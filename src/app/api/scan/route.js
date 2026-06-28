@@ -69,7 +69,7 @@ export async function POST(request) {
     };
 
     try {
-      insertScan(scanRecord);
+      await insertScan(scanRecord);
     } catch (e) {
       // ignore DB errors
     }

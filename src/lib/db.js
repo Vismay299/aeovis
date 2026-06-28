@@ -1,47 +1,36 @@
-import Database from "better-sqlite3";
-import fs from "fs";
-import path from "path";
+import { createClient } from "@supabase/supabase-js";
 
-const dataDir = path.join(process.cwd(), "data");
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
-}
+// Avoid throwing if env vars are missing during build phase, but we'll need them at runtime
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-const dbPath = path.join(dataDir, "aeo.db");
-const db = new Database(dbPath);
+export async function insertScan(scanRecord) {
+  if (!supabase) {
+    console.warn("Supabase credentials missing. Skipping database insert.");
+    return;
+  }
 
-// Initialize DB schema
-db.exec(`
-  CREATE TABLE IF NOT EXISTS scans (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    brand TEXT NOT NULL,
-    url TEXT,
-    industry TEXT NOT NULL,
-    visibility_pct REAL NOT NULL,
-    prompts_tracked INTEGER NOT NULL,
-    prompts_mentioned INTEGER NOT NULL,
-    raw_results TEXT NOT NULL,
-    scanned_at TEXT NOT NULL
-  )
-`);
+  const { data, error } = await supabase
+    .from("scans")
+    .insert([
+      {
+        brand: scanRecord.brand,
+        url: scanRecord.url,
+        industry: scanRecord.industry,
+        visibility_pct: scanRecord.visibility_pct,
+        prompts_tracked: scanRecord.prompts_tracked,
+        prompts_mentioned: scanRecord.prompts_mentioned,
+        raw_results: scanRecord.results,
+        scanned_at: scanRecord.scanned_at,
+      }
+    ]);
 
-export function insertScan(scanRecord) {
-  const stmt = db.prepare(`
-    INSERT INTO scans (
-      brand, url, industry, visibility_pct, prompts_tracked,
-      prompts_mentioned, raw_results, scanned_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  if (error) {
+    console.error("Error inserting into Supabase:", error);
+    throw error;
+  }
 
-  stmt.run(
-    scanRecord.brand,
-    scanRecord.url,
-    scanRecord.industry,
-    scanRecord.visibility_pct,
-    scanRecord.prompts_tracked,
-    scanRecord.prompts_mentioned,
-    JSON.stringify(scanRecord.results),
-    scanRecord.scanned_at
-  );
+  return data;
 }
