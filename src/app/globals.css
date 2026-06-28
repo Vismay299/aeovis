@@ -1,0 +1,108 @@
+@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    color-scheme: light;
+}
+
+body {
+    margin: 0;
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #fdfbf7;
+    color: #1a1a1a;
+}
+
+code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+@layer base {
+    :root {
+        --background: 40 43% 98%;
+        --foreground: 0 0% 10%;
+        --card: 0 0% 100%;
+        --card-foreground: 0 0% 10%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 0 0% 10%;
+        --primary: 17 76% 49%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 48 30% 93%;
+        --secondary-foreground: 0 0% 10%;
+        --muted: 48 30% 93%;
+        --muted-foreground: 0 0% 40%;
+        --accent: 17 76% 49%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 0 50% 39%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 45 18% 87%;
+        --input: 45 18% 87%;
+        --ring: 0 0% 10%;
+        --radius: 0.25rem;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+    h1, h2, h3, h4 {
+        font-family: "Cormorant Garamond", Georgia, serif;
+    }
+}
+
+.font-serif {
+    font-family: "Cormorant Garamond", Georgia, serif;
+}
+.font-sans {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+::-webkit-scrollbar {
+    width: 11px;
+    height: 11px;
+}
+::-webkit-scrollbar-track {
+    background: #fdfbf7;
+}
+::-webkit-scrollbar-thumb {
+    background: #d9d4c6;
+    border: 3px solid #fdfbf7;
+    border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #b8b2a0;
+}
+
+::selection {
+    background: #d9531e;
+    color: #ffffff;
+}
+
+/* Blinking caret for typographic loader */
+@keyframes caret-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+.caret-blink {
+    animation: caret-blink 1s step-end infinite;
+}
+
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+}
+
+.App {
+  min-height: 100vh;
+  background-color: #fdfbf7;
+}
