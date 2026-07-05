@@ -4,6 +4,7 @@ import { Lightbulb, Target, Loader2 } from "lucide-react";
 export const OpportunitiesPanel = ({ result }) => {
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   const prompts = result.rawResults || result.topPrompts || [];
   
@@ -36,6 +37,8 @@ export const OpportunitiesPanel = ({ result }) => {
     }
 
     const fetchInsights = async () => {
+      setLoading(true);
+      setHasError(false);
       try {
         const res = await fetch("/api/opportunities", {
           method: "POST",
@@ -45,16 +48,19 @@ export const OpportunitiesPanel = ({ result }) => {
         if (res.ok) {
           const data = await res.json();
           setInsights(data.recommendations || []);
+        } else {
+          setHasError(true);
         }
       } catch (e) {
         console.error("Failed to fetch LLM insights", e);
+        setHasError(true);
       } finally {
         setLoading(false);
       }
     };
 
     fetchInsights();
-  }, [result.brand]); // re-run only if brand changes (or use stringified gaps if needed, but it's safe enough for dashboard)
+  }, [result.brand, JSON.stringify(sortedGaps)]); // re-run only if brand or exact gaps change
 
   if (sortedGaps.length === 0) {
     return (

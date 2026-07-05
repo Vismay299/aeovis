@@ -30,6 +30,56 @@ export default function Dashboard() {
     }
   }, []);
 
+  const { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend } = React.useMemo(() => {
+    let scoreTrend = null;
+    let previousScan = null;
+    let sortedHistory = [];
+    let topPromptsWithTrend = [];
+    let competitorsWithTrend = [];
+
+    if (!result) return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend };
+
+    if (history && history.length > 0) {
+      sortedHistory = [...history].sort((a,b) => new Date(b.scanned_at) - new Date(a.scanned_at));
+      const idx = sortedHistory.findIndex(s => new Date(s.scanned_at).getTime() === new Date(result.scanTimestamp).getTime());
+      if (idx !== -1 && idx + 1 < sortedHistory.length) {
+        const prev = sortedHistory[idx + 1];
+        scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
+        previousScan = normalizeResult(prev, result.brand, result.website);
+      } else if (idx === -1 && sortedHistory.length > 0) {
+        // result not in history yet
+        scoreTrend = (result.visibilityScore - (sortedHistory[0].visibility_pct || 0)).toFixed(1);
+        previousScan = normalizeResult(sortedHistory[0], result.brand, result.website);
+      }
+    }
+
+    topPromptsWithTrend = (result.topPrompts || []).map(p => {
+      if (previousScan && previousScan.topPrompts) {
+        const prevP = previousScan.topPrompts.find(pp => pp.prompt.toLowerCase() === p.prompt.toLowerCase());
+        const currRank = typeof p.rank === "number" ? p.rank : null;
+        const prevRank = prevP && typeof prevP.rank === "number" ? prevP.rank : null;
+        if (prevRank !== null && currRank !== null) {
+          return { ...p, trend: prevRank - currRank };
+        }
+      }
+      return p;
+    });
+
+    competitorsWithTrend = (result.competitors || []).map(c => {
+      if (previousScan && previousScan.competitors) {
+        const prevC = previousScan.competitors.find(pc => pc.name.toLowerCase() === c.name.toLowerCase());
+        const currVis = typeof c.visibilityScore === "number" ? c.visibilityScore : 0;
+        const prevVis = prevC && typeof prevC.visibilityScore === "number" ? prevC.visibilityScore : 0;
+        if (prevC) {
+          return { ...c, trend: (currVis - prevVis).toFixed(1) };
+        }
+      }
+      return c;
+    });
+
+    return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend };
+  }, [result, history]);
+
   // Empty state — no scan yet
   if (result === null) {
     return (
@@ -105,50 +155,7 @@ export default function Dashboard() {
     }
   };
 
-  const { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend } = React.useMemo(() => {
-    let scoreTrend = null;
-    let previousScan = null;
-    let sortedHistory = [];
-    if (history && history.length > 0) {
-      sortedHistory = [...history].sort((a,b) => new Date(b.scanned_at) - new Date(a.scanned_at));
-      const idx = sortedHistory.findIndex(s => new Date(s.scanned_at).getTime() === new Date(result.scanTimestamp).getTime());
-      if (idx !== -1 && idx + 1 < sortedHistory.length) {
-        const prev = sortedHistory[idx + 1];
-        scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
-        previousScan = normalizeResult(prev, result.brand, result.website);
-      } else if (idx === -1 && sortedHistory.length > 0) {
-        // result not in history yet
-        scoreTrend = (result.visibilityScore - (sortedHistory[0].visibility_pct || 0)).toFixed(1);
-        previousScan = normalizeResult(sortedHistory[0], result.brand, result.website);
-      }
-    }
 
-    const topPromptsWithTrend = (result.topPrompts || []).map(p => {
-      if (previousScan && previousScan.topPrompts) {
-        const prevP = previousScan.topPrompts.find(pp => pp.prompt.toLowerCase() === p.prompt.toLowerCase());
-        const currRank = typeof p.rank === "number" ? p.rank : null;
-        const prevRank = prevP && typeof prevP.rank === "number" ? prevP.rank : null;
-        if (prevRank !== null && currRank !== null) {
-          return { ...p, trend: prevRank - currRank };
-        }
-      }
-      return p;
-    });
-
-    const competitorsWithTrend = (result.competitors || []).map(c => {
-      if (previousScan && previousScan.competitors) {
-        const prevC = previousScan.competitors.find(pc => pc.name.toLowerCase() === c.name.toLowerCase());
-        const currVis = typeof c.visibilityScore === "number" ? c.visibilityScore : 0;
-        const prevVis = prevC && typeof prevC.visibilityScore === "number" ? prevC.visibilityScore : 0;
-        if (prevC) {
-          return { ...c, trend: (currVis - prevVis).toFixed(1) };
-        }
-      }
-      return c;
-    });
-
-    return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend };
-  }, [result, history]);
 
   return (
     <div className="min-h-screen bg-[#FDFBF7]">
