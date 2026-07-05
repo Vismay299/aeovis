@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, FlaskConical } from "lucide-react";
+import { RefreshCw, FlaskConical, Loader2 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { KpiCard, HeroScoreCard } from "@/components/dashboard/KpiCard";
 import { TopPromptsTable } from "@/components/dashboard/TopPromptsTable";
@@ -18,6 +18,7 @@ export default function Dashboard() {
   const [result, setResult] = useState(undefined);
   const [history, setHistory] = useState([]);
   const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
@@ -143,6 +144,7 @@ export default function Dashboard() {
       });
       saveScan(newResult);
       setResult(newResult);
+      setScanError(null);
       
       // refresh history
       fetchScanHistory(result.brand).then(scans => {
@@ -150,6 +152,7 @@ export default function Dashboard() {
       });
     } catch (e) {
       console.error("Re-run failed:", e);
+      setScanError(e.message || "Failed to run scan. Please try again.");
     } finally {
       setIsScanning(false);
     }
@@ -158,9 +161,24 @@ export default function Dashboard() {
 
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7]">
+    <div className="min-h-screen bg-[#FDFBF7] relative">
+      {/* Scanning Overlay */}
+      {isScanning && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm transition-opacity duration-300">
+          <Loader2 className="w-12 h-12 text-[#D9531E] animate-spin mb-4" />
+          <h2 className="font-serif text-2xl font-semibold text-[#1A1A1A]">Scanning Answer Engines</h2>
+          <p className="text-[#666666] mt-2">Running live prompts and analyzing AI responses...</p>
+        </div>
+      )}
+
       <Navbar />
       <div className="max-w-7xl mx-auto px-6 md:px-12 py-10 md:py-14" data-testid="dashboard">
+        {scanError && (
+          <div className="mb-6 p-4 bg-[#F9ECEC] border border-[#E2B8B8] rounded-sm text-[#8B3A3A] text-sm flex items-center justify-between">
+            <span>{scanError}</span>
+            <button onClick={() => setScanError(null)} className="text-[#8B3A3A] font-semibold hover:underline">Dismiss</button>
+          </div>
+        )}
         {result.isSample && (
           <div
             data-testid="sample-banner"
