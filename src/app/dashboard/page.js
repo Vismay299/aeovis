@@ -8,6 +8,8 @@ import { KpiCard, HeroScoreCard } from "@/components/dashboard/KpiCard";
 import { TopPromptsTable } from "@/components/dashboard/TopPromptsTable";
 import { CompetitorTable } from "@/components/dashboard/CompetitorTable";
 import { InsightPanel } from "@/components/dashboard/InsightPanel";
+import { OpportunitiesPanel } from "@/components/dashboard/OpportunitiesPanel";
+import { CitationsPanel } from "@/components/dashboard/CitationsPanel";
 import { loadScan, fetchScanHistory, normalizeResult } from "@/services/api";
 import { scoreTier, tierLabel, formatTimestamp, relativeTime } from "@/utils/format";
 
@@ -16,6 +18,7 @@ export default function Dashboard() {
   const [result, setResult] = useState(undefined);
   const [history, setHistory] = useState([]);
   const [isScanning, setIsScanning] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     const current = loadScan();
@@ -265,18 +268,45 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Main grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
-            <TopPromptsTable prompts={topPromptsWithTrend} />
-            <CompetitorTable competitors={competitorsWithTrend} />
-          </div>
-          <div className="lg:col-span-1">
-            <div className="lg:sticky lg:top-24">
-              <InsightPanel result={result} trend={scoreTrend} onRerun={handleRerun} />
+        {/* Tabs */}
+        <div className="flex items-center gap-6 border-b border-[#E5E2D9] mb-8 overflow-x-auto pb-px">
+          {["overview", "opportunities", "citations"].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`pb-4 text-sm font-semibold uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === tab 
+                  ? "border-[#1A1A1A] text-[#1A1A1A]" 
+                  : "border-transparent text-[#999999] hover:text-[#1A1A1A]"
+              }`}
+            >
+              {tab === "citations" ? "Citations & Sources" : tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Main Content Area */}
+        {activeTab === "overview" && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-8">
+              <TopPromptsTable prompts={topPromptsWithTrend} />
+              <CompetitorTable competitors={competitorsWithTrend} />
+            </div>
+            <div className="lg:col-span-1">
+              <div className="lg:sticky lg:top-24">
+                <InsightPanel result={result} trend={scoreTrend} onRerun={handleRerun} />
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === "opportunities" && (
+          <OpportunitiesPanel result={result} />
+        )}
+
+        {activeTab === "citations" && (
+          <CitationsPanel result={result} />
+        )}
       </div>
     </div>
   );

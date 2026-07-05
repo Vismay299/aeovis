@@ -83,6 +83,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
           citations: p.citations || [],
           keyPhrases: p.key_phrases || p.keyPhrases || [],
           competitorsFound: p.competitors_found || [],
+          mentioned: p.mentioned
         };
       }
       return {

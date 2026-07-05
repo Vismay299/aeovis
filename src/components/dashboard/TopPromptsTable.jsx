@@ -48,9 +48,27 @@ export const TopPromptsTable = ({ prompts }) => {
                   className="border-b border-[#E5E2D9] last:border-0 hover:bg-[#FDFBF7] transition-colors"
                 >
                   <td className="px-7 py-5 text-sm text-[#1A1A1A]">
-                    {p.prompt}
+                    <div className="font-medium">{p.prompt}</div>
                     {p.citations && p.citations.length > 0 && (
-                      <span className="ml-2 text-[10px] text-[#2F5C4F]">📎 {p.citations.length}</span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {p.citations.map((c, idx) => {
+                          let label = c;
+                          try {
+                            label = new URL(c).hostname.replace('www.', '');
+                          } catch(e) {}
+                          return (
+                            <a 
+                              key={idx} 
+                              href={c} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-[#F3F0E6] border border-[#E5E2D9] text-[10px] text-[#666666] hover:bg-[#E5E2D9] hover:text-[#1A1A1A] transition-colors"
+                            >
+                              📎 {label}
+                            </a>
+                          )
+                        })}
+                      </div>
                     )}
                   </td>
                   <td className="px-4 py-5 text-center">
