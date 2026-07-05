@@ -62,6 +62,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
       (results.length ? new Set(results.flatMap(r => r.competitors_found || [])).size : 0),
     scanTimestamp: data.scanned_at ?? data.scanTimestamp ?? new Date().toISOString(),
     usedDynamicPrompts: usedDynamic,
+    tokensUsed: data.tokens_used ?? data.tokensUsed ?? 0,
     summary: data.summary || generateSummary(data),
     totalCitations: results.reduce((sum, r) => sum + ((r.citations || r.citations_found || []).length), 0),
     // Preserve rich Phase 2 analysis fields for future UI (citations, key phrases, exact position)

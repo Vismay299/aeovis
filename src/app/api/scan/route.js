@@ -10,6 +10,7 @@ const NEGATIVE_WORDS = ["expensive", "limited", "poor", "lacking", "outdated", "
 export async function POST(request) {
   try {
     const payload = await request.json();
+    const stats = { tokens: 0 };
     const brand = (payload.brand || "").trim();
     const url = (payload.url || "").trim();
     const industry = (payload.industry || "").trim();
@@ -63,12 +64,12 @@ export async function POST(request) {
 
         let responseText = "";
         try {
-          responseText = await generateContent(fullPrompt);
+          responseText = await generateContent(fullPrompt, { stats, timeout: 20000 });
         } catch (e) {
           // keep empty
         }
 
-        return await analyzeResponseWithLLM(promptText, responseText, brand, competitors);
+        return await analyzeResponseWithLLM(promptText, responseText, brand, competitors, stats);
       });
 
       const chunkResults = await Promise.all(chunkPromises);
@@ -100,6 +101,7 @@ export async function POST(request) {
       results,
       scanned_at: scannedAt,
       used_dynamic_prompts: usedDynamicPrompts,
+      tokens_used: stats.tokens
     };
 
     try {
@@ -114,7 +116,7 @@ export async function POST(request) {
   }
 }
 
-async function analyzeResponseWithLLM(promptText, responseText, brand, competitors) {
+async function analyzeResponseWithLLM(promptText, responseText, brand, competitors, stats) {
   if (!responseText) {
     return {
       prompt: promptText,
@@ -149,7 +151,7 @@ Extract the following information and return it as a JSON object:
 Respond ONLY with valid JSON. Do not include markdown formatting.`;
 
   try {
-    const jsonStr = await generateContent(extractionPrompt, { jsonMode: true });
+    const jsonStr = await generateContent(extractionPrompt, { jsonMode: true, stats, timeout: 30000 });
     const cleanStr = jsonStr.replace(/```json\n?|\n?```/g, "").trim();
     const result = JSON.parse(cleanStr);
     

@@ -222,6 +222,11 @@ export default function Dashboard() {
                   {result.usedDynamicPrompts ? "dynamic prompts" : "static fallback"}
                 </span>
               )}
+              {!!result.tokensUsed && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FDF6E3] text-[#8F6614] border border-[#E6D5A7] ml-1 align-middle">
+                  ~{result.tokensUsed.toLocaleString()} tokens
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3 self-start md:self-auto print:hidden">

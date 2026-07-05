@@ -37,11 +37,14 @@ export async function generateContent(prompt, options = {}, retries = 2) {
           ...modelConfig 
         });
 
-        const timeoutMs = options.timeout || 15000;
+        const timeoutMs = options.timeout || 20000;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-        const resultPromise = model.generateContent(prompt);
+        // Natively pass AbortController to the Google SDK if supported, while keeping Promise.race as a safety net
+        const requestOptions = { timeout: timeoutMs, signal: controller.signal };
+        const resultPromise = model.generateContent(prompt, { requestOptions });
+        
         const result = await Promise.race([
           resultPromise,
           new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini timeout")), timeoutMs))
@@ -50,11 +53,12 @@ export async function generateContent(prompt, options = {}, retries = 2) {
         clearTimeout(timeoutId);
         const response = await result.response;
         
-        // Token cost logging
+        // Token cost logging via object reference
         if (response.usageMetadata && response.usageMetadata.totalTokenCount) {
-          if (!global.totalSessionTokens) global.totalSessionTokens = 0;
-          global.totalSessionTokens += response.usageMetadata.totalTokenCount;
-          console.log(`[gemini] Used ${response.usageMetadata.totalTokenCount} tokens. Total session: ${global.totalSessionTokens}`);
+          const used = response.usageMetadata.totalTokenCount;
+          if (options.stats) {
+            options.stats.tokens = (options.stats.tokens || 0) + used;
+          }
         }
 
         return response.text();
