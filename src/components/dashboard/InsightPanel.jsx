@@ -2,7 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import { scoreTier, tierLabel } from "@/utils/format";
 import { ScoreBadge } from "@/components/ScoreBadge";
 
-export const InsightPanel = ({ result, onRerun }) => {
+export const InsightPanel = ({ result, trend, onRerun }) => {
   const tier = scoreTier(result.visibilityScore);
   const interpretation = {
     strong:
@@ -29,6 +29,11 @@ export const InsightPanel = ({ result, onRerun }) => {
         <ScoreBadge tier={tier} testId="insight-score-badge" />
         <span className="text-sm text-[#666666]">
           {tierLabel(tier)} at <span className="text-[#1A1A1A] font-semibold">{result.visibilityScore}/100</span>
+          {trend !== null && trend !== undefined && (
+            <span className={`ml-2 text-xs font-semibold ${parseFloat(trend) > 0 ? "text-[#2F5C4F]" : parseFloat(trend) < 0 ? "text-[#8B3A3A]" : "text-[#999999]"}`}>
+              ({parseFloat(trend) > 0 ? "+" : ""}{trend})
+            </span>
+          )}
         </span>
       </div>
 

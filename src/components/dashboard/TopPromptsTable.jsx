@@ -47,11 +47,26 @@ export const TopPromptsTable = ({ prompts }) => {
                   data-testid={`prompt-row-${i}`}
                   className="border-b border-[#E5E2D9] last:border-0 hover:bg-[#FDFBF7] transition-colors"
                 >
-                  <td className="px-7 py-5 text-sm text-[#1A1A1A]">{p.prompt}</td>
+                  <td className="px-7 py-5 text-sm text-[#1A1A1A]">
+                    {p.prompt}
+                    {p.citations && p.citations.length > 0 && (
+                      <span className="ml-2 text-[10px] text-[#2F5C4F]">📎 {p.citations.length}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-5 text-center">
-                    <span className={`font-serif font-semibold text-xl ${rankColor(p.rank)}`}>
-                      {p.rank === "—" || p.rank == null ? "—" : `#${p.rank}`}
-                    </span>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className={`font-serif font-semibold text-xl ${rankColor(p.rank)}`}>
+                        {p.rank === "—" || p.rank == null ? "—" : `#${p.rank}`}
+                      </span>
+                      {p.trend !== undefined && p.trend !== 0 && (
+                        <span className={`text-[10px] px-1 py-0.5 rounded-sm font-semibold ${p.trend > 0 ? "bg-[#E8F0ED] text-[#2F5C4F]" : "bg-[#F9ECEC] text-[#8B3A3A]"}`}>
+                          {p.trend > 0 ? "↑" : "↓"}{Math.abs(p.trend)}
+                        </span>
+                      )}
+                    </div>
+                    {p.position && p.position !== "omitted" && (
+                      <div className="text-[9px] text-[#999999] mt-0.5 capitalize">{p.position}</div>
+                    )}
                   </td>
                   <td className="px-7 py-5 text-right text-sm text-[#666666] uppercase tracking-wider text-xs">
                     {p.volume}

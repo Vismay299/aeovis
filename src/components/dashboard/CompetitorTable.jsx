@@ -31,7 +31,7 @@ export const CompetitorTable = ({ competitors }) => {
                   Competitor
                 </th>
                 <th className="text-[11px] uppercase tracking-[0.12em] text-[#1A1A1A] font-semibold text-center px-4 py-3 w-28">
-                  Mentions
+                  Visibility
                 </th>
                 <th className="text-[11px] uppercase tracking-[0.12em] text-[#1A1A1A] font-semibold text-right px-7 py-3 w-32">
                   Gap
@@ -46,13 +46,22 @@ export const CompetitorTable = ({ competitors }) => {
                   className="border-b border-[#E5E2D9] last:border-0 hover:bg-[#FDFBF7] transition-colors"
                 >
                   <td className="px-7 py-5">
-                    <div className="text-sm font-semibold text-[#1A1A1A]">{c.name}</div>
+                    <div className="text-sm font-semibold text-[#1A1A1A] capitalize">{c.name}</div>
                     <div className="text-xs text-[#999999] mt-0.5">
-                      seen in {c.prompts} prompt{c.prompts === 1 ? "" : "s"}
+                      {c.mentions} mention{c.mentions === 1 ? "" : "s"}
                     </div>
                   </td>
-                  <td className="px-4 py-5 text-center font-serif font-semibold text-xl text-[#1A1A1A]">
-                    {c.mentions}
+                  <td className="px-4 py-5 text-center">
+                    <div className="flex flex-col items-center justify-center gap-1">
+                      <span className="font-serif font-semibold text-xl text-[#1A1A1A]">
+                        {c.visibilityScore !== undefined ? `${c.visibilityScore}%` : c.mentions}
+                      </span>
+                      {c.trend !== undefined && parseFloat(c.trend) !== 0 && (
+                        <span className={`text-[10px] px-1 py-0.5 rounded-sm font-semibold ${parseFloat(c.trend) > 0 ? "bg-[#E8F0ED] text-[#2F5C4F]" : "bg-[#F9ECEC] text-[#8B3A3A]"}`}>
+                          {parseFloat(c.trend) > 0 ? "↑" : "↓"}{Math.abs(parseFloat(c.trend))}%
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-7 py-5 text-right">
                     {c.userAbsent ? (

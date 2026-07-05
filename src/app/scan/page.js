@@ -12,6 +12,7 @@ import { SAMPLE_RESULT } from "@/data/mockData";
 
 const STAGES = [
   "Submitting brand for analysis",
+  "Generating custom prompts from your website",
   "Probing AI answers across prompts",
   "Detecting competitor co-mentions",
   "Scoring visibility & composing report",
@@ -28,6 +29,7 @@ export default function Scan() {
   const [brand, setBrand] = useState("");
   const [website, setWebsite] = useState("");
   const [industry, setIndustry] = useState("");
+  const [competitors, setCompetitors] = useState("");
   const [industries, setIndustries] = useState([]);
   const [errors, setErrors] = useState({});
 
@@ -44,7 +46,8 @@ export default function Scan() {
     if (!website.trim()) e.website = "Website is required.";
     else if (!/^([\w-]+\.)+[\w-]{2,}.*$/.test(website.replace(/^https?:\/\//, "")))
       e.website = "Enter a valid domain, e.g. acme.com";
-    if (!industry) e.industry = "Industry is required.";
+    // Industry is optional now — dynamic prompt generation works without it
+    // (it helps with fallback and categorization)
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -55,7 +58,7 @@ export default function Scan() {
     setFailed(false);
     setStage(0);
     try {
-      const result = await runScan({ brand: brand.trim(), website: website.trim(), industry }, (s) =>
+      const result = await runScan({ brand: brand.trim(), website: website.trim(), industry, competitors: competitors.trim() }, (s) =>
         setStage(s)
       );
       saveScan(result);
@@ -136,7 +139,7 @@ export default function Scan() {
 
                 <div>
                   <label htmlFor="industry" className="block text-xs uppercase tracking-[0.15em] text-[#666666] font-medium mb-3">
-                    Industry
+                    Industry <span className="text-[#999999] font-normal">(optional — helps with fallback)</span>
                   </label>
                   <Select value={industry} onValueChange={setIndustry}>
                     <SelectTrigger
@@ -159,6 +162,20 @@ export default function Scan() {
                       <AlertCircle className="w-3.5 h-3.5" /> {errors.industry}
                     </p>
                   )}
+                </div>
+
+                <div>
+                  <label htmlFor="competitors" className="block text-xs uppercase tracking-[0.15em] text-[#666666] font-medium mb-3">
+                    Competitors <span className="text-[#999999] font-normal">(comma-separated, max 4)</span>
+                  </label>
+                  <input
+                    id="competitors"
+                    data-testid="scan-competitors-input"
+                    value={competitors}
+                    onChange={(e) => setCompetitors(e.target.value)}
+                    placeholder="Rival A, Rival B"
+                    className="w-full bg-white border border-[#E5E2D9] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none rounded-sm px-5 py-4 font-sans text-[#1A1A1A] placeholder:text-[#BBBBBB] transition-all"
+                  />
                 </div>
 
                 <p className="text-sm text-[#666666] border-l-2 border-[#E5E2D9] pl-4 leading-relaxed">
@@ -220,7 +237,7 @@ export default function Scan() {
                 Analyzing {brand}
                 <span className="caret-blink text-[#D9531E]">_</span>
               </h2>
-              <p className="text-[#666666] mt-3 mb-12">This usually takes under a minute.</p>
+              <p className="text-[#666666] mt-3 mb-12">Generating custom prompts from your site, then probing AI answers. This usually takes 30-90 seconds.</p>
 
               <div className="space-y-px">
                 {STAGES.map((label, i) => {

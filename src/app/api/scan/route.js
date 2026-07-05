@@ -18,41 +18,66 @@ export async function POST(request) {
     if (!brand) {
       return NextResponse.json({ detail: "Brand name is required." }, { status: 400 });
     }
-    if (!INDUSTRY_PROMPTS[industry]) {
-      return NextResponse.json({ detail: "Invalid industry." }, { status: 400 });
-    }
+    // Industry is recommended for fallback and categorization, but dynamic prompt generation works without it
+    const hasValidIndustry = !!INDUSTRY_PROMPTS[industry];
 
     const competitors = competitorsRaw
       ? competitorsRaw.split(",").map(c => c.trim()).filter(Boolean)
       : [];
 
     let prompts = await generatePromptsForBrand(brand, url, industry);
-    if (!prompts || prompts.length === 0) {
-      console.log("Fallback to static industry prompts");
-      prompts = INDUSTRY_PROMPTS[industry].prompts;
+    const usedDynamicPrompts = prompts && prompts.length > 0;
+
+    if (!usedDynamicPrompts) {
+      if (hasValidIndustry) {
+        console.log("Fallback to static industry prompts");
+        prompts = INDUSTRY_PROMPTS[industry].prompts;
+      } else {
+        console.warn("No dynamic prompts generated and no valid industry for fallback");
+        prompts = [];
+      }
     }
+
+    console.log(`[scan] Used dynamic prompts: ${usedDynamicPrompts} (${prompts.length} prompts)`);
 
     const results = [];
     let promptsMentioned = 0;
 
-    for (const promptText of prompts) {
-      let fullPrompt = promptText;
-      if (url) {
-        fullPrompt = `${promptText}\n\nFor context, the brand being evaluated is ${brand} (${url}). Consider it alongside other relevant options.`;
-      }
+    // Batch processing to reduce latency
+    const chunkSize = 5;
+    for (let i = 0; i < prompts.length; i += chunkSize) {
+      const chunk = prompts.slice(i, i + chunkSize);
+      
+      const chunkPromises = chunk.map(async (promptText) => {
+        let fullPrompt = promptText;
+        let contextLines = [];
+        if (url) {
+          contextLines.push(`Context: The brand being evaluated is ${brand} (${url}).`);
+        }
+        if (competitors.length > 0) {
+          contextLines.push(`Consider alongside these competitors: ${competitors.join(", ")}.`);
+        }
+        if (contextLines.length) {
+          fullPrompt = `${promptText}\n\n${contextLines.join(" ")} Evaluate fairly and include the brand when relevant.`;
+        }
 
-      let responseText = "";
-      try {
-        responseText = await generateContent(fullPrompt);
-      } catch (e) {
-        // keep empty
-      }
+        let responseText = "";
+        try {
+          responseText = await generateContent(fullPrompt);
+        } catch (e) {
+          // keep empty
+        }
 
-      const result = analyzeResponse(promptText, responseText, brand, competitors);
-      if (result.mentioned) {
-        promptsMentioned += 1;
+        return await analyzeResponseWithLLM(promptText, responseText, brand, competitors);
+      });
+
+      const chunkResults = await Promise.all(chunkPromises);
+      for (const result of chunkResults) {
+        if (result.mentioned) {
+          promptsMentioned += 1;
+        }
+        results.push(result);
       }
-      results.push(result);
     }
 
     const promptsTracked = prompts.length;
@@ -70,8 +95,11 @@ export async function POST(request) {
       visibility_pct: visibilityPct,
       prompts_tracked: promptsTracked,
       prompts_mentioned: promptsMentioned,
+      competitors: competitors,
+      competitors_raw: competitorsRaw,
       results,
       scanned_at: scannedAt,
+      used_dynamic_prompts: usedDynamicPrompts,
     };
 
     try {
@@ -86,7 +114,62 @@ export async function POST(request) {
   }
 }
 
-function analyzeResponse(promptText, responseText, brand, competitors) {
+async function analyzeResponseWithLLM(promptText, responseText, brand, competitors) {
+  if (!responseText) {
+    return {
+      prompt: promptText,
+      response_snippet: "",
+      mentioned: false,
+      position: "omitted",
+      sentiment: "neutral",
+      competitors_found: [],
+      citations: [],
+      key_phrases: []
+    };
+  }
+
+  const extractionPrompt = `You are an AI analyzing how a brand is mentioned in a text.
+Brand: ${brand}
+Competitors: ${competitors.join(', ') || 'None provided'}
+User Prompt: ${promptText}
+
+Text to analyze:
+---
+${responseText}
+---
+
+Extract the following information and return it as a JSON object:
+- "mentioned": boolean, true if the brand is mentioned.
+- "position": string, one of "recommended" (if strongly recommended early), "compared" (if compared with others), "cited" (if just mentioned as a source), or "omitted" (if not mentioned).
+- "sentiment": string, "positive", "negative", or "neutral" towards the brand.
+- "competitors_found": array of strings, listing any of the provided competitors found in the text. If none, return empty array. If other competitors are found that were not in the list, you can add them too.
+- "citations": array of strings, any URLs or website links cited in the text.
+- "key_phrases": array of strings, 2-3 key phrases about the brand.
+
+Respond ONLY with valid JSON. Do not include markdown formatting.`;
+
+  try {
+    const jsonStr = await generateContent(extractionPrompt, { jsonMode: true });
+    const cleanStr = jsonStr.replace(/```json\n?|\n?```/g, "").trim();
+    const result = JSON.parse(cleanStr);
+    
+    return {
+      prompt: promptText,
+      response_snippet: responseText.slice(0, 300),
+      mentioned: !!result.mentioned,
+      position: result.position || "omitted",
+      sentiment: result.sentiment || "neutral",
+      competitors_found: result.competitors_found || [],
+      citations: result.citations || [],
+      key_phrases: result.key_phrases || []
+    };
+  } catch (e) {
+    console.warn("LLM extraction failed, using fallback:", e);
+    return analyzeResponseFallback(promptText, responseText, brand, competitors);
+  }
+}
+
+function analyzeResponseFallback(promptText, responseText, brand, competitors) {
   const textLower = responseText.toLowerCase();
   const brandLower = brand.toLowerCase();
   const mentioned = textLower.includes(brandLower);
@@ -120,6 +203,8 @@ function analyzeResponse(promptText, responseText, brand, competitors) {
     position,
     sentiment,
     competitors_found: competitorsFound,
+    citations: [],
+    key_phrases: []
   };
 }
 

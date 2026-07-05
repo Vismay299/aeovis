@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, FlaskConical } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
@@ -8,15 +8,23 @@ import { KpiCard, HeroScoreCard } from "@/components/dashboard/KpiCard";
 import { TopPromptsTable } from "@/components/dashboard/TopPromptsTable";
 import { CompetitorTable } from "@/components/dashboard/CompetitorTable";
 import { InsightPanel } from "@/components/dashboard/InsightPanel";
-import { loadScan } from "@/services/api";
+import { loadScan, fetchScanHistory, normalizeResult } from "@/services/api";
 import { scoreTier, tierLabel, formatTimestamp, relativeTime } from "@/utils/format";
 
 export default function Dashboard() {
   const router = useRouter();
   const [result, setResult] = useState(undefined);
+  const [history, setHistory] = useState([]);
+  const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
-    setResult(loadScan());
+    const current = loadScan();
+    setResult(current);
+    if (current && current.brand && !current.isSample) {
+      fetchScanHistory(current.brand).then(scans => {
+        setHistory(scans || []);
+      });
+    }
   }, []);
 
   // Empty state — no scan yet
@@ -62,6 +70,83 @@ export default function Dashboard() {
 
   const tier = scoreTier(result.visibilityScore);
 
+  const handleHistoryClick = (scan) => {
+    // Re-normalize raw DB row into frontend shape
+    setResult(normalizeResult(scan, result.brand, result.website));
+  };
+
+  const handleRerun = async () => {
+    if (isScanning) return;
+    setIsScanning(true);
+    try {
+      const { runScan, saveScan } = await import("@/services/api");
+      // Grab input competitors if possible, or fallback to mapped ones
+      const compStr = result.competitorsRaw !== undefined ? result.competitorsRaw : (result.competitors ? result.competitors.map(c => c.name).join(", ") : "");
+      const newResult = await runScan({ 
+        brand: result.brand, 
+        website: result.website, 
+        industry: result.industry || "", 
+        competitors: compStr 
+      });
+      saveScan(newResult);
+      setResult(newResult);
+      
+      // refresh history
+      fetchScanHistory(result.brand).then(scans => {
+        setHistory(scans || []);
+      });
+    } catch (e) {
+      console.error("Re-run failed:", e);
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend } = React.useMemo(() => {
+    let scoreTrend = null;
+    let previousScan = null;
+    let sortedHistory = [];
+    if (history && history.length > 0) {
+      sortedHistory = [...history].sort((a,b) => new Date(b.scanned_at) - new Date(a.scanned_at));
+      const idx = sortedHistory.findIndex(s => new Date(s.scanned_at).getTime() === new Date(result.scanTimestamp).getTime());
+      if (idx !== -1 && idx + 1 < sortedHistory.length) {
+        const prev = sortedHistory[idx + 1];
+        scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
+        previousScan = normalizeResult(prev, result.brand, result.website);
+      } else if (idx === -1 && sortedHistory.length > 0) {
+        // result not in history yet
+        scoreTrend = (result.visibilityScore - (sortedHistory[0].visibility_pct || 0)).toFixed(1);
+        previousScan = normalizeResult(sortedHistory[0], result.brand, result.website);
+      }
+    }
+
+    const topPromptsWithTrend = (result.topPrompts || []).map(p => {
+      if (previousScan && previousScan.topPrompts) {
+        const prevP = previousScan.topPrompts.find(pp => pp.prompt.toLowerCase() === p.prompt.toLowerCase());
+        const currRank = typeof p.rank === "number" ? p.rank : null;
+        const prevRank = prevP && typeof prevP.rank === "number" ? prevP.rank : null;
+        if (prevRank !== null && currRank !== null) {
+          return { ...p, trend: prevRank - currRank };
+        }
+      }
+      return p;
+    });
+
+    const competitorsWithTrend = (result.competitors || []).map(c => {
+      if (previousScan && previousScan.competitors) {
+        const prevC = previousScan.competitors.find(pc => pc.name.toLowerCase() === c.name.toLowerCase());
+        const currVis = typeof c.visibilityScore === "number" ? c.visibilityScore : 0;
+        const prevVis = prevC && typeof prevC.visibilityScore === "number" ? prevC.visibilityScore : 0;
+        if (prevC) {
+          return { ...c, trend: (currVis - prevVis).toFixed(1) };
+        }
+      }
+      return c;
+    });
+
+    return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend };
+  }, [result, history]);
+
   return (
     <div className="min-h-screen bg-[#FDFBF7]">
       <Navbar />
@@ -94,25 +179,33 @@ export default function Dashboard() {
               <span data-testid="dashboard-timestamp">
                 Last scan {formatTimestamp(result.scanTimestamp)} ({relativeTime(result.scanTimestamp)})
               </span>
+              {result.usedDynamicPrompts !== undefined && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E8F0ED] text-[#2F5C4F] border border-[#B4D4CA] ml-1 align-middle">
+                  {result.usedDynamicPrompts ? "dynamic prompts" : "static fallback"}
+                </span>
+              )}
             </div>
           </div>
           <button
             data-testid="rerun-scan-btn"
-            onClick={() => router.push("/scan")}
-            className="group inline-flex items-center gap-2 self-start md:self-auto bg-transparent text-[#1A1A1A] border border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em]"
+            onClick={handleRerun}
+            disabled={isScanning}
+            className={`group inline-flex items-center gap-2 self-start md:self-auto bg-transparent border transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] ${isScanning ? "text-[#999999] border-[#E5E2D9] cursor-not-allowed" : "text-[#1A1A1A] border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white"}`}
           >
-            <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" strokeWidth={1.5} />
-            Re-run scan
+            <RefreshCw className={`w-4 h-4 ${isScanning ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} strokeWidth={1.5} />
+            {isScanning ? "Scanning..." : "Re-run scan"}
           </button>
         </div>
 
         {/* KPI row — hero score + two supporting */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
           <div className="lg:col-span-2">
             <HeroScoreCard
               testId="kpi-visibility-score"
               score={result.visibilityScore}
               tierText={tierLabel(tier)}
+              trend={scoreTrend}
+              historyScores={sortedHistory.map(s => s.visibility_pct || 0)}
             />
           </div>
           <KpiCard
@@ -129,17 +222,58 @@ export default function Dashboard() {
             sub="Co-mentioned in answers"
             index={2}
           />
+          <KpiCard
+            testId="kpi-citations"
+            label="Citations Extracted"
+            value={result.totalCitations || 0}
+            sub="URLs in AI responses"
+            index={3}
+          />
         </div>
+
+        {/* History Row */}
+        {sortedHistory.length > 1 && (
+          <div className="mb-8 p-5 bg-white border border-[#E5E2D9] rounded-sm">
+            <h3 className="text-xs font-semibold text-[#1A1A1A] mb-4 uppercase tracking-[0.1em]">Previous Scans</h3>
+            <div className="flex gap-4 overflow-x-auto pb-2">
+              {sortedHistory.map((scan, i) => {
+                const isActive = new Date(scan.scanned_at).getTime() === new Date(result.scanTimestamp).getTime();
+                // Simple consecutive delta for the list (newer minus this one)
+                const next = sortedHistory[i - 1];
+                const cardDelta = next ? (next.visibility_pct - (scan.visibility_pct || 0)).toFixed(1) : null;
+                return (
+                  <button 
+                    key={i} 
+                    onClick={() => handleHistoryClick(scan)}
+                    className={`min-w-[140px] text-left p-4 border rounded-sm transition-colors ${isActive ? "border-[#D9531E] bg-[#FFF8F5]" : "border-[#E5E2D9] bg-[#FDFBF7] hover:border-[#1A1A1A]"}`}
+                  >
+                    <div className="text-xs text-[#666666] whitespace-nowrap">{formatTimestamp(scan.scanned_at)}</div>
+                    <div className="text-xl font-serif font-bold text-[#D9531E] mt-2">{scan.visibility_pct}%</div>
+                    {cardDelta !== null && (
+                      <div className={`text-[10px] mt-0.5 font-semibold ${parseFloat(cardDelta) > 0 ? "text-[#2F5C4F]" : parseFloat(cardDelta) < 0 ? "text-[#8B3A3A]" : "text-[#999999]"}`}>
+                        {parseFloat(cardDelta) > 0 ? "+" : ""}{cardDelta}%
+                      </div>
+                    )}
+                    <div className="text-xs text-[#999999] mt-1">{scan.prompts_tracked} prompts</div>
+                    {scan.used_dynamic_prompts !== undefined && (
+                      <div className="text-[10px] mt-1 text-[#2F5C4F]">{scan.used_dynamic_prompts ? "dyn" : "static"}</div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Main grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
-            <TopPromptsTable prompts={result.topPrompts || []} />
-            <CompetitorTable competitors={result.competitors || []} />
+            <TopPromptsTable prompts={topPromptsWithTrend} />
+            <CompetitorTable competitors={competitorsWithTrend} />
           </div>
           <div className="lg:col-span-1">
             <div className="lg:sticky lg:top-24">
-              <InsightPanel result={result} onRerun={() => router.push("/scan")} />
+              <InsightPanel result={result} trend={scoreTrend} onRerun={handleRerun} />
             </div>
           </div>
         </div>

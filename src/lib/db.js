@@ -12,6 +12,14 @@ export async function insertScan(scanRecord) {
     return;
   }
 
+  // Persist rich Phase 2 data: store full payload (incl. competitors list + used flag + results) in raw_results JSONB for flexibility
+  const rawPayload = {
+    results: scanRecord.results || [],
+    competitors: scanRecord.competitors || [],
+    used_dynamic_prompts: !!scanRecord.used_dynamic_prompts,
+    platform: scanRecord.platform,
+  };
+
   const { data, error } = await supabase
     .from("scans")
     .insert([
@@ -22,7 +30,7 @@ export async function insertScan(scanRecord) {
         visibility_pct: scanRecord.visibility_pct,
         prompts_tracked: scanRecord.prompts_tracked,
         prompts_mentioned: scanRecord.prompts_mentioned,
-        raw_results: scanRecord.results,
+        raw_results: rawPayload,
         scanned_at: scanRecord.scanned_at,
       }
     ]);
@@ -32,5 +40,24 @@ export async function insertScan(scanRecord) {
     throw error;
   }
 
+  return data;
+}
+
+export async function getScansForBrand(brand) {
+  if (!supabase) {
+    return [];
+  }
+  
+  const { data, error } = await supabase
+    .from("scans")
+    .select("*")
+    .ilike("brand", brand)
+    .order("scanned_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching scans from Supabase:", error);
+    return [];
+  }
+  
   return data;
 }
