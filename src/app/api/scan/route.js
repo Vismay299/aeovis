@@ -26,7 +26,7 @@ export async function POST(request) {
       ? competitorsRaw.split(",").map(c => c.trim()).filter(Boolean)
       : [];
 
-    let prompts = await generatePromptsForBrand(brand, url, industry);
+    let prompts = await generatePromptsForBrand(brand, url, industry, stats);
     const usedDynamicPrompts = prompts && prompts.length > 0;
 
     if (!usedDynamicPrompts) {

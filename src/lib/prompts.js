@@ -15,7 +15,7 @@ ${rawContent.slice(0, 5000)}
 Return ONLY a concise 300-500 word summary focused on what makes this brand distinct. No introductions, no JSON, just the summary text.`;
 
   try {
-    const summary = await generateContent(summaryPrompt);
+    const summary = await generateContent(summaryPrompt, { stats, timeout: 20000 });
     return summary.trim() || rawContent.slice(0, 3000);
   } catch (e) {
     console.warn("Gemini summarization failed, using raw content");
@@ -23,7 +23,7 @@ Return ONLY a concise 300-500 word summary focused on what makes this brand dist
   }
 }
 
-export async function generatePromptsForBrand(brand, website, industry) {
+export async function generatePromptsForBrand(brand, website, industry = "", stats = null) {
   let websiteSummary = await scrapeForSummary(website);
   websiteSummary = await summarizeWebsiteContent(websiteSummary, brand, industry);
 
@@ -49,7 +49,7 @@ Do not add any extra text, markdown, or explanations outside the JSON.`;
 
   try {
     // Use structured JSON mode for more reliable output
-    const responseText = await generateContent(genPrompt, { jsonMode: true });
+    const responseText = await generateContent(genPrompt, { jsonMode: true, stats, timeout: 30000 });
     // Parse directly since we requested JSON
     let promptsArray;
     try {

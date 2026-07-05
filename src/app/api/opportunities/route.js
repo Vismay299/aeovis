@@ -20,7 +20,9 @@ For EACH of these prompts, provide a 1-sentence strategic recommendation on how 
 Return a JSON array of strings in the exact same order as the prompts.
 Only return valid JSON.`;
 
-    const jsonStr = await generateContent(promptText, { jsonMode: true, temperature: 0.2 });
+    const stats = { tokens: 0 };
+    const jsonStr = await generateContent(promptText, { jsonMode: true, temperature: 0.2, stats, timeout: 20000 });
+    console.log(`[opportunities] generated in ${stats.tokens} tokens`);
     const cleanStr = jsonStr.replace(/```json\n?|\n?```/g, "").trim();
     const result = JSON.parse(cleanStr);
 

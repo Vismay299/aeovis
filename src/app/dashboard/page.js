@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RefreshCw, FlaskConical, Loader2, Download } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { KpiCard, HeroScoreCard } from "@/components/dashboard/KpiCard";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TopPromptsTable } from "@/components/dashboard/TopPromptsTable";
 import { CompetitorTable } from "@/components/dashboard/CompetitorTable";
 import { InsightPanel } from "@/components/dashboard/InsightPanel";
@@ -118,14 +119,14 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen bg-[#FDFBF7]">
         <Navbar />
-        <div className="max-w-7xl mx-auto px-6 md:px-12 py-28 animate-pulse">
-           <div className="h-6 bg-[#E5E2D9] w-32 mb-4 rounded-sm"></div>
-           <div className="h-16 bg-[#E5E2D9] w-64 mb-10 rounded-sm"></div>
+        <div className="max-w-7xl mx-auto px-6 md:px-12 py-28">
+           <Skeleton className="h-6 bg-[#E5E2D9] w-32 mb-4 rounded-sm" />
+           <Skeleton className="h-16 bg-[#E5E2D9] w-64 mb-10 rounded-sm" />
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
-             <div className="lg:col-span-2 h-40 bg-[#E5E2D9] rounded-sm"></div>
-             <div className="h-40 bg-[#E5E2D9] rounded-sm"></div>
-             <div className="h-40 bg-[#E5E2D9] rounded-sm"></div>
-             <div className="h-40 bg-[#E5E2D9] rounded-sm"></div>
+             <Skeleton className="lg:col-span-2 h-40 bg-[#E5E2D9] rounded-sm" />
+             <Skeleton className="h-40 bg-[#E5E2D9] rounded-sm" />
+             <Skeleton className="h-40 bg-[#E5E2D9] rounded-sm" />
+             <Skeleton className="h-40 bg-[#E5E2D9] rounded-sm" />
            </div>
         </div>
       </div>
