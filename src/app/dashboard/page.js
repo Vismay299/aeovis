@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, FlaskConical, Loader2 } from "lucide-react";
+import { RefreshCw, FlaskConical, Loader2, Download } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { KpiCard, HeroScoreCard } from "@/components/dashboard/KpiCard";
 import { TopPromptsTable } from "@/components/dashboard/TopPromptsTable";
@@ -118,6 +118,16 @@ export default function Dashboard() {
     return (
       <div className="min-h-screen bg-[#FDFBF7]">
         <Navbar />
+        <div className="max-w-7xl mx-auto px-6 md:px-12 py-28 animate-pulse">
+           <div className="h-6 bg-[#E5E2D9] w-32 mb-4 rounded-sm"></div>
+           <div className="h-16 bg-[#E5E2D9] w-64 mb-10 rounded-sm"></div>
+           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+             <div className="lg:col-span-2 h-40 bg-[#E5E2D9] rounded-sm"></div>
+             <div className="h-40 bg-[#E5E2D9] rounded-sm"></div>
+             <div className="h-40 bg-[#E5E2D9] rounded-sm"></div>
+             <div className="h-40 bg-[#E5E2D9] rounded-sm"></div>
+           </div>
+        </div>
       </div>
     );
   }
@@ -161,7 +171,7 @@ export default function Dashboard() {
 
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] relative">
+    <div className="min-h-screen bg-[#FDFBF7] relative print:bg-white">
       {/* Scanning Overlay */}
       {isScanning && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm transition-opacity duration-300">
@@ -214,15 +224,24 @@ export default function Dashboard() {
               )}
             </div>
           </div>
-          <button
-            data-testid="rerun-scan-btn"
-            onClick={handleRerun}
-            disabled={isScanning}
-            className={`group inline-flex items-center gap-2 self-start md:self-auto bg-transparent border transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] ${isScanning ? "text-[#999999] border-[#E5E2D9] cursor-not-allowed" : "text-[#1A1A1A] border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white"}`}
-          >
-            <RefreshCw className={`w-4 h-4 ${isScanning ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} strokeWidth={1.5} />
-            {isScanning ? "Scanning..." : "Re-run scan"}
-          </button>
+          <div className="flex items-center gap-3 self-start md:self-auto print:hidden">
+            <button
+              onClick={() => window.print()}
+              className="group inline-flex items-center gap-2 bg-transparent border border-[#E5E2D9] hover:border-[#1A1A1A] text-[#1A1A1A] transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em]"
+            >
+              <Download className="w-4 h-4 group-hover:-translate-y-0.5 transition-transform" strokeWidth={1.5} />
+              Export
+            </button>
+            <button
+              data-testid="rerun-scan-btn"
+              onClick={handleRerun}
+              disabled={isScanning}
+              className={`group inline-flex items-center gap-2 bg-transparent border transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] ${isScanning ? "text-[#999999] border-[#E5E2D9] cursor-not-allowed" : "text-[#1A1A1A] border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white"}`}
+            >
+              <RefreshCw className={`w-4 h-4 ${isScanning ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} strokeWidth={1.5} />
+              {isScanning ? "Scanning..." : "Re-run"}
+            </button>
+          </div>
         </div>
 
         {/* KPI row — hero score + two supporting */}
@@ -294,7 +313,7 @@ export default function Dashboard() {
         )}
 
         {/* Tabs */}
-        <div className="flex items-center gap-6 border-b border-[#E5E2D9] mb-8 overflow-x-auto pb-px">
+        <div className="flex items-center gap-6 border-b border-[#E5E2D9] mb-8 overflow-x-auto pb-px print:hidden">
           {["overview", "opportunities", "citations"].map(tab => (
             <button
               key={tab}

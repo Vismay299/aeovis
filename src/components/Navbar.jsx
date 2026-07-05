@@ -9,7 +9,7 @@ export const Navbar = () => {
   return (
     <header
       data-testid="navbar"
-      className="sticky top-0 z-50 bg-[#FDFBF7]/90 backdrop-blur-md border-b border-[#E5E2D9]"
+      className="sticky top-0 z-50 bg-[#FDFBF7]/90 backdrop-blur-md border-b border-[#E5E2D9] print:hidden"
     >
       <div className="max-w-7xl mx-auto px-6 md:px-12 h-[72px] flex items-center justify-between">
         <Link href="/" data-testid="nav-logo" className="flex items-baseline gap-2 group">
