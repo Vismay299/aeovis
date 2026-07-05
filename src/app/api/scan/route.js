@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { INDUSTRY_PROMPTS } from "@/data/industries";
 import { generateContent } from "@/lib/gemini";
 import { insertScan } from "@/lib/db";
+import { generatePromptsForBrand } from "@/lib/prompts";
 
 const POSITIVE_WORDS = ["great", "best", "top", "excellent", "recommend", "leading", "powerful"];
 const NEGATIVE_WORDS = ["expensive", "limited", "poor", "lacking", "outdated", "issues"];
@@ -24,7 +25,12 @@ export async function POST(request) {
     const competitors = competitorsRaw
       ? competitorsRaw.split(",").map(c => c.trim()).filter(Boolean)
       : [];
-    const prompts = INDUSTRY_PROMPTS[industry].prompts;
+
+    let prompts = await generatePromptsForBrand(brand, url, industry);
+    if (!prompts || prompts.length === 0) {
+      console.log("Fallback to static industry prompts");
+      prompts = INDUSTRY_PROMPTS[industry].prompts;
+    }
 
     const results = [];
     let promptsMentioned = 0;
