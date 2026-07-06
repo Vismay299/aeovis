@@ -1,5 +1,6 @@
 import { generateContent } from "./gemini.js";
 import { scrapeForSummary } from "./firecrawl.js";
+import { normalizeTopic } from "./scoring/topics.js";
 
 async function summarizeWebsiteContent(rawContent, brand, industry, stats = null) {
   if (!rawContent || rawContent.length < 200) return rawContent;
@@ -26,7 +27,7 @@ Industry: ${industry || "General"}
 Return ONLY a concise 300-500 word summary. No introductions or JSON.`;
 
   try {
-    const summary = await generateContent(summaryPrompt, { stats, timeout: 20000 });
+    const { text: summary } = await generateContent(summaryPrompt, { stats, timeout: 20000 });
     return summary.trim() || rawContent.slice(0, 3000);
   } catch (e) {
     console.warn("Gemini summarization failed, using raw content");
@@ -56,27 +57,33 @@ CRITICAL RULES:
 - Focus on the problem the user is facing and the outcome they want.
 - Use the provided summary to make questions relevant to this exact offering.
 
+For each generated prompt, classify it into one of these intent tiers:
+- "high_intent": Queries close to purchasing, e.g. looking for best tools, software lists, alternatives, or pricing.
+- "comparison": Direct comparisons between tools or solutions.
+- "problem_aware": Queries focused on solving a specific pain or issue, without knowing the category of tools yet.
+- "exploratory": General research, learning, or definition queries.
+- "branded": Queries explicitly searching for this brand "${brand}" or its specific features.
+
 Good examples of style (adapt the style to the summary, do not copy these literally):
   - "How do I solve [specific pain from summary] without [current painful way]?"
   - "I only find out about [problem] after it costs me money, how can I catch this earlier?"
   - "Tools to [desired outcome] for [audience from summary]"
   - "Why do I keep getting surprised by [problem]?"
 
-Generate a diverse mix:
-- Problem awareness questions
-- "How do I..." or "What's the best way to..." questions
-- Questions about integrating with tools they already use
-- Questions about avoiding big projects or manual work
-- "Best [tool/category] for [use case]" queries
-
 Return ONLY a valid JSON array of objects:
-[{"text": "the exact question a user would type"}]
+[
+  {
+    "text": "the exact question a user would type",
+    "intent_tier": "high_intent" | "comparison" | "problem_aware" | "exploratory" | "branded",
+    "topic_suggestion": "short category name e.g. Pricing, Setup, Integrations, Features"
+  }
+]
 
 Do not add any extra text, explanations, or markdown outside the JSON.`;
 
   try {
     // Use structured JSON mode for more reliable output
-    const responseText = await generateContent(genPrompt, { jsonMode: true, stats, timeout: 30000 });
+    const { text: responseText } = await generateContent(genPrompt, { jsonMode: true, stats, timeout: 30000 });
     // Parse directly since we requested JSON
     let promptsArray;
     try {
@@ -90,7 +97,12 @@ Do not add any extra text, explanations, or markdown outside the JSON.`;
     }
 
     if (Array.isArray(promptsArray) && promptsArray.length > 0) {
-      return promptsArray.map(p => p.text || p.prompt || p).filter(Boolean);
+      return promptsArray.map(p => {
+        const text = (p.text || p.prompt || "").trim();
+        const intent_tier = p.intent_tier || "exploratory";
+        const topic = normalizeTopic(p.topic_suggestion || "General");
+        return { text, intent_tier, topic };
+      }).filter(p => p.text);
     }
     return [];
   } catch (e) {

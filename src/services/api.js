@@ -1,4 +1,5 @@
 import { buildMockResult } from "@/data/mockData";
+import { normalizeTopic } from "../lib/scoring/topics.js";
 
 export function saveScan(result) {
   try {
@@ -50,12 +51,37 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
   }
   const usedDynamic = !!(data.used_dynamic_prompts ?? data.usedDynamicPrompts ?? data.raw_results?.used_dynamic_prompts);
 
+  const version = data.scoring_version ?? data.scoringVersion ?? data.raw_results?.scoring_version ?? "v1-binary";
+  const promptsTracked = data.prompts_tracked ?? data.promptsAnalyzed ?? results.length ?? 0;
+  const promptsMentioned = data.prompts_mentioned ?? results.filter(r => r.mentioned).length ?? 0;
+  const derivedMentionRate = promptsTracked ? Math.round((promptsMentioned / promptsTracked) * 1000) / 10 : 0.0;
+
+  const mentionRatePct = data.mention_rate_pct ?? data.mentionRatePct ?? data.raw_results?.mention_rate_pct ?? (
+    version === "v1-binary"
+      ? (data.visibility_pct ?? data.visibilityScore ?? 0.0)
+      : derivedMentionRate
+  );
+
   return {
     brand: data.brand ?? fallbackBrand,
     website: data.website ?? data.url ?? fallbackWebsite,
     industry: data.industry ?? "",
     visibilityScore: data.visibility_pct ?? data.visibilityScore ?? 0,
-    promptsAnalyzed: data.prompts_tracked ?? data.promptsAnalyzed ?? 0,
+    mentionRatePct,
+    promptsAnalyzed: promptsTracked,
+    scoreCiLow: data.score_ci_low ?? data.scoreCiLow ?? data.raw_results?.score_ci_low ?? (data.visibility_pct ?? data.visibilityScore ?? 0),
+    scoreCiHigh: data.score_ci_high ?? data.scoreCiHigh ?? data.raw_results?.score_ci_high ?? (data.visibility_pct ?? data.visibilityScore ?? 0),
+    stability: data.stability ?? data.raw_results?.stability ?? "high",
+    promptSetId: data.prompt_set_id ?? data.promptSetId ?? data.raw_results?.prompt_set_id ?? "",
+    promptSetHash: data.prompt_set_hash ?? data.promptSetHash ?? data.raw_results?.prompt_set_hash ?? "",
+    intentBreakdown: data.intent_breakdown ?? data.intentBreakdown ?? data.raw_results?.intent_breakdown ?? {
+      high_intent: 0.0,
+      comparison: 0.0,
+      problem_aware: 0.0,
+      exploratory: 0.0,
+      branded: 0.0
+    },
+    topicScores: data.topic_scores ?? data.topicScores ?? data.raw_results?.topic_scores ?? {},
     competitorsFound:
       data.competitors_found ??
       data.competitorsFound ??
@@ -65,6 +91,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     tokensUsed: data.tokens_used ?? data.tokensUsed ?? 0,
     summary: data.summary || generateSummary(data),
     totalCitations: results.reduce((sum, r) => sum + ((r.citations || r.citations_found || []).length), 0),
+    scoringVersion: version,
     // Preserve rich Phase 2 analysis fields for future UI (citations, key phrases, exact position)
     rawResults: results,
     topPrompts: results.map((p) => {
@@ -84,26 +111,57 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
           citations: p.citations || [],
           keyPhrases: p.key_phrases || p.keyPhrases || [],
           competitorsFound: p.competitors_found || [],
-          mentioned: p.mentioned
+          mentioned: p.mentioned,
+          rawResponse: p.raw_response ?? "",
+          modelUsed: p.model_used ?? "",
+          probeTemperature: p.probe_temperature ?? null,
+          judgeMethod: p.judge_method ?? "",
+          judgeModelUsed: p.judge_model_used ?? "",
+          promptScore: p.prompt_score ?? (p.mentioned ? 100.0 : 0.0),
+          intentTier: p.intent_tier || "exploratory",
+          topic: normalizeTopic(p.topic || "General")
         };
       }
       return {
         prompt: p.prompt,
         rank: p.rank ?? p.visibility ?? "—",
         volume: p.volume ?? "—",
+        intentTier: p.intent_tier || "exploratory",
+        topic: normalizeTopic(p.topic || "General")
       };
     }),
-    competitors: extractCompetitors(data),
+    competitors: extractCompetitors(data, results),
     competitorsRaw: data.competitors_raw || "",
     // For debug / future UI
     _debug: {
       usedDynamicPrompts: usedDynamic,
       hasCitations: results.some(r => (r.citations || []).length > 0),
+      judgeStats: (() => {
+        if (data.judge_stats || data.judgeStats || data.raw_results?.judge_stats) {
+          return data.judge_stats ?? data.judgeStats ?? data.raw_results.judge_stats;
+        }
+        const hasRunDetails = results.some(r => r.run_details && r.run_details.length > 0);
+        if (hasRunDetails) {
+          const allRuns = results.flatMap(r => r.run_details || []);
+          return {
+            deterministic: allRuns.filter(run => run.judge_method === "deterministic").length,
+            llm: allRuns.filter(run => run.judge_method === "llm").length,
+            fallback: allRuns.filter(run => run.judge_method === "fallback").length,
+            skipped: allRuns.filter(run => run.judge_method === "skipped").length,
+          };
+        }
+        return {
+          deterministic: results.filter(r => r.judge_method === "deterministic" || r.judgeMethod === "deterministic").length,
+          llm: results.filter(r => r.judge_method === "llm" || r.judgeMethod === "llm").length,
+          fallback: results.filter(r => r.judge_method === "fallback" || r.judgeMethod === "fallback").length,
+          skipped: results.filter(r => r.judge_method === "skipped" || r.judgeMethod === "skipped").length,
+        };
+      })()
     },
   };
 }
 
-function extractCompetitors(data) {
+function extractCompetitors(data, results = []) {
   const comps = data.competitors;
   if (comps && comps.length) {
     // Handle both array of strings (from input) or array of objects (legacy/derived)
@@ -120,10 +178,11 @@ function extractCompetitors(data) {
       }));
     }
   }
-  if (!data.results) return [];
+  const activeResults = data.results ?? results ?? [];
+  if (!activeResults || activeResults.length === 0) return [];
 
   const compMap = {};
-  data.results.forEach(r => {
+  activeResults.forEach(r => {
     const isBrandMentioned = r.mentioned;
     (r.competitors_found || []).forEach(c => {
       const name = c.toLowerCase();
@@ -136,7 +195,7 @@ function extractCompetitors(data) {
     });
   });
 
-  const totalPrompts = data.prompts_tracked || data.promptsAnalyzed || (data.results && data.results.length) || 1;
+  const totalPrompts = data.prompts_tracked || data.promptsAnalyzed || activeResults.length || 1;
 
   return Object.values(compMap)
     .sort((a, b) => b.mentions - a.mentions)
@@ -151,11 +210,17 @@ function extractCompetitors(data) {
 
 function generateSummary(data) {
   const brand = data.brand || "Your brand";
-  const score = data.visibility_pct || 0;
-  if (score >= 70) {
+  const score = data.visibility_pct ?? data.visibilityScore ?? 0;
+  const version = data.scoring_version ?? data.scoringVersion ?? data.raw_results?.scoring_version ?? "v2-composite";
+
+  const isBinary = version === "v1-binary";
+  const strongThreshold = isBinary ? 70 : 50;
+  const moderateThreshold = isBinary ? 40 : 25;
+
+  if (score >= strongThreshold) {
     return `${brand} has a strong presence across AI answers in this category, frequently appearing as a recommended solution. Ensure you monitor high-intent queries to defend this position.`;
   }
-  if (score >= 40) {
+  if (score >= moderateThreshold) {
     return `${brand} appears in a moderate amount of AI answers but often loses ground on comparison prompts. There is clear room to grow by targeting specific competitor gaps.`;
   }
   return `${brand} is largely invisible in AI answers for this category. Competitors are currently capturing the majority of AI-driven recommendations.`;
@@ -171,7 +236,7 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
     if (stage < 4) {
       onProgress(stage);
     }
-  }, 3500);
+  }, 25000);
 
   try {
     const res = await fetch("/api/scan", {

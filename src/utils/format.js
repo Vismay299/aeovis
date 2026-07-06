@@ -1,6 +1,10 @@
-export function scoreTier(score) {
-  if (score >= 70) return "strong";
-  if (score >= 40) return "moderate";
+export function scoreTier(score, scoringVersion = "v2-composite") {
+  const isBinary = scoringVersion === "v1-binary";
+  const strongThreshold = isBinary ? 70 : 50;
+  const moderateThreshold = isBinary ? 40 : 25;
+
+  if (score >= strongThreshold) return "strong";
+  if (score >= moderateThreshold) return "moderate";
   return "weak";
 }
 

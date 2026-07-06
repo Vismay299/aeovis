@@ -13,6 +13,8 @@ import { OpportunitiesPanel } from "@/components/dashboard/OpportunitiesPanel";
 import { CitationsPanel } from "@/components/dashboard/CitationsPanel";
 import { loadScan, fetchScanHistory, normalizeResult } from "@/services/api";
 import { scoreTier, tierLabel, formatTimestamp, relativeTime } from "@/utils/format";
+import { ScoreBreakdown } from "@/components/dashboard/ScoreBreakdown";
+import { QueryManager } from "@/components/dashboard/QueryManager";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -32,14 +34,16 @@ export default function Dashboard() {
     }
   }, []);
 
-  const { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend } = React.useMemo(() => {
+  const { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend, isMixedTrend, promptSetChanged } = React.useMemo(() => {
     let scoreTrend = null;
     let previousScan = null;
     let sortedHistory = [];
     let topPromptsWithTrend = [];
     let competitorsWithTrend = [];
+    let isMixedTrend = false;
+    let promptSetChanged = false;
 
-    if (!result) return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend };
+    if (!result) return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend, isMixedTrend, promptSetChanged };
 
     if (history && history.length > 0) {
       sortedHistory = [...history].sort((a,b) => new Date(b.scanned_at) - new Date(a.scanned_at));
@@ -48,20 +52,49 @@ export default function Dashboard() {
         const prev = sortedHistory[idx + 1];
         scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
         previousScan = normalizeResult(prev, result.brand, result.website);
+        
+        const prevVersion = prev.scoring_version ?? prev.raw_results?.scoring_version ?? "v1-binary";
+        if (prevVersion !== result.scoringVersion) {
+          isMixedTrend = true;
+        }
+
+        const prevHash = prev.prompt_set_hash ?? prev.raw_results?.prompt_set_hash ?? "";
+        if (prevHash && result.promptSetHash && prevHash !== result.promptSetHash) {
+          promptSetChanged = true;
+        }
       } else if (idx === -1 && sortedHistory.length > 0) {
         // result not in history yet
-        scoreTrend = (result.visibilityScore - (sortedHistory[0].visibility_pct || 0)).toFixed(1);
-        previousScan = normalizeResult(sortedHistory[0], result.brand, result.website);
+        const prev = sortedHistory[0];
+        scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
+        previousScan = normalizeResult(prev, result.brand, result.website);
+        
+        const prevVersion = prev.scoring_version ?? prev.raw_results?.scoring_version ?? "v1-binary";
+        if (prevVersion !== result.scoringVersion) {
+          isMixedTrend = true;
+        }
+
+        const prevHash = prev.prompt_set_hash ?? prev.raw_results?.prompt_set_hash ?? "";
+        if (prevHash && result.promptSetHash && prevHash !== result.promptSetHash) {
+          promptSetChanged = true;
+        }
       }
     }
 
-    topPromptsWithTrend = (result.topPrompts || []).map(p => {
+    // Sort prompts by rank / visibility
+    const sortedPrompts = [...(result.topPrompts || [])].sort((a, b) => {
+      if (a.rank === "—") return 1;
+      if (b.rank === "—") return -1;
+      return a.rank - b.rank;
+    });
+
+    topPromptsWithTrend = sortedPrompts.map(p => {
       if (previousScan && previousScan.topPrompts) {
         const prevP = previousScan.topPrompts.find(pp => pp.prompt.toLowerCase() === p.prompt.toLowerCase());
-        const currRank = typeof p.rank === "number" ? p.rank : null;
-        const prevRank = prevP && typeof prevP.rank === "number" ? prevP.rank : null;
-        if (prevRank !== null && currRank !== null) {
-          return { ...p, trend: prevRank - currRank };
+        if (prevP) {
+          const prevRank = prevP.rank === "—" || prevP.rank == null ? 100 : prevP.rank;
+          const currRank = p.rank === "—" || p.rank == null ? 100 : p.rank;
+          const trend = prevRank - currRank;
+          return { ...p, trend };
         }
       }
       return p;
@@ -70,17 +103,21 @@ export default function Dashboard() {
     competitorsWithTrend = (result.competitors || []).map(c => {
       if (previousScan && previousScan.competitors) {
         const prevC = previousScan.competitors.find(pc => pc.name.toLowerCase() === c.name.toLowerCase());
-        const currVis = typeof c.visibilityScore === "number" ? c.visibilityScore : 0;
-        const prevVis = prevC && typeof prevC.visibilityScore === "number" ? prevC.visibilityScore : 0;
         if (prevC) {
-          return { ...c, trend: (currVis - prevVis).toFixed(1) };
+          const trend = c.visibilityScore - prevC.visibilityScore;
+          return { ...c, trend };
         }
       }
       return c;
     });
 
-    return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend };
+    return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend, isMixedTrend, promptSetChanged };
   }, [result, history]);
+
+  const resultWithFlags = React.useMemo(() => {
+    if (!result) return null;
+    return { ...result, promptSetChanged };
+  }, [result, promptSetChanged]);
 
   // Empty state — no scan yet
   if (result === null) {
@@ -133,7 +170,7 @@ export default function Dashboard() {
     );
   }
 
-  const tier = scoreTier(result.visibilityScore);
+  const tier = scoreTier(result.visibilityScore, result.scoringVersion);
 
   const handleHistoryClick = (scan) => {
     // Re-normalize raw DB row into frontend shape
@@ -258,7 +295,20 @@ export default function Dashboard() {
               score={result.visibilityScore}
               tierText={tierLabel(tier)}
               trend={scoreTrend}
-              historyScores={sortedHistory.map(s => s.visibility_pct || 0)}
+              isMixedTrend={isMixedTrend}
+              promptSetChanged={promptSetChanged}
+              mentionRate={result.mentionRatePct}
+              scoreCiLow={result.scoreCiLow}
+              scoreCiHigh={result.scoreCiHigh}
+              historyScores={sortedHistory
+                .filter(s => {
+                  const ver = s.scoring_version ?? s.raw_results?.scoring_version ?? "v1-binary";
+                  if (result.scoringVersion === "v1-binary") {
+                    return ver === "v1-binary";
+                  }
+                  return ver !== "v1-binary";
+                })
+                .map(s => s.visibility_pct || 0)}
             />
           </div>
           <KpiCard
@@ -283,6 +333,13 @@ export default function Dashboard() {
             index={3}
           />
         </div>
+
+        {/* Intent Breakdown Row (Phase 3) */}
+        {result.intentBreakdown && (
+          <div className="mb-8">
+            <ScoreBreakdown breakdown={result.intentBreakdown} />
+          </div>
+        )}
 
         {/* History Row */}
         {sortedHistory.length > 1 && (
@@ -311,6 +368,11 @@ export default function Dashboard() {
                     {scan.used_dynamic_prompts !== undefined && (
                       <div className="text-[10px] mt-1 text-[#2F5C4F]">{scan.used_dynamic_prompts ? "dyn" : "static"}</div>
                     )}
+                    {(scan.scoring_version !== undefined || scan.raw_results?.scoring_version !== undefined) && (
+                      <div className="text-[10px] mt-1 text-[#666666] italic">
+                        {scan.scoring_version ?? scan.raw_results?.scoring_version ?? "v1-binary"}
+                      </div>
+                    )}
                   </button>
                 );
               })}
@@ -320,7 +382,7 @@ export default function Dashboard() {
 
         {/* Tabs */}
         <div className="flex items-center gap-6 border-b border-[#E5E2D9] mb-8 overflow-x-auto pb-px print:hidden">
-          {["overview", "opportunities", "citations"].map(tab => (
+          {["overview", "queries", "opportunities", "citations"].map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -330,7 +392,7 @@ export default function Dashboard() {
                   : "border-transparent text-[#999999] hover:text-[#1A1A1A]"
               }`}
             >
-              {tab === "citations" ? "Citations & Sources" : tab}
+              {tab === "citations" ? "Citations & Sources" : tab === "queries" ? "Tracked Queries" : tab}
             </button>
           ))}
         </div>
@@ -344,10 +406,14 @@ export default function Dashboard() {
             </div>
             <div className="lg:col-span-1">
               <div className="lg:sticky lg:top-24">
-                <InsightPanel result={result} trend={scoreTrend} onRerun={handleRerun} />
+                <InsightPanel result={resultWithFlags} trend={scoreTrend} onRerun={handleRerun} />
               </div>
             </div>
           </div>
+        )}
+
+        {activeTab === "queries" && (
+          <QueryManager brand={result.brand} currentPrompts={result.topPrompts} />
         )}
 
         {activeTab === "opportunities" && (

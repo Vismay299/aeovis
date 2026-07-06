@@ -1,0 +1,142 @@
+[
+  {
+    "response": "We highly recommend Acme for your CRM needs. It stands out as the best tool.",
+    "brand": "Acme",
+    "website": "https://acme.io",
+    "competitors": ["Beta CRM", "Salesforce"],
+    "expected": { "mentioned": true, "position": "recommended" }
+  },
+  {
+    "response": "When comparing solutions, Acme and Beta CRM are both strong options with similar features.",
+    "brand": "Acme",
+    "website": "https://acme.io",
+    "competitors": ["Beta CRM", "Salesforce"],
+    "expected": { "mentioned": true, "position": "compared" }
+  },
+  {
+    "response": "For more information, visit the acme.io website or read their docs.",
+    "brand": "Acme",
+    "website": "https://acme.io",
+    "competitors": ["Beta CRM", "Salesforce"],
+    "expected": { "mentioned": true, "position": "cited" }
+  },
+  {
+    "response": "We recommend using Salesforce or HubSpot for managing enterprise leads.",
+    "brand": "Acme",
+    "website": "https://acme.io",
+    "competitors": ["Salesforce", "HubSpot"],
+    "expected": { "mentioned": false, "position": "omitted" }
+  },
+  {
+    "response": "Acme Corp provides exceptional pipeline tracking utilities.",
+    "brand": "Acme Corp",
+    "website": "https://acme.io",
+    "competitors": ["Salesforce"],
+    "expected": { "mentioned": true, "position": "recommended" }
+  },
+  {
+    "response": "This is an acmeist philosophical view, not related to software.",
+    "brand": "Acme",
+    "website": "https://acme.io",
+    "competitors": ["Salesforce"],
+    "expected": { "mentioned": false, "position": "omitted" }
+  },
+  {
+    "response": "Linear App is the gold standard for issue tracking in modern engineering teams.",
+    "brand": "Linear",
+    "website": "https://linear.app",
+    "competitors": ["Jira", "Asana"],
+    "expected": { "mentioned": true, "position": "recommended" }
+  },
+  {
+    "response": "We analyzed Linear and Jira. Linear is fast, but Jira has more advanced dashboards.",
+    "brand": "Linear",
+    "website": "https://linear.app",
+    "competitors": ["Jira", "Asana"],
+    "expected": { "mentioned": true, "position": "compared" }
+  },
+  {
+    "response": "For a complete list of features, consult the linear.app site.",
+    "brand": "Linear",
+    "website": "https://linear.app",
+    "competitors": ["Jira"],
+    "expected": { "mentioned": true, "position": "cited" }
+  },
+  {
+    "response": "You should check out Linear Technologies for high-performance analog semiconductors.",
+    "brand": "Linear",
+    "website": "https://linear.app",
+    "competitors": ["Jira"],
+    "expected": { "mentioned": true, "position": "recommended" }
+  },
+  {
+    "response": "Our top recommendation is Snowflake for data warehousing.",
+    "brand": "Snowflake",
+    "website": "https://snowflake.com",
+    "competitors": ["Databricks", "Redshift"],
+    "expected": { "mentioned": true, "position": "recommended" }
+  },
+  {
+    "response": "Snowflake Corp has built a massive ecosystem, competing with Databricks.",
+    "brand": "Snowflake",
+    "website": "https://snowflake.com",
+    "competitors": ["Databricks", "Redshift"],
+    "expected": { "mentioned": true, "position": "compared" }
+  },
+  {
+    "response": "Refer to the snowflake.com documentation for detailed query specs.",
+    "brand": "Snowflake",
+    "website": "https://snowflake.com",
+    "competitors": ["Databricks"],
+    "expected": { "mentioned": true, "position": "cited" }
+  },
+  {
+    "response": "Redshift is a cloud data warehouse product from AWS.",
+    "brand": "Snowflake",
+    "website": "https://snowflake.com",
+    "competitors": ["Databricks", "Redshift"],
+    "expected": { "mentioned": false, "position": "omitted" }
+  },
+  {
+    "response": "We recommend Datadog for unified observability.",
+    "brand": "Datadog",
+    "website": "https://datadoghq.com",
+    "competitors": ["New Relic", "Dynatrace"],
+    "expected": { "mentioned": true, "position": "recommended" }
+  },
+  {
+    "response": "Datadog and New Relic both monitor server metrics, though Datadog has better logs.",
+    "brand": "Datadog",
+    "website": "https://datadoghq.com",
+    "competitors": ["New Relic", "Dynatrace"],
+    "expected": { "mentioned": true, "position": "compared" }
+  },
+  {
+    "response": "Configure the datadoghq.com agent to begin streaming logs.",
+    "brand": "Datadog",
+    "website": "https://datadoghq.com",
+    "competitors": ["New Relic"],
+    "expected": { "mentioned": true, "position": "cited" }
+  },
+  {
+    "response": "The datadogging behavior of the server is quite unusual here.",
+    "brand": "Datadog",
+    "website": "https://datadoghq.com",
+    "competitors": ["New Relic"],
+    "expected": { "mentioned": false, "position": "omitted" }
+  },
+  {
+    "response": "PostHog is the best suite of product analytics for startups.",
+    "brand": "PostHog",
+    "website": "https://posthog.com",
+    "competitors": ["Mixpanel", "Amplitude"],
+    "expected": { "mentioned": true, "position": "recommended" }
+  },
+  {
+    "response": "Both PostHog and Mixpanel offer event tracking, but PostHog is open source.",
+    "brand": "PostHog",
+    "website": "https://posthog.com",
+    "competitors": ["Mixpanel", "Amplitude"],
+    "expected": { "mentioned": true, "position": "compared" }
+  }
+]

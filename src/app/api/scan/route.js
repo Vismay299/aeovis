@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { INDUSTRY_PROMPTS } from "@/data/industries";
-import { generateContent } from "@/lib/gemini";
 import { insertScan } from "@/lib/db";
 import { generatePromptsForBrand } from "@/lib/prompts";
-
-const POSITIVE_WORDS = ["great", "best", "top", "excellent", "recommend", "leading", "powerful"];
-const NEGATIVE_WORDS = ["expensive", "limited", "poor", "lacking", "outdated", "issues"];
+import { computeVisibilityScore, computeScanStats, computeIntentBreakdown, computeTopicScores } from "@/lib/scoring/computeVisibilityScore";
+import { SCORING_VERSION, PROBE_RUNS } from "@/lib/scoring/constants";
+import { normalizeTopic } from "@/lib/scoring/topics";
+import { probePromptMultiple } from "@/lib/scoring/probe";
+import { aggregatePromptRuns } from "@/lib/scoring/aggregate";
+import { getPromptsForBrand, upsertPrompts } from "@/lib/db/prompts";
+import crypto from "crypto";
 
 export async function POST(request) {
   try {
@@ -19,70 +22,180 @@ export async function POST(request) {
     if (!brand) {
       return NextResponse.json({ detail: "Brand name is required." }, { status: 400 });
     }
-    // Industry is recommended for fallback and categorization, but dynamic prompt generation works without it
     const hasValidIndustry = !!INDUSTRY_PROMPTS[industry];
 
     const competitors = competitorsRaw
       ? competitorsRaw.split(",").map(c => c.trim()).filter(Boolean)
       : [];
 
-    let prompts = await generatePromptsForBrand(brand, url, industry, stats);
-    const usedDynamicPrompts = prompts && prompts.length > 0;
+    // P3-S07: Load existing prompts before generating new ones (count > 0 instead of >= 15)
+    let prompts = [];
+    let loadedFromDb = false;
+    try {
+      const allDbPrompts = await getPromptsForBrand(brand, true);
+      if (allDbPrompts && allDbPrompts.length > 0) {
+        loadedFromDb = true;
+        const enabledDbPrompts = allDbPrompts.filter(p => p.enabled);
+        
+        if (enabledDbPrompts.length === 0) {
+          return NextResponse.json({ detail: "All tracked queries are disabled. Please enable at least one query in Tracked Queries." }, { status: 400 });
+        }
 
-    if (!usedDynamicPrompts) {
-      if (hasValidIndustry) {
-        console.log("Fallback to static industry prompts");
-        prompts = INDUSTRY_PROMPTS[industry].prompts;
+        console.log(`Loaded ${enabledDbPrompts.length} enabled prompts from database for brand: ${brand}`);
+        prompts = enabledDbPrompts.map(p => ({
+          id: p.id,
+          text: p.text,
+          intent_tier: p.intent_tier,
+          topic: normalizeTopic(p.topic || "General"),
+          weight: p.weight,
+        }));
+
+        // Optionally top up if below 15
+        if (prompts.length < 15) {
+          console.log(`Prompt count (${prompts.length}) below minimum (15). Topping up...`);
+          const generated = await generatePromptsForBrand(brand, url, industry, stats);
+          if (generated && generated.length > 0) {
+            const existingTexts = new Set(allDbPrompts.map(p => p.text.toLowerCase().trim()));
+            const newPrompts = generated.filter(p => !existingTexts.has(p.text.toLowerCase().trim()));
+            
+            const needed = 15 - prompts.length;
+            const topUpPrompts = newPrompts.slice(0, needed);
+            
+            if (topUpPrompts.length > 0) {
+              try {
+                await upsertPrompts(brand, topUpPrompts);
+                // Reload from DB to get the new list of enabled prompts
+                const reloaded = await getPromptsForBrand(brand, false);
+                prompts = reloaded.map(p => ({
+                  id: p.id,
+                  text: p.text,
+                  intent_tier: p.intent_tier,
+                  topic: normalizeTopic(p.topic || "General"),
+                  weight: p.weight,
+                }));
+              } catch (e) {
+                console.warn("Failed to persist top-up prompts:", e.message);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Error loading prompts from DB:", e.message);
+    }
+
+    let usedDynamicPrompts = false;
+    if (!loadedFromDb) {
+      // Generate prompts
+      const generated = await generatePromptsForBrand(brand, url, industry, stats);
+      if (generated && generated.length > 0) {
+        prompts = generated;
+        usedDynamicPrompts = true;
+
+        // P3-S06: Save generated prompts to brand_prompts
+        try {
+          await upsertPrompts(brand, prompts);
+          // Reload from DB to get the generated IDs
+          const dbPrompts = await getPromptsForBrand(brand);
+          if (dbPrompts && dbPrompts.length > 0) {
+            prompts = dbPrompts.map(p => ({
+              id: p.id,
+              text: p.text,
+              intent_tier: p.intent_tier,
+              topic: normalizeTopic(p.topic || "General"),
+              weight: p.weight,
+            }));
+          }
+        } catch (e) {
+          console.warn("Failed to persist generated prompts to DB:", e.message);
+        }
       } else {
-        console.warn("No dynamic prompts generated and no valid industry for fallback");
-        prompts = [];
+        // Fallback to static industry prompts
+        if (hasValidIndustry) {
+          console.log("Fallback to static industry prompts");
+          prompts = INDUSTRY_PROMPTS[industry].prompts.map(p => ({
+            text: p,
+            intent_tier: "exploratory",
+            topic: "General",
+            weight: null,
+          }));
+
+          // P3-Nit: Persist fallback static prompts to brand_prompts so they are persistent
+          try {
+            await upsertPrompts(brand, prompts);
+            const dbPrompts = await getPromptsForBrand(brand);
+            if (dbPrompts && dbPrompts.length > 0) {
+              prompts = dbPrompts.map(p => ({
+                id: p.id,
+                text: p.text,
+                intent_tier: p.intent_tier,
+                topic: normalizeTopic(p.topic || "General"),
+                weight: p.weight,
+              }));
+            }
+          } catch (e) {
+            console.warn("Failed to persist static prompts to DB:", e.message);
+          }
+        } else {
+          console.warn("No dynamic prompts generated and no valid industry for fallback");
+          prompts = [];
+        }
       }
     }
 
     console.log(`[scan] Used dynamic prompts: ${usedDynamicPrompts} (${prompts.length} prompts)`);
 
     const results = [];
-    let promptsMentioned = 0;
 
     // Batch processing to reduce latency
     const chunkSize = 5;
     for (let i = 0; i < prompts.length; i += chunkSize) {
       const chunk = prompts.slice(i, i + chunkSize);
       
-      const chunkPromises = chunk.map(async (promptText) => {
-        // Send the prompt mostly as-is so we measure real visibility.
-        // Only add light competitor context if provided. Avoid heavy brand injection
-        // that would artificially make the brand appear.
-        let fullPrompt = promptText;
-        if (competitors.length > 0) {
-          fullPrompt = `${promptText}\n\nConsider these existing options if relevant: ${competitors.join(", ")}.`;
+      const chunkPromises = chunk.map(async (promptObj) => {
+        // Run prompt multiple times and aggregate
+        const runs = await probePromptMultiple(promptObj.text, brand, competitors, url, stats, PROBE_RUNS);
+        const agg = aggregatePromptRuns(runs);
+        if (agg) {
+          agg.intent_tier = promptObj.intent_tier;
+          agg.topic = promptObj.topic;
+          agg.weight = promptObj.weight;
         }
-
-        let responseText = "";
-        try {
-          responseText = await generateContent(fullPrompt, { stats, timeout: 20000 });
-        } catch (e) {
-          // keep empty
-        }
-
-        return await analyzeResponseWithLLM(promptText, responseText, brand, competitors, stats);
+        return agg;
       });
 
       const chunkResults = await Promise.all(chunkPromises);
       for (const result of chunkResults) {
-        if (result.mentioned) {
-          promptsMentioned += 1;
+        if (result) {
+          results.push(result);
         }
-        results.push(result);
       }
     }
 
     const promptsTracked = prompts.length;
-    const visibilityPct = promptsTracked
+    const visibilityPct = computeVisibilityScore(results, url);
+    const promptsMentioned = results.filter(r => r.mentioned).length;
+    const mentionRatePct = promptsTracked
       ? Math.round((promptsMentioned / promptsTracked) * 1000) / 10
       : 0.0;
 
+    // Compute overall judge stats from run details
+    const judgeStats = {
+      deterministic: results.reduce((sum, r) => sum + (r.run_details || []).filter(run => run.judge_method === "deterministic").length, 0),
+      llm: results.reduce((sum, r) => sum + (r.run_details || []).filter(run => run.judge_method === "llm").length, 0),
+      fallback: results.reduce((sum, r) => sum + (r.run_details || []).filter(run => run.judge_method === "fallback").length, 0),
+      skipped: results.reduce((sum, r) => sum + (r.run_details || []).filter(run => run.judge_method === "skipped").length, 0),
+    };
+
+    const scanStats = computeScanStats(results, visibilityPct);
+    const intentBreakdown = computeIntentBreakdown(results, url);
+    const topicScores = computeTopicScores(results, url);
     const scannedAt = new Date().toISOString();
+
+    // P3-S08: Add prompt_set_id and prompt_set_hash
+    const promptTexts = prompts.map(p => p.text.toLowerCase().trim()).sort();
+    const prompt_set_hash = crypto.createHash("sha256").update(promptTexts.join("|")).digest("hex");
+    const prompt_set_id = prompt_set_hash.slice(0, 16);
 
     const scanRecord = {
       brand,
@@ -90,14 +203,24 @@ export async function POST(request) {
       industry,
       platform: "gemini",
       visibility_pct: visibilityPct,
+      mention_rate_pct: mentionRatePct,
       prompts_tracked: promptsTracked,
       prompts_mentioned: promptsMentioned,
       competitors: competitors,
       competitors_raw: competitorsRaw,
       results,
       scanned_at: scannedAt,
-      used_dynamic_prompts: usedDynamicPrompts,
-      tokens_used: stats.tokens
+      used_dynamic_prompts: usedDynamicPrompts || loadedFromDb,
+      tokens_used: stats.tokens,
+      scoring_version: SCORING_VERSION,
+      judge_stats: judgeStats,
+      score_ci_low: scanStats.score_ci_low,
+      score_ci_high: scanStats.score_ci_high,
+      stability: scanStats.stability,
+      prompt_set_id,
+      prompt_set_hash,
+      intent_breakdown: intentBreakdown,
+      topic_scores: topicScores
     };
 
     try {
@@ -108,126 +231,7 @@ export async function POST(request) {
 
     return NextResponse.json(scanRecord);
   } catch (error) {
+    console.error("Scanning API error:", error);
     return NextResponse.json({ detail: "Internal Server Error" }, { status: 500 });
   }
-}
-
-async function analyzeResponseWithLLM(promptText, responseText, brand, competitors, stats) {
-  if (!responseText) {
-    return {
-      prompt: promptText,
-      response_snippet: "",
-      mentioned: false,
-      position: "omitted",
-      sentiment: "neutral",
-      competitors_found: [],
-      citations: [],
-      key_phrases: []
-    };
-  }
-
-  const extractionPrompt = `You are an AI analyzing whether a specific B2B industrial tool is naturally recommended in an AI answer.
-
-Brand being tracked: ${brand}
-User's question: ${promptText}
-
-AI answer text:
----
-${responseText}
----
-
-Rules for "mentioned":
-- Only return true if the brand (or its product name) is explicitly named as a solution, recommendation, or relevant option.
-- Do NOT count it as mentioned just because the question or context mentioned it — the AI answer itself must bring it up.
-- Be strict. Obscure brands should only count if they are genuinely surfaced.
-
-Extract and return ONLY valid JSON:
-{
-  "mentioned": boolean,
-  "position": "recommended" | "compared" | "cited" | "omitted",
-  "sentiment": "positive" | "negative" | "neutral",
-  "competitors_found": string[],
-  "citations": string[],
-  "key_phrases": string[]
-}`;
-
-  try {
-    const jsonStr = await generateContent(extractionPrompt, { jsonMode: true, stats, timeout: 30000 });
-    const cleanStr = jsonStr.replace(/```json\n?|\n?```/g, "").trim();
-    const result = JSON.parse(cleanStr);
-    
-    return {
-      prompt: promptText,
-      response_snippet: responseText.slice(0, 300),
-      mentioned: !!result.mentioned,
-      position: result.position || "omitted",
-      sentiment: result.sentiment || "neutral",
-      competitors_found: result.competitors_found || [],
-      citations: result.citations || [],
-      key_phrases: result.key_phrases || []
-    };
-  } catch (e) {
-    console.warn("LLM extraction failed, using fallback:", e);
-    return analyzeResponseFallback(promptText, responseText, brand, competitors);
-  }
-}
-
-function analyzeResponseFallback(promptText, responseText, brand, competitors) {
-  const textLower = responseText.toLowerCase();
-  const brandLower = brand.toLowerCase();
-  const mentioned = textLower.includes(brandLower);
-
-  let position = "omitted";
-  let sentiment = "neutral";
-  const competitorsFound = [];
-
-  if (mentioned) {
-    const idx = textLower.indexOf(brandLower);
-    const textLen = responseText.length || 1;
-    const relative = idx / textLen;
-
-    if (relative <= 0.2) position = "recommended";
-    else if (relative <= 0.5) position = "compared";
-    else position = "cited";
-
-    sentiment = classifySentiment(responseText, idx, brand);
-  }
-
-  for (const comp of competitors) {
-    if (textLower.includes(comp.toLowerCase())) {
-      competitorsFound.push(comp);
-    }
-  }
-
-  return {
-    prompt: promptText,
-    response_snippet: responseText.slice(0, 300),
-    mentioned,
-    position,
-    sentiment,
-    competitors_found: competitorsFound,
-    citations: [],
-    key_phrases: []
-  };
-}
-
-function classifySentiment(responseText, brandIdx, brand) {
-  const textLower = responseText.toLowerCase();
-  const windowStart = Math.max(0, brandIdx - 100);
-  const windowEnd = Math.min(textLower.length, brandIdx + brand.length + 100);
-  const window = textLower.substring(windowStart, windowEnd);
-
-  let posCount = 0;
-  for (const w of POSITIVE_WORDS) {
-    if (window.includes(w)) posCount++;
-  }
-
-  let negCount = 0;
-  for (const w of NEGATIVE_WORDS) {
-    if (window.includes(w)) negCount++;
-  }
-
-  if (posCount > negCount) return "positive";
-  if (negCount > posCount) return "negative";
-  return "neutral";
 }

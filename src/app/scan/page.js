@@ -250,7 +250,7 @@ export default function Scan() {
                 Analyzing {brand}
                 <span className="caret-blink text-[#D9531E]">_</span>
               </h2>
-              <p className="text-[#666666] mt-3 mb-12">Generating custom prompts from your site, then probing AI answers. This usually takes 30-90 seconds.</p>
+              <p className="text-[#666666] mt-3 mb-12">Generating custom prompts from your site, then probing AI answers. This usually takes 2-3 minutes due to multi-run stability checks.</p>
 
               <div className="space-y-px">
                 {STAGES.map((label, i) => {

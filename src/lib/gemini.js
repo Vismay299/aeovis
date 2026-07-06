@@ -4,7 +4,7 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error("GEMINI_API_KEY is not configured.");
-    return "";
+    return { text: "", model_used: "" };
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -61,7 +61,7 @@ export async function generateContent(prompt, options = {}, retries = 2) {
           }
         }
 
-        return response.text();
+        return { text: response.text(), model_used: modelName };
       } catch (e) {
         lastErr = e;
         continue; // try next model
@@ -77,5 +77,5 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   }
 
   console.error(`[scan] all models failed after ${retries} retries: ${lastErr}`);
-  return "";
+  return { text: "", model_used: "" };
 }

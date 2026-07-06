@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:prompts": "node --env-file=.env.local scripts/test-dynamic-prompts.mjs"
+    "test:prompts": "node --env-file=.env.local scripts/test-dynamic-prompts.mjs",
+    "test:scoring": "node --test src/lib/scoring/**/*.test.mjs",
+    "test:calibration": "node src/lib/scoring/test_calibration.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
