@@ -7,7 +7,7 @@ import { ArrowRight, AlertCircle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Navbar } from "@/components/Navbar";
 import { toast } from "sonner";
-import { runScan, saveScan, fetchIndustries } from "@/services/api";
+import { runScan, saveScan, fetchIndustries, loadScan, clearScan } from "@/services/api";
 import { SAMPLE_RESULT } from "@/data/mockData";
 
 const STAGES = [
@@ -54,6 +54,19 @@ export default function Scan() {
 
   const start = async () => {
     if (!validate()) return;
+
+    // If starting a scan for a *different* brand/website than the last saved result,
+    // clear the old data first. This prevents the dashboard from showing
+    // prompts/results from a previous run (e.g. Monoedge) when viewing the new brand.
+    try {
+      const current = loadScan();
+      const newBrand = brand.trim();
+      const newWebsite = website.trim();
+      if (current && (current.brand !== newBrand || current.website !== newWebsite)) {
+        clearScan();
+      }
+    } catch {}
+
     setScanning(true);
     setFailed(false);
     setStage(0);

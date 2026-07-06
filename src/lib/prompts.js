@@ -1,18 +1,29 @@
 import { generateContent } from "./gemini.js";
 import { scrapeForSummary } from "./firecrawl.js";
 
-async function summarizeWebsiteContent(rawContent, brand, industry) {
+async function summarizeWebsiteContent(rawContent, brand, industry, stats = null) {
   if (!rawContent || rawContent.length < 200) return rawContent;
 
-  const summaryPrompt = `You are an expert content analyst. Summarize the key offerings, products/services, unique value propositions, and target audience for the following website content.
+  const summaryPrompt = `You are an expert B2B buyer intent analyst.
 
-Brand: ${brand}
-Industry: ${industry || "General"}
+Analyze the website content below and create a summary that will help generate realistic questions a potential customer would actually ask an AI chatbot.
+
+Focus on:
+- The real frustrations and pains the target audience faces (describe them using language from the site).
+- How they would naturally describe their situation and current problems.
+- Who the typical buyer is (job/role, industry, mindset) and what outcomes they want.
+- Common problem areas this product solves, and the language used to describe them.
+- Any tools or current ways of working they mention (e.g. Excel, existing software, manual processes).
+
+Do not just repeat features. Focus on the buyer's pains, goals, and natural search language.
 
 Website content (may be truncated):
 ${rawContent.slice(0, 5000)}
 
-Return ONLY a concise 300-500 word summary focused on what makes this brand distinct. No introductions, no JSON, just the summary text.`;
+Brand reference: ${brand} (do not center the summary on the brand name itself)
+Industry: ${industry || "General"}
+
+Return ONLY a concise 300-500 word summary. No introductions or JSON.`;
 
   try {
     const summary = await generateContent(summaryPrompt, { stats, timeout: 20000 });
@@ -25,27 +36,43 @@ Return ONLY a concise 300-500 word summary focused on what makes this brand dist
 
 export async function generatePromptsForBrand(brand, website, industry = "", stats = null) {
   let websiteSummary = await scrapeForSummary(website);
-  websiteSummary = await summarizeWebsiteContent(websiteSummary, brand, industry);
+  websiteSummary = await summarizeWebsiteContent(websiteSummary, brand, industry, stats);
 
-  const genPrompt = `You are an expert Answer Engine Optimization strategist. Your job is to generate realistic questions that real users would type into AI chatbots (ChatGPT, Claude, Perplexity, Gemini, etc.) about this specific brand.
+  const genPrompt = `You are an expert in real buyer search behavior for B2B products and services.
 
-Brand Name: ${brand}
-Website: ${website || "not provided"}
-Industry / Category: ${industry || "General"}
-Key offerings / summary from website:
-${(websiteSummary || "").slice(0, 4000)}
+Your job is to generate realistic questions that a potential customer would actually type into Gemini, ChatGPT or Perplexity when looking for solutions to problems in their business or daily life.
 
-Generate 15-20 high-quality, diverse prompts. Mix:
-- Informational / "how to" questions
-- Comparison and "vs" questions (relevant competitors if known)
-- "Best for [use case]" questions
-- Problem-solving / pain point questions
-- Buyer journey questions (awareness, consideration, decision)
+Use the website summary below to understand the specific pains, language, and use cases for THIS product.
 
-Return ONLY a valid JSON array of objects with this structure:
-[{"text": "...", "topic_suggestion": "..."}]
+Website summary:
+${(websiteSummary || "").slice(0, 3500)}
 
-Do not add any extra text, markdown, or explanations outside the JSON.`;
+Generate 18-22 natural, realistic prompts that real users would type.
+
+CRITICAL RULES:
+- Most prompts must NOT contain the brand name "${brand}". Real users searching for help usually have never heard of this specific brand or product.
+- Base the questions on the pains and language described in the summary above. Do not invent unrelated problems.
+- Write the way real people (not technical experts) actually talk and search.
+- Focus on the problem the user is facing and the outcome they want.
+- Use the provided summary to make questions relevant to this exact offering.
+
+Good examples of style (adapt the style to the summary, do not copy these literally):
+  - "How do I solve [specific pain from summary] without [current painful way]?"
+  - "I only find out about [problem] after it costs me money, how can I catch this earlier?"
+  - "Tools to [desired outcome] for [audience from summary]"
+  - "Why do I keep getting surprised by [problem]?"
+
+Generate a diverse mix:
+- Problem awareness questions
+- "How do I..." or "What's the best way to..." questions
+- Questions about integrating with tools they already use
+- Questions about avoiding big projects or manual work
+- "Best [tool/category] for [use case]" queries
+
+Return ONLY a valid JSON array of objects:
+[{"text": "the exact question a user would type"}]
+
+Do not add any extra text, explanations, or markdown outside the JSON.`;
 
   try {
     // Use structured JSON mode for more reliable output

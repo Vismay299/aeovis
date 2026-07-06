@@ -50,16 +50,12 @@ export async function POST(request) {
       const chunk = prompts.slice(i, i + chunkSize);
       
       const chunkPromises = chunk.map(async (promptText) => {
+        // Send the prompt mostly as-is so we measure real visibility.
+        // Only add light competitor context if provided. Avoid heavy brand injection
+        // that would artificially make the brand appear.
         let fullPrompt = promptText;
-        let contextLines = [];
-        if (url) {
-          contextLines.push(`Context: The brand being evaluated is ${brand} (${url}).`);
-        }
         if (competitors.length > 0) {
-          contextLines.push(`Consider alongside these competitors: ${competitors.join(", ")}.`);
-        }
-        if (contextLines.length) {
-          fullPrompt = `${promptText}\n\n${contextLines.join(" ")} Evaluate fairly and include the brand when relevant.`;
+          fullPrompt = `${promptText}\n\nConsider these existing options if relevant: ${competitors.join(", ")}.`;
         }
 
         let responseText = "";
@@ -130,25 +126,30 @@ async function analyzeResponseWithLLM(promptText, responseText, brand, competito
     };
   }
 
-  const extractionPrompt = `You are an AI analyzing how a brand is mentioned in a text.
-Brand: ${brand}
-Competitors: ${competitors.join(', ') || 'None provided'}
-User Prompt: ${promptText}
+  const extractionPrompt = `You are an AI analyzing whether a specific B2B industrial tool is naturally recommended in an AI answer.
 
-Text to analyze:
+Brand being tracked: ${brand}
+User's question: ${promptText}
+
+AI answer text:
 ---
 ${responseText}
 ---
 
-Extract the following information and return it as a JSON object:
-- "mentioned": boolean, true if the brand is mentioned.
-- "position": string, one of "recommended" (if strongly recommended early), "compared" (if compared with others), "cited" (if just mentioned as a source), or "omitted" (if not mentioned).
-- "sentiment": string, "positive", "negative", or "neutral" towards the brand.
-- "competitors_found": array of strings, listing any of the provided competitors found in the text. If none, return empty array. If other competitors are found that were not in the list, you can add them too.
-- "citations": array of strings, any URLs or website links cited in the text.
-- "key_phrases": array of strings, 2-3 key phrases about the brand.
+Rules for "mentioned":
+- Only return true if the brand (or its product name) is explicitly named as a solution, recommendation, or relevant option.
+- Do NOT count it as mentioned just because the question or context mentioned it — the AI answer itself must bring it up.
+- Be strict. Obscure brands should only count if they are genuinely surfaced.
 
-Respond ONLY with valid JSON. Do not include markdown formatting.`;
+Extract and return ONLY valid JSON:
+{
+  "mentioned": boolean,
+  "position": "recommended" | "compared" | "cited" | "omitted",
+  "sentiment": "positive" | "negative" | "neutral",
+  "competitors_found": string[],
+  "citations": string[],
+  "key_phrases": string[]
+}`;
 
   try {
     const jsonStr = await generateContent(extractionPrompt, { jsonMode: true, stats, timeout: 30000 });
