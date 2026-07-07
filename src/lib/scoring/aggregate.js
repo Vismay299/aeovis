@@ -82,3 +82,99 @@ export function aggregatePromptRuns(runs) {
     judge_model_used: getMostCommon(runs.map(r => r.judge_model_used), "")
   };
 }
+
+import { ENGINE_DEFAULT_WEIGHTS } from "../engines/types.js";
+
+/**
+ * Aggregates multiple run results across all enabled engines for a prompt.
+ *
+ * @param {Array} runs - Array of run result objects (each containing an .engine property)
+ * @returns {Object} Multi-engine aggregated prompt result object
+ */
+export function aggregateMultiEnginePromptRuns(runs) {
+  if (!runs || runs.length === 0) return null;
+  
+  // Group by engine
+  const runsByEngine = {};
+  runs.forEach(r => {
+    const engine = r.engine || "gemini";
+    if (!runsByEngine[engine]) {
+      runsByEngine[engine] = [];
+    }
+    runsByEngine[engine].push(r);
+  });
+  
+  // Aggregate per engine
+  const engineAggs = {};
+  const activeEngines = [];
+  
+  Object.entries(runsByEngine).forEach(([engine, engineRuns]) => {
+    const agg = aggregatePromptRuns(engineRuns);
+    if (agg) {
+      engineAggs[engine] = agg;
+      activeEngines.push(engine);
+    }
+  });
+  
+  if (activeEngines.length === 0) return null;
+  
+  // Normalize weights for active engines
+  let totalWeight = 0.0;
+  activeEngines.forEach(eng => {
+    totalWeight += ENGINE_DEFAULT_WEIGHTS[eng] ?? 0.25;
+  });
+  if (totalWeight === 0) totalWeight = 1.0;
+  
+  const normalizedWeights = {};
+  activeEngines.forEach(eng => {
+    normalizedWeights[eng] = (ENGINE_DEFAULT_WEIGHTS[eng] ?? 0.25) / totalWeight;
+  });
+  
+  // Calculate weighted prompt score and mentioned rate
+  let weightedScore = 0.0;
+  let weightedMentionRate = 0.0;
+  
+  const engine_scores = {};
+  activeEngines.forEach(eng => {
+    const agg = engineAggs[eng];
+    weightedScore += agg.prompt_score * normalizedWeights[eng];
+    weightedMentionRate += (agg.mentioned ? 1.0 : 0.0) * normalizedWeights[eng];
+    engine_scores[eng] = agg.prompt_score;
+  });
+  
+  // Sort engines by weight descending to find primary engine
+  const sortedActive = [...activeEngines].sort((a, b) => {
+    return (ENGINE_DEFAULT_WEIGHTS[b] ?? 0.25) - (ENGINE_DEFAULT_WEIGHTS[a] ?? 0.25);
+  });
+  const primaryEngine = sortedActive[0];
+  const primaryAgg = engineAggs[primaryEngine];
+  
+  const promptText = primaryAgg.prompt;
+  const mentioned = weightedMentionRate >= 0.5;
+  
+  const position = primaryAgg.position;
+  const sentiment = primaryAgg.sentiment;
+  const competitors_found = uniqueUnion(Object.values(engineAggs).map(a => a.competitors_found || []));
+  const citations = uniqueUnion(Object.values(engineAggs).map(a => a.citations || []));
+  const key_phrases = uniqueUnion(Object.values(engineAggs).map(a => a.key_phrases || []));
+  
+  return {
+    prompt: promptText,
+    mentioned,
+    position,
+    sentiment,
+    competitors_found,
+    citations,
+    key_phrases,
+    raw_response: primaryAgg.raw_response,
+    model_used: primaryAgg.model_used,
+    probe_temperature: primaryAgg.probe_temperature,
+    prompt_score: Math.round(weightedScore * 10) / 10,
+    prompt_score_stddev: primaryAgg.prompt_score_stddev,
+    run_details: runs,
+    engine_scores,
+    engine_details: engineAggs,
+    judge_method: primaryAgg.judge_method,
+    judge_model_used: primaryAgg.judge_model_used
+  };
+}

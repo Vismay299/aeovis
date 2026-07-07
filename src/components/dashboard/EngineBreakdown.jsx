@@ -1,0 +1,110 @@
+import React from "react";
+import { Cpu, ShieldAlert, BadgeDollarSign } from "lucide-react";
+
+const ENGINE_CONFIGS = {
+  perplexity: {
+    label: "Perplexity",
+    color: "bg-gradient-to-r from-[#208080] to-[#3a9f9f]",
+    textColor: "text-[#208080]",
+    badgeBg: "bg-[#eef8f8]",
+    weight: "40%"
+  },
+  openai: {
+    label: "ChatGPT (GPT-4o)",
+    color: "bg-gradient-to-r from-[#10a37f] to-[#22c55e]",
+    textColor: "text-[#10a37f]",
+    badgeBg: "bg-[#eafaf5]",
+    weight: "35%"
+  },
+  gemini: {
+    label: "Gemini",
+    color: "bg-gradient-to-r from-[#4b39ef] to-[#827ae6]",
+    textColor: "text-[#4b39ef]",
+    badgeBg: "bg-[#eef2ff]",
+    weight: "25%"
+  }
+};
+
+export const EngineBreakdown = ({ result }) => {
+  const engineScores = result.engineScores || {};
+  const costByEngine = result.costByEngine || {};
+  const enginesPartial = result.enginesPartial || false;
+
+  const enginesToShow = Object.keys(engineScores).length > 0
+    ? Object.keys(engineScores)
+    : ["gemini"];
+
+  return (
+    <div
+      data-testid="engine-breakdown"
+      className="bg-white border border-[#E5E2D9] rounded-sm p-6"
+    >
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="font-serif text-xl font-semibold text-[#1A1A1A]">
+            Engine-Specific Visibility
+          </h3>
+          <p className="text-xs text-[#666666] mt-0.5">
+            Performance across key search and LLM platforms
+          </p>
+        </div>
+        {enginesPartial && (
+          <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-[#8B3A3A] bg-[#F9ECEC] px-2 py-0.5 rounded-sm">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            Partial Output
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-5">
+        {enginesToShow.map(eng => {
+          const config = ENGINE_CONFIGS[eng] || {
+            label: eng.toUpperCase(),
+            color: "bg-gradient-to-r from-[#999999] to-[#cccccc]",
+            textColor: "text-[#666666]",
+            badgeBg: "bg-[#f2f2f2]",
+            weight: "N/A"
+          };
+
+          const score = engineScores[eng] !== undefined ? engineScores[eng] : 0.0;
+          const cost = costByEngine[eng] !== undefined ? costByEngine[eng] : 0.0;
+
+          return (
+            <div key={eng} className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2">
+                  <span className={`font-semibold ${config.textColor}`}>{config.label}</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm ${config.badgeBg} ${config.textColor}`}>
+                    Weight: {config.weight}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  {cost > 0 && (
+                    <span className="text-xs text-[#666666] flex items-center gap-1" title="Estimated query API costs">
+                      <BadgeDollarSign className="w-3.5 h-3.5 text-[#2F5C4F]" />
+                      ${cost.toFixed(4)}
+                    </span>
+                  )}
+                  <span className="font-serif font-bold text-base text-[#1A1A1A]">
+                    {score.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+              <div className="h-2 w-full bg-[#E5E2D9] rounded-full overflow-hidden relative">
+                <div
+                  className={`h-full ${config.color} rounded-full transition-all duration-500`}
+                  style={{ width: `${score}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 pt-4 border-t border-[#E5E2D9] flex items-center gap-1.5 text-[11px] text-[#999999]">
+        <Cpu className="w-3.5 h-3.5 text-[#D9531E]" />
+        <span>Headline visibility is a weighted blend of engine visibility scores.</span>
+      </div>
+    </div>
+  );
+};

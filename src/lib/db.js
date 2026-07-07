@@ -50,7 +50,10 @@ export async function insertScan(scanRecord) {
     share_of_voice_pct: scanRecord.share_of_voice_pct,
     win_rate_pct: scanRecord.win_rate_pct,
     brand_citation_share_pct: scanRecord.brand_citation_share_pct,
-    top_domains: scanRecord.top_domains
+    top_domains: scanRecord.top_domains,
+    engine_scores: scanRecord.engine_scores,
+    cost_by_engine: scanRecord.cost_by_engine,
+    engines_partial: scanRecord.engines_partial
   };
 
   const baseRecord = {

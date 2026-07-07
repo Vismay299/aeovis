@@ -11,6 +11,7 @@ import { CompetitorTable } from "@/components/dashboard/CompetitorTable";
 import { InsightPanel } from "@/components/dashboard/InsightPanel";
 import { OpportunitiesPanel } from "@/components/dashboard/OpportunitiesPanel";
 import { CitationsPanel } from "@/components/dashboard/CitationsPanel";
+import { EngineBreakdown } from "@/components/dashboard/EngineBreakdown";
 import { loadScan, fetchScanHistory, normalizeResult } from "@/services/api";
 import { scoreTier, tierLabel, formatTimestamp, relativeTime } from "@/utils/format";
 import { ScoreBreakdown } from "@/components/dashboard/ScoreBreakdown";
@@ -426,9 +427,10 @@ export default function Dashboard() {
                 brandMentions={result.rawResults ? result.rawResults.filter(r => r.mentioned).length : 0}
               />
             </div>
-            <div className="lg:col-span-1">
-              <div className="lg:sticky lg:top-24">
+            <div className="lg:col-span-1 space-y-8">
+              <div className="lg:sticky lg:top-24 space-y-8">
                 <InsightPanel result={resultWithFlags} trend={scoreTrend} onRerun={handleRerun} />
+                <EngineBreakdown result={result} />
               </div>
             </div>
           </div>

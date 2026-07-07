@@ -11,7 +11,7 @@ import {
   computeCompetitorVisibility,
   computeGapScores
 } from './computeVisibilityScore.js';
-import { aggregatePromptRuns } from './aggregate.js';
+import { aggregatePromptRuns, aggregateMultiEnginePromptRuns } from './aggregate.js';
 import { normalizeTopic, slugifyTopic } from './topics.js';
 
 // ... (existing test functions remain unchanged)
@@ -259,5 +259,23 @@ test('computeVisibilityScore - blended visibility with brandUrl', () => {
   // Mention Visibility = 100.0%
   // Blended visibility = 0.85 * 100.0 + 0.15 * 50.0 = 85.0 + 7.5 = 92.5%
   assert.equal(computeVisibilityScore(results, "https://acme.io"), 92.5);
+});
+
+test('aggregateMultiEnginePromptRuns - weighted engine aggregation', () => {
+  const runs = [
+    // Gemini runs (prompt_score 100.0, weight 0.25)
+    { prompt: "crm tool", engine: "gemini", prompt_score: 100.0, mentioned: true, position: "recommended", sentiment: "positive" },
+    // OpenAI runs (prompt_score 80.0, weight 0.35)
+    { prompt: "crm tool", engine: "openai", prompt_score: 80.0, mentioned: true, position: "compared", sentiment: "positive" }
+  ];
+  // Active engines: gemini (weight 0.25), openai (weight 0.35)
+  // Total weight = 0.60
+  // Normalized: gemini = 0.25 / 0.6 = 0.4167, openai = 0.35 / 0.6 = 0.5833
+  // Weighted score = 100 * 0.4167 + 80 * 0.5833 = 41.67 + 46.67 = 88.3
+  const agg = aggregateMultiEnginePromptRuns(runs);
+  assert.equal(agg.prompt, "crm tool");
+  assert.equal(agg.prompt_score, 88.3);
+  assert.equal(agg.engine_scores.gemini, 100.0);
+  assert.equal(agg.engine_scores.openai, 80.0);
 });
 

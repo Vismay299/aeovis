@@ -6,7 +6,8 @@ import { computeVisibilityScore, computeScanStats, computeIntentBreakdown, compu
 import { SCORING_VERSION, PROBE_RUNS } from "@/lib/scoring/constants";
 import { normalizeTopic } from "@/lib/scoring/topics";
 import { probePromptMultiple } from "@/lib/scoring/probe";
-import { aggregatePromptRuns } from "@/lib/scoring/aggregate";
+import { aggregatePromptRuns, aggregateMultiEnginePromptRuns } from "@/lib/scoring/aggregate";
+import { getEnabledEngines } from "@/lib/engines/types";
 import { getPromptsForBrand, upsertPrompts } from "@/lib/db/prompts";
 import crypto from "crypto";
 
@@ -153,9 +154,9 @@ export async function POST(request) {
       const chunk = prompts.slice(i, i + chunkSize);
       
       const chunkPromises = chunk.map(async (promptObj) => {
-        // Run prompt multiple times and aggregate
+        // Run prompt multiple times across all enabled engines and aggregate
         const runs = await probePromptMultiple(promptObj.text, brand, competitors, url, stats, PROBE_RUNS);
-        const agg = aggregatePromptRuns(runs);
+        const agg = aggregateMultiEnginePromptRuns(runs);
         if (agg) {
           agg.intent_tier = promptObj.intent_tier;
           agg.topic = promptObj.topic;
@@ -199,6 +200,32 @@ export async function POST(request) {
     // P7-S06: Aggregate top cited domains across prompts
     const topDomains = aggregateTopDomains(results, url, competitors);
 
+    // P8-S08: Compute scan-level engine scores
+    const activeEngines = Array.from(new Set(results.flatMap(r => Object.keys(r.engine_scores || {}))));
+    const engineScores = {};
+    activeEngines.forEach(eng => {
+      const enginePromptResults = results.map(r => ({
+        ...r,
+        prompt_score: r.engine_scores?.[eng] ?? 0.0
+      }));
+      engineScores[eng] = computeVisibilityScore(enginePromptResults, url);
+    });
+
+    // P8-S13: Compute cost by engine
+    const costByEngine = {};
+    results.forEach(r => {
+      (r.run_details || []).forEach(run => {
+        const eng = run.engine || "gemini";
+        costByEngine[eng] = (costByEngine[eng] || 0) + (run.cost || 0.0);
+      });
+    });
+    Object.keys(costByEngine).forEach(eng => {
+      costByEngine[eng] = Math.round(costByEngine[eng] * 100000) / 100000;
+    });
+
+    // P8-S11: Graceful partial failure flag
+    const enginesPartial = results.some(r => (r.run_details || []).some(run => run.model_used.includes("failed") || run.model_used.includes("skipped")));
+
     // P6-S02 / P7-S05: Compute competitor objects using composite scoring and citation shares
     const competitorObjects = competitors.map(comp => {
       const visibilityScore = computeCompetitorVisibility(results, comp);
@@ -239,7 +266,7 @@ export async function POST(request) {
       brand,
       url,
       industry,
-      platform: "gemini",
+      platform: activeEngines.join(", ") || "gemini",
       visibility_pct: visibilityPct,
       mention_rate_pct: mentionRatePct,
       prompts_tracked: promptsTracked,
@@ -262,7 +289,10 @@ export async function POST(request) {
       share_of_voice_pct: shareOfVoicePct,
       win_rate_pct: winRatePct,
       brand_citation_share_pct: brandCitationSharePct,
-      top_domains: topDomains
+      top_domains: topDomains,
+      engine_scores: engineScores,
+      cost_by_engine: costByEngine,
+      engines_partial: enginesPartial
     };
 
     try {
