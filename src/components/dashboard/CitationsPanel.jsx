@@ -47,8 +47,12 @@ export const CitationsPanel = ({ result }) => {
             <Globe className="w-4 h-4 text-[#D9531E]" />
             Your Domain Share
           </div>
-          <div className="font-serif text-4xl text-[#1A1A1A] font-semibold">{ownDomainPercentage}%</div>
-          <div className="text-sm text-[#999999] mt-1">{ownDomainCount} links to {brandDomain || 'your site'}</div>
+          <div className="font-serif text-4xl text-[#1A1A1A] font-semibold">
+            {result.brandCitationSharePct !== undefined ? result.brandCitationSharePct : 0}%
+          </div>
+          <div className="text-sm text-[#999999] mt-1">
+            Cited in {Math.round(((result.brandCitationSharePct || 0) * (result.promptsAnalyzed || 15)) / 100)} of {result.promptsAnalyzed || 15} queries
+          </div>
         </div>
       </div>
 

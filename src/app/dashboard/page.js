@@ -298,6 +298,7 @@ export default function Dashboard() {
               isMixedTrend={isMixedTrend}
               promptSetChanged={promptSetChanged}
               mentionRate={result.mentionRatePct}
+              citationShare={result.brandCitationSharePct}
               scoreCiLow={result.scoreCiLow}
               scoreCiHigh={result.scoreCiHigh}
               historyScores={sortedHistory

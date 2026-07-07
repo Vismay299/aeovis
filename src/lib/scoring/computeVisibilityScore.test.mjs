@@ -250,3 +250,14 @@ test('computeGapScores - calculations', () => {
   assert.ok(results[0].gap_score > 0);
 });
 
+test('computeVisibilityScore - blended visibility with brandUrl', () => {
+  const results = [
+    { prompt_score: 100.0, intent_tier: 'exploratory', citations: ["https://acme.io/pricing"] }, // Brand cited
+    { prompt_score: 100.0, intent_tier: 'exploratory', citations: [] }                           // Brand not cited
+  ];
+  // Brand cited in 1 of 2 prompts -> Citation Share = 50.0%
+  // Mention Visibility = 100.0%
+  // Blended visibility = 0.85 * 100.0 + 0.15 * 50.0 = 85.0 + 7.5 = 92.5%
+  assert.equal(computeVisibilityScore(results, "https://acme.io"), 92.5);
+});
+

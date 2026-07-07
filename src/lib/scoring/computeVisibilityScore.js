@@ -1,7 +1,7 @@
 import { POSITION_WEIGHTS, SENTIMENT_WEIGHTS, CITATION_BONUS, INTENT_WEIGHTS, CITATION_SHARE_WEIGHT } from "./constants.js";
 import { normalizeTopic } from "./topics.js";
 import { judgeDeterministic } from "./judge.js";
-import { extractBrandDomain, classifyCitation } from "./citations.js";
+import { extractBrandDomain, classifyCitation, computeBrandCitationShare, computeCompetitorCitationShare } from "./citations.js";
 
 function extractDomain(urlStr) {
   if (!urlStr) return "";
@@ -313,49 +313,4 @@ export function computeGapScores(results, competitors = []) {
   });
 }
 
-/**
- * Computes citation share percentage for the tracking brand.
- *
- * @param {Array} results - Array of prompt results
- * @param {string} brandUrl - Brand website URL
- * @returns {number} Percentage (0-100)
- */
-export function computeBrandCitationShare(results, brandUrl) {
-  if (!results || results.length === 0) return 0.0;
-  const brandDomain = extractBrandDomain(brandUrl);
-  if (!brandDomain) return 0.0;
-  
-  let citedPromptsCount = 0;
-  results.forEach(r => {
-    const hasBrandCitation = (r.citations || []).some(c => {
-      const domain = extractBrandDomain(c);
-      return domain === brandDomain || domain.endsWith("." + brandDomain);
-    });
-    if (hasBrandCitation) {
-      citedPromptsCount++;
-    }
-  });
-  return Math.round((citedPromptsCount / results.length) * 1000) / 10;
-}
-
-/**
- * Computes citation share percentage for a competitor.
- *
- * @param {Array} results - Array of prompt results
- * @param {string} competitor - Competitor name
- * @returns {number} Percentage (0-100)
- */
-export function computeCompetitorCitationShare(results, competitor) {
-  if (!results || results.length === 0) return 0.0;
-  let citedPromptsCount = 0;
-  
-  results.forEach(r => {
-    const hasCompCitation = (r.citations || []).some(c => {
-      return classifyCitation(c, "", [competitor]) === "competitor";
-    });
-    if (hasCompCitation) {
-      citedPromptsCount++;
-    }
-  });
-  return Math.round((citedPromptsCount / results.length) * 1000) / 10;
-}
+export { extractBrandDomain, classifyCitation, aggregateTopDomains, computeBrandCitationShare, computeCompetitorCitationShare } from "./citations.js";

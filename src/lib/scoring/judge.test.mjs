@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getBrandAliases, detectMention, detectPosition, detectSentiment, extractCitations } from './judge.js';
+import { getBrandAliases } from './aliases.js';
+import { detectMention, detectPosition, detectSentiment, extractCitations } from './judge.js';
 
 test('getBrandAliases - extraction and formatting', () => {
   const aliases = getBrandAliases("Acme Corp", "https://acme.io");

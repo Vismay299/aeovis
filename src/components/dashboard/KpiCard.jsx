@@ -27,7 +27,7 @@ export const KpiCard = ({ label, value, suffix, sub, index = 0, testId }) => {
   );
 };
 
-export const HeroScoreCard = ({ score, tierText, testId, trend, isMixedTrend, promptSetChanged, historyScores = [], mentionRate, scoreCiLow, scoreCiHigh }) => {
+export const HeroScoreCard = ({ score, tierText, testId, trend, isMixedTrend, promptSetChanged, historyScores = [], mentionRate, citationShare, scoreCiLow, scoreCiHigh }) => {
   const [showTooltip, setShowTooltip] = useState(false);
   const margin = scoreCiLow != null && scoreCiHigh != null ? Math.round(score - scoreCiLow) : 0;
 
@@ -76,13 +76,11 @@ export const HeroScoreCard = ({ score, tierText, testId, trend, isMixedTrend, pr
           {showTooltip && (
             <div className="absolute left-0 top-6 z-50 bg-[#1A1A1A] text-white text-[11px] p-4 rounded-sm border border-[#E5E2D9]/20 shadow-lg min-w-[240px] leading-relaxed">
               <p className="font-semibold text-white mb-2">How is this calculated?</p>
-              <p className="text-white/80 mb-1">Formula: <span className="font-mono text-[#E5E2D9]">Median(Mention × Position × Sentiment + Citation Bonus)</span> across multiple runs.</p>
+              <p className="text-white/80 mb-1">Blended Formula: <span className="font-mono text-[#E5E2D9]">85% Mention Visibility + 15% Brand Citation Share</span>.</p>
               <ul className="list-disc pl-3.5 space-y-1.5 mt-2 text-white/70">
-                <li><strong>Multi-run aggregation:</strong> Probes each query multiple times (default 3) and takes the median score to ensure stability.</li>
+                <li><strong>Mention Visibility:</strong> Average score calculated using the median performance (Mention × Position × Sentiment + Citation Bonus) across runs.</li>
+                <li><strong>Brand Citation Share:</strong> The % of queries where the brand domain is cited in the references.</li>
                 <li><strong>Intent weighting:</strong> Scores are aggregated using a weighted average: High Intent (3.0x), Comparison (2.0x), Problem Aware (1.5x), Exploratory (1.0x), and Branded (0.5x).</li>
-                <li><strong>Position weights:</strong> Recommended (1.0), Compared (0.6), Cited (0.3), Omitted (0.0)</li>
-                <li><strong>Sentiment weights:</strong> Positive (1.0), Neutral (0.5), Negative (0.0)</li>
-                <li><strong>Citation Bonus:</strong> +0.15 score bonus (up to 15 points on the 100 scale) if brand domain is in cited sources (capped at 1.0)</li>
               </ul>
             </div>
           )}
@@ -120,6 +118,11 @@ export const HeroScoreCard = ({ score, tierText, testId, trend, isMixedTrend, pr
           {mentionRate !== undefined && (
             <div className="whitespace-nowrap">
               Mention Rate: <span className="font-bold text-white">{mentionRate}%</span>
+            </div>
+          )}
+          {citationShare !== undefined && (
+            <div className="whitespace-nowrap">
+              Citation Share: <span className="font-bold text-white">{citationShare}%</span>
             </div>
           )}
           {margin > 0 && (
