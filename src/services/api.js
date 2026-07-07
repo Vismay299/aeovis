@@ -67,6 +67,33 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     website: data.website ?? data.url ?? fallbackWebsite,
     industry: data.industry ?? "",
     visibilityScore: data.visibility_pct ?? data.visibilityScore ?? 0,
+    shareOfVoicePct: (() => {
+      const val = data.share_of_voice_pct ?? data.shareOfVoicePct ?? data.raw_results?.share_of_voice_pct;
+      if (val !== undefined && val !== null) return val;
+      const brandMentions = results.filter(r => r.mentioned).length;
+      const competitorMentions = results.reduce((sum, r) => sum + (r.competitors_found || []).length, 0);
+      const total = brandMentions + competitorMentions;
+      return total > 0 ? Math.round((brandMentions / total) * 1000) / 10 : 0.0;
+    })(),
+    winRatePct: (() => {
+      const val = data.win_rate_pct ?? data.winRatePct ?? data.raw_results?.win_rate_pct;
+      if (val !== undefined && val !== null) return val;
+      const comps = data.competitors ?? [];
+      const comparisonPrompts = results.filter(r => r.intent_tier === "comparison" || r.intentTier === "comparison");
+      if (comparisonPrompts.length === 0) return 0.0;
+      let wins = 0;
+      comparisonPrompts.forEach(r => {
+        if (r.mentioned) {
+          const compsFound = r.competitors_found || r.competitorsFound || [];
+          const compsList = comps && comps.length ? comps.map(c => typeof c === "string" ? c : (c.name || "")) : [];
+          const hasTrackedComp = compsFound.some(c => compsList.some(comp => comp.toLowerCase() === c.toLowerCase()));
+          if (!hasTrackedComp) {
+            wins++;
+          }
+        }
+      });
+      return Math.round((wins / comparisonPrompts.length) * 1000) / 10;
+    })(),
     mentionRatePct,
     promptsAnalyzed: promptsTracked,
     scoreCiLow: data.score_ci_low ?? data.scoreCiLow ?? data.raw_results?.score_ci_low ?? (data.visibility_pct ?? data.visibilityScore ?? 0),
@@ -118,6 +145,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
           judgeMethod: p.judge_method ?? "",
           judgeModelUsed: p.judge_model_used ?? "",
           promptScore: p.prompt_score ?? (p.mentioned ? 100.0 : 0.0),
+          gapScore: p.gap_score ?? p.gapScore ?? 0.0,
           intentTier: p.intent_tier || "exploratory",
           topic: normalizeTopic(p.topic || "General")
         };

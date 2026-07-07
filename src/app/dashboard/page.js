@@ -288,7 +288,7 @@ export default function Dashboard() {
         </div>
 
         {/* KPI row — hero score + two supporting */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5 mb-8">
           <div className="lg:col-span-2">
             <HeroScoreCard
               testId="kpi-visibility-score"
@@ -311,6 +311,14 @@ export default function Dashboard() {
                 .map(s => s.visibility_pct || 0)}
             />
           </div>
+          <KpiCard
+            testId="kpi-sov"
+            label="Share of Voice"
+            value={result.shareOfVoicePct !== undefined ? result.shareOfVoicePct : "—"}
+            suffix="%"
+            sub="Mentions vs competitors"
+            index={1}
+          />
           <KpiCard
             testId="kpi-prompts"
             label="Prompts Analyzed"
@@ -402,7 +410,11 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
               <TopPromptsTable prompts={topPromptsWithTrend} />
-              <CompetitorTable competitors={competitorsWithTrend} />
+              <CompetitorTable
+                competitors={competitorsWithTrend}
+                results={result.rawResults || []}
+                brandMentions={result.rawResults ? result.rawResults.filter(r => r.mentioned).length : 0}
+              />
             </div>
             <div className="lg:col-span-1">
               <div className="lg:sticky lg:top-24">

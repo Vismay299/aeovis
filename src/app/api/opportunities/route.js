@@ -12,8 +12,11 @@ export async function POST(request) {
     const promptText = `You are an SEO and AEO (Answer Engine Optimization) expert.
 I have identified ${gaps.length} high-value prompts where the brand "${brand}" is currently NOT mentioned by the AI, but competitors might be.
 
-Here are the gaps (prompts):
-${gaps.map((g, i) => `${i + 1}. Prompt: "${g.prompt}" | Volume: ${g.volume} | Competitors present: ${(g.competitors_found || []).join(", ")}`).join("\n")}
+  Here are the gaps (prompts):
+${gaps.map((g, i) => {
+  const comps = g.competitorsFound || g.competitors_found || [];
+  return `${i + 1}. Prompt: "${g.prompt}" | Volume: ${g.volume || g.sentiment || "Medium"} | Competitors present: ${comps.join(", ")}`;
+}).join("\n")}
 
 For EACH of these prompts, provide a 1-sentence strategic recommendation on how "${brand}" can capture this query (e.g., "Publish a comparison guide against competitor X" or "Create a dedicated landing page addressing this high-intent query").
 

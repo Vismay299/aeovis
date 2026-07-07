@@ -1,5 +1,6 @@
 import { POSITION_WEIGHTS, SENTIMENT_WEIGHTS, CITATION_BONUS, INTENT_WEIGHTS } from "./constants.js";
 import { normalizeTopic } from "./topics.js";
+import { judgeDeterministic } from "./judge.js";
 
 function extractDomain(urlStr) {
   if (!urlStr) return "";
@@ -166,4 +167,138 @@ export function computeTopicScores(results, brandUrl = "") {
     topicScores[topic] = count > 0 ? Math.round((sum / count) * 10) / 10 : 0.0;
   }
   return topicScores;
+}
+
+/**
+ * Computes the overall Share of Voice percentage (brand mentions / total brand+competitor mentions).
+ *
+ * @param {Array} results - Array of prompt result objects
+ * @returns {number} Share of Voice percentage (0-100)
+ */
+export function computeShareOfVoice(results) {
+  if (!results || results.length === 0) return 0.0;
+  let brandMentions = 0;
+  let competitorMentions = 0;
+  
+  results.forEach(r => {
+    if (r.mentioned) brandMentions++;
+    competitorMentions += (r.competitors_found || []).length;
+  });
+  
+  const total = brandMentions + competitorMentions;
+  return total > 0 ? Math.round((brandMentions / total) * 1000) / 10 : 0.0;
+}
+
+/**
+ * Computes win rate on comparison prompts (brand mentioned, competitors not mentioned).
+ *
+ * @param {Array} results - Array of prompt result objects
+ * @param {Array} competitors - List of competitor brand names
+ * @returns {number} Win rate percentage (0-100)
+ */
+export function computeWinRate(results, competitors = []) {
+  if (!results || results.length === 0) return 0.0;
+  const comparisonPrompts = results.filter(r => r.intent_tier === "comparison");
+  if (comparisonPrompts.length === 0) return 0.0;
+
+  let wins = 0;
+  comparisonPrompts.forEach(r => {
+    if (r.mentioned) {
+      const hasCompetitor = (r.competitors_found || []).some(c =>
+        competitors.some(comp => comp.toLowerCase() === c.toLowerCase())
+      );
+      if (!hasCompetitor) {
+        wins++;
+      }
+    }
+  });
+  
+  return Math.round((wins / comparisonPrompts.length) * 1000) / 10;
+}
+
+/**
+ * Computes the overall composite visibility score for a single competitor using identical composite rules.
+ *
+ * @param {Array} results - Array of prompt result objects
+ * @param {string} competitor - Competitor name to score
+ * @returns {number} Visibility percentage (0-100)
+ */
+export function computeCompetitorVisibility(results, competitor) {
+  if (!results || results.length === 0) return 0.0;
+  
+  let totalScore = 0.0;
+  let totalWeight = 0.0;
+  
+  results.forEach(r => {
+    const tier = r.intent_tier || "exploratory";
+    const weight = r.weight ?? INTENT_WEIGHTS[tier] ?? 1.0;
+    
+    let compPromptScore = 0.0;
+    
+    if (r.run_details && r.run_details.length > 0) {
+      const runScores = r.run_details.map(run => {
+        if (!run.raw_response) {
+          const found = (run.competitors_found || []).some(c => c.toLowerCase() === competitor.toLowerCase());
+          return found ? 100.0 : 0.0;
+        }
+        const compResult = judgeDeterministic(run.raw_response, competitor, "", []);
+        return scorePromptResult(compResult, "") * 100;
+      });
+      
+      const sorted = [...runScores].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      compPromptScore = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    } else {
+      const found = (r.competitors_found || []).some(c => c.toLowerCase() === competitor.toLowerCase());
+      compPromptScore = found ? 100.0 : 0.0;
+    }
+    
+    totalScore += compPromptScore * weight;
+    totalWeight += weight;
+  });
+  
+  return Math.round((totalScore / (totalWeight || 1)) * 10) / 10;
+}
+
+/**
+ * Computes gap_score per prompt vs the top competitor on that prompt.
+ * Formula: gap_score = max(competitor_prompt_score) - brand_prompt_score
+ *
+ * @param {Array} results - Array of prompt result objects
+ * @param {Array} competitors - List of competitor brand names
+ */
+export function computeGapScores(results, competitors = []) {
+  if (!results || results.length === 0 || !competitors || competitors.length === 0) {
+    return;
+  }
+  
+  results.forEach(r => {
+    let maxCompScore = 0.0;
+    
+    competitors.forEach(comp => {
+      let compPromptScore = 0.0;
+      if (r.run_details && r.run_details.length > 0) {
+        const runScores = r.run_details.map(run => {
+          if (!run.raw_response) {
+            const found = (run.competitors_found || []).some(c => c.toLowerCase() === comp.toLowerCase());
+            return found ? 100.0 : 0.0;
+          }
+          const compResult = judgeDeterministic(run.raw_response, comp, "", []);
+          return scorePromptResult(compResult, "") * 100;
+        });
+        const sorted = [...runScores].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        compPromptScore = sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+      } else {
+        const found = (r.competitors_found || []).some(c => c.toLowerCase() === comp.toLowerCase());
+        compPromptScore = found ? 100.0 : 0.0;
+      }
+      
+      if (compPromptScore > maxCompScore) {
+        maxCompScore = compPromptScore;
+      }
+    });
+    
+    r.gap_score = Math.round((maxCompScore - (r.prompt_score || 0.0)) * 10) / 10;
+  });
 }

@@ -1,9 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeVisibilityScore, scorePromptResult, computeScanStats, computeIntentBreakdown, computeTopicScores } from './computeVisibilityScore.js';
+import {
+  computeVisibilityScore,
+  scorePromptResult,
+  computeScanStats,
+  computeIntentBreakdown,
+  computeTopicScores,
+  computeShareOfVoice,
+  computeWinRate,
+  computeCompetitorVisibility,
+  computeGapScores
+} from './computeVisibilityScore.js';
 import { aggregatePromptRuns } from './aggregate.js';
 import { normalizeTopic, slugifyTopic } from './topics.js';
 
+// ... (existing test functions remain unchanged)
+// We will replace all content starting from line 7 to the end to append the new tests cleanly.
 test('scorePromptResult - basic combinations', () => {
   // mentioned + recommended + positive = 1.0
   assert.equal(scorePromptResult({ mentioned: true, position: 'recommended', sentiment: 'positive' }), 1.0);
@@ -185,3 +197,56 @@ test('slugifyTopic - format', () => {
   assert.equal(slugifyTopic("  INTEGRATIONS  "), "integrations");
   assert.equal(slugifyTopic("General"), "general");
 });
+
+test('computeShareOfVoice - percentages', () => {
+  const results = [
+    { mentioned: true, competitors_found: ["beta"] }, // Brand 1, Competitor 1
+    { mentioned: true, competitors_found: [] },       // Brand 1, Competitor 0
+    { mentioned: false, competitors_found: ["beta"] }  // Brand 0, Competitor 1
+  ];
+  // Total brand mentions = 2, total competitor mentions = 2. Total = 4.
+  // SOV = 2 / 4 = 50.0%
+  assert.equal(computeShareOfVoice(results), 50.0);
+});
+
+test('computeWinRate - comparisons', () => {
+  const results = [
+    { mentioned: true, intent_tier: 'comparison', competitors_found: [] },       // Win
+    { mentioned: true, intent_tier: 'comparison', competitors_found: ['beta'] }, // Loss (competitor present)
+    { mentioned: false, intent_tier: 'comparison', competitors_found: [] },      // Loss (not mentioned)
+    { mentioned: true, intent_tier: 'high_intent', competitors_found: [] }       // Ignored (not comparison tier)
+  ];
+  // Wins = 1, total comparison prompts = 3
+  // Win rate = 1 / 3 = 33.3%
+  assert.equal(computeWinRate(results, ['beta']), 33.3);
+});
+
+test('computeCompetitorVisibility - composite rules', () => {
+  const results = [
+    {
+      intent_tier: 'exploratory',
+      run_details: [
+        { raw_response: "Beta is an amazing CRM system." }, // mentioned + recommended + neutral = 0.5 * 100 = 50
+        { raw_response: "I suggest Beta CRM." }
+      ]
+    }
+  ];
+  const vis = computeCompetitorVisibility(results, "Beta");
+  // Expected to be around 50%
+  assert.ok(vis > 0);
+});
+
+test('computeGapScores - calculations', () => {
+  const results = [
+    {
+      prompt_score: 30.0,
+      run_details: [
+        { raw_response: "Acme is okay. Beta is the best CRM." }
+      ]
+    }
+  ];
+  computeGapScores(results, ["Beta"]);
+  // Beta score should be high, prompt_score is 30, so gap_score should be positive
+  assert.ok(results[0].gap_score > 0);
+});
+

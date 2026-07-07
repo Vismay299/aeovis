@@ -8,27 +8,17 @@ export const OpportunitiesPanel = ({ result }) => {
 
   const prompts = result.rawResults || result.topPrompts || [];
   
-  // Filter for gaps (brand not mentioned / omitted)
-  const gaps = prompts.filter(p => p.mentioned === false || p.position === "omitted");
+  // Filter for gaps (where competitor is visible but brand is not, i.e., gapScore > 0 or omitted)
+  const gaps = prompts.filter(p => (p.gapScore !== undefined ? p.gapScore > 0 : (p.mentioned === false || p.position === "omitted")));
   
-  // Sort gaps by volume if available, or just prioritize ones with competitors
-  const volScore = (vol) => {
-    if (typeof vol === 'string') {
-      const v = vol.toLowerCase();
-      if (v === 'high') return 30;
-      if (v === 'medium') return 20;
-      if (v === 'low') return 10;
-    }
-    return 0;
-  };
-
   const sortedGaps = [...gaps].map(g => {
-    const vScore = volScore(g.volume || g.sentiment);
-    const compScore = (g.competitorsFound || g.competitors_found || []).length * 15;
-    // Base 20 for being a gap at all
-    const potential = Math.min(100, 20 + vScore + compScore);
+    const potential = g.gapScore !== undefined ? Math.round(g.gapScore) : 50;
     return { ...g, potential };
-  }).sort((a, b) => b.potential - a.potential).slice(0, 5); // Top 5 opportunities
+  }).sort((a, b) => {
+    const gapA = a.gapScore !== undefined ? a.gapScore : 0;
+    const gapB = b.gapScore !== undefined ? b.gapScore : 0;
+    return gapB - gapA;
+  }).slice(0, 5); // Top 5 opportunities by gapScore
 
   useEffect(() => {
     if (sortedGaps.length === 0) {

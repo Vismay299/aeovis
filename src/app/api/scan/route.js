@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { INDUSTRY_PROMPTS } from "@/data/industries";
 import { insertScan } from "@/lib/db";
 import { generatePromptsForBrand } from "@/lib/prompts";
-import { computeVisibilityScore, computeScanStats, computeIntentBreakdown, computeTopicScores } from "@/lib/scoring/computeVisibilityScore";
+import { computeVisibilityScore, computeScanStats, computeIntentBreakdown, computeTopicScores, computeShareOfVoice, computeWinRate, computeCompetitorVisibility, computeGapScores } from "@/lib/scoring/computeVisibilityScore";
 import { SCORING_VERSION, PROBE_RUNS } from "@/lib/scoring/constants";
 import { normalizeTopic } from "@/lib/scoring/topics";
 import { probePromptMultiple } from "@/lib/scoring/probe";
@@ -187,6 +187,36 @@ export async function POST(request) {
       skipped: results.reduce((sum, r) => sum + (r.run_details || []).filter(run => run.judge_method === "skipped").length, 0),
     };
 
+    // P6-S04: Compute gap_score per prompt result against top competitor
+    computeGapScores(results, competitors);
+
+    const shareOfVoicePct = computeShareOfVoice(results);
+    const winRatePct = computeWinRate(results, competitors);
+
+    // P6-S02: Compute competitor objects using composite scoring
+    const competitorObjects = competitors.map(comp => {
+      const visibilityScore = computeCompetitorVisibility(results, comp);
+      let mentions = 0;
+      let userAbsent = 0;
+      results.forEach(r => {
+        const found = (r.competitors_found || []).some(c => c.toLowerCase() === comp.toLowerCase());
+        if (found) {
+          mentions++;
+          if (!r.mentioned) {
+            userAbsent++;
+          }
+        }
+      });
+      return {
+        name: comp,
+        mentions,
+        prompts: mentions,
+        userAbsent: userAbsent > 0,
+        visibilityScore
+      };
+    });
+    competitorObjects.sort((a, b) => b.visibilityScore - a.visibilityScore);
+
     const scanStats = computeScanStats(results, visibilityPct);
     const intentBreakdown = computeIntentBreakdown(results, url);
     const topicScores = computeTopicScores(results, url);
@@ -206,7 +236,7 @@ export async function POST(request) {
       mention_rate_pct: mentionRatePct,
       prompts_tracked: promptsTracked,
       prompts_mentioned: promptsMentioned,
-      competitors: competitors,
+      competitors: competitorObjects,
       competitors_raw: competitorsRaw,
       results,
       scanned_at: scannedAt,
@@ -220,7 +250,9 @@ export async function POST(request) {
       prompt_set_id,
       prompt_set_hash,
       intent_breakdown: intentBreakdown,
-      topic_scores: topicScores
+      topic_scores: topicScores,
+      share_of_voice_pct: shareOfVoicePct,
+      win_rate_pct: winRatePct
     };
 
     try {
