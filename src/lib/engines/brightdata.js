@@ -1,10 +1,58 @@
 import { normalizeUrl } from "../scoring/citations.js";
 
-export function getBrightDataConfig() {
-  const apiKey = (process.env.BRIGHTDATA_API_KEY || "").trim();
-  const zone = (process.env.BRIGHTDATA_SERP_ZONE || "").trim();
-  if (!apiKey || !zone) return null;
+let cachedZoneName = null;
+
+export function getBrightDataApiKey() {
+  return (process.env.BRIGHTDATA_API_KEY || "").trim() || null;
+}
+
+export async function resolveBrightDataSerpZone(apiKey = getBrightDataApiKey()) {
+  const configuredZone = (process.env.BRIGHTDATA_SERP_ZONE || "").trim();
+  if (configuredZone) return configuredZone;
+  if (cachedZoneName) return cachedZoneName;
+  if (!apiKey) return null;
+
+  const res = await fetch("https://api.brightdata.com/zone/get_all_zones", {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Bright Data zone lookup failed: HTTP ${res.status}`);
+  }
+
+  const zones = await res.json();
+  const activeSerpZone = (zones || []).find(
+    (z) => z.type === "serp" && z.status === "active"
+  );
+
+  if (!activeSerpZone?.name) {
+    throw new Error("No active Bright Data SERP zone found on this account.");
+  }
+
+  cachedZoneName = activeSerpZone.name;
+  console.log(`[brightdata] Auto-discovered SERP zone: ${cachedZoneName}`);
+  return cachedZoneName;
+}
+
+export async function getBrightDataConfig() {
+  const apiKey = getBrightDataApiKey();
+  if (!apiKey) return null;
+
+  const zone = await resolveBrightDataSerpZone(apiKey);
+  if (!zone) return null;
+
   return { apiKey, zone };
+}
+
+function normalizeBrightDataResponse(data) {
+  if (!data || typeof data !== "object") return data;
+
+  let payload = data;
+  if (data.body !== undefined) {
+    payload = typeof data.body === "string" ? JSON.parse(data.body) : data.body;
+  }
+
+  return payload || data;
 }
 
 function buildGoogleSearchUrl(query, { geo = "us", aiOverview = true } = {}) {
@@ -21,9 +69,9 @@ function buildGoogleSearchUrl(query, { geo = "us", aiOverview = true } = {}) {
 }
 
 export async function brightDataSearch(query, options = {}) {
-  const config = getBrightDataConfig();
+  const config = await getBrightDataConfig();
   if (!config) {
-    throw new Error("Bright Data SERP is not configured (BRIGHTDATA_API_KEY + BRIGHTDATA_SERP_ZONE).");
+    throw new Error("Bright Data SERP is not configured (set BRIGHTDATA_API_KEY).");
   }
 
   const geo = process.env.SERP_GEO || "us";
@@ -60,7 +108,7 @@ export async function brightDataSearch(query, options = {}) {
       throw new Error(data.error || data.message || "Bright Data request failed");
     }
 
-    return data;
+    return normalizeBrightDataResponse(data);
   } catch (err) {
     clearTimeout(timeoutId);
     throw err;

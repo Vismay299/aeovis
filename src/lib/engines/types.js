@@ -40,9 +40,7 @@ export function getEnabledEngines() {
   const list = [Engine.GEMINI];
   if (process.env.OPENAI_API_KEY) list.push(Engine.OPENAI);
   if (process.env.PERPLEXITY_API_KEY) list.push(Engine.PERPLEXITY);
-  const serpConfigured =
-    (process.env.BRIGHTDATA_API_KEY && process.env.BRIGHTDATA_SERP_ZONE) ||
-    process.env.SERPAPI_KEY;
+  const serpConfigured = process.env.BRIGHTDATA_API_KEY || process.env.SERPAPI_KEY;
   if (serpConfigured && probeMode !== "llm_only") {
     list.push(Engine.GOOGLE_AI_OVERVIEW);
   }

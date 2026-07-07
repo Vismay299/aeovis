@@ -1,6 +1,6 @@
 import { normalizeUrl } from "../scoring/citations.js";
 import {
-  getBrightDataConfig,
+  getBrightDataApiKey,
   brightDataSearch,
   extractBrightDataAiOverview,
   extractBrightDataPaa,
@@ -8,9 +8,9 @@ import {
 
 function getSerpProvider() {
   const explicit = (process.env.SERP_PROVIDER || "").trim().toLowerCase();
-  if (explicit === "brightdata") return getBrightDataConfig() ? "brightdata" : null;
+  if (explicit === "brightdata") return getBrightDataApiKey() ? "brightdata" : null;
   if (explicit === "serpapi") return resolveSerpCredentials() ? "serpapi" : null;
-  if (getBrightDataConfig()) return "brightdata";
+  if (getBrightDataApiKey()) return "brightdata";
   if (resolveSerpCredentials()) return "serpapi";
   return null;
 }
