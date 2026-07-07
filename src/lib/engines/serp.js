@@ -1,4 +1,23 @@
 import { normalizeUrl } from "../scoring/citations.js";
+import {
+  getBrightDataConfig,
+  brightDataSearch,
+  extractBrightDataAiOverview,
+  extractBrightDataPaa,
+} from "./brightdata.js";
+
+function getSerpProvider() {
+  const explicit = (process.env.SERP_PROVIDER || "").trim().toLowerCase();
+  if (explicit === "brightdata") return getBrightDataConfig() ? "brightdata" : null;
+  if (explicit === "serpapi") return resolveSerpCredentials() ? "serpapi" : null;
+  if (getBrightDataConfig()) return "brightdata";
+  if (resolveSerpCredentials()) return "serpapi";
+  return null;
+}
+
+function isSerpConfigured() {
+  return !!getSerpProvider();
+}
 
 function resolveSerpCredentials() {
   const raw = (process.env.SERPAPI_KEY || "").trim();
@@ -136,9 +155,14 @@ export function extractTextFromBlocks(blocks) {
  * @returns {Promise<Object>} Probe result: { text, model_used, citations, cost, tokens }
  */
 export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
-  if (!resolveSerpCredentials()) {
-    console.warn("[serp] SERPAPI_KEY not configured. Skipping Google AI Overview probe.");
+  const provider = getSerpProvider();
+  if (!provider) {
+    console.warn("[serp] No SERP provider configured. Skipping Google AI Overview probe.");
     return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
+  }
+
+  if (provider === "brightdata") {
+    return probeGoogleAiOverviewBrightData(prompt, options, retries);
   }
 
   const geo = process.env.SERP_GEO || "us";
@@ -174,7 +198,13 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
       if (resJson.error) {
         const authError = String(resJson.error).toLowerCase().includes("invalid api key");
         if (authError) {
-          console.warn("[serp] SerpAPI auth/quota issue — skipping Google AI Overview for this query.");
+          const creds = resolveSerpCredentials();
+          if (creds?.authHeader && !global.__serpLoginCredentialWarned) {
+            global.__serpLoginCredentialWarned = true;
+            console.warn(
+              "[serp] SerpAPI rejected the credential. SERPAPI_KEY must be your private API key from https://serpapi.com/manage-api-key — not your login email/password."
+            );
+          }
         }
         return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
       }
@@ -250,28 +280,69 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
  * @param {Array|string} seedTerms - Search term(s) to fetch queries for
  * @returns {Promise<Array<string>>} List of question strings
  */
+async function probeGoogleAiOverviewBrightData(prompt, options = {}, retries = 2) {
+  const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+  let lastErr = null;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const data = await brightDataSearch(prompt, { ...options, aiOverview: true });
+      const { text, citations } = extractBrightDataAiOverview(data);
+      const cost = 0.0015;
+
+      if (options.stats) {
+        options.stats.cost = (options.stats.cost || 0) + cost;
+      }
+
+      const hasOverview = !!text?.trim();
+      return {
+        text,
+        model_used: hasOverview ? "google_ai_overview" : "google_ai_overview-skipped",
+        citations,
+        cost,
+        tokens: 0,
+      };
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) {
+        await wait(1000 * Math.pow(2, attempt));
+      }
+    }
+  }
+
+  console.warn(`[brightdata] Google AI Overview unavailable — skipping: ${lastErr?.message || lastErr}`);
+  return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
+}
+
 export async function fetchPeopleAlsoAsk(seedTerms) {
-  if (!resolveSerpCredentials()) {
-    console.warn("[serp] SERPAPI_KEY not configured. PAA fetch returning empty list.");
+  if (!isSerpConfigured()) {
+    console.warn("[serp] No SERP provider configured. PAA fetch returning empty list.");
     return [];
   }
-  
+
+  const provider = getSerpProvider();
   const questions = new Set();
   const terms = Array.isArray(seedTerms) ? seedTerms : [seedTerms];
-  
+
   for (const term of terms.slice(0, 3)) {
     try {
+      if (provider === "brightdata") {
+        const data = await brightDataSearch(term, { aiOverview: false, timeout: 30000 });
+        extractBrightDataPaa(data).forEach((q) => questions.add(q));
+        continue;
+      }
+
       const searchParams = new URLSearchParams({
         q: term,
         engine: "google",
         hl: "en",
-        gl: "us"
+        gl: "us",
       });
       const res = await serpFetch(searchParams);
       if (res.ok) {
         const data = await res.json();
         const paa = data.people_also_ask || [];
-        paa.forEach(item => {
+        paa.forEach((item) => {
           if (item.question) {
             questions.add(item.question);
           }
