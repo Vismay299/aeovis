@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:prompts": "node --env-file=.env.local scripts/test-dynamic-prompts.mjs",
-    "test:scoring": "node --test src/lib/scoring/**/*.test.mjs",
+    "test:scoring": "node --test src/lib/scoring/**/*.test.mjs src/lib/engines/**/*.test.mjs",
     "test:calibration": "node src/lib/scoring/test_calibration.js"
   },
   "dependencies": {

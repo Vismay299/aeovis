@@ -2,26 +2,33 @@ import React from "react";
 import { Cpu, ShieldAlert, BadgeDollarSign } from "lucide-react";
 
 const ENGINE_CONFIGS = {
+  google_ai_overview: {
+    label: "Google AI Overview",
+    color: "bg-gradient-to-r from-[#4285F4] via-[#EA4335] via-[#FBBC05] to-[#34A853]",
+    textColor: "text-[#4285F4]",
+    badgeBg: "bg-[#e8f0fe]",
+    defaultWeight: 0.50
+  },
   perplexity: {
     label: "Perplexity",
     color: "bg-gradient-to-r from-[#208080] to-[#3a9f9f]",
     textColor: "text-[#208080]",
     badgeBg: "bg-[#eef8f8]",
-    defaultWeight: 0.40
+    defaultWeight: 0.25
   },
   openai: {
     label: "ChatGPT (GPT-4o)",
     color: "bg-gradient-to-r from-[#10a37f] to-[#22c55e]",
     textColor: "text-[#10a37f]",
     badgeBg: "bg-[#eafaf5]",
-    defaultWeight: 0.35
+    defaultWeight: 0.15
   },
   gemini: {
     label: "Gemini",
     color: "bg-gradient-to-r from-[#4b39ef] to-[#827ae6]",
     textColor: "text-[#4b39ef]",
     badgeBg: "bg-[#eef2ff]",
-    defaultWeight: 0.25
+    defaultWeight: 0.10
   }
 };
 
@@ -29,6 +36,7 @@ export const EngineBreakdown = ({ result }) => {
   const engineScores = result.engineScores || {};
   const costByEngine = result.costByEngine || {};
   const enginesPartial = result.enginesPartial || false;
+  const serpCoveragePct = result.serpCoveragePct;
 
   const enginesToShow = Object.keys(engineScores).length > 0
     ? Object.keys(engineScores)
@@ -112,6 +120,13 @@ export const EngineBreakdown = ({ result }) => {
           );
         })}
       </div>
+
+      {serpCoveragePct !== undefined && enginesToShow.includes("google_ai_overview") && (
+        <div className="mt-4 pt-3 border-t border-[#E5E2D9] flex items-center justify-between text-xs text-[#666666]">
+          <span>AI Overview Coverage Rate</span>
+          <span className="font-semibold text-[#1A1A1A]">{serpCoveragePct.toFixed(1)}%</span>
+        </div>
+      )}
 
       <div className="mt-5 pt-4 border-t border-[#E5E2D9] flex items-center gap-1.5 text-[11px] text-[#999999]">
         <Cpu className="w-3.5 h-3.5 text-[#D9531E]" />

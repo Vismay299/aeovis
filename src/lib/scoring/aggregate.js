@@ -1,4 +1,4 @@
-import { ENGINE_DEFAULT_WEIGHTS } from "../engines/types.js";
+import { ENGINE_DEFAULT_WEIGHTS, ENGINE_HYBRID_WEIGHTS } from "../engines/types.js";
 
 function getStdDev(array) {
   const n = array.length;
@@ -119,16 +119,21 @@ export function aggregateMultiEnginePromptRuns(runs) {
   
   if (activeEngines.length === 0) return null;
   
+  // Choose weights dictionary based on active engines:
+  // If google_ai_overview is one of the active engines, we use ENGINE_HYBRID_WEIGHTS!
+  const hasSerp = activeEngines.includes("google_ai_overview");
+  const weightsDict = hasSerp ? ENGINE_HYBRID_WEIGHTS : ENGINE_DEFAULT_WEIGHTS;
+
   // Normalize weights for active engines
   let totalWeight = 0.0;
   activeEngines.forEach(eng => {
-    totalWeight += ENGINE_DEFAULT_WEIGHTS[eng] ?? 0.25;
+    totalWeight += weightsDict[eng] ?? 0.25;
   });
   if (totalWeight === 0) totalWeight = 1.0;
   
   const normalizedWeights = {};
   activeEngines.forEach(eng => {
-    normalizedWeights[eng] = (ENGINE_DEFAULT_WEIGHTS[eng] ?? 0.25) / totalWeight;
+    normalizedWeights[eng] = (weightsDict[eng] ?? 0.25) / totalWeight;
   });
   
   // Calculate weighted prompt score and mentioned rate

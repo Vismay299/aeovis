@@ -92,7 +92,7 @@ export const HeroScoreCard = ({ score, tierText, testId, trend, isMixedTrend, pr
                 isMixedTrend && promptSetChanged
                   ? "Trend compares different scoring versions and different prompt sets"
                   : isMixedTrend
-                  ? "Trend compares different scoring versions (v1 vs v3)"
+                  ? "Trend compares different scoring versions (e.g. v3 vs v5-hybrid)"
                   : promptSetChanged
                   ? "Prompt set changed between these scans — trend comparison may be less accurate"
                   : undefined

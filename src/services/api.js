@@ -136,6 +136,8 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     engineScores: data.engine_scores ?? data.engineScores ?? data.raw_results?.engine_scores ?? { gemini: data.visibility_pct ?? data.visibilityScore ?? 0.0 },
     costByEngine: data.cost_by_engine ?? data.costByEngine ?? data.raw_results?.cost_by_engine ?? {},
     enginesPartial: !!(data.engines_partial ?? data.enginesPartial ?? data.raw_results?.engines_partial),
+    serpCoveragePct: data.serp_coverage_pct ?? data.serpCoveragePct ?? data.raw_results?.serp_coverage_pct ?? 0.0,
+    probeSources: data.probe_sources ?? data.probeSources ?? data.raw_results?.probe_sources ?? [],
     summary: data.summary || generateSummary(data),
     totalCitations: results.reduce((sum, r) => sum + ((r.citations || r.citations_found || []).length), 0),
     scoringVersion: version,

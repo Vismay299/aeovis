@@ -53,7 +53,9 @@ export async function insertScan(scanRecord) {
     top_domains: scanRecord.top_domains,
     engine_scores: scanRecord.engine_scores,
     cost_by_engine: scanRecord.cost_by_engine,
-    engines_partial: scanRecord.engines_partial
+    engines_partial: scanRecord.engines_partial,
+    serp_coverage_pct: scanRecord.serp_coverage_pct,
+    probe_sources: scanRecord.probe_sources
   };
 
   const baseRecord = {

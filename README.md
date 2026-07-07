@@ -41,9 +41,25 @@ A modern, agentic web application for tracking Answer Engine Optimization (AEO) 
    # Perplexity API Key for Perplexity search engine simulation (Optional)
    PERPLEXITY_API_KEY=your_perplexity_api_key
 
-   # Comma-separated list of enabled simulation engines (default is 'gemini')
-   # Options: gemini, openai, perplexity
-   ENGINES_ENABLED=gemini,openai,perplexity
+   # SerpAPI Key for fetching Google AI Overviews (Optional)
+   SERPAPI_KEY=your_serpapi_key
+
+   # Location code for SerpAPI (default 'us')
+   SERP_GEO=us
+
+   # Device configuration for SerpAPI (default 'desktop')
+   SERP_DEVICE=desktop
+
+   # Probing mode configurations (default 'hybrid' if serpapi key present, else 'llm_only')
+   # Options:
+   # - hybrid: Google AI Overview + enabled LLMs
+   # - llm_only: Only LLM engines (Gemini/OpenAI/Perplexity)
+   # - serp_primary: Query Google AI Overview first; only fallback to LLMs on overview miss
+   PROBE_MODE=hybrid
+
+   # Comma-separated list of enabled simulation engines
+   # Options: gemini, openai, perplexity, google_ai_overview
+   ENGINES_ENABLED=google_ai_overview,gemini,openai,perplexity
 
    # Supabase Configuration for history tracking
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url

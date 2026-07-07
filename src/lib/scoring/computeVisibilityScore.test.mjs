@@ -279,3 +279,20 @@ test('aggregateMultiEnginePromptRuns - weighted engine aggregation', () => {
   assert.equal(agg.engine_scores.openai, 80.0);
 });
 
+test('aggregateMultiEnginePromptRuns - hybrid weights when serp present', () => {
+  const runs = [
+    // google_ai_overview (weight 0.50, score 100)
+    { prompt: "crm tool", engine: "google_ai_overview", prompt_score: 100.0, mentioned: true, position: "recommended", sentiment: "positive" },
+    // gemini (weight 0.10, score 80)
+    { prompt: "crm tool", engine: "gemini", prompt_score: 80.0, mentioned: true, position: "compared", sentiment: "positive" }
+  ];
+  // Active: google_ai_overview (0.50), gemini (0.10). Total weight = 0.60
+  // Normalized: google_ai_overview = 0.50 / 0.6 = 0.8333, gemini = 0.10 / 0.6 = 0.1667
+  // Weighted score = 100 * 0.8333 + 80 * 0.1667 = 83.33 + 13.33 = 96.7
+  const agg = aggregateMultiEnginePromptRuns(runs);
+  assert.equal(agg.prompt, "crm tool");
+  assert.equal(agg.prompt_score, 96.7);
+  assert.equal(agg.engine_scores.google_ai_overview, 100.0);
+  assert.equal(agg.engine_scores.gemini, 80.0);
+});
+

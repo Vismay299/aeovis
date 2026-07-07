@@ -226,6 +226,16 @@ export async function POST(request) {
     // P8-S11: Graceful partial failure flag
     const enginesPartial = results.some(r => (r.run_details || []).some(run => run.model_used.includes("failed") || run.model_used.includes("skipped")));
 
+    // P8b-S12: Calculate Google AI Overview coverage rate
+    const serpQueries = results.filter(r => (r.run_details || []).some(run => run.engine === "google_ai_overview"));
+    const serpHits = results.filter(r => (r.run_details || []).some(run => run.engine === "google_ai_overview" && run.raw_response));
+    const serpCoveragePct = serpQueries.length ? Math.round((serpHits.length / serpQueries.length) * 1000) / 10 : 0.0;
+
+    // P8b-S09: Extract all successfully queried probe sources
+    const probeSources = Array.from(new Set(results.flatMap(r => (r.run_details || []).map(run => run.engine).filter(Boolean))));
+
+    const activeVersion = probeSources.includes("google_ai_overview") ? "v5-hybrid" : SCORING_VERSION;
+
     // P6-S02 / P7-S05: Compute competitor objects using composite scoring and citation shares
     const competitorObjects = competitors.map(comp => {
       const visibilityScore = computeCompetitorVisibility(results, comp);
@@ -266,7 +276,7 @@ export async function POST(request) {
       brand,
       url,
       industry,
-      platform: activeEngines.join(", ") || "gemini",
+      platform: probeSources.join(", ") || "gemini",
       visibility_pct: visibilityPct,
       mention_rate_pct: mentionRatePct,
       prompts_tracked: promptsTracked,
@@ -277,7 +287,7 @@ export async function POST(request) {
       scanned_at: scannedAt,
       used_dynamic_prompts: usedDynamicPrompts || loadedFromDb,
       tokens_used: stats.tokens,
-      scoring_version: SCORING_VERSION,
+      scoring_version: activeVersion,
       judge_stats: judgeStats,
       score_ci_low: scanStats.score_ci_low,
       score_ci_high: scanStats.score_ci_high,
@@ -292,7 +302,9 @@ export async function POST(request) {
       top_domains: topDomains,
       engine_scores: engineScores,
       cost_by_engine: costByEngine,
-      engines_partial: enginesPartial
+      engines_partial: enginesPartial,
+      serp_coverage_pct: serpCoveragePct,
+      probe_sources: probeSources
     };
 
     try {
