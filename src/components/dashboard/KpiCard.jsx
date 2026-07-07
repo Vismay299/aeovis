@@ -21,7 +21,7 @@ export const KpiCard = ({ label, value, suffix, sub, index = 0, testId }) => {
           </span>
           {suffix && <span className="text-lg text-[#999999] font-serif">{suffix}</span>}
         </div>
-        {sub && <p className="mt-3 text-sm text-[#666666]">{sub}</p>}
+        {sub && <div className="mt-3 text-sm text-[#666666]">{sub}</div>}
       </div>
     </motion.div>
   );
