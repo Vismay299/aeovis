@@ -1,5 +1,52 @@
 import { normalizeUrl } from "../scoring/citations.js";
 
+function resolveSerpCredentials() {
+  const raw = (process.env.SERPAPI_KEY || "").trim();
+  if (!raw) return null;
+
+  const toBasicAuth = (value) => `Basic ${Buffer.from(value).toString("base64")}`;
+
+  if (/^[A-Za-z0-9+/]+=*$/.test(raw) && raw.length > 20) {
+    try {
+      const decoded = Buffer.from(raw, "base64").toString("utf8");
+      if (decoded.includes("@") && decoded.includes(":")) {
+        return { authHeader: `Basic ${raw}` };
+      }
+    } catch {
+      // Fall through to plain key handling.
+    }
+  }
+
+  if (raw.includes("@") && raw.includes(":")) {
+    return { authHeader: toBasicAuth(raw) };
+  }
+
+  return { apiKey: raw };
+}
+
+async function serpFetch(searchParams, options = {}) {
+  const creds = resolveSerpCredentials();
+  if (!creds) {
+    throw new Error("SERPAPI_KEY is not configured.");
+  }
+
+  const params = new URLSearchParams(searchParams);
+  if (creds.apiKey) {
+    params.set("api_key", creds.apiKey);
+  }
+
+  const headers = {};
+  if (creds.authHeader) {
+    headers.Authorization = creds.authHeader;
+  }
+
+  return fetch(`https://serpapi.com/search?${params.toString()}`, {
+    method: "GET",
+    headers,
+    signal: options.signal,
+  });
+}
+
 /**
  * Recursively extracts and formats text from SerpAPI Google SGE/AI Overview blocks.
  * Handles text snippets, lists, and child blocks cleanly.
@@ -89,8 +136,7 @@ export function extractTextFromBlocks(blocks) {
  * @returns {Promise<Object>} Probe result: { text, model_used, citations, cost, tokens }
  */
 export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
-  const apiKey = process.env.SERPAPI_KEY;
-  if (!apiKey) {
+  if (!resolveSerpCredentials()) {
     console.warn("[serp] SERPAPI_KEY not configured. Skipping Google AI Overview probe.");
     return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
   }
@@ -101,7 +147,6 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
   // hl=en is required for AI Overview support
   const searchParams = new URLSearchParams({
     q: prompt,
-    api_key: apiKey,
     engine: "google",
     gl: geo,
     hl: "en",
@@ -117,10 +162,7 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      const res = await fetch(`https://serpapi.com/search?${searchParams.toString()}`, {
-        method: "GET",
-        signal: controller.signal
-      });
+      const res = await serpFetch(searchParams, { signal: controller.signal });
 
       clearTimeout(timeoutId);
 
@@ -140,12 +182,8 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
         const followUpParams = new URLSearchParams({
           engine: "google_ai_overview",
           page_token: pageToken,
-          api_key: apiKey
         });
-        const followUpRes = await fetch(`https://serpapi.com/search?${followUpParams.toString()}`, {
-          method: "GET",
-          signal: controller.signal
-        });
+        const followUpRes = await serpFetch(followUpParams, { signal: controller.signal });
         if (followUpRes.ok) {
           const followUpJson = await followUpRes.json();
           if (followUpJson.ai_overview) {
@@ -205,8 +243,7 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
  * @returns {Promise<Array<string>>} List of question strings
  */
 export async function fetchPeopleAlsoAsk(seedTerms) {
-  const apiKey = process.env.SERPAPI_KEY;
-  if (!apiKey) {
+  if (!resolveSerpCredentials()) {
     console.warn("[serp] SERPAPI_KEY not configured. PAA fetch returning empty list.");
     return [];
   }
@@ -218,12 +255,11 @@ export async function fetchPeopleAlsoAsk(seedTerms) {
     try {
       const searchParams = new URLSearchParams({
         q: term,
-        api_key: apiKey,
         engine: "google",
         hl: "en",
         gl: "us"
       });
-      const res = await fetch(`https://serpapi.com/search?${searchParams.toString()}`);
+      const res = await serpFetch(searchParams);
       if (res.ok) {
         const data = await res.json();
         const paa = data.people_also_ask || [];
