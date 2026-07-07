@@ -3,24 +3,11 @@ import { Globe, Link as LinkIcon } from "lucide-react";
 
 export const CitationsPanel = ({ result }) => {
   const topDomains = result.topDomains || [];
-  const brandDomain = result.website ? result.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase() : "";
-
   // Count total citations across all prompts
   const totalCitations = (result.rawResults || []).reduce(
     (sum, r) => sum + (r.citations || []).length,
     0
   );
-
-  const ownDomainCount = (result.rawResults || []).reduce((sum, r) => {
-    return sum + (r.citations || []).filter(c => {
-      const lower = c.toLowerCase();
-      return brandDomain && (lower.includes("://" + brandDomain) || lower.includes("." + brandDomain + "/"));
-    }).length;
-  }, 0);
-
-  const ownDomainPercentage = totalCitations > 0 
-    ? Math.round((ownDomainCount / totalCitations) * 100) 
-    : 0;
 
   if (totalCitations === 0) {
     return (

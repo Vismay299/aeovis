@@ -45,8 +45,11 @@ export const CompetitorTable = ({ competitors = [], results = [], brandMentions 
                 <th className="text-[11px] uppercase tracking-[0.12em] text-[#1A1A1A] font-semibold text-center px-4 py-3 w-28">
                   Visibility
                 </th>
-                <th className="text-[11px] uppercase tracking-[0.12em] text-[#1A1A1A] font-semibold text-center px-4 py-3 w-32">
+                 <th className="text-[11px] uppercase tracking-[0.12em] text-[#1A1A1A] font-semibold text-center px-4 py-3 w-32">
                   Share of Voice
+                </th>
+                <th className="text-[11px] uppercase tracking-[0.12em] text-[#1A1A1A] font-semibold text-center px-4 py-3 w-32">
+                  Citation Share
                 </th>
                 <th className="text-[11px] uppercase tracking-[0.12em] text-[#1A1A1A] font-semibold text-center px-4 py-3 w-36">
                   Comparison Win Rate
@@ -99,6 +102,9 @@ export const CompetitorTable = ({ competitors = [], results = [], brandMentions 
                     </td>
                     <td className="px-4 py-5 text-center font-serif text-lg font-medium text-[#1A1A1A]">
                       {sov}%
+                    </td>
+                    <td className="px-4 py-5 text-center font-serif text-lg font-medium text-[#1A1A1A]">
+                      {c.citationShare !== undefined ? `${c.citationShare}%` : "0%"}
                     </td>
                     <td className="px-4 py-5 text-center font-serif text-lg font-medium text-[#1A1A1A]">
                       {winRate}%
