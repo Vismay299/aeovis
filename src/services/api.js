@@ -1,5 +1,5 @@
 import { buildMockResult } from "@/data/mockData";
-import { normalizeTopic } from "../lib/scoring/topics.js";
+import { normalizeTopic, isPromptRelatedToUrl } from "../lib/scoring/topics.js";
 import {
   extractBrandDomain,
   classifyCitation,
@@ -365,5 +365,117 @@ export async function runScan({ brand, website, industry, competitors, querySour
     throw new Error("Scan timed out after 10 minutes.");
   } catch (error) {
     throw error;
+  }
+}
+
+export async function getContentEvents(brand) {
+  const isLocal = typeof window !== "undefined" && !process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (isLocal) {
+    try {
+      const stored = localStorage.getItem(`aeo_content_events_${brand.toLowerCase()}`);
+      if (stored) {
+        const events = JSON.parse(stored);
+        
+        // Compute lift client-side based on localStorage scans
+        const historyStored = localStorage.getItem(`aeo_scans_${brand.toLowerCase()}`) || "[]";
+        const scans = JSON.parse(historyStored);
+
+        return events.map(event => {
+          let currentScore = null;
+          let previousScore = null;
+          let lift = null;
+          let relatedPrompts = [];
+
+          if (scans.length > 0) {
+            const latestScan = scans[0];
+            const latestResults = latestScan.rawResults || latestScan.raw_results || [];
+            
+            const latestMatches = latestResults.filter(r => isPromptRelatedToUrl(r.prompt || r.text, event.url));
+            if (latestMatches.length > 0) {
+              relatedPrompts = latestMatches.map(m => m.prompt || m.text);
+              const currentSum = latestMatches.reduce((sum, m) => sum + (m.prompt_score ?? 0), 0);
+              currentScore = Math.round((currentSum / latestMatches.length) * 10) / 10;
+
+              if (scans.length > 1) {
+                const prevScan = scans[1];
+                const prevResults = prevScan.rawResults || prevScan.raw_results || [];
+                const prevMatches = prevResults.filter(r => 
+                  relatedPrompts.some(pText => pText.toLowerCase().trim() === (r.prompt || r.text || "").toLowerCase().trim())
+                );
+                if (prevMatches.length > 0) {
+                  const prevSum = prevMatches.reduce((sum, m) => sum + (m.prompt_score ?? 0), 0);
+                  previousScore = Math.round((prevSum / prevMatches.length) * 10) / 10;
+                  lift = Math.round((currentScore - previousScore) * 10) / 10;
+                }
+              }
+            }
+          }
+
+          return {
+            ...event,
+            related_prompts: relatedPrompts,
+            current_score: currentScore,
+            previous_score: previousScore,
+            lift: lift
+          };
+        });
+      }
+      return [];
+    } catch (e) {
+      console.warn("Local content events retrieval failed:", e);
+      return [];
+    }
+  }
+
+  try {
+    const res = await fetch(`/api/content-events?brand=${encodeURIComponent(brand)}`);
+    if (res.ok) {
+      return await res.json();
+    }
+    return [];
+  } catch (e) {
+    console.error("Failed to fetch content events:", e);
+    return [];
+  }
+}
+
+export async function addContentEvent({ brand, url, publishDate }) {
+  const isLocal = typeof window !== "undefined" && !process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (isLocal) {
+    try {
+      const key = `aeo_content_events_${brand.toLowerCase()}`;
+      const stored = localStorage.getItem(key) || "[]";
+      const events = JSON.parse(stored);
+      
+      const newEvent = {
+        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+        brand,
+        url,
+        publish_date: publishDate || new Date().toISOString(),
+        created_at: new Date().toISOString()
+      };
+      
+      events.push(newEvent);
+      localStorage.setItem(key, JSON.stringify(events));
+      return newEvent;
+    } catch (e) {
+      console.warn("Local content event insertion failed:", e);
+      return null;
+    }
+  }
+
+  try {
+    const res = await fetch("/api/content-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ brand, url, publishDate }),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return null;
+  } catch (e) {
+    console.error("Failed to add content event:", e);
+    return null;
   }
 }

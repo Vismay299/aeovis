@@ -1,5 +1,5 @@
 import { INDUSTRY_PROMPTS } from "../../data/industries.js";
-import { insertScan, updateScanJob } from "../db.js";
+import { insertScan, updateScanJob, getContentEvents, getScansForBrand } from "../db.js";
 import { generatePromptsForBrand } from "../prompts.js";
 import {
   computeVisibilityScore,
@@ -15,7 +15,8 @@ import {
   aggregateTopDomains
 } from "../scoring/computeVisibilityScore.js";
 import { SCORING_VERSION, SCORING_VERSION_HYBRID, PROBE_RUNS, INTENT_WEIGHTS } from "../scoring/constants.js";
-import { normalizeTopic } from "../scoring/topics.js";
+import { normalizeTopic, isPromptRelatedToUrl } from "../scoring/topics.js";
+import { computeContentLiftReports } from "../scoring/contentLift.js";
 import { probePromptMultiple } from "../scoring/probe.js";
 import { aggregateMultiEnginePromptRuns } from "../scoring/aggregate.js";
 import { getPromptsForBrand, upsertPrompts } from "../db/prompts.js";
@@ -418,6 +419,27 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw, 
     const prompt_set_hash = crypto.createHash("sha256").update(promptTexts.join("|")).digest("hex");
     const prompt_set_id = prompt_set_hash.slice(0, 16);
 
+    // P14-S02/S03: Tag related prompts and compute content lift vs previous scan
+    let contentLift = [];
+    try {
+      const events = await getContentEvents(brand);
+      if (events && events.length > 0) {
+        brandResults.forEach(r => {
+          const matchingEvent = events.find(ev => isPromptRelatedToUrl(r.prompt, ev.url));
+          if (matchingEvent) {
+            r.related_content_url = matchingEvent.url;
+            console.log(`[worker] Prompt "${r.prompt}" matched content event: ${matchingEvent.url}`);
+          }
+        });
+
+        const previousScans = await getScansForBrand(brand);
+        const prevResults = previousScans[0]?.raw_results?.results || [];
+        contentLift = computeContentLiftReports(events, brandResults, prevResults);
+      }
+    } catch (e) {
+      console.warn("[worker] Failed to compute content lift:", e.message);
+    }
+
     // Save scan
     const scanRecord = {
       brand,
@@ -458,7 +480,8 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw, 
       judge_disagreement_count: judgeDisagreementCount,
       control_prompts_passed: controlPromptsPassed,
       control_prompts_total: controlPromptsTotal,
-      query_source: querySource
+      query_source: querySource,
+      content_lift: contentLift
     };
 
     let savedScan = null;

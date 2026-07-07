@@ -41,3 +41,37 @@ export function slugifyTopic(name) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
+
+/**
+ * Determines if a query prompt is semantically related to a content URL path.
+ * Match criteria: parses the path segments, extracts key terms (excluding stopwords),
+ * and checks if those terms are present in the query string.
+ *
+ * @param {string} promptText - Query prompt string
+ * @param {string} urlStr - Content event URL string
+ * @returns {boolean} True if matching/related
+ */
+export function isPromptRelatedToUrl(promptText, urlStr) {
+  if (!promptText || !urlStr) return false;
+  try {
+    const cleanedUrl = urlStr.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+    const parts = cleanedUrl.split('/');
+    if (parts.length <= 1) return false; // Domain only, no path to match against
+    
+    const pathSegments = parts.slice(1).join(' ').toLowerCase();
+    const promptLower = promptText.toLowerCase();
+    
+    const keywords = pathSegments.split(/[^a-z0-9]/).filter(w => w.length > 2);
+    if (keywords.length === 0) return false;
+    
+    const stopwords = new Set(["the", "and", "for", "with", "how", "what", "why", "best", "top", "free", "blog", "post"]);
+    const queryKeywords = keywords.filter(k => !stopwords.has(k));
+    
+    if (queryKeywords.length === 0) return false;
+    
+    return queryKeywords.some(k => promptLower.includes(k));
+  } catch (e) {
+    return false;
+  }
+}
+

@@ -65,6 +65,25 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
   gsc_queries jsonb
 );
 
+-- 4. Content Events Table (content lift tracking)
+CREATE TABLE IF NOT EXISTS content_events (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  brand text NOT NULL,
+  url text NOT NULL,
+  publish_date timestamptz DEFAULT now(),
+  created_at timestamptz DEFAULT now()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'content_events_brand_url_idx'
+  ) THEN
+    ALTER TABLE content_events
+      ADD CONSTRAINT content_events_brand_url_idx UNIQUE (brand, url);
+  END IF;
+END $$;
+
 -- Safe, idempotent column migration helpers for existing databases
 DO $$
 BEGIN
@@ -89,6 +108,7 @@ END $$;
 ALTER TABLE scans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE brand_prompts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scan_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE content_events ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN
@@ -108,5 +128,11 @@ BEGIN
     SELECT 1 FROM pg_policies WHERE tablename = 'scan_jobs' AND policyname = 'Allow anon all on scan_jobs'
   ) THEN
     CREATE POLICY "Allow anon all on scan_jobs" ON scan_jobs FOR ALL TO anon USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'content_events' AND policyname = 'Allow anon all on content_events'
+  ) THEN
+    CREATE POLICY "Allow anon all on content_events" ON content_events FOR ALL TO anon USING (true) WITH CHECK (true);
   END IF;
 END $$;

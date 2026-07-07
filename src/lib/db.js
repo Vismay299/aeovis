@@ -41,6 +41,15 @@ export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, s
 //   created_at timestamptz DEFAULT now()
 // );
 // CREATE UNIQUE INDEX brand_prompts_brand_text_idx ON brand_prompts (brand, text);
+//
+// CREATE TABLE content_events (
+//   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+//   brand text NOT NULL,
+//   url text NOT NULL,
+//   publish_date timestamptz DEFAULT now(),
+//   created_at timestamptz DEFAULT now()
+// );
+// CREATE UNIQUE INDEX content_events_brand_url_idx ON content_events (brand, url);
 
 export async function insertScan(scanRecord) {
   if (!supabase) {
@@ -79,7 +88,8 @@ export async function insertScan(scanRecord) {
     judge_disagreement_count: scanRecord.judge_disagreement_count,
     control_prompts_passed: scanRecord.control_prompts_passed,
     control_prompts_total: scanRecord.control_prompts_total,
-    query_source: scanRecord.query_source
+    query_source: scanRecord.query_source,
+    content_lift: scanRecord.content_lift || []
   };
 
   const baseRecord = {
@@ -246,5 +256,60 @@ export async function updateScanJob(jobId, updates) {
     const updated = { id: jobId, ...updates };
     global.memoryJobs.set(jobId, updated);
     return updated;
+  }
+}
+
+// Global memory store for content events (Next.js hot-reload safe)
+global.memoryContentEvents = global.memoryContentEvents || new Map();
+
+export async function getContentEvents(brand) {
+  if (!supabase) {
+    const list = Array.from(global.memoryContentEvents.values());
+    return list.filter(item => item.brand.toLowerCase() === brand.toLowerCase());
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("content_events")
+      .select("*")
+      .eq("brand", brand)
+      .order("publish_date", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn("Failed to fetch content_events from database, checking memory:", err.message);
+    const list = Array.from(global.memoryContentEvents.values());
+    return list.filter(item => item.brand.toLowerCase() === brand.toLowerCase());
+  }
+}
+
+export async function insertContentEvent({ brand, url, publishDate }) {
+  const id = crypto.randomUUID();
+  const event = {
+    id,
+    brand,
+    url,
+    publish_date: publishDate || new Date().toISOString(),
+    created_at: new Date().toISOString()
+  };
+
+  if (!supabase) {
+    global.memoryContentEvents.set(id, event);
+    return event;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("content_events")
+      .insert([event])
+      .select();
+
+    if (error) throw error;
+    return data[0];
+  } catch (err) {
+    console.warn("Failed to insert content_event to database, falling back to memory:", err.message);
+    global.memoryContentEvents.set(id, event);
+    return event;
   }
 }

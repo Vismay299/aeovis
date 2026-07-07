@@ -59,7 +59,7 @@ async function main() {
     await client.query(sql);
     console.log("Migration applied successfully.\n");
 
-    const tables = ["scans", "brand_prompts", "scan_jobs"];
+    const tables = ["scans", "brand_prompts", "scan_jobs", "content_events"];
     for (const table of tables) {
       const { rows } = await client.query(
         `SELECT to_regclass('public.${table}') AS regclass`

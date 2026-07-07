@@ -18,6 +18,7 @@ import { ScoreBreakdown } from "@/components/dashboard/ScoreBreakdown";
 import { IntentBreakdown } from "@/components/dashboard/IntentBreakdown";
 import { TopicBreakdown } from "@/components/dashboard/TopicBreakdown";
 import { QueryManager } from "@/components/dashboard/QueryManager";
+import ContentLiftPanel from "@/components/dashboard/ContentLiftPanel";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -477,7 +478,7 @@ export default function Dashboard() {
           <>
             {/* Tabs */}
             <div className="flex items-center gap-6 border-b border-[#E5E2D9] mb-8 overflow-x-auto pb-px print:hidden">
-              {["overview", "queries", "opportunities", "citations"].map(tab => (
+              {["overview", "queries", "opportunities", "citations", "content"].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -487,7 +488,7 @@ export default function Dashboard() {
                       : "border-transparent text-[#999999] hover:text-[#1A1A1A]"
                   }`}
                 >
-                  {tab === "citations" ? "Citations & Sources" : tab === "queries" ? "Tracked Queries" : tab}
+                  {tab === "citations" ? "Citations & Sources" : tab === "queries" ? "Tracked Queries" : tab === "content" ? "Content Lift" : tab}
                 </button>
               ))}
             </div>
@@ -525,6 +526,10 @@ export default function Dashboard() {
 
             {activeTab === "citations" && (
               <CitationsPanel result={result} />
+            )}
+
+            {activeTab === "content" && (
+              <ContentLiftPanel brand={result.brand} />
             )}
           </>
         )}
