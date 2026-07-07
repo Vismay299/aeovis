@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { detectMention } from './judge.js';
 import { getBrandAliases } from './aliases.js';
+import { computeProbeFailureRate, evaluateControlPassed } from './qualityGate.js';
 
 test('detectMention - control prompt matching correctness', () => {
   // iPhone expected mention "Apple"
@@ -36,44 +37,36 @@ test('brand-in-prompt detection logic simulation', () => {
   assert.equal(hasBrandAlias2, true);
 });
 
-test('control_passed - passes when a successful engine run detects expected mention', () => {
+test('evaluateControlPassed - passes when a successful engine run detects expected mention', () => {
   const controlResult = {
-    is_control: true,
-    expected_mention: "Apple",
     run_details: [
-      { model_used: "google_ai_overview-failed", raw_response: "", mentioned: false },
-      { model_used: "gemini-flash-lite-latest", raw_response: "Apple manufactures the iPhone.", mentioned: true },
+      { engine: "google_ai_overview", model_used: "google_ai_overview-failed", raw_response: "", mentioned: false },
+      { engine: "gemini", model_used: "gemini-flash-lite-latest", raw_response: "Apple manufactures the iPhone.", mentioned: true },
     ],
   };
 
-  const successfulRuns = controlResult.run_details.filter((run) => {
-    const isFailed = run.model_used?.endsWith("-failed");
-    const isSkipped = run.model_used?.includes("skipped");
-    const isEmpty = !run.raw_response?.trim();
-    return !isFailed && !isSkipped && !isEmpty;
-  });
-  const controlPassed = successfulRuns.length > 0 && successfulRuns.some((run) => run.mentioned);
-
-  assert.equal(controlPassed, true);
+  assert.equal(evaluateControlPassed(controlResult), true);
 });
 
-test('probe failure rate mathematical threshold', () => {
+test('computeProbeFailureRate - ignores optional google_ai_overview failures', () => {
   const brandRuns = [
-    { model_used: "gemini", raw_response: "Acme is a great tool." },
-    { model_used: "perplexity-failed", raw_response: "" }, // failed probe
-    { model_used: "openai", raw_response: "" }, // empty response is a failure
-    { model_used: "gemini-skipped", raw_response: "" } // skipped engine is ignored
+    { engine: "gemini", model_used: "gemini", raw_response: "Acme is a great tool." },
+    { engine: "gemini", model_used: "gemini", raw_response: "Acme is mentioned here." },
+    { engine: "google_ai_overview", model_used: "google_ai_overview-failed", raw_response: "" },
+    { engine: "google_ai_overview", model_used: "google_ai_overview-failed", raw_response: "" },
+    { engine: "google_ai_overview", model_used: "google_ai_overview-skipped", raw_response: "" },
   ];
 
-  const totalBrandProbes = brandRuns.length;
-  const failedBrandProbes = brandRuns.filter(run => {
-    const isFailed = run.model_used?.endsWith("-failed");
-    const isEmpty = !run.raw_response?.trim();
-    const isSkipped = run.model_used?.includes("skipped");
-    return isFailed || (isEmpty && !isSkipped);
-  }).length;
+  assert.equal(computeProbeFailureRate(brandRuns), 0);
+});
 
-  const probeFailureRate = totalBrandProbes > 0 ? failedBrandProbes / totalBrandProbes : 0.0;
-  // total probes = 4. failed probes = perplexity-failed (1) + empty openai (1) = 2. rate = 2 / 4 = 50%
-  assert.equal(probeFailureRate, 0.50);
+test('computeProbeFailureRate - counts required engine failures', () => {
+  const brandRuns = [
+    { engine: "gemini", model_used: "gemini", raw_response: "Acme is a great tool." },
+    { engine: "gemini", model_used: "perplexity-failed", raw_response: "" },
+    { engine: "openai", model_used: "openai", raw_response: "" },
+    { engine: "gemini", model_used: "gemini-skipped", raw_response: "" },
+  ];
+
+  assert.equal(computeProbeFailureRate(brandRuns), 0.5);
 });

@@ -171,6 +171,14 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
       }
 
       let resJson = await res.json();
+      if (resJson.error) {
+        const authError = String(resJson.error).toLowerCase().includes("invalid api key");
+        if (authError) {
+          console.warn("[serp] SerpAPI auth/quota issue — skipping Google AI Overview for this query.");
+        }
+        return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
+      }
+
       let cost = 0.01; // SerpAPI flat rate for search query
 
       // Handle deferred loading using SGE token
@@ -232,8 +240,8 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
     return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
   }
 
-  console.error(`[serp] Google AI Overview failed after ${retries} retries: ${lastErr}`);
-  return { text: "", model_used: "google_ai_overview-failed", citations: [], cost: 0.0, tokens: 0 };
+  console.warn(`[serp] Google AI Overview unavailable after ${retries} retries — skipping: ${lastErr}`);
+  return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
 }
 
 /**

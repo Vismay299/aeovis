@@ -23,6 +23,7 @@ import { getPromptsForBrand, upsertPrompts } from "../db/prompts.js";
 import { CONTROL_PROMPTS } from "../scoring/controlPrompts.js";
 import { getBrandAliases } from "../scoring/aliases.js";
 import { buildHybridPromptPool } from "../scoring/hybridPrompts.js";
+import { computeProbeFailureRate, evaluateControlPassed } from "../scoring/qualityGate.js";
 import crypto from "crypto";
 
 function mapDbPrompt(p) {
@@ -187,13 +188,7 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     const brandResults = results.filter(r => !r.is_control);
 
     controlResults.forEach((r) => {
-      const successfulRuns = (r.run_details || []).filter((run) => {
-        const isFailed = run.model_used?.endsWith("-failed");
-        const isSkipped = run.model_used?.includes("skipped");
-        const isEmpty = !run.raw_response?.trim();
-        return !isFailed && !isSkipped && !isEmpty;
-      });
-      r.control_passed = successfulRuns.length > 0 && successfulRuns.some((run) => run.mentioned);
+      r.control_passed = evaluateControlPassed(r);
     });
 
     // Brand injection warning check
@@ -232,13 +227,7 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     const controlPassed = controlPromptsTotal > 0 ? (controlPromptsPassed === controlPromptsTotal) : true;
 
     const brandRuns = brandResults.flatMap(r => r.run_details || []);
-    const failedProbes = brandRuns.filter(run => {
-      const isFailed = run.model_used?.endsWith("-failed");
-      const isEmpty = !run.raw_response?.trim();
-      const isSkipped = run.model_used?.includes("skipped");
-      return isFailed || (isEmpty && !isSkipped);
-    }).length;
-    const probeFailureRate = brandRuns.length > 0 ? failedProbes / brandRuns.length : 0.0;
+    const probeFailureRate = computeProbeFailureRate(brandRuns);
 
     const qualityGateFailed = !controlPassed || probeFailureRate > 0.20;
 
