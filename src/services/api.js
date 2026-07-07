@@ -173,7 +173,8 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
           promptScore: p.prompt_score ?? (p.mentioned ? 100.0 : 0.0),
           gapScore: p.gap_score ?? p.gapScore ?? 0.0,
           intentTier: p.intent_tier || "exploratory",
-          topic: normalizeTopic(p.topic || "General")
+          topic: normalizeTopic(p.topic || "General"),
+          brandInPromptWarning: !!(p.brand_in_prompt_warning || p.brandInPromptWarning)
         };
       }
       return {
@@ -182,7 +183,8 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
         volume: p.volume ?? "—",
         gapScore: p.gap_score ?? p.gapScore ?? 0.0,
         intentTier: p.intent_tier || "exploratory",
-        topic: normalizeTopic(p.topic || "General")
+        topic: normalizeTopic(p.topic || "General"),
+        brandInPromptWarning: !!(p.brand_in_prompt_warning || p.brandInPromptWarning)
       };
     }),
     competitors: extractCompetitors(data, results),

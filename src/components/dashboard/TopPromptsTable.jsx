@@ -80,6 +80,11 @@ export const TopPromptsTable = ({ prompts }) => {
             📁 {normalizeTopic(p.topic)}
           </span>
         )}
+        {p.brandInPromptWarning && (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#F9ECEC] text-[9px] font-bold text-[#8B3A3A] uppercase tracking-wider border border-[#E2B8B8]" title="Prompt contains the brand name, introducing search bias.">
+            ⚠️ Brand In Prompt
+          </span>
+        )}
         {p.citations && p.citations.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {p.citations.map((c, idx) => {

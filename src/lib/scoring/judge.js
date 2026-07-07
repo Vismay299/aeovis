@@ -163,6 +163,9 @@ export function extractCitations(text) {
 
 /**
  * Deterministic judging logic orchestrator.
+ * NOTE on LLM Disagreement Scope: To preserve scan performance and control API costs,
+ * the LLM judge is selectively triggered only when the response is marked as ambiguous (isAmbiguous).
+ * Deterministic vs LLM judge disagreement is therefore tracked only on these ambiguous runs.
  */
 export function judgeDeterministic(text, brand, website, competitors = []) {
   const aliases = getBrandAliases(brand, website);

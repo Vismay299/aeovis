@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, FlaskConical, Loader2, Download } from "lucide-react";
+import { RefreshCw, FlaskConical, Loader2, Download, ShieldAlert } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { KpiCard, HeroScoreCard } from "@/components/dashboard/KpiCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -289,24 +289,40 @@ export default function Dashboard() {
         </div>
 
         {/* Quality Gate Failure Alert */}
-        {result.qualityGateFailed && (
-          <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#F9ECEC] border border-[#E2B8B8] rounded-sm p-6 text-[#8B3A3A]" data-testid="quality-gate-failed-alert">
-            <div>
-              <h4 className="font-serif text-lg font-bold">Scan Quality Gate Failed</h4>
-              <p className="text-sm mt-1 text-[#8B3A3A]/90">
-                This scan failed the quality checks. Control prompt mentions were not detected, or probe failure rate exceeded 20%. Scores are hidden as they may be misleading.
-              </p>
+        {result.qualityGateFailed && (() => {
+          const controlRuns = result.rawResults ? result.rawResults.filter(r => r.is_control) : [];
+          const totalControls = controlRuns.length;
+          const passedControls = controlRuns.filter(r => r.control_passed).length;
+          const failureRatePct = (result.probeFailureRate || 0) * 100;
+          
+          return (
+            <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-[#F9ECEC] border border-[#E2B8B8] rounded-sm p-6 text-[#8B3A3A]" data-testid="quality-gate-failed-alert">
+              <div>
+                <h4 className="font-serif text-lg font-bold">Scan Quality Gate Failed</h4>
+                <p className="text-sm mt-1 text-[#8B3A3A]/90">
+                  This scan failed the required controls. Detailed data has been hidden to prevent misleading interpretations.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-xs font-semibold text-[#8B3A3A]/80">
+                  {totalControls > 0 && (
+                    <span>Control Prompts: <span className="text-[#8B3A3A] font-bold">{passedControls}/{totalControls} passed</span></span>
+                  )}
+                  <span>Probe Failure Rate: <span className="text-[#8B3A3A] font-bold">{failureRatePct.toFixed(1)}%</span> (limit 20%)</span>
+                  {result.judgeDisagreementCount > 0 && (
+                    <span>Judge Disagreements: <span className="text-[#8B3A3A] font-bold">{result.judgeDisagreementCount} flagged</span></span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={handleRerun}
+                disabled={isScanning}
+                className="inline-flex items-center gap-2 bg-[#8B3A3A] hover:bg-[#8B3A3A]/90 text-white transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] self-start md:self-auto shrink-0"
+              >
+                <RefreshCw className={`w-4 h-4 ${isScanning ? "animate-spin" : ""}`} />
+                Retry Scan
+              </button>
             </div>
-            <button
-              onClick={handleRerun}
-              disabled={isScanning}
-              className="inline-flex items-center gap-2 bg-[#8B3A3A] hover:bg-[#8B3A3A]/90 text-white transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] self-start md:self-auto shrink-0"
-            >
-              <RefreshCw className={`w-4 h-4 ${isScanning ? "animate-spin" : ""}`} />
-              Retry Scan
-            </button>
-          </div>
-        )}
+          );
+        })()}
 
         {/* KPI row — hero score + two supporting */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5 mb-8">
@@ -318,10 +334,10 @@ export default function Dashboard() {
               trend={result.qualityGateFailed ? null : scoreTrend}
               isMixedTrend={isMixedTrend}
               promptSetChanged={promptSetChanged}
-              mentionRate={result.mentionRatePct}
-              citationShare={result.brandCitationSharePct}
-              scoreCiLow={result.scoreCiLow}
-              scoreCiHigh={result.scoreCiHigh}
+              mentionRate={result.qualityGateFailed ? undefined : result.mentionRatePct}
+              citationShare={result.qualityGateFailed ? undefined : result.brandCitationSharePct}
+              scoreCiLow={result.qualityGateFailed ? null : result.scoreCiLow}
+              scoreCiHigh={result.qualityGateFailed ? null : result.scoreCiHigh}
               historyScores={result.qualityGateFailed ? [] : sortedHistory
                 .filter(s => {
                   const ver = s.scoring_version ?? s.raw_results?.scoring_version ?? "v1-binary";
@@ -419,53 +435,68 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex items-center gap-6 border-b border-[#E5E2D9] mb-8 overflow-x-auto pb-px print:hidden">
-          {["overview", "queries", "opportunities", "citations"].map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`pb-4 text-sm font-semibold uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors ${
-                activeTab === tab 
-                  ? "border-[#1A1A1A] text-[#1A1A1A]" 
-                  : "border-transparent text-[#999999] hover:text-[#1A1A1A]"
-              }`}
-            >
-              {tab === "citations" ? "Citations & Sources" : tab === "queries" ? "Tracked Queries" : tab}
-            </button>
-          ))}
-        </div>
-
-        {/* Main Content Area */}
-        {activeTab === "overview" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-8">
-              <TopPromptsTable prompts={topPromptsWithTrend} />
-              <CompetitorTable
-                competitors={competitorsWithTrend}
-                results={result.rawResults || []}
-                brandMentions={result.rawResults ? result.rawResults.filter(r => r.mentioned).length : 0}
-              />
-            </div>
-            <div className="lg:col-span-1 space-y-8">
-              <div className="lg:sticky lg:top-24 space-y-8">
-                <InsightPanel result={resultWithFlags} trend={scoreTrend} onRerun={handleRerun} />
-                <EngineBreakdown result={result} />
-              </div>
-            </div>
+        {result.qualityGateFailed ? (
+          <div className="bg-white border border-[#E5E2D9] rounded-sm p-12 text-center max-w-2xl mx-auto my-12" data-testid="dashboard-unreliable-placeholder">
+            <ShieldAlert className="w-12 h-12 text-[#8B3A3A] mx-auto mb-4" strokeWidth={1.5} />
+            <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A]">Dashboard Data Hidden</h3>
+            <p className="text-[#666666] mt-3 text-sm leading-relaxed">
+              This scan did not pass the required quality controls (control prompt checks failed or API failure rate exceeded 20%). Detailed visibility, competitor breakdown, citation sources, and recommendations have been hidden to ensure you do not base decisions on unreliable metrics.
+            </p>
+            <p className="text-[#666666] mt-2 text-sm">
+              Please click <strong>Retry Scan</strong> above to re-run the analysis.
+            </p>
           </div>
-        )}
+        ) : (
+          <>
+            {/* Tabs */}
+            <div className="flex items-center gap-6 border-b border-[#E5E2D9] mb-8 overflow-x-auto pb-px print:hidden">
+              {["overview", "queries", "opportunities", "citations"].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`pb-4 text-sm font-semibold uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors ${
+                    activeTab === tab 
+                      ? "border-[#1A1A1A] text-[#1A1A1A]" 
+                      : "border-transparent text-[#999999] hover:text-[#1A1A1A]"
+                  }`}
+                >
+                  {tab === "citations" ? "Citations & Sources" : tab === "queries" ? "Tracked Queries" : tab}
+                </button>
+              ))}
+            </div>
 
-        {activeTab === "queries" && (
-          <QueryManager brand={result.brand} currentPrompts={result.topPrompts} />
-        )}
+            {/* Main Content Area */}
+            {activeTab === "overview" && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-8">
+                  <TopPromptsTable prompts={topPromptsWithTrend} />
+                  <CompetitorTable
+                    competitors={competitorsWithTrend}
+                    results={result.rawResults || []}
+                    brandMentions={result.rawResults ? result.rawResults.filter(r => r.mentioned).length : 0}
+                  />
+                </div>
+                <div className="lg:col-span-1 space-y-8">
+                  <div className="lg:sticky lg:top-24 space-y-8">
+                    <InsightPanel result={resultWithFlags} trend={scoreTrend} onRerun={handleRerun} />
+                    <EngineBreakdown result={result} />
+                  </div>
+                </div>
+              </div>
+            )}
 
-        {activeTab === "opportunities" && (
-          <OpportunitiesPanel result={result} />
-        )}
+            {activeTab === "queries" && (
+              <QueryManager brand={result.brand} currentPrompts={result.topPrompts} />
+            )}
 
-        {activeTab === "citations" && (
-          <CitationsPanel result={result} />
+            {activeTab === "opportunities" && (
+              <OpportunitiesPanel result={result} />
+            )}
+
+            {activeTab === "citations" && (
+              <CitationsPanel result={result} />
+            )}
+          </>
         )}
       </div>
     </div>

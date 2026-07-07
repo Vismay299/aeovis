@@ -11,6 +11,7 @@ import { aggregateMultiEnginePromptRuns } from "@/lib/scoring/aggregate";
 import { getPromptsForBrand, upsertPrompts } from "@/lib/db/prompts";
 import { CONTROL_PROMPTS } from "@/lib/scoring/controlPrompts";
 import { getBrandAliases } from "@/lib/scoring/aliases";
+import { detectMention } from "@/lib/scoring/judge";
 import crypto from "crypto";
 
 export async function POST(request) {
@@ -291,22 +292,32 @@ export async function POST(request) {
 
     const activeVersion = hasSerp ? SCORING_VERSION_HYBRID : SCORING_VERSION;
 
-    // P9-S02: Validate control prompt responses (expected mention must be present in raw response)
+    // P9-S02: Validate control prompt responses (pass if any engine run contains the expected mention with word boundaries)
     let qualityGateFailed = false;
     controlResults.forEach(r => {
-      const responseText = r.raw_response || "";
+      const runs = r.run_details || [];
       const expected = r.expected_mention || "";
-      const found = responseText.toLowerCase().includes(expected.toLowerCase());
-      r.control_passed = found;
-      if (!found) {
+      const passed = runs.some(run => {
+        const text = run.raw_response || "";
+        return detectMention(text, [expected]);
+      });
+      r.control_passed = passed;
+      if (!passed) {
         qualityGateFailed = true;
       }
     });
 
-    // P9-S03: Track probe failure rate and trigger gate failure if >20%
-    const totalProbes = results.flatMap(r => r.run_details || []).length;
-    const failedProbes = results.flatMap(r => r.run_details || []).filter(run => run.model_used?.endsWith("-failed")).length;
-    const probeFailureRate = totalProbes > 0 ? failedProbes / totalProbes : 0.0;
+    // P9-S03 & Issue 9: Track probe failure rate over brandResults only (counting empty responses as failures)
+    const brandRuns = brandResults.flatMap(r => r.run_details || []);
+    const totalBrandProbes = brandRuns.length;
+    const failedBrandProbes = brandRuns.filter(run => {
+      const isFailed = run.model_used?.endsWith("-failed");
+      const isEmpty = !run.raw_response?.trim();
+      const isSkipped = run.model_used?.includes("skipped");
+      return isFailed || (isEmpty && !isSkipped);
+    }).length;
+    
+    const probeFailureRate = totalBrandProbes > 0 ? failedBrandProbes / totalBrandProbes : 0.0;
     if (probeFailureRate > 0.20) {
       qualityGateFailed = true;
     }
