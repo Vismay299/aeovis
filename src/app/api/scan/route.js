@@ -9,18 +9,15 @@ export async function POST(request) {
     const url = (payload.url || "").trim();
     const industry = (payload.industry || "").trim();
     const competitors = (payload.competitors || "").trim();
-    const querySource = payload.querySource || "llm_generated";
-    const gscQueries = Array.isArray(payload.gscQueries) ? payload.gscQueries : [];
-
     if (!brand) {
       return NextResponse.json({ detail: "Brand name is required." }, { status: 400 });
     }
 
     // Enqueue the scan job
-    const job = await createScanJob({ brand, url, industry, competitors, querySource, gscQueries });
+    const job = await createScanJob({ brand, url, industry, competitors });
 
     // Trigger background worker asynchronously (non-blocking)
-    startScanJob(job.id, brand, url, industry, competitors, querySource, gscQueries).catch(err => {
+    startScanJob(job.id, brand, url, industry, competitors).catch(err => {
       console.error(`[worker-trigger] Error in async background scan job ${job.id}:`, err);
     });
 

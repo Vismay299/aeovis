@@ -172,7 +172,7 @@ export async function getScansForBrand(brand) {
 // Global memory store for scan jobs (Next.js hot-reload safe)
 global.memoryJobs = global.memoryJobs || new Map();
 
-export async function createScanJob({ brand, url, industry, competitors, querySource, gscQueries }) {
+export async function createScanJob({ brand, url, industry, competitors }) {
   const jobId = crypto.randomUUID();
   const job = {
     id: jobId,
@@ -180,8 +180,8 @@ export async function createScanJob({ brand, url, industry, competitors, querySo
     url: url || "",
     industry: industry || "",
     competitors: competitors || "",
-    query_source: querySource || "llm_generated",
-    gsc_queries: gscQueries || [],
+    query_source: "hybrid",
+    gsc_queries: [],
     status: "pending",
     progress_pct: 0,
     created_at: new Date().toISOString(),

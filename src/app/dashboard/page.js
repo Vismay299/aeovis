@@ -267,6 +267,7 @@ export default function Dashboard() {
               {result.querySource && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EBF3FF] text-[#4B6B94] border border-[#BACEEA] ml-1 align-middle uppercase font-bold tracking-wider" data-testid="dashboard-query-source">
                   Source: {
+                    result.querySource === "hybrid" ? "Hybrid" :
                     result.querySource === "people_also_ask" ? "PAA" : 
                     result.querySource === "search_autocomplete" ? "Autocomplete" : 
                     result.querySource === "google_search_console" ? "Search Console" : 

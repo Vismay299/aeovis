@@ -1,6 +1,6 @@
 import { INDUSTRY_PROMPTS } from "../../data/industries.js";
 import { insertScan, updateScanJob, getContentEvents, getScansForBrand } from "../db.js";
-import { generatePromptsForBrand } from "../prompts.js";
+
 import {
   computeVisibilityScore,
   computeScanStats,
@@ -22,7 +22,7 @@ import { aggregateMultiEnginePromptRuns } from "../scoring/aggregate.js";
 import { getPromptsForBrand, upsertPrompts } from "../db/prompts.js";
 import { CONTROL_PROMPTS } from "../scoring/controlPrompts.js";
 import { getBrandAliases } from "../scoring/aliases.js";
-import { fetchPeopleAlsoAsk, fetchAutocomplete } from "../engines/serp.js";
+import { buildHybridPromptPool } from "../scoring/hybridPrompts.js";
 import crypto from "crypto";
 
 function mapDbPrompt(p) {
@@ -42,11 +42,11 @@ function mapDbPrompt(p) {
  * State transitions:
  * pending -> generating_prompts -> probing -> analyzing -> scoring -> complete | failed
  */
-export async function startScanJob(jobId, brand, url, industry, competitorsRaw, querySource = "llm_generated", gscQueries = []) {
+export async function startScanJob(jobId, brand, url, industry, competitorsRaw) {
   const stats = { tokens: 0 };
   
   try {
-    console.log(`[worker] Starting scan job ${jobId} for brand: ${brand} (strategy: ${querySource})`);
+    console.log(`[worker] Starting scan job ${jobId} for brand: ${brand} (strategy: hybrid)`);
     
     // State 1: generating_prompts (10% progress)
     await updateScanJob(jobId, { status: "generating_prompts", progress_pct: 10 });
@@ -60,166 +60,73 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw, 
     let loadedFromDb = false;
     let usedDynamicPrompts = false;
 
-    // 1. Google Search Console Upload Sourcing
-    if (querySource === "google_search_console" && Array.isArray(gscQueries) && gscQueries.length > 0) {
-      console.log(`[worker] Sourcing prompts from GSC upload: ${gscQueries.length} queries`);
-      prompts = gscQueries.slice(0, 20).map((q, idx) => ({
-        text: q,
-        intent_tier: "exploratory",
-        topic: "Search Console",
-        weight: 1.0,
-        source: "gsc"
-      }));
-    }
-    // 2. People Also Ask Sourcing
-    else if (querySource === "people_also_ask") {
-      console.log(`[worker] Sourcing prompts from People Also Ask`);
-      const seedTerms = [brand, url, industry].filter(Boolean);
-      try {
-        const questions = await fetchPeopleAlsoAsk(seedTerms);
-        if (questions && questions.length > 0) {
-          prompts = questions.slice(0, 20).map(q => ({
-            text: q,
-            intent_tier: "exploratory",
-            topic: "People Also Ask",
-            weight: 1.0,
-            source: "paa"
-          }));
+    const MIN_PROMPTS = 15;
+    const MAX_PROMPTS = 20;
+
+    // Hybrid prompt sourcing: LLM + PAA + autocomplete, with DB cache as the base
+    console.log("[worker] Sourcing prompts via hybrid strategy (LLM + PAA + autocomplete)");
+    try {
+      const allDbPrompts = await getPromptsForBrand(brand, true);
+      if (allDbPrompts && allDbPrompts.length > 0) {
+        loadedFromDb = true;
+        const enabledDbPrompts = allDbPrompts.filter(p => p.enabled);
+
+        if (enabledDbPrompts.length === 0) {
+          throw new Error("All tracked queries are disabled. Please enable at least one query in Tracked Queries.");
         }
-      } catch (err) {
-        console.warn("[worker] Failed to fetch PAA questions:", err.message);
+
+        console.log(`[worker] Loaded ${enabledDbPrompts.length} enabled prompts from database`);
+        prompts = enabledDbPrompts.map(mapDbPrompt);
       }
-    }
-    // 3. Search Autocomplete Sourcing
-    else if (querySource === "search_autocomplete") {
-      console.log(`[worker] Sourcing prompts from Google Autocomplete`);
-      try {
-        const suggestions = await fetchAutocomplete(brand);
-        if (suggestions && suggestions.length > 0) {
-          prompts = suggestions.slice(0, 20).map(q => ({
-            text: q,
-            intent_tier: "exploratory",
-            topic: "Autocomplete",
-            weight: 1.0,
-            source: "autocomplete"
-          }));
-        }
-      } catch (err) {
-        console.warn("[worker] Failed to fetch autocomplete suggestions:", err.message);
-      }
+    } catch (e) {
+      console.warn("[worker] DB query loading error, will generate prompts:", e.message);
     }
 
-    // Save non-LLM prompts to DB for persistence and management
-    if (prompts.length > 0 && querySource !== "llm_generated") {
-      try {
-        await upsertPrompts(brand, prompts);
-        const dbPrompts = await getPromptsForBrand(brand);
-        if (dbPrompts && dbPrompts.length > 0) {
-          prompts = dbPrompts.map(mapDbPrompt);
+    if (prompts.length < MIN_PROMPTS) {
+      const targetCount = prompts.length === 0 ? MAX_PROMPTS : MIN_PROMPTS;
+      console.log(`[worker] Prompt count (${prompts.length}) below target (${targetCount}). Building hybrid pool...`);
+      const hybridPool = await buildHybridPromptPool(brand, url, industry, stats);
+
+      if (hybridPool.length > 0) {
+        const existingTexts = new Set(prompts.map(p => p.text.toLowerCase().trim()));
+        const newPrompts = hybridPool.filter(p => !existingTexts.has(p.text.toLowerCase().trim()));
+        const needed = targetCount - prompts.length;
+        const toAdd = newPrompts.slice(0, needed);
+
+        if (toAdd.length > 0) {
+          await upsertPrompts(brand, toAdd);
+          const reloaded = await getPromptsForBrand(brand, prompts.length === 0 ? false : true);
+          const enabledReloaded = reloaded.filter(p => p.enabled !== false);
+          prompts = enabledReloaded.map(mapDbPrompt);
         }
-      } catch (e) {
-        console.warn("[worker] Failed to persist sourced prompts:", e.message);
-      }
-    }
 
-    // 4. Default / Fallback: Load from DB or dynamically generate via LLM
-    if (prompts.length === 0) {
-      console.log("[worker] Sourcing prompts via standard LLM generation / DB cache");
-      try {
-        const allDbPrompts = await getPromptsForBrand(brand, true);
-        if (allDbPrompts && allDbPrompts.length > 0) {
-          loadedFromDb = true;
-          const enabledDbPrompts = allDbPrompts.filter(p => p.enabled);
-          
-          if (enabledDbPrompts.length === 0) {
-            throw new Error("All tracked queries are disabled. Please enable at least one query in Tracked Queries.");
-          }
-
-          console.log(`[worker] Loaded ${enabledDbPrompts.length} enabled prompts from database`);
-          prompts = enabledDbPrompts.map(mapDbPrompt);
-
-          // Top up if under 15
-          if (prompts.length < 15) {
-            console.log(`[worker] Prompt count (${prompts.length}) below minimum (15). Topping up...`);
-            const generated = await generatePromptsForBrand(brand, url, industry, stats);
-            if (generated && generated.length > 0) {
-              const existingTexts = new Set(allDbPrompts.map(p => p.text.toLowerCase().trim()));
-              const newPrompts = generated.filter(p => !existingTexts.has(p.text.toLowerCase().trim()));
-              
-              const needed = 15 - prompts.length;
-              const topUpPrompts = newPrompts.slice(0, needed).map(p => ({ ...p, source: p.source || "llm_generated" }));
-              
-              if (topUpPrompts.length > 0) {
-                await upsertPrompts(brand, topUpPrompts);
-                const reloaded = await getPromptsForBrand(brand, false);
-                prompts = reloaded.map(mapDbPrompt);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("[worker] DB query loading error, will generate prompts:", e.message);
-      }
-
-      if (!loadedFromDb && prompts.length === 0) {
-        let generated = await generatePromptsForBrand(brand, url, industry, stats);
-        if (generated && generated.length > 0) {
-          generated = generated.map(p => ({ ...p, source: "llm_generated" }));
-
-          // P13-S03: Fetch PAA questions and blend 5-10 of them into the dynamic pool
-          try {
-            const seedTerms = [brand, url, industry].filter(Boolean);
-            const paaQuestions = await fetchPeopleAlsoAsk(seedTerms);
-            if (paaQuestions && paaQuestions.length > 0) {
-              console.log(`[worker] Blending ${Math.min(10, paaQuestions.length)} PAA queries into LLM dynamic prompt pool`);
-              const paaPrompts = paaQuestions.slice(0, 10).map(q => ({
-                text: q,
-                intent_tier: "exploratory",
-                topic: "People Also Ask",
-                weight: 1.0,
-                source: "paa"
-              }));
-              generated = [...paaPrompts, ...generated].slice(0, 20);
-            }
-          } catch (paaErr) {
-            console.warn("[worker] PAA blending failed, proceeding with LLM queries only:", paaErr.message);
-          }
-
-          prompts = generated;
+        if (!loadedFromDb) {
           usedDynamicPrompts = true;
-
-          try {
-            await upsertPrompts(brand, prompts);
-            const dbPrompts = await getPromptsForBrand(brand);
-            if (dbPrompts && dbPrompts.length > 0) {
-              prompts = dbPrompts.map(mapDbPrompt);
-            }
-          } catch (e) {
-            console.warn("[worker] Failed to persist generated prompts:", e.message);
-          }
-        } else {
-          if (hasValidIndustry) {
-            console.log("[worker] Fallback to static industry prompts");
-            prompts = INDUSTRY_PROMPTS[industry].prompts.map(p => ({
-              text: p,
-              intent_tier: "exploratory",
-              topic: "General",
-              weight: null,
-            }));
-
-            try {
-              await upsertPrompts(brand, prompts);
-              const dbPrompts = await getPromptsForBrand(brand);
-              if (dbPrompts && dbPrompts.length > 0) {
-                prompts = dbPrompts.map(mapDbPrompt);
-              }
-            } catch (e) {
-              console.warn("[worker] Failed to persist static fallback prompts:", e.message);
-            }
-          } else {
-            throw new Error("No dynamic prompts generated and no valid industry for fallback.");
-          }
         }
+      }
+    }
+
+    if (prompts.length === 0) {
+      if (hasValidIndustry) {
+        console.log("[worker] Hybrid pool empty, falling back to static industry prompts");
+        prompts = INDUSTRY_PROMPTS[industry].prompts.map(p => ({
+          text: p,
+          intent_tier: "exploratory",
+          topic: "General",
+          weight: null,
+        }));
+
+        try {
+          await upsertPrompts(brand, prompts);
+          const dbPrompts = await getPromptsForBrand(brand);
+          if (dbPrompts && dbPrompts.length > 0) {
+            prompts = dbPrompts.map(mapDbPrompt);
+          }
+        } catch (e) {
+          console.warn("[worker] Failed to persist static fallback prompts:", e.message);
+        }
+      } else {
+        throw new Error("No prompts generated and no valid industry for fallback.");
       }
     }
 
@@ -480,7 +387,7 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw, 
       judge_disagreement_count: judgeDisagreementCount,
       control_prompts_passed: controlPromptsPassed,
       control_prompts_total: controlPromptsTotal,
-      query_source: querySource,
+      query_source: "hybrid",
       content_lift: contentLift
     };
 

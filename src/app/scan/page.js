@@ -40,52 +40,6 @@ export default function Scan() {
   const [stage, setStage] = useState(-1);
   const [progress, setProgress] = useState(0);
   const [failed, setFailed] = useState(false);
-  const [querySource, setQuerySource] = useState("llm_generated");
-  const [gscQueries, setGscQueries] = useState([]);
-  const [csvFileName, setCsvFileName] = useState("");
-
-  const handleCsvUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setCsvFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target.result || "";
-        const lines = text.split(/\r?\n/);
-        if (lines.length === 0) return;
-        
-        const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/['"]/g, ''));
-        let queryIdx = headers.findIndex(h => h.includes("query") || h.includes("keyword") || h.includes("search term") || h === "queries");
-        if (queryIdx === -1) queryIdx = 0;
-        
-        const parsedQueries = [];
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          
-          const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.trim().replace(/^"|"$/g, ''));
-          const q = cols[queryIdx];
-          if (q && q.trim()) {
-            parsedQueries.push(q.trim());
-          }
-        }
-        
-        if (parsedQueries.length === 0) {
-          toast.error("No queries found in the CSV. Make sure there is a 'Query' or 'Keyword' column.");
-        } else {
-          setGscQueries(parsedQueries);
-          toast.success(`Successfully loaded ${parsedQueries.length} queries from CSV.`);
-        }
-      } catch (err) {
-        console.error("Failed to parse CSV:", err);
-        toast.error("Failed to parse CSV file. Ensure it is a valid GSC export.");
-      }
-    };
-    reader.readAsText(file);
-  };
-
   const validate = () => {
     const e = {};
     if (!brand.trim()) e.brand = "Brand name is required.";
@@ -124,8 +78,6 @@ export default function Scan() {
           website: website.trim(), 
           industry, 
           competitors: competitors.trim(),
-          querySource,
-          gscQueries
         },
         (s, p) => {
           setStage(s);
@@ -253,55 +205,9 @@ export default function Scan() {
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="querySource" className="block text-xs uppercase tracking-[0.15em] text-[#666666] font-medium mb-3">
-                    Query Sourcing Strategy
-                  </label>
-                  <Select value={querySource} onValueChange={(val) => {
-                    setQuerySource(val);
-                    if (val !== "google_search_console") {
-                      setGscQueries([]);
-                      setCsvFileName("");
-                    }
-                  }}>
-                    <SelectTrigger
-                      id="querySource"
-                      data-testid="scan-query-source-input"
-                      className="w-full bg-white border border-[#E5E2D9] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none rounded-sm px-5 py-4 font-sans text-[#1A1A1A] transition-all h-auto"
-                    >
-                      <SelectValue placeholder="Select query source..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="llm_generated">LLM Generated Prompts (Default)</SelectItem>
-                      <SelectItem value="people_also_ask">People Also Ask (PAA)</SelectItem>
-                      <SelectItem value="search_autocomplete">Search Autocomplete</SelectItem>
-                      <SelectItem value="google_search_console">Google Search Console (CSV Upload)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {querySource === "google_search_console" && (
-                  <div className="border border-dashed border-[#E5E2D9] p-6 rounded-sm bg-[#FDFBF7] space-y-4">
-                    <label className="block text-xs uppercase tracking-[0.1em] text-[#666666] font-bold">
-                      Upload GSC Queries (.csv)
-                    </label>
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={handleCsvUpload}
-                      className="block w-full text-xs text-[#666666] file:mr-4 file:py-2.5 file:px-4 file:rounded-sm file:border file:border-[#1A1A1A] file:text-xs file:font-semibold file:bg-transparent file:text-[#1A1A1A] hover:file:bg-[#1A1A1A] hover:file:text-white file:transition-colors file:cursor-pointer"
-                    />
-                    {csvFileName && (
-                      <p className="text-xs text-[#2F5C4F] font-semibold">
-                        Loaded: {csvFileName} ({gscQueries.length} queries parsed)
-                      </p>
-                    )}
-                  </div>
-                )}
-
                 <p className="text-sm text-[#666666] border-l-2 border-[#E5E2D9] pl-4 leading-relaxed">
-                  This scan checks dozens of category prompts, measures where your brand appears, and
-                  flags competitors mentioned instead of you.
+                  This scan automatically blends LLM-generated prompts with real search data (People Also Ask
+                  and autocomplete) to measure where your brand appears and which competitors get mentioned instead.
                 </p>
 
                 <button
