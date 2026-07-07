@@ -5,8 +5,8 @@ A modern, agentic web application for tracking Answer Engine Optimization (AEO) 
 ## Features
 
 - **Dynamic Prompt Generation**: Automatically generates a robust list of industry-specific queries simulating how real users ask AI (e.g., "Best [Industry] tools for [Use Case]").
-- **Live AI Probing**: Uses Google Gemini to act as an Answer Engine, evaluating how often your brand is recommended natively vs. omitted.
-- **Visibility Scoring**: Calculates a composite 0-100 Visibility Score based on whether the brand was mentioned, its recommendation position (Recommended: 1.0, Compared: 0.6, Cited: 0.3, Omitted: 0.0), sentiment (Positive: 1.0, Neutral: 0.5, Negative: 0.0), and a +0.15 score bonus (up to 15 points on the 100 scale) for brand domain citations.
+- **Live AI Probing**: Simulates search and LLM engines using a hybrid architecture: Google AI Overview (via SerpAPI), Perplexity, OpenAI, and Gemini.
+- **Visibility Scoring**: Calculates a composite 0-100 Visibility Score based on whether the brand was mentioned, its recommendation position (Recommended: 1.0, Compared: 0.6, Cited: 0.3, Omitted: 0.0), sentiment (Positive: 1.0, Neutral: 0.5, Negative: 0.0), and a +0.15 score bonus (up to 15 points on the 100 scale) for brand domain citations. If Google AI Overview is active, a hybrid weight methodology is applied (50% Google AI Overview, 25% Perplexity, 15% ChatGPT, 10% Gemini).
 - **Competitor Tracking**: Identifies the exact competitors stealing your share of voice on specific prompts.
 - **Actionable Opportunities**: Uses LLM-driven insights to highlight high-potential visibility gaps and suggests strategic next steps to capture them.
 - **Citations & Sources**: Aggregates the top domains cited by the AI to help you understand which sources influence the answer engine the most.

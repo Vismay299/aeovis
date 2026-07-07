@@ -77,6 +77,7 @@ export const HeroScoreCard = ({ score, tierText, testId, trend, isMixedTrend, pr
             <div className="absolute left-0 top-6 z-50 bg-[#1A1A1A] text-white text-[11px] p-4 rounded-sm border border-[#E5E2D9]/20 shadow-lg min-w-[240px] leading-relaxed">
               <p className="font-semibold text-white mb-2">How is this calculated?</p>
               <p className="text-white/80 mb-1">Blended Formula: <span className="font-mono text-[#E5E2D9]">85% Mention Visibility + 15% Brand Citation Share</span>.</p>
+              <p className="text-white/80 mb-1">Hybrid Probing: <span className="font-mono text-[#E5E2D9]">Google AI Overview (50%) + Perplexity (25%) + ChatGPT (15%) + Gemini (10%)</span>.</p>
               <ul className="list-disc pl-3.5 space-y-1.5 mt-2 text-white/70">
                 <li><strong>Mention Visibility:</strong> Average score calculated using the median performance (Mention × Position × Sentiment + Citation Bonus) across runs.</li>
                 <li><strong>Brand Citation Share:</strong> The % of queries where the brand domain is cited in the references.</li>

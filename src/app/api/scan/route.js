@@ -6,7 +6,7 @@ import { computeVisibilityScore, computeScanStats, computeIntentBreakdown, compu
 import { SCORING_VERSION, SCORING_VERSION_HYBRID, PROBE_RUNS } from "@/lib/scoring/constants";
 import { normalizeTopic } from "@/lib/scoring/topics";
 import { probePromptMultiple } from "@/lib/scoring/probe";
-import { aggregatePromptRuns, aggregateMultiEnginePromptRuns } from "@/lib/scoring/aggregate";
+import { aggregateMultiEnginePromptRuns } from "@/lib/scoring/aggregate";
 import { getEnabledEngines } from "@/lib/engines/types";
 import { getPromptsForBrand, upsertPrompts } from "@/lib/db/prompts";
 import crypto from "crypto";
@@ -226,15 +226,22 @@ export async function POST(request) {
     // P8-S11: Graceful partial failure flag (only flag actual API failures, not skipped stubs)
     const enginesPartial = results.some(r => (r.run_details || []).some(run => run.model_used?.endsWith("-failed")));
 
-    // P8b-S12: Calculate Google AI Overview coverage rate
+    // P8b-S09: Extract all successfully queried probe sources (excluding skipped)
+    const probeSources = Array.from(new Set(
+      results.flatMap(r => (r.run_details || [])
+        .filter(run => run.model_used && !run.model_used.includes("skipped"))
+        .map(run => run.engine)
+        .filter(Boolean))
+    ));
+
+    const hasSerp = probeSources.includes("google_ai_overview");
+
+    // P8b-S12: Calculate Google AI Overview coverage rate (only if Serp was actually queried)
     const serpQueries = results.filter(r => (r.run_details || []).some(run => run.engine === "google_ai_overview"));
     const serpHits = results.filter(r => (r.run_details || []).some(run => run.engine === "google_ai_overview" && run.raw_response));
-    const serpCoveragePct = serpQueries.length ? Math.round((serpHits.length / serpQueries.length) * 1000) / 10 : 0.0;
+    const serpCoveragePct = hasSerp ? (serpQueries.length ? Math.round((serpHits.length / serpQueries.length) * 1000) / 10 : 0.0) : null;
 
-    // P8b-S09: Extract all successfully queried probe sources
-    const probeSources = Array.from(new Set(results.flatMap(r => (r.run_details || []).map(run => run.engine).filter(Boolean))));
-
-    const activeVersion = probeSources.includes("google_ai_overview") ? SCORING_VERSION_HYBRID : SCORING_VERSION;
+    const activeVersion = hasSerp ? SCORING_VERSION_HYBRID : SCORING_VERSION;
 
     // P6-S02 / P7-S05: Compute competitor objects using composite scoring and citation shares
     const competitorObjects = competitors.map(comp => {

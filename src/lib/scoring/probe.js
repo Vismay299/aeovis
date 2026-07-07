@@ -17,7 +17,7 @@ import { judgeDeterministic, isAmbiguous, judgeWithLLM } from "./judge.js";
  */
 export async function probePromptOnce(promptText, brand, competitors, url, stats, engine = "gemini") {
   let fullPrompt = promptText;
-  if (competitors && competitors.length > 0) {
+  if (engine !== "google_ai_overview" && competitors && competitors.length > 0) {
     fullPrompt = `${promptText}\n\nConsider these existing options if relevant: ${competitors.join(", ")}.`;
   }
 

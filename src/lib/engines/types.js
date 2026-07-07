@@ -36,11 +36,12 @@ export function getEnabledEngines() {
       .filter(s => ENGINES.includes(s));
   }
   
-  // Default fallbacks based on probe mode
-  if (probeMode === "llm_only") {
-    return [Engine.GEMINI];
+  // Dynamic API Key check fallback
+  const list = [Engine.GEMINI];
+  if (process.env.OPENAI_API_KEY) list.push(Engine.OPENAI);
+  if (process.env.PERPLEXITY_API_KEY) list.push(Engine.PERPLEXITY);
+  if (process.env.SERPAPI_KEY && probeMode !== "llm_only") {
+    list.push(Engine.GOOGLE_AI_OVERVIEW);
   }
-  
-  // For hybrid or serp_primary, default to google_ai_overview and gemini
-  return [Engine.GOOGLE_AI_OVERVIEW, Engine.GEMINI];
+  return list;
 }

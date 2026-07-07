@@ -1,6 +1,62 @@
 import { normalizeUrl } from "../scoring/citations.js";
 
 /**
+ * Recursively extracts and formats text from SerpAPI Google SGE/AI Overview blocks.
+ * Handles text snippets, lists, and child blocks cleanly.
+ *
+ * @param {Array|Object} blocks - Block payload from SerpAPI JSON
+ * @returns {string} Formatted text content
+ */
+export function extractTextFromBlocks(blocks) {
+  if (!blocks) return "";
+  if (!Array.isArray(blocks)) {
+    if (typeof blocks === "object" && blocks !== null) {
+      let parts = [];
+      if (blocks.snippet) {
+        parts.push(blocks.snippet);
+      }
+      if (Array.isArray(blocks.list)) {
+        parts.push(extractTextFromBlocks(blocks.list));
+      }
+      if (Array.isArray(blocks.text_blocks)) {
+        parts.push(extractTextFromBlocks(blocks.text_blocks));
+      }
+      return parts.join("\n");
+    }
+    return String(blocks);
+  }
+
+  return blocks
+    .map(block => {
+      if (typeof block === "string") return block;
+      if (typeof block === "object" && block !== null) {
+        let parts = [];
+        if (block.snippet) {
+          parts.push(block.snippet);
+        }
+        if (Array.isArray(block.list)) {
+          const items = block.list
+            .map(item => {
+              const itemText = typeof item === "string" ? item : (item.snippet || "");
+              return itemText ? `- ${itemText}` : "";
+            })
+            .filter(Boolean);
+          if (items.length > 0) {
+            parts.push(items.join("\n"));
+          }
+        }
+        if (Array.isArray(block.text_blocks)) {
+          parts.push(extractTextFromBlocks(block.text_blocks));
+        }
+        return parts.join("\n");
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
  * SerpAPI Google search adapter to fetch Google AI Overview responses.
  *
  * @param {string} prompt - Search query/prompt
@@ -18,11 +74,13 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
   const geo = process.env.SERP_GEO || "us";
   const device = process.env.SERP_DEVICE || "desktop";
   
+  // hl=en is required for AI Overview support
   const searchParams = new URLSearchParams({
     q: prompt,
     api_key: apiKey,
     engine: "google",
     gl: geo,
+    hl: "en",
     device: device
   });
 
@@ -47,8 +105,9 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
       }
 
       let resJson = await res.json();
+      let cost = 0.01; // SerpAPI flat rate for search query
 
-      // P8b-S03: Handle deferred loading using page_token
+      // Handle deferred loading using SGE token
       const pageToken = resJson.ai_overview?.page_token || 
                         resJson.ai_overview_deferred?.token || 
                         resJson.ai_overview?.deferred_token;
@@ -65,10 +124,10 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
         });
         if (followUpRes.ok) {
           const followUpJson = await followUpRes.json();
-          // Merge or overwrite with follow-up JSON
           if (followUpJson.ai_overview) {
             resJson.ai_overview = followUpJson.ai_overview;
           }
+          cost += 0.01; // Charge second SerpAPI query for deferred overview fetch
         }
       }
       
@@ -78,14 +137,11 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
       if (resJson.ai_overview) {
         text = resJson.ai_overview.text || "";
         if (Array.isArray(resJson.ai_overview.text_blocks)) {
-          text = resJson.ai_overview.text_blocks.map(b => b.text).filter(Boolean).join("\n");
+          text = extractTextFromBlocks(resJson.ai_overview.text_blocks);
         }
         const refs = resJson.ai_overview.references || [];
         citations = refs.map(r => r.link).filter(Boolean).map(normalizeUrl);
       }
-
-      // SerpAPI estimated developer cost per query is $0.01
-      const cost = 0.01;
 
       if (options.stats) {
         options.stats.cost = (options.stats.cost || 0) + cost;
@@ -93,7 +149,7 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
 
       return {
         text,
-        model_used: "google-ai-overview",
+        model_used: "google_ai_overview",
         citations,
         cost,
         tokens: 0
