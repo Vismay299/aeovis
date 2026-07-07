@@ -36,6 +36,27 @@ test('brand-in-prompt detection logic simulation', () => {
   assert.equal(hasBrandAlias2, true);
 });
 
+test('control_passed - passes when a successful engine run detects expected mention', () => {
+  const controlResult = {
+    is_control: true,
+    expected_mention: "Apple",
+    run_details: [
+      { model_used: "google_ai_overview-failed", raw_response: "", mentioned: false },
+      { model_used: "gemini-flash-lite-latest", raw_response: "Apple manufactures the iPhone.", mentioned: true },
+    ],
+  };
+
+  const successfulRuns = controlResult.run_details.filter((run) => {
+    const isFailed = run.model_used?.endsWith("-failed");
+    const isSkipped = run.model_used?.includes("skipped");
+    const isEmpty = !run.raw_response?.trim();
+    return !isFailed && !isSkipped && !isEmpty;
+  });
+  const controlPassed = successfulRuns.length > 0 && successfulRuns.some((run) => run.mentioned);
+
+  assert.equal(controlPassed, true);
+});
+
 test('probe failure rate mathematical threshold', () => {
   const brandRuns = [
     { model_used: "gemini", raw_response: "Acme is a great tool." },

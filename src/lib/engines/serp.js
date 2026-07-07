@@ -171,9 +171,10 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
         options.stats.cost = (options.stats.cost || 0) + cost;
       }
 
+      const hasOverview = !!text?.trim();
       return {
         text,
-        model_used: "google_ai_overview",
+        model_used: hasOverview ? "google_ai_overview" : "google_ai_overview-skipped",
         citations,
         cost,
         tokens: 0
@@ -185,6 +186,12 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
         await wait(delay);
       }
     }
+  }
+
+  const authError = String(lastErr?.message || lastErr).includes("401");
+  if (authError) {
+    console.warn("[serp] SERPAPI_KEY is invalid — skipping Google AI Overview for this scan.");
+    return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
   }
 
   console.error(`[serp] Google AI Overview failed after ${retries} retries: ${lastErr}`);

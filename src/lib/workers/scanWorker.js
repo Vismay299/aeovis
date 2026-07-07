@@ -186,6 +186,16 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     const controlResults = results.filter(r => r.is_control);
     const brandResults = results.filter(r => !r.is_control);
 
+    controlResults.forEach((r) => {
+      const successfulRuns = (r.run_details || []).filter((run) => {
+        const isFailed = run.model_used?.endsWith("-failed");
+        const isSkipped = run.model_used?.includes("skipped");
+        const isEmpty = !run.raw_response?.trim();
+        return !isFailed && !isSkipped && !isEmpty;
+      });
+      r.control_passed = successfulRuns.length > 0 && successfulRuns.some((run) => run.mentioned);
+    });
+
     // Brand injection warning check
     const brandAliases = getBrandAliases(brand, url);
     brandResults.forEach(r => {
