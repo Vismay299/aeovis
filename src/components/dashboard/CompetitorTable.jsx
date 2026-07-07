@@ -22,7 +22,7 @@ export const CompetitorTable = ({ competitors = [], results = [], brandMentions 
             Competitor Share of Voice & Performance
           </h3>
           <p className="text-sm text-[#666666] mt-1">
-            Rival presence, share of voice, and direct comparison performance
+            Rival presence, share of voice, and direct comparison performance (win rate is % where they appear and you are absent)
           </p>
         </div>
         <span className="text-xs uppercase tracking-[0.15em] text-[#999999] font-medium">

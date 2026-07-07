@@ -62,10 +62,7 @@ export function aggregatePromptRuns(runs) {
   const prompt_score = Math.round(getMedian(promptScores) * 10) / 10;
   const prompt_score_stddev = Math.round(getStdDev(promptScores) * 10) / 10;
 
-  const sanitizedRuns = runs.map(r => {
-    const { raw_response, ...rest } = r;
-    return rest;
-  });
+  const sanitizedRuns = runs;
 
   return {
     prompt: promptText,

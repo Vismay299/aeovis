@@ -46,7 +46,9 @@ export async function insertScan(scanRecord) {
     prompt_set_id: scanRecord.prompt_set_id,
     prompt_set_hash: scanRecord.prompt_set_hash,
     intent_breakdown: scanRecord.intent_breakdown,
-    topic_scores: scanRecord.topic_scores
+    topic_scores: scanRecord.topic_scores,
+    share_of_voice_pct: scanRecord.share_of_voice_pct,
+    win_rate_pct: scanRecord.win_rate_pct
   };
 
   const baseRecord = {

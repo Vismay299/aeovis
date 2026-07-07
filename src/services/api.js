@@ -154,6 +154,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
         prompt: p.prompt,
         rank: p.rank ?? p.visibility ?? "—",
         volume: p.volume ?? "—",
+        gapScore: p.gap_score ?? p.gapScore ?? 0.0,
         intentTier: p.intent_tier || "exploratory",
         topic: normalizeTopic(p.topic || "General")
       };

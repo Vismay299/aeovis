@@ -316,7 +316,16 @@ export default function Dashboard() {
             label="Share of Voice"
             value={result.shareOfVoicePct !== undefined ? result.shareOfVoicePct : "—"}
             suffix="%"
-            sub="Mentions vs competitors"
+            sub={
+              <div className="flex flex-col gap-1">
+                <div>Mentions vs competitors</div>
+                {result.winRatePct !== undefined && (
+                  <div className="text-[11px] font-semibold text-[#1A1A1A]">
+                    Comparison Win Rate: <span className="text-[#D9531E]">{result.winRatePct}%</span>
+                  </div>
+                )}
+              </div>
+            }
             index={1}
           />
           <KpiCard
