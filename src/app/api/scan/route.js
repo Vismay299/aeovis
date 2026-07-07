@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { INDUSTRY_PROMPTS } from "@/data/industries";
 import { insertScan } from "@/lib/db";
 import { generatePromptsForBrand } from "@/lib/prompts";
-import { computeVisibilityScore, computeScanStats, computeIntentBreakdown, computeTopicScores, computeShareOfVoice, computeWinRate, computeCompetitorVisibility, computeGapScores } from "@/lib/scoring/computeVisibilityScore";
+import { computeVisibilityScore, computeScanStats, computeIntentBreakdown, computeTopicScores, computeShareOfVoice, computeWinRate, computeCompetitorVisibility, computeGapScores, computeBrandCitationShare, computeCompetitorCitationShare, aggregateTopDomains } from "@/lib/scoring/computeVisibilityScore";
 import { SCORING_VERSION, PROBE_RUNS } from "@/lib/scoring/constants";
 import { normalizeTopic } from "@/lib/scoring/topics";
 import { probePromptMultiple } from "@/lib/scoring/probe";
@@ -193,9 +193,16 @@ export async function POST(request) {
     const shareOfVoicePct = computeShareOfVoice(results);
     const winRatePct = computeWinRate(results, competitors);
 
-    // P6-S02: Compute competitor objects using composite scoring
+    // P7-S04: Compute brand citation share percentage
+    const brandCitationSharePct = computeBrandCitationShare(results, url);
+
+    // P7-S06: Aggregate top cited domains across prompts
+    const topDomains = aggregateTopDomains(results, url, competitors);
+
+    // P6-S02 / P7-S05: Compute competitor objects using composite scoring and citation shares
     const competitorObjects = competitors.map(comp => {
       const visibilityScore = computeCompetitorVisibility(results, comp);
+      const citationShare = computeCompetitorCitationShare(results, comp);
       let mentions = 0;
       let userAbsent = 0;
       results.forEach(r => {
@@ -212,7 +219,8 @@ export async function POST(request) {
         mentions,
         prompts: mentions,
         userAbsent: userAbsent > 0,
-        visibilityScore
+        visibilityScore,
+        citationShare
       };
     });
     competitorObjects.sort((a, b) => b.visibilityScore - a.visibilityScore);
@@ -252,7 +260,9 @@ export async function POST(request) {
       intent_breakdown: intentBreakdown,
       topic_scores: topicScores,
       share_of_voice_pct: shareOfVoicePct,
-      win_rate_pct: winRatePct
+      win_rate_pct: winRatePct,
+      brand_citation_share_pct: brandCitationSharePct,
+      top_domains: topDomains
     };
 
     try {

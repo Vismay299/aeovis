@@ -15,6 +15,7 @@ export const SENTIMENT_WEIGHTS = {
 };
 
 export const CITATION_BONUS = 0.15;
+export const CITATION_SHARE_WEIGHT = 0.15;
 
 export const SCORING_VERSION = "v3-weighted";
 export const PROBE_TEMPERATURE = 0.4;

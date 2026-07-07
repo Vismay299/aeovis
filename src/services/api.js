@@ -109,6 +109,26 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
       branded: 0.0
     },
     topicScores: data.topic_scores ?? data.topicScores ?? data.raw_results?.topic_scores ?? {},
+    brandCitationSharePct: (() => {
+      const val = data.brand_citation_share_pct ?? data.brandCitationSharePct ?? data.raw_results?.brand_citation_share_pct;
+      if (val !== undefined && val !== null) return val;
+      const brandDomain = extractBrandDomain(data.website ?? data.url ?? fallbackWebsite);
+      if (!brandDomain) return 0.0;
+      let citedPromptsCount = 0;
+      results.forEach(r => {
+        const hasBrandCitation = (r.citations || []).some(c => {
+          const domain = extractBrandDomain(c);
+          return domain === brandDomain || domain.endsWith("." + brandDomain);
+        });
+        if (hasBrandCitation) citedPromptsCount++;
+      });
+      return results.length > 0 ? Math.round((citedPromptsCount / results.length) * 1000) / 10 : 0.0;
+    })(),
+    topDomains: (() => {
+      const val = data.top_domains ?? data.topDomains ?? data.raw_results?.top_domains;
+      if (val !== undefined && val !== null) return val;
+      return aggregateTopDomains(results, data.website ?? data.url ?? fallbackWebsite, data.competitors ?? []);
+    })(),
     competitorsFound:
       data.competitors_found ??
       data.competitorsFound ??
@@ -292,4 +312,49 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
     clearInterval(progressInterval);
     throw error;
   }
+}
+
+// Browser-safe local helpers for legacy calculations
+function extractBrandDomain(urlStr) {
+  if (!urlStr || typeof urlStr !== "string") return "";
+  try {
+    let cleaned = urlStr.trim().toLowerCase();
+    if (!/^https?:\/\//i.test(cleaned)) {
+      cleaned = "http://" + cleaned;
+    }
+    const parsed = new URL(cleaned);
+    return parsed.hostname.replace(/^www\./i, "");
+  } catch (e) {
+    return "";
+  }
+}
+
+function aggregateTopDomains(results, brandUrl, competitors = []) {
+  const domainCounts = {};
+  results.forEach(r => {
+    const uniqueDomainsInPrompt = new Set();
+    (r.citations || []).forEach(url => {
+      const domain = extractBrandDomain(url);
+      if (domain) uniqueDomainsInPrompt.add(domain);
+    });
+    uniqueDomainsInPrompt.forEach(domain => {
+      domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+    });
+  });
+  return Object.entries(domainCounts)
+    .map(([domain, count]) => {
+      let type = "third_party";
+      const brandDomain = extractBrandDomain(brandUrl);
+      if (brandDomain && (domain === brandDomain || domain.endsWith("." + brandDomain))) {
+        type = "brand";
+      } else if (competitors.some(c => {
+        const name = typeof c === "string" ? c.toLowerCase() : (c.name || "").toLowerCase();
+        return domain.includes(name);
+      })) {
+        type = "competitor";
+      }
+      return { domain, count, type };
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
 }

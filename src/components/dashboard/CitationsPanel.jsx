@@ -1,44 +1,22 @@
-import { Globe, Link as LinkIcon, ExternalLink } from "lucide-react";
+import React from "react";
+import { Globe, Link as LinkIcon } from "lucide-react";
 
 export const CitationsPanel = ({ result }) => {
-  const rawResults = result.rawResults || [];
-  
-  // Aggregate citations
-  const domainCounts = {};
-  let totalCitations = 0;
-  let ownDomainCount = 0;
+  const topDomains = result.topDomains || [];
   const brandDomain = result.website ? result.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase() : "";
 
-  const allCitations = [];
+  // Count total citations across all prompts
+  const totalCitations = (result.rawResults || []).reduce(
+    (sum, r) => sum + (r.citations || []).length,
+    0
+  );
 
-  rawResults.forEach(r => {
-    if (r.citations && r.citations.length > 0) {
-      r.citations.forEach(url => {
-        totalCitations++;
-        let hostname = url;
-        try {
-          hostname = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
-        } catch (e) {}
-
-        if (brandDomain && hostname.includes(brandDomain)) {
-          ownDomainCount++;
-        }
-
-        domainCounts[hostname] = (domainCounts[hostname] || 0) + 1;
-        
-        // Push full citation data
-        allCitations.push({
-          url,
-          hostname,
-          prompt: r.prompt
-        });
-      });
-    }
-  });
-
-  const sortedDomains = Object.entries(domainCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10); // Top 10
+  const ownDomainCount = (result.rawResults || []).reduce((sum, r) => {
+    return sum + (r.citations || []).filter(c => {
+      const lower = c.toLowerCase();
+      return brandDomain && (lower.includes("://" + brandDomain) || lower.includes("." + brandDomain + "/"));
+    }).length;
+  }, 0);
 
   const ownDomainPercentage = totalCitations > 0 
     ? Math.round((ownDomainCount / totalCitations) * 100) 
@@ -85,21 +63,28 @@ export const CitationsPanel = ({ result }) => {
           </p>
         </div>
         <div className="divide-y divide-[#E5E2D9]">
-          {sortedDomains.map(([domain, count], i) => (
-            <div key={domain} className="p-5 px-7 flex items-center justify-between hover:bg-[#FDFBF7] transition-colors">
+          {topDomains.map((item, i) => (
+            <div key={item.domain} className="p-5 px-7 flex items-center justify-between hover:bg-[#FDFBF7] transition-colors">
               <div className="flex items-center gap-3">
                 <span className="text-[#999999] font-medium w-4">{i + 1}</span>
-                <span className={`font-semibold ${brandDomain && domain.includes(brandDomain) ? 'text-[#2F5C4F]' : 'text-[#1A1A1A]'}`}>
-                  {domain}
+                <span className={`font-semibold ${item.type === "brand" ? 'text-[#2F5C4F]' : item.type === "competitor" ? 'text-[#8B3A3A]' : 'text-[#1A1A1A]'}`}>
+                  {item.domain}
                 </span>
-                {brandDomain && domain.includes(brandDomain) && (
+                
+                {item.type === "brand" && (
                   <span className="text-[10px] uppercase tracking-wider bg-[#E8F0ED] text-[#2F5C4F] px-1.5 py-0.5 rounded-sm">
                     Own Domain
                   </span>
                 )}
+                
+                {item.type === "competitor" && (
+                  <span className="text-[10px] uppercase tracking-wider bg-[#F9ECEC] text-[#8B3A3A] px-1.5 py-0.5 rounded-sm">
+                    Competitor
+                  </span>
+                )}
               </div>
               <div className="text-sm text-[#666666]">
-                <span className="font-semibold text-[#1A1A1A]">{count}</span> citations
+                <span className="font-semibold text-[#1A1A1A]">{item.count}</span> citation{item.count === 1 ? "" : "s"}
               </div>
             </div>
           ))}
