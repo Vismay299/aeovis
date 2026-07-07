@@ -122,7 +122,7 @@ export const EngineBreakdown = ({ result }) => {
         })}
       </div>
 
-      {serpCoveragePct !== undefined && enginesToShow.includes("google_ai_overview") && (
+      {serpCoveragePct != null && enginesToShow.includes("google_ai_overview") && (
         <div className="mt-4 pt-3 border-t border-[#E5E2D9] flex items-center justify-between text-xs text-[#666666]">
           <span>AI Overview Coverage Rate</span>
           <span className="font-semibold text-[#1A1A1A]">{serpCoveragePct.toFixed(1)}%</span>

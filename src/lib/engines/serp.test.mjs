@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { probeGoogleAiOverview, extractTextFromBlocks } from './serp.js';
 
-test('extractTextFromBlocks - nested list, snippets and expandable formats', () => {
+test('extractTextFromBlocks - nested list, snippets, tables, and expandable formats', () => {
   const blocks = [
     { snippet: "Here is the first paragraph." },
     {
@@ -16,13 +16,28 @@ test('extractTextFromBlocks - nested list, snippets and expandable formats', () 
       text_blocks: [
         { snippet: "Nested text snippet." }
       ]
+    },
+    {
+      header: "Expandable Section Title",
+      content: [
+        { snippet: "Expandable inner text." }
+      ]
+    },
+    {
+      table: {
+        headers: ["Plan", "Price"],
+        rows: [
+          ["Basic", "$10"],
+          ["Pro", "$30"]
+        ]
+      }
     }
   ];
 
   const result = extractTextFromBlocks(blocks);
   assert.equal(
     result,
-    "Here is the first paragraph.\nKey features include:\n- Feature A\n- Feature B\nNested text snippet."
+    "Here is the first paragraph.\nKey features include:\n- Feature A\n- Feature B\nNested text snippet.\nExpandable Section Title\nExpandable inner text.\nPlan | Price\nBasic | $10\nPro | $30"
   );
 });
 

@@ -7,7 +7,7 @@ import { SCORING_VERSION, SCORING_VERSION_HYBRID, PROBE_RUNS } from "@/lib/scori
 import { normalizeTopic } from "@/lib/scoring/topics";
 import { probePromptMultiple } from "@/lib/scoring/probe";
 import { aggregateMultiEnginePromptRuns } from "@/lib/scoring/aggregate";
-import { getEnabledEngines } from "@/lib/engines/types";
+
 import { getPromptsForBrand, upsertPrompts } from "@/lib/db/prompts";
 import crypto from "crypto";
 
@@ -226,10 +226,10 @@ export async function POST(request) {
     // P8-S11: Graceful partial failure flag (only flag actual API failures, not skipped stubs)
     const enginesPartial = results.some(r => (r.run_details || []).some(run => run.model_used?.endsWith("-failed")));
 
-    // P8b-S09: Extract all successfully queried probe sources (excluding skipped)
+    // P8b-S09: Extract all successfully queried probe sources (excluding skipped/failed)
     const probeSources = Array.from(new Set(
       results.flatMap(r => (r.run_details || [])
-        .filter(run => run.model_used && !run.model_used.includes("skipped"))
+        .filter(run => run.model_used && !run.model_used.includes("skipped") && !run.model_used.includes("failed"))
         .map(run => run.engine)
         .filter(Boolean))
     ));

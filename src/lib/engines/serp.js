@@ -15,6 +15,18 @@ export function extractTextFromBlocks(blocks) {
       if (blocks.snippet) {
         parts.push(blocks.snippet);
       }
+      if (blocks.header) {
+        parts.push(blocks.header);
+      }
+      if (blocks.content) {
+        parts.push(extractTextFromBlocks(blocks.content));
+      }
+      const tableData = blocks.table || (blocks.headers && blocks.rows ? blocks : null);
+      if (tableData && Array.isArray(tableData.headers) && Array.isArray(tableData.rows)) {
+        const hStr = tableData.headers.join(" | ");
+        const rStr = tableData.rows.map(r => Array.isArray(r) ? r.join(" | ") : String(r)).join("\n");
+        parts.push(`${hStr}\n${rStr}`);
+      }
       if (Array.isArray(blocks.list)) {
         parts.push(extractTextFromBlocks(blocks.list));
       }
@@ -33,6 +45,18 @@ export function extractTextFromBlocks(blocks) {
         let parts = [];
         if (block.snippet) {
           parts.push(block.snippet);
+        }
+        if (block.header) {
+          parts.push(block.header);
+        }
+        if (block.content) {
+          parts.push(extractTextFromBlocks(block.content));
+        }
+        const tableData = block.table || (block.headers && block.rows ? block : null);
+        if (tableData && Array.isArray(tableData.headers) && Array.isArray(tableData.rows)) {
+          const hStr = tableData.headers.join(" | ");
+          const rStr = tableData.rows.map(r => Array.isArray(r) ? r.join(" | ") : String(r)).join("\n");
+          parts.push(`${hStr}\n${rStr}`);
         }
         if (Array.isArray(block.list)) {
           const items = block.list
