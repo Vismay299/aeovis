@@ -170,31 +170,41 @@ async function runJudgePipeline(promptText, responseText, brand, competitors, ur
   }
 
   const ambiguous = isAmbiguous(responseText, brand, url);
+  const detResult = judgeDeterministic(responseText, brand, url, competitors);
+
   if (!ambiguous) {
-    const detResult = judgeDeterministic(responseText, brand, url, competitors);
     return {
       prompt: promptText,
       response_snippet: responseText.slice(0, 300),
       key_phrases: [],
+      judge_disagreement: false,
       ...detResult
     };
   }
 
   const llmResult = await judgeWithLLM(promptText, responseText, brand, competitors, stats);
   if (llmResult) {
+    let judgeDisagreement = false;
+    if (llmResult.mentioned !== detResult.mentioned) {
+      console.warn(`[judge] Disagreement detected on prompt: "${promptText}". LLM judge: ${llmResult.mentioned}, Det judge: ${detResult.mentioned}. Using conservative false.`);
+      llmResult.mentioned = false;
+      judgeDisagreement = true;
+    }
     return {
       prompt: promptText,
       response_snippet: responseText.slice(0, 300),
+      judge_disagreement: judgeDisagreement,
       ...llmResult
     };
   }
 
-  const detResult = judgeDeterministic(responseText, brand, url, competitors);
-  detResult.judge_method = "fallback";
+  const fallbackDet = { ...detResult };
+  fallbackDet.judge_method = "fallback";
   return {
     prompt: promptText,
     response_snippet: responseText.slice(0, 300),
     key_phrases: [],
-    ...detResult
+    judge_disagreement: false,
+    ...fallbackDet
   };
 }

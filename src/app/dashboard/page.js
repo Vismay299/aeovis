@@ -288,21 +288,41 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Quality Gate Failure Alert */}
+        {result.qualityGateFailed && (
+          <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#F9ECEC] border border-[#E2B8B8] rounded-sm p-6 text-[#8B3A3A]" data-testid="quality-gate-failed-alert">
+            <div>
+              <h4 className="font-serif text-lg font-bold">Scan Quality Gate Failed</h4>
+              <p className="text-sm mt-1 text-[#8B3A3A]/90">
+                This scan failed the quality checks. Control prompt mentions were not detected, or probe failure rate exceeded 20%. Scores are hidden as they may be misleading.
+              </p>
+            </div>
+            <button
+              onClick={handleRerun}
+              disabled={isScanning}
+              className="inline-flex items-center gap-2 bg-[#8B3A3A] hover:bg-[#8B3A3A]/90 text-white transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] self-start md:self-auto shrink-0"
+            >
+              <RefreshCw className={`w-4 h-4 ${isScanning ? "animate-spin" : ""}`} />
+              Retry Scan
+            </button>
+          </div>
+        )}
+
         {/* KPI row — hero score + two supporting */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5 mb-8">
           <div className="lg:col-span-2">
             <HeroScoreCard
               testId="kpi-visibility-score"
-              score={result.visibilityScore}
+              score={result.qualityGateFailed ? "—" : result.visibilityScore}
               tierText={tierLabel(tier)}
-              trend={scoreTrend}
+              trend={result.qualityGateFailed ? null : scoreTrend}
               isMixedTrend={isMixedTrend}
               promptSetChanged={promptSetChanged}
               mentionRate={result.mentionRatePct}
               citationShare={result.brandCitationSharePct}
               scoreCiLow={result.scoreCiLow}
               scoreCiHigh={result.scoreCiHigh}
-              historyScores={sortedHistory
+              historyScores={result.qualityGateFailed ? [] : sortedHistory
                 .filter(s => {
                   const ver = s.scoring_version ?? s.raw_results?.scoring_version ?? "v1-binary";
                   if (result.scoringVersion === "v1-binary") {
@@ -316,12 +336,12 @@ export default function Dashboard() {
           <KpiCard
             testId="kpi-sov"
             label="Share of Voice"
-            value={result.shareOfVoicePct !== undefined ? result.shareOfVoicePct : "—"}
-            suffix="%"
+            value={result.qualityGateFailed ? "—" : (result.shareOfVoicePct !== undefined ? result.shareOfVoicePct : "—")}
+            suffix={result.qualityGateFailed ? "" : "%"}
             sub={
               <div className="flex flex-col gap-1">
                 <div>Mentions vs competitors</div>
-                {result.winRatePct !== undefined && (
+                {!result.qualityGateFailed && result.winRatePct !== undefined && (
                   <div className="text-[11px] font-semibold text-[#1A1A1A]">
                     Comparison Win Rate: <span className="text-[#D9531E]">{result.winRatePct}%</span>
                   </div>

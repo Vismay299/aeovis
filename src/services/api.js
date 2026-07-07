@@ -56,6 +56,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
   if ((!results || results.length === 0) && data.raw_results?.results) {
     results = data.raw_results.results;
   }
+  results = results.filter(r => !r.is_control);
   const usedDynamic = !!(data.used_dynamic_prompts ?? data.usedDynamicPrompts ?? data.raw_results?.used_dynamic_prompts);
 
   const version = data.scoring_version ?? data.scoringVersion ?? data.raw_results?.scoring_version ?? "v1-binary";
@@ -138,6 +139,9 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     enginesPartial: !!(data.engines_partial ?? data.enginesPartial ?? data.raw_results?.engines_partial),
     serpCoveragePct: data.serp_coverage_pct ?? data.serpCoveragePct ?? data.raw_results?.serp_coverage_pct ?? null,
     probeSources: data.probe_sources ?? data.probeSources ?? data.raw_results?.probe_sources ?? [],
+    qualityGateFailed: !!(data.quality_gate_failed ?? data.qualityGateFailed ?? data.raw_results?.quality_gate_failed),
+    probeFailureRate: data.probe_failure_rate ?? data.probeFailureRate ?? data.raw_results?.probe_failure_rate ?? 0.0,
+    judgeDisagreementCount: data.judge_disagreement_count ?? data.judgeDisagreementCount ?? data.raw_results?.judge_disagreement_count ?? 0,
     summary: data.summary || generateSummary(data),
     totalCitations: results.reduce((sum, r) => sum + ((r.citations || r.citations_found || []).length), 0),
     scoringVersion: version,

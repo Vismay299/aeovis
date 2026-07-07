@@ -9,6 +9,8 @@ import { probePromptMultiple } from "@/lib/scoring/probe";
 import { aggregateMultiEnginePromptRuns } from "@/lib/scoring/aggregate";
 
 import { getPromptsForBrand, upsertPrompts } from "@/lib/db/prompts";
+import { CONTROL_PROMPTS } from "@/lib/scoring/controlPrompts";
+import { getBrandAliases } from "@/lib/scoring/aliases";
 import crypto from "crypto";
 
 export async function POST(request) {
@@ -146,21 +148,40 @@ export async function POST(request) {
 
     console.log(`[scan] Used dynamic prompts: ${usedDynamicPrompts} (${prompts.length} prompts)`);
 
+    // P9-S01: Append control prompts to the scan list
+    const augmentedPrompts = [
+      ...prompts.map(p => ({ ...p, is_control: false })),
+      ...CONTROL_PROMPTS.map((cp, idx) => ({
+        id: `control-${idx}`,
+        text: cp.text,
+        intent_tier: "branded",
+        topic: "Control",
+        is_control: true,
+        expected_mention: cp.expectedMention
+      }))
+    ];
+
     const results = [];
 
     // Batch processing to reduce latency
     const chunkSize = 5;
-    for (let i = 0; i < prompts.length; i += chunkSize) {
-      const chunk = prompts.slice(i, i + chunkSize);
+    for (let i = 0; i < augmentedPrompts.length; i += chunkSize) {
+      const chunk = augmentedPrompts.slice(i, i + chunkSize);
       
       const chunkPromises = chunk.map(async (promptObj) => {
-        // Run prompt multiple times across all enabled engines and aggregate
-        const runs = await probePromptMultiple(promptObj.text, brand, competitors, url, stats, PROBE_RUNS);
+        // For control prompts, we run without competitor context to avoid bias
+        const compList = promptObj.is_control ? [] : competitors;
+        // Check for expected mention rather than target brand if it is control
+        const brandToUse = promptObj.is_control ? promptObj.expected_mention : brand;
+
+        const runs = await probePromptMultiple(promptObj.text, brandToUse, compList, url, stats, PROBE_RUNS);
         const agg = aggregateMultiEnginePromptRuns(runs);
         if (agg) {
           agg.intent_tier = promptObj.intent_tier;
           agg.topic = promptObj.topic;
           agg.weight = promptObj.weight;
+          agg.is_control = promptObj.is_control;
+          agg.expected_mention = promptObj.expected_mention;
         }
         return agg;
       });
@@ -173,9 +194,36 @@ export async function POST(request) {
       }
     }
 
-    const promptsTracked = prompts.length;
-    const visibilityPct = computeVisibilityScore(results, url);
-    const promptsMentioned = results.filter(r => r.mentioned).length;
+    // Split control prompts from regular brand tracking results
+    const controlResults = results.filter(r => r.is_control);
+    const brandResults = results.filter(r => !r.is_control);
+
+    // P9-S04: Detect brand injection in non-branded prompts
+    const brandAliases = getBrandAliases(brand, url);
+    brandResults.forEach(r => {
+      if (r.intent_tier !== "branded") {
+        const promptLower = r.prompt.toLowerCase();
+        const hasBrandAlias = brandAliases.some(alias => {
+          const cleanAlias = alias.toLowerCase();
+          const escaped = cleanAlias.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+          const regex = new RegExp(`(?:^|[^a-zA-Z0-9_])${escaped}(?:$|[^a-zA-Z0-9_])`, "i");
+          return regex.test(promptLower);
+        });
+        if (hasBrandAlias) {
+          r.brand_in_prompt_warning = true;
+        }
+      }
+    });
+
+    // P9-S05: Track judge disagreement count across all runs
+    const judgeDisagreementCount = results.reduce((sum, r) => {
+      const runsCount = (r.run_details || []).filter(run => run.judge_disagreement).length;
+      return sum + runsCount;
+    }, 0);
+
+    const promptsTracked = brandResults.length;
+    const visibilityPct = computeVisibilityScore(brandResults, url);
+    const promptsMentioned = brandResults.filter(r => r.mentioned).length;
     const mentionRatePct = promptsTracked
       ? Math.round((promptsMentioned / promptsTracked) * 1000) / 10
       : 0.0;
@@ -189,29 +237,29 @@ export async function POST(request) {
     };
 
     // P6-S04: Compute gap_score per prompt result against top competitor
-    computeGapScores(results, competitors);
+    computeGapScores(brandResults, competitors);
 
-    const shareOfVoicePct = computeShareOfVoice(results);
-    const winRatePct = computeWinRate(results, competitors);
+    const shareOfVoicePct = computeShareOfVoice(brandResults);
+    const winRatePct = computeWinRate(brandResults, competitors);
 
     // P7-S04: Compute brand citation share percentage
-    const brandCitationSharePct = computeBrandCitationShare(results, url);
+    const brandCitationSharePct = computeBrandCitationShare(brandResults, url);
 
     // P7-S06: Aggregate top cited domains across prompts
-    const topDomains = aggregateTopDomains(results, url, competitors);
+    const topDomains = aggregateTopDomains(brandResults, url, competitors);
 
-    // P8-S08: Compute scan-level engine scores
-    const activeEngines = Array.from(new Set(results.flatMap(r => Object.keys(r.engine_scores || {}))));
+    // P8-S08: Compute scan-level engine scores (using brand results only)
+    const activeEngines = Array.from(new Set(brandResults.flatMap(r => Object.keys(r.engine_scores || {}))));
     const engineScores = {};
     activeEngines.forEach(eng => {
-      const enginePromptResults = results.map(r => ({
+      const enginePromptResults = brandResults.map(r => ({
         ...r,
         prompt_score: r.engine_scores?.[eng] ?? 0.0
       }));
       engineScores[eng] = computeVisibilityScore(enginePromptResults, url);
     });
 
-    // P8-S13: Compute cost by engine
+    // P8-S13: Compute cost by engine (including control prompts)
     const costByEngine = {};
     results.forEach(r => {
       (r.run_details || []).forEach(run => {
@@ -243,13 +291,33 @@ export async function POST(request) {
 
     const activeVersion = hasSerp ? SCORING_VERSION_HYBRID : SCORING_VERSION;
 
+    // P9-S02: Validate control prompt responses (expected mention must be present in raw response)
+    let qualityGateFailed = false;
+    controlResults.forEach(r => {
+      const responseText = r.raw_response || "";
+      const expected = r.expected_mention || "";
+      const found = responseText.toLowerCase().includes(expected.toLowerCase());
+      r.control_passed = found;
+      if (!found) {
+        qualityGateFailed = true;
+      }
+    });
+
+    // P9-S03: Track probe failure rate and trigger gate failure if >20%
+    const totalProbes = results.flatMap(r => r.run_details || []).length;
+    const failedProbes = results.flatMap(r => r.run_details || []).filter(run => run.model_used?.endsWith("-failed")).length;
+    const probeFailureRate = totalProbes > 0 ? failedProbes / totalProbes : 0.0;
+    if (probeFailureRate > 0.20) {
+      qualityGateFailed = true;
+    }
+
     // P6-S02 / P7-S05: Compute competitor objects using composite scoring and citation shares
     const competitorObjects = competitors.map(comp => {
-      const visibilityScore = computeCompetitorVisibility(results, comp);
-      const citationShare = computeCompetitorCitationShare(results, comp);
+      const visibilityScore = computeCompetitorVisibility(brandResults, comp);
+      const citationShare = computeCompetitorCitationShare(brandResults, comp);
       let mentions = 0;
       let userAbsent = 0;
-      results.forEach(r => {
+      brandResults.forEach(r => {
         const found = (r.competitors_found || []).some(c => c.toLowerCase() === comp.toLowerCase());
         if (found) {
           mentions++;
@@ -269,9 +337,9 @@ export async function POST(request) {
     });
     competitorObjects.sort((a, b) => b.visibilityScore - a.visibilityScore);
 
-    const scanStats = computeScanStats(results, visibilityPct);
-    const intentBreakdown = computeIntentBreakdown(results, url);
-    const topicScores = computeTopicScores(results, url);
+    const scanStats = computeScanStats(brandResults, visibilityPct);
+    const intentBreakdown = computeIntentBreakdown(brandResults, url);
+    const topicScores = computeTopicScores(brandResults, url);
     const scannedAt = new Date().toISOString();
 
     // P3-S08: Add prompt_set_id and prompt_set_hash
@@ -311,7 +379,10 @@ export async function POST(request) {
       cost_by_engine: costByEngine,
       engines_partial: enginesPartial,
       serp_coverage_pct: serpCoveragePct,
-      probe_sources: probeSources
+      probe_sources: probeSources,
+      quality_gate_failed: qualityGateFailed,
+      probe_failure_rate: probeFailureRate,
+      judge_disagreement_count: judgeDisagreementCount
     };
 
     try {

@@ -29,7 +29,7 @@ export const KpiCard = ({ label, value, suffix, sub, index = 0, testId }) => {
 
 export const HeroScoreCard = ({ score, tierText, testId, trend, isMixedTrend, promptSetChanged, historyScores = [], mentionRate, citationShare, scoreCiLow, scoreCiHigh }) => {
   const [showTooltip, setShowTooltip] = useState(false);
-  const margin = scoreCiLow != null && scoreCiHigh != null ? Math.round(score - scoreCiLow) : 0;
+  const margin = typeof score === "number" && scoreCiLow != null && scoreCiHigh != null ? Math.round(score - scoreCiLow) : 0;
 
   // Generate sparkline points if we have history
   let sparkline = null;
@@ -113,20 +113,20 @@ export const HeroScoreCard = ({ score, tierText, testId, trend, isMixedTrend, pr
           <span className="font-serif text-7xl md:text-8xl font-semibold tracking-tight leading-none">
             {score}
           </span>
-          <span className="text-2xl text-white/70 font-serif">/100</span>
+          {typeof score === "number" && <span className="text-2xl text-white/70 font-serif">/100</span>}
         </div>
         <div className="flex flex-col gap-1 mt-1 text-xs text-white/80 font-medium">
-          {mentionRate !== undefined && (
+          {typeof score === "number" && mentionRate !== undefined && (
             <div className="whitespace-nowrap">
               Mention Rate: <span className="font-bold text-white">{mentionRate}%</span>
             </div>
           )}
-          {citationShare !== undefined && (
+          {typeof score === "number" && citationShare !== undefined && (
             <div className="whitespace-nowrap">
               Citation Share: <span className="font-bold text-white">{citationShare}%</span>
             </div>
           )}
-          {margin > 0 && (
+          {typeof score === "number" && margin > 0 && (
             <div className="whitespace-nowrap">
               Confidence Range: <span className="font-bold text-white">{score}% ± {margin}%</span>
             </div>
