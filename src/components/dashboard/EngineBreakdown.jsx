@@ -7,21 +7,21 @@ const ENGINE_CONFIGS = {
     color: "bg-gradient-to-r from-[#208080] to-[#3a9f9f]",
     textColor: "text-[#208080]",
     badgeBg: "bg-[#eef8f8]",
-    weight: "40%"
+    defaultWeight: 0.40
   },
   openai: {
     label: "ChatGPT (GPT-4o)",
     color: "bg-gradient-to-r from-[#10a37f] to-[#22c55e]",
     textColor: "text-[#10a37f]",
     badgeBg: "bg-[#eafaf5]",
-    weight: "35%"
+    defaultWeight: 0.35
   },
   gemini: {
     label: "Gemini",
     color: "bg-gradient-to-r from-[#4b39ef] to-[#827ae6]",
     textColor: "text-[#4b39ef]",
     badgeBg: "bg-[#eef2ff]",
-    weight: "25%"
+    defaultWeight: 0.25
   }
 };
 
@@ -33,6 +33,18 @@ export const EngineBreakdown = ({ result }) => {
   const enginesToShow = Object.keys(engineScores).length > 0
     ? Object.keys(engineScores)
     : ["gemini"];
+
+  // Normalize weights for active engines
+  let totalWeight = 0;
+  enginesToShow.forEach(eng => {
+    totalWeight += ENGINE_CONFIGS[eng]?.defaultWeight ?? 0.25;
+  });
+  if (totalWeight === 0) totalWeight = 1.0;
+
+  const normalizedWeights = {};
+  enginesToShow.forEach(eng => {
+    normalizedWeights[eng] = ((ENGINE_CONFIGS[eng]?.defaultWeight ?? 0.25) / totalWeight) * 100;
+  });
 
   return (
     <div
@@ -62,12 +74,12 @@ export const EngineBreakdown = ({ result }) => {
             label: eng.toUpperCase(),
             color: "bg-gradient-to-r from-[#999999] to-[#cccccc]",
             textColor: "text-[#666666]",
-            badgeBg: "bg-[#f2f2f2]",
-            weight: "N/A"
+            badgeBg: "bg-[#f2f2f2]"
           };
 
           const score = engineScores[eng] !== undefined ? engineScores[eng] : 0.0;
           const cost = costByEngine[eng] !== undefined ? costByEngine[eng] : 0.0;
+          const weight = Math.round(normalizedWeights[eng] ?? 0);
 
           return (
             <div key={eng} className="space-y-2">
@@ -75,7 +87,7 @@ export const EngineBreakdown = ({ result }) => {
                 <div className="flex items-center gap-2">
                   <span className={`font-semibold ${config.textColor}`}>{config.label}</span>
                   <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm ${config.badgeBg} ${config.textColor}`}>
-                    Weight: {config.weight}
+                    Weight: {weight}%
                   </span>
                 </div>
                 <div className="flex items-center gap-4">

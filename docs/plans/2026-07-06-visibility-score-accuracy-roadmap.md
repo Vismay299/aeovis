@@ -523,7 +523,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 *Real buyers use ChatGPT, Perplexity, Gemini — not just one.*
 
 ### P8-S01 — Define `Engine` enum
-- **What**: `gemini | openai | perplexity` (extensible)
+- **What**: `gemini | openai | perplexity` (extensible; Phase 8b adds `google_ai_overview`)
 - **Where**: `src/lib/engines/types.js`
 - **Done when**: Types exported
 
@@ -563,7 +563,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 - **Done when**: API returns per-engine breakdown
 
 ### P8-S09 — Compute headline score as weighted cross-engine average
-- **What**: Default weights: Perplexity 0.4, OpenAI 0.35, Gemini 0.25 (tunable)
+- **What**: Default LLM-only weights: Perplexity 0.4, OpenAI 0.35, Gemini 0.25 (tunable). **Phase 8b replaces with hybrid weights** when `google_ai_overview` is enabled.
 - **Where**: `constants.js`, `computeVisibilityScore.js`
 - **Done when**: Single headline number reflects multi-engine
 
@@ -586,6 +586,111 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 - **What**: `cost_by_engine` on scan record
 - **Where**: probe layer
 - **Done when**: Token/cost estimates logged per engine
+
+**Note**: Complete Phase 8 (adapter interface + at least Gemini adapter) before starting Phase 8b. Phase 8b adds SERP/AI Overview as the **primary production probe** in a hybrid stack.
+
+---
+
+## Phase 8b: Hybrid Probing (SERP / AI Overview + LLM Engines)
+
+*Buyers see Google's AI Overview and other answer engines — not an isolated Gemini API call. Reuse the Phase 1–7 scoring pipeline; swap and extend the **probe layer** only.*
+
+### Architecture
+
+```
+Prompt set (same 15 queries every run)
+        │
+        ├─ google_ai_overview (SERP API)     ← primary prod probe (~50% headline weight)
+        ├─ perplexity                        ← answer engine (~25%)
+        ├─ openai                            ← answer engine (~15%)
+        └─ gemini                              ← dev / fallback / cheap (~10%, or dev-only)
+        │
+        ▼
+  Same judge + scoring (Phases 1–7)
+  → visibility, SOV, citations, topics, gap_score, etc.
+        │
+        ▼
+  Headline score = weighted cross-source blend (tunable in constants)
+```
+
+**Prerequisite**: Phase 8 adapter interface (`probe(engine, prompt, options) → ProbeResult`).
+
+### P8b-S01 — Extend `Engine` enum with `google_ai_overview`
+- **What**: Add `google_ai_overview` to `src/lib/engines/types.js`; document hybrid probe roles in comments
+- **Where**: `types.js`
+- **Done when**: Enum includes `gemini | openai | perplexity | google_ai_overview`
+
+### P8b-S02 — Research SerpAPI vs DataForSEO for AI Overview
+- **What**: Compare pricing, AI Overview availability, citation fields, geo/device params; document go/no-go + chosen provider
+- **Where**: this doc (decision note below P8b-S02) or `docs/decisions/serp-provider.md`
+- **Done when**: One provider selected; cost-per-scan estimate for 15 prompts documented
+
+### P8b-S03 — Create `src/lib/engines/serp.js` adapter
+- **What**: `probeGoogleAiOverview(query, options) → { text, citations, engine: "google_ai_overview", raw }`
+- **Where**: new file; implements Phase 8 adapter interface
+- **Done when**: Returns parsed overview text + citation URLs when `SERPAPI_KEY` set; graceful empty result when key missing
+
+### P8b-S04 — Parse AI Overview text and citations from SERP response
+- **What**: Extract overview snippet/blocks and linked domains; normalize URLs via `normalizeUrl()` from `citations.js`
+- **Where**: `serp.js`
+- **Done when**: Unit tests with fixture JSON; citations passed to existing `classifyCitation()` pipeline
+
+### P8b-S05 — Add `SERPAPI_KEY`, `SERP_GEO`, `SERP_DEVICE` env config
+- **What**: Document in README + `.env.local` example; default geo `us`, device `desktop`
+- **Where**: env docs, `constants.js` or `engines/serp.js`
+- **Done when**: Scan respects locale params; missing key skips SERP without failing scan
+
+### P8b-S06 — Add `PROBE_MODE` env: `hybrid | llm_only | serp_primary`
+- **What**: `hybrid` (default prod): SERP + enabled LLMs. `llm_only`: current behavior (fast dev). `serp_primary`: SERP only, LLMs as fallback on SERP miss
+- **Where**: `probe.js`, `constants.js`
+- **Done when**: Dev can run `PROBE_MODE=llm_only` without SERP costs
+
+### P8b-S07 — Wire hybrid probe loop in `probe.js`
+- **What**: For each prompt × enabled engines: call adapter; tag every result with `engine` field; SERP runs first when `PROBE_MODE` is hybrid/serp_primary
+- **Where**: `probe.js`, `scan/route.js`
+- **Done when**: Scan results include mixed-engine `run_details`; existing judge/scoring unchanged
+
+### P8b-S08 — Add default hybrid engine weights
+- **What**: `ENGINE_WEIGHTS`: `google_ai_overview: 0.50`, `perplexity: 0.25`, `openai: 0.15`, `gemini: 0.10` (tunable; gemini optional 0 in prod)
+- **Where**: `constants.js`, `computeVisibilityScore.js`
+- **Done when**: Headline `visibility_pct` blends per-engine sub-scores when multiple engines present
+
+### P8b-S09 — Store `engine_scores` and `probe_sources` on scan record
+- **What**: `engine_scores: { google_ai_overview: 64, perplexity: 58, ... }`; `probe_sources: ["google_ai_overview","perplexity"]` for transparency
+- **Where**: `route.js`, `db.js` `raw_results`
+- **Done when**: API + `normalizeResult()` expose breakdown; persisted across reloads
+
+### P8b-S10 — Update `EngineBreakdown` UI for hybrid sources
+- **What**: Show Google AI Overview bar first (labeled clearly), then Perplexity / ChatGPT / Gemini; badge when `engines_partial: true`
+- **Where**: `EngineBreakdown.jsx` (Phase 8) or extend `ScoreBreakdown.jsx`
+- **Done when**: Dashboard distinguishes SERP-sourced vs LLM-sourced scores
+
+### P8b-S11 — Citation handling for SERP-sourced results
+- **What**: Prefer structured citations from SERP response over regex `extractCitations()` on overview text
+- **Where**: `serp.js`, `citations.js`
+- **Done when**: `brand_citation_share_pct` and `top_domains` reflect real overview links in hybrid scans
+
+### P8b-S12 — Handle SERP misses and partial coverage
+- **What**: If no AI Overview for a query, fall back to enabled LLM engines for that prompt only; flag `serp_coverage_pct` on scan
+- **Where**: `probe.js`, `route.js`
+- **Done when**: Scan completes when 40% of queries lack an overview; UI shows coverage %
+
+### P8b-S13 — Cost tracking for SERP probes
+- **What**: `cost_by_engine.google_ai_overview` — estimated $ per scan based on queries × SERP price
+- **Where**: probe layer, scan record
+- **Done when**: Logged alongside LLM token costs from P8-S13
+
+### P8b-S14 — Bump `scoring_version` to `v5-hybrid`
+- **What**: Version string when hybrid weights active; dashboard warns on trend compare across `v4-multi-run` vs `v5-hybrid`
+- **Where**: `constants.js`, `KpiCard` / dashboard trend logic
+- **Done when**: Mixed-version trends show existing `isMixedTrend` warning
+
+### P8b-S15 — Update README and hero tooltip for hybrid methodology
+- **What**: Copy explains: "We probe Google AI Overview + major answer engines using the same tracked queries every run"
+- **Where**: `README.md`, `KpiCard.jsx` tooltip, landing page (Phase 12 can fully polish)
+- **Done when**: Marketing matches hybrid implementation
+
+**Phase guidance**: Ship 8b before treating scores as "production AEO." Phases 1–7 scoring is engine-agnostic — 8b changes *data source*, not measurement math. Gemini remains valuable for dev (`PROBE_MODE=llm_only`) and prompt generation (`prompts.js`).
 
 ---
 
@@ -743,13 +848,14 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ## Phase 13: External Query Data (Optional, High Value)
 
-*LLM-generated prompts alone don't reflect real search demand.*
+*LLM-generated prompts alone don't reflect real search demand. **Probing** via SERP/AI Overview is Phase 8b; this phase is **prompt sourcing** only (PAA, autocomplete, GSC).*
 
-### P13-S01 — Research SerpAPI / DataForSEO pricing for PAA + autocomplete
-- **Done when**: Decision documented (go/no-go)
+### P13-S01 — Reuse SERP provider from Phase 8b for PAA + autocomplete
+- **What**: Extend `src/lib/engines/serp.js` (or `src/lib/queryData/serp.js`) with PAA/autocomplete endpoints
+- **Done when**: Same API key as 8b; no second provider decision needed
 
 ### P13-S02 — Add `fetchPeopleAlsoAsk(industry, seedTerms)` stub
-- **Where**: `src/lib/queryData/serp.js`
+- **Where**: `src/lib/queryData/serp.js` (imports shared SERP client from 8b)
 - **Done when**: Returns [] without API key; real data with key
 
 ### P13-S03 — Merge PAA queries into prompt generation pool
@@ -797,10 +903,16 @@ PROBE_RUNS=3                    # Set to 1 for fast dev scans
 # Phase 8
 OPENAI_API_KEY=                 # Optional
 PERPLEXITY_API_KEY=             # Optional
-ENGINES_ENABLED=gemini          # gemini,openai,perplexity
+ENGINES_ENABLED=gemini          # gemini,openai,perplexity,google_ai_overview
 
-# Phase 13
-SERPAPI_KEY=                    # Optional
+# Phase 8b (hybrid probing — primary prod path)
+SERPAPI_KEY=                    # Required for google_ai_overview in prod
+SERP_GEO=us                     # Optional: gl/hl country
+SERP_DEVICE=desktop             # Optional: desktop | mobile
+PROBE_MODE=hybrid               # hybrid | llm_only | serp_primary
+ENGINE_WEIGHTS=                 # Optional override; default 0.50/0.25/0.15/0.10
+
+# Phase 13 (prompt sourcing only — reuses SERPAPI_KEY from 8b)
 ```
 
 ---
@@ -813,8 +925,9 @@ SERPAPI_KEY=                    # Optional
 | `v2-composite` | Weighted: mention × position × sentiment + citation bonus |
 | `v3-weighted` | v2 + intent-tier prompt weights |
 | `v4-multi-run` | v3 + median across N probe runs |
-| `v5-multi-engine` | v4 + cross-engine weighted average |
-| `v6-bayesian` | v5 + credible intervals with category priors |
+| `v5-multi-engine` | v4 + cross-engine weighted average (LLM engines only) |
+| `v5-hybrid` | v4 + SERP AI Overview + LLM engines with hybrid weights (Phase 8b) |
+| `v6-bayesian` | v5-hybrid + credible intervals with category priors |
 
 Bump `scoring_version` on every formula change. Never rewrite historical scores silently.
 
@@ -828,9 +941,10 @@ Bump `scoring_version` on every formula change. Never rewrite historical scores 
 | **Sprint 2** | P2 + P3 (S01–S11) | Multi-run stability + persistent prompts |
 | **Sprint 3** | P4 + P5 + P6 | Topics, deterministic judge, share of voice |
 | **Sprint 4** | P7 + P9 | Citation share + quality gates |
-| **Sprint 5** | P8 (Gemini + Perplexity) | Multi-engine probing |
+| **Sprint 5** | P8 (adapter + Gemini + Perplexity stubs) | Multi-engine LLM probing |
+| **Sprint 5b** | P8b (SERP / AI Overview hybrid) | **Production-grade probes; Google AI Overview primary** |
 | **Sprint 6** | P10 + P11 + P12 | Bayesian CI, async pipeline, full decomposition UI |
-| **Sprint 7+** | P13 + P14 | External query data, content lift |
+| **Sprint 7+** | P13 + P14 | PAA/autocomplete prompt sourcing, content lift |
 
 ---
 
@@ -838,7 +952,7 @@ Bump `scoring_version` on every formula change. Never rewrite historical scores 
 
 The visibility score overhaul is complete when:
 
-1. Headline score uses composite, intent-weighted, multi-run, multi-engine signals
+1. Headline score uses composite, intent-weighted, multi-run, **hybrid** signals (Google AI Overview + LLM engines per Phase 8b)
 2. User sees credible interval, stability flag, and score decomposition
 3. Prompt sets persist across scans; trend comparison warns on prompt set changes
 4. Share of voice and citation share are visible and factor into insights

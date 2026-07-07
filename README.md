@@ -35,6 +35,16 @@ A modern, agentic web application for tracking Answer Engine Optimization (AEO) 
    # Google Gemini API Key for dynamic prompt generation and simulated answer engine responses
    GEMINI_API_KEY=your_gemini_api_key
 
+   # OpenAI API Key for ChatGPT search engine simulation (Optional)
+   OPENAI_API_KEY=your_openai_api_key
+
+   # Perplexity API Key for Perplexity search engine simulation (Optional)
+   PERPLEXITY_API_KEY=your_perplexity_api_key
+
+   # Comma-separated list of enabled simulation engines (default is 'gemini')
+   # Options: gemini, openai, perplexity
+   ENGINES_ENABLED=gemini,openai,perplexity
+
    # Supabase Configuration for history tracking
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key

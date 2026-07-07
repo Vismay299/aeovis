@@ -53,15 +53,21 @@ export async function generateContent(prompt, options = {}, retries = 2) {
         clearTimeout(timeoutId);
         const response = await result.response;
         
-        // Token cost logging via object reference
-        if (response.usageMetadata && response.usageMetadata.totalTokenCount) {
-          const used = response.usageMetadata.totalTokenCount;
+        let tokens = 0;
+        let cost = 0.0;
+        if (response.usageMetadata) {
+          const promptTokens = response.usageMetadata.promptTokenCount || 0;
+          const candidatesTokens = response.usageMetadata.candidatesTokenCount || 0;
+          tokens = response.usageMetadata.totalTokenCount || (promptTokens + candidatesTokens);
+          cost = (promptTokens * 0.075 / 1e6) + (candidatesTokens * 0.30 / 1e6);
+          
           if (options.stats) {
-            options.stats.tokens = (options.stats.tokens || 0) + used;
+            options.stats.tokens = (options.stats.tokens || 0) + tokens;
+            options.stats.cost = (options.stats.cost || 0) + cost;
           }
         }
 
-        return { text: response.text(), model_used: modelName };
+        return { text: response.text(), model_used: modelName, tokens, cost };
       } catch (e) {
         lastErr = e;
         continue; // try next model

@@ -67,9 +67,8 @@ export async function probePromptOnce(promptText, brand, competitors, url, stats
  */
 export async function probePromptMultiple(promptText, brand, competitors, url, stats, N = 3) {
   const enabledEngines = getEnabledEngines();
-  const allRuns = [];
   
-  for (const engine of enabledEngines) {
+  const enginePromises = enabledEngines.map(async (engine) => {
     const promises = Array.from({ length: N }).map(async () => {
       try {
         const run = await probePromptOnce(promptText, brand, competitors, url, stats, engine);
@@ -98,12 +97,11 @@ export async function probePromptMultiple(promptText, brand, competitors, url, s
         };
       }
     });
-    
-    const engineRuns = await Promise.all(promises);
-    allRuns.push(...engineRuns);
-  }
+    return Promise.all(promises);
+  });
   
-  return allRuns;
+  const allEngineRuns = await Promise.all(enginePromises);
+  return allEngineRuns.flat();
 }
 
 /**

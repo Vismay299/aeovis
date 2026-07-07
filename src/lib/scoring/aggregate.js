@@ -1,3 +1,5 @@
+import { ENGINE_DEFAULT_WEIGHTS } from "../engines/types.js";
+
 function getStdDev(array) {
   const n = array.length;
   if (n <= 1) return 0;
@@ -83,7 +85,6 @@ export function aggregatePromptRuns(runs) {
   };
 }
 
-import { ENGINE_DEFAULT_WEIGHTS } from "../engines/types.js";
 
 /**
  * Aggregates multiple run results across all enabled engines for a prompt.
