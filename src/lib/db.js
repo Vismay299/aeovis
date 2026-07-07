@@ -58,7 +58,9 @@ export async function insertScan(scanRecord) {
     probe_sources: scanRecord.probe_sources,
     quality_gate_failed: scanRecord.quality_gate_failed,
     probe_failure_rate: scanRecord.probe_failure_rate,
-    judge_disagreement_count: scanRecord.judge_disagreement_count
+    judge_disagreement_count: scanRecord.judge_disagreement_count,
+    control_prompts_passed: scanRecord.control_prompts_passed,
+    control_prompts_total: scanRecord.control_prompts_total
   };
 
   const baseRecord = {

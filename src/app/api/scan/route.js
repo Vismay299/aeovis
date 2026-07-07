@@ -393,7 +393,9 @@ export async function POST(request) {
       probe_sources: probeSources,
       quality_gate_failed: qualityGateFailed,
       probe_failure_rate: probeFailureRate,
-      judge_disagreement_count: judgeDisagreementCount
+      judge_disagreement_count: judgeDisagreementCount,
+      control_prompts_passed: controlResults.filter(r => r.control_passed).length,
+      control_prompts_total: controlResults.length
     };
 
     try {

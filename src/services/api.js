@@ -142,6 +142,8 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     qualityGateFailed: !!(data.quality_gate_failed ?? data.qualityGateFailed ?? data.raw_results?.quality_gate_failed),
     probeFailureRate: data.probe_failure_rate ?? data.probeFailureRate ?? data.raw_results?.probe_failure_rate ?? 0.0,
     judgeDisagreementCount: data.judge_disagreement_count ?? data.judgeDisagreementCount ?? data.raw_results?.judge_disagreement_count ?? 0,
+    controlPromptsPassed: data.control_prompts_passed ?? data.controlPromptsPassed ?? data.raw_results?.control_prompts_passed ?? 0,
+    controlPromptsTotal: data.control_prompts_total ?? data.controlPromptsTotal ?? data.raw_results?.control_prompts_total ?? 0,
     summary: data.summary || generateSummary(data),
     totalCitations: results.reduce((sum, r) => sum + ((r.citations || r.citations_found || []).length), 0),
     scoringVersion: version,

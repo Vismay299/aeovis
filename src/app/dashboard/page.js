@@ -290,9 +290,8 @@ export default function Dashboard() {
 
         {/* Quality Gate Failure Alert */}
         {result.qualityGateFailed && (() => {
-          const controlRuns = result.rawResults ? result.rawResults.filter(r => r.is_control) : [];
-          const totalControls = controlRuns.length;
-          const passedControls = controlRuns.filter(r => r.control_passed).length;
+          const totalControls = result.controlPromptsTotal ?? 0;
+          const passedControls = result.controlPromptsPassed ?? 0;
           const failureRatePct = (result.probeFailureRate || 0) * 100;
           
           return (
@@ -390,7 +389,7 @@ export default function Dashboard() {
         </div>
 
         {/* Intent Breakdown Row (Phase 3) */}
-        {result.intentBreakdown && (
+        {!result.qualityGateFailed && result.intentBreakdown && (
           <div className="mb-8">
             <ScoreBreakdown breakdown={result.intentBreakdown} />
           </div>
