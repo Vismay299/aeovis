@@ -9,12 +9,21 @@ test('Scan Jobs - lifecycle state updates and persistence', async () => {
   const competitors = "CompA, CompB";
 
   // 1. Create job
-  const job = await createScanJob({ brand, url, industry, competitors });
+  const job = await createScanJob({ 
+    brand, 
+    url, 
+    industry, 
+    competitors, 
+    querySource: "people_also_ask", 
+    gscQueries: ["query a", "query b"] 
+  });
   assert.ok(job.id);
   assert.equal(job.brand, brand);
   assert.equal(job.url, url);
   assert.equal(job.industry, industry);
   assert.equal(job.competitors, competitors);
+  assert.equal(job.query_source, "people_also_ask");
+  assert.deepEqual(job.gsc_queries, ["query a", "query b"]);
   assert.equal(job.status, "pending");
   assert.equal(job.progress_pct, 0);
 

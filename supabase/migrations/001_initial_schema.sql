@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS scans (
   score_ci_low numeric,
   score_ci_high numeric,
   stability text,
-  mention_rate_pct numeric
+  mention_rate_pct numeric,
+  query_source text DEFAULT 'llm_generated'
 );
 
 -- 2. Brand Prompts Table (persistent prompt caching)
@@ -33,7 +34,8 @@ CREATE TABLE IF NOT EXISTS brand_prompts (
   topic text,
   weight numeric DEFAULT 1.0,
   enabled boolean DEFAULT true,
-  created_at timestamptz DEFAULT now()
+  created_at timestamptz DEFAULT now(),
+  source text DEFAULT 'llm_generated'
 );
 
 DO $$
@@ -58,8 +60,30 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
   created_at timestamptz DEFAULT now(),
   result_id uuid REFERENCES scans(id) ON DELETE SET NULL,
   error_message text,
-  run_record jsonb
+  run_record jsonb,
+  query_source text DEFAULT 'llm_generated',
+  gsc_queries jsonb
 );
+
+-- Safe, idempotent column migration helpers for existing databases
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='brand_prompts' AND column_name='source') THEN
+    ALTER TABLE brand_prompts ADD COLUMN source text DEFAULT 'llm_generated';
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='scan_jobs' AND column_name='query_source') THEN
+    ALTER TABLE scan_jobs ADD COLUMN query_source text DEFAULT 'llm_generated';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='scan_jobs' AND column_name='gsc_queries') THEN
+    ALTER TABLE scan_jobs ADD COLUMN gsc_queries jsonb;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='scans' AND column_name='query_source') THEN
+    ALTER TABLE scans ADD COLUMN query_source text DEFAULT 'llm_generated';
+  END IF;
+END $$;
 
 -- Enable RLS and allow anon access (matches client-side Supabase usage)
 ALTER TABLE scans ENABLE ROW LEVEL SECURITY;

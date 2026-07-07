@@ -25,7 +25,9 @@ export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, s
 //   created_at timestamptz DEFAULT now(),
 //   result_id uuid REFERENCES scans(id) ON DELETE SET NULL,
 //   error_message text,
-//   run_record jsonb
+//   run_record jsonb,
+//   query_source text,
+//   gsc_queries jsonb
 // );
 //
 // CREATE TABLE brand_prompts (
@@ -76,7 +78,8 @@ export async function insertScan(scanRecord) {
     probe_failure_rate: scanRecord.probe_failure_rate,
     judge_disagreement_count: scanRecord.judge_disagreement_count,
     control_prompts_passed: scanRecord.control_prompts_passed,
-    control_prompts_total: scanRecord.control_prompts_total
+    control_prompts_total: scanRecord.control_prompts_total,
+    query_source: scanRecord.query_source
   };
 
   const baseRecord = {
@@ -159,7 +162,7 @@ export async function getScansForBrand(brand) {
 // Global memory store for scan jobs (Next.js hot-reload safe)
 global.memoryJobs = global.memoryJobs || new Map();
 
-export async function createScanJob({ brand, url, industry, competitors }) {
+export async function createScanJob({ brand, url, industry, competitors, querySource, gscQueries }) {
   const jobId = crypto.randomUUID();
   const job = {
     id: jobId,
@@ -167,6 +170,8 @@ export async function createScanJob({ brand, url, industry, competitors }) {
     url: url || "",
     industry: industry || "",
     competitors: competitors || "",
+    query_source: querySource || "llm_generated",
+    gsc_queries: gscQueries || [],
     status: "pending",
     progress_pct: 0,
     created_at: new Date().toISOString(),

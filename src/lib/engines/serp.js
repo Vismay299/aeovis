@@ -190,3 +190,73 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
   console.error(`[serp] Google AI Overview failed after ${retries} retries: ${lastErr}`);
   return { text: "", model_used: "google_ai_overview-failed", citations: [], cost: 0.0, tokens: 0 };
 }
+
+/**
+ * Fetches "People Also Ask" questions using SerpAPI search results.
+ *
+ * @param {Array|string} seedTerms - Search term(s) to fetch queries for
+ * @returns {Promise<Array<string>>} List of question strings
+ */
+export async function fetchPeopleAlsoAsk(seedTerms) {
+  const apiKey = process.env.SERPAPI_KEY;
+  if (!apiKey) {
+    console.warn("[serp] SERPAPI_KEY not configured. PAA fetch returning empty list.");
+    return [];
+  }
+  
+  const questions = new Set();
+  const terms = Array.isArray(seedTerms) ? seedTerms : [seedTerms];
+  
+  for (const term of terms.slice(0, 3)) {
+    try {
+      const searchParams = new URLSearchParams({
+        q: term,
+        api_key: apiKey,
+        engine: "google",
+        hl: "en",
+        gl: "us"
+      });
+      const res = await fetch(`https://serpapi.com/search?${searchParams.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        const paa = data.people_also_ask || [];
+        paa.forEach(item => {
+          if (item.question) {
+            questions.add(item.question);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn(`[serp] PAA fetch failed for term "${term}":`, e.message);
+    }
+  }
+  return Array.from(questions);
+}
+
+/**
+ * Fetches Google search autocomplete suggestions for seed terms.
+ * Uses the free suggestqueries.google.com endpoint for efficiency.
+ *
+ * @param {Array|string} seedTerms - Search term(s)
+ * @returns {Promise<Array<string>>} List of suggestion strings
+ */
+export async function fetchAutocomplete(seedTerms) {
+  const suggestions = new Set();
+  const terms = Array.isArray(seedTerms) ? seedTerms : [seedTerms];
+  
+  for (const term of terms.slice(0, 3)) {
+    try {
+      const res = await fetch(`https://suggestqueries.google.com/complete/search?client=chrome&q=${encodeURIComponent(term)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data[1])) {
+          data[1].forEach(sug => suggestions.add(sug));
+        }
+      }
+    } catch (e) {
+      console.warn(`[serp] Autocomplete fetch failed for term "${term}":`, e.message);
+    }
+  }
+  return Array.from(suggestions);
+}
+

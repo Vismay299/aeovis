@@ -147,6 +147,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     summary: data.summary || generateSummary(data),
     totalCitations: results.reduce((sum, r) => sum + ((r.citations || r.citations_found || []).length), 0),
     scoringVersion: version,
+    querySource: data.query_source ?? data.querySource ?? data.raw_results?.query_source ?? "llm_generated",
     sampleSizeAdequacy: data.sample_size_adequacy ?? data.sampleSizeAdequacy ?? data.raw_results?.sample_size_adequacy ?? (results.length >= 30),
     // Preserve rich Phase 2 analysis fields for future UI (citations, key phrases, exact position)
     rawResults: results,
@@ -288,7 +289,7 @@ function generateSummary(data) {
   return `${brand} is largely invisible in AI answers for this category. Competitors are currently capturing the majority of AI-driven recommendations.`;
 }
 
-export async function runScan({ brand, website, industry, competitors }, onProgress = () => {}) {
+export async function runScan({ brand, website, industry, competitors, querySource, gscQueries }, onProgress = () => {}) {
   onProgress(0); // Stage 0: Submitting brand for analysis
 
   try {
@@ -296,7 +297,14 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
     const res = await fetch("/api/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ brand, url: website, industry, competitors: competitors || "" }),
+      body: JSON.stringify({
+        brand,
+        url: website,
+        industry,
+        competitors: competitors || "",
+        querySource: querySource || "llm_generated",
+        gscQueries: gscQueries || []
+      }),
     });
 
     if (!res.ok) {

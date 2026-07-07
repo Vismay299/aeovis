@@ -37,7 +37,9 @@ export async function GET(request) {
         job.brand,
         job.url || "",
         job.industry || "",
-        job.competitors || ""
+        job.competitors || "",
+        job.query_source || "llm_generated",
+        job.gsc_queries || []
       ).catch(err => {
         console.error(`[cron-worker] Error processing job ${job.id}:`, err);
       });

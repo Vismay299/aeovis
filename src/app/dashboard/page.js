@@ -15,6 +15,8 @@ import { EngineBreakdown } from "@/components/dashboard/EngineBreakdown";
 import { loadScan, fetchScanHistory, normalizeResult } from "@/services/api";
 import { scoreTier, tierLabel, formatTimestamp, relativeTime } from "@/utils/format";
 import { ScoreBreakdown } from "@/components/dashboard/ScoreBreakdown";
+import { IntentBreakdown } from "@/components/dashboard/IntentBreakdown";
+import { TopicBreakdown } from "@/components/dashboard/TopicBreakdown";
 import { QueryManager } from "@/components/dashboard/QueryManager";
 
 export default function Dashboard() {
@@ -261,6 +263,16 @@ export default function Dashboard() {
                   {result.usedDynamicPrompts ? "dynamic prompts" : "static fallback"}
                 </span>
               )}
+              {result.querySource && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EBF3FF] text-[#4B6B94] border border-[#BACEEA] ml-1 align-middle uppercase font-bold tracking-wider" data-testid="dashboard-query-source">
+                  Source: {
+                    result.querySource === "people_also_ask" ? "PAA" : 
+                    result.querySource === "search_autocomplete" ? "Autocomplete" : 
+                    result.querySource === "google_search_console" ? "Search Console" : 
+                    "LLM Generated"
+                  }
+                </span>
+              )}
               {!!result.tokensUsed && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FDF6E3] text-[#8F6614] border border-[#E6D5A7] ml-1 align-middle">
                   ~{result.tokensUsed.toLocaleString()} tokens
@@ -401,10 +413,13 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Intent Breakdown Row (Phase 3) */}
-        {!result.qualityGateFailed && result.intentBreakdown && (
-          <div className="mb-8">
-            <ScoreBreakdown breakdown={result.intentBreakdown} />
+        {/* Score Decomposition & Intent Breakdown Row */}
+        {!result.qualityGateFailed && (
+          <div className="space-y-8 mb-8">
+            <ScoreBreakdown result={result} />
+            {result.intentBreakdown && (
+              <IntentBreakdown breakdown={result.intentBreakdown} />
+            )}
           </div>
         )}
 
@@ -492,6 +507,9 @@ export default function Dashboard() {
                   <div className="lg:sticky lg:top-24 space-y-8">
                     <InsightPanel result={resultWithFlags} trend={scoreTrend} onRerun={handleRerun} />
                     <EngineBreakdown result={result} />
+                    {result.topicScores && (
+                      <TopicBreakdown topicScores={result.topicScores} />
+                    )}
                   </div>
                 </div>
               </div>

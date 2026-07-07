@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { probeGoogleAiOverview, extractTextFromBlocks } from './serp.js';
+import { probeGoogleAiOverview, extractTextFromBlocks, fetchPeopleAlsoAsk, fetchAutocomplete } from './serp.js';
 
 test('extractTextFromBlocks - nested list, snippets, tables, and expandable formats', () => {
   const blocks = [
@@ -117,4 +117,53 @@ test('probeGoogleAiOverview - mock deferred page_token loading', async () => {
 
   globalThis.fetch = originalFetch;
   delete process.env.SERPAPI_KEY;
+});
+
+test('fetchPeopleAlsoAsk - mock fetches and returns question strings', async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async () => {
+    return {
+      ok: true,
+      json: async () => ({
+        people_also_ask: [
+          { question: "What is AEO?" },
+          { question: "How to track SGE visibility?" }
+        ]
+      })
+    };
+  };
+
+  process.env.SERPAPI_KEY = "mock-key";
+
+  const result = await fetchPeopleAlsoAsk("aeo");
+  assert.deepEqual(result, [
+    "What is AEO?",
+    "How to track SGE visibility?"
+  ]);
+
+  globalThis.fetch = originalFetch;
+  delete process.env.SERPAPI_KEY;
+});
+
+test('fetchAutocomplete - mock suggestions', async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async () => {
+    return {
+      ok: true,
+      json: async () => [
+        "aeo",
+        ["aeo tracking", "aeo visibility tools"]
+      ]
+    };
+  };
+
+  const result = await fetchAutocomplete("aeo");
+  assert.deepEqual(result, [
+    "aeo tracking",
+    "aeo visibility tools"
+  ]);
+
+  globalThis.fetch = originalFetch;
 });

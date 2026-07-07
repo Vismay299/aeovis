@@ -132,6 +132,50 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Methodology Section */}
+      <section className="bg-[#F3F0E6] border-y border-[#E5E2D9]">
+        <div className="max-w-7xl mx-auto px-6 md:px-12 py-20 md:py-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <motion.div {...fadeUp}>
+            <span className="text-xs uppercase tracking-[0.2em] text-[#D9531E] font-semibold">
+              Statistical Rigor
+            </span>
+            <h2 className="font-serif text-4xl md:text-5xl font-semibold tracking-tight text-[#1A1A1A] mt-4 leading-tight">
+              A scientifically backed approach to AEO
+            </h2>
+            <p className="mt-6 text-[#666666] leading-relaxed">
+              Unlike simple keyword scrapers, AnswerRank uses a multi-engine hybrid probing model and Bayesian statistics to measure visibility with mathematical confidence.
+            </p>
+          </motion.div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="bg-white p-6 border border-[#E5E2D9] rounded-sm">
+              <h4 className="font-serif text-lg font-semibold text-[#1A1A1A] mb-2">Hybrid Probing</h4>
+              <p className="text-xs text-[#666666] leading-relaxed">
+                Weights visibility across search engines based on actual usage: Google AI Overview (50%), Perplexity (25%), ChatGPT (15%), and Gemini (10%).
+              </p>
+            </div>
+            <div className="bg-white p-6 border border-[#E5E2D9] rounded-sm">
+              <h4 className="font-serif text-lg font-semibold text-[#1A1A1A] mb-2">Blended Scoring</h4>
+              <p className="text-xs text-[#666666] leading-relaxed">
+                A robust composite score combining Mention Visibility (85%) with organic Reference Citation Share (15%) for holistic insight.
+              </p>
+            </div>
+            <div className="bg-white p-6 border border-[#E5E2D9] rounded-sm">
+              <h4 className="font-serif text-lg font-semibold text-[#1A1A1A] mb-2">Intent Weights</h4>
+              <p className="text-xs text-[#666666] leading-relaxed">
+                Weights visibility by B2B purchase intent level, placing higher value on Comparison (2.0x) and High Buy Intent (3.0x) search queries.
+              </p>
+            </div>
+            <div className="bg-white p-6 border border-[#E5E2D9] rounded-sm">
+              <h4 className="font-serif text-lg font-semibold text-[#1A1A1A] mb-2">Bayesian Intervals</h4>
+              <p className="text-xs text-[#666666] leading-relaxed">
+                Uses a Beta-Binomial conjugate model to construct 90% credible intervals, providing a statistically rigorous safety margin.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Preview / The report */}
       <section id="preview" className="border-t border-[#E5E2D9] bg-[#F3F0E6]">
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-20 md:py-32 grid lg:grid-cols-12 gap-12 items-center">

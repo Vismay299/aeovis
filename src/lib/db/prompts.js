@@ -58,6 +58,7 @@ export async function upsertPrompts(brand, prompts) {
       const found = existingMap.get(textKey);
       const isEnabled = found ? found.enabled : (p.enabled !== false);
       const weightVal = found ? found.weight : (p.weight ?? null);
+      const sourceVal = found ? (found.source || "llm_generated") : (p.source || "llm_generated");
 
       return {
         brand,
@@ -65,7 +66,8 @@ export async function upsertPrompts(brand, prompts) {
         intent_tier: p.intent_tier,
         topic: p.topic || "General",
         weight: weightVal,
-        enabled: isEnabled
+        enabled: isEnabled,
+        source: sourceVal
       };
     });
 
