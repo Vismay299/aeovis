@@ -38,6 +38,7 @@ export default function Scan() {
   }, []);
   const [scanning, setScanning] = useState(false);
   const [stage, setStage] = useState(-1);
+  const [progress, setProgress] = useState(0);
   const [failed, setFailed] = useState(false);
 
   const validate = () => {
@@ -70,9 +71,18 @@ export default function Scan() {
     setScanning(true);
     setFailed(false);
     setStage(0);
+    setProgress(0);
     try {
-      const result = await runScan({ brand: brand.trim(), website: website.trim(), industry, competitors: competitors.trim() }, (s) =>
-        setStage(s)
+      const result = await runScan(
+        { brand: brand.trim(), website: website.trim(), industry, competitors: competitors.trim() },
+        (s, p) => {
+          setStage(s);
+          if (p !== undefined) {
+            setProgress(p);
+          } else {
+            setProgress(Math.round(((s + 1) / STAGES.length) * 100));
+          }
+        }
       );
       saveScan(result);
       toast.success("Scan complete");
@@ -247,7 +257,7 @@ export default function Scan() {
                 Scanning
               </span>
               <h2 className="font-serif text-4xl md:text-5xl font-semibold tracking-tight text-[#1A1A1A] mt-4">
-                Analyzing {brand}
+                Analyzing {brand} ({progress}%)
                 <span className="caret-blink text-[#D9531E]">_</span>
               </h2>
               <p className="text-[#666666] mt-3 mb-12">Generating custom prompts from your site, then probing AI answers. This usually takes 2-3 minutes due to multi-run stability checks.</p>
@@ -295,7 +305,7 @@ export default function Scan() {
                 <motion.div
                   className="absolute left-0 top-0 h-px bg-[#D9531E]"
                   initial={{ width: "0%" }}
-                  animate={{ width: `${((stage + 1) / STAGES.length) * 100}%` }}
+                  animate={{ width: `${progress}%` }}
                   transition={{ duration: 0.5 }}
                 />
               </div>

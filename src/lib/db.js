@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -12,6 +13,20 @@ export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, s
 // ALTER TABLE scans ADD COLUMN score_ci_high numeric;
 // ALTER TABLE scans ADD COLUMN stability text;
 // ALTER TABLE scans ADD COLUMN mention_rate_pct numeric;
+//
+// CREATE TABLE scan_jobs (
+//   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+//   brand text NOT NULL,
+//   url text,
+//   industry text,
+//   competitors text,
+//   status text NOT NULL,
+//   progress_pct integer DEFAULT 0,
+//   created_at timestamptz DEFAULT now(),
+//   result_id uuid REFERENCES scans(id) ON DELETE SET NULL,
+//   error_message text,
+//   run_record jsonb
+// );
 //
 // CREATE TABLE brand_prompts (
 //   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -43,6 +58,7 @@ export async function insertScan(scanRecord) {
     score_ci_low: scanRecord.score_ci_low,
     score_ci_high: scanRecord.score_ci_high,
     stability: scanRecord.stability,
+    sample_size_adequacy: scanRecord.sample_size_adequacy,
     prompt_set_id: scanRecord.prompt_set_id,
     prompt_set_hash: scanRecord.prompt_set_hash,
     intent_breakdown: scanRecord.intent_breakdown,
@@ -138,4 +154,92 @@ export async function getScansForBrand(brand) {
   }
   
   return data;
+}
+
+// Global memory store for scan jobs (Next.js hot-reload safe)
+global.memoryJobs = global.memoryJobs || new Map();
+
+export async function createScanJob({ brand, url, industry, competitors }) {
+  const jobId = crypto.randomUUID();
+  const job = {
+    id: jobId,
+    brand,
+    url: url || "",
+    industry: industry || "",
+    competitors: competitors || "",
+    status: "pending",
+    progress_pct: 0,
+    created_at: new Date().toISOString(),
+    result_id: null,
+    error_message: null,
+    run_record: null
+  };
+
+  if (!supabase) {
+    global.memoryJobs.set(jobId, job);
+    return job;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("scan_jobs")
+      .insert([job])
+      .select();
+    if (error) throw error;
+    return data[0];
+  } catch (err) {
+    console.warn("Failed to insert scan_job to database, falling back to memory:", err.message);
+    global.memoryJobs.set(jobId, job);
+    return job;
+  }
+}
+
+export async function getScanJob(jobId) {
+  if (!supabase || global.memoryJobs.has(jobId)) {
+    return global.memoryJobs.get(jobId) || null;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("scan_jobs")
+      .select("*")
+      .eq("id", jobId);
+    if (error) throw error;
+    return data[0] || global.memoryJobs.get(jobId) || null;
+  } catch (err) {
+    console.warn("Failed to get scan_job from database, checking memory:", err.message);
+    return global.memoryJobs.get(jobId) || null;
+  }
+}
+
+export async function updateScanJob(jobId, updates) {
+  // Always update in memory as fallback/mirror
+  const memJob = global.memoryJobs.get(jobId);
+  if (memJob) {
+    Object.assign(memJob, updates);
+  }
+
+  if (!supabase || global.memoryJobs.has(jobId)) {
+    if (!memJob) {
+      const fallbackJob = { id: jobId, ...updates };
+      global.memoryJobs.set(jobId, fallbackJob);
+    }
+    return memJob || global.memoryJobs.get(jobId);
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("scan_jobs")
+      .update(updates)
+      .eq("id", jobId)
+      .select();
+    if (error) throw error;
+    return data[0];
+  } catch (err) {
+    console.warn("Failed to update scan_job in database, updated memory:", err.message);
+    if (memJob) return memJob;
+    const updated = { id: jobId, ...updates };
+    global.memoryJobs.set(jobId, updated);
+    return updated;
+  }
 }

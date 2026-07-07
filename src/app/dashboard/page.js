@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, FlaskConical, Loader2, Download, ShieldAlert } from "lucide-react";
+import { RefreshCw, FlaskConical, Loader2, Download, ShieldAlert, AlertCircle } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { KpiCard, HeroScoreCard } from "@/components/dashboard/KpiCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -322,6 +322,19 @@ export default function Dashboard() {
             </div>
           );
         })()}
+
+        {/* Sample Size Warning Alert */}
+        {!result.qualityGateFailed && !result.sampleSizeAdequacy && (
+          <div className="mb-8 flex items-start gap-4 bg-[#FCF8E3] border border-[#F5E7B8] rounded-sm p-5 text-[#8A6D3B]" data-testid="small-sample-warning">
+            <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-[#8A6D3B]" />
+            <div>
+              <h4 className="font-serif text-base font-bold">Score based on small sample</h4>
+              <p className="text-sm mt-1 text-[#8A6D3B]/90">
+                This scan only tracks {result.promptsAnalyzed} prompts (recommended: 30+). Credible intervals may be wider due to small sample size.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* KPI row — hero score + two supporting */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5 mb-8">

@@ -1,3 +1,9 @@
 {
-  "name": "aeo-vis"
+  "name": "aeo-vis",
+  "crons": [
+    {
+      "path": "/api/scan/worker",
+      "schedule": "*/1 * * * *"
+    }
+  ]
 }

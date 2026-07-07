@@ -23,4 +23,12 @@ export const INDUSTRY_PROMPTS = {
       "best investment platforms for beginners",
     ],
   },
+  agency: {
+    label: "Agency",
+    prompts: [
+      "best digital marketing agencies for startups",
+      "top web development companies for design",
+      "best SEO agency for local business growth",
+    ],
+  },
 };

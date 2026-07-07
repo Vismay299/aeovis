@@ -17,8 +17,8 @@ export const SENTIMENT_WEIGHTS = {
 export const CITATION_BONUS = 0.15;
 export const CITATION_SHARE_WEIGHT = 0.15;
 
-export const SCORING_VERSION = "v5-multi-engine";
-export const SCORING_VERSION_HYBRID = "v5-hybrid";
+export const SCORING_VERSION = "v6-bayesian";
+export const SCORING_VERSION_HYBRID = "v6-bayesian-hybrid";
 export const PROBE_TEMPERATURE = 0.4;
 const parsedRuns = parseInt(process.env.PROBE_RUNS, 10);
 export const PROBE_RUNS = Number.isFinite(parsedRuns) && parsedRuns >= 1 ? parsedRuns : 3;
@@ -30,3 +30,14 @@ export const INTENT_WEIGHTS = {
   exploratory: 1.0,
   branded: 0.5,
 };
+
+// Bayesian industry-specific prior mention rates.
+// These reflect standard baseline organic presence/mention rates in AI engine responses.
+export const CATEGORY_PRIORS = {
+  saas: 0.35,      // Software-as-a-Service standard organic baseline visibility
+  agency: 0.25,    // Marketing/Development agencies baseline visibility
+  ecommerce: 0.30, // Retail and consumer brand baseline visibility
+  finance: 0.20,   // High-security/finance services baseline visibility
+  default: 0.30,   // General industry fallback baseline visibility
+};
+

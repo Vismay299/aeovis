@@ -132,18 +132,28 @@ test('aggregatePromptRuns - simple aggregation', () => {
 });
 
 test('computeScanStats - calculations', () => {
-  const results = [
-    { prompt_score: 100, prompt_score_stddev: 0 },
-    { prompt_score: 50, prompt_score_stddev: 10 },
-    { prompt_score: 0, prompt_score_stddev: 20 }
-  ];
-  // Mean is 50. avgStddev is (0 + 10 + 20) / 3 = 10 -> "medium" stability
-  // CI is ±avgStddev = [40, 60]
-  const stats = computeScanStats(results, 50);
-  assert.equal(stats.score_ci_low, 40);
-  assert.equal(stats.score_ci_high, 60);
+  const results = Array.from({ length: 30 }, (_, i) => ({
+    prompt_score: i < 15 ? 100 : 0,
+    prompt_score_stddev: 10,
+    mentioned: i < 15
+  }));
+  // total prompts = 30, mentioned = 15
+  // For industry "saas", prior = 0.35
+  const stats = computeScanStats(results, 50, "saas");
+  assert.equal(stats.score_ci_low, 33.5);
+  assert.equal(stats.score_ci_high, 59.2);
   assert.equal(stats.stability, "medium");
   assert.equal(stats.average_stddev, 10);
+  assert.equal(stats.sample_size_adequacy, true);
+
+  // Test small sample size warning
+  const smallResults = Array.from({ length: 29 }, (_, i) => ({
+    prompt_score: i < 15 ? 100 : 0,
+    prompt_score_stddev: 5,
+    mentioned: i < 15
+  }));
+  const smallStats = computeScanStats(smallResults, 50, "saas");
+  assert.equal(smallStats.sample_size_adequacy, false);
 });
 
 test('computeVisibilityScore - weighted mean', () => {

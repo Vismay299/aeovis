@@ -1,4 +1,5 @@
-import { POSITION_WEIGHTS, SENTIMENT_WEIGHTS, CITATION_BONUS, INTENT_WEIGHTS, CITATION_SHARE_WEIGHT } from "./constants.js";
+import { POSITION_WEIGHTS, SENTIMENT_WEIGHTS, CITATION_BONUS, INTENT_WEIGHTS, CITATION_SHARE_WEIGHT, CATEGORY_PRIORS } from "./constants.js";
+import { computePosterior } from "./bayesian.js";
 import { normalizeTopic } from "./topics.js";
 import { judgeDeterministic } from "./judge.js";
 import { extractBrandDomain, classifyCitation, computeBrandCitationShare, computeCompetitorCitationShare } from "./citations.js";
@@ -118,13 +119,14 @@ export function computeIntentBreakdown(results, brandUrl = "") {
  * @param {number} visibilityScore - The computed visibility score
  * @returns {Object} Scan stats containing score_ci_low, score_ci_high, and stability
  */
-export function computeScanStats(results, visibilityScore) {
+export function computeScanStats(results, visibilityScore, industry = "") {
   if (!results || results.length === 0) {
     return {
       score_ci_low: visibilityScore,
       score_ci_high: visibilityScore,
       stability: "high",
-      average_stddev: 0.0
+      average_stddev: 0.0,
+      sample_size_adequacy: false
     };
   }
 
@@ -136,15 +138,30 @@ export function computeScanStats(results, visibilityScore) {
   if (avgStddev > 15) stability = "volatile";
   else if (avgStddev > 5) stability = "medium";
 
-  // Base CI on run-level uncertainty (avgStddev)
-  const score_ci_low = Math.round(Math.max(0, visibilityScore - avgStddev) * 10) / 10;
-  const score_ci_high = Math.round(Math.min(100, visibilityScore + avgStddev) * 10) / 10;
+  // Bayesian 90% credible interval
+  const totalPrompts = results.length;
+  const observedSuccesses = (visibilityScore / 100) * totalPrompts;
+  
+  const cleanKey = (industry || "").toLowerCase().trim().replace(/[^a-z]/g, '');
+  const prior = CATEGORY_PRIORS[cleanKey] ?? CATEGORY_PRIORS.default;
+  
+  const { credibleIntervalLow, credibleIntervalHigh } = computePosterior(
+    prior,
+    observedSuccesses,
+    totalPrompts,
+    0.90, // 90% credible interval
+    10    // prior strength
+  );
+  
+  const score_ci_low = Math.round(credibleIntervalLow * 100 * 10) / 10;
+  const score_ci_high = Math.round(credibleIntervalHigh * 100 * 10) / 10;
 
   return {
     score_ci_low,
     score_ci_high,
     stability,
-    average_stddev: Math.round(avgStddev * 10) / 10
+    average_stddev: Math.round(avgStddev * 10) / 10,
+    sample_size_adequacy: totalPrompts >= 30
   };
 }
 

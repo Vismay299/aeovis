@@ -78,23 +78,60 @@ A modern, agentic web application for tracking Answer Engine Optimization (AEO) 
 
 ## Database Schema (Supabase)
 
-If you are setting up Supabase, create a table named `scans` with the following schema:
+If you are setting up Supabase, execute the following SQL scripts in your Supabase SQL Editor:
 
-- `id`: uuid (primary key)
-- `created_at`: timestampz
-- `brand`: text
-- `url`: text
-- `industry`: text
-- `platform`: text
-- `visibility_pct`: numeric
-- `prompts_tracked`: integer
-- `prompts_mentioned`: integer
-- `competitors`: jsonb (Array of strings)
-- `results`: jsonb (Optional: Array of extracted result objects if not using `raw_results`)
-- `scanned_at`: timestampz
-- `used_dynamic_prompts`: boolean
-- `raw_results`: jsonb (Array of detailed extracted prompt analysis objects)
-- `competitors_raw`: text (Original user input)
+```sql
+-- 1. Scans Table (core results)
+CREATE TABLE scans (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at timestamptz DEFAULT now(),
+  brand text NOT NULL,
+  url text,
+  industry text,
+  platform text,
+  visibility_pct numeric,
+  prompts_tracked integer,
+  prompts_mentioned integer,
+  competitors jsonb,
+  scanned_at timestamptz,
+  used_dynamic_prompts boolean,
+  raw_results jsonb,
+  competitors_raw text,
+  scoring_version text,
+  score_ci_low numeric,
+  score_ci_high numeric,
+  stability text,
+  mention_rate_pct numeric
+);
+
+-- 2. Brand Prompts Table (persistent prompt caching)
+CREATE TABLE brand_prompts (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  brand text NOT NULL,
+  text text NOT NULL,
+  intent_tier text NOT NULL,
+  topic text,
+  weight numeric DEFAULT 1.0,
+  enabled boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  CONSTRAINT brand_prompts_brand_text_idx UNIQUE (brand, text)
+);
+
+-- 3. Scan Jobs Table (async pipeline tracking)
+CREATE TABLE scan_jobs (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  brand text NOT NULL,
+  url text,
+  industry text,
+  competitors text,
+  status text NOT NULL,
+  progress_pct integer DEFAULT 0,
+  created_at timestamptz DEFAULT now(),
+  result_id uuid REFERENCES scans(id) ON DELETE SET NULL,
+  error_message text,
+  run_record jsonb
+);
+```
 
 ## Features
 

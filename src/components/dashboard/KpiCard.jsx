@@ -126,9 +126,9 @@ export const HeroScoreCard = ({ score, tierText, testId, trend, isMixedTrend, pr
               Citation Share: <span className="font-bold text-white">{citationShare}%</span>
             </div>
           )}
-          {typeof score === "number" && margin > 0 && (
-            <div className="whitespace-nowrap">
-              Confidence Range: <span className="font-bold text-white">{score}% ± {margin}%</span>
+          {typeof score === "number" && scoreCiLow != null && scoreCiHigh != null && (
+            <div className="whitespace-nowrap" data-testid="score-likely-range">
+              Likely Range: <span className="font-bold text-white">{scoreCiLow}%–{scoreCiHigh}%</span>
             </div>
           )}
         </div>

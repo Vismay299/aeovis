@@ -147,6 +147,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     summary: data.summary || generateSummary(data),
     totalCitations: results.reduce((sum, r) => sum + ((r.citations || r.citations_found || []).length), 0),
     scoringVersion: version,
+    sampleSizeAdequacy: data.sample_size_adequacy ?? data.sampleSizeAdequacy ?? data.raw_results?.sample_size_adequacy ?? (results.length >= 30),
     // Preserve rich Phase 2 analysis fields for future UI (citations, key phrases, exact position)
     rawResults: results,
     topPrompts: results.map((p) => {
@@ -288,29 +289,18 @@ function generateSummary(data) {
 }
 
 export async function runScan({ brand, website, industry, competitors }, onProgress = () => {}) {
-  // Simulate progress steps while the fetch is happening (scrape + dynamic prompt gen + analyses)
-  let stage = 0;
-  onProgress(stage);
-
-  const progressInterval = setInterval(() => {
-    stage += 1;
-    if (stage < 4) {
-      onProgress(stage);
-    }
-  }, 25000);
+  onProgress(0); // Stage 0: Submitting brand for analysis
 
   try {
+    // 1. Submit the scan job
     const res = await fetch("/api/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ brand, url: website, industry, competitors: competitors || "" }),
     });
 
-    clearInterval(progressInterval);
-    onProgress(4);
-
     if (!res.ok) {
-      let msg = "Scan failed";
+      let msg = "Scan failed to initiate";
       try {
         const errData = await res.json();
         if (errData.detail) msg = errData.detail;
@@ -318,10 +308,54 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
       throw new Error(msg);
     }
 
-    const data = await res.json();
-    return normalizeResult(data, brand, website);
+    const initData = await res.json();
+    const jobId = initData.job_id;
+    if (!jobId) {
+      throw new Error("Invalid response from scanning service: no job ID returned.");
+    }
+
+    // 2. Poll status endpoint until completion or failure
+    const statusToStage = {
+      "pending": 0,
+      "generating_prompts": 1,
+      "probing": 2,
+      "analyzing": 3,
+      "scoring": 4,
+      "complete": 4,
+      "failed": 4
+    };
+
+    const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    let attempts = 0;
+    const maxAttempts = 300; // 10 minutes maximum time
+
+    while (attempts < maxAttempts) {
+      await delay(2000); // Poll every 2 seconds
+      attempts++;
+
+      const pollRes = await fetch(`/api/scan/${jobId}/status`);
+      if (!pollRes.ok) {
+        throw new Error("Failed to retrieve scan progress status.");
+      }
+
+      const statusData = await pollRes.json();
+      const mappedStage = statusToStage[statusData.status] ?? 0;
+      onProgress(mappedStage, statusData.progress_pct);
+
+      if (statusData.status === "complete") {
+        if (!statusData.run_record) {
+          throw new Error("Scan finished but no record was returned.");
+        }
+        return normalizeResult(statusData.run_record, brand, website);
+      }
+
+      if (statusData.status === "failed") {
+        throw new Error(statusData.error_message || "Async background scan job failed.");
+      }
+    }
+
+    throw new Error("Scan timed out after 10 minutes.");
   } catch (error) {
-    clearInterval(progressInterval);
     throw error;
   }
 }
