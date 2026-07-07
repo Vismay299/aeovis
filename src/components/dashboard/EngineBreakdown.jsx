@@ -38,8 +38,9 @@ export const EngineBreakdown = ({ result }) => {
   const enginesPartial = result.enginesPartial || false;
   const serpCoveragePct = result.serpCoveragePct;
 
+  const displayOrder = ["google_ai_overview", "perplexity", "openai", "gemini"];
   const enginesToShow = Object.keys(engineScores).length > 0
-    ? Object.keys(engineScores)
+    ? Object.keys(engineScores).sort((a, b) => displayOrder.indexOf(a) - displayOrder.indexOf(b))
     : ["gemini"];
 
   // Normalize weights for active engines

@@ -82,7 +82,10 @@ export async function probePromptMultiple(promptText, brand, competitors, url, s
       
       // If AI Overview exists, we skip LLM fallback and return N replicated runs
       if (serpRun.raw_response) {
-        return Array.from({ length: N }).map(() => ({ ...serpRun }));
+        return Array.from({ length: N }).map((_, idx) => ({
+          ...serpRun,
+          cost: idx === 0 ? serpRun.cost : 0.0
+        }));
       }
     } catch (e) {
       console.error("[probe] serp_primary Google AI Overview probe failed:", e);
@@ -97,7 +100,10 @@ export async function probePromptMultiple(promptText, brand, competitors, url, s
       try {
         const run = await probePromptOnce(promptText, brand, competitors, url, stats, engine);
         run.engine = engine;
-        return Array.from({ length: N }).map(() => ({ ...run }));
+        return Array.from({ length: N }).map((_, idx) => ({
+          ...run,
+          cost: idx === 0 ? run.cost : 0.0
+        }));
       } catch (e) {
         console.error(`[probe] Error probing google_ai_overview:`, e);
         const failedRun = createFailedRunPlaceholder(promptText, engine, e.message);

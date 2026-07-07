@@ -3,7 +3,7 @@ import { INDUSTRY_PROMPTS } from "@/data/industries";
 import { insertScan } from "@/lib/db";
 import { generatePromptsForBrand } from "@/lib/prompts";
 import { computeVisibilityScore, computeScanStats, computeIntentBreakdown, computeTopicScores, computeShareOfVoice, computeWinRate, computeCompetitorVisibility, computeGapScores, computeBrandCitationShare, computeCompetitorCitationShare, aggregateTopDomains } from "@/lib/scoring/computeVisibilityScore";
-import { SCORING_VERSION, PROBE_RUNS } from "@/lib/scoring/constants";
+import { SCORING_VERSION, SCORING_VERSION_HYBRID, PROBE_RUNS } from "@/lib/scoring/constants";
 import { normalizeTopic } from "@/lib/scoring/topics";
 import { probePromptMultiple } from "@/lib/scoring/probe";
 import { aggregatePromptRuns, aggregateMultiEnginePromptRuns } from "@/lib/scoring/aggregate";
@@ -223,8 +223,8 @@ export async function POST(request) {
       costByEngine[eng] = Math.round(costByEngine[eng] * 100000) / 100000;
     });
 
-    // P8-S11: Graceful partial failure flag
-    const enginesPartial = results.some(r => (r.run_details || []).some(run => run.model_used.includes("failed") || run.model_used.includes("skipped")));
+    // P8-S11: Graceful partial failure flag (only flag actual API failures, not skipped stubs)
+    const enginesPartial = results.some(r => (r.run_details || []).some(run => run.model_used?.endsWith("-failed")));
 
     // P8b-S12: Calculate Google AI Overview coverage rate
     const serpQueries = results.filter(r => (r.run_details || []).some(run => run.engine === "google_ai_overview"));
@@ -234,7 +234,7 @@ export async function POST(request) {
     // P8b-S09: Extract all successfully queried probe sources
     const probeSources = Array.from(new Set(results.flatMap(r => (r.run_details || []).map(run => run.engine).filter(Boolean))));
 
-    const activeVersion = probeSources.includes("google_ai_overview") ? "v5-hybrid" : SCORING_VERSION;
+    const activeVersion = probeSources.includes("google_ai_overview") ? SCORING_VERSION_HYBRID : SCORING_VERSION;
 
     // P6-S02 / P7-S05: Compute competitor objects using composite scoring and citation shares
     const competitorObjects = competitors.map(comp => {

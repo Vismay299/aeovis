@@ -150,7 +150,7 @@ export function aggregateMultiEnginePromptRuns(runs) {
   
   // Sort engines by weight descending to find primary engine
   const sortedActive = [...activeEngines].sort((a, b) => {
-    return (ENGINE_DEFAULT_WEIGHTS[b] ?? 0.25) - (ENGINE_DEFAULT_WEIGHTS[a] ?? 0.25);
+    return (weightsDict[b] ?? 0.25) - (weightsDict[a] ?? 0.25);
   });
   const primaryEngine = sortedActive[0];
   const primaryAgg = engineAggs[primaryEngine];
