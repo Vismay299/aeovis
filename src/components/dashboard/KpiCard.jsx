@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { HelpCircle, X } from "lucide-react";
+import {
+  AIO_ERROR_RATE_LIMIT_PCT,
+  AIO_MIN_NON_BRANDED_COVERAGE,
+} from "@/lib/scoring/aioConstants";
 
 export const KpiCard = ({ label, value, suffix, sub, index = 0, testId, tone = "neutral" }) => {
   const tones = {
@@ -38,6 +42,15 @@ export const KpiCard = ({ label, value, suffix, sub, index = 0, testId, tone = "
   );
 };
 
+function formatRateWithCount(rate, count, denom) {
+  if (rate == null) return null;
+  const pct = `${rate}%`;
+  if (count != null && denom != null && denom > 0) {
+    return `${pct} (${count}/${denom})`;
+  }
+  return pct;
+}
+
 export const HeroScoreCard = ({
   score,
   tierText,
@@ -47,6 +60,10 @@ export const HeroScoreCard = ({
   citationShare,
   aioCoverage,
   nonBrandedCount,
+  nonBrandedWithAio,
+  visibleNonBranded,
+  mentionedNonBranded,
+  citedNonBranded,
   brandedVisibility,
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -105,7 +122,13 @@ export const HeroScoreCard = ({
                 {trend}%
               </span>
             )}
-            <span className="text-xs uppercase tracking-[0.12em] text-white/90 font-semibold border border-white/30 rounded-sm px-2 py-0.5">
+            <span
+              className={`text-xs uppercase tracking-[0.12em] font-semibold border rounded-sm px-2 py-0.5 ${
+                typeof score !== "number"
+                  ? "bg-white/10 text-white/70 border-white/20"
+                  : "text-white/90 border-white/30"
+              }`}
+            >
               {tierText}
             </span>
           </div>
@@ -120,21 +143,52 @@ export const HeroScoreCard = ({
             )}
           </div>
           <div className="flex flex-col gap-1 mt-2 text-xs text-white/80 font-medium">
-            {typeof score === "number" && nonBrandedCount != null && (
-              <div className="whitespace-nowrap">
-                Across{" "}
-                <span className="font-bold text-white">{nonBrandedCount}</span> non-branded
-                queries
-              </div>
-            )}
+            {typeof score === "number" &&
+              nonBrandedCount != null &&
+              nonBrandedWithAio != null && (
+                <div>
+                  {visibleNonBranded != null && (
+                    <>
+                      Visible in{" "}
+                      <span className="font-bold text-white">{visibleNonBranded}</span> of{" "}
+                      <span className="font-bold text-white">{nonBrandedWithAio}</span>{" "}
+                      non-branded AI Overviews
+                    </>
+                  )}
+                  {visibleNonBranded == null && (
+                    <>
+                      Based on{" "}
+                      <span className="font-bold text-white">{nonBrandedWithAio}</span>{" "}
+                      non-branded AI Overviews
+                    </>
+                  )}{" "}
+                  (
+                  <span className="font-bold text-white">{nonBrandedCount}</span> non-branded
+                  queries tracked)
+                </div>
+              )}
             {typeof score === "number" && mentionRate != null && (
               <div className="whitespace-nowrap">
-                Mentioned in text: <span className="font-bold text-white">{mentionRate}%</span>
+                Mentioned in text:{" "}
+                <span className="font-bold text-white">
+                  {formatRateWithCount(
+                    mentionRate,
+                    mentionedNonBranded,
+                    nonBrandedWithAio
+                  )}
+                </span>
               </div>
             )}
             {typeof score === "number" && citationShare != null && (
               <div className="whitespace-nowrap">
-                Domain cited: <span className="font-bold text-white">{citationShare}%</span>
+                Domain cited:{" "}
+                <span className="font-bold text-white">
+                  {formatRateWithCount(
+                    citationShare,
+                    citedNonBranded,
+                    nonBrandedWithAio
+                  )}
+                </span>
               </div>
             )}
             {typeof score === "number" && aioCoverage != null && (
@@ -227,7 +281,8 @@ export const HeroScoreCard = ({
                 </h4>
                 <p>
                   If Google doesn&apos;t serve an AI Overview for enough of your queries
-                  (coverage &lt; 30%) or the SERP API errors out on more than 40% of
+                  (coverage &lt; {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}%) or the
+                  SERP API errors out on more than {AIO_ERROR_RATE_LIMIT_PCT}% of
                   queries, we flag the scan as a data-source issue instead of showing a
                   fake 0%.
                 </p>

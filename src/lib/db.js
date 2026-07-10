@@ -57,10 +57,11 @@ export async function insertScan(scanRecord) {
     return;
   }
 
-  // Persist rich Phase 2 data: store full payload (incl. competitors list + used flag + results) in raw_results JSONB for flexibility
+  // Persist rich scan data in raw_results JSONB for history / normalizeResult
   const rawPayload = {
     results: scanRecord.results || [],
     competitors: scanRecord.competitors || [],
+    competitors_raw: scanRecord.competitors_raw,
     used_dynamic_prompts: !!scanRecord.used_dynamic_prompts,
     platform: scanRecord.platform,
     scoring_version: scanRecord.scoring_version,
@@ -77,6 +78,13 @@ export async function insertScan(scanRecord) {
     share_of_voice_pct: scanRecord.share_of_voice_pct,
     win_rate_pct: scanRecord.win_rate_pct,
     brand_citation_share_pct: scanRecord.brand_citation_share_pct,
+    branded_visibility_pct: scanRecord.branded_visibility_pct,
+    aio_coverage_pct: scanRecord.aio_coverage_pct,
+    aio_error_rate_pct: scanRecord.aio_error_rate_pct,
+    data_source_issue: scanRecord.data_source_issue,
+    insufficient_sample: scanRecord.insufficient_sample,
+    summary_stats: scanRecord.summary_stats || null,
+    seeds: scanRecord.seeds || [],
     top_domains: scanRecord.top_domains,
     engine_scores: scanRecord.engine_scores,
     cost_by_engine: scanRecord.cost_by_engine,
@@ -89,7 +97,9 @@ export async function insertScan(scanRecord) {
     control_prompts_passed: scanRecord.control_prompts_passed,
     control_prompts_total: scanRecord.control_prompts_total,
     query_source: scanRecord.query_source,
-    content_lift: scanRecord.content_lift || []
+    content_lift: scanRecord.content_lift || [],
+    cost_total: scanRecord.cost_total,
+    tokens_used: scanRecord.tokens_used,
   };
 
   const baseRecord = {

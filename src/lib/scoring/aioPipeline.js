@@ -1,7 +1,14 @@
 import { brightDataSearch, extractBrightDataAiOverview } from "../engines/brightdata.js";
 import { getBrandAliases } from "./aliases.js";
-import { detectMention, extractCitations } from "./judge.js";
-import { extractBrandDomain, normalizeUrl } from "./citations.js";
+import {
+  AIO_CONCURRENCY,
+  AIO_ERROR_RATE_LIMIT_PCT,
+  AIO_MIN_NON_BRANDED_COVERAGE,
+  AIO_MIN_NON_BRANDED_WITH_AIO,
+} from "./aioConstants.js";
+import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
+import { detectMention } from "./judge.js";
+import { extractBrandDomain } from "./citations.js";
 
 /**
  * AIO-Only Probing Pipeline
@@ -21,16 +28,9 @@ import { extractBrandDomain, normalizeUrl } from "./citations.js";
  *  - error (string|null)    — set when the API errored for this query
  */
 
-const CONCURRENCY = 3;
-
 function domainMatches(candidateDomain, target) {
   if (!candidateDomain || !target) return false;
   return candidateDomain === target || candidateDomain.endsWith("." + target);
-}
-
-function isBrandedQuery(queryText, brandAliases) {
-  if (!queryText) return false;
-  return detectMention(queryText, brandAliases);
 }
 
 function findCompetitorsInText(text, competitors) {
@@ -76,6 +76,8 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
     is_branded_query: isBrandedQuery(query.text, brandAliases),
     topic: query.topic || "General",
     source: query.source || "unknown",
+    // Own-name panel only — never set "branded" just because the text contains an alias
+    intent_tier: resolveQueryIntentTier(query),
     aio_present: false,
     aio_text: "",
     aio_citations: [],
@@ -95,21 +97,32 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
     result.cost = 0.0015;
     if (stats) stats.cost = (stats.cost || 0) + result.cost;
 
-    if (text) {
+    const hasText = Boolean(text && text.trim());
+    const hasCitations =
+      (citations?.length || 0) > 0 || (references?.length || 0) > 0;
+
+    if (hasText || hasCitations) {
       result.aio_present = true;
-      result.aio_text = text;
-      result.aio_citations = citations;
-      result.aio_references = (references || []).map((r) => ({
-        href: r.href,
-        title: r.title || "",
-        source: r.source || "",
-        domain: extractBrandDomain(r.href),
-      }));
+      result.aio_text = text || "";
 
-      // Brand detection in text
-      result.brand_mentioned_in_text = detectMention(text, brandAliases);
+      if (citations?.length) {
+        result.aio_citations = citations;
+      }
+      if (references?.length) {
+        result.aio_references = references.map((r) => ({
+          href: r.href,
+          title: r.title || "",
+          source: r.source || "",
+          domain: extractBrandDomain(r.href),
+        }));
+      }
 
-      // Brand cited: check if brand domain appears in AIO citations
+      if (hasText) {
+        result.brand_mentioned_in_text = detectMention(text, brandAliases);
+        result.competitors_found_in_text = findCompetitorsInText(text, competitors);
+      }
+
+      // Brand cited: check citations even when overview text is empty
       if (brandDomain) {
         result.brand_cited = result.aio_citations.some((c) => {
           const d = extractBrandDomain(c);
@@ -118,9 +131,6 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
       }
 
       result.visible = result.brand_mentioned_in_text || result.brand_cited;
-
-      // Competitor detection
-      result.competitors_found_in_text = findCompetitorsInText(text, competitors);
       result.competitors_cited = findCompetitorsCited(result.aio_citations, competitors);
     }
   } catch (err) {
@@ -150,7 +160,7 @@ export async function runAioScan({ brand, url, competitors = [], queries, stats,
   const brandDomain = extractBrandDomain(url);
 
   let completed = 0;
-  const results = await runWithConcurrency(queries, CONCURRENCY, async (query) => {
+  const results = await runWithConcurrency(queries, AIO_CONCURRENCY, async (query) => {
     const res = await probeQueryOnce(query, brand, brandAliases, brandDomain, competitors, stats);
     completed++;
     if (onProgress) onProgress(completed, queries.length);
@@ -176,7 +186,11 @@ export function summarizeAioResults(results) {
   const mentionedNonBranded = nonBrandedWithAio.filter((r) => r.brand_mentioned_in_text).length;
   const citedNonBranded = nonBrandedWithAio.filter((r) => r.brand_cited).length;
 
-  const aioCoveragePct = total > 0 ? Math.round((withAio.length / total) * 1000) / 10 : 0.0;
+  // coverage is non-branded only
+  const aioCoveragePct =
+    nonBranded.length > 0
+      ? Math.round((nonBrandedWithAio.length / nonBranded.length) * 1000) / 10
+      : 0.0;
   const errorRatePct = total > 0 ? Math.round((errored / total) * 1000) / 10 : 0.0;
 
   const visibilityPct =
@@ -202,10 +216,11 @@ export function summarizeAioResults(results) {
   // Determine whether the scan is reliable enough to score.
   // Data source issue if too many API errors OR too few queries produced an AIO.
   const dataSourceIssue =
-    errorRatePct > 50 ||
-    (nonBranded.length > 0 && nonBrandedWithAio.length / nonBranded.length < 0.30);
+    errorRatePct > AIO_ERROR_RATE_LIMIT_PCT ||
+    (nonBranded.length > 0 &&
+      nonBrandedWithAio.length / nonBranded.length < AIO_MIN_NON_BRANDED_COVERAGE);
 
-  const insufficientSample = nonBrandedWithAio.length < 5;
+  const insufficientSample = nonBrandedWithAio.length < AIO_MIN_NON_BRANDED_WITH_AIO;
 
   return {
     results,
@@ -229,6 +244,11 @@ export function summarizeAioResults(results) {
       citation_share_pct: citationSharePct,
       data_source_issue: dataSourceIssue,
       insufficient_sample: insufficientSample,
+      thresholds: {
+        error_rate_limit_pct: AIO_ERROR_RATE_LIMIT_PCT,
+        min_non_branded_coverage: AIO_MIN_NON_BRANDED_COVERAGE,
+        min_non_branded_with_aio: AIO_MIN_NON_BRANDED_WITH_AIO,
+      },
     },
   };
 }

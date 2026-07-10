@@ -2,13 +2,71 @@ import crypto from "crypto";
 import { insertScan, updateScanJob } from "../db.js";
 import { buildAioQueries } from "../scoring/aioPrompts.js";
 import {
+  buildBrandedQueries,
+  dedupeQueriesByText,
+  isBrandPresenceQuery,
+  isBrandedQuery,
+  resolveQueryIntentTier,
+} from "../scoring/aioQueryClassify.js";
+import {
   runAioScan,
   aggregateAioTopDomains,
-  computeCompetitorAioMetrics,
 } from "../scoring/aioPipeline.js";
+import {
+  buildCompetitorLeaderboard,
+  enrichResultsWithCompetitors,
+} from "../scoring/coMentions.js";
 import { getBrandAliases } from "../scoring/aliases.js";
 import { getPromptsForBrand, upsertPrompts } from "../db/prompts.js";
 import { extractBrandDomain } from "../scoring/citations.js";
+
+function queryTextKey(text) {
+  return String(text || "").toLowerCase().trim();
+}
+
+/** Dedupe branded by lowercase text; skip seeds already present in non-branded list. */
+function mergeQueryLists(nonBranded, branded) {
+  const nonBrandedTexts = new Set(nonBranded.map((q) => queryTextKey(q.text)));
+  const seenBranded = new Set();
+  const brandedOnly = [];
+
+  for (const q of branded) {
+    const key = queryTextKey(q.text);
+    if (!key || seenBranded.has(key) || nonBrandedTexts.has(key)) continue;
+    seenBranded.add(key);
+    brandedOnly.push(q);
+  }
+
+  return {
+    queries: [...nonBranded, ...brandedOnly],
+    nonBrandedCount: nonBranded.length,
+    brandedCount: brandedOnly.length,
+  };
+}
+
+function logQueryClassification(queries, brandAliases) {
+  for (const q of queries) {
+    console.log(
+      `[aio-worker] query classify: text="${q.text}" is_branded_query=${isBrandedQuery(
+        q.text,
+        brandAliases
+      )} source=${q.source || "unknown"} intent_tier=${q.intent_tier || "—"}`
+    );
+  }
+}
+
+function finalizeQueryPlan(queries, brandAliases, seeds = []) {
+  const deduped = dedupeQueriesByText(queries).map((q) => ({
+    ...q,
+    intent_tier: resolveQueryIntentTier(q),
+  }));
+  return {
+    seeds,
+    queries: deduped,
+    nonBrandedCount: deduped.filter((q) => !isBrandedQuery(q.text, brandAliases)).length,
+    brandedCount: deduped.filter(isBrandPresenceQuery).length,
+  };
+}
 
 /**
  * AIO-only background scan pipeline.
@@ -40,16 +98,60 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       if (dbPrompts && dbPrompts.length > 0) {
         usedDbPrompts = true;
         console.log(`[aio-worker] Using ${dbPrompts.length} enabled prompts from DB`);
-        queryPlan = {
-          seeds: [],
-          queries: dbPrompts.map((p) => ({
-            text: p.text,
-            source: p.source || "db",
-            topic: p.topic || "General",
-          })),
-          nonBrandedCount: dbPrompts.length,
-          brandedCount: 0,
-        };
+        const mapped = dbPrompts.map((p) => ({
+          text: p.text,
+          source: p.source || "db",
+          topic: p.topic || "General",
+          intent_tier: p.intent_tier,
+        }));
+        const existingTexts = new Set(mapped.map((q) => queryTextKey(q.text)));
+
+        let brandPresence = mapped.filter(isBrandPresenceQuery);
+        let injectedBranded = [];
+        if (brandPresence.length === 0) {
+          injectedBranded = buildBrandedQueries(brand, url)
+            .filter((q) => !existingTexts.has(queryTextKey(q.text)))
+            .map((q) => ({ ...q, intent_tier: "branded" }));
+          if (injectedBranded.length > 0) {
+            brandPresence = injectedBranded;
+            try {
+              await upsertPrompts(
+                brand,
+                injectedBranded.map((q) => ({
+                  text: q.text,
+                  intent_tier: "branded",
+                  topic: q.topic,
+                  weight: 1.0,
+                  source: q.source,
+                  enabled: true,
+                }))
+              );
+            } catch (err) {
+              console.warn("[aio-worker] Failed to persist injected branded seeds:", err.message);
+            }
+          }
+        } else if (brandPresence.some((q) => q.intent_tier !== "branded")) {
+          try {
+            await upsertPrompts(
+              brand,
+              brandPresence.map((q) => ({
+                text: q.text,
+                intent_tier: "branded",
+                topic: q.topic,
+                weight: 1.0,
+                source: q.source,
+                enabled: true,
+              }))
+            );
+          } catch (err) {
+            console.warn("[aio-worker] Failed to fix branded intent_tier:", err.message);
+          }
+        }
+
+        queryPlan = finalizeQueryPlan(
+          [...mapped, ...injectedBranded],
+          brandAliases
+        );
       }
     } catch (err) {
       console.warn("[aio-worker] DB prompt fetch failed:", err.message);
@@ -58,14 +160,14 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     if (!queryPlan) {
       queryPlan = await buildAioQueries(brand, url, industry, stats);
 
-      // Persist non-branded queries so users can enable/disable in Tracked Queries UI
+      // Persist queries for Tracked Queries UI (intent_tier = brand presence only for seeds)
       if (queryPlan.queries.length > 0) {
         try {
           await upsertPrompts(
             brand,
             queryPlan.queries.map((q) => ({
               text: q.text,
-              intent_tier: "exploratory",
+              intent_tier: resolveQueryIntentTier(q),
               topic: q.topic,
               weight: 1.0,
               source: q.source,
@@ -82,8 +184,33 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       throw new Error("Could not source any queries for this scan. Check PAA/autocomplete access.");
     }
 
+    if (!usedDbPrompts) {
+      const { nonBranded, branded } = queryPlan.queries.reduce(
+        (acc, q) => {
+          if (isBrandedQuery(q.text, brandAliases)) acc.branded.push(q);
+          else acc.nonBranded.push(q);
+          return acc;
+        },
+        { nonBranded: [], branded: [] }
+      );
+      const merged = mergeQueryLists(nonBranded, branded);
+      queryPlan = finalizeQueryPlan(
+        merged.queries,
+        brandAliases,
+        queryPlan.seeds
+      );
+    } else {
+      queryPlan = finalizeQueryPlan(
+        queryPlan.queries,
+        brandAliases,
+        queryPlan.seeds
+      );
+    }
+
+    logQueryClassification(queryPlan.queries, brandAliases);
+
     console.log(
-      `[aio-worker] Prepared ${queryPlan.queries.length} queries (${queryPlan.nonBrandedCount} non-branded, ${queryPlan.brandedCount} branded)`
+      `[aio-worker] Prepared ${queryPlan.queries.length} queries (${queryPlan.nonBrandedCount} non-branded, ${queryPlan.brandedCount} brand-presence)`
     );
 
     // 2. Probe each query via BrightData AIO
@@ -104,7 +231,7 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     // 3. Scoring / aggregation
     await updateScanJob(jobId, { status: "scoring", progress_pct: 90 });
 
-    const { results, summary } = scanOutput;
+    let { results, summary } = scanOutput;
 
     // Attach brand-in-prompt warning to non-branded results just in case
     results.forEach((r) => {
@@ -118,11 +245,24 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     const scannedAt = new Date().toISOString();
 
     const nonBrandedResults = results.filter((r) => !r.is_branded_query);
-    const brandedResults = results.filter((r) => r.is_branded_query);
 
-    const topDomains = aggregateAioTopDomains(nonBrandedResults, url, competitors);
-    const competitorObjects = computeCompetitorAioMetrics(results, competitors).sort(
-      (a, b) => b.visibilityScore - a.visibilityScore
+    // Blank-style: discover co-mentioned rivals from AIO text + citations,
+    // then merge with any user-supplied competitor names.
+    const competitorObjects = buildCompetitorLeaderboard({
+      results,
+      brand,
+      brandUrl: url,
+      userCompetitors: competitors,
+      max: 10,
+    });
+    const competitorNames = competitorObjects.map((c) => c.name);
+    results = enrichResultsWithCompetitors(results, competitorNames);
+
+    const topDomains = aggregateAioTopDomains(nonBrandedResults, url, competitorNames);
+    console.log(
+      `[aio-worker] Co-mention competitors: ${competitorObjects
+        .map((c) => `${c.name}(${c.visibilityScore}%/${c.source})`)
+        .join(", ") || "(none)"}`
     );
 
     const promptTexts = queryPlan.queries.map((q) => q.text.toLowerCase().trim()).sort();

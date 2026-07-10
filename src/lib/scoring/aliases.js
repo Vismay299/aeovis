@@ -32,7 +32,13 @@ export function getBrandAliases(brand, website) {
       aliases.add(hostname);
       
       const domainName = hostname.split(".")[0];
-      if (domainName && domainName.length > 1) {
+      const brandLower = (brand || "").trim().toLowerCase();
+      // Avoid ultra-short domain stems (e.g. "go") unless they appear in the brand name.
+      if (
+        domainName &&
+        (domainName.length >= 3 ||
+          (domainName.length >= 2 && brandLower.includes(domainName)))
+      ) {
         aliases.add(domainName);
       }
     } catch (e) {

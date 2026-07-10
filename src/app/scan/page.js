@@ -192,23 +192,26 @@ export default function Scan() {
 
                 <div>
                   <label htmlFor="competitors" className="block text-xs uppercase tracking-[0.15em] text-[#666666] font-medium mb-3">
-                    Competitors <span className="text-[#999999] font-normal">(comma-separated, max 4)</span>
+                    Competitors{" "}
+                    <span className="text-[#999999] font-normal">
+                      (optional — we also auto-discover co-mentions from AIOs)
+                    </span>
                   </label>
                   <input
                     id="competitors"
                     data-testid="scan-competitors-input"
                     value={competitors}
                     onChange={(e) => setCompetitors(e.target.value)}
-                    placeholder="Rival A, Rival B"
+                    placeholder="e.g. Kajaria, Somany (optional)"
                     className="w-full bg-white border border-[#E5E2D9] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none rounded-sm px-5 py-4 font-sans text-[#1A1A1A] placeholder:text-[#BBBBBB] transition-all"
                   />
                 </div>
 
                 <p className="text-sm text-[#666666] border-l-2 border-[#E5E2D9] pl-4 leading-relaxed">
                   This scan probes Google&apos;s live AI Overview for every tracked query
-                  using Bright Data&apos;s SERP API. We seed the queries from real Google
-                  People-Also-Ask and autocomplete for your category, so branded searches
-                  don&apos;t artificially inflate your visibility.
+                  using Bright Data. Rivals are discovered from brands co-mentioned or
+                  cited in those answers (Blank-style), and any names you list here are
+                  always tracked too.
                 </p>
 
                 <button

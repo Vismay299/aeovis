@@ -3,10 +3,57 @@ import { scrapeForSummary } from "../firecrawl.js";
 import { generateContent } from "../gemini.js";
 import { INDUSTRY_PROMPTS } from "../../data/industries.js";
 import { getBrandAliases } from "./aliases.js";
-import { detectMention } from "./judge.js";
+import {
+  isBrandedQuery,
+  isBrandPresenceQuery,
+  resolveQueryIntentTier,
+  dedupeQueriesByText,
+  buildBrandedQueries,
+} from "./aioQueryClassify.js";
+
+export {
+  isBrandedQuery,
+  isBrandPresenceQuery,
+  resolveQueryIntentTier,
+  dedupeQueriesByText,
+  buildBrandedQueries,
+};
 
 const MAX_NON_BRANDED = 18;
-const MAX_BRANDED = 4;
+
+/** Maps normalized industry strings to INDUSTRY_PROMPTS keys (saas, ecommerce, finance, agency). */
+const INDUSTRY_ALIAS_TO_KEY = Object.entries(INDUSTRY_PROMPTS).reduce(
+  (map, [key, { label }]) => {
+    map[key] = key;
+    if (label) {
+      const lower = label.toLowerCase();
+      map[lower] = key;
+      map[lower.replace(/[\s-]+/g, "")] = key;
+    }
+    return map;
+  },
+  {
+    "e-commerce": "ecommerce",
+    "e commerce": "ecommerce",
+  }
+);
+
+/**
+ * Normalizes an industry string to a known INDUSTRY_PROMPTS entry.
+ * Accepts keys ("saas", "ecommerce"), labels ("SaaS", "E-commerce"), and common aliases.
+ */
+export function resolveIndustry(industry) {
+  if (!industry) return null;
+  const normalized = String(industry).trim().toLowerCase();
+  if (!normalized) return null;
+
+  const key =
+    INDUSTRY_ALIAS_TO_KEY[normalized] ||
+    INDUSTRY_ALIAS_TO_KEY[normalized.replace(/[\s-]+/g, "")] ||
+    (INDUSTRY_PROMPTS[normalized] ? normalized : null);
+
+  return key ? INDUSTRY_PROMPTS[key] : null;
+}
 
 /**
  * Extracts category seed terms from the brand's website + industry using Gemini.
@@ -22,7 +69,7 @@ async function deriveCategorySeeds(brand, website, industry, stats) {
     websiteSnippet = (await scrapeForSummary(website)) || "";
   } catch {}
 
-  const industryPrompts = INDUSTRY_PROMPTS[industry];
+  const industryPrompts = resolveIndustry(industry);
   const industryHint = industryPrompts?.label || industry || "";
 
   const prompt = `You are an expert in real buyer search behaviour.
@@ -86,7 +133,7 @@ async function fetchCategoryQueries(seeds, brandAliases) {
   const push = (text, source, topic) => {
     const key = text.toLowerCase().trim();
     if (!key || seen.has(key)) return;
-    if (isBranded(key, brandAliases)) return; // exclude branded queries here
+    if (isBrandedQuery(key, brandAliases)) return; // exclude branded queries here
     // Drop very short 1-word or 2-word garbage (single generic terms like "saas"
     // pull in unrelated PAA/autocomplete like "saas stocks" or "apocalypse").
     if (key.length < 8) return;
@@ -120,31 +167,6 @@ async function fetchCategoryQueries(seeds, brandAliases) {
   return queries.slice(0, MAX_NON_BRANDED);
 }
 
-function isBranded(text, brandAliases) {
-  return detectMention(text, brandAliases);
-}
-
-/**
- * Builds a small set of BRANDED queries so we can also show a "Brand Presence" panel.
- */
-function buildBrandedQueries(brand, website) {
-  const domain = (website || "").replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0];
-  const set = new Set();
-  const push = (t) => {
-    if (t) set.add(t);
-  };
-  push(brand);
-  push(`what is ${brand}`);
-  push(`${brand} reviews`);
-  push(`${brand} pricing`);
-  if (domain && domain.toLowerCase() !== brand.toLowerCase()) {
-    push(`${brand} vs alternatives`);
-  }
-  return Array.from(set)
-    .slice(0, MAX_BRANDED)
-    .map((text) => ({ text, source: "branded_seed", topic: "Brand Presence" }));
-}
-
 /**
  * Main entry point: build the full query list for an AIO-only scan.
  */
@@ -157,8 +179,9 @@ export async function buildAioQueries(brand, website, industry, stats) {
 
   // Fallback: if PAA + autocomplete produced nothing, use the static
   // industry prompts (they are already non-branded).
-  if (nonBranded.length === 0 && INDUSTRY_PROMPTS[industry]) {
-    INDUSTRY_PROMPTS[industry].prompts.forEach((text) => {
+  const industryFallback = resolveIndustry(industry);
+  if (nonBranded.length === 0 && industryFallback) {
+    industryFallback.prompts.forEach((text) => {
       nonBranded.push({ text, source: "industry_fallback", topic: "Industry Fallback" });
     });
   }

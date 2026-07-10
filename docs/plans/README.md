@@ -33,6 +33,8 @@ docs/plans/
 | Plan | Description |
 |------|-------------|
 | [2026-07-05-mvp-implementation-plan.md](./2026-07-05-mvp-implementation-plan.md) | Full review of the MVP Implementation Document against the existing Next.js prototype. Includes grilling questions, gaps analysis, and a detailed spec for refining the document. |
+| [2026-07-06-visibility-score-accuracy-roadmap.md](./2026-07-06-visibility-score-accuracy-roadmap.md) | Roadmap for multi-signal visibility score accuracy (pre–AIO-only pivot). |
+| [2026-07-10-aio-only-branch-fix-plan.md](./2026-07-10-aio-only-branch-fix-plan.md) | Step-by-step fix plan for AIO-only logic on `updated-logic-july10` (gates, coverage, normalize, denominators, branded reuse, tests) — brand-agnostic. |
 
 ## How to Create a New Plan
 

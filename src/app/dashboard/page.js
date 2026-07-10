@@ -11,9 +11,19 @@ import { InsightPanel } from "@/components/dashboard/InsightPanel";
 import { CitationsPanel } from "@/components/dashboard/CitationsPanel";
 import { AioEvidenceList } from "@/components/dashboard/AioEvidence";
 import { QueryManager } from "@/components/dashboard/QueryManager";
-import { loadScan, fetchScanHistory, normalizeResult } from "@/services/api";
+import {
+  loadScan,
+  fetchScanHistory,
+  normalizeResult,
+  getHistoryNonBrandedCount,
+} from "@/services/api";
 import { scoreTier, tierLabel, formatTimestamp, relativeTime } from "@/utils/format";
 import { getBrandAliases } from "@/lib/scoring/aliases";
+import {
+  AIO_ERROR_RATE_LIMIT_PCT,
+  AIO_MIN_NON_BRANDED_COVERAGE,
+  AIO_COVERAGE_WARNING_PCT,
+} from "@/lib/scoring/aioConstants";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -25,9 +35,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     const current = loadScan();
-    setResult(current);
-    if (current && current.brand && !current.isSample) {
-      fetchScanHistory(current.brand).then((scans) => setHistory(scans || []));
+    const normalized = current
+      ? normalizeResult(current, current.brand, current.website)
+      : current;
+    setResult(normalized);
+    if (normalized && normalized.brand && !normalized.isSample) {
+      fetchScanHistory(normalized.brand).then((scans) => setHistory(scans || []));
     }
   }, []);
 
@@ -104,7 +117,10 @@ export default function Dashboard() {
     );
   }
 
-  const tier = scoreTier(result.visibilityScore, result.scoringVersion);
+  const dataSourceIssue = result.dataSourceIssue;
+  const tier = dataSourceIssue
+    ? null
+    : scoreTier(result.visibilityScore, result.scoringVersion);
   const brandAliases = getBrandAliases(result.brand, result.website);
 
   const handleHistoryClick = (scan) => {
@@ -140,7 +156,18 @@ export default function Dashboard() {
     }
   };
 
-  const dataSourceIssue = result.dataSourceIssue;
+  const mentionedNonBranded = (result.rawResults || []).filter(
+    (r) =>
+      !(r.is_branded_query ?? r.isBrandedQuery) &&
+      !!(r.aio_present ?? r.aioPresent) &&
+      !!(r.brand_mentioned_in_text ?? r.brandMentionedInText)
+  ).length;
+  const citedNonBranded = (result.rawResults || []).filter(
+    (r) =>
+      !(r.is_branded_query ?? r.isBrandedQuery) &&
+      !!(r.aio_present ?? r.aioPresent) &&
+      !!(r.brand_cited ?? r.brandCited)
+  ).length;
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] relative print:bg-white">
@@ -260,14 +287,14 @@ export default function Dashboard() {
                   <span className="text-[#8B3A3A] font-bold">
                     {result.aioCoveragePct ?? 0}%
                   </span>{" "}
-                  (need ≥ 30%)
+                  (need ≥ {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}%)
                 </span>
                 <span>
                   SERP error rate:{" "}
                   <span className="text-[#8B3A3A] font-bold">
                     {result.aioErrorRatePct ?? 0}%
                   </span>{" "}
-                  (limit 40%)
+                  (limit {AIO_ERROR_RATE_LIMIT_PCT}%)
                 </span>
               </div>
             </div>
@@ -288,15 +315,10 @@ export default function Dashboard() {
             data-testid="small-sample-warning"
           >
             <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-[#8A6D3B]" />
-            <div>
-              <h4 className="font-serif text-base font-bold">
-                Small sample — treat this score with caution
-              </h4>
-              <p className="text-sm mt-1 text-[#8A6D3B]/90">
-                Only {result.promptsAnalyzed} non-branded queries had a live AI Overview.
-                Consider adding more tracked queries or expanding your industry seeds.
-              </p>
-            </div>
+            <p className="text-sm text-[#8A6D3B]/90">
+              Only {result.nonBrandedWithAio} non-branded queries had a live AI Overview (of{" "}
+              {result.promptsAnalyzed} non-branded tracked). Treat this score with caution.
+            </p>
           </div>
         )}
 
@@ -306,14 +328,24 @@ export default function Dashboard() {
             <HeroScoreCard
               testId="kpi-visibility-score"
               score={dataSourceIssue ? "—" : result.visibilityScore}
-              tierText={tierLabel(tier)}
+              tierText={dataSourceIssue ? "Unavailable" : tierLabel(tier)}
               trend={dataSourceIssue ? null : scoreTrend}
               mentionRate={dataSourceIssue ? undefined : result.mentionRatePct}
               citationShare={dataSourceIssue ? undefined : result.brandCitationSharePct}
               aioCoverage={dataSourceIssue ? undefined : result.aioCoveragePct}
               nonBrandedCount={dataSourceIssue ? undefined : result.promptsAnalyzed}
+              nonBrandedWithAio={
+                dataSourceIssue ? undefined : result.nonBrandedWithAio
+              }
+              visibleNonBranded={
+                dataSourceIssue ? undefined : result.visibleNonBranded
+              }
+              mentionedNonBranded={
+                dataSourceIssue ? undefined : mentionedNonBranded
+              }
+              citedNonBranded={dataSourceIssue ? undefined : citedNonBranded}
               brandedVisibility={
-                dataSourceIssue || result.brandedPromptsCount === 0
+                dataSourceIssue || result.brandPresencePromptsCount === 0
                   ? undefined
                   : result.brandedVisibilityPct
               }
@@ -327,46 +359,59 @@ export default function Dashboard() {
             tone={
               dataSourceIssue
                 ? "critical"
-                : (result.aioCoveragePct ?? 0) < 50
+                : (result.aioCoveragePct ?? 0) < AIO_COVERAGE_WARNING_PCT
                 ? "warning"
                 : "good"
             }
-            sub={`AI Overviews returned for ${
-              Math.round(
-                ((result.aioCoveragePct ?? 0) / 100) *
-                  (result.promptsAnalyzed + (result.brandedPromptsCount || 0))
-              ) || 0
-            } of ${result.promptsAnalyzed + (result.brandedPromptsCount || 0)} queries`}
+            sub={`${result.nonBrandedWithAio ?? 0} of ${result.promptsAnalyzed} non-branded queries returned an AI Overview`}
             index={1}
           />
           <KpiCard
             testId="kpi-brand-presence"
             label="Brand Presence"
             value={
-              dataSourceIssue || result.brandedPromptsCount === 0
+              dataSourceIssue || result.brandPresencePromptsCount === 0
                 ? "—"
                 : result.brandedVisibilityPct
             }
             suffix={
-              dataSourceIssue || result.brandedPromptsCount === 0 ? "" : "%"
+              dataSourceIssue || result.brandPresencePromptsCount === 0 ? "" : "%"
             }
-            sub={`Own-name queries: ${result.brandedPromptsCount || 0}`}
+            sub={`${result.brandPresenceWithAio ?? result.brandedWithAio ?? 0} of ${
+              result.brandPresencePromptsCount || 0
+            } own-name queries had an AIO`}
             index={2}
           />
           <KpiCard
             testId="kpi-prompts"
             label="Tracked Queries"
-            value={result.promptsAnalyzed + (result.brandedPromptsCount || 0)}
-            sub={`${result.promptsAnalyzed} non-branded · ${
-              result.brandedPromptsCount || 0
-            } branded`}
+            value={
+              result.queriesTracked ??
+              (result.rawResults?.length ||
+                result.promptsAnalyzed + (result.brandedPromptsCount || 0))
+            }
+            sub={(() => {
+              const nonB = result.promptsAnalyzed || 0;
+              const own = result.brandPresencePromptsCount || 0;
+              const other =
+                result.aliasBrandedOnlyCount ??
+                Math.max(0, (result.brandedPromptsCount || 0) - own);
+              if (other > 0) {
+                return `${nonB} non-branded · ${own} own-name · ${other} other branded`;
+              }
+              return `${nonB} non-branded · ${own} own-name`;
+            })()}
             index={3}
           />
           <KpiCard
             testId="kpi-competitors"
             label="Competitors Found"
-            value={result.competitorsFound}
-            sub="Co-mentioned in AIOs"
+            value={result.competitorsFound ?? 0}
+            sub={
+              (result.competitorsFound ?? 0) === 0
+                ? "None co-mentioned in AIOs"
+                : "Auto-found in AI Overviews"
+            }
             index={4}
           />
         </div>
@@ -417,7 +462,7 @@ export default function Dashboard() {
                       </div>
                     )}
                     <div className="text-xs text-[#999999] mt-1">
-                      {scan.prompts_tracked} queries
+                      {getHistoryNonBrandedCount(scan)} non-branded tracked
                     </div>
                   </button>
                 );
@@ -439,7 +484,8 @@ export default function Dashboard() {
               Not enough AI Overview data
             </h3>
             <p className="text-[#666666] mt-3 text-sm leading-relaxed">
-              Bright Data returned an AI Overview for less than 30% of your tracked
+              Bright Data returned an AI Overview for less than{" "}
+              {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}% of your tracked
               queries. Rather than pretending we have a real signal, we&apos;re showing
               nothing. Retry the scan or add more high-intent queries in the &quot;Tracked
               Queries&quot; tab.
@@ -485,9 +531,7 @@ export default function Dashboard() {
                   <CompetitorTable
                     competitors={result.competitors}
                     results={result.rawResults || []}
-                    brandMentions={
-                      (result.rawResults || []).filter((r) => r.mentioned).length
-                    }
+                    competitorsConfigured={result.competitorsConfigured}
                   />
                 </div>
                 <div className="lg:col-span-1 space-y-8">
@@ -515,11 +559,11 @@ export default function Dashboard() {
                 </div>
                 <AioEvidenceList
                   testId="branded-evidence"
-                  title={`Branded queries (${result.brandedPromptsCount || 0})`}
-                  subtitle="Own-name searches. Excluded from the headline visibility score."
-                  prompts={result.brandedResults}
+                  title={`Brand presence queries (${result.brandPresencePromptsCount || 0})`}
+                  subtitle="Intentional own-name searches (branded seeds). Excluded from the headline visibility score."
+                  prompts={result.brandPresenceResults}
                   brandAliases={brandAliases}
-                  emptyLabel="No branded queries were tracked in this scan."
+                  emptyLabel="No brand presence queries were tracked in this scan."
                 />
               </div>
             )}
