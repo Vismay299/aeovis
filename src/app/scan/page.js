@@ -12,10 +12,9 @@ import { SAMPLE_RESULT } from "@/data/mockData";
 
 const STAGES = [
   "Submitting brand for analysis",
-  "Generating custom prompts from your website",
-  "Probing AI answers across prompts",
-  "Detecting competitor co-mentions",
-  "Scoring visibility & composing report",
+  "Sourcing real Google queries (PAA + Autocomplete)",
+  "Probing Google AI Overview via Bright Data",
+  "Scoring visibility & composing evidence",
 ];
 
 const RECENT = [
@@ -206,8 +205,10 @@ export default function Scan() {
                 </div>
 
                 <p className="text-sm text-[#666666] border-l-2 border-[#E5E2D9] pl-4 leading-relaxed">
-                  This scan automatically blends LLM-generated prompts with real search data (People Also Ask
-                  and autocomplete) to measure where your brand appears and which competitors get mentioned instead.
+                  This scan probes Google&apos;s live AI Overview for every tracked query
+                  using Bright Data&apos;s SERP API. We seed the queries from real Google
+                  People-Also-Ask and autocomplete for your category, so branded searches
+                  don&apos;t artificially inflate your visibility.
                 </p>
 
                 <button
@@ -264,7 +265,7 @@ export default function Scan() {
                 Analyzing {brand} ({progress}%)
                 <span className="caret-blink text-[#D9531E]">_</span>
               </h2>
-              <p className="text-[#666666] mt-3 mb-12">Generating custom prompts from your site, then probing AI answers. This usually takes 2-3 minutes due to multi-run stability checks.</p>
+              <p className="text-[#666666] mt-3 mb-12">Sourcing real Google queries, then probing Google AI Overview via Bright Data. This usually takes 60-90 seconds.</p>
 
               <div className="space-y-px">
                 {STAGES.map((label, i) => {

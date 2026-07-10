@@ -6,19 +6,14 @@ import { RefreshCw, FlaskConical, Loader2, Download, ShieldAlert, AlertCircle } 
 import { Navbar } from "@/components/Navbar";
 import { KpiCard, HeroScoreCard } from "@/components/dashboard/KpiCard";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TopPromptsTable } from "@/components/dashboard/TopPromptsTable";
 import { CompetitorTable } from "@/components/dashboard/CompetitorTable";
 import { InsightPanel } from "@/components/dashboard/InsightPanel";
-import { OpportunitiesPanel } from "@/components/dashboard/OpportunitiesPanel";
 import { CitationsPanel } from "@/components/dashboard/CitationsPanel";
-import { EngineBreakdown } from "@/components/dashboard/EngineBreakdown";
+import { AioEvidenceList } from "@/components/dashboard/AioEvidence";
+import { QueryManager } from "@/components/dashboard/QueryManager";
 import { loadScan, fetchScanHistory, normalizeResult } from "@/services/api";
 import { scoreTier, tierLabel, formatTimestamp, relativeTime } from "@/utils/format";
-import { ScoreBreakdown } from "@/components/dashboard/ScoreBreakdown";
-import { IntentBreakdown } from "@/components/dashboard/IntentBreakdown";
-import { TopicBreakdown } from "@/components/dashboard/TopicBreakdown";
-import { QueryManager } from "@/components/dashboard/QueryManager";
-import ContentLiftPanel from "@/components/dashboard/ContentLiftPanel";
+import { getBrandAliases } from "@/lib/scoring/aliases";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -32,98 +27,33 @@ export default function Dashboard() {
     const current = loadScan();
     setResult(current);
     if (current && current.brand && !current.isSample) {
-      fetchScanHistory(current.brand).then(scans => {
-        setHistory(scans || []);
-      });
+      fetchScanHistory(current.brand).then((scans) => setHistory(scans || []));
     }
   }, []);
 
-  const { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend, isMixedTrend, promptSetChanged } = React.useMemo(() => {
+  const { scoreTrend, previousScan, sortedHistory } = useMemo(() => {
     let scoreTrend = null;
     let previousScan = null;
     let sortedHistory = [];
-    let topPromptsWithTrend = [];
-    let competitorsWithTrend = [];
-    let isMixedTrend = false;
-    let promptSetChanged = false;
+    if (!result || !history?.length) return { scoreTrend, previousScan, sortedHistory };
 
-    if (!result) return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend, isMixedTrend, promptSetChanged };
+    sortedHistory = [...history].sort(
+      (a, b) => new Date(b.scanned_at) - new Date(a.scanned_at)
+    );
+    const idx = sortedHistory.findIndex(
+      (s) => new Date(s.scanned_at).getTime() === new Date(result.scanTimestamp).getTime()
+    );
+    let prev = null;
+    if (idx !== -1 && idx + 1 < sortedHistory.length) prev = sortedHistory[idx + 1];
+    else if (idx === -1 && sortedHistory.length > 0) prev = sortedHistory[0];
 
-    if (history && history.length > 0) {
-      sortedHistory = [...history].sort((a,b) => new Date(b.scanned_at) - new Date(a.scanned_at));
-      const idx = sortedHistory.findIndex(s => new Date(s.scanned_at).getTime() === new Date(result.scanTimestamp).getTime());
-      if (idx !== -1 && idx + 1 < sortedHistory.length) {
-        const prev = sortedHistory[idx + 1];
-        scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
-        previousScan = normalizeResult(prev, result.brand, result.website);
-        
-        const prevVersion = prev.scoring_version ?? prev.raw_results?.scoring_version ?? "v1-binary";
-        if (prevVersion !== result.scoringVersion) {
-          isMixedTrend = true;
-        }
-
-        const prevHash = prev.prompt_set_hash ?? prev.raw_results?.prompt_set_hash ?? "";
-        if (prevHash && result.promptSetHash && prevHash !== result.promptSetHash) {
-          promptSetChanged = true;
-        }
-      } else if (idx === -1 && sortedHistory.length > 0) {
-        // result not in history yet
-        const prev = sortedHistory[0];
-        scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
-        previousScan = normalizeResult(prev, result.brand, result.website);
-        
-        const prevVersion = prev.scoring_version ?? prev.raw_results?.scoring_version ?? "v1-binary";
-        if (prevVersion !== result.scoringVersion) {
-          isMixedTrend = true;
-        }
-
-        const prevHash = prev.prompt_set_hash ?? prev.raw_results?.prompt_set_hash ?? "";
-        if (prevHash && result.promptSetHash && prevHash !== result.promptSetHash) {
-          promptSetChanged = true;
-        }
-      }
+    if (prev) {
+      scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
+      previousScan = normalizeResult(prev, result.brand, result.website);
     }
-
-    // Sort prompts by rank / visibility
-    const sortedPrompts = [...(result.topPrompts || [])].sort((a, b) => {
-      if (a.rank === "—") return 1;
-      if (b.rank === "—") return -1;
-      return a.rank - b.rank;
-    });
-
-    topPromptsWithTrend = sortedPrompts.map(p => {
-      if (previousScan && previousScan.topPrompts) {
-        const prevP = previousScan.topPrompts.find(pp => pp.prompt.toLowerCase() === p.prompt.toLowerCase());
-        if (prevP) {
-          const prevRank = prevP.rank === "—" || prevP.rank == null ? 100 : prevP.rank;
-          const currRank = p.rank === "—" || p.rank == null ? 100 : p.rank;
-          const trend = prevRank - currRank;
-          return { ...p, trend };
-        }
-      }
-      return p;
-    });
-
-    competitorsWithTrend = (result.competitors || []).map(c => {
-      if (previousScan && previousScan.competitors) {
-        const prevC = previousScan.competitors.find(pc => pc.name.toLowerCase() === c.name.toLowerCase());
-        if (prevC) {
-          const trend = c.visibilityScore - prevC.visibilityScore;
-          return { ...c, trend };
-        }
-      }
-      return c;
-    });
-
-    return { scoreTrend, previousScan, sortedHistory, topPromptsWithTrend, competitorsWithTrend, isMixedTrend, promptSetChanged };
+    return { scoreTrend, previousScan, sortedHistory };
   }, [result, history]);
 
-  const resultWithFlags = React.useMemo(() => {
-    if (!result) return null;
-    return { ...result, promptSetChanged };
-  }, [result, promptSetChanged]);
-
-  // Empty state — no scan yet
   if (result === null) {
     return (
       <div className="min-h-screen bg-[#FDFBF7]">
@@ -140,8 +70,8 @@ export default function Dashboard() {
               Your dashboard is waiting
             </h2>
             <p className="text-[#666666] mt-4 leading-relaxed">
-              Run your first visibility check to see your AI Visibility Score, top prompts, and
-              competitor gaps right here.
+              Run your first Google AI Overview visibility check to see your score, top
+              answers, and competitor gaps right here.
             </p>
             <button
               data-testid="empty-run-scan"
@@ -161,23 +91,23 @@ export default function Dashboard() {
       <div className="min-h-screen bg-[#FDFBF7]">
         <Navbar />
         <div className="max-w-7xl mx-auto px-6 md:px-12 py-28">
-           <Skeleton className="h-6 bg-[#E5E2D9] w-32 mb-4 rounded-sm" />
-           <Skeleton className="h-16 bg-[#E5E2D9] w-64 mb-10 rounded-sm" />
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
-             <Skeleton className="lg:col-span-2 h-40 bg-[#E5E2D9] rounded-sm" />
-             <Skeleton className="h-40 bg-[#E5E2D9] rounded-sm" />
-             <Skeleton className="h-40 bg-[#E5E2D9] rounded-sm" />
-             <Skeleton className="h-40 bg-[#E5E2D9] rounded-sm" />
-           </div>
+          <Skeleton className="h-6 bg-[#E5E2D9] w-32 mb-4 rounded-sm" />
+          <Skeleton className="h-16 bg-[#E5E2D9] w-64 mb-10 rounded-sm" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
+            <Skeleton className="lg:col-span-2 h-40 bg-[#E5E2D9] rounded-sm" />
+            <Skeleton className="h-40 bg-[#E5E2D9] rounded-sm" />
+            <Skeleton className="h-40 bg-[#E5E2D9] rounded-sm" />
+            <Skeleton className="h-40 bg-[#E5E2D9] rounded-sm" />
+          </div>
         </div>
       </div>
     );
   }
 
   const tier = scoreTier(result.visibilityScore, result.scoringVersion);
+  const brandAliases = getBrandAliases(result.brand, result.website);
 
   const handleHistoryClick = (scan) => {
-    // Re-normalize raw DB row into frontend shape
     setResult(normalizeResult(scan, result.brand, result.website));
   };
 
@@ -186,22 +116,22 @@ export default function Dashboard() {
     setIsScanning(true);
     try {
       const { runScan, saveScan } = await import("@/services/api");
-      // Grab input competitors if possible, or fallback to mapped ones
-      const compStr = result.competitorsRaw !== undefined ? result.competitorsRaw : (result.competitors ? result.competitors.map(c => c.name).join(", ") : "");
-      const newResult = await runScan({ 
-        brand: result.brand, 
-        website: result.website, 
-        industry: result.industry || "", 
-        competitors: compStr 
+      const compStr =
+        result.competitorsRaw !== undefined
+          ? result.competitorsRaw
+          : result.competitors
+          ? result.competitors.map((c) => c.name).join(", ")
+          : "";
+      const newResult = await runScan({
+        brand: result.brand,
+        website: result.website,
+        industry: result.industry || "",
+        competitors: compStr,
       });
       saveScan(newResult);
       setResult(newResult);
       setScanError(null);
-      
-      // refresh history
-      fetchScanHistory(result.brand).then(scans => {
-        setHistory(scans || []);
-      });
+      fetchScanHistory(result.brand).then((scans) => setHistory(scans || []));
     } catch (e) {
       console.error("Re-run failed:", e);
       setScanError(e.message || "Failed to run scan. Please try again.");
@@ -210,25 +140,36 @@ export default function Dashboard() {
     }
   };
 
-
+  const dataSourceIssue = result.dataSourceIssue;
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] relative print:bg-white">
-      {/* Scanning Overlay */}
       {isScanning && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm transition-opacity duration-300">
           <Loader2 className="w-12 h-12 text-[#D9531E] animate-spin mb-4" />
-          <h2 className="font-serif text-2xl font-semibold text-[#1A1A1A]">Scanning Answer Engines</h2>
-          <p className="text-[#666666] mt-2">Running live prompts and analyzing AI responses...</p>
+          <h2 className="font-serif text-2xl font-semibold text-[#1A1A1A]">
+            Probing Google AI Overview
+          </h2>
+          <p className="text-[#666666] mt-2">
+            Running live queries against Bright Data. This usually takes 60-90 seconds.
+          </p>
         </div>
       )}
 
       <Navbar />
-      <div className="max-w-7xl mx-auto px-6 md:px-12 py-10 md:py-14" data-testid="dashboard">
+      <div
+        className="max-w-7xl mx-auto px-6 md:px-12 py-10 md:py-14"
+        data-testid="dashboard"
+      >
         {scanError && (
           <div className="mb-6 p-4 bg-[#F9ECEC] border border-[#E2B8B8] rounded-sm text-[#8B3A3A] text-sm flex items-center justify-between">
             <span>{scanError}</span>
-            <button onClick={() => setScanError(null)} className="text-[#8B3A3A] font-semibold hover:underline">Dismiss</button>
+            <button
+              onClick={() => setScanError(null)}
+              className="text-[#8B3A3A] font-semibold hover:underline"
+            >
+              Dismiss
+            </button>
           </div>
         )}
         {result.isSample && (
@@ -245,7 +186,7 @@ export default function Dashboard() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-[#E5E2D9] mb-10">
           <div>
             <span className="text-xs uppercase tracking-[0.15em] text-[#666666] font-medium">
-              Visibility report
+              Google AI Overview visibility
             </span>
             <h1
               data-testid="dashboard-brand"
@@ -257,29 +198,15 @@ export default function Dashboard() {
               <span className="font-medium text-[#1A1A1A]">{result.website}</span>
               <span className="text-[#CCCCCC]">·</span>
               <span data-testid="dashboard-timestamp">
-                Last scan {formatTimestamp(result.scanTimestamp)} ({relativeTime(result.scanTimestamp)})
+                Last scan {formatTimestamp(result.scanTimestamp)} (
+                {relativeTime(result.scanTimestamp)})
               </span>
-              {result.usedDynamicPrompts !== undefined && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E8F0ED] text-[#2F5C4F] border border-[#B4D4CA] ml-1 align-middle">
-                  {result.usedDynamicPrompts ? "dynamic prompts" : "static fallback"}
-                </span>
-              )}
-              {result.querySource && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EBF3FF] text-[#4B6B94] border border-[#BACEEA] ml-1 align-middle uppercase font-bold tracking-wider" data-testid="dashboard-query-source">
-                  Source: {
-                    result.querySource === "hybrid" ? "Hybrid" :
-                    result.querySource === "people_also_ask" ? "PAA" : 
-                    result.querySource === "search_autocomplete" ? "Autocomplete" : 
-                    result.querySource === "google_search_console" ? "Search Console" : 
-                    "LLM Generated"
-                  }
-                </span>
-              )}
-              {!!result.tokensUsed && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#FDF6E3] text-[#8F6614] border border-[#E6D5A7] ml-1 align-middle">
-                  ~{result.tokensUsed.toLocaleString()} tokens
-                </span>
-              )}
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#EBF3FF] text-[#4B6B94] border border-[#BACEEA] uppercase font-bold tracking-wider">
+                Source: Google AIO
+              </span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#F3F0E6] text-[#666666] border border-[#E5E2D9] uppercase font-bold tracking-wider">
+                {result.scoringVersion}
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-3 self-start md:self-auto print:hidden">
@@ -294,169 +221,204 @@ export default function Dashboard() {
               data-testid="rerun-scan-btn"
               onClick={handleRerun}
               disabled={isScanning}
-              className={`group inline-flex items-center gap-2 bg-transparent border transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] ${isScanning ? "text-[#999999] border-[#E5E2D9] cursor-not-allowed" : "text-[#1A1A1A] border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white"}`}
+              className={`group inline-flex items-center gap-2 bg-transparent border transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] ${
+                isScanning
+                  ? "text-[#999999] border-[#E5E2D9] cursor-not-allowed"
+                  : "text-[#1A1A1A] border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white"
+              }`}
             >
-              <RefreshCw className={`w-4 h-4 ${isScanning ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} strokeWidth={1.5} />
+              <RefreshCw
+                className={`w-4 h-4 ${
+                  isScanning ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"
+                }`}
+                strokeWidth={1.5}
+              />
               {isScanning ? "Scanning..." : "Re-run"}
             </button>
           </div>
         </div>
 
-        {/* Quality Gate Failure Alert */}
-        {result.qualityGateFailed && (() => {
-          const totalControls = result.controlPromptsTotal ?? 0;
-          const passedControls = result.controlPromptsPassed ?? 0;
-          const failureRatePct = (result.probeFailureRate || 0) * 100;
-          
-          return (
-            <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-[#F9ECEC] border border-[#E2B8B8] rounded-sm p-6 text-[#8B3A3A]" data-testid="quality-gate-failed-alert">
-              <div>
-                <h4 className="font-serif text-lg font-bold">Scan Quality Gate Failed</h4>
-                <p className="text-sm mt-1 text-[#8B3A3A]/90">
-                  This scan failed the required controls. Detailed data has been hidden to prevent misleading interpretations.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-xs font-semibold text-[#8B3A3A]/80">
-                  {totalControls > 0 && (
-                    <span>Control Prompts: <span className="text-[#8B3A3A] font-bold">{passedControls}/{totalControls} passed</span></span>
-                  )}
-                  <span>Probe Failure Rate: <span className="text-[#8B3A3A] font-bold">{failureRatePct.toFixed(1)}%</span> (limit 20%)</span>
-                  {result.judgeDisagreementCount > 0 && (
-                    <span>Judge Disagreements: <span className="text-[#8B3A3A] font-bold">{result.judgeDisagreementCount} flagged</span></span>
-                  )}
-                </div>
+        {/* Data-source issue banner */}
+        {dataSourceIssue && (
+          <div
+            data-testid="data-source-issue-banner"
+            className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6 bg-[#F9ECEC] border border-[#E2B8B8] rounded-sm p-6 text-[#8B3A3A]"
+          >
+            <div>
+              <div className="flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5" />
+                <h4 className="font-serif text-lg font-bold">Data source issue — scan incomplete</h4>
               </div>
-              <button
-                onClick={handleRerun}
-                disabled={isScanning}
-                className="inline-flex items-center gap-2 bg-[#8B3A3A] hover:bg-[#8B3A3A]/90 text-white transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] self-start md:self-auto shrink-0"
-              >
-                <RefreshCw className={`w-4 h-4 ${isScanning ? "animate-spin" : ""}`} />
-                Retry Scan
-              </button>
+              <p className="text-sm mt-2 text-[#8B3A3A]/90 max-w-2xl">
+                Bright Data returned no AI Overview for the majority of tracked queries,
+                or the SERP API errored out too often. We are not showing a visibility
+                score to avoid misleading you with a false 0%.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-xs font-semibold text-[#8B3A3A]/80">
+                <span>
+                  AIO coverage:{" "}
+                  <span className="text-[#8B3A3A] font-bold">
+                    {result.aioCoveragePct ?? 0}%
+                  </span>{" "}
+                  (need ≥ 30%)
+                </span>
+                <span>
+                  SERP error rate:{" "}
+                  <span className="text-[#8B3A3A] font-bold">
+                    {result.aioErrorRatePct ?? 0}%
+                  </span>{" "}
+                  (limit 40%)
+                </span>
+              </div>
             </div>
-          );
-        })()}
+            <button
+              onClick={handleRerun}
+              disabled={isScanning}
+              className="inline-flex items-center gap-2 bg-[#8B3A3A] hover:bg-[#8B3A3A]/90 text-white transition-colors rounded-sm px-6 py-3 font-sans font-semibold text-xs uppercase tracking-[0.1em] self-start md:self-auto shrink-0"
+            >
+              <RefreshCw className={`w-4 h-4 ${isScanning ? "animate-spin" : ""}`} />
+              Retry scan
+            </button>
+          </div>
+        )}
 
-        {/* Sample Size Warning Alert */}
-        {!result.qualityGateFailed && !result.sampleSizeAdequacy && (
-          <div className="mb-8 flex items-start gap-4 bg-[#FCF8E3] border border-[#F5E7B8] rounded-sm p-5 text-[#8A6D3B]" data-testid="small-sample-warning">
+        {!dataSourceIssue && result.insufficientSample && (
+          <div
+            className="mb-8 flex items-start gap-4 bg-[#FCF8E3] border border-[#F5E7B8] rounded-sm p-5 text-[#8A6D3B]"
+            data-testid="small-sample-warning"
+          >
             <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-[#8A6D3B]" />
             <div>
-              <h4 className="font-serif text-base font-bold">Score based on small sample</h4>
+              <h4 className="font-serif text-base font-bold">
+                Small sample — treat this score with caution
+              </h4>
               <p className="text-sm mt-1 text-[#8A6D3B]/90">
-                This scan only tracks {result.promptsAnalyzed} prompts (recommended: 30+). Credible intervals may be wider due to small sample size.
+                Only {result.promptsAnalyzed} non-branded queries had a live AI Overview.
+                Consider adding more tracked queries or expanding your industry seeds.
               </p>
             </div>
           </div>
         )}
 
-        {/* KPI row — hero score + two supporting */}
+        {/* KPI row */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5 mb-8">
           <div className="lg:col-span-2">
             <HeroScoreCard
               testId="kpi-visibility-score"
-              score={result.qualityGateFailed ? "—" : result.visibilityScore}
+              score={dataSourceIssue ? "—" : result.visibilityScore}
               tierText={tierLabel(tier)}
-              trend={result.qualityGateFailed ? null : scoreTrend}
-              isMixedTrend={isMixedTrend}
-              promptSetChanged={promptSetChanged}
-              mentionRate={result.qualityGateFailed ? undefined : result.mentionRatePct}
-              citationShare={result.qualityGateFailed ? undefined : result.brandCitationSharePct}
-              scoreCiLow={result.qualityGateFailed ? null : result.scoreCiLow}
-              scoreCiHigh={result.qualityGateFailed ? null : result.scoreCiHigh}
-              historyScores={result.qualityGateFailed ? [] : sortedHistory
-                .filter(s => {
-                  const ver = s.scoring_version ?? s.raw_results?.scoring_version ?? "v1-binary";
-                  if (result.scoringVersion === "v1-binary") {
-                    return ver === "v1-binary";
-                  }
-                  return ver !== "v1-binary";
-                })
-                .map(s => s.visibility_pct || 0)}
+              trend={dataSourceIssue ? null : scoreTrend}
+              mentionRate={dataSourceIssue ? undefined : result.mentionRatePct}
+              citationShare={dataSourceIssue ? undefined : result.brandCitationSharePct}
+              aioCoverage={dataSourceIssue ? undefined : result.aioCoveragePct}
+              nonBrandedCount={dataSourceIssue ? undefined : result.promptsAnalyzed}
+              brandedVisibility={
+                dataSourceIssue || result.brandedPromptsCount === 0
+                  ? undefined
+                  : result.brandedVisibilityPct
+              }
             />
           </div>
           <KpiCard
-            testId="kpi-sov"
-            label="Share of Voice"
-            value={result.qualityGateFailed ? "—" : (result.shareOfVoicePct !== undefined ? result.shareOfVoicePct : "—")}
-            suffix={result.qualityGateFailed ? "" : "%"}
-            sub={
-              <div className="flex flex-col gap-1">
-                <div>Mentions vs competitors</div>
-                {!result.qualityGateFailed && result.winRatePct !== undefined && (
-                  <div className="text-[11px] font-semibold text-[#1A1A1A]">
-                    Comparison Win Rate: <span className="text-[#D9531E]">{result.winRatePct}%</span>
-                  </div>
-                )}
-              </div>
+            testId="kpi-aio-coverage"
+            label="AIO Coverage"
+            value={dataSourceIssue ? "—" : result.aioCoveragePct ?? 0}
+            suffix="%"
+            tone={
+              dataSourceIssue
+                ? "critical"
+                : (result.aioCoveragePct ?? 0) < 50
+                ? "warning"
+                : "good"
             }
+            sub={`AI Overviews returned for ${
+              Math.round(
+                ((result.aioCoveragePct ?? 0) / 100) *
+                  (result.promptsAnalyzed + (result.brandedPromptsCount || 0))
+              ) || 0
+            } of ${result.promptsAnalyzed + (result.brandedPromptsCount || 0)} queries`}
             index={1}
           />
           <KpiCard
+            testId="kpi-brand-presence"
+            label="Brand Presence"
+            value={
+              dataSourceIssue || result.brandedPromptsCount === 0
+                ? "—"
+                : result.brandedVisibilityPct
+            }
+            suffix={
+              dataSourceIssue || result.brandedPromptsCount === 0 ? "" : "%"
+            }
+            sub={`Own-name queries: ${result.brandedPromptsCount || 0}`}
+            index={2}
+          />
+          <KpiCard
             testId="kpi-prompts"
-            label="Prompts Analyzed"
-            value={result.promptsAnalyzed}
-            sub="Across your category"
-            index={1}
+            label="Tracked Queries"
+            value={result.promptsAnalyzed + (result.brandedPromptsCount || 0)}
+            sub={`${result.promptsAnalyzed} non-branded · ${
+              result.brandedPromptsCount || 0
+            } branded`}
+            index={3}
           />
           <KpiCard
             testId="kpi-competitors"
             label="Competitors Found"
             value={result.competitorsFound}
-            sub="Co-mentioned in answers"
-            index={2}
-          />
-          <KpiCard
-            testId="kpi-citations"
-            label="Citations Extracted"
-            value={result.totalCitations || 0}
-            sub="URLs in AI responses"
-            index={3}
+            sub="Co-mentioned in AIOs"
+            index={4}
           />
         </div>
 
-        {/* Score Decomposition & Intent Breakdown Row */}
-        {!result.qualityGateFailed && (
-          <div className="space-y-8 mb-8">
-            <ScoreBreakdown result={result} />
-            {result.intentBreakdown && (
-              <IntentBreakdown breakdown={result.intentBreakdown} />
-            )}
-          </div>
-        )}
-
         {/* History Row */}
-        {sortedHistory.length > 1 && (
+        {sortedHistory && sortedHistory.length > 1 && (
           <div className="mb-8 p-5 bg-white border border-[#E5E2D9] rounded-sm">
-            <h3 className="text-xs font-semibold text-[#1A1A1A] mb-4 uppercase tracking-[0.1em]">Previous Scans</h3>
+            <h3 className="text-xs font-semibold text-[#1A1A1A] mb-4 uppercase tracking-[0.1em]">
+              Previous Scans
+            </h3>
             <div className="flex gap-4 overflow-x-auto pb-2">
               {sortedHistory.map((scan, i) => {
-                const isActive = new Date(scan.scanned_at).getTime() === new Date(result.scanTimestamp).getTime();
-                // Simple consecutive delta for the list (newer minus this one)
+                const isActive =
+                  new Date(scan.scanned_at).getTime() ===
+                  new Date(result.scanTimestamp).getTime();
                 const next = sortedHistory[i - 1];
-                const cardDelta = next ? (next.visibility_pct - (scan.visibility_pct || 0)).toFixed(1) : null;
+                const cardDelta = next
+                  ? (next.visibility_pct - (scan.visibility_pct || 0)).toFixed(1)
+                  : null;
                 return (
-                  <button 
-                    key={i} 
+                  <button
+                    key={i}
                     onClick={() => handleHistoryClick(scan)}
-                    className={`min-w-[140px] text-left p-4 border rounded-sm transition-colors ${isActive ? "border-[#D9531E] bg-[#FFF8F5]" : "border-[#E5E2D9] bg-[#FDFBF7] hover:border-[#1A1A1A]"}`}
+                    className={`min-w-[140px] text-left p-4 border rounded-sm transition-colors ${
+                      isActive
+                        ? "border-[#D9531E] bg-[#FFF8F5]"
+                        : "border-[#E5E2D9] bg-[#FDFBF7] hover:border-[#1A1A1A]"
+                    }`}
                   >
-                    <div className="text-xs text-[#666666] whitespace-nowrap">{formatTimestamp(scan.scanned_at)}</div>
-                    <div className="text-xl font-serif font-bold text-[#D9531E] mt-2">{scan.visibility_pct}%</div>
+                    <div className="text-xs text-[#666666] whitespace-nowrap">
+                      {formatTimestamp(scan.scanned_at)}
+                    </div>
+                    <div className="text-xl font-serif font-bold text-[#D9531E] mt-2">
+                      {scan.visibility_pct}%
+                    </div>
                     {cardDelta !== null && (
-                      <div className={`text-[10px] mt-0.5 font-semibold ${parseFloat(cardDelta) > 0 ? "text-[#2F5C4F]" : parseFloat(cardDelta) < 0 ? "text-[#8B3A3A]" : "text-[#999999]"}`}>
-                        {parseFloat(cardDelta) > 0 ? "+" : ""}{cardDelta}%
+                      <div
+                        className={`text-[10px] mt-0.5 font-semibold ${
+                          parseFloat(cardDelta) > 0
+                            ? "text-[#2F5C4F]"
+                            : parseFloat(cardDelta) < 0
+                            ? "text-[#8B3A3A]"
+                            : "text-[#999999]"
+                        }`}
+                      >
+                        {parseFloat(cardDelta) > 0 ? "+" : ""}
+                        {cardDelta}%
                       </div>
                     )}
-                    <div className="text-xs text-[#999999] mt-1">{scan.prompts_tracked} prompts</div>
-                    {scan.used_dynamic_prompts !== undefined && (
-                      <div className="text-[10px] mt-1 text-[#2F5C4F]">{scan.used_dynamic_prompts ? "dyn" : "static"}</div>
-                    )}
-                    {(scan.scoring_version !== undefined || scan.raw_results?.scoring_version !== undefined) && (
-                      <div className="text-[10px] mt-1 text-[#666666] italic">
-                        {scan.scoring_version ?? scan.raw_results?.scoring_version ?? "v1-binary"}
-                      </div>
-                    )}
+                    <div className="text-xs text-[#999999] mt-1">
+                      {scan.prompts_tracked} queries
+                    </div>
                   </button>
                 );
               })}
@@ -464,74 +426,112 @@ export default function Dashboard() {
           </div>
         )}
 
-        {result.qualityGateFailed ? (
-          <div className="bg-white border border-[#E5E2D9] rounded-sm p-12 text-center max-w-2xl mx-auto my-12" data-testid="dashboard-unreliable-placeholder">
-            <ShieldAlert className="w-12 h-12 text-[#8B3A3A] mx-auto mb-4" strokeWidth={1.5} />
-            <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A]">Dashboard Data Hidden</h3>
+        {dataSourceIssue ? (
+          <div
+            className="bg-white border border-[#E5E2D9] rounded-sm p-12 text-center max-w-2xl mx-auto my-12"
+            data-testid="dashboard-unreliable-placeholder"
+          >
+            <ShieldAlert
+              className="w-12 h-12 text-[#8B3A3A] mx-auto mb-4"
+              strokeWidth={1.5}
+            />
+            <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A]">
+              Not enough AI Overview data
+            </h3>
             <p className="text-[#666666] mt-3 text-sm leading-relaxed">
-              This scan did not pass the required quality controls (control prompt checks failed or API failure rate exceeded 20%). Detailed visibility, competitor breakdown, citation sources, and recommendations have been hidden to ensure you do not base decisions on unreliable metrics.
-            </p>
-            <p className="text-[#666666] mt-2 text-sm">
-              Please click <strong>Retry Scan</strong> above to re-run the analysis.
+              Bright Data returned an AI Overview for less than 30% of your tracked
+              queries. Rather than pretending we have a real signal, we&apos;re showing
+              nothing. Retry the scan or add more high-intent queries in the &quot;Tracked
+              Queries&quot; tab.
             </p>
           </div>
         ) : (
           <>
             {/* Tabs */}
             <div className="flex items-center gap-6 border-b border-[#E5E2D9] mb-8 overflow-x-auto pb-px print:hidden">
-              {["overview", "queries", "opportunities", "citations", "content"].map(tab => (
+              {["overview", "brand-presence", "queries", "citations"].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
+                  data-testid={`tab-${tab}`}
                   className={`pb-4 text-sm font-semibold uppercase tracking-wider whitespace-nowrap border-b-2 transition-colors ${
-                    activeTab === tab 
-                      ? "border-[#1A1A1A] text-[#1A1A1A]" 
+                    activeTab === tab
+                      ? "border-[#1A1A1A] text-[#1A1A1A]"
                       : "border-transparent text-[#999999] hover:text-[#1A1A1A]"
                   }`}
                 >
-                  {tab === "citations" ? "Citations & Sources" : tab === "queries" ? "Tracked Queries" : tab === "content" ? "Content Lift" : tab}
+                  {tab === "brand-presence"
+                    ? "Brand Presence"
+                    : tab === "citations"
+                    ? "Citations & Sources"
+                    : tab === "queries"
+                    ? "Tracked Queries"
+                    : "Overview"}
                 </button>
               ))}
             </div>
 
-            {/* Main Content Area */}
             {activeTab === "overview" && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
-                  <TopPromptsTable prompts={topPromptsWithTrend} />
+                  <AioEvidenceList
+                    testId="non-branded-evidence"
+                    title="Non-branded queries"
+                    subtitle="Real Google searches your buyers make in this category. Click a row to see the actual AI Overview."
+                    prompts={result.nonBrandedResults}
+                    brandAliases={brandAliases}
+                    emptyLabel="No non-branded queries in this scan."
+                  />
                   <CompetitorTable
-                    competitors={competitorsWithTrend}
+                    competitors={result.competitors}
                     results={result.rawResults || []}
-                    brandMentions={result.rawResults ? result.rawResults.filter(r => r.mentioned).length : 0}
+                    brandMentions={
+                      (result.rawResults || []).filter((r) => r.mentioned).length
+                    }
                   />
                 </div>
                 <div className="lg:col-span-1 space-y-8">
                   <div className="lg:sticky lg:top-24 space-y-8">
-                    <InsightPanel result={resultWithFlags} trend={scoreTrend} onRerun={handleRerun} />
-                    <EngineBreakdown result={result} />
-                    {result.topicScores && (
-                      <TopicBreakdown topicScores={result.topicScores} />
-                    )}
+                    <InsightPanel result={result} trend={scoreTrend} onRerun={handleRerun} />
                   </div>
                 </div>
               </div>
             )}
 
+            {activeTab === "brand-presence" && (
+              <div className="space-y-6">
+                <div className="bg-[#FFFBF6] border border-[#E5E2D9] rounded-sm p-6">
+                  <span className="text-[10px] uppercase tracking-[0.2em] text-[#D9531E] font-bold">
+                    Branded queries panel
+                  </span>
+                  <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A] mt-1">
+                    How Google answers when people search for {result.brand} directly
+                  </h3>
+                  <p className="text-sm text-[#666666] mt-2 max-w-3xl">
+                    These queries contain your brand name so they are excluded from the
+                    headline score. They still matter — this is how Google frames your
+                    brand when someone already knows about you.
+                  </p>
+                </div>
+                <AioEvidenceList
+                  testId="branded-evidence"
+                  title={`Branded queries (${result.brandedPromptsCount || 0})`}
+                  subtitle="Own-name searches. Excluded from the headline visibility score."
+                  prompts={result.brandedResults}
+                  brandAliases={brandAliases}
+                  emptyLabel="No branded queries were tracked in this scan."
+                />
+              </div>
+            )}
+
             {activeTab === "queries" && (
-              <QueryManager brand={result.brand} currentPrompts={result.topPrompts} />
+              <QueryManager
+                brand={result.brand}
+                currentPrompts={result.topPrompts}
+              />
             )}
 
-            {activeTab === "opportunities" && (
-              <OpportunitiesPanel result={result} />
-            )}
-
-            {activeTab === "citations" && (
-              <CitationsPanel result={result} />
-            )}
-
-            {activeTab === "content" && (
-              <ContentLiftPanel brand={result.brand} />
-            )}
+            {activeTab === "citations" && <CitationsPanel result={result} />}
           </>
         )}
       </div>

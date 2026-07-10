@@ -1,0 +1,39 @@
+{
+  "summary": "End-to-end validation of AEO/AIO scan pipeline for Wrike/SaaS. 1 fresh BrightData scan executed (job e9ab5622...): completed in ~4m20s with visibility_pct=9.1%, aio_coverage_pct=59.1%, aio_error_rate_pct=27.3%, data_source_issue=false, 22 results (18 non-branded + 4 branded), scoring_version=v7-aio-only, platform=google_ai_overview. Parser fix VERIFIED: 11 non-branded rows returned non-empty aio_text AND non-empty aio_references. Visible-flag alignment verified on 1 row. Frontend dashboard tested by injecting the normalized result into sessionStorage — all KPI cards, evidence expansion, brand presence tab, and data_source_issue banner behaviors work correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/scan/{job_id}/status", "issue": "aio_error_rate_pct=27.3% observed — BrightData intermittently 500'd on ~6/22 queries. Retries wired in and overall scan still passed the data_source_issue gate; behavior matches spec ('degrade gracefully')."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "KpiCard", "issue": "React warning 'Received NaN for the children attribute' fires briefly on the empty-state /dashboard route before the 'No report yet' placeholder mounts. Non-fatal, but should be guarded with Number.isFinite() in KpiCard.jsx.", "selector": "[data-testid^=\"kpi-\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/tests/test_aio_scan.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Low) Guard KpiCard numeric children with Number.isFinite() to eliminate NaN React warning on empty dashboard state.",
+    "(Optional) Consider surfacing SERP error rate more prominently even when scan is not gated (aio_error_rate_pct=27.3% is high but currently only shown inside the data-source-issue banner)."
+  ],
+  "critical_code_review_comments": [
+    "src/services/api.js normalizeResult() correctly derives nonBrandedResults/brandedResults and honors data_source_issue from multiple locations (top-level, summary_stats, raw) — robust.",
+    "AioEvidence.jsx line ~200 crashes with 'Cannot read properties of undefined (reading length)' if a malformed payload without prompts is injected. Add a default (prompts = []) in props destructure for defensive rendering.",
+    "extractBrightDataAiOverview parser is now correctly reading ai_overview.texts and references[].href — verified by real data (11/18 non-branded queries returned real AIO text with citations)."
+  ],
+  "updated_files": [
+    "/app/tests/test_aio_scan.py (new)"
+  ],
+  "success_rate": {"backend": "100% (7/7 pytest)", "frontend": "100% (5/5 UI checks)"},
+  "test_credentials": "None required. All keys pre-configured in /app/.env.local.",
+  "seed_data_creation": "None. Used real BrightData response from live scan job e9ab5622-226e-4741-aa6f-2c956e3c4ba3.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Do NOT run more than 1-2 fresh /api/scan calls per session — each burns real BrightData credits. If you need a completed scan for frontend testing, poll GET /api/scan/{job_id}/status of an existing job or re-use /tmp/scan_result.json. Frontend dashboard consumes sessionStorage['aeo_last_scan'] as the NORMALIZED shape (with nonBrandedResults/brandedResults arrays), NOT the raw run_record — injecting run_record directly crashes AioEvidence.jsx at line 200 (prompts.length). Use the mapping in /app/src/services/api.js normalizeResult() as reference. Scan takes ~4-5 minutes end-to-end.",
+  "rca_of_the_issue": "N/A — the original parser bug (empty AIO text due to reading wrong JSON path) is CONFIRMED FIXED. The current extractBrightDataAiOverview reads ai_overview.texts (typed blocks with list/paragraph snippets) and ai_overview.references[].href, and returned real content for 11/18 non-branded Wrike-category queries in this run. Visibility resolved to 9.1% (non-zero), aio_coverage 59.1%, data_source_issue=false. Demo-ready."
+}

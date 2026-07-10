@@ -75,78 +75,150 @@ export async function brightDataSearch(query, options = {}) {
   }
 
   const geo = process.env.SERP_GEO || "us";
-  const timeoutMs = options.timeout || 45000;
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutMs = options.timeout || 30000;
+  const maxAttempts = options.attempts ?? 2;
+  const backoffMs = options.backoffMs ?? 1000;
 
-  try {
-    const res = await fetch("https://api.brightdata.com/request", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        zone: config.zone,
-        url: buildGoogleSearchUrl(query, { geo, aiOverview: options.aiOverview !== false }),
-        format: "json",
-        country: geo,
-      }),
-      signal: controller.signal,
-    });
+  let lastErr = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch("https://api.brightdata.com/request", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          zone: config.zone,
+          url: buildGoogleSearchUrl(query, {
+            geo,
+            aiOverview: options.aiOverview !== false,
+          }),
+          format: "json",
+          country: geo,
+        }),
+        signal: controller.signal,
+      });
 
-    clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Bright Data HTTP ${res.status}: ${errText}`);
+      if (!res.ok) {
+        const errText = await res.text();
+        // Retry on 5xx (proxy errors are transient)
+        if (res.status >= 500 && attempt < maxAttempts) {
+          lastErr = new Error(`Bright Data HTTP ${res.status}: ${errText}`);
+          await new Promise((r) => setTimeout(r, backoffMs * attempt));
+          continue;
+        }
+        throw new Error(`Bright Data HTTP ${res.status}: ${errText}`);
+      }
+
+      const data = await res.json();
+      if (data.error || data.status === "error") {
+        throw new Error(data.error || data.message || "Bright Data request failed");
+      }
+      return normalizeBrightDataResponse(data);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastErr = err;
+      const isAbort = err.name === "AbortError" || /abort/i.test(err.message || "");
+      const is5xx = /HTTP 5\d\d/.test(err.message || "");
+      if ((isAbort || is5xx) && attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, backoffMs * attempt));
+        continue;
+      }
+      throw err;
     }
-
-    const data = await res.json();
-
-    if (data.error || data.status === "error") {
-      throw new Error(data.error || data.message || "Bright Data request failed");
-    }
-
-    return normalizeBrightDataResponse(data);
-  } catch (err) {
-    clearTimeout(timeoutId);
-    throw err;
   }
+  throw lastErr || new Error("Bright Data request failed after retries.");
+}
+
+function extractSnippetsFromBlock(block) {
+  if (!block) return [];
+  if (typeof block === "string") return [block];
+  const out = [];
+  if (block.snippet) out.push(block.snippet);
+  if (block.text) out.push(block.text);
+  if (block.header) out.push(block.header);
+  if (Array.isArray(block.list)) {
+    block.list.forEach((item) => {
+      out.push(...extractSnippetsFromBlock(item));
+    });
+  }
+  if (Array.isArray(block.text_blocks)) {
+    block.text_blocks.forEach((tb) => {
+      out.push(...extractSnippetsFromBlock(tb));
+    });
+  }
+  if (Array.isArray(block.paragraphs)) {
+    block.paragraphs.forEach((p) => {
+      out.push(...extractSnippetsFromBlock(p));
+    });
+  }
+  return out.filter(Boolean);
 }
 
 export function extractBrightDataAiOverview(data) {
   const ao = data?.ai_overview;
-  if (!ao) return { text: "", citations: [] };
+  if (!ao) return { text: "", citations: [], references: [] };
 
   let text = "";
+  const parts = [];
+
   if (typeof ao === "string") {
     text = ao;
-  } else if (ao.text) {
-    text = ao.text;
-  } else if (Array.isArray(ao.text_blocks)) {
-    text = ao.text_blocks
-      .map((block) => block.snippet || block.text || block.header || "")
-      .filter(Boolean)
-      .join("\n");
-  } else if (Array.isArray(ao.paragraphs)) {
-    text = ao.paragraphs.map((p) => (typeof p === "string" ? p : p.text || "")).filter(Boolean).join("\n");
-  } else if (ao.snippet) {
-    text = ao.snippet;
+  } else {
+    // Primary shape observed from Bright Data: ai_overview.texts (array of blocks)
+    if (Array.isArray(ao.texts)) {
+      ao.texts.forEach((block) => {
+        parts.push(...extractSnippetsFromBlock(block));
+      });
+    }
+    // Fallbacks for other shapes
+    if (parts.length === 0 && Array.isArray(ao.text_blocks)) {
+      ao.text_blocks.forEach((block) => {
+        parts.push(...extractSnippetsFromBlock(block));
+      });
+    }
+    if (parts.length === 0 && Array.isArray(ao.paragraphs)) {
+      ao.paragraphs.forEach((p) => {
+        parts.push(...extractSnippetsFromBlock(p));
+      });
+    }
+    if (parts.length === 0 && typeof ao.text === "string") parts.push(ao.text);
+    if (parts.length === 0 && typeof ao.snippet === "string") parts.push(ao.snippet);
+
+    text = parts.join("\n");
   }
 
-  const citationSources = [
+  // References: BrightData uses `href`, `title`, `source` in ai_overview.references
+  const refSources = [
     ...(ao.references || []),
     ...(ao.sources || []),
     ...(ao.citations || []),
   ];
 
-  const citations = citationSources
-    .map((ref) => (typeof ref === "string" ? ref : ref.link || ref.url || ref.href))
-    .filter(Boolean)
-    .map(normalizeUrl);
+  const references = refSources
+    .map((ref) => {
+      if (typeof ref === "string") return { href: ref, title: "", source: "" };
+      const href = ref.href || ref.link || ref.url || "";
+      return {
+        href,
+        title: ref.title || "",
+        source: ref.source || "",
+      };
+    })
+    .filter((r) => r.href);
 
-  return { text: text.trim(), citations: [...new Set(citations)] };
+  const citations = [...new Set(references.map((r) => normalizeUrl(r.href)).filter(Boolean))];
+
+  return {
+    text: text.trim(),
+    citations,
+    references,
+  };
 }
 
 export function extractBrightDataPaa(data) {
