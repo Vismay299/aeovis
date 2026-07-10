@@ -9,6 +9,11 @@ export const KpiCard = ({ label, value, suffix, sub, index = 0, testId, tone = "
     critical: "bg-[#F9ECEC] border-[#E2B8B8] text-[#8B3A3A]",
     good: "bg-[#E8F0ED] border-[#B4D4CA] text-[#2F5C4F]",
   };
+
+  // Prevent React NaN warning if numeric value hasn't resolved yet
+  const displayValue =
+    typeof value === "number" && !Number.isFinite(value) ? "—" : value ?? "—";
+
   return (
     <motion.div
       data-testid={testId}
@@ -21,9 +26,11 @@ export const KpiCard = ({ label, value, suffix, sub, index = 0, testId, tone = "
       <div>
         <div className="flex items-baseline gap-1.5">
           <span className="font-serif text-4xl md:text-5xl font-semibold tracking-tight leading-none">
-            {value}
+            {displayValue}
           </span>
-          {suffix && <span className="text-base opacity-60 font-serif">{suffix}</span>}
+          {suffix && displayValue !== "—" && (
+            <span className="text-base opacity-60 font-serif">{suffix}</span>
+          )}
         </div>
         {sub && <div className="mt-2 text-xs opacity-70">{sub}</div>}
       </div>

@@ -191,13 +191,13 @@ export const AioEvidenceRow = ({ prompt, brandAliases }) => {
   );
 };
 
-export const AioEvidenceList = ({ prompts, brandAliases, title, subtitle, testId, emptyLabel = "No queries yet." }) => (
+export const AioEvidenceList = ({ prompts = [], brandAliases = [], title, subtitle, testId, emptyLabel = "No queries yet." }) => (
   <div data-testid={testId} className="bg-white border border-[#E5E2D9] rounded-sm">
     <div className="px-6 py-5 border-b border-[#E5E2D9]">
       <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A] leading-tight">{title}</h3>
       {subtitle && <p className="text-sm text-[#666666] mt-1">{subtitle}</p>}
     </div>
-    {prompts.length === 0 ? (
+    {(!prompts || prompts.length === 0) ? (
       <div className="px-6 py-10 text-center text-sm text-[#999999]">{emptyLabel}</div>
     ) : (
       <div className="divide-y divide-[#E5E2D9]">
