@@ -348,7 +348,7 @@ export function discoverCompetitorNames(results, brand, brandUrl, userCompetitor
   return [...userOrdered, ...discovered];
 }
 
-function citationMatchesCompetitor(citations, references, compAliases, brandDomainForComp) {
+export function citationMatchesCompetitor(citations, references, compAliases) {
   const hrefs = [];
   (citations || []).forEach((c) => {
     if (typeof c === "string") hrefs.push(c);

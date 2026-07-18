@@ -162,7 +162,7 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
   }
 
   if (provider === "brightdata") {
-    return probeGoogleAiOverviewBrightData(prompt, options, retries);
+    return probeGoogleAiOverviewBrightData(prompt, options);
   }
 
   const geo = process.env.SERP_GEO || "us";
@@ -280,38 +280,32 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
  * @param {Array|string} seedTerms - Search term(s) to fetch queries for
  * @returns {Promise<Array<string>>} List of question strings
  */
-async function probeGoogleAiOverviewBrightData(prompt, options = {}, retries = 2) {
-  const wait = (ms) => new Promise((res) => setTimeout(res, ms));
-  let lastErr = null;
+async function probeGoogleAiOverviewBrightData(prompt, options = {}) {
+  try {
+    const data = await brightDataSearch(prompt, { ...options, aiOverview: true });
+    const { text, citations } = extractBrightDataAiOverview(data);
+    const cost = 0.0015;
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const data = await brightDataSearch(prompt, { ...options, aiOverview: true });
-      const { text, citations } = extractBrightDataAiOverview(data);
-      const cost = 0.0015;
-
-      if (options.stats) {
-        options.stats.cost = (options.stats.cost || 0) + cost;
-      }
-
-      const hasOverview = !!text?.trim();
-      return {
-        text,
-        model_used: hasOverview ? "google_ai_overview" : "google_ai_overview-skipped",
-        citations,
-        cost,
-        tokens: 0,
-      };
-    } catch (e) {
-      lastErr = e;
-      if (attempt < retries) {
-        await wait(1000 * Math.pow(2, attempt));
-      }
+    if (options.stats) {
+      options.stats.cost = (options.stats.cost || 0) + cost;
     }
-  }
 
-  console.warn(`[brightdata] Google AI Overview unavailable — skipping: ${lastErr?.message || lastErr}`);
-  return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
+    const hasOverview = !!text?.trim();
+    return {
+      text,
+      model_used: hasOverview ? "google_ai_overview" : "google_ai_overview-skipped",
+      citations,
+      cost,
+      tokens: 0,
+    };
+  } catch (e) {
+    const msg = (e?.message || String(e)).toLowerCase();
+    if (msg.includes("rate limit") || msg.includes("quota")) {
+      throw e;
+    }
+    console.warn(`[brightdata] Google AI Overview unavailable — skipping: ${e?.message || e}`);
+    return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
+  }
 }
 
 export async function fetchPeopleAlsoAsk(seedTerms) {

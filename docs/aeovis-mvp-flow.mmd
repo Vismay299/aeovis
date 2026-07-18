@@ -1,0 +1,21 @@
+flowchart TB
+  User[User enters brand + website + industry]
+  User --> PromptGen[Generate 25-35 prompts]
+  PromptGen --> RunLoop[Run each prompt against engine]
+  RunLoop --> Parse[Check mentions rank sentiment competitors]
+  Parse --> Score[Calculate visibility score]
+  Score --> Dashboard[Show dashboard with per-prompt rows]
+
+  subgraph built [Already in aeovis]
+    RunLoop
+    Parse
+    Score
+    Dashboard
+  end
+
+  subgraph todo [Still to build]
+    PromptGen
+    Engine[Gemini API first, Google AI Overview later]
+  end
+
+  Engine --> RunLoop

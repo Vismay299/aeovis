@@ -169,6 +169,10 @@ export default function Dashboard() {
       !!(r.brand_cited ?? r.brandCited)
   ).length;
 
+  // True only when the scan actually probed branded/own-name queries. v8 scans
+  // are unbranded-only, so this is false and all branded UI is hidden.
+  const hasBrandedData = (result?.brandPresencePromptsCount ?? 0) > 0;
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] relative print:bg-white">
       {isScanning && (
@@ -316,14 +320,23 @@ export default function Dashboard() {
           >
             <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-[#8A6D3B]" />
             <p className="text-sm text-[#8A6D3B]/90">
-              Only {result.nonBrandedWithAio} non-branded queries had a live AI Overview (of{" "}
-              {result.promptsAnalyzed} non-branded tracked). Treat this score with caution.
+              Only {result.queriesWithAio ?? result.nonBrandedWithAio} of{" "}
+              {result.promptsTracked ?? result.promptsAnalyzed} tracked prompts had a live AI
+              Overview. Treat this score with caution.
             </p>
           </div>
         )}
 
-        {/* KPI row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5 mb-8">
+        {/* KPI row.
+            hasBrandedData is false for every v8 (unbranded-only) scan — the
+            pipeline still computes branded metrics, but nothing feeds it
+            branded queries. Branded surfaces stay in the tree and light up
+            automatically if branded prompts are re-enabled. */}
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 gap-5 mb-8 ${
+            hasBrandedData ? "lg:grid-cols-7" : "lg:grid-cols-6"
+          }`}
+        >
           <div className="lg:col-span-2">
             <HeroScoreCard
               testId="kpi-visibility-score"
@@ -353,7 +366,7 @@ export default function Dashboard() {
           </div>
           <KpiCard
             testId="kpi-aio-coverage"
-            label="AIO Coverage"
+            label="AI Overview coverage"
             value={dataSourceIssue ? "—" : result.aioCoveragePct ?? 0}
             suffix="%"
             tone={
@@ -363,25 +376,33 @@ export default function Dashboard() {
                 ? "warning"
                 : "good"
             }
-            sub={`${result.nonBrandedWithAio ?? 0} of ${result.promptsAnalyzed} non-branded queries returned an AI Overview`}
+            sub={`${result.queriesWithAio ?? result.nonBrandedWithAio ?? 0} of ${
+              result.promptsTracked ?? result.promptsAnalyzed
+            } prompts`}
             index={1}
           />
           <KpiCard
-            testId="kpi-brand-presence"
-            label="Brand Presence"
-            value={
-              dataSourceIssue || result.brandPresencePromptsCount === 0
-                ? "—"
-                : result.brandedVisibilityPct
-            }
-            suffix={
-              dataSourceIssue || result.brandPresencePromptsCount === 0 ? "" : "%"
-            }
-            sub={`${result.brandPresenceWithAio ?? result.brandedWithAio ?? 0} of ${
-              result.brandPresencePromptsCount || 0
-            } own-name queries had an AIO`}
+            testId="kpi-presence"
+            label="Presence"
+            value={dataSourceIssue ? "—" : result.presenceRatePct ?? 0}
+            suffix="%"
+            sub={`${result.visibleCount ?? result.visibleNonBranded ?? 0} of ${
+              result.promptsTracked ?? result.promptsAnalyzed
+            } prompts`}
             index={2}
           />
+          {hasBrandedData && (
+            <KpiCard
+              testId="kpi-brand-presence"
+              label="Brand Presence"
+              value={dataSourceIssue ? "—" : result.brandedVisibilityPct}
+              suffix={dataSourceIssue ? "" : "%"}
+              sub={`${result.brandPresenceWithAio ?? result.brandedWithAio ?? 0} of ${
+                result.brandPresencePromptsCount || 0
+              } own-name queries had an AIO`}
+              index={3}
+            />
+          )}
           <KpiCard
             testId="kpi-prompts"
             label="Tracked Queries"
@@ -396,12 +417,16 @@ export default function Dashboard() {
               const other =
                 result.aliasBrandedOnlyCount ??
                 Math.max(0, (result.brandedPromptsCount || 0) - own);
+              // Unbranded-only scan: don't pad the label with permanent zeros.
+              if (own === 0 && other === 0) {
+                return `${nonB} unbranded queries`;
+              }
               if (other > 0) {
                 return `${nonB} non-branded · ${own} own-name · ${other} other branded`;
               }
               return `${nonB} non-branded · ${own} own-name`;
             })()}
-            index={3}
+            index={4}
           />
           <KpiCard
             testId="kpi-competitors"
@@ -412,7 +437,7 @@ export default function Dashboard() {
                 ? "None co-mentioned in AIOs"
                 : "Auto-found in AI Overviews"
             }
-            index={4}
+            index={5}
           />
         </div>
 
@@ -495,7 +520,12 @@ export default function Dashboard() {
           <>
             {/* Tabs */}
             <div className="flex items-center gap-6 border-b border-[#E5E2D9] mb-8 overflow-x-auto pb-px print:hidden">
-              {["overview", "brand-presence", "queries", "citations"].map((tab) => (
+              {[
+                "overview",
+                ...(hasBrandedData ? ["brand-presence"] : []),
+                "queries",
+                "citations",
+              ].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}

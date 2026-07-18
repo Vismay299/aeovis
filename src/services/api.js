@@ -164,7 +164,19 @@ function mapCompetitorRow(c) {
 
 /**
  * Prefer stored competitor metrics; if empty, rediscover from AIO evidence
- * so older scans / form-empty runs still show Blank-style co-mentions.
+ * so older scans / form-empty runs still show co-mentions.
+ *
+ * NOTE — two competitor scorers coexist by design:
+ *   - v8 (authoritative): competitorExtract.extractCompetitors(), one batched
+ *     LLM call, run server-side in scanWorker and persisted on the scan record.
+ *   - v7 (this fallback): coMentions.buildCompetitorLeaderboard(), the regex +
+ *     stopword heuristic. Retained ONLY so pre-v8 scans still render a
+ *     competitor table.
+ *
+ * A v8 scan always persists competitors, so this branch should never run for
+ * new scans. If you see it firing on a fresh scan, the worker failed to persist
+ * competitors — fix that rather than tuning the heuristic. Delete this fallback
+ * (and coMentions' scoring exports) once pre-v8 scans age out of the database.
  */
 function resolveCompetitors(data, raw, results, brand, website) {
   const stored = (data.competitors ?? raw.competitors ?? []).map(mapCompetitorRow);
@@ -297,8 +309,6 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
   let visibleNonBranded =
     summary?.visible_non_branded ?? countVisibleNonBranded();
 
-  const anyAioPresent = results.some((r) => getAioPresent(r));
-
   let visibilityPct =
     data.visibility_pct ?? data.visibilityScore ?? summary?.visibility_pct ?? null;
   let mentionRatePct =
@@ -331,10 +341,17 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     summary?.error_rate_pct ??
     raw.aio_error_rate_pct ??
     null;
+  let presenceRatePct =
+    data.presence_rate_pct ?? data.presenceRatePct ?? summary?.presence_rate_pct ?? null;
+  let shareOfAiPct =
+    data.share_of_ai_pct ?? data.shareOfAiPct ?? summary?.share_of_ai_pct ?? visibilityPct;
 
+  // The pipeline (summarizeAioResults) already emits three mutually-consistent
+  // metrics on one denominator each. Only recompute when the summary is
+  // missing entirely (legacy scans) — never second-guess a present summary,
+  // that client-side "disagreement" check was the historical source of
+  // mixed-denominator bugs.
   const summaryMissing = !summary && results.length > 0;
-  const fieldsDisagree =
-    (visibilityPct ?? 0) > 0 && (aioCoveragePct ?? 0) === 0 && anyAioPresent;
 
   const recomputeFromResults = () => {
     nonBrandedWithAio = countNonBrandedWithAio();
@@ -376,9 +393,13 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     const errored = results.filter((r) => r.error).length;
     aioErrorRatePct =
       results.length > 0 ? round1(errored / results.length) : 0;
+
+    presenceRatePct =
+      nonBranded.length > 0 ? round1(visibleNonBranded / nonBranded.length) : 0;
+    shareOfAiPct = visibilityPct;
   };
 
-  if (summaryMissing || fieldsDisagree) {
+  if (summaryMissing) {
     recomputeFromResults();
   }
 
@@ -402,6 +423,9 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
   brandedVisibilityPct = brandedVisibilityPct ?? 0;
   aioCoveragePct = aioCoveragePct ?? 0;
   aioErrorRatePct = aioErrorRatePct ?? 0;
+  presenceRatePct = presenceRatePct ?? 0;
+  shareOfAiPct = shareOfAiPct ?? visibilityPct;
+  const promptsTracked = data.prompts_tracked ?? raw.prompts_tracked ?? nonBranded.length;
   const dataSourceIssue = !!(
     data.data_source_issue ??
     data.dataSourceIssue ??
@@ -430,6 +454,13 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     website,
     industry: data.industry ?? "",
     visibilityScore: visibilityPct,
+    /** Hero metric — same value as visibilityScore, named for the "Share of AI answers" hero. */
+    shareOfAiPct,
+    presenceRatePct,
+    /** Denominator the hero uses: non-branded queries where Google actually returned an AIO. */
+    queriesWithAio: nonBrandedWithAio,
+    promptsTracked,
+    visibleCount: visibleNonBranded,
     mentionRatePct,
     brandCitationSharePct: citationSharePct,
     brandedVisibilityPct,

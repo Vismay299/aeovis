@@ -1,0 +1,27 @@
+flowchart TB
+  subgraph step1 [Step 1 - Pick prompts]
+    A[You enter brand + website]
+    B[System auto-generates prompts]
+    C[Or pulls from real-user query dataset]
+    D[Or you add your own prompts]
+    A --> E[Saved list of ~35-50 prompts]
+    B --> E
+    C --> E
+    D --> E
+  end
+
+  subgraph step2 [Step 2 - Run prompts daily]
+    E --> F[Bot opens ChatGPT like a real user]
+    F --> G[Types prompt 1 and saves answer]
+    F --> H[Types prompt 2 and saves answer]
+    F --> I[... repeats for all prompts]
+  end
+
+  subgraph step3 [Step 3 - Score results]
+    G --> J[Did your brand appear?]
+    H --> J
+    I --> J
+    J --> K[Visibility score = percent of prompts you appear in]
+    J --> L[Per-prompt table in dashboard]
+    J --> M[Competitors mentioned]
+  end

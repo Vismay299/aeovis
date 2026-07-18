@@ -92,7 +92,11 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
   };
 
   try {
-    const data = await brightDataSearch(query.text, { timeout: 30000, aiOverview: true });
+    // Bright Data SERP responses for AI Overview average ~45-50s; a 30s
+    // timeout aborts the majority of otherwise-successful queries and inflates
+    // the error rate. Use 60s (matches brightdata.js default) so real responses
+    // land. Retries are handled inside brightDataSearch.
+    const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true });
     const { text, citations, references } = extractBrightDataAiOverview(data);
     result.cost = 0.0015;
     if (stats) stats.cost = (stats.cost || 0) + result.cost;
@@ -213,6 +217,13 @@ export function summarizeAioResults(results) {
       ? Math.round((citedNonBranded / nonBrandedWithAio.length) * 1000) / 10
       : 0.0;
 
+  // presence_rate_pct = visible ÷ total non-branded queries (denominator = 30,
+  // not queries_with_aio) — a second, stricter view of the same "visible" count.
+  const presenceRatePct =
+    nonBranded.length > 0
+      ? Math.round((visibleNonBranded / nonBranded.length) * 1000) / 10
+      : 0.0;
+
   // Determine whether the scan is reliable enough to score.
   // Data source issue if too many API errors OR too few queries produced an AIO.
   const dataSourceIssue =
@@ -222,6 +233,10 @@ export function summarizeAioResults(results) {
 
   const insufficientSample = nonBrandedWithAio.length < AIO_MIN_NON_BRANDED_WITH_AIO;
 
+  // Scoring contract — three consistently-defined numbers, never mixed:
+  //   visibility_pct / share_of_ai_pct (HERO) = visible ÷ queries_with_aio (non-branded)
+  //   aio_coverage_pct                        = queries_with_aio ÷ 30 (non-branded)
+  //   presence_rate_pct                       = visible ÷ 30 (non-branded)
   return {
     results,
     summary: {
@@ -239,6 +254,8 @@ export function summarizeAioResults(results) {
       aio_coverage_pct: aioCoveragePct,
       error_rate_pct: errorRatePct,
       visibility_pct: visibilityPct,
+      share_of_ai_pct: visibilityPct,
+      presence_rate_pct: presenceRatePct,
       branded_visibility_pct: brandedVisibilityPct,
       mention_rate_pct: mentionRatePct,
       citation_share_pct: citationSharePct,

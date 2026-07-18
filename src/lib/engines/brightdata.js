@@ -55,7 +55,7 @@ function normalizeBrightDataResponse(data) {
   return payload || data;
 }
 
-function buildGoogleSearchUrl(query, { geo = "us", aiOverview = true } = {}) {
+function buildGoogleSearchUrl(query, { geo = "in", aiOverview = true } = {}) {
   const params = new URLSearchParams({
     q: query,
     hl: "en",
@@ -68,16 +68,58 @@ function buildGoogleSearchUrl(query, { geo = "us", aiOverview = true } = {}) {
   return `https://www.google.com/search?${params.toString()}`;
 }
 
+function isRetryableHttpStatus(status) {
+  return status === 429 || status >= 500;
+}
+
+function isRateLimitResponse(data) {
+  // Bright Data quota/rate-limit signals: explicit error messages,
+  // 429 status from the zone proxy, or a nil/empty body for rate-limited zones.
+  const msg = String(data?.error || data?.message || "").toLowerCase();
+  if (msg.includes("rate limit") || msg.includes("too many requests") || msg.includes("quota")) {
+    return true;
+  }
+  if (data?.status_code === 429) return true;
+  if (data?.status === "rate_limited") return true;
+  return false;
+}
+
+function innerBody(data) {
+  // Bright Data wraps the Google SERP response inside data.body as a JSON
+  // string. Parse it if present so truncation checks operate on the actual
+  // SERP object, not the outer string.
+  if (!data) return null;
+  if (data.body && typeof data.body === "string") {
+    try { return JSON.parse(data.body); } catch (_) { return data.body; }
+  }
+  if (data.body && typeof data.body === "object") return data.body;
+  // No body wrapper — the SERP data sits directly on `data` (legacy zone configs).
+  return data;
+}
+
+function bodyLooksTruncated(body, wantAio) {
+  if (!body) return true;
+  if (!wantAio) return false;
+  // Google always returns at least organic + general for any valid SERP
+  // response. If none of the expected sections are present and AI Overview was
+  // requested but is missing, the proxy likely truncated the stream.
+  const hasOrganic = Array.isArray(body.organic) && body.organic.length > 0;
+  const hasGeneral = !!(body.general && body.general.query);
+  const hasPaa = Array.isArray(body.people_also_ask) && body.people_also_ask.length > 0;
+  const hasAio = !!body.ai_overview;
+  return !hasOrganic && !hasGeneral && !hasPaa && !hasAio;
+}
+
 export async function brightDataSearch(query, options = {}) {
   const config = await getBrightDataConfig();
   if (!config) {
     throw new Error("Bright Data SERP is not configured (set BRIGHTDATA_API_KEY).");
   }
 
-  const geo = process.env.SERP_GEO || "us";
-  const timeoutMs = options.timeout || 30000;
+  const geo = process.env.SERP_GEO || "in";
+  const timeoutMs = options.timeout || 60000;
   const maxAttempts = options.attempts ?? 2;
-  const backoffMs = options.backoffMs ?? 1000;
+  const backoffMs = options.backoffMs ?? 3000;
 
   let lastErr = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -89,6 +131,7 @@ export async function brightDataSearch(query, options = {}) {
         headers: {
           Authorization: `Bearer ${config.apiKey}`,
           "Content-Type": "application/json",
+          "Accept-Encoding": "identity",
         },
         body: JSON.stringify({
           zone: config.zone,
@@ -106,26 +149,76 @@ export async function brightDataSearch(query, options = {}) {
 
       if (!res.ok) {
         const errText = await res.text();
-        // Retry on 5xx (proxy errors are transient)
-        if (res.status >= 500 && attempt < maxAttempts) {
-          lastErr = new Error(`Bright Data HTTP ${res.status}: ${errText}`);
-          await new Promise((r) => setTimeout(r, backoffMs * attempt));
+        if (isRetryableHttpStatus(res.status) && attempt < maxAttempts) {
+          lastErr = new Error(`Bright Data HTTP ${res.status}: ${errText.slice(0, 200)}`);
+          const delay = res.status === 429 ? backoffMs * attempt * 3 : backoffMs * attempt;
+          await new Promise((r) => setTimeout(r, delay));
           continue;
         }
-        throw new Error(`Bright Data HTTP ${res.status}: ${errText}`);
+        throw new Error(`Bright Data HTTP ${res.status}: ${errText.slice(0, 200)}`);
       }
 
-      const data = await res.json();
+      const raw = await res.text();
+
+      // HTML proxy error pages are transient — retry once.
+      const trimmed = raw.trimStart();
+      if (trimmed.startsWith("<") || trimmed.startsWith("<!DOCTYPE")) {
+        if (attempt < maxAttempts) {
+          lastErr = new Error(`Bright Data returned a non-JSON response (${raw.slice(0, 80)}...)`);
+          await new Promise((r) => setTimeout(r, backoffMs * attempt * 2));
+          continue;
+        }
+        throw new Error(`Bright Data returned an HTML proxy page instead of JSON.`);
+      }
+
+      let data;
+      try {
+        data = JSON.parse(raw);
+      } catch (parseErr) {
+        // Truncated JSON (stream cut mid-response) is transient — retry.
+        if (attempt < maxAttempts) {
+          lastErr = new Error(`Bright Data response was not valid JSON: ${parseErr.message}`);
+          await new Promise((r) => setTimeout(r, backoffMs * attempt * 2));
+          continue;
+        }
+        throw new Error(`Bright Data response was not valid JSON: ${parseErr.message}`);
+      }
+
+      // Rate-limit detection — stop retrying immediately.
+      if (isRateLimitResponse(data)) {
+        throw new Error(
+          `Bright Data rate limit / quota exhausted — ${data.error || data.message || "try again later"}`
+        );
+      }
+
       if (data.error || data.status === "error") {
         throw new Error(data.error || data.message || "Bright Data request failed");
       }
+
+      // Check actual SERP body for truncation (parse inner body first).
+      const parsed = innerBody(data);
+      const wantAio = options.aiOverview !== false;
+      if (bodyLooksTruncated(parsed, wantAio) && attempt < maxAttempts) {
+        lastErr = new Error("Bright Data returned a truncated/empty AIO response");
+        await new Promise((r) => setTimeout(r, backoffMs * attempt * 3));
+        continue;
+      }
+
       return normalizeBrightDataResponse(data);
     } catch (err) {
       clearTimeout(timeoutId);
       lastErr = err;
+
+      // Rate-limit errors are not retryable — throw immediately.
+      const msg = (err.message || "").toLowerCase();
+      if (msg.includes("rate limit") || msg.includes("quota")) throw err;
+
       const isAbort = err.name === "AbortError" || /abort/i.test(err.message || "");
       const is5xx = /HTTP 5\d\d/.test(err.message || "");
-      if ((isAbort || is5xx) && attempt < maxAttempts) {
+      const isHtml = /non-JSON response/.test(err.message || "");
+      const isJsonErr = /not valid JSON/.test(err.message || "");
+      const isTruncation = /truncated/.test(err.message || "");
+      if ((isAbort || is5xx || isHtml || isJsonErr || isTruncation) && attempt < maxAttempts) {
         await new Promise((r) => setTimeout(r, backoffMs * attempt));
         continue;
       }

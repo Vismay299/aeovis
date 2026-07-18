@@ -86,23 +86,24 @@ export const HeroScoreCard = ({
             onMouseLeave={() => setShowTooltip(false)}
           >
             <span className="text-xs uppercase tracking-[0.15em] text-white/80 font-medium">
-              AI Overview Visibility
+              Share of AI answers
             </span>
             <HelpCircle className="w-3.5 h-3.5 text-white/60 group-hover:text-white transition-colors" />
             {showTooltip && (
               <div className="absolute left-0 top-6 z-50 bg-[#1A1A1A] text-white text-[11px] p-4 rounded-sm border border-[#E5E2D9]/20 shadow-lg min-w-[260px] leading-relaxed">
                 <p className="font-semibold text-white mb-2">How is this calculated?</p>
                 <p className="text-white/80">
-                  We probe Google AI Overview (via Bright Data) for every tracked
-                  non-branded query. The score is:
+                  We probe Google AI Overview (via Bright Data) for all 30 tracked
+                  unbranded queries. Share of AI answers is:
                 </p>
                 <div className="mt-2 mb-2 p-2 rounded-sm bg-white/10 font-mono text-[10px] text-[#FFE5D9]">
-                  visible non-branded queries with AIO ÷ total non-branded queries with AIO
+                  visible queries ÷ queries where an AI Overview appeared
                 </div>
                 <p className="text-white/80">
                   A query is "visible" if the brand is mentioned in the AIO text OR the
-                  brand&apos;s domain is cited in the references. Branded queries are
-                  tracked separately in the "Brand Presence" panel.
+                  brand&apos;s domain is cited in the references. Two sub-metrics — AI
+                  Overview coverage and raw presence — are always shown alongside it, each
+                  out of the full 30.
                 </p>
               </div>
             )}
@@ -149,10 +150,10 @@ export const HeroScoreCard = ({
                 <div>
                   {visibleNonBranded != null && (
                     <>
-                      Visible in{" "}
+                      You appear in{" "}
                       <span className="font-bold text-white">{visibleNonBranded}</span> of{" "}
-                      <span className="font-bold text-white">{nonBrandedWithAio}</span>{" "}
-                      non-branded AI Overviews
+                      <span className="font-bold text-white">{nonBrandedWithAio}</span> AI
+                      Overviews
                     </>
                   )}
                   {visibleNonBranded == null && (
@@ -253,12 +254,11 @@ export const HeroScoreCard = ({
 
               <section>
                 <h4 className="font-serif text-lg font-semibold text-[#1A1A1A] mb-2">
-                  2. Branded vs non-branded queries
+                  2. 30 unbranded queries
                 </h4>
                 <p>
-                  We tag every query as branded (contains the brand name or its aliases)
-                  or non-branded. The headline score only uses non-branded queries so
-                  searching your own name doesn&apos;t artificially inflate the number.
+                  Every scan tracks exactly 30 unbranded category queries — never your own
+                  brand name — so searching for yourself can&apos;t inflate the number.
                 </p>
               </section>
 
@@ -267,11 +267,13 @@ export const HeroScoreCard = ({
                   3. Simple, transparent scoring
                 </h4>
                 <div className="bg-[#FFF8F5] border-l-2 border-[#D9531E] p-3 font-mono text-xs text-[#D9531E] my-3 rounded-sm">
-                  Score = visible non-branded AIOs ÷ non-branded queries with an AIO
+                  Share of AI answers = visible queries ÷ queries where an AI Overview appeared
                 </div>
                 <p>
                   A query counts as visible if the brand is mentioned in the AI Overview
-                  text OR the brand&apos;s domain appears in the citation references.
+                  text OR the brand&apos;s domain appears in the citation references. AI
+                  Overview coverage and presence are shown alongside it, both out of the
+                  full 30 — never mixed denominators.
                 </p>
               </section>
 
