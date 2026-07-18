@@ -126,7 +126,8 @@ export async function insertScan(scanRecord) {
           stability: scanRecord.stability,
           mention_rate_pct: scanRecord.mention_rate_pct,
         }
-      ]);
+      ])
+      .select();
     if (error) throw error;
     return data;
   } catch (err) {
@@ -140,7 +141,8 @@ export async function insertScan(scanRecord) {
             ...baseRecord,
             scoring_version: scanRecord.scoring_version,
           }
-        ]);
+        ])
+        .select();
       if (error) throw error;
       return data;
     } catch (err2) {
@@ -181,7 +183,6 @@ export async function getScansForBrand(brand) {
 
 // Global memory store for scan jobs (Next.js hot-reload safe)
 global.memoryJobs = global.memoryJobs || new Map();
-
 export async function createScanJob({ brand, url, industry, competitors }) {
   const jobId = crypto.randomUUID();
   const job = {
@@ -216,6 +217,52 @@ export async function createScanJob({ brand, url, industry, competitors }) {
     console.warn("Failed to insert scan_job to database, falling back to memory:", err.message);
     global.memoryJobs.set(jobId, job);
     return job;
+  }
+}
+
+/**
+ * True if a scan for this brand is already running. Checks the shared
+ * `scan_jobs` table, not just the in-process memory map — on serverless each
+ * instance has its own map, so a memory-only check does not prevent two
+ * concurrent scans from starting and overloading the Bright Data zone.
+ *
+ * Jobs older than STALE_JOB_MS are ignored so a crashed job stuck in
+ * "probing" cannot block a brand forever.
+ */
+const STALE_JOB_MS = 15 * 60 * 1000;
+
+export async function hasActiveScanForBrand(brand) {
+  const RUNNING = ["pending", "generating_prompts", "probing", "scoring"];
+  const key = String(brand || "").trim().toLowerCase();
+  if (!key) return false;
+
+  const cutoffMs = Date.now() - STALE_JOB_MS;
+
+  // In-memory first: covers local dev and Supabase-less runs.
+  for (const job of global.memoryJobs.values()) {
+    if (String(job.brand || "").trim().toLowerCase() !== key) continue;
+    if (!RUNNING.includes(job.status)) continue;
+    const created = new Date(job.created_at || 0).getTime();
+    if (Number.isFinite(created) && created < cutoffMs) continue; // stale
+    return true;
+  }
+
+  if (!supabase) return false;
+
+  try {
+    const { data, error } = await supabase
+      .from("scan_jobs")
+      .select("id")
+      .ilike("brand", key)
+      .in("status", RUNNING)
+      .gt("created_at", new Date(cutoffMs).toISOString())
+      .limit(1);
+    if (error) throw error;
+    return (data || []).length > 0;
+  } catch (err) {
+    // Fail open: a broken duplicate-check must not block all scanning.
+    console.warn("[db] hasActiveScanForBrand check failed, allowing scan:", err.message);
+    return false;
   }
 }
 

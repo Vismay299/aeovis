@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 import { startScanJob } from "@/lib/workers/scanWorker";
 
+// This route has side effects (it launches real Bright Data scans). Without
+// force-dynamic, Next prerenders it during `next build` and actually executes
+// the handler, starting live scans and burning SERP quota on every deploy.
+export const dynamic = "force-dynamic";
+
 export async function GET(request) {
   if (!supabase) {
     return NextResponse.json({ processed: 0, info: "No Supabase configured. Local in-memory worker runs automatically." });

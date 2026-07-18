@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createScanJob } from "@/lib/db";
+import { createScanJob, hasActiveScanForBrand } from "@/lib/db";
 import { startScanJob } from "@/lib/workers/scanWorker";
 
 export async function POST(request) {
@@ -11,6 +11,13 @@ export async function POST(request) {
     const competitors = (payload.competitors || "").trim();
     if (!brand) {
       return NextResponse.json({ detail: "Brand name is required." }, { status: 400 });
+    }
+
+    if (await hasActiveScanForBrand(brand)) {
+      return NextResponse.json(
+        { detail: "A scan for this brand is already in progress. Please wait for it to finish." },
+        { status: 409 }
+      );
     }
 
     // Enqueue the scan job
