@@ -1,20 +1,43 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { ArrowUpRight, ArrowRight } from "lucide-react";
-import { Navbar } from "@/components/Navbar";
-import { Footer } from "@/components/Footer";
-import { DashboardPreview } from "@/components/DashboardPreview";
+import { ArrowRight } from "lucide-react";
+import "@/components/landing/landing.css";
+import { LandingNav } from "@/components/landing/LandingNav";
+import { ScanBar } from "@/components/landing/ScanBar";
+import { AnswerDemo } from "@/components/landing/AnswerDemo";
+import { ProbeCounter } from "@/components/landing/ProbeCounter";
+import { Reveal } from "@/components/landing/Reveal";
+import { ScoreMeter } from "@/components/perceev/ScoreMeter";
+import { Badge } from "@/components/perceev/Badge";
+import { Wordmark } from "@/components/perceev/Wordmark";
 import { saveScan } from "@/services/api";
 import { SAMPLE_RESULT } from "@/data/mockData";
 
-const fadeUp = {
-  initial: { opacity: 0, y: 24 },
-  whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, margin: "-80px" },
-  transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
-};
+const RIVALS = [
+  { name: "You", score: 64, gap: null, you: true },
+  { name: "NorthPeak", score: 71, gap: "+7" },
+  { name: "Lumen IQ", score: 58, gap: "-6" },
+  { name: "Brightwave", score: 38, gap: "-26" },
+];
+
+const STEPS = [
+  {
+    num: "01",
+    title: "Enter your domain",
+    body: "No signup, no credit card. Just the website you want checked.",
+  },
+  {
+    num: "02",
+    title: "We probe the AI",
+    body: "30 unbranded buyer prompts hit the engines your customers actually use — never leading, never branded.",
+  },
+  {
+    num: "03",
+    title: "Get your verdict",
+    body: "A share-of-AI score, the answers verbatim, and the rivals beating you — in about a minute.",
+  },
+];
 
 export default function Landing() {
   const router = useRouter();
@@ -25,260 +48,228 @@ export default function Landing() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7]">
-      <Navbar />
+    <div className="lp">
+      <LandingNav />
 
-      {/* Hero — asymmetric editorial */}
-      <section className="max-w-7xl mx-auto px-6 md:px-12 pt-16 md:pt-24 pb-16 md:pb-24">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-end">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="lg:col-span-7"
-          >
-            <div className="flex items-center gap-3 mb-7">
-              <span className="h-px w-10 bg-[#D9531E]" />
-              <span className="text-xs uppercase tracking-[0.2em] text-[#666666] font-medium">
-                Answer Engine Optimization
-              </span>
-            </div>
-            <h1 className="font-serif text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight leading-[1.04] text-[#1A1A1A]">
-              When AI answers,
-              <br />
-              does it name <span className="italic text-[#D9531E]">you</span>
-              <br />
-              — or your rival?
-            </h1>
-            <p className="mt-8 text-lg text-[#666666] max-w-xl leading-relaxed">
-              Brands are quietly losing presence in AI-generated answers. AnswerRank measures
-              exactly where you appear, where competitors win, and what to fix — in one clear report.
-            </p>
-            <div className="mt-10 flex flex-col sm:flex-row gap-4">
-              <button
-                data-testid="hero-primary-cta"
-                onClick={() => router.push("/scan")}
-                className="group inline-flex items-center justify-center gap-2 bg-[#D9531E] text-white hover:bg-[#B34115] transition-colors rounded-sm px-8 py-4 font-sans font-semibold text-sm uppercase tracking-[0.1em]"
-              >
-                Run a visibility check
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" strokeWidth={2} />
-              </button>
-              <button
-                data-testid="hero-secondary-cta"
-                onClick={viewSample}
-                className="inline-flex items-center justify-center gap-2 bg-transparent text-[#1A1A1A] border border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white transition-colors rounded-sm px-8 py-4 font-sans font-semibold text-sm uppercase tracking-[0.1em]"
-              >
-                See a sample report
-              </button>
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
-            className="lg:col-span-5"
-          >
-            <DashboardPreview />
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Value strip — editorial numbered */}
-      <section className="border-y border-[#E5E2D9] bg-[#F3F0E6]">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-[#E5E2D9]">
-          {[
-            { n: "01", t: "Visibility Score", d: "One honest number for your answer-engine presence." },
-            { n: "02", t: "Top Prompts", d: "See exactly which queries surface your brand — and where." },
-            { n: "03", t: "Competitor Gaps", d: "Spot the prompts where rivals appear and you don't." },
-          ].map((item, i) => (
-            <motion.div key={i} {...fadeUp} transition={{ duration: 0.5, delay: i * 0.1 }} className="py-10 md:py-12 md:px-10 first:md:pl-0 last:md:pr-0">
-              <span className="font-serif text-3xl text-[#D9531E] font-semibold">{item.n}</span>
-              <h3 className="font-sans text-lg font-semibold text-[#1A1A1A] mt-3">{item.t}</h3>
-              <p className="text-sm text-[#666666] mt-1.5 leading-relaxed">{item.d}</p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how" className="max-w-7xl mx-auto px-6 md:px-12 py-20 md:py-32">
-        <motion.div {...fadeUp} className="max-w-2xl mb-16">
-          <span className="text-xs uppercase tracking-[0.2em] text-[#D9531E] font-semibold">
-            The method
-          </span>
-          <h2 className="font-serif text-4xl md:text-5xl font-semibold tracking-tight text-[#1A1A1A] mt-4 leading-tight">
-            Three steps to a clear answer
-          </h2>
-        </motion.div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[#E5E2D9] border border-[#E5E2D9] rounded-sm overflow-hidden">
-          {[
-            { step: "Step 1", title: "Enter brand & site", desc: "Tell us the brand and website you want measured across AI answers." },
-            { step: "Step 2", title: "AI runs the checks", desc: "Our engine probes dozens of real prompts your buyers actually ask." },
-            { step: "Step 3", title: "Review visibility", desc: "Get a clear score, your top prompts, and where competitors are winning." },
-          ].map((s, i) => (
-            <motion.div
-              key={i}
-              {...fadeUp}
-              transition={{ duration: 0.5, delay: i * 0.1 }}
-              className="bg-white p-8 md:p-10 hover:bg-[#FDFBF7] transition-colors"
-            >
-              <span className="text-xs uppercase tracking-[0.15em] text-[#999999] font-medium">{s.step}</span>
-              <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A] mt-4 mb-3">{s.title}</h3>
-              <p className="text-sm text-[#666666] leading-relaxed">{s.desc}</p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* Methodology Section */}
-      <section className="bg-[#F3F0E6] border-y border-[#E5E2D9]">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 py-20 md:py-24 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          <motion.div {...fadeUp}>
-            <span className="text-xs uppercase tracking-[0.2em] text-[#D9531E] font-semibold">
-              Statistical Rigor
+      <main>
+        {/* ---------- Hero ---------- */}
+        <section className="lp-hero">
+          <div className="lp-hero-glow" />
+          <div className="lp-container lp-hero-inner">
+            <span className="lp-eyebrow">
+              <span className="lp-eyebrow-dot" />
+              Answer engine intelligence
             </span>
-            <h2 className="font-serif text-4xl md:text-5xl font-semibold tracking-tight text-[#1A1A1A] mt-4 leading-tight">
-              A scientifically backed approach to AEO
-            </h2>
-            <p className="mt-6 text-[#666666] leading-relaxed">
-              Unlike simple keyword scrapers, AnswerRank uses a multi-engine hybrid probing model and Bayesian statistics to measure visibility with mathematical confidence.
+
+            <h1 className="lp-hero-title">
+              When AI answers, does it name <span style={{ color: "var(--accent)" }}>you</span> — or
+              your rival?
+            </h1>
+
+            <p className="lp-hero-sub">
+              Google&apos;s AI Overview, ChatGPT, and Perplexity now answer buyer questions directly
+              — often without sending anyone to a website. Brands that don&apos;t appear in those
+              answers are invisible to the next generation of search.
             </p>
-          </motion.div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div className="bg-white p-6 border border-[#E5E2D9] rounded-sm">
-              <h4 className="font-serif text-lg font-semibold text-[#1A1A1A] mb-2">Hybrid Probing</h4>
-              <p className="text-xs text-[#666666] leading-relaxed">
-                Weights visibility across search engines based on actual usage: Google AI Overview (50%), Perplexity (25%), ChatGPT (15%), and Gemini (10%).
-              </p>
+
+            <div className="lp-hero-scan">
+              <ScanBar />
+              <p className="lp-hero-micro">Free · No signup · 60-second scan</p>
             </div>
-            <div className="bg-white p-6 border border-[#E5E2D9] rounded-sm">
-              <h4 className="font-serif text-lg font-semibold text-[#1A1A1A] mb-2">Blended Scoring</h4>
-              <p className="text-xs text-[#666666] leading-relaxed">
-                A robust composite score combining Mention Visibility (85%) with organic Reference Citation Share (15%) for holistic insight.
-              </p>
-            </div>
-            <div className="bg-white p-6 border border-[#E5E2D9] rounded-sm">
-              <h4 className="font-serif text-lg font-semibold text-[#1A1A1A] mb-2">Intent Weights</h4>
-              <p className="text-xs text-[#666666] leading-relaxed">
-                Weights visibility by B2B purchase intent level, placing higher value on Comparison (2.0x) and High Buy Intent (3.0x) search queries.
-              </p>
-            </div>
-            <div className="bg-white p-6 border border-[#E5E2D9] rounded-sm">
-              <h4 className="font-serif text-lg font-semibold text-[#1A1A1A] mb-2">Bayesian Intervals</h4>
-              <p className="text-xs text-[#666666] leading-relaxed">
-                Uses a Beta-Binomial conjugate model to construct 90% credible intervals, providing a statistically rigorous safety margin.
-              </p>
+
+            {/* Live AI answer window */}
+            <Reveal>
+              <p className="lp-answer-caption">This is what AI tells your buyers</p>
+              <div className="lp-answer-window">
+                <div className="lp-answer-head">
+                  <div className="lp-answer-dots">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <span className="lp-answer-title">ai overview · live probe</span>
+                </div>
+                <div className="lp-answer-body">
+                  <AnswerDemo />
+                </div>
+                <div className="lp-answer-foot">
+                  <span className="lp-legend">
+                    <i style={{ background: "var(--good)" }} />
+                    Your brand
+                  </span>
+                  <span className="lp-legend">
+                    <i style={{ background: "var(--crit)" }} />
+                    Rivals
+                  </span>
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ---------- Stats strip ---------- */}
+        <section className="lp-stats">
+          <div className="lp-container">
+            <div className="lp-stats-grid">
+              <div className="lp-stat">
+                <ProbeCounter />
+                <div className="lp-stat-label">Probes run</div>
+              </div>
+              <div className="lp-stat">
+                <div className="lp-stat-value">30</div>
+                <div className="lp-stat-label">Prompts per scan</div>
+              </div>
+              <div className="lp-stat">
+                <div className="lp-stat-value">60s</div>
+                <div className="lp-stat-label">To a verdict</div>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Preview / The report */}
-      <section id="preview" className="border-t border-[#E5E2D9] bg-[#F3F0E6]">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 py-20 md:py-32 grid lg:grid-cols-12 gap-12 items-center">
-          <motion.div {...fadeUp} className="lg:col-span-5">
-            <span className="text-xs uppercase tracking-[0.2em] text-[#D9531E] font-semibold">
-              The report
-            </span>
-            <h2 className="font-serif text-4xl md:text-5xl font-semibold tracking-tight text-[#1A1A1A] mt-4 leading-tight">
-              A dashboard built for decisions
-            </h2>
-            <p className="mt-6 text-[#666666] leading-relaxed">
-              No clutter, no vanity charts. Just the metrics that tell you whether AI answers
-              recommend you — or your competitors.
-            </p>
-            <ul className="mt-8 space-y-4">
-              {[
-                "AI Visibility Score with plain-language interpretation",
-                "Top prompts ranked by where you appear",
-                "Competitor co-mentions with explicit gap flags",
-              ].map((t, i) => (
-                <li key={i} className="flex items-start gap-3 text-[15px] text-[#1A1A1A]">
-                  <span className="mt-2 w-1.5 h-1.5 bg-[#D9531E] shrink-0" />
-                  {t}
-                </li>
-              ))}
-            </ul>
-            <button
-              data-testid="preview-sample-cta"
-              onClick={viewSample}
-              className="group mt-9 inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.1em] text-[#1A1A1A] border-b-2 border-[#D9531E] pb-1 hover:gap-3 transition-all"
-            >
-              Open the sample report
-              <ArrowUpRight className="w-4 h-4 text-[#D9531E]" strokeWidth={2} />
-            </button>
-          </motion.div>
+        {/* ---------- The shift ---------- */}
+        <section className="lp-section" id="the-shift">
+          <div className="lp-container">
+            <Reveal>
+              <div className="lp-split">
+                <div>
+                  <span className="lp-kicker">01 · The shift</span>
+                  <h2 className="lp-h2">Buyers don&apos;t click links anymore — they ask AI</h2>
+                </div>
+                <p className="lp-body">
+                  Every day, more buying decisions start — and end — inside a single AI answer. If
+                  the engines don&apos;t know you, your buyers never will. Ranking #1 on Google
+                  means nothing when the answer box above it never mentions your name.
+                </p>
+              </div>
+            </Reveal>
+          </div>
+        </section>
 
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
-            className="lg:col-span-7"
-          >
-            <DashboardPreview />
-          </motion.div>
-        </div>
-      </section>
+        {/* ---------- The verdict ---------- */}
+        <section className="lp-section" id="the-verdict">
+          <div className="lp-container">
+            <Reveal>
+              <div className="lp-split">
+                <div>
+                  <span className="lp-kicker">02 · The verdict</span>
+                  <h2 className="lp-h2">One score. Your share of AI.</h2>
+                  <p className="lp-body">
+                    Every scan runs 30 unbranded prompts across real buyer scenarios, then distills
+                    the answers into a single share-of-AI score — how often the engines mention
+                    you, cite you, and where you actually stand.
+                  </p>
+                </div>
+                <div className="lp-verdict-card">
+                  <div className="lp-verdict-top">
+                    <div className="lp-verdict-score">
+                      <span className="lp-verdict-num">64</span>
+                      <span className="lp-verdict-denom">/100</span>
+                    </div>
+                    <Badge variant="moderate">Moderate</Badge>
+                  </div>
+                  <ScoreMeter segments={40} value={64} />
+                  <div className="lp-verdict-meta">
+                    <span>Mentioned 18/20 AIOs</span>
+                    <span>Cited in 6/20</span>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </section>
 
-      {/* Use cases */}
-      <section id="usecases" className="max-w-7xl mx-auto px-6 md:px-12 py-20 md:py-32">
-        <motion.div {...fadeUp} className="max-w-2xl mb-16">
-          <span className="text-xs uppercase tracking-[0.2em] text-[#D9531E] font-semibold">
-            Who it's for
+        {/* ---------- The rivalry ---------- */}
+        <section className="lp-section" id="the-rivalry">
+          <div className="lp-container">
+            <Reveal>
+              <div className="lp-narrow">
+                <span className="lp-kicker">03 · The rivalry</span>
+                <h2 className="lp-h2">Your rivals are already there</h2>
+                <p className="lp-body">
+                  Every scan benchmarks you against the competitors AI actually names — not the
+                  ones you think you have.
+                </p>
+              </div>
+              <div className="lp-rival-list lp-narrow">
+                {RIVALS.map((rival) => (
+                  <div key={rival.name} className={`lp-rival${rival.you ? " is-you" : ""}`}>
+                    <span className="lp-rival-name">
+                      {rival.name}
+                      {rival.you && <Badge variant="accent">You</Badge>}
+                    </span>
+                    <div className="lp-rival-meter">
+                      <ScoreMeter segments={30} value={rival.score} />
+                    </div>
+                    <span className="lp-rival-score">{rival.score}</span>
+                    <span className="lp-rival-gap">
+                      {rival.gap ? (
+                        <Badge variant={parseFloat(rival.gap) > 0 ? "weak" : "strong"}>
+                          {rival.gap}
+                        </Badge>
+                      ) : (
+                        <Badge variant="neutral">Base</Badge>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ---------- How it works ---------- */}
+        <section className="lp-section" id="how-it-works">
+          <div className="lp-container">
+            <Reveal>
+              <div className="lp-narrow">
+                <span className="lp-kicker">04 · How it works</span>
+                <h2 className="lp-h2">Domain in. Verdict out.</h2>
+              </div>
+              <div className="lp-steps">
+                {STEPS.map((step) => (
+                  <div key={step.num} className="lp-step">
+                    <span className="lp-step-num">{step.num}</span>
+                    <h3 className="lp-step-title">{step.title}</h3>
+                    <p className="lp-step-body">{step.body}</p>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ---------- Final CTA ---------- */}
+        <section className="lp-cta" id="begin">
+          <div className="lp-cta-glow" />
+          <div className="lp-container lp-cta-inner">
+            <Reveal>
+              <h2 className="lp-cta-title">Start your first scan</h2>
+              <p className="lp-cta-sub">
+                Run a visibility check in under a minute. No signup. No credit card. Just your
+                domain and we&apos;ll probe the rest.
+              </p>
+              <div className="lp-hero-scan">
+                <ScanBar />
+              </div>
+              <button className="lp-sample-link" data-testid="preview-sample-cta" onClick={viewSample}>
+                See a sample report
+                <ArrowRight size={14} />
+              </button>
+            </Reveal>
+          </div>
+        </section>
+      </main>
+
+      {/* ---------- Footer ---------- */}
+      <footer className="lp-footer" data-testid="footer">
+        <div className="lp-container lp-footer-inner">
+          <Wordmark size="sm" />
+          <span className="lp-footer-copy">
+            © {new Date().getFullYear()} Perceev. All rights reserved.
           </span>
-          <h2 className="font-serif text-4xl md:text-5xl font-semibold tracking-tight text-[#1A1A1A] mt-4 leading-tight">
-            Built for teams that live in search
-          </h2>
-        </motion.div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {[
-            { idx: "For brands", title: "Protect your share of the answer", desc: "Understand whether AI recommends you, and defend the conversations that drive demand." },
-            { idx: "For agencies", title: "Prove AEO impact to clients", desc: "Audit AI visibility for clients and hand over a clean, credible, editorial-grade report." },
-            { idx: "For consultants", title: "Add AEO to your offering", desc: "Bring answer-engine optimization into your SEO and growth practice instantly." },
-          ].map((u, i) => (
-            <motion.div
-              key={i}
-              {...fadeUp}
-              transition={{ duration: 0.5, delay: i * 0.1 }}
-              className="bg-white border border-[#E5E2D9] rounded-sm p-8 hover:border-[#1A1A1A] transition-colors"
-            >
-              <span className="text-xs uppercase tracking-[0.15em] text-[#D9531E] font-semibold">{u.idx}</span>
-              <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A] mt-4 mb-3 leading-snug">{u.title}</h3>
-              <p className="text-sm text-[#666666] leading-relaxed">{u.desc}</p>
-            </motion.div>
-          ))}
         </div>
-      </section>
-
-      {/* Final CTA */}
-      <section className="border-t border-[#E5E2D9] bg-[#1A1A1A]">
-        <div className="max-w-7xl mx-auto px-6 md:px-12 py-24 md:py-32 text-center">
-          <motion.div {...fadeUp}>
-            <h2 className="font-serif text-5xl md:text-7xl font-semibold tracking-tight text-[#FDFBF7] leading-[1.05]">
-              See where you stand
-              <br />
-              in AI answers.
-            </h2>
-            <p className="mt-6 text-lg text-[#A8A8A8] max-w-xl mx-auto">
-              Run your first visibility check in under a minute. No signup required.
-            </p>
-            <button
-              data-testid="final-cta"
-              onClick={() => router.push("/scan")}
-              className="group mt-10 inline-flex items-center gap-2 bg-[#D9531E] text-white hover:bg-[#B34115] transition-colors rounded-sm px-9 py-4 font-sans font-semibold text-sm uppercase tracking-[0.1em]"
-            >
-              Run a visibility check
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" strokeWidth={2} />
-            </button>
-          </motion.div>
-        </div>
-      </section>
-
-      <Footer />
+      </footer>
     </div>
   );
 }

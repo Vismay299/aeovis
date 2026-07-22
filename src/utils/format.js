@@ -15,13 +15,13 @@ export function tierLabel(tier) {
 export function tierClasses(tier) {
   switch (tier) {
     case "strong":
-      return "bg-[#E8F0ED] text-[#2F5C4F] border-[#B4D4CA]";
+      return "text-[var(--good)] border-[var(--good-border)]";
     case "moderate":
-      return "bg-[#FDF6E3] text-[#8F6614] border-[#E6D5A7]";
+      return "text-[var(--warn)] border-[var(--warn-border)]";
     case "weak":
-      return "bg-[#F9ECEC] text-[#8B3A3A] border-[#E2B8B8]";
+      return "text-[var(--crit)] border-[var(--crit-border)]";
     default:
-      return "bg-[#F3F0E6] text-[#666666] border-[#E5E2D9]";
+      return "text-[var(--text-2)] border-[var(--border-2)]";
   }
 }
 

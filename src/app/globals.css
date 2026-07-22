@@ -1,108 +1,244 @@
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,500&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+@font-face {
+  font-family: 'Geist';
+  src: url('./fonts/GeistVF.woff') format('woff');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('./fonts/GeistMonoVF.woff') format('woff');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-    color-scheme: light;
+  /* Surfaces — warm graphite ramp */
+  --bg-0: #0E0D0B;
+  --bg-1: #151310;
+  --bg-2: #1C1915;
+  --bg-3: #242019;
+  --bg-inverse: #EDE7DC;
+
+  /* Borders */
+  --border-1: #26221C;
+  --border-2: #38322A;
+  --border-3: #524A3E;
+
+  /* Text */
+  --text-1: #EDE7DC;
+  --text-2: #A69D8F;
+  --text-3: #746C5F;
+  --text-inverse: #141210;
+
+  /* Accent — ember */
+  --accent: #E8632C;
+  --accent-hover: #F2743E;
+  --accent-press: #C9501E;
+  --accent-fg: #140D08;
+  --accent-soft: rgba(232, 99, 44, 0.12);
+  --accent-border: rgba(232, 99, 44, 0.35);
+  --accent-text: #F08A5B;
+
+  /* Semantic */
+  --good: #8BC49A;
+  --good-bg: rgba(139, 196, 154, 0.10);
+  --good-border: rgba(139, 196, 154, 0.30);
+  --warn: #D9A441;
+  --warn-bg: rgba(217, 164, 65, 0.10);
+  --warn-border: rgba(217, 164, 65, 0.30);
+  --crit: #DE7A66;
+  --crit-bg: rgba(222, 122, 102, 0.10);
+  --crit-border: rgba(222, 122, 102, 0.30);
+  --info: #8FAEC9;
+  --info-bg: rgba(143, 174, 201, 0.10);
+  --info-border: rgba(143, 174, 201, 0.30);
+
+  /* Data viz */
+  --chart-1: #E8632C;
+  --chart-2: #8BC49A;
+  --chart-3: #D9A441;
+  --chart-4: #8FAEC9;
+  --chart-5: #746C5F;
+  --meter-track: #2B2620;
+
+  /* Semantic aliases */
+  --surface-page: var(--bg-0);
+  --surface-card: var(--bg-1);
+  --surface-raised: var(--bg-2);
+  --surface-active: var(--bg-3);
+  --text-body: var(--text-1);
+  --text-secondary: var(--text-2);
+  --text-muted: var(--text-3);
+  --focus-ring: 0 0 0 2px var(--bg-0), 0 0 0 4px var(--accent-border);
+
+  /* Typography */
+  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', ui-monospace, monospace;
+
+  --type-display-xl: 600 clamp(44px, 5.2vw, 72px)/1.02 var(--font-sans);
+  --track-display: -0.035em;
+  --type-display: 600 44px/1.06 var(--font-sans);
+  --type-h1: 600 32px/1.15 var(--font-sans);
+  --track-h1: -0.02em;
+  --type-h2: 600 22px/1.25 var(--font-sans);
+  --track-h2: -0.015em;
+  --type-h3: 600 17px/1.35 var(--font-sans);
+  --track-h3: -0.01em;
+  --type-body-lg: 400 16px/1.6 var(--font-sans);
+  --type-body: 400 14px/1.55 var(--font-sans);
+  --type-body-sm: 400 13px/1.5 var(--font-sans);
+  --type-label: 500 11px/1.2 var(--font-mono);
+  --track-label: 0.14em;
+  --type-label-sm: 500 10px/1.2 var(--font-mono);
+  --track-label-sm: 0.12em;
+  --type-data-xl: 600 64px/1 var(--font-sans);
+  --track-data: -0.03em;
+  --type-data: 600 28px/1.1 var(--font-sans);
+  --type-mono-body: 400 13px/1.6 var(--font-mono);
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+  --space-11: 96px;
+  --container-max: 1200px;
+  --container-pad: 32px;
+  --control-h-sm: 32px;
+  --control-h-md: 40px;
+  --control-h-lg: 52px;
+
+  /* Effects */
+  --radius-1: 4px;
+  --radius-2: 6px;
+  --radius-round: 999px;
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 48px rgba(232, 99, 44, 0.14);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur-med: 240ms;
+  --blur-overlay: blur(8px);
+
+  /* shadcn/ui compatibility — map Perceev tokens to shadcn HSL vars */
+  --background: 30 11% 5%;
+  --foreground: 38 43% 93%;
+  --card: 30 12% 8%;
+  --card-foreground: 38 43% 93%;
+  --popover: 30 12% 8%;
+  --popover-foreground: 38 43% 93%;
+  --primary: 17 76% 54%;
+  --primary-foreground: 30 36% 6%;
+  --secondary: 34 10% 14%;
+  --secondary-foreground: 38 43% 93%;
+  --muted: 34 10% 14%;
+  --muted-foreground: 36 14% 57%;
+  --accent-shadcn: 17 76% 54%;
+  --accent-shadcn-foreground: 30 36% 6%;
+  --destructive: 10 54% 63%;
+  --destructive-foreground: 30 36% 6%;
+  --border: 34 14% 13%;
+  --input: 34 14% 13%;
+  --ring: 17 76% 54%;
+  --radius: 0.25rem;
+
+  color-scheme: dark;
 }
 
-body {
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
     margin: 0;
-    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    background: var(--bg-0);
+    color: var(--text-1);
+    font: var(--type-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #fdfbf7;
-    color: #1a1a1a;
-}
-
-code {
-    font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
-}
-
-@layer base {
-    :root {
-        --background: 40 43% 98%;
-        --foreground: 0 0% 10%;
-        --card: 0 0% 100%;
-        --card-foreground: 0 0% 10%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 0 0% 10%;
-        --primary: 17 76% 49%;
-        --primary-foreground: 0 0% 100%;
-        --secondary: 48 30% 93%;
-        --secondary-foreground: 0 0% 10%;
-        --muted: 48 30% 93%;
-        --muted-foreground: 0 0% 40%;
-        --accent: 17 76% 49%;
-        --accent-foreground: 0 0% 100%;
-        --destructive: 0 50% 39%;
-        --destructive-foreground: 0 0% 100%;
-        --border: 45 18% 87%;
-        --input: 45 18% 87%;
-        --ring: 0 0% 10%;
-        --radius: 0.25rem;
-    }
-}
-
-@layer base {
-    * {
-        @apply border-border;
-    }
-    body {
-        @apply bg-background text-foreground;
-    }
-    h1, h2, h3, h4 {
-        font-family: "Cormorant Garamond", Georgia, serif;
-    }
-}
-
-.font-serif {
-    font-family: "Cormorant Garamond", Georgia, serif;
-}
-.font-sans {
-    font-family: "IBM Plex Sans", system-ui, sans-serif;
-}
-
-::-webkit-scrollbar {
-    width: 11px;
-    height: 11px;
-}
-::-webkit-scrollbar-track {
-    background: #fdfbf7;
-}
-::-webkit-scrollbar-thumb {
-    background: #d9d4c6;
-    border: 3px solid #fdfbf7;
-    border-radius: 0;
-}
-::-webkit-scrollbar-thumb:hover {
-    background: #b8b2a0;
+  }
+  h1, h2, h3, h4 {
+    margin: 0;
+    color: var(--text-1);
+  }
+  p {
+    margin: 0;
+  }
+  a {
+    color: var(--accent-text);
+    text-decoration: none;
+    transition: color var(--dur-fast);
+  }
+  a:hover {
+    color: var(--accent-hover);
+  }
 }
 
 ::selection {
-    background: #d9531e;
-    color: #ffffff;
+  background: var(--accent);
+  color: var(--accent-fg);
 }
 
-/* Blinking caret for typographic loader */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-0);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+  border: 3px solid var(--bg-0);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-3);
+}
+
+/* Blinking caret for typing loader */
 @keyframes caret-blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 .caret-blink {
-    animation: caret-blink 1s step-end infinite;
+  animation: caret-blink 1s step-end infinite;
+}
+
+/* Pulse fade for skeleton shimmer */
+@keyframes pulse-fade {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* Shimmer for skeleton loading */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.animate-shimmer {
+  animation: shimmer 1.8s infinite;
 }
 
 @layer base {
-    [data-debug-wrapper="true"] {
-        display: contents !important;
-    }
+  [data-debug-wrapper="true"] {
+    display: contents !important;
+  }
 }
 
 .App {
   min-height: 100vh;
-  background-color: #fdfbf7;
+  background-color: var(--bg-0);
 }

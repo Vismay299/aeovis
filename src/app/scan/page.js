@@ -1,12 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import { ArrowRight, AlertCircle } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Navbar } from "@/components/Navbar";
+import { AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { Wordmark } from "@/components/perceev/Wordmark";
+import { Button } from "@/components/perceev/Button";
+import { Input } from "@/components/perceev/Input";
+import { Select } from "@/components/perceev/Select";
+import { ScoreMeter } from "@/components/perceev/ScoreMeter";
+import { Alert } from "@/components/perceev/Alert";
+import { Card } from "@/components/perceev/Card";
 import { runScan, saveScan, fetchIndustries, loadScan, clearScan } from "@/services/api";
 import { SAMPLE_RESULT } from "@/data/mockData";
 
@@ -28,25 +33,26 @@ export default function Scan() {
   const [brand, setBrand] = useState("");
   const [website, setWebsite] = useState("");
   const [industry, setIndustry] = useState("");
+  const [customIndustry, setCustomIndustry] = useState("");
   const [competitors, setCompetitors] = useState("");
   const [industries, setIndustries] = useState([]);
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    fetchIndustries().then(data => setIndustries(data.industries || [])).catch(() => {});
+    fetchIndustries().then((data) => setIndustries(data.industries || [])).catch(() => {});
   }, []);
+
   const [scanning, setScanning] = useState(false);
   const [stage, setStage] = useState(-1);
   const [progress, setProgress] = useState(0);
   const [failed, setFailed] = useState(false);
+
   const validate = () => {
     const e = {};
     if (!brand.trim()) e.brand = "Brand name is required.";
     if (!website.trim()) e.website = "Website is required.";
     else if (!/^([\w-]+\.)+[\w-]{2,}.*$/.test(website.replace(/^https?:\/\//, "")))
       e.website = "Enter a valid domain, e.g. acme.com";
-    // Industry is optional now — dynamic prompt generation works without it
-    // (it helps with fallback and categorization)
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -54,9 +60,6 @@ export default function Scan() {
   const start = async () => {
     if (!validate()) return;
 
-    // If starting a scan for a *different* brand/website than the last saved result,
-    // clear the old data first. This prevents the dashboard from showing
-    // prompts/results from a previous run (e.g. Monoedge) when viewing the new brand.
     try {
       const current = loadScan();
       const newBrand = brand.trim();
@@ -72,10 +75,10 @@ export default function Scan() {
     setProgress(0);
     try {
       const result = await runScan(
-        { 
-          brand: brand.trim(), 
-          website: website.trim(), 
-          industry, 
+        {
+          brand: brand.trim(),
+          website: website.trim(),
+          industry: industry === "__custom__" ? customIndustry.trim() : industry,
           competitors: competitors.trim(),
         },
         (s, p) => {
@@ -98,238 +101,427 @@ export default function Scan() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7]">
-      <Navbar />
-      <div className="max-w-3xl mx-auto px-6 md:px-12 py-16 md:py-24">
-        <AnimatePresence mode="wait">
-          {!scanning ? (
-            <motion.div
-              key="form"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5 }}
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--bg-0)",
+        fontFamily: "var(--font-sans)",
+      }}
+    >
+      {/* Slim top bar */}
+      <header
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 40,
+          background: "var(--bg-0)",
+          borderBottom: "1px solid var(--border-1)",
+          padding: "0 var(--space-6)",
+          height: "56px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Link href="/" aria-label="Perceev home" style={{ display: "inline-flex" }}>
+          <Wordmark size="sm" />
+        </Link>
+        <button
+          onClick={() => {
+            if (scanning) return;
+            setBrand("");
+            setWebsite("");
+            setIndustry("");
+            setCustomIndustry("");
+            setCompetitors("");
+            setErrors({});
+          }}
+          style={{
+            background: "none",
+            border: "none",
+            padding: 0,
+            cursor: "pointer",
+            fontFamily: "var(--font-mono)",
+            fontSize: "10px",
+            fontWeight: 500,
+            textTransform: "uppercase",
+            letterSpacing: "0.14em",
+            color: "var(--text-3)",
+            transition: "color var(--dur-fast)",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-1)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-3)")}
+        >
+          New scan
+        </button>
+      </header>
+
+      <div
+        style={{
+          maxWidth: "700px",
+          margin: "0 auto",
+          padding: "var(--space-10) var(--space-6)",
+        }}
+      >
+        {!scanning ? (
+          <div>
+            <h1
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "var(--type-h1)",
+                fontWeight: 600,
+                letterSpacing: "var(--track-h1)",
+                color: "var(--text-1)",
+                marginBottom: "var(--space-3)",
+              }}
             >
-              <div className="flex items-center gap-3 mb-6">
-                <span className="h-px w-10 bg-[#D9531E]" />
-                <span className="text-xs uppercase tracking-[0.2em] text-[#666666] font-medium">
-                  New scan
-                </span>
-              </div>
-              <h1 className="font-serif text-5xl md:text-6xl font-semibold tracking-tight text-[#1A1A1A] leading-[1.05]">
-                Run a visibility check
-              </h1>
-              <p className="mt-6 text-lg text-[#666666] max-w-xl leading-relaxed">
-                We probe how often AI answers surface your brand across the prompts your buyers
-                actually ask.
-              </p>
+              Run a visibility check
+            </h1>
+            <p
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "var(--type-body-lg)",
+                color: "var(--text-2)",
+                marginBottom: "var(--space-8)",
+                lineHeight: 1.6,
+              }}
+            >
+              We probe how often AI answers surface your brand across the prompts your buyers
+              actually ask.
+            </p>
 
-              <div className="mt-12 space-y-8">
-                <div>
-                  <label htmlFor="brand" className="block text-xs uppercase tracking-[0.15em] text-[#666666] font-medium mb-3">
-                    Brand or company name
-                  </label>
-                  <input
-                    id="brand"
-                    data-testid="scan-brand-input"
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
-                    placeholder="Acme Analytics"
-                    className="w-full bg-white border border-[#E5E2D9] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none rounded-sm px-5 py-4 font-sans text-[#1A1A1A] placeholder:text-[#BBBBBB] transition-all"
-                  />
-                  {errors.brand && (
-                    <p data-testid="scan-brand-error" className="mt-2 text-xs text-[#8B3A3A] flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5" /> {errors.brand}
-                    </p>
-                  )}
-                </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+              <Input
+                id="brand"
+                data-testid="scan-brand-input"
+                label="Brand or company name"
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                placeholder="Acme Analytics"
+                error={errors.brand}
+              />
 
-                <div>
-                  <label htmlFor="website" className="block text-xs uppercase tracking-[0.15em] text-[#666666] font-medium mb-3">
-                    Website
-                  </label>
-                  <input
-                    id="website"
-                    data-testid="scan-website-input"
-                    value={website}
-                    onChange={(e) => setWebsite(e.target.value)}
-                    placeholder="acme.com"
-                    className="w-full bg-white border border-[#E5E2D9] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none rounded-sm px-5 py-4 font-sans text-[#1A1A1A] placeholder:text-[#BBBBBB] transition-all"
-                  />
-                  {errors.website && (
-                    <p data-testid="scan-website-error" className="mt-2 text-xs text-[#8B3A3A] flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5" /> {errors.website}
-                    </p>
-                  )}
-                </div>
+              <Input
+                id="website"
+                data-testid="scan-website-input"
+                label="Website"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="acme.com"
+                error={errors.website}
+              />
 
-                <div>
-                  <label htmlFor="industry" className="block text-xs uppercase tracking-[0.15em] text-[#666666] font-medium mb-3">
-                    Industry <span className="text-[#999999] font-normal">(optional — helps with fallback)</span>
-                  </label>
-                  <Select value={industry} onValueChange={setIndustry}>
-                    <SelectTrigger
-                      id="industry"
-                      data-testid="scan-industry-input"
-                      className="w-full bg-white border border-[#E5E2D9] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none rounded-sm px-5 py-4 font-sans text-[#1A1A1A] transition-all h-auto"
-                    >
-                      <SelectValue placeholder="Select an industry..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {industries.map((ind) => (
-                        <SelectItem key={ind.id} value={ind.id}>
-                          {ind.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.industry && (
-                    <p data-testid="scan-industry-error" className="mt-2 text-xs text-[#8B3A3A] flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5" /> {errors.industry}
-                    </p>
-                  )}
-                </div>
+              <Select
+                id="industry"
+                data-testid="scan-industry-input"
+                label={
+                  <>
+                    Industry{" "}
+                    <span style={{ color: "var(--text-3)", fontWeight: 400 }}>
+                      (optional — helps with fallback)
+                    </span>
+                  </>
+                }
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+              >
+                <option value="">Select an industry...</option>
+                {industries.map((ind) => (
+                  <option key={ind.id} value={ind.id}>
+                    {ind.label}
+                  </option>
+                ))}
+                <option value="__custom__">Other — type your own…</option>
+              </Select>
 
-                <div>
-                  <label htmlFor="competitors" className="block text-xs uppercase tracking-[0.15em] text-[#666666] font-medium mb-3">
+              {industry === "__custom__" && (
+                <Input
+                  id="custom-industry"
+                  data-testid="scan-custom-industry-input"
+                  label="Your industry"
+                  value={customIndustry}
+                  onChange={(e) => setCustomIndustry(e.target.value)}
+                  placeholder="e.g. Dental equipment, Pet food, Drone services"
+                />
+              )}
+
+              <Input
+                id="competitors"
+                data-testid="scan-competitors-input"
+                label={
+                  <>
                     Competitors{" "}
-                    <span className="text-[#999999] font-normal">
+                    <span style={{ color: "var(--text-3)", fontWeight: 400 }}>
                       (optional — we also auto-discover co-mentions from AIOs)
                     </span>
-                  </label>
-                  <input
-                    id="competitors"
-                    data-testid="scan-competitors-input"
-                    value={competitors}
-                    onChange={(e) => setCompetitors(e.target.value)}
-                    placeholder="e.g. Kajaria, Somany (optional)"
-                    className="w-full bg-white border border-[#E5E2D9] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none rounded-sm px-5 py-4 font-sans text-[#1A1A1A] placeholder:text-[#BBBBBB] transition-all"
-                  />
-                </div>
+                  </>
+                }
+                value={competitors}
+                onChange={(e) => setCompetitors(e.target.value)}
+                placeholder="e.g. Kajaria, Somany (optional)"
+              />
 
-                <p className="text-sm text-[#666666] border-l-2 border-[#E5E2D9] pl-4 leading-relaxed">
-                  This scan probes Google&apos;s live AI Overview for every tracked query
-                  using Bright Data. Rivals are discovered from brands co-mentioned or
-                  cited in those answers (Blank-style), and any names you list here are
-                  always tracked too.
-                </p>
+              <p
+                style={{
+                  fontFamily: "var(--font-sans)",
+                  fontSize: "13px",
+                  color: "var(--text-2)",
+                  borderLeft: "2px solid var(--border-2)",
+                  paddingLeft: "var(--space-4)",
+                  lineHeight: 1.55,
+                }}
+              >
+                This scan probes Google&apos;s live AI Overview for every tracked query
+                using Bright Data. Rivals are discovered from brands co-mentioned or
+                cited in those answers (Blank-style), and any names you list here are
+                always tracked too.
+              </p>
 
-                <button
-                  data-testid="scan-submit-btn"
-                  onClick={start}
-                  className="group w-full inline-flex items-center justify-center gap-2 bg-[#D9531E] text-white hover:bg-[#B34115] transition-colors rounded-sm px-8 py-5 font-sans font-semibold text-sm uppercase tracking-[0.12em]"
-                >
-                  Start scan
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" strokeWidth={2} />
-                </button>
-              </div>
+              <Button
+                data-testid="scan-submit-btn"
+                variant="primary"
+                size="lg"
+                onClick={start}
+                style={{ width: "100%" }}
+              >
+                Start scan
+              </Button>
+            </div>
 
-              {/* Recent / sample scans */}
-              <div className="mt-16">
-                <span className="text-xs uppercase tracking-[0.15em] text-[#666666] font-medium">
-                  Recent scans
-                </span>
-                <div className="mt-5 grid sm:grid-cols-3 gap-px bg-[#E5E2D9] border border-[#E5E2D9] rounded-sm overflow-hidden">
-                  {RECENT.map((r, i) => (
-                    <button
-                      key={i}
-                      data-testid={`recent-scan-${i}`}
-                      onClick={() => {
-                        saveScan({ ...SAMPLE_RESULT, brand: r.brand, website: r.site, visibilityScore: r.score, isSample: true });
-                        router.push("/dashboard");
-                      }}
-                      className="text-left bg-white p-5 hover:bg-[#FDFBF7] transition-colors"
-                    >
-                      <div className="font-semibold text-[#1A1A1A] text-sm">{r.brand}</div>
-                      <div className="text-xs text-[#999999] mb-4">{r.site}</div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-serif text-3xl font-semibold text-[#D9531E] leading-none">
-                          {r.score}
-                        </span>
-                        <span className="text-xs text-[#999999]">/100</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="loading"
-              data-testid="scan-loading"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="min-h-[60vh] flex flex-col justify-center"
-            >
-              <span className="text-xs uppercase tracking-[0.2em] text-[#D9531E] font-semibold">
-                Scanning
+            {/* Recent / sample scans */}
+            <div style={{ marginTop: "var(--space-11)" }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                  fontWeight: 500,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  color: "var(--text-3)",
+                }}
+              >
+                Recent scans
               </span>
-              <h2 className="font-serif text-4xl md:text-5xl font-semibold tracking-tight text-[#1A1A1A] mt-4">
-                Analyzing {brand} ({progress}%)
-                <span className="caret-blink text-[#D9531E]">_</span>
-              </h2>
-              <p className="text-[#666666] mt-3 mb-12">Sourcing real Google queries, then probing Google AI Overview via Bright Data. This usually takes 60-90 seconds.</p>
-
-              <div className="space-y-px">
-                {STAGES.map((label, i) => {
-                  const done = i < stage;
-                  const active = i === stage;
-                  return (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: "var(--space-3)",
+                  marginTop: "var(--space-4)",
+                }}
+              >
+                {RECENT.map((r, i) => (
+                  <button
+                    key={i}
+                    data-testid={`recent-scan-${i}`}
+                    onClick={() => {
+                      saveScan({
+                        ...SAMPLE_RESULT,
+                        brand: r.brand,
+                        website: r.site,
+                        visibilityScore: r.score,
+                        isSample: true,
+                      });
+                      router.push("/dashboard");
+                    }}
+                    style={{
+                      textAlign: "left",
+                      background: "var(--bg-1)",
+                      border: "1px solid var(--border-1)",
+                      borderRadius: "var(--radius-2)",
+                      padding: "var(--space-5)",
+                      cursor: "pointer",
+                      transition: "border-color var(--dur-fast)",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "var(--accent-border)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "var(--border-1)";
+                    }}
+                  >
                     <div
-                      key={i}
-                      data-testid={`scan-stage-${i}`}
-                      className="flex items-baseline gap-4 py-4 border-b border-[#E5E2D9]"
+                      style={{
+                        fontFamily: "var(--font-sans)",
+                        fontSize: "14px",
+                        fontWeight: 600,
+                        color: "var(--text-1)",
+                      }}
                     >
-                      <span className="font-serif text-xl text-[#999999] w-8 shrink-0">
-                        0{i + 1}
+                      {r.brand}
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "10px",
+                        color: "var(--text-3)",
+                        marginBottom: "var(--space-4)",
+                      }}
+                    >
+                      {r.site}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "4px" }}>
+                      <span
+                        style={{
+                          fontFamily: "var(--font-sans)",
+                          fontSize: "28px",
+                          fontWeight: 600,
+                          color: "var(--accent)",
+                          lineHeight: 1,
+                        }}
+                      >
+                        {r.score}
                       </span>
                       <span
-                        className={`text-lg transition-colors ${
-                          active
-                            ? "text-[#1A1A1A] font-medium"
-                            : done
-                            ? "text-[#666666]"
-                            : "text-[#CCCCCC]"
-                        }`}
+                        style={{
+                          fontFamily: "var(--font-sans)",
+                          fontSize: "11px",
+                          color: "var(--text-3)",
+                        }}
                       >
-                        {label}
-                        {active && <span className="caret-blink text-[#D9531E]"> …</span>}
-                      </span>
-                      <span className="ml-auto text-xs uppercase tracking-[0.15em] font-medium">
-                        {done ? (
-                          <span className="text-[#2F5C4F]">Done</span>
-                        ) : active ? (
-                          <span className="text-[#D9531E]">Running</span>
-                        ) : (
-                          <span className="text-[#CCCCCC]">Queued</span>
-                        )}
+                        /100
                       </span>
                     </div>
-                  );
-                })}
+                  </button>
+                ))}
               </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            data-testid="scan-loading"
+            style={{
+              minHeight: "60vh",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+            }}
+          >
+            <span
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "10px",
+                fontWeight: 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.14em",
+                color: "var(--accent-text)",
+              }}
+            >
+              Scanning
+            </span>
+            <h2
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "var(--type-h1)",
+                fontWeight: 600,
+                letterSpacing: "var(--track-h1)",
+                color: "var(--text-1)",
+                marginTop: "var(--space-4)",
+              }}
+            >
+              Analyzing {brand} ({progress}%)
+              <span className="caret-blink" style={{ color: "var(--accent)" }}>
+                _
+              </span>
+            </h2>
+            <p
+              style={{
+                color: "var(--text-2)",
+                marginTop: "var(--space-3)",
+                marginBottom: "var(--space-8)",
+                fontSize: "14px",
+                lineHeight: 1.55,
+              }}
+            >
+              Sourcing real Google queries, then probing Google AI Overview via Bright
+              Data. This usually takes 60-90 seconds.
+            </p>
 
-              <div className="mt-10 h-px bg-[#E5E2D9] relative">
-                <motion.div
-                  className="absolute left-0 top-0 h-px bg-[#D9531E]"
-                  initial={{ width: "0%" }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.5 }}
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {STAGES.map((label, i) => {
+                const done = i < stage;
+                const active = i === stage;
+                return (
+                  <div
+                    key={i}
+                    data-testid={`scan-stage-${i}`}
+                    style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: "var(--space-4)",
+                      padding: "var(--space-4) 0",
+                      borderBottom: "1px solid var(--border-1)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "14px",
+                        color: "var(--text-3)",
+                        width: "28px",
+                        flexShrink: 0,
+                      }}
+                    >
+                      0{i + 1}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "16px",
+                        transition: "color var(--dur-fast)",
+                        color: active
+                          ? "var(--text-1)"
+                          : done
+                          ? "var(--text-2)"
+                          : "var(--text-3)",
+                        fontWeight: active ? 500 : 400,
+                      }}
+                    >
+                      {label}
+                      {active && (
+                        <span
+                          className="caret-blink"
+                          style={{ color: "var(--accent)" }}
+                        >
+                          {" "}…
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: "10px",
+                        fontWeight: 500,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.1em",
+                        color: done
+                          ? "var(--good)"
+                          : active
+                          ? "var(--accent-text)"
+                          : "var(--text-3)",
+                      }}
+                    >
+                      {done ? "Done" : active ? "Running" : "Queued"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: "var(--space-8)" }}>
+              <ScoreMeter segments={20} value={progress} />
+            </div>
+          </div>
+        )}
 
         {failed && (
-          <div
-            data-testid="scan-error-banner"
-            className="mt-8 flex items-center gap-3 bg-[#F9ECEC] border border-[#E2B8B8] rounded-sm px-5 py-4"
-          >
-            <AlertCircle className="w-5 h-5 text-[#8B3A3A] shrink-0" strokeWidth={1.5} />
-            <span className="text-sm text-[#8B3A3A]">
+          <div style={{ marginTop: "var(--space-6)" }}>
+            <Alert
+              data-testid="scan-error-banner"
+              variant="crit"
+            >
               Something went wrong running the scan. Please try again.
-            </span>
+            </Alert>
           </div>
         )}
       </div>

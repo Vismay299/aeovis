@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Plus, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { normalizeTopic } from "@/lib/scoring/topics";
 
 const INTENT_LABELS = {
@@ -37,7 +36,6 @@ export const QueryManager = ({ brand, currentPrompts = [], onPromptAdded }) => {
     fetchPrompts();
   }, [brand]);
 
-  // If database is empty, fallback to the current scan's prompts
   const displayPrompts = prompts.length > 0 ? prompts : currentPrompts.map((p, idx) => ({
     id: p.id || `temp-${idx}`,
     text: p.prompt,
@@ -69,8 +67,7 @@ export const QueryManager = ({ brand, currentPrompts = [], onPromptAdded }) => {
         setNewText("");
         setNewTopic("General");
         setMessage({ type: "success", text: "Query added successfully! Run a new scan to update your score." });
-        
-        // Refresh prompts
+
         const refresh = await fetch(`/api/brands/${encodeURIComponent(brand)}/prompts?includeDisabled=true`);
         if (refresh.ok) {
           const refreshData = await refresh.json();
@@ -104,12 +101,11 @@ export const QueryManager = ({ brand, currentPrompts = [], onPromptAdded }) => {
       });
 
       if (res.ok) {
-        setMessage({ 
-          type: "success", 
-          text: `Successfully ${!currentStatus ? "enabled" : "disabled"} query: "${promptText.slice(0, 30)}..."` 
+        setMessage({
+          type: "success",
+          text: `Successfully ${!currentStatus ? "enabled" : "disabled"} query: "${promptText.slice(0, 30)}..."`
         });
-        
-        // Refresh prompts
+
         const refresh = await fetch(`/api/brands/${encodeURIComponent(brand)}/prompts?includeDisabled=true`);
         if (refresh.ok) {
           const refreshData = await refresh.json();
@@ -126,153 +122,383 @@ export const QueryManager = ({ brand, currentPrompts = [], onPromptAdded }) => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "var(--space-6)", padding: "var(--space-6)" }}>
       {/* Left pane: Add query */}
-      <div className="lg:col-span-1 bg-white border border-[#E5E2D9] rounded-sm p-6 self-start">
-        <h3 className="font-serif text-xl font-semibold text-[#1A1A1A] mb-2 flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-[#D9531E]" />
-          Add Custom Query
-        </h3>
-        <p className="text-xs text-[#666666] mb-6 leading-relaxed">
-          Target specific customer questions or keyword variations. Your AEO Visibility score will automatically incorporate these in the next scan.
-        </p>
+      <div style={{ alignSelf: "start", position: "sticky", top: "var(--space-6)" }}>
+        <div
+          style={{
+            background: "var(--bg-0)",
+            border: "1px solid var(--border-1)",
+            borderRadius: "var(--radius-2)",
+            padding: "var(--space-6)",
+          }}
+        >
+          <h3
+            style={{
+              fontFamily: "var(--font-sans)",
+              fontSize: "16px",
+              fontWeight: 600,
+              color: "var(--text-1)",
+              marginBottom: "var(--space-2)",
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--space-2)",
+            }}
+          >
+            <Sparkles size={16} style={{ color: "var(--accent)" }} />
+            Add Custom Query
+          </h3>
+          <p style={{ fontSize: "12px", color: "var(--text-3)", marginBottom: "var(--space-5)", lineHeight: 1.5 }}>
+            Target specific customer questions or keyword variations. Your AEO Visibility score will automatically incorporate these in the next scan.
+          </p>
 
-        <form onSubmit={handleAddPrompt} className="space-y-5">
-          <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[#1A1A1A] font-bold mb-2">
-              Query Text
-            </label>
-            <textarea
-              required
-              rows={3}
-              value={newText}
-              onChange={(e) => setNewText(e.target.value)}
-              placeholder="e.g. What is the best CRM software for real estate agencies?"
-              className="w-full text-sm border border-[#E5E2D9] p-3 focus:outline-none focus:border-[#1A1A1A] rounded-sm font-sans resize-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <form onSubmit={handleAddPrompt} style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[#1A1A1A] font-bold mb-2">
-                Intent Tier
-              </label>
-              <select
-                value={newIntent}
-                onChange={(e) => setNewIntent(e.target.value)}
-                className="w-full text-xs border border-[#E5E2D9] p-2.5 focus:outline-none focus:border-[#1A1A1A] rounded-sm font-sans bg-transparent"
+              <label
+                style={{
+                  display: "block",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "9px",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "var(--text-2)",
+                  marginBottom: "var(--space-2)",
+                }}
               >
-                <option value="high_intent">High Intent</option>
-                <option value="comparison">Comparison</option>
-                <option value="problem_aware">Problem Aware</option>
-                <option value="exploratory">Exploratory</option>
-                <option value="branded">Branded</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[#1A1A1A] font-bold mb-2">
-                Topic / Category
+                Query Text
               </label>
-              <input
-                type="text"
-                value={newTopic}
-                onChange={(e) => setNewTopic(e.target.value)}
-                placeholder="e.g. Features"
-                className="w-full text-xs border border-[#E5E2D9] p-2.5 focus:outline-none focus:border-[#1A1A1A] rounded-sm font-sans"
+              <textarea
+                required
+                rows={3}
+                value={newText}
+                onChange={(e) => setNewText(e.target.value)}
+                placeholder="e.g. What is the best CRM software for real estate agencies?"
+                style={{
+                  width: "100%",
+                  background: "var(--bg-1)",
+                  border: "1px solid var(--border-2)",
+                  borderRadius: "var(--radius-1)",
+                  padding: "10px 12px",
+                  fontFamily: "var(--font-sans)",
+                  fontSize: "13px",
+                  color: "var(--text-1)",
+                  outline: "none",
+                  resize: "none",
+                  boxSizing: "border-box",
+                }}
+                onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+                onBlur={(e) => (e.target.style.borderColor = "var(--border-2)")}
               />
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={actionLoading || !newText.trim()}
-            className="w-full bg-[#1A1A1A] text-white hover:bg-[#D9531E] transition-colors rounded-sm py-3 text-xs uppercase tracking-widest font-semibold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Plus className="w-4 h-4" />
-            Add Query
-          </button>
-        </form>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "var(--space-4)" }}>
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "9px",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    color: "var(--text-2)",
+                    marginBottom: "var(--space-2)",
+                  }}
+                >
+                  Intent Tier
+                </label>
+                <select
+                  value={newIntent}
+                  onChange={(e) => setNewIntent(e.target.value)}
+                  style={{
+                    width: "100%",
+                    background: "var(--bg-1)",
+                    border: "1px solid var(--border-2)",
+                    borderRadius: "var(--radius-1)",
+                    padding: "8px 10px",
+                    fontFamily: "var(--font-sans)",
+                    fontSize: "12px",
+                    color: "var(--text-1)",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <option value="high_intent">High Intent</option>
+                  <option value="comparison">Comparison</option>
+                  <option value="problem_aware">Problem Aware</option>
+                  <option value="exploratory">Exploratory</option>
+                  <option value="branded">Branded</option>
+                </select>
+              </div>
 
-        <AnimatePresence>
-          {message && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className={`mt-5 p-3 rounded-sm text-xs font-medium flex items-start gap-2 ${message.type === "success" ? "bg-[#E8F0ED] text-[#2F5C4F]" : "bg-[#F9ECEC] text-[#8B3A3A]"}`}
+              <div>
+                <label
+                  style={{
+                    display: "block",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "9px",
+                    fontWeight: 600,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.1em",
+                    color: "var(--text-2)",
+                    marginBottom: "var(--space-2)",
+                  }}
+                >
+                  Topic / Category
+                </label>
+                <input
+                  type="text"
+                  value={newTopic}
+                  onChange={(e) => setNewTopic(e.target.value)}
+                  placeholder="e.g. Features"
+                  style={{
+                    width: "100%",
+                    background: "var(--bg-1)",
+                    border: "1px solid var(--border-2)",
+                    borderRadius: "var(--radius-1)",
+                    padding: "8px 10px",
+                    fontFamily: "var(--font-sans)",
+                    fontSize: "12px",
+                    color: "var(--text-1)",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={actionLoading || !newText.trim()}
+              style={{
+                width: "100%",
+                background: "var(--accent)",
+                color: "var(--accent-fg)",
+                border: "none",
+                borderRadius: "var(--radius-1)",
+                padding: "10px 16px",
+                fontFamily: "var(--font-mono)",
+                fontSize: "10px",
+                fontWeight: 500,
+                textTransform: "uppercase",
+                letterSpacing: "0.12em",
+                cursor: actionLoading || !newText.trim() ? "not-allowed" : "pointer",
+                opacity: actionLoading || !newText.trim() ? 0.5 : 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "var(--space-2)",
+              }}
             >
-              {message.type === "success" ? <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" /> : <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+              <Plus size={14} />
+              Add Query
+            </button>
+          </form>
+
+          {message && (
+            <div
+              style={{
+                marginTop: "var(--space-4)",
+                padding: "var(--space-3)",
+                borderRadius: "var(--radius-1)",
+                fontSize: "12px",
+                fontWeight: 500,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "var(--space-2)",
+                background: message.type === "success" ? "var(--good-bg)" : "var(--crit-bg)",
+                color: message.type === "success" ? "var(--good)" : "var(--crit)",
+              }}
+            >
+              {message.type === "success" ? (
+                <CheckCircle2 size={14} style={{ flexShrink: 0, marginTop: "2px" }} />
+              ) : (
+                <AlertCircle size={14} style={{ flexShrink: 0, marginTop: "2px" }} />
+              )}
               <span>{message.text}</span>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+        </div>
       </div>
 
       {/* Right pane: list */}
-      <div className="lg:col-span-2 bg-white border border-[#E5E2D9] rounded-sm p-6 md:p-8">
-        <div className="flex justify-between items-center border-b border-[#E5E2D9] pb-4 mb-6">
+      <div
+        style={{
+          background: "var(--bg-0)",
+          border: "1px solid var(--border-1)",
+          borderRadius: "var(--radius-2)",
+          padding: "var(--space-6)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            borderBottom: "1px solid var(--border-1)",
+            paddingBottom: "var(--space-4)",
+            marginBottom: "var(--space-5)",
+          }}
+        >
           <div>
-            <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A]">
+            <h3
+              style={{
+                fontFamily: "var(--font-sans)",
+                fontSize: "var(--type-h3)",
+                fontWeight: 600,
+                color: "var(--text-1)",
+                letterSpacing: "var(--track-h3)",
+              }}
+            >
               Currently Tracked Queries
             </h3>
-            <p className="text-xs text-[#666666] mt-1">
+            <p style={{ fontSize: "12px", color: "var(--text-3)", marginTop: "4px" }}>
               Active prompt set for visibility scans.
             </p>
           </div>
-          <span className="text-xs font-semibold px-2.5 py-1 bg-[#F3F0E6] rounded-full text-[#1A1A1A]">
+          <span
+            style={{
+              fontFamily: "var(--font-mono)",
+              fontSize: "10px",
+              fontWeight: 500,
+              padding: "4px 10px",
+              borderRadius: "var(--radius-round)",
+              background: "var(--bg-2)",
+              color: "var(--text-1)",
+            }}
+          >
             {displayPrompts.length} total
           </span>
         </div>
 
         {loading ? (
-          <div className="py-20 text-center text-sm text-[#999999]">
+          <div style={{ padding: "var(--space-10) 0", textAlign: "center", fontSize: "13px", color: "var(--text-3)" }}>
             Loading tracked queries...
           </div>
         ) : displayPrompts.length === 0 ? (
-          <div className="py-20 text-center text-sm text-[#999999]">
+          <div style={{ padding: "var(--space-10) 0", textAlign: "center", fontSize: "13px", color: "var(--text-3)" }}>
             No tracked queries. Run your first scan to generate them automatically.
           </div>
         ) : (
-          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-            {displayPrompts.map((p, idx) => (
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", maxHeight: "600px", overflowY: "auto", paddingRight: "var(--space-2)" }}>
+            {displayPrompts.map((p) => (
               <div
                 key={p.id}
-                className={`flex items-start justify-between gap-4 border border-[#E5E2D9] hover:border-[#1A1A1A] transition-colors rounded-sm p-4 bg-[#FDFBF7] ${!p.enabled ? "opacity-60 bg-[#F3F0E6]/30" : ""}`}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: "var(--space-4)",
+                  border: "1px solid var(--border-1)",
+                  borderRadius: "var(--radius-2)",
+                  padding: "var(--space-4)",
+                  background: "var(--bg-1)",
+                  opacity: p.enabled ? 1 : 0.5,
+                }}
               >
-                <div className="space-y-2">
-                  <p className={`text-sm font-medium leading-relaxed ${p.enabled ? "text-[#1A1A1A]" : "text-[#999999] line-through"}`}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+                  <p
+                    style={{
+                      fontSize: "13px",
+                      fontWeight: 500,
+                      lineHeight: 1.5,
+                      color: p.enabled ? "var(--text-1)" : "var(--text-3)",
+                      textDecoration: p.enabled ? "none" : "line-through",
+                    }}
+                  >
                     {p.text}
                   </p>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "6px" }}>
                     {p.intent_tier && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#F3F0E6] text-[9px] font-semibold text-[#1A1A1A] uppercase tracking-wider">
-                        🎯 {INTENT_LABELS[p.intent_tier] || p.intent_tier.replace("_", " ")}
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "2px 6px",
+                          borderRadius: "var(--radius-1)",
+                          background: "var(--bg-2)",
+                          fontSize: "9px",
+                          fontWeight: 600,
+                          color: "var(--text-1)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        {INTENT_LABELS[p.intent_tier] || p.intent_tier.replace("_", " ")}
                       </span>
                     )}
                     {p.topic && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#FFF8F5] text-[9px] font-semibold text-[#D9531E] uppercase tracking-wider">
-                        📁 {normalizeTopic(p.topic)}
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "2px 6px",
+                          borderRadius: "var(--radius-1)",
+                          background: "var(--accent-soft)",
+                          fontSize: "9px",
+                          fontWeight: 600,
+                          color: "var(--accent-text)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        {normalizeTopic(p.topic)}
                       </span>
                     )}
                     {!p.enabled && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-sm bg-[#F9ECEC] text-[9px] font-bold text-[#8B3A3A] uppercase tracking-wider">
-                        🚫 Disabled
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "2px 6px",
+                          borderRadius: "var(--radius-1)",
+                          background: "var(--crit-bg)",
+                          fontSize: "9px",
+                          fontWeight: 600,
+                          color: "var(--crit)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        Disabled
                       </span>
                     )}
                   </div>
                 </div>
-                
-                <div className="flex items-center gap-2 shrink-0 pt-0.5">
-                  <label className="relative inline-flex items-center cursor-pointer select-none">
-                    <input 
-                      type="checkbox" 
+
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexShrink: 0, paddingTop: "2px" }}>
+                  <label style={{ position: "relative", display: "inline-flex", alignItems: "center", cursor: "pointer", userSelect: "none" }}>
+                    <input
+                      type="checkbox"
                       checked={!!p.enabled}
                       disabled={actionLoading}
                       onChange={() => handleTogglePrompt(p.id, p.text, !!p.enabled)}
-                      className="sr-only peer"
+                      style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
                     />
-                    <div className="w-9 h-5 bg-[#E5E2D9] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-[#E5E2D9] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#2F5C4F]"></div>
+                    <div
+                      style={{
+                        width: "36px",
+                        height: "20px",
+                        borderRadius: "var(--radius-round)",
+                        background: p.enabled ? "var(--good)" : "var(--border-2)",
+                        transition: "background var(--dur-fast)",
+                        position: "relative",
+                      }}
+                    >
+                      <span
+                        style={{
+                          position: "absolute",
+                          top: "2px",
+                          left: p.enabled ? "18px" : "2px",
+                          width: "16px",
+                          height: "16px",
+                          borderRadius: "var(--radius-round)",
+                          background: "#fff",
+                          transition: "left var(--dur-fast)",
+                        }}
+                      />
+                    </div>
                   </label>
                 </div>
               </div>

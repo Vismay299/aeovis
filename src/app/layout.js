@@ -2,8 +2,8 @@ import "./globals.css";
 import { Toaster } from "sonner";
 
 export const metadata = {
-  title: "AnswerRank | AEO Checker",
-  description: "Check if AI knows your brand",
+  title: "Perceev | Answer Engine Intelligence",
+  description: "AI is answering your buyers. Know where you stand.",
 };
 
 export default function RootLayout({ children }) {
