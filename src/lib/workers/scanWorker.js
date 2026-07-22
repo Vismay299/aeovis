@@ -4,8 +4,11 @@ import { generateUnbrandedPrompts } from "../scoring/promptGen.js";
 import { extractCompetitors } from "../scoring/competitorExtract.js";
 import { runAioScan, aggregateAioTopDomains } from "../scoring/aioPipeline.js";
 import { getPromptsForBrand, upsertPrompts } from "../db/prompts.js";
+import { buildBrandedQueries, isBrandedQuery } from "../scoring/aioQueryClassify.js";
+import { getBrandAliases } from "../scoring/aliases.js";
 
 const MAX_SOURCING_ATTEMPTS = 3;
+const UNBRANDED_TARGET = 30;
 
 function queryTextKey(text) {
   return String(text || "").toLowerCase().trim();
@@ -17,7 +20,7 @@ function queryTextKey(text) {
  * are collected. Returns the full 30-query list plus only the newly
  * generated ones (so the caller persists just the delta).
  */
-async function sourceUnbrandedQueries(brand, url, industry, stats) {
+async function sourceUnbrandedQueries(brand, url, industry, stats, brandAliases) {
   let dbPrompts = [];
   try {
     dbPrompts = await getPromptsForBrand(brand, false);
@@ -25,41 +28,54 @@ async function sourceUnbrandedQueries(brand, url, industry, stats) {
     console.warn("[aio-worker] DB prompt fetch failed:", err.message);
   }
 
-  const existing = (dbPrompts || []).map((p) => ({
-    text: p.text,
-    source: p.source || "db",
-    topic: p.topic || "General",
-    intent_tier: p.intent_tier || "informational",
-  }));
+  // getPromptsForBrand returns every enabled row regardless of tier, and we
+  // persist branded seeds alongside the unbranded set. Filter them out here or
+  // they leak into the 30 on the next scan and silently inflate the score.
+  const existing = (dbPrompts || [])
+    .filter(
+      (p) =>
+        p.intent_tier !== "branded" &&
+        String(p.source || "").toLowerCase() !== "branded_seed" &&
+        !isBrandedQuery(p.text, brandAliases)
+    )
+    .map((p) => ({
+      text: p.text,
+      source: p.source || "db",
+      topic: p.topic || "General",
+      intent_tier: p.intent_tier || "informational",
+    }));
 
-  if (existing.length >= 30) {
-    return { queries: existing.slice(0, 30), newlyGenerated: [] };
+  if (existing.length >= UNBRANDED_TARGET) {
+    return { queries: existing.slice(0, UNBRANDED_TARGET), newlyGenerated: [] };
   }
 
   const seen = new Set(existing.map((q) => queryTextKey(q.text)));
   const merged = [...existing];
 
   let attempts = 0;
-  while (merged.length < 30 && attempts < MAX_SOURCING_ATTEMPTS) {
+  while (merged.length < UNBRANDED_TARGET && attempts < MAX_SOURCING_ATTEMPTS) {
     attempts++;
-    const shortfall = 30 - merged.length;
+    const shortfall = UNBRANDED_TARGET - merged.length;
     const generated = await generateUnbrandedPrompts(brand, url, industry, stats, shortfall);
     for (const q of generated) {
       const key = queryTextKey(q.text);
       if (seen.has(key)) continue;
       seen.add(key);
       merged.push(q);
-      if (merged.length >= 30) break;
+      if (merged.length >= UNBRANDED_TARGET) break;
     }
   }
 
-  if (merged.length < 30) {
+  if (merged.length < UNBRANDED_TARGET) {
     throw new Error(
-      `Could only source ${merged.length}/30 unique unbranded prompts for this scan.`
+      `Could only source ${merged.length}/${UNBRANDED_TARGET} unique unbranded prompts for this scan.`
     );
   }
 
-  return { queries: merged.slice(0, 30), newlyGenerated: merged.slice(existing.length) };
+  return {
+    queries: merged.slice(0, UNBRANDED_TARGET),
+    newlyGenerated: merged.slice(existing.length),
+  };
 }
 
 /**
@@ -84,14 +100,38 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       .map((c) => c.trim())
       .filter(Boolean);
 
-    // 1. Source exactly 30 unbranded queries (reuse DB prompts, top up via OpenRouter).
-    const { queries, newlyGenerated } = await sourceUnbrandedQueries(brand, url, industry, stats);
+    const brandAliases = getBrandAliases(brand, url);
 
-    if (newlyGenerated.length > 0) {
+    // 1. Source exactly 30 unbranded queries (reuse DB prompts, top up via OpenRouter).
+    const { queries: unbrandedQueries, newlyGenerated } = await sourceUnbrandedQueries(
+      brand,
+      url,
+      industry,
+      stats,
+      brandAliases
+    );
+
+    // 1b. Add a small set of own-name seeds for the Brand Presence panel. These
+    // are probed and reported separately -- summarizeAioResults keys off
+    // is_branded_query, so they never enter the headline denominators.
+    const brandedQueries = buildBrandedQueries(brand, url).filter((q) => {
+      const key = queryTextKey(q.text);
+      return !unbrandedQueries.some((u) => queryTextKey(u.text) === key);
+    });
+
+    const queries = [...unbrandedQueries, ...brandedQueries];
+
+    const toPersist = [
+      ...newlyGenerated,
+      // Persist seeds so they appear in Tracked Queries. sourceUnbrandedQueries
+      // filters them back out on the next run.
+      ...brandedQueries,
+    ];
+    if (toPersist.length > 0) {
       try {
         await upsertPrompts(
           brand,
-          newlyGenerated.map((q) => ({
+          toPersist.map((q) => ({
             text: q.text,
             intent_tier: q.intent_tier,
             topic: q.topic,
@@ -101,11 +141,14 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
           }))
         );
       } catch (err) {
-        console.warn("[aio-worker] Failed to persist newly generated prompts:", err.message);
+        console.warn("[aio-worker] Failed to persist prompts:", err.message);
       }
     }
 
-    console.log(`[aio-worker] Prepared ${queries.length} unbranded queries`);
+    console.log(
+      `[aio-worker] Prepared ${queries.length} queries ` +
+        `(${unbrandedQueries.length} unbranded, ${brandedQueries.length} brand-presence)`
+    );
 
     // 2. Probe each query via BrightData AIO (India geo).
     await updateScanJob(jobId, { status: "probing", progress_pct: 25 });
@@ -138,8 +181,10 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       stats,
       max: 10,
     });
+    // Non-branded only: own-name queries cite the brand's own domain heavily
+    // and would dominate the source leaderboard.
     const topDomains = aggregateAioTopDomains(
-      results,
+      results.filter((r) => !r.is_branded_query),
       url,
       competitorObjects.map((c) => c.name)
     );
@@ -149,7 +194,9 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
         .join(", ") || "(none)"}`
     );
 
-    const promptTexts = queries.map((q) => q.text.toLowerCase().trim()).sort();
+    // Hash the unbranded set only, so the prompt-set identity is stable and
+    // comparable across scans regardless of branded seeds.
+    const promptTexts = unbrandedQueries.map((q) => q.text.toLowerCase().trim()).sort();
     const prompt_set_hash = crypto
       .createHash("sha256")
       .update(promptTexts.join("|"))
@@ -166,7 +213,9 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       aio_coverage_pct: summary.aio_coverage_pct,
       presence_rate_pct: summary.presence_rate_pct,
       mention_rate_pct: summary.mention_rate_pct,
-      prompts_tracked: queries.length,
+      // Unbranded count only -- this is the denominator the coverage and
+      // presence KPIs divide by. Branded seeds must not inflate it.
+      prompts_tracked: unbrandedQueries.length,
       prompts_mentioned: summary.visible_non_branded,
       competitors: competitorObjects,
       competitors_raw: competitorsRaw,
@@ -175,7 +224,7 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       used_dynamic_prompts: true,
       tokens_used: stats.tokens || 0,
       cost_total: stats.cost || 0,
-      scoring_version: "v8-aio-unbranded",
+      scoring_version: "v8.1-aio-unbranded-plus-presence",
       prompt_set_id,
       prompt_set_hash,
       brand_citation_share_pct: summary.citation_share_pct,

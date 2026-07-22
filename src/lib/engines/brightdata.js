@@ -49,10 +49,34 @@ function normalizeBrightDataResponse(data) {
 
   let payload = data;
   if (data.body !== undefined) {
-    payload = typeof data.body === "string" ? JSON.parse(data.body) : data.body;
+    if (typeof data.body === "string") {
+      try {
+        payload = data.body ? JSON.parse(data.body) : data;
+      } catch {
+        payload = data;
+      }
+    } else {
+      payload = data.body;
+    }
   }
 
   return payload || data;
+}
+
+/**
+ * Bright Data's proxy wraps its own session/routing failures (e.g. a
+ * "no ready cookies" session-pool exhaustion for a geo) in an HTTP 200
+ * envelope with an empty `body` — not a rate limit, not truncation, just
+ * "this attempt got no page". Surface it with its real cause instead of
+ * letting downstream code try to double-parse an empty body string.
+ */
+function proxySessionError(data) {
+  const brdError = data?.headers?.["x-brd-error"] || data?.headers?.["x-brd-error-code"];
+  const statusCode = data?.status_code;
+  const bodyEmpty = data?.body === "" || data?.body === undefined;
+  if (brdError && bodyEmpty) return brdError;
+  if (statusCode && statusCode >= 400 && bodyEmpty) return `proxy status ${statusCode}`;
+  return null;
 }
 
 function buildGoogleSearchUrl(query, { geo = "in", aiOverview = true } = {}) {
@@ -193,6 +217,18 @@ export async function brightDataSearch(query, options = {}) {
 
       if (data.error || data.status === "error") {
         throw new Error(data.error || data.message || "Bright Data request failed");
+      }
+
+      // Proxy-level session failure (e.g. "no_ready_cookies") — retryable,
+      // but must not fall through to normalizeBrightDataResponse on an empty body.
+      const sessionErr = proxySessionError(data);
+      if (sessionErr) {
+        if (attempt < maxAttempts) {
+          lastErr = new Error(`Bright Data proxy session error: ${sessionErr}`);
+          await new Promise((r) => setTimeout(r, backoffMs * attempt * 2));
+          continue;
+        }
+        throw new Error(`Bright Data proxy session error: ${sessionErr}`);
       }
 
       // Check actual SERP body for truncation (parse inner body first).

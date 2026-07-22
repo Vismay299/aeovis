@@ -581,11 +581,23 @@ function generateSummary(brand, score, coverage, dataSourceIssue) {
 export async function runScan({ brand, website, industry, competitors }, onProgress = () => {}) {
   onProgress(0);
 
-  const res = await fetch("/api/scan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ brand, url: website, industry, competitors: competitors || "" }),
-  });
+  // The bare "Failed to fetch" TypeError (server unreachable / not running)
+  // is meaningless to a user — translate it into an actionable message.
+  const friendlyNetworkError = () =>
+    new Error(
+      "Couldn't reach the scanning service. Make sure the app server is running, then try again."
+    );
+
+  let res;
+  try {
+    res = await fetch("/api/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ brand, url: website, industry, competitors: competitors || "" }),
+    });
+  } catch {
+    throw friendlyNetworkError();
+  }
 
   if (!res.ok) {
     let msg = "Scan failed to initiate";
@@ -612,16 +624,35 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
 
   const delay = (ms) => new Promise((r) => setTimeout(r, ms));
   let attempts = 0;
-  const maxAttempts = 300;
+  // 15 min of headroom (450 × 2s). A slow scan (Bright Data at low concurrency)
+  // can run 10-12 min; the old 10-min cap could time out a still-healthy job.
+  const maxAttempts = 450;
+  // A single transient poll failure (dev-server hot-reload, brief network blip)
+  // must not kill an otherwise-healthy multi-minute scan. Only give up after
+  // several consecutive failures.
+  const MAX_CONSECUTIVE_POLL_ERRORS = 5;
+  let consecutivePollErrors = 0;
 
   while (attempts < maxAttempts) {
     await delay(2000);
     attempts++;
 
-    const pollRes = await fetch(`/api/scan/${jobId}/status`);
-    if (!pollRes.ok) throw new Error("Failed to retrieve scan progress status.");
+    let statusData;
+    try {
+      const pollRes = await fetch(`/api/scan/${jobId}/status`);
+      if (!pollRes.ok) throw new Error(`status HTTP ${pollRes.status}`);
+      statusData = await pollRes.json();
+      consecutivePollErrors = 0;
+    } catch (err) {
+      consecutivePollErrors++;
+      if (consecutivePollErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
+        throw new Error(
+          "Lost connection to the scanning service while the scan was running. Please try again."
+        );
+      }
+      continue; // transient — retry on the next tick
+    }
 
-    const statusData = await pollRes.json();
     const stage = statusToStage[statusData.status] ?? 0;
     onProgress(stage, statusData.progress_pct);
 
@@ -634,7 +665,7 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
     }
   }
 
-  throw new Error("Scan timed out after 10 minutes.");
+  throw new Error("Scan timed out after 15 minutes.");
 }
 
 export async function getContentEvents(brand) {

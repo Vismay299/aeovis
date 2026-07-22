@@ -1,4 +1,8 @@
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
+
+function getBaseUrl() {
+  return (process.env.OPENROUTER_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+}
 
 export function getOpenRouterModel() {
   return process.env.OPENROUTER_MODEL || "google/gemma-4-31b-it:free";
@@ -16,6 +20,10 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   }
 
   const model = getOpenRouterModel();
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl}/chat/completions`;
+  const isOpenRouter = baseUrl.includes("openrouter.ai");
+  const isMimo = baseUrl.includes("xiaomimimo.com");
   const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 
   const messages = [];
@@ -27,11 +35,19 @@ export async function generateContent(prompt, options = {}, retries = 2) {
     messages,
     temperature: options.temperature ?? 0.2,
   };
-  if (options.max_tokens || options.maxTokens) {
-    body.max_tokens = options.max_tokens || options.maxTokens;
+  const maxTokens = options.max_tokens || options.maxTokens;
+  if (maxTokens) {
+    if (isMimo) body.max_completion_tokens = maxTokens;
+    else body.max_tokens = maxTokens;
   }
   if (options.jsonMode) {
     body.response_format = { type: "json_object" };
+  }
+  // MiMo is a reasoning model — disable thinking so `message.content` is the
+  // final answer only, not interleaved with a hidden reasoning trace that
+  // would break robustJsonParse below.
+  if (isMimo) {
+    body.thinking = { type: "disabled" };
   }
 
   let lastErr = null;
@@ -42,13 +58,12 @@ export async function generateContent(prompt, options = {}, retries = 2) {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const res = await fetch(OPENROUTER_URL, {
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
-          "HTTP-Referer": "https://aeovis.app",
-          "X-Title": "aeovis",
+          ...(isOpenRouter ? { "HTTP-Referer": "https://aeovis.app", "X-Title": "aeovis" } : {}),
         },
         body: JSON.stringify(body),
         signal: controller.signal,
@@ -115,44 +130,70 @@ export function robustJsonParse(text) {
     // fall through to balanced-slice scan
   }
 
-  const openers = ["[", "{"];
-  for (const opener of openers) {
-    const closer = opener === "[" ? "]" : "}";
-    const start = stripped.indexOf(opener);
-    if (start === -1) continue;
-
-    let depth = 0;
-    let inString = false;
-    let escapeNext = false;
-    for (let i = start; i < stripped.length; i++) {
-      const ch = stripped[i];
-      if (escapeNext) {
-        escapeNext = false;
-        continue;
-      }
-      if (ch === "\\") {
-        escapeNext = true;
-        continue;
-      }
-      if (ch === '"') {
-        inString = !inString;
-        continue;
-      }
-      if (inString) continue;
-      if (ch === opener) depth++;
-      else if (ch === closer) {
-        depth--;
-        if (depth === 0) {
-          const slice = stripped.slice(start, i + 1);
-          try {
-            return JSON.parse(slice);
-          } catch {
-            break;
-          }
-        }
+  // Array case: find the first balanced [...] slice and return it directly.
+  const arrStart = stripped.indexOf("[");
+  if (arrStart !== -1) {
+    const slice = scanBalanced(stripped, arrStart, "[", "]");
+    if (slice) {
+      try {
+        return JSON.parse(slice);
+      } catch {
+        // fall through
       }
     }
   }
 
+  // Object case: some models (e.g. MiMo) ignore "return a JSON array" and
+  // emit JSON Lines instead — one top-level {...} per line, unwrapped.
+  // Collect every top-level object we can balance-scan; if there's more
+  // than one, treat it as the array the caller asked for.
+  const objects = [];
+  let cursor = 0;
+  while (cursor < stripped.length) {
+    const objStart = stripped.indexOf("{", cursor);
+    if (objStart === -1) break;
+    const slice = scanBalanced(stripped, objStart, "{", "}");
+    if (!slice) break;
+    try {
+      objects.push(JSON.parse(slice));
+    } catch {
+      // skip unparsable chunk, keep scanning past it
+    }
+    cursor = objStart + slice.length;
+  }
+
+  if (objects.length > 1) return objects;
+  if (objects.length === 1) return objects[0];
+  return null;
+}
+
+/** Scans forward from `start` (which must be at `opener`) for the matching
+ * balanced `closer`, respecting quoted strings/escapes. Returns the slice
+ * (opener..closer inclusive) or null if never balanced. */
+function scanBalanced(str, start, opener, closer) {
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+  for (let i = start; i < str.length; i++) {
+    const ch = str[i];
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escapeNext = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === opener) depth++;
+    else if (ch === closer) {
+      depth--;
+      if (depth === 0) return str.slice(start, i + 1);
+    }
+  }
   return null;
 }
