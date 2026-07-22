@@ -18,10 +18,19 @@ function detectMention(text, aliases) {
 }
 
 function normalizeNameKey(name) {
-  return String(name || "")
+  const suffixes = [
+    "tiles", "ceramics", "india", "ltd", "pvt", "private", "limited",
+    "corporation", "corp", "inc", "llc", "co", "services", "solutions",
+    "technologies", "tech", "group", "industries", "international",
+  ];
+  let cleaned = String(name || "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+
+  const parts = cleaned.split(/\s+/);
+  const filtered = parts.filter((p) => !suffixes.includes(p));
+  return filtered.join(" ") || cleaned;
 }
 
 function buildExtractionPrompt({ brand, text, domains }) {
@@ -38,6 +47,7 @@ Cited domains seen in these results: ${domains.length ? domains.join(", ") : "(n
 Rules:
 - Only list real company/product/brand names, never the brand "${brand}" itself.
 - Do NOT list generic words like "software", "platform", "tool", "solution", "service".
+- Exclude tools, marketplaces-as-tools, media sites, and software products; only direct competitors that sell what ${brand} sells.
 - If you can infer the competitor's website domain from context or the cited domains list, include it.
 - Return at most 15 names, most relevant first.
 
@@ -99,8 +109,28 @@ export async function extractCompetitors({
   });
   discovered.forEach((c) => {
     const key = normalizeNameKey(c.name);
-    if (!key || merged.has(key)) return;
-    merged.set(key, { name: c.name, domain: c.domain, source: "discovered" });
+    if (!key) return;
+    if (merged.has(key)) return;
+    // Check if this key is a substring of any existing key (or vice-versa)
+    // to merge suffixes like "Kajaria Tiles" into "Kajaria".
+    let mergedWith = null;
+    for (const [existingKey, existingVal] of merged) {
+      if (key.includes(existingKey) || existingKey.includes(key)) {
+        // Keep the shorter key (prefer the one without suffix)
+        if (key.length >= existingKey.length) {
+          mergedWith = existingKey;
+        } else {
+          // Replace existing with this cleaner name
+          merged.set(key, { ...existingVal, name: c.name, source: existingVal.source });
+          merged.delete(existingKey);
+          mergedWith = key;
+        }
+        break;
+      }
+    }
+    if (!mergedWith) {
+      merged.set(key, { name: c.name, domain: c.domain, source: "discovered" });
+    }
   });
 
   const competitorObjects = Array.from(merged.values()).slice(0, max + userCompetitors.length);

@@ -3,6 +3,7 @@ import { insertScan, updateScanJob } from "../db.js";
 import { generateUnbrandedPrompts } from "../scoring/promptGen.js";
 import { extractCompetitors } from "../scoring/competitorExtract.js";
 import { runAioScan, aggregateAioTopDomains } from "../scoring/aioPipeline.js";
+import { runMultiEngineScan, summarizeEngineResults, resolveEnabledEngines } from "../scoring/enginePipeline.js";
 import { getPromptsForBrand, upsertPrompts } from "../db/prompts.js";
 import { buildBrandedQueries, isBrandedQuery } from "../scoring/aioQueryClassify.js";
 import { getBrandAliases } from "../scoring/aliases.js";
@@ -25,7 +26,7 @@ async function sourceUnbrandedQueries(brand, url, industry, stats, brandAliases)
   try {
     dbPrompts = await getPromptsForBrand(brand, false);
   } catch (err) {
-    console.warn("[aio-worker] DB prompt fetch failed:", err.message);
+    console.warn("[worker] DB prompt fetch failed:", err.message);
   }
 
   // getPromptsForBrand returns every enabled row regardless of tier, and we
@@ -79,12 +80,12 @@ async function sourceUnbrandedQueries(brand, url, industry, stats, brandAliases)
 }
 
 /**
- * AIO-only background scan pipeline (unbranded-only).
+ * Multi-engine background scan pipeline (unbranded-only).
  *
  * States:
  *   pending -> generating_prompts -> probing -> scoring -> complete | failed
  *
- * Single source of truth: BrightData Google AI Overview, India geo.
+ * Probes Google AIO, ChatGPT, and/or Perplexity depending on ENGINES env.
  * Prompt generation + competitor extraction go through OpenRouter's free
  * model only (see llm.js) — no Gemini/paid fallback.
  */
@@ -92,7 +93,7 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
   const stats = { cost: 0.0, tokens: 0 };
 
   try {
-    console.log(`[aio-worker] Starting scan job ${jobId} for brand: ${brand}`);
+    console.log(`[worker] Starting scan job ${jobId} for brand: ${brand}`);
     await updateScanJob(jobId, { status: "generating_prompts", progress_pct: 10 });
 
     const competitors = (competitorsRaw || "")
@@ -111,9 +112,7 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       brandAliases
     );
 
-    // 1b. Add a small set of own-name seeds for the Brand Presence panel. These
-    // are probed and reported separately -- summarizeAioResults keys off
-    // is_branded_query, so they never enter the headline denominators.
+    // 1b. Add a small set of own-name seeds for the Brand Presence panel.
     const brandedQueries = buildBrandedQueries(brand, url).filter((q) => {
       const key = queryTextKey(q.text);
       return !unbrandedQueries.some((u) => queryTextKey(u.text) === key);
@@ -123,8 +122,6 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
 
     const toPersist = [
       ...newlyGenerated,
-      // Persist seeds so they appear in Tracked Queries. sourceUnbrandedQueries
-      // filters them back out on the next run.
       ...brandedQueries,
     ];
     if (toPersist.length > 0) {
@@ -141,55 +138,107 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
           }))
         );
       } catch (err) {
-        console.warn("[aio-worker] Failed to persist prompts:", err.message);
+        console.warn("[worker] Failed to persist prompts:", err.message);
       }
     }
 
     console.log(
-      `[aio-worker] Prepared ${queries.length} queries ` +
+      `[worker] Prepared ${queries.length} queries ` +
         `(${unbrandedQueries.length} unbranded, ${brandedQueries.length} brand-presence)`
     );
 
-    // 2. Probe each query via BrightData AIO (India geo).
+    // 2. Probe each query. Use multi-engine path when >1 engine is enabled.
     await updateScanJob(jobId, { status: "probing", progress_pct: 25 });
 
-    const scanOutput = await runAioScan({
-      brand,
-      url,
-      competitors: [],
-      queries,
-      stats,
-      onProgress: async (done, total) => {
-        const pct = 25 + Math.round((done / total) * 60); // 25% -> 85%
-        await updateScanJob(jobId, { progress_pct: pct });
-      },
-    });
+    const enabledEngines = resolveEnabledEngines();
+    const isMultiEngine = enabledEngines.length > 1;
+
+    let scanOutput;
+    if (isMultiEngine) {
+      scanOutput = await runMultiEngineScan({
+        brand,
+        url,
+        competitors,
+        queries,
+        stats,
+        onProgress: async (done, total) => {
+          const pct = 25 + Math.round((done / total) * 60); // 25% -> 85%
+          await updateScanJob(jobId, { progress_pct: pct });
+        },
+      });
+    } else {
+      scanOutput = await runAioScan({
+        brand,
+        url,
+        competitors,
+        queries,
+        stats,
+        onProgress: async (done, total) => {
+          const pct = 25 + Math.round((done / total) * 60); // 25% -> 85%
+          await updateScanJob(jobId, { progress_pct: pct });
+        },
+      });
+    }
 
     // 3. Scoring / aggregation
     await updateScanJob(jobId, { status: "scoring", progress_pct: 90 });
 
-    const { results, summary } = scanOutput;
+    let results, summary, engines, headline, visibilityIndexPct, enginesCounted;
+
+    if (isMultiEngine) {
+      const multiSummary = summarizeEngineResults(scanOutput);
+      results = multiSummary.results;
+      summary = multiSummary.summary;
+      engines = multiSummary.engines;
+      headline = multiSummary.headline;
+      visibilityIndexPct = headline.visibility_index_pct;
+      enginesCounted = headline.engines_counted;
+    } else {
+      results = scanOutput.results;
+      summary = scanOutput.summary;
+      engines = null;
+      headline = null;
+      visibilityIndexPct = null;
+      enginesCounted = 0;
+    }
 
     const scannedAt = new Date().toISOString();
 
-    // One batched OpenRouter call over all non-branded AIO text + citations.
+    // Competitor extraction: feed union of all non-branded text + citations from all engines.
+    // For multi-engine, rows have `text`/`citations` instead of `aio_text`/`aio_citations`.
+    // Normalize both shapes for extractCompetitors.
+    const normalizedForCompetitors = results
+      .filter((r) => !r.is_branded_query)
+      .map((r) => ({
+        is_branded_query: false,
+        aio_present: r.answer_present || r.aio_present || false,
+        aio_text: r.text || r.aio_text || "",
+        aio_citations: r.citations || r.aio_citations || [],
+        aio_references: r.references || r.aio_references || [],
+        visible: r.visible || false,
+        engine: r.engine,
+      }));
+
     const competitorObjects = await extractCompetitors({
-      results,
+      results: normalizedForCompetitors,
       brand,
       brandUrl: url,
       userCompetitors: competitors,
       stats,
       max: 10,
     });
-    // Non-branded only: own-name queries cite the brand's own domain heavily
-    // and would dominate the source leaderboard.
+
+    // Top domains: aggregate over the normalized non-branded rows so
+    // aio_references is populated (raw multi-engine rows carry `references`,
+    // not `aio_references` — aggregateAioTopDomains reads the latter).
     const topDomains = aggregateAioTopDomains(
-      results.filter((r) => !r.is_branded_query),
+      normalizedForCompetitors.filter((r) => r.aio_present),
       url,
       competitorObjects.map((c) => c.name)
     );
+
     console.log(
-      `[aio-worker] Competitors: ${competitorObjects
+      `[worker] Competitors: ${competitorObjects
         .map((c) => `${c.name}(${c.visibilityScore}%/${c.source})`)
         .join(", ") || "(none)"}`
     );
@@ -203,18 +252,21 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       .digest("hex");
     const prompt_set_id = prompt_set_hash.slice(0, 16);
 
+    const platform = isMultiEngine ? "multi" : "google_ai_overview";
+    const scoringVersion = isMultiEngine
+      ? "v9-multi-engine"
+      : "v8.1-aio-unbranded-plus-presence";
+
     const scanRecord = {
       brand,
       url,
       industry,
-      platform: "google_ai_overview",
+      platform,
       visibility_pct: summary.visibility_pct,
       share_of_ai_pct: summary.share_of_ai_pct,
       aio_coverage_pct: summary.aio_coverage_pct,
       presence_rate_pct: summary.presence_rate_pct,
       mention_rate_pct: summary.mention_rate_pct,
-      // Unbranded count only -- this is the denominator the coverage and
-      // presence KPIs divide by. Branded seeds must not inflate it.
       prompts_tracked: unbrandedQueries.length,
       prompts_mentioned: summary.visible_non_branded,
       competitors: competitorObjects,
@@ -224,7 +276,7 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       used_dynamic_prompts: true,
       tokens_used: stats.tokens || 0,
       cost_total: stats.cost || 0,
-      scoring_version: "v8.1-aio-unbranded-plus-presence",
+      scoring_version: scoringVersion,
       prompt_set_id,
       prompt_set_hash,
       brand_citation_share_pct: summary.citation_share_pct,
@@ -237,18 +289,21 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       summary_stats: summary,
     };
 
+    // Multi-engine specific fields
+    if (isMultiEngine) {
+      scanRecord.engines = engines;
+      scanRecord.visibility_index_pct = visibilityIndexPct;
+      scanRecord.engines_counted = enginesCounted;
+    }
+
     let savedScanId = null;
     try {
       const savedScan = await insertScan(scanRecord);
       savedScanId = savedScan?.[0]?.id || null;
     } catch (err) {
-      console.error("[aio-worker] Database insertScan failed:", err.message);
+      console.error("[worker] Database insertScan failed:", err.message);
     }
 
-    // Only set result_id when the scan row actually persisted, otherwise the
-    // scan_jobs.result_id FK (references scans.id) is violated and the job
-    // status update fails. If unpersisted, keep result_id null and rely on the
-    // in-memory run_record fallback.
     await updateScanJob(jobId, {
       status: "complete",
       progress_pct: 100,
@@ -257,10 +312,11 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     });
 
     console.log(
-      `[aio-worker] Scan ${jobId} complete. share_of_ai=${summary.share_of_ai_pct}%  coverage=${summary.aio_coverage_pct}%  presence=${summary.presence_rate_pct}%  data_source_issue=${summary.data_source_issue}`
+      `[worker] Scan ${jobId} complete. share_of_ai=${summary.share_of_ai_pct}%  coverage=${summary.aio_coverage_pct}%  presence=${summary.presence_rate_pct}%  data_source_issue=${summary.data_source_issue}` +
+        (isMultiEngine ? `  visibility_index=${visibilityIndexPct}  engines_counted=${enginesCounted}` : "")
     );
   } catch (error) {
-    console.error(`[aio-worker] Scan job ${jobId} failed:`, error);
+    console.error(`[worker] Scan job ${jobId} failed:`, error);
     await updateScanJob(jobId, {
       status: "failed",
       progress_pct: 100,

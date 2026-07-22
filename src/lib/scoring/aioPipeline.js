@@ -1,4 +1,4 @@
-import { brightDataSearch, extractBrightDataAiOverview } from "../engines/brightdata.js";
+import { brightDataSearch, extractBrightDataAiOverview, extractBrightDataOrganic } from "../engines/brightdata.js";
 import { getBrandAliases } from "./aliases.js";
 import {
   AIO_CONCURRENCY,
@@ -98,6 +98,15 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
     // land. Retries are handled inside brightDataSearch.
     const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true });
     const { text, citations, references } = extractBrightDataAiOverview(data);
+    const organic = extractBrightDataOrganic(data);
+    result.organic = organic;
+    result.organic_position = organic.map((o) => o.domain);
+    if (brandDomain && organic.length > 0) {
+      const brandPos = organic.findIndex((o) =>
+        o.domain === brandDomain || o.domain.endsWith("." + brandDomain)
+      );
+      result.brand_organic_position = brandPos >= 0 ? brandPos + 1 : null;
+    }
     result.cost = 0.0015;
     if (stats) stats.cost = (stats.cost || 0) + result.cost;
 
@@ -190,6 +199,13 @@ export function summarizeAioResults(results) {
   const mentionedNonBranded = nonBrandedWithAio.filter((r) => r.brand_mentioned_in_text).length;
   const citedNonBranded = nonBrandedWithAio.filter((r) => r.brand_cited).length;
 
+  // Organic rank-not-cited: non-branded rows where brand is in top 10 organic
+  // but was NOT visible in the AI Overview (ranks on Google but not in AIO).
+  const rankNotCited = nonBrandedWithAio.filter(
+    (r) => r.brand_organic_position && r.brand_organic_position <= 10 && !r.visible
+  );
+  const rank_not_cited_count = rankNotCited.length;
+
   // coverage is non-branded only
   const aioCoveragePct =
     nonBranded.length > 0
@@ -251,6 +267,7 @@ export function summarizeAioResults(results) {
       visible_branded: visibleBranded,
       mentioned_non_branded: mentionedNonBranded,
       cited_non_branded: citedNonBranded,
+      rank_not_cited_count,
       aio_coverage_pct: aioCoveragePct,
       error_rate_pct: errorRatePct,
       visibility_pct: visibilityPct,

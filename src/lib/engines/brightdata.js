@@ -356,3 +356,18 @@ export function extractBrightDataPaa(data) {
     .map((item) => item.question || item.text)
     .filter(Boolean);
 }
+
+/**
+ * Extracts top organic search results from Bright Data SERP response.
+ * The data is already unwrapped by normalizeBrightDataResponse so organic
+ * sits directly on the object.
+ */
+export function extractBrightDataOrganic(data) {
+  const organic = Array.isArray(data?.organic) ? data.organic : [];
+  return organic.slice(0, 10).map((result, i) => ({
+    position: result.position || result.rank || i + 1,
+    href: result.link || result.href || "",
+    domain: (result.domain || "").replace(/^www\./i, ""),
+    title: result.title || "",
+  }));
+}

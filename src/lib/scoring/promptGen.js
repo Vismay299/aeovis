@@ -30,7 +30,13 @@ function wordCount(text) {
     .filter(Boolean).length;
 }
 
-function buildGenPrompt({ brand, website, industryHint, websiteSnippet, need, avoid = [] }) {
+function buildGenPrompt({ brand, website, industryHint, websiteSnippet, need, avoid = [], seedQueries = [] }) {
+  let seedSection = "";
+  if (seedQueries.length > 0) {
+    const capped = seedQueries.slice(0, 30);
+    seedSection = `\nReal queries observed on Google for this category (use as grounding, vary and expand):\n${capped.join("\n")}\n`;
+  }
+
   return `You are a market researcher reconstructing the REAL Google Search Console query
 report for a company's product category — the messy, specific, varied things actual
 buyers in India type into Google, not marketing copy.
@@ -39,7 +45,7 @@ Website: ${website}
 ${industryHint ? `Industry: ${industryHint}` : ""}
 Website summary:
 ${(websiteSnippet || "").slice(0, 2500)}
-
+${seedSection}
 Step 1 (do this silently, do not output it): from the summary above, identify 6-10
 DISTINCT angles a real buyer of this category cares about — e.g. a specific feature,
 a price point, a use case, a named competitor/alternative, a pain point, a target
@@ -137,6 +143,54 @@ export async function generateUnbrandedPrompts(
   const industryPack = resolveIndustryPack(industry);
   const industryHint = industryPack?.label || industry || "";
 
+  // 5b: PAA-seeding — derive seed terms and fetch real Google queries BEFORE
+  // the LLM pass so the prompt is grounded in actual search behaviour.
+  let seedQueries = [];
+  try {
+    const seedTerms = [];
+    if (industryHint) {
+      seedTerms.push(industryHint);
+      // Add variation terms from industry label
+      const words = industryHint.toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+      seedTerms.push(...words.slice(0, 3));
+    }
+    // Add top words from the scraped website title (extract first 2 meaningful words)
+    if (websiteSnippet) {
+      const firstLine = websiteSnippet.split("\n")[0] || "";
+      const titleWords = firstLine
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "")
+        .split(/\s+/)
+        .filter((w) => w.length > 4 && !["about", "contact", "home", "page"].includes(w))
+        .slice(0, 3);
+      seedTerms.push(...titleWords);
+    }
+    const uniqueTerms = [...new Set(seedTerms)].slice(0, 5);
+
+    const paaResults = [];
+    for (const term of uniqueTerms) {
+      if (paaResults.length >= 30) break;
+      try {
+        const result = await Promise.race([
+          Promise.all([paaFn(term), autoFn(term)]),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 10000)),
+        ]);
+        const [paa, autos] = result;
+        const merged = [...(paa || []), ...(autos || [])];
+        for (const q of merged) {
+          if (typeof q === "string" && q.trim() && !paaResults.includes(q.trim())) {
+            paaResults.push(q.trim());
+          }
+        }
+      } catch {
+        // best-effort per term
+      }
+    }
+    seedQueries = paaResults;
+  } catch {
+    // best-effort; prompt gen still works without seeds
+  }
+
   // Pass 1
   const prompt1 = buildGenPrompt({
     brand,
@@ -144,6 +198,7 @@ export async function generateUnbrandedPrompts(
     industryHint,
     websiteSnippet,
     need: count + 10,
+    seedQueries,
   });
   const result1 = await llmJsonFn(prompt1, { stats, timeout: 25000, temperature: 0.85 });
   if (Array.isArray(result1)) result1.forEach(add);
@@ -157,6 +212,7 @@ export async function generateUnbrandedPrompts(
       websiteSnippet,
       need: count - collected.length + 6,
       avoid: collected.map((c) => c.text),
+      seedQueries,
     });
     const result2 = await llmJsonFn(prompt2, { stats, timeout: 25000, temperature: 0.85 });
     if (Array.isArray(result2)) result2.forEach(add);

@@ -88,6 +88,11 @@ export async function insertScan(scanRecord) {
     top_domains: scanRecord.top_domains,
     engine_scores: scanRecord.engine_scores,
     cost_by_engine: scanRecord.cost_by_engine,
+    // v9 multi-engine: per-engine summaries + headline index. Without these,
+    // history reloads silently degrade multi-engine scans to AIO-only.
+    engines: scanRecord.engines || null,
+    visibility_index_pct: scanRecord.visibility_index_pct ?? null,
+    engines_counted: scanRecord.engines_counted ?? 0,
     engines_partial: scanRecord.engines_partial,
     serp_coverage_pct: scanRecord.serp_coverage_pct,
     probe_sources: scanRecord.probe_sources,
