@@ -33,7 +33,10 @@ function highlightBrand(text, aliases) {
   return parts;
 }
 
-function StatusPill({ visible, aioPresent, error, isBranded }) {
+function StatusPill({ visible, aioPresent, error, isBranded, engine }) {
+  // "AI Overview" is Google-specific wording — ChatGPT/Perplexity rows must
+  // never be labeled with it. They always answer unless the API errored.
+  const noAnswerLabel = engine && engine !== "aio" ? "No answer" : "No AI Overview";
   if (error) {
     return (
       <span
@@ -72,7 +75,7 @@ function StatusPill({ visible, aioPresent, error, isBranded }) {
           letterSpacing: "0.08em",
         }}
       >
-        No AI Overview
+        {noAnswerLabel}
       </span>
     );
   }
@@ -133,9 +136,17 @@ const AioEvidenceRow = ({ prompt, brandAliases }) => {
     isBrandedQuery,
     source,
     error,
+    engine,
   } = prompt;
 
   const hasContent = aioPresent || error;
+
+  const engineLabel = (() => {
+    if (engine === "aio") return "AIO";
+    if (engine === "chatgpt") return "ChatGPT";
+    if (engine === "perplexity") return "PPLX";
+    return null;
+  })();
 
   return (
     <div
@@ -195,7 +206,25 @@ const AioEvidenceRow = ({ prompt, brandAliases }) => {
               gap: "6px",
             }}
           >
-            <StatusPill visible={visible} aioPresent={aioPresent} error={error} isBranded={isBrandedQuery} />
+            <StatusPill visible={visible} aioPresent={aioPresent} error={error} isBranded={isBrandedQuery} engine={engine} />
+            {engineLabel && (
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "8px",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  padding: "1px 5px",
+                  borderRadius: "var(--radius-1)",
+                  background: "var(--bg-2)",
+                  color: "var(--text-2)",
+                  border: "1px solid var(--border-2)",
+                }}
+              >
+                {engineLabel}
+              </span>
+            )}
             {isBrandedQuery && (
               <Badge variant="accent">Branded query</Badge>
             )}
@@ -279,7 +308,7 @@ const AioEvidenceRow = ({ prompt, brandAliases }) => {
                 borderRadius: "var(--radius-1)",
               }}
             >
-              Bright Data returned an error for this query: {error}
+              {engineLabel ? `${engineLabel}: ${error}` : `Bright Data returned an error for this query: ${error}`}
             </div>
           ) : (
             <>
@@ -295,7 +324,7 @@ const AioEvidenceRow = ({ prompt, brandAliases }) => {
                     marginBottom: "var(--space-2)",
                   }}
                 >
-                  Google AI Overview
+                  {engineLabel ? `${engineLabel}` : "Google AI Overview"}
                 </h5>
                 <div
                   style={{
@@ -370,8 +399,15 @@ const AioEvidenceRow = ({ prompt, brandAliases }) => {
 
 export const AnswersView = ({ prompts = [], brandAliases = [], title = "Non-branded queries", subtitle, testId, emptyLabel = "No queries yet.", hasBrandedData }) => {
   const [filter, setFilter] = useState("all");
+  const [engineFilter, setEngineFilter] = useState("all");
+
+  const hasEngines = prompts.some((p) => p.engine);
 
   const filtered = prompts.filter((p) => {
+    if (engineFilter !== "all") {
+      const pEngine = p.engine || "aio";
+      if (pEngine !== engineFilter) return false;
+    }
     if (filter === "visible") return p.visible;
     if (filter === "absent") return !!(p.aioPresent) && !p.visible;
     if (filter === "no-aio") return !p.aioPresent && !p.error;
@@ -383,9 +419,16 @@ export const AnswersView = ({ prompts = [], brandAliases = [], title = "Non-bran
     { key: "all", label: "All", count: prompts.length },
     { key: "visible", label: "Visible", count: prompts.filter((p) => p.visible).length },
     { key: "absent", label: "Absent", count: prompts.filter((p) => !!(p.aioPresent) && !p.visible).length },
-    { key: "no-aio", label: "No AIO", count: prompts.filter((p) => !p.aioPresent && !p.error).length },
+    { key: "no-aio", label: hasEngines ? "No answer" : "No AIO", count: prompts.filter((p) => !p.aioPresent && !p.error).length },
     { key: "cited", label: "Cited", count: prompts.filter((p) => !!p.brandCited).length },
   ];
+
+  const engineChips = hasEngines ? [
+    { key: "all", label: "All", count: prompts.length },
+    { key: "aio", label: "AIO", count: prompts.filter((p) => (p.engine || "aio") === "aio").length },
+    { key: "chatgpt", label: "ChatGPT", count: prompts.filter((p) => p.engine === "chatgpt").length },
+    { key: "perplexity", label: "PPLX", count: prompts.filter((p) => p.engine === "perplexity").length },
+  ].filter((c) => c.key === "all" || c.count > 0) : null;
 
   return (
     <div style={{ display: "flex", gap: "var(--space-6)", height: "100%", overflow: "hidden" }}>
@@ -443,6 +486,39 @@ export const AnswersView = ({ prompts = [], brandAliases = [], title = "Non-bran
                 </button>
               ))}
             </div>
+            {engineChips && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "var(--space-2)",
+                  marginTop: "var(--space-3)",
+                  flexWrap: "wrap",
+                }}
+              >
+                {engineChips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    onClick={() => setEngineFilter(chip.key)}
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "9px",
+                      fontWeight: 500,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                      padding: "3px 8px",
+                      borderRadius: "var(--radius-round)",
+                      background: engineFilter === chip.key ? "var(--info-bg)" : "var(--bg-2)",
+                      color: engineFilter === chip.key ? "var(--info)" : "var(--text-3)",
+                      border: engineFilter === chip.key ? "1px solid var(--info-border)" : "1px solid var(--border-2)",
+                      cursor: "pointer",
+                      transition: "all var(--dur-fast)",
+                    }}
+                  >
+                    {chip.label} <span style={{ opacity: 0.6 }}>{chip.count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div style={{ flex: 1, overflowY: "auto" }}>
             {filtered.length === 0 ? (

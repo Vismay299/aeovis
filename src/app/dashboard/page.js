@@ -56,11 +56,12 @@ export default function Dashboard() {
     }
   }, []);
 
-  const { scoreTrend, previousScan, sortedHistory } = useMemo(() => {
+  const { scoreTrend, previousScan, sortedHistory, deltaSamePromptSet } = useMemo(() => {
     let scoreTrend = null;
     let previousScan = null;
     let sortedHistory = [];
-    if (!result || !history?.length) return { scoreTrend, previousScan, sortedHistory };
+    let deltaSamePromptSet = true;
+    if (!result || !history?.length) return { scoreTrend, previousScan, sortedHistory, deltaSamePromptSet };
 
     sortedHistory = [...history].sort(
       (a, b) => new Date(b.scanned_at) - new Date(a.scanned_at)
@@ -69,14 +70,44 @@ export default function Dashboard() {
       (s) => new Date(s.scanned_at).getTime() === new Date(result.scanTimestamp).getTime()
     );
     let prev = null;
-    if (idx !== -1 && idx + 1 < sortedHistory.length) prev = sortedHistory[idx + 1];
-    else if (idx === -1 && sortedHistory.length > 0) prev = sortedHistory[0];
 
-    if (prev) {
+    if (idx !== -1 && idx + 1 < sortedHistory.length) {
+      // Find the most recent previous scan with the same prompt_set_id
+      for (let j = idx + 1; j < sortedHistory.length; j++) {
+        const candidate = sortedHistory[j];
+        const candidatePromptSetId = candidate.prompt_set_id || "";
+        const currentPromptSetId = result.promptSetId || result.prompt_set_id || "";
+        const candidateScoringMajor = (candidate.scoring_version || "").split("-")[0] || "";
+        const currentScoringMajor = (result.scoringVersion || "").split("-")[0] || "";
+
+        if (candidatePromptSetId && currentPromptSetId && candidatePromptSetId === currentPromptSetId) {
+          prev = candidate;
+          break;
+        }
+        // Same scoring major version — also acceptable
+        if (candidateScoringMajor === currentScoringMajor && candidatePromptSetId === currentPromptSetId) {
+          prev = candidate;
+          break;
+        }
+      }
+
+      // If no matching prompt set found, mark as new prompt set
+      if (!prev) {
+        prev = sortedHistory[idx + 1]; // fallback for display purposes
+        deltaSamePromptSet = false;
+      }
+    } else if (idx === -1 && sortedHistory.length > 0) {
+      prev = sortedHistory[0];
+      deltaSamePromptSet = false;
+    }
+
+    if (prev && deltaSamePromptSet) {
       scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
+    }
+    if (prev) {
       previousScan = normalizeResult(prev, result.brand, result.website);
     }
-    return { scoreTrend, previousScan, sortedHistory };
+    return { scoreTrend, previousScan, sortedHistory, deltaSamePromptSet };
   }, [result, history]);
 
   // Empty state
@@ -165,10 +196,11 @@ export default function Dashboard() {
   }
 
   const dataSourceIssue = result.dataSourceIssue;
-  // Hero metric. v8 names it share_of_ai_pct; visibilityScore is the legacy
-  // alias carrying the same value. Read the v8 field first so the hero stays
-  // correct if the two ever diverge.
-  const heroScore = result.shareOfAiPct ?? result.visibilityScore;
+  // Hero metric. Multi-engine: AI Visibility Index (equal-weight mean).
+  // Single-engine: shareOfAiPct (the AIO-only value).
+  const heroScore = result.isMultiEngine
+    ? (result.visibilityIndexPct ?? result.shareOfAiPct ?? result.visibilityScore)
+    : (result.shareOfAiPct ?? result.visibilityScore);
   const tier = dataSourceIssue
     ? null
     : scoreTier(heroScore, result.scoringVersion);
@@ -218,13 +250,13 @@ export default function Dashboard() {
   const mentionedNonBranded = (result.rawResults || []).filter(
     (r) =>
       !(r.is_branded_query ?? r.isBrandedQuery) &&
-      !!(r.aio_present ?? r.aioPresent) &&
+      !!(r.aio_present || r.aioPresent || r.answer_present) &&
       !!(r.brand_mentioned_in_text ?? r.brandMentionedInText)
   ).length;
   const citedNonBranded = (result.rawResults || []).filter(
     (r) =>
       !(r.is_branded_query ?? r.isBrandedQuery) &&
-      !!(r.aio_present ?? r.aioPresent) &&
+      !!(r.aio_present || r.aioPresent || r.answer_present) &&
       !!(r.brand_cited ?? r.brandCited)
   ).length;
 
@@ -386,7 +418,9 @@ export default function Dashboard() {
                 border: "1px solid var(--info-border)",
               }}
             >
-              Source: Google AIO
+              {result.isMultiEngine
+                ? `Sources: ${(result.probeSources || []).map((s) => s === "aio" ? "AIO" : s === "chatgpt" ? "ChatGPT" : s === "perplexity" ? "PPLX" : s.toUpperCase()).join(" + ")}`
+                : "Source: Google AIO"}
             </span>
             <span
               style={{
@@ -600,6 +634,15 @@ export default function Dashboard() {
                 score={heroScore}
                 tier={tierLabelMap[tier]}
                 trend={scoreTrend}
+                scoreLabel={result.isMultiEngine ? "AI Visibility Index" : null}
+                engineChips={result.isMultiEngine && result.perEngineSummaries
+                  ? [
+                      { label: "AIO", value: result.perEngineSummaries.aio?.share_of_ai_pct ?? "—" },
+                      { label: "ChatGPT", value: result.perEngineSummaries.chatgpt?.share_of_ai_pct ?? "—" },
+                      { label: "PPLX", value: result.perEngineSummaries.perplexity?.share_of_ai_pct ?? "—" },
+                    ]
+                  : null
+                }
                 stats={[
                   {
                     value: `${result.visibleNonBranded ?? 0}/${result.nonBrandedWithAio ?? 0}`,
@@ -689,7 +732,9 @@ export default function Dashboard() {
                   <AnswersView
                     data-testid="non-branded-evidence"
                     title="Non-branded queries"
-                    subtitle="Real Google searches your buyers make in this category. Click a row to see the actual AI Overview."
+                    subtitle={result.isMultiEngine
+                      ? "Real searches your buyers make in this category. Click a row to see the actual AI answer from each engine."
+                      : "Real Google searches your buyers make in this category. Click a row to see the actual AI Overview."}
                     prompts={result.nonBrandedResults || []}
                     brandAliases={brandAliases}
                     emptyLabel="No non-branded queries in this scan."

@@ -1,7 +1,7 @@
 import { ScoreMeter } from "@/components/perceev/ScoreMeter";
 import { Badge } from "@/components/perceev/Badge";
 
-export const ScoreBand = ({ score, tier, trend, stats = [] }) => {
+export const ScoreBand = ({ score, tier, trend, stats = [], engineChips, scoreLabel }) => {
   const isNumeric = typeof score === "number";
 
   return (
@@ -76,6 +76,20 @@ export const ScoreBand = ({ score, tier, trend, stats = [] }) => {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", flexWrap: "wrap" }}>
+            {scoreLabel && (
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "10px",
+                  fontWeight: 500,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.08em",
+                  color: "var(--text-3)",
+                }}
+              >
+                {scoreLabel}
+              </span>
+            )}
             {tier && <Badge variant={tier}>{tier}</Badge>}
             {trend != null && (
               <span
@@ -103,6 +117,25 @@ export const ScoreBand = ({ score, tier, trend, stats = [] }) => {
                 {trend}%
               </span>
             )}
+            {engineChips && engineChips.map((chip, i) => (
+              <span
+                key={i}
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "9px",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  padding: "2px 6px",
+                  borderRadius: "var(--radius-1)",
+                  background: "var(--bg-2)",
+                  color: "var(--text-2)",
+                  border: "1px solid var(--border-2)",
+                }}
+              >
+                {chip.label} {chip.value}%
+              </span>
+            ))}
           </div>
           <div
             style={{

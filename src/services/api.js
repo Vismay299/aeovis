@@ -70,6 +70,10 @@ function getIntentTier(r) {
   return r.intent_tier ?? r.intentTier ?? null;
 }
 
+function getEngine(r) {
+  return r.engine ?? r.engineName ?? null;
+}
+
 /** Brand Presence panel: intentional own-name seeds / intent, not every alias hit. */
 function isBrandPresenceResult(r) {
   const source = r.source || "";
@@ -77,8 +81,15 @@ function isBrandPresenceResult(r) {
   return source === "branded_seed" || intentTier === "branded";
 }
 
+// Use || not ??: text-engine rows carry an explicit `aio_present: false`
+// alongside `answer_present: true` — a nullish fallback would stop at the
+// false and misreport every ChatGPT/Perplexity answer as "no answer".
+function getAnswerPresent(r) {
+  return !!(r.answer_present || r.aio_present || r.aioPresent);
+}
+
 function getAioPresent(r) {
-  return !!(r.aio_present ?? r.aioPresent);
+  return !!(r.aio_present || r.aioPresent || r.answer_present);
 }
 
 function getBrandMentionedInText(r) {
@@ -214,6 +225,9 @@ function isAlreadyNormalized(data) {
     return false;
   }
 
+  // Multi-engine records have isMultiEngine set during normalization
+  if (data.isMultiEngine != null) return true;
+
   // Normalized UI object: visibilityScore + UI prompt arrays (rawResults may stay snake_case)
   if (data.visibilityScore == null) return false;
 
@@ -223,6 +237,26 @@ function isAlreadyNormalized(data) {
     Array.isArray(data.brandedResults) ||
     Array.isArray(data.brandPresenceResults)
   );
+}
+
+function buildEngineScores(isMultiEngine, data, raw, fallbackScore) {
+  if (isMultiEngine) {
+    const engines = data.engines || raw.engines || {};
+    const scores = {};
+    for (const [key, summary] of Object.entries(engines)) {
+      scores[key] = (summary && summary.share_of_ai_pct) || 0;
+    }
+    return scores;
+  }
+  return { google_ai_overview: fallbackScore };
+}
+
+function buildProbeSources(isMultiEngine, data, raw) {
+  if (isMultiEngine) {
+    const engines = data.engines || raw.engines || {};
+    return Object.keys(engines);
+  }
+  return ["google_ai_overview"];
 }
 
 export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
@@ -345,6 +379,9 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     data.presence_rate_pct ?? data.presenceRatePct ?? summary?.presence_rate_pct ?? null;
   let shareOfAiPct =
     data.share_of_ai_pct ?? data.shareOfAiPct ?? summary?.share_of_ai_pct ?? visibilityPct;
+
+  // Multi-engine detection: record carries an `engines` key with per-engine summaries.
+  const isMultiEngine = !!(data.engines || raw.engines);
 
   // The pipeline (summarizeAioResults) already emits three mutually-consistent
   // metrics on one denominator each. Only recompute when the summary is
@@ -495,9 +532,13 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     competitorsFound,
     competitorsConfigured,
     competitorsRaw: data.competitors_raw ?? raw.competitors_raw ?? "",
-    engineScores: { google_ai_overview: visibilityPct },
-    probeSources: ["google_ai_overview"],
+    engineScores: buildEngineScores(isMultiEngine, data, raw, visibilityPct),
+    probeSources: buildProbeSources(isMultiEngine, data, raw),
     serpCoveragePct: aioCoveragePct,
+    visibilityIndexPct: data.visibility_index_pct ?? raw.visibility_index_pct ?? null,
+    enginesCounted: data.engines_counted ?? raw.engines_counted ?? 0,
+    isMultiEngine,
+    perEngineSummaries: (data.engines || raw.engines) || null,
     summary: generateSummary(brand, visibilityPct, aioCoveragePct, dataSourceIssue),
     totalCitations: results.reduce(
       (sum, r) => sum + getAioCitations(r).length,
@@ -540,11 +581,13 @@ function mapPromptForUi(r) {
 
   return {
     prompt: r.prompt,
+    engine: r.engine || null,
     rank,
+    organicPosition: r.brand_organic_position ?? r.organicPosition ?? null,
     volume: source ? source.toUpperCase() : "—",
     promptScore,
     aioPresent,
-    aioText: r.aio_text ?? r.aioText ?? "",
+    aioText: r.aio_text ?? r.aioText ?? r.text ?? "",
     aioCitations,
     aioReferences,
     brandMentioned: brandMentionedInText,

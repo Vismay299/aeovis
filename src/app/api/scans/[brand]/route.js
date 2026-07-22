@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getScansForBrand } from "@/lib/db";
 
+// Scan history must always be fresh. Without this, Next 14 statically caches
+// the handler (it never reads `request`), so newly-saved scans never appear.
+export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
+
 /** Shape DB rows for normalizeResult: summary_stats, flat metrics, and results. */
 function enrichScanForClient(scan) {
   const raw = scan.raw_results || {};
