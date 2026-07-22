@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Perceev — Strategy Brief & GEO Operating System</title>
+<style>
+  :root{
+    --paper:#f5f4f2;
+    --card:#ffffff;
+    --ink:#1f2328;
+    --muted:#5b6470;
+    --faint:#8a929c;
+    --line:#e4e2dd;
+    --line-strong:#d3d0c9;
+    --slate:#2f4858;
+    --slate-soft:#eef2f5;
+    --good:#3c6e57; --good-bg:#eff5f1;
+    --warn:#8a6216; --warn-bg:#faf5e9;
+    --risk:#9b3b2f; --risk-bg:#f9efec;
+    --info:#2f4858; --info-bg:#eef2f5;
+    --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--sans);font-size:16px;line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  .layout{display:grid;grid-template-columns:236px 1fr;gap:44px;align-items:start}
+  @media (max-width:900px){.layout{grid-template-columns:1fr;gap:0}.toc{position:static!important;max-height:none!important;border:1px solid var(--line);margin-bottom:24px}}
+
+  /* Masthead */
+  header.masthead{background:var(--slate);color:#f3f1ec;padding:54px 0 46px}
+  header.masthead .wrap{max-width:1080px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#a9b6c0;margin:0 0 14px}
+  header.masthead h1{font-size:40px;line-height:1.12;margin:0 0 14px;font-weight:700;letter-spacing:-.02em}
+  header.masthead h1 .v{color:#e8895a}
+  header.masthead p.lede{font-size:18px;color:#d5dbe0;max-width:760px;margin:0 0 22px}
+  .meta-row{display:flex;flex-wrap:wrap;gap:10px 26px;font-size:13px;color:#b7c1c9;font-family:var(--mono)}
+  .meta-row b{color:#e6ebed;font-weight:600}
+
+  main{padding:40px 0 80px}
+
+  /* TOC */
+  .toc{position:sticky;top:20px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 16px;max-height:calc(100vh - 40px);overflow:auto}
+  .toc h4{margin:0 0 10px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);font-family:var(--mono)}
+  .toc ol{list-style:none;margin:0;padding:0;counter-reset:toc}
+  .toc ol li{counter-increment:toc;margin:0 0 2px}
+  .toc ol li a{display:block;padding:5px 8px;border-radius:6px;color:var(--muted);text-decoration:none;font-size:13.5px;line-height:1.35}
+  .toc ol li a::before{content:counter(toc) ".";color:var(--faint);font-family:var(--mono);margin-right:7px;font-size:12px}
+  .toc ol li a:hover{background:var(--slate-soft);color:var(--slate)}
+
+  /* Sections */
+  section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:32px 34px;margin:0 0 22px;scroll-margin-top:18px}
+  section > h2{font-size:24px;line-height:1.2;margin:0 0 6px;letter-spacing:-.01em;color:var(--ink);font-weight:700}
+  section > h2 .num{font-family:var(--mono);font-size:15px;color:var(--slate);margin-right:12px;font-weight:600}
+  .sec-sub{color:var(--muted);font-size:15px;margin:0 0 22px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+  h3{font-size:18px;margin:30px 0 10px;letter-spacing:-.01em;color:var(--slate)}
+  h4{font-size:15px;margin:20px 0 8px;color:var(--ink)}
+  p{margin:0 0 14px}
+  ul,ol{margin:0 0 14px;padding-left:22px}
+  li{margin:0 0 7px}
+  a{color:var(--slate);text-decoration:underline;text-decoration-color:#c4cdd4;text-underline-offset:2px}
+  strong{font-weight:650}
+  code{font-family:var(--mono);font-size:.86em;background:#f1efeb;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:#3b4650}
+  .src{font-size:12px;color:var(--faint)}
+  .src a{color:var(--faint)}
+
+  /* Badges */
+  .badge{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:20px;vertical-align:middle;font-weight:600;border:1px solid transparent}
+  .b-built{background:var(--good-bg);color:var(--good);border-color:#cfe2d7}
+  .b-partial{background:var(--warn-bg);color:var(--warn);border-color:#ecdcb5}
+  .b-planned{background:#eef0f2;color:#5b6470;border-color:#dcdfe3}
+  .b-risk{background:var(--risk-bg);color:var(--risk);border-color:#e8cdc6}
+
+  /* Callouts */
+  .call{border:1px solid var(--line);border-left-width:4px;border-radius:8px;padding:14px 18px;margin:16px 0;background:#fafafa}
+  .call .lab{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;display:block;margin-bottom:5px}
+  .call p:last-child{margin-bottom:0}
+  .c-asset{border-left-color:var(--good);background:var(--good-bg)} .c-asset .lab{color:var(--good)}
+  .c-gap{border-left-color:var(--warn);background:var(--warn-bg)} .c-gap .lab{color:var(--warn)}
+  .c-risk{border-left-color:var(--risk);background:var(--risk-bg)} .c-risk .lab{color:var(--risk)}
+  .c-insight{border-left-color:var(--slate);background:var(--info-bg)} .c-insight .lab{color:var(--slate)}
+
+  /* Tables */
+  .tbl-scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--line);border-radius:8px}
+  table{border-collapse:collapse;width:100%;font-size:14px;min-width:520px}
+  th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:#f4f3f0;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:650;border-bottom:1px solid var(--line-strong)}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even){background:#faf9f7}
+  td.num,th.num{font-family:var(--mono);white-space:nowrap}
+
+  /* Metric cards */
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0}
+  .metric{border:1px solid var(--line);border-radius:9px;padding:14px 16px;background:#fbfaf8}
+  .metric .big{font-size:26px;font-weight:700;letter-spacing:-.02em;font-family:var(--mono);color:var(--slate);line-height:1.1}
+  .metric .cap{font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.35}
+
+  /* Diagram */
+  .diagram{border:1px solid var(--line);border-radius:10px;background:#fbfaf8;padding:22px;margin:18px 0;overflow-x:auto}
+  .flow{display:flex;align-items:stretch;gap:0;min-width:560px}
+  .node{flex:1;background:var(--card);border:1px solid var(--line-strong);border-radius:8px;padding:11px 12px;text-align:center;display:flex;flex-direction:column;justify-content:center}
+  .node .t{font-weight:650;font-size:13.5px;line-height:1.25}
+  .node .s{font-size:11.5px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+  .arrow{display:flex;align-items:center;color:var(--faint);padding:0 4px;font-size:18px}
+  .lane-label{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+
+  .agentgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:18px 0}
+  .agent{border:1px solid var(--line);border-radius:10px;padding:16px 17px;background:#fbfaf8}
+  .agent .head{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  .agent .idx{font-family:var(--mono);font-size:12px;font-weight:700;color:#fff;background:var(--slate);border-radius:6px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .agent .nm{font-weight:700;font-size:15px;line-height:1.15}
+  .agent .role{font-size:13.5px;color:var(--muted);margin:0 0 8px}
+  .agent .kv{font-size:12.5px;color:var(--ink);margin:3px 0}
+  .agent .kv b{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);font-weight:650;display:inline-block;min-width:52px}
+
+  /* Loop steps */
+  .loop{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin:16px 0}
+  .loop .step{background:var(--card);border:1px solid var(--line-strong);border-radius:20px;padding:7px 14px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .loop .step .n{font-family:var(--mono);font-size:11px;color:var(--slate);font-weight:700}
+  .loop .a{color:var(--faint)}
+
+  /* Roadmap */
+  .phase{border:1px solid var(--line);border-left:4px solid var(--slate);border-radius:8px;padding:16px 18px;margin:14px 0;background:#fbfaf8}
+  .phase .ph-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin-bottom:6px}
+  .phase .ph-t{font-weight:700;font-size:16px}
+  .phase .ph-when{font-family:var(--mono);font-size:11.5px;color:var(--muted);background:#eef0f2;border-radius:20px;padding:2px 10px}
+  .phase .ph-goal{font-size:13.5px;color:var(--muted);font-style:italic;margin-bottom:8px}
+
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}
+  @media (max-width:640px){.two-col{grid-template-columns:1fr}.metric .big{font-size:22px}}
+
+  hr.soft{border:none;border-top:1px solid var(--line);margin:26px 0}
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--slate);font-weight:700;margin:0 0 4px}
+
+  footer.end{color:var(--faint);font-size:13px;text-align:center;padding:30px 0 10px}
+
+  @media print{
+    body{background:#fff;font-size:11.5pt}
+    .toc,header.masthead{display:none}
+    .layout{grid-template-columns:1fr}
+    section{border:none;box-shadow:none;padding:0 0 10px;page-break-inside:auto;break-inside:auto}
+    section > h2{page-break-after:avoid}
+    .call,.diagram,.agent,.phase,.tbl-scroll,.metric{page-break-inside:avoid}
+    a{color:var(--ink);text-decoration:none}
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="wrap">
+    <p class="eyebrow">Internal Strategy Brief · Confidential · For Co-Founder Review</p>
+    <h1>Percee<span class="v">v</span> — from Visibility Score to a GEO Operating System</h1>
+    <p class="lede">Where the product stands today, how it compares to Profound and the wider Answer-Engine-Optimization field, and a budget-aware plan to build the two-part product: the score that gets us in the door, and the human-in-the-loop agent system that keeps clients ranked in AI answers.</p>
+    <div class="meta-row">
+      <span>Date: <b>21 July 2026</b></span>
+      <span>Product: <b>Perceev</b> (formerly aeovis)</span>
+      <span>Stack: <b>Next.js 14 · Supabase · Bright Data · OpenRouter</b></span>
+      <span>Status: <b>Part 1 live (AIO only) · Part 2 to build</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="layout">
+
+  <!-- ===================== TOC ===================== -->
+  <nav class="toc">
+    <h4>Contents</h4>
+    <ol>
+      <li><a href="#s1">Executive summary</a></li>
+      <li><a href="#s2">Why now — the market</a></li>
+      <li><a href="#s3">What we have today</a></li>
+      <li><a href="#s4">Honest assessment — gaps</a></li>
+      <li><a href="#s5">Profound &amp; the field</a></li>
+      <li><a href="#s6">Product vision — two verticals</a></li>
+      <li><a href="#s7">The GEO Operating System</a></li>
+      <li><a href="#s8">WordPress plug-and-play</a></li>
+      <li><a href="#s9">The periodic loop</a></li>
+      <li><a href="#s10">Economics &amp; pricing</a></li>
+      <li><a href="#s11">Roadmap</a></li>
+      <li><a href="#s12">Risks &amp; caveats</a></li>
+      <li><a href="#s13">Recommendations</a></li>
+      <li><a href="#s14">Appendix &amp; sources</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+  <!-- ===================== 1. EXEC SUMMARY ===================== -->
+  <section id="s1">
+    <h2><span class="num">01</span>Executive summary</h2>
+    <p class="sec-sub">The one-page version to read before anything else.</p>
+
+    <p><strong>The shift is real and it is monetizable.</strong> Buyers increasingly get their answers from ChatGPT, Google AI Overviews, Gemini and Perplexity instead of a page of blue links. When the AI answers without naming your client, the click — and the sale — never happens. A whole category ("Answer Engine Optimization" / "Generative Engine Optimization") has formed around this in under two years, led by <strong>Profound</strong>, which just raised a <strong>$96M Series C at a $1B valuation</strong>. The category is now large enough that Gartner published its first Market Guide for it, and consolidation has started (Sitecore bought Scrunch AI for ~$225M; Adobe is buying Semrush for ~$1.9B).</p>
+
+    <p><strong>Our two-part product is the right shape.</strong> Part 1 — the <em>AI Visibility Score</em> — is the cheap, alarming, foot-in-the-door diagnostic ("AI recommends your competitor, not you"). Part 2 — the <em>GEO Operating System</em> — is a human-in-the-loop team of agents that audits the client's site, writes content engineered to win AI citations, publishes it to their WordPress after a human approves, and re-checks every couple of weeks to keep them on top. Part 1 sells the problem; Part 2 is the recurring revenue and the retention.</p>
+
+    <div class="call c-insight">
+      <span class="lab">The core strategic read</span>
+      <p>The funded leaders (Profound, Bluefish) are <strong>enterprise-first and measurement-heavy</strong>. Almost nobody credibly does <strong>affordable, done-for-you, generate-<em>and</em>-publish for SMBs — especially on WordPress</strong>. That is our lane. We do not out-Profound Profound; we serve the Indian and long-tail SMB/D2C/SaaS market they will never chase, at a price (~₹40,000/mo) that only works <em>because</em> our agents replace the human hours a traditional agency would burn.</p>
+    </div>
+
+    <h3>Where we actually are</h3>
+    <div class="metrics">
+      <div class="metric"><div class="big">1 / 4</div><div class="cap">of the promised engines live (Google AI Overviews). ChatGPT, Gemini, Perplexity, AI Mode not wired up yet.</div></div>
+      <div class="metric"><div class="big">30</div><div class="cap">unbranded prompts scored per brand, on a clean three-metric model.</div></div>
+      <div class="metric"><div class="big">~$1.50</div><div class="cap">true data cost per brand per month across all four engines. Data is not our cost centre.</div></div>
+      <div class="metric"><div class="big">₹0</div><div class="cap">of Part 2 built. But the seeds (content-tracking, gap-to-recommendation) already exist in the codebase.</div></div>
+    </div>
+
+    <h3>What this brief asks you to agree on</h3>
+    <ol>
+      <li><strong>Harden Part 1 into something sellable</strong> before adding features: fix the reliability gates, add accounts/billing, tighten the methodology story.</li>
+      <li><strong>Light up the other three engines</strong> — the adapters are already half-written and dormant in our repo, and the data cost is trivial.</li>
+      <li><strong>Build the GEO OS as a human-in-the-loop pipeline, WordPress-first, draft-by-default</strong> — this is the moat and the margin.</li>
+      <li><strong>Price it as an automation-enabled productized service (~₹40k/mo)</strong>, with a free/cheap score as the funnel.</li>
+    </ol>
+  </section>
+
+  <!-- ===================== 2. WHY NOW ===================== -->
+  <section id="s2">
+    <h2><span class="num">02</span>Why now — the market we are betting on</h2>
+    <p class="sec-sub">The numbers a co-founder should be able to quote in a sales call.</p>
+
+    <h3>Search behaviour is moving into AI answers</h3>
+    <ul>
+      <li><strong>ChatGPT reached ~800M weekly active users</strong> (Oct 2025), up from 500M in March 2025. <span class="src">(TechCrunch)</span></li>
+      <li><strong>Pew Research:</strong> 58% of US users saw an AI summary in at least one search; when a summary appears, users click a result only <strong>8% of the time vs 15%</strong> without one, and just <strong>1%</strong> click a link inside the summary. Fewer clicks reach websites — unless <em>you are the source the AI cites.</em> <span class="src">(Pew, Jul 2025)</span></li>
+      <li><strong>Bain &amp; Company:</strong> ~80% of consumers now rely on AI summaries for at least 40% of searches; ~60% of searches are "zero-click"; organic traffic is down 15–25%. <span class="src">(Bain)</span></li>
+      <li><strong>Adobe:</strong> AI-referred traffic to US retail sites is up <strong>~1,300% since late 2024</strong> and converts <strong>~54% better</strong> than non-AI traffic. <span class="src">(Adobe / Digital Commerce 360)</span></li>
+      <li><strong>Gartner (Market Guide, Mar 2026):</strong> nearly one-third of buyers now use generative AI somewhere in the purchase journey.</li>
+    </ul>
+
+    <div class="call c-insight">
+      <span class="lab">The one-sentence pitch this supports</span>
+      <p>"Your customers are asking AI which product to buy. Today the AI recommends someone else. We measure exactly how invisible you are — and then we fix it." That is the entire business in two sentences, and every stat above backs it.</p>
+    </div>
+
+    <h3>The category is real, funded, and consolidating</h3>
+    <ul>
+      <li><strong>Profound</strong> — ~$155M raised, $1B valuation (Feb 2026), 700+ enterprise customers including 10%+ of the Fortune 500.</li>
+      <li><strong>Sitecore acquired Scrunch AI for ~$225M</strong> (Jun 2026) — the category's first big exit.</li>
+      <li><strong>Adobe is acquiring Semrush for ~$1.9B</strong> — the incumbent SEO suites are paying up to own AI-visibility data.</li>
+      <li><strong>Gartner</strong> published its inaugural <em>Market Guide for Answer Engine Visibility Tools</em> (Mar 2026) — formal analyst recognition that this is a market, not a fad.</li>
+    </ul>
+    <p>Two implications for us. First, validation: serious money agrees the problem is worth solving. Second, urgency: the space is filling fast, so our edge has to be a segment and a delivery model the funded players structurally won't copy — <em>affordable, done-for-you, SMB, WordPress, India-first.</em></p>
+
+    <div class="call c-gap">
+      <span class="lab">Reality check on "market size"</span>
+      <p>Every splashy GEO market-size figure ($1B→$17B by 2034, etc.) traces back to paid report-sellers that disagree with each other by ~2×. Treat those as marketing. The <em>trustworthy</em> signals are the funding rounds, the acquisitions, and the first-party usage/adoption stats above — lean on those, not the TAM slides.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 3. WHAT WE HAVE ===================== -->
+  <section id="s3">
+    <h2><span class="num">03</span>What we have today — the current build</h2>
+    <p class="sec-sub">An honest, complete inventory of Part 1 (the Visibility Score). This is what actually runs.</p>
+
+    <p>Perceev today is a <strong>Next.js 14 (App Router, plain JavaScript) app on Supabase</strong> that measures one thing well: how visible a brand is inside <strong>Google AI Overviews</strong>, in the <strong>India</strong> geo. It is mid-rebrand (aeovis → Perceev, dark "dossier" redesign) and was recently rebuilt from a sprawling multi-engine "v7" into a focused "v8" pipeline.</p>
+
+    <h3>3.1 · The scan pipeline, end to end <span class="badge b-built">Built</span></h3>
+    <div class="diagram">
+      <p class="lane-label">Fire-and-forget background job · states: generating_prompts → probing → scoring → complete</p>
+      <div class="flow">
+        <div class="node"><div class="t">Scan form</div><div class="s">brand · url · industry</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="t">Prompt gen</div><div class="s">OpenRouter (free)</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="t">Probe ×30</div><div class="s">Bright Data AIO</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="t">Score + rivals</div><div class="s">ratios + 1 LLM call</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="t">Dashboard</div><div class="s">5 views</div></div>
+      </div>
+    </div>
+    <ul>
+      <li><strong>Prompt generation.</strong> For each brand we generate <strong>exactly 30 unbranded prompts</strong> — the messy, real things a buyer types, <em>not</em> the brand name. The site is scraped (Firecrawl) for context, then the free OpenRouter model (<code>google/gemma-4-31b-it:free</code>) writes queries across intent tiers (informational / commercial / comparison / problem-aware), topped up if short from People-Also-Ask, Google autocomplete, and a static 30-industry pack.</li>
+      <li><strong>Probing.</strong> Each prompt is run through <strong>Bright Data's SERP API</strong> with <code>brd_ai_overview=2</code> (India, <code>gl=in</code>), at concurrency 6. For every prompt we record: did an AI Overview appear, its full text, its cited sources, whether the brand is named in the text, and whether the brand's domain is cited.</li>
+      <li><strong>Scoring &amp; rivals.</strong> Straight ratios (below) plus one batched OpenRouter call to extract competitors from the collected AI-Overview text, and an aggregation of the most-cited domains.</li>
+      <li><strong>Persistence.</strong> Results are written to Supabase; a SHA-256 hash of the prompt set gives each scan a stable identity so scores are comparable over time.</li>
+    </ul>
+
+    <h3>3.2 · The scoring model <span class="badge b-built">Built</span></h3>
+    <p>Deliberately <strong>not</strong> a mysterious 0–100 composite. It is three clean numbers, each on its own fixed denominator — because mixing denominators was the recurring historical bug. "Visible" = the brand is named in the AI Overview text <em>or</em> its domain is cited.</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Metric</th><th>Definition</th><th>Reads as</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Share of AI</strong> (headline)</td><td class="num">visible ÷ prompts-with-an-AIO</td><td>"When AI answers, how often does it include you?"</td></tr>
+          <tr><td>AIO coverage</td><td class="num">prompts-with-an-AIO ÷ 30</td><td>"How often does AI even show an answer here?"</td></tr>
+          <tr><td>Presence rate</td><td class="num">visible ÷ 30</td><td>Strictest view — visible across all tracked prompts.</td></tr>
+          <tr><td>Mention vs citation</td><td class="num">named-in-text · domain-cited</td><td>Split of <em>how</em> you show up.</td></tr>
+          <tr><td>Brand presence</td><td class="num">own-name seed queries</td><td>Reported separately; never inflates the headline.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>There are <strong>reliability gates</strong>: if the error rate is over 50%, or fewer than 15% of prompts returned an AI Overview, the dashboard suppresses the score and shows "not enough AI Overview data" rather than a misleading number. Tiers: <strong>strong ≥ 50, moderate ≥ 25, weak &lt; 25.</strong></p>
+
+    <h3>3.3 · The dashboard <span class="badge b-built">Built</span></h3>
+    <p>The rebranded dashboard has a sidebar and five views: <strong>Overview</strong> (hero score, KPIs, "where you're losing"), <strong>Answers</strong> (the verbatim AI-Overview text with the brand highlighted — this is the "proof" screen a salesperson shows), <strong>Rivals</strong> (competitor co-mention leaderboard), <strong>Sources</strong> (which domains AI cites most), and <strong>Queries</strong> (manage the tracked prompt set).</p>
+
+    <h3>3.4 · Data providers, cron &amp; cost <span class="badge b-built">Built</span></h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Provider</th><th>Used for</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Bright Data SERP</strong></td><td>Google AI Overview + People-Also-Ask</td><td>The single source of truth. Hardened retries/rate-limit handling. This is the "keywords + PAA" provider.</td></tr>
+          <tr><td><strong>OpenRouter</strong></td><td>Prompt generation + competitor extraction</td><td>Free model only (<code>gemma-4-31b-it:free</code>), ~1,500 free requests/day. Cost = $0.</td></tr>
+          <tr><td><strong>Firecrawl</strong></td><td>Scrape the brand site for prompt context</td><td>Falls back to plain fetch if no key.</td></tr>
+          <tr><td><strong>Supabase</strong></td><td>Persistence</td><td>4 tables (see below). Wide-open anon access today — a gap (§4).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>A <strong>daily Vercel cron</strong> already hits <code>/api/scan/worker</code> to resume stuck/pending jobs — the primitive we will later reuse for periodic re-scans. Data tables: <code>scans</code>, <code>brand_prompts</code>, <code>scan_jobs</code>, and — tellingly — <code>content_events</code>.</p>
+
+    <div class="call c-asset">
+      <span class="lab">Hidden assets — Part 2 is not greenfield</span>
+      <p>Three things already in the repo make the roadmap far cheaper than it looks:</p>
+      <p>1. <strong>The other engines are half-built.</strong> Working-but-dormant adapters exist for OpenAI (<code>gpt-4o-mini</code>), Perplexity (<code>sonar</code>) and Gemini, behind a <code>probe.js</code>/<code>adapter.js</code> layer the v8 pipeline simply stopped calling. Adding ChatGPT/Perplexity/Gemini to the score is largely a <em>wire-up</em>, not a rebuild.</p>
+      <p>2. <strong>The "fixing" loop is sketched.</strong> A <code>content_events</code> table + a <code>contentLift.js</code> module already exist to measure whether a published page moved the score, and an <code>/api/opportunities</code> endpoint already turns gaps into recommendations.</p>
+      <p>3. <strong>The async job model + daily cron</strong> is exactly the backbone a periodic agent loop needs.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 4. GAPS ===================== -->
+  <section id="s4">
+    <h2><span class="num">04</span>Honest assessment — what's weak and what to fix</h2>
+    <p class="sec-sub">The things I'd want a co-founder to know before we sell this, roughly in priority order.</p>
+
+    <h4><span class="badge b-partial">Fix first</span> &nbsp;Only one of four promised engines is live</h4>
+    <p>The landing copy and the pitch imply ChatGPT / Gemini / Perplexity / Google AI Mode. Only Google AI Overviews works. This is the single biggest gap between the story and the product — and, happily, the cheapest to close (§3 hidden assets, §11 Phase 1).</p>
+
+    <h4><span class="badge b-risk">Credibility risk</span> &nbsp;Reliability gates were loosened</h4>
+    <p>To cope with India's volatile AI-Overview coverage, the "is this scan trustworthy?" threshold was relaxed (minimum coverage 30% → 15%). It made healthy scans stop getting flagged — but it also means a <em>genuinely thin</em> scan can now show a confident-looking score. For a paid product where the number is the whole pitch, we need to re-examine this and be transparent about confidence.</p>
+
+    <h4><span class="badge b-partial">Blocks selling</span> &nbsp;No accounts, no multi-tenancy, no billing</h4>
+    <p>Everything is keyed by brand name in <code>sessionStorage</code> with wide-open anonymous database access. That is fine for a demo and impossible for a paid SaaS with client data. Auth + per-account isolation + billing is prerequisite work for charging anyone.</p>
+
+    <h4><span class="badge b-partial">Quality ceiling</span> &nbsp;The free LLM is fine for prompts, not for client content</h4>
+    <p>The free OpenRouter model is a smart cost choice for <em>generating test prompts</em>. But the moment Part 2 writes content a client will publish under their own name, a free model is the wrong tool — quality and factual reliability matter too much. We must budget for a capable model on the paid path (§10).</p>
+
+    <h4><span class="badge b-planned">Tech debt</span> &nbsp;Orphaned code &amp; one inconsistency</h4>
+    <ul>
+      <li>The rebrand left orphaned components (the planned "dossier" landing was built but never wired; several old dashboard panels linger).</li>
+      <li><code>/api/opportunities</code> still calls the <em>legacy Gemini</em> path while everything else standardised on OpenRouter — a small but real inconsistency to clean up when we revive that feature.</li>
+    </ul>
+
+    <h4><span class="badge b-planned">Methodology</span> &nbsp;AIO text ≠ what a real ChatGPT user sees</h4>
+    <p>We infer "visibility" from the AI-Overview block returned to a scraper. That is directionally correct and cheap, but it is not a personalised, logged-in consumer session. Profound's differentiator is literally "what you see is what your customer sees." We should be honest about our methodology and treat consumer-fidelity capture as a premium upgrade, not pretend we already have it (§10).</p>
+
+    <div class="call c-insight">
+      <span class="lab">Net</span>
+      <p>None of this is fatal — it's a well-built diagnostic that needs <em>productizing</em> (auth, billing, confidence, more engines) before it's a business, plus a Part 2 to justify the price. The bones are good and unusually far along for a pre-revenue product.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 5. PROFOUND ===================== -->
+  <section id="s5">
+    <h2><span class="num">05</span>Profound &amp; the competitive field</h2>
+    <p class="sec-sub">What the category leader actually does, what everyone else does, and where the open lane is.</p>
+
+    <h3>5.1 · Profound, in one screen</h3>
+    <div class="metrics">
+      <div class="metric"><div class="big">~$155M</div><div class="cap">raised across 4 rounds; $1B valuation (Series C, Feb 2026)</div></div>
+      <div class="metric"><div class="big">700+</div><div class="cap">enterprise customers; 10%+ of the Fortune 500</div></div>
+      <div class="metric"><div class="big">~10</div><div class="cap">answer engines tracked (ChatGPT, AIO, Gemini, Perplexity, Copilot, Grok, Claude…)</div></div>
+      <div class="metric"><div class="big">2024</div><div class="cap">founded, NYC — Cadwallader (CEO) &amp; Babbs (CTO)</div></div>
+    </div>
+    <p>Profound coined "Answer Engine Optimization" and organises its suite as <strong>Monitor → Create → Operate</strong>:</p>
+    <ul>
+      <li><strong>Answer Engine Insights</strong> — the flagship: visibility, share of voice, sentiment, citations, and a "FactCheck" that flags wrong AI claims. Runs prompts <em>daily</em>, across ~10 engines, 30+ languages, 150+ regions.</li>
+      <li><strong>Prompt Volumes</strong> — their real moat: a licensed dataset of <strong>1.5B+ anonymised AI conversations</strong> (from opt-in consumer panels), so they can tell you which prompts actually have volume and intent. This is data we cannot cheaply replicate.</li>
+      <li><strong>Agent Analytics</strong> — server-log analytics of AI crawler bots (GPTBot, ClaudeBot, PerplexityBot) hitting your site, with spoof detection.</li>
+      <li><strong>Shopping</strong> — visibility inside ChatGPT Shopping (SKU-level).</li>
+      <li><strong>Agents + Workflows + Aim</strong> — the "write" side: agents research across 16 models, draft optimised content, and <strong>publish to WordPress/Sanity/Contentful with a human approval step</strong>; "Aim" is an always-on agent that turns findings into execution plans.</li>
+    </ul>
+    <p><strong>How their tech works:</strong> for insights they <em>capture responses directly from the browser</em> ("what you see is what your customer sees") rather than raw APIs; for prompt volumes they <em>license</em> conversation data. Under the hood: Aho-Corasick pattern matching, a RAG pipeline over a Milvus vector DB, and self-hosted GPU inference. <strong>Pricing:</strong> Starter $99/mo (ChatGPT only, 50 prompts), Growth $399/mo (3 engines, 100 prompts), Enterprise custom (~$2,000–$5,000+/mo). Their metrics mirror ours almost exactly: <em>Visibility = responses with your brand ÷ responses with any brand</em>; <em>Share of Voice = your mentions ÷ all brand mentions.</em></p>
+
+    <div class="call c-insight">
+      <span class="lab">What to copy vs. what to skip</span>
+      <p><strong>Copy:</strong> their metric definitions (validates ours), the daily-run cadence framing, and the Monitor→Create→Operate story arc. <strong>Skip:</strong> the licensed 1.5B-conversation dataset, ~10-engine breadth, bot-log analytics, and shopping — all expensive, enterprise-grade, and unnecessary for our buyer. We compete on <em>delivery and price</em>, not data volume.</p>
+    </div>
+
+    <h3>5.2 · The field — and the one axis that matters</h3>
+    <p>There are 25+ credible players. The decisive question for us is <strong>"do they only measure, or do they also generate and publish content?"</strong> Most only measure.</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Company</th><th class="num">Entry price</th><th>Tier</th><th>Generates + publishes content?</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Profound</strong></td><td class="num">$99/mo</td><td>Enterprise pure-play</td><td>Yes — publishes (human-in-loop)</td></tr>
+          <tr><td>Bluefish AI</td><td class="num">Custom</td><td>Enterprise ($68M raised)</td><td>Yes — agentic activation</td></tr>
+          <tr><td>Scrunch AI</td><td class="num">$300/mo</td><td>Acquired by Sitecore (~$225M)</td><td>Yes — "agentic content engine"</td></tr>
+          <tr><td>Peec AI</td><td class="num">$95/mo</td><td>SMB/agency ($21M A)</td><td>No — measurement only</td></tr>
+          <tr><td>Otterly.AI</td><td class="num">$29/mo</td><td>SMB/solo</td><td>No — measurement only</td></tr>
+          <tr><td>Rankscale</td><td class="num">$20/mo</td><td>SMB (widest engine coverage)</td><td>No — measurement only</td></tr>
+          <tr><td>AthenaHQ</td><td class="num">Free / $295</td><td>SMB→ent. (ex-Google founders)</td><td>Yes — "Action Center"</td></tr>
+          <tr><td>Semrush AI Toolkit</td><td class="num">$99/mo add-on</td><td>SEO incumbent (→ Adobe)</td><td>Partial — audits/briefs</td></tr>
+          <tr><td>Ahrefs Brand Radar</td><td class="num">+$199/mo</td><td>SEO incumbent</td><td>No</td></tr>
+          <tr><td>Sight AI / AgenticSEO / LovedByAI</td><td class="num">Free–low</td><td>SMB / WordPress-native</td><td>Yes — auto-publish (unbenchmarked)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="call c-asset">
+      <span class="lab">The whitespace we're aiming at</span>
+      <p>The cheap tools (Otterly, Rankscale, Peec) <strong>only measure</strong>. The tools that generate <em>and</em> publish are either <strong>enterprise-priced</strong> (Profound, Bluefish) or <strong>tiny and unproven</strong> (Sight AI, AgenticSEO, LovedByAI). Almost nobody offers <strong>measurement + content generation + technical audit + genuine WordPress auto-publish, done-for-you, at an SMB price, with a human guaranteeing quality.</strong> That combination — plus India-first pricing and support — is a defensible position the funded players won't chase.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 6. PRODUCT VISION ===================== -->
+  <section id="s6">
+    <h2><span class="num">06</span>Product vision — two verticals, one funnel</h2>
+    <p class="sec-sub">How the score and the operating system feed each other.</p>
+
+    <div class="two-col">
+      <div class="agent">
+        <div class="head"><span class="idx">1</span><span class="nm">The Visibility Score</span></div>
+        <p class="role">The hook. Cheap or free, fast, and alarming.</p>
+        <p style="font-size:14px;margin:0">A prospect enters a URL and sees, in the AI's own words, that it recommends competitors instead of them — across ChatGPT, Google AIO, Gemini and Perplexity. This creates the "I'm losing money right now" feeling. It's a lead magnet and a diagnostic, not the revenue.</p>
+      </div>
+      <div class="agent">
+        <div class="head"><span class="idx">2</span><span class="nm">The GEO Operating System</span></div>
+        <p class="role">The value. Recurring, human-in-the-loop, sticky.</p>
+        <p style="font-size:14px;margin:0">The subscription that actually fixes the score: audit → generate citation-worthy content → human approves → publish to their WordPress → re-measure → repeat. This is the ₹40k/mo, and the reason they don't churn.</p>
+      </div>
+    </div>
+
+    <p>The funnel is: <strong>free/cheap score → "here's exactly what's wrong and what a competitor is doing right" → done-for-you subscription to fix it → proof, every two weeks, that the score is climbing.</strong> The score is the marketing; the OS is the business. Crucially, the score's output (the 30 prompts, the gaps, the winning source pages) is <em>the exact input</em> the OS needs — so the two halves aren't separate products bolted together, they're one loop.</p>
+
+    <div class="call c-insight">
+      <span class="lab">Positioning line for the deck</span>
+      <p>"Profound tells a Fortune 500 team what's wrong and hands it to their in-house marketers. Perceev is the whole team — we find what's wrong <em>and</em> our agents plus a human fix it and publish it, for the price of a freelancer."</p>
+    </div>
+  </section>
+
+  <!-- ===================== 7. THE GEO OS ===================== -->
+  <section id="s7">
+    <h2><span class="num">07</span>The GEO/SEO Operating System — how it works</h2>
+    <p class="sec-sub">The core of Part 2: a human-in-the-loop team of specialised agents, grounded in what actually wins AI citations.</p>
+
+    <h3>7.1 · The philosophy — optimise passages, not pages</h3>
+    <p>Before the architecture, the strategy the agents execute. AI answers are <strong>not</strong> "top-10 blue links summarised." The engine takes one prompt, fans it out into 8–15 synthetic sub-queries, retrieves content at the <strong>passage (paragraph) level</strong>, and stitches passages from ~5 sites into one answer. So we optimise <em>quotable passages</em>, not whole pages. The evidence on what moves citations is unusually concrete:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Lever</th><th class="num">Effect on AI visibility</th><th>What the agents do about it</th></tr></thead>
+        <tbody>
+          <tr><td>Add quotations</td><td class="num">+41%</td><td>Every draft includes quotable expert lines.</td></tr>
+          <tr><td>Add statistics</td><td class="num">+34%</td><td>Cite hard numbers with sources near the top of each section.</td></tr>
+          <tr><td>Cite sources</td><td class="num">+30%</td><td>Reference authoritative sources inline.</td></tr>
+          <tr><td>Brand mentions vs backlinks</td><td class="num">~3× stronger</td><td>Off-page workstream targets <em>unlinked brand mentions</em> / digital PR, not just links.</td></tr>
+          <tr><td>Freshness</td><td class="num">~26% fresher</td><td>Content-refresh is a first-class agent action, not an afterthought.</td></tr>
+          <tr><td>Keyword stuffing</td><td class="num">negligible</td><td>Explicitly <em>not</em> done — the old SEO trick doesn't transfer.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Source-type bias is real too: government (11.75×), e-commerce (5.1×), documentation (3.4×), and news (2.6×) pages are over-cited relative to rank, and Reddit/forums are cited in ~40% of AI answers. Structured data (schema) is table-stakes hygiene, <em>not</em> a primary lever. The agents encode all of this as their playbook.</p>
+
+    <h3>7.2 · The closed loop</h3>
+    <div class="loop">
+      <span class="step"><span class="n">1</span>Visibility scan</span><span class="a">→</span>
+      <span class="step"><span class="n">2</span>Master plans</span><span class="a">→</span>
+      <span class="step"><span class="n">3</span>Audit + Create</span><span class="a">→</span>
+      <span class="step"><span class="n">4</span>Reviewer QA</span><span class="a">→</span>
+      <span class="step"><span class="n">5</span>Human approves</span><span class="a">→</span>
+      <span class="step"><span class="n">6</span>Publish to WP (draft)</span><span class="a">→</span>
+      <span class="step"><span class="n">7</span>Re-scan + measure lift</span><span class="a">↺</span>
+    </div>
+    <p>Steps 6–7 reuse what we already have: the <code>content_events</code> table records what was published, and <code>contentLift.js</code> measures whether the score for the related prompts went up. The loop then repeats on a cadence (§9), which is what keeps a client at the top instead of a one-and-done project.</p>
+
+    <h3>7.3 · The five agents</h3>
+    <p>This honours the five-role design, mapped onto the proven "orchestrator-worker + judge + human gate" pattern (the same shape Anthropic uses in production). Two distinct brains: the <strong>Master</strong> decides <em>what</em> to do; the <strong>Orchestrator</strong> reliably <em>runs</em> it.</p>
+
+    <div class="agentgrid">
+      <div class="agent">
+        <div class="head"><span class="idx">M</span><span class="nm">Master (Strategy)</span></div>
+        <p class="role">The editor-in-chief. Turns a scan into a prioritised work plan.</p>
+        <p class="kv"><b>In</b> Scan gaps, rival wins, cited sources</p>
+        <p class="kv"><b>Out</b> Ranked content briefs + target prompts</p>
+        <p class="kv"><b>Model</b> Strongest (reasoning-heavy)</p>
+      </div>
+      <div class="agent">
+        <div class="head"><span class="idx">O</span><span class="nm">Orchestrator (Runtime)</span></div>
+        <p class="role">The conductor. Deterministic state machine, not a chatbot.</p>
+        <p class="kv"><b>Does</b> Spawns workers, validates handoffs, retries, enforces the human gate, runs on cron</p>
+        <p class="kv"><b>Layer</b> LangGraph (durable + native HITL)</p>
+      </div>
+      <div class="agent">
+        <div class="head"><span class="idx">T</span><span class="nm">Technical Audit</span></div>
+        <p class="role">Reads the client's site the way an AI crawler does.</p>
+        <p class="kv"><b>Checks</b> Crawlability, chunk-ability, schema, freshness, internal links, llms.txt, AI-crawler rules</p>
+        <p class="kv"><b>Out</b> Prioritised technical fix-list</p>
+      </div>
+      <div class="agent">
+        <div class="head"><span class="idx">C</span><span class="nm">Content Creator</span></div>
+        <p class="role">Writes passage-optimised drafts from a brief.</p>
+        <p class="kv"><b>Does</b> Researches the winning sources, writes with quotable stats/quotes/citations, matches brand kit</p>
+        <p class="kv"><b>Model</b> Capable (quality matters)</p>
+      </div>
+      <div class="agent">
+        <div class="head"><span class="idx">R</span><span class="nm">Reviewer / QA</span></div>
+        <p class="role">The skeptical judge before any human sees it.</p>
+        <p class="kv"><b>Scores</b> Facts, citation accuracy, <em>source authority</em>, brand voice, AEO checklist (0–1)</p>
+        <p class="kv"><b>Routes</b> Pass → human; fail → back to Creator</p>
+      </div>
+    </div>
+
+    <h3>7.4 · Architecture at a glance</h3>
+    <div class="diagram">
+      <p class="lane-label">Orchestrator coordinates; workers run in parallel; nothing goes live without a human</p>
+      <div class="flow" style="min-width:640px">
+        <div class="node"><div class="t">Master</div><div class="s">plan / briefs</div></div>
+        <div class="arrow">→</div>
+        <div class="node" style="background:var(--slate-soft)"><div class="t">Orchestrator</div><div class="s">state machine</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="t">Audit ∥ Creator</div><div class="s">parallel workers</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="t">Reviewer</div><div class="s">QA judge</div></div>
+        <div class="arrow">→</div>
+        <div class="node" style="border-color:var(--good);background:var(--good-bg)"><div class="t">Human gate</div><div class="s">approve / edit</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="t">WordPress</div><div class="s">draft</div></div>
+      </div>
+    </div>
+
+    <h3>7.5 · The failure mode we must engineer against</h3>
+    <div class="call c-risk">
+      <span class="lab">The #1 technical risk, named</span>
+      <p>In real multi-agent content systems, the best-documented failure is that <strong>the writer agents favour SEO-optimised "slop" over authoritative sources</strong> — which is exactly the low-quality content AI engines are learning to <em>discount</em>. If our agents produce generic AI filler, we actively hurt clients and lose the account. Mitigation is non-negotiable: bake explicit <strong>source-authority and originality heuristics</strong> into <em>both</em> the Creator's brief and the Reviewer's rubric, keep the human gate mandatory, and never auto-publish live. Other guardrails from the research: schema-validate every hand-off between agents, keep tasks few and sharply specified, and cap autonomous steps (most production systems run ≤10 steps before a human).</p>
+    </div>
+
+    <h3>7.6 · Build choices</h3>
+    <ul>
+      <li><strong>Frameworks:</strong> prototype the content "crew" fast in <strong>CrewAI</strong>; build the durable orchestrator + approval gate in <strong>LangGraph</strong> (checkpointing and native human-in-the-loop are precisely what a publish pipeline needs). Avoid classic AutoGen (now in maintenance).</li>
+      <li><strong>Models:</strong> tiered on purpose — the <em>free</em> model rule stays for the <em>scoring</em> product's prompt-gen, but the paid OS needs a capable model for Master/Creator/Reviewer. This also fits our working style (strong model to plan, cheaper model to execute the grunt work).</li>
+      <li><strong>Human-in-the-loop is a feature, not a fallback.</strong> "A human reviews and publishes it themselves" is our quality guarantee and our differentiator against pure-automation tools — we sell it, we don't hide it.</li>
+    </ul>
+  </section>
+
+  <!-- ===================== 8. WORDPRESS ===================== -->
+  <section id="s8">
+    <h2><span class="num">08</span>WordPress plug-and-play</h2>
+    <p class="sec-sub">"They subscribe, we connect to their WordPress, understand what they've built, and start improving it."</p>
+
+    <h3>8.1 · How "connect your WordPress" actually works</h3>
+    <p>WordPress ships everything we need out of the box. The pragmatic MVP path:</p>
+    <ol>
+      <li>The client enters their <strong>site URL + username</strong> and generates an <strong>Application Password</strong> in WP admin (built into WordPress 5.6+; a per-integration token, individually revocable, no plugin required).</li>
+      <li>We authenticate to the <strong>WordPress REST API</strong> over HTTPS and store the token <strong>encrypted at rest</strong>.</li>
+      <li><strong>"Understand what they've built"</strong> = we read their existing posts, pages and categories via the REST API + sitemap. That's the content inventory the Technical Audit and Master agents work from — the "plug-and-play understanding" the client is promised.</li>
+      <li>All generated content is pushed as a <strong>draft</strong> (<code>status=draft</code>) — never published live automatically. The client's human (or ours) reviews and hits publish.</li>
+    </ol>
+
+    <h3>8.2 · Two phases of integration</h3>
+    <div class="two-col">
+      <div class="agent">
+        <div class="head"><span class="idx">A</span><span class="nm">MVP — Application Password</span></div>
+        <p class="role">Ship this first. Zero plugin, works on any self-hosted WP.</p>
+        <p style="font-size:13.5px;margin:0">REST API + token, draft-first. A short setup guide gets a client connected in minutes. Good enough to onboard the first paying clients.</p>
+      </div>
+      <div class="agent">
+        <div class="head"><span class="idx">B</span><span class="nm">Premium — Perceev plugin</span></div>
+        <p class="role">The "one-click connect" upgrade, later.</p>
+        <p style="font-size:13.5px;margin:0">A branded plugin gives a single "Connect" button, tightly scoped permissions, and <strong>webhooks</strong> so their site tells us when content changes (triggering a re-audit). Nicer UX, more support burden — do it once volume justifies it.</p>
+      </div>
+    </div>
+
+    <div class="call c-gap">
+      <span class="lab">Security — do this correctly from day one</span>
+      <p>We are holding write-access to clients' live websites. Rules: <strong>HTTPS only</strong>; <strong>encrypt tokens</strong>, never log them; <strong>least privilege</strong> — tell clients to create a dedicated <em>Editor</em> user, not Admin; <strong>one revocable token per site</strong> so offboarding is clean; and <strong>draft-first everything</strong> as defence-in-depth. Skip self-hosted OAuth (heavy, brittle) at MVP. Handle sites whose security plugins disable the REST API with a clear error path.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 9. THE LOOP ===================== -->
+  <section id="s9">
+    <h2><span class="num">09</span>The periodic loop — cadence &amp; automation</h2>
+    <p class="sec-sub">The flywheel that keeps a client ranked, and why we run two clocks not one.</p>
+
+    <p>The key design move is to <strong>decouple the two loops</strong>, because they have very different costs:</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Loop</th><th>Cadence</th><th>Cost</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Scan &amp; score</strong></td><td>Every 10–15 days (biweekly)</td><td>Cents — negligible</td><td>Frequency <em>is</em> the product: trend lines, "your score moved," alerting. Cheap enough to do often.</td></tr>
+          <tr><td><strong>Re-audit + regenerate content</strong></td><td>Monthly, or event-triggered on a score drop</td><td>LLM tokens + human review time</td><td>This is the real cost. Do it deliberately, not constantly.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>So: <strong>scan biweekly, regenerate monthly.</strong> A 10–15 day scoring cadence is a reasonable, marketable default ("we check your AI visibility every two weeks"). We already have the primitive — the daily Vercel cron and async job model — so extending it to "for every active subscription, re-scan on schedule and, if the score slipped, wake the Master agent" is an incremental build, not a new system.</p>
+
+    <div class="call c-insight">
+      <span class="lab">Why this is the retention engine</span>
+      <p>AI answers are volatile — rivals publish, engines change what they cite, Reddit threads rise and fall. A one-time content project decays. The periodic loop reframes the product as <em>"we keep you at the top,"</em> which is a subscription a client renews, not a project they finish. That is the whole reason ₹40k/mo <em>recurring</em> is defensible.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 10. ECONOMICS ===================== -->
+  <section id="s10">
+    <h2><span class="num">10</span>Economics — cost, price, margin</h2>
+    <p class="sec-sub">Why ₹40k/mo works, and what actually costs money.</p>
+
+    <h3>10.1 · Data is not the cost centre</h3>
+    <p>Running all four engines is astonishingly cheap. 30 prompts × 4 engines × biweekly ≈ 240 queries/brand/month, using the budget stack (DataForSEO for Google AIO, Perplexity Sonar, Gemini's free grounding tier, OpenAI web search):</p>
+    <div class="metrics">
+      <div class="metric"><div class="big">~$1.50–3</div><div class="cap">raw data cost per brand / month, all engines</div></div>
+      <div class="metric"><div class="big">$15–30</div><div class="cap">per month for 10 brands</div></div>
+      <div class="metric"><div class="big">$75–150</div><div class="cap">per month for 50 brands</div></div>
+      <div class="metric"><div class="big">≈ $0</div><div class="cap">Gemini grounding (5k free/mo) + our free prompt-gen model</div></div>
+    </div>
+    <p>Our real COGS on the paid OS is <strong>LLM generation tokens + human QA minutes</strong> — both controllable. (If we ever want true consumer-UI fidelity like Profound's browser capture, that jumps to a flat $100–500+/mo tool — so we treat it as a <em>premium tier</em>, not the default.)</p>
+
+    <h3>10.2 · Is ₹40,000/mo (~$480) the right price?</h3>
+    <p>Yes, and it's well-placed:</p>
+    <ul>
+      <li>It sits at the <strong>entry of the Indian "local SEO" band</strong> (₹40k–1.2L/mo) and just above a standard ₹30k content package — credible, not cheap-looking, to an Indian SMB/D2C buyer.</li>
+      <li>Globally it's <strong>below the US small-business GEO floor (~$1,500/mo)</strong>, so to anyone paying in USD it reads as aggressive value for a "GEO OS + done-for-you content."</li>
+      <li>For reference, US GEO/AEO retainers run $1,500–$50,000+/mo; Indian content runs ₹2,500–8,000 per 1,000-word article.</li>
+    </ul>
+
+    <div class="call c-risk">
+      <span class="lab">The catch — and the whole thesis</span>
+      <p>At ₹40k/mo the margin <strong>only works if the automation genuinely replaces human hours.</strong> A traditional agency delivering ₹40k of <em>manual</em> GEO + content is near break-even. Our multi-agent system — auto-audit, auto-draft, human <em>only reviews</em> — is precisely what turns that into a profitable price. The agents aren't a gimmick; they are the margin. If we can't keep human time per client low, the price doesn't work — so keeping the Reviewer agent good enough that a human can approve in minutes is a business-critical metric, not a nice-to-have.</p>
+    </div>
+
+    <h3>10.3 · Suggested pricing ladder</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Tier</th><th class="num">Price</th><th>What they get</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Free score</strong></td><td class="num">₹0</td><td>One-off visibility scan, one engine, gated report</td><td>Lead magnet / funnel</td></tr>
+          <tr><td><strong>Monitor</strong></td><td class="num">₹5–15k/mo</td><td>Biweekly scans, all 4 engines, trends, rival tracking</td><td>Self-serve, mostly automated</td></tr>
+          <tr><td><strong>GEO OS (flagship)</strong></td><td class="num">~₹40k/mo</td><td>Everything + agents audit, write, human-review &amp; publish to their WP, monthly regeneration</td><td>The done-for-you business</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== 11. ROADMAP ===================== -->
+  <section id="s11">
+    <h2><span class="num">11</span>Roadmap — a phased, budget-aware plan</h2>
+    <p class="sec-sub">Sequenced so each phase is sellable before we spend on the next.</p>
+
+    <div class="phase">
+      <div class="ph-h"><span class="ph-t">Phase 0 · Make Part 1 sellable</span><span class="ph-when">foundation</span></div>
+      <p class="ph-goal">Turn a good demo into something we can charge for.</p>
+      <ul>
+        <li>Add <strong>auth, per-account multi-tenancy, and billing</strong> (lock down the wide-open anon database).</li>
+        <li>Revisit the <strong>reliability gates</strong> and show a confidence indicator — never a confident number on a thin scan.</li>
+        <li>Tighten the <strong>methodology story</strong> (be honest that we read the AIO block, not a logged-in session).</li>
+        <li>Clean up orphaned code; fix the <code>/api/opportunities</code> Gemini inconsistency.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="ph-h"><span class="ph-t">Phase 1 · Four engines, not one</span><span class="ph-when">close the story gap</span></div>
+      <p class="ph-goal">Deliver the ChatGPT / Gemini / Perplexity / AI-Mode promise.</p>
+      <ul>
+        <li><strong>Wire up the dormant adapters</strong> (OpenAI, Perplexity, Gemini already coded) and add Google AI Mode.</li>
+        <li>Unify their outputs into the existing scoring model; add a per-engine breakdown to the dashboard.</li>
+        <li>Cost is trivial (§10); this is mostly integration, not invention.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="ph-h"><span class="ph-t">Phase 2 · GEO OS MVP (one client, semi-manual)</span><span class="ph-when">the new revenue</span></div>
+      <p class="ph-goal">Prove the loop with a single design partner before automating it.</p>
+      <ul>
+        <li>Build the <strong>Technical Audit</strong> + <strong>Content Creator</strong> + <strong>Reviewer</strong> agents (CrewAI to start).</li>
+        <li>Build the <strong>human review UI</strong> and <strong>WordPress draft publishing</strong> (Application Password path).</li>
+        <li>Run it hands-on for one friendly client; measure content lift with the existing <code>content_events</code>/<code>contentLift</code> tools.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="ph-h"><span class="ph-t">Phase 3 · Orchestrate &amp; automate the loop</span><span class="ph-when">margin</span></div>
+      <p class="ph-goal">Make it run itself between human approvals.</p>
+      <ul>
+        <li>Introduce the <strong>Master + Orchestrator</strong> (LangGraph) with schema-validated hand-offs and the mandatory human gate.</li>
+        <li>Wire the <strong>periodic loop</strong> (biweekly scan, monthly regenerate, score-drop triggers) onto the cron.</li>
+        <li>Drive down human-minutes-per-client — the metric the ₹40k price depends on.</li>
+      </ul>
+    </div>
+
+    <div class="phase">
+      <div class="ph-h"><span class="ph-t">Phase 4 · Productize &amp; scale</span><span class="ph-when">growth</span></div>
+      <p class="ph-goal">From done-for-you service to plug-and-play product.</p>
+      <ul>
+        <li>Ship the <strong>branded WordPress plugin</strong> (one-click connect + webhooks).</li>
+        <li>Onboarding self-serve, agency/reseller tier, the free-score funnel at scale.</li>
+        <li>Consider a premium <em>consumer-fidelity</em> capture tier if enterprise-ish clients demand it.</li>
+      </ul>
+    </div>
+
+    <div class="call c-insight">
+      <span class="lab">Sequencing logic</span>
+      <p>Phases 0–1 make the <em>existing</em> asset earn money and close the credibility gap cheaply. Phase 2 proves Part 2 with one client and real numbers before we over-invest in orchestration. Only then (Phase 3) do we automate, and only after that (Phase 4) do we productize. Each phase de-risks the next and is independently valuable.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 12. RISKS ===================== -->
+  <section id="s12">
+    <h2><span class="num">12</span>Risks &amp; honest caveats</h2>
+    <p class="sec-sub">What could go wrong, and how we blunt it.</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Agents produce generic "slop"</strong> that AI engines discount — hurting clients.</td><td>Authority/originality heuristics in Creator + Reviewer; mandatory human gate; never auto-publish live.</td></tr>
+          <tr><td><strong>India AIO coverage is volatile</strong>; scores can look thin or swing.</td><td>Honest confidence indicators; four engines smooths reliance on any one; frame volatility as "why you need continuous monitoring."</td></tr>
+          <tr><td><strong>Free-model quality</strong> is too low for client-facing content.</td><td>Tiered models — capable model on the paid path, free model only for internal prompt-gen; cost is small vs ₹40k.</td></tr>
+          <tr><td><strong>Methodology fidelity</strong> — we don't capture the true consumer UI like Profound.</td><td>Be transparent; treat browser-fidelity capture as a future premium tier, not a claim we make now.</td></tr>
+          <tr><td><strong>We hold write-access to client sites.</strong></td><td>Encrypted revocable tokens, least-privilege Editor user, HTTPS, draft-first, per-site isolation.</td></tr>
+          <tr><td><strong>Consolidation / competition</strong> — a funded player moves down-market.</td><td>Win on India-first pricing, support, WordPress depth, and done-for-you delivery the enterprise players won't staff.</td></tr>
+          <tr><td><strong>Data-provider dependence</strong> (Bright Data / DataForSEO pricing or access changes).</td><td>Keep the provider layer swappable (already abstracted); multi-provider fallback.</td></tr>
+          <tr><td><strong>Human-minutes-per-client creep</strong> breaks the margin.</td><td>Track it as a core metric; invest in Reviewer quality so approvals take minutes.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== 13. RECOMMENDATIONS ===================== -->
+  <section id="s13">
+    <h2><span class="num">13</span>Recommendations — what to decide now</h2>
+    <p class="sec-sub">The short list for the co-founder conversation.</p>
+    <ol>
+      <li><strong>Commit to the two-part product and the SMB/India/WordPress lane.</strong> Don't chase Profound's enterprise, data-heavy game — we can't win it and don't need to.</li>
+      <li><strong>Do Phase 0 before anything shiny.</strong> Auth, billing, honest confidence. An un-sellable diagnostic is not a business, however good the demo.</li>
+      <li><strong>Light up the other three engines next</strong> — it's cheap, it's mostly wiring, and it closes the biggest gap between our pitch and our product.</li>
+      <li><strong>Prove Part 2 with one design-partner client</strong> (semi-manual) before building the full orchestration. Real content-lift numbers are worth more than a clever architecture diagram.</li>
+      <li><strong>Make "a human reviews and publishes" a selling point, not a limitation.</strong> It's our quality guarantee and our edge over pure-automation tools.</li>
+      <li><strong>Hold the line on ₹40k/mo</strong> — and treat "human-minutes per client" as the number that makes or breaks the unit economics.</li>
+    </ol>
+    <div class="call c-asset">
+      <span class="lab">Bottom line</span>
+      <p>We have an unusually mature Part 1 for a pre-revenue product, a competitor set that has proven the demand and left the SMB done-for-you lane open, and a codebase that already contains the seeds of Part 2. The work ahead is <em>productizing and delivering</em>, not inventing. That's a good place to be.</p>
+    </div>
+  </section>
+
+  <!-- ===================== 14. APPENDIX ===================== -->
+  <section id="s14">
+    <h2><span class="num">14</span>Appendix &amp; sources</h2>
+    <p class="sec-sub">Reference tables and the sources behind the numbers in this brief.</p>
+
+    <h3>A · Data-provider cost reference (per 1,000 queries)</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Provider</th><th class="num">~Price / 1k</th><th>Returns AIO?</th><th>India geo</th></tr></thead>
+        <tbody>
+          <tr><td>DataForSEO (recommended primary)</td><td class="num">$0.60–2.00 + $0.60 async AIO</td><td>Yes</td><td>Full incl. AI Mode</td></tr>
+          <tr><td>Bright Data SERP (current)</td><td class="num">$1.50 → $0.56 at scale</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>SerpApi</td><td class="num">$25 list (~$9–15 at scale)</td><td>Yes</td><td>Yes</td></tr>
+          <tr><td>OpenAI web search tool</td><td class="num">$10 / 1k calls</td><td>ChatGPT-style</td><td>—</td></tr>
+          <tr><td>Perplexity Sonar</td><td class="num">~$5 / 1k (low-context)</td><td>Perplexity + citations</td><td>—</td></tr>
+          <tr><td>Gemini grounding</td><td class="num">5k free/mo, then $14 / 1k</td><td>Gemini + citations</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>B · Key sources</h3>
+    <p style="font-size:13.5px;color:var(--muted)">Profound &amp; funding: tryprofound.com (Series A/B/C posts, pricing, feature &amp; engineering pages), Sequoia, Lightspeed, Fortune, Yahoo/BusinessWire, Tracxn, PitchBook. Competitors &amp; consolidation: TechCrunch (Peec), Bloomberg &amp; Sitecore (Scrunch), Adobe newsroom (Semrush), Gartner Market Guide, Trakkr &amp; Data-Mania reviews, vendor pricing pages (Otterly, Rankscale, AthenaHQ, Evertune, Bluefish). Search-shift &amp; adoption: Pew Research (Jul 2025), Bain &amp; Company, Adobe Analytics / Digital Commerce 360, Similarweb, TechCrunch (ChatGPT 800M WAU). GEO tactics: the "GEO: Generative Engine Optimization" paper (arXiv 2311.09735), Ahrefs &amp; Semrush &amp; seoClarity citation studies, Zyppy/Signal factor meta-analysis, Search Engine Land (AI Mode patents). Architecture: Anthropic multi-agent research engineering post, the MAST failure-mode taxonomy (arXiv 2503.13657), LangGraph/CrewAI docs. WordPress: WordPress REST API handbook &amp; Application Passwords integration guide. Pricing benchmarks: WebFX, Digital Elevator, Indian SEO pricing guides (6smarketers, upGrowth, Primotech).</p>
+
+    <div class="call c-gap">
+      <span class="lab">Source reliability note</span>
+      <p>Many citation-percentage studies and market-size figures in this space come from vendor/SEO blogs of varying rigour and move fast. The high-confidence sources are the funding announcements, the acquisitions, the Pew/Bain/Adobe first-party data, the academic papers, and the providers' own pricing pages. Treat specific percentages as directional and re-verify pricing before committing spend.</p>
+    </div>
+  </section>
+
+  <footer class="end">
+    Perceev · Internal strategy brief · Prepared 21 July 2026 · Confidential — for co-founder review
+  </footer>
+
+  </main>
+</div>
+</div>
+
+</body>
+</html>
