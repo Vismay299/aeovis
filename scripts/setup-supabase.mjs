@@ -9,7 +9,7 @@
  * Get the password from: Supabase Dashboard → Project Settings → Database → Database password
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import pg from "pg";
@@ -46,8 +46,12 @@ function getConnectionString() {
 }
 
 async function main() {
-  const sqlPath = join(__dirname, "../supabase/migrations/001_initial_schema.sql");
-  const sql = readFileSync(sqlPath, "utf8");
+  const migrationsDir = join(__dirname, "../supabase/migrations");
+  // Apply every .sql migration in filename order (001_, 002_, ...). All
+  // migrations are idempotent (IF NOT EXISTS), so re-running is safe.
+  const migrationFiles = readdirSync(migrationsDir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
   const connectionString = getConnectionString();
 
   console.log("Connecting to Supabase Postgres...");
@@ -55,11 +59,24 @@ async function main() {
 
   try {
     await client.connect();
-    console.log("Applying migration: 001_initial_schema.sql");
-    await client.query(sql);
-    console.log("Migration applied successfully.\n");
+    for (const file of migrationFiles) {
+      console.log(`Applying migration: ${file}`);
+      const sql = readFileSync(join(migrationsDir, file), "utf8");
+      await client.query(sql);
+    }
+    console.log("Migrations applied successfully.\n");
 
-    const tables = ["scans", "brand_prompts", "scan_jobs", "content_events"];
+    const tables = [
+      "scans",
+      "brand_prompts",
+      "scan_jobs",
+      "content_events",
+      "content_jobs",
+      "content_items",
+      "content_feedback",
+      "brand_briefs",
+      "content_lessons",
+    ];
     for (const table of tables) {
       const { rows } = await client.query(
         `SELECT to_regclass('public.${table}') AS regclass`

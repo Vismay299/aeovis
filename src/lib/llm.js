@@ -26,3 +26,29 @@ export async function llmJson(prompt, options = {}, jsonRetries = 2) {
   }
   return null;
 }
+
+/** Paid content-generation model (Agent Content OS pipeline steps only). */
+export function getContentModel() {
+  return process.env.CONTENT_MODEL || "anthropic/claude-sonnet-4.5";
+}
+
+/**
+ * Content-pipeline variant of llmJson: same JSON-retry contract, but routed
+ * to the paid CONTENT_MODEL via the existing OpenRouter client. Scoring and
+ * prompt-gen callers must keep using llmJson (free model) — this entry point
+ * exists ONLY for content steps (coordinate/research/benchmark/draft/review/
+ * learn), which need a capable model and track real cost via options.stats.
+ */
+export async function contentLlmJson(prompt, options = {}, jsonRetries = 2) {
+  return llmJson(
+    prompt,
+    {
+      model: getContentModel(),
+      // Long-form drafting needs headroom; callers can still override.
+      timeout: 120000,
+      max_tokens: 8000,
+      ...options,
+    },
+    jsonRetries
+  );
+}

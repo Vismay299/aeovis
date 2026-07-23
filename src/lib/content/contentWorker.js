@@ -1,0 +1,212 @@
+import {
+  getContentJob,
+  updateContentJob,
+  insertContentItem,
+  getBrandBrief,
+  upsertBrandBrief,
+  listLessons,
+} from "../db/content.js";
+import { getScansForBrand } from "../db.js";
+import { HEALTHCARE_CXO_BRIEF } from "./briefs/healthcareCxo.js";
+import { runCoordinate } from "./steps/coordinate.js";
+import { runResearch } from "./steps/research.js";
+import { runBenchmark } from "./steps/benchmark.js";
+import { runDraft } from "./steps/draft.js";
+import { runReview } from "./steps/review.js";
+
+/**
+ * Content-pipeline background worker. Identical shape to scanWorker.js:
+ * fire-and-forget, status writes per step, cron-resumable, fails loud with
+ * the step named.
+ *
+ * States: pending -> coordinating -> researching -> benchmarking ->
+ * drafting -> reviewing -> awaiting_approval | failed
+ *
+ * Guardrails (locked decisions):
+ * - Max 2 automatic draft→review cycles, then the item goes to the human
+ *   queue regardless, flagged "below_threshold".
+ * - A YMYL violation is never auto-revised — straight to the human queue
+ *   with the violation named.
+ * - CONTENT_MAX_COST_PER_ITEM is a hard per-item stop.
+ */
+
+const MAX_DRAFT_REVIEW_CYCLES = 2;
+
+function getCostCap() {
+  const cap = Number(process.env.CONTENT_MAX_COST_PER_ITEM);
+  return Number.isFinite(cap) && cap > 0 ? cap : 0.15;
+}
+
+function assertUnderCostCap(stats, step) {
+  const cap = getCostCap();
+  if ((stats.cost || 0) > cap) {
+    throw new Error(
+      `Cost cap exceeded after step "${step}": $${stats.cost.toFixed(4)} > $${cap} (CONTENT_MAX_COST_PER_ITEM)`
+    );
+  }
+}
+
+/**
+ * Resolve the brand brief for a job: stored brief wins; otherwise seed from
+ * the requested preset (first shipped preset: healthcare-cxo) and persist it
+ * so Studio's brief editor starts from what the pipeline actually used.
+ */
+export async function resolveBrief(brand, input, deps = {}) {
+  const get = deps.getBrandBrief || getBrandBrief;
+  const upsert = deps.upsertBrandBrief || upsertBrandBrief;
+
+  const stored = await get(brand);
+  if (stored?.brief) return stored.brief;
+
+  const preset =
+    input?.brand_profile === "healthcare-cxo" || !input?.brand_profile
+      ? HEALTHCARE_CXO_BRIEF
+      : HEALTHCARE_CXO_BRIEF; // single shipped preset in v1
+  const seeded = { ...preset, one_liner: `${brand} — ${preset.one_liner}` };
+  try {
+    await upsert(brand, seeded);
+  } catch (err) {
+    console.warn("[content-worker] brief seed persist failed:", err.message);
+  }
+  return seeded;
+}
+
+export async function startContentJob(jobId, deps = {}) {
+  const stats = { cost: 0, tokens: 0 };
+
+  const update = deps.updateContentJob || updateContentJob;
+
+  try {
+    const job = deps.job || (await getContentJob(jobId));
+    if (!job) throw new Error(`content job ${jobId} not found`);
+    const { brand, playbook, input } = job;
+
+    console.log(`[content-worker] Starting job ${jobId}: ${brand} / ${playbook}`);
+
+    // Assemble the inherited context every step gets.
+    const brief = await resolveBrief(brand, input, deps);
+    const lessons = await (deps.listLessons || listLessons)(brand, playbook, {
+      activeOnly: true,
+    });
+    const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
+    const scan = scans?.[0] || null;
+
+    const ctx = {
+      brand,
+      playbook,
+      input: input || {},
+      brief,
+      lessons,
+      scan,
+      stats,
+      critique: "",
+    };
+
+    // 1. Coordinate
+    await update(jobId, { status: "coordinating", progress_pct: 8 });
+    ctx.workOrder = await runCoordinate(ctx, deps);
+    assertUnderCostCap(stats, "coordinate");
+
+    // 2. Research
+    await update(jobId, { status: "researching", progress_pct: 30 });
+    ctx.researchPack = await runResearch(ctx, deps);
+    assertUnderCostCap(stats, "research");
+
+    // 3. Benchmark
+    await update(jobId, { status: "benchmarking", progress_pct: 50 });
+    ctx.benchmarkNotes = await runBenchmark(ctx, deps);
+    assertUnderCostCap(stats, "benchmark");
+
+    // 4. Draft → review loop (bounded)
+    const revisions = [];
+    let draft = null;
+    let review = null;
+    let cycles = 0;
+
+    while (cycles < MAX_DRAFT_REVIEW_CYCLES) {
+      cycles += 1;
+
+      await update(jobId, {
+        status: "drafting",
+        progress_pct: cycles === 1 ? 62 : 84,
+      });
+      draft = await runDraft(ctx, deps);
+      assertUnderCostCap(stats, "draft");
+
+      await update(jobId, {
+        status: "reviewing",
+        progress_pct: cycles === 1 ? 78 : 92,
+      });
+      review = await runReview({ ...ctx, draft }, deps);
+      assertUnderCostCap(stats, "review");
+
+      if (review.verdict === "pass") break;
+
+      // YMYL can never be auto-revised into a pass — human decides.
+      if (review.ymyl_violation) {
+        console.warn(
+          `[content-worker] Job ${jobId}: YMYL violation flagged — routing to human queue without auto-revision`
+        );
+        break;
+      }
+
+      if (cycles < MAX_DRAFT_REVIEW_CYCLES) {
+        revisions.push({
+          revision: cycles - 1,
+          title: draft.title,
+          body_md: draft.body_md,
+          rubric: review,
+          critique: review.critique,
+        });
+        ctx.critique = review.critique;
+      }
+    }
+
+    const belowThreshold = review.verdict !== "pass";
+    const rubric = {
+      ...review,
+      below_threshold: belowThreshold,
+      cycles,
+    };
+
+    // 5. Queue for human approval — the gate is mandatory and terminal.
+    const item = await (deps.insertContentItem || insertContentItem)({
+      job_id: jobId,
+      brand,
+      playbook,
+      title: draft.title,
+      body_md: draft.body_md,
+      research_pack: ctx.researchPack,
+      benchmark_notes: ctx.benchmarkNotes,
+      rubric,
+      revision: revisions.length,
+      revisions,
+      target_queries: ctx.workOrder.target_queries || [],
+      status: "awaiting_approval",
+    });
+
+    await update(jobId, {
+      status: "awaiting_approval",
+      progress_pct: 100,
+      item_id: item.id,
+      cost_total: Math.round((stats.cost || 0) * 10000) / 10000,
+    });
+
+    console.log(
+      `[content-worker] Job ${jobId} queued for approval. verdict=${review.verdict}` +
+        ` weighted=${review.weighted_total} ymyl=${review.ymyl_violation}` +
+        ` cycles=${cycles} cost=$${(stats.cost || 0).toFixed(4)}`
+    );
+
+    return item;
+  } catch (error) {
+    console.error(`[content-worker] Job ${jobId} failed:`, error);
+    await update(jobId, {
+      status: "failed",
+      progress_pct: 100,
+      error_message: error.message || "Unexpected content pipeline error.",
+      cost_total: Math.round((stats.cost || 0) * 10000) / 10000,
+    });
+    return null;
+  }
+}

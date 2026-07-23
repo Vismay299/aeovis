@@ -11,6 +11,9 @@ export function getOpenRouterModel() {
 /**
  * OpenRouter chat-completion client. Mirrors gemini.js's generateContent
  * signature/contract so callers (llm.js) stay swappable between providers.
+ *
+ * `options.model` overrides the default free model — used only by the
+ * content pipeline (llm.js contentLlmJson) for paid content generation.
  */
 export async function generateContent(prompt, options = {}, retries = 2) {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -19,7 +22,7 @@ export async function generateContent(prompt, options = {}, retries = 2) {
     return { text: "", model_used: "" };
   }
 
-  const model = getOpenRouterModel();
+  const model = options.model || getOpenRouterModel();
   const baseUrl = getBaseUrl();
   const url = `${baseUrl}/chat/completions`;
   const isOpenRouter = baseUrl.includes("openrouter.ai");
@@ -42,6 +45,12 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   }
   if (options.jsonMode) {
     body.response_format = { type: "json_object" };
+  }
+  // Paid models: ask OpenRouter to include the real cost in `usage` so the
+  // content pipeline's per-item cost cap works off actual spend, not guesses.
+  const isPaidModel = !model.endsWith(":free");
+  if (isOpenRouter && isPaidModel) {
+    body.usage = { include: true };
   }
   // MiMo is a reasoning model — disable thinking so `message.content` is the
   // final answer only, not interleaved with a hidden reasoning trace that
@@ -87,7 +96,9 @@ export async function generateContent(prompt, options = {}, retries = 2) {
       const promptTokens = data?.usage?.prompt_tokens || 0;
       const completionTokens = data?.usage?.completion_tokens || 0;
       const tokens = data?.usage?.total_tokens || promptTokens + completionTokens;
-      const cost = model.endsWith(":free") ? 0 : 0;
+      // Free models cost 0; paid models report real USD cost when
+      // `usage.include` was requested (OpenRouter only).
+      const cost = model.endsWith(":free") ? 0 : Number(data?.usage?.cost) || 0;
 
       if (options.stats) {
         options.stats.tokens = (options.stats.tokens || 0) + tokens;
