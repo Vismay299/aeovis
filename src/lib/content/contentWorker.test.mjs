@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startContentJob } from "./contentWorker.js";
+import { startContentJob, reviseContentItem } from "./contentWorker.js";
 
 /**
  * End-to-end pipeline tests against a scripted fake LLM — zero live calls.
@@ -251,6 +251,60 @@ test("cost cap: job fails with the cap named once spend crosses it", async () =>
   const final = jobUpdates[jobUpdates.length - 1];
   assert.equal(final.status, "failed");
   assert.ok(final.error_message.includes("Cost cap exceeded"));
+});
+
+test("reviseContentItem: human comment drives a redraft back to the queue", async () => {
+  const { llm, prompts } = makeFakeLlm([
+    { ...LI_DRAFT, title: "revised-after-feedback" },
+    LI_REVIEW_PASS,
+  ]);
+
+  const storedItem = {
+    id: "item-1",
+    job_id: "job-1",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    title: "original",
+    body_md: LI_DRAFT.body_md,
+    research_pack: RESEARCH_PACK,
+    benchmark_notes: { pack: { hook_patterns: [] }, work_order: LI_WORK_ORDER },
+    rubric: { verdict: "pass" },
+    revision: 0,
+    revisions: [],
+    target_queries: [],
+    status: "changes_requested",
+  };
+
+  const itemUpdates = [];
+  const deps = {
+    llm,
+    scrape: async () => "No website content available.",
+    getContentItem: async () => storedItem,
+    updateContentItem: async (id, updates) => {
+      itemUpdates.push({ id, ...updates });
+      return { ...storedItem, ...updates };
+    },
+    updateContentJob: async () => ({}),
+    listLessons: async () => [],
+    getScansForBrand: async () => [],
+    getBrandBrief: async () => null,
+    upsertBrandBrief: async () => ({}),
+  };
+
+  const updated = await reviseContentItem("item-1", "cut the salesy ending", deps);
+
+  assert.ok(updated);
+  assert.equal(prompts.length, 2, "one draft + one review, no auto-loop");
+  assert.ok(prompts[0].includes("HUMAN REVIEWER FEEDBACK"));
+  assert.ok(prompts[0].includes("cut the salesy ending"));
+
+  const final = itemUpdates[itemUpdates.length - 1];
+  assert.equal(final.title, "revised-after-feedback");
+  assert.equal(final.status, "awaiting_approval");
+  assert.equal(final.revision, 1);
+  assert.equal(final.revisions.length, 1);
+  assert.equal(final.revisions[0].source, "human_feedback");
+  assert.equal(final.rubric.revised_from_feedback, true);
 });
 
 test("invalid step output: retried once, then the job fails with the step named", async () => {

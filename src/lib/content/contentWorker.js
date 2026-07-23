@@ -2,6 +2,8 @@ import {
   getContentJob,
   updateContentJob,
   insertContentItem,
+  getContentItem,
+  updateContentItem,
   getBrandBrief,
   upsertBrandBrief,
   listLessons,
@@ -177,7 +179,9 @@ export async function startContentJob(jobId, deps = {}) {
       title: draft.title,
       body_md: draft.body_md,
       research_pack: ctx.researchPack,
-      benchmark_notes: ctx.benchmarkNotes,
+      // The work order rides inside benchmark_notes so the human-feedback
+      // revision path (reviseContentItem) can rebuild the draft context.
+      benchmark_notes: { ...ctx.benchmarkNotes, work_order: ctx.workOrder },
       rubric,
       revision: revisions.length,
       revisions,
@@ -207,6 +211,119 @@ export async function startContentJob(jobId, deps = {}) {
       error_message: error.message || "Unexpected content pipeline error.",
       cost_total: Math.round((stats.cost || 0) * 10000) / 10000,
     });
+    return null;
+  }
+}
+
+/**
+ * Human-feedback revision: on "request changes", redraft the item with the
+ * reviewer's comment as the critique, re-review once, and return it to the
+ * approval queue. One cycle only — the human gate re-applies regardless of
+ * verdict, so there is nothing for an auto-loop to add here.
+ */
+export async function reviseContentItem(itemId, comment, deps = {}) {
+  const stats = { cost: 0, tokens: 0 };
+  const getItem = deps.getContentItem || getContentItem;
+  const updateItem = deps.updateContentItem || updateContentItem;
+
+  const item = await getItem(itemId);
+  if (!item) throw new Error(`content item ${itemId} not found`);
+
+  const { brand, playbook } = item;
+  console.log(`[content-worker] Revising item ${itemId} from human feedback`);
+
+  const brief = await resolveBrief(brand, {}, deps);
+  const lessons = await (deps.listLessons || listLessons)(brand, playbook, {
+    activeOnly: true,
+  });
+  const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
+
+  const benchmarkNotes = { ...(item.benchmark_notes || {}) };
+  const workOrder =
+    benchmarkNotes.work_order || {
+      angle: item.title || "revise per feedback",
+      title_hint: item.title || "",
+      target_queries: item.target_queries || [],
+      fan_out: [],
+      sections: [],
+      hook_thesis: "",
+      post_shape: "",
+      notes: "",
+    };
+  delete benchmarkNotes.work_order;
+
+  const ctx = {
+    brand,
+    playbook,
+    input: {},
+    brief,
+    lessons,
+    scan: scans?.[0] || null,
+    stats,
+    workOrder,
+    researchPack: item.research_pack,
+    benchmarkNotes,
+    critique:
+      `HUMAN REVIEWER FEEDBACK (verdict: changes_requested) — this outranks ` +
+      `every automated critique. Address every point:\n${comment}`,
+  };
+
+  try {
+    const draft = await runDraft(ctx, deps);
+    assertUnderCostCap(stats, "draft(revision)");
+    const review = await runReview({ ...ctx, draft }, deps);
+    assertUnderCostCap(stats, "review(revision)");
+
+    const revisions = [
+      ...(item.revisions || []),
+      {
+        revision: item.revision || 0,
+        title: item.title,
+        body_md: item.body_md,
+        rubric: item.rubric,
+        critique: comment,
+        source: "human_feedback",
+      },
+    ];
+
+    const updated = await updateItem(itemId, {
+      title: draft.title,
+      body_md: draft.body_md,
+      benchmark_notes: { ...benchmarkNotes, work_order: workOrder },
+      rubric: {
+        ...review,
+        below_threshold: review.verdict !== "pass",
+        cycles: 1,
+        revised_from_feedback: true,
+      },
+      revision: (item.revision || 0) + 1,
+      revisions,
+      status: "awaiting_approval",
+    });
+
+    // Fold revision spend into the originating job's total.
+    if (item.job_id) {
+      try {
+        const job = await getContentJob(item.job_id);
+        const prev = Number(job?.cost_total) || 0;
+        await (deps.updateContentJob || updateContentJob)(item.job_id, {
+          status: "awaiting_approval",
+          cost_total: Math.round((prev + stats.cost) * 10000) / 10000,
+        });
+      } catch (err) {
+        console.warn("[content-worker] revision cost fold failed:", err.message);
+      }
+    }
+
+    console.log(
+      `[content-worker] Item ${itemId} revised. verdict=${review.verdict} cost=$${stats.cost.toFixed(4)}`
+    );
+    return updated;
+  } catch (error) {
+    console.error(`[content-worker] Revision of item ${itemId} failed:`, error);
+    // Leave the item visible in the queue with its previous draft rather
+    // than losing it — the human can retry or edit manually.
+    await updateItem(itemId, { status: "awaiting_approval" });
     return null;
   }
 }
