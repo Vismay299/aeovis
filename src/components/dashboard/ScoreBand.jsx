@@ -15,8 +15,9 @@ export const ScoreBand = ({ score, tier, trend, stats = [], engineChips, scoreLa
         overflow: "hidden",
       }}
     >
-      {/* Radial glow behind the score */}
+      {/* Radial glow behind the score — declaration gold, hidden in print */}
       <div
+        data-print="hide"
         style={{
           position: "absolute",
           top: "-20%",
@@ -24,7 +25,7 @@ export const ScoreBand = ({ score, tier, trend, stats = [], engineChips, scoreLa
           width: "50%",
           height: "140%",
           background:
-            "radial-gradient(ellipse, rgba(232,99,44,0.08) 0%, transparent 70%)",
+            "radial-gradient(ellipse, var(--accent-soft) 0%, transparent 70%)",
           pointerEvents: "none",
         }}
       />

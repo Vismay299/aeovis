@@ -519,12 +519,13 @@ export default function Dashboard() {
             >
               {result.scoringVersion}
             </span>
-            <Button variant="secondary" size="sm" onClick={() => window.print()}>
+            <Button data-print="hide" variant="secondary" size="sm" onClick={() => window.print()}>
               <Download size={14} />
               Export
             </Button>
             <Button
               data-testid="rerun-scan-btn"
+              data-print="hide"
               variant="secondary"
               size="sm"
               onClick={handleRerun}

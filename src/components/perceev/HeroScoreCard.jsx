@@ -26,8 +26,9 @@ export const HeroScoreCard = ({
         overflow: "hidden",
       }}
     >
-      {/* Radial glow overlay */}
+      {/* Radial glow overlay — decorative, hidden in print */}
       <div
+        data-print="hide"
         style={{
           position: "absolute",
           inset: 0,

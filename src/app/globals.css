@@ -328,3 +328,159 @@
   min-height: 100vh;
   background-color: var(--bg-0);
 }
+
+/* ==========================================================
+   Print — the exported report.
+   The screen theme is a dark studio; paper is not. Remap the
+   token API to a light report document, hide app chrome, and
+   unfreeze the app-shell scroll layout so content paginates.
+   ========================================================== */
+@media print {
+  :root {
+    /* Surfaces */
+    --bg-0: #FFFFFF;
+    --bg-1: #FFFFFF;
+    --bg-2: #EFF1F5;
+    --bg-3: #E4E8EE;
+    --bg-inverse: #101720;
+
+    /* Borders */
+    --border-1: #D9DEE6;
+    --border-2: #C2CAD6;
+    --border-3: #97A2B4;
+
+    /* Text */
+    --text-1: #101720;
+    --text-2: #3F4E63;
+    --text-3: #5D6B80;
+    --text-inverse: #FFFFFF;
+
+    /* Accent — print-safe declaration gold */
+    --accent: #B8860B;
+    --accent-hover: #B8860B;
+    --accent-press: #B8860B;
+    --accent-fg: #FFFFFF;
+    --accent-soft: rgba(184, 134, 11, 0.08);
+    --accent-border: rgba(184, 134, 11, 0.4);
+    --accent-text: #8A6508;
+
+    /* Party colors */
+    --you: #0E9E85;
+    --you-fg: #FFFFFF;
+    --you-soft: rgba(14, 158, 133, 0.1);
+    --you-border: rgba(14, 158, 133, 0.4);
+    --rival: #C43D28;
+    --rival-soft: rgba(196, 61, 40, 0.1);
+    --rival-border: rgba(196, 61, 40, 0.4);
+
+    /* Semantic */
+    --good: #1D8A54;
+    --good-bg: rgba(29, 138, 84, 0.08);
+    --good-border: rgba(29, 138, 84, 0.35);
+    --warn: #96700F;
+    --warn-bg: rgba(150, 112, 15, 0.08);
+    --warn-border: rgba(150, 112, 15, 0.35);
+    --crit: #C23B27;
+    --crit-bg: rgba(194, 59, 39, 0.08);
+    --crit-border: rgba(194, 59, 39, 0.35);
+    --info: #2456C0;
+    --info-bg: rgba(36, 86, 192, 0.08);
+    --info-border: rgba(36, 86, 192, 0.35);
+
+    /* Data viz */
+    --chart-1: #B8860B;
+    --chart-2: #0E9E85;
+    --chart-3: #C43D28;
+    --chart-4: #2456C0;
+    --chart-5: #5D6B80;
+    --meter-track: #E4E8EE;
+
+    /* Effects */
+    --shadow-pop: none;
+    --shadow-glow: none;
+
+    /* shadcn HSL vars */
+    --background: 0 0% 100%;
+    --foreground: 213 33% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 213 33% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 33% 9%;
+    --primary: 43 81% 38%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 21% 95%;
+    --secondary-foreground: 213 33% 9%;
+    --muted: 220 21% 95%;
+    --muted-foreground: 216 22% 32%;
+    --border: 216 20% 87%;
+    --input: 216 20% 87%;
+    --ring: 43 81% 38%;
+
+    color-scheme: light;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* App chrome that has no place in a report */
+  [data-testid="sidebar"],
+  [data-print="hide"],
+  .lp-nav,
+  .shelf,
+  .lp-ticker {
+    display: none !important;
+  }
+
+  /* Unfreeze the dashboard app shell: the screen layout pins
+     height to the viewport and scrolls inside panels; print
+     needs one continuous flowing document. */
+  div:has(> [data-testid="sidebar"]) {
+    display: block !important;
+    min-height: 0 !important;
+  }
+
+  main {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  [data-testid="dashboard"] {
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  [data-testid="dashboard"] * {
+    overflow: visible !important;
+    max-height: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Keep panels whole across page breaks */
+  [data-testid="dashboard"] > div {
+    break-inside: avoid;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+}
