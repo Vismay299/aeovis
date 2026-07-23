@@ -18,6 +18,7 @@ import { ContentItemView } from "./ContentItemView";
 import { LessonsPanel } from "./LessonsPanel";
 import { BrandBriefEditor } from "./BrandBriefEditor";
 import { NewContentForm } from "./NewContentForm";
+import { WeeklyReport } from "./WeeklyReport";
 
 const RUNNING_STATUSES = [
   "pending",
@@ -235,6 +236,7 @@ export function StudioView({ brand, initialItemId = null, onCountsChange }) {
           onChange={setTab}
           items={[
             { key: "queue", label: "Queue", count: awaitingCount || null, testId: "studio-tab-queue" },
+            { key: "report", label: "Report", testId: "studio-tab-report" },
             { key: "lessons", label: "Lessons", testId: "studio-tab-lessons" },
             { key: "brief", label: "Brand brief", testId: "studio-tab-brief" },
           ]}
@@ -330,6 +332,12 @@ export function StudioView({ brand, initialItemId = null, onCountsChange }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {tab === "report" && (
+          <div style={{ maxWidth: "760px" }}>
+            <WeeklyReport brand={brand} />
           </div>
         )}
 

@@ -11,6 +11,7 @@ import {
   Loader2,
   ShieldAlert,
   ExternalLink,
+  TrendingUp,
 } from "lucide-react";
 import { Card } from "@/components/perceev/Card";
 import { Badge } from "@/components/perceev/Badge";
@@ -60,6 +61,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
   const [deciding, setDeciding] = useState(null);
   const [copied, setCopied] = useState(null);
   const [error, setError] = useState(null);
+  const [lift, setLift] = useState(null);
 
   const fetchItem = useCallback(async () => {
     try {
@@ -75,6 +77,15 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
   useEffect(() => {
     fetchItem();
   }, [fetchItem]);
+
+  // GEO lift for approved geo_articles — target queries visible/cited since publish.
+  useEffect(() => {
+    if (item?.playbook !== "geo_article" || item?.status !== "approved") return;
+    fetch(`/api/content-items/${itemId}/lift`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.applicable && setLift(d))
+      .catch(() => {});
+  }, [item?.playbook, item?.status, itemId]);
 
   // While a revision is in flight (changes_requested), poll for the redraft.
   useEffect(() => {
@@ -212,6 +223,40 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
         >
           <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
           Revision in progress — the agent is redrafting from your comment. This view refreshes automatically.
+        </div>
+      )}
+
+      {lift && (
+        <div
+          data-testid="studio-lift"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-3)",
+            background: lift.cited_delta > 0 ? "var(--good-bg)" : "var(--bg-1)",
+            border: `1px solid ${lift.cited_delta > 0 ? "var(--good-border)" : "var(--border-1)"}`,
+            borderRadius: "var(--radius-1)",
+            padding: "var(--space-3) var(--space-4)",
+            fontSize: "12px",
+            color: lift.cited_delta > 0 ? "var(--good)" : "var(--text-2)",
+            flexShrink: 0,
+          }}
+        >
+          <TrendingUp size={14} />
+          {lift.has_post_scan ? (
+            <span>
+              GEO lift: <strong>{lift.target_count}</strong> target{" "}
+              {lift.target_count === 1 ? "query" : "queries"} → cited on{" "}
+              <strong>{lift.after.cited}</strong> (was {lift.before.cited}), visible on{" "}
+              <strong>{lift.after.visible}</strong> since publish.
+              {lift.cited_delta > 0 && ` +${lift.cited_delta} newly cited.`}
+            </span>
+          ) : (
+            <span>
+              Tracking <strong>{lift.target_count}</strong> target{" "}
+              {lift.target_count === 1 ? "query" : "queries"} — re-scan the brand to measure lift since publish.
+            </span>
+          )}
         </div>
       )}
 
