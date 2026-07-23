@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, ExternalLink, CheckCircle2, XCircle, Link2, AlertCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, CheckCircle2, XCircle, Link2, AlertCircle, Sparkles, Loader2 } from "lucide-react";
 import { Card } from "@/components/perceev/Card";
 import { Badge } from "@/components/perceev/Badge";
 
@@ -121,8 +121,9 @@ function StatusPill({ visible, aioPresent, error, isBranded, engine }) {
   );
 }
 
-const AioEvidenceRow = ({ prompt, brandAliases }) => {
+const AioEvidenceRow = ({ prompt, brandAliases, onGenerateContent }) => {
   const [expanded, setExpanded] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const {
     prompt: query,
     aioPresent,
@@ -148,6 +149,24 @@ const AioEvidenceRow = ({ prompt, brandAliases }) => {
     return null;
   })();
 
+  // A "gap": brand absent from a live answer, or mentioned but never cited.
+  // These rows carry the Generate-content trigger (geo_article playbook).
+  const isGap =
+    !isBrandedQuery &&
+    !error &&
+    aioPresent &&
+    (!visible || (brandMentioned && !brandCited));
+
+  const handleGenerate = async () => {
+    if (generating || !onGenerateContent) return;
+    setGenerating(true);
+    try {
+      await onGenerateContent(prompt);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div
       data-testid="aio-evidence-row"
@@ -157,10 +176,12 @@ const AioEvidenceRow = ({ prompt, brandAliases }) => {
       }}
       className="last:border-0"
     >
+      <div style={{ display: "flex", alignItems: "flex-start" }}>
       <button
         onClick={() => hasContent && setExpanded((v) => !v)}
         style={{
-          width: "100%",
+          flex: 1,
+          minWidth: 0,
           textAlign: "left",
           padding: "var(--space-4) var(--space-6)",
           display: "flex",
@@ -294,6 +315,42 @@ const AioEvidenceRow = ({ prompt, brandAliases }) => {
           </div>
         </div>
       </button>
+      {isGap && onGenerateContent && (
+        <button
+          data-testid="generate-content-btn"
+          onClick={handleGenerate}
+          disabled={generating}
+          title="Generate a GEO article targeting this gap"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            flexShrink: 0,
+            margin: "var(--space-4) var(--space-6) 0 0",
+            padding: "4px 10px",
+            borderRadius: "var(--radius-1)",
+            background: "var(--accent-soft)",
+            color: "var(--accent-text)",
+            border: "1px solid var(--accent-border)",
+            fontFamily: "var(--font-mono)",
+            fontSize: "9px",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+            cursor: generating ? "wait" : "pointer",
+            whiteSpace: "nowrap",
+            transition: "all var(--dur-fast)",
+          }}
+        >
+          {generating ? (
+            <Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} />
+          ) : (
+            <Sparkles size={11} />
+          )}
+          {generating ? "Starting…" : "Generate content"}
+        </button>
+      )}
+      </div>
 
       {expanded && hasContent && (
         <div style={{ padding: "var(--space-2) 14px var(--space-6)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
@@ -397,7 +454,7 @@ const AioEvidenceRow = ({ prompt, brandAliases }) => {
   );
 };
 
-export const AnswersView = ({ prompts = [], brandAliases = [], title = "Non-branded queries", subtitle, testId, emptyLabel = "No queries yet.", hasBrandedData }) => {
+export const AnswersView = ({ prompts = [], brandAliases = [], title = "Non-branded queries", subtitle, testId, emptyLabel = "No queries yet.", hasBrandedData, onGenerateContent }) => {
   const [filter, setFilter] = useState("all");
   const [engineFilter, setEngineFilter] = useState("all");
 
@@ -527,7 +584,7 @@ export const AnswersView = ({ prompts = [], brandAliases = [], title = "Non-bran
               </div>
             ) : (
               filtered.map((p, i) => (
-                <AioEvidenceRow key={i} prompt={p} brandAliases={brandAliases} />
+                <AioEvidenceRow key={i} prompt={p} brandAliases={brandAliases} onGenerateContent={onGenerateContent} />
               ))
             )}
           </div>

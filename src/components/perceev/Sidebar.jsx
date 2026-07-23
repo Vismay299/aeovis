@@ -11,6 +11,7 @@ import {
   Search,
   History,
   Plus,
+  PenSquare,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { key: "rivals", label: "Rivals", icon: Swords, testId: "sidebar-rivals" },
   { key: "sources", label: "Sources", icon: Link2, testId: "sidebar-sources" },
   { key: "queries", label: "Queries", icon: Search, testId: "sidebar-queries" },
+  { key: "studio", label: "Studio", icon: PenSquare, testId: "sidebar-studio" },
 ];
 
 export const Sidebar = ({
@@ -30,6 +32,7 @@ export const Sidebar = ({
   onHistoryClick,
   activeScanTimestamp,
   onNewScan,
+  studioBadge = 0,
 }) => {
   const router = useRouter();
   const pathname = usePathname();
@@ -171,6 +174,28 @@ export const Sidebar = ({
               >
                 <Icon size={16} strokeWidth={1.5} />
                 {item.label}
+                {item.key === "studio" && studioBadge > 0 && (
+                  <span
+                    data-testid="sidebar-studio-badge"
+                    style={{
+                      marginLeft: "auto",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "9px",
+                      fontWeight: 600,
+                      minWidth: "18px",
+                      height: "18px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "0 5px",
+                      borderRadius: "var(--radius-round)",
+                      background: "var(--accent)",
+                      color: "var(--accent-fg)",
+                    }}
+                  >
+                    {studioBadge}
+                  </span>
+                )}
               </button>
             );
           })}

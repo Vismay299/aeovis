@@ -144,6 +144,33 @@ export async function hasActiveContentJobForBrand(brand, playbook) {
   }
 }
 
+/** Recent jobs for a brand — Studio's "generating…" cards. */
+export async function listContentJobs(brand, limit = 20) {
+  const key = String(brand || "").trim().toLowerCase();
+  if (!supabase) {
+    return Array.from(global.memoryContentJobs.values())
+      .filter((j) => !key || j.brand.toLowerCase() === key)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, limit);
+  }
+  try {
+    let query = supabase
+      .from("content_jobs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (key) query = query.ilike("brand", key);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn("[content-db] listContentJobs failed, checking memory:", err.message);
+    return Array.from(global.memoryContentJobs.values())
+      .filter((j) => !key || j.brand.toLowerCase() === key)
+      .slice(0, limit);
+  }
+}
+
 /** Pending/stuck jobs for the cron resume path (mirrors scan worker route). */
 export async function listResumableContentJobs(limit = 5) {
   if (!supabase) return [];

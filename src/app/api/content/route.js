@@ -2,11 +2,39 @@ import { NextResponse } from "next/server";
 import {
   createContentJob,
   hasActiveContentJobForBrand,
+  listContentJobs,
 } from "@/lib/db/content";
 import { startContentJob } from "@/lib/content/contentWorker";
 import { PLAYBOOKS } from "@/lib/content/schemas";
 
 export const dynamic = "force-dynamic";
+
+/** GET /api/content?brand= — recent jobs (Studio's in-flight cards). */
+export async function GET(request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const brand = (searchParams.get("brand") || "").trim();
+    const jobs = await listContentJobs(brand || undefined, 20);
+    const slim = jobs.map((j) => ({
+      id: j.id,
+      brand: j.brand,
+      playbook: j.playbook,
+      status: j.status,
+      progress_pct: j.progress_pct,
+      item_id: j.item_id,
+      error_message: j.error_message,
+      cost_total: j.cost_total,
+      created_at: j.created_at,
+    }));
+    return NextResponse.json(
+      { jobs: slim },
+      { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+    );
+  } catch (error) {
+    console.error("Content jobs list error:", error);
+    return NextResponse.json({ detail: "Internal Server Error" }, { status: 500 });
+  }
+}
 
 /**
  * POST /api/content — create a content job { brand, playbook, input }.

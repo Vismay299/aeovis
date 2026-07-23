@@ -1,9 +1,10 @@
-export const Card = ({ variant = "padded", className = "", children, style: outerStyle }) => {
+export const Card = ({ variant = "padded", className = "", children, style: outerStyle, ...props }) => {
   const padded = variant !== "flush";
 
   return (
     <div
       className={className}
+      {...props}
       style={{
         background: "var(--bg-1)",
         border: "1px solid var(--border-1)",

@@ -14,6 +14,7 @@ import { AnswersView } from "@/components/dashboard/AnswersView";
 import { RivalsView } from "@/components/dashboard/RivalsView";
 import { SourcesView } from "@/components/dashboard/SourcesView";
 import { QueriesView } from "@/components/dashboard/QueriesView";
+import { StudioView } from "@/components/studio/StudioView";
 import {
   loadScan,
   fetchScanHistory,
@@ -44,6 +45,8 @@ export default function Dashboard() {
   const [rerunStage, setRerunStage] = useState(0);
   const [rerunProgress, setRerunProgress] = useState(0);
   const [view, setView] = useState("overview");
+  const [studioBadge, setStudioBadge] = useState(0);
+  const [studioNotice, setStudioNotice] = useState(null);
 
   useEffect(() => {
     const current = loadScan();
@@ -55,6 +58,65 @@ export default function Dashboard() {
       fetchScanHistory(normalized.brand).then((scans) => setHistory(scans || []));
     }
   }, []);
+
+  // Studio badge: count of items awaiting human approval for this brand.
+  useEffect(() => {
+    const brand = result?.brand;
+    if (!brand || result?.isSample) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/content-items?brand=${encodeURIComponent(brand)}`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) {
+          setStudioBadge(
+            (data.items || []).filter((i) => i.status === "awaiting_approval").length
+          );
+        }
+      } catch {
+        /* badge is best-effort */
+      }
+    };
+    poll();
+    const t = setInterval(poll, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [result?.brand, result?.isSample]);
+
+  // AnswersView gap-row trigger: prefilled geo_article job — the AI's current
+  // answer and citations ride along as input.
+  const handleGenerateContent = async (row) => {
+    try {
+      const res = await fetch("/api/content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brand: result.brand,
+          playbook: "geo_article",
+          input: {
+            type: "gap",
+            query: row.prompt,
+            engine: row.engine || "aio",
+            gap_kind: row.visible ? "rank_not_cited" : "absent",
+            answer_text: row.aioText || "",
+            citations: (row.aioReferences || []).map((r) => ({ href: r.href, title: r.title || "" })),
+            topic: row.topic || undefined,
+            brand_profile: "healthcare-cxo",
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || "Failed to start content job");
+      setStudioNotice(null);
+      setView("studio");
+    } catch (e) {
+      setStudioNotice(e.message);
+      setView("studio");
+    }
+  };
 
   const { scoreTrend, previousScan, sortedHistory, deltaSamePromptSet } = useMemo(() => {
     let scoreTrend = null;
@@ -324,6 +386,7 @@ export default function Dashboard() {
         onHistoryClick={handleHistoryClick}
         activeScanTimestamp={result.scanTimestamp}
         onNewScan={() => router.push("/scan")}
+        studioBadge={studioBadge}
       />
 
       <main
@@ -366,6 +429,8 @@ export default function Dashboard() {
                 ? "Rivals"
                 : view === "sources"
                 ? "Sources"
+                : view === "studio"
+                ? "Content Studio"
                 : "Tracked Queries"}
             </div>
             <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-3)", marginTop: "2px" }}>
@@ -661,8 +726,8 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Content area — dataSourceIssue placeholder */}
-          {dataSourceIssue ? (
+          {/* Content area — dataSourceIssue placeholder (Studio stays reachable) */}
+          {dataSourceIssue && view !== "studio" ? (
             <div
               data-testid="dashboard-unreliable-placeholder"
               style={{
@@ -738,6 +803,7 @@ export default function Dashboard() {
                     prompts={result.nonBrandedResults || []}
                     brandAliases={brandAliases}
                     emptyLabel="No non-branded queries in this scan."
+                    onGenerateContent={result.isSample ? undefined : handleGenerateContent}
                   />
                   {hasBrandedData && (
                     <AnswersView
@@ -767,6 +833,22 @@ export default function Dashboard() {
                   brand={result.brand}
                   currentPrompts={result.topPrompts || []}
                 />
+              )}
+
+              {view === "studio" && (
+                <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                  {studioNotice && (
+                    <Alert variant="crit" onDismiss={() => setStudioNotice(null)}>
+                      {studioNotice}
+                    </Alert>
+                  )}
+                  <div style={{ flex: 1, minHeight: 0 }}>
+                    <StudioView
+                      brand={result.brand}
+                      onCountsChange={({ awaiting }) => setStudioBadge(awaiting)}
+                    />
+                  </div>
+                </div>
               )}
             </>
           )}
