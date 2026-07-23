@@ -27,6 +27,9 @@ export async function GET(request, { params }) {
         item_id: job.item_id,
         error_message: job.error_message,
         cost_total: job.cost_total,
+        agent_snapshot: job.agent_snapshot || null,
+        agent_trace: job.agent_trace || [],
+        input: job.input || {},
         created_at: job.created_at,
       },
       {

@@ -3,6 +3,7 @@ import {
   createContentJob,
   hasActiveContentJobForBrand,
   listContentJobs,
+  getAgent,
 } from "@/lib/db/content";
 import { startContentJob } from "@/lib/content/contentWorker";
 import { PLAYBOOKS } from "@/lib/content/schemas";
@@ -24,6 +25,9 @@ export async function GET(request) {
       item_id: j.item_id,
       error_message: j.error_message,
       cost_total: j.cost_total,
+      agent_snapshot: j.agent_snapshot || null,
+      agent_trace: j.agent_trace || [],
+      input: j.input || {},
       created_at: j.created_at,
     }));
     return NextResponse.json(
@@ -44,34 +48,60 @@ export async function POST(request) {
   try {
     const payload = await request.json();
     const brand = (payload.brand || "").trim();
-    const playbook = (payload.playbook || "").trim();
     const input = payload.input && typeof payload.input === "object" ? payload.input : {};
+    const agentId = (payload.agent_id || "").trim();
 
     if (!brand) {
       return NextResponse.json({ detail: "Brand name is required." }, { status: 400 });
     }
+
+    // An agent, if given, determines the base playbook. Otherwise the caller
+    // may pass a raw playbook (back-compat with the v1 trigger).
+    let agent = null;
+    if (agentId) {
+      agent = await getAgent(agentId);
+      if (!agent) {
+        return NextResponse.json({ detail: "Agent not found." }, { status: 404 });
+      }
+    }
+    const playbook = agent ? agent.base : (payload.playbook || "").trim();
+
     if (!PLAYBOOKS.includes(playbook)) {
       return NextResponse.json(
-        { detail: `playbook must be one of: ${PLAYBOOKS.join(", ")}` },
+        { detail: `playbook (or agent base) must be one of: ${PLAYBOOKS.join(", ")}` },
         { status: 400 }
       );
     }
 
-    if (await hasActiveContentJobForBrand(brand, playbook)) {
+    // Duplicate guard: concurrency across different agents is allowed; only an
+    // exact re-fire (same agent + same target query) is blocked.
+    if (
+      await hasActiveContentJobForBrand(brand, {
+        playbook,
+        agentId: agent?.id || null,
+        query: input?.query || "",
+      })
+    ) {
       return NextResponse.json(
-        { detail: "A content job for this brand and playbook is already in progress." },
+        { detail: "This agent is already generating content for this query." },
         { status: 409 }
       );
     }
 
-    const job = await createContentJob({ brand, playbook, input });
+    const job = await createContentJob({
+      brand,
+      playbook,
+      input,
+      agent_id: agent?.id || null,
+      agent_snapshot: agent || null,
+    });
 
     startContentJob(job.id).catch((err) => {
       console.error(`[content-trigger] Error in background content job ${job.id}:`, err);
     });
 
     return NextResponse.json(
-      { job_id: job.id, status: job.status, progress_pct: job.progress_pct },
+      { job_id: job.id, status: job.status, progress_pct: job.progress_pct, agent: agent?.name || null },
       { status: 201 }
     );
   } catch (error) {

@@ -18,6 +18,7 @@ export async function GET(request) {
       job_id: i.job_id,
       brand: i.brand,
       playbook: i.playbook,
+      agent_snapshot: i.agent_snapshot || null,
       title: i.title,
       status: i.status,
       revision: i.revision,

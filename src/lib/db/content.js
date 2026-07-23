@@ -110,39 +110,64 @@ export async function updateContentJob(jobId, updates) {
   }
 }
 
+function queryKeyLower(text) {
+  return String(text || "").toLowerCase().trim();
+}
+
 /**
- * Duplicate guard, mirrors hasActiveScanForBrand: true when a content job for
- * this brand+playbook is already running (memory OR shared table), ignoring
- * stale jobs so a crashed run can't block a brand forever.
+ * Precise duplicate guard. Concurrency across *different* agents is a feature
+ * (the user watches several agents work at once), so this only blocks an
+ * EXACT re-fire: the same brand + same agent + same target query already
+ * running. Stale jobs are ignored so a crash can't block forever.
+ *
+ * Back-compat: called as (brand, playbook) it blocks brand+playbook, matching
+ * the v1 trigger which had no agents.
  */
-export async function hasActiveContentJobForBrand(brand, playbook) {
+export async function hasActiveContentJobForBrand(brand, opts) {
   const key = String(brand || "").trim().toLowerCase();
   if (!key) return false;
   const cutoffMs = Date.now() - STALE_CONTENT_JOB_MS;
 
-  for (const job of global.memoryContentJobs.values()) {
-    if (String(job.brand || "").trim().toLowerCase() !== key) continue;
-    if (playbook && job.playbook !== playbook) continue;
-    if (!CONTENT_JOB_RUNNING.includes(job.status)) continue;
+  // Normalize args: string → {playbook}; object → {playbook, agentId, query}.
+  const { playbook, agentId, query } =
+    typeof opts === "string" ? { playbook: opts } : opts || {};
+  const qKey = queryKeyLower(query);
+
+  const matches = (job) => {
+    if (String(job.brand || "").trim().toLowerCase() !== key) return false;
+    if (!CONTENT_JOB_RUNNING.includes(job.status)) return false;
     const created = new Date(job.created_at || 0).getTime();
-    if (Number.isFinite(created) && created < cutoffMs) continue;
+    if (Number.isFinite(created) && created < cutoffMs) return false;
+    // With an agent + query, block only the exact same combination.
+    if (agentId) {
+      if (job.agent_id !== agentId) return false;
+      if (qKey && queryKeyLower(job.input?.query) !== qKey) return false;
+      return true;
+    }
+    // No agent → v1 behavior: block same playbook.
+    if (playbook && job.playbook !== playbook) return false;
     return true;
+  };
+
+  for (const job of global.memoryContentJobs.values()) {
+    if (matches(job)) return true;
   }
 
   if (!supabase) return false;
 
   try {
-    let query = supabase
+    let q = supabase
       .from("content_jobs")
-      .select("id")
+      .select("id, agent_id, playbook, input")
       .ilike("brand", key)
       .in("status", CONTENT_JOB_RUNNING)
-      .gt("created_at", new Date(cutoffMs).toISOString())
-      .limit(1);
-    if (playbook) query = query.eq("playbook", playbook);
-    const { data, error } = await query;
+      .gt("created_at", new Date(cutoffMs).toISOString());
+    if (agentId) q = q.eq("agent_id", agentId);
+    else if (playbook) q = q.eq("playbook", playbook);
+    const { data, error } = await q.limit(20);
     if (error) throw error;
-    return (data || []).length > 0;
+    if (!agentId || !qKey) return (data || []).length > 0;
+    return (data || []).some((j) => queryKeyLower(j.input?.query) === qKey);
   } catch (err) {
     console.warn("[content-db] duplicate check failed, allowing job:", err.message);
     return false;
