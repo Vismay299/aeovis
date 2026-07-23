@@ -115,6 +115,30 @@ function getVisible(r) {
   );
 }
 
+/**
+ * Multi-engine scans emit one row per (prompt, engine). Any count that means
+ * "how many PROMPTS" must dedupe by prompt text, or a 30-prompt scan on two
+ * engines reads as 60 prompts in the UI. Single-engine rows are one per
+ * prompt, so unique counts are identical there.
+ */
+function promptKeyOf(r) {
+  return String(r.prompt || "").toLowerCase().trim();
+}
+
+function uniquePromptCount(rows) {
+  return new Set(rows.map(promptKeyOf)).size;
+}
+
+function groupRowsByPrompt(rows) {
+  const map = new Map();
+  rows.forEach((r) => {
+    const k = promptKeyOf(r);
+    if (!map.has(k)) map.set(k, []);
+    map.get(k).push(r);
+  });
+  return map;
+}
+
 function hasSnakeCaseResultRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return false;
   const first = rows[0];
@@ -441,9 +465,14 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
   }
 
   // Brand Presence KPI always uses intentional own-name set, not every alias hit.
-  brandPresenceWithAio = countBrandPresenceWithAio();
-  const visibleBrandPresence = brandPresence.filter(
-    (r) => getAioPresent(r) && getVisible(r)
+  // Prompt-level semantics: a prompt counts as answered/visible if ANY engine
+  // answered / showed the brand (identical to before for single-engine rows).
+  const brandPresenceByPrompt = groupRowsByPrompt(brandPresence);
+  brandPresenceWithAio = [...brandPresenceByPrompt.values()].filter((rows) =>
+    rows.some(getAioPresent)
+  ).length;
+  const visibleBrandPresence = [...brandPresenceByPrompt.values()].filter((rows) =>
+    rows.some((r) => getAioPresent(r) && getVisible(r))
   ).length;
   brandedVisibilityPct =
     brandPresenceWithAio > 0
@@ -503,18 +532,21 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     brandedVisibilityPct,
     aioCoveragePct,
     aioErrorRatePct,
-    promptsAnalyzed: nonBranded.length,
+    promptsAnalyzed: uniquePromptCount(nonBranded),
     nonBrandedWithAio,
     brandedWithAio: brandPresenceWithAio,
     brandPresenceWithAio,
     visibleNonBranded,
     visibleBranded,
-    brandedPromptsCount: branded.length,
-    brandPresencePromptsCount: brandPresence.length,
+    brandedPromptsCount: uniquePromptCount(branded),
+    brandPresencePromptsCount: uniquePromptCount(brandPresence),
     /** Alias-hit queries that are not intentional Brand Presence seeds */
-    aliasBrandedOnlyCount: Math.max(0, branded.length - brandPresence.length),
+    aliasBrandedOnlyCount: Math.max(
+      0,
+      uniquePromptCount(branded) - uniquePromptCount(brandPresence)
+    ),
     /** All probed queries (non-branded + alias-branded + brand presence) */
-    queriesTracked: results.length,
+    queriesTracked: uniquePromptCount(results),
     scanTimestamp: data.scanned_at ?? data.scanTimestamp ?? new Date().toISOString(),
     scoringVersion: data.scoring_version ?? raw.scoring_version ?? "v7-aio-only",
     seeds: data.seeds ?? raw.seeds ?? [],
@@ -539,7 +571,15 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     enginesCounted: data.engines_counted ?? raw.engines_counted ?? 0,
     isMultiEngine,
     perEngineSummaries: (data.engines || raw.engines) || null,
-    summary: generateSummary(brand, visibilityPct, aioCoveragePct, dataSourceIssue),
+    summary: generateSummary(
+      brand,
+      isMultiEngine
+        ? (data.visibility_index_pct ?? raw.visibility_index_pct ?? visibilityPct)
+        : visibilityPct,
+      aioCoveragePct,
+      dataSourceIssue,
+      isMultiEngine ? Object.keys(data.engines || raw.engines || {}) : null
+    ),
     totalCitations: results.reduce(
       (sum, r) => sum + getAioCitations(r).length,
       0
@@ -609,16 +649,26 @@ function mapPromptForUi(r) {
   };
 }
 
-function generateSummary(brand, score, coverage, dataSourceIssue) {
+const ENGINE_LABELS = {
+  aio: "Google AI Overviews",
+  chatgpt: "ChatGPT",
+  perplexity: "Perplexity",
+};
+
+function generateSummary(brand, score, coverage, dataSourceIssue, engineNames = null) {
+  const surface =
+    engineNames && engineNames.length > 1
+      ? engineNames.map((e) => ENGINE_LABELS[e] || e).join(" and ")
+      : "Google AI Overviews";
   if (dataSourceIssue) {
-    return `Not enough Google AI Overview responses were returned for ${brand} to compute a reliable score. This usually means either the data source (Bright Data SERP) errored or Google did not surface an AIO for most tracked queries.`;
+    return `Not enough AI answers were returned for ${brand} to compute a reliable score. This usually means either the data source (Bright Data SERP) errored or Google did not surface an AIO for most tracked queries.`;
   }
   const b = brand || "Your brand";
   if (score >= 50)
-    return `${b} shows strong presence in Google AI Overviews — appearing in the majority of relevant answers. Keep monitoring high-intent competitor queries to defend this position.`;
+    return `${b} shows strong presence across ${surface} — appearing in the majority of relevant answers. Keep monitoring high-intent competitor queries to defend this position.`;
   if (score >= 20)
-    return `${b} appears in some Google AI Overviews but is missed in most category queries. Competitors are winning the majority of AIO recommendations.`;
-  return `${b} is largely invisible in Google AI Overviews for its category. Competitors dominate AIO recommendations across the tracked queries.`;
+    return `${b} appears in some answers across ${surface} but is missed in most category queries. Competitors are winning the majority of AI recommendations.`;
+  return `${b} is largely invisible across ${surface} for its category. Competitors dominate AI recommendations across the tracked queries.`;
 }
 
 export async function runScan({ brand, website, industry, competitors }, onProgress = () => {}) {

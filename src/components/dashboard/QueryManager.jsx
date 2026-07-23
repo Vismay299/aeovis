@@ -10,7 +10,7 @@ const INTENT_LABELS = {
   branded: "Branded"
 };
 
-export const QueryManager = ({ brand, currentPrompts = [], onPromptAdded }) => {
+export const QueryManager = ({ brand, legacyBrand, currentPrompts = [], onPromptAdded }) => {
   const [prompts, setPrompts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newText, setNewText] = useState("");
@@ -19,10 +19,19 @@ export const QueryManager = ({ brand, currentPrompts = [], onPromptAdded }) => {
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState(null);
 
+  // `brand` is the canonical pool key (domain-first, see resolveBrandKey).
+  // `legacyBrand` lets the API fall back to pre-migration pools stored under
+  // the typed brand name, so the tab isn't empty before the next scan.
+  const listUrl = () => {
+    const params = new URLSearchParams({ includeDisabled: "true" });
+    if (legacyBrand && legacyBrand !== brand) params.set("legacyBrand", legacyBrand);
+    return `/api/brands/${encodeURIComponent(brand)}/prompts?${params.toString()}`;
+  };
+
   useEffect(() => {
     async function fetchPrompts() {
       try {
-        const res = await fetch(`/api/brands/${encodeURIComponent(brand)}/prompts?includeDisabled=true`);
+        const res = await fetch(listUrl());
         if (res.ok) {
           const data = await res.json();
           setPrompts(data.prompts || []);
@@ -34,7 +43,8 @@ export const QueryManager = ({ brand, currentPrompts = [], onPromptAdded }) => {
       }
     }
     fetchPrompts();
-  }, [brand]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand, legacyBrand]);
 
   const displayPrompts = prompts.length > 0 ? prompts : currentPrompts.map((p, idx) => ({
     id: p.id || `temp-${idx}`,
@@ -68,7 +78,7 @@ export const QueryManager = ({ brand, currentPrompts = [], onPromptAdded }) => {
         setNewTopic("General");
         setMessage({ type: "success", text: "Query added successfully! Run a new scan to update your score." });
 
-        const refresh = await fetch(`/api/brands/${encodeURIComponent(brand)}/prompts?includeDisabled=true`);
+        const refresh = await fetch(listUrl());
         if (refresh.ok) {
           const refreshData = await refresh.json();
           setPrompts(refreshData.prompts || []);
@@ -106,7 +116,7 @@ export const QueryManager = ({ brand, currentPrompts = [], onPromptAdded }) => {
           text: `Successfully ${!currentStatus ? "enabled" : "disabled"} query: "${promptText.slice(0, 30)}..."`
         });
 
-        const refresh = await fetch(`/api/brands/${encodeURIComponent(brand)}/prompts?includeDisabled=true`);
+        const refresh = await fetch(listUrl());
         if (refresh.ok) {
           const refreshData = await refresh.json();
           setPrompts(refreshData.prompts || []);

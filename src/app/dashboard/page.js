@@ -23,6 +23,7 @@ import {
 } from "@/services/api";
 import { scoreTier, tierLabel, formatTimestamp, relativeTime } from "@/utils/format";
 import { getBrandAliases } from "@/lib/scoring/aliases";
+import { resolveBrandKey } from "@/lib/scoring/brandKey";
 import {
   AIO_ERROR_RATE_LIMIT_PCT,
   AIO_MIN_NON_BRANDED_COVERAGE,
@@ -180,7 +181,14 @@ export default function Dashboard() {
     }
 
     if (prev && deltaSamePromptSet) {
-      scoreTrend = (result.visibilityScore - (prev.visibility_pct || 0)).toFixed(1);
+      // Compare hero-to-hero: multi-engine scans display the visibility index,
+      // so the delta must use the index on both sides — not the AIO-only value.
+      const currentHero = result.isMultiEngine
+        ? (result.visibilityIndexPct ?? result.visibilityScore)
+        : result.visibilityScore;
+      const prevHero =
+        prev.raw_results?.visibility_index_pct ?? prev.visibility_pct ?? 0;
+      scoreTrend = (currentHero - prevHero).toFixed(1);
     }
     if (prev) {
       previousScan = normalizeResult(prev, result.brand, result.website);
@@ -716,13 +724,19 @@ export default function Dashboard() {
                 score={heroScore}
                 tier={tierLabelMap[tier]}
                 trend={scoreTrend}
+                promptSetChanged={!deltaSamePromptSet && !!previousScan}
                 scoreLabel={result.isMultiEngine ? "AI Visibility Index" : null}
                 engineChips={result.isMultiEngine && result.perEngineSummaries
                   ? [
-                      { label: "AIO", value: result.perEngineSummaries.aio?.share_of_ai_pct ?? "—" },
-                      { label: "ChatGPT", value: result.perEngineSummaries.chatgpt?.share_of_ai_pct ?? "—" },
-                      { label: "PPLX", value: result.perEngineSummaries.perplexity?.share_of_ai_pct ?? "—" },
+                      { key: "aio", label: "AIO" },
+                      { key: "chatgpt", label: "ChatGPT" },
+                      { key: "perplexity", label: "PPLX" },
                     ]
+                      .filter(({ key }) => result.perEngineSummaries[key])
+                      .map(({ key, label }) => ({
+                        label,
+                        value: result.perEngineSummaries[key].share_of_ai_pct ?? "—",
+                      }))
                   : null
                 }
                 stats={[
@@ -847,7 +861,8 @@ export default function Dashboard() {
 
               {view === "queries" && (
                 <QueriesView
-                  brand={result.brand}
+                  brand={resolveBrandKey(result.brand, result.website)}
+                  legacyBrand={result.brand}
                   currentPrompts={result.topPrompts || []}
                 />
               )}

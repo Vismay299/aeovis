@@ -1,7 +1,7 @@
 import { ScoreMeter } from "@/components/perceev/ScoreMeter";
 import { Badge } from "@/components/perceev/Badge";
 
-export const ScoreBand = ({ score, tier, trend, stats = [], engineChips, scoreLabel }) => {
+export const ScoreBand = ({ score, tier, trend, stats = [], engineChips, scoreLabel, promptSetChanged }) => {
   const isNumeric = typeof score === "number";
 
   return (
@@ -116,6 +116,26 @@ export const ScoreBand = ({ score, tier, trend, stats = [], engineChips, scoreLa
               >
                 {parseFloat(trend) > 0 ? "+" : ""}
                 {trend}%
+              </span>
+            )}
+            {promptSetChanged && (
+              <span
+                data-testid="prompt-set-changed-marker"
+                title="The tracked prompt list changed since the previous scan, so this score isn't directly comparable to it. The trend restarts from this scan."
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: "9px",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  padding: "2px 8px",
+                  borderRadius: "var(--radius-1)",
+                  background: "var(--warn-bg)",
+                  color: "var(--warn)",
+                  border: "1px solid var(--warn-border)",
+                }}
+              >
+                Prompt list changed — trend resets
               </span>
             )}
             {engineChips && engineChips.map((chip, i) => (

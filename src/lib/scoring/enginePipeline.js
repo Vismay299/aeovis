@@ -281,18 +281,39 @@ function summarizeEngineSlice(results, engineName) {
 }
 
 /**
- * Computes the headline "AI Visibility Index" — equal-weight mean of
- * per-engine share_of_ai across engines that produced ≥5 non-branded answers.
+ * Relative engine weights for the headline index (prompt-set contract,
+ * 2026-07-20: 50/50 today, configurable without rework). Weights are
+ * RELATIVE — they are renormalized over whichever engines are eligible in a
+ * given scan, so aio:1 + perplexity:1 is a 50/50 blend when both report, and
+ * 100% of whichever one is alone. Change the blend here (or extend to an env
+ * override) — never inline weights at call sites.
  */
-function computeHeadline(engineSummaries) {
+export const ENGINE_WEIGHTS = {
+  aio: 1,
+  chatgpt: 1,
+  perplexity: 1,
+};
+
+/**
+ * Computes the headline "AI Visibility Index" — weighted mean of per-engine
+ * share_of_ai across engines that produced ≥5 non-branded answers.
+ */
+export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS) {
   const eligible = engineSummaries.filter(
     (s) => !s.data_source_issue && s.non_branded_with_answer >= 5
   );
   if (eligible.length === 0) {
     return { visibility_index_pct: null, engines_counted: 0 };
   }
-  const sum = eligible.reduce((acc, s) => acc + s.share_of_ai_pct, 0);
-  const mean = Math.round((sum / eligible.length) * 10) / 10;
+  const totalWeight = eligible.reduce(
+    (acc, s) => acc + (weights[s.engine] ?? 1),
+    0
+  );
+  const weightedSum = eligible.reduce(
+    (acc, s) => acc + s.share_of_ai_pct * (weights[s.engine] ?? 1),
+    0
+  );
+  const mean = Math.round((weightedSum / totalWeight) * 10) / 10;
   return { visibility_index_pct: mean, engines_counted: eligible.length };
 }
 

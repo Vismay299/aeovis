@@ -7,31 +7,110 @@ import { runMultiEngineScan, summarizeEngineResults, resolveEnabledEngines } fro
 import { getPromptsForBrand, upsertPrompts } from "../db/prompts.js";
 import { buildBrandedQueries, isBrandedQuery } from "../scoring/aioQueryClassify.js";
 import { getBrandAliases } from "../scoring/aliases.js";
+import { resolveBrandKey } from "../scoring/brandKey.js";
 
 const MAX_SOURCING_ATTEMPTS = 3;
-const UNBRANDED_TARGET = 30;
+const DEFAULT_UNBRANDED_TARGET = 30;
+
+/**
+ * Tracked-set size. Plan-limit lever: raising it (PROMPT_TARGET env) makes the
+ * next scan top up ADDITIVELY — existing prompts and their histories are never
+ * regenerated or replaced (prompt-set contract, 2026-07-20).
+ */
+export function resolvePromptTarget() {
+  const raw = Number.parseInt(process.env.PROMPT_TARGET || "", 10);
+  if (!Number.isFinite(raw)) return DEFAULT_UNBRANDED_TARGET;
+  return Math.min(100, Math.max(10, raw));
+}
 
 function queryTextKey(text) {
   return String(text || "").toLowerCase().trim();
 }
 
+function mapDbPromptRow(p) {
+  return {
+    text: p.text,
+    source: p.source || "db",
+    topic: p.topic || "General",
+    intent_tier: p.intent_tier || "informational",
+  };
+}
+
 /**
- * Reuses enabled DB prompts when there are already >=30, otherwise tops up
- * with freshly generated unbranded prompts until exactly 30 unique queries
- * are collected. Returns the full 30-query list plus only the newly
- * generated ones (so the caller persists just the delta).
+ * Sources the brand's tracked unbranded prompt set (prompt-set contract):
+ *
+ *  - Pool is keyed by resolveBrandKey (domain-first) so brand-name casing or
+ *    variants can never fragment the set. Legacy pools stored under the typed
+ *    brand name are migrated to the key on first read.
+ *  - FAIL-LOUD: a DB error while loading the pool aborts the scan. Silently
+ *    regenerating prompts would produce a score on the wrong questions and
+ *    quietly break score comparability — a failed scan is strictly better.
+ *  - Generation runs only when the pool is genuinely short of target
+ *    (onboarding, or an additive top-up after the target was raised).
+ *  - Reuse path slices deterministically (DB ordering is created_at, id).
+ *
+ * Returns the full target-sized list plus only the newly generated ones
+ * (so the caller persists just the delta). `deps` is test injection only.
  */
-async function sourceUnbrandedQueries(brand, url, industry, stats, brandAliases) {
-  let dbPrompts = [];
+export async function sourceUnbrandedQueries(brand, url, industry, stats, brandAliases, deps = {}) {
+  const getPrompts = deps.getPromptsForBrand || getPromptsForBrand;
+  const upsert = deps.upsertPrompts || upsertPrompts;
+  const generate = deps.generateUnbrandedPrompts || generateUnbrandedPrompts;
+  const target = deps.promptTarget || resolvePromptTarget();
+
+  const promptKey = resolveBrandKey(brand, url);
+
+  let dbPrompts;
   try {
-    dbPrompts = await getPromptsForBrand(brand, false);
+    dbPrompts = await getPrompts(promptKey, false, { strict: true });
   } catch (err) {
-    console.warn("[worker] DB prompt fetch failed:", err.message);
+    throw new Error(
+      `Couldn't load the tracked prompt set for this brand (${err.message}). ` +
+        `Scan aborted to protect score comparability — please retry.`
+    );
+  }
+
+  // Legacy migration: older scans stored the pool under the typed brand name.
+  // Re-home those rows under the canonical key once, preserving enabled/weight.
+  if ((dbPrompts || []).length === 0 && promptKey !== queryTextKey(brand)) {
+    let legacyRows;
+    try {
+      legacyRows = await getPrompts(brand, true, { strict: true });
+    } catch (err) {
+      throw new Error(
+        `Couldn't load the tracked prompt set for this brand (${err.message}). ` +
+          `Scan aborted to protect score comparability — please retry.`
+      );
+    }
+    if ((legacyRows || []).length > 0) {
+      console.log(
+        `[worker] Migrating ${legacyRows.length} legacy prompts from "${brand}" to key "${promptKey}"`
+      );
+      try {
+        await upsert(
+          promptKey,
+          legacyRows.map((p) => ({
+            text: p.text,
+            intent_tier: p.intent_tier,
+            topic: p.topic,
+            weight: p.weight,
+            enabled: p.enabled,
+            source: p.source,
+          }))
+        );
+        dbPrompts = await getPrompts(promptKey, false, { strict: true });
+      } catch (err) {
+        throw new Error(
+          `Couldn't migrate the tracked prompt set to its new key (${err.message}). ` +
+            `Scan aborted to protect score comparability — please retry.`
+        );
+      }
+    }
   }
 
   // getPromptsForBrand returns every enabled row regardless of tier, and we
   // persist branded seeds alongside the unbranded set. Filter them out here or
-  // they leak into the 30 on the next scan and silently inflate the score.
+  // they leak into the tracked set on the next scan and silently inflate the score.
   const existing = (dbPrompts || [])
     .filter(
       (p) =>
@@ -39,43 +118,39 @@ async function sourceUnbrandedQueries(brand, url, industry, stats, brandAliases)
         String(p.source || "").toLowerCase() !== "branded_seed" &&
         !isBrandedQuery(p.text, brandAliases)
     )
-    .map((p) => ({
-      text: p.text,
-      source: p.source || "db",
-      topic: p.topic || "General",
-      intent_tier: p.intent_tier || "informational",
-    }));
+    .map(mapDbPromptRow);
 
-  if (existing.length >= UNBRANDED_TARGET) {
-    return { queries: existing.slice(0, UNBRANDED_TARGET), newlyGenerated: [] };
+  if (existing.length >= target) {
+    return { queries: existing.slice(0, target), newlyGenerated: [], promptKey };
   }
 
   const seen = new Set(existing.map((q) => queryTextKey(q.text)));
   const merged = [...existing];
 
   let attempts = 0;
-  while (merged.length < UNBRANDED_TARGET && attempts < MAX_SOURCING_ATTEMPTS) {
+  while (merged.length < target && attempts < MAX_SOURCING_ATTEMPTS) {
     attempts++;
-    const shortfall = UNBRANDED_TARGET - merged.length;
-    const generated = await generateUnbrandedPrompts(brand, url, industry, stats, shortfall);
+    const shortfall = target - merged.length;
+    const generated = await generate(brand, url, industry, stats, shortfall);
     for (const q of generated) {
       const key = queryTextKey(q.text);
       if (seen.has(key)) continue;
       seen.add(key);
       merged.push(q);
-      if (merged.length >= UNBRANDED_TARGET) break;
+      if (merged.length >= target) break;
     }
   }
 
-  if (merged.length < UNBRANDED_TARGET) {
+  if (merged.length < target) {
     throw new Error(
-      `Could only source ${merged.length}/${UNBRANDED_TARGET} unique unbranded prompts for this scan.`
+      `Could only source ${merged.length}/${target} unique unbranded prompts for this scan.`
     );
   }
 
   return {
-    queries: merged.slice(0, UNBRANDED_TARGET),
+    queries: merged.slice(0, target),
     newlyGenerated: merged.slice(existing.length),
+    promptKey,
   };
 }
 
@@ -103,8 +178,9 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
 
     const brandAliases = getBrandAliases(brand, url);
 
-    // 1. Source exactly 30 unbranded queries (reuse DB prompts, top up via OpenRouter).
-    const { queries: unbrandedQueries, newlyGenerated } = await sourceUnbrandedQueries(
+    // 1. Source the tracked unbranded set (reuse DB pool keyed by domain,
+    //    top up additively via OpenRouter only when short of target).
+    const { queries: unbrandedQueries, newlyGenerated, promptKey } = await sourceUnbrandedQueries(
       brand,
       url,
       industry,
@@ -127,7 +203,7 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     if (toPersist.length > 0) {
       try {
         await upsertPrompts(
-          brand,
+          promptKey,
           toPersist.map((q) => ({
             text: q.text,
             intent_tier: q.intent_tier,

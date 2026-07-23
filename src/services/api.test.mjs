@@ -305,3 +305,121 @@ test("normalizeResult — double normalize is stable (session re-entry)", () => 
   assert.equal(second.brandPresencePromptsCount, first.brandPresencePromptsCount);
   assert.equal(second.competitorsFound, first.competitorsFound);
 });
+
+test("normalizeResult — multi-engine rows count unique prompts, not engine rows", () => {
+  const mk = (prompt, engine, overrides = {}) => ({
+    prompt,
+    engine,
+    is_branded_query: false,
+    intent_tier: "informational",
+    source: "llm_generated",
+    answer_present: true,
+    aio_present: engine === "aio",
+    text: "answer text",
+    citations: [],
+    references: [],
+    brand_mentioned_in_text: false,
+    brand_cited: false,
+    visible: false,
+    error: null,
+    ...overrides,
+  });
+
+  const record = {
+    brand: "Acme",
+    url: "acme.com",
+    prompts_tracked: 3,
+    engines: {
+      aio: { engine: "aio", share_of_ai_pct: 33.3, non_branded_with_answer: 3, data_source_issue: false },
+      perplexity: { engine: "perplexity", share_of_ai_pct: 66.7, non_branded_with_answer: 3, data_source_issue: false },
+    },
+    visibility_index_pct: 50,
+    engines_counted: 2,
+    summary_stats: {
+      visibility_pct: 33.3,
+      share_of_ai_pct: 33.3,
+      non_branded_with_aio: 3,
+      visible_non_branded: 1,
+    },
+    results: [
+      // 3 unbranded prompts x 2 engines = 6 rows
+      mk("best widget for home", "aio", { visible: true, brand_mentioned_in_text: true }),
+      mk("best widget for home", "perplexity", { visible: true, brand_mentioned_in_text: true }),
+      mk("widget vs gadget", "aio"),
+      mk("widget vs gadget", "perplexity"),
+      mk("cheap widgets online", "aio"),
+      mk("cheap widgets online", "perplexity"),
+      // 1 brand-presence prompt x 2 engines: answered+visible on perplexity only
+      mk("what is Acme", "aio", {
+        is_branded_query: true,
+        source: "branded_seed",
+        intent_tier: "branded",
+        answer_present: false,
+        aio_present: false,
+      }),
+      mk("what is Acme", "perplexity", {
+        is_branded_query: true,
+        source: "branded_seed",
+        intent_tier: "branded",
+        visible: true,
+        brand_mentioned_in_text: true,
+      }),
+    ],
+  };
+
+  const out = normalizeResult(record, "Acme", "acme.com");
+
+  assert.equal(out.isMultiEngine, true);
+  // Prompt-denominated counts are unique prompts, not rows
+  assert.equal(out.promptsAnalyzed, 3);
+  assert.equal(out.queriesTracked, 4);
+  assert.equal(out.brandedPromptsCount, 1);
+  assert.equal(out.brandPresencePromptsCount, 1);
+  // Brand presence: answered/visible on >=1 engine counts the PROMPT once
+  assert.equal(out.brandPresenceWithAio, 1);
+  assert.equal(out.visibleBranded, 1);
+  assert.equal(out.brandedVisibilityPct, 100);
+  // Result arrays keep per-engine rows for the engine-filtered views
+  assert.equal(out.nonBrandedResults.length, 6);
+  // Multi-engine summary references both surfaces
+  assert.match(out.summary, /Perplexity/);
+});
+
+test("normalizeResult — single-engine counts unchanged by unique-prompt logic", () => {
+  const row = (prompt, overrides = {}) => ({
+    prompt,
+    is_branded_query: false,
+    intent_tier: "informational",
+    source: "llm_generated",
+    aio_present: true,
+    aio_text: "text",
+    aio_citations: [],
+    brand_mentioned_in_text: false,
+    brand_cited: false,
+    visible: false,
+    error: null,
+    ...overrides,
+  });
+
+  const record = {
+    brand: "Acme",
+    url: "acme.com",
+    summary_stats: {
+      visibility_pct: 50,
+      non_branded_with_aio: 2,
+      visible_non_branded: 1,
+    },
+    results: [
+      row("q one", { visible: true, brand_mentioned_in_text: true }),
+      row("q two"),
+      row("what is Acme", { is_branded_query: true, source: "branded_seed", intent_tier: "branded" }),
+    ],
+  };
+
+  const out = normalizeResult(record, "Acme", "acme.com");
+  assert.equal(out.isMultiEngine, false);
+  assert.equal(out.promptsAnalyzed, 2);
+  assert.equal(out.queriesTracked, 3);
+  assert.equal(out.brandPresencePromptsCount, 1);
+  assert.equal(out.brandPresenceWithAio, 1);
+});

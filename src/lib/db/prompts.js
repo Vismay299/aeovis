@@ -1,14 +1,27 @@
 import { supabase } from "../db.js";
 
 /**
- * Gets prompts for a given brand from the database.
+ * Gets prompts for a given brand key from the database.
  *
- * @param {string} brand - Brand name
+ * Ordering is deterministic (created_at ASC, id ASC) — batch-inserted rows
+ * share a timestamp, and the scan worker slices the first N, so a stable
+ * tiebreaker is required for the tracked set to be identical across scans.
+ *
+ * @param {string} brand - Brand key (see resolveBrandKey) or legacy brand name
  * @param {boolean} includeDisabled - If true, returns disabled prompts as well
+ * @param {{ strict?: boolean }} options - strict: throw on DB errors instead of
+ *   returning []. Callers that must distinguish "no set yet" from "couldn't
+ *   load the set" (the scan worker's fail-loud contract) pass strict: true.
  * @returns {Promise<Array>} List of prompt objects
  */
-export async function getPromptsForBrand(brand, includeDisabled = false) {
+export async function getPromptsForBrand(brand, includeDisabled = false, options = {}) {
+  const { strict = false } = options;
+
   if (!supabase) {
+    if (strict) {
+      // No DB configured at all — that's "no set exists", not a load failure.
+      return [];
+    }
     console.warn("Supabase client is not initialized.");
     return [];
   }
@@ -23,14 +36,20 @@ export async function getPromptsForBrand(brand, includeDisabled = false) {
       query = query.eq("enabled", true);
     }
 
-    const { data, error } = await query.order("created_at", { ascending: true });
+    const { data, error } = await query
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true });
 
     if (error) {
+      if (strict) {
+        throw new Error(`brand_prompts fetch failed: ${error.message}`);
+      }
       console.warn("Error fetching brand prompts (falling back to empty):", error.message);
       return [];
     }
     return data || [];
   } catch (e) {
+    if (strict) throw e;
     return [];
   }
 }

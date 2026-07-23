@@ -250,3 +250,62 @@ function computeHeadlineFromSlices(engineSummaries) {
   const mean = Math.round((sum / eligible.length) * 10) / 10;
   return { visibility_index_pct: mean, engines_counted: eligible.length };
 }
+
+// --- computeHeadline weight semantics (now exported) ---
+
+import { computeHeadline, ENGINE_WEIGHTS } from "./enginePipeline.js";
+
+function slice(engine, shareOfAi, overrides = {}) {
+  return {
+    engine,
+    share_of_ai_pct: shareOfAi,
+    non_branded_with_answer: 15,
+    data_source_issue: false,
+    ...overrides,
+  };
+}
+
+test("computeHeadline — default weights give 50/50 blend of two engines", () => {
+  const out = computeHeadline([slice("aio", 40), slice("perplexity", 60)]);
+  assert.equal(out.visibility_index_pct, 50);
+  assert.equal(out.engines_counted, 2);
+});
+
+test("computeHeadline — weights renormalize when one engine is ineligible", () => {
+  const out = computeHeadline([
+    slice("aio", 40, { data_source_issue: true }),
+    slice("perplexity", 60),
+  ]);
+  assert.equal(out.visibility_index_pct, 60);
+  assert.equal(out.engines_counted, 1);
+});
+
+test("computeHeadline — custom weights shift the blend", () => {
+  const out = computeHeadline(
+    [slice("aio", 40), slice("perplexity", 60)],
+    { aio: 3, perplexity: 1 }
+  );
+  // (40*3 + 60*1) / 4 = 45
+  assert.equal(out.visibility_index_pct, 45);
+});
+
+test("computeHeadline — unknown engine defaults to weight 1", () => {
+  const out = computeHeadline(
+    [slice("aio", 40), slice("someday-engine", 80)],
+    { aio: 1 }
+  );
+  assert.equal(out.visibility_index_pct, 60);
+});
+
+test("computeHeadline — <5 answers excludes an engine", () => {
+  const out = computeHeadline([
+    slice("aio", 40, { non_branded_with_answer: 3 }),
+    slice("perplexity", 60),
+  ]);
+  assert.equal(out.visibility_index_pct, 60);
+  assert.equal(out.engines_counted, 1);
+});
+
+test("ENGINE_WEIGHTS — default config is equal weights (50/50 contract)", () => {
+  assert.equal(ENGINE_WEIGHTS.aio, ENGINE_WEIGHTS.perplexity);
+});
