@@ -171,7 +171,7 @@ export async function getScansForBrand(brand) {
   if (!supabase) {
     return [];
   }
-  
+
   const { data, error } = await supabase
     .from("scans")
     .select("*")
@@ -182,8 +182,59 @@ export async function getScansForBrand(brand) {
     console.error("Error fetching scans from Supabase:", error);
     return [];
   }
-  
+
   return data;
+}
+
+/**
+ * Recent scans collapsed to the latest per brand, for the homepage workspace.
+ * Returns lightweight rows (no full raw_results payload beyond what a card
+ * needs) so the homepage stays fast.
+ */
+export async function listRecentScans(limit = 12) {
+  if (!supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("scans")
+      .select("id, brand, url, industry, visibility_pct, scanned_at, raw_results")
+      .order("scanned_at", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+
+    const byBrand = new Map();
+    for (const s of data || []) {
+      const key = String(s.brand || "").trim().toLowerCase();
+      if (!key) continue;
+      const raw = s.raw_results || {};
+      const engines = raw.engines ? Object.keys(raw.engines) : [];
+      const score =
+        raw.visibility_index_pct ??
+        raw.summary_stats?.share_of_ai_pct ??
+        s.visibility_pct ??
+        null;
+      const existing = byBrand.get(key);
+      if (!existing) {
+        byBrand.set(key, {
+          id: s.id,
+          brand: s.brand,
+          url: s.url,
+          industry: s.industry,
+          score: score == null ? null : Math.round(Number(score) * 10) / 10,
+          scanned_at: s.scanned_at,
+          engines,
+          scan_count: 1,
+        });
+      } else {
+        existing.scan_count += 1;
+      }
+    }
+    return Array.from(byBrand.values())
+      .sort((a, b) => new Date(b.scanned_at) - new Date(a.scanned_at))
+      .slice(0, limit);
+  } catch (err) {
+    console.warn("[db] listRecentScans failed:", err.message);
+    return [];
+  }
 }
 
 // Global memory store for scan jobs (Next.js hot-reload safe)

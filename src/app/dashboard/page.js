@@ -47,6 +47,22 @@ export default function Dashboard() {
   const [view, setView] = useState("overview");
   const [studioBadge, setStudioBadge] = useState(0);
   const [studioNotice, setStudioNotice] = useState(null);
+  const [studioInitialItem, setStudioInitialItem] = useState(null);
+
+  // Deep-link support: /dashboard?view=studio&item=<id> lands directly on a
+  // run from the homepage workspace. Read once from the URL on mount.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const v = params.get("view");
+      const validViews = ["overview", "answers", "rivals", "sources", "queries", "studio"];
+      if (v && validViews.includes(v)) setView(v);
+      const item = params.get("item");
+      if (item) setStudioInitialItem(item);
+    } catch {
+      /* no-op */
+    }
+  }, []);
 
   useEffect(() => {
     const current = loadScan();
@@ -846,6 +862,7 @@ export default function Dashboard() {
                     <StudioView
                       brand={result.brand}
                       scan={result}
+                      initialItemId={studioInitialItem}
                       onCountsChange={({ awaiting }) => setStudioBadge(awaiting)}
                     />
                   </div>

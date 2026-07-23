@@ -606,3 +606,10 @@
     padding: var(--space-10) 0;
   }
 }
+
+/* Homepage operator workspace — collapse the two-column grid on narrow screens */
+@media (max-width: 860px) {
+  .home-dash-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

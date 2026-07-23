@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import "@/components/landing/landing.css";
 import { LandingNav } from "@/components/landing/LandingNav";
+import { HomeDashboard } from "@/components/home/HomeDashboard";
 import { ScanBar } from "@/components/landing/ScanBar";
 import { AnswerDemo } from "@/components/landing/AnswerDemo";
 import { ProbeCounter } from "@/components/landing/ProbeCounter";
@@ -50,6 +51,10 @@ export default function Landing() {
   return (
     <div className="lp">
       <LandingNav />
+
+      {/* Operator workspace — your previous runs. Renders nothing for
+          first-time visitors, so the landing page is unchanged for them. */}
+      <HomeDashboard />
 
       <main>
         {/* ---------- Hero ---------- */}
