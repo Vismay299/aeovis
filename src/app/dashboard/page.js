@@ -845,6 +845,7 @@ export default function Dashboard() {
                   <div style={{ flex: 1, minHeight: 0 }}>
                     <StudioView
                       brand={result.brand}
+                      scan={result}
                       onCountsChange={({ awaiting }) => setStudioBadge(awaiting)}
                     />
                   </div>
