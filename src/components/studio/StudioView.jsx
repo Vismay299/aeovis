@@ -192,6 +192,12 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
     refresh();
   }, [refresh]);
 
+  // Re-sync on tab change so a newly-built agent shows up immediately in the
+  // Opportunities / New-run pickers (the Agents tab creates it out of band).
+  useEffect(() => {
+    refresh();
+  }, [tab, refresh]);
+
   const hasActivity =
     jobs.some((j) => RUNNING_STATUSES.includes(j.status)) || items.some((i) => i.status === "changes_requested");
   useEffect(() => {
