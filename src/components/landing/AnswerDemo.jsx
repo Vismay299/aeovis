@@ -48,11 +48,23 @@ const SCENARIOS = [
 export const AnswerDemo = () => {
   const [scenarioIndex, setScenarioIndex] = useState(0);
   const [charIndex, setCharIndex] = useState(0);
+  const [reduced, setReduced] = useState(false);
 
   const scenario = SCENARIOS[scenarioIndex];
   const fullText = scenario.texts.map((t) => t.text).join("");
 
+  // Respect prefers-reduced-motion: show answers whole, no typing.
   useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setReduced(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (reduced) {
+      setCharIndex(fullText.length);
+      return;
+    }
     if (charIndex >= fullText.length) {
       const pause = setTimeout(() => {
         setScenarioIndex((prev) => (prev + 1) % SCENARIOS.length);
@@ -66,7 +78,7 @@ export const AnswerDemo = () => {
     }, 24); // ~3 chars at a time feels like 24ms per char equivalent
 
     return () => clearTimeout(timer);
-  }, [charIndex, fullText.length]);
+  }, [charIndex, fullText.length, reduced]);
 
   useEffect(() => {
     setCharIndex(0);
@@ -80,33 +92,30 @@ export const AnswerDemo = () => {
     remaining -= shown;
     const content = segment.text.slice(0, shown);
 
-    let style = {
-      color: "var(--text-2)",
-    };
+    // Your brand gets the highlighter pass; rivals get the
+    // proofreader's red underline. Plain text stays ink.
     if (segment.highlight) {
       if (segment.rival) {
-        style.color = "var(--crit)";
-        style.fontWeight = 600;
-      } else {
-        style.color = "var(--good)";
-        style.fontWeight = 600;
+        return (
+          <span key={i} className="ev-rival">
+            {content}
+          </span>
+        );
       }
+      return (
+        <mark key={i} className="ev-you">
+          {content}
+        </mark>
+      );
     }
 
-    return (
-      <span key={i} style={style}>
-        {content}
-      </span>
-    );
+    return <span key={i}>{content}</span>;
   });
 
   return (
     <div
       style={{
         fontFamily: "var(--font-sans)",
-        fontSize: "15px",
-        lineHeight: 1.65,
-        color: "var(--text-2)",
         position: "relative",
       }}
     >
@@ -114,7 +123,7 @@ export const AnswerDemo = () => {
       {charIndex < fullText.length && (
         <span
           className="caret-blink"
-          style={{ color: "var(--accent)", fontWeight: 700 }}
+          style={{ color: "var(--text-2)", fontWeight: 600 }}
         >
           |
         </span>

@@ -41,7 +41,7 @@ export const LandingNav = () => {
             Sample report
           </button>
           <Button variant="primary" size="md" onClick={() => router.push("/scan")}>
-            Run a check
+            Run the count
           </Button>
         </div>
       </div>

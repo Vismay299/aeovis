@@ -48,11 +48,11 @@ export const Badge = ({ variant = "neutral", dot, children, className = "" }) =>
         border: `1px solid ${s.border}`,
         borderRadius: "var(--radius-1)",
         padding: "2px 8px",
-        fontFamily: "var(--font-mono)",
-        fontSize: "10px",
-        fontWeight: 500,
+        fontFamily: "var(--font-display)",
+        fontSize: "12px",
+        fontWeight: 600,
         textTransform: "uppercase",
-        letterSpacing: "0.1em",
+        letterSpacing: "0.08em",
         lineHeight: "18px",
       }}
     >

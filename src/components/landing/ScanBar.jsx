@@ -57,7 +57,7 @@ export const ScanBar = ({ className = "" }) => {
         type="submit"
         style={{ flexShrink: 0, padding: "0 24px" }}
       >
-        Run a check
+        Run the count
       </Button>
     </form>
   );

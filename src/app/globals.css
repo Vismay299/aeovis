@@ -14,59 +14,105 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./fonts/BarlowCondensed-500.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./fonts/BarlowCondensed-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  src: url('./fonts/BarlowCondensed-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  /* Surfaces — warm graphite ramp */
-  --bg-0: #0E0D0B;
-  --bg-1: #151310;
-  --bg-2: #1C1915;
-  --bg-3: #242019;
-  --bg-inverse: #EDE7DC;
+  /* ==========================================================
+     Perceev — "Results Night"
+     The graphics package of an election-results broadcast:
+     luminous tallies on a blue-black studio wall. Share-of-AI
+     is vote share; rivals are parties; the verdict is the
+     projection. See DESIGN.md.
+     ========================================================== */
+
+  /* Surfaces — studio blue-black ramp */
+  --bg-0: #0A0E14;
+  --bg-1: #101623;
+  --bg-2: #16202E;
+  --bg-3: #1D2A3C;
+  --bg-inverse: #E8EDF4;
 
   /* Borders */
-  --border-1: #26221C;
-  --border-2: #38322A;
-  --border-3: #524A3E;
+  --border-1: #1C2736;
+  --border-2: #283850;
+  --border-3: #3A5273;
 
-  /* Text */
-  --text-1: #EDE7DC;
-  --text-2: #A69D8F;
-  --text-3: #746C5F;
-  --text-inverse: #141210;
+  /* Text — studio white */
+  --text-1: #E8EDF4;
+  --text-2: #96A5BA;
+  --text-3: #7C8AA0;
+  --text-inverse: #0A0E14;
 
-  /* Accent — ember */
-  --accent: #E8632C;
-  --accent-hover: #F2743E;
-  --accent-press: #C9501E;
-  --accent-fg: #140D08;
-  --accent-soft: rgba(232, 99, 44, 0.12);
-  --accent-border: rgba(232, 99, 44, 0.35);
-  --accent-text: #F08A5B;
+  /* Accent — declaration gold. CTAs, projections, links. */
+  --accent: #F0B429;
+  --accent-hover: #FFC94A;
+  --accent-press: #D19C1D;
+  --accent-fg: #1A1102;
+  --accent-soft: rgba(240, 180, 41, 0.10);
+  --accent-border: rgba(240, 180, 41, 0.38);
+  --accent-text: #F3C25A;
+
+  /* Party colors — data roles, never decoration */
+  --you: #35E0C5;
+  --you-fg: #04211C;
+  --you-soft: rgba(53, 224, 197, 0.12);
+  --you-border: rgba(53, 224, 197, 0.4);
+  --rival: #FF5D45;
+  --rival-soft: rgba(255, 93, 69, 0.12);
+  --rival-border: rgba(255, 93, 69, 0.4);
+
+  /* Legacy marker aliases (mark = "you" highlight) */
+  --mark: var(--you);
+  --mark-soft: var(--you-soft);
+  --mark-border: var(--you-border);
 
   /* Semantic */
-  --good: #8BC49A;
-  --good-bg: rgba(139, 196, 154, 0.10);
-  --good-border: rgba(139, 196, 154, 0.30);
-  --warn: #D9A441;
-  --warn-bg: rgba(217, 164, 65, 0.10);
-  --warn-border: rgba(217, 164, 65, 0.30);
-  --crit: #DE7A66;
-  --crit-bg: rgba(222, 122, 102, 0.10);
-  --crit-border: rgba(222, 122, 102, 0.30);
-  --info: #8FAEC9;
-  --info-bg: rgba(143, 174, 201, 0.10);
-  --info-border: rgba(143, 174, 201, 0.30);
+  --good: #3ECF7A;
+  --good-bg: rgba(62, 207, 122, 0.10);
+  --good-border: rgba(62, 207, 122, 0.35);
+  --warn: #E8A23D;
+  --warn-bg: rgba(232, 162, 61, 0.10);
+  --warn-border: rgba(232, 162, 61, 0.35);
+  --crit: #FF5D45;
+  --crit-bg: rgba(255, 93, 69, 0.10);
+  --crit-border: rgba(255, 93, 69, 0.35);
+  --info: #4DA3FF;
+  --info-bg: rgba(77, 163, 255, 0.10);
+  --info-border: rgba(77, 163, 255, 0.35);
 
   /* Data viz */
-  --chart-1: #E8632C;
-  --chart-2: #8BC49A;
-  --chart-3: #D9A441;
-  --chart-4: #8FAEC9;
-  --chart-5: #746C5F;
-  --meter-track: #2B2620;
+  --chart-1: #F0B429;
+  --chart-2: #35E0C5;
+  --chart-3: #FF5D45;
+  --chart-4: #4DA3FF;
+  --chart-5: #64748C;
+  --meter-track: #1D2A3C;
 
   /* Semantic aliases */
   --surface-page: var(--bg-0);
@@ -80,27 +126,28 @@
 
   /* Typography */
   --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
   --font-mono: 'Geist Mono', 'SF Mono', ui-monospace, monospace;
 
-  --type-display-xl: 600 clamp(44px, 5.2vw, 72px)/1.02 var(--font-sans);
-  --track-display: -0.035em;
-  --type-display: 600 44px/1.06 var(--font-sans);
-  --type-h1: 600 32px/1.15 var(--font-sans);
-  --track-h1: -0.02em;
-  --type-h2: 600 22px/1.25 var(--font-sans);
-  --track-h2: -0.015em;
+  --type-display-xl: 700 clamp(56px, 7.5vw, 112px)/0.94 var(--font-display);
+  --track-display: 0.005em;
+  --type-display: 700 48px/0.98 var(--font-display);
+  --type-h1: 600 34px/1.05 var(--font-display);
+  --track-h1: 0.01em;
+  --type-h2: 600 24px/1.15 var(--font-display);
+  --track-h2: 0.01em;
   --type-h3: 600 17px/1.35 var(--font-sans);
   --track-h3: -0.01em;
   --type-body-lg: 400 16px/1.6 var(--font-sans);
   --type-body: 400 14px/1.55 var(--font-sans);
   --type-body-sm: 400 13px/1.5 var(--font-sans);
-  --type-label: 500 11px/1.2 var(--font-mono);
-  --track-label: 0.14em;
-  --type-label-sm: 500 10px/1.2 var(--font-mono);
-  --track-label-sm: 0.12em;
-  --type-data-xl: 600 64px/1 var(--font-sans);
-  --track-data: -0.03em;
-  --type-data: 600 28px/1.1 var(--font-sans);
+  --type-label: 600 12px/1.2 var(--font-display);
+  --track-label: 0.08em;
+  --type-label-sm: 600 11px/1.2 var(--font-display);
+  --track-label-sm: 0.08em;
+  --type-data-xl: 700 72px/0.9 var(--font-display);
+  --track-data: 0;
+  --type-data: 700 32px/1 var(--font-display);
   --type-mono-body: 400 13px/1.6 var(--font-mono);
 
   /* Spacing */
@@ -121,37 +168,37 @@
   --control-h-md: 40px;
   --control-h-lg: 52px;
 
-  /* Effects */
-  --radius-1: 4px;
+  /* Effects — sharp broadcast panels */
+  --radius-1: 3px;
   --radius-2: 6px;
   --radius-round: 999px;
-  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 48px rgba(232, 99, 44, 0.14);
+  --shadow-pop: 0 16px 44px rgba(0, 0, 0, 0.5), 0 2px 10px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 10px 30px rgba(0, 0, 0, 0.35);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --dur-fast: 120ms;
   --dur-med: 240ms;
   --blur-overlay: blur(8px);
 
   /* shadcn/ui compatibility — map Perceev tokens to shadcn HSL vars */
-  --background: 30 11% 5%;
-  --foreground: 38 43% 93%;
-  --card: 30 12% 8%;
-  --card-foreground: 38 43% 93%;
-  --popover: 30 12% 8%;
-  --popover-foreground: 38 43% 93%;
-  --primary: 17 76% 54%;
-  --primary-foreground: 30 36% 6%;
-  --secondary: 34 10% 14%;
-  --secondary-foreground: 38 43% 93%;
-  --muted: 34 10% 14%;
-  --muted-foreground: 36 14% 57%;
-  --accent-shadcn: 17 76% 54%;
-  --accent-shadcn-foreground: 30 36% 6%;
-  --destructive: 10 54% 63%;
-  --destructive-foreground: 30 36% 6%;
-  --border: 34 14% 13%;
-  --input: 34 14% 13%;
-  --ring: 17 76% 54%;
+  --background: 218 33% 6%;
+  --foreground: 214 21% 93%;
+  --card: 220 37% 10%;
+  --card-foreground: 214 21% 93%;
+  --popover: 220 37% 10%;
+  --popover-foreground: 214 21% 93%;
+  --primary: 42 87% 55%;
+  --primary-foreground: 43 86% 6%;
+  --secondary: 214 35% 13%;
+  --secondary-foreground: 214 21% 93%;
+  --muted: 214 35% 13%;
+  --muted-foreground: 213 17% 66%;
+  --accent-shadcn: 42 87% 55%;
+  --accent-shadcn-foreground: 43 86% 6%;
+  --destructive: 8 100% 64%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 213 32% 16%;
+  --input: 213 32% 16%;
+  --ring: 42 87% 55%;
   --radius: 0.25rem;
 
   color-scheme: dark;
@@ -187,9 +234,16 @@
   }
 }
 
+/* Selection — the declaration stamp */
 ::selection {
   background: var(--accent);
   color: var(--accent-fg);
+}
+
+/* Keyboard focus — visible on every interactive element */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 ::-webkit-scrollbar {
@@ -230,6 +284,38 @@
 }
 .animate-shimmer {
   animation: shimmer 1.8s infinite;
+}
+
+/* Legacy sweep hook — now a gold declaration bar behind key words */
+.mark-sweep {
+  background-image: linear-gradient(178deg, var(--accent), var(--accent));
+  background-repeat: no-repeat;
+  background-size: 100% 84%;
+  background-position: 0 62%;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0 0.09em;
+  margin: 0 -0.02em;
+  border-radius: 2px;
+  color: var(--accent-fg);
+}
+
+.mark-sweep.is-animated {
+  animation: mark-sweep-in 0.5s var(--ease-out) both;
+  animation-delay: var(--sweep-delay, 0.5s);
+}
+
+@keyframes mark-sweep-in {
+  from { background-size: 0% 84%; }
+  to { background-size: 100% 84%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark-sweep.is-animated,
+  .caret-blink,
+  .animate-shimmer {
+    animation: none;
+  }
 }
 
 @layer base {

@@ -32,9 +32,9 @@ const variants = {
 };
 
 const sizes = {
-  sm: { padding: "6px 14px", fontSize: "var(--type-label-sm)", lineHeight: "var(--control-h-sm)", minHeight: "var(--control-h-sm)" },
-  md: { padding: "8px 20px", fontSize: "var(--type-label)", lineHeight: "var(--control-h-md)", minHeight: "var(--control-h-md)" },
-  lg: { padding: "12px 28px", fontSize: "11px", lineHeight: "var(--control-h-lg)", minHeight: "var(--control-h-lg)" },
+  sm: { padding: "6px 14px", fontSize: "13px", lineHeight: "var(--control-h-sm)", minHeight: "var(--control-h-sm)" },
+  md: { padding: "8px 20px", fontSize: "15px", lineHeight: "var(--control-h-md)", minHeight: "var(--control-h-md)" },
+  lg: { padding: "12px 30px", fontSize: "17px", lineHeight: "var(--control-h-lg)", minHeight: "var(--control-h-lg)" },
 };
 
 export const Button = ({ variant = "primary", size = "md", disabled, className = "", style, children, ...props }) => {
@@ -47,14 +47,13 @@ export const Button = ({ variant = "primary", size = "md", disabled, className =
     justifyContent: "center",
     gap: "8px",
     borderRadius: "var(--radius-1)",
-    fontFamily: "var(--font-mono)",
-    fontWeight: 500,
+    fontFamily: "var(--font-display)",
+    fontWeight: 600,
     textTransform: "uppercase",
-    letterSpacing: "0.12em",
+    letterSpacing: "0.08em",
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.5 : 1,
     transition: "all var(--dur-fast) var(--ease-out)",
-    outline: "none",
     ...s,
     ...v.rest,
     ...(hover && !disabled ? v.hover : {}),
