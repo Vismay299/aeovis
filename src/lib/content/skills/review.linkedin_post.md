@@ -16,6 +16,14 @@ assume the hook is weak until it survives the 1.5-second test.
 
 {{brief}}
 
+## Agent configuration (score the draft against THIS format)
+
+{{agent}}
+
+## Format checklist for this agent (fold into format_checklist scoring)
+
+{{format_checklist}}
+
 ## Work order (hook thesis + post shape the draft was bound to)
 
 {{work_order}}

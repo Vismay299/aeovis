@@ -10,6 +10,20 @@ import {
 } from "../db/content.js";
 import { getScansForBrand } from "../db.js";
 import { HEALTHCARE_CXO_BRIEF } from "./briefs/healthcareCxo.js";
+import { defaultAgentForBase } from "./agents/model.js";
+import { crewMember } from "./agents/crew.js";
+import {
+  initTrace,
+  markWorking,
+  markDone,
+  markFailed,
+  bumpCycle,
+  summarizeCoordinate,
+  summarizeResearch,
+  summarizeBenchmark,
+  summarizeDraft,
+  summarizeReview,
+} from "./agents/trace.js";
 import { runCoordinate } from "./steps/coordinate.js";
 import { runResearch } from "./steps/research.js";
 import { runBenchmark } from "./steps/benchmark.js";
@@ -73,17 +87,34 @@ export async function resolveBrief(brand, input, deps = {}) {
   return seeded;
 }
 
+/** The agent config a job runs under: its snapshot, else the base default. */
+export function resolveAgent(job) {
+  if (job?.agent_snapshot && typeof job.agent_snapshot === "object") {
+    return job.agent_snapshot;
+  }
+  return defaultAgentForBase(job?.playbook || "geo_article");
+}
+
 export async function startContentJob(jobId, deps = {}) {
   const stats = { cost: 0, tokens: 0 };
+  const trace = initTrace();
 
   const update = deps.updateContentJob || updateContentJob;
+  // Every job update also flushes the live trace so the theater sees each
+  // specialist transition in real time.
+  const writeJob = (fields) => update(jobId, { ...fields, agent_trace: trace });
 
+  let jobRef = deps.job;
   try {
     const job = deps.job || (await getContentJob(jobId));
     if (!job) throw new Error(`content job ${jobId} not found`);
+    jobRef = job;
     const { brand, playbook, input } = job;
+    const agent = resolveAgent(job);
 
-    console.log(`[content-worker] Starting job ${jobId}: ${brand} / ${playbook}`);
+    console.log(
+      `[content-worker] Starting job ${jobId}: ${brand} / ${playbook} / agent="${agent.name}" format=${agent.format}`
+    );
 
     // Assemble the inherited context every step gets.
     const brief = await resolveBrief(brand, input, deps);
@@ -96,6 +127,7 @@ export async function startContentJob(jobId, deps = {}) {
     const ctx = {
       brand,
       playbook,
+      agent,
       input: input || {},
       brief,
       lessons,
@@ -104,22 +136,28 @@ export async function startContentJob(jobId, deps = {}) {
       critique: "",
     };
 
-    // 1. Coordinate
-    await update(jobId, { status: "coordinating", progress_pct: 8 });
+    // 1. Strategist (coordinate)
+    markWorking(trace, "coordinate", crewMember("coordinate").verb);
+    await writeJob({ status: "coordinating", progress_pct: 8 });
     ctx.workOrder = await runCoordinate(ctx, deps);
     assertUnderCostCap(stats, "coordinate");
+    markDone(trace, "coordinate", summarizeCoordinate(ctx.workOrder));
 
-    // 2. Research
-    await update(jobId, { status: "researching", progress_pct: 30 });
+    // 2. Researcher (research)
+    markWorking(trace, "research", crewMember("research").verb);
+    await writeJob({ status: "researching", progress_pct: 30 });
     ctx.researchPack = await runResearch(ctx, deps);
     assertUnderCostCap(stats, "research");
+    markDone(trace, "research", summarizeResearch(ctx.researchPack));
 
-    // 3. Benchmark
-    await update(jobId, { status: "benchmarking", progress_pct: 50 });
+    // 3. Analyst (benchmark)
+    markWorking(trace, "benchmark", crewMember("benchmark").verb);
+    await writeJob({ status: "benchmarking", progress_pct: 50 });
     ctx.benchmarkNotes = await runBenchmark(ctx, deps);
     assertUnderCostCap(stats, "benchmark");
+    markDone(trace, "benchmark", summarizeBenchmark(ctx.benchmarkNotes, playbook));
 
-    // 4. Draft → review loop (bounded)
+    // 4. Writer + Editor (draft → review loop, bounded)
     const revisions = [];
     let draft = null;
     let review = null;
@@ -128,19 +166,27 @@ export async function startContentJob(jobId, deps = {}) {
     while (cycles < MAX_DRAFT_REVIEW_CYCLES) {
       cycles += 1;
 
-      await update(jobId, {
-        status: "drafting",
-        progress_pct: cycles === 1 ? 62 : 84,
-      });
+      bumpCycle(trace, "draft", cycles);
+      markWorking(
+        trace,
+        "draft",
+        cycles === 1 ? crewMember("draft").verb : `Redrafting from the critique (pass ${cycles})`
+      );
+      await writeJob({ status: "drafting", progress_pct: cycles === 1 ? 62 : 84 });
       draft = await runDraft(ctx, deps);
       assertUnderCostCap(stats, "draft");
+      markDone(trace, "draft", summarizeDraft(draft, cycles));
 
-      await update(jobId, {
-        status: "reviewing",
-        progress_pct: cycles === 1 ? 78 : 92,
-      });
+      bumpCycle(trace, "review", cycles);
+      markWorking(
+        trace,
+        "review",
+        cycles === 1 ? crewMember("review").verb : `Re-scoring the redraft (pass ${cycles})`
+      );
+      await writeJob({ status: "reviewing", progress_pct: cycles === 1 ? 78 : 92 });
       review = await runReview({ ...ctx, draft }, deps);
       assertUnderCostCap(stats, "review");
+      markDone(trace, "review", summarizeReview(review));
 
       if (review.verdict === "pass") break;
 
@@ -176,6 +222,8 @@ export async function startContentJob(jobId, deps = {}) {
       job_id: jobId,
       brand,
       playbook,
+      agent_id: job.agent_id || null,
+      agent_snapshot: agent,
       title: draft.title,
       body_md: draft.body_md,
       research_pack: ctx.researchPack,
@@ -189,7 +237,7 @@ export async function startContentJob(jobId, deps = {}) {
       status: "awaiting_approval",
     });
 
-    await update(jobId, {
+    await writeJob({
       status: "awaiting_approval",
       progress_pct: 100,
       item_id: item.id,
@@ -205,11 +253,15 @@ export async function startContentJob(jobId, deps = {}) {
     return item;
   } catch (error) {
     console.error(`[content-worker] Job ${jobId} failed:`, error);
+    // Mark whichever specialist was mid-flight as failed for the theater.
+    const active = trace.find((t) => t.status === "working");
+    if (active) markFailed(trace, active.step, error.message || "failed");
     await update(jobId, {
       status: "failed",
       progress_pct: 100,
       error_message: error.message || "Unexpected content pipeline error.",
       cost_total: Math.round((stats.cost || 0) * 10000) / 10000,
+      agent_trace: trace,
     });
     return null;
   }
@@ -252,9 +304,12 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
     };
   delete benchmarkNotes.work_order;
 
+  const agent = item.agent_snapshot || defaultAgentForBase(playbook);
+
   const ctx = {
     brand,
     playbook,
+    agent,
     input: {},
     brief,
     lessons,

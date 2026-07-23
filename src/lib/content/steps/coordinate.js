@@ -3,6 +3,7 @@ import { validateWorkOrder } from "../schemas.js";
 import {
   callStepLlm,
   formatLessons,
+  formatAgentOverlay,
   normalizeScanRows,
   formatScanAnswers,
 } from "./shared.js";
@@ -58,6 +59,7 @@ export async function runCoordinate(ctx, deps = {}) {
   const prompt = renderStepPrompt("coordinate", ctx.playbook, {
     brand: ctx.brand,
     brief: ctx.brief,
+    agent: formatAgentOverlay(ctx.agent),
     lessons: formatLessons(ctx.lessons),
     input: ctx.input,
     scan_context: buildScanContext(ctx),

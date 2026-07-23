@@ -1,6 +1,6 @@
 import { renderStepPrompt } from "../skills/loader.js";
 import { validateDraft } from "../schemas.js";
-import { callStepLlm, formatLessons } from "./shared.js";
+import { callStepLlm, formatLessons, formatAgentOverlay } from "./shared.js";
 
 /**
  * Draft step: channel prompt pack + work order + research pack + lessons →
@@ -11,6 +11,7 @@ export async function runDraft(ctx, deps = {}) {
   const prompt = renderStepPrompt("draft", ctx.playbook, {
     brand: ctx.brand,
     brief: ctx.brief,
+    agent: formatAgentOverlay(ctx.agent),
     lessons: formatLessons(ctx.lessons),
     work_order: ctx.workOrder,
     research_pack: ctx.researchPack,

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { supabase } from "../db.js";
+import { builtinAgents } from "../content/agents/model.js";
 
 /**
  * DB helpers for the Agent Content OS (content_jobs, content_items,
@@ -15,6 +16,7 @@ global.memoryContentItems = global.memoryContentItems || new Map();
 global.memoryContentFeedback = global.memoryContentFeedback || new Map();
 global.memoryBrandBriefs = global.memoryBrandBriefs || new Map();
 global.memoryContentLessons = global.memoryContentLessons || new Map();
+global.memoryContentAgents = global.memoryContentAgents || new Map();
 
 /** Worker-active statuses. awaiting_approval and beyond are human-side. */
 export const CONTENT_JOB_RUNNING = [
@@ -32,7 +34,7 @@ const STALE_CONTENT_JOB_MS = 20 * 60 * 1000;
 // content_jobs
 // ---------------------------------------------------------------------------
 
-export async function createContentJob({ brand, playbook, input }) {
+export async function createContentJob({ brand, playbook, input, agent_id, agent_snapshot }) {
   const jobId = crypto.randomUUID();
   const job = {
     id: jobId,
@@ -44,6 +46,9 @@ export async function createContentJob({ brand, playbook, input }) {
     item_id: null,
     error_message: null,
     cost_total: 0,
+    agent_id: agent_id || null,
+    agent_snapshot: agent_snapshot || null,
+    agent_trace: [],
     created_at: new Date().toISOString(),
   };
 
@@ -214,6 +219,8 @@ export async function insertContentItem(item) {
     revision: item.revision || 0,
     revisions: item.revisions || [],
     target_queries: item.target_queries || [],
+    agent_id: item.agent_id || null,
+    agent_snapshot: item.agent_snapshot || null,
     status: item.status || "draft",
     created_at: now,
     updated_at: now,
@@ -498,4 +505,121 @@ export async function deactivateLessonByText(brand, playbook, lessonText) {
   const all = await listLessons(brand, playbook, { activeOnly: true });
   const match = all.find((l) => l.lesson.trim() === target);
   if (match) await setLessonActive(match.id, false);
+}
+
+// ---------------------------------------------------------------------------
+// content_agents (custom agents)
+// ---------------------------------------------------------------------------
+
+function agentBrandKey(brand) {
+  return String(brand || "").trim().toLowerCase();
+}
+
+/**
+ * List agents for a brand. Seeds the two built-in agents on first call for a
+ * brand that has none, so every brand starts with usable agents.
+ */
+export async function listAgents(brand, { seedIfEmpty = true } = {}) {
+  const key = agentBrandKey(brand);
+
+  const readMemory = () =>
+    Array.from(global.memoryContentAgents.values())
+      .filter((a) => a.brand.toLowerCase() === key)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  let agents;
+  if (!supabase) {
+    agents = readMemory();
+  } else {
+    try {
+      const { data, error } = await supabase
+        .from("content_agents")
+        .select("*")
+        .ilike("brand", key)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      agents = data || [];
+    } catch (err) {
+      console.warn("[content-db] listAgents failed, checking memory:", err.message);
+      agents = readMemory();
+    }
+  }
+
+  if (agents.length === 0 && seedIfEmpty && key) {
+    const seeded = [];
+    for (const a of builtinAgents()) {
+      seeded.push(await insertAgent(brand, a));
+    }
+    return seeded;
+  }
+  return agents;
+}
+
+export async function getAgent(id) {
+  if (!supabase || global.memoryContentAgents.has(id)) {
+    return global.memoryContentAgents.get(id) || null;
+  }
+  try {
+    const { data, error } = await supabase.from("content_agents").select("*").eq("id", id);
+    if (error) throw error;
+    return data?.[0] || null;
+  } catch (err) {
+    console.warn("[content-db] getAgent failed, checking memory:", err.message);
+    return global.memoryContentAgents.get(id) || null;
+  }
+}
+
+export async function insertAgent(brand, agent) {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const record = { id, brand, ...agent, created_at: now, updated_at: now };
+
+  if (!supabase) {
+    global.memoryContentAgents.set(id, record);
+    return record;
+  }
+  try {
+    const { data, error } = await supabase.from("content_agents").insert([record]).select();
+    if (error) throw error;
+    return data[0];
+  } catch (err) {
+    console.warn("[content-db] insertAgent failed, using memory:", err.message);
+    global.memoryContentAgents.set(id, record);
+    return record;
+  }
+}
+
+export async function updateAgent(id, updates) {
+  const withTs = { ...updates, updated_at: new Date().toISOString() };
+  const mem = global.memoryContentAgents.get(id);
+  if (mem) Object.assign(mem, withTs);
+  if (!supabase || global.memoryContentAgents.has(id)) return mem || null;
+  try {
+    const { data, error } = await supabase
+      .from("content_agents")
+      .update(withTs)
+      .eq("id", id)
+      .select();
+    if (error) throw error;
+    return data[0];
+  } catch (err) {
+    console.warn("[content-db] updateAgent failed:", err.message);
+    return mem || null;
+  }
+}
+
+export async function deleteAgent(id) {
+  if (global.memoryContentAgents.has(id)) {
+    global.memoryContentAgents.delete(id);
+    return true;
+  }
+  if (!supabase) return false;
+  try {
+    const { error } = await supabase.from("content_agents").delete().eq("id", id);
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.warn("[content-db] deleteAgent failed:", err.message);
+    return false;
+  }
 }

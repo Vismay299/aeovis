@@ -17,6 +17,14 @@ your default posture is "prove it", not "looks good".
 
 {{brief}}
 
+## Agent configuration (score the draft against THIS format, not a generic article)
+
+{{agent}}
+
+## Format checklist for this agent (fold into channel_checklist scoring)
+
+{{format_checklist}}
+
 ## Work order
 
 {{work_order}}

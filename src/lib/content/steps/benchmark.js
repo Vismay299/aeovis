@@ -2,6 +2,7 @@ import { loadSkill, renderStepPrompt } from "../skills/loader.js";
 import { validateBenchmarkNotes } from "../schemas.js";
 import {
   callStepLlm,
+  formatAgentOverlay,
   rowsForQueries,
   formatCitationsByEngine,
   formatScrapedPages,
@@ -38,6 +39,7 @@ export async function runBenchmark(ctx, deps = {}) {
   const prompt = renderStepPrompt("benchmark", ctx.playbook, {
     brand: ctx.brand,
     brief: ctx.brief,
+    agent: formatAgentOverlay(ctx.agent),
     work_order: ctx.workOrder,
     citations_by_engine: formatCitationsByEngine(rows),
     scraped_pages: formatScrapedPages(ctx.scrapedPages),

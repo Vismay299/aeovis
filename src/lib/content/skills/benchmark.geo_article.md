@@ -14,6 +14,10 @@ teardown, not vibes: classify formats, count the distribution, apply the
 decision table. Static best-practice rules are directional; what THIS query's
 citations reward is ground truth.
 
+## Agent configuration (the format directive must be compatible with this)
+
+{{agent}}
+
 ## Work order
 
 {{work_order}}

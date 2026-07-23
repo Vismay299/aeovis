@@ -307,6 +307,153 @@ test("reviseContentItem: human comment drives a redraft back to the queue", asyn
   assert.equal(final.rubric.revised_from_feedback, true);
 });
 
+test("custom agent: listicle format flows into prompts and the trace fills live", async () => {
+  const GEO_WORK_ORDER = {
+    angle: "Ranked diagnostics chains for corporates",
+    title_hint: "top diagnostics chains",
+    target_queries: ["best diagnostics chain for corporates india"],
+    fan_out: ["what to evaluate", "top chains", "pricing", "coverage"],
+    sections: [{ h2: "Which chain is best?", sub_query: "top chains", evidence_note: "table" }],
+    notes: "",
+  };
+  const GEO_DRAFT = {
+    title: "Top 7 Diagnostics Chains for Corporate Health Programs in India",
+    body_md: "## 1. Thyrocare\n" + "x ".repeat(900) + "\n## 2. Dr Lal PathLabs\nmore text here",
+    meta_description: "The 7 best diagnostics chains for corporate health checkups in India, ranked.",
+    levers_used: ["listicle"],
+  };
+  const GEO_REVIEW_PASS = {
+    scores: {
+      facts_vs_research: 0.9,
+      citation_validity: 0.85,
+      authority_specificity: 0.85,
+      brand_voice: 0.8,
+      channel_checklist: 0.9,
+      ymyl_compliance: 1.0,
+    },
+    verdict: "pass",
+    ymyl_violation: false,
+    violations: [],
+    critique: "",
+  };
+
+  const { llm, prompts } = makeFakeLlm([GEO_WORK_ORDER, RESEARCH_PACK, {
+    // benchmark (geo path is an LLM call)
+    format_distribution: { listicle: 70, comparison: 30 },
+    dominant_format: "listicle",
+    directive: "Build a ranked listicle.",
+    earned_placement: false,
+    engine_divergence: "none observed",
+    structural_notes: [],
+  }, GEO_DRAFT, GEO_REVIEW_PASS]);
+
+  const listicleAgent = {
+    name: "Listicle Writer",
+    emoji: "🔢",
+    base: "geo_article",
+    format: "listicle",
+    channel: "website",
+    length_hint: "800 words",
+    format_config: { items: 7, ranked: true },
+    design_rules: ["No fluff intros"],
+    custom_instructions: "End with a pricing caveat.",
+    rubric_emphasis: { authority_specificity: 1.5 },
+  };
+
+  const jobUpdates = [];
+  const items = [];
+  const deps = {
+    llm,
+    scrape: async () => "No website content available.",
+    job: {
+      id: "job-1",
+      brand: "TestDiag",
+      playbook: "geo_article",
+      status: "pending",
+      input: { type: "gap", query: "best diagnostics chain for corporates india" },
+      agent_id: "agent-1",
+      agent_snapshot: listicleAgent,
+    },
+    updateContentJob: async (jobId, updates) => {
+      jobUpdates.push({ jobId, ...updates });
+      return { id: jobId, ...updates };
+    },
+    insertContentItem: async (item) => {
+      const rec = { id: "item-1", ...item };
+      items.push(rec);
+      return rec;
+    },
+    listLessons: async () => [],
+    getScansForBrand: async () => [],
+    getBrandBrief: async () => null,
+    upsertBrandBrief: async () => ({}),
+  };
+
+  const item = await startContentJob("job-1", deps);
+  assert.ok(item);
+
+  // The listicle format directive reached the draft prompt.
+  const draftPrompt = prompts[3];
+  assert.ok(draftPrompt.includes("ranked listicle"), "format structure in draft prompt");
+  assert.ok(draftPrompt.includes("items=7"), "format config in draft prompt");
+  assert.ok(draftPrompt.includes("End with a pricing caveat"), "custom instructions in draft prompt");
+
+  // The agent snapshot is stamped on the item for provenance.
+  assert.equal(items[0].agent_snapshot.format, "listicle");
+  assert.equal(items[0].agent_id, "agent-1");
+
+  // The live trace was written and completed for every specialist.
+  const withTrace = jobUpdates.filter((u) => Array.isArray(u.agent_trace));
+  assert.ok(withTrace.length >= 5, "trace written on each step");
+  const finalTrace = withTrace[withTrace.length - 1].agent_trace;
+  assert.deepEqual(
+    finalTrace.map((t) => t.step),
+    ["coordinate", "research", "benchmark", "draft", "review"]
+  );
+  assert.ok(finalTrace.every((t) => t.status === "done"), "all specialists done");
+  assert.ok(finalTrace[0].summary.includes("Angle"), "strategist reported its summary");
+  assert.ok(/\d+ words/.test(finalTrace[3].summary), "writer reported word count");
+});
+
+test("failed job marks the mid-flight specialist as failed in the trace", async () => {
+  // research throws (scrape ok but llm returns invalid pack twice)
+  const { llm } = makeFakeLlm([
+    {
+      angle: "a",
+      title_hint: "t",
+      hook_thesis: "Home collection inverts margins",
+      post_shape: "data_point",
+      target_queries: [],
+      fan_out: [],
+      sections: [],
+    },
+    { sources: [] }, // invalid research pack (no sources)
+    { sources: [] }, // still invalid on retry
+  ]);
+  const jobUpdates = [];
+  const deps = {
+    llm,
+    scrape: async () => "No website content available.",
+    job: { id: "job-1", brand: "TestDiag", playbook: "linkedin_post", status: "pending", input: {} },
+    updateContentJob: async (jobId, updates) => {
+      jobUpdates.push({ jobId, ...updates });
+      return { id: jobId, ...updates };
+    },
+    insertContentItem: async (i) => ({ id: "item-1", ...i }),
+    listLessons: async () => [],
+    getScansForBrand: async () => [],
+    getBrandBrief: async () => null,
+    upsertBrandBrief: async () => ({}),
+  };
+
+  const item = await startContentJob("job-1", deps);
+  assert.equal(item, null);
+  const final = jobUpdates[jobUpdates.length - 1];
+  assert.equal(final.status, "failed");
+  const research = final.agent_trace.find((t) => t.step === "research");
+  assert.equal(research.status, "failed");
+});
+
 test("invalid step output: retried once, then the job fails with the step named", async () => {
   const { llm, prompts } = makeFakeLlm([
     { angle: "" }, // invalid work order

@@ -17,6 +17,10 @@ judged in 1.5 seconds on its first line — earn the pause.
 
 {{brief}}
 
+## Agent configuration — the OUTPUT FORMAT is BINDING (single post vs thread, etc.)
+
+{{agent}}
+
 ## Lessons from past human feedback (obey every one)
 
 {{lessons}}

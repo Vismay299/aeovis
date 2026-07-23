@@ -18,6 +18,10 @@ thesis a CXO would stop for.
 
 {{brief}}
 
+## Agent configuration (the operator you are executing — plan for its format)
+
+{{agent}}
+
 ## Lessons from past human feedback (obey every one)
 
 {{lessons}}

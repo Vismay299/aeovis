@@ -247,11 +247,38 @@ export function validateDraft(playbook, obj) {
 // review
 // ---------------------------------------------------------------------------
 
-export function validateReview(playbook, obj) {
+/**
+ * Apply an agent's rubric emphasis: multiply base weights by the per-dimension
+ * multiplier, then renormalize to sum 1 so the pass threshold stays comparable.
+ * Floors are intentionally NOT scaled — an agent can shift emphasis but can't
+ * lower a hard floor (e.g. facts_vs_research).
+ */
+export function applyRubricEmphasis(baseWeights, emphasis) {
+  if (!emphasis || typeof emphasis !== "object" || Object.keys(emphasis).length === 0) {
+    return baseWeights;
+  }
+  const scaled = {};
+  let sum = 0;
+  for (const [dim, w] of Object.entries(baseWeights)) {
+    const mult = Number(emphasis[dim]);
+    const val = w * (Number.isFinite(mult) && mult > 0 ? mult : 1);
+    scaled[dim] = val;
+    sum += val;
+  }
+  if (sum <= 0) return baseWeights;
+  const norm = {};
+  for (const [dim, w] of Object.entries(scaled)) {
+    norm[dim] = Math.round((w / sum) * 1000) / 1000;
+  }
+  return norm;
+}
+
+export function validateReview(playbook, obj, rubricEmphasis) {
   if (!obj || typeof obj !== "object") return fail(["review is not an object"]);
   const errors = [];
-  const weights = RUBRIC_WEIGHTS[playbook];
-  if (!weights) return fail([`unknown playbook "${playbook}"`]);
+  const baseWeights = RUBRIC_WEIGHTS[playbook];
+  if (!baseWeights) return fail([`unknown playbook "${playbook}"`]);
+  const weights = applyRubricEmphasis(baseWeights, rubricEmphasis);
 
   const scoresIn = obj.scores && typeof obj.scores === "object" ? obj.scores : {};
   const scores = {};

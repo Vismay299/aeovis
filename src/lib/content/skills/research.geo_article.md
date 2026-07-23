@@ -17,6 +17,10 @@ and the draft step is forbidden from claiming anything not in your pack.
 
 {{brief}}
 
+## Agent configuration (research must serve this format's evidence needs)
+
+{{agent}}
+
 ## Lessons from past human feedback (obey every one)
 
 {{lessons}}

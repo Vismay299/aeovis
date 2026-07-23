@@ -76,6 +76,7 @@ async function main() {
       "content_feedback",
       "brand_briefs",
       "content_lessons",
+      "content_agents",
     ];
     for (const table of tables) {
       const { rows } = await client.query(

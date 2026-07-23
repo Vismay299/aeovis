@@ -1,4 +1,5 @@
 import { contentLlmJson } from "../../llm.js";
+import { getFormat } from "../agents/formats.js";
 
 /**
  * Shared helpers for pipeline steps. Each step module exposes a
@@ -32,6 +33,43 @@ export async function callStepLlm({ step, prompt, validate, llm, stats, temperat
   );
   err.step = step;
   throw err;
+}
+
+/**
+ * Agent overlay — the block injected into EVERY step so the pipeline produces
+ * exactly the format, channel, and design the user configured. This is what
+ * makes an agent "a Listicle Writer" vs "a GEO article writer" without any
+ * code change: the format's structure directive + the agent's own rules.
+ */
+export function formatAgentOverlay(agent) {
+  if (!agent) return "(no custom agent — use the base playbook defaults)";
+  const fmt = getFormat(agent.format);
+  const lines = [];
+  lines.push(`AGENT: "${agent.name}" ${agent.emoji || ""}`.trim());
+  if (agent.description) lines.push(`Purpose: ${agent.description}`);
+  lines.push(`OUTPUT FORMAT — ${fmt.label} (this is BINDING, it overrides the base structure):`);
+  lines.push(fmt.structure);
+  if (agent.length_hint) lines.push(`Target length: ${agent.length_hint}.`);
+  if (agent.channel) lines.push(`Channel: ${agent.channel} (write for how content is consumed there).`);
+
+  // Format-specific config (e.g. listicle item count, thread post count).
+  const cfg = agent.format_config || {};
+  const cfgPairs = Object.entries(cfg).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  if (cfgPairs.length) {
+    lines.push(
+      "Format settings: " + cfgPairs.map(([k, v]) => `${k}=${v}`).join(", ") + " (obey these exactly)."
+    );
+  }
+
+  if ((agent.design_rules || []).length) {
+    lines.push("Design rules (in addition to the brand brief's tone rules):");
+    for (const r of agent.design_rules) lines.push(`- ${r}`);
+  }
+  if (agent.custom_instructions) {
+    lines.push("Custom instructions from the operator (obey these over defaults on conflict):");
+    lines.push(agent.custom_instructions);
+  }
+  return lines.join("\n");
 }
 
 /** Lessons list → the injected prompt block. Explicit "none" beats silence. */

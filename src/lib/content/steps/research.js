@@ -4,6 +4,7 @@ import { scrapeForSummary } from "../../firecrawl.js";
 import {
   callStepLlm,
   formatLessons,
+  formatAgentOverlay,
   rowsForQueries,
   formatScanAnswers,
   topCitedUrls,
@@ -55,6 +56,7 @@ export async function runResearch(ctx, deps = {}) {
   const prompt = renderStepPrompt("research", ctx.playbook, {
     brand: ctx.brand,
     brief: ctx.brief,
+    agent: formatAgentOverlay(ctx.agent),
     lessons: formatLessons(ctx.lessons),
     work_order: ctx.workOrder,
     scan_answers: scanAnswersBlock,

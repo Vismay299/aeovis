@@ -1,7 +1,8 @@
 import { renderStepPrompt } from "../skills/loader.js";
 import { validateReview } from "../schemas.js";
 import { isYmylBrief } from "../briefs/healthcareCxo.js";
-import { callStepLlm } from "./shared.js";
+import { getFormat } from "../agents/formats.js";
+import { callStepLlm, formatAgentOverlay } from "./shared.js";
 
 /**
  * Review step (master accuracy agent): rubric scoring against the research
@@ -11,10 +12,18 @@ import { callStepLlm } from "./shared.js";
  */
 export async function runReview(ctx, deps = {}) {
   const ymylActive = isYmylBrief(ctx.brief);
+  const fmt = getFormat(ctx.agent?.format);
+  const formatChecklist =
+    fmt.checklist && fmt.checklist.length
+      ? `This agent's OUTPUT FORMAT is "${fmt.label}". The channel_checklist/format_checklist dimension MUST verify:\n` +
+        fmt.checklist.map((c) => `- ${c}`).join("\n")
+      : "";
 
   const prompt = renderStepPrompt("review", ctx.playbook, {
     brand: ctx.brand,
     brief: ctx.brief,
+    agent: formatAgentOverlay(ctx.agent),
+    format_checklist: formatChecklist || "(no format-specific checklist)",
     work_order: ctx.workOrder,
     research_pack: ctx.researchPack,
     benchmark_notes: ctx.benchmarkNotes,
@@ -27,7 +36,7 @@ export async function runReview(ctx, deps = {}) {
   return callStepLlm({
     step: "review",
     prompt,
-    validate: (out) => validateReview(ctx.playbook, out),
+    validate: (out) => validateReview(ctx.playbook, out, ctx.agent?.rubric_emphasis),
     llm: deps.llm,
     stats: ctx.stats,
     temperature: 0.2,

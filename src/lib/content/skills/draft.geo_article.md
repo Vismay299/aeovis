@@ -17,6 +17,15 @@ they conflict (this query's citations are ground truth).
 
 {{brief}}
 
+## Agent configuration — the OUTPUT FORMAT here is BINDING and OVERRIDES the default article structure below when they differ
+
+{{agent}}
+
+When the agent's OUTPUT FORMAT is not a plain article (e.g. listicle, comparison,
+FAQ, how-to), build THAT structure. The GEO levers below still apply *within*
+that structure — answer-first passages, front-loaded strongest answer, tables
+where the format calls for them, cited stats — but the shape is the agent's.
+
 ## Lessons from past human feedback (obey every one)
 
 {{lessons}}

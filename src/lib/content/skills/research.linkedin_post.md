@@ -17,6 +17,10 @@ does not. Everything you emit carries a source URL.
 
 {{brief}}
 
+## Agent configuration (research must serve this format's evidence needs)
+
+{{agent}}
+
 ## Lessons from past human feedback (obey every one)
 
 {{lessons}}
