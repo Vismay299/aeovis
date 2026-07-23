@@ -30,6 +30,10 @@ where the format calls for them, cited stats — but the shape is the agent's.
 
 {{lessons}}
 
+## Knowledge blocks (ground truth + banned claims — these outrank everything except the human)
+
+{{knowledge}}
+
 ## Work order (angle, fan-out, section plan)
 
 {{work_order}}

@@ -19,11 +19,20 @@ export async function runReview(ctx, deps = {}) {
         fmt.checklist.map((c) => `- ${c}`).join("\n")
       : "";
 
+  const factCheckBlock = ctx.factCheck
+    ? `Independent fact-check ${ctx.factCheck.passed ? "PASSED" : "FAILED"} with ${ctx.factCheck.issues.length} issue(s):\n` +
+      ctx.factCheck.issues
+        .map((i) => `- [${i.kind}] "${i.claim}" — ${i.problem}`)
+        .join("\n")
+    : "(no independent fact-check block ran in this pipeline)";
+
   const prompt = renderStepPrompt("review", ctx.playbook, {
     brand: ctx.brand,
     brief: ctx.brief,
     agent: formatAgentOverlay(ctx.agent),
     format_checklist: formatChecklist || "(no format-specific checklist)",
+    knowledge: ctx.knowledge || "(no knowledge blocks configured)",
+    fact_check: factCheckBlock,
     work_order: ctx.workOrder,
     research_pack: ctx.researchPack,
     benchmark_notes: ctx.benchmarkNotes,

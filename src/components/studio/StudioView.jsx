@@ -24,6 +24,7 @@ import { NewContentForm } from "./NewContentForm";
 import { WeeklyReport } from "./WeeklyReport";
 import { AgentsPanel } from "./AgentsPanel";
 import { OpportunitiesPanel } from "./OpportunitiesPanel";
+import { KnowledgePanel } from "./KnowledgePanel";
 import { AgentTheater, PipelineStrip } from "./AgentTheater";
 
 const RUNNING_STATUSES = ["pending", "coordinating", "researching", "benchmarking", "drafting", "reviewing"];
@@ -267,6 +268,7 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
             { key: "queue", label: "Queue", count: awaitingCount || null, testId: "studio-tab-queue" },
             { key: "agents", label: "Agents", testId: "studio-tab-agents" },
             { key: "opportunities", label: "Opportunities", testId: "studio-tab-opportunities" },
+            { key: "knowledge", label: "Knowledge", testId: "studio-tab-knowledge" },
             { key: "report", label: "Report", testId: "studio-tab-report" },
             { key: "lessons", label: "Lessons", testId: "studio-tab-lessons" },
             { key: "brief", label: "Brand brief", testId: "studio-tab-brief" },
@@ -363,6 +365,12 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
 
         {tab === "opportunities" && (
           <OpportunitiesPanel brand={brand} scan={scan} agents={agents} onLaunched={launchToTheater} />
+        )}
+
+        {tab === "knowledge" && (
+          <div style={{ maxWidth: "860px" }}>
+            <KnowledgePanel brand={brand} />
+          </div>
         )}
 
         {tab === "report" && (

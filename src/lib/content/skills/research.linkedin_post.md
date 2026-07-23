@@ -25,6 +25,10 @@ does not. Everything you emit carries a source URL.
 
 {{lessons}}
 
+## Knowledge blocks (brand ground truth, pinned sources, banned claims)
+
+{{knowledge}}
+
 ## Work order (note `hook_thesis` and `notes` — they name the evidence needed)
 
 {{work_order}}

@@ -72,6 +72,33 @@ export function formatAgentOverlay(agent) {
   return lines.join("\n");
 }
 
+const KNOWLEDGE_TYPE_LABELS = {
+  url: "PINNED SOURCE (prefer citing from this)",
+  snippet: "BRAND GROUND TRUTH (facts that outrank model knowledge)",
+  banned_claims: "BANNED CLAIMS (never state these — hard rule)",
+  glossary: "TERMINOLOGY (use these terms exactly)",
+};
+
+/**
+ * Knowledge blocks → the injected prompt section. Order = precedence (the
+ * user drags to prioritize). Per-block and total caps keep prompts bounded.
+ */
+export function formatKnowledge(blocks, { perBlockChars = 2200, totalChars = 9000 } = {}) {
+  const active = (blocks || []).filter((b) => b && b.active !== false && (b.content || "").trim());
+  if (active.length === 0) return "(no knowledge blocks configured)";
+  const parts = [];
+  let used = 0;
+  for (const b of active) {
+    const label = KNOWLEDGE_TYPE_LABELS[b.type] || "NOTE";
+    const body = String(b.content).trim().slice(0, perBlockChars);
+    const chunk = `### ${label}: ${b.title}${b.source_url ? `\nSource: ${b.source_url}` : ""}\n${body}`;
+    if (used + chunk.length > totalChars) break;
+    parts.push(chunk);
+    used += chunk.length;
+  }
+  return parts.join("\n\n");
+}
+
 /** Lessons list → the injected prompt block. Explicit "none" beats silence. */
 export function formatLessons(lessons) {
   const list = (lessons || []).map((l) => (typeof l === "string" ? l : l.lesson)).filter(Boolean);

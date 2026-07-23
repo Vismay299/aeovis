@@ -339,6 +339,39 @@ export function validateReview(playbook, obj, rubricEmphasis) {
 }
 
 // ---------------------------------------------------------------------------
+// fact_check
+// ---------------------------------------------------------------------------
+
+const FACT_CHECK_KINDS = ["fabricated", "overstated", "banned", "unverifiable"];
+
+export function validateFactCheck(obj) {
+  if (!obj || typeof obj !== "object") return fail(["fact_check output is not an object"]);
+  const errors = [];
+  if (typeof obj.passed !== "boolean") errors.push("passed: required boolean");
+
+  const issues = (Array.isArray(obj.issues) ? obj.issues : [])
+    .filter((i) => i && isNonEmptyString(i.claim))
+    .map((i) => ({
+      claim: i.claim.trim(),
+      problem: isNonEmptyString(i.problem) ? i.problem.trim() : "",
+      kind: FACT_CHECK_KINDS.includes(i.kind) ? i.kind : "unverifiable",
+    }));
+
+  if (errors.length) return fail(errors);
+
+  // Code owns the pass rule: fabricated or banned issues always fail,
+  // whatever the model claimed.
+  const hardFail = issues.some((i) => i.kind === "fabricated" || i.kind === "banned");
+  const passed = obj.passed === true && !hardFail;
+
+  return pass({
+    passed,
+    issues,
+    critique: isNonEmptyString(obj.critique) ? obj.critique.trim() : "",
+  });
+}
+
+// ---------------------------------------------------------------------------
 // learn → lessons
 // ---------------------------------------------------------------------------
 

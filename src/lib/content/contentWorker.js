@@ -12,6 +12,7 @@ import { getScansForBrand } from "../db.js";
 import { HEALTHCARE_CXO_BRIEF } from "./briefs/healthcareCxo.js";
 import { defaultAgentForBase } from "./agents/model.js";
 import { crewMember } from "./agents/crew.js";
+import { getBlock, resolvePipeline } from "./agents/blocks.js";
 import {
   initTrace,
   markWorking,
@@ -23,12 +24,18 @@ import {
   summarizeBenchmark,
   summarizeDraft,
   summarizeReview,
+  summarizeTransform,
+  summarizeFactCheck,
 } from "./agents/trace.js";
 import { runCoordinate } from "./steps/coordinate.js";
 import { runResearch } from "./steps/research.js";
 import { runBenchmark } from "./steps/benchmark.js";
 import { runDraft } from "./steps/draft.js";
 import { runReview } from "./steps/review.js";
+import { runTransform } from "./steps/transform.js";
+import { runFactCheck } from "./steps/factCheck.js";
+import { formatKnowledge } from "./steps/shared.js";
+import { listKnowledgeBlocks } from "../db/knowledge.js";
 
 /**
  * Content-pipeline background worker. Identical shape to scanWorker.js:
@@ -95,25 +102,42 @@ export function resolveAgent(job) {
   return defaultAgentForBase(job?.playbook || "geo_article");
 }
 
+/** Job-status string for a block (the coarse status the queue UI shows). */
+function statusForBlock(slug) {
+  const map = {
+    coordinate: "coordinating",
+    research: "researching",
+    benchmark: "benchmarking",
+    draft: "drafting",
+    review: "reviewing",
+    fact_check: "reviewing",
+  };
+  if (map[slug]) return map[slug];
+  const kind = getBlock(slug)?.kind;
+  return kind === "transform" ? "drafting" : "reviewing";
+}
+
 export async function startContentJob(jobId, deps = {}) {
   const stats = { cost: 0, tokens: 0 };
-  const trace = initTrace();
 
   const update = deps.updateContentJob || updateContentJob;
+
+  let trace = initTrace();
   // Every job update also flushes the live trace so the theater sees each
   // specialist transition in real time.
   const writeJob = (fields) => update(jobId, { ...fields, agent_trace: trace });
 
-  let jobRef = deps.job;
   try {
     const job = deps.job || (await getContentJob(jobId));
     if (!job) throw new Error(`content job ${jobId} not found`);
-    jobRef = job;
     const { brand, playbook, input } = job;
     const agent = resolveAgent(job);
+    const pipeline = resolvePipeline(agent);
+    trace = initTrace(pipeline);
 
     console.log(
-      `[content-worker] Starting job ${jobId}: ${brand} / ${playbook} / agent="${agent.name}" format=${agent.format}`
+      `[content-worker] Starting job ${jobId}: ${brand} / ${playbook} / agent="${agent.name}" ` +
+        `format=${agent.format} pipeline=[${pipeline.join(" → ")}]`
     );
 
     // Assemble the inherited context every step gets.
@@ -123,6 +147,9 @@ export async function startContentJob(jobId, deps = {}) {
     });
     const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
     const scan = scans?.[0] || null;
+    const knowledgeBlocks = await (deps.listKnowledgeBlocks || listKnowledgeBlocks)(brand, {
+      activeOnly: true,
+    });
 
     const ctx = {
       brand,
@@ -134,33 +161,45 @@ export async function startContentJob(jobId, deps = {}) {
       scan,
       stats,
       critique: "",
+      knowledge: formatKnowledge(knowledgeBlocks),
     };
 
-    // 1. Strategist (coordinate)
-    markWorking(trace, "coordinate", crewMember("coordinate").verb);
-    await writeJob({ status: "coordinating", progress_pct: 8 });
-    ctx.workOrder = await runCoordinate(ctx, deps);
-    assertUnderCostCap(stats, "coordinate");
-    markDone(trace, "coordinate", summarizeCoordinate(ctx.workOrder));
+    // Progress: distribute 8→92% across the pipeline's blocks.
+    const pctFor = (idx) => 8 + Math.round((idx / pipeline.length) * 84);
 
-    // 2. Researcher (research)
-    markWorking(trace, "research", crewMember("research").verb);
-    await writeJob({ status: "researching", progress_pct: 30 });
-    ctx.researchPack = await runResearch(ctx, deps);
-    assertUnderCostCap(stats, "research");
-    markDone(trace, "research", summarizeResearch(ctx.researchPack));
+    // --- Phase A: context blocks (everything before the Writer) ---
+    const draftIdx = pipeline.indexOf("draft");
+    for (let i = 0; i < draftIdx; i++) {
+      const slug = pipeline[i];
+      markWorking(trace, slug);
+      await writeJob({ status: statusForBlock(slug), progress_pct: pctFor(i) });
 
-    // 3. Analyst (benchmark)
-    markWorking(trace, "benchmark", crewMember("benchmark").verb);
-    await writeJob({ status: "benchmarking", progress_pct: 50 });
-    ctx.benchmarkNotes = await runBenchmark(ctx, deps);
-    assertUnderCostCap(stats, "benchmark");
-    markDone(trace, "benchmark", summarizeBenchmark(ctx.benchmarkNotes, playbook));
+      if (slug === "coordinate") {
+        ctx.workOrder = await runCoordinate(ctx, deps);
+        markDone(trace, slug, summarizeCoordinate(ctx.workOrder));
+      } else if (slug === "research") {
+        ctx.researchPack = await runResearch(ctx, deps);
+        markDone(trace, slug, summarizeResearch(ctx.researchPack));
+      } else if (slug === "benchmark") {
+        ctx.benchmarkNotes = await runBenchmark(ctx, deps);
+        markDone(trace, slug, summarizeBenchmark(ctx.benchmarkNotes, playbook));
+      }
+      assertUnderCostCap(stats, slug);
+    }
 
-    // 4. Writer + Editor (draft → review loop, bounded)
+    // Removed context blocks leave honest holes the prompts flag themselves.
+    if (!ctx.researchPack) {
+      ctx.researchPack = { sources: [], stats: [], quotes: [], paa: [], angles: [], unsupported_subqueries: [] };
+    }
+    if (!ctx.benchmarkNotes) ctx.benchmarkNotes = { directive: "(no benchmark block in this pipeline)" };
+
+    // --- Phase B: Writer → transforms → checks → Editor (bounded loop) ---
+    // Post-draft blocks between the Writer and the Editor:
+    const midBlocks = pipeline.slice(draftIdx + 1, pipeline.length - 1);
     const revisions = [];
     let draft = null;
     let review = null;
+    let factCheck = null;
     let cycles = 0;
 
     while (cycles < MAX_DRAFT_REVIEW_CYCLES) {
@@ -172,10 +211,34 @@ export async function startContentJob(jobId, deps = {}) {
         "draft",
         cycles === 1 ? crewMember("draft").verb : `Redrafting from the critique (pass ${cycles})`
       );
-      await writeJob({ status: "drafting", progress_pct: cycles === 1 ? 62 : 84 });
+      await writeJob({ status: "drafting", progress_pct: cycles === 1 ? pctFor(draftIdx) : 84 });
       draft = await runDraft(ctx, deps);
       assertUnderCostCap(stats, "draft");
       markDone(trace, "draft", summarizeDraft(draft, cycles));
+      ctx.draft = draft;
+
+      // Transforms + fact-check run on the FIRST pass only; a revision cycle
+      // goes straight back to the Editor (cost-bounded, documented behavior).
+      if (cycles === 1) {
+        for (let m = 0; m < midBlocks.length; m++) {
+          const slug = midBlocks[m];
+          const block = getBlock(slug);
+          markWorking(trace, slug);
+          await writeJob({ status: statusForBlock(slug), progress_pct: pctFor(draftIdx + 1 + m) });
+
+          if (block.kind === "transform") {
+            draft = await runTransform(ctx, slug, deps);
+            ctx.draft = draft;
+            markDone(trace, slug, summarizeTransform(block, draft));
+          } else if (slug === "fact_check") {
+            factCheck = await runFactCheck(ctx, deps);
+            markDone(trace, slug, summarizeFactCheck(factCheck));
+            // The Editor sees the fact-checker's findings.
+            ctx.factCheck = factCheck;
+          }
+          assertUnderCostCap(stats, slug);
+        }
+      }
 
       bumpCycle(trace, "review", cycles);
       markWorking(
@@ -183,7 +246,7 @@ export async function startContentJob(jobId, deps = {}) {
         "review",
         cycles === 1 ? crewMember("review").verb : `Re-scoring the redraft (pass ${cycles})`
       );
-      await writeJob({ status: "reviewing", progress_pct: cycles === 1 ? 78 : 92 });
+      await writeJob({ status: "reviewing", progress_pct: cycles === 1 ? pctFor(pipeline.length - 1) : 92 });
       review = await runReview({ ...ctx, draft }, deps);
       assertUnderCostCap(stats, "review");
       markDone(trace, "review", summarizeReview(review));
@@ -210,9 +273,19 @@ export async function startContentJob(jobId, deps = {}) {
       }
     }
 
-    const belowThreshold = review.verdict !== "pass";
+    // Fold independent fact-check findings into the rubric so the human sees
+    // them alongside the Editor's violations.
+    const factCheckViolations = (factCheck?.issues || []).map((i) => ({
+      rule: `fact_check:${i.kind}`,
+      detail: `"${i.claim}" — ${i.problem}`,
+      ymyl: false,
+    }));
+
+    const belowThreshold = review.verdict !== "pass" || factCheck?.passed === false;
     const rubric = {
       ...review,
+      violations: [...(review.violations || []), ...factCheckViolations],
+      fact_check: factCheck ? { passed: factCheck.passed, issue_count: factCheck.issues.length } : undefined,
       below_threshold: belowThreshold,
       cycles,
     };
@@ -305,6 +378,9 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
   delete benchmarkNotes.work_order;
 
   const agent = item.agent_snapshot || defaultAgentForBase(playbook);
+  const knowledgeBlocks = await (deps.listKnowledgeBlocks || listKnowledgeBlocks)(brand, {
+    activeOnly: true,
+  });
 
   const ctx = {
     brand,
@@ -315,6 +391,7 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
     lessons,
     scan: scans?.[0] || null,
     stats,
+    knowledge: formatKnowledge(knowledgeBlocks),
     workOrder,
     researchPack: item.research_pack,
     benchmarkNotes,

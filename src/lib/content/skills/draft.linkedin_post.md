@@ -25,6 +25,10 @@ judged in 1.5 seconds on its first line — earn the pause.
 
 {{lessons}}
 
+## Knowledge blocks (ground truth + banned claims — these outrank everything except the human)
+
+{{knowledge}}
+
 ## Work order (hook thesis + post shape are BINDING)
 
 {{work_order}}

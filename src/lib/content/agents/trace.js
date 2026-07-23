@@ -1,4 +1,5 @@
-import { CREW, crewMember } from "./crew.js";
+import { crewMember } from "./crew.js";
+import { getBlock, DEFAULT_PIPELINES } from "./blocks.js";
 
 /**
  * Live agent trace — the data behind the theater. The worker maintains one
@@ -8,20 +9,27 @@ import { CREW, crewMember } from "./crew.js";
  * one-line summary of what it produced.
  */
 
-/** Fresh trace: all five specialists pending, in pipeline order. */
-export function initTrace() {
-  return CREW.map((c) => ({
-    step: c.step,
-    name: c.name,
-    emoji: c.emoji,
-    role: c.role,
-    status: "pending",
-    activity: "",
-    summary: "",
-    cycle: 0,
-    started_at: null,
-    finished_at: null,
-  }));
+/**
+ * Fresh trace for a pipeline (defaults to the classic five-specialist crew).
+ * Entries are built from the block registry, so custom crews (translator,
+ * fact-checker, …) appear in the theater with no UI changes.
+ */
+export function initTrace(pipeline = DEFAULT_PIPELINES.geo_article) {
+  return pipeline.map((slug) => {
+    const b = getBlock(slug) || { name: slug, emoji: "🤖", role: slug };
+    return {
+      step: slug,
+      name: b.name,
+      emoji: b.emoji,
+      role: b.role,
+      status: "pending",
+      activity: "",
+      summary: "",
+      cycle: 0,
+      started_at: null,
+      finished_at: null,
+    };
+  });
 }
 
 function entry(trace, step) {
@@ -32,7 +40,7 @@ export function markWorking(trace, step, activity, nowIso) {
   const e = entry(trace, step);
   if (!e) return trace;
   e.status = "working";
-  e.activity = activity || crewMember(step).verb;
+  e.activity = activity || getBlock(step)?.verb || crewMember(step).verb;
   if (!e.started_at) e.started_at = nowIso || new Date().toISOString();
   return trace;
 }
@@ -98,6 +106,21 @@ export function summarizeDraft(draft, cycle) {
   const words = String(draft?.body_md || "").trim().split(/\s+/).filter(Boolean).length;
   const rev = cycle > 1 ? ` (redraft ${cycle})` : "";
   return `"${(draft?.title || "untitled").slice(0, 60)}" — ${words} words${rev}`;
+}
+
+export function summarizeTransform(block, draft) {
+  const words = String(draft?.body_md || "").trim().split(/\s+/).filter(Boolean).length;
+  return `${block?.name || "Transform"} applied — ${words} words`;
+}
+
+export function summarizeFactCheck(fc) {
+  if (!fc) return "no result";
+  if (fc.passed && fc.issues.length === 0) return "Every claim traces to a source";
+  const hard = fc.issues.filter((i) => i.kind === "fabricated" || i.kind === "banned").length;
+  const bits = [`${fc.issues.length} ${fc.issues.length === 1 ? "issue" : "issues"}`];
+  if (hard) bits.push(`${hard} hard (fabricated/banned)`);
+  bits.push(fc.passed ? "passed" : "FAILED");
+  return bits.join(", ");
 }
 
 export function summarizeReview(review) {

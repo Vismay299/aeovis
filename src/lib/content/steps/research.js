@@ -58,6 +58,7 @@ export async function runResearch(ctx, deps = {}) {
     brief: ctx.brief,
     agent: formatAgentOverlay(ctx.agent),
     lessons: formatLessons(ctx.lessons),
+    knowledge: ctx.knowledge || "(no knowledge blocks configured)",
     work_order: ctx.workOrder,
     scan_answers: scanAnswersBlock,
     scraped_pages: formatScrapedPages(scraped),

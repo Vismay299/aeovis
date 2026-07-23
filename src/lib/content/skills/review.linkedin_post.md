@@ -24,6 +24,14 @@ assume the hook is weak until it survives the 1.5-second test.
 
 {{format_checklist}}
 
+## Knowledge blocks (check the draft against banned claims + ground truth)
+
+{{knowledge}}
+
+## Independent fact-check findings (weigh these in facts_vs_research)
+
+{{fact_check}}
+
 ## Work order (hook thesis + post shape the draft was bound to)
 
 {{work_order}}

@@ -7,6 +7,7 @@ import { Badge } from "@/components/perceev/Badge";
 import { Button } from "@/components/perceev/Button";
 import { Input } from "@/components/perceev/Input";
 import { Select } from "@/components/perceev/Select";
+import { CrewCanvas } from "./CrewCanvas";
 
 const labelStyle = {
   display: "block",
@@ -57,7 +58,7 @@ const EMPHASIS_DIMS = {
  * asks for: what (format), where (channel), how (length, design rules, custom
  * instructions, format config), and focus (rubric emphasis).
  */
-export function AgentBuilder({ brand, formats, agent, onSaved, onCancel, onDeleted }) {
+export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, onSaved, onCancel, onDeleted }) {
   const [form, setForm] = useState(() => ({
     name: agent?.name || "",
     emoji: agent?.emoji || "🤖",
@@ -69,6 +70,8 @@ export function AgentBuilder({ brand, formats, agent, onSaved, onCancel, onDelet
     design_rules: agent?.design_rules || [],
     custom_instructions: agent?.custom_instructions || "",
     rubric_emphasis: agent?.rubric_emphasis || {},
+    pipeline: agent?.pipeline || null,
+    block_config: agent?.block_config || {},
   }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -238,6 +241,15 @@ export function AgentBuilder({ brand, formats, agent, onSaved, onCancel, onDelet
             ))}
           </div>
         )}
+
+        {/* The crew — composable pipeline */}
+        <CrewCanvas
+          blocks={blocks}
+          pipeline={form.pipeline || defaultPipelines?.[base] || ["coordinate", "research", "benchmark", "draft", "review"]}
+          blockConfig={form.block_config}
+          onChange={(pipeline) => set("pipeline", pipeline)}
+          onConfigChange={(cfg) => set("block_config", cfg)}
+        />
 
         {/* Where + length */}
         <div style={{ display: "flex", gap: "var(--space-4)", flexWrap: "wrap" }}>

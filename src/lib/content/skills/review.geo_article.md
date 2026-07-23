@@ -25,6 +25,14 @@ your default posture is "prove it", not "looks good".
 
 {{format_checklist}}
 
+## Knowledge blocks (check the draft against banned claims + ground truth)
+
+{{knowledge}}
+
+## Independent fact-check findings (weigh these in facts_vs_research)
+
+{{fact_check}}
+
 ## Work order
 
 {{work_order}}

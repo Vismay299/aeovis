@@ -13,6 +13,7 @@ export async function runDraft(ctx, deps = {}) {
     brief: ctx.brief,
     agent: formatAgentOverlay(ctx.agent),
     lessons: formatLessons(ctx.lessons),
+    knowledge: ctx.knowledge || "(no knowledge blocks configured)",
     work_order: ctx.workOrder,
     research_pack: ctx.researchPack,
     benchmark_notes: ctx.benchmarkNotes,

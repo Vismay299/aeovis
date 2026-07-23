@@ -3,6 +3,7 @@ import { listAgents, insertAgent } from "@/lib/db/content";
 import { normalizeAgent } from "@/lib/content/agents/model";
 import { FORMATS } from "@/lib/content/agents/formats";
 import { CREW } from "@/lib/content/agents/crew";
+import { BLOCKS, DEFAULT_PIPELINES } from "@/lib/content/agents/blocks";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -30,8 +31,20 @@ export async function GET(request) {
       config_schema: f.config_schema || null,
     }));
 
+    const blocks = Object.values(BLOCKS).map((b) => ({
+      slug: b.slug,
+      name: b.name,
+      emoji: b.emoji,
+      role: b.role,
+      kind: b.kind,
+      verb: b.verb,
+      blurb: b.blurb,
+      locked: b.locked === true,
+      config_schema: b.config_schema || null,
+    }));
+
     return NextResponse.json(
-      { agents, formats, crew: CREW },
+      { agents, formats, crew: CREW, blocks, default_pipelines: DEFAULT_PIPELINES },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {

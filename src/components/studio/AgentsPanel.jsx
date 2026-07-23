@@ -34,6 +34,7 @@ function AgentCard({ agent, onEdit, onRun }) {
           <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
             <Badge variant="neutral">{agent.format}</Badge>
             {agent.channel && <Badge variant="muted">→ {agent.channel}</Badge>}
+            {agent.pipeline && <Badge variant="accent">custom crew · {agent.pipeline.length}</Badge>}
           </div>
           {agent.description && (
             <p style={{ fontSize: "12px", color: "var(--text-2)", marginTop: "var(--space-2)", lineHeight: 1.5 }}>{agent.description}</p>
@@ -59,6 +60,8 @@ function AgentCard({ agent, onEdit, onRun }) {
 export function AgentsPanel({ brand, onRun }) {
   const [agents, setAgents] = useState(null);
   const [formats, setFormats] = useState([]);
+  const [blocks, setBlocks] = useState([]);
+  const [defaultPipelines, setDefaultPipelines] = useState(null);
   const [editing, setEditing] = useState(null); // agent object, or {} for new
   const [error, setError] = useState(null);
 
@@ -69,6 +72,8 @@ export function AgentsPanel({ brand, onRun }) {
       const data = await res.json();
       setAgents(data.agents || []);
       setFormats(data.formats || []);
+      setBlocks(data.blocks || []);
+      setDefaultPipelines(data.default_pipelines || null);
     } catch (e) {
       setError(e.message);
       setAgents([]);
@@ -84,6 +89,8 @@ export function AgentsPanel({ brand, onRun }) {
       <AgentBuilder
         brand={brand}
         formats={formats}
+        blocks={blocks}
+        defaultPipelines={defaultPipelines}
         agent={editing.id ? editing : null}
         onCancel={() => setEditing(null)}
         onSaved={() => {

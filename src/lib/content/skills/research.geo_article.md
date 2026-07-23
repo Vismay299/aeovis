@@ -25,6 +25,10 @@ and the draft step is forbidden from claiming anything not in your pack.
 
 {{lessons}}
 
+## Knowledge blocks (brand ground truth, pinned sources, banned claims)
+
+{{knowledge}}
+
 ## Work order
 
 {{work_order}}

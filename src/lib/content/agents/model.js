@@ -1,4 +1,5 @@
 import { FORMAT_KEYS, getFormat, baseForFormat } from "./formats.js";
+import { validatePipeline } from "./blocks.js";
 
 /**
  * Agent model — validation, normalization, and built-in seeds.
@@ -69,6 +70,19 @@ export function normalizeAgent(input, brand) {
   const formatConfig =
     input?.format_config && typeof input.format_config === "object" ? input.format_config : {};
 
+  // Custom crew pipeline (Crew Canvas). Invalid pipelines are a hard error so
+  // the builder surfaces the exact rule that was broken.
+  let pipeline = null;
+  if (input?.pipeline != null) {
+    const v = validatePipeline(input.pipeline);
+    if (!v.ok) errors.push(...v.errors);
+    else pipeline = v.value;
+  }
+
+  // Per-block config (e.g. translate → { language: "Hindi" }).
+  const blockConfig =
+    input?.block_config && typeof input.block_config === "object" ? input.block_config : {};
+
   const agent = {
     name,
     slug: input?.slug ? slugify(input.slug) : slugify(name),
@@ -84,6 +98,8 @@ export function normalizeAgent(input, brand) {
     custom_instructions: String(input?.custom_instructions || "").trim().slice(0, 1200),
     rubric_emphasis: emphasis,
     targeting,
+    pipeline,
+    block_config: blockConfig,
     is_builtin: input?.is_builtin === true,
     active: input?.active !== false,
   };
