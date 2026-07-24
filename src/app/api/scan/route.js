@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createScanJob, hasActiveScanForBrand } from "@/lib/db";
-import { startScanJob } from "@/lib/workers/scanWorker";
+import { runScanChunk } from "@/lib/workers/scanWorker";
+
+// A chunk can run for up to ~150s (CHUNK_TIME_BUDGET_MS in scanWorker.js)
+// plus finalize; give the fire-and-forget first chunk kicked off below room
+// to make real progress before the platform would otherwise cut it off.
+export const maxDuration = 300;
 
 export async function POST(request) {
   try {
@@ -23,8 +28,10 @@ export async function POST(request) {
     // Enqueue the scan job
     const job = await createScanJob({ brand, url, industry, competitors });
 
-    // Trigger background worker asynchronously (non-blocking)
-    startScanJob(job.id, brand, url, industry, competitors).catch(err => {
+    // Trigger the first chunk asynchronously (non-blocking). runScanChunk
+    // resumes/advances by job id alone — sourcing, probing, and finalize are
+    // all driven off the job row + checkpoint, not these function args.
+    runScanChunk(job.id).catch(err => {
       console.error(`[worker-trigger] Error in async background scan job ${job.id}:`, err);
     });
 

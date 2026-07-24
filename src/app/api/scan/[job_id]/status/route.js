@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getScanJob } from "@/lib/db";
+import { runScanChunk, shouldRescueJob } from "@/lib/workers/scanWorker";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -11,9 +12,39 @@ export async function GET(request, { params }) {
       return NextResponse.json({ detail: "Job ID is required." }, { status: 400 });
     }
 
-    const job = await getScanJob(job_id);
+    let job;
+    try {
+      job = await getScanJob(job_id);
+    } catch (error) {
+      // Transient DB read failure. The client (services/api.js) tolerates up
+      // to 5 CONSECUTIVE poll errors before giving up on an otherwise-healthy
+      // multi-minute scan, but a hard 500 here would burn one of those for
+      // what's often a one-tick blip. Returning a same-shape "working" status
+      // instead keeps the poll loop alive for the next tick (2s later) to
+      // retry the read; if the DB is genuinely down, every subsequent tick
+      // fails this same read and the client's own timeout still bounds how
+      // long a user waits. Chosen deliberately over a 503 — documented here
+      // per P0.2's "your call" note.
+      console.error(`Transient error reading job ${job_id}:`, error);
+      return NextResponse.json(
+        { status: "working", progress_pct: null, transient_error: true },
+        { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+      );
+    }
+
     if (!job) {
       return NextResponse.json({ detail: "Job not found." }, { status: 404 });
+    }
+
+    // Poll-driven rescue (P0.2): this route is already polled every ~2s by
+    // the client, so piggyback the staleness check here instead of relying
+    // solely on the cron sweep — a frozen/dropped chunk resumes within one
+    // poll tick instead of waiting for the next cron interval. Fire-and-forget:
+    // the status response must not wait on the rescued chunk to finish.
+    if (shouldRescueJob(job)) {
+      runScanChunk(job.id).catch((err) => {
+        console.error(`[status-rescue] Failed to resume job ${job.id}:`, err);
+      });
     }
 
     return NextResponse.json(

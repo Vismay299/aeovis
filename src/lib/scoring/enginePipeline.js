@@ -3,7 +3,7 @@ import { probeChatGpt, isChatGptConfigured } from "../engines/openai.js";
 import { probePerplexity, isPerplexityConfigured } from "../engines/perplexity.js";
 import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
-import { detectMention } from "./judge.js";
+import { detectMention, judgeBrandsSymmetric } from "./judge.js";
 import { extractBrandDomain } from "./citations.js";
 import {
   AIO_CONCURRENCY,
@@ -15,7 +15,7 @@ import {
 const CHATGPT_CONCURRENCY = 4;
 const PERPLEXITY_CONCURRENCY = 4;
 
-function domainMatches(candidateDomain, target) {
+export function domainMatches(candidateDomain, target) {
   if (!candidateDomain || !target) return false;
   return candidateDomain === target || candidateDomain.endsWith("." + target);
 }
@@ -42,6 +42,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     visible: false,
     competitors_found_in_text: [],
     competitors_cited: [],
+    brands: [], // P1.2 — symmetric self+rival mention/position/sentiment (populated below once there's text to judge)
     error: null,
     cost: 0,
   };
@@ -81,6 +82,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
       if (hasText) {
         result.brand_mentioned_in_text = detectMention(text, brandAliases);
         result.competitors_found_in_text = findCompetitorsInText(text, competitors);
+        result.brands = judgeBrandsSymmetric(text, buildTrackedBrandRoster(brand, brandAliases, competitors));
       }
 
       if (brandDomain) {
@@ -125,6 +127,7 @@ async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, 
     visible: false,
     competitors_found_in_text: [],
     competitors_cited: [],
+    brands: [], // P1.2 — see probeAio's field of the same name
     error: null,
     cost: 0,
   };
@@ -153,6 +156,7 @@ async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, 
   if (result.text) {
     result.brand_mentioned_in_text = detectMention(result.text, brandAliases);
     result.competitors_found_in_text = findCompetitorsInText(result.text, competitors);
+    result.brands = judgeBrandsSymmetric(result.text, buildTrackedBrandRoster(brand, brandAliases, competitors));
   }
 
   if (brandDomain) {
@@ -175,6 +179,25 @@ function findCompetitorsInText(text, competitors) {
     if (detectMention(text, aliases)) hits.add(comp);
   });
   return Array.from(hits);
+}
+
+/**
+ * Builds the tracked-brand roster for P1.2 symmetric judging: the self brand
+ * plus every tracked competitor, each with its resolved alias list, for
+ * judgeBrandsSymmetric to rank/score in one pass over the answer text.
+ * Competitor aliases are resolved exactly the way findCompetitorsInText/
+ * findCompetitorsCited already do — getBrandAliases(comp, ""), no website
+ * known for a rival — so "tracked" here means the same `competitors` list
+ * already threaded through this file (frozen at sourcing time onto the
+ * scan's checkpoint), not the richer LLM-discovered competitor set
+ * extractCompetitors computes later at finalize time for display.
+ */
+export function buildTrackedBrandRoster(brand, brandAliases, competitors) {
+  const roster = [{ name: brand, aliases: brandAliases, isSelf: true }];
+  (competitors || []).forEach((comp) => {
+    roster.push({ name: comp, aliases: getBrandAliases(comp, ""), isSelf: false });
+  });
+  return roster;
 }
 
 function findCompetitorsCited(references, competitors) {
@@ -205,8 +228,16 @@ function findCompetitorsCited(references, competitors) {
 /**
  * Engine-aware summary over a slice of results from one engine.
  * Mirrors summarizeAioResults logic exactly to keep denominators consistent.
+ *
+ * Exported (P0.2 follow-up de-dup) so src/lib/workers/scanWorker.js can
+ * import this directly instead of keeping its own hand-copy — the chunk
+ * worker's finalize phase reconstructs per-engine summaries from persisted
+ * `raw` rows after a chunked, possibly multi-invocation probe phase, which
+ * runMultiEngineScan's own (in-process, single-call) use below can't serve.
+ * Keep this the ONLY implementation; a second copy is exactly the drift risk
+ * this export closes off.
  */
-function summarizeEngineSlice(results, engineName) {
+export function summarizeEngineSlice(results, engineName) {
   const total = results.length;
   const errored = results.filter((r) => r.error).length;
   const withAnswer = results.filter((r) => r.answer_present);

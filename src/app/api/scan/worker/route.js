@@ -1,55 +1,119 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
-import { startScanJob } from "@/lib/workers/scanWorker";
+import { runScanChunk, runSchedulerTick, shouldRescueJob } from "@/lib/workers/scanWorker";
 
-// This route has side effects (it launches real Bright Data scans). Without
-// force-dynamic, Next prerenders it during `next build` and actually executes
-// the handler, starting live scans and burning SERP quota on every deploy.
+// This route has side effects (it resumes real scans and, via the scheduler
+// tick, can create new ones). Without force-dynamic, Next prerenders it
+// during `next build` and actually executes the handler.
 export const dynamic = "force-dynamic";
 
+// Mirrors the POST /api/scan route: a resumed chunk needs the same headroom.
+export const maxDuration = 300;
+
+const MAX_CONCURRENT_RESUMES = 3;
+
+let warnedNoSecret = false;
+
+/**
+ * Cron/worker auth (reviewer D4). This endpoint resumes scans AND — via the
+ * scheduler tick — can CREATE new ones, each costing real Bright Data + LLM
+ * spend. Unauthenticated it is a free "burn the owner's API budget" button,
+ * and the `?job_id=` branch resumes an arbitrary job.
+ *
+ * When CRON_SECRET is set (production), a caller must present it as
+ * `Authorization: Bearer <secret>`, `x-cron-secret: <secret>`, or `?secret=`.
+ * Vercel's own cron invocations are also accepted via the `x-vercel-cron`
+ * header they inject. When CRON_SECRET is unset (local dev) we allow the call
+ * but warn once, so dev/self-continue keeps working out of the box.
+ */
+function isAuthorized(request, searchParams) {
+  const secret = (process.env.CRON_SECRET || "").trim();
+  if (!secret) {
+    if (!warnedNoSecret) {
+      warnedNoSecret = true;
+      console.warn(
+        "[worker] CRON_SECRET is not set — /api/scan/worker is UNAUTHENTICATED. " +
+          "Set CRON_SECRET before exposing this deployment publicly."
+      );
+    }
+    return true;
+  }
+  if (request.headers.get("x-vercel-cron")) return true;
+  const auth = request.headers.get("authorization") || "";
+  if (auth === `Bearer ${secret}`) return true;
+  if (request.headers.get("x-cron-secret") === secret) return true;
+  if (searchParams.get("secret") === secret) return true;
+  return false;
+}
+
 export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+
+  if (!isAuthorized(request, searchParams)) {
+    return NextResponse.json({ detail: "Unauthorized." }, { status: 401 });
+  }
+
+  const directJobId = searchParams.get("job_id");
+
+  // Self-continue path (scanWorker.js's fire-and-forget self-continue fetch,
+  // fired when a chunk hits its soft time budget with work still remaining):
+  // resume THIS SPECIFIC job right now, unconditionally. The staleness sweep
+  // below intentionally does NOT cover this case — the chunk that just fired
+  // this request also just heartbeated, so isJobAlive would report it fresh
+  // and the sweep would (correctly, for its own purpose) skip it.
+  if (directJobId) {
+    try {
+      await runScanChunk(directJobId);
+      return NextResponse.json({ processed: 1, job_id: directJobId, mode: "direct-resume" });
+    } catch (error) {
+      console.error(`[worker] Direct resume of job ${directJobId} failed:`, error);
+      return NextResponse.json({ detail: "Internal Server Error" }, { status: 500 });
+    }
+  }
+
   if (!supabase) {
     return NextResponse.json({ processed: 0, info: "No Supabase configured. Local in-memory worker runs automatically." });
   }
 
   try {
-    // Retrieve active (incomplete) jobs to process
+    // Retrieve every not-yet-finished job; staleness (not a fixed 5-minute
+    // created_at window) decides which ones actually need a rescue kick —
+    // a job with a fresh heartbeat is presumed to be actively worked by
+    // another invocation (single-flight via isJobAlive, no in-process lock).
     const { data: activeJobs, error } = await supabase
       .from("scan_jobs")
       .select("*")
       .not("status", "in", '("complete","failed")')
-      .limit(10);
+      .limit(20);
 
     if (error) {
       throw error;
     }
 
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    const pendingOrStuckJobs = (activeJobs || []).filter(job => {
-      if (job.status === "pending") return true;
-      const createdTime = new Date(job.created_at).getTime();
-      return createdTime < fiveMinutesAgo;
-    }).slice(0, 3); // Limit to processing 3 parallel jobs max per cron run
+    const toResume = (activeJobs || []).filter((job) => shouldRescueJob(job)).slice(0, MAX_CONCURRENT_RESUMES);
 
-    if (pendingOrStuckJobs.length === 0) {
-      return NextResponse.json({ processed: 0, message: "No pending or stuck jobs found." });
-    }
-
-    const startedIds = [];
-    for (const job of pendingOrStuckJobs) {
-      startScanJob(
-        job.id,
-        job.brand,
-        job.url || "",
-        job.industry || "",
-        job.competitors || ""
-      ).catch(err => {
-        console.error(`[cron-worker] Error processing job ${job.id}:`, err);
+    const resumedIds = [];
+    for (const job of toResume) {
+      // RESUME, never restart: runScanChunk reads job.checkpoint and
+      // prompt_results itself — it never re-sources prompts or re-probes an
+      // already-persisted (engine, query) pair.
+      runScanChunk(job.id).catch(err => {
+        console.error(`[cron-worker] Error resuming job ${job.id}:`, err);
       });
-      startedIds.push(job.id);
+      resumedIds.push(job.id);
     }
 
-    return NextResponse.json({ processed: startedIds.length, job_ids: startedIds });
+    // Scheduler tick: enqueue new scans for any brand whose cadence is due
+    // and isn't already running.
+    let scheduled = [];
+    try {
+      const tickResult = await runSchedulerTick(new Date().toISOString());
+      scheduled = tickResult.started;
+    } catch (err) {
+      console.error("[worker] Scheduler tick failed:", err);
+    }
+
+    return NextResponse.json({ processed: resumedIds.length, job_ids: resumedIds, scheduled });
   } catch (error) {
     console.error("Cron worker route error:", error);
     return NextResponse.json({ detail: "Internal Server Error" }, { status: 500 });

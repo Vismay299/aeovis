@@ -97,6 +97,33 @@ export function detectPosition(text, aliases, competitors = []) {
 }
 
 /**
+ * Returns the character index of the first (leftmost) word-boundary match of
+ * any alias in `aliases`, or -1 if none match. P1.1 in-answer-position
+ * building block.
+ *
+ * Uses the same boundary definition as detectMention (a non-alphanumeric/
+ * underscore character, or start/end of string) but via zero-width
+ * lookaround so the returned index is the alias's own first character —
+ * never shifted by a consumed boundary character — and "a match was found
+ * here" always agrees with what detectMention(text, aliases) would return.
+ */
+export function findFirstMentionIndex(text, aliases) {
+  if (!text || !aliases || aliases.length === 0) return -1;
+
+  let firstIdx = Infinity;
+  for (const alias of aliases) {
+    const cleanAlias = alias.toLowerCase();
+    const escaped = cleanAlias.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regex = new RegExp(`(?<![a-zA-Z0-9_])${escaped}(?![a-zA-Z0-9_])`, "i");
+    const match = regex.exec(text);
+    if (match && match.index < firstIdx) {
+      firstIdx = match.index;
+    }
+  }
+  return firstIdx === Infinity ? -1 : firstIdx;
+}
+
+/**
  * Deterministically detects sentiment in a window around first brand match.
  */
 export function detectSentiment(text, aliases) {
@@ -148,6 +175,28 @@ export function detectSentiment(text, aliases) {
     return "negative";
   }
   return "neutral";
+}
+
+/**
+ * P1.1 sentiment contract: the deterministic categorical detector
+ * (detectSentiment) mapped to a 0-100 int.
+ *
+ *   positive -> 100, neutral -> 50, negative -> 0
+ *
+ * IMPORTANT — null vs 0: this returns `null` (never `0`) when `aliases`
+ * isn't mentioned in `text` at all. `0` means "mentioned and read as
+ * negative"; `null` means "brand absent from this answer". Averaging those
+ * two cases together would silently drag sentiment_avg down for every answer
+ * a brand simply wasn't in — see src/lib/analytics/rollup.js's
+ * computeBrandRollups, which relies on this distinction to filter absent
+ * brands out of the mean instead of scoring them as maximally negative.
+ */
+const SENTIMENT_SCORE = { positive: 100, neutral: 50, negative: 0 };
+
+export function detectSentimentScore(text, aliases) {
+  if (!detectMention(text, aliases)) return null;
+  const category = detectSentiment(text, aliases);
+  return SENTIMENT_SCORE[category] ?? 50;
 }
 
 /**
@@ -205,6 +254,74 @@ export function judgeDeterministic(text, brand, website, competitors = []) {
     judge_method: "deterministic",
     judge_model_used: ""
   };
+}
+
+/**
+ * P1.2 symmetric per-answer brand judging: computes mention + in-answer
+ * position + sentiment for the self brand AND every tracked competitor from
+ * the SAME answer text, reusing the exact deterministic alias-matching
+ * machinery detectMention/findFirstMentionIndex/detectSentiment already use
+ * (no LLM — see the deterministic-vs-LLM note below).
+ *
+ * `brands` is `[{ name, aliases, isSelf }, ...]`. Callers build this with
+ * getBrandAliases(brand, url) for the self brand and getBrandAliases(comp, "")
+ * for each tracked competitor (no website known for a rival) — exactly
+ * mirroring enginePipeline.js's findCompetitorsInText/findCompetitorsCited
+ * (see buildTrackedBrandRoster there).
+ *
+ * Position contract (P1.1): the 1-based rank of a brand's FIRST alias
+ * occurrence among the ordered distinct brand mentions in the text — e.g. if
+ * the text names [Rival A, You, Rival B] in that reading order, You are
+ * position 2. Ranking is scoped to the roster passed in here (there is no
+ * way to rank against untracked brands we have no aliases for). This is NOT
+ * brand_organic_position (organic SERP rank from Bright Data) — an entirely
+ * separate signal that stays untouched.
+ *
+ * Sentiment contract (P1.1): see detectSentimentScore — positive=100,
+ * neutral=50, negative=0, null (never 0) when unmentioned.
+ *
+ * Returns one record per input brand, in the SAME order as `brands`,
+ * REGARDLESS of whether it was mentioned — symmetric: self and every
+ * competitor always get a record, so result_brands can carry a complete
+ * one-row-per-tracked-brand matrix per answer, not just the brands that
+ * happened to be mentioned.
+ *
+ * Deterministic-only (no LLM assist): the contract above is fully mechanical
+ * — a word-boundary regex scan plus a keyword-window sentiment count — with
+ * no ambiguous judgment call for a model to resolve, so an LLM pass would
+ * only add latency/cost/a new failure mode on the hot probing path (this
+ * runs once per probe, and a scan already fans out to dozens of probes)
+ * without changing the answer. See judge.js's own judgeWithLLM/isAmbiguous
+ * for the (separately dead, pre-existing) pattern this deliberately does not
+ * extend.
+ */
+export function judgeBrandsSymmetric(text, brands) {
+  const roster = brands || [];
+
+  const withIndex = roster.map((b) => ({
+    name: b.name,
+    isSelf: !!b.isSelf,
+    aliases: b.aliases,
+    index: findFirstMentionIndex(text, b.aliases),
+  }));
+
+  const positionByOriginalIndex = new Map();
+  withIndex
+    .map((b, i) => ({ i, index: b.index }))
+    .filter((b) => b.index !== -1)
+    .sort((a, b) => a.index - b.index)
+    .forEach((b, rank) => positionByOriginalIndex.set(b.i, rank + 1));
+
+  return withIndex.map((b, i) => {
+    const mentioned = b.index !== -1;
+    return {
+      name: b.name,
+      is_self: b.isSelf,
+      mentioned,
+      position: mentioned ? positionByOriginalIndex.get(i) : null,
+      sentiment: mentioned ? detectSentimentScore(text, b.aliases) : null,
+    };
+  });
 }
 
 /**

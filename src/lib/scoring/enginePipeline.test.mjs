@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { summarizeEngineResults, resolveEnabledEngines } from "./enginePipeline.js";
+import { summarizeEngineResults, resolveEnabledEngines, buildTrackedBrandRoster } from "./enginePipeline.js";
+import { getBrandAliases } from "./aliases.js";
 
 function makeAioRow(overrides = {}) {
   return {
@@ -308,4 +309,43 @@ test("computeHeadline — <5 answers excludes an engine", () => {
 
 test("ENGINE_WEIGHTS — default config is equal weights (50/50 contract)", () => {
   assert.equal(ENGINE_WEIGHTS.aio, ENGINE_WEIGHTS.perplexity);
+});
+
+// ---------------------------------------------------------------------------
+// buildTrackedBrandRoster (P1.2) — the self+rival roster fed into
+// judgeBrandsSymmetric from probeAio/probeTextEngine. probeAio/probeTextEngine
+// themselves hit real network engines (Bright Data/ChatGPT/Perplexity) and
+// aren't exported for that reason (matching this file's existing convention
+// of testing the pure summarize/roster layer, never the network-calling probe
+// functions directly) — this is the integration point that IS exercised here;
+// the ranking/scoring logic itself is covered in judge.test.mjs.
+// ---------------------------------------------------------------------------
+
+test("buildTrackedBrandRoster — self brand first (reusing the already-resolved brandAliases), then one entry per competitor", () => {
+  const brandAliases = ["Acme Corp", "acme", "acme.io"];
+  const roster = buildTrackedBrandRoster("Acme Corp", brandAliases, ["Rival One", "Rival Two"]);
+
+  assert.equal(roster.length, 3);
+
+  assert.equal(roster[0].name, "Acme Corp");
+  assert.equal(roster[0].isSelf, true);
+  assert.deepEqual(roster[0].aliases, brandAliases, "self brand reuses the already-resolved brandAliases, not a fresh lookup");
+
+  assert.equal(roster[1].name, "Rival One");
+  assert.equal(roster[1].isSelf, false);
+  assert.deepEqual(roster[1].aliases, getBrandAliases("Rival One", ""), "competitor aliases resolved the same way findCompetitorsInText does — no website known for a rival");
+
+  assert.equal(roster[2].name, "Rival Two");
+  assert.equal(roster[2].isSelf, false);
+});
+
+test("buildTrackedBrandRoster — no competitors -> roster is just the self brand", () => {
+  const roster = buildTrackedBrandRoster("Acme", ["Acme"], []);
+  assert.equal(roster.length, 1);
+  assert.equal(roster[0].isSelf, true);
+});
+
+test("buildTrackedBrandRoster — missing competitors list does not throw", () => {
+  const roster = buildTrackedBrandRoster("Acme", ["Acme"], undefined);
+  assert.equal(roster.length, 1);
 });
