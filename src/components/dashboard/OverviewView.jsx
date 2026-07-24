@@ -2,6 +2,7 @@ import { KpiCard } from "@/components/perceev/KpiCard";
 import { Card } from "@/components/perceev/Card";
 import { Badge } from "@/components/perceev/Badge";
 import { ArrowRight } from "lucide-react";
+import { OverviewAnalytics } from "./OverviewAnalytics";
 
 export const OverviewView = ({
   result,
@@ -22,6 +23,11 @@ export const OverviewView = ({
 }) => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+      {/* Overview v2 (P1.4) — real analytics: The Verdict, Visibility Trend,
+          Rank + Share of Voice. Sits above the pre-existing KPI/insight
+          content below, which stays untouched. */}
+      <OverviewAnalytics result={result} heroScore={heroScore} />
+
       {/* KPI cards 2×2 */}
       <div
         style={{

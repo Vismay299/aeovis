@@ -11,3 +11,4 @@ export { Tabs } from "./Tabs";
 export { Alert } from "./Alert";
 export { Skeleton } from "./Skeleton";
 export { Sidebar } from "./Sidebar";
+export { TrendChart, RankTable, PerformanceMatrix, Donut, DeltaChip } from "./charts";

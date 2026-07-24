@@ -9,6 +9,7 @@ import {
   Swords,
   Link2,
   Search,
+  Bot,
   History,
   Plus,
   PenSquare,
@@ -20,6 +21,7 @@ const NAV_ITEMS = [
   { key: "rivals", label: "Rivals", icon: Swords, testId: "sidebar-rivals" },
   { key: "sources", label: "Sources", icon: Link2, testId: "sidebar-sources" },
   { key: "queries", label: "Queries", icon: Search, testId: "sidebar-queries" },
+  { key: "crawlability", label: "Crawlability", icon: Bot, testId: "sidebar-crawlability" },
   { key: "studio", label: "Studio", icon: PenSquare, testId: "sidebar-studio" },
 ];
 
