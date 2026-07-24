@@ -11,7 +11,7 @@ const variants = {
       color: "var(--text-1)",
       border: "1px solid var(--border-3)",
     },
-    hover: { background: "var(--bg-2)", borderColor: "var(--text-1)" },
+    hover: { background: "var(--bg-2)", border: "1px solid var(--text-1)" },
   },
   ghost: {
     rest: {
@@ -27,7 +27,7 @@ const variants = {
       color: "var(--crit)",
       border: "1px solid var(--crit-border)",
     },
-    hover: { background: "var(--crit)", color: "#fff", borderColor: "var(--crit)" },
+    hover: { background: "var(--crit)", color: "#fff", border: "1px solid var(--crit)" },
   },
 };
 
