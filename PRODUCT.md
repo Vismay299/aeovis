@@ -38,8 +38,18 @@ on the homepage with existing case history.
 
 ## Capabilities and Constraints
 
-- 30 unbranded prompts per scan; engines: Google AI Overview, ChatGPT, Perplexity.
-- Free scan, no signup, ~60 seconds to verdict.
+- Unbranded prompts per scan: 30 by default, now a per-brand tracked-set size
+  (`scan_schedules.prompt_target`, 10–100) that only ever grows additively so
+  score history stays comparable.
+- Engines are configured per deployment (`ENGINES`). Supported: Google AI
+  Overview, ChatGPT, Perplexity. Currently enabled in this deployment:
+  AI Overview + Perplexity (ChatGPT needs `OPENAI_API_KEY`). Every engine-facing
+  surface renders whatever engines actually reported — never a hardcoded count.
+- Free scan, no signup. A scan now runs as resumable checkpointed chunks rather
+  than one long request, so wall-clock varies with engine count and is no longer
+  a fixed ~60 seconds; progress is reported live and a killed run self-resumes.
+- Recurring scans: per-brand cadence (72h default / daily / weekly) drives trend
+  history; analytics are stored normalized (per prompt, per citation, per day).
 - Next.js 14 app; token-driven CSS design system in `src/app/globals.css` consumed by
   landing, dashboard, scan flow, and Studio; shadcn/ui HSL variable compatibility
   must be maintained.

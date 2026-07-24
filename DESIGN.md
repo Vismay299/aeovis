@@ -48,6 +48,11 @@ Roles (color is party identity — never decorative):
 - The crawl (bottom-of-hero marquee of probe results) is a durable device.
 - The LIVE bug (pulsing red dot + caps) marks live/simulated data surfaces.
 - Tally bars: horizontal, party-colored fill, name + count + gap, threshold line.
+- **Role colors are not scales.** When a chart encodes magnitude (heatmap cells,
+  graded ring segments, intensity fills), only YOUR series may ramp in teal.
+  Rival magnitudes ramp on neutral luminance (graphite steps), never on red — a
+  "hot" rival cell must read as a quantity, not as a party. Red stays reserved
+  for the rival/trailing role itself.
 - One orchestrated motion moment: tallies counting/filling on reveal. Crawl runs
   continuously. Everything else is restrained. `prefers-reduced-motion` respected.
 
