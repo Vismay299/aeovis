@@ -596,7 +596,12 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
 
 function mapPromptForUi(r) {
   const aioCitations = getAioCitations(r);
-  const aioReferences = r.aio_references ?? r.aioReferences ?? [];
+  // `?? r.references` is required since P0.2: every scan (including AIO-only)
+  // now probes through the v9 engine registry, whose rows carry `references`,
+  // not the legacy `aio_references`. Without this fallback new AIO scans render
+  // an empty source list in the per-prompt drill-down (reviewer D5). The `text`
+  // and `citations` siblings already have their equivalent fallbacks.
+  const aioReferences = r.aio_references ?? r.aioReferences ?? r.references ?? [];
   const brandMentionedInText = getBrandMentionedInText(r);
   const brandCited = getBrandCited(r);
   const visible = getVisible(r);
@@ -750,8 +755,26 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
     onProgress(stage, statusData.progress_pct);
 
     if (statusData.status === "complete") {
-      if (!statusData.run_record) throw new Error("Scan finished but no record was returned.");
-      return normalizeResult(statusData.run_record, brand, website);
+      // P0.3: the canonical record now lives in the `scans` table
+      // (result_id points at it) rather than riding along on the job row.
+      // A later package stops the worker writing run_record entirely, so
+      // prefer the DB fetch whenever result_id is present, and only fall
+      // back to run_record when it's absent or the fetch doesn't pan out.
+      let record = null;
+      if (statusData.result_id) {
+        try {
+          const recordRes = await fetch(`/api/scans/by-id/${statusData.result_id}`);
+          if (recordRes.ok) {
+            const recordData = await recordRes.json();
+            record = recordData.scan || null;
+          }
+        } catch {
+          // Transient — fall through to run_record below.
+        }
+      }
+      if (!record) record = statusData.run_record;
+      if (!record) throw new Error("Scan finished but no record was returned.");
+      return normalizeResult(record, brand, website);
     }
     if (statusData.status === "failed") {
       throw new Error(statusData.error_message || "Async scan job failed.");
