@@ -239,8 +239,58 @@ export async function listRecentScans(limit = 12) {
 
 // Global memory store for scan jobs (Next.js hot-reload safe)
 global.memoryJobs = global.memoryJobs || new Map();
-export async function createScanJob({ brand, url, industry, competitors }) {
+
+/**
+ * Scan job store — DB-authoritative, fail-loud (P0.0).
+ *
+ *  - hasDb === true  (Supabase configured): Supabase is the ONLY source of
+ *    truth for scan_jobs. Every read/write goes straight to it; a DB error
+ *    THROWS instead of silently degrading to the in-memory map. Falling back
+ *    used to be a poison pill: one transient DB failure inside createScanJob
+ *    tipped a job into memoryJobs, and — because getScanJob/updateScanJob
+ *    checked memory first — every later update for that job on that instance
+ *    then wrote to memory only. Checkpoints silently stopped persisting, and
+ *    a different serverless instance (or the DB-backed status poll) kept
+ *    reading stale state forever.
+ *  - hasDb === false (no Supabase — local dev, `npm run test:*`): the
+ *    in-memory Map is the only store, exactly as before this fix.
+ *
+ * `deps.client` is test-only injection (defaults to the module-level
+ * `supabase`), so every real call site — which never passes `deps` — behaves
+ * exactly as `hasDb = !!supabase`.
+ */
+function resolveClient(deps) {
+  return deps && Object.prototype.hasOwnProperty.call(deps, "client") ? deps.client : supabase;
+}
+
+/** Worker-active statuses — a job in one of these is still running. */
+export const SCAN_JOB_RUNNING = ["pending", "generating_prompts", "probing", "scoring"];
+
+/** A running job with no heartbeat inside this window is presumed dead. */
+export const HEARTBEAT_STALE_MS = 3 * 60 * 1000;
+
+/**
+ * Canonical liveness check: running status + a heartbeat stamped within
+ * HEARTBEAT_STALE_MS. updateScanJob stamps heartbeat_at on every call, so a
+ * worker that's genuinely still processing keeps its job "alive"; a crashed
+ * or orphaned worker's job goes stale after one heartbeat window — it stops
+ * blocking new scans (see hasActiveScanForBrand below) and becomes eligible
+ * for rescue/restart. A running-status job with a stale or absent heartbeat
+ * is treated as dead. Exported so the worker/status route reuses this exact
+ * same staleness definition.
+ */
+export function isJobAlive(job, nowMs = Date.now()) {
+  if (!job || !SCAN_JOB_RUNNING.includes(job.status)) return false;
+  const heartbeatMs = new Date(job.heartbeat_at || 0).getTime();
+  return Number.isFinite(heartbeatMs) && nowMs - heartbeatMs < HEARTBEAT_STALE_MS;
+}
+
+export async function createScanJob({ brand, url, industry, competitors }, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
+
   const jobId = crypto.randomUUID();
+  const now = new Date().toISOString();
   const job = {
     id: jobId,
     brand,
@@ -251,125 +301,161 @@ export async function createScanJob({ brand, url, industry, competitors }) {
     gsc_queries: [],
     status: "pending",
     progress_pct: 0,
-    created_at: new Date().toISOString(),
+    created_at: now,
+    heartbeat_at: now,
     result_id: null,
     error_message: null,
     run_record: null
   };
 
-  if (!supabase) {
+  if (!hasDb) {
     global.memoryJobs.set(jobId, job);
     return job;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("scan_jobs")
-      .insert([job])
-      .select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("Failed to insert scan_job to database, falling back to memory:", err.message);
-    global.memoryJobs.set(jobId, job);
-    return job;
-  }
+  const { data, error } = await client
+    .from("scan_jobs")
+    .insert([job])
+    .select();
+  if (error) throw error;
+  return data[0];
 }
 
 /**
  * True if a scan for this brand is already running. Checks the shared
- * `scan_jobs` table, not just the in-process memory map — on serverless each
+ * `scan_jobs` table (not just the in-process memory map — on serverless each
  * instance has its own map, so a memory-only check does not prevent two
- * concurrent scans from starting and overloading the Bright Data zone.
- *
- * Jobs older than STALE_JOB_MS are ignored so a crashed job stuck in
- * "probing" cannot block a brand forever.
+ * concurrent scans from starting and overloading the Bright Data zone), and
+ * only counts a running job as blocking while isJobAlive says its heartbeat
+ * is fresh. A crashed job stuck in "probing" cannot block a brand forever.
  */
-const STALE_JOB_MS = 15 * 60 * 1000;
-
-export async function hasActiveScanForBrand(brand) {
-  const RUNNING = ["pending", "generating_prompts", "probing", "scoring"];
+export async function hasActiveScanForBrand(brand, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
   const key = String(brand || "").trim().toLowerCase();
   if (!key) return false;
 
-  const cutoffMs = Date.now() - STALE_JOB_MS;
-
-  // In-memory first: covers local dev and Supabase-less runs.
-  for (const job of global.memoryJobs.values()) {
-    if (String(job.brand || "").trim().toLowerCase() !== key) continue;
-    if (!RUNNING.includes(job.status)) continue;
-    const created = new Date(job.created_at || 0).getTime();
-    if (Number.isFinite(created) && created < cutoffMs) continue; // stale
-    return true;
+  if (!hasDb) {
+    for (const job of global.memoryJobs.values()) {
+      if (String(job.brand || "").trim().toLowerCase() !== key) continue;
+      if (isJobAlive(job)) return true;
+    }
+    return false;
   }
 
-  if (!supabase) return false;
-
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from("scan_jobs")
-      .select("id")
+      .select("id, status, heartbeat_at")
       .ilike("brand", key)
-      .in("status", RUNNING)
-      .gt("created_at", new Date(cutoffMs).toISOString())
-      .limit(1);
+      .in("status", SCAN_JOB_RUNNING)
+      .limit(20);
     if (error) throw error;
-    return (data || []).length > 0;
+    return (data || []).some((job) => isJobAlive(job));
   } catch (err) {
-    // Fail open: a broken duplicate-check must not block all scanning.
+    // Fail open: a broken duplicate-check must not block all scanning. This
+    // is the read-side check only — the writes in this module still throw.
     console.warn("[db] hasActiveScanForBrand check failed, allowing scan:", err.message);
     return false;
   }
 }
 
-export async function getScanJob(jobId) {
-  if (!supabase || global.memoryJobs.has(jobId)) {
+export async function getScanJob(jobId, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
+
+  if (!hasDb) {
     return global.memoryJobs.get(jobId) || null;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("scan_jobs")
-      .select("*")
-      .eq("id", jobId);
-    if (error) throw error;
-    return data[0] || global.memoryJobs.get(jobId) || null;
-  } catch (err) {
-    console.warn("Failed to get scan_job from database, checking memory:", err.message);
-    return global.memoryJobs.get(jobId) || null;
-  }
+  const { data, error } = await client
+    .from("scan_jobs")
+    .select("*")
+    .eq("id", jobId);
+  if (error) throw error;
+  return data[0] || null;
 }
 
-export async function updateScanJob(jobId, updates) {
-  // Always update in memory as fallback/mirror
-  const memJob = global.memoryJobs.get(jobId);
-  if (memJob) {
-    Object.assign(memJob, updates);
-  }
+export async function updateScanJob(jobId, updates, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
+  // Any update means the worker is alive — stamp on every call, including
+  // ones that only touch progress_pct or checkpoint.
+  const stamped = { ...updates, heartbeat_at: new Date().toISOString() };
 
-  if (!supabase || global.memoryJobs.has(jobId)) {
-    if (!memJob) {
-      const fallbackJob = { id: jobId, ...updates };
-      global.memoryJobs.set(jobId, fallbackJob);
+  if (!hasDb) {
+    const memJob = global.memoryJobs.get(jobId);
+    if (memJob) {
+      Object.assign(memJob, stamped);
+      return memJob;
     }
-    return memJob || global.memoryJobs.get(jobId);
+    const created = { id: jobId, ...stamped };
+    global.memoryJobs.set(jobId, created);
+    return created;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("scan_jobs")
-      .update(updates)
-      .eq("id", jobId)
-      .select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("Failed to update scan_job in database, updated memory:", err.message);
-    if (memJob) return memJob;
-    const updated = { id: jobId, ...updates };
-    global.memoryJobs.set(jobId, updated);
-    return updated;
+  const { data, error } = await client
+    .from("scan_jobs")
+    .update(stamped)
+    .eq("id", jobId)
+    .select();
+  if (error) throw error;
+  return data[0];
+}
+
+/**
+ * Compare-and-set status transition — structural single-flight (P0.2 FIX 2).
+ * Flips `status` from `fromStatus` to `toStatus` ONLY if the row's status
+ * still equals `fromStatus` at the moment the UPDATE actually runs:
+ * `.eq("status", fromStatus)` (or `.in("status", fromStatus)` when an array
+ * is passed) is part of the same UPDATE statement as the write, so Postgres'
+ * row-level locking makes the check-and-set atomic — of two callers racing
+ * this exact statement against the same row, only one's WHERE clause can
+ * still match (the loser's UPDATE affects 0 rows). This is how sourcing and
+ * finalize (scanWorker.js) claim exclusive ownership of a job phase without
+ * a dedicated lock table: only a fixed sequential crash-recovery guard
+ * existed before (D3-class bug — see plan.md P0.2), and that only protects
+ * against a SEQUENTIAL retry, not two instances genuinely running at once.
+ *
+ * `fromStatus` may be a single status string or an array of acceptable
+ * current statuses (`.in()` instead of `.eq()`) — sourcing can be claimed
+ * from either "pending" or "generating_prompts" (fresh start or a resume
+ * after an earlier attempt crashed mid-sourcing).
+ *
+ * Returns the updated row if THIS caller won the transition, else `null` —
+ * never throws for a lost race, that's an expected, common outcome. Fail-loud
+ * only on a genuine DB error (thrown), matching every other function here: a
+ * claim is correctness-critical and must never silently degrade.
+ *
+ * Memory path (hasDb === false): mirrors updateScanJob's own auto-vivify
+ * convenience when the job doesn't exist yet in `global.memoryJobs` — there
+ * is exactly one process and one map in that mode, so there is no concurrent
+ * caller to lose a race to. When the job DOES already exist, the same
+ * fromStatus check applies as the DB path.
+ */
+export async function claimJobStatus(jobId, fromStatus, toStatus, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
+  const now = new Date().toISOString();
+  const fromList = Array.isArray(fromStatus) ? fromStatus : [fromStatus];
+
+  if (!hasDb) {
+    const memJob = global.memoryJobs.get(jobId);
+    if (memJob) {
+      if (!fromList.includes(memJob.status)) return null;
+      Object.assign(memJob, { status: toStatus, heartbeat_at: now });
+      return memJob;
+    }
+    const created = { id: jobId, status: toStatus, heartbeat_at: now };
+    global.memoryJobs.set(jobId, created);
+    return created;
   }
+
+  let query = client.from("scan_jobs").update({ status: toStatus, heartbeat_at: now }).eq("id", jobId);
+  query = Array.isArray(fromStatus) ? query.in("status", fromStatus) : query.eq("status", fromStatus);
+  const { data, error } = await query.select();
+  if (error) throw error;
+  return data && data[0] ? data[0] : null;
 }
 
 // Global memory store for content events (Next.js hot-reload safe)

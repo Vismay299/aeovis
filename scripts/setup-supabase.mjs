@@ -78,6 +78,13 @@ async function main() {
       "content_lessons",
       "content_agents",
       "knowledge_blocks",
+      // 005 analytics platform
+      "prompt_results",
+      "result_brands",
+      "citations",
+      "brand_metrics_daily",
+      "scan_schedules",
+      "topics",
     ];
     for (const table of tables) {
       const { rows } = await client.query(

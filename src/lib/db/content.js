@@ -6,9 +6,14 @@ import { builtinAgents } from "../content/agents/model.js";
  * DB helpers for the Agent Content OS (content_jobs, content_items,
  * content_feedback, brand_briefs, content_lessons).
  *
- * Mirrors db.js patterns exactly: Supabase when configured, hot-reload-safe
- * in-memory fallback otherwise, and fail-soft warnings — a broken DB call
- * degrades to memory rather than killing a pipeline mid-run.
+ * content_jobs / content_items are DB-authoritative and fail-loud (P0.0,
+ * mirrors db.js's scan_jobs fix): when Supabase is configured it is the ONLY
+ * source of truth and a DB error THROWS instead of silently degrading to the
+ * in-memory map — that fallback was a poison pill where one transient DB
+ * failure on create tipped a job/item into memory forever on that instance.
+ * Every other helper below (feedback / brief / lesson / agent) is unchanged:
+ * fail-soft, Supabase when configured, hot-reload-safe in-memory fallback
+ * otherwise.
  */
 
 global.memoryContentJobs = global.memoryContentJobs || new Map();
@@ -17,6 +22,16 @@ global.memoryContentFeedback = global.memoryContentFeedback || new Map();
 global.memoryBrandBriefs = global.memoryBrandBriefs || new Map();
 global.memoryContentLessons = global.memoryContentLessons || new Map();
 global.memoryContentAgents = global.memoryContentAgents || new Map();
+
+/**
+ * Test-only client injection for the DB-authoritative helpers below. Real
+ * call sites never pass `deps`, so `resolveClient({})` always returns the
+ * module-level `supabase` — every production/dev call behaves exactly as
+ * `hasDb = !!supabase`.
+ */
+function resolveClient(deps) {
+  return deps && Object.prototype.hasOwnProperty.call(deps, "client") ? deps.client : supabase;
+}
 
 /** Worker-active statuses. awaiting_approval and beyond are human-side. */
 export const CONTENT_JOB_RUNNING = [
@@ -34,8 +49,12 @@ const STALE_CONTENT_JOB_MS = 20 * 60 * 1000;
 // content_jobs
 // ---------------------------------------------------------------------------
 
-export async function createContentJob({ brand, playbook, input, agent_id, agent_snapshot }) {
+export async function createContentJob({ brand, playbook, input, agent_id, agent_snapshot }, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
+
   const jobId = crypto.randomUUID();
+  const now = new Date().toISOString();
   const job = {
     id: jobId,
     brand,
@@ -49,65 +68,60 @@ export async function createContentJob({ brand, playbook, input, agent_id, agent
     agent_id: agent_id || null,
     agent_snapshot: agent_snapshot || null,
     agent_trace: [],
-    created_at: new Date().toISOString(),
+    created_at: now,
+    heartbeat_at: now,
   };
 
-  if (!supabase) {
+  if (!hasDb) {
     global.memoryContentJobs.set(jobId, job);
     return job;
   }
 
-  try {
-    const { data, error } = await supabase.from("content_jobs").insert([job]).select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[content-db] insert content_job failed, using memory:", err.message);
-    global.memoryContentJobs.set(jobId, job);
-    return job;
-  }
+  const { data, error } = await client.from("content_jobs").insert([job]).select();
+  if (error) throw error;
+  return data[0];
 }
 
-export async function getContentJob(jobId) {
-  if (!supabase || global.memoryContentJobs.has(jobId)) {
+export async function getContentJob(jobId, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
+
+  if (!hasDb) {
     return global.memoryContentJobs.get(jobId) || null;
   }
-  try {
-    const { data, error } = await supabase
-      .from("content_jobs")
-      .select("*")
-      .eq("id", jobId);
-    if (error) throw error;
-    return data[0] || null;
-  } catch (err) {
-    console.warn("[content-db] get content_job failed, checking memory:", err.message);
-    return global.memoryContentJobs.get(jobId) || null;
-  }
+
+  const { data, error } = await client
+    .from("content_jobs")
+    .select("*")
+    .eq("id", jobId);
+  if (error) throw error;
+  return data[0] || null;
 }
 
-export async function updateContentJob(jobId, updates) {
-  const memJob = global.memoryContentJobs.get(jobId);
-  if (memJob) Object.assign(memJob, updates);
+export async function updateContentJob(jobId, updates, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
+  // Any update means the worker is alive — stamp on every call.
+  const stamped = { ...updates, heartbeat_at: new Date().toISOString() };
 
-  if (!supabase || global.memoryContentJobs.has(jobId)) {
-    if (!memJob) global.memoryContentJobs.set(jobId, { id: jobId, ...updates });
-    return memJob || global.memoryContentJobs.get(jobId);
+  if (!hasDb) {
+    const memJob = global.memoryContentJobs.get(jobId);
+    if (memJob) {
+      Object.assign(memJob, stamped);
+      return memJob;
+    }
+    const created = { id: jobId, ...stamped };
+    global.memoryContentJobs.set(jobId, created);
+    return created;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("content_jobs")
-      .update(updates)
-      .eq("id", jobId)
-      .select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[content-db] update content_job failed, updated memory:", err.message);
-    const updated = { id: jobId, ...updates };
-    global.memoryContentJobs.set(jobId, updated);
-    return updated;
-  }
+  const { data, error } = await client
+    .from("content_jobs")
+    .update(stamped)
+    .eq("id", jobId)
+    .select();
+  if (error) throw error;
+  return data[0];
 }
 
 function queryKeyLower(text) {
@@ -115,18 +129,31 @@ function queryKeyLower(text) {
 }
 
 /**
+ * Freshness check for the dedupe guard below: prefers heartbeat_at (stamped
+ * by every updateContentJob call) and falls back to created_at for rows
+ * written before migration 005 added the column.
+ */
+function isContentJobFresh(job, nowMs = Date.now()) {
+  const stampSource = job.heartbeat_at || job.created_at;
+  const stampMs = new Date(stampSource || 0).getTime();
+  return Number.isFinite(stampMs) && nowMs - stampMs < STALE_CONTENT_JOB_MS;
+}
+
+/**
  * Precise duplicate guard. Concurrency across *different* agents is a feature
  * (the user watches several agents work at once), so this only blocks an
  * EXACT re-fire: the same brand + same agent + same target query already
- * running. Stale jobs are ignored so a crash can't block forever.
+ * running. Stale jobs (see isContentJobFresh) are ignored so a crash can't
+ * block forever.
  *
  * Back-compat: called as (brand, playbook) it blocks brand+playbook, matching
  * the v1 trigger which had no agents.
  */
-export async function hasActiveContentJobForBrand(brand, opts) {
+export async function hasActiveContentJobForBrand(brand, opts, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
   const key = String(brand || "").trim().toLowerCase();
   if (!key) return false;
-  const cutoffMs = Date.now() - STALE_CONTENT_JOB_MS;
 
   // Normalize args: string → {playbook}; object → {playbook, agentId, query}.
   const { playbook, agentId, query } =
@@ -136,8 +163,7 @@ export async function hasActiveContentJobForBrand(brand, opts) {
   const matches = (job) => {
     if (String(job.brand || "").trim().toLowerCase() !== key) return false;
     if (!CONTENT_JOB_RUNNING.includes(job.status)) return false;
-    const created = new Date(job.created_at || 0).getTime();
-    if (Number.isFinite(created) && created < cutoffMs) return false;
+    if (!isContentJobFresh(job)) return false;
     // With an agent + query, block only the exact same combination.
     if (agentId) {
       if (job.agent_id !== agentId) return false;
@@ -149,25 +175,24 @@ export async function hasActiveContentJobForBrand(brand, opts) {
     return true;
   };
 
-  for (const job of global.memoryContentJobs.values()) {
-    if (matches(job)) return true;
+  if (!hasDb) {
+    for (const job of global.memoryContentJobs.values()) {
+      if (matches(job)) return true;
+    }
+    return false;
   }
 
-  if (!supabase) return false;
-
   try {
-    let q = supabase
+    let q = client
       .from("content_jobs")
-      .select("id, agent_id, playbook, input")
+      .select("id, agent_id, playbook, input, status, heartbeat_at, created_at")
       .ilike("brand", key)
-      .in("status", CONTENT_JOB_RUNNING)
-      .gt("created_at", new Date(cutoffMs).toISOString());
+      .in("status", CONTENT_JOB_RUNNING);
     if (agentId) q = q.eq("agent_id", agentId);
     else if (playbook) q = q.eq("playbook", playbook);
     const { data, error } = await q.limit(20);
     if (error) throw error;
-    if (!agentId || !qKey) return (data || []).length > 0;
-    return (data || []).some((j) => queryKeyLower(j.input?.query) === qKey);
+    return (data || []).some(matches);
   } catch (err) {
     console.warn("[content-db] duplicate check failed, allowing job:", err.message);
     return false;
@@ -267,44 +292,40 @@ export async function insertContentItem(item) {
   }
 }
 
-export async function updateContentItem(id, updates) {
+export async function updateContentItem(id, updates, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
   const withTimestamp = { ...updates, updated_at: new Date().toISOString() };
-  const memItem = global.memoryContentItems.get(id);
-  if (memItem) Object.assign(memItem, withTimestamp);
 
-  if (!supabase || global.memoryContentItems.has(id)) {
+  if (!hasDb) {
+    const memItem = global.memoryContentItems.get(id);
+    if (memItem) Object.assign(memItem, withTimestamp);
     return memItem || null;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("content_items")
-      .update(withTimestamp)
-      .eq("id", id)
-      .select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[content-db] update content_item failed:", err.message);
-    return memItem || null;
-  }
+  const { data, error } = await client
+    .from("content_items")
+    .update(withTimestamp)
+    .eq("id", id)
+    .select();
+  if (error) throw error;
+  return data[0];
 }
 
-export async function getContentItem(id) {
-  if (!supabase || global.memoryContentItems.has(id)) {
+export async function getContentItem(id, deps = {}) {
+  const client = resolveClient(deps);
+  const hasDb = !!client;
+
+  if (!hasDb) {
     return global.memoryContentItems.get(id) || null;
   }
-  try {
-    const { data, error } = await supabase
-      .from("content_items")
-      .select("*")
-      .eq("id", id);
-    if (error) throw error;
-    return data[0] || null;
-  } catch (err) {
-    console.warn("[content-db] get content_item failed, checking memory:", err.message);
-    return global.memoryContentItems.get(id) || null;
-  }
+
+  const { data, error } = await client
+    .from("content_items")
+    .select("*")
+    .eq("id", id);
+  if (error) throw error;
+  return data[0] || null;
 }
 
 export async function listContentItems(brand) {
