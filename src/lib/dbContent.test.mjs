@@ -8,6 +8,13 @@ import {
   getContentItem,
   updateContentItem,
   CONTENT_JOB_RUNNING,
+  CONTENT_HEARTBEAT_STALE_MS,
+  isContentJobAlive,
+  shouldRescueContentJob,
+  listResumableContentJobs,
+  insertContentRun,
+  finishContentRun,
+  listContentRunsForJob,
 } from "./db/content.js";
 
 /**
@@ -405,4 +412,186 @@ test("CONTENT_JOB_RUNNING is exported with the expected statuses", () => {
     "drafting",
     "reviewing",
   ]);
+});
+
+// --- rescue liveness + the D1 regression (T1) --------------------------------
+
+test("isContentJobAlive: fresh heartbeat is alive, stale is not, terminal never is", () => {
+  const fresh = { status: "drafting", heartbeat_at: isoMinutesAgo(1) };
+  const stale = { status: "drafting", heartbeat_at: isoMinutesAgo(10) };
+
+  assert.equal(isContentJobAlive(fresh), true);
+  assert.equal(isContentJobAlive(stale), false);
+  assert.equal(isContentJobAlive({ status: "drafting" }), false, "no heartbeat => dead");
+  assert.equal(
+    isContentJobAlive({ status: "approved", heartbeat_at: isoMinutesAgo(1) }),
+    false,
+    "a finished job is not 'alive' however recent its heartbeat"
+  );
+  assert.equal(isContentJobAlive(null), false);
+});
+
+test("isContentJobAlive uses a 3-minute window, matching db.js's HEARTBEAT_STALE_MS", () => {
+  assert.equal(CONTENT_HEARTBEAT_STALE_MS, 3 * 60 * 1000);
+  assert.equal(isContentJobAlive({ status: "drafting", heartbeat_at: isoMinutesAgo(2) }), true);
+  assert.equal(isContentJobAlive({ status: "drafting", heartbeat_at: isoMinutesAgo(4) }), false);
+});
+
+test("shouldRescueContentJob: only a running job with a stale heartbeat and no live lease", () => {
+  const stale = isoMinutesAgo(10);
+
+  assert.equal(
+    shouldRescueContentJob({ status: "drafting", heartbeat_at: stale }),
+    true,
+    "stale + unleased => rescue"
+  );
+  assert.equal(
+    shouldRescueContentJob({ status: "drafting", heartbeat_at: isoMinutesAgo(1) }),
+    false,
+    "a healthy in-flight job must never be re-picked"
+  );
+  assert.equal(
+    shouldRescueContentJob({ status: "approved", heartbeat_at: stale }),
+    false,
+    "a terminal job is never rescued"
+  );
+  assert.equal(
+    shouldRescueContentJob({
+      status: "drafting",
+      heartbeat_at: stale,
+      lease_owner: "run_a",
+      lease_expires_at: new Date(Date.now() + 60_000).toISOString(),
+    }),
+    false,
+    "a live lease means another worker owns this job"
+  );
+  assert.equal(
+    shouldRescueContentJob({
+      status: "drafting",
+      heartbeat_at: stale,
+      lease_owner: "run_dead",
+      lease_expires_at: isoMinutesAgo(5),
+    }),
+    true,
+    "an expired lease does not protect a dead worker's job"
+  );
+});
+
+test("D1 regression: a fresh PENDING job is NOT resumable just for being pending", async () => {
+  // The old implementation returned every `pending` job unconditionally, so a
+  // job that POST /api/content had just dispatched was picked up again by the
+  // next cron tick and run twice — two executions, two content_items rows, and
+  // up to double the per-item cost cap. Liveness now governs both paths.
+  const { client } = makeMockClient({
+    content_jobs: () => ({
+      data: [
+        { id: "fresh-pending", status: "pending", heartbeat_at: isoMinutesAgo(0), created_at: isoMinutesAgo(0) },
+      ],
+      error: null,
+    }),
+  });
+
+  assert.deepEqual(await listResumableContentJobs(5, { client }), []);
+});
+
+test("D1 regression: a job running longer than 5 minutes but heartbeating is NOT resumable", async () => {
+  // The old filter was `created_at < now - 5min`, which re-picked healthy
+  // long-running jobs. A real geo_article run can exceed five minutes.
+  const { client } = makeMockClient({
+    content_jobs: () => ({
+      data: [
+        {
+          id: "long-but-healthy",
+          status: "drafting",
+          created_at: isoMinutesAgo(30),
+          heartbeat_at: isoMinutesAgo(1),
+        },
+      ],
+      error: null,
+    }),
+  });
+
+  assert.deepEqual(await listResumableContentJobs(5, { client }), []);
+});
+
+test("listResumableContentJobs returns genuinely dead jobs, capped at the limit", async () => {
+  const stale = isoMinutesAgo(10);
+  const { client } = makeMockClient({
+    content_jobs: () => ({
+      data: [
+        { id: "dead-1", status: "drafting", heartbeat_at: stale, created_at: stale },
+        { id: "alive", status: "drafting", heartbeat_at: isoMinutesAgo(1), created_at: stale },
+        { id: "dead-2", status: "researching", heartbeat_at: stale, created_at: stale },
+        { id: "dead-3", status: "pending", heartbeat_at: stale, created_at: stale },
+      ],
+      error: null,
+    }),
+  });
+
+  const resumable = await listResumableContentJobs(2, { client });
+  assert.deepEqual(resumable.map((j) => j.id), ["dead-1", "dead-2"]);
+});
+
+test("listResumableContentJobs fails soft: a DB error yields no work, never a throw", async () => {
+  const { client } = makeMockClient({
+    content_jobs: () => ({ data: null, error: new Error("db down") }),
+  });
+  assert.deepEqual(await listResumableContentJobs(5, { client }), []);
+});
+
+// --- content_runs ledger (T3) -----------------------------------------------
+
+test("insertContentRun opens a running row; finishContentRun closes it with cost", async () => {
+  const run = await insertContentRun(
+    { job_id: "job-9", brand: "Acme", block: "draft", cycle: 2 },
+    { client: null }
+  );
+
+  assert.equal(run.status, "running");
+  assert.equal(run.block, "draft");
+  assert.equal(run.cycle, 2);
+  assert.ok(run.started_at);
+
+  const closed = await finishContentRun(
+    run.id,
+    { status: "succeeded", cost: 0.0123, tokens: 900 },
+    { client: null }
+  );
+  assert.equal(closed.status, "succeeded");
+  assert.equal(closed.cost, 0.0123);
+  assert.equal(closed.tokens, 900);
+  assert.ok(closed.ended_at);
+  assert.ok(closed.duration_ms >= 0, "duration is derived from the row's own started_at");
+});
+
+test("finishContentRun records the error on a failed block", async () => {
+  const run = await insertContentRun({ job_id: "job-9", brand: "Acme", block: "review" }, { client: null });
+  const closed = await finishContentRun(
+    run.id,
+    { status: "failed", cost: 0.004, error: "schema validation failed" },
+    { client: null }
+  );
+  assert.equal(closed.status, "failed");
+  assert.equal(closed.error, "schema validation failed");
+});
+
+test("finishContentRun tolerates a null run id — a broken ledger never fails a job", async () => {
+  assert.equal(await finishContentRun(null, { status: "succeeded" }, { client: null }), null);
+  assert.equal(await finishContentRun("no-such-run", { status: "succeeded" }, { client: null }), null);
+});
+
+test("listContentRunsForJob returns one job's runs oldest-first", async () => {
+  const a = await insertContentRun({ job_id: "job-A", brand: "Acme", block: "coordinate" }, { client: null });
+  await finishContentRun(a.id, { status: "succeeded", cost: 0.001 }, { client: null });
+  const b = await insertContentRun({ job_id: "job-A", brand: "Acme", block: "draft" }, { client: null });
+  await insertContentRun({ job_id: "job-B", brand: "Acme", block: "draft" }, { client: null });
+
+  const runs = await listContentRunsForJob("job-A", { client: null });
+  assert.deepEqual(runs.map((r) => r.block), ["coordinate", "draft"]);
+  assert.equal(runs[1].id, b.id);
+  assert.equal(
+    (await listContentRunsForJob("job-B", { client: null })).length,
+    1,
+    "runs are scoped to their own job"
+  );
 });

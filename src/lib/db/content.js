@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { supabase } from "../db.js";
+import { leaseIsFree } from "../jobLease.js";
 import { builtinAgents } from "../content/agents/model.js";
 
 /**
@@ -43,7 +44,55 @@ export const CONTENT_JOB_RUNNING = [
   "reviewing",
 ];
 
+/**
+ * Two staleness windows, deliberately different — they answer different
+ * questions and conflating them is what produced D1 (see the plan doc).
+ *
+ *  - STALE_CONTENT_JOB_MS (20 min) — DEDUPE. "Should I refuse to create a
+ *    second job for this brand+agent+query?" Wants a GENEROUS window: a user
+ *    re-clicking Generate should be blocked even while the worker is briefly
+ *    quiet mid-block.
+ *  - CONTENT_HEARTBEAT_STALE_MS (3 min) — RESCUE. "Is this job's worker dead,
+ *    so I may resume it?" Wants a TIGHT window so a genuinely crashed job
+ *    becomes resumable quickly. Matches db.js's HEARTBEAT_STALE_MS so both
+ *    pipelines use one definition of "the worker died".
+ */
 const STALE_CONTENT_JOB_MS = 20 * 60 * 1000;
+
+export const CONTENT_HEARTBEAT_STALE_MS = 3 * 60 * 1000;
+
+/**
+ * Canonical liveness check for content jobs — the mirror of db.js's
+ * isJobAlive(). updateContentJob() stamps heartbeat_at on every call, so a
+ * worker that is genuinely progressing keeps its job alive between blocks.
+ */
+export function isContentJobAlive(job, nowMs = Date.now()) {
+  if (!job || !CONTENT_JOB_RUNNING.includes(job.status)) return false;
+  const heartbeatMs = new Date(job.heartbeat_at || 0).getTime();
+  return Number.isFinite(heartbeatMs) && nowMs - heartbeatMs < CONTENT_HEARTBEAT_STALE_MS;
+}
+
+/**
+ * May the cron resume this job? Mirrors scanWorker's shouldRescueJob():
+ * running status, no live lease held by anyone, and a stale heartbeat.
+ *
+ * The lease check is the belt to the heartbeat's braces — the conditional
+ * UPDATE in jobLease.acquireLease() is the real authority, this just avoids
+ * dispatching work we are certain to lose.
+ *
+ * NOTE ON `pending`: the previous implementation treated every `pending` job
+ * as resumable unconditionally, which is exactly how D1 fired — POST
+ * /api/content dispatches startContentJob() itself, so a job it had *just*
+ * started (still inside its first block, no status write yet) was re-picked by
+ * the very next cron tick and run twice. Both dispatch paths now agree on
+ * heartbeat liveness: a pending job whose creator died is rescued one
+ * heartbeat window later instead of within seconds of a healthy start.
+ */
+export function shouldRescueContentJob(job, nowMs = Date.now()) {
+  if (!job || !CONTENT_JOB_RUNNING.includes(job.status)) return false;
+  if (!leaseIsFree(job, null, nowMs)) return false;
+  return !isContentJobAlive(job, nowMs);
+}
 
 // ---------------------------------------------------------------------------
 // content_jobs
@@ -226,25 +275,149 @@ export async function listContentJobs(brand, limit = 20) {
   }
 }
 
-/** Pending/stuck jobs for the cron resume path (mirrors scan worker route). */
-export async function listResumableContentJobs(limit = 5) {
-  if (!supabase) return [];
+/**
+ * Jobs the cron may rescue (mirrors /api/scan/worker's sweep).
+ *
+ * Retrieves every not-yet-finished job and lets shouldRescueContentJob decide
+ * which ones actually need a kick — heartbeat staleness plus a free lease, NOT
+ * a fixed `created_at` window. The old `created_at`-based filter re-picked
+ * healthy in-flight jobs and was the direct cause of D1 (double-run,
+ * double-spend); see shouldRescueContentJob's note.
+ */
+export async function listResumableContentJobs(limit = 5, deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) return [];
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from("content_jobs")
       .select("*")
       .in("status", CONTENT_JOB_RUNNING)
-      .limit(limit * 3);
+      .limit(Math.max(limit * 4, 20));
     if (error) throw error;
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    return (data || [])
-      .filter((job) => {
-        if (job.status === "pending") return true;
-        return new Date(job.created_at).getTime() < fiveMinutesAgo;
-      })
-      .slice(0, limit);
+    return (data || []).filter((job) => shouldRescueContentJob(job)).slice(0, limit);
   } catch (err) {
     console.warn("[content-db] listResumableContentJobs failed:", err.message);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// content_runs — per-block execution ledger (T3)
+//
+// FAILURE POLICY, deliberately different from content_jobs/content_items:
+// the ledger is OBSERVABILITY, not correctness. A ledger write that fails must
+// never take down a job that is otherwise producing a good draft, so every
+// function here is fail-soft (warn + return null) rather than fail-loud. The
+// cost CAP is enforced from `stats` in contentWorker, never from these rows,
+// so a missing ledger row cannot let a job overspend.
+// ---------------------------------------------------------------------------
+
+global.memoryContentRuns = global.memoryContentRuns || new Map();
+
+/** Open a ledger row for one block execution. Returns the row, or null. */
+export async function insertContentRun({ job_id, brand, block, cycle = 1 }, deps = {}) {
+  const client = resolveClient(deps);
+  const run = {
+    id: crypto.randomUUID(),
+    job_id: job_id || null,
+    brand,
+    block,
+    cycle,
+    status: "running",
+    cost: 0,
+    tokens: 0,
+    duration_ms: null,
+    error: null,
+    started_at: new Date().toISOString(),
+    ended_at: null,
+    created_at: new Date().toISOString(),
+  };
+
+  if (!client) {
+    global.memoryContentRuns.set(run.id, run);
+    return run;
+  }
+
+  try {
+    const { data, error } = await client.from("content_runs").insert([run]).select();
+    if (error) throw error;
+    return data[0];
+  } catch (err) {
+    console.warn(`[content-db] insertContentRun(${block}) failed:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Close a ledger row. `duration_ms` is derived from the row's own started_at
+ * so a caller never has to thread a start timestamp around.
+ */
+export async function finishContentRun(runId, { status, cost = 0, tokens = 0, error = null }, deps = {}) {
+  if (!runId) return null;
+  const client = resolveClient(deps);
+  const endedAt = new Date();
+
+  if (!client) {
+    const run = global.memoryContentRuns.get(runId);
+    if (!run) return null;
+    Object.assign(run, {
+      status,
+      cost,
+      tokens,
+      error,
+      ended_at: endedAt.toISOString(),
+      duration_ms: endedAt.getTime() - new Date(run.started_at).getTime(),
+    });
+    return run;
+  }
+
+  try {
+    const { data: existing } = await client
+      .from("content_runs")
+      .select("started_at")
+      .eq("id", runId);
+    const startedAt = existing?.[0]?.started_at;
+    const patch = {
+      status,
+      cost,
+      tokens,
+      error,
+      ended_at: endedAt.toISOString(),
+      duration_ms: startedAt ? endedAt.getTime() - new Date(startedAt).getTime() : null,
+    };
+    const { data, error: updateError } = await client
+      .from("content_runs")
+      .update(patch)
+      .eq("id", runId)
+      .select();
+    if (updateError) throw updateError;
+    return data?.[0] || null;
+  } catch (err) {
+    console.warn(`[content-db] finishContentRun(${runId}) failed:`, err.message);
+    return null;
+  }
+}
+
+/** The execution history of one job, oldest first. */
+export async function listContentRunsForJob(jobId, deps = {}) {
+  const client = resolveClient(deps);
+
+  if (!client) {
+    return Array.from(global.memoryContentRuns.values())
+      .filter((r) => r.job_id === jobId)
+      .sort((a, b) => new Date(a.started_at) - new Date(b.started_at));
+  }
+
+  try {
+    const { data, error } = await client
+      .from("content_runs")
+      .select("*")
+      .eq("job_id", jobId)
+      .order("started_at", { ascending: true });
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.warn("[content-db] listContentRunsForJob failed:", err.message);
     return [];
   }
 }

@@ -3,6 +3,10 @@
     {
       "path": "/api/scan/worker",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/content/worker",
+      "schedule": "30 0 * * *"
     }
   ]
 }

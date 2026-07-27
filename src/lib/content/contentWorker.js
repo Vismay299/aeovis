@@ -7,8 +7,12 @@ import {
   getBrandBrief,
   upsertBrandBrief,
   listLessons,
+  insertContentRun,
+  finishContentRun,
 } from "../db/content.js";
 import { getScansForBrand } from "../db.js";
+import { acquireLease, renewLease, releaseLease, newLeaseOwner } from "../jobLease.js";
+import { stageForBlock, isLegalTransition } from "./stages.js";
 import { HEALTHCARE_CXO_BRIEF } from "./briefs/healthcareCxo.js";
 import { defaultAgentForBase } from "./agents/model.js";
 import { crewMember } from "./agents/crew.js";
@@ -102,19 +106,49 @@ export function resolveAgent(job) {
   return defaultAgentForBase(job?.playbook || "geo_article");
 }
 
-/** Job-status string for a block (the coarse status the queue UI shows). */
+/**
+ * Job-status string for a block (the coarse status the queue UI shows).
+ * The mapping now lives in stages.js as data (T2) — this stays as the thin
+ * adapter that supplies the block's kind for the fallback path.
+ */
 function statusForBlock(slug) {
-  const map = {
-    coordinate: "coordinating",
-    research: "researching",
-    benchmark: "benchmarking",
-    draft: "drafting",
-    review: "reviewing",
-    fact_check: "reviewing",
-  };
-  if (map[slug]) return map[slug];
-  const kind = getBlock(slug)?.kind;
-  return kind === "transform" ? "drafting" : "reviewing";
+  return stageForBlock(slug, getBlock(slug)?.kind);
+}
+
+function round4(n) {
+  return Math.round((n || 0) * 10000) / 10000;
+}
+
+/**
+ * Run one block inside a ledger row (T3). Captures this block's own spend as
+ * the delta of the shared `stats` accumulator across the call, so per-block
+ * cost attribution needs no changes in the step modules themselves.
+ *
+ * The ledger is observability: insert/finish are fail-soft in db/content.js, a
+ * null run id is tolerated here, and the cost CAP is still enforced from
+ * `stats` by assertUnderCostCap — so a broken ledger can neither fail a job
+ * nor let one overspend.
+ */
+async function withLedger({ jobId, brand, slug, cycle = 1, stats, deps = {} }, fn) {
+  const open = deps.insertContentRun || insertContentRun;
+  const close = deps.finishContentRun || finishContentRun;
+
+  const run = await open({ job_id: jobId, brand, block: slug, cycle });
+  const costBefore = stats.cost || 0;
+  const tokensBefore = stats.tokens || 0;
+  const delta = () => ({
+    cost: round4((stats.cost || 0) - costBefore),
+    tokens: (stats.tokens || 0) - tokensBefore,
+  });
+
+  try {
+    const out = await fn();
+    await close(run?.id, { status: "succeeded", ...delta() });
+    return out;
+  } catch (err) {
+    await close(run?.id, { status: "failed", ...delta(), error: err.message || "failed" });
+    throw err;
+  }
 }
 
 export async function startContentJob(jobId, deps = {}) {
@@ -122,10 +156,54 @@ export async function startContentJob(jobId, deps = {}) {
 
   const update = deps.updateContentJob || updateContentJob;
 
+  // --- Lease: structural single-flight (T1) -------------------------------
+  // The cron may have already won the lease and hands its owner id down via
+  // deps.leaseOwner; a direct dispatch (POST /api/content) acquires one here.
+  // Either way, exactly one execution of this job can be in flight — before
+  // this, two overlapping dispatches each ran the full pipeline against one
+  // row, each spending up to the per-item cap (D1).
+  const leaseOwner = deps.leaseOwner || newLeaseOwner("job");
+  if (!deps.leaseOwner) {
+    let won = null;
+    try {
+      won = await acquireLease("content_jobs", jobId, leaseOwner);
+    } catch (err) {
+      // Fail CLOSED: without proven exclusivity we must not spend budget.
+      console.error(`[content-worker] lease acquire failed for job ${jobId}:`, err.message);
+      return null;
+    }
+    if (!won) {
+      console.log(`[content-worker] job ${jobId} is already leased — skipping duplicate start`);
+      return null;
+    }
+  }
+
   let trace = initTrace();
+  // Last status THIS execution wrote — the `from` side of the transition check.
+  let lastStatus = null;
+
   // Every job update also flushes the live trace so the theater sees each
-  // specialist transition in real time.
-  const writeJob = (fields) => update(jobId, { ...fields, agent_trace: trace });
+  // specialist transition in real time, and renews the lease so a job that is
+  // genuinely progressing never loses it (L3).
+  const writeJob = async (fields) => {
+    if (fields.status) {
+      // Warn, never throw (L6): inside a fire-and-forget worker an exception
+      // here would turn a bookkeeping bug into a lost job. Tests assert
+      // legality; production gets a loud line naming the illegal edge.
+      if (!isLegalTransition(lastStatus, fields.status)) {
+        console.warn(
+          `[content-worker] job ${jobId}: illegal transition ` +
+            `${lastStatus || "(none)"} → ${fields.status} — see content/stages.js`
+        );
+      }
+      lastStatus = fields.status;
+    }
+    const result = await update(jobId, { ...fields, agent_trace: trace });
+    renewLease("content_jobs", jobId, leaseOwner).catch((err) =>
+      console.warn(`[content-worker] lease renew failed for job ${jobId}:`, err.message)
+    );
+    return result;
+  };
 
   try {
     const job = deps.job || (await getContentJob(jobId));
@@ -174,14 +252,15 @@ export async function startContentJob(jobId, deps = {}) {
       markWorking(trace, slug);
       await writeJob({ status: statusForBlock(slug), progress_pct: pctFor(i) });
 
+      const ledger = { jobId, brand, slug, stats, deps };
       if (slug === "coordinate") {
-        ctx.workOrder = await runCoordinate(ctx, deps);
+        ctx.workOrder = await withLedger(ledger, () => runCoordinate(ctx, deps));
         markDone(trace, slug, summarizeCoordinate(ctx.workOrder));
       } else if (slug === "research") {
-        ctx.researchPack = await runResearch(ctx, deps);
+        ctx.researchPack = await withLedger(ledger, () => runResearch(ctx, deps));
         markDone(trace, slug, summarizeResearch(ctx.researchPack));
       } else if (slug === "benchmark") {
-        ctx.benchmarkNotes = await runBenchmark(ctx, deps);
+        ctx.benchmarkNotes = await withLedger(ledger, () => runBenchmark(ctx, deps));
         markDone(trace, slug, summarizeBenchmark(ctx.benchmarkNotes, playbook));
       }
       assertUnderCostCap(stats, slug);
@@ -212,7 +291,10 @@ export async function startContentJob(jobId, deps = {}) {
         cycles === 1 ? crewMember("draft").verb : `Redrafting from the critique (pass ${cycles})`
       );
       await writeJob({ status: "drafting", progress_pct: cycles === 1 ? pctFor(draftIdx) : 84 });
-      draft = await runDraft(ctx, deps);
+      draft = await withLedger(
+        { jobId, brand, slug: "draft", cycle: cycles, stats, deps },
+        () => runDraft(ctx, deps)
+      );
       assertUnderCostCap(stats, "draft");
       markDone(trace, "draft", summarizeDraft(draft, cycles));
       ctx.draft = draft;
@@ -226,12 +308,13 @@ export async function startContentJob(jobId, deps = {}) {
           markWorking(trace, slug);
           await writeJob({ status: statusForBlock(slug), progress_pct: pctFor(draftIdx + 1 + m) });
 
+          const midLedger = { jobId, brand, slug, stats, deps };
           if (block.kind === "transform") {
-            draft = await runTransform(ctx, slug, deps);
+            draft = await withLedger(midLedger, () => runTransform(ctx, slug, deps));
             ctx.draft = draft;
             markDone(trace, slug, summarizeTransform(block, draft));
           } else if (slug === "fact_check") {
-            factCheck = await runFactCheck(ctx, deps);
+            factCheck = await withLedger(midLedger, () => runFactCheck(ctx, deps));
             markDone(trace, slug, summarizeFactCheck(factCheck));
             // The Editor sees the fact-checker's findings.
             ctx.factCheck = factCheck;
@@ -247,7 +330,10 @@ export async function startContentJob(jobId, deps = {}) {
         cycles === 1 ? crewMember("review").verb : `Re-scoring the redraft (pass ${cycles})`
       );
       await writeJob({ status: "reviewing", progress_pct: cycles === 1 ? pctFor(pipeline.length - 1) : 92 });
-      review = await runReview({ ...ctx, draft }, deps);
+      review = await withLedger(
+        { jobId, brand, slug: "review", cycle: cycles, stats, deps },
+        () => runReview({ ...ctx, draft }, deps)
+      );
       assertUnderCostCap(stats, "review");
       markDone(trace, "review", summarizeReview(review));
 
@@ -337,6 +423,15 @@ export async function startContentJob(jobId, deps = {}) {
       agent_trace: trace,
     });
     return null;
+  } finally {
+    // Release on EVERY terminal outcome, success or failure. Without this a
+    // job that crashed and needs a retry would sit out the full lease TTL for
+    // no reason, and a finished job would look busy to the rescue sweep.
+    try {
+      await releaseLease("content_jobs", jobId, leaseOwner);
+    } catch (err) {
+      console.warn(`[content-worker] lease release failed for job ${jobId}:`, err.message);
+    }
   }
 }
 
@@ -400,10 +495,15 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
       `every automated critique. Address every point:\n${comment}`,
   };
 
+  // Revision spend is ledgered against the originating job under the next
+  // cycle number, so a job's execution history includes human-driven passes.
+  const revCycle = (item.revision || 0) + 1;
+  const revLedger = (slug) => ({ jobId: item.job_id, brand, slug, cycle: revCycle, stats, deps });
+
   try {
-    const draft = await runDraft(ctx, deps);
+    const draft = await withLedger(revLedger("draft"), () => runDraft(ctx, deps));
     assertUnderCostCap(stats, "draft(revision)");
-    const review = await runReview({ ...ctx, draft }, deps);
+    const review = await withLedger(revLedger("review"), () => runReview({ ...ctx, draft }, deps));
     assertUnderCostCap(stats, "review(revision)");
 
     const revisions = [

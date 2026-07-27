@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startContentJob, reviseContentItem } from "./contentWorker.js";
+import { isLegalTransition } from "./stages.js";
 
 /**
  * End-to-end pipeline tests against a scripted fake LLM — zero live calls.
@@ -469,4 +470,151 @@ test("invalid step output: retried once, then the job fails with the step named"
   const final = jobUpdates[jobUpdates.length - 1];
   assert.equal(final.status, "failed");
   assert.ok(final.error_message.includes('Step "coordinate"'));
+});
+
+// --- control plane: stage transitions (T2) + run ledger (T3) -----------------
+
+/** deps plus a capturing ledger, so per-block accounting can be asserted. */
+function makeLedgerDeps(llm, opts = {}) {
+  const base = makeDeps(llm, opts);
+  const runs = [];
+  base.deps.insertContentRun = async ({ job_id, brand, block, cycle }) => {
+    const run = { id: `run-${runs.length + 1}`, job_id, brand, block, cycle, status: "running" };
+    runs.push(run);
+    return run;
+  };
+  base.deps.finishContentRun = async (runId, patch) => {
+    const run = runs.find((r) => r.id === runId);
+    if (run) Object.assign(run, patch);
+    return run || null;
+  };
+  return { ...base, runs };
+}
+
+test("every job status the worker writes is a legal stage transition", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates } = makeDeps(llm);
+
+  await startContentJob("job-1", deps);
+
+  const statuses = jobUpdates.map((u) => u.status).filter(Boolean);
+  let previous = null;
+  for (const status of statuses) {
+    assert.ok(
+      isLegalTransition(previous, status),
+      `illegal transition ${previous} → ${status} (see content/stages.js)`
+    );
+    previous = status;
+  }
+});
+
+test("the revision loop's repeated statuses are still legal transitions", async () => {
+  const { llm } = makeFakeLlm([
+    LI_WORK_ORDER,
+    RESEARCH_PACK,
+    LI_DRAFT,
+    LI_REVIEW_FAIL,
+    { ...LI_DRAFT, title: "redrafted" },
+    LI_REVIEW_PASS,
+  ]);
+  const { deps, jobUpdates } = makeDeps(llm);
+
+  await startContentJob("job-1", deps);
+
+  const statuses = jobUpdates.map((u) => u.status).filter(Boolean);
+  // drafting → reviewing → drafting → reviewing: the loop revisits statuses.
+  assert.ok(statuses.filter((s) => s === "drafting").length >= 2);
+  let previous = null;
+  for (const status of statuses) {
+    assert.ok(isLegalTransition(previous, status), `illegal transition ${previous} → ${status}`);
+    previous = status;
+  }
+});
+
+test("ledger: one row per executed block, each closed with its own cost", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS], 0.01);
+  const { deps, runs } = makeLedgerDeps(llm);
+
+  await startContentJob("job-1", deps);
+
+  assert.deepEqual(
+    runs.map((r) => r.block),
+    ["coordinate", "research", "benchmark", "draft", "review"],
+    "every block in the resolved pipeline gets a ledger row"
+  );
+  for (const run of runs) {
+    assert.equal(run.status, "succeeded", `${run.block} should have closed successfully`);
+    assert.equal(run.job_id, "job-1");
+    assert.equal(run.brand, "TestDiag");
+  }
+
+  // benchmark is static for linkedin_post — it makes no LLM call, so its own
+  // cost must be exactly 0. This is the point of per-block attribution: a free
+  // block and a paid one are distinguishable.
+  const byBlock = Object.fromEntries(runs.map((r) => [r.block, r]));
+  assert.equal(byBlock.benchmark.cost, 0, "a block that spends nothing records 0");
+  for (const block of ["coordinate", "research", "draft", "review"]) {
+    assert.ok(byBlock[block].cost > 0, `${block} calls the LLM and must record its spend`);
+  }
+});
+
+test("ledger: per-block cost sums to the job total — attribution is complete (D4)", async () => {
+  const perCall = 0.01;
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS], perCall);
+  const { deps, runs, jobUpdates } = makeLedgerDeps(llm);
+
+  await startContentJob("job-1", deps);
+
+  const ledgerTotal = runs.reduce((sum, r) => sum + r.cost, 0);
+  const jobTotal = jobUpdates[jobUpdates.length - 1].cost_total;
+  assert.ok(
+    Math.abs(ledgerTotal - jobTotal) < 1e-6,
+    `ledger total ${ledgerTotal} should equal job total ${jobTotal}`
+  );
+});
+
+test("ledger: the revision loop records each pass under its own cycle number", async () => {
+  const { llm } = makeFakeLlm([
+    LI_WORK_ORDER,
+    RESEARCH_PACK,
+    LI_DRAFT,
+    LI_REVIEW_FAIL,
+    { ...LI_DRAFT, title: "redrafted" },
+    LI_REVIEW_PASS,
+  ]);
+  const { deps, runs } = makeLedgerDeps(llm);
+
+  await startContentJob("job-1", deps);
+
+  const drafts = runs.filter((r) => r.block === "draft");
+  const reviews = runs.filter((r) => r.block === "review");
+  assert.deepEqual(drafts.map((r) => r.cycle), [1, 2]);
+  assert.deepEqual(reviews.map((r) => r.cycle), [1, 2]);
+});
+
+test("ledger: a failing block is closed as failed with the error text", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER]); // research exhausts the queue
+  const { deps, runs } = makeLedgerDeps(llm);
+
+  const item = await startContentJob("job-1", deps);
+
+  assert.equal(item, null, "the job still fails loudly");
+  const research = runs.find((r) => r.block === "research");
+  assert.ok(research, "the failing block still opened a ledger row");
+  assert.equal(research.status, "failed");
+  assert.ok(research.error, "the failure reason is recorded");
+  assert.equal(runs.find((r) => r.block === "coordinate").status, "succeeded");
+});
+
+test("ledger: a broken ledger never breaks the pipeline", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, items } = makeDeps(llm);
+  // db/content.js is fail-soft and returns null; prove the worker tolerates it.
+  deps.insertContentRun = async () => null;
+  deps.finishContentRun = async () => null;
+
+  const item = await startContentJob("job-1", deps);
+
+  assert.ok(item, "the job must still produce an item");
+  assert.equal(items[0].status, "awaiting_approval");
 });

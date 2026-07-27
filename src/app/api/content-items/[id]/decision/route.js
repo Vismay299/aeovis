@@ -8,6 +8,7 @@ import {
 import { insertContentEvent } from "@/lib/db";
 import { reviseContentItem } from "@/lib/content/contentWorker";
 import { runLearn } from "@/lib/content/steps/learn";
+import { decideItemStatus, jobStatusForItemStatus } from "@/lib/content/stages";
 
 export const dynamic = "force-dynamic";
 
@@ -55,12 +56,18 @@ export async function POST(request, { params }) {
     if (!item) {
       return NextResponse.json({ detail: "Item not found." }, { status: 404 });
     }
-    if (item.status !== "awaiting_approval") {
+
+    // Route the decision through the stage machine (T2) instead of re-deriving
+    // the rules here: it owns "which statuses are review gates" and "where does
+    // each verdict go", so the gate and the target status can never disagree.
+    const routed = decideItemStatus(item.status, verdict);
+    if (!routed.ok) {
       return NextResponse.json(
-        { detail: `Item is "${item.status}" — only awaiting_approval items accept decisions.` },
-        { status: 409 }
+        { detail: routed.error },
+        { status: routed.code === "bad_verdict" ? 400 : 409 }
       );
     }
+    const newStatus = routed.status;
 
     // 1. Feedback row — the raw learning signal.
     const feedback = await insertContentFeedback({
@@ -72,13 +79,10 @@ export async function POST(request, { params }) {
 
     // 2. Status change. changes_requested keeps the item in-flight; the
     //    revision pass returns it to awaiting_approval when done.
-    const newStatus = verdict === "approved" ? "approved" : verdict === "rejected" ? "rejected" : "changes_requested";
     await updateContentItem(id, { status: newStatus });
     if (item.job_id) {
       try {
-        await updateContentJob(item.job_id, {
-          status: verdict === "changes_requested" ? "awaiting_approval" : newStatus,
-        });
+        await updateContentJob(item.job_id, { status: jobStatusForItemStatus(newStatus) });
       } catch (err) {
         console.warn("[decision] job status sync failed:", err.message);
       }

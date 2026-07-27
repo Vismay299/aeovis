@@ -1,15 +1,87 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 import { listResumableContentJobs } from "@/lib/db/content";
+import { acquireLease, newLeaseOwner } from "@/lib/jobLease";
 import { startContentJob } from "@/lib/content/contentWorker";
 import { createDailyBatchJobs, getDailyBatchSize } from "@/lib/content/dailyBatch";
 
 // Side-effectful (spends real model budget) — must never run at build time.
 export const dynamic = "force-dynamic";
 
+// Mirrors /api/scan/worker: a resumed content job runs a full block pipeline
+// and needs the same headroom as the route that first started it (D3).
+export const maxDuration = 300;
+
+const MAX_CONCURRENT_RESUMES = 3;
+
+let warnedNoSecret = false;
+
+/**
+ * Cron/worker auth — mirrors /api/scan/worker's isAuthorized exactly (D2).
+ *
+ * This endpoint resumes content jobs AND, with `?batch=1`, CREATES new ones,
+ * each spending real model budget against CONTENT_MAX_COST_PER_ITEM.
+ * Unauthenticated it is a free "burn the owner's model budget" button — the
+ * scan worker was sealed for precisely this reason (reviewer D4) and this route
+ * was left open.
+ *
+ * When CRON_SECRET is set (production), a caller must present it as
+ * `Authorization: Bearer <secret>`, `x-cron-secret: <secret>`, or `?secret=`.
+ * Vercel's own cron invocations are also accepted via the `x-vercel-cron`
+ * header they inject. When CRON_SECRET is unset (local dev) we allow the call
+ * but warn once, so dev keeps working out of the box.
+ */
+function isAuthorized(request, searchParams) {
+  const secret = (process.env.CRON_SECRET || "").trim();
+  if (!secret) {
+    if (!warnedNoSecret) {
+      warnedNoSecret = true;
+      console.warn(
+        "[content-cron] CRON_SECRET is not set — /api/content/worker is UNAUTHENTICATED. " +
+          "Set CRON_SECRET before exposing this deployment publicly."
+      );
+    }
+    return true;
+  }
+  if (request.headers.get("x-vercel-cron")) return true;
+  const auth = request.headers.get("authorization") || "";
+  if (auth === `Bearer ${secret}`) return true;
+  if (request.headers.get("x-cron-secret") === secret) return true;
+  if (searchParams.get("secret") === secret) return true;
+  return false;
+}
+
+/**
+ * Take the lease, then dispatch. Returns the lease owner if we won the job,
+ * else null. This is the single-flight gate (D1): before this, the cron fired
+ * startContentJob() fire-and-forget with no exclusivity, so two overlapping
+ * invocations both ran the same job — two executions racing one row, each
+ * spending up to the full per-item cap and each inserting a content_items row.
+ */
+async function dispatchWithLease(jobId, label) {
+  const owner = newLeaseOwner("cron");
+  let won = null;
+  try {
+    won = await acquireLease("content_jobs", jobId, owner);
+  } catch (err) {
+    // Fail CLOSED: if we cannot prove we hold the lease, we must not spend.
+    console.error(`[content-cron] lease acquire failed for ${label} ${jobId}:`, err.message);
+    return null;
+  }
+  if (!won) {
+    console.log(`[content-cron] ${label} ${jobId} is leased by another worker — skipping`);
+    return null;
+  }
+
+  startContentJob(jobId, { leaseOwner: owner }).catch((err) => {
+    console.error(`[content-cron] Error processing ${label} ${jobId}:`, err);
+  });
+  return owner;
+}
+
 /**
  * GET /api/content/worker — cron for the content pipeline. Two jobs:
- *   1. Resume pending/stuck content jobs (mirrors /api/scan/worker).
+ *   1. Rescue content jobs whose worker died (heartbeat stale + lease free).
  *   2. If CONTENT_DAILY_BATCH>0 and ?batch=1 (daily cadence), enqueue up to
  *      n geo_article jobs from the worst gaps of each brand's latest scan.
  *
@@ -18,6 +90,12 @@ export const dynamic = "force-dynamic";
  * hits `?batch=1`.
  */
 export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+
+  if (!isAuthorized(request, searchParams)) {
+    return NextResponse.json({ detail: "Unauthorized." }, { status: 401 });
+  }
+
   if (!supabase) {
     return NextResponse.json({
       processed: 0,
@@ -26,17 +104,17 @@ export async function GET(request) {
   }
 
   try {
-    const { searchParams } = new URL(request.url);
     const runBatch = searchParams.get("batch") === "1";
 
-    // 1. Resume in-flight jobs.
-    const jobs = await listResumableContentJobs(3);
+    // 1. Rescue jobs whose worker is presumed dead. A job with a fresh
+    //    heartbeat or a live lease is presumed actively worked and skipped.
+    const jobs = await listResumableContentJobs(MAX_CONCURRENT_RESUMES);
     const startedIds = [];
+    const skippedIds = [];
     for (const job of jobs) {
-      startContentJob(job.id).catch((err) => {
-        console.error(`[content-cron] Error processing job ${job.id}:`, err);
-      });
-      startedIds.push(job.id);
+      const owner = await dispatchWithLease(job.id, "job");
+      if (owner) startedIds.push(job.id);
+      else skippedIds.push(job.id);
     }
 
     // 2. Daily batch (opt-in).
@@ -54,10 +132,8 @@ export async function GET(request) {
         try {
           const created = await createDailyBatchJobs(brand);
           for (const job of created) {
-            batchCreated.push(job.id);
-            startContentJob(job.id).catch((err) =>
-              console.error(`[content-cron] batch job ${job.id} failed:`, err)
-            );
+            const owner = await dispatchWithLease(job.id, "batch job");
+            if (owner) batchCreated.push(job.id);
           }
         } catch (err) {
           console.warn(`[content-cron] batch for ${brand} failed:`, err.message);
@@ -68,6 +144,7 @@ export async function GET(request) {
     return NextResponse.json({
       resumed: startedIds.length,
       resumed_ids: startedIds,
+      skipped_leased: skippedIds.length,
       batch_created: batchCreated.length,
       batch_ids: batchCreated,
     });
