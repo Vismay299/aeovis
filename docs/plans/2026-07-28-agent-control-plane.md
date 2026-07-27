@@ -243,6 +243,36 @@ existing `src/lib/dbContent.test.mjs`.
 
 ---
 
+## 6a. Deploy order (REQUIRED — read before shipping)
+
+**Run `supabase/migrations/006_agent_control_plane.sql` BEFORE deploying this code.**
+
+`acquireLease` writes `lease_owner` / `lease_expires_at`. Against a database
+without those columns the write errors, and the worker deliberately **fails
+closed** (L4 — never spend budget without proven exclusivity), so *every*
+content job would stop starting. This is exactly the failure migration 005's own
+comment records for `content_jobs.heartbeat_at`: code and migration authored
+separately, shipped out of order, whole subsystem 500s.
+
+`content_runs` is safer by construction — the ledger is fail-soft, so a missing
+table only loses per-block attribution and logs a warning.
+
+Set `CRON_SECRET` in the Vercel project before or with this deploy. The route
+still works without it (warn-once, matching `/api/scan/worker`), but the whole
+point of D2 is to stop shipping it open.
+
+Verify after migrating:
+
+```bash
+curl -s "$DEPLOY_URL/api/content/worker" -H "x-cron-secret: $CRON_SECRET" | jq
+```
+
+Expect `{"resumed":0,"skipped_leased":0,...}` on a healthy system — no stale
+jobs to rescue is the correct steady state. A 401 without the header confirms D2
+is sealed.
+
+---
+
 ## 7. Deliberately deferred
 
 | Item | Why not now |
