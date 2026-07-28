@@ -1,29 +1,37 @@
-"use client";
+'use client';
 
-import { useRouter, usePathname } from "next/navigation";
-import { Wordmark } from "./Wordmark";
-import { Button } from "./Button";
-import {
-  LayoutDashboard,
-  MessageSquareText,
-  Swords,
-  Link2,
-  Search,
-  Bot,
-  History,
-  Plus,
-  PenSquare,
-} from "lucide-react";
+/**
+ * The cabin's control column.
+ *
+ * Identity at the head, the brand under observation in its berth, the panel
+ * regions as engraved legend buttons with an indicator lamp each, and the
+ * train register of previous readings below. Selection is shown by a lit
+ * lamp and a lit legend — position and light, not colour alone.
+ */
+
+import { useRouter } from 'next/navigation';
+import { Plus } from 'lucide-react';
+import { Wordmark } from './Wordmark';
+import { Button } from './Button';
+import { Describer } from '@/components/signal/Describer';
+import { Lamp } from '@/components/signal/Lamp';
 
 const NAV_ITEMS = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard, testId: "sidebar-overview" },
-  { key: "answers", label: "Answers", icon: MessageSquareText, testId: "sidebar-answers" },
-  { key: "rivals", label: "Rivals", icon: Swords, testId: "sidebar-rivals" },
-  { key: "sources", label: "Sources", icon: Link2, testId: "sidebar-sources" },
-  { key: "queries", label: "Queries", icon: Search, testId: "sidebar-queries" },
-  { key: "crawlability", label: "Crawlability", icon: Bot, testId: "sidebar-crawlability" },
-  { key: "studio", label: "Studio", icon: PenSquare, testId: "sidebar-studio" },
+  { key: 'overview', label: 'overview', testId: 'sidebar-overview' },
+  { key: 'answers', label: 'answers', testId: 'sidebar-answers' },
+  { key: 'rivals', label: 'rivals', testId: 'sidebar-rivals' },
+  { key: 'sources', label: 'sources', testId: 'sidebar-sources' },
+  { key: 'queries', label: 'queries', testId: 'sidebar-queries' },
+  { key: 'crawlability', label: 'crawlability', testId: 'sidebar-crawlability' },
+  { key: 'studio', label: 'studio', testId: 'sidebar-studio' },
 ];
+
+function readingLamp(v) {
+  if (v == null) return 'amber';
+  if (v >= 50) return 'green';
+  if (v >= 25) return 'amber';
+  return 'red';
+}
 
 export const Sidebar = ({
   brand,
@@ -35,166 +43,69 @@ export const Sidebar = ({
   activeScanTimestamp,
   onNewScan,
   studioBadge = 0,
+  currentScore,
 }) => {
   const router = useRouter();
-  const pathname = usePathname();
 
   return (
-    <aside
-      data-testid="sidebar"
-      style={{
-        width: "236px",
-        minWidth: "236px",
-        height: "100vh",
-        background: "var(--bg-1)",
-        borderRight: "1px solid var(--border-1)",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}
-    >
-      {/* Brand chip */}
-      <div
-        style={{
-          padding: "var(--space-5) var(--space-5) var(--space-4)",
-          borderBottom: "1px solid var(--border-1)",
-        }}
-      >
+    <aside data-testid="sidebar" className="sb-cabin">
+      <div className="sb-cabin__head">
         <a
           href="/"
-          style={{ display: "inline-block" }}
+          style={{ display: 'inline-flex' }}
           onClick={(e) => {
             e.preventDefault();
-            router.push("/");
+            router.push('/');
           }}
         >
           <Wordmark size="sm" />
         </a>
       </div>
 
-      {/* Current brand indicator */}
       {brand && (
-        <div
-          style={{
-            padding: "var(--space-3) var(--space-5)",
-            borderBottom: "1px solid var(--border-1)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <span
-              style={{
-                width: "6px",
-                height: "6px",
-                borderRadius: "var(--radius-round)",
-                background: "var(--accent)",
-                flexShrink: 0,
-              }}
-            />
-            <div style={{ overflow: "hidden" }}>
-              <div
-                style={{
-                  fontFamily: "var(--font-sans)",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  color: "var(--text-1)",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {brand}
-              </div>
-              {website && (
-                <div
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "10px",
-                    color: "var(--text-3)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    marginTop: "2px",
-                  }}
-                >
-                  {website}
-                </div>
-              )}
-            </div>
+        <div className="sb-cabin__berth">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <Lamp lamp={readingLamp(currentScore)} size={8} />
+            <span className="sb-cabin__brand" title={brand}>
+              {brand}
+            </span>
+            {currentScore != null && Number.isFinite(currentScore) && (
+              <span style={{ marginLeft: 'auto' }}>
+                <Describer
+                  value={String(Math.round(currentScore)).padStart(2, '0')}
+                  size={14}
+                  bloom={false}
+                  lamp={readingLamp(currentScore)}
+                />
+              </span>
+            )}
           </div>
+          {website && (
+            <div className="t-stamp sb-cabin__site" title={website}>
+              {website}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Nav items */}
-      <nav
-        style={{
-          flex: 1,
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          padding: "var(--space-2)",
-        }}
-      >
-        <div style={{ flex: 1, overflowY: "auto" }}>
+      <nav className="sb-cabin__nav" aria-label="Panel regions">
+        <div className="sb-cabin__legends">
           {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
             const isActive = view === item.key;
             return (
               <button
                 key={item.key}
+                type="button"
                 data-testid={item.testId}
+                className="sb-legend"
+                data-active={isActive ? 'true' : 'false'}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => onViewChange(item.key)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  width: "100%",
-                  padding: "8px 12px",
-                  marginBottom: "2px",
-                  borderRadius: "var(--radius-1)",
-                  background: isActive ? "var(--bg-2)" : "transparent",
-                  border: "none",
-                  color: isActive ? "var(--text-1)" : "var(--text-2)",
-                  fontFamily: "var(--font-sans)",
-                  fontSize: "13px",
-                  fontWeight: isActive ? 500 : 400,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: "all var(--dur-fast) var(--ease-out)",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) e.target.style.color = "var(--text-1)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) e.target.style.color = "var(--text-2)";
-                }}
               >
-                <Icon size={16} strokeWidth={1.5} />
-                {item.label}
-                {item.key === "studio" && studioBadge > 0 && (
-                  <span
-                    data-testid="sidebar-studio-badge"
-                    style={{
-                      marginLeft: "auto",
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "9px",
-                      fontWeight: 600,
-                      minWidth: "18px",
-                      height: "18px",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "0 5px",
-                      borderRadius: "var(--radius-round)",
-                      background: "var(--accent)",
-                      color: "var(--accent-fg)",
-                    }}
-                  >
+                <Lamp lamp="white" lit={isActive} size={7} />
+                <span>{item.label}</span>
+                {item.key === 'studio' && studioBadge > 0 && (
+                  <span data-testid="sidebar-studio-badge" className="sb-legend__count">
                     {studioBadge}
                   </span>
                 )}
@@ -203,91 +114,31 @@ export const Sidebar = ({
           })}
         </div>
 
-        {/* Scan history */}
         {history && history.length > 0 && (
-          <div
-            style={{
-              borderTop: "1px solid var(--border-1)",
-              paddingTop: "var(--space-3)",
-              marginTop: "var(--space-2)",
-              overflow: "hidden",
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "0 12px var(--space-2)",
-              }}
-            >
-              <History size={12} style={{ color: "var(--text-3)" }} />
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "9px",
-                  fontWeight: 500,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.1em",
-                  color: "var(--text-3)",
-                }}
-              >
-                Scan history
-              </span>
-            </div>
-            <div
-              style={{
-                overflowY: "auto",
-                maxHeight: "140px",
-                padding: "0 var(--space-2)",
-              }}
-            >
-              {history.slice(0, 5).map((scan, i) => {
+          <div className="sb-cabin__register">
+            <span className="t-plate" style={{ padding: '0 12px 8px', display: 'block' }}>
+              register
+            </span>
+            <div className="sb-scroll" data-lenis-prevent style={{ maxHeight: 168 }}>
+              {history.slice(0, 8).map((scan, i) => {
                 const isActive =
                   activeScanTimestamp &&
-                  new Date(scan.scanned_at).getTime() ===
-                    new Date(activeScanTimestamp).getTime();
+                  new Date(scan.scanned_at).getTime() === new Date(activeScanTimestamp).getTime();
                 return (
                   <button
                     key={i}
+                    type="button"
+                    className="sb-entry"
+                    data-active={isActive ? 'true' : 'false'}
                     onClick={() => onHistoryClick?.(scan)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      width: "100%",
-                      padding: "6px 10px",
-                      marginBottom: "2px",
-                      borderRadius: "var(--radius-1)",
-                      background: isActive ? "var(--bg-2)" : "transparent",
-                      border: "none",
-                      color: isActive ? "var(--text-1)" : "var(--text-2)",
-                      fontFamily: "var(--font-mono)",
-                      fontSize: "10px",
-                      cursor: "pointer",
-                      textAlign: "left",
-                      transition: "all var(--dur-fast)",
-                    }}
                   >
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span className="sb-entry__time">
                       {new Date(scan.scanned_at).toLocaleDateString(undefined, {
-                        month: "short",
-                        day: "numeric",
+                        month: 'short',
+                        day: 'numeric',
                       })}
                     </span>
-                    <span
-                      style={{
-                        fontFamily: "var(--font-sans)",
-                        fontWeight: 600,
-                        color: "var(--accent-text)",
-                        flexShrink: 0,
-                        marginLeft: "8px",
-                      }}
-                    >
-                      {scan.visibility_pct}%
-                    </span>
+                    <span className="sb-entry__val t-tally">{scan.visibility_pct}%</span>
                   </button>
                 );
               })}
@@ -296,23 +147,19 @@ export const Sidebar = ({
         )}
       </nav>
 
-      {/* CTA */}
-      <div
-        style={{
-          padding: "var(--space-4) var(--space-5)",
-          borderTop: "1px solid var(--border-1)",
-        }}
-      >
+      <div className="sb-cabin__foot">
         <Button
           variant="primary"
           size="md"
-          style={{ width: "100%" }}
-          onClick={onNewScan || (() => router.push("/scan"))}
+          style={{ width: '100%' }}
+          onClick={onNewScan || (() => router.push('/scan'))}
         >
-          <Plus size={14} />
-          New scan
+          <Plus size={13} />
+          new scan
         </Button>
       </div>
     </aside>
   );
 };
+
+export default Sidebar;

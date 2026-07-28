@@ -1,42 +1,47 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Loader2, FolderOpen, Bot, Search } from "lucide-react";
-import { fetchScanHistory, saveScan } from "@/services/api";
+/**
+ * Trains already on the system.
+ *
+ * A slim rail across the head of the panel carrying the runs this operator
+ * already has: each brand as a berth with its reading, each agent run as a
+ * working entry. Renders nothing at all until there is history, so a
+ * first-time visitor gets the clean panel.
+ */
 
-function scoreColor(v) {
-  if (v == null) return "var(--text-3)";
-  if (v >= 60) return "var(--good)";
-  if (v >= 35) return "var(--warn)";
-  return "var(--crit)";
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
+import { fetchScanHistory, saveScan } from '@/services/api';
+import { Describer } from '@/components/signal/Describer';
+import { Lamp } from '@/components/signal/Lamp';
+
+function readingLamp(v) {
+  if (v == null) return 'amber';
+  if (v >= 50) return 'green';
+  if (v >= 25) return 'amber';
+  return 'red';
 }
 
 function timeAgo(iso) {
-  if (!iso) return "";
+  if (!iso) return '';
   const s = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  if (s < 60) return "just now";
+  if (s < 60) return 'just now';
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
+  if (m < 60) return `${m}m ago`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
-  const d = Math.floor(h / 24);
-  return `${d}d`;
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 const statusLabel = {
-  awaiting_approval: "awaiting you",
-  approved: "approved",
-  rejected: "rejected",
-  changes_requested: "in revision",
-  draft: "draft",
+  awaiting_approval: 'awaiting you',
+  approved: 'approved',
+  rejected: 'rejected',
+  changes_requested: 'in revision',
+  draft: 'draft',
 };
 
-/**
- * Case files shelf — previous runs as one slim row above the landing page.
- * Renders nothing until there's history, so first-time visitors see the
- * pure landing page. Deliberately compact: the poster stays the star.
- */
 export function HomeDashboard() {
   const router = useRouter();
   const [data, setData] = useState(null);
@@ -45,7 +50,7 @@ export function HomeDashboard() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/history", { cache: "no-store" });
+      const res = await fetch('/api/history', { cache: 'no-store' });
       if (res.ok) setData(await res.json());
     } catch {
       /* homepage history is best-effort */
@@ -58,7 +63,6 @@ export function HomeDashboard() {
     load();
   }, [load]);
 
-  // Poll while any agent job is running so the shelf stays live.
   const hasActive = (data?.activeJobs || []).length > 0;
   useEffect(() => {
     if (!hasActive) return;
@@ -67,13 +71,13 @@ export function HomeDashboard() {
   }, [hasActive, load]);
 
   const openBrand = async (brand, view) => {
-    setOpening(brand + (view || ""));
+    setOpening(brand + (view || ''));
     try {
       const scans = await fetchScanHistory(brand);
       if (scans && scans[0]) saveScan(scans[0]);
-      router.push(view ? `/dashboard?view=${view}` : "/dashboard");
+      router.push(view ? `/dashboard?view=${view}` : '/dashboard');
     } catch {
-      router.push("/dashboard");
+      router.push('/dashboard');
     }
   };
 
@@ -84,7 +88,7 @@ export function HomeDashboard() {
       if (scans && scans[0]) saveScan(scans[0]);
       router.push(`/dashboard?view=studio&item=${run.id}`);
     } catch {
-      router.push("/dashboard?view=studio");
+      router.push('/dashboard?view=studio');
     }
   };
 
@@ -95,90 +99,76 @@ export function HomeDashboard() {
   const activeJobs = data?.activeJobs || [];
   const counts = data?.counts || {};
 
-  // Nothing to show → let the landing page speak for itself.
   if (scans.length === 0 && runs.length === 0) return null;
 
   return (
-    <section data-testid="home-dashboard" className="shelf">
-      <div className="lp-container shelf-inner">
-        <span className="shelf-label">
-          <FolderOpen size={13} />
-          your case files
-        </span>
+    <section data-testid="home-dashboard" className="lp-rail">
+      <div className="lp-rail-inner">
+        <span className="t-plate lp-rail-plate">on the system</span>
 
-        <div className="shelf-files">
+        <div className="lp-rail-items">
           {scans.map((s) => (
             <button
               key={s.brand}
+              type="button"
               data-testid="home-brand-card"
-              className="shelf-file"
+              className="lp-rail-item"
               onClick={() => openBrand(s.brand)}
             >
-              <span className="shelf-file-name">{s.brand}</span>
-              <span className="shelf-file-score" style={{ color: scoreColor(s.score) }}>
-                {s.score == null ? "—" : s.score}
-              </span>
-              <span className="shelf-file-meta">
-                {timeAgo(s.scanned_at)} ago
-                {opening === s.brand && (
-                  <Loader2
-                    size={10}
-                    style={{
-                      marginLeft: "6px",
-                      display: "inline",
-                      verticalAlign: "-1px",
-                      animation: "spin 1s linear infinite",
-                    }}
-                  />
-                )}
-              </span>
+              <Lamp lamp={readingLamp(s.score)} size={7} />
+              <span className="lp-rail-name">{s.brand}</span>
+              <Describer
+                value={s.score == null ? '--' : String(Math.round(s.score)).padStart(2, '0')}
+                size={12}
+                bloom={false}
+                lamp={readingLamp(s.score)}
+              />
+              <span className="lp-rail-meta">{timeAgo(s.scanned_at)}</span>
+              {opening === s.brand && (
+                <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
+              )}
             </button>
           ))}
 
-          {runs.slice(0, 4).map((r) => (
+          {runs.slice(0, 3).map((r) => (
             <button
               key={r.id}
+              type="button"
               data-testid="home-run-card"
-              className="shelf-file"
+              className="lp-rail-item"
               onClick={() => openRun(r)}
               title={`${r.agent_name} · ${r.brand}`}
             >
-              <span style={{ fontSize: "13px", flexShrink: 0 }}>{r.agent_emoji}</span>
-              <span className="shelf-file-name">{r.title || "(untitled)"}</span>
-              <span className="shelf-file-meta">{statusLabel[r.status] || "draft"}</span>
+              <span aria-hidden="true" style={{ fontSize: 12 }}>
+                {r.agent_emoji}
+              </span>
+              <span className="lp-rail-name">{r.title || '(untitled)'}</span>
+              <span className="lp-rail-meta">{statusLabel[r.status] || 'draft'}</span>
             </button>
           ))}
         </div>
 
-        {activeJobs.length > 0 && (
-          <span className="shelf-jobs">
-            <Loader2 size={13} style={{ animation: "spin 1s linear infinite" }} />
-            {activeJobs.length} agent{activeJobs.length === 1 ? "" : "s"} working
-          </span>
-        )}
-
-        <div className="shelf-actions">
-          {counts.awaiting > 0 && (
-            <button
-              className="shelf-btn is-ghost"
-              onClick={() => scans[0] && openBrand(scans[0].brand, "studio")}
-            >
+        <div className="lp-rail-actions">
+          {activeJobs.length > 0 && (
+            <span className="lp-rail-meta" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
+              {activeJobs.length} working
+            </span>
+          )}
+          {counts.awaiting > 0 && scans[0] && (
+            <button type="button" className="lp-link" onClick={() => openBrand(scans[0].brand, 'studio')}>
               {counts.awaiting} awaiting you
             </button>
           )}
           {scans[0] && (
-            <button
-              className="shelf-btn is-primary"
-              onClick={() => openBrand(scans[0].brand, "studio")}
-            >
-              <Bot size={13} /> Open Studio
+            <button type="button" className="lp-link" onClick={() => openBrand(scans[0].brand, 'studio')}>
+              open studio
             </button>
           )}
-          <a href="#begin" className="shelf-btn is-ghost">
-            <Search size={13} /> New scan
-          </a>
         </div>
       </div>
     </section>
   );
 }
+
+export default HomeDashboard;

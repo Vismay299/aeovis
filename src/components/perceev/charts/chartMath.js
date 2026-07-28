@@ -282,8 +282,9 @@ export function normalize(value, min, max) {
   return clamp((value - min) / (max - min), 0, 1);
 }
 
-/** Dark -> light graphite steps, all pulled from existing neutral tokens — never a rival hue. */
-export const NEUTRAL_RAMP_TOKENS = ["--bg-2", "--bg-3", "--border-2", "--border-3", "--text-3", "--text-2"];
+/** Dark -> light steel steps. A rival's magnitude is a quantity, never a role
+    colour: only your own series is allowed to ramp toward bone. */
+export const NEUTRAL_RAMP_TOKENS = ["--steel-1", "--steel-2", "--steel-3", "--steel-4", "--steel-5", "--nickel"];
 
 export function neutralRampVar(t) {
   const clamped = clamp(t ?? 0, 0, 1);

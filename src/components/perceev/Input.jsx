@@ -1,60 +1,43 @@
-export const Input = ({ label, error, id, className = "", style: outerStyle, ...props }) => {
-  return (
-    <div className={className} style={outerStyle}>
-      {label && (
-        <label
-          htmlFor={id}
-          style={{
-            display: "block",
-            fontFamily: "var(--font-mono)",
-            fontSize: "10px",
-            fontWeight: 500,
-            textTransform: "uppercase",
-            letterSpacing: "0.12em",
-            color: "var(--text-2)",
-            marginBottom: "var(--space-2)",
-          }}
-        >
-          {label}
-        </label>
-      )}
-      <input
-        id={id}
-        style={{
-          width: "100%",
-          background: "var(--bg-1)",
-          border: `1px solid ${error ? "var(--crit-border)" : "var(--border-2)"}`,
-          borderRadius: "var(--radius-1)",
-          padding: "12px 16px",
-          fontFamily: "var(--font-sans)",
-          fontSize: "14px",
-          color: "var(--text-1)",
-          outline: "none",
-          transition: "border-color var(--dur-fast), box-shadow var(--dur-fast)",
-          boxSizing: "border-box",
-        }}
-        onFocus={(e) => {
-          e.target.style.borderColor = "var(--accent)";
-          e.target.style.boxShadow = "var(--focus-ring)";
-        }}
-        onBlur={(e) => {
-          e.target.style.borderColor = error ? "var(--crit-border)" : "var(--border-2)";
-          e.target.style.boxShadow = "none";
-        }}
-        {...props}
-      />
-      {error && (
-        <p
-          style={{
-            marginTop: "var(--space-1)",
-            fontSize: "12px",
-            color: "var(--crit)",
-            fontFamily: "var(--font-sans)",
-          }}
-        >
-          {error}
+/** A recessed field cut into the panel face, with its engraved plate. */
+
+export const Input = ({
+  label,
+  error,
+  hint,
+  id,
+  size = 'md',
+  className = '',
+  style: outerStyle,
+  ...props
+}) => (
+  <div className={className} style={outerStyle}>
+    {label && (
+      <label htmlFor={id} className="t-plate" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
+        {label}
+      </label>
+    )}
+    <input
+      id={id}
+      className={`sb-field${size !== 'md' ? ` sb-field--${size}` : ''}`}
+      aria-invalid={error ? 'true' : undefined}
+      aria-describedby={error && id ? `${id}-err` : undefined}
+      {...props}
+    />
+    {error ? (
+      <p
+        id={id ? `${id}-err` : undefined}
+        style={{ marginTop: 'var(--space-2)', font: 'var(--type-body-sm)', color: 'var(--lamp-red-text)' }}
+      >
+        {error}
+      </p>
+    ) : (
+      hint && (
+        <p style={{ marginTop: 'var(--space-2)', font: 'var(--type-body-sm)', color: 'var(--text-3)' }}>
+          {hint}
         </p>
-      )}
-    </div>
-  );
-};
+      )
+    )}
+  </div>
+);
+
+export default Input;

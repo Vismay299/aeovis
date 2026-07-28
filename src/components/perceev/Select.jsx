@@ -1,65 +1,56 @@
-import { ChevronDown } from "lucide-react";
+/**
+ * A rotary selector. The indicator is an engraved position mark — two
+ * nickel chevrons scribed into the panel beside the window, not a
+ * software chevron floating over a field.
+ */
 
-export const Select = ({ label, id, children, className = "", style: outerStyle, ...props }) => {
-  return (
-    <div className={className} style={{ position: "relative", ...outerStyle }}>
-      {label && (
-        <label
-          htmlFor={id}
-          style={{
-            display: "block",
-            fontFamily: "var(--font-mono)",
-            fontSize: "10px",
-            fontWeight: 500,
-            textTransform: "uppercase",
-            letterSpacing: "0.12em",
-            color: "var(--text-2)",
-            marginBottom: "var(--space-2)",
-          }}
-        >
-          {label}
-        </label>
-      )}
-      <div style={{ position: "relative" }}>
-        <select
-          id={id}
-          style={{
-            width: "100%",
-            appearance: "none",
-            background: "var(--bg-1)",
-            border: "1px solid var(--border-2)",
-            borderRadius: "var(--radius-1)",
-            padding: "12px 40px 12px 16px",
-            fontFamily: "var(--font-sans)",
-            fontSize: "14px",
-            color: "var(--text-1)",
-            outline: "none",
-            cursor: "pointer",
-            transition: "border-color var(--dur-fast)",
-            boxSizing: "border-box",
-          }}
-          onFocus={(e) => {
-            e.target.style.borderColor = "var(--accent)";
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = "var(--border-2)";
-          }}
-          {...props}
-        >
-          {children}
-        </select>
-        <ChevronDown
-          size={16}
-          style={{
-            position: "absolute",
-            right: "12px",
-            top: "50%",
-            transform: "translateY(-50%)",
-            pointerEvents: "none",
-            color: "var(--text-2)",
-          }}
-        />
-      </div>
+export const Select = ({
+  label,
+  id,
+  size = 'md',
+  hint,
+  children,
+  className = '',
+  style: outerStyle,
+  ...props
+}) => (
+  <div className={className} style={outerStyle}>
+    {label && (
+      <label htmlFor={id} className="t-plate" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
+        {label}
+      </label>
+    )}
+    <div style={{ position: 'relative' }}>
+      <select
+        id={id}
+        className={`sb-field sb-select${size !== 'md' ? ` sb-field--${size}` : ''}`}
+        {...props}
+      >
+        {children}
+      </select>
+      <svg
+        width="9"
+        height="14"
+        viewBox="0 0 9 14"
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          right: '12px',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          pointerEvents: 'none',
+        }}
+      >
+        <path d="M1 5.5 4.5 2 8 5.5" stroke="var(--nickel-dim)" strokeWidth="1.4" fill="none" />
+        <path d="M1 8.5 4.5 12 8 8.5" stroke="var(--nickel)" strokeWidth="1.4" fill="none" />
+      </svg>
     </div>
-  );
-};
+    {hint && (
+      <p style={{ marginTop: 'var(--space-2)', font: 'var(--type-body-sm)', color: 'var(--text-3)' }}>
+        {hint}
+      </p>
+    )}
+  </div>
+);
+
+export default Select;

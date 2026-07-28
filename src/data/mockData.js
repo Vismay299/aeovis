@@ -23,8 +23,9 @@ export function buildMockResult(brand, website) {
       { prompt: `Enterprise-grade brand monitoring tools`, rank: "—", volume: "Medium" },
       { prompt: `Which platforms track AI search rankings?`, rank: 4, volume: "Medium" },
     ],
+    /* A brand is never its own competitor — listing it here produced
+       duplicate rows and duplicate React keys in every rival chart. */
     competitors: [
-      { name: "Brightwave", mentions: 18, prompts: 12, userAbsent: true },
       { name: "NorthPeak", mentions: 14, prompts: 9, userAbsent: true },
       { name: "Lumen IQ", mentions: 11, prompts: 7, userAbsent: false },
       { name: "Vantage", mentions: 9, prompts: 6, userAbsent: true },

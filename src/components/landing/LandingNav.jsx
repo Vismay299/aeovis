@@ -1,22 +1,28 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Wordmark } from "@/components/perceev/Wordmark";
-import { Button } from "@/components/perceev/Button";
-import { saveScan } from "@/services/api";
-import { SAMPLE_RESULT } from "@/data/mockData";
+/**
+ * The panel head rail: wordmark riveted at the left, engraved legends across
+ * the middle, and the one lit action at the right.
+ */
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Wordmark } from '@/components/perceev/Wordmark';
+import { Button } from '@/components/perceev/Button';
+import { Lamp } from '@/components/signal/Lamp';
+import { saveScan } from '@/services/api';
+import { SAMPLE_RESULT } from '@/data/mockData';
 
 export const LandingNav = () => {
   const router = useRouter();
 
   const scrollTo = (id) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const viewSample = () => {
     saveScan({ ...SAMPLE_RESULT, isSample: true });
-    router.push("/dashboard");
+    router.push('/dashboard');
   };
 
   return (
@@ -25,26 +31,34 @@ export const LandingNav = () => {
         <Link
           href="/"
           aria-label="Perceev home"
-          style={{ display: "inline-flex" }}
+          style={{ display: 'inline-flex' }}
           onClick={(e) => {
             e.preventDefault();
-            window.scrollTo({ top: 0, behavior: "smooth" });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
         >
           <Wordmark size="default" />
         </Link>
+
+        <span className="lp-nav-plate">
+          <Lamp lamp="green" size={6} />
+          <span className="t-plate">answer engine interlocking</span>
+        </span>
+
         <div className="lp-nav-links">
-          <button className="lp-nav-link" onClick={() => scrollTo("how-it-works")}>
-            How it works
+          <button type="button" className="lp-nav-link" onClick={() => scrollTo('route-setting')}>
+            how it works
           </button>
-          <button className="lp-nav-link" onClick={viewSample}>
-            Sample report
+          <button type="button" className="lp-nav-link" onClick={viewSample}>
+            sample report
           </button>
-          <Button variant="primary" size="md" onClick={() => router.push("/scan")}>
-            Run the count
+          <Button variant="primary" size="md" onClick={() => router.push('/scan')}>
+            run the probe
           </Button>
         </div>
       </div>
     </header>
   );
 };
+
+export default LandingNav;

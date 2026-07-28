@@ -1,12 +1,13 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
+'use client';
 
 /**
- * Broadcast count-up — a numeral that counts to its value when it enters
- * the viewport, like a tally board taking new returns. Renders the final
- * value immediately under prefers-reduced-motion, and always for SSR.
+ * A tally settling. Counts to its value when the block is entered, the way a
+ * needle settles rather than a linear sweep. Renders the final value
+ * immediately for SSR and under prefers-reduced-motion.
  */
+
+import { useEffect, useRef, useState } from 'react';
+
 export const CountUp = ({ value, duration = 900, delay = 200 }) => {
   const ref = useRef(null);
   const [display, setDisplay] = useState(value);
@@ -15,7 +16,7 @@ export const CountUp = ({ value, duration = 900, delay = 200 }) => {
   useEffect(() => {
     const el = ref.current;
     if (!el || ran.current) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     const io = new IntersectionObserver(
       (entries) => {
@@ -26,18 +27,23 @@ export const CountUp = ({ value, duration = 900, delay = 200 }) => {
         setDisplay(0);
         const tick = (now) => {
           const t = Math.min(1, Math.max(0, (now - start) / duration));
-          // exponential ease-out — decelerating returns
-          const eased = 1 - Math.pow(2, -10 * t);
+          const eased = 1 - Math.pow(1 - t, 3);
           setDisplay(Math.round(value * (t >= 1 ? 1 : eased)));
           if (t < 1) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
       },
-      { threshold: 0.4 }
+      { threshold: 0.4 },
     );
     io.observe(el);
     return () => io.disconnect();
   }, [value, duration, delay]);
 
-  return <span ref={ref}>{display}</span>;
+  return (
+    <span ref={ref} className="tnum">
+      {display}
+    </span>
+  );
 };
+
+export default CountUp;

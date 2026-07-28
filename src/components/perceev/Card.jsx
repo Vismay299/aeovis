@@ -1,15 +1,28 @@
-export const Card = ({ variant = "padded", className = "", children, style: outerStyle, ...props }) => {
-  const padded = variant !== "flush";
+/**
+ * A panel: an engraved rectangle of painted steel bolted to the wall.
+ * `raised` adds the nickel bevel for a panel that stands off the face.
+ * `keyline` runs a 2px lamp strip along the top edge to mark which role
+ * owns the region — top edge only, never a thick side border.
+ */
+
+export const Card = ({
+  variant = 'padded',
+  raised = false,
+  keyline = null,
+  className = '',
+  children,
+  style: outerStyle,
+  ...props
+}) => {
+  const padded = variant !== 'flush';
 
   return (
     <div
-      className={className}
+      className={`sb-panel ${raised ? 'sb-panel--raised' : ''} ${className}`}
       {...props}
       style={{
-        background: "var(--bg-1)",
-        border: "1px solid var(--border-1)",
-        borderRadius: "var(--radius-2)",
-        padding: padded ? "var(--space-6)" : 0,
+        padding: padded ? 'var(--space-5)' : 0,
+        borderTop: keyline ? `2px solid var(--lamp-${keyline})` : undefined,
         ...outerStyle,
       }}
     >
@@ -17,3 +30,5 @@ export const Card = ({ variant = "padded", className = "", children, style: oute
     </div>
   );
 };
+
+export default Card;

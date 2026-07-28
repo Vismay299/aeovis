@@ -1,374 +1,311 @@
-"use client";
+'use client';
 
 /*
-DIRECTION CONTRACT — Results Night
-THESIS: AI is calling the race for your buyers; this page is the results
-broadcast of that election. Refuses the dark-SaaS glow-hero the category ships.
-OWN-WORLD: blue-black studio wall, gold declarations, teal=you / red=rivals
-party colors, condensed uppercase tallies, live crawl, straps as segment marks.
-STORY: an executive realizes the count is already running without them, sees
-the tally and the verbatim answers, and runs their own count (free scan).
-FIRST VIEWPORT: topline strap (LIVE · ANSWER ENGINE RESULTS), giant condensed
-headline left, live tally board right (4 parties, threshold line), scan desk
-with gold RUN THE COUNT beneath the headline, probe crawl along the bottom.
-FORM: candidate 7 of the grounded list (election results broadcast), assigned
-by concept seed 5f228d86; staging: studio-wall single frame, crawl retained.
+DIRECTION CONTRACT — The Signal Box
+THESIS: answer-engine visibility is an interlocking, not a scoreboard. Only one
+brand can hold the path in a given answer. Refuses the marketing stack the
+category ships — no alternating splits, no eyebrow over every heading, no row
+of feature cards.
+OWN-WORLD: graphite panel steel, hairline track work, engraved nickel plates,
+one bone-white lit state, three desaturated earth tones for data roles only.
+Archivo cut into a signage voice, a body voice and a plate voice.
+STORY: an executive watches unbranded questions get routed to somebody else's
+name, sees the reading that produces, and runs the same probe on their domain.
+FIRST VIEWPORT: the panel head with the one control, then the claim at signage
+scale across the full width, the call beside it, and the live record running
+under it. One continuous descent — the line starts below and runs unbroken to
+the close.
+FORM: grounded direction 3 of 7, seed 30239951; staging: one live thread pulled
+down the panel — reaching a block lights its milepost.
 */
 
-import { useRouter } from "next/navigation";
-import { ArrowRight } from "lucide-react";
-import "@/components/landing/landing.css";
-import { LandingNav } from "@/components/landing/LandingNav";
-import { HomeDashboard } from "@/components/home/HomeDashboard";
-import { ScanBar } from "@/components/landing/ScanBar";
-import { AnswerDemo } from "@/components/landing/AnswerDemo";
-import { CountUp } from "@/components/landing/CountUp";
-import { EvidenceTicker } from "@/components/landing/EvidenceTicker";
-import { Reveal } from "@/components/landing/Reveal";
-import { ScoreMeter } from "@/components/perceev/ScoreMeter";
-import { Badge } from "@/components/perceev/Badge";
-import { Wordmark } from "@/components/perceev/Wordmark";
-import { saveScan } from "@/services/api";
-import { SAMPLE_RESULT } from "@/data/mockData";
+import { useRouter } from 'next/navigation';
+import { ArrowRight } from 'lucide-react';
+import '@/components/landing/landing.css';
 
-/* Synthetic demonstration tally — fictional brands, labeled in the board head.
-   Brightwave is the demo "you" everywhere on this page (crawl, soundbite, tally). */
-const TALLY = [
-  { name: "NorthPeak", score: 71 },
-  { name: "Brightwave", score: 64, you: true },
-  { name: "Lumen IQ", score: 58 },
-  { name: "Vantage", score: 38 },
+import SmoothScroll from '@/components/signal/SmoothScroll';
+import { Wordmark } from '@/components/perceev/Wordmark';
+import { Button } from '@/components/perceev/Button';
+import { ScanBar } from '@/components/landing/ScanBar';
+import { LineTraversal } from '@/components/landing/LineTraversal';
+import { LiveInterlocking } from '@/components/landing/LiveInterlocking';
+import { AnswerSheet } from '@/components/landing/AnswerSheet';
+import { Reveal } from '@/components/landing/Reveal';
+import { HomeDashboard } from '@/components/home/HomeDashboard';
+import { Describer } from '@/components/signal/Describer';
+import { Lamp } from '@/components/signal/Lamp';
+import { BlockInstrument } from '@/components/signal/BlockInstrument';
+import { OccupancyRow } from '@/components/signal/TrackCircuit';
+import { useProbeCycle, TRACKED_SET, YOU } from '@/components/landing/probeCycle';
+import { saveScan } from '@/services/api';
+import { SAMPLE_RESULT } from '@/data/mockData';
+
+/* Demonstration figures, consistent with the tracked set above. Synthetic. */
+const DEMO_FIELD = [
+  { name: 'NorthPeak', value: 33 },
+  { name: YOU, value: 25, isYou: true },
+  { name: 'Lumen IQ', value: 17 },
+  { name: 'no brand named', value: 25, muted: true },
 ];
 
-const STEPS = [
-  {
-    num: "seg 1",
-    title: "Enter your domain",
-    body: "No signup, no credit card. Just the website you want counted.",
-  },
-  {
-    num: "seg 2",
-    title: "We run the count",
-    body: "30 unbranded buyer prompts hit the engines your customers actually use — never leading, never branded.",
-  },
-  {
-    num: "seg 3",
-    title: "The projection lands",
-    body: "A share-of-AI score, the answers verbatim, and the rivals ahead of you — in about a minute.",
-  },
+const ENGINES = [
+  { name: 'Google AI Overview', asked: 12, reached: 3, share: 0.25 },
+  { name: 'Perplexity', asked: 12, reached: 4, share: 0.33 },
+  { name: 'ChatGPT', asked: 12, reached: 2, share: 0.17 },
 ];
+
+function Block({ n, id, title, lede, children }) {
+  return (
+    <section className="lp-blk" id={id}>
+      <Reveal>
+        <span className="lp-blk-post" aria-hidden="true">
+          <i>{n}</i>
+        </span>
+        <h2 className="lp-blk-title">{title}</h2>
+        {lede && <p className="lp-blk-lede">{lede}</p>}
+        {children}
+      </Reveal>
+    </section>
+  );
+}
 
 export default function Landing() {
   const router = useRouter();
+  const { probe, lit, record, index, reduced } = useProbeCycle();
 
   const viewSample = () => {
     saveScan({ ...SAMPLE_RESULT, isSample: true });
-    router.push("/dashboard");
+    router.push('/dashboard');
   };
 
   return (
-    <div className="lp">
-      <LandingNav />
+    <SmoothScroll>
+      <div className="lp">
+        <HomeDashboard />
 
-      {/* Case files shelf — previous runs, one slim row. Renders nothing
-          for first-time visitors. */}
-      <HomeDashboard />
+        {/* ============ the panel head ============ */}
+        <header className="lp-head">
+          <div className="lp-head-inner">
+            <Wordmark size="default" />
+            <span className="plate lp-head-live">
+              <Lamp lamp="green" size={6} calling={!reduced} />
+              <span className="t-plate">panel live</span>
+            </span>
+            <Button
+              variant="primary"
+              size="sm"
+              className="lp-head-call"
+              onClick={() => router.push('/scan')}
+            >
+              run the probe
+            </Button>
+          </div>
+        </header>
 
-      <main>
-        {/* ---------- Hero — the studio wall ---------- */}
+        {/* ============ the claim ============ */}
         <section className="lp-hero">
-          <div className="lp-container lp-hero-main">
-            <div className="lp-hero-topline">
-              <span className="lp-live">
-                <span className="lp-live-dot" />
-                Live
-              </span>
-              <span className="lp-topline-title">Answer engine results · every buyer question</span>
-              <span className="lp-topline-stamp">30 probes / scan · 60s to verdict</span>
-            </div>
+          <div className="lp-hero-inner">
+            <span className="t-plate lp-hero-plate">
+              answer-engine visibility · demonstration panel
+            </span>
+
+            <h1 className="lp-claim">
+              AI answers your buyers.
+              <br />
+              <em>Whose name does it say?</em>
+            </h1>
 
             <div className="lp-hero-grid">
-              <div>
-                <h1 className="lp-hero-title">
-                  AI is calling the race for your buyers.
-                  <br />
-                  <span className="mark-sweep is-animated">Are you winning?</span>
-                </h1>
+              <p className="lp-claim-sub">
+                Google&apos;s AI Overview, ChatGPT and Perplexity now answer the questions your
+                buyers used to search. Perceev asks them {TRACKED_SET.length * 3} unbranded buyer
+                questions and shows you exactly which brand each answer clears the path to.
+              </p>
 
-                <p className="lp-hero-sub">
-                  Google&apos;s AI Overview, ChatGPT, and Perplexity answer buyer questions
-                  directly — and declare winners by name. Perceev probes them with 30 unbranded
-                  buyer prompts and reports your share of AI, live.
-                </p>
-
-                <div className="lp-hero-scan">
-                  <ScanBar />
-                  <p className="lp-hero-micro">free · no signup · 60-second scan</p>
-                </div>
-              </div>
-
-              {/* The live tally board — synthetic demonstration */}
-              <div className="tally is-live" style={{ "--threshold": 0.6 }}>
-                <div className="tally-head">
-                  <span className="tally-title">Share of AI · live tally</span>
-                  <span className="tally-declared">demo data · probes in: 24/30</span>
-                </div>
-                <div className="tally-body">
-                  <div className="tally-threshold">
-                    <span>visibility threshold</span>
-                  </div>
-                  {TALLY.map((row, i) => (
-                    <div
-                      key={row.name}
-                      className={`tally-row${row.you ? " is-you" : ""}`}
-                      style={{ "--i": i }}
-                    >
-                      <span className="tally-name">
-                        <i className="tally-chip" />
-                        {row.name}
-                        {row.you && <em className="tally-you-tag">you</em>}
-                      </span>
-                      <div className="tally-track">
-                        <div className="tally-fill" style={{ "--v": row.score }} />
-                      </div>
-                      <span className="tally-count">
-                        <CountUp value={row.score} delay={i * 120 + 200} />
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="tally-foot">
-                  <span>engines: aio · chatgpt · perplexity</span>
-                  <span>unbranded prompts only</span>
-                </div>
+              <div className="lp-hero-call">
+                <ScanBar />
+                <p className="lp-micro">Free · no signup · unbranded questions only</p>
+                <button
+                  type="button"
+                  className="lp-link"
+                  onClick={viewSample}
+                  data-testid="preview-sample-cta"
+                >
+                  see a sample report <ArrowRight size={12} />
+                </button>
               </div>
             </div>
-          </div>
 
-          {/* The crawl — probe results wire */}
-          <EvidenceTicker />
-        </section>
-
-        {/* ---------- The shift ---------- */}
-        <section className="lp-section" id="the-shift">
-          <div className="lp-container">
-            <Reveal>
-              <div className="lp-sec-head">
-                <span className="lp-strap">
-                  The shift <small>· why this race matters</small>
-                </span>
-              </div>
-              <div className="lp-split">
-                <div>
-                  <h2 className="lp-h2">Buyers stopped clicking. They ask AI.</h2>
-                  <p className="lp-body">
-                    Every day, more buying decisions start — and end — inside a single AI answer.
-                    If the engines don&apos;t know you, your buyers never will. Ranking #1 on
-                    Google means nothing when the answer box above it never says your name.
-                  </p>
-                </div>
-                {/* The soundbite — a probe answer, verbatim */}
-                <div className="lp-sheet">
-                  <div className="lp-sheet-head">
-                    <span>
-                      probe feed · <b>unbranded</b> · rotating
+            {/* the live record — the panel keeps its own log as it runs */}
+            <div className="lp-record">
+              <span className="t-plate lp-record-plate">record · demonstration</span>
+              <ul className="lp-record-list">
+                {record.length === 0 && (
+                  <li className="lp-record-empty">waiting for the first route…</li>
+                )}
+                {record.map((r, i) => (
+                  <li key={`${r.code}-${i}`}>
+                    <Describer
+                      value={r.code}
+                      size={12}
+                      bloom={false}
+                      lamp={r.to === YOU ? 'white' : r.to === null ? 'amber' : 'red'}
+                    />
+                    <span className="lp-record-engine">{r.engine}</span>
+                    <span
+                      className="lp-record-to"
+                      data-kind={r.to === YOU ? 'you' : r.to === null ? 'none' : 'rival'}
+                    >
+                      {r.to === null ? 'no route' : r.to}
                     </span>
-                    <span>verbatim</span>
-                  </div>
-                  <div className="lp-sheet-body">
-                    <AnswerDemo />
-                  </div>
-                  <div className="lp-sheet-foot">
-                    <span className="lp-legend">
-                      <i className="lp-legend-mark" />
-                      you, named
-                    </span>
-                    <span className="lp-legend">
-                      <i className="lp-legend-rival" />
-                      rival, named
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Reveal>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </section>
 
-        {/* ---------- The projection — verdict segment ---------- */}
-        <section className="lp-projection-band" id="the-verdict">
-          <div className="lp-container">
-            <Reveal>
-              <div className="lp-sec-head">
-                <span className="lp-strap">
-                  The projection <small>· one score, called early</small>
-                </span>
-              </div>
-              <div className="lp-split">
-                <div>
-                  <h2 className="lp-h2">One score. Your share of AI.</h2>
-                  <p className="lp-body">
-                    Every scan runs 30 unbranded prompts across real buyer scenarios, then
-                    distills the answers into a single share-of-AI score — how often the engines
-                    mention you, cite you, and where you actually stand against the field.
-                  </p>
-                </div>
-                <div className="lp-projection">
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "var(--space-4)", alignItems: "baseline" }}>
-                    <span className="lp-projection-stamp">Projection · moderate visibility</span>
-                    <span className="tally-declared">demo data</span>
-                  </div>
-                  <div className="lp-projection-num">
-                    <strong>
-                      <CountUp value={64} />
-                    </strong>
-                    <span>/100</span>
-                  </div>
-                  <div className="lp-projection-meter">
-                    <ScoreMeter segments={30} value={64} />
-                  </div>
-                  <div className="lp-projection-splits">
-                    <div className="lp-projection-split">
-                      <strong>19/30</strong>
-                      <span>probes name you</span>
-                    </div>
-                    <div className="lp-projection-split">
-                      <strong>8/30</strong>
-                      <span>cite your pages</span>
-                    </div>
-                    <div className="lp-projection-split">
-                      <strong>1</strong>
-                      <span>rival ahead</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </Reveal>
-          </div>
-        </section>
+        {/* ============ the line ============ */}
+        <main className="lp-line">
+          <div className="lp-line-inner">
+            <LineTraversal />
 
-        {/* ---------- The rivalry ---------- */}
-        <section className="lp-section" id="the-rivalry">
-          <div className="lp-container">
-            <Reveal>
-              <div className="lp-sec-head">
-                <span className="lp-strap">
-                  The rivalry <small>· the field AI actually names</small>
-                </span>
-              </div>
-              <div className="lp-split">
-                <div>
-                  <h2 className="lp-h2">Your rivals are already on the board</h2>
-                  <p className="lp-body">
-                    Every scan benchmarks you against the competitors AI actually names — not the
-                    ones you think you have. Their leads, their wins, and the gap you have to
-                    close, updated with every count.
-                  </p>
-                  <p className="lp-body" style={{ marginTop: "var(--space-4)" }}>
-                    <Badge variant="accent">auto-discovered</Badge>{" "}
-                    <span style={{ fontSize: "14px" }}>
-                      Rivals come from the answers themselves — co-mentions and citations, not a
-                      list you maintain.
-                    </span>
-                  </p>
-                </div>
-                <div className="tally" style={{ "--threshold": 0.6 }}>
-                  <div className="tally-head">
-                    <span className="tally-title">The field · gap to you</span>
-                    <span className="tally-declared">demo data</span>
-                  </div>
-                  <div className="tally-body">
-                    <div className="tally-threshold">
-                      <span>visibility threshold</span>
-                    </div>
-                    {TALLY.map((row, i) => (
-                      <div
-                        key={row.name}
-                        className={`tally-row${row.you ? " is-you" : ""}`}
-                        style={{ "--i": i }}
-                      >
-                        <span className="tally-name">
-                          <i className="tally-chip" />
-                          {row.name}
-                        </span>
-                        <div className="tally-track">
-                          <div className="tally-fill" style={{ "--v": row.score }} />
-                        </div>
-                        <span className="tally-count">
-                        <CountUp value={row.score} delay={i * 120 + 200} />
-                      </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="tally-foot">
-                    <span>you trail NorthPeak by 7 · you lead Lumen IQ by 6</span>
-                  </div>
-                </div>
-              </div>
-            </Reveal>
-          </div>
-        </section>
-
-        {/* ---------- The rundown (how it works) ---------- */}
-        <section className="lp-section" id="how-it-works">
-          <div className="lp-container">
-            <Reveal>
-              <div className="lp-sec-head">
-                <span className="lp-strap">
-                  The rundown <small>· domain in, verdict out</small>
-                </span>
-              </div>
-              <h2 className="lp-h2">Sixty seconds to your first count</h2>
-              <div className="lp-steps">
-                {STEPS.map((step) => (
-                  <div key={step.num} className="lp-step">
-                    <span className="lp-step-num">{step.num}</span>
-                    <h3 className="lp-step-title">{step.title}</h3>
-                    <p className="lp-step-body">{step.body}</p>
+            <Block
+              n="1"
+              id="the-questions"
+              title="The questions go in unbranded"
+              lede="Every probe is a question a buyer would actually type — and none of them name you. A leading question returns a flattering answer, so the set never contains one. This is the trust story: the verdict reflects what buyers hear, not what a vanity query returns."
+            >
+              <div className="lp-berths">
+                {TRACKED_SET.map((t, i) => (
+                  <div className="lp-berth" key={t.code}>
+                    <Describer
+                      value={t.code}
+                      size={13}
+                      bloom={false}
+                      lamp={i === index ? 'white' : 'amber'}
+                    />
+                    <span className="lp-berth-q">{t.q}</span>
                   </div>
                 ))}
               </div>
-            </Reveal>
-          </div>
-        </section>
-
-        {/* ---------- Final CTA ---------- */}
-        <section className="lp-cta" id="begin">
-          <div className="lp-container">
-            <Reveal>
-              <h2 className="lp-cta-title">
-                The count is on. <span className="mark-sweep">Enter the race.</span>
-              </h2>
-              <p className="lp-cta-sub">
-                Run a visibility check in under a minute. No signup. No credit card. Just your
-                domain — we&apos;ll probe the rest.
-              </p>
-              <div className="lp-hero-scan" style={{ marginTop: 0 }}>
-                <ScanBar />
+              <div className="lp-berths-foot">
+                <span className="t-plate">12 of {TRACKED_SET.length * 3} shown</span>
+                <span className="t-plate" style={{ color: 'var(--text-3)' }}>
+                  demonstration set · healthcare
+                </span>
               </div>
-              <div>
-                <button
-                  className="lp-sample-link"
-                  data-testid="preview-sample-cta"
-                  onClick={viewSample}
-                >
-                  See a sample report
-                  <ArrowRight size={14} />
-                </button>
-              </div>
-            </Reveal>
-          </div>
-        </section>
-      </main>
+            </Block>
 
-      {/* ---------- Footer ---------- */}
-      <footer className="lp-footer" data-testid="footer">
-        <div className="lp-container lp-footer-inner">
-          <Wordmark size="sm" />
-          <span className="lp-footer-copy">
-            © {new Date().getFullYear()} Perceev. All rights reserved.
-          </span>
-        </div>
-      </footer>
-    </div>
+            <Block
+              n="2"
+              id="the-engines"
+              title="Each one is asked of every engine"
+              lede="The same question goes to every answer engine you are configured for, because they disagree. A brand that owns AI Overview can be invisible in Perplexity, and averaging the two hides it."
+            >
+              <div className="lp-engines">
+                {ENGINES.map((e) => (
+                  <div className="lp-engine" key={e.name}>
+                    <span className="lp-engine-name">
+                      <Lamp lamp={e.reached > 0 ? 'green' : 'red'} size={7} />
+                      {e.name}
+                    </span>
+                    <span className="lp-engine-line">
+                      <span style={{ width: `${e.share * 100}%` }} />
+                    </span>
+                    <span className="lp-engine-note">
+                      {e.reached} of {e.asked} reached you
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Block>
+
+            <Block
+              n="3"
+              id="the-interlocking"
+              title="Only one brand can hold the path"
+              lede="Watch a single question resolve. The engine clears a route to exactly one destination — you, a rival, or nobody at all. Every route that terminates somewhere else is one you could have held."
+            >
+              <LiveInterlocking probe={probe} lit={lit} reduced={reduced} />
+            </Block>
+
+            <Block
+              n="4"
+              id="the-reading"
+              title="What that adds up to"
+              lede="Run the whole set and the pattern stops being anecdotal. This is the reading a demonstration scan produces, and the field it produced it against."
+            >
+              <div className="lp-reading">
+                <BlockInstrument value={25} size={252} caption="of answers reach you" />
+                <div className="lp-reading-field">
+                  <span className="t-plate">where the rest of the answers went</span>
+                  <div style={{ marginTop: 12 }}>
+                    {DEMO_FIELD.map((f, i) => (
+                      <OccupancyRow
+                        key={f.name}
+                        name={f.name}
+                        value={f.value}
+                        max={40}
+                        rank={i + 1}
+                        isYou={f.isYou}
+                        lamp={f.muted ? 'amber' : 'red'}
+                      />
+                    ))}
+                  </div>
+                  <p className="lp-micro" style={{ marginTop: 14 }}>
+                    Rivals are discovered from the answers themselves — co-mentions and citations,
+                    not a list you maintain.
+                  </p>
+                </div>
+              </div>
+            </Block>
+
+            <Block
+              n="5"
+              id="the-evidence"
+              title="With the answer kept verbatim"
+              lede="Every reading is backed by the text the engine actually returned, marked where your name appears and where a rival took the section instead. No paraphrase, no score without its evidence."
+            >
+              <AnswerSheet />
+            </Block>
+
+            {/* ---- the close ---- */}
+            <section className="lp-close" id="run">
+              <Reveal>
+                <span className="lp-buffer" aria-hidden="true">
+                  <i />
+                </span>
+                <h2 className="lp-close-title">Run the same probe on your domain</h2>
+                <p className="lp-blk-lede">
+                  Enter a domain and Perceev asks the engines the questions your buyers ask, then
+                  reports which brand each answer names. No signup, no card.
+                </p>
+                <div className="lp-close-call">
+                  <ScanBar id="scan-domain-close" />
+                </div>
+                <p className="lp-micro">
+                  You will get a share-of-AI reading, the field it was measured against, and every
+                  answer verbatim.
+                </p>
+              </Reveal>
+            </section>
+          </div>
+        </main>
+
+        <footer className="lp-footer" data-testid="footer">
+          <div className="lp-footer-inner">
+            <Wordmark size="sm" />
+            <span className="lp-footer-copy">
+              © {new Date().getFullYear()} Perceev · Demonstration data on this page uses fictional
+              brands.
+            </span>
+            <Button variant="secondary" size="sm" onClick={() => router.push('/scan')}>
+              run the probe
+            </Button>
+          </div>
+        </footer>
+      </div>
+    </SmoothScroll>
   );
 }

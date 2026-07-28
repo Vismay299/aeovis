@@ -1,9 +1,16 @@
-"use client";
+'use client';
 
-import { useEffect, useRef } from "react";
+/**
+ * Blocks light as the train enters them.
+ *
+ * Content is visible by default and this only lifts it the last few pixels —
+ * the page is readable whether or not the lamps ever fire. CSS handles
+ * prefers-reduced-motion.
+ */
 
-/** Fades children up into view on scroll. No-op under prefers-reduced-motion (CSS). */
-export const Reveal = ({ children, delay = 0, className = "" }) => {
+import { useEffect, useRef } from 'react';
+
+export const Reveal = ({ children, delay = 0, className = '' }) => {
   const ref = useRef(null);
 
   useEffect(() => {
@@ -12,11 +19,11 @@ export const Reveal = ({ children, delay = 0, className = "" }) => {
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          el.classList.add("is-visible");
+          el.classList.add('is-lit');
           io.disconnect();
         }
       },
-      { threshold: 0.15, rootMargin: "0px 0px -40px 0px" }
+      { threshold: 0.12, rootMargin: '0px 0px -48px 0px' },
     );
     io.observe(el);
     return () => io.disconnect();
@@ -25,10 +32,12 @@ export const Reveal = ({ children, delay = 0, className = "" }) => {
   return (
     <div
       ref={ref}
-      className={`lp-reveal ${className}`}
+      className={`lp-block ${className}`}
       style={delay ? { transitionDelay: `${delay}ms` } : undefined}
     >
       {children}
     </div>
   );
 };
+
+export default Reveal;

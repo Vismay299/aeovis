@@ -1,39 +1,40 @@
+/* ==============================================================
+   Perceev — "The Signal Box"
+
+   THESIS: answer-engine visibility is an interlocking, not a
+   scoreboard. Every buyer question is a route request; the engine
+   clears a path to you or to a rival, and two brands cannot hold
+   the same section in the same answer. This surface refuses the
+   dark-SaaS card grid and the tally-bar broadcast package alike.
+
+   OWN-WORLD: unlit painted-steel panel (#0A0F0C green-black),
+   hairline silver track work, engraved nickel label plates, and
+   four signalling lamps that fire behind the diagram — proceed
+   green, lunar white, caution amber, occupied red. One variable
+   face (Archivo) cut into a signage voice, a body voice, and an
+   engraved plate voice. Radius 2-3px. Lamps bloom; nothing else.
+
+   FORM: illuminated interlocking diagram, staged as one live
+   thread pulled through the panel — calling a route releases the
+   next segment, and illumination travels as visible causality.
+   Grounded direction 3 of 7; seed key 30239951.
+
+   See DESIGN.md. Token names here are the public API.
+   ============================================================== */
+
 @font-face {
-  font-family: 'Geist';
-  src: url('./fonts/GeistVF.woff') format('woff');
+  font-family: 'Archivo';
+  src: url('./fonts/Archivo-VF.woff2') format('woff2-variations');
   font-weight: 100 900;
+  font-stretch: 62% 125%;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: 'Geist Mono';
-  src: url('./fonts/GeistMonoVF.woff') format('woff');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Barlow Condensed';
-  src: url('./fonts/BarlowCondensed-500.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Barlow Condensed';
-  src: url('./fonts/BarlowCondensed-600.woff2') format('woff2');
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Barlow Condensed';
-  src: url('./fonts/BarlowCondensed-700.woff2') format('woff2');
-  font-weight: 700;
+  font-family: 'Spline Sans Mono';
+  src: url('./fonts/SplineSansMono-VF.woff2') format('woff2-variations');
+  font-weight: 300 700;
   font-style: normal;
   font-display: swap;
 }
@@ -43,114 +44,190 @@
 @tailwind utilities;
 
 :root {
-  /* ==========================================================
-     Perceev — "Results Night"
-     The graphics package of an election-results broadcast:
-     luminous tallies on a blue-black studio wall. Share-of-AI
-     is vote share; rivals are parties; the verdict is the
-     projection. See DESIGN.md.
-     ========================================================== */
+  /* ---------- Panel: graphite steel, unlit. Neutral, no hue. ---------- */
+  --panel-0: #0B0B0C;   /* page — the unlit cabin */
+  --panel-1: #121214;   /* panel face */
+  --panel-2: #17181A;   /* raised / row hover */
+  --panel-3: #1E1F22;   /* active / pressed */
+  --panel-inverse: #EDEDEF;
 
-  /* Surfaces — studio blue-black ramp */
-  --bg-0: #0A0E14;
-  --bg-1: #101623;
-  --bg-2: #16202E;
-  --bg-3: #1D2A3C;
-  --bg-inverse: #E8EDF4;
+  /* ---------- Engraved rules, panel edges, nickel bevel ---------- */
+  --rule-1: #212225;
+  --rule-2: #2E3034;
+  --rule-3: #414449;
+  --bevel-hi: rgba(237, 237, 239, 0.055);
+  --bevel-lo: rgba(0, 0, 0, 0.5);
 
-  /* Borders */
-  --border-1: #1C2736;
-  --border-2: #283850;
-  --border-3: #3A5273;
+  /* ---------- Track line work ---------- */
+  --track: #5C5F66;       /* in scope, unlit */
+  --track-dim: #3A3D42;   /* out of scope */
 
-  /* Text — studio white */
-  --text-1: #E8EDF4;
-  --text-2: #96A5BA;
-  --text-3: #7C8AA0;
-  --text-inverse: #0A0E14;
+  /* ---------- Lettering ---------- */
+  --text-1: #EDEDEF;
+  --text-2: #A0A2A8;
+  --text-3: #74767D;
+  --text-inverse: #0B0B0C;
+  --nickel: #8A8D94;      /* engraved plate text */
+  --nickel-dim: #5A5D63;
 
-  /* Accent — declaration gold. CTAs, projections, links. */
-  --accent: #F0B429;
-  --accent-hover: #FFC94A;
-  --accent-press: #D19C1D;
-  --accent-fg: #1A1102;
-  --accent-soft: rgba(240, 180, 41, 0.10);
-  --accent-border: rgba(240, 180, 41, 0.38);
-  --accent-text: #F3C25A;
+  /* ==============================================================
+     Indications.
 
-  /* Party colors — data roles, never decoration */
-  --you: #35E0C5;
-  --you-fg: #04211C;
-  --you-soft: rgba(53, 224, 197, 0.12);
-  --you-border: rgba(53, 224, 197, 0.4);
-  --rival: #FF5D45;
-  --rival-soft: rgba(255, 93, 69, 0.12);
-  --rival-border: rgba(255, 93, 69, 0.4);
+     The lit state is LIGHT, not colour: bone against graphite. The
+     three tinted roles exist only to tell data apart, and every one
+     of them is desaturated earth — brass, oxide, sage, slate. None
+     of them is a signal-bright hue, and none may be used for
+     decoration. Restraint is the register.
+     ============================================================== */
 
-  /* Legacy marker aliases (mark = "you" highlight) */
-  --mark: var(--you);
-  --mark-soft: var(--you-soft);
-  --mark-border: var(--you-border);
+  /* The one interactive fill: bone. Actions, primary CTA. */
+  --action: #EDEBE6;
+  --action-hi: #FFFFFF;
+  --action-lo: #CFCDC8;
+  --action-fg: #0B0B0C;
 
-  /* Semantic */
-  --good: #3ECF7A;
-  --good-bg: rgba(62, 207, 122, 0.10);
-  --good-border: rgba(62, 207, 122, 0.35);
-  --warn: #E8A23D;
-  --warn-bg: rgba(232, 162, 61, 0.10);
-  --warn-border: rgba(232, 162, 61, 0.35);
-  --crit: #FF5D45;
-  --crit-bg: rgba(255, 93, 69, 0.10);
-  --crit-border: rgba(255, 93, 69, 0.35);
-  --info: #4DA3FF;
-  --info-bg: rgba(77, 163, 255, 0.10);
-  --info-border: rgba(77, 163, 255, 0.35);
+  /* PROCEED / clear / good — muted sage */
+  --lamp-green: #8CA394;
+  --lamp-green-hi: #A3B7AA;
+  --lamp-green-lo: #6E8477;
+  --lamp-green-fg: #0B0B0C;
+  --lamp-green-soft: rgba(140, 163, 148, 0.10);
+  --lamp-green-edge: rgba(140, 163, 148, 0.34);
+  --lamp-green-bloom: 0 0 7px rgba(140, 163, 148, 0.30);
+  --lamp-green-text: #9DB3A3;
 
-  /* Data viz */
-  --chart-1: #F0B429;
-  --chart-2: #35E0C5;
-  --chart-3: #FF5D45;
-  --chart-4: #4DA3FF;
-  --chart-5: #64748C;
-  --meter-track: #1D2A3C;
+  /* YOUR ROUTE — bone. You, wherever you appear in data. */
+  --lamp-white: #EDEBE6;
+  --lamp-white-fg: #0B0B0C;
+  --lamp-white-soft: rgba(237, 235, 230, 0.09);
+  --lamp-white-edge: rgba(237, 235, 230, 0.32);
+  --lamp-white-bloom: 0 0 8px rgba(237, 235, 230, 0.26);
 
-  /* Semantic aliases */
-  --surface-page: var(--bg-0);
-  --surface-card: var(--bg-1);
-  --surface-raised: var(--bg-2);
-  --surface-active: var(--bg-3);
+  /* CAUTION — brass */
+  --lamp-amber: #B0925C;
+  --lamp-amber-fg: #0B0B0C;
+  --lamp-amber-soft: rgba(176, 146, 92, 0.10);
+  --lamp-amber-edge: rgba(176, 146, 92, 0.34);
+  --lamp-amber-bloom: 0 0 7px rgba(176, 146, 92, 0.30);
+  --lamp-amber-text: #C4A472;
+
+  /* OCCUPIED — oxide. A rival holds the section. */
+  --lamp-red: #A9604F;
+  --lamp-red-fg: #F6F1EF;
+  --lamp-red-soft: rgba(169, 96, 79, 0.11);
+  --lamp-red-edge: rgba(169, 96, 79, 0.36);
+  --lamp-red-bloom: 0 0 7px rgba(169, 96, 79, 0.32);
+  --lamp-red-text: #C08573;
+
+  /* ANNOTATION — slate. Block-instrument marks only. */
+  --lamp-blue: #74849A;
+  --lamp-blue-soft: rgba(116, 132, 154, 0.10);
+  --lamp-blue-edge: rgba(116, 132, 154, 0.34);
+  --lamp-blue-text: #8E9DAE;
+
+  /* ---------- Data viz: magnitude ramps on steel, never on a role ---------- */
+  --steel-1: #26282B;
+  --steel-2: #34373B;
+  --steel-3: #45484D;
+  --steel-4: #5C5F66;
+  --steel-5: #797D85;
+
+  /* ==============================================================
+     Compatibility aliases — the previous world's token names remain
+     the API for surfaces that consume them. Each points at its new
+     signalling role. See DESIGN.md § Compatibility.
+     ============================================================== */
+  --bg-0: var(--panel-0);
+  --bg-1: var(--panel-1);
+  --bg-2: var(--panel-2);
+  --bg-3: var(--panel-3);
+  --bg-inverse: var(--panel-inverse);
+  --border-1: var(--rule-1);
+  --border-2: var(--rule-2);
+  --border-3: var(--rule-3);
+
+  --accent: var(--action);
+  --accent-hover: var(--action-hi);
+  --accent-press: var(--action-lo);
+  --accent-fg: var(--action-fg);
+  --accent-soft: rgba(237, 235, 230, 0.08);
+  --accent-border: rgba(237, 235, 230, 0.30);
+  --accent-text: var(--text-1);
+
+  --you: var(--lamp-white);
+  --you-fg: var(--lamp-white-fg);
+  --you-soft: var(--lamp-white-soft);
+  --you-border: var(--lamp-white-edge);
+  --rival: var(--lamp-red);
+  --rival-soft: var(--lamp-red-soft);
+  --rival-border: var(--lamp-red-edge);
+  --mark: var(--lamp-white);
+  --mark-soft: var(--lamp-white-soft);
+  --mark-border: var(--lamp-white-edge);
+
+  --good: var(--lamp-green);
+  --good-bg: var(--lamp-green-soft);
+  --good-border: var(--lamp-green-edge);
+  --warn: var(--lamp-amber);
+  --warn-bg: var(--lamp-amber-soft);
+  --warn-border: var(--lamp-amber-edge);
+  --crit: var(--lamp-red);
+  --crit-bg: var(--lamp-red-soft);
+  --crit-border: var(--lamp-red-edge);
+  --info: var(--lamp-blue);
+  --info-bg: var(--lamp-blue-soft);
+  --info-border: var(--lamp-blue-edge);
+
+  --chart-1: var(--lamp-white);
+  --chart-2: var(--lamp-green);
+  --chart-3: var(--lamp-amber);
+  --chart-4: var(--lamp-blue);
+  --chart-5: var(--steel-4);
+  --meter-track: var(--panel-3);
+
+  --surface-page: var(--panel-0);
+  --surface-card: var(--panel-1);
+  --surface-raised: var(--panel-2);
+  --surface-active: var(--panel-3);
   --text-body: var(--text-1);
   --text-secondary: var(--text-2);
   --text-muted: var(--text-3);
-  --focus-ring: 0 0 0 2px var(--bg-0), 0 0 0 4px var(--accent-border);
+  --focus-ring: 0 0 0 2px var(--panel-0), 0 0 0 4px var(--accent-border);
 
-  /* Typography */
-  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
-  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
-  --font-mono: 'Geist Mono', 'SF Mono', ui-monospace, monospace;
+  /* ---------- Typography: one variable face, three voices ---------- */
+  --font-sans: 'Archivo', system-ui, -apple-system, sans-serif;
+  --font-display: 'Archivo', 'Arial', sans-serif;
+  --font-mono: 'Spline Sans Mono', ui-monospace, monospace;
 
-  --type-display-xl: 700 clamp(56px, 7.5vw, 112px)/0.94 var(--font-display);
-  --track-display: 0.005em;
-  --type-display: 700 48px/0.98 var(--font-display);
-  --type-h1: 600 34px/1.05 var(--font-display);
+  --wdth-sig: 118%;     /* signage — destination board */
+  --wdth-body: 100%;
+  --wdth-plate: 78%;    /* engraved laminate label */
+  --wdth-tally: 105%;
+
+  /* size/weight/line-height only; width is applied by the voice classes */
+  --type-display-xl: 800 clamp(48px, 7vw, 104px)/0.92 var(--font-sans);
+  --type-display: 800 clamp(34px, 4.4vw, 56px)/0.96 var(--font-sans);
+  --type-h1: 800 32px/1.04 var(--font-sans);
+  --type-h2: 800 22px/1.14 var(--font-sans);
+  --type-h3: 700 16px/1.32 var(--font-sans);
+  --type-body-lg: 400 16px/1.62 var(--font-sans);
+  --type-body: 400 15px/1.6 var(--font-sans);
+  --type-body-sm: 400 13.5px/1.5 var(--font-sans);
+  --type-label: 700 11px/1.2 var(--font-sans);
+  --type-label-sm: 700 10px/1.2 var(--font-sans);
+  --type-data-xl: 700 clamp(56px, 7vw, 84px)/0.88 var(--font-sans);
+  --type-data: 700 30px/1 var(--font-sans);
+  --type-mono-body: 400 12.5px/1.6 var(--font-mono);
+
+  --track-display: 0.01em;
   --track-h1: 0.01em;
-  --type-h2: 600 24px/1.15 var(--font-display);
-  --track-h2: 0.01em;
-  --type-h3: 600 17px/1.35 var(--font-sans);
-  --track-h3: -0.01em;
-  --type-body-lg: 400 16px/1.6 var(--font-sans);
-  --type-body: 400 14px/1.55 var(--font-sans);
-  --type-body-sm: 400 13px/1.5 var(--font-sans);
-  --type-label: 600 12px/1.2 var(--font-display);
-  --track-label: 0.08em;
-  --type-label-sm: 600 11px/1.2 var(--font-display);
-  --track-label-sm: 0.08em;
-  --type-data-xl: 700 72px/0.9 var(--font-display);
+  --track-h2: 0.012em;
+  --track-h3: 0;
+  --track-label: 0.14em;
+  --track-label-sm: 0.15em;
   --track-data: 0;
-  --type-data: 700 32px/1 var(--font-display);
-  --type-mono-body: 400 13px/1.6 var(--font-mono);
 
-  /* Spacing */
+  /* ---------- Spacing ---------- */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -159,47 +236,57 @@
   --space-6: 24px;
   --space-7: 32px;
   --space-8: 40px;
-  --space-9: 48px;
-  --space-10: 64px;
-  --space-11: 96px;
-  --container-max: 1200px;
-  --container-pad: 32px;
-  --control-h-sm: 32px;
+  --space-9: 56px;
+  --space-10: 80px;
+  --space-11: 112px;
+  --container-max: 1280px;
+  --container-pad: 28px;
+  --control-h-sm: 30px;
   --control-h-md: 40px;
   --control-h-lg: 52px;
 
-  /* Effects — sharp broadcast panels */
-  --radius-1: 3px;
-  --radius-2: 6px;
+  /* ---------- Effects: engraved panels, offset depth ---------- */
+  --radius-1: 2px;
+  --radius-2: 3px;
   --radius-round: 999px;
-  --shadow-pop: 0 16px 44px rgba(0, 0, 0, 0.5), 0 2px 10px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow-panel: 0 1px 0 var(--bevel-hi) inset, 0 -1px 0 var(--bevel-lo) inset;
+  --shadow-pop: 0 18px 48px rgba(0, 0, 0, 0.62), 0 3px 12px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 10px 28px rgba(0, 0, 0, 0.45);
+
+  /* ---------- Motion: a filament and a relay ---------- */
+  --ease-lamp: cubic-bezier(0.2, 0.9, 0.1, 1);      /* inrush */
+  --ease-decay: cubic-bezier(0.4, 0, 0.7, 0.2);     /* cooling tail */
+  --ease-point: cubic-bezier(0.34, 1.3, 0.5, 1);    /* mechanical snap */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-lamp: 140ms;
+  --dur-decay: 260ms;
+  --dur-point: 380ms;
   --dur-fast: 120ms;
   --dur-med: 240ms;
-  --blur-overlay: blur(8px);
+  --chain-step: 55ms;                                /* route travel */
+  --blur-overlay: blur(10px);
 
-  /* shadcn/ui compatibility — map Perceev tokens to shadcn HSL vars */
-  --background: 218 33% 6%;
-  --foreground: 214 21% 93%;
-  --card: 220 37% 10%;
-  --card-foreground: 214 21% 93%;
-  --popover: 220 37% 10%;
-  --popover-foreground: 214 21% 93%;
-  --primary: 42 87% 55%;
-  --primary-foreground: 43 86% 6%;
-  --secondary: 214 35% 13%;
-  --secondary-foreground: 214 21% 93%;
-  --muted: 214 35% 13%;
-  --muted-foreground: 213 17% 66%;
-  --accent-shadcn: 42 87% 55%;
-  --accent-shadcn-foreground: 43 86% 6%;
-  --destructive: 8 100% 64%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 213 32% 16%;
-  --input: 213 32% 16%;
-  --ring: 42 87% 55%;
-  --radius: 0.25rem;
+  /* ---------- shadcn/ui compatibility ---------- */
+  --background: 240 4% 5%;
+  --foreground: 240 4% 93%;
+  --card: 240 5% 8%;
+  --card-foreground: 240 4% 93%;
+  --popover: 240 5% 8%;
+  --popover-foreground: 240 4% 93%;
+  --primary: 39 16% 92%;
+  --primary-foreground: 240 4% 5%;
+  --secondary: 240 4% 10%;
+  --secondary-foreground: 240 4% 93%;
+  --muted: 240 4% 10%;
+  --muted-foreground: 231 5% 64%;
+  --accent-shadcn: 39 16% 92%;
+  --accent-shadcn-foreground: 240 4% 5%;
+  --destructive: 11 36% 48%;
+  --destructive-foreground: 20 25% 95%;
+  --border: 240 5% 14%;
+  --input: 240 5% 14%;
+  --ring: 39 16% 92%;
+  --radius: 0.1875rem;
 
   color-scheme: dark;
 }
@@ -208,12 +295,18 @@
   * {
     @apply border-border;
   }
+  html {
+    /* Lenis drives scrolling; never fight it with CSS smooth scroll. */
+    scroll-behavior: auto;
+  }
   body {
     @apply bg-background text-foreground;
     margin: 0;
-    background: var(--bg-0);
+    background: var(--panel-0);
     color: var(--text-1);
     font: var(--type-body);
+    font-stretch: var(--wdth-body);
+    font-synthesis: none;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -221,266 +314,421 @@
     margin: 0;
     color: var(--text-1);
   }
-  p {
-    margin: 0;
-  }
+  p { margin: 0; }
   a {
-    color: var(--accent-text);
+    color: var(--text-1);
     text-decoration: none;
-    transition: color var(--dur-fast);
+    text-decoration-color: var(--rule-3);
+    transition: color var(--dur-fast) var(--ease-lamp);
   }
-  a:hover {
-    color: var(--accent-hover);
-  }
+  a:hover { color: var(--action-hi); }
 }
 
-/* Selection — the declaration stamp */
-::selection {
-  background: var(--accent);
-  color: var(--accent-fg);
+/* ==============================================================
+   Typographic voices
+   ============================================================== */
+
+.t-sig {
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-sig);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--track-display);
+  line-height: 0.96;
 }
 
-/* Keyboard focus — visible on every interactive element */
-:where(button, a, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.t-plate {
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-plate);
+  font-weight: 700;
+  font-size: 10.5px;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: var(--track-label);
+  color: var(--nickel);
 }
 
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg-0);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-2);
-  border: 3px solid var(--bg-0);
-  border-radius: 8px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--border-3);
+.t-tally {
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-tally);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--track-data);
 }
 
-/* Blinking caret for typing loader */
-@keyframes caret-blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-.caret-blink {
-  animation: caret-blink 1s step-end infinite;
+.t-stamp {
+  font: var(--type-mono-body);
+  color: var(--text-3);
+  letter-spacing: -0.01em;
 }
 
-/* Pulse fade for skeleton shimmer */
-@keyframes pulse-fade {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ==============================================================
+   Panel surfaces — engraved rectangles of painted steel
+   ============================================================== */
+
+.panel {
+  background: var(--panel-1);
+  border: 1px solid var(--rule-1);
+  border-radius: var(--radius-2);
 }
 
-/* Shimmer for skeleton loading */
+.panel-raised {
+  background: var(--panel-2);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-panel);
+}
+
+/* The engraved label plate riveted to a panel edge. Identifies a
+   control or a region — never introduces a prose section. */
+.plate {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--rule-2);
+  border-radius: 1px;
+  box-shadow: 0 1px 0 var(--bevel-hi) inset;
+}
+
+/* ==============================================================
+   Lamps — the only thing on this surface that blooms
+   ============================================================== */
+
+.lamp {
+  --lamp: var(--track);
+  --bloom: none;
+  position: relative;
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--panel-3);
+  border: 1px solid var(--rule-2);
+  transition:
+    background var(--dur-decay) var(--ease-decay),
+    box-shadow var(--dur-decay) var(--ease-decay),
+    border-color var(--dur-decay) var(--ease-decay);
+}
+
+.lamp[data-lit='true'] {
+  background: var(--lamp);
+  border-color: var(--lamp);
+  box-shadow: var(--bloom);
+  animation: lamp-on var(--dur-lamp) var(--ease-lamp) both;
+}
+
+.lamp--green  { --lamp: var(--lamp-green);  --bloom: var(--lamp-green-bloom); }
+.lamp--white  { --lamp: var(--lamp-white);  --bloom: var(--lamp-white-bloom); }
+.lamp--amber  { --lamp: var(--lamp-amber);  --bloom: var(--lamp-amber-bloom); }
+.lamp--red    { --lamp: var(--lamp-red);    --bloom: var(--lamp-red-bloom); }
+.lamp--blue   { --lamp: var(--lamp-blue);   --bloom: 0 0 12px var(--lamp-blue-edge); }
+
+/* Filament inrush: overshoot at 60%, then settle. */
+@keyframes lamp-on {
+  0%   { filter: brightness(0.35); }
+  60%  { filter: brightness(1.35); }
+  100% { filter: brightness(1); }
+}
+
+/* A lamp that is calling but not yet proved — flashing white on a
+   real panel means "route requested". */
+@keyframes lamp-call {
+  0%, 45%   { opacity: 1; }
+  55%, 100% { opacity: 0.28; }
+}
+.lamp-call { animation: lamp-call 900ms steps(1, end) infinite; }
+
+/* ==============================================================
+   Track work — 0deg / 45deg / 90deg only
+   ============================================================== */
+
+.rail {
+  background: var(--track-dim);
+  border-radius: 1px;
+}
+
+.rail-lit {
+  background: var(--lamp, var(--lamp-white));
+  box-shadow: var(--bloom, var(--lamp-white-bloom));
+}
+
+/* Route illumination travelling along a chain of sections. Each
+   section sets --i; the delay makes causality visible. */
+.chain > * {
+  animation: section-light var(--dur-lamp) var(--ease-lamp) both;
+  animation-delay: calc(var(--i, 0) * var(--chain-step));
+}
+
+@keyframes section-light {
+  from { opacity: 0; transform: scaleX(0.02); }
+  60%  { opacity: 1; filter: brightness(1.3); }
+  to   { opacity: 1; transform: scaleX(1); filter: brightness(1); }
+}
+
+/* ==============================================================
+   Describer — 14-segment berth digits
+   ============================================================== */
+
+@keyframes describer-step {
+  0%, 40%  { opacity: 0; }
+  41%      { opacity: 1; }
+  100%     { opacity: 1; }
+}
+.describer-step { animation: describer-step 90ms steps(2, end) both; }
+
+/* ==============================================================
+   Point machine — anything that switches a path
+   ============================================================== */
+
+@keyframes point-swing {
+  from { transform: rotate(var(--from, 0deg)); }
+  to   { transform: rotate(var(--to, 45deg)); }
+}
+
+/* ==============================================================
+   Skeleton — an unlit berth waiting for its code
+   ============================================================== */
+
+@keyframes berth-wait {
+  0%, 100% { opacity: 0.32; }
+  50%      { opacity: 0.62; }
+}
+.berth-wait { animation: berth-wait 1.6s var(--ease-out) infinite; }
+
 @keyframes shimmer {
-  0% { transform: translateX(-100%); }
+  0%   { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
 }
-.animate-shimmer {
-  animation: shimmer 1.8s infinite;
-}
+.animate-shimmer { animation: shimmer 1.8s infinite; }
 
-/* Legacy sweep hook — now a gold declaration bar behind key words */
+@keyframes caret-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+.caret-blink { animation: caret-blink 1s step-end infinite; }
+
+/* ==============================================================
+   Emphasis in running prose — a lit section behind a phrase.
+   Replaces the old highlight sweep; this is a track circuit, so it
+   fills left to right the way a train occupies one.
+   ============================================================== */
+
 .mark-sweep {
-  background-image: linear-gradient(178deg, var(--accent), var(--accent));
+  background-image: linear-gradient(90deg, var(--action), var(--action));
   background-repeat: no-repeat;
-  background-size: 100% 84%;
-  background-position: 0 62%;
+  background-size: 100% 100%;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  padding: 0 0.09em;
-  margin: 0 -0.02em;
-  border-radius: 2px;
-  color: var(--accent-fg);
+  padding: 0.02em 0.14em;
+  margin: 0 -0.04em;
+  border-radius: 1px;
+  color: var(--action-fg);
 }
 
 .mark-sweep.is-animated {
-  animation: mark-sweep-in 0.5s var(--ease-out) both;
-  animation-delay: var(--sweep-delay, 0.5s);
+  animation: circuit-occupy 420ms var(--ease-lamp) both;
+  animation-delay: var(--sweep-delay, 0.4s);
 }
 
-@keyframes mark-sweep-in {
-  from { background-size: 0% 84%; }
-  to { background-size: 100% 84%; }
+@keyframes circuit-occupy {
+  from { background-size: 0% 100%; color: var(--text-1); }
+  to   { background-size: 100% 100%; color: var(--action-fg); }
 }
+
+/* ==============================================================
+   Focus, selection, scrollbar — the panel's own hardware
+   ============================================================== */
+
+::selection {
+  background: var(--action);
+  color: var(--action-fg);
+}
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--panel-0); }
+::-webkit-scrollbar-thumb {
+  background: var(--rule-2);
+  border: 3px solid var(--panel-0);
+  border-radius: 1px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--rule-3); }
+
+/* ==============================================================
+   Reduced motion — chains collapse to one state change, the
+   traversal stops, every lit state stays readable.
+   ============================================================== */
 
 @media (prefers-reduced-motion: reduce) {
+  .chain > *,
+  .lamp[data-lit='true'],
   .mark-sweep.is-animated,
+  .describer-step,
+  .berth-wait,
+  .animate-shimmer,
   .caret-blink,
-  .animate-shimmer {
-    animation: none;
+  .lamp-call {
+    animation: none !important;
+  }
+  .chain > * { opacity: 1; transform: none; }
+  .mark-sweep.is-animated { background-size: 100% 100%; color: var(--lamp-green-fg); }
+  *, *::before, *::after {
+    transition-duration: 1ms !important;
   }
 }
 
 @layer base {
-  [data-debug-wrapper="true"] {
-    display: contents !important;
-  }
+  [data-debug-wrapper='true'] { display: contents !important; }
 }
 
 .App {
   min-height: 100vh;
-  background-color: var(--bg-0);
+  background-color: var(--panel-0);
 }
 
-/* ==========================================================
+/* ==============================================================
    Print — the exported report.
-   The screen theme is a dark studio; paper is not. Remap the
-   token API to a light report document, hide app chrome, and
-   unfreeze the app-shell scroll layout so content paginates.
-   ========================================================== */
+   The screen is an unlit steel panel; paper is not. Remap the token
+   API to a light report document, hide app chrome, and unfreeze the
+   app-shell scroll layout so content paginates.
+   ============================================================== */
 @media print {
   :root {
-    /* Surfaces */
-    --bg-0: #FFFFFF;
-    --bg-1: #FFFFFF;
-    --bg-2: #EFF1F5;
-    --bg-3: #E4E8EE;
-    --bg-inverse: #101720;
+    --panel-0: #FFFFFF;
+    --panel-1: #FFFFFF;
+    --panel-2: #F1F3F1;
+    --panel-3: #E5E9E6;
+    --panel-inverse: #0E1512;
 
-    /* Borders */
-    --border-1: #D9DEE6;
-    --border-2: #C2CAD6;
-    --border-3: #97A2B4;
+    --rule-1: #D8DEDA;
+    --rule-2: #C0C9C4;
+    --rule-3: #94A19B;
+    --bevel-hi: transparent;
+    --bevel-lo: transparent;
 
-    /* Text */
-    --text-1: #101720;
-    --text-2: #3F4E63;
-    --text-3: #5D6B80;
+    --track: #6B7873;
+    --track-dim: #AAB4AF;
+
+    --text-1: #0E1512;
+    --text-2: #3E4C46;
+    --text-3: #5A6862;
     --text-inverse: #FFFFFF;
+    --nickel: #4C5A54;
+    --nickel-dim: #6B7873;
 
-    /* Accent — print-safe declaration gold */
-    --accent: #B8860B;
-    --accent-hover: #B8860B;
-    --accent-press: #B8860B;
-    --accent-fg: #FFFFFF;
-    --accent-soft: rgba(184, 134, 11, 0.08);
-    --accent-border: rgba(184, 134, 11, 0.4);
-    --accent-text: #8A6508;
+    --lamp-green: #0F7A3D;
+    --lamp-green-hi: #0F7A3D;
+    --lamp-green-lo: #0F7A3D;
+    --lamp-green-fg: #FFFFFF;
+    --lamp-green-soft: rgba(15, 122, 61, 0.09);
+    --lamp-green-edge: rgba(15, 122, 61, 0.42);
+    --lamp-green-bloom: none;
+    --lamp-green-text: #0B5C2E;
 
-    /* Party colors */
-    --you: #0E9E85;
-    --you-fg: #FFFFFF;
-    --you-soft: rgba(14, 158, 133, 0.1);
-    --you-border: rgba(14, 158, 133, 0.4);
-    --rival: #C43D28;
-    --rival-soft: rgba(196, 61, 40, 0.1);
-    --rival-border: rgba(196, 61, 40, 0.4);
+    --lamp-white: #1D3A6B;
+    --lamp-white-fg: #FFFFFF;
+    --lamp-white-soft: rgba(29, 58, 107, 0.09);
+    --lamp-white-edge: rgba(29, 58, 107, 0.42);
+    --lamp-white-bloom: none;
 
-    /* Semantic */
-    --good: #1D8A54;
-    --good-bg: rgba(29, 138, 84, 0.08);
-    --good-border: rgba(29, 138, 84, 0.35);
-    --warn: #96700F;
-    --warn-bg: rgba(150, 112, 15, 0.08);
-    --warn-border: rgba(150, 112, 15, 0.35);
-    --crit: #C23B27;
-    --crit-bg: rgba(194, 59, 39, 0.08);
-    --crit-border: rgba(194, 59, 39, 0.35);
-    --info: #2456C0;
-    --info-bg: rgba(36, 86, 192, 0.08);
-    --info-border: rgba(36, 86, 192, 0.35);
+    --lamp-amber: #8A5B06;
+    --lamp-amber-fg: #FFFFFF;
+    --lamp-amber-soft: rgba(138, 91, 6, 0.09);
+    --lamp-amber-edge: rgba(138, 91, 6, 0.42);
+    --lamp-amber-bloom: none;
+    --lamp-amber-text: #6E4805;
 
-    /* Data viz */
-    --chart-1: #B8860B;
-    --chart-2: #0E9E85;
-    --chart-3: #C43D28;
-    --chart-4: #2456C0;
-    --chart-5: #5D6B80;
-    --meter-track: #E4E8EE;
+    --lamp-red: #B32A1E;
+    --lamp-red-fg: #FFFFFF;
+    --lamp-red-soft: rgba(179, 42, 30, 0.09);
+    --lamp-red-edge: rgba(179, 42, 30, 0.42);
+    --lamp-red-bloom: none;
+    --lamp-red-text: #922218;
 
-    /* Effects */
+    --lamp-blue: #17509E;
+    --lamp-blue-soft: rgba(23, 80, 158, 0.09);
+    --lamp-blue-edge: rgba(23, 80, 158, 0.42);
+    --lamp-blue-text: #123F7D;
+
+    --steel-1: #E5E9E6;
+    --steel-2: #CFD6D2;
+    --steel-3: #B3BDB8;
+    --steel-4: #94A19B;
+    --steel-5: #76837D;
+
+    --shadow-panel: none;
     --shadow-pop: none;
     --shadow-glow: none;
 
-    /* shadcn HSL vars */
     --background: 0 0% 100%;
-    --foreground: 213 33% 9%;
+    --foreground: 158 20% 7%;
     --card: 0 0% 100%;
-    --card-foreground: 213 33% 9%;
+    --card-foreground: 158 20% 7%;
     --popover: 0 0% 100%;
-    --popover-foreground: 213 33% 9%;
-    --primary: 43 81% 38%;
+    --popover-foreground: 158 20% 7%;
+    --primary: 146 78% 27%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 21% 95%;
-    --secondary-foreground: 213 33% 9%;
-    --muted: 220 21% 95%;
-    --muted-foreground: 216 22% 32%;
-    --border: 216 20% 87%;
-    --input: 216 20% 87%;
-    --ring: 43 81% 38%;
+    --secondary: 120 8% 95%;
+    --secondary-foreground: 158 20% 7%;
+    --muted: 120 8% 95%;
+    --muted-foreground: 154 11% 27%;
+    --destructive: 5 71% 41%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 150 11% 86%;
+    --input: 150 11% 86%;
+    --ring: 146 78% 27%;
 
     color-scheme: light;
   }
 
-  @page {
-    margin: 12mm;
-  }
+  @page { margin: 12mm; }
 
-  html,
-  body {
-    background: #ffffff !important;
-  }
+  html, body { background: #ffffff !important; }
 
   * {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     box-shadow: none !important;
     text-shadow: none !important;
+    animation: none !important;
   }
 
-  ::-webkit-scrollbar {
-    display: none !important;
-  }
+  ::-webkit-scrollbar { display: none !important; }
 
-  /* App chrome that has no place in a report */
-  [data-testid="sidebar"],
-  [data-print="hide"],
+  [data-testid='sidebar'],
+  [data-print='hide'],
   .lp-nav,
   .shelf,
   .lp-ticker {
     display: none !important;
   }
 
-  /* Unfreeze the dashboard app shell: the screen layout pins
-     height to the viewport and scrolls inside panels; print
-     needs one continuous flowing document. */
-  div:has(> [data-testid="sidebar"]) {
+  /* Unfreeze the dashboard app shell into one flowing document. */
+  div:has(> [data-testid='sidebar']) {
     display: block !important;
     min-height: 0 !important;
   }
 
-  main {
-    height: auto !important;
-    overflow: visible !important;
-  }
+  main { height: auto !important; overflow: visible !important; }
 
-  [data-testid="dashboard"] {
-    overflow: visible !important;
-    height: auto !important;
-  }
+  [data-testid='dashboard'] { overflow: visible !important; height: auto !important; }
 
-  [data-testid="dashboard"] * {
+  [data-testid='dashboard'] * {
     overflow: visible !important;
     max-height: none !important;
-    animation: none !important;
     transition: none !important;
   }
 
-  /* Keep panels whole across page breaks */
-  [data-testid="dashboard"] > div {
-    break-inside: avoid;
-  }
+  [data-testid='dashboard'] > div { break-inside: avoid; }
 
-  h1,
-  h2,
-  h3 {
-    break-after: avoid;
-  }
+  h1, h2, h3 { break-after: avoid; }
 }

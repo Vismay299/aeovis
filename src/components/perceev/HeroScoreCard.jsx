@@ -1,4 +1,16 @@
-import { ScoreMeter } from "./ScoreMeter";
+'use client';
+
+/**
+ * The instrument bay.
+ *
+ * The verdict is not a coloured tile with a big number on it — it is the
+ * dial the operator trusts, with the aspect the signal is currently showing
+ * beside it and the readings that produced it scribed underneath.
+ */
+
+import { BlockInstrument } from '@/components/signal/BlockInstrument';
+import { AspectSignal, aspectForScore } from '@/components/signal/Lamp';
+import { Button } from './Button';
 
 export const HeroScoreCard = ({
   score,
@@ -8,123 +20,97 @@ export const HeroScoreCard = ({
   stats = [],
   onMethodologyClick,
 }) => {
-  const isNumeric = typeof score === "number";
+  const isNumeric = typeof score === 'number' && Number.isFinite(score);
+  const value = isNumeric ? score : 0;
+  const aspect = aspectForScore(isNumeric ? score : null);
+  const delta = trend != null && trend !== '' ? parseFloat(trend) : null;
 
   return (
     <div
       data-testid={testId}
-      style={{
-        background: "var(--accent)",
-        color: "var(--accent-fg)",
-        borderRadius: "var(--radius-2)",
-        padding: "var(--space-7)",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        minHeight: "210px",
-        position: "relative",
-        overflow: "hidden",
-      }}
+      className="sb-panel"
+      style={{ borderTop: `2px solid var(--lamp-${aspect.lamp})` }}
     >
-      {/* Radial glow overlay — decorative, hidden in print */}
-      <div
-        data-print="hide"
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(ellipse at 20% 30%, rgba(255,255,255,0.08) 0%, transparent 60%)",
-          pointerEvents: "none",
-        }}
-      />
-
-      <div style={{ position: "relative", zIndex: 1 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              fontWeight: 500,
-              textTransform: "uppercase",
-              letterSpacing: "0.12em",
-              color: "var(--accent-fg)",
-              opacity: 0.75,
-            }}
-          >
-            Share of AI answers
+      <div className="sb-panel__head">
+        <span className="t-plate">share of ai answers</span>
+        {tierText && (
+          <span className="t-plate" style={{ marginLeft: 'auto', color: `var(--lamp-${aspect.lamp})` }}>
+            {tierText}
           </span>
-          <div style={{ display: "flex", gap: "8px" }}>
-            {trend != null && (
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  padding: "2px 8px",
-                  borderRadius: "var(--radius-1)",
-                  background:
-                    parseFloat(trend) > 0 ? "rgba(255,255,255,0.2)" : "rgba(0,0,0,0.2)",
-                }}
-              >
-                {parseFloat(trend) > 0 ? "+" : ""}
-                {trend}%
-              </span>
-            )}
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "10px",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.1em",
-                padding: "2px 8px",
-                borderRadius: "var(--radius-1)",
-                border: "1px solid rgba(255,255,255,0.25)",
-              }}
-            >
-              {tierText}
-            </span>
-          </div>
-        </div>
-        <div style={{ marginTop: "var(--space-4)" }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
-            <span
-              style={{
-                fontFamily: "var(--font-sans)",
-                fontSize: "72px",
-                fontWeight: 600,
-                letterSpacing: "-0.035em",
-                lineHeight: 1,
-              }}
-            >
-              {score}
-            </span>
-            {isNumeric && (
-              <span style={{ fontSize: "24px", opacity: 0.6, fontFamily: "var(--font-sans)" }}>
-                /100
-              </span>
-            )}
-          </div>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "4px",
-              marginTop: "var(--space-2)",
-              fontSize: "12px",
-              opacity: 0.8,
-            }}
-          >
-            {stats.map((stat, i) => (
-              <div key={i}>{stat}</div>
-            ))}
-          </div>
-        </div>
+        )}
       </div>
 
-      <div style={{ position: "relative", zIndex: 1, marginTop: "var(--space-5)" }}>
-        <ScoreMeter segments={40} value={isNumeric ? score : 0} />
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(190px, 260px) minmax(0, 1fr)',
+          gap: 'var(--space-7)',
+          padding: 'var(--space-6) var(--space-5)',
+          alignItems: 'center',
+        }}
+      >
+        <BlockInstrument
+          value={value}
+          size={240}
+          caption="of answers reach you"
+          showAspect={false}
+        />
+
+        <div style={{ display: 'grid', gap: 'var(--space-5)', minWidth: 0 }}>
+          <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+            <span className="t-plate">aspect displayed</span>
+            <AspectSignal aspect={aspect} size="md" />
+          </div>
+
+          {delta != null && Number.isFinite(delta) && (
+            <div style={{ display: 'grid', gap: 5 }}>
+              <span className="t-plate">since last reading</span>
+              <span
+                className="t-tally"
+                style={{
+                  fontSize: 19,
+                  color: delta > 0 ? 'var(--lamp-green)' : delta < 0 ? 'var(--lamp-red)' : 'var(--text-2)',
+                }}
+              >
+                {delta > 0 ? '+' : delta < 0 ? '−' : ''}
+                {Math.abs(delta)}
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}> pts</span>
+              </span>
+            </div>
+          )}
+
+          {stats.length > 0 && (
+            <ul
+              style={{
+                display: 'grid',
+                gap: 7,
+                margin: 0,
+                padding: 0,
+                listStyle: 'none',
+                borderTop: '1px solid var(--rule-1)',
+                paddingTop: 'var(--space-4)',
+              }}
+            >
+              {stats.map((stat, i) => (
+                <li
+                  key={i}
+                  style={{ font: 'var(--type-body-sm)', color: 'var(--text-2)', lineHeight: 1.5 }}
+                >
+                  {stat}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {onMethodologyClick && (
+            <Button variant="ghost" size="sm" onClick={onMethodologyClick} style={{ justifySelf: 'start' }}>
+              how this is measured
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
 };
+
+export default HeroScoreCard;

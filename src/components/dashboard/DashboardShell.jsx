@@ -437,6 +437,7 @@ export default function DashboardShell({ scan, scanId }) {
         activeScanTimestamp={result.scanTimestamp}
         onNewScan={() => router.push("/scan")}
         studioBadge={studioBadge}
+        currentScore={heroScore ?? result.visibilityScore}
       />
 
       <main

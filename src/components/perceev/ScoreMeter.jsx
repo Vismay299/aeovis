@@ -1,27 +1,21 @@
-export const ScoreMeter = ({ segments = 40, value = 0, max = 100, className = "" }) => {
-  const filled = Math.round((value / max) * segments);
-  const clamped = Math.max(0, Math.min(filled, segments));
+/**
+ * A run of track circuits. Kept for surfaces that want the bare rail
+ * without a name or tally beside it; the full row lives in
+ * components/signal/TrackCircuit.
+ */
 
-  return (
-    <div
-      role="meter"
-      aria-valuenow={value}
-      aria-valuemin={0}
-      aria-valuemax={max}
-      className={`flex gap-[2px] ${className}`}
-    >
-      {Array.from({ length: segments }).map((_, i) => (
-        <span
-          key={i}
-          className="flex-1"
-          style={{
-            height: "6px",
-            borderRadius: "var(--radius-round)",
-            background: i < clamped ? "var(--accent)" : "var(--meter-track)",
-            transition: "background var(--dur-med) var(--ease-out)",
-          }}
-        />
-      ))}
-    </div>
-  );
-};
+import { TrackCircuit } from '@/components/signal/TrackCircuit';
+
+export const ScoreMeter = ({ segments = 32, value = 0, max = 100, lamp = 'green', className = '' }) => (
+  <TrackCircuit
+    value={value}
+    max={max}
+    sections={segments}
+    lamp={lamp}
+    height={7}
+    className={className}
+    label={`${Math.round(value)} of ${max}`}
+  />
+);
+
+export default ScoreMeter;

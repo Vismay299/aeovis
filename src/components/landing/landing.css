@@ -1,1038 +1,839 @@
-/* ============================================================
-   Perceev landing — "Results Night"
-   Election-broadcast graphics on the studio wall: tallies,
-   straps, the crawl, the projection. Uses global tokens.
-   See DESIGN.md for the world's rules.
-   ============================================================ */
+/* ==============================================================
+   Landing — The Signal Box.
+
+   One continuous descent. A slim panel head carries identity and
+   the one control; the claim sits at signage scale across the full
+   width; then a single length of line runs unbroken to the close,
+   with every region hanging off it as a numbered block.
+
+   There are no page-level columns, no hero that scrolls away, no
+   alternating splits, no eyebrow over every heading, and no row of
+   feature cards. Width is the panel's; content is not parked in a
+   narrow lane down the middle.
+   ============================================================== */
 
 .lp {
   min-height: 100vh;
-  background: var(--bg-0);
+  background: var(--panel-0);
   color: var(--text-1);
-  font-family: var(--font-sans);
-  overflow-x: hidden;
+
+  /* the panel's measure — one place */
+  --lp-max: 1460px;
+  --lp-pad: clamp(18px, 3.2vw, 52px);
+  /* No overflow clipping here: it would turn this into a scroll
+     container and kill position:sticky on the panel head. */
 }
 
-.lp-container {
-  max-width: 1180px;
+.lp-wrap {
+  max-width: var(--lp-max);
   margin: 0 auto;
-  padding-left: var(--space-6);
-  padding-right: var(--space-6);
+  padding-left: var(--lp-pad);
+  padding-right: var(--lp-pad);
 }
 
-/* ---------- Nav ---------- */
+/* --------------------------------------------------------------
+   The head rail — runs already on the system
+   -------------------------------------------------------------- */
 
-.lp-nav {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  background: rgba(10, 14, 20, 0.86);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border-1);
+.lp-rail {
+  border-bottom: 1px solid var(--rule-1);
+  background: var(--panel-1);
 }
 
-.lp-nav-inner {
+.lp-rail-inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 60px;
+  gap: 16px;
+  max-width: var(--lp-max);
+  margin: 0 auto;
+  padding: 8px var(--lp-pad);
 }
 
-.lp-nav-links {
+.lp-rail-plate { flex: none; }
+
+/* One row only. More runs scroll sideways rather than pushing the panel
+   down — the rail is a status strip, not a section. */
+.lp-rail-items {
   display: flex;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.lp-nav-link {
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-2);
-  transition: color var(--dur-fast);
-}
-
-.lp-nav-link:hover {
-  color: var(--text-1);
-}
-
-/* ---------- Case files shelf (returning visitors) ---------- */
-
-.shelf {
-  border-bottom: 1px solid var(--border-1);
-  background: var(--bg-1);
-}
-
-.shelf-inner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  padding-top: var(--space-3);
-  padding-bottom: var(--space-3);
-}
-
-.shelf-label {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-shrink: 0;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.shelf-files {
-  display: flex;
-  align-items: stretch;
-  gap: var(--space-2);
-  overflow-x: auto;
-  scrollbar-width: none;
-  flex: 1;
-  min-width: 0;
-  padding: 2px 0;
-}
-
-.shelf-files::-webkit-scrollbar {
-  display: none;
-}
-
-.shelf-file {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  background: var(--bg-0);
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius-1);
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: border-color var(--dur-fast), background var(--dur-fast);
-  font-family: var(--font-sans);
-  text-align: left;
-}
-
-.shelf-file:hover {
-  border-color: var(--border-3);
-  background: var(--bg-2);
-}
-
-.shelf-file-name {
-  font-size: 13px;
-  font-weight: 550;
-  color: var(--text-1);
-  white-space: nowrap;
-  max-width: 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.shelf-file-meta {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-3);
-  white-space: nowrap;
-}
-
-.shelf-file-score {
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.shelf-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-.shelf-btn {
-  display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: var(--radius-1);
-  padding: 7px 14px;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.lp-rail-items::-webkit-scrollbar { display: none; }
+
+.lp-rail-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 9px;
+  background: var(--panel-0);
+  border: 1px solid var(--rule-1);
+  border-radius: 1px;
   cursor: pointer;
-  transition: all var(--dur-fast);
-  text-decoration: none;
+  transition:
+    border-color var(--dur-fast) var(--ease-lamp),
+    background var(--dur-fast) var(--ease-lamp);
+}
+.lp-rail-item:hover {
+  border-color: var(--rule-3);
+  background: var(--panel-2);
+}
+
+.lp-rail-name {
+  font-size: 13px;
+  color: var(--text-1);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.shelf-btn.is-primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border: 1px solid var(--accent);
+.lp-rail-meta {
+  font: var(--type-mono-body);
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 
-.shelf-btn.is-primary:hover {
-  background: var(--accent-hover);
-}
-
-.shelf-btn.is-ghost {
-  background: transparent;
-  color: var(--text-2);
-  border: 1px solid var(--border-2);
-}
-
-.shelf-btn.is-ghost:hover {
-  color: var(--text-1);
-  border-color: var(--border-3);
-}
-
-.shelf-jobs {
+.lp-rail-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 550;
-  color: var(--accent-text);
+  gap: 18px;
+  margin-left: auto;
+  flex: none;
+  padding-left: 8px;
+  border-left: 1px solid var(--rule-1);
 }
 
-/* ---------- Broadcast primitives ---------- */
+/* --------------------------------------------------------------
+   The panel head — identity and the one control, always reachable
+   -------------------------------------------------------------- */
 
-/* LIVE bug */
-.lp-live {
-  display: inline-flex;
+.lp-head {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--panel-0) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--rule-1);
+}
+
+.lp-head-inner {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  gap: 16px;
+  max-width: var(--lp-max);
+  margin: 0 auto;
+  padding: 13px var(--lp-pad);
+}
+
+.lp-head-live { margin-left: 4px; }
+.lp-head-call { margin-left: auto; }
+
+/* --------------------------------------------------------------
+   The claim
+   -------------------------------------------------------------- */
+
+.lp-hero {
+  border-bottom: 1px solid var(--rule-1);
+}
+
+.lp-hero-inner {
+  max-width: var(--lp-max);
+  margin: 0 auto;
+  padding: clamp(34px, 4.2vw, 68px) var(--lp-pad) 0;
+}
+
+.lp-hero-plate {
+  display: block;
+  color: var(--text-3);
+}
+
+.lp-claim {
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-sig);
+  font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.004em;
+  line-height: 0.94;
+  /* each sentence holds one line: the signage width runs ~0.78em a
+     character, so the ceiling is the measure divided by that. */
+  font-size: clamp(30px, 4.7vw, 68px);
   color: var(--text-1);
+  margin: clamp(14px, 1.6vw, 24px) 0 0;
 }
 
-.lp-live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--crit);
-  animation: lp-live-pulse 1.6s ease-in-out infinite;
+.lp-claim em {
+  font-style: normal;
+  color: var(--text-3);
 }
 
-@keyframes lp-live-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+/* the copy and the control, side by side under the claim */
+.lp-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(330px, 30%);
+  gap: clamp(28px, 4vw, 72px);
+  align-items: start;
+  margin-top: clamp(22px, 2.6vw, 40px);
+  padding-bottom: clamp(26px, 3vw, 46px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lp-live-dot {
-    animation: none;
-  }
+.lp-claim-sub {
+  font: var(--type-body-lg);
+  font-size: clamp(15px, 1.2vw, 19px);
+  color: var(--text-2);
+  max-width: 62ch;
+  line-height: 1.6;
+  margin: 0;
 }
 
-/* Segment strap — the rundown marker */
-.lp-strap {
+.lp-hero-call {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+/* --------------------------------------------------------------
+   The record — the panel's own log, running under the claim
+   -------------------------------------------------------------- */
+
+.lp-record {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  border-top: 1px solid var(--rule-1);
+  padding: 12px 0;
+}
+
+.lp-record-plate {
+  flex: none;
+  color: var(--text-3);
+}
+
+.lp-record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lp-record-list::-webkit-scrollbar { display: none; }
+
+.lp-record-list li {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  background: var(--bg-2);
-  border-top: 3px solid var(--accent);
-  border-radius: 0 0 var(--radius-1) var(--radius-1);
-  padding: 8px 14px 7px;
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-1);
+  flex: none;
+  padding: 5px 10px;
+  background: var(--panel-1);
+  border: 1px solid var(--rule-1);
+  border-radius: 1px;
+  animation: lamp-in var(--dur-lamp) var(--ease-lamp) both;
 }
 
-.lp-strap small {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+.lp-record-engine {
+  font: var(--type-mono-body);
+  font-size: 11px;
   color: var(--text-3);
+  white-space: nowrap;
 }
 
-/* ---------- Hero — the studio wall ---------- */
+.lp-record-to {
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-plate);
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  white-space: nowrap;
+}
+.lp-record-to[data-kind='you'] { color: var(--lamp-white); }
+.lp-record-to[data-kind='rival'] { color: var(--lamp-red-text); }
+.lp-record-to[data-kind='none'] { color: var(--text-3); }
 
-.lp-hero {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100svh - 60px);
+.lp-record-empty {
+  font: var(--type-body-sm);
+  color: var(--text-3);
+  border: none !important;
+  background: none !important;
+  padding: 5px 0 !important;
+}
+
+/* --------------------------------------------------------------
+   The line — one length running the whole document
+   -------------------------------------------------------------- */
+
+.lp-line-inner {
+  /* the rail's x, and the gap between rail and content */
+  --rail-x: calc(var(--lp-pad) + clamp(8px, 1vw, 18px));
+  --rail-gap: clamp(30px, 3vw, 46px);
+
   position: relative;
+  max-width: var(--lp-max);
+  margin: 0 auto;
+  padding: 0 var(--lp-pad) 0 calc(var(--rail-x) + var(--rail-gap));
 }
 
-/* returning operators have the case-files shelf above — keep the crawl on the fold */
-.shelf + main .lp-hero {
-  min-height: calc(100svh - 126px);
-}
-
-/* studio wall: faint scan of horizontal light across the top */
-.lp-hero::before {
-  content: "";
+/* the continuous rail every block hangs off */
+.lp-line-inner::before {
+  content: '';
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 420px;
-  background:
-    radial-gradient(120% 100% at 50% -30%, rgba(77, 163, 255, 0.07) 0%, transparent 60%);
+  left: var(--rail-x);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--rule-2);
+}
+
+/* the travelled length, filled by scroll progress */
+.lp-line-travelled {
+  position: absolute;
+  left: var(--rail-x);
+  top: 0;
+  width: 1px;
+  background: var(--track);
   pointer-events: none;
 }
 
-.lp-hero-main {
-  position: relative;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: var(--space-6) 0 var(--space-8);
-}
-
-/* top strap row */
-.lp-hero-topline {
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  border-top: 1px solid var(--border-2);
-  border-bottom: 1px solid var(--border-2);
-  padding: 10px 0;
-  margin-bottom: var(--space-8);
-}
-
-.lp-hero-topline .lp-topline-title {
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-2);
-}
-
-.lp-hero-topline .lp-topline-stamp {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--text-3);
-}
-
-.lp-hero-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(320px, 5fr);
-  gap: var(--space-10);
-  align-items: center;
-}
-
-.lp-hero-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(48px, 6.3vw, 90px);
-  font-weight: 700;
-  line-height: 0.94;
-  letter-spacing: 0.005em;
-  text-transform: uppercase;
-  color: var(--text-1);
-}
-
-.lp-hero-sub {
-  margin: var(--space-6) 0 0;
-  max-width: 52ch;
-  font-size: 16.5px;
-  line-height: 1.65;
-  color: var(--text-2);
-}
-
-.lp-hero-scan {
-  max-width: 520px;
-  margin-top: var(--space-7);
-}
-
-.lp-hero-micro {
-  margin-top: var(--space-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  color: var(--text-3);
-}
-
-/* ---------- The tally board ---------- */
-
-.tally {
-  background: var(--bg-1);
-  border: 1px solid var(--border-2);
-  /* broadcast keyline: sharp top edge, radius only below */
-  border-top: 3px solid var(--accent);
-  border-radius: 0 0 var(--radius-1) var(--radius-1);
-  box-shadow: var(--shadow-pop);
-}
-
-.tally-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 14px 18px 12px;
-  border-bottom: 1px solid var(--border-1);
-}
-
-.tally-title {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-1);
-}
-
-.tally-declared {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.05em;
-  color: var(--text-3);
-}
-
-.tally-body {
-  position: relative;
-  padding: var(--space-5) 18px var(--space-4);
-}
-
-/* the visibility threshold — the majority mark */
-.tally-threshold {
+/* the marker riding the line */
+.lp-line-marker {
   position: absolute;
-  top: var(--space-4);
-  bottom: 34px;
-  /* 18px pad + 118px name + 16px gap = 152px track start;
-     track width = 100% − pads(36) − name(118) − count(56) − gaps(32) */
-  left: calc(152px + (100% - 242px) * var(--threshold, 0.6));
-  border-left: 1px dashed rgba(232, 237, 244, 0.45);
+  left: var(--rail-x);
+  width: 9px;
+  height: 9px;
+  margin-left: -4px;
+  margin-top: -4px;
+  border-radius: 1px;
+  background: var(--action);
+  box-shadow: 0 0 10px rgba(237, 235, 230, 0.28);
   pointer-events: none;
+  z-index: 2;
 }
 
-.tally-threshold span {
+/* --------------------------------------------------------------
+   Blocks on the line
+   -------------------------------------------------------------- */
+
+.lp-blk {
+  position: relative;
+  padding: clamp(58px, 6.4vw, 108px) 0;
+  border-bottom: 1px solid var(--rule-1);
+  /* the head is sticky; anchored jumps clear it */
+  scroll-margin-top: 76px;
+}
+.lp-blk:last-child { border-bottom: none; }
+
+/* the milepost: a block's number, scribed on the rail */
+.lp-blk-post {
   position: absolute;
-  bottom: -22px;
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  font-family: var(--font-display);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  left: calc(-1 * var(--rail-gap));
+  margin-left: -13px;
+  top: 0;
 }
 
-.tally-row {
-  display: grid;
-  grid-template-columns: 118px minmax(0, 1fr) 56px;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 7px 0;
-}
-
-.tally-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tally-row.is-you .tally-name {
-  color: var(--you);
-}
-
-.tally-you-tag {
+.lp-blk-post i {
+  display: block;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: var(--panel-0);
+  border: 1px solid var(--rule-2);
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-tally);
+  font-weight: 700;
+  font-size: 11px;
   font-style: normal;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  background: var(--you);
-  color: var(--you-fg);
-  border-radius: 1px;
-  padding: 1px 4px;
-  margin-left: 1px;
-  flex-shrink: 0;
+  line-height: 25px;
+  text-align: center;
+  color: var(--text-3);
+  transition:
+    color var(--dur-decay) var(--ease-decay),
+    border-color var(--dur-decay) var(--ease-decay),
+    background var(--dur-decay) var(--ease-decay);
 }
 
-.tally-chip {
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 1px;
-  background: var(--rival);
+/* Reveal puts the lit class on .lp-block, which wraps the milepost. */
+.lp-block.is-lit .lp-blk-post i {
+  color: var(--action-fg);
+  background: var(--action);
+  border-color: var(--action);
 }
 
-.tally-row.is-you .tally-chip {
-  background: var(--you);
+.lp-blk-title {
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-sig);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  font-size: clamp(22px, 2.5vw, 38px);
+  color: var(--text-1);
+  margin: 0 0 14px;
+  max-width: 24ch;
 }
 
-.tally-track {
+.lp-blk-lede {
+  font: var(--type-body-lg);
+  font-size: clamp(15px, 1.05vw, 17px);
+  color: var(--text-2);
+  max-width: 68ch;
+  line-height: 1.62;
+  margin: 0 0 30px;
+}
+
+/* content lifts the last few pixels as the marker reaches the block;
+   it is fully readable before and after */
+.lp-block {
   position: relative;
-  height: 18px;
-  background: var(--meter-track);
-  border-radius: 1px;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lp-block {
+    transform: translateY(10px);
+    transition: transform 520ms var(--ease-lamp);
+  }
+  .lp-block.is-lit { transform: none; }
+}
+
+/* --------------------------------------------------------------
+   Block 1 — the questions arriving as berths
+   -------------------------------------------------------------- */
+
+/* 12 berths: the minimum is set so the grid lands on a column count
+   that divides them evenly and never leaves a half-empty last row. */
+.lp-berths {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1px;
+  background: var(--rule-1);
+  border: 1px solid var(--rule-1);
+  border-radius: var(--radius-2);
   overflow: hidden;
 }
 
-.tally-fill {
+.lp-berth {
+  background: var(--panel-1);
+  padding: 13px 14px;
+  display: grid;
+  gap: 8px;
+  min-height: 70px;
+  align-content: start;
+}
+
+.lp-berth-q {
+  font-size: 12.5px;
+  color: var(--text-3);
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.lp-berths-foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+/* --------------------------------------------------------------
+   Block 2 — the engine lines
+   -------------------------------------------------------------- */
+
+.lp-engines {
+  display: grid;
+  gap: 1px;
+  background: var(--rule-1);
+  border: 1px solid var(--rule-1);
+  border-radius: var(--radius-2);
+  overflow: hidden;
+}
+
+.lp-engine {
+  background: var(--panel-1);
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 17px 18px;
+}
+
+.lp-engine-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.lp-engine-line {
+  position: relative;
+  height: 1px;
+  background: var(--track-dim);
+}
+
+.lp-engine-line span {
   position: absolute;
   inset: 0 auto 0 0;
-  width: calc(var(--v) * 1%);
-  background: var(--rival);
-  transform-origin: left center;
+  height: 1px;
+  background: var(--track);
 }
 
-.tally-row.is-you .tally-fill {
-  background: var(--you);
-}
-
-.lp-reveal.is-visible .tally-fill,
-.tally.is-live .tally-fill {
-  animation: tally-fill-in 0.9s var(--ease-out) both;
-  animation-delay: calc(var(--i, 0) * 120ms + 200ms);
-}
-
-@keyframes tally-fill-in {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
-}
-
-.tally-count {
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text-1);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.tally-row.is-you .tally-count {
-  color: var(--you);
-}
-
-.tally-foot {
-  display: flex;
-  gap: var(--space-5);
-  padding: 10px 18px 12px;
-  border-top: 1px solid var(--border-1);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
+.lp-engine-note {
+  font: var(--type-mono-body);
+  font-size: 11.5px;
   color: var(--text-3);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tally-fill {
-    animation: none !important;
-  }
-}
-
-/* ---------- The crawl — probe results wire ---------- */
-
-.lp-ticker {
-  position: relative;
-  border-top: 1px solid var(--border-2);
-  border-bottom: 1px solid var(--border-2);
-  background: var(--bg-1);
-  overflow: hidden;
-  display: flex;
-}
-
-.lp-ticker-tab {
-  flex-shrink: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--accent);
-  color: var(--accent-fg);
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  padding: 0 18px;
-}
-
-.lp-ticker-viewport {
-  overflow: hidden;
-  flex: 1;
-}
-
-.lp-ticker-track {
-  display: flex;
-  width: max-content;
-  animation: lp-ticker 50s linear infinite;
-  will-change: transform;
-}
-
-.lp-ticker:hover .lp-ticker-track {
-  animation-play-state: paused;
-}
-
-.lp-ticker-group {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-9);
-  padding: 13px var(--space-9) 13px 0;
-}
-
-@keyframes lp-ticker {
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-.lp-tick {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
   white-space: nowrap;
 }
 
-.lp-tick-probe {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-3);
+/* --------------------------------------------------------------
+   Block 3 — the interlocking
+   -------------------------------------------------------------- */
+
+.lp-ilk {
+  background: var(--panel-1);
+  border: 1px solid var(--rule-1);
+  border-radius: var(--radius-2);
+  overflow: hidden;
 }
 
-.lp-tick-text {
+.lp-ilk-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--rule-1);
+}
+
+.lp-ilk-q {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  line-height: 1.4;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lp-ilk-engine {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.lp-ilk-body {
+  position: relative;
+  padding: 0;
+}
+
+.lp-ilk-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+}
+
+.lp-ilk-roads {
+  position: relative;
+  height: 100%;
+}
+
+.lp-ilk-road {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 16px;
+  /* the roads label from the right; the diagram runs underneath */
+  justify-content: flex-end;
+}
+
+/* the buffer stop each road terminates against */
+.lp-ilk-buffer {
+  width: 3px;
+  height: 17px;
+  background: var(--nickel-dim);
+  border-radius: 1px;
+  flex: none;
+}
+
+.lp-ilk-name {
   font-size: 14px;
   color: var(--text-2);
+  white-space: nowrap;
+  transition: color var(--dur-decay) var(--ease-decay);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .lp-ticker-track {
-    animation: none;
-  }
-}
-
-/* your brand called — party chip */
-.ev-you {
-  background: var(--you);
-  color: var(--you-fg);
-  font-weight: 600;
-  padding: 1px 5px;
-  margin: 0 1px;
-  border-radius: 2px;
-}
-
-/* rival called — trailing red */
-.ev-rival {
-  color: var(--rival);
+.lp-ilk-road[data-you='true'] .lp-ilk-name {
+  color: var(--text-1);
   font-weight: 600;
 }
 
-/* ---------- The soundbite — a probe answer, verbatim ---------- */
+.lp-ilk-road[data-arrived='true'] .lp-ilk-name { color: var(--text-1); }
+
+.lp-ilk-state {
+  min-width: 88px;
+  text-align: right;
+}
+.lp-ilk-road[data-you='true'] .lp-ilk-state { color: var(--lamp-white); }
+.lp-ilk-road[data-arrived='true']:not([data-you='true']) .lp-ilk-state {
+  color: var(--lamp-red-text);
+}
+
+/* --------------------------------------------------------------
+   Block 4 — the reading
+   -------------------------------------------------------------- */
+
+.lp-reading {
+  display: grid;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  gap: clamp(28px, 4vw, 72px);
+  align-items: start;
+}
+
+.lp-reading-field { min-width: 0; }
+
+@media (max-width: 820px) {
+  .lp-reading { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* --------------------------------------------------------------
+   The answer sheet
+   -------------------------------------------------------------- */
 
 .lp-sheet {
-  position: relative;
-  background: var(--bg-1);
-  border: 1px solid var(--border-2);
-  /* broadcast keyline: sharp top edge, radius only below */
-  border-top: 3px solid var(--info);
-  border-radius: 0 0 var(--radius-1) var(--radius-1);
-  box-shadow: var(--shadow-pop);
+  background: var(--panel-1);
+  border: 1px solid var(--rule-1);
+  border-radius: var(--radius-2);
   overflow: hidden;
 }
 
 .lp-sheet-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: 11px 18px;
-  border-bottom: 1px solid var(--border-1);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  gap: 12px;
+  padding: 9px 14px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--rule-1);
 }
 
-.lp-sheet-head b {
-  font-weight: 500;
+.lp-sheet-q {
+  padding: 16px 18px 0;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-2);
+  line-height: 1.45;
 }
 
 .lp-sheet-body {
-  padding: var(--space-6) var(--space-6) var(--space-5);
-  min-height: 190px;
-  font-size: 15px;
-  line-height: 1.8;
-  color: var(--text-2);
+  padding: 12px 18px 18px;
+  font: var(--type-body-lg);
+  color: var(--text-1);
+  line-height: 1.72;
+  min-height: 122px;
+  max-width: 78ch;
 }
 
 .lp-sheet-foot {
   display: flex;
-  gap: var(--space-6);
-  padding: 11px 18px;
-  border-top: 1px solid var(--border-1);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-3);
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px solid var(--rule-1);
+  background: var(--panel-2);
+}
+
+/* your section, held: a lit block behind the name */
+.lp-you {
+  background: var(--action);
+  color: var(--action-fg);
+  padding: 0.04em 0.22em;
+  margin: 0 -0.06em;
+  border-radius: 1px;
+  font-weight: 600;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* a rival holding the section: scribed under, in oxide */
+.lp-rival {
+  color: var(--lamp-red-text);
+  font-weight: 600;
+  border-bottom: 1px solid var(--lamp-red-edge);
+  padding-bottom: 1px;
 }
 
 .lp-legend {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-plate);
+  font-weight: 700;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--text-3);
 }
 
-.lp-legend-mark {
-  display: inline-block;
-  width: 12px;
-  height: 10px;
-  border-radius: 2px;
-  background: var(--you);
+.lp-legend i {
+  width: 13px;
+  height: 9px;
+  border-radius: 1px;
+  display: block;
 }
-
+.lp-legend-you { background: var(--action); }
 .lp-legend-rival {
-  display: inline-block;
-  width: 12px;
-  height: 10px;
-  border-radius: 2px;
-  background: var(--rival);
+  background: var(--lamp-red-soft);
+  border-bottom: 1px solid var(--lamp-red);
 }
 
-/* ---------- Sections ---------- */
+/* --------------------------------------------------------------
+   The close
+   -------------------------------------------------------------- */
 
-.lp-section {
-  padding: var(--space-11) 0;
+.lp-close {
+  padding: clamp(64px, 7vw, 128px) 0 clamp(56px, 6vw, 104px);
 }
 
-.lp-section + .lp-section {
-  border-top: 1px solid var(--border-1);
-}
-
-.lp-sec-head {
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: var(--space-6);
-  margin-bottom: var(--space-7);
-}
-
-.lp-h2 {
-  font-family: var(--font-display);
-  font-size: clamp(36px, 4.4vw, 60px);
-  font-weight: 700;
-  line-height: 0.96;
+.lp-close-title {
+  font-family: var(--font-sans);
+  font-stretch: var(--wdth-sig);
+  font-weight: 800;
+  text-transform: uppercase;
   letter-spacing: 0.005em;
-  text-transform: uppercase;
+  line-height: 0.94;
+  font-size: clamp(30px, 4.6vw, 68px);
   color: var(--text-1);
-  max-width: 22ch;
+  margin: 18px 0 18px;
+  max-width: 18ch;
 }
 
-.lp-body {
-  margin-top: var(--space-5);
-  font-size: 16px;
-  line-height: 1.7;
-  color: var(--text-2);
-  max-width: 58ch;
+.lp-close-call {
+  max-width: 560px;
+  margin-bottom: 14px;
 }
 
-.lp-split {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--space-10);
+.lp-buffer {
+  display: flex;
   align-items: center;
+  gap: 12px;
+  color: var(--text-3);
+}
+.lp-buffer i {
+  display: block;
+  width: 3px;
+  height: 26px;
+  background: var(--nickel-dim);
+  border-radius: 1px;
 }
 
-/* ---------- The projection — verdict segment ---------- */
+/* --------------------------------------------------------------
+   Controls
+   -------------------------------------------------------------- */
 
-.lp-projection-band {
-  background: var(--bg-1);
-  border-top: 1px solid var(--border-2);
-  border-bottom: 1px solid var(--border-2);
-  padding: var(--space-11) 0;
-}
+.lp-call { display: grid; gap: 9px; width: 100%; }
+.lp-call-plate { display: block; }
+.lp-call-row { display: flex; gap: 8px; }
+.lp-call-field { flex: 1; min-width: 0; }
+.lp-call-btn { flex: none; }
 
-.lp-projection {
-  position: relative;
-  background: var(--bg-0);
-  border: 1px solid var(--border-2);
-  /* broadcast keyline: sharp top edge, radius only below */
-  border-top: 3px solid var(--accent);
-  border-radius: 0 0 var(--radius-1) var(--radius-1);
-  padding: var(--space-7);
-  box-shadow: var(--shadow-pop);
-}
-
-.lp-projection-stamp {
-  display: inline-block;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--accent-text);
-}
-
-.lp-projection-num {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-top: var(--space-3);
-}
-
-.lp-projection-num strong {
-  font-family: var(--font-display);
-  font-size: clamp(96px, 10vw, 148px);
-  font-weight: 700;
-  line-height: 0.85;
-  color: var(--text-1);
-  font-variant-numeric: tabular-nums;
-}
-
-.lp-projection-num > span {
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 600;
+.lp-micro {
+  font-size: 12px;
   color: var(--text-3);
 }
 
-.lp-projection-meter {
-  margin-top: var(--space-6);
-}
-
-.lp-projection-splits {
-  display: flex;
-  gap: var(--space-7);
-  margin-top: var(--space-5);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--border-1);
-}
-
-.lp-projection-split {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.lp-projection-split strong {
-  font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--text-1);
-  font-variant-numeric: tabular-nums;
-}
-
-.lp-projection-split span {
-  font-family: var(--font-display);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-/* ---------- The rundown (how it works) ---------- */
-
-.lp-steps {
-  margin-top: var(--space-8);
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-6);
-}
-
-.lp-step {
-  background: var(--bg-1);
-  border: 1px solid var(--border-1);
-  /* broadcast keyline: sharp top edge, radius only below */
-  border-top: 3px solid var(--border-3);
-  border-radius: 0 0 var(--radius-1) var(--radius-1);
-  padding: var(--space-6);
-  transition: border-color var(--dur-fast);
-}
-
-.lp-step:hover {
-  border-top-color: var(--accent);
-}
-
-.lp-step-num {
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-
-.lp-step-title {
-  margin-top: var(--space-3);
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--text-1);
-}
-
-.lp-step-body {
-  margin-top: var(--space-3);
-  font-size: 14.5px;
-  line-height: 1.65;
-  color: var(--text-2);
-}
-
-/* ---------- Final CTA ---------- */
-
-.lp-cta {
-  position: relative;
-  padding: var(--space-11) 0;
-  border-top: 1px solid var(--border-1);
-}
-
-.lp-cta-title {
-  font-family: var(--font-display);
-  font-size: clamp(48px, 7vw, 104px);
-  font-weight: 700;
-  line-height: 0.92;
-  letter-spacing: 0.005em;
-  text-transform: uppercase;
-  color: var(--text-1);
-  max-width: 14ch;
-}
-
-.lp-cta-sub {
-  max-width: 520px;
-  margin: var(--space-5) 0 var(--space-7);
-  font-size: 16px;
-  line-height: 1.65;
-  color: var(--text-2);
-}
-
-.lp-sample-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: var(--space-6);
+.lp-link {
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--accent-text);
-  transition: color var(--dur-fast);
+  font-stretch: var(--wdth-plate);
+  font-weight: 700;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color var(--dur-fast) var(--ease-lamp);
 }
+.lp-link:hover { color: var(--text-1); }
 
-.lp-sample-link:hover {
-  color: var(--accent-hover);
-}
-
-/* ---------- Footer ---------- */
+/* --------------------------------------------------------------
+   Footer
+   -------------------------------------------------------------- */
 
 .lp-footer {
-  border-top: 1px solid var(--border-1);
-  padding: var(--space-8) 0;
-  background: var(--bg-1);
+  border-top: 1px solid var(--rule-1);
+  background: var(--panel-1);
 }
 
 .lp-footer-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: 20px;
   flex-wrap: wrap;
+  padding: 20px var(--lp-pad);
+  max-width: var(--lp-max);
+  margin: 0 auto;
 }
 
 .lp-footer-copy {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.03em;
+  font-size: 12px;
   color: var(--text-3);
 }
 
-/* ---------- Reveal on scroll ---------- */
+/* --------------------------------------------------------------
+   Responsive
+   -------------------------------------------------------------- */
 
-.lp-reveal {
-  opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.7s var(--ease-out), transform 0.7s var(--ease-out);
-}
-
-.lp-reveal.is-visible {
-  opacity: 1;
-  transform: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .lp-reveal {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-}
-
-/* ---------- Responsive ---------- */
-
-@media (max-width: 900px) {
-  .lp-hero {
-    min-height: 0;
-  }
-  .lp-hero-main {
-    padding: var(--space-7) 0 var(--space-8);
-  }
-  .lp-hero-topline {
-    margin-bottom: var(--space-7);
-  }
-  .lp-hero-topline .lp-topline-title {
-    display: none;
-  }
+@media (max-width: 1000px) {
   .lp-hero-grid {
-    grid-template-columns: 1fr;
-    gap: var(--space-8);
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
   }
-  .lp-split {
-    grid-template-columns: 1fr;
-    gap: var(--space-7);
-  }
-  .lp-steps {
-    grid-template-columns: 1fr;
-  }
-  .lp-nav-link {
-    display: none;
-  }
-  .lp-section {
-    padding: var(--space-10) 0;
-  }
-  .lp-projection-band {
-    padding: var(--space-10) 0;
-  }
-  .lp-ticker-tab {
-    padding: 0 12px;
-    font-size: 12px;
-  }
-  .shelf-inner {
-    flex-wrap: wrap;
+  .lp-hero-call { justify-items: stretch; }
+  .lp-engine { grid-template-columns: 1fr; gap: 10px; }
+  .lp-engine-note { white-space: normal; }
+}
+
+@media (max-width: 720px) {
+  .lp-line-inner { --rail-gap: 26px; }
+  .lp-record { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .lp-head-live { display: none; }
+  .lp-berths { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+  /* the rail's plate and actions do not shrink, so on a narrow panel
+     they take their own row rather than pushing the document wide */
+  .lp-rail-inner { flex-wrap: wrap; gap: 8px 12px; }
+  .lp-rail-items { width: 100%; order: 2; }
+  .lp-rail-actions {
+    margin-left: auto;
+    padding-left: 0;
+    border-left: none;
+    gap: 14px;
   }
 }
 
-/* Homepage operator workspace — collapse the two-column grid on narrow screens */
-@media (max-width: 860px) {
-  .home-dash-grid {
-    grid-template-columns: 1fr !important;
-  }
+@media (max-width: 560px) {
+  .lp-call-row { flex-direction: column; align-items: stretch; }
+  .lp-blk-post i { width: 23px; height: 23px; line-height: 21px; font-size: 10px; }
+  .lp-blk-post { margin-left: -11px; }
 }

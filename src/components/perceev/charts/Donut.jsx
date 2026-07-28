@@ -1,186 +1,137 @@
-"use client";
+'use client';
 
-import { motion, useReducedMotion } from "framer-motion";
-import { buildDonutSegments, describeArcPath, formatPercent, neutralRampVar } from "./chartMath";
-
-const SIZE = 200;
-const CENTER = SIZE / 2;
-const R_OUTER = 86;
-const THICKNESS = 26;
-const RADIUS = R_OUTER - THICKNESS / 2;
-
-/** Largest rival gets the brightest neutral step, smallest fades toward the dark end — never red. Floor lifted so even a trailing rival stays visible against the panel. */
-function rivalRampT(rank, total) {
-  if (total <= 1) return 1;
-  const raw = 1 - rank / (total - 1);
-  return 0.15 + raw * 0.85;
-}
+import { formatPercent, neutralRampVar } from './chartMath';
 
 /**
- * Share-of-voice ring. Self segment is `--you`; every rival is a distinct
- * step of the neutral graphite ramp (DESIGN.md: rivals never all read as
- * red magnitude — that's an alarm color, not a rank). Center shows the
- * self segment's normalized share (falls back to the first segment) so the
- * printed number always matches the wedge you're looking at, even if the
- * input values don't already sum to 100.
+ * Share of the line.
  *
- * Owns its own panel chrome (background, hairline border, sharp corners),
- * matching the KpiCard/ScoreBand convention.
- *
- * @param {{name: string, value: number, isSelf?: boolean}[]} segments
- * @param {"you"|"accent"|"rival"|"good"|null} [keyline] optional 3px top-edge party-color keyline
+ * Not a ring. One continuous run of track divided into the shares that hold
+ * it, read left to right with your own section in bone and every rival on a
+ * step of the neutral steel ramp — a rival's size is a quantity, never an
+ * alarm. The component keeps its old name because the whole dashboard
+ * imports it under that name.
  */
+
+/** Largest rival takes the brightest steel step; the smallest stays visible. */
+function rivalRampT(rank, total) {
+  if (total <= 1) return 1;
+  return 0.2 + (1 - rank / (total - 1)) * 0.8;
+}
+
 export const Donut = ({
   segments,
-  centerLabel = "Share of Voice",
+  centerLabel = 'share of the line',
   showLegend = true,
   keyline = null,
-  testId = "sov-donut",
+  testId = 'sov-donut',
 }) => {
-  const safeSegments = Array.isArray(segments) ? segments : [];
-  const prefersReduced = useReducedMotion();
-  const n = safeSegments.length;
-  const geo = buildDonutSegments(safeSegments, { gapDeg: n > 1 ? 2 : 0 });
-  const hasData = geo.some((s) => s.pct > 0);
+  const safe = Array.isArray(segments) ? segments : [];
+  const total = safe.reduce((s, seg) => s + (Number(seg.value) || 0), 0);
+  const hasData = total > 0;
 
-  const rivalsByValue = geo
+  const rivalsByValue = safe
     .filter((s) => !s.isSelf)
     .slice()
-    .sort((a, b) => b.value - a.value)
+    .sort((a, b) => (b.value || 0) - (a.value || 0))
     .map((s) => s.name);
 
-  const centerSeg = geo.find((s) => s.isSelf) || geo[0];
-  const centerText = hasData && centerSeg ? formatPercent(centerSeg.pct * 100) : "—";
+  const colorFor = (seg) =>
+    seg.isSelf
+      ? 'var(--lamp-white)'
+      : neutralRampVar(rivalRampT(rivalsByValue.indexOf(seg.name), rivalsByValue.length));
+
+  const selfSeg = safe.find((s) => s.isSelf) || safe[0];
+  const selfPct = hasData && selfSeg ? ((Number(selfSeg.value) || 0) / total) * 100 : null;
 
   return (
     <div
       data-testid={testId}
+      className="sb-panel"
       style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "var(--space-5)",
-        background: "var(--bg-1)",
-        borderTop: keyline ? `3px solid var(--${keyline})` : "1px solid var(--border-1)",
-        borderRight: "1px solid var(--border-1)",
-        borderBottom: "1px solid var(--border-1)",
-        borderLeft: "1px solid var(--border-1)",
-        borderRadius: "var(--radius-2)",
-        padding: "var(--space-6)",
+        borderTop: keyline ? `2px solid var(--lamp-${keyline})` : undefined,
+        padding: 'var(--space-5)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-4)',
       }}
     >
-      <div style={{ position: "relative", width: "100%", maxWidth: `${SIZE}px` }}>
-        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} style={{ width: "100%", height: "auto", display: "block" }}>
-          {/* Track — makes the segment gaps read as design, not missing data */}
-          <circle cx={CENTER} cy={CENTER} r={RADIUS} fill="none" stroke="var(--bg-2)" strokeWidth={THICKNESS} />
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3)' }}>
+        <span className="t-tally" style={{ fontSize: 34, lineHeight: 1, color: 'var(--lamp-white)' }}>
+          {selfPct == null ? '—' : formatPercent(selfPct)}
+        </span>
+        <span className="t-plate">{centerLabel}</span>
+      </div>
 
-          {!hasData && (
-            <circle
-              cx={CENTER}
-              cy={CENTER}
-              r={RADIUS}
-              fill="none"
-              stroke="var(--border-2)"
-              strokeWidth={THICKNESS}
-              strokeDasharray="3 5"
-            />
-          )}
-
-          {hasData &&
-            geo.map((seg, i) => {
-              if (seg.pct <= 0) return null;
-              const color = seg.isSelf
-                ? "var(--you)"
-                : neutralRampVar(rivalRampT(rivalsByValue.indexOf(seg.name), rivalsByValue.length));
-              const d = describeArcPath(CENTER, CENTER, RADIUS, seg.startAngle, seg.endAngle);
-
-              return (
-                <motion.path
-                  key={seg.name ?? i}
-                  d={d}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={THICKNESS}
-                  strokeLinecap="butt"
-                  initial={prefersReduced ? false : { pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={
-                    prefersReduced ? { duration: 0 } : { duration: 0.8, delay: i * 0.09, ease: [0.22, 1, 0.36, 1] }
-                  }
-                />
-              );
-            })}
-        </svg>
-
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "var(--font-display)",
-              fontWeight: 700,
-              fontSize: "40px",
-              lineHeight: 1,
-              letterSpacing: "var(--track-data)",
-              fontVariantNumeric: "tabular-nums",
-              color: "var(--text-1)",
-            }}
-          >
-            {centerText}
-          </span>
-          <span
-            style={{
-              marginTop: "6px",
-              fontFamily: "var(--font-display)",
-              fontWeight: 600,
-              fontSize: "10px",
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              color: "var(--text-3)",
-              textAlign: "center",
-            }}
-          >
-            {centerLabel}
-          </span>
-        </div>
+      {/* the run of track, divided by who holds it */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '2px',
+          height: '18px',
+          background: 'var(--panel-0)',
+          border: '1px solid var(--rule-1)',
+          borderRadius: '1px',
+          padding: '2px',
+          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.45)',
+        }}
+      >
+        {!hasData && (
+          <div className="sb-hatch" style={{ flex: 1, borderRadius: '1px' }} />
+        )}
+        {hasData &&
+          safe.map((seg, i) => {
+            const pct = ((Number(seg.value) || 0) / total) * 100;
+            if (pct <= 0) return null;
+            return (
+              <div
+                key={`${seg.name ?? 'seg'}-${i}`}
+                title={`${seg.name}: ${formatPercent(pct)}`}
+                style={{
+                  flex: `${pct} 0 0`,
+                  minWidth: '2px',
+                  background: colorFor(seg),
+                  borderRadius: '1px',
+                }}
+              />
+            );
+          })}
       </div>
 
       {showLegend && (
-        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "var(--space-2) var(--space-5)", width: "100%" }}>
-          {geo.map((seg, i) => {
-            const color = seg.isSelf
-              ? "var(--you)"
-              : neutralRampVar(rivalRampT(rivalsByValue.indexOf(seg.name), rivalsByValue.length));
+        <div style={{ display: 'grid', gap: '6px' }}>
+          {safe.map((seg, i) => {
+            const pct = hasData ? ((Number(seg.value) || 0) / total) * 100 : 0;
             return (
-              <div key={seg.name ?? i} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ width: "8px", height: "8px", flexShrink: 0, borderRadius: "1px", background: color }} />
+              <div
+                key={`${seg.name ?? 'legend'}-${i}`}
+                style={{ display: 'flex', alignItems: 'center', gap: '9px' }}
+              >
                 <span
                   style={{
-                    fontFamily: "var(--font-sans)",
-                    fontSize: "12px",
-                    fontWeight: seg.isSelf ? 600 : 400,
-                    color: seg.isSelf ? "var(--text-1)" : "var(--text-2)",
+                    width: '11px',
+                    height: '8px',
+                    flexShrink: 0,
+                    borderRadius: '1px',
+                    background: colorFor(seg),
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: seg.isSelf ? 700 : 450,
+                    color: seg.isSelf ? 'var(--text-1)' : 'var(--text-2)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   {seg.name}
                 </span>
                 <span
-                  style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    fontVariantNumeric: "tabular-nums",
-                    color: "var(--text-3)",
-                  }}
+                  className="t-tally"
+                  style={{ marginLeft: 'auto', fontSize: '13px', color: 'var(--text-3)' }}
                 >
-                  {formatPercent(seg.pct * 100)}
+                  {formatPercent(pct)}
                 </span>
               </div>
             );

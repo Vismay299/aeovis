@@ -1,75 +1,31 @@
-import { useState } from "react";
+/**
+ * Illuminated pushbutton.
+ *
+ * Every action on this surface is a button on a signal panel: an engraved
+ * legend on a collared face that physically depresses when pressed. The
+ * primary action is a lamp already showing a cleared path, so it is never
+ * hidden; hover is the filament inrush. States live in signal.css.
+ *
+ * variant: primary | secondary | ghost | danger | route
+ */
 
-const variants = {
-  primary: {
-    rest: { background: "var(--accent)", color: "var(--accent-fg)", border: "none" },
-    hover: { background: "var(--accent-hover)" },
-  },
-  secondary: {
-    rest: {
-      background: "transparent",
-      color: "var(--text-1)",
-      border: "1px solid var(--border-3)",
-    },
-    hover: { background: "var(--bg-2)", border: "1px solid var(--text-1)" },
-  },
-  ghost: {
-    rest: {
-      background: "transparent",
-      color: "var(--text-2)",
-      border: "1px solid transparent",
-    },
-    hover: { color: "var(--text-1)", background: "var(--bg-2)" },
-  },
-  danger: {
-    rest: {
-      background: "var(--crit-bg)",
-      color: "var(--crit)",
-      border: "1px solid var(--crit-border)",
-    },
-    hover: { background: "var(--crit)", color: "#fff", border: "1px solid var(--crit)" },
-  },
-};
+export const Button = ({
+  variant = 'primary',
+  size = 'md',
+  lamp = false,
+  disabled,
+  className = '',
+  children,
+  ...props
+}) => (
+  <button
+    className={`sb-btn sb-btn--${variant} sb-btn--${size} ${className}`}
+    disabled={disabled}
+    {...props}
+  >
+    {lamp && <span className="sb-btn__lamp" aria-hidden="true" />}
+    {children}
+  </button>
+);
 
-const sizes = {
-  sm: { padding: "6px 14px", fontSize: "13px", lineHeight: "var(--control-h-sm)", minHeight: "var(--control-h-sm)" },
-  md: { padding: "8px 20px", fontSize: "15px", lineHeight: "var(--control-h-md)", minHeight: "var(--control-h-md)" },
-  lg: { padding: "12px 30px", fontSize: "17px", lineHeight: "var(--control-h-lg)", minHeight: "var(--control-h-lg)" },
-};
-
-export const Button = ({ variant = "primary", size = "md", disabled, className = "", style, children, ...props }) => {
-  const [hover, setHover] = useState(false);
-  const v = variants[variant] || variants.primary;
-  const s = sizes[size] || sizes.md;
-  const base = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-    borderRadius: "var(--radius-1)",
-    fontFamily: "var(--font-display)",
-    fontWeight: 600,
-    textTransform: "uppercase",
-    letterSpacing: "0.08em",
-    cursor: disabled ? "not-allowed" : "pointer",
-    opacity: disabled ? 0.5 : 1,
-    transition: "all var(--dur-fast) var(--ease-out)",
-    ...s,
-    ...v.rest,
-    ...(hover && !disabled ? v.hover : {}),
-    ...style,
-  };
-
-  return (
-    <button
-      style={base}
-      disabled={disabled}
-      className={className}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-};
+export default Button;

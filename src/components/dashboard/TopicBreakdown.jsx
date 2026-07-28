@@ -13,14 +13,14 @@ export const TopicBreakdown = ({ topicScores }) => {
   return (
     <div
       data-testid="topic-breakdown"
-      className="bg-white border border-[#E5E2D9] rounded-sm p-6"
+      className="bg-[var(--panel-1)] border border-[var(--rule-1)] rounded-sm p-6"
     >
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="font-serif text-xl font-semibold text-[#1A1A1A]">
+          <h3 className="font-serif text-xl font-semibold text-[var(--text-1)]">
             Visibility by Topic Category
           </h3>
-          <p className="text-xs text-[#666666] mt-0.5">
+          <p className="text-xs text-[var(--text-2)] mt-0.5">
             Compare visibility across different prompt topic verticals
           </p>
         </div>
@@ -37,14 +37,14 @@ export const TopicBreakdown = ({ topicScores }) => {
               className="space-y-1.5"
             >
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-[#1A1A1A]">{topic}</span>
-                <span className="font-serif font-bold text-sm text-[#D9531E]">
+                <span className="font-semibold text-[var(--text-1)]">{topic}</span>
+                <span className="font-serif font-bold text-sm text-[var(--lamp-amber)]">
                   {score}%
                 </span>
               </div>
-              <div className="h-2 w-full bg-[#E5E2D9] rounded-full overflow-hidden relative">
+              <div className="h-2 w-full bg-[var(--rule-1)] rounded-full overflow-hidden relative">
                 <div
-                  className="h-full bg-[#2F5C4F] rounded-full transition-all duration-500"
+                  className="h-full bg-[var(--lamp-green)] rounded-full transition-all duration-500"
                   style={{ width: `${score}%` }}
                 />
               </div>
@@ -53,8 +53,8 @@ export const TopicBreakdown = ({ topicScores }) => {
         })}
       </div>
 
-      <div className="mt-5 pt-4 border-t border-[#E5E2D9] flex items-center gap-1.5 text-[11px] text-[#999999]">
-        <FolderHeart className="w-3.5 h-3.5 text-[#2F5C4F]" />
+      <div className="mt-5 pt-4 border-t border-[var(--rule-1)] flex items-center gap-1.5 text-[11px] text-[var(--text-3)]">
+        <FolderHeart className="w-3.5 h-3.5 text-[var(--lamp-green)]" />
         <span>Categorized automatically based on semantic keyword mapping.</span>
       </div>
     </div>

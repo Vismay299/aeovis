@@ -54,8 +54,8 @@ export const OpportunitiesPanel = ({ result }) => {
 
   if (sortedGaps.length === 0) {
     return (
-      <div className="bg-white border border-[#E5E2D9] rounded-sm p-12 text-center">
-        <p className="text-[#999999] text-sm">No major gaps identified. Your visibility is excellent.</p>
+      <div className="bg-[var(--panel-1)] border border-[var(--rule-1)] rounded-sm p-12 text-center">
+        <p className="text-[var(--text-3)] text-sm">No major gaps identified. Your visibility is excellent.</p>
       </div>
     );
   }
@@ -72,49 +72,49 @@ export const OpportunitiesPanel = ({ result }) => {
   };
 
   return (
-    <div data-testid="opportunities-panel" className="bg-white border border-[#E5E2D9] rounded-sm">
-      <div className="px-7 py-6 border-b border-[#E5E2D9]">
+    <div data-testid="opportunities-panel" className="bg-[var(--panel-1)] border border-[var(--rule-1)] rounded-sm">
+      <div className="px-7 py-6 border-b border-[var(--rule-1)]">
         <div className="flex items-center gap-2">
-          <Lightbulb className="w-5 h-5 text-[#D9531E]" />
-          <h3 className="font-serif text-2xl font-semibold text-[#1A1A1A] leading-tight">
+          <Lightbulb className="w-5 h-5 text-[var(--lamp-amber)]" />
+          <h3 className="font-serif text-2xl font-semibold text-[var(--text-1)] leading-tight">
             Actionable Opportunities
           </h3>
         </div>
-        <p className="text-sm text-[#666666] mt-1">
+        <p className="text-sm text-[var(--text-2)] mt-1">
           High-value prompts where your brand is currently invisible.
         </p>
       </div>
-      <div className="divide-y divide-[#E5E2D9] relative">
+      <div className="divide-y divide-[var(--rule-1)] relative">
         {loading && (
-          <div className="absolute inset-0 bg-white/60 z-10 flex items-center justify-center backdrop-blur-[1px]">
-            <Loader2 className="w-8 h-8 text-[#D9531E] animate-spin" />
+          <div className="absolute inset-0 bg-[var(--panel-1)]/60 z-10 flex items-center justify-center backdrop-blur-[1px]">
+            <Loader2 className="w-8 h-8 text-[var(--lamp-amber)] animate-spin" />
           </div>
         )}
         {sortedGaps.map((p, i) => (
-          <div key={i} className="p-7 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between hover:bg-[#FDFBF7] transition-colors">
+          <div key={i} className="p-7 flex flex-col md:flex-row gap-6 items-start md:items-center justify-between hover:bg-[var(--panel-1)] transition-colors">
             <div className="flex-1">
-              <div className="text-sm font-semibold text-[#1A1A1A]">{p.prompt}</div>
-              <div className="mt-2 text-xs text-[#666666] flex flex-wrap items-center gap-x-4 gap-y-2">
-                <span className="inline-flex items-center gap-1.5 font-medium text-[#1A1A1A]">
-                  Potential Score: <span className="text-[#D9531E] font-serif text-base">{p.potential}</span>/100
+              <div className="text-sm font-semibold text-[var(--text-1)]">{p.prompt}</div>
+              <div className="mt-2 text-xs text-[var(--text-2)] flex flex-wrap items-center gap-x-4 gap-y-2">
+                <span className="inline-flex items-center gap-1.5 font-medium text-[var(--text-1)]">
+                  Potential Score: <span className="text-[var(--lamp-amber)] font-serif text-base">{p.potential}</span>/100
                 </span>
                 {(p.competitorsFound || p.competitors_found)?.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 text-[#8B3A3A]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#8B3A3A]" />
+                  <span className="inline-flex items-center gap-1.5 text-[var(--lamp-red)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--lamp-red)]" />
                     Competitors: {(p.competitorsFound || p.competitors_found).join(", ")}
                   </span>
                 )}
-                <span className="uppercase tracking-wider text-[10px] font-medium px-2 py-0.5 bg-[#F3F0E6] rounded-sm">
+                <span className="uppercase tracking-wider text-[10px] font-medium px-2 py-0.5 bg-[var(--panel-2)] rounded-sm">
                   {p.volume || p.sentiment || "Unknown"} Volume
                 </span>
               </div>
             </div>
-            <div className="bg-[#FFF8F5] border border-[#E2B8B8] rounded-sm p-4 md:w-2/5 shrink-0">
+            <div className="bg-[var(--lamp-red-soft)] border border-[var(--lamp-red-edge)] rounded-sm p-4 md:w-2/5 shrink-0">
               <div className="flex items-start gap-2">
-                <Target className="w-4 h-4 text-[#D9531E] shrink-0 mt-0.5" />
+                <Target className="w-4 h-4 text-[var(--lamp-amber)] shrink-0 mt-0.5" />
                 <div>
-                  <div className="text-[10px] uppercase tracking-[0.1em] text-[#D9531E] font-semibold mb-1">AI Recommendation</div>
-                  <div className="text-xs text-[#1A1A1A] leading-relaxed">
+                  <div className="text-[10px] uppercase tracking-[0.1em] text-[var(--lamp-amber)] font-semibold mb-1">AI Recommendation</div>
+                  <div className="text-xs text-[var(--text-1)] leading-relaxed">
                     {getRecommendation(p, i)}
                   </div>
                 </div>
