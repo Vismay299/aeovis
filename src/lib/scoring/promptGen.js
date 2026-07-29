@@ -2,6 +2,7 @@ import { scrapeForSummary } from "../firecrawl.js";
 import { fetchPeopleAlsoAsk, fetchAutocomplete } from "../engines/serp.js";
 import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery } from "./aioQueryClassify.js";
+import { isEliciting, assessPromptSet, MIN_ELICITING_RATIO } from "./promptQuality.js";
 import { llmJson } from "../llm.js";
 import { INDUSTRY_PROMPTS } from "../../data/industries.js";
 
@@ -37,9 +38,30 @@ function buildGenPrompt({ brand, website, industryHint, websiteSnippet, need, av
     seedSection = `\nReal queries observed on Google for this category (use as grounding, vary and expand):\n${capped.join("\n")}\n`;
   }
 
-  return `You are a market researcher reconstructing the REAL Google Search Console query
-report for a company's product category — the messy, specific, varied things actual
-buyers in India type into Google, not marketing copy.
+  return `You are building a measurement instrument. Each query you write will be sent to
+an AI assistant (Google AI Overviews, ChatGPT, Perplexity), and we will check WHICH
+VENDOR BRANDS the assistant names in its answer. A query is only useful to us if a
+real assistant would answer it by naming specific companies, brands, or products.
+
+THE ONE RULE THAT MATTERS
+Before writing each query ask: "would an AI assistant answer this by naming actual
+brands?" If the honest answer is no — it would return a definition, a calculation, a
+how-to, or a comparison of MATERIALS rather than VENDORS — do not write it.
+
+Queries that FAIL this test (never write these):
+  "how to calculate tiles needed for room"     -> arithmetic, names nobody
+  "how much do vitrified tiles cost per sqft"  -> a price range, names nobody
+  "can i install tiles over old tiles"         -> a how-to, names nobody
+  "what is double charge tile"                 -> a definition, names nobody
+  "matte finish tiles pros and cons"           -> compares materials, not brands
+
+Queries that PASS (write these):
+  "best tile brands in india"                  -> brand list
+  "top vitrified tile manufacturers"           -> brand list
+  "kajaria vs somany which is better"          -> names both, plus alternatives
+  "most trusted tile companies in bangalore"   -> vendor list
+  "alternatives to orientbell tiles"           -> competing brands
+  "trusted tile shop near me bangalore"        -> local vendors
 
 Website: ${website}
 ${industryHint ? `Industry: ${industryHint}` : ""}
@@ -47,13 +69,13 @@ Website summary:
 ${(websiteSnippet || "").slice(0, 2500)}
 ${seedSection}
 Step 1 (do this silently, do not output it): from the summary above, identify 6-10
-DISTINCT angles a real buyer of this category cares about — e.g. a specific feature,
-a price point, a use case, a named competitor/alternative, a pain point, a target
-audience (student/freelancer/small business/enterprise), a comparison, a "how do I"
-task. Every angle must be genuinely different from the others.
+DISTINCT buyer DECISIONS in this category — a use case, a budget level, a customer
+segment, a quality tier, a region, a named rival, a specific application. These are
+the axes a buyer picks a VENDOR along, not the things they want explained to them.
+Every decision must be genuinely different from the others.
 
-Step 2: write ${need} UNBRANDED Google queries, spread across those angles (roughly
-2-4 queries per angle, not all queries about the same one thing). Never repeat the
+Step 2: write ${need} UNBRANDED vendor-selection queries, spread across those decisions
+(roughly 2-4 per decision, not all about the same one thing). Never repeat the
 same sentence template with one word swapped — vary sentence structure, length, and
 phrasing the way different real people would type it.
 
@@ -61,28 +83,29 @@ Style rules (this is what makes it realistic, follow closely):
 - 3-9 words, lowercase like a real search bar, no punctuation at the end.
 - Never use stiff commercial verbs a real person doesn't type: no "purchase X license",
   "subscribe to X service", "buy X software". Real people type things like
-  "X pricing", "X free trial", "is X worth it", "cheapest X for small business".
-- Mix these intent tiers roughly evenly: informational ("how does X work"),
-  commercial ("X pricing india", "X free plan"), comparison ("X vs Y", "best X 2025"),
-  problem_aware (a real frustration or task, e.g. "site looks unprofessional fix",
-  "landing page not converting", "need a website by tomorrow").
+  "best X for small business", "X vs Y", "is X worth it", "cheapest X in india".
+- AT LEAST 80% must contain an explicit vendor-seeking cue: best / top / leading /
+  which / who / vs / compare / alternatives / brands / companies / manufacturers /
+  suppliers / shops / near me / most trusted / reviews / worth it.
+- The remainder may be softer buying questions, but each must still plausibly return
+  a list of named brands. If it would return a definition or a calculation, drop it.
 - Never include the brand name "${brand}" or its domain in any query.
 - No duplicate or near-duplicate queries.
 ${avoid.length ? `- Avoid repeating any of these already-collected queries: ${avoid.slice(0, 30).join(" | ")}` : ""}
 
-Bad examples (too templated/stiff, do NOT write like this):
-"purchase AI website builder license", "subscribe to AI website builder service",
-"AI website builder monthly fee", "AI website builder trial offer"
+Bad examples — these name nobody, so they measure nothing (do NOT write these):
+"how to make a website in one day", "what is a landing page",
+"website builder monthly fee calculator", "how many pages should a site have"
 
-Good examples (natural, varied, specific):
-"cheapest website builder for small business india", "wix vs squarespace which is better",
-"free website builder no credit card needed", "how to make a website in one day",
-"best drag and drop website builder for beginners", "landing page not converting help"
+Good examples (natural, varied, specific, and they all return brand lists):
+"best website builder for small business india", "wix vs squarespace which is better",
+"top ecommerce platforms for indian sellers", "alternatives to shopify for small stores",
+"most trusted web design agencies bangalore", "which website builder is best for beginners"
 
 Return ONLY a JSON array of objects, no commentary, in this exact shape. Give each item
-a short "topic" naming the specific angle it came from (angles should vary across items,
+a short "topic" naming the buyer decision it came from (topics should vary across items,
 not all be the same string):
-[{"text": "...", "topic": "...", "intent_tier": "informational|commercial|comparison|problem_aware"}]`;
+[{"text": "...", "topic": "...", "intent_tier": "commercial|comparison|informational|problem_aware"}]`;
 }
 
 /**
@@ -256,5 +279,39 @@ export async function generateUnbrandedPrompts(
     );
   }
 
-  return collected.slice(0, count);
+  // --- Elicitation gate ----------------------------------------------------
+  // We over-generate (count + 10), so the trim down to `count` is free leverage:
+  // keep vendor-selection queries before informational ones. A prompt that
+  // cannot make an assistant name a brand cannot measure brand visibility, and
+  // every one we keep is a guaranteed zero in the denominator (see
+  // promptQuality.js for the Italica measurement that motivated this).
+  //
+  // Stable within each group: the LLM's own ordering is preserved, so this
+  // re-ranks by usefulness without reshuffling otherwise-equivalent prompts.
+  const ranked = [
+    ...collected.filter((q) => isEliciting(q.text)),
+    ...collected.filter((q) => !isEliciting(q.text)),
+  ];
+  const chosen = ranked.slice(0, count);
+
+  const health = assessPromptSet(chosen);
+  if (!health.ok) {
+    // Not fatal: a thin category genuinely may not support 75% vendor queries,
+    // and a scan with a weak set still beats no scan. But it IS logged loudly,
+    // and the scan persists elicitation_rate_pct so the dashboard can say the
+    // measurement is low-confidence rather than quietly reporting a hard zero.
+    console.warn(
+      `[promptGen] LOW ELICITATION for "${brand}": only ${health.eliciting}/${health.total} ` +
+        `(${Math.round(health.ratio * 100)}%) of the prompt set is a vendor-selection query ` +
+        `(want >=${Math.round(MIN_ELICITING_RATIO * 100)}%). ${health.diagnostic} prompts cannot ` +
+        `produce a brand mention and will drag the visibility denominator.`
+    );
+  } else {
+    console.log(
+      `[promptGen] "${brand}" prompt set: ${health.eliciting}/${health.total} eliciting ` +
+        `(${Math.round(health.ratio * 100)}%)`
+    );
+  }
+
+  return chosen;
 }

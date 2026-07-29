@@ -4,6 +4,7 @@ import { probePerplexity, isPerplexityConfigured } from "../engines/perplexity.j
 import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
 import { detectMention, judgeBrandsSymmetric } from "./judge.js";
+import { countBrandsElicited } from "./promptQuality.js";
 import { extractBrandDomain } from "./citations.js";
 import {
   AIO_CONCURRENCY,
@@ -247,7 +248,31 @@ export function summarizeEngineSlice(results, engineName) {
   const nonBrandedWithAnswer = nonBranded.filter((r) => r.answer_present);
   const brandedWithAnswer = branded.filter((r) => r.answer_present);
 
-  const visibleNonBranded = nonBrandedWithAnswer.filter((r) => r.visible).length;
+  // --- The eliciting pool: prompts whose answer named ANY roster vendor -----
+  //
+  // A brand cannot be mentioned in an answer that names nobody. Scoring over
+  // every answered prompt therefore divides by impossibility: on the Italica
+  // scan, 40 of 56 answered unbranded prompts ("how to calculate tiles needed
+  // for room", "how much do vitrified tiles cost per sqft") returned taxonomy
+  // and how-to answers naming zero vendors, permanently capping the achievable
+  // score at 16/56 before the brand's real visibility was ever measured.
+  //
+  // `r.brands` is judgeBrandsSymmetric's output (P1.2), already computed for
+  // every result — so this costs nothing extra and cannot drift from the
+  // mention data the score itself uses.
+  //
+  // FALLBACK: a slice with no roster data anywhere (older scans, fixtures that
+  // predate P1.2) keeps the previous denominator rather than collapsing to
+  // zero — absence of judging is not evidence that nothing was elicited.
+  const hasRoster = nonBrandedWithAnswer.some(
+    (r) => Array.isArray(r.brands) && r.brands.length > 0
+  );
+  const elicitingPool = hasRoster
+    ? nonBrandedWithAnswer.filter((r) => countBrandsElicited(r.brands) >= 1)
+    : nonBrandedWithAnswer;
+  const deadPrompts = nonBrandedWithAnswer.length - elicitingPool.length;
+
+  const visibleNonBranded = elicitingPool.filter((r) => r.visible).length;
   const visibleBranded = brandedWithAnswer.filter((r) => r.visible).length;
 
   const mentionedNonBranded = nonBrandedWithAnswer.filter((r) => r.brand_mentioned_in_text).length;
@@ -264,10 +289,47 @@ export function summarizeEngineSlice(results, engineName) {
       : 0;
   const errorRatePct = total > 0 ? Math.round((errored / total) * 1000) / 10 : 0;
 
+  // Denominator is the ELICITING pool, not every answered prompt (see above).
   const visibilityPct =
-    nonBrandedWithAnswer.length > 0
-      ? Math.round((visibleNonBranded / nonBrandedWithAnswer.length) * 1000) / 10
+    elicitingPool.length > 0
+      ? Math.round((visibleNonBranded / elicitingPool.length) * 1000) / 10
       : 0;
+
+  // What fraction of the prompt set is actually a usable probe? This is a
+  // property of the PROMPT SET, not the brand — a low number means the
+  // generator produced SEO keywords instead of vendor-selection questions and
+  // the scan is measuring almost nothing. Surfaced so it can be alerted on.
+  const elicitationRatePct =
+    nonBrandedWithAnswer.length > 0
+      ? Math.round((elicitingPool.length / nonBrandedWithAnswer.length) * 1000) / 10
+      : 0;
+
+  // --- Share of Voice over the eliciting pool ------------------------------
+  // Presence answers "how often do they name me". SOV answers "when they name
+  // someone, how often is it me" — the question a brand with a low score
+  // actually needs answered, and the one that names who is winning instead.
+  let selfMentions = 0;
+  let allMentions = 0;
+  const rivalMentions = {};
+  for (const r of elicitingPool) {
+    for (const b of r.brands || []) {
+      if (!b || !b.mentioned) continue;
+      allMentions += 1;
+      if (b.is_self ?? b.isSelf) selfMentions += 1;
+      else if (b.name) rivalMentions[b.name] = (rivalMentions[b.name] || 0) + 1;
+    }
+  }
+  const shareOfVoicePct =
+    allMentions > 0 ? Math.round((selfMentions / allMentions) * 1000) / 10 : 0;
+
+  const topRivals = Object.entries(rivalMentions)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name, mentions]) => ({
+      name,
+      mentions,
+      share_pct: allMentions > 0 ? Math.round((mentions / allMentions) * 1000) / 10 : 0,
+    }));
 
   const presenceRatePct =
     nonBranded.length > 0
@@ -282,10 +344,14 @@ export function summarizeEngineSlice(results, engineName) {
           nonBrandedWithAnswer.length / nonBranded.length < AIO_MIN_NON_BRANDED_COVERAGE)
       : errorRatePct > 50;
 
+  // Sample adequacy is judged on the ELICITING pool — the prompts that can
+  // actually produce a mention. 56 answered prompts of which only 16 name any
+  // vendor is a sample of 16, and reporting it as adequate is how a score gets
+  // presented with false confidence.
   const insufficientSample =
     engineName === "aio"
-      ? nonBrandedWithAnswer.length < AIO_MIN_NON_BRANDED_WITH_AIO
-      : nonBrandedWithAnswer.length < 5;
+      ? elicitingPool.length < AIO_MIN_NON_BRANDED_WITH_AIO
+      : elicitingPool.length < 5;
 
   return {
     engine: engineName,
@@ -296,6 +362,15 @@ export function summarizeEngineSlice(results, engineName) {
     non_branded_with_answer: nonBrandedWithAnswer.length,
     branded_with_answer: brandedWithAnswer.length,
     errored_queries: errored,
+    // Prompt-set health (see elicitationRatePct above).
+    eliciting_queries: elicitingPool.length,
+    dead_prompts: deadPrompts,
+    elicitation_rate_pct: elicitationRatePct,
+    // Share of Voice + who is winning instead.
+    share_of_voice_pct: shareOfVoicePct,
+    self_mentions: selfMentions,
+    total_brand_mentions: allMentions,
+    top_rivals: topRivals,
     visible_non_branded: visibleNonBranded,
     visible_branded: visibleBranded,
     mentioned_non_branded: mentionedNonBranded,
