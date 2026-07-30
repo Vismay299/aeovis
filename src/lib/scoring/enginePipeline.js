@@ -261,13 +261,25 @@ export function summarizeEngineSlice(results, engineName) {
   // every result — so this costs nothing extra and cannot drift from the
   // mention data the score itself uses.
   //
-  // FALLBACK: a slice with no roster data anywhere (older scans, fixtures that
-  // predate P1.2) keeps the previous denominator rather than collapsing to
-  // zero — absence of judging is not evidence that nothing was elicited.
-  const hasRoster = nonBrandedWithAnswer.some(
-    (r) => Array.isArray(r.brands) && r.brands.length > 0
+  // FALLBACK — the roster must contain RIVALS for this filter to mean anything.
+  //
+  // Competitors are discovered in runFinalizePhase, AFTER probing, so during a
+  // live scan `r.brands` holds only the self brand. With a self-only roster
+  // "did this answer name any vendor" degenerates into "did this answer name
+  // US", which makes the eliciting pool identical to the numerator and forces
+  // the score to 0/0 or a meaningless 100%. A live Italica scan reproduced
+  // exactly that: aio eliciting_queries=0 -> visibility 0, and perplexity
+  // 1 eliciting / 1 visible -> visibility_pct 100 for a brand with essentially
+  // no presence. Far worse than the bug this filter exists to fix.
+  //
+  // So: apply the filter only when at least one NON-SELF roster brand is
+  // present anywhere in the slice. Otherwise keep the previous denominator —
+  // absence of a rival roster is absence of evidence, not evidence that
+  // nothing was elicited.
+  const hasRivalRoster = nonBrandedWithAnswer.some(
+    (r) => Array.isArray(r.brands) && r.brands.some((b) => b && !(b.is_self ?? b.isSelf))
   );
-  const elicitingPool = hasRoster
+  const elicitingPool = hasRivalRoster
     ? nonBrandedWithAnswer.filter((r) => countBrandsElicited(r.brands) >= 1)
     : nonBrandedWithAnswer;
   const deadPrompts = nonBrandedWithAnswer.length - elicitingPool.length;
@@ -319,8 +331,16 @@ export function summarizeEngineSlice(results, engineName) {
       else if (b.name) rivalMentions[b.name] = (rivalMentions[b.name] || 0) + 1;
     }
   }
-  const shareOfVoicePct =
-    allMentions > 0 ? Math.round((selfMentions / allMentions) * 1000) / 10 : 0;
+  // SOV is UNDEFINED without rivals, not 0 and not 100. With a self-only
+  // roster the only brand counted is us, so every mention is ours and the
+  // ratio is 100% by construction — a live scan reported exactly that
+  // (1/1 = 100%) for a brand with one mention in thirty answers. Null makes
+  // the dashboard say "not available" instead of printing a flattering lie.
+  const shareOfVoicePct = !hasRivalRoster
+    ? null
+    : allMentions > 0
+      ? Math.round((selfMentions / allMentions) * 1000) / 10
+      : 0;
 
   const topRivals = Object.entries(rivalMentions)
     .sort((a, b) => b[1] - a[1])

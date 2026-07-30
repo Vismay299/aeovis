@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { summarizeEngineResults, resolveEnabledEngines, buildTrackedBrandRoster } from "./enginePipeline.js";
+import { summarizeEngineResults, summarizeEngineSlice, resolveEnabledEngines, buildTrackedBrandRoster } from "./enginePipeline.js";
 import { getBrandAliases } from "./aliases.js";
 
 function makeAioRow(overrides = {}) {
@@ -348,4 +348,108 @@ test("buildTrackedBrandRoster — no competitors -> roster is just the self bran
 test("buildTrackedBrandRoster — missing competitors list does not throw", () => {
   const roster = buildTrackedBrandRoster("Acme", ["Acme"], undefined);
   assert.equal(roster.length, 1);
+});
+
+// --- eliciting denominator: self-only roster must not corrupt the score ----
+// Regression for a bug caught by a LIVE Italica scan, not by unit tests.
+// Competitors are discovered in runFinalizePhase, AFTER probing, so during a
+// scan `r.brands` holds only the self brand. Filtering the denominator to
+// "answers that named a roster brand" then means "answers that named US",
+// which makes numerator and denominator identical.
+
+function rowWithBrands(overrides = {}) {
+  return {
+    query: overrides.query || "best tiles in india",
+    error: null,
+    answer_present: overrides.answer_present ?? true,
+    is_branded_query: overrides.is_branded_query ?? false,
+    visible: overrides.visible ?? false,
+    brand_mentioned_in_text: overrides.visible ?? false,
+    brand_cited: false,
+    brands: overrides.brands ?? [{ name: "Italica", is_self: true, mentioned: overrides.visible ?? false }],
+  };
+}
+
+test("self-only roster does NOT collapse the denominator (live-scan regression)", () => {
+  // 27 answered prompts, self never mentioned. A self-only roster carries no
+  // information about whether vendors were named, so the filter must not apply.
+  const rows = Array.from({ length: 27 }, () => rowWithBrands({ visible: false }));
+  const s = summarizeEngineSlice(rows, "aio");
+  assert.equal(s.non_branded_with_answer, 27);
+  assert.equal(s.eliciting_queries, 27, "self-only roster must fall back to all answered");
+  assert.equal(s.dead_prompts, 0);
+  assert.equal(s.visibility_pct, 0);
+});
+
+test("self-only roster with one mention scores 1/30, never 100%", () => {
+  // The severe form of the bug: 1 eliciting / 1 visible => 100% for a brand
+  // with essentially no presence.
+  const rows = [
+    ...Array.from({ length: 29 }, () => rowWithBrands({ visible: false })),
+    rowWithBrands({ visible: true }),
+  ];
+  const s = summarizeEngineSlice(rows, "perplexity");
+  assert.equal(s.eliciting_queries, 30);
+  assert.notEqual(s.visibility_pct, 100, "must never report 100% off a single mention");
+  assert.equal(s.visibility_pct, 3.3);
+});
+
+test("a roster WITH rivals does filter the denominator to eliciting prompts", () => {
+  const named = (mentioned) => [
+    { name: "Italica", is_self: true, mentioned: false },
+    { name: "Kajaria", is_self: false, mentioned },
+  ];
+  const rows = [
+    rowWithBrands({ visible: false, brands: named(true) }),   // eliciting
+    rowWithBrands({ visible: false, brands: named(true) }),   // eliciting
+    rowWithBrands({ visible: false, brands: named(false) }),  // dead
+    rowWithBrands({ visible: false, brands: named(false) }),  // dead
+  ];
+  const s = summarizeEngineSlice(rows, "aio");
+  assert.equal(s.non_branded_with_answer, 4);
+  assert.equal(s.eliciting_queries, 2);
+  assert.equal(s.dead_prompts, 2);
+  assert.equal(s.elicitation_rate_pct, 50);
+});
+
+test("share of voice and rival table come from the eliciting pool", () => {
+  const rows = [
+    rowWithBrands({
+      visible: true,
+      brands: [
+        { name: "Italica", is_self: true, mentioned: true },
+        { name: "Kajaria", is_self: false, mentioned: true },
+      ],
+    }),
+    rowWithBrands({
+      visible: false,
+      brands: [
+        { name: "Italica", is_self: true, mentioned: false },
+        { name: "Kajaria", is_self: false, mentioned: true },
+        { name: "Somany", is_self: false, mentioned: true },
+      ],
+    }),
+  ];
+  const s = summarizeEngineSlice(rows, "aio");
+  assert.equal(s.total_brand_mentions, 4);
+  assert.equal(s.self_mentions, 1);
+  assert.equal(s.share_of_voice_pct, 25);
+  assert.deepEqual(
+    s.top_rivals.map((r) => r.name),
+    ["Kajaria", "Somany"]
+  );
+});
+
+test("share of voice is null (not 100) when the roster has no rivals", () => {
+  // Second half of the live-scan regression: with a self-only roster every
+  // counted mention is ours, so SOV is 100% by construction. It must report
+  // "unknown", never a flattering number.
+  const rows = [
+    ...Array.from({ length: 29 }, () => rowWithBrands({ visible: false })),
+    rowWithBrands({ visible: true }),
+  ];
+  const s = summarizeEngineSlice(rows, "perplexity");
+  assert.equal(s.share_of_voice_pct, null);
+  assert.deepEqual(s.top_rivals, []);
+  assert.equal(s.visibility_pct, 3.3, "visibility is still computable without rivals");
 });

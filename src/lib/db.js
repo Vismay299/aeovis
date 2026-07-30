@@ -187,6 +187,54 @@ export async function getScansForBrand(brand) {
 }
 
 /**
+ * Scans for a brand looked up by its DOMAIN rather than its display name.
+ *
+ * `scans.brand` holds the display name ("Italica") while the analytics tables
+ * and every /api/brands/[brand]/* sibling route are keyed by the resolved
+ * domain ("italicatiles.com"). A caller holding only the domain key otherwise
+ * gets an empty result for a brand that has been scanned 8 times — which is
+ * exactly how /api/brands/[brand]/coverage 404'd on its first live call.
+ *
+ * Matching is done on the scan's own `url` host, in JS rather than SQL, so
+ * "https://www.x.com/path", "x.com" and "X.COM" all resolve to one brand.
+ * Full rows (raw_results included) — callers need the per-prompt payload.
+ */
+export async function getScansByDomain(domain, deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) return [];
+
+  const host = String(domain || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0];
+  if (!host) return [];
+
+  try {
+    const { data, error } = await client
+      .from("scans")
+      .select("*")
+      .order("scanned_at", { ascending: false })
+      .limit(200);
+    if (error) throw error;
+
+    return (data || []).filter((s) => {
+      const scanHost = String(s.url || "")
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .split("/")[0];
+      return scanHost === host;
+    });
+  } catch (err) {
+    console.warn("[db] getScansByDomain failed:", err.message);
+    return [];
+  }
+}
+
+/**
  * Recent scans collapsed to the latest per brand, for the homepage workspace.
  * Returns lightweight rows (no full raw_results payload beyond what a card
  * needs) so the homepage stays fast.

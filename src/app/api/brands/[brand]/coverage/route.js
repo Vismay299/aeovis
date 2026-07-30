@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getScansForBrand } from "@/lib/db";
+import { getScansForBrand, getScansByDomain } from "@/lib/db";
 import { listContentJobs, listContentItems } from "@/lib/db/content";
 import { queryUniverseFromScan, rollupCoverage, summarizeCoverage } from "@/lib/content/coverage";
 
@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
 
 const JOB_SCAN_LIMIT = 200;
+
 
 /**
  * GET /api/brands/[brand]/coverage — T4 (plan:
@@ -21,8 +22,12 @@ const JOB_SCAN_LIMIT = 200;
  * dailyBatch already dedupes on. Nothing is persisted, so a re-scan or a
  * decision is reflected immediately with no backfill.
  *
- * Brand-keying contract: identical to the sibling brand routes — `[brand]` is
- * already a resolveBrandKey() output and is used verbatim.
+ * Brand-keying: this route spans TWO key spaces, which the first version got
+ * wrong and a live call caught. The sibling routes (metrics/citations/gaps)
+ * read analytics tables keyed by the resolved DOMAIN ("italicatiles.com"), but
+ * `scans.brand` and `content_jobs.brand` hold the DISPLAY name ("Italica").
+ * Passing the domain straight to getScansForBrand therefore 404'd for a brand
+ * that has 30 tracked queries. We accept either form and resolve it below.
  *
  * Query params: `gaps_only=1` restricts the universe to current gap queries.
  *
@@ -43,20 +48,35 @@ export async function GET(request, { params }) {
     const gapsOnly = searchParams.get("gaps_only") === "1";
 
     let scans;
-    let jobs;
-    let items;
     try {
-      [scans, jobs, items] = await Promise.all([
-        getScansForBrand(brandKey),
-        listContentJobs(brandKey, JOB_SCAN_LIMIT),
-        listContentItems(brandKey),
-      ]);
+      scans = await getScansForBrand(brandKey);
+      // Caller used the domain key (the sibling-route convention) but scans are
+      // stored under the display name — resolve via the scan's own url.
+      if (!scans?.length) {
+        scans = await getScansByDomain(brandKey);
+      }
     } catch (dbError) {
-      console.error(`Error fetching coverage data for "${brandKey}":`, dbError);
+      console.error(`Error fetching scans for "${brandKey}":`, dbError);
       return NextResponse.json({ error: "Failed to load coverage data." }, { status: 500 });
     }
 
     const scan = scans?.[0];
+    // Jobs and items are keyed by the same display name the scan carries, not
+    // by whatever form the caller used.
+    const contentKey = scan?.brand || brandKey;
+
+    let jobs;
+    let items;
+    try {
+      [jobs, items] = await Promise.all([
+        listContentJobs(contentKey, JOB_SCAN_LIMIT),
+        listContentItems(contentKey),
+      ]);
+    } catch (dbError) {
+      console.error(`Error fetching content for "${contentKey}":`, dbError);
+      return NextResponse.json({ error: "Failed to load coverage data." }, { status: 500 });
+    }
+
     if (!scan) {
       return NextResponse.json(
         { error: "No scan found for this brand — nothing to measure coverage against." },
