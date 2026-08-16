@@ -1,39 +1,41 @@
 'use client';
 
 /**
- * Setting the route.
+ * Scan.
  *
- * Entering a brand is pressing the entrance button; the scan is the box
- * proving the route section by section before it clears. The stage list is
- * therefore a run of track circuits, not a spinner with steps beside it.
+ * Three states in one screen: entry → running → complete. Entry asks for the
+ * least it can and starts; running reports what the job actually says about
+ * itself; complete hands over to the reading.
+ *
+ * The running state deliberately shows real progress only. The landing page's
+ * ribbon diagram resolves questions to named brands, and the scan job reports
+ * a stage and a percentage — not per-question verdicts — so drawing brands
+ * here would be inventing telemetry the product does not have yet.
  */
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { Wordmark } from '@/components/perceev/Wordmark';
-import { Button } from '@/components/perceev/Button';
-import { Input } from '@/components/perceev/Input';
-import { Select } from '@/components/perceev/Select';
-import { Alert } from '@/components/perceev/Alert';
-import { Describer } from '@/components/signal/Describer';
-import { Lamp } from '@/components/signal/Lamp';
-import { TrackCircuit } from '@/components/signal/TrackCircuit';
+
+import { Wordmark } from '@/components/landing/SiteNav';
+import { ThemeToggle } from '@/components/perceev/ThemeToggle';
 import { runScan, saveScan, fetchIndustries, loadScan, clearScan } from '@/services/api';
 import { SAMPLE_RESULT } from '@/data/mockData';
 
 const STAGES = [
-  { label: 'Brand accepted', detail: 'the entrance button is pressed' },
-  { label: 'Questions sourced', detail: 'real buyer queries, unbranded' },
-  { label: 'Engines probed', detail: 'every question put to every engine' },
-  { label: 'Route proved', detail: 'answers scored, evidence composed' },
+  { label: 'Brand accepted', detail: 'the domain is resolved and the run is queued' },
+  { label: 'Questions sourced', detail: 'real buyer queries, none of which name you' },
+  { label: 'Engines probed', detail: 'every question put to every engine in turn' },
+  { label: 'Answers scored', detail: 'verdicts recorded, evidence kept verbatim' },
 ];
 
-const RECENT = [
-  { brand: 'Brightwave', site: 'brightwave.io', score: 71 },
-  { brand: 'NorthPeak', site: 'northpeak.com', score: 52 },
-  { brand: 'Lumen IQ', site: 'lumeniq.ai', score: 38 },
+/* The sample report, quoting the one demonstration reading. Brightwave is
+   fictional, and the page says so. */
+const SAMPLE_FACTS = [
+  { k: 'Share of AI', v: '41%' },
+  { k: 'Answers naming you', v: '15 / 36' },
+  { k: 'Rivals discovered', v: '7' },
 ];
 
 export default function Scan() {
@@ -54,10 +56,12 @@ export default function Scan() {
   useEffect(() => {
     fetchIndustries()
       .then((data) => setIndustries(data.industries || []))
-      .catch(() => {});
+      .catch(() => {
+        /* the industry hint is optional; the scan runs without it */
+      });
   }, []);
 
-  /* A domain typed on the landing panel arrives here already set. */
+  /* A domain typed on the landing page arrives here already set. */
   useEffect(() => {
     try {
       const pre = localStorage.getItem('perceev_prescan_domain');
@@ -65,7 +69,9 @@ export default function Scan() {
         setWebsite(pre);
         localStorage.removeItem('perceev_prescan_domain');
       }
-    } catch {}
+    } catch {
+      /* nothing was stored — the field simply starts empty */
+    }
   }, []);
 
   const validate = () => {
@@ -78,7 +84,8 @@ export default function Scan() {
     return Object.keys(e).length === 0;
   };
 
-  const start = async () => {
+  const start = async (ev) => {
+    if (ev) ev.preventDefault();
     if (!validate()) return;
 
     try {
@@ -88,7 +95,9 @@ export default function Scan() {
       if (current && (current.brand !== newBrand || current.website !== newWebsite)) {
         clearScan();
       }
-    } catch {}
+    } catch {
+      /* no readable prior scan — nothing to clear */
+    }
 
     setScanning(true);
     setFailed(false);
@@ -108,324 +117,246 @@ export default function Scan() {
         },
       );
       saveScan(result);
-      toast.success('Route proved — reading ready');
+      toast.success('Reading ready');
       router.push('/dashboard');
     } catch (err) {
       setFailed(true);
       setScanning(false);
-      toast.error(err?.message || 'The route could not be proved. Try again.');
+      toast.error(err?.message || 'The scan could not complete. Try again.');
     }
   };
 
-  const reset = () => {
-    if (scanning) return;
-    setBrand('');
-    setWebsite('');
-    setIndustry('');
-    setCustomIndustry('');
-    setCompetitors('');
-    setErrors({});
+  const openSample = () => {
+    saveScan({ ...SAMPLE_RESULT, isSample: true });
+    router.push('/dashboard');
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--panel-0)' }}>
-      <header
-        style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 40,
-          background: 'var(--panel-1)',
-          borderBottom: '1px solid var(--rule-1)',
-          padding: '0 clamp(18px, 4vw, 32px)',
-          height: 56,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 16,
-        }}
-      >
-        <Link href="/" aria-label="Perceev home" style={{ display: 'inline-flex' }}>
-          <Wordmark size="sm" />
-        </Link>
-        <span className="plate">
-          <Lamp lamp={scanning ? 'amber' : 'green'} size={6} calling={scanning} />
-          <span className="t-plate">{scanning ? 'proving route' : 'entry panel'}</span>
-        </span>
-        <button type="button" onClick={reset} className="lp-link" style={{ marginLeft: 'auto' }}>
-          clear
-        </button>
+    <>
+      <header className="nav">
+        <div className="shell nav__in">
+          <Link href="/" aria-label="Perceev home"><Wordmark /></Link>
+          <span className="tag" style={{ marginLeft: 4 }}>
+            {scanning ? 'Probe running' : 'New probe'}
+          </span>
+          <div className="nav__r">
+            <ThemeToggle />
+          </div>
+        </div>
       </header>
 
-      <div style={{ maxWidth: 760, margin: '0 auto', padding: 'clamp(32px, 6vw, 72px) clamp(18px, 4vw, 32px)' }}>
-        {!scanning ? (
-          <div>
-            <h1
-              className="t-sig"
-              style={{ fontSize: 'clamp(28px, 4vw, 44px)', marginBottom: 'var(--space-4)' }}
-            >
-              Set a route for your brand
-            </h1>
-            <p
-              style={{
-                font: 'var(--type-body-lg)',
-                color: 'var(--text-2)',
-                marginBottom: 'var(--space-8)',
-                lineHeight: 1.62,
-                maxWidth: '62ch',
-              }}
-            >
-              We put unbranded buyer questions to the answer engines and report which brand each
-              answer clears the path to — including how often that brand is you.
+      <div className="scan">
+        <div className="scan__in">
+          {/* ── entry ──────────────────────────────────────────────── */}
+          <div className={`state${scanning ? '' : ' is-on'}`}>
+            <span className="tag tag--brand">Free · no signup</span>
+            <h2>Ask the engines about your brand.</h2>
+            <p className="lede scan__sub">
+              We put unbranded buyer questions to every answer engine and report which brand each
+              answer recommends — including how often that brand is you.
             </p>
 
-            <div className="sb-panel">
-              <div className="sb-panel__head">
-                <span className="t-plate">entry controls</span>
+            <form
+              onSubmit={start}
+              className="stack" style={{ textAlign: 'left', marginTop: 32 }}
+            >
+              <div className="grid g2" style={{ gap: 16 }}>
+                <div>
+                  <label className="lbl" htmlFor="brand">Brand or company name</label>
+                  <input
+                    id="brand"
+                    className="inp"
+                    data-testid="scan-brand-input"
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    placeholder="Acme Analytics"
+                    aria-invalid={errors.brand ? 'true' : undefined}
+                    aria-describedby={errors.brand ? 'brand-err' : undefined}
+                  />
+                  {errors.brand && (
+                    <p id="brand-err" style={{ color: 'var(--crit)', fontSize: 13, marginTop: 6 }}>
+                      {errors.brand}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="lbl" htmlFor="website">Website</label>
+                  <input
+                    id="website"
+                    className="inp"
+                    data-testid="scan-website-input"
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    placeholder="acme.com"
+                    autoComplete="url"
+                    spellCheck="false"
+                    aria-invalid={errors.website ? 'true' : undefined}
+                    aria-describedby={errors.website ? 'website-err' : undefined}
+                  />
+                  {errors.website && (
+                    <p id="website-err" style={{ color: 'var(--crit)', fontSize: 13, marginTop: 6 }}>
+                      {errors.website}
+                    </p>
+                  )}
+                </div>
               </div>
 
-              <div
-                style={{
-                  padding: 'var(--space-5)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 'var(--space-5)',
-                }}
-              >
-                <Input
-                  id="brand"
-                  data-testid="scan-brand-input"
-                  label="brand or company name"
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  placeholder="Acme Analytics"
-                  error={errors.brand}
-                />
-
-                <Input
-                  id="website"
-                  data-testid="scan-website-input"
-                  label="website"
-                  value={website}
-                  onChange={(e) => setWebsite(e.target.value)}
-                  placeholder="acme.com"
-                  error={errors.website}
-                />
-
-                <Select
+              <div>
+                <label className="lbl" htmlFor="industry">Industry — optional</label>
+                <select
                   id="industry"
+                  className="inp"
                   data-testid="scan-industry-input"
-                  label="industry — optional"
                   value={industry}
                   onChange={(e) => setIndustry(e.target.value)}
-                  hint="Used only if we cannot source enough real queries."
                 >
                   <option value="">Select an industry…</option>
                   {industries.map((ind) => (
-                    <option key={ind.id} value={ind.id}>
-                      {ind.label}
-                    </option>
+                    <option key={ind.id} value={ind.id}>{ind.label}</option>
                   ))}
                   <option value="__custom__">Other — type your own…</option>
-                </Select>
+                </select>
+                <p style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6 }}>
+                  Used only if we cannot source enough real queries.
+                </p>
+              </div>
 
-                {industry === '__custom__' && (
-                  <Input
+              {industry === '__custom__' && (
+                <div>
+                  <label className="lbl" htmlFor="custom-industry">Your industry</label>
+                  <input
                     id="custom-industry"
+                    className="inp"
                     data-testid="scan-custom-industry-input"
-                    label="your industry"
                     value={customIndustry}
                     onChange={(e) => setCustomIndustry(e.target.value)}
                     placeholder="e.g. Dental equipment, Pet food, Drone services"
                   />
-                )}
+                </div>
+              )}
 
-                <Input
+              <div>
+                <label className="lbl" htmlFor="competitors">Rivals to track — optional</label>
+                <input
                   id="competitors"
+                  className="inp"
                   data-testid="scan-competitors-input"
-                  label="rivals to track — optional"
                   value={competitors}
                   onChange={(e) => setCompetitors(e.target.value)}
-                  placeholder="e.g. Kajaria, Somany"
-                  hint="We also discover rivals from the answers themselves, so this list only adds to them."
+                  placeholder="e.g. NorthPeak, Lumen IQ"
                 />
-
-                <Button
-                  data-testid="scan-submit-btn"
-                  variant="primary"
-                  size="lg"
-                  onClick={start}
-                  style={{ width: '100%' }}
-                >
-                  prove the route
-                </Button>
+                <p style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 6 }}>
+                  We also discover rivals from the answers themselves, so this only adds to them.
+                </p>
               </div>
-            </div>
 
-            <div style={{ marginTop: 'var(--space-9)' }}>
-              <span className="t-plate">sample readings · synthetic brands</span>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
-                  gap: 1,
-                  background: 'var(--rule-1)',
-                  border: '1px solid var(--rule-1)',
-                  borderRadius: 'var(--radius-2)',
-                  marginTop: 'var(--space-3)',
-                  overflow: 'hidden',
-                }}
+              <button
+                className="btn btn--primary btn--lg"
+                type="submit"
+                data-testid="scan-submit-btn"
+                style={{ width: '100%' }}
               >
-                {RECENT.map((r, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    data-testid={`recent-scan-${i}`}
-                    onClick={() => {
-                      saveScan({
-                        ...SAMPLE_RESULT,
-                        brand: r.brand,
-                        website: r.site,
-                        visibilityScore: r.score,
-                        isSample: true,
-                      });
-                      router.push('/dashboard');
-                    }}
-                    className="sb-entry"
-                    style={{
-                      display: 'grid',
-                      gap: 9,
-                      padding: 'var(--space-4) var(--space-5)',
-                      background: 'var(--panel-1)',
-                      textAlign: 'left',
-                    }}
-                  >
-                    <span style={{ display: 'grid', gap: 2 }}>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
-                        {r.brand}
-                      </span>
-                      <span className="t-stamp">{r.site}</span>
-                    </span>
-                    <Describer
-                      value={String(r.score)}
-                      size={20}
-                      bloom={false}
-                      lamp={r.score >= 50 ? 'green' : r.score >= 25 ? 'amber' : 'red'}
-                    />
-                  </button>
-                ))}
-              </div>
+                Run the probe
+              </button>
+            </form>
+
+            <div style={{ marginTop: 44, textAlign: 'left' }}>
+              <span className="tag">Not ready to run one?</span>
+              <button
+                type="button"
+                data-testid="recent-scan-0"
+                className="panel"
+                onClick={openSample}
+                style={{ width: '100%', textAlign: 'left', cursor: 'pointer', marginTop: 12, padding: 0 }}
+              >
+                <div className="panel__h">
+                  <b>Open the sample report</b>
+                  <span className="chip">Brightwave · healthcare · India</span>
+                  <span className="tag" style={{ marginLeft: 'auto' }}>Fictional brand</span>
+                </div>
+                <div className="panel__b">
+                  <div className="grid g3">
+                    {SAMPLE_FACTS.map((f) => (
+                      <div key={f.k}>
+                        <div className="stat__k">{f.k}</div>
+                        <div className="stat__v" style={{ fontSize: 26 }}>{f.v}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </button>
             </div>
           </div>
-        ) : (
-          <div data-testid="scan-loading" style={{ minHeight: '58vh' }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-4)',
-                marginBottom: 'var(--space-5)',
-                flexWrap: 'wrap',
-              }}
-            >
-              <Describer value={String(progress).padStart(3, '0')} length={3} lamp="amber" size={44} />
-              <span className="t-plate">per cent proved</span>
-            </div>
 
-            <h2 className="t-sig" style={{ fontSize: 'clamp(24px, 3.2vw, 36px)', marginBottom: 'var(--space-3)' }}>
-              Proving the route for {brand}
-            </h2>
-            <p
-              style={{
-                color: 'var(--text-2)',
-                font: 'var(--type-body)',
-                marginBottom: 'var(--space-7)',
-                maxWidth: '62ch',
-                lineHeight: 1.6,
-              }}
-            >
-              Every tracked question is being put to each engine in turn. A run that is interrupted
-              picks up where it stopped, so this can safely take a few minutes.
+          {/* ── running ────────────────────────────────────────────── */}
+          <div className={`state${scanning ? ' is-on' : ''}`} data-testid={scanning ? 'scan-loading' : undefined}>
+            <span className="tag tag--brand">Probe running</span>
+            <h2>Asking the engines about {brand || 'your brand'}.</h2>
+            <p className="lede scan__sub">
+              Every tracked question goes to each engine in turn. A run that is interrupted picks up
+              where it stopped, so this can safely take a few minutes.
             </p>
 
-            <div style={{ marginBottom: 'var(--space-7)' }}>
-              <TrackCircuit
-                value={progress}
-                max={100}
-                sections={36}
-                lamp="white"
-                height={12}
-                animate={false}
-                label={`${progress} per cent proved`}
-              />
-            </div>
-
-            <div className="sb-panel">
-              <div className="sb-panel__head">
-                <span className="t-plate">sections</span>
+            <div className="probe">
+              <div className="probe__bar">
+                <i style={{ transform: `scaleX(${Math.max(0, Math.min(1, progress / 100))})` }} />
               </div>
-              <div>
-                {STAGES.map((s, i) => {
-                  const done = i < stage;
-                  const active = i === stage;
-                  return (
-                    <div
-                      key={i}
-                      data-testid={`scan-stage-${i}`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 'var(--space-4)',
-                        padding: '13px var(--space-5)',
-                        borderBottom: i === STAGES.length - 1 ? 'none' : '1px solid var(--rule-1)',
-                        background: active ? 'var(--panel-2)' : 'transparent',
-                      }}
-                    >
-                      <Lamp
-                        lamp={done ? 'green' : active ? 'amber' : 'white'}
-                        lit={done || active}
-                        calling={active}
-                        size={9}
-                      />
-                      <span style={{ display: 'grid', gap: 2, minWidth: 0, flex: 1 }}>
-                        <span
-                          style={{
-                            fontSize: 14,
-                            fontWeight: active ? 600 : 450,
-                            color: active ? 'var(--text-1)' : done ? 'var(--text-2)' : 'var(--text-3)',
-                          }}
+              <div className="probe__meta">
+                <span className="tag">{progress}% complete</span>
+                <span className="tag">
+                  {stage >= 0 && stage < STAGES.length ? STAGES[stage].label : 'Finishing'}
+                </span>
+              </div>
+
+              <div className="panel" style={{ marginTop: 22 }}>
+                <div className="panel__h"><b>Stages</b></div>
+                <div className="panel__b">
+                  <div className="stages">
+                    {STAGES.map((s, i) => {
+                      const done = i < stage;
+                      const now = i === stage;
+                      return (
+                        <div
+                          key={s.label}
+                          className={`stage${done ? ' done' : ''}${now ? ' now' : ''}`}
+                          data-testid={`scan-stage-${i}`}
                         >
-                          {s.label}
-                        </span>
-                        <span className="t-stamp">{s.detail}</span>
-                      </span>
-                      <span
-                        className="t-plate"
-                        style={{
-                          color: done
-                            ? 'var(--lamp-green-text)'
-                            : active
-                            ? 'var(--lamp-amber-text)'
-                            : 'var(--text-3)',
-                        }}
-                      >
-                        {done ? 'clear' : active ? 'proving' : 'queued'}
-                      </span>
-                    </div>
-                  );
-                })}
+                          <span className="stage__d" aria-hidden="true">
+                            {done ? '✓' : i + 1}
+                          </span>
+                          <span>
+                            <h4>{s.label}</h4>
+                            <p>{s.detail}</p>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        )}
 
-        {failed && (
-          <div style={{ marginTop: 'var(--space-6)' }}>
-            <Alert data-testid="scan-error-banner" variant="crit" title="route not proved">
-              The scan could not complete. Nothing was saved, so you can run it again without
-              losing anything.
-            </Alert>
-          </div>
-        )}
+          {failed && (
+            <div
+              className="panel"
+              data-testid="scan-error-banner"
+              style={{ marginTop: 24, textAlign: 'left', borderColor: 'var(--crit)' }}
+            >
+              <div className="panel__h">
+                <span className="chip chip--crit"><i className="chip__led" /> Failed</span>
+                <b>The scan could not complete</b>
+              </div>
+              <div className="panel__b">
+                <p style={{ fontSize: 14, color: 'var(--ink-3)' }}>
+                  Nothing was saved, so you can run it again without losing anything.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,10 +1,7 @@
-/**
- * The route selector: the row of illuminated route buttons along the top
- * of a panel. The set route carries a lit strip on its bottom edge.
- */
+/** A row of filter pills. The active one inverts to solid ink. */
 
 export const Tabs = ({ items, active, onChange, className = '' }) => (
-  <div className={`sb-routes ${className}`} role="tablist">
+  <div className={`filters ${className}`.trim()} role="tablist" style={{ marginBottom: 0 }}>
     {items.map((item) => {
       const isActive = item.key === active;
       return (
@@ -13,13 +10,14 @@ export const Tabs = ({ items, active, onChange, className = '' }) => (
           type="button"
           role="tab"
           aria-selected={isActive}
-          data-active={isActive ? 'true' : 'false'}
-          className="sb-route"
+          className={`filter${isActive ? ' is-on' : ''}`}
           onClick={() => onChange(item.key)}
           data-testid={item.testId}
         >
           {item.label}
-          {item.count != null && <span className="sb-route__count">{item.count}</span>}
+          {item.count != null && (
+            <span style={{ opacity: 0.6, marginLeft: 6 }}>{item.count}</span>
+          )}
         </button>
       );
     })}

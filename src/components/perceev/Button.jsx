@@ -1,29 +1,37 @@
 /**
- * Illuminated pushbutton.
+ * The button. A 46px pill that lifts 1px on hover and nothing more.
  *
- * Every action on this surface is a button on a signal panel: an engraved
- * legend on a collared face that physically depresses when pressed. The
- * primary action is a lamp already showing a cleared path, so it is never
- * hidden; hover is the filament inrush. States live in signal.css.
- *
- * variant: primary | secondary | ghost | danger | route
+ * The variant names are the ones this codebase already calls with; they map
+ * onto the design system's `.btn--*` modifiers. See docs/design/DESIGN-SYSTEM.md.
  */
+
+const VARIANT = {
+  primary: 'btn--primary',
+  secondary: 'btn--ghost',
+  ghost: 'btn--quiet',
+  quiet: 'btn--quiet',
+  danger: 'btn--danger',
+  route: 'btn--primary',
+  onbrand: 'btn--onbrand',
+};
+
+const SIZE = { sm: 'btn--sm', md: '', lg: 'btn--lg' };
 
 export const Button = ({
   variant = 'primary',
   size = 'md',
-  lamp = false,
+  lamp,          /* accepted and ignored: the rejected world's lamp dot */
   disabled,
   className = '',
   children,
   ...props
 }) => (
   <button
-    className={`sb-btn sb-btn--${variant} sb-btn--${size} ${className}`}
+    type={props.type || 'button'}
+    className={`btn ${VARIANT[variant] || VARIANT.primary} ${SIZE[size] ?? ''} ${className}`.trim()}
     disabled={disabled}
     {...props}
   >
-    {lamp && <span className="sb-btn__lamp" aria-hidden="true" />}
     {children}
   </button>
 );

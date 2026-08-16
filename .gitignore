@@ -42,3 +42,8 @@ next-env.d.ts
 
 # Command Code agent state
 .commandcode/
+
+# design prototype build output — regenerate with `node scripts/build-prototype.mjs`
+/design-options/perceev-prototype.html
+# design review screenshots (6MB+); the prototype itself is the record
+/design-options/previews/

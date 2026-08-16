@@ -15,10 +15,9 @@ import { loadScan, clearScan } from "@/services/api";
  * quota a large multi-engine record can approach. This route now only
  * bridges callers that still write to sessionStorage and push here:
  *
- *   - src/app/scan/page.js                   (a fresh scan just completed)
- *   - src/components/home/HomeDashboard.jsx  (homepage "case files" shelf)
- *   - the landing page's "sample report" buttons (src/app/page.js,
- *     DossierModules.jsx, LandingNav.jsx) — SAMPLE_RESULT, isSample: true
+ *   - src/app/scan/page.js  (a fresh scan just completed, and its sample card)
+ *   - the landing page's "see a sample report" button (src/app/page.js)
+ *     — SAMPLE_RESULT, isSample: true
  *
  * Sample reports are deliberately NOT part of the redirect: they're
  * synthetic (no DB row, nothing to fetch), so this route renders them

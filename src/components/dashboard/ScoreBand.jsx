@@ -1,16 +1,14 @@
 'use client';
 
 /**
- * The instrument bay at the head of the panel.
+ * The verdict.
  *
- * The reading is a dial with an engraved scale and the aspect the signal is
- * currently showing, not a large coloured numeral with a glow behind it. The
- * figures that produced it are scribed alongside.
+ * Share of AI is the headline metric and this is where it lives: one large
+ * tabular number, the delta since the last comparable reading, the per-engine
+ * split, and the three figures that produced it.
+ *
+ * Engine chips render whatever the scan reported — never a fixed set.
  */
-
-import { BlockInstrument } from '@/components/signal/BlockInstrument';
-import { AspectSignal, aspectForTier, Lamp } from '@/components/signal/Lamp';
-import { Badge } from '@/components/perceev/Badge';
 
 export const ScoreBand = ({
   score,
@@ -22,116 +20,83 @@ export const ScoreBand = ({
   promptSetChanged,
 }) => {
   const isNumeric = typeof score === 'number' && Number.isFinite(score);
-  const aspect = aspectForTier(tier);
   const delta = trend != null && trend !== '' ? parseFloat(trend) : null;
+  const tierChip = { Strong: 'chip chip--good', Moderate: 'chip chip--warn', Weak: 'chip chip--crit' };
 
   return (
-    <div className="sb-panel" style={{ borderTop: `2px solid var(--lamp-${aspect.lamp})` }}>
-      <div className="sb-panel__head">
-        <span className="t-plate">{scoreLabel || 'share of ai answers'}</span>
+    <div className="panel" data-testid="score-band">
+      <div className="panel__h">
+        <b>{scoreLabel || 'Share of AI'}</b>
+        {tier && <span className={tierChip[tier] || 'chip'}>{tier}</span>}
         {engineChips && engineChips.length > 0 && (
-          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 14, flexWrap: 'wrap' }}>
-            {engineChips.map((chip, i) => (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <Lamp lamp={chip.value > 0 ? 'green' : 'red'} size={6} />
-                <span className="t-plate">
-                  {chip.label} {chip.value}%
-                </span>
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
+            {engineChips.map((chip) => (
+              <span key={chip.label} className="chip">
+                {chip.label} {chip.value}%
               </span>
             ))}
           </span>
         )}
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(150px, 176px) minmax(0, 1fr)',
-          gap: 'var(--space-7)',
-          padding: 'var(--space-5)',
-          alignItems: 'center',
-        }}
-      >
-        <BlockInstrument
-          value={isNumeric ? score : 0}
-          size={168}
-          caption="of answers reach you"
-          showAspect={false}
-        />
+      <div className="panel__b">
+        <div
+          style={{
+            display: 'grid', gridTemplateColumns: 'minmax(0,auto) minmax(0,1fr)',
+            gap: 'clamp(20px,3vw,42px)', alignItems: 'center',
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div
+              className="num"
+              style={{
+                fontSize: 'clamp(52px,7vw,84px)', fontWeight: 640, lineHeight: 1,
+                letterSpacing: '-.045em', color: 'var(--brand)',
+              }}
+            >
+              {isNumeric ? Math.round(score) : '—'}
+              <span style={{ fontSize: '.42em', color: 'var(--ink-3)', marginLeft: 4 }}>%</span>
+            </div>
+            <div className="tag" style={{ marginTop: 8 }}>of answers name you</div>
 
-        <div style={{ display: 'grid', gap: 'var(--space-4)', minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
-            <AspectSignal aspect={aspect} size="sm" />
-            {tier && <Badge variant={tier}>{tier}</Badge>}
             {delta != null && Number.isFinite(delta) && (
-              <span
-                className="t-tally"
-                style={{
-                  fontSize: 14,
-                  color:
-                    delta > 0 ? 'var(--lamp-green-text)' : delta < 0 ? 'var(--lamp-red-text)' : 'var(--text-2)',
-                }}
+              <div
+                className={`stat__d ${delta > 0 ? 'up' : delta < 0 ? 'dn' : 'flat'}`}
+                style={{ marginTop: 10 }}
               >
+                {delta > 0 ? '▲' : delta < 0 ? '▼' : '■'}
                 {delta > 0 ? '+' : delta < 0 ? '−' : ''}
-                {Math.abs(delta)} since last
-              </span>
+                {Math.abs(delta)} since the last reading
+              </div>
             )}
           </div>
 
-          {promptSetChanged && (
-            <span
-              data-testid="prompt-set-changed-marker"
-              title="The tracked question list changed since the previous scan, so this reading isn't directly comparable to it. The trend restarts here."
-              style={{
-                justifySelf: 'start',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 7,
-                padding: '3px 8px',
-                borderRadius: 1,
-                background: 'var(--lamp-amber-soft)',
-                border: '1px solid var(--lamp-amber-edge)',
-              }}
-            >
-              <Lamp lamp="amber" size={6} />
-              <span className="t-plate" style={{ color: 'var(--lamp-amber-text)' }}>
-                question list changed — trend resets
+          <div style={{ display: 'grid', gap: 14, minWidth: 0 }}>
+            {promptSetChanged && (
+              <span
+                className="chip chip--warn"
+                data-testid="prompt-set-changed-marker"
+                title="The tracked question list changed since the previous scan, so this reading isn't directly comparable to it. The trend restarts here."
+                style={{ justifySelf: 'start' }}
+              >
+                <i className="chip__led" /> Question list changed — trend resets
               </span>
-            </span>
-          )}
+            )}
 
-          {stats.length > 0 && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${Math.min(stats.length, 4)}, minmax(0, 1fr))`,
-                gap: '1px',
-                background: 'var(--rule-1)',
-                border: '1px solid var(--rule-1)',
-                borderRadius: 1,
-              }}
-            >
-              {stats.map((stat, i) => (
-                <div
-                  key={i}
-                  style={{
-                    background: 'var(--panel-1)',
-                    padding: '9px 12px',
-                    display: 'grid',
-                    gap: 4,
-                    minWidth: 0,
-                  }}
-                >
-                  <span className="t-tally" style={{ fontSize: 17, color: 'var(--text-1)' }}>
-                    {stat.value}
-                  </span>
-                  <span className="t-plate" style={{ whiteSpace: 'normal', lineHeight: 1.35 }}>
-                    {stat.label}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+            {stats.length > 0 && (
+              <div
+                className="grid"
+                style={{ gridTemplateColumns: `repeat(${Math.min(stats.length, 3)}, minmax(0,1fr))` }}
+              >
+                {stats.map((stat) => (
+                  <div key={stat.label} className="stat">
+                    <span className="stat__k">{stat.label}</span>
+                    <span className="stat__v" style={{ fontSize: 24 }}>{stat.value}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

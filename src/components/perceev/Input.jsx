@@ -1,4 +1,4 @@
-/** A recessed field cut into the panel face, with its engraved plate. */
+/** A labelled text field, with its error or hint underneath. */
 
 export const Input = ({
   label,
@@ -12,13 +12,12 @@ export const Input = ({
 }) => (
   <div className={className} style={outerStyle}>
     {label && (
-      <label htmlFor={id} className="t-plate" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
-        {label}
-      </label>
+      <label htmlFor={id} className="lbl">{label}</label>
     )}
     <input
       id={id}
-      className={`sb-field${size !== 'md' ? ` sb-field--${size}` : ''}`}
+      className="inp"
+      style={size === 'sm' ? { height: 36, fontSize: 14 } : undefined}
       aria-invalid={error ? 'true' : undefined}
       aria-describedby={error && id ? `${id}-err` : undefined}
       {...props}
@@ -26,15 +25,13 @@ export const Input = ({
     {error ? (
       <p
         id={id ? `${id}-err` : undefined}
-        style={{ marginTop: 'var(--space-2)', font: 'var(--type-body-sm)', color: 'var(--lamp-red-text)' }}
+        style={{ marginTop: 6, fontSize: 13, color: 'var(--crit)' }}
       >
         {error}
       </p>
     ) : (
       hint && (
-        <p style={{ marginTop: 'var(--space-2)', font: 'var(--type-body-sm)', color: 'var(--text-3)' }}>
-          {hint}
-        </p>
+        <p style={{ marginTop: 6, fontSize: 13, color: 'var(--ink-3)' }}>{hint}</p>
       )
     )}
   </div>

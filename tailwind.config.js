@@ -1,8 +1,11 @@
 /** @type {import('tailwindcss').Config} */
-const plugin = require("tailwindcss/plugin");
+
+/* Tailwind is the utility layer over the Perceev token system defined in
+   src/app/globals.css. The tokens are the API; everything here just makes
+   them reachable from a class name. See docs/design/DESIGN-SYSTEM.md. */
 
 module.exports = {
-    darkMode: ["class"],
+    darkMode: ["class", '[data-theme="dark"]'],
     content: [
     "./src/pages/**/*.{js,jsx,ts,tsx}",
     "./src/components/**/*.{js,jsx,ts,tsx}",
@@ -11,16 +14,28 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Archivo"', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['"Archivo"', 'Arial', 'sans-serif'],
-        mono: ['"Spline Sans Mono"', 'ui-monospace', 'monospace'],
+        sans: ['"Archivo"', 'system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
+        display: ['"Archivo"', 'system-ui', 'sans-serif'],
+        mono: ['"SplineMono"', '"Spline Sans Mono"', 'ui-monospace', '"SF Mono"', 'monospace'],
       },
       borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 1px)',
-        sm: '1px'
+        xs: 'var(--r-xs)',
+        sm: 'var(--r-sm)',
+        md: 'var(--r-md)',
+        lg: 'var(--r-lg)',
+        xl: 'var(--r-xl)',
+        pill: 'var(--r-pill)',
+      },
+      maxWidth: {
+        shell: 'var(--shell)',
+      },
+      boxShadow: {
+        1: 'var(--shadow-1)',
+        2: 'var(--shadow-2)',
+        3: 'var(--shadow-3)',
       },
       colors: {
+        /* shadcn/ui contract — HSL triplets, kept in sync with the palette */
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         card: {
@@ -54,31 +69,51 @@ module.exports = {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
-        /* Signalling lamps — available to utilities where a token
-           reference would be more awkward than a class. */
-        panel: {
-          0: 'var(--panel-0)',
-          1: 'var(--panel-1)',
-          2: 'var(--panel-2)',
-          3: 'var(--panel-3)'
+
+        /* Perceev tokens, for the places a utility reads better than a
+           style attribute. Names match the design system exactly. */
+        paper: 'var(--paper)',
+        surface: 'var(--surface)',
+        sunken: 'var(--sunken)',
+        raised: 'var(--raised)',
+        ink: {
+          1: 'var(--ink-1)',
+          2: 'var(--ink-2)',
+          3: 'var(--ink-3)',
+          4: 'var(--ink-4)'
         },
-        rule: {
-          1: 'var(--rule-1)',
-          2: 'var(--rule-2)',
-          3: 'var(--rule-3)'
+        line: {
+          DEFAULT: 'var(--line)',
+          soft: 'var(--line-soft)',
+          strong: 'var(--line-strong)'
         },
-        lamp: {
-          green: 'var(--lamp-green)',
-          white: 'var(--lamp-white)',
-          amber: 'var(--lamp-amber)',
-          red: 'var(--lamp-red)',
-          blue: 'var(--lamp-blue)'
+        brand: {
+          DEFAULT: 'var(--brand)',
+          lift: 'var(--brand-lift)',
+          tint: 'var(--brand-tint)',
+          line: 'var(--brand-line)',
+          on: 'var(--on-brand)'
         },
-        track: {
-          DEFAULT: 'var(--track)',
-          dim: 'var(--track-dim)'
+        navy: {
+          DEFAULT: 'var(--navy)',
+          ink: 'var(--navy-ink)',
+          dim: 'var(--navy-dim)',
+          line: 'var(--navy-line)'
         },
-        nickel: 'var(--nickel)',
+        good: { DEFAULT: 'var(--good)', tint: 'var(--good-tint)', on: 'var(--on-good)' },
+        warn: { DEFAULT: 'var(--warn)', tint: 'var(--warn-tint)' },
+        crit: { DEFAULT: 'var(--crit)', tint: 'var(--crit-tint)' },
+
+        /* --you is indigo in every chart, without exception; rivals ramp
+           down the neutral scale and never take a semantic hue */
+        you: 'var(--you)',
+        rival: {
+          1: 'var(--rival-1)',
+          2: 'var(--rival-2)',
+          3: 'var(--rival-3)'
+        },
+        none: 'var(--none)',
+
         chart: {
           '1': 'var(--chart-1)',
           '2': 'var(--chart-2)',
@@ -87,10 +122,18 @@ module.exports = {
           '5': 'var(--chart-5)'
         }
       },
+      /* one easing curve for the whole system; nothing bounces */
       transitionTimingFunction: {
-        lamp: 'var(--ease-lamp)',
-        decay: 'var(--ease-decay)',
-        point: 'var(--ease-point)',
+        DEFAULT: 'cubic-bezier(.22,.68,0,1)',
+        ease: 'cubic-bezier(.22,.68,0,1)',
+        lamp: 'cubic-bezier(.22,.68,0,1)',
+        decay: 'cubic-bezier(.22,.68,0,1)',
+        point: 'cubic-bezier(.22,.68,0,1)',
+      },
+      transitionDuration: {
+        fast: '150ms',
+        base: '260ms',
+        slow: '620ms',
       },
       keyframes: {
         'accordion-down': {
@@ -101,42 +144,25 @@ module.exports = {
           from: { height: 'var(--radix-accordion-content-height)' },
           to: { height: '0' }
         },
-        'shimmer': {
-          '0%': { transform: 'translateX(-100%)' },
-          '100%': { transform: 'translateX(100%)' }
+        /* a calm opacity pulse, never a sweeping shimmer */
+        'skel': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '.45' }
         },
-        /* Filament inrush — a lamp coming up behind the diagram. */
-        'lamp-in': {
-          '0%': { opacity: '0', filter: 'brightness(0.35)' },
-          '60%': { opacity: '1', filter: 'brightness(1.35)' },
-          '100%': { opacity: '1', filter: 'brightness(1)' }
-        },
-        /* A section occupying left to right, the way a train does. */
-        'occupy': {
-          from: { transform: 'scaleX(0)' },
-          to: { transform: 'scaleX(1)' }
+        'screen-in': {
+          from: { opacity: '0', transform: 'translateY(8px)' },
+          to: { opacity: '1', transform: 'none' }
         }
       },
       animation: {
-        'accordion-down': 'accordion-down 0.2s var(--ease-lamp)',
-        'accordion-up': 'accordion-up 0.2s var(--ease-decay)',
-        'shimmer': 'shimmer 1.8s infinite',
-        'lamp-in': 'lamp-in var(--dur-lamp) var(--ease-lamp) both',
-        'occupy': 'occupy 420ms var(--ease-lamp) both'
+        'accordion-down': 'accordion-down 260ms cubic-bezier(.22,.68,0,1)',
+        'accordion-up': 'accordion-up 260ms cubic-bezier(.22,.68,0,1)',
+        'skel': 'skel 1.5s ease-in-out infinite',
+        'screen-in': 'screen-in 380ms cubic-bezier(.22,.68,0,1) both'
       }
     }
   },
   plugins: [
     require("tailwindcss-animate"),
-    /* One variable face, three voices. Tailwind has no font-stretch
-       scale, and the width axis is what makes the signage voice. */
-    plugin(function ({ addUtilities }) {
-      addUtilities({
-        '.wdth-sig': { 'font-stretch': 'var(--wdth-sig)' },
-        '.wdth-body': { 'font-stretch': 'var(--wdth-body)' },
-        '.wdth-plate': { 'font-stretch': 'var(--wdth-plate)' },
-        '.wdth-tally': { 'font-stretch': 'var(--wdth-tally)' },
-      });
-    }),
   ],
 };

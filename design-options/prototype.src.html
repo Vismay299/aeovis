@@ -1,0 +1,2653 @@
+<title>Perceev Product System</title>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   PERCEEV — product system prototype
+   Fonts travel inside the file: the artifact CSP blocks every external
+   host, so a linked webfont would fall back silently.
+   ═══════════════════════════════════════════════════════════════════ */
+
+@font-face{
+  font-family:'Archivo';
+  src:url(data:font/woff2;base64,__ARCHIVO_B64__) format('woff2-variations');
+  font-weight:100 900;
+  font-stretch:62% 125%;
+  font-display:block;
+}
+@font-face{
+  font-family:'SplineMono';
+  src:url(data:font/woff2;base64,__MONO_B64__) format('woff2-variations');
+  font-weight:300 700;
+  font-display:block;
+}
+
+/* ── tokens · light is the base palette ─────────────────────────── */
+:root{
+  --paper:      #F7F7FA;
+  --surface:    #FFFFFF;
+  --sunken:     #EFEFF4;
+  --raised:     #FFFFFF;
+
+  /* Every ink here is used on real content, so every ink clears AA on
+     both --paper and --surface. Anything lighter is a border, not text. */
+  --ink-1: #0E1017;
+  --ink-2: #474C5A;
+  --ink-3: #565C6D;
+  --ink-4: #64697B;
+
+  --line:        #E2E3EB;
+  --line-soft:   #EDEEF3;
+  --line-strong: #CFD2DE;
+
+  --brand:      #3730CE;
+  --brand-lift: #5B54F0;
+  --brand-tint: #EEEEFC;
+  --brand-line: #D3D1F8;
+  --on-brand:   #FFFFFF;
+
+  --card-brand:      #3730CE;
+  --card-brand-ink:  #FFFFFF;
+  --card-brand-soft: #C7C4F6;
+  --card-brand-line: rgba(255,255,255,.22);
+
+  --navy:     #0C0E18;
+  --navy-ink: #E9EAF2;
+  --navy-dim: #949AB0;
+  --navy-line:#1E2231;
+  --brand-on-navy: #A9A4FF;
+
+  /* semantic hues are darkened until they clear AA as text on their own
+     tint and on the surface — a status colour nobody can read is decor */
+  --good: #0B7552;  --good-tint: #E4F4EE;  --on-good: #FFFFFF;
+  --warn: #8A5709;  --warn-tint: #FBF0DE;
+  --crit: #B02F2F;  --crit-tint: #FBEAEA;
+
+  --you:     #3730CE;
+  --rival-1: #8A90A6;
+  --rival-2: #B4B9C9;
+  --rival-3: #D3D6E0;
+  --none:    #E5E7EF;
+
+  --shadow-1: 0 1px 2px rgba(14,16,23,.05), 0 0 0 1px rgba(14,16,23,.05);
+  --shadow-2: 0 2px 4px rgba(14,16,23,.04), 0 10px 24px -8px rgba(14,16,23,.10), 0 0 0 1px rgba(14,16,23,.055);
+  --shadow-3: 0 4px 8px rgba(14,16,23,.04), 0 28px 56px -16px rgba(14,16,23,.16), 0 0 0 1px rgba(14,16,23,.06);
+
+  --r-xs: 5px; --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px; --r-pill: 999px;
+
+  --shell: 1200px;
+  --pad: clamp(20px, 4vw, 48px);
+
+  /* one curve at three speeds — two curves this similar read as an
+     accident rather than a decision */
+  --t-fast: 150ms cubic-bezier(.22,.68,0,1);
+  --t-base: 260ms cubic-bezier(.22,.68,0,1);
+  --t-slow: 620ms cubic-bezier(.22,.68,0,1);
+}
+
+/* ── tokens · dark, for viewers with no explicit choice ─────────── */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:   #0A0C12;
+    --surface: #12151F;
+    --sunken:  #07090E;
+    --raised:  #171B26;
+
+    --ink-1: #EDEEF3;
+    --ink-2: #AEB4C4;
+    --ink-3: #8F96AB;
+    --ink-4: #7C8398;
+
+    --line:        #1F2432;
+    --line-soft:   #171B25;
+    --line-strong: #2C3242;
+
+    --brand:      #7F79FF;
+    --brand-lift: #A29CFF;
+    --brand-tint: #171734;
+    --brand-line: #32307B;
+    --on-brand:   #0A0A18;
+
+    --card-brand:      #2A24A8;
+    --card-brand-ink:  #F2F1FF;
+    --card-brand-soft: #A9A5EE;
+    --card-brand-line: rgba(255,255,255,.16);
+
+    --navy:     #06080F;
+    --navy-ink: #E9EAF2;
+    --navy-dim: #8F96AB;
+    --navy-line:#171B27;
+    --brand-on-navy: #A9A4FF;
+
+    --good: #3DBF93;  --good-tint: #0C2620;  --on-good: #04231A;
+    --warn: #D9A445;  --warn-tint: #2A1F0B;
+    --crit: #E97070;  --crit-tint: #2B1315;
+
+    --you:     #7F79FF;
+    --rival-1: #737A94;
+    --rival-2: #515770;
+    --rival-3: #3B4054;
+    --none:    #262B38;
+
+    --shadow-1: 0 1px 2px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05);
+    --shadow-2: 0 2px 4px rgba(0,0,0,.4), 0 10px 24px -8px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.055);
+    --shadow-3: 0 4px 8px rgba(0,0,0,.4), 0 28px 56px -16px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.06);
+  }
+}
+
+/* ── tokens · dark, chosen explicitly ───────────────────────────── */
+:root[data-theme="dark"]{
+  --paper:   #0A0C12;
+  --surface: #12151F;
+  --sunken:  #07090E;
+  --raised:  #171B26;
+
+  --ink-1: #EDEEF3;
+  --ink-2: #AEB4C4;
+  --ink-3: #8F96AB;
+  --ink-4: #7C8398;
+
+  --line:        #1F2432;
+  --line-soft:   #171B25;
+  --line-strong: #2C3242;
+
+  --brand:      #7F79FF;
+  --brand-lift: #A29CFF;
+  --brand-tint: #171734;
+  --brand-line: #32307B;
+  --on-brand:   #0A0A18;
+
+  --card-brand:      #2A24A8;
+  --card-brand-ink:  #F2F1FF;
+  --card-brand-soft: #A9A5EE;
+  --card-brand-line: rgba(255,255,255,.16);
+
+  --navy:     #06080F;
+  --navy-ink: #E9EAF2;
+  --navy-dim: #8F96AB;
+  --navy-line:#171B27;
+  --brand-on-navy: #A9A4FF;
+
+  --good: #3DBF93;  --good-tint: #0C2620;  --on-good: #04231A;
+  --warn: #D9A445;  --warn-tint: #2A1F0B;
+  --crit: #E97070;  --crit-tint: #2B1315;
+
+  --you:     #7F79FF;
+  --rival-1: #737A94;
+  --rival-2: #515770;
+  --rival-3: #3B4054;
+  --none:    #262B38;
+
+  --shadow-1: 0 1px 2px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.05);
+  --shadow-2: 0 2px 4px rgba(0,0,0,.4), 0 10px 24px -8px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.055);
+  --shadow-3: 0 4px 8px rgba(0,0,0,.4), 0 28px 56px -16px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.06);
+}
+
+/* ── reset ──────────────────────────────────────────────────────── */
+*,*::before,*::after{ box-sizing:border-box }
+html{ scroll-behavior:smooth; -webkit-text-size-adjust:100% }
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink-2);
+  font-family:'Archivo',system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-variation-settings:'wdth' 100;
+  font-size:17px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+img,svg{ display:block; max-width:100% }
+button,input,select{ font:inherit; color:inherit }
+p{ margin:0 }
+a{ color:inherit; text-decoration:none }
+:focus-visible{ outline:2px solid var(--brand); outline-offset:3px; border-radius:3px }
+
+/* ── type ───────────────────────────────────────────────────────── */
+h1,h2,h3,h4{
+  margin:0;
+  color:var(--ink-1);
+  font-variation-settings:'wdth' 100;
+  font-weight:620;
+  letter-spacing:-.03em;
+  line-height:1.04;
+  text-wrap:balance;
+}
+h1{ font-size:clamp(38px, 5.4vw, 68px) }
+h2{ font-size:clamp(30px, 3.9vw, 52px) }
+h3{ font-size:clamp(20px, 1.7vw, 25px); line-height:1.2; letter-spacing:-.024em }
+h4{ font-size:17px; letter-spacing:-.018em; line-height:1.3 }
+
+.mono{
+  font-family:'SplineMono',ui-monospace,'SF Mono',monospace;
+  font-variant-numeric:tabular-nums;
+}
+.tag{
+  font-family:'SplineMono',ui-monospace,monospace;
+  font-size:11px;
+  font-weight:500;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-3);
+}
+.tag--brand{ color:var(--brand) }
+.num{ font-variant-numeric:tabular-nums }
+.lede{ font-size:clamp(17px,1.35vw,19.5px); line-height:1.6; color:var(--ink-2) }
+.dim{ color:var(--ink-3) }
+
+/* a section marker that carries real sequence, used only where the
+   content genuinely is ordered */
+.marker{ display:flex; align-items:center; gap:14px }
+.marker__n{ font-family:'SplineMono',monospace; font-size:11px; letter-spacing:.14em; color:var(--brand) }
+.marker__r{ width:34px; height:1px; background:var(--line-strong) }
+
+.shell{ max-width:var(--shell); margin-inline:auto; padding-inline:var(--pad) }
+.shell--wide{ max-width:1360px }
+
+/* grid and flex children default to min-width:auto, so one wide child
+   silently pushes its whole track past the viewport */
+.hero__grid > *, .work > *, .ev > *, .grid > *{ min-width:0 }
+
+/* ── primitives ─────────────────────────────────────────────────── */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:9px;
+  height:46px; padding:0 22px; border:1px solid transparent; border-radius:var(--r-pill);
+  font-size:15px; font-weight:600; letter-spacing:-.01em; cursor:pointer;
+  transition:background var(--t-fast), color var(--t-fast), border-color var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast);
+  white-space:nowrap;
+}
+.btn:hover{ transform:translateY(-1px) }
+.btn:active{ transform:translateY(0) }
+.btn--primary{ background:var(--brand); color:var(--on-brand); border-color:var(--brand) }
+.btn--primary:hover{ background:var(--brand-lift); border-color:var(--brand-lift) }
+.btn--ghost{ background:var(--surface); color:var(--ink-1); border-color:var(--line-strong) }
+.btn--ghost:hover{ border-color:var(--ink-3) }
+.btn--quiet{ background:transparent; color:var(--ink-2); border-color:transparent }
+.btn--quiet:hover{ background:var(--sunken); color:var(--ink-1) }
+.btn--onbrand{ background:var(--card-brand-ink); color:var(--card-brand); border-color:var(--card-brand-ink) }
+.btn--sm{ height:36px; padding:0 15px; font-size:14px }
+.btn--lg{ height:52px; padding:0 26px; font-size:16px }
+
+.chip{
+  display:inline-flex; align-items:center; gap:6px;
+  height:24px; padding:0 9px; border-radius:var(--r-xs);
+  font-family:'SplineMono',monospace; font-size:10.5px; font-weight:500;
+  letter-spacing:.08em; text-transform:uppercase; white-space:nowrap;
+  background:var(--sunken); color:var(--ink-3); border:1px solid var(--line);
+}
+.chip--you{   background:var(--brand-tint); color:var(--brand); border-color:var(--brand-line) }
+.chip--good{  background:var(--good-tint);  color:var(--good);  border-color:transparent }
+.chip--warn{  background:var(--warn-tint);  color:var(--warn);  border-color:transparent }
+.chip--crit{  background:var(--crit-tint);  color:var(--crit);  border-color:transparent }
+.chip__led{ width:5px; height:5px; border-radius:50%; background:currentColor; flex:none }
+
+.card{
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg);
+}
+.card--flat{ box-shadow:none }
+.card--lift{ border-color:transparent; box-shadow:var(--shadow-2) }
+
+.field{
+  display:flex; align-items:center; gap:8px;
+  background:var(--surface); border:1px solid var(--line-strong);
+  border-radius:var(--r-pill); padding:5px 5px 5px 18px;
+  transition:border-color var(--t-fast);
+}
+.field:focus-within{ border-color:var(--brand) }
+/* `flex:1 1 0` plus `width:0` is what actually lets the input shrink: an
+   input keeps an intrinsic size that inflates the whole track otherwise. */
+.field input{
+  flex:1 1 0; width:0; min-width:0; border:0; background:transparent; outline:0;
+  font-size:16px; color:var(--ink-1); padding-block:11px;
+}
+.field input::placeholder{ color:var(--ink-4) }
+
+/* ── motion ─────────────────────────────────────────────────────── */
+/* Reveals are an enhancement, never a gate: the hidden state only
+   applies once script has confirmed it can un-hide them again. */
+.js-anim .reveal{
+  opacity:0; transform:translateY(16px);
+  transition:opacity var(--t-slow), transform var(--t-slow);
+  transition-delay:var(--d, 0ms);
+}
+.js-anim .reveal.is-in{ opacity:1; transform:none }
+
+@media (prefers-reduced-motion: reduce){
+  html{ scroll-behavior:auto }
+  *,*::before,*::after{
+    animation-duration:1ms !important; animation-iteration-count:1 !important;
+    transition-duration:1ms !important;
+  }
+  .js-anim .reveal{ opacity:1; transform:none }
+  .is-in .occ__bar i{ transform:scaleY(1) }
+}
+
+/* ═══ prototype chrome — deliberately not part of the design ═════ */
+/* Fixed colours on purpose: this chrome is not part of the product, so it
+   must not invert with the theme it is being used to inspect. */
+.proto{
+  position:fixed; z-index:900; left:50%; bottom:18px; transform:translateX(-50%);
+  display:flex; align-items:center; gap:3px; max-width:calc(100vw - 24px);
+  padding:5px; border-radius:var(--r-pill);
+  background:rgba(14,16,23,.94); backdrop-filter:blur(10px);
+  box-shadow:0 8px 30px -6px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.08);
+  overflow-x:auto; scrollbar-width:none;
+}
+.proto::-webkit-scrollbar{ display:none }
+.proto__b{
+  border:0; background:transparent; color:#A8ADBC; cursor:pointer;
+  height:32px; padding:0 13px; border-radius:var(--r-pill); white-space:nowrap;
+  font-family:'SplineMono',monospace; font-size:10.5px; font-weight:500;
+  letter-spacing:.1em; text-transform:uppercase;
+  transition:background var(--t-fast), color var(--t-fast);
+}
+.proto__b:hover{ color:#fff }
+.proto__b.is-on{ background:#fff; color:#0E1017 }
+.proto__sep{ width:1px; height:18px; background:rgba(255,255,255,.16); margin-inline:5px; flex:none }
+
+/* ── screen router ──────────────────────────────────────────────── */
+.screen{ display:none }
+.screen.is-active{ display:block; animation:screenIn 380ms cubic-bezier(.22,.68,0,1) both }
+@keyframes screenIn{ from{ opacity:0; transform:translateY(8px) } to{ opacity:1; transform:none } }
+
+/* ═══════════════════════════════════════════════════════════════
+   LANDING
+   ═══════════════════════════════════════════════════════════════ */
+.nav{
+  position:sticky; top:0; z-index:60;
+  background:color-mix(in srgb, var(--paper) 86%, transparent);
+  backdrop-filter:blur(14px) saturate(180%);
+  border-bottom:1px solid var(--line-soft);
+}
+.nav__in{ display:flex; align-items:center; gap:30px; height:66px }
+.wordmark{
+  display:flex; align-items:center; gap:10px;
+  font-weight:640; font-size:19px; letter-spacing:-.04em; color:var(--ink-1);
+}
+.wordmark__m{
+  width:22px; height:22px; border-radius:6px; background:var(--brand);
+  display:grid; place-items:center; flex:none;
+}
+.nav__links{ display:flex; gap:4px; margin-left:14px }
+.nav__links a{
+  padding:7px 13px; border-radius:var(--r-pill); font-size:14.5px; color:var(--ink-2);
+  transition:background var(--t-fast), color var(--t-fast);
+}
+.nav__links a:hover{ background:var(--sunken); color:var(--ink-1) }
+.nav__r{ margin-left:auto; display:flex; align-items:center; gap:10px }
+
+/* hero */
+.hero{ padding-block:clamp(56px,8vw,110px) clamp(40px,5vw,70px) }
+.hero__grid{ display:grid; grid-template-columns:1.02fr .98fr; gap:clamp(32px,5vw,76px); align-items:center }
+.hero h1{ margin:20px 0 22px }
+.hero h1 em{ font-style:normal; color:var(--brand) }
+.hero__sub{ max-width:44ch; margin-bottom:30px }
+.hero__form{ max-width:420px }
+.hero__fine{ display:flex; gap:18px; margin-top:14px; flex-wrap:wrap }
+.hero__fine span{ display:flex; align-items:center; gap:6px; font-size:13.5px; color:var(--ink-3) }
+
+/* the answer sheet — the product's characteristic act, marking up a
+   real engine answer as it arrives */
+.sheet{
+  background:var(--surface); border-radius:var(--r-xl); box-shadow:var(--shadow-3);
+  overflow:hidden;
+}
+.sheet__top{
+  display:flex; align-items:center; gap:10px; padding:13px 18px;
+  border-bottom:1px solid var(--line-soft); background:var(--sunken);
+}
+.sheet__body{ padding:22px 24px 24px }
+.sheet__q{
+  font-size:16px; font-weight:600; color:var(--ink-1); letter-spacing:-.018em;
+  padding-bottom:16px; margin-bottom:16px; border-bottom:1px solid var(--line-soft);
+}
+.sheet__a{ font-size:16px; line-height:1.85; color:var(--ink-2); min-height:170px }
+.sheet__a .caret{
+  display:inline-block; width:2px; height:1em; background:var(--brand);
+  vertical-align:-2px; animation:blink 1.05s steps(2,start) infinite;
+}
+@keyframes blink{ to{ visibility:hidden } }
+mark{
+  border-radius:4px; padding:1px 5px; background:transparent; color:inherit;
+  transition:background 420ms ease, color 420ms ease, box-shadow 420ms ease;
+}
+mark.lit-you{ background:var(--brand-tint); color:var(--brand); font-weight:600; box-shadow:inset 0 0 0 1px var(--brand-line) }
+mark.lit-rival{ background:var(--sunken); color:var(--ink-2); font-weight:600; box-shadow:inset 0 0 0 1px var(--line-strong) }
+.sheet__foot{
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  padding-top:16px; margin-top:18px; border-top:1px solid var(--line-soft);
+}
+
+/* engine coverage — a position on a shared scale, read as a line and a
+   dot rather than another row of blocks */
+.rail{ border-block:1px solid var(--line); background:var(--surface) }
+.rail__in{ padding-block:clamp(26px,3vw,42px) }
+.rail__top{ display:flex; align-items:baseline; gap:18px; flex-wrap:wrap; margin-bottom:20px }
+.gauge{
+  display:grid; grid-template-columns:clamp(126px,14vw,186px) 1fr 62px;
+  gap:clamp(14px,2vw,26px); align-items:center;
+  padding-block:18px; border-top:1px solid var(--line-soft);
+}
+.gauge__n{ font-size:15px; font-weight:600; color:var(--ink-1) }
+.gauge__t{ position:relative; height:2px; background:var(--line-strong); border-radius:2px }
+.gauge__f{
+  position:absolute; left:0; top:0; height:2px; width:100%; border-radius:2px;
+  background:var(--you); transform-origin:left center; transform:scaleX(0);
+  transition:transform 900ms cubic-bezier(.22,.68,0,1); transition-delay:var(--d,0ms);
+}
+.is-in .gauge__f{ transform:scaleX(var(--p)) }
+.gauge__d{
+  position:absolute; top:50%; left:calc(var(--p) * 100%); width:12px; height:12px;
+  margin-left:-6px; border-radius:50%; background:var(--you);
+  box-shadow:0 0 0 3px var(--surface);
+  transform:translateY(-50%) scale(0);
+  /* the system's one easing curve — an overshoot here was the only place
+     anything bounced, which the components page explicitly claims it doesn't */
+  transition:transform 460ms cubic-bezier(.22,.68,0,1);
+  transition-delay:calc(var(--d, 0ms) + 640ms);
+}
+.is-in .gauge__d{ transform:translateY(-50%) scale(1) }
+.gauge__half{ position:absolute; left:50%; top:-9px; bottom:-9px; width:1px; background:var(--line-strong) }
+.gauge__v{
+  font-family:'SplineMono',monospace; font-size:13px; color:var(--ink-1);
+  text-align:right; font-variant-numeric:tabular-nums;
+}
+.rail__foot{ display:flex; gap:24px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px solid var(--line-soft) }
+.rail__foot p{ font-size:13.5px; color:var(--ink-3); flex:1 1 220px; min-width:0 }
+
+/* a plain section rhythm: one idea, lots of air */
+.sec{ padding-block:clamp(64px,9vw,140px) }
+.sec--tight{ padding-block:clamp(52px,6vw,88px) }
+.sec__head{ max-width:60ch }
+.sec__head h2{ margin:18px 0 16px }
+.sec__head p{ color:var(--ink-3) }
+/* `ch` must sit on the element whose font-size it is meant to measure —
+   on the wrapper it resolves against 17px body text and crushes the
+   heading into a one-word column. */
+.sec__head--mid{ max-width:none; margin-inline:auto; text-align:center }
+.sec__head--mid h2{ max-width:17ch; margin-inline:auto }
+.sec__head--mid p{ max-width:52ch; margin-inline:auto }
+
+/* where the answers go — 36 questions resolving into four destinations.
+   A ribbon carries both the count and the fact that a question ends up
+   somewhere, which a row of blocks never showed. */
+.flow{ margin-top:clamp(30px,4vw,56px) }
+.flow svg{ display:block; width:100%; height:auto; overflow:visible }
+.flow__rib{
+  opacity:0;
+  transition:opacity 900ms cubic-bezier(.22,.68,0,1);
+  transition-delay:var(--d,0ms);
+}
+.is-in .flow__rib{ opacity:.46 }
+.is-in .flow__rib--you{ opacity:.66 }
+.flow__rib:hover{ opacity:.85 }
+.flow__node{
+  transform:scaleY(0); transform-origin:center;
+  transition:transform 620ms cubic-bezier(.22,.68,0,1);
+  transition-delay:var(--d,0ms);
+}
+.is-in .flow__node{ transform:scaleY(1) }
+.flow__lab{ opacity:0; transition:opacity 620ms ease; transition-delay:calc(var(--d,0ms) + 260ms) }
+.is-in .flow__lab{ opacity:1 }
+.legend{ display:flex; gap:20px; flex-wrap:wrap; margin-top:22px }
+.legend span{ display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink-3) }
+.legend i{ width:11px; height:11px; border-radius:3px; flex:none }
+
+/* capability section — one deck, stepped through, rather than four cards
+   the reader has to scroll past */
+.work{ display:grid; grid-template-columns:.86fr 1.14fr; gap:clamp(28px,5vw,80px); align-items:center }
+.work__side h2{ margin:18px 0 18px }
+.work__side p{ color:var(--ink-3); max-width:38ch }
+
+/* every slide occupies the same grid cell, so the deck is as tall as its
+   tallest slide and never jumps height when you step */
+.deck__stage{ display:grid }
+.deck__stage > *{ grid-area:1 / 1 }
+/* Vertical, and direction-correct without tracking scroll direction:
+   a slide earlier in the sequence rests above, a later one rests below.
+   Advancing therefore lifts the current card out of the top while the
+   next rises from underneath; scrolling back reverses it for free. */
+.deck__stage .wcard{
+  opacity:0; visibility:hidden;
+  transition:opacity 420ms cubic-bezier(.22,.68,0,1),
+             transform 420ms cubic-bezier(.22,.68,0,1),
+             visibility 0s linear 420ms;
+}
+.deck__stage .wcard.is-prev{ transform:translateY(-26px) }
+.deck__stage .wcard.is-next{ transform:translateY(26px) }
+.deck__stage .wcard.is-on{
+  opacity:1; visibility:visible; transform:none; transition-delay:0s;
+}
+/* the section is tall; the panel inside it pins, so scrolling through the
+   tall part steps the deck instead of moving the page */
+.workscroll{ position:relative; height:340vh }
+.workscroll__pin{
+  position:sticky; top:0; min-height:100vh;
+  display:flex; align-items:center;
+}
+
+/* Below the breakpoint — and whenever motion is unwelcome — the pin is
+   dropped and the four cards simply stack, so nothing depends on a
+   scroll effect to be readable. */
+@media (max-width:960px), (prefers-reduced-motion: reduce){
+  .workscroll{ height:auto }
+  .workscroll__pin{ position:static; min-height:0; display:block }
+  .deck__stage{ gap:clamp(14px,2vw,20px) }
+  .deck__stage > *{ grid-area:auto }
+  .deck__stage .wcard{ opacity:1; visibility:visible; transform:none }
+}
+.wcard{
+  background:var(--card-brand); color:var(--card-brand-ink);
+  border-radius:var(--r-xl); padding:clamp(26px,3vw,38px); position:relative; overflow:hidden;
+}
+.wcard__n{
+  position:absolute; top:26px; right:30px;
+  font-family:'SplineMono',monospace; font-size:11px; letter-spacing:.12em;
+  color:var(--card-brand-soft);
+}
+.wcard h3{ color:var(--card-brand-ink); margin:0 0 12px }
+.wcard p{ color:var(--card-brand-soft); font-size:15.5px; line-height:1.6; max-width:44ch }
+.wcard__viz{ margin-bottom:26px; height:96px }
+
+/* evidence */
+.ev{ display:grid; grid-template-columns:.8fr 1.2fr; gap:clamp(28px,5vw,72px); align-items:center }
+
+/* faq */
+.faq{ max-width:820px; border-top:1px solid var(--line); margin-top:clamp(28px,4vw,44px) }
+details{ border-bottom:1px solid var(--line) }
+summary{
+  list-style:none; cursor:pointer; padding-block:20px;
+  display:grid; grid-template-columns:1fr 18px; gap:20px; align-items:center;
+  font-size:clamp(17px,1.5vw,20px); font-weight:600; color:var(--ink-1);
+  letter-spacing:-.022em; line-height:1.3; transition:color var(--t-fast);
+}
+summary:hover{ color:var(--brand) }
+summary::-webkit-details-marker{ display:none }
+summary::after{
+  content:''; width:14px; height:14px; justify-self:end; align-self:center;
+  background-image:linear-gradient(var(--brand),var(--brand)),linear-gradient(var(--brand),var(--brand));
+  background-position:center,center; background-repeat:no-repeat;
+  background-size:100% 1.6px, 1.6px 100%;
+  transition:background-size var(--t-base);
+}
+details[open] summary::after{ background-size:100% 1.6px, 1.6px 0% }
+details p{ padding-bottom:24px; color:var(--ink-3); font-size:16px; max-width:70ch }
+
+/* closing block + footer */
+.close{ background:var(--navy); color:var(--navy-dim) }
+.close h2{ color:var(--navy-ink); max-width:18ch; margin:18px auto 18px; text-align:center }
+.close p{ max-width:50ch; margin:0 auto 30px; text-align:center }
+.close__in{ text-align:center; padding-block:clamp(60px,8vw,110px) }
+.close .field{ background:rgba(255,255,255,.06); border-color:var(--navy-line); margin-inline:auto; max-width:430px }
+.close .field input{ color:var(--navy-ink) }
+.close .field input::placeholder{ color:var(--navy-dim) }
+
+.foot{ background:var(--navy); color:var(--navy-dim); padding-block:44px 26px; border-top:1px solid var(--navy-line) }
+.foot__g{ display:grid; grid-template-columns:1.7fr repeat(3,1fr); gap:30px; padding-bottom:32px }
+.foot__g h5{ font-family:'SplineMono',monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--navy-dim); margin:0 0 14px; font-weight:500 }
+.foot__g a{ display:block; font-size:14.5px; color:var(--navy-ink); opacity:.72; padding-block:5px; transition:opacity var(--t-fast) }
+.foot__g a:hover{ opacity:1 }
+.foot__b{ display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding-top:20px; border-top:1px solid var(--navy-line) }
+.foot .wordmark{ color:var(--navy-ink) }
+/* the navy blocks are their own ground — labels there take the navy inks,
+   never the page inks, which are tuned for paper */
+.foot .tag, .close .tag{ color:var(--navy-dim) }
+.close .tag--brand{ color:var(--brand-on-navy) }
+
+@media(max-width:960px){
+  .hero__grid,.work,.ev{ grid-template-columns:1fr; gap:34px }
+  .work__side{ position:static }
+  .rail__in{ grid-template-columns:1fr }
+  .rail__i{ border-right:0; border-bottom:1px solid var(--line-soft); padding-left:0 }
+  .foot__g{ grid-template-columns:1fr 1fr }
+  .nav__links{ display:none }
+}
+</style>
+
+<!-- ═══════ PROTOTYPE CHROME ═══════ -->
+<nav class="proto" aria-label="Prototype screens">
+  <button class="proto__b is-on" data-go="landing">Landing</button>
+  <button class="proto__b" data-go="scan">Scan</button>
+  <button class="proto__b" data-go="overview">Dashboard</button>
+  <button class="proto__b" data-go="answers">Answers</button>
+  <button class="proto__b" data-go="rivals">Rivals</button>
+  <button class="proto__b" data-go="sources">Sources</button>
+  <button class="proto__b" data-go="studio">Studio</button>
+  <button class="proto__b" data-go="components">Components</button>
+  <span class="proto__sep"></span>
+  <button class="proto__b" id="themeBtn" aria-label="Toggle colour theme">Theme</button>
+</nav>
+
+<main>
+
+<!-- ═══════════════════ LANDING ═══════════════════ -->
+<section class="screen is-active" data-screen="landing">
+
+  <header class="nav">
+    <div class="shell nav__in">
+      <a href="#" class="wordmark">
+        <span class="wordmark__m">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L21 21"/></svg>
+        </span>
+        perceev
+      </a>
+      <div class="nav__links">
+        <a href="#gap">The gap</a>
+        <a href="#work">What it does</a>
+        <a href="#evidence">Evidence</a>
+      </div>
+      <div class="nav__r">
+        <button class="btn btn--quiet btn--sm" data-go="overview">Sign in</button>
+        <button class="btn btn--primary btn--sm" data-go="scan">Run a free probe</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- hero -->
+  <div class="hero shell">
+    <div class="hero__grid">
+      <div>
+        <span class="tag tag--brand reveal">Answer-engine intelligence</span>
+        <h1 class="reveal" style="--d:60ms">The answer names two brands. <em>Is one of them yours?</em></h1>
+        <p class="lede hero__sub reveal" style="--d:120ms">
+          Perceev asks Google AI Overview, ChatGPT and Perplexity the 36 unbranded questions your
+          buyers actually type, then shows you which brand each answer recommends.
+        </p>
+        <div class="hero__form reveal" style="--d:180ms">
+          <form class="field" onsubmit="return false">
+            <input type="text" placeholder="yourcompany.com" aria-label="Your domain">
+            <button class="btn btn--primary" type="submit" data-go="scan">Run the probe</button>
+          </form>
+          <div class="hero__fine">
+            <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--good)" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Free</span>
+            <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--good)" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> No signup</span>
+            <span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--good)" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Answers kept verbatim</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sheet reveal" style="--d:240ms">
+        <div class="sheet__top">
+          <span class="chip">Perplexity</span>
+          <span class="tag">Unbranded question 04</span>
+          <span class="chip chip--good" style="margin-left:auto"><i class="chip__led"></i> Live</span>
+        </div>
+        <div class="sheet__body">
+          <p class="sheet__q">“which analytics tools track clinical outcomes”</p>
+          <p class="sheet__a" id="sheetA"></p>
+          <div class="sheet__foot">
+            <span class="chip chip--you">You · mentioned</span>
+            <span class="chip">Rival cited first</span>
+            <span class="chip">4 sources</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- engine coverage -->
+  <div class="rail">
+    <div class="shell rail__in">
+      <div class="rail__top">
+        <span class="tag tag--brand">Reach, engine by engine</span>
+        <p style="font-size:14.5px; color:var(--ink-3); flex:1 1 300px; min-width:0">
+          The same twelve questions go to each. The mark is where you land; the line is half the set.
+        </p>
+      </div>
+
+      <div class="gauge reveal" style="--p:.4167">
+        <span class="gauge__n">Google AI Overview</span>
+        <span class="gauge__t"><i class="gauge__half"></i><i class="gauge__f"></i><i class="gauge__d"></i></span>
+        <span class="gauge__v">5 / 12</span>
+      </div>
+      <div class="gauge reveal" style="--p:.5; --d:110ms">
+        <span class="gauge__n">ChatGPT</span>
+        <span class="gauge__t"><i class="gauge__half"></i><i class="gauge__f"></i><i class="gauge__d"></i></span>
+        <span class="gauge__v">6 / 12</span>
+      </div>
+      <div class="gauge reveal" style="--p:.3333; --d:220ms">
+        <span class="gauge__n">Perplexity</span>
+        <span class="gauge__t"><i class="gauge__half"></i><i class="gauge__f"></i><i class="gauge__d"></i></span>
+        <span class="gauge__v">4 / 12</span>
+      </div>
+
+      <div class="rail__foot reveal" style="--d:300ms">
+        <p>Three of your four highest-intent questions live in AI Overview.</p>
+        <p>ChatGPT is your strongest engine, and your rivals' weakest.</p>
+        <p>Perplexity cites sources hardest — six of its 64 are pages you control.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- the gap : one statement, one graphic, air -->
+  <section class="sec shell" id="gap">
+    <div class="sec__head sec__head--mid reveal">
+      <span class="tag tag--brand">The gap</span>
+      <h2>Nobody scrolls to the fourth result any more.</h2>
+      <p class="lede">An answer is not a queue you can join. It names two vendors, and the rest of the
+      category does not exist for that buyer, on that day.</p>
+    </div>
+
+    <div class="flow reveal">
+      <svg viewBox="0 0 940 414" role="img"
+           aria-label="Of 36 unbranded questions, 15 answers name Brightwave, 12 name NorthPeak, 6 name Lumen IQ, and 3 name no brand at all.">
+        <!-- the set, as one column -->
+        <text x="8" y="18" font-family="SplineMono" font-size="10.5" letter-spacing="1.5"
+              fill="var(--ink-3)" class="flow__lab">36 UNBRANDED QUESTIONS</text>
+        <rect x="8" y="30" width="14" height="300" rx="3" fill="var(--ink-1)" opacity=".14"/>
+
+        <!-- ribbons, thickness = number of answers -->
+        <path class="flow__rib flow__rib--you" style="--d:120ms" fill="var(--you)"
+              d="M22,30 C320,30 320,16 620,16 L620,141 C320,141 320,155 22,155 Z"/>
+        <path class="flow__rib" style="--d:220ms" fill="var(--rival-1)"
+              d="M22,155 C320,155 320,167 620,167 L620,267 C320,267 320,255 22,255 Z"/>
+        <path class="flow__rib" style="--d:320ms" fill="var(--rival-2)"
+              d="M22,255 C320,255 320,293 620,293 L620,343 C320,343 320,305 22,305 Z"/>
+        <path class="flow__rib" style="--d:420ms" fill="var(--rival-3)"
+              d="M22,305 C320,305 320,369 620,369 L620,394 C320,394 320,330 22,330 Z"/>
+
+        <!-- destinations -->
+        <rect class="flow__node" style="--d:120ms" x="620" y="16"  width="14" height="125" rx="3" fill="var(--you)"/>
+        <rect class="flow__node" style="--d:220ms" x="620" y="167" width="14" height="100" rx="3" fill="var(--rival-1)"/>
+        <rect class="flow__node" style="--d:320ms" x="620" y="293" width="14" height="50"  rx="3" fill="var(--rival-2)"/>
+        <rect class="flow__node" style="--d:420ms" x="620" y="369" width="14" height="25"  rx="3" fill="var(--rival-3)"/>
+
+        <g class="flow__lab" style="--d:120ms">
+          <text x="650" y="72"  font-size="17" font-weight="620" letter-spacing="-.3" fill="var(--ink-1)">Brightwave</text>
+          <text x="650" y="94"  font-family="SplineMono" font-size="12" fill="var(--brand)">15 ANSWERS · 41%</text>
+        </g>
+        <g class="flow__lab" style="--d:220ms">
+          <text x="650" y="210" font-size="17" font-weight="620" letter-spacing="-.3" fill="var(--ink-1)">NorthPeak</text>
+          <text x="650" y="232" font-family="SplineMono" font-size="12" fill="var(--ink-3)">12 ANSWERS · 33%</text>
+        </g>
+        <g class="flow__lab" style="--d:320ms">
+          <text x="650" y="311" font-size="17" font-weight="620" letter-spacing="-.3" fill="var(--ink-1)">Lumen IQ</text>
+          <text x="650" y="333" font-family="SplineMono" font-size="12" fill="var(--ink-3)">6 ANSWERS · 17%</text>
+        </g>
+        <g class="flow__lab" style="--d:420ms">
+          <text x="650" y="375" font-size="17" font-weight="620" letter-spacing="-.3" fill="var(--ink-3)">No brand named</text>
+          <text x="650" y="397" font-family="SplineMono" font-size="12" fill="var(--ink-3)">3 ANSWERS · 9%</text>
+        </g>
+      </svg>
+    </div>
+  </section>
+
+  <!-- what it does : sticky left, cards right -->
+  <section class="workscroll" id="work">
+   <div class="workscroll__pin">
+    <div class="shell work">
+      <div class="work__side">
+        <div class="reveal">
+          <span class="tag tag--brand">What it does</span>
+          <h2>Four things arrive with every reading.</h2>
+          <p>None of them ask you to configure anything first. Enter a domain and the rest happens on
+          its own.</p>
+          <button class="btn btn--primary" style="margin-top:24px" data-go="overview">Open a live report</button>
+        </div>
+      </div>
+
+      <div class="deck reveal" id="deck">
+        <div class="deck__stage">
+        <article class="wcard is-on" data-slide="0" aria-roledescription="slide">
+          <span class="wcard__n">01 / 04</span>
+          <div class="wcard__viz">
+            <!-- the set itself: 36 marks, one per tracked question -->
+            <svg viewBox="0 0 300 96" width="100%" height="96" role="img"
+                 aria-label="The tracked set: thirty-six questions">
+              <g fill="var(--card-brand-soft)" opacity=".55">
+                <rect x="0"   y="8"  width="21" height="22" rx="4"/><rect x="25"  y="8" width="21" height="22" rx="4"/>
+                <rect x="50"  y="8"  width="21" height="22" rx="4"/><rect x="75"  y="8" width="21" height="22" rx="4"/>
+                <rect x="100" y="8"  width="21" height="22" rx="4"/><rect x="125" y="8" width="21" height="22" rx="4"/>
+                <rect x="150" y="8"  width="21" height="22" rx="4"/><rect x="175" y="8" width="21" height="22" rx="4"/>
+                <rect x="200" y="8"  width="21" height="22" rx="4"/><rect x="225" y="8" width="21" height="22" rx="4"/>
+                <rect x="250" y="8"  width="21" height="22" rx="4"/><rect x="275" y="8" width="21" height="22" rx="4"/>
+
+                <rect x="0"   y="37" width="21" height="22" rx="4"/><rect x="25"  y="37" width="21" height="22" rx="4"/>
+                <rect x="50"  y="37" width="21" height="22" rx="4"/><rect x="75"  y="37" width="21" height="22" rx="4"/>
+                <rect x="100" y="37" width="21" height="22" rx="4"/><rect x="125" y="37" width="21" height="22" rx="4"/>
+                <rect x="150" y="37" width="21" height="22" rx="4"/><rect x="175" y="37" width="21" height="22" rx="4"/>
+                <rect x="200" y="37" width="21" height="22" rx="4"/><rect x="225" y="37" width="21" height="22" rx="4"/>
+                <rect x="250" y="37" width="21" height="22" rx="4"/><rect x="275" y="37" width="21" height="22" rx="4"/>
+
+                <rect x="0"   y="66" width="21" height="22" rx="4"/><rect x="25"  y="66" width="21" height="22" rx="4"/>
+                <rect x="50"  y="66" width="21" height="22" rx="4"/><rect x="75"  y="66" width="21" height="22" rx="4"/>
+                <rect x="100" y="66" width="21" height="22" rx="4"/><rect x="125" y="66" width="21" height="22" rx="4"/>
+                <rect x="150" y="66" width="21" height="22" rx="4"/><rect x="175" y="66" width="21" height="22" rx="4"/>
+                <rect x="200" y="66" width="21" height="22" rx="4"/><rect x="225" y="66" width="21" height="22" rx="4"/>
+                <rect x="250" y="66" width="21" height="22" rx="4"/><rect x="275" y="66" width="21" height="22" rx="4"/>
+              </g>
+            </svg>
+          </div>
+          <h3>36 questions, none of which name you</h3>
+          <p>A leading question returns a flattering answer, so the set never contains one. Every entry
+          is a phrasing a buyer would type on their own.</p>
+        </article>
+
+        <article class="wcard" data-slide="1" aria-roledescription="slide">
+          <span class="wcard__n">02 / 04</span>
+          <div class="wcard__viz">
+            <svg viewBox="0 0 300 96" width="100%" height="96" role="img" aria-label="Share of AI rising over six readings">
+              <path d="M4 82 L62 74 L120 60 L178 63 L236 40 L296 14" fill="none"
+                    stroke="var(--card-brand-ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"
+                    class="draw"/>
+              <path d="M4 40 L62 44 L120 52 L178 50 L236 62 L296 66" fill="none"
+                    stroke="var(--card-brand-soft)" stroke-width="1.6" stroke-dasharray="4 4" opacity=".7"/>
+              <circle cx="296" cy="14" r="4" fill="var(--card-brand-ink)"/>
+            </svg>
+          </div>
+          <h3>One number that moves</h3>
+          <p>Share of AI is the share of answers that name you, stored per question and per engine so a
+          page going live can be traced to the question it won.</p>
+        </article>
+
+        <article class="wcard" data-slide="2" aria-roledescription="slide">
+          <span class="wcard__n">03 / 04</span>
+          <div class="wcard__viz">
+            <svg viewBox="0 0 300 96" width="100%" height="96" role="img" aria-label="Rival share of answers">
+              <g>
+                <rect x="0" y="8"  width="118" height="14" rx="3" fill="var(--card-brand-ink)"/>
+                <rect x="0" y="32" width="96"  height="14" rx="3" fill="var(--card-brand-soft)" opacity=".75"/>
+                <rect x="0" y="56" width="50"  height="14" rx="3" fill="var(--card-brand-soft)" opacity=".5"/>
+                <rect x="0" y="80" width="28"  height="14" rx="3" fill="var(--card-brand-soft)" opacity=".3"/>
+              </g>
+            </svg>
+          </div>
+          <h3>Rivals you did not know you had</h3>
+          <p>Discovered from the answers themselves, ranked by how often each one takes a recommendation
+          you wanted. You never maintain a competitor list.</p>
+        </article>
+
+        <article class="wcard" data-slide="3" aria-roledescription="slide">
+          <span class="wcard__n">04 / 04</span>
+          <div class="wcard__viz">
+            <svg viewBox="0 0 300 96" width="100%" height="96" role="img" aria-label="Sixty-four cited sources, six of them yours">
+              <g fill="var(--card-brand-soft)" opacity=".34">
+                <circle cx="12" cy="16" r="5"/><circle cx="40" cy="16" r="5"/><circle cx="68" cy="16" r="5"/><circle cx="96" cy="16" r="5"/><circle cx="124" cy="16" r="5"/><circle cx="152" cy="16" r="5"/><circle cx="180" cy="16" r="5"/><circle cx="208" cy="16" r="5"/>
+                <circle cx="12" cy="44" r="5"/><circle cx="40" cy="44" r="5"/><circle cx="96" cy="44" r="5"/><circle cx="124" cy="44" r="5"/><circle cx="152" cy="44" r="5"/><circle cx="180" cy="44" r="5"/><circle cx="208" cy="44" r="5"/>
+                <circle cx="12" cy="72" r="5"/><circle cx="40" cy="72" r="5"/><circle cx="68" cy="72" r="5"/><circle cx="124" cy="72" r="5"/><circle cx="152" cy="72" r="5"/><circle cx="180" cy="72" r="5"/><circle cx="208" cy="72" r="5"/>
+              </g>
+              <g fill="var(--card-brand-ink)">
+                <circle cx="236" cy="16" r="5"/><circle cx="264" cy="16" r="5"/>
+                <circle cx="68" cy="44" r="5"/><circle cx="236" cy="44" r="5"/>
+                <circle cx="96" cy="72" r="5"/><circle cx="236" cy="72" r="5"/>
+              </g>
+            </svg>
+          </div>
+          <h3>The 64 pages the engines drew on</h3>
+          <p>Six of them are yours. The other fifty-eight are the shape of the work, and where the
+          content operation starts.</p>
+        </article>
+        </div>
+
+      </div>
+    </div>
+   </div>
+  </section>
+
+  <!-- evidence -->
+  <section class="sec--tight" style="background:var(--surface); border-block:1px solid var(--line)">
+    <div class="shell sec" style="padding-block:clamp(52px,6vw,92px)">
+      <div class="ev">
+        <div class="reveal">
+          <span class="tag tag--brand">Evidence</span>
+          <h2 style="margin:18px 0 16px; font-size:clamp(26px,3.1vw,40px)">No score without the sentence that made it.</h2>
+          <p class="dim" style="max-width:38ch">Every reading is backed by the text the engine actually
+          returned, marked where your name appears and where a rival took the recommendation instead.</p>
+          <button class="btn btn--ghost" style="margin-top:24px" data-go="answers">See all 36 answers</button>
+        </div>
+        <div class="card reveal" style="--d:100ms; padding:clamp(22px,2.6vw,32px)">
+          <div style="display:flex; gap:9px; align-items:center; flex-wrap:wrap; padding-bottom:16px; border-bottom:1px solid var(--line-soft); margin-bottom:18px">
+            <span class="chip">Google AI Overview</span>
+            <span class="tag">16 Aug 2026 · 09:14 IST</span>
+            <span class="chip chip--warn" style="margin-left:auto">Rival first</span>
+          </div>
+          <p style="font-size:17px; font-weight:600; color:var(--ink-1); letter-spacing:-.02em; margin-bottom:16px">
+            “best EHR platform for a 200-bed hospital”
+          </p>
+          <p style="font-size:16px; line-height:1.85; color:var(--ink-2)">
+            For hospitals in the 150–300 bed range, <mark class="lit-rival">NorthPeak</mark> is the most
+            frequently recommended platform, largely on the strength of its NABH-aligned reporting.
+            <mark class="lit-you">Brightwave</mark> is named alongside it for outcome dashboards and
+            readmission tracking, and is often preferred where clinical analytics matter more than
+            billing workflow.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- faq -->
+  <section class="sec shell">
+    <div class="sec__head reveal">
+      <span class="tag tag--brand">Objections</span>
+      <h2>Answered without marketing language.</h2>
+    </div>
+    <div class="faq reveal">
+      <details open>
+        <summary>Why unbranded questions?</summary>
+        <p>A branded question already contains the answer. Ask an engine “is Brightwave good for
+        hospitals” and it will find something kind to say, because it is a completion machine and you
+        handed it the premise. Your buyer types “best EHR for a 200-bed hospital”, and there the engine
+        has to choose.</p>
+      </details>
+      <details>
+        <summary>How is this different from rank tracking?</summary>
+        <p>A rank tracker tells you where a page sits in a list of blue links. There is no list here.
+        There is one paragraph naming two vendors, so we measure whether that paragraph says your name,
+        and we keep the paragraph.</p>
+      </details>
+      <details>
+        <summary>Does the number actually move?</summary>
+        <p>Yes, and that is why it runs on a cadence. Readings are stored per question, per engine, per
+        day, so when a question flips from a rival to you we can point at the page the engine started
+        citing.</p>
+      </details>
+      <details>
+        <summary>Does adding questions break my history?</summary>
+        <p>No. The tracked set only ever grows additively, and the score is always a share of the set as
+        it stood that day, so a reading from March stays comparable to one from August.</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- close -->
+  <section class="close">
+    <div class="shell close__in">
+      <span class="tag tag--brand">Free · 36 questions · no signup</span>
+      <h2>Find out what the engines say when you are not in the room.</h2>
+      <p>Enter a domain. We ask the questions your buyers ask and report which brand each answer names.</p>
+      <form class="field" onsubmit="return false">
+        <input type="text" placeholder="yourcompany.com" aria-label="Your domain">
+        <button class="btn btn--primary" type="submit" data-go="scan">Run the probe</button>
+      </form>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div class="shell">
+      <div class="foot__g">
+        <div>
+          <span class="wordmark" style="margin-bottom:12px">
+            <span class="wordmark__m">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L21 21"/></svg>
+            </span>
+            perceev
+          </span>
+          <p style="font-size:14.5px; max-width:32ch; line-height:1.55">
+            Answer-engine intelligence for teams whose buyers have stopped searching and started asking.
+          </p>
+        </div>
+        <div><h5>Product</h5><a href="#" data-go="overview">Overview</a><a href="#" data-go="answers">Answers</a><a href="#" data-go="rivals">Rivals</a><a href="#" data-go="sources">Sources</a></div>
+        <div><h5>Company</h5><a href="#work">What it does</a><a href="#evidence">Evidence</a><a href="#">Changelog</a><a href="#">Contact</a></div>
+        <div><h5>Legal</h5><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Data handling</a></div>
+      </div>
+      <div class="foot__b">
+        <span class="tag">© 2026 Perceev</span>
+        <span class="tag">Demonstration data uses fictional brands</span>
+      </div>
+    </div>
+  </footer>
+
+</section>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   PRODUCT SURFACES — scan flow and the app shell
+   ═══════════════════════════════════════════════════════════════ */
+
+/* the floating screen switcher sits over the page bottom */
+.foot{ padding-bottom:76px }
+
+/* ── scan ───────────────────────────────────────────────────────── */
+.scan{ min-height:100vh; display:grid; place-items:center; padding:70px 20px 110px; background:var(--paper) }
+.scan__in{ width:100%; max-width:620px; text-align:center }
+.scan h2{ margin:18px 0 14px }
+.scan__sub{ color:var(--ink-3); max-width:46ch; margin-inline:auto }
+.scan .field{ margin:30px auto 0; max-width:440px }
+
+.state{ display:none }
+.state.is-on{ display:block; animation:screenIn 340ms cubic-bezier(.22,.68,0,1) both }
+
+/* The probe does not show a spinner: it draws the reading as it arrives.
+   Every answered question thickens the ribbon to whichever brand won it,
+   so the finished animation IS the diagram on the landing page. */
+.probe{ text-align:left; margin-top:26px }
+.probe__bar{
+  position:relative; height:2px; border-radius:2px;
+  background:var(--line-strong); overflow:hidden;
+}
+.probe__bar i{
+  position:absolute; left:0; top:0; height:2px; width:100%;
+  background:var(--brand); transform-origin:left center; transform:scaleX(0);
+  transition:transform 300ms linear;
+}
+.probe__meta{ display:flex; justify-content:space-between; gap:12px; margin-top:10px }
+.probe__viz{ margin-top:20px }
+.probe__viz svg{ display:block; width:100%; height:auto; overflow:visible }
+.probe__now{
+  display:flex; align-items:center; gap:12px; margin-top:20px; padding:12px 15px;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);
+}
+.probe__q{
+  flex:1 1 0; min-width:0; font-size:14px; color:var(--ink-1);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.probe__rib{ transition:opacity 300ms ease }
+/* No transition on the bars: drawProbe replaces the SVG contents each tick,
+   so a fresh element has no previous value to animate from — the declaration
+   was dead weight, and animating height is the wrong tool regardless. */
+
+.result{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:28px 0 26px }
+
+/* ── app shell ──────────────────────────────────────────────────── */
+.app{ display:grid; grid-template-columns:236px 1fr; min-height:100vh; background:var(--paper) }
+.side{
+  border-right:1px solid var(--line); background:var(--surface);
+  padding:16px 12px; position:sticky; top:0; height:100vh; overflow-y:auto;
+}
+.side__brand{ display:flex; align-items:center; gap:10px; padding:4px 8px 18px }
+.side__g{ margin:16px 0 6px; padding-inline:10px }
+.side__g:first-of-type{ margin-top:0 }
+.side__i{
+  display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  padding:8px 10px; border:0; border-radius:var(--r-sm); background:transparent;
+  font-size:14px; color:var(--ink-2); cursor:pointer;
+  transition:background var(--t-fast), color var(--t-fast);
+}
+.side__i:hover{ background:var(--sunken); color:var(--ink-1) }
+.side__i.is-on{ background:var(--brand-tint); color:var(--brand); font-weight:600 }
+.side__i svg{ flex:none; opacity:.8 }
+.side__i b{ margin-left:auto; font-family:'SplineMono',monospace; font-size:11px; font-weight:500; color:var(--ink-4) }
+.side__i.is-on b{ color:var(--brand) }
+.side__foot{ margin-top:22px; padding:12px 10px; border-top:1px solid var(--line-soft) }
+
+.main{ min-width:0; display:flex; flex-direction:column }
+.topbar{
+  position:sticky; top:0; z-index:20; display:flex; align-items:center; gap:12px;
+  min-height:60px; padding:10px clamp(16px,2.4vw,30px); flex-wrap:wrap;
+  background:color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter:blur(12px); border-bottom:1px solid var(--line);
+}
+.topbar h4{ font-size:17px }
+.seg{ display:flex; gap:2px; background:var(--sunken); padding:3px; border-radius:var(--r-pill); margin-left:auto }
+.seg button{
+  border:0; background:transparent; cursor:pointer; padding:6px 13px; border-radius:var(--r-pill);
+  font-size:12.5px; font-weight:600; color:var(--ink-3); transition:background var(--t-fast), color var(--t-fast);
+}
+.seg button.is-on{ background:var(--surface); color:var(--ink-1); box-shadow:var(--shadow-1) }
+.viewpad{ padding:clamp(18px,2.4vw,28px) clamp(16px,2.4vw,30px) 96px }
+.view{ display:none }
+.view.is-on{ display:block; animation:screenIn 300ms cubic-bezier(.22,.68,0,1) both }
+
+/* ── product primitives ─────────────────────────────────────────── */
+/* panels size to their own content — a stretched panel whose body is
+   taller than the row silently spills past its own border */
+.grid{ display:grid; gap:13px; align-items:start }
+.g4{ grid-template-columns:repeat(4,1fr) }
+.g3{ grid-template-columns:repeat(3,1fr) }
+.g2{ grid-template-columns:1fr 1fr }
+.g-wide{ grid-template-columns:1.5fr 1fr }
+.g-side{ grid-template-columns:1fr 340px }
+
+.stat{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); padding:15px 17px }
+.stat__k{ font-size:13px; color:var(--ink-3); font-weight:500; margin-bottom:9px }
+.stat__v{ font-size:31px; font-weight:640; letter-spacing:-.04em; color:var(--ink-1); line-height:1; display:flex; align-items:baseline; gap:4px }
+.stat__v small{ font-size:14px; color:var(--ink-4); font-weight:500 }
+.stat__v.is-you{ color:var(--brand) }
+.stat__d{ font-family:'SplineMono',monospace; font-size:11px; margin-top:10px; display:flex; align-items:center; gap:5px }
+.up{ color:var(--good) } .dn{ color:var(--crit) } .flat{ color:var(--ink-4) }
+
+.panel{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); min-width:0 }
+.panel__h{ display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line-soft); flex-wrap:wrap }
+.panel__h b{ font-size:14px; font-weight:600; color:var(--ink-1) }
+.panel__h .tag{ margin-left:auto }
+.panel__b{ padding:16px }
+.panel__b--flush{ padding:0 }
+
+/* `height="auto"` is not a valid SVG length attribute — a chart given one
+   ignores its viewBox ratio and stretches to fill, overflowing the panel.
+   Size charts from CSS so the intrinsic ratio is honoured. */
+.chart{ display:block; width:100%; height:auto }
+
+.tbl{ width:100%; border-collapse:collapse }
+.tbl th{
+  font-family:'SplineMono',monospace; font-size:10px; letter-spacing:.11em; text-transform:uppercase;
+  color:var(--ink-4); font-weight:500; text-align:left; padding:0 0 10px; border-bottom:1px solid var(--line);
+}
+.tbl th:nth-child(n+2), .tbl td:nth-child(n+2){ text-align:right }
+.tbl td{ padding:10px 0; border-bottom:1px solid var(--line-soft); font-size:14.5px; color:var(--ink-2) }
+.tbl tr:last-child td{ border-bottom:0 }
+.tbl .nm{ display:flex; align-items:center; gap:9px; color:var(--ink-1); font-weight:500 }
+.tbl .v{ font-family:'SplineMono',monospace; font-size:13.5px; color:var(--ink-1) }
+.sw{ width:9px; height:9px; border-radius:2px; flex:none }
+
+/* a row list that is scannable without being a table */
+.rows{ display:grid }
+.row{
+  display:grid; grid-template-columns:1fr auto; gap:6px 14px; align-items:center;
+  padding:11px 0; border-bottom:1px solid var(--line-soft);
+}
+.row:last-child{ border-bottom:0 }
+.row__n{ display:flex; align-items:center; gap:9px; font-size:14.5px; color:var(--ink-2); min-width:0 }
+.row__n b{ color:var(--ink-1); font-weight:600 }
+.row__v{ font-family:'SplineMono',monospace; font-size:13.5px; color:var(--ink-1) }
+.row__bar{ grid-column:1/-1; height:5px; border-radius:3px; background:var(--sunken); overflow:hidden }
+/* The fill is full width and scaled, not grown: animating `width` relayouts
+   the row on every frame. --w is a ratio (.41), not a percentage. */
+.row__bar i{
+  display:block; height:100%; width:100%; border-radius:3px;
+  transform:scaleX(0); transform-origin:left center;
+  transition:transform 900ms cubic-bezier(.22,.68,0,1); transition-delay:var(--d,0ms);
+}
+.is-in .row__bar i, .view.is-on .row__bar i{ transform:scaleX(var(--w)) }
+
+/* answers list */
+.qrow{
+  display:grid; grid-template-columns:34px 1fr 132px 116px; gap:14px; align-items:center;
+  padding:12px 16px; border-bottom:1px solid var(--line-soft); cursor:pointer;
+  transition:background var(--t-fast);
+}
+.qrow:last-child{ border-bottom:0 }
+.qrow:hover{ background:var(--sunken) }
+.qrow.is-sel{ background:var(--brand-tint) }
+.qrow__i{ font-family:'SplineMono',monospace; font-size:11px; color:var(--ink-4) }
+.qrow__q{ font-size:14.5px; color:var(--ink-1); line-height:1.35 }
+.qrow__e{ font-size:13px; color:var(--ink-3) }
+.qrow__v{ display:flex; justify-content:flex-end }
+
+.filters{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px }
+.filter{
+  height:32px; padding:0 13px; border-radius:var(--r-pill); cursor:pointer;
+  background:var(--surface); border:1px solid var(--line); color:var(--ink-2);
+  font-size:13px; font-weight:500; transition:all var(--t-fast);
+}
+.filter:hover{ border-color:var(--ink-4) }
+.filter.is-on{ background:var(--ink-1); border-color:var(--ink-1); color:var(--paper) }
+
+/* sources */
+.src{
+  display:grid; grid-template-columns:1fr 76px 92px; gap:14px; align-items:center;
+  padding:11px 16px; border-bottom:1px solid var(--line-soft);
+}
+.src:last-child{ border-bottom:0 }
+.src__d{ font-family:'SplineMono',monospace; font-size:13px; color:var(--ink-1); overflow:hidden; text-overflow:ellipsis }
+.src__d.mine{ color:var(--brand) }
+
+/* studio */
+.opp{
+  display:grid; grid-template-columns:1fr auto; gap:12px; align-items:start;
+  padding:16px; border:1px solid var(--line); border-radius:var(--r-md); background:var(--surface);
+  transition:border-color var(--t-fast), transform var(--t-fast);
+}
+.opp:hover{ border-color:var(--brand-line); transform:translateY(-1px) }
+.opp h4{ margin-bottom:6px }
+.opp p{ font-size:13.5px; color:var(--ink-3); max-width:60ch }
+.opp__meta{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap }
+
+/* ── agent canvas ──────────────────────────────────────────────────
+   A node graph of the content run: which agent does what, in what
+   order, and where the human gate sits. The dotted field is a real
+   canvas surface, not decoration — the graph is pannable. */
+.cv{ overflow:auto; background:var(--sunken); border-radius:var(--r-md); border:1px solid var(--line) }
+/* sized so the whole run is visible on a desktop without panning, and
+   pans rather than clipping on anything narrower */
+.cv__stage{ position:relative; width:1130px; height:280px }
+.cv__stage::before{
+  content:''; position:absolute; inset:0;
+  background-image:radial-gradient(var(--line-strong) 1px, transparent 1px);
+  background-size:22px 22px; opacity:.5;
+}
+.cv__edges{ position:absolute; inset:0; width:100%; height:100%; overflow:visible }
+.cve{ fill:none; stroke:var(--line-strong); stroke-width:2 }
+.cve--done{ stroke:var(--good) }
+.cve--live{ stroke:var(--brand); stroke-width:2.5; stroke-dasharray:7 6; animation:dash 900ms linear infinite }
+.cve--back{ stroke:var(--ink-4); stroke-dasharray:3 5; stroke-width:1.5 }
+@keyframes dash{ to{ stroke-dashoffset:-26 } }
+@media (prefers-reduced-motion: reduce){ .cve--live{ animation:none } }
+
+.cvn{
+  /* fixed, not min: ports sit at 50% height, so a node that grows a line
+     taller drags its port off the edge that connects to it */
+  position:absolute; left:var(--x); top:var(--y); width:164px; height:142px;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);
+  padding:11px 12px; cursor:pointer; text-align:left;
+  box-shadow:var(--shadow-1);
+  transition:border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+}
+.cvn:hover{ transform:translateY(-2px); box-shadow:var(--shadow-2) }
+.cvn.is-sel{ border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-tint), var(--shadow-2) }
+.cvn__h{ display:flex; align-items:center; gap:9px; margin-bottom:7px }
+.cvn__ico{
+  width:26px; height:26px; border-radius:7px; flex:none;
+  display:grid; place-items:center; background:var(--sunken); color:var(--ink-3);
+}
+.cvn b{ font-size:14px; font-weight:640; color:var(--ink-1); letter-spacing:-.015em }
+.cvn p{ font-size:12.5px; color:var(--ink-3); line-height:1.4 }
+.cvn__st{
+  display:inline-flex; align-items:center; gap:5px; margin-top:9px;
+  font-family:'SplineMono',monospace; font-size:9.5px; letter-spacing:.09em;
+  text-transform:uppercase; padding:2px 7px; border-radius:var(--r-xs);
+  background:var(--sunken); color:var(--ink-3);
+}
+.cvn.is-done  .cvn__ico{ background:var(--good-tint); color:var(--good) }
+.cvn.is-done  .cvn__st{ background:var(--good-tint); color:var(--good) }
+.cvn.is-human{ border-color:var(--brand) }
+.cvn.is-human .cvn__ico{ background:var(--brand-tint); color:var(--brand) }
+.cvn.is-human .cvn__st{ background:var(--brand-tint); color:var(--brand) }
+.cvn.is-queued{ opacity:.72; border-style:dashed }
+
+.cvn__p{
+  position:absolute; width:9px; height:9px; border-radius:50%;
+  background:var(--surface); border:2px solid var(--line-strong);
+}
+.cvn__p--in{ left:-5px; top:50%; margin-top:-4.5px }
+.cvn__p--out{ right:-5px; top:50%; margin-top:-4.5px }
+.cvn__p--down{ bottom:-5px; left:50%; margin-left:-4.5px }
+.cvn.is-done .cvn__p{ border-color:var(--good) }
+.cvn.is-human .cvn__p{ border-color:var(--brand) }
+
+/* a quiet pulse marks the one node waiting on a person */
+.cvn.is-human::after{
+  content:''; position:absolute; inset:-5px; border-radius:calc(var(--r-md) + 4px);
+  border:1.5px solid var(--brand); opacity:0; pointer-events:none;
+  animation:gate 2.4s ease-out infinite;
+}
+@keyframes gate{ 0%{ opacity:.55; transform:scale(1) } 70%,100%{ opacity:0; transform:scale(1.035) } }
+@media (prefers-reduced-motion: reduce){ .cvn.is-human::after{ animation:none; opacity:.5 } }
+
+.cvbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--line-soft) }
+.cvbar__z{ display:flex; gap:2px; margin-left:auto; background:var(--sunken); padding:3px; border-radius:var(--r-pill) }
+.cvbar__z button{
+  border:0; background:transparent; cursor:pointer; width:28px; height:24px;
+  border-radius:var(--r-pill); color:var(--ink-3); font-size:14px; line-height:1;
+}
+.cvbar__z button:hover{ background:var(--surface); color:var(--ink-1) }
+
+.stages{ display:grid; gap:0; position:relative }
+.stage{ display:grid; grid-template-columns:30px 1fr; gap:14px; padding-bottom:22px; position:relative }
+.stage:last-child{ padding-bottom:0 }
+.stage::before{
+  content:''; position:absolute; left:14px; top:26px; bottom:0; width:2px; background:var(--line);
+}
+.stage:last-child::before{ display:none }
+.stage__d{
+  width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
+  background:var(--sunken); color:var(--ink-4); border:2px solid var(--surface);
+  position:relative; z-index:1; font-family:'SplineMono',monospace; font-size:11px; font-weight:600;
+}
+/* --good flips from dark to light between themes, so the glyph on top of
+   it needs a paired token rather than a hard-coded white */
+.stage.done .stage__d{ background:var(--good); color:var(--on-good) }
+.stage.now  .stage__d{ background:var(--brand); color:var(--on-brand) }
+.stage h4{ margin-bottom:3px }
+.stage p{ font-size:13.5px; color:var(--ink-3) }
+
+/* loading placeholder — a calm pulse, not a sweeping shimmer */
+.skel{
+  height:12px; border-radius:4px; background:var(--sunken);
+  margin-bottom:9px; animation:skel 1.5s ease-in-out infinite;
+}
+@keyframes skel{ 0%,100%{ opacity:1 } 50%{ opacity:.45 } }
+
+/* components reference */
+.spec{ padding-block:26px; border-bottom:1px solid var(--line) }
+.spec__h{ margin-bottom:18px }
+.swatches{ display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:12px }
+.sw2{ border:1px solid var(--line); border-radius:var(--r-sm); overflow:hidden; background:var(--surface) }
+.sw2__c{ height:60px }
+.sw2__l{ padding:9px 11px }
+.sw2__l b{ display:block; font-size:12.5px; color:var(--ink-1); font-weight:600 }
+.demorow{ display:flex; gap:10px; flex-wrap:wrap; align-items:center }
+
+@media(max-width:1080px){
+  .g4{ grid-template-columns:repeat(2,1fr) }
+  .g-wide,.g-side,.g2,.g3{ grid-template-columns:1fr }
+  .app{ grid-template-columns:1fr }
+  .side{ position:static; height:auto; border-right:0; border-bottom:1px solid var(--line) }
+  .side__g,.side__foot{ display:none }
+  .side__nav{ display:flex; gap:6px; overflow-x:auto; scrollbar-width:none }
+  .side__i{ width:auto; white-space:nowrap }
+  .side__i b{ display:none }
+  .result{ grid-template-columns:1fr }
+  .qrow{ grid-template-columns:28px 1fr; row-gap:6px }
+  .qrow__e,.qrow__v{ grid-column:2 }
+  .qrow__v{ justify-content:flex-start }
+}
+</style>
+
+<!-- ═══════════════════ SCAN ═══════════════════ -->
+<section class="screen" data-screen="scan">
+  <div class="scan">
+    <div class="scan__in">
+
+      <!-- state A · entry -->
+      <div class="state is-on" data-state="entry">
+        <span class="tag tag--brand">Free probe</span>
+        <h2>Which brand does the answer name?</h2>
+        <p class="lede scan__sub">Enter a domain. We infer your category, write 36 unbranded buyer
+        questions, and ask every configured engine each one.</p>
+        <form class="field" onsubmit="return false">
+          <input type="text" id="scanDomain" value="brightwave.io" aria-label="Your domain">
+          <button class="btn btn--primary" type="submit" id="scanGo">Run the probe</button>
+        </form>
+        <p class="tag" style="margin-top:16px">No signup · no card · answers kept verbatim</p>
+      </div>
+
+      <!-- state B · running -->
+      <div class="state" data-state="running">
+        <span class="tag tag--brand">Probing</span>
+        <h2 style="font-size:clamp(24px,2.6vw,34px)">Watch the reading build.</h2>
+        <p class="lede scan__sub">Each answer that comes back thickens the path to whichever brand it
+        named. Nothing is estimated — this is the reading assembling itself.</p>
+
+        <div class="probe">
+          <div class="probe__bar"><i id="probeBar"></i></div>
+          <div class="probe__meta">
+            <span class="tag" id="probeCount">0 of 36 answered</span>
+            <span class="tag" id="probeLeft">36 to go</span>
+          </div>
+
+          <div class="probe__viz"><svg id="probeSvg" viewBox="0 0 760 340" role="img"
+               aria-label="Live diagram of answers accumulating to each brand"></svg></div>
+
+          <div class="probe__now">
+            <span class="chip" id="probeEngine">Starting</span>
+            <span class="probe__q" id="probeQ">Preparing the tracked set…</span>
+            <span id="probeVerdict"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- state C · complete -->
+      <div class="state" data-state="done">
+        <span class="tag" style="color:var(--good)">Reading complete</span>
+        <h2 style="font-size:clamp(26px,3vw,40px)">15 of 36 answers named Brightwave.</h2>
+        <p class="lede scan__sub">The other 21 named a rival, or named nobody at all. That second
+        number is the one that moves.</p>
+
+        <div class="result">
+          <div class="stat">
+            <p class="stat__k">Share of AI</p>
+            <p class="stat__v is-you num"><span data-count="41">0</span><small>%</small></p>
+            <p class="stat__d up">▲ 11 pts vs. last</p>
+          </div>
+          <div class="stat">
+            <p class="stat__k">Rivals discovered</p>
+            <p class="stat__v num" data-count="7">0</p>
+            <p class="stat__d flat">3 newly seen</p>
+          </div>
+          <div class="stat">
+            <p class="stat__k">Sources cited</p>
+            <p class="stat__v num" data-count="64">0</p>
+            <p class="stat__d dn">only 6 are yours</p>
+          </div>
+        </div>
+
+        <div class="demorow" style="justify-content:center">
+          <button class="btn btn--primary" data-go="overview">Open the full report</button>
+          <button class="btn btn--ghost" id="scanAgain">Run another domain</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ APP ═══════════════════ -->
+<section class="screen" data-screen="app">
+  <div class="app">
+
+    <aside class="side">
+      <div class="side__brand">
+        <span class="wordmark__m">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M15.5 15.5L21 21"/></svg>
+        </span>
+        <span style="font-weight:640; font-size:16px; letter-spacing:-.035em; color:var(--ink-1)">perceev</span>
+      </div>
+
+      <p class="tag side__g">Reading</p>
+      <div class="side__nav">
+        <button class="side__i is-on" data-view="overview">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          Overview
+        </button>
+        <button class="side__i" data-view="answers">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          Answers <b>36</b>
+        </button>
+        <button class="side__i" data-view="rivals">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 00-3-3.87"/></svg>
+          Rivals <b>7</b>
+        </button>
+        <button class="side__i" data-view="sources">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7L12 5"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7"/></svg>
+          Sources <b>64</b>
+        </button>
+      </div>
+
+      <p class="tag side__g">Studio</p>
+      <div class="side__nav">
+        <button class="side__i" data-view="studio">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.6 6.6L21 10l-5 4.2L17.5 21 12 17.5 6.5 21 8 14.2 3 10l6.4-1.4z"/></svg>
+          Opportunities <b>9</b>
+        </button>
+      </div>
+
+      <div class="side__foot">
+        <p class="tag" style="margin-bottom:8px">Next reading</p>
+        <p style="font-size:13.5px; color:var(--ink-2)">In 71 hours · every 3 days</p>
+        <button class="btn btn--ghost btn--sm" style="width:100%; margin-top:12px">Change cadence</button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <div class="topbar">
+        <h4 id="viewTitle">Overview</h4>
+        <span class="chip chip--you">brightwave.io</span>
+        <span class="chip chip--good"><i class="chip__led"></i> Reading 06 complete</span>
+        <div class="seg">
+          <button class="is-on">30 days</button><button>90 days</button><button>All</button>
+        </div>
+      </div>
+
+      <div class="viewpad">
+
+        <!-- ── OVERVIEW ─────────────────────────────────────────── -->
+        <div class="view is-on" data-view="overview">
+          <div class="grid g4" style="margin-bottom:13px">
+            <div class="stat">
+              <p class="stat__k">Share of AI</p>
+              <p class="stat__v is-you num"><span data-count="41">0</span><small>%</small></p>
+              <p class="stat__d up">▲ 11.0 pts vs. reading 05</p>
+            </div>
+            <div class="stat">
+              <p class="stat__k">Answers naming you</p>
+              <p class="stat__v num"><span data-count="15">0</span><small>/36</small></p>
+              <p class="stat__d up">▲ 4 more</p>
+            </div>
+            <div class="stat">
+              <p class="stat__k">Rivals discovered</p>
+              <p class="stat__v num" data-count="7">0</p>
+              <p class="stat__d flat">3 new this reading</p>
+            </div>
+            <div class="stat">
+              <p class="stat__k">High-intent lost</p>
+              <p class="stat__v num" data-count="9">0</p>
+              <p class="stat__d up">▼ 2 fewer than last</p>
+            </div>
+          </div>
+
+          <div class="grid g-wide" style="margin-bottom:13px">
+            <div class="panel">
+              <div class="panel__h"><b>Share of AI over six readings</b><span class="tag">% of answers</span></div>
+              <div class="panel__b">
+                <svg class="chart" viewBox="0 0 620 190" role="img"
+                     aria-label="Share of AI rises from 22 to 41 percent while NorthPeak falls from 44 to 33 percent, crossing in August">
+                  <g stroke="var(--line-soft)" stroke-width="1">
+                    <line x1="34" y1="18" x2="612" y2="18"/><line x1="34" y1="56" x2="612" y2="56"/>
+                    <line x1="34" y1="94" x2="612" y2="94"/><line x1="34" y1="132" x2="612" y2="132"/>
+                  </g>
+                  <g font-family="SplineMono" font-size="10" fill="var(--ink-4)" text-anchor="end">
+                    <text x="26" y="21">50</text><text x="26" y="59">33</text>
+                    <text x="26" y="97">17</text><text x="26" y="135">0</text>
+                  </g>
+                  <path d="M50 30 L162 40 L274 52 L386 49 L498 62 L604 56"
+                        fill="none" stroke="var(--rival-1)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path class="draw" d="M50 118 L162 108 L274 92 L386 95 L498 68 L604 38"
+                        fill="none" stroke="var(--you)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="604" cy="38" r="4.5" fill="var(--you)"/>
+                  <g font-family="SplineMono" font-size="10" fill="var(--ink-4)" text-anchor="middle">
+                    <text x="50" y="158">MAR</text><text x="162" y="158">APR</text><text x="274" y="158">MAY</text>
+                    <text x="386" y="158">JUN</text><text x="498" y="158">JUL</text><text x="604" y="158">AUG</text>
+                  </g>
+                </svg>
+                <div class="legend" style="margin-top:6px">
+                  <span><i style="background:var(--you)"></i> Brightwave</span>
+                  <span><i style="background:var(--rival-1)"></i> NorthPeak</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel__h"><b>Who holds the answer</b><span class="tag">n = 36</span></div>
+              <div class="panel__b">
+                <div class="rows">
+                  <div class="row">
+                    <span class="row__n"><b>Brightwave</b><span class="chip chip--you">You</span></span>
+                    <span class="row__v">41%</span>
+                    <span class="row__bar"><i style="--w:0.41; background:var(--you)"></i></span>
+                  </div>
+                  <div class="row">
+                    <span class="row__n">NorthPeak</span><span class="row__v">33%</span>
+                    <span class="row__bar"><i style="--w:0.33; --d:80ms; background:var(--rival-1)"></i></span>
+                  </div>
+                  <div class="row">
+                    <span class="row__n">Lumen IQ</span><span class="row__v">17%</span>
+                    <span class="row__bar"><i style="--w:0.17; --d:160ms; background:var(--rival-2)"></i></span>
+                  </div>
+                  <div class="row">
+                    <span class="row__n dim">No brand named</span><span class="row__v">9%</span>
+                    <span class="row__bar"><i style="--w:0.09; --d:240ms; background:var(--rival-3)"></i></span>
+                  </div>
+                </div>
+                <p class="tag" style="margin-top:16px; text-transform:none; letter-spacing:.01em; line-height:1.5">
+                  Discovered from the answers themselves, never a list you maintain.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid g2">
+            <div class="panel">
+              <div class="panel__h"><b>Coverage by engine</b><span class="tag">12 questions each</span></div>
+              <div class="panel__b">
+                <div class="rows">
+                  <div class="row">
+                    <span class="row__n">ChatGPT</span><span class="row__v">6 / 12</span>
+                    <span class="row__bar"><i style="--w:0.50; background:var(--you)"></i></span>
+                  </div>
+                  <div class="row">
+                    <span class="row__n">Google AI Overview</span><span class="row__v">5 / 12</span>
+                    <span class="row__bar"><i style="--w:0.42; --d:80ms; background:var(--you)"></i></span>
+                  </div>
+                  <div class="row">
+                    <span class="row__n">Perplexity</span><span class="row__v">4 / 12</span>
+                    <span class="row__bar"><i style="--w:0.33; --d:160ms; background:var(--you)"></i></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel__h"><b>Highest-value gaps</b><span class="tag">9 open</span></div>
+              <div class="panel__b--flush">
+                <div class="qrow" data-go="answers">
+                  <span class="qrow__i">Q01</span>
+                  <span class="qrow__q">best EHR platform for a 200-bed hospital</span>
+                  <span class="qrow__e">AI Overview</span>
+                  <span class="qrow__v"><span class="chip">NorthPeak</span></span>
+                </div>
+                <div class="qrow" data-go="answers">
+                  <span class="qrow__i">Q07</span>
+                  <span class="qrow__q">NABH compliance software comparison</span>
+                  <span class="qrow__e">Perplexity</span>
+                  <span class="qrow__v"><span class="chip">NorthPeak</span></span>
+                </div>
+                <div class="qrow" data-go="answers">
+                  <span class="qrow__i">Q04</span>
+                  <span class="qrow__q">which analytics tools track clinical outcomes</span>
+                  <span class="qrow__e">Perplexity</span>
+                  <span class="qrow__v"><span class="chip">Lumen IQ</span></span>
+                </div>
+                <div class="qrow" data-go="answers">
+                  <span class="qrow__i">Q05</span>
+                  <span class="qrow__q">affordable HIMS for multi-specialty clinics</span>
+                  <span class="qrow__e">AI Overview</span>
+                  <span class="qrow__v"><span class="chip">No brand</span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── ANSWERS ──────────────────────────────────────────── -->
+        <div class="view" data-view="answers">
+          <div class="filters">
+            <button class="filter is-on">All 36</button>
+            <button class="filter">Named you · 15</button>
+            <button class="filter">Rival holds · 18</button>
+            <button class="filter">No brand · 3</button>
+            <button class="filter">High intent · 9</button>
+          </div>
+
+          <div class="grid g-side">
+            <div class="panel">
+              <div class="panel__h"><b>Every answer, as returned</b><span class="tag">Reading 06</span></div>
+              <div class="panel__b--flush" id="answerList"></div>
+              <div style="display:flex; align-items:center; gap:12px; padding:12px 16px; border-top:1px solid var(--line)">
+                <span class="tag" id="answerCount"></span>
+                <button class="btn btn--ghost btn--sm" style="margin-left:auto">Show the rest</button>
+              </div>
+            </div>
+
+            <div class="panel" style="align-self:start; position:sticky; top:76px">
+              <div class="panel__h"><b>Verbatim</b><span class="chip chip--warn">Rival first</span></div>
+              <div class="panel__b">
+                <p class="tag" style="margin-bottom:10px">Perplexity · 16 Aug 2026 · 09:14 IST</p>
+                <p style="font-size:15.5px; font-weight:600; color:var(--ink-1); letter-spacing:-.018em; line-height:1.35; margin-bottom:14px">
+                  “which analytics tools track clinical outcomes”
+                </p>
+                <p style="font-size:15px; line-height:1.8; color:var(--ink-2)">
+                  Clinical outcome analytics generally splits between registry-based reporting and
+                  real-time dashboards. <mark class="lit-you">Brightwave</mark> covers the dashboard
+                  side well for mid-size hospitals and is frequently named for readmission tracking.
+                  For registry submission and NABH-aligned reporting,
+                  <mark class="lit-rival">NorthPeak</mark> is cited more often.
+                </p>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:16px; padding-top:14px; border-top:1px solid var(--line-soft)">
+                  <span class="chip chip--you">You · mentioned</span>
+                  <span class="chip">4 sources</span>
+                  <span class="chip">1 of them yours</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── RIVALS ───────────────────────────────────────────── -->
+        <div class="view" data-view="rivals">
+          <div class="grid g-wide" style="margin-bottom:13px">
+            <div class="panel">
+              <div class="panel__h"><b>Every brand the engines named</b><span class="tag">7 discovered · 3 new</span></div>
+              <div class="panel__b">
+                <table class="tbl">
+                  <thead><tr><th>Brand</th><th>Answers</th><th>Share</th><th>Vs. last</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="nm"><i class="sw" style="background:var(--you)"></i> Brightwave <span class="chip chip--you">You</span></span></td>
+                      <td class="v">15</td><td class="v" style="color:var(--brand)">41%</td><td class="v up">▲ 11</td>
+                    </tr>
+                    <tr>
+                      <td><span class="nm"><i class="sw" style="background:var(--rival-1)"></i> NorthPeak</span></td>
+                      <td class="v">12</td><td class="v">33%</td><td class="v dn">▼ 11</td>
+                    </tr>
+                    <tr>
+                      <td><span class="nm"><i class="sw" style="background:var(--rival-2)"></i> Lumen IQ</span></td>
+                      <td class="v">6</td><td class="v">17%</td><td class="v flat">—</td>
+                    </tr>
+                    <tr>
+                      <td><span class="nm"><i class="sw" style="background:var(--rival-3)"></i> Vantage <span class="chip">New</span></span></td>
+                      <td class="v">4</td><td class="v">11%</td><td class="v flat">new</td>
+                    </tr>
+                    <tr>
+                      <td><span class="nm"><i class="sw" style="background:var(--rival-3)"></i> Coreset <span class="chip">New</span></span></td>
+                      <td class="v">3</td><td class="v">8%</td><td class="v flat">new</td>
+                    </tr>
+                    <tr>
+                      <td><span class="nm"><i class="sw" style="background:var(--rival-3)"></i> Pulse Metrics</span></td>
+                      <td class="v">2</td><td class="v">6%</td><td class="v dn">▼ 3</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel__h"><b>Head to head</b><span class="tag">vs. NorthPeak</span></div>
+              <div class="panel__b">
+                <div class="rows">
+                  <div class="row">
+                    <span class="row__n">Questions you both appear in</span><span class="row__v">8</span>
+                    <span class="row__bar"><i style="--w:0.66; background:var(--rival-2)"></i></span>
+                  </div>
+                  <div class="row">
+                    <span class="row__n">Only you</span><span class="row__v">7</span>
+                    <span class="row__bar"><i style="--w:0.58; --d:80ms; background:var(--you)"></i></span>
+                  </div>
+                  <div class="row">
+                    <span class="row__n">Only NorthPeak</span><span class="row__v">4</span>
+                    <span class="row__bar"><i style="--w:0.33; --d:160ms; background:var(--rival-1)"></i></span>
+                  </div>
+                </div>
+                <p style="font-size:13.5px; color:var(--ink-3); margin-top:16px; padding-top:14px; border-top:1px solid var(--line-soft); line-height:1.55">
+                  NorthPeak leads on compliance phrasing. You lead on outcome and analytics phrasing.
+                  The four it holds alone are all NABH-related.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SOURCES ──────────────────────────────────────────── -->
+        <div class="view" data-view="sources">
+          <div class="grid g4" style="margin-bottom:13px">
+            <div class="stat">
+              <p class="stat__k">Sources cited</p>
+              <p class="stat__v num" data-count="64">0</p>
+              <p class="stat__d flat">across 36 answers</p>
+            </div>
+            <div class="stat">
+              <p class="stat__k">Pages you control</p>
+              <p class="stat__v is-you num" data-count="6">0</p>
+              <p class="stat__d up">▲ 2 since last</p>
+            </div>
+            <div class="stat">
+              <p class="stat__k">Rival-owned</p>
+              <p class="stat__v num" data-count="11">0</p>
+              <p class="stat__d dn">NorthPeak holds 7</p>
+            </div>
+            <div class="stat">
+              <p class="stat__k">Third-party</p>
+              <p class="stat__v num" data-count="47">0</p>
+              <p class="stat__d flat">directories, forums, press</p>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel__h"><b>What the engines drew on</b><span class="tag">Ranked by citations</span></div>
+            <div class="panel__b--flush">
+              <div class="src" style="border-bottom:1px solid var(--line)">
+                <span class="tag">Domain</span><span class="tag" style="text-align:right">Cited</span><span class="tag" style="text-align:right">Owner</span>
+              </div>
+              <div class="src"><span class="src__d">g2.com</span><span class="row__v" style="text-align:right">9</span><span style="text-align:right"><span class="chip">Third party</span></span></div>
+              <div class="src"><span class="src__d">northpeak.com/compare</span><span class="row__v" style="text-align:right">7</span><span style="text-align:right"><span class="chip chip--crit">Rival</span></span></div>
+              <div class="src"><span class="src__d mine">brightwave.io/ehr</span><span class="row__v" style="text-align:right">6</span><span style="text-align:right"><span class="chip chip--you">Yours</span></span></div>
+              <div class="src"><span class="src__d">nabh.co</span><span class="row__v" style="text-align:right">6</span><span style="text-align:right"><span class="chip">Third party</span></span></div>
+              <div class="src"><span class="src__d">healthtech.in</span><span class="row__v" style="text-align:right">5</span><span style="text-align:right"><span class="chip">Third party</span></span></div>
+              <div class="src"><span class="src__d mine">brightwave.io/blog/readmission</span><span class="row__v" style="text-align:right">4</span><span style="text-align:right"><span class="chip chip--you">Yours</span></span></div>
+              <div class="src"><span class="src__d">capterra.com</span><span class="row__v" style="text-align:right">4</span><span style="text-align:right"><span class="chip">Third party</span></span></div>
+              <div class="src"><span class="src__d">reddit.com/r/healthIT</span><span class="row__v" style="text-align:right">3</span><span style="text-align:right"><span class="chip">Third party</span></span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── STUDIO ───────────────────────────────────────────── -->
+        <div class="view" data-view="studio">
+
+          <!-- the run itself, as a graph -->
+          <div class="panel" style="margin-bottom:13px">
+            <div class="cvbar">
+              <b style="font-size:14px; font-weight:600; color:var(--ink-1)">Content run · 0042</b>
+              <span class="chip chip--you">best EHR platform for a 200-bed hospital</span>
+              <span class="chip chip--warn"><i class="chip__led"></i> Waiting on you</span>
+              <div class="cvbar__z">
+                <button type="button" aria-label="Zoom out">−</button>
+                <button type="button" aria-label="Fit to view">⤢</button>
+                <button type="button" aria-label="Zoom in">+</button>
+              </div>
+            </div>
+
+            <div class="cv">
+              <div class="cv__stage">
+                <svg class="cv__edges" viewBox="0 0 1130 280" aria-hidden="true">
+                  <path class="cve cve--done" d="M178,127 L200,127"/>
+                  <path class="cve cve--done" d="M364,127 L386,127"/>
+                  <path class="cve cve--done" d="M550,127 L572,127"/>
+                  <path class="cve cve--live" d="M736,127 L758,127"/>
+                  <path class="cve" d="M922,127 L944,127"/>
+                  <!-- rejection path: the editor can send the draft back to the writer -->
+                  <path class="cve cve--back"
+                        d="M840,198 C840,228 840,250 800,250 L694,250 C656,250 654,228 654,198"/>
+                </svg>
+
+                <button class="cvn is-done" style="--x:14px; --y:56px" data-node="trigger">
+                  <div class="cvn__h">
+                    <span class="cvn__ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg></span>
+                    <b>Gap detected</b>
+                  </div>
+                  <p>Reading 06 · NorthPeak took this answer in two engines.</p>
+                  <span class="cvn__st">Trigger</span>
+                  <span class="cvn__p cvn__p--out"></span>
+                </button>
+
+                <button class="cvn is-done" style="--x:200px; --y:56px" data-node="researcher">
+                  <div class="cvn__h">
+                    <span class="cvn__ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5"/></svg></span>
+                    <b>Researcher</b>
+                  </div>
+                  <p>Read 4 cited sources and the winning rival page.</p>
+                  <span class="cvn__st">Done · 41s</span>
+                  <span class="cvn__p cvn__p--in"></span><span class="cvn__p cvn__p--out"></span>
+                </button>
+
+                <button class="cvn is-done" style="--x:386px; --y:56px" data-node="strategist">
+                  <div class="cvn__h">
+                    <span class="cvn__ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 4 3 5-7"/></svg></span>
+                    <b>Strategist</b>
+                  </div>
+                  <p>Chose bed-count sizing as the angle the answer rewards.</p>
+                  <span class="cvn__st">Done · 18s</span>
+                  <span class="cvn__p cvn__p--in"></span><span class="cvn__p cvn__p--out"></span>
+                </button>
+
+                <button class="cvn is-done" style="--x:572px; --y:56px" data-node="writer">
+                  <div class="cvn__h">
+                    <span class="cvn__ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></span>
+                    <b>Writer</b>
+                  </div>
+                  <p>Drafted 1,400 words with a sizing table.</p>
+                  <span class="cvn__st">Done · 2m 06s</span>
+                  <span class="cvn__p cvn__p--in"></span><span class="cvn__p cvn__p--out"></span>
+                  <span class="cvn__p cvn__p--down"></span>
+                </button>
+
+                <button class="cvn is-human is-sel" style="--x:758px; --y:56px" data-node="editor">
+                  <div class="cvn__h">
+                    <span class="cvn__ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+                    <b>Editor · you</b>
+                  </div>
+                  <p>Approve, or send back with a note. Nothing ships without it.</p>
+                  <span class="cvn__st">Waiting on you</span>
+                  <span class="cvn__p cvn__p--in"></span><span class="cvn__p cvn__p--out"></span>
+                  <span class="cvn__p cvn__p--down"></span>
+                </button>
+
+                <button class="cvn is-queued" style="--x:944px; --y:56px" data-node="measure">
+                  <div class="cvn__h">
+                    <span class="cvn__ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+                    <b>Publish &amp; measure</b>
+                  </div>
+                  <p>Ships, then watches this question next reading.</p>
+                  <span class="cvn__st">Queued</span>
+                  <span class="cvn__p cvn__p--in"></span>
+                </button>
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:10px; padding:12px 16px; border-top:1px solid var(--line-soft); flex-wrap:wrap">
+              <span class="tag">Five agents · one human gate</span>
+              <span class="tag" style="margin-left:auto">Scroll the canvas to pan</span>
+            </div>
+          </div>
+
+          <div class="grid g-side">
+            <div>
+              <div class="panel" style="margin-bottom:13px">
+                <div class="panel__h"><b>Opportunities from live gaps</b><span class="tag">9 open · ranked by intent</span></div>
+                <div class="panel__b" style="display:grid; gap:12px">
+
+                  <article class="opp">
+                    <div>
+                      <h4>Win “best EHR platform for a 200-bed hospital”</h4>
+                      <p>NorthPeak holds this in AI Overview and Perplexity on the strength of a
+                      comparison page. No page of yours addresses bed-count sizing directly.</p>
+                      <div class="opp__meta">
+                        <span class="chip chip--crit">Highest intent</span>
+                        <span class="chip">2 engines</span>
+                        <span class="chip">Held by NorthPeak</span>
+                      </div>
+                    </div>
+                    <button class="btn btn--primary btn--sm">Commission</button>
+                  </article>
+
+                  <article class="opp">
+                    <div>
+                      <h4>Win “NABH compliance software comparison”</h4>
+                      <p>The engines cite nabh.co and a rival comparison page. A compliance-mapping
+                      page would be the shortest route in.</p>
+                      <div class="opp__meta">
+                        <span class="chip chip--warn">High intent</span>
+                        <span class="chip">1 engine</span>
+                        <span class="chip">Held by NorthPeak</span>
+                      </div>
+                    </div>
+                    <button class="btn btn--ghost btn--sm">Commission</button>
+                  </article>
+
+                  <article class="opp">
+                    <div>
+                      <h4>Defend “which analytics tools track clinical outcomes”</h4>
+                      <p>You are named second here. Lumen IQ is gaining, and the answer cites one
+                      page of yours already.</p>
+                      <div class="opp__meta">
+                        <span class="chip chip--you">You appear</span>
+                        <span class="chip">Slipping</span>
+                      </div>
+                    </div>
+                    <button class="btn btn--ghost btn--sm">Commission</button>
+                  </article>
+
+                </div>
+                <div style="display:flex; align-items:center; gap:12px; padding-top:14px; margin-top:2px; border-top:1px solid var(--line)">
+                  <span class="tag">3 of 9 shown</span>
+                  <button class="btn btn--ghost btn--sm" style="margin-left:auto">Show the rest</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- inspector · reflects whichever node is selected on the canvas -->
+            <div class="panel" style="align-self:start; position:sticky; top:76px">
+              <div class="panel__h">
+                <b id="insTitle">Editor · you</b>
+                <span class="chip chip--warn" id="insState">Waiting on you</span>
+              </div>
+              <div class="panel__b">
+                <p class="tag" style="margin-bottom:8px">Selected node</p>
+                <p id="insDesc" style="font-size:14.5px; color:var(--ink-2); line-height:1.6; margin-bottom:18px">
+                  The one step no agent can take. Approve the draft and it publishes; send it back and
+                  the Writer picks it up again with your note attached.
+                </p>
+
+                <p class="tag" style="margin-bottom:10px">Output</p>
+                <div class="rows" id="insRows"></div>
+
+                <div class="demorow" style="margin-top:20px" id="insActions">
+                  <button class="btn btn--primary btn--sm">Review draft</button>
+                  <button class="btn btn--quiet btn--sm">Send back</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ COMPONENTS ═══════════════════ -->
+<section class="screen" data-screen="components">
+  <div style="background:var(--paper); min-height:100vh">
+    <div class="shell" style="padding-block:clamp(36px,5vw,64px) 110px; max-width:1100px">
+
+      <span class="tag tag--brand">Design system</span>
+      <h2 style="margin:16px 0 14px">Every part, in one place.</h2>
+      <p class="lede" style="max-width:56ch; color:var(--ink-3)">
+        The pieces the landing page and the product are both assembled from. Toggle the theme in the
+        switcher below to check every one against both grounds.
+      </p>
+
+      <!-- palette -->
+      <div class="spec" style="margin-top:34px">
+        <div class="spec__h">
+          <h3>Colour</h3>
+          <p class="dim" style="font-size:14.5px">Neutrals carry a slight indigo bias so they read as
+          chosen rather than inherited. Semantic colour is separate from the accent and never doubles as it.</p>
+        </div>
+        <div class="swatches">
+          <div class="sw2"><div class="sw2__c" style="background:var(--paper)"></div><div class="sw2__l"><b>Paper</b><span class="tag">--paper</span></div></div>
+          <div class="sw2"><div class="sw2__c" style="background:var(--surface)"></div><div class="sw2__l"><b>Surface</b><span class="tag">--surface</span></div></div>
+          <div class="sw2"><div class="sw2__c" style="background:var(--sunken)"></div><div class="sw2__l"><b>Sunken</b><span class="tag">--sunken</span></div></div>
+          <div class="sw2"><div class="sw2__c" style="background:var(--ink-1)"></div><div class="sw2__l"><b>Ink</b><span class="tag">--ink-1</span></div></div>
+          <div class="sw2"><div class="sw2__c" style="background:var(--brand)"></div><div class="sw2__l"><b>Brand</b><span class="tag">--brand</span></div></div>
+          <div class="sw2"><div class="sw2__c" style="background:var(--brand-lift)"></div><div class="sw2__l"><b>Brand lift</b><span class="tag">--brand-lift</span></div></div>
+          <div class="sw2"><div class="sw2__c" style="background:var(--good)"></div><div class="sw2__l"><b>Good</b><span class="tag">--good</span></div></div>
+          <div class="sw2"><div class="sw2__c" style="background:var(--warn)"></div><div class="sw2__l"><b>Caution</b><span class="tag">--warn</span></div></div>
+          <div class="sw2"><div class="sw2__c" style="background:var(--crit)"></div><div class="sw2__l"><b>Critical</b><span class="tag">--crit</span></div></div>
+          <div class="sw2"><div class="sw2__c" style="background:var(--navy)"></div><div class="sw2__l"><b>Navy</b><span class="tag">--navy</span></div></div>
+        </div>
+        <p class="tag" style="margin-top:16px; text-transform:none; letter-spacing:.01em; line-height:1.6">
+          Data roles: <span style="color:var(--you)">indigo is always you</span>, rivals ramp down the
+          neutral scale, and no brand named sits at the bottom. A rival never takes a semantic colour.
+        </p>
+        <div class="legend" style="margin-top:10px">
+          <span><i style="background:var(--you)"></i> You</span>
+          <span><i style="background:var(--rival-1)"></i> Rival 1</span>
+          <span><i style="background:var(--rival-2)"></i> Rival 2</span>
+          <span><i style="background:var(--rival-3)"></i> Rival 3</span>
+          <span><i style="background:var(--none)"></i> No brand</span>
+        </div>
+      </div>
+
+      <!-- type -->
+      <div class="spec">
+        <div class="spec__h">
+          <h3>Type</h3>
+          <p class="dim" style="font-size:14.5px">One variable family in three voices, plus a mono for
+          data and labels where digits must line up.</p>
+        </div>
+        <div style="display:grid; gap:20px">
+          <div>
+            <span class="tag">Display · Archivo 620 · −0.03em</span>
+            <p style="font-size:44px; font-weight:620; letter-spacing:-.03em; line-height:1.05; color:var(--ink-1); margin-top:6px">The answer names two brands.</p>
+          </div>
+          <div>
+            <span class="tag">Heading · Archivo 620 · 25px</span>
+            <h3 style="margin-top:6px">Who holds the answer</h3>
+          </div>
+          <div>
+            <span class="tag">Body · Archivo 400 · 17px / 1.65</span>
+            <p style="max-width:62ch; margin-top:6px">Every reading is backed by the text the engine
+            actually returned, marked where your name appears and where a rival took the recommendation
+            instead. Running text stays near 65 characters so the eye returns to the right line.</p>
+          </div>
+          <div>
+            <span class="tag">Data · Spline Sans Mono · tabular</span>
+            <p class="mono" style="font-size:16px; color:var(--ink-1); margin-top:6px">41.0%&nbsp;&nbsp;15/36&nbsp;&nbsp;₹40,000&nbsp;&nbsp;2026-08-16</p>
+          </div>
+          <div>
+            <span class="tag">Label · Spline Sans Mono · uppercase · 0.14em</span>
+            <div class="demorow" style="margin-top:8px">
+              <span class="tag">Reading 06</span>
+              <span class="tag">36 unbranded answers</span>
+              <span class="tag tag--brand">Answer-engine intelligence</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="spec">
+        <div class="spec__h"><h3>Controls</h3></div>
+        <div style="display:grid; gap:18px">
+          <div>
+            <span class="tag" style="display:block; margin-bottom:10px">Buttons</span>
+            <div class="demorow">
+              <button class="btn btn--primary">Run the probe</button>
+              <button class="btn btn--ghost">See a report</button>
+              <button class="btn btn--quiet">Sign in</button>
+              <button class="btn btn--primary btn--sm">Commission</button>
+              <button class="btn btn--ghost btn--sm">Send back</button>
+              <button class="btn btn--primary btn--lg">Start tracking</button>
+            </div>
+          </div>
+          <div>
+            <span class="tag" style="display:block; margin-bottom:10px">Status chips — form as well as colour, so state reads at a glance</span>
+            <div class="demorow">
+              <span class="chip chip--you">You · cited</span>
+              <span class="chip">NorthPeak</span>
+              <span class="chip chip--good"><i class="chip__led"></i> Reading complete</span>
+              <span class="chip chip--warn">Rival first</span>
+              <span class="chip chip--crit">Highest intent</span>
+            </div>
+          </div>
+          <div>
+            <span class="tag" style="display:block; margin-bottom:10px">Input</span>
+            <form class="field" style="max-width:420px" onsubmit="return false">
+              <input type="text" placeholder="yourcompany.com" aria-label="Domain example">
+              <button class="btn btn--primary" type="submit">Run</button>
+            </form>
+          </div>
+          <div>
+            <span class="tag" style="display:block; margin-bottom:10px">Segmented control and filters</span>
+            <div class="demorow">
+              <div class="seg" style="margin-left:0"><button class="is-on">30 days</button><button>90 days</button><button>All</button></div>
+              <div class="filters" style="margin-bottom:0">
+                <button class="filter is-on">All 36</button>
+                <button class="filter">Named you</button>
+                <button class="filter">Rival holds</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- data display -->
+      <div class="spec">
+        <div class="spec__h">
+          <h3>Data display</h3>
+          <p class="dim" style="font-size:14.5px">Charts get the same care as type: a faint grid, an
+          emphasised endpoint, tabular figures, and a legend that names real brands.</p>
+        </div>
+        <div class="grid g3" style="margin-bottom:13px">
+          <div class="stat">
+            <p class="stat__k">Share of AI</p>
+            <p class="stat__v is-you num">41<small>%</small></p>
+            <p class="stat__d up">▲ 11.0 pts</p>
+          </div>
+          <div class="stat">
+            <p class="stat__k">Rivals discovered</p>
+            <p class="stat__v num">7</p>
+            <p class="stat__d flat">3 new this reading</p>
+          </div>
+          <div class="stat">
+            <p class="stat__k">High-intent lost</p>
+            <p class="stat__v num">9</p>
+            <p class="stat__d dn">▼ 2 fewer</p>
+          </div>
+        </div>
+        <div class="grid g2">
+          <div class="panel">
+            <div class="panel__h"><b>Share bars</b><span class="tag">n = 36</span></div>
+            <div class="panel__b">
+              <div class="rows">
+                <div class="row">
+                  <span class="row__n"><b>Brightwave</b><span class="chip chip--you">You</span></span>
+                  <span class="row__v">41%</span>
+                  <span class="row__bar"><i style="--w:0.41; background:var(--you)"></i></span>
+                </div>
+                <div class="row">
+                  <span class="row__n">NorthPeak</span><span class="row__v">33%</span>
+                  <span class="row__bar"><i style="--w:0.33; --d:80ms; background:var(--rival-1)"></i></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel__h"><b>Table</b><span class="tag">Right-aligned numerics</span></div>
+            <div class="panel__b">
+              <table class="tbl">
+                <thead><tr><th>Brand</th><th>Answers</th><th>Share</th></tr></thead>
+                <tbody>
+                  <tr><td><span class="nm"><i class="sw" style="background:var(--you)"></i> Brightwave</span></td><td class="v">15</td><td class="v" style="color:var(--brand)">41%</td></tr>
+                  <tr><td><span class="nm"><i class="sw" style="background:var(--rival-1)"></i> NorthPeak</span></td><td class="v">12</td><td class="v">33%</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- states -->
+      <div class="spec">
+        <div class="spec__h">
+          <h3>The states that are usually forgotten</h3>
+          <p class="dim" style="font-size:14.5px">A reading can be empty, still running, or refused by
+          an engine. Each says what happened and what to do about it.</p>
+        </div>
+        <div class="grid g3">
+          <div class="panel">
+            <div class="panel__b" style="text-align:center; padding:34px 20px">
+              <div style="width:38px; height:38px; border-radius:50%; background:var(--sunken); display:grid; place-items:center; margin:0 auto 14px">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M16 16l5 5"/></svg>
+              </div>
+              <h4 style="margin-bottom:6px">No readings yet</h4>
+              <p style="font-size:13.5px; color:var(--ink-3); margin-bottom:16px">Run your first probe and
+              the trend starts building from it.</p>
+              <button class="btn btn--ghost btn--sm" data-go="scan">Run a probe</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel__b" style="padding:26px 20px">
+              <p class="tag" style="margin-bottom:14px">Loading</p>
+              <div class="skel" style="width:70%"></div>
+              <div class="skel" style="width:92%"></div>
+              <div class="skel" style="width:54%"></div>
+              <div class="skel" style="height:44px; margin-top:14px"></div>
+            </div>
+          </div>
+          <div class="panel" style="border-color:var(--crit)">
+            <div class="panel__b" style="padding:26px 20px">
+              <span class="chip chip--crit" style="margin-bottom:12px">Engine unreachable</span>
+              <h4 style="margin:10px 0 6px">Perplexity did not answer 3 questions</h4>
+              <p style="font-size:13.5px; color:var(--ink-3); margin-bottom:16px">Those three are excluded
+              from this reading's share, so the number stays comparable. They retry on the next run.</p>
+              <button class="btn btn--ghost btn--sm">See which three</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- motion -->
+      <div class="spec" style="border-bottom:0">
+        <div class="spec__h">
+          <h3>Motion</h3>
+          <p class="dim" style="font-size:14.5px">Four movements, each tied to something real. Everything
+          collapses to a single state change under reduced motion.</p>
+        </div>
+        <div class="rows" style="max-width:640px">
+          <div class="row"><span class="row__n"><b>Reveal on scroll</b></span><span class="row__v">620ms</span></div>
+          <div class="row"><span class="row__n"><b>Count to a number</b></span><span class="row__v">900ms</span></div>
+          <div class="row"><span class="row__n"><b>Draw a trend line</b></span><span class="row__v">1200ms</span></div>
+          <div class="row"><span class="row__n"><b>Change screen</b></span><span class="row__v">380ms</span></div>
+        </div>
+        <p class="tag" style="margin-top:16px; text-transform:none; letter-spacing:.01em">
+          Easing is cubic-bezier(.22,.68,0,1) throughout — one curve, so nothing feels borrowed.
+        </p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   Prototype behaviour
+   ═══════════════════════════════════════════════════════════════ */
+const RM = matchMedia('(prefers-reduced-motion: reduce)');
+
+/* Arm the reveal styles only now that script is running, so a script
+   failure leaves a fully readable page rather than a blank one. */
+document.documentElement.classList.add('js-anim');
+
+/* ── router ───────────────────────────────────────────────────────
+   The five product views live inside one app shell, exactly as they do
+   in the real product, so the sidebar is real navigation rather than a
+   picture of navigation. */
+const APP_VIEWS = ['overview','answers','rivals','sources','studio'];
+const VIEW_TITLE = {
+  overview:'Overview', answers:'Answers', rivals:'Rivals',
+  sources:'Sources', studio:'Opportunities'
+};
+
+function setView(view){
+  document.querySelectorAll('.view').forEach(v =>
+    v.classList.toggle('is-on', v.dataset.view === view));
+  document.querySelectorAll('.side__i').forEach(b =>
+    b.classList.toggle('is-on', b.dataset.view === view));
+  const t = document.getElementById('viewTitle');
+  if(t) t.textContent = VIEW_TITLE[view] || view;
+  const pane = document.querySelector(`.view[data-view="${view}"]`);
+  if(pane) requestAnimationFrame(() => sweepReveals(pane));
+}
+
+function go(name){
+  const isView = APP_VIEWS.includes(name);
+  const screenName = isView ? 'app' : name;
+  const target = document.querySelector(`.screen[data-screen="${screenName}"]`);
+  if(!target) return;
+
+  document.querySelectorAll('.screen').forEach(s =>
+    s.classList.toggle('is-active', s === target));
+  document.querySelectorAll('.proto__b[data-go]').forEach(b =>
+    b.classList.toggle('is-on', b.dataset.go === name));
+
+  window.scrollTo({ top:0, behavior:'auto' });
+  if(isView) setView(name);
+  requestAnimationFrame(() => sweepReveals(target));
+  if(name === 'scan') resetScan();
+}
+
+document.addEventListener('click', e => {
+  const nav = e.target.closest('[data-view]');
+  if(nav && nav.classList.contains('side__i')){ setView(nav.dataset.view); return; }
+  const t = e.target.closest('[data-go]');
+  if(!t) return;
+  e.preventDefault();
+  go(t.dataset.go);
+});
+
+/* segmented controls and filter pills behave like real controls */
+document.addEventListener('click', e => {
+  const b = e.target.closest('.seg button, .filter');
+  if(!b) return;
+  const group = b.closest('.seg, .filters');
+  group.querySelectorAll('.seg button, .filter').forEach(x => x.classList.remove('is-on'));
+  b.classList.add('is-on');
+});
+
+/* answers list rows select, and drive the verbatim panel beside them */
+document.addEventListener('click', e => {
+  const r = e.target.closest('#answerList .qrow');
+  if(!r) return;
+  document.querySelectorAll('#answerList .qrow').forEach(x => x.classList.remove('is-sel'));
+  r.classList.add('is-sel');
+});
+
+/* ── theme toggle ─────────────────────────────────────────────── */
+document.getElementById('themeBtn').addEventListener('click', () => {
+  const root = document.documentElement;
+  const dark = root.getAttribute('data-theme') === 'dark'
+    || (!root.hasAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+  root.setAttribute('data-theme', dark ? 'light' : 'dark');
+});
+
+/* ── scroll reveals ───────────────────────────────────────────── */
+const io = new IntersectionObserver(entries => {
+  entries.forEach(en => {
+    if(en.isIntersecting){ en.target.classList.add('is-in'); io.unobserve(en.target); }
+  });
+}, { rootMargin:'0px 0px -8% 0px', threshold:.06 });
+
+/* ?stills=1 settles every reveal immediately — used to capture whole-page
+   stills for review, where nothing ever scrolls into view */
+const STILLS = new URLSearchParams(location.search).has('stills');
+
+function observeReveals(scope=document){
+  if(STILLS){
+    scope.querySelectorAll('.reveal').forEach(el => el.classList.add('is-in'));
+    countUp(scope); drawCharts(scope);
+    return;
+  }
+  scope.querySelectorAll('.reveal:not(.is-in)').forEach(el => io.observe(el));
+}
+/* a screen that was display:none has no rect, so anything already in
+   view when it appears needs one manual sweep */
+function sweepReveals(scope){
+  scope.querySelectorAll('.reveal:not(.is-in)').forEach(el => {
+    const r = el.getBoundingClientRect();
+    if(STILLS || r.top < innerHeight * 0.95) el.classList.add('is-in');
+    else io.observe(el);
+  });
+  countUp(scope);
+  drawCharts(scope);
+}
+observeReveals();
+
+/* ── count-up ─────────────────────────────────────────────────── */
+function countUp(scope=document){
+  scope.querySelectorAll('[data-count]:not([data-counted])').forEach(el => {
+    el.setAttribute('data-counted','1');
+    const to = parseFloat(el.dataset.count);
+    const dp = (el.dataset.count.split('.')[1] || '').length;
+    if(RM.matches){ el.textContent = to.toFixed(dp); return; }
+    const dur = 900, t0 = performance.now();
+    const tick = now => {
+      const p = Math.min(1, (now - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      el.textContent = (to * e).toFixed(dp);
+      if(p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+/* ── chart line draw-in ───────────────────────────────────────── */
+function drawCharts(scope=document){
+  scope.querySelectorAll('.draw:not([data-drawn])').forEach(p => {
+    p.setAttribute('data-drawn','1');
+    if(RM.matches) return;
+    const len = p.getTotalLength();
+    p.style.strokeDasharray = len;
+    p.style.strokeDashoffset = len;
+    p.getBoundingClientRect();
+    p.style.transition = 'stroke-dashoffset 1200ms cubic-bezier(.22,.68,0,1)';
+    p.style.strokeDashoffset = '0';
+  });
+}
+
+/* ── hero answer sheet: the engine's text arriving and being marked ── */
+const SHEET = [
+  { t:'Clinical outcome analytics generally splits between registry-based reporting and real-time dashboards. ' },
+  { t:'Brightwave', mark:'you' },
+  { t:' covers the dashboard side well for mid-size hospitals and is frequently named for readmission tracking. For registry submission and NABH-aligned reporting, ' },
+  { t:'NorthPeak', mark:'rival' },
+  { t:' is cited more often, particularly by Indian implementation partners.' }
+];
+(function typeSheet(){
+  const host = document.getElementById('sheetA');
+  if(!host) return;
+
+  if(RM.matches){
+    host.innerHTML = SHEET.map(s =>
+      s.mark ? `<mark class="lit-${s.mark}">${s.t}</mark>` : s.t).join('');
+    return;
+  }
+
+  const caret = document.createElement('span');
+  caret.className = 'caret';
+  host.appendChild(caret);
+
+  let seg = 0, ch = 0, node = null;
+  const step = () => {
+    if(seg >= SHEET.length){ caret.remove(); return; }
+    const s = SHEET[seg];
+    if(!node){
+      node = s.mark ? document.createElement('mark') : document.createElement('span');
+      if(s.mark) node.dataset.pending = s.mark;
+      host.insertBefore(node, caret);
+    }
+    node.textContent = s.t.slice(0, ++ch);
+    if(ch >= s.t.length){
+      /* a brand name only lights once it is completely written */
+      if(s.mark) node.className = 'lit-' + s.mark;
+      seg++; ch = 0; node = null;
+      setTimeout(step, s.mark ? 260 : 40);
+    } else {
+      setTimeout(step, s.mark ? 34 : 11);
+    }
+  };
+  setTimeout(step, 700);
+})();
+
+/* ── the tracked set, shared by the scan log and the answers list ── */
+const QUESTIONS = [
+  ['best EHR platform for a 200-bed hospital',            'AI Overview', 'r1'],
+  ['how do mid-size hospitals cut readmission rates',     'Perplexity',  'you'],
+  ['top patient engagement software in India',            'ChatGPT',     'you'],
+  ['which analytics tools track clinical outcomes',       'Perplexity',  'r2'],
+  ['affordable HIMS for multi-specialty clinics',         'AI Overview', 'none'],
+  ['vendors for hospital revenue cycle automation',       'ChatGPT',     'you'],
+  ['NABH compliance software comparison',                 'Perplexity',  'r1'],
+  ['teleconsultation platforms for tier-2 cities',        'AI Overview', 'you'],
+  ['how to reduce OT turnaround time',                    'ChatGPT',     'r1'],
+  ['hospital inventory management best practices',        'Perplexity',  'you'],
+  ['patient no-show reduction tools',                     'AI Overview', 'r2'],
+  ['best way to benchmark clinical quality metrics',      'ChatGPT',     'you'],
+  ['ICU capacity planning software',                      'Perplexity',  'r1'],
+  ['electronic prescribing systems for Indian hospitals', 'AI Overview', 'you'],
+  ['how do hospitals measure length of stay',             'ChatGPT',     'r1'],
+  ['clinical decision support tools comparison',          'Perplexity',  'you'],
+];
+const HOLDER_LABEL = { you:'You', r1:'NorthPeak', r2:'Lumen IQ', none:'No brand' };
+const HOLDER_CHIP  = { you:'chip chip--you', r1:'chip', r2:'chip', none:'chip' };
+
+/* ── answers list ─────────────────────────────────────────────── */
+(function buildAnswers(){
+  const host = document.getElementById('answerList');
+  if(!host) return;
+  QUESTIONS.forEach(([q, engine, holder], i) => {
+    const row = document.createElement('div');
+    row.className = 'qrow' + (i === 3 ? ' is-sel' : '');
+    row.innerHTML =
+      `<span class="qrow__i">Q${String(i+1).padStart(2,'0')}</span>` +
+      `<span class="qrow__q">${q}</span>` +
+      `<span class="qrow__e">${engine}</span>` +
+      `<span class="qrow__v"><span class="${HOLDER_CHIP[holder]}">${HOLDER_LABEL[holder]}</span></span>`;
+    host.appendChild(row);
+  });
+  /* the tracked set is 36; say how many of them are on screen rather than
+     letting the filter's "All 36" contradict the visible rows */
+  const count = document.getElementById('answerCount');
+  if(count) count.textContent = `${QUESTIONS.length} of 36 shown`;
+})();
+
+/* ── capability deck ──────────────────────────────────────────────
+   Scroll drives it. The section is taller than the viewport and the
+   panel inside pins, so travel through that extra height maps onto the
+   slide index — scroll down and it advances, scroll back and it
+   reverses. No timers and no click-stepping. */
+(function deck(){
+  const sec  = document.getElementById('work');
+  const root = document.getElementById('deck');
+  if(!sec || !root) return;
+
+  const slides = [...root.querySelectorAll('.wcard')];
+  const N = slides.length;
+  let current = -1;
+
+  /* the pin is dropped below this width, and the cards just stack */
+  const pinned = () =>
+    matchMedia('(min-width:961px)').matches && !RM.matches;
+
+  function show(i){
+    if(i === current) return;
+    current = i;
+    slides.forEach((s, k) => {
+      s.classList.toggle('is-on',   k === i);
+      s.classList.toggle('is-prev', k <  i);
+      s.classList.toggle('is-next', k >  i);
+    });
+  }
+
+  function onScroll(){
+    if(!pinned()){ show(0); return; }
+    const top   = sec.getBoundingClientRect().top;
+    const range = sec.offsetHeight - innerHeight;
+    if(range <= 0) return;
+    const p = Math.min(1, Math.max(0, -top / range));
+    /* p spans the whole section, so the index is which quarter we are in */
+    show(Math.min(N - 1, Math.floor(p * N)));
+  }
+
+  addEventListener('scroll', onScroll, { passive:true });
+  addEventListener('resize', onScroll);
+  onScroll();
+})();
+
+/* ── agent canvas → inspector ─────────────────────────────────── */
+const NODES = {
+  trigger: {
+    title:'Gap detected', state:'Trigger', chip:'chip',
+    desc:'Reading 06 found that NorthPeak took this answer in two of the three engines, on the strength of a comparison page. No page of yours addresses bed-count sizing.',
+    rows:[['Question','best EHR platform for a 200-bed hospital'],['Engines lost','AI Overview, Perplexity'],['Intent','Highest']],
+    actions:'<button class="btn btn--ghost btn--sm">Open the answer</button>'
+  },
+  researcher: {
+    title:'Researcher', state:'Done · 41s', chip:'chip chip--good',
+    desc:'Reads every source the engines actually cited for this question, plus the rival page that is winning it, and extracts what the answer rewards.',
+    rows:[['Sources read','4'],['Rival pages','1'],['Runtime','41s']],
+    actions:'<button class="btn btn--ghost btn--sm">See what it read</button>'
+  },
+  strategist: {
+    title:'Strategist', state:'Done · 18s', chip:'chip chip--good',
+    desc:'Picks the angle. Here it chose bed-count sizing, because every answer that named a rival organised itself around hospital size rather than feature lists.',
+    rows:[['Angle','Bed-count sizing'],['Rejected','Feature comparison'],['Runtime','18s']],
+    actions:'<button class="btn btn--ghost btn--sm">See the reasoning</button>'
+  },
+  writer: {
+    title:'Writer', state:'Done · 2m 06s', chip:'chip chip--good',
+    desc:'Drafts against the chosen angle, with the cited sources in context. It never invents a claim it cannot attribute to something the Researcher read.',
+    rows:[['Words','1,400'],['Tables','1 sizing table'],['Citations','4']],
+    actions:'<button class="btn btn--ghost btn--sm">Read the draft</button>'
+  },
+  editor: {
+    title:'Editor · you', state:'Waiting on you', chip:'chip chip--warn',
+    desc:'The one step no agent can take. Approve the draft and it publishes; send it back and the Writer picks it up again with your note attached.',
+    rows:[['Draft','1,400 words · ready'],['Waiting since','2h 14m'],['Blocks','Publish & measure']],
+    actions:'<button class="btn btn--primary btn--sm">Review draft</button><button class="btn btn--quiet btn--sm">Send back</button>'
+  },
+  measure: {
+    title:'Publish & measure', state:'Queued', chip:'chip',
+    desc:'Ships the approved page, then watches this exact question on the next reading. If it flips from NorthPeak to you, the run is what moved it.',
+    rows:[['Runs after','Your approval'],['Watches','Q01 · all engines'],['Next reading','In 71 hours']],
+    actions:'<button class="btn btn--ghost btn--sm" disabled style="opacity:.5;cursor:not-allowed">Waiting on approval</button>'
+  }
+};
+
+function selectNode(key){
+  const n = NODES[key];
+  if(!n) return;
+  document.querySelectorAll('.cvn').forEach(b => b.classList.toggle('is-sel', b.dataset.node === key));
+  document.getElementById('insTitle').textContent = n.title;
+  const st = document.getElementById('insState');
+  st.className = n.chip;
+  st.textContent = n.state;
+  document.getElementById('insDesc').textContent = n.desc;
+  document.getElementById('insRows').innerHTML = n.rows.map(([k,v]) =>
+    `<div class="row"><span class="row__n">${k}</span><span class="row__v">${v}</span></div>`).join('');
+  document.getElementById('insActions').innerHTML = n.actions;
+}
+
+document.addEventListener('click', e => {
+  const node = e.target.closest('.cvn');
+  if(node) selectNode(node.dataset.node);
+});
+selectNode('editor');
+
+/* ── scan flow ────────────────────────────────────────────────────
+   The 36 verdicts are fixed so the animation lands exactly on the
+   numbers every other surface quotes: 15 you, 12 NorthPeak, 6 Lumen IQ,
+   3 with no brand named. */
+const SCAN_VERDICTS = [
+  'r1','you','you','r2','none','you','r1','you','r1','you','r2','you',
+  'r1','you','r1','r2','you','you','none','r1','you','r1','r2','you',
+  'r1','you','r2','none','r1','you','r1','you','r2','you','r1','r1'
+];
+const ORDER  = ['you','r1','r2','none'];
+const FILL   = { you:'var(--you)', r1:'var(--rival-1)', r2:'var(--rival-2)', none:'var(--rival-3)' };
+const NAMED  = { you:'Brightwave', r1:'NorthPeak', r2:'Lumen IQ', none:'No brand named' };
+
+let scanTimer = null;
+
+function scanState(name){
+  document.querySelectorAll('.scan .state').forEach(s =>
+    s.classList.toggle('is-on', s.dataset.state === name));
+}
+
+/* Redraws the whole diagram from the running tally. Left column is the
+   tracked set draining; right nodes are the brands filling. */
+function drawProbe(counts, answered){
+  const svg = document.getElementById('probeSvg');
+  if(!svg) return;
+  const TOTAL = 36, H = 240, U = H / TOTAL;
+  const LX = 6, W = 12, RX = 470, CX = 240, LY0 = 28, RY0 = 24, GAP = 22;
+  const LABEL_MIN = 40;   // two-line labels collide below this spacing
+
+  let ly = LY0, ry = RY0, out = '';
+
+  // labels down the left, then each brand's ribbon and node
+  out += `<text x="${LX}" y="18" font-family="SplineMono" font-size="10"
+          letter-spacing="1.4" fill="var(--ink-3)">TRACKED SET · ${TOTAL}</text>`;
+
+  const bands = [];
+  ORDER.forEach(k => {
+    const n = counts[k] || 0;
+    const lh = n * U;
+    const rh = n * U;
+    if(n > 0){
+      bands.push({ k, n, l0: ly, l1: ly + lh, r0: ry, r1: ry + rh });
+      ly += lh;
+      ry += rh + GAP;
+    }
+  });
+
+  // what is still unanswered sits at the foot of the left column
+  const restH = (TOTAL - answered) * U;
+  out += `<rect x="${LX}" y="${ly}" width="${W}" height="${Math.max(0, restH)}"
+          rx="3" fill="var(--ink-1)" opacity=".12" class="probe__seg"/>`;
+
+  let lastLabel = -Infinity;
+  bands.forEach(b => {
+    out += `<path class="probe__rib" fill="${FILL[b.k]}"
+            opacity="${b.k === 'you' ? .6 : .42}"
+            d="M${LX + W},${b.l0} C${CX},${b.l0} ${CX},${b.r0} ${RX},${b.r0}
+               L${RX},${b.r1} C${CX},${b.r1} ${CX},${b.l1} ${LX + W},${b.l1} Z"/>`;
+    out += `<rect class="probe__seg" x="${LX}" y="${b.l0}" width="${W}"
+            height="${b.l1 - b.l0}" rx="3" fill="${FILL[b.k]}"/>`;
+    out += `<rect class="probe__node" x="${RX}" y="${b.r0}" width="${W}"
+            height="${b.r1 - b.r0}" rx="3" fill="${FILL[b.k]}"/>`;
+
+    /* a band of two or three answers is thinner than its own label, so the
+       label is pushed clear rather than allowed to sit on its neighbour */
+    let cy = b.r0 + (b.r1 - b.r0) / 2;
+    if(cy - lastLabel < LABEL_MIN) cy = lastLabel + LABEL_MIN;
+    lastLabel = cy;
+
+    out += `<text x="${RX + 26}" y="${cy - 2}" font-size="15" font-weight="620"
+            letter-spacing="-.2" fill="var(--ink-1)">${NAMED[b.k]}</text>`;
+    out += `<text x="${RX + 26}" y="${cy + 16}" font-family="SplineMono" font-size="11"
+            fill="${b.k === 'you' ? 'var(--brand)' : 'var(--ink-3)'}">${b.n} ANSWERS</text>`;
+  });
+
+  svg.innerHTML = out;
+}
+
+function resetScan(){
+  clearInterval(scanTimer);
+  scanState('entry');
+  const bar = document.getElementById('probeBar');
+  if(bar){ bar.style.transition = 'none'; bar.style.transform = 'scaleX(0)'; }
+  const c = document.getElementById('probeCount'), l = document.getElementById('probeLeft');
+  if(c) c.textContent = '0 of 36 answered';
+  if(l) l.textContent = '36 to go';
+  const e = document.getElementById('probeEngine'), q = document.getElementById('probeQ'),
+        v = document.getElementById('probeVerdict');
+  if(e) e.textContent = 'Starting';
+  if(q) q.textContent = 'Preparing the tracked set…';
+  if(v) v.innerHTML = '';
+  drawProbe({ you:0, r1:0, r2:0, none:0 }, 0);
+  document.querySelectorAll('[data-screen="scan"] [data-counted]')
+    .forEach(el => el.removeAttribute('data-counted'));
+}
+
+function runScan(){
+  /* a second click must not stack a second interval on the first */
+  clearInterval(scanTimer);
+  scanState('running');
+
+  const bar = document.getElementById('probeBar');
+  const counts = { you:0, r1:0, r2:0, none:0 };
+  let done = 0;
+  const TOTAL = 36;
+  const stepMs = RM.matches ? 24 : 190;
+
+  bar.style.transition = 'none';
+  bar.style.transform = 'scaleX(0)';
+  bar.getBoundingClientRect();
+  bar.style.transition = 'transform 300ms linear';
+  drawProbe(counts, 0);
+
+  scanTimer = setInterval(() => {
+    done++;
+    const holder = SCAN_VERDICTS[done - 1];
+    counts[holder]++;
+
+    bar.style.transform = `scaleX(${done / TOTAL})`;
+    document.getElementById('probeCount').textContent = `${done} of ${TOTAL} answered`;
+    document.getElementById('probeLeft').textContent =
+      done === TOTAL ? 'complete' : `${TOTAL - done} to go`;
+
+    const [q, engine] = QUESTIONS[(done - 1) % QUESTIONS.length];
+    document.getElementById('probeEngine').textContent = engine;
+    document.getElementById('probeQ').textContent = q;
+    document.getElementById('probeVerdict').innerHTML =
+      `<span class="${HOLDER_CHIP[holder]}">${HOLDER_LABEL[holder]}</span>`;
+
+    drawProbe(counts, done);
+
+    if(done >= TOTAL){
+      clearInterval(scanTimer);
+      setTimeout(() => {
+        scanState('done');
+        countUp(document.querySelector('[data-state="done"]'));
+      }, 620);
+    }
+  }, stepMs);
+}
+
+document.getElementById('scanGo')?.addEventListener('click', runScan);
+document.getElementById('scanAgain')?.addEventListener('click', resetScan);
+drawProbe({ you:0, r1:0, r2:0, none:0 }, 0);
+</script>

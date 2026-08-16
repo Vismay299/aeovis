@@ -1,143 +1,94 @@
 'use client';
 
 /**
- * The answer, verbatim.
+ * The hero answer sheet.
  *
- * The product's second principle is to show the evidence rather than
- * describe it. So this is the engine's own text, arriving on the wire, with
- * the sections marked: your brand holds a lit lunar-white section, a rival
- * holding one reads occupied red. Synthetic demonstration answers.
+ * The product's characteristic act: an engine answer arriving verbatim and
+ * being marked up as it lands. A brand name only lights once it has been
+ * completely written, so the mark reads as a verdict rather than a highlight.
  */
 
-import { useEffect, useState } from 'react';
-import { useReducedMotion } from '@/lib/motion';
+import { useEffect, useRef, useState } from 'react';
 
-const ANSWERS = [
-  {
-    code: '1A02',
-    engine: 'perplexity',
-    q: 'how do mid-size hospitals cut readmission rates',
-    parts: [
-      { t: 'Hospitals in the 150–300 bed range typically combine discharge-planning workflows with post-acute monitoring. ' },
-      { t: 'Brightwave', you: true },
-      { t: ' is frequently named for outcome tracking at this scale, while ' },
-      { t: 'NorthPeak', rival: true },
-      { t: ' is cited more often for care-transition messaging.' },
-    ],
-  },
-  {
-    code: '1A05',
-    engine: 'ai overview',
-    q: 'affordable HIMS for multi-specialty clinics',
-    parts: [
-      { t: 'For multi-specialty clinics watching cost, buyers most often shortlist ' },
-      { t: 'Lumen IQ', rival: true },
-      { t: ' and ' },
-      { t: 'NorthPeak', rival: true },
-      { t: ', which both publish per-seat pricing. Deployment timelines of four to six weeks are typical.' },
-    ],
-  },
-  {
-    code: '1A04',
-    engine: 'chatgpt',
-    q: 'which analytics tools track clinical outcomes',
-    parts: [
-      { t: 'Clinical outcome analytics generally splits between registry-based reporting and real-time dashboards. ' },
-      { t: 'Brightwave', you: true },
-      { t: ' covers the dashboard side and is named alongside ' },
-      { t: 'Lumen IQ', rival: true },
-      { t: ' for benchmarking against peer institutions.' },
-    ],
-  },
+/* One segment per run of text. `mark` is the verdict the segment carries. */
+const SHEET = [
+  { t: 'Clinical outcome analytics generally splits between registry-based reporting and real-time dashboards. ' },
+  { t: 'Brightwave', mark: 'you' },
+  { t: ' covers the dashboard side well for mid-size hospitals and is frequently named for readmission tracking. For registry submission and NABH-aligned reporting, ' },
+  { t: 'NorthPeak', mark: 'rival' },
+  { t: ' is cited more often, particularly by Indian implementation partners.' },
 ];
 
-export const AnswerSheet = () => {
-  const reduced = useReducedMotion();
-  const [index, setIndex] = useState(0);
-  const [chars, setChars] = useState(0);
+const FULL = SHEET.map((s) => s.t.length);
+const TOTAL = FULL.reduce((a, b) => a + b, 0);
 
-  const answer = ANSWERS[index];
-  const full = answer.parts.map((p) => p.t).join('');
-
-  useEffect(() => {
-    setChars(0);
-  }, [index]);
+export function AnswerSheet() {
+  /* Written character count across the whole passage. One number drives both
+     which segment is being typed and how much of it exists. */
+  const [written, setWritten] = useState(0);
+  const [instant, setInstant] = useState(false);
+  const timer = useRef(null);
 
   useEffect(() => {
-    if (reduced) {
-      setChars(full.length);
-      const hold = setTimeout(() => setIndex((i) => (i + 1) % ANSWERS.length), 7000);
-      return () => clearTimeout(hold);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setInstant(true);
+      return undefined;
     }
-    if (chars >= full.length) {
-      const hold = setTimeout(() => setIndex((i) => (i + 1) % ANSWERS.length), 3600);
-      return () => clearTimeout(hold);
-    }
-    const t = setTimeout(() => setChars((c) => Math.min(full.length, c + 2)), 18);
-    return () => clearTimeout(t);
-  }, [chars, full.length, reduced, index]);
 
-  let remaining = chars;
-  const rendered = answer.parts.map((part, i) => {
-    if (remaining <= 0) return null;
-    const shown = Math.min(part.t.length, remaining);
-    remaining -= shown;
-    const text = part.t.slice(0, shown);
+    let n = 0;
+    const step = () => {
+      n += 1;
+      setWritten(n);
+      if (n >= TOTAL) return;
+      /* a brand name is typed slower, and the passage pauses on finishing one */
+      let seg = 0;
+      let acc = 0;
+      while (seg < FULL.length - 1 && acc + FULL[seg] < n) { acc += FULL[seg]; seg += 1; }
+      const inMark = Boolean(SHEET[seg].mark);
+      const justFinished = acc + FULL[seg] === n;
+      timer.current = setTimeout(step, justFinished ? (inMark ? 260 : 40) : (inMark ? 34 : 11));
+    };
+    timer.current = setTimeout(step, 700);
+    return () => clearTimeout(timer.current);
+  }, []);
 
-    if (part.you) {
-      return (
-        <mark key={i} className="lp-you">
-          {text}
-        </mark>
-      );
-    }
-    if (part.rival) {
-      return (
-        <span key={i} className="lp-rival">
-          {text}
-        </span>
-      );
-    }
-    return <span key={i}>{text}</span>;
-  });
+  const done = instant || written >= TOTAL;
+  let cursor = 0;
 
   return (
-    <div className="lp-sheet">
-      <div className="lp-sheet-head">
-        <span className="t-plate">
-          {answer.engine} · unbranded question {answer.code}
-        </span>
-        <span className="t-plate" style={{ marginLeft: 'auto' }}>
-          verbatim
+    <div className="sheet">
+      <div className="sheet__top">
+        <span className="chip">Perplexity</span>
+        <span className="tag">Unbranded question 04</span>
+        <span className="chip chip--good" style={{ marginLeft: 'auto' }}>
+          <i className="chip__led" /> Live
         </span>
       </div>
-
-      <p className="lp-sheet-q">&ldquo;{answer.q}&rdquo;</p>
-
-      <div className="lp-sheet-body" aria-live="polite">
-        {rendered}
-        {chars < full.length && (
-          <span className="caret-blink" style={{ color: 'var(--lamp-green)', fontWeight: 700 }}>
-            ▌
-          </span>
-        )}
-      </div>
-
-      <div className="lp-sheet-foot">
-        <span className="lp-legend">
-          <i className="lp-legend-you" />
-          your section
-        </span>
-        <span className="lp-legend">
-          <i className="lp-legend-rival" />
-          rival holds it
-        </span>
-        <span className="t-stamp" style={{ marginLeft: 'auto' }}>
-          demonstration · synthetic brands
-        </span>
+      <div className="sheet__body">
+        <p className="sheet__q">&ldquo;which analytics tools track clinical outcomes&rdquo;</p>
+        <p className="sheet__a">
+          {SHEET.map((s, i) => {
+            const start = cursor;
+            cursor += s.t.length;
+            const shown = instant ? s.t : s.t.slice(0, Math.max(0, Math.min(s.t.length, written - start)));
+            if (!shown) return null;
+            /* the mark only lights once the whole name is on the page */
+            const lit = instant || written >= cursor;
+            if (!s.mark) return <span key={i}>{shown}</span>;
+            return (
+              <mark key={i} className={lit ? `lit-${s.mark}` : undefined}>{shown}</mark>
+            );
+          })}
+          {!done && <span className="caret" />}
+        </p>
+        <div className="sheet__foot">
+          <span className="chip chip--you">You · mentioned</span>
+          <span className="chip">Rival cited first</span>
+          <span className="chip">4 sources</span>
+        </div>
       </div>
     </div>
   );
-};
+}
 
 export default AnswerSheet;

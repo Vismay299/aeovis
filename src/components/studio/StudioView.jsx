@@ -26,6 +26,45 @@ import { AgentsPanel } from "./AgentsPanel";
 import { OpportunitiesPanel } from "./OpportunitiesPanel";
 import { KnowledgePanel } from "./KnowledgePanel";
 import { AgentTheater, PipelineStrip } from "./AgentTheater";
+import { AgentCanvas } from "./AgentCanvas";
+
+const CANVAS_STATUS_LABEL = {
+  pending: "Queued",
+  coordinating: "Coordinating",
+  researching: "Researching",
+  benchmarking: "Benchmarking",
+  drafting: "Drafting",
+  reviewing: "Reviewing",
+  awaiting_approval: "Waiting on you",
+  changes_requested: "Back with the writer",
+  approved: "Approved",
+  rejected: "Rejected",
+  failed: "Failed",
+};
+
+/**
+ * Maps a real run onto the canvas' node states. Every field is read from the
+ * record or left blank — the graph never invents a step the API did not
+ * report, because the whole point of the canvas is that it is the run.
+ */
+function toCanvasRun(record) {
+  if (!record) return null;
+  const queries = record.target_queries || [];
+  return {
+    status: record.status,
+    statusLabel: CANVAS_STATUS_LABEL[record.status] || record.status,
+    query: queries[0] || record.title || null,
+    intent: record.intent_tier || null,
+    enginesLost: record.engine ? String(record.engine).toUpperCase() : null,
+    sourcesRead: record.sources_read ?? (record.citations || []).length ?? null,
+    rivalPages: record.rival_pages ?? null,
+    angle: record.angle || record.agent_snapshot?.name || null,
+    rejected: record.rejected_angle || null,
+    words: record.word_count ?? null,
+    citations: (record.citations || []).length || null,
+    revision: record.revision ?? 0,
+  };
+}
 
 const RUNNING_STATUSES = ["pending", "coordinating", "researching", "benchmarking", "drafting", "reviewing"];
 
@@ -222,6 +261,17 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
 
   const awaitingCount = grouped.awaiting_approval.length;
 
+  /* The canvas shows whichever run most wants a person: the one waiting on
+     approval, otherwise the one in flight, otherwise the most recent. */
+  const canvasSource = useMemo(
+    () => grouped.awaiting_approval?.[0] || runningJobs[0] || items[0] || null,
+    [grouped, runningJobs, items],
+  );
+  const canvasRun = useMemo(() => toCanvasRun(canvasSource), [canvasSource]);
+  const canvasTitle = canvasSource
+    ? `Content run · ${canvasSource.title || canvasSource.id?.slice(0, 8) || ''}`.trim()
+    : 'Content run';
+
   const launchToTheater = (jobId) => {
     setOpenItemId(null);
     setOpenJobId(jobId);
@@ -305,6 +355,15 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {tab === "queue" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+            {/* The run as a graph. Shows whichever run most wants attention:
+                the one waiting on a person, otherwise the one in flight. */}
+            {canvasRun && (
+              <AgentCanvas
+                run={canvasRun}
+                title={canvasTitle}
+              />
+            )}
+
             {runningJobs.length > 0 && (
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "var(--space-3)" }}>

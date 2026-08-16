@@ -1,26 +1,25 @@
 'use client';
 
 /**
- * Trains already on the system.
+ * What this operator already has running.
  *
- * A slim rail across the head of the panel carrying the runs this operator
- * already has: each brand as a berth with its reading, each agent run as a
- * working entry. Renders nothing at all until there is history, so a
- * first-time visitor gets the clean panel.
+ * A slim strip above the page carrying every brand already read and every
+ * agent run in flight. Renders nothing at all until there is history, so a
+ * first-time visitor gets the clean page.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { fetchScanHistory, saveScan } from '@/services/api';
-import { Describer } from '@/components/signal/Describer';
-import { Lamp } from '@/components/signal/Lamp';
 
-function readingLamp(v) {
-  if (v == null) return 'amber';
-  if (v >= 50) return 'green';
-  if (v >= 25) return 'amber';
-  return 'red';
+/* The reading's own band. Rivals never take a semantic colour, but this is
+   your own score against a threshold, which is exactly what they are for. */
+function scoreChip(v) {
+  if (v == null) return 'chip';
+  if (v >= 50) return 'chip chip--good';
+  if (v >= 25) return 'chip chip--warn';
+  return 'chip chip--crit';
 }
 
 function timeAgo(iso) {
@@ -40,6 +39,21 @@ const statusLabel = {
   rejected: 'rejected',
   changes_requested: 'in revision',
   draft: 'draft',
+};
+
+const itemStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 9,
+  height: 34,
+  padding: '0 12px',
+  borderRadius: 'var(--r-pill)',
+  border: '1px solid var(--line)',
+  background: 'var(--surface)',
+  color: 'var(--ink-2)',
+  fontSize: 13.5,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
 };
 
 export function HomeDashboard() {
@@ -65,7 +79,7 @@ export function HomeDashboard() {
 
   const hasActive = (data?.activeJobs || []).length > 0;
   useEffect(() => {
-    if (!hasActive) return;
+    if (!hasActive) return undefined;
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
   }, [hasActive, load]);
@@ -102,31 +116,34 @@ export function HomeDashboard() {
   if (scans.length === 0 && runs.length === 0) return null;
 
   return (
-    <section data-testid="home-dashboard" className="lp-rail">
-      <div className="lp-rail-inner">
-        <span className="t-plate lp-rail-plate">on the system</span>
+    <section
+      data-testid="home-dashboard"
+      style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)' }}
+    >
+      <div
+        className="shell"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          paddingBlock: 12, minWidth: 0,
+        }}
+      >
+        <span className="tag">Already running</span>
 
-        <div className="lp-rail-items">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0, flex: '1 1 320px' }}>
           {scans.map((s) => (
             <button
               key={s.brand}
               type="button"
               data-testid="home-brand-card"
-              className="lp-rail-item"
+              style={itemStyle}
               onClick={() => openBrand(s.brand)}
             >
-              <Lamp lamp={readingLamp(s.score)} size={7} />
-              <span className="lp-rail-name">{s.brand}</span>
-              <Describer
-                value={s.score == null ? '--' : String(Math.round(s.score)).padStart(2, '0')}
-                size={12}
-                bloom={false}
-                lamp={readingLamp(s.score)}
-              />
-              <span className="lp-rail-meta">{timeAgo(s.scanned_at)}</span>
-              {opening === s.brand && (
-                <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
-              )}
+              <b style={{ color: 'var(--ink-1)', fontWeight: 600 }}>{s.brand}</b>
+              <span className={scoreChip(s.score)}>
+                {s.score == null ? '—' : `${Math.round(s.score)}%`}
+              </span>
+              <span className="tag" style={{ letterSpacing: '.06em' }}>{timeAgo(s.scanned_at)}</span>
+              {opening === s.brand && <Loader2 size={12} aria-hidden="true" />}
             </button>
           ))}
 
@@ -135,34 +152,48 @@ export function HomeDashboard() {
               key={r.id}
               type="button"
               data-testid="home-run-card"
-              className="lp-rail-item"
+              style={itemStyle}
               onClick={() => openRun(r)}
               title={`${r.agent_name} · ${r.brand}`}
             >
-              <span aria-hidden="true" style={{ fontSize: 12 }}>
-                {r.agent_emoji}
+              <span aria-hidden="true">{r.agent_emoji}</span>
+              <span
+                style={{
+                  color: 'var(--ink-1)', maxWidth: '22ch',
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+              >
+                {r.title || '(untitled)'}
               </span>
-              <span className="lp-rail-name">{r.title || '(untitled)'}</span>
-              <span className="lp-rail-meta">{statusLabel[r.status] || 'draft'}</span>
+              <span className="tag" style={{ letterSpacing: '.06em' }}>
+                {statusLabel[r.status] || 'draft'}
+              </span>
             </button>
           ))}
         </div>
 
-        <div className="lp-rail-actions">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
           {activeJobs.length > 0 && (
-            <span className="lp-rail-meta" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Loader2 size={11} style={{ animation: 'spin 1s linear infinite' }} />
-              {activeJobs.length} working
+            <span className="chip chip--you">
+              <Loader2 size={11} aria-hidden="true" /> {activeJobs.length} working
             </span>
           )}
           {counts.awaiting > 0 && scans[0] && (
-            <button type="button" className="lp-link" onClick={() => openBrand(scans[0].brand, 'studio')}>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => openBrand(scans[0].brand, 'studio')}
+            >
               {counts.awaiting} awaiting you
             </button>
           )}
           {scans[0] && (
-            <button type="button" className="lp-link" onClick={() => openBrand(scans[0].brand, 'studio')}>
-              open studio
+            <button
+              type="button"
+              className="btn btn--quiet btn--sm"
+              onClick={() => openBrand(scans[0].brand, 'studio')}
+            >
+              Open Studio
             </button>
           )}
         </div>

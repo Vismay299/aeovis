@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perceev — Option 5 · Aperture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   OPTION 5 — "APERTURE"
+   Dark. Data command deck. Deep slate (not black),
+   vivid colour confined to charts, tabular numerics.
+   Sources: Radix Colors (dark ramp), nivo (heatmap / flow),
+            ECharts (dense layout), Inter (tabular figures)
+   ============================================================ */
+
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+html{scroll-behavior:smooth}
+
+:root{
+  /* deep slate, blue-cast — deliberately not black */
+  --bg:   #070C15;
+  --s1:   #0C1220;
+  --s2:   #111A2B;
+  --s3:   #172236;
+  --s4:   #1E2B42;
+
+  --line:      #1C2739;
+  --line-soft: #151E2E;
+  --line-lift: rgba(255,255,255,.05);
+
+  --t1: #E9EEF7;
+  --t2: #99A7C0;
+  --t3: #6B7A94;
+  --t4: #4C5A73;
+
+  /* data colours. YOU is always cyan, everywhere, without exception. */
+  --you:    #22D3EE;
+  --you-dk: #0E7490;
+  --r1:     #A78BFA;
+  --r2:     #FBBF24;
+  --r3:     #64748B;
+  --none:   #334155;
+  --good:   #34D399;
+  --bad:    #FB7185;
+
+  --maxw: 1300px;
+  --pad: clamp(18px, 3vw, 36px);
+}
+
+body{
+  background:var(--bg);color:var(--t2);
+  font-family:'IBM Plex Sans',-apple-system,'Segoe UI',sans-serif;
+  font-size:16px;line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{
+  margin:0;color:var(--t1);font-family:'Familjen Grotesk',sans-serif;
+  font-weight:600;letter-spacing:-.03em;line-height:1.06;
+}
+h1{font-size:clamp(36px,4.9vw,66px);letter-spacing:-.04em}
+h2{font-size:clamp(26px,3.2vw,44px)}
+h3{font-size:19px;letter-spacing:-.02em;line-height:1.25}
+p{margin:0}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:var(--maxw);margin-inline:auto;padding-inline:var(--pad);position:relative;z-index:1}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1}
+
+.key{
+  font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--t4);font-weight:500;
+}
+.key--you{color:var(--you)}
+
+.panel{
+  background:var(--s1);border:1px solid var(--line);border-radius:10px;
+  box-shadow:inset 0 1px 0 var(--line-lift);
+}
+.panel__h{
+  display:flex;align-items:center;gap:10px;padding:11px 14px;
+  border-bottom:1px solid var(--line);
+}
+.panel__h b{font-family:'Familjen Grotesk',sans-serif;font-size:13px;color:var(--t1);font-weight:600;letter-spacing:-.01em}
+.panel__h .key{margin-left:auto}
+.panel__b{padding:14px}
+
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.08em;
+  text-transform:uppercase;padding:4px 8px;border-radius:5px;
+  background:var(--s3);color:var(--t2);border:1px solid var(--line);white-space:nowrap;
+}
+.chip--you{color:var(--you);border-color:var(--you-dk);background:rgba(34,211,238,.08)}
+.chip--good{color:var(--good);border-color:#166534;background:rgba(52,211,153,.08)}
+.chip--bad{color:var(--bad);border-color:#7F1D3A;background:rgba(251,113,133,.08)}
+.led{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  height:44px;padding:0 20px;border-radius:8px;cursor:pointer;border:1px solid transparent;
+  font-family:'Familjen Grotesk',sans-serif;font-size:15px;font-weight:600;
+  transition:.18s cubic-bezier(.32,.72,0,1);white-space:nowrap;
+}
+.btn--go{background:var(--you);color:#04202A;border-color:var(--you)}
+.btn--go:hover{background:#5CE3F7;transform:translateY(-1px)}
+.btn--line{background:var(--s2);color:var(--t1);border-color:var(--line);box-shadow:inset 0 1px 0 var(--line-lift)}
+.btn--line:hover{background:var(--s3);border-color:var(--s4)}
+.btn--sm{height:36px;padding:0 15px;font-size:13.5px;border-radius:7px}
+
+/* ═════════ TOP BAR ═════════ */
+.top{border-bottom:1px solid var(--line);background:rgba(7,12,21,.9);backdrop-filter:blur(12px);position:sticky;top:0;z-index:70}
+.top__in{display:flex;align-items:center;gap:26px;height:58px}
+.brand{
+  display:flex;align-items:center;gap:10px;font-family:'Familjen Grotesk',sans-serif;
+  font-weight:700;font-size:18px;color:var(--t1);letter-spacing:-.035em;
+}
+.brand__m{
+  width:24px;height:24px;border-radius:6px;border:1.5px solid var(--you);
+  display:grid;place-items:center;color:var(--you);flex:none;
+}
+.top nav{display:flex;gap:24px;margin-left:20px}
+.top nav a{font-size:14px;color:var(--t3);transition:.16s}
+.top nav a:hover{color:var(--t1)}
+.top__r{margin-left:auto;display:flex;align-items:center;gap:12px}
+
+/* ═════════ HERO ═════════ */
+.hero{padding-block:clamp(40px,5vw,74px) clamp(26px,3vw,40px)}
+.hero__g{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(26px,4vw,64px);align-items:center}
+.hero h1{margin:18px 0 20px;max-width:15ch;text-wrap:balance}
+.hero h1 em{font-style:normal;color:var(--you)}
+.hero__p{font-size:clamp(16px,1.3vw,18.5px);color:var(--t2);max-width:50ch;line-height:1.6}
+.hero__f{display:flex;gap:9px;margin-top:28px;flex-wrap:wrap}
+.hero__f input{
+  flex:1;min-width:190px;height:44px;border-radius:8px;padding:0 15px;
+  background:var(--s1);border:1px solid var(--line);color:var(--t1);
+  font:inherit;font-size:15px;outline:0;box-shadow:inset 0 1px 0 var(--line-lift);
+}
+.hero__f input::placeholder{color:var(--t4)}
+.hero__f input:focus{border-color:var(--you-dk)}
+.hero__k{display:flex;gap:16px;margin-top:14px;flex-wrap:wrap}
+
+/* live readout panel */
+.readout__rows{display:grid;gap:1px;background:var(--line-soft)}
+.rd{
+  background:var(--s1);display:grid;grid-template-columns:78px 1fr 92px;
+  gap:12px;align-items:center;padding:9px 13px;
+}
+.rd__e{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--t4);text-transform:uppercase;letter-spacing:.06em}
+.rd__q{font-size:13.5px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rd__v{display:flex;justify-content:flex-end}
+
+/* ═════════ COMMAND DECK ═════════ */
+.deck{padding-bottom:clamp(40px,5vw,72px)}
+.deck__frame{
+  background:var(--s1);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+  box-shadow:inset 0 1px 0 var(--line-lift), 0 40px 80px -40px #000;
+}
+.deck__bar{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  border-bottom:1px solid var(--line);background:var(--s2);flex-wrap:wrap;
+}
+.deck__body{display:grid;grid-template-columns:186px 1fr}
+.deck__side{border-right:1px solid var(--line);padding:14px 10px;background:var(--bg)}
+.sgrp{padding:0 9px;margin:16px 0 6px}
+.sgrp:first-child{margin-top:0}
+.sitem{
+  display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:6px;
+  font-size:13.5px;color:var(--t2);
+}
+.sitem--on{background:var(--s3);color:var(--t1);font-weight:500;box-shadow:inset 2px 0 0 var(--you)}
+.sitem b{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--t4);font-weight:500}
+.sitem--on b{color:var(--you)}
+
+.deck__main{padding:14px;display:grid;gap:12px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.tile{background:var(--s2);border:1px solid var(--line);border-radius:9px;padding:13px}
+.tile__k{font-size:11.5px;color:var(--t3);font-weight:500;margin-bottom:7px}
+.tile__v{
+  font-family:'Familjen Grotesk',sans-serif;font-size:29px;font-weight:600;color:var(--t1);
+  line-height:1;letter-spacing:-.035em;display:flex;align-items:baseline;gap:4px;
+}
+.tile__v small{font-size:13px;color:var(--t4);font-weight:500}
+.tile__v.is-you{color:var(--you)}
+.tile__d{font-family:'IBM Plex Mono',monospace;font-size:11px;margin-top:8px;display:flex;align-items:center;gap:5px}
+.up{color:var(--good)} .dn{color:var(--bad)} .flat{color:var(--t4)}
+
+.deck__2{display:grid;grid-template-columns:1.5fr 1fr;gap:12px}
+.deck__3{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.chart{width:100%;height:auto;display:block}
+
+.lgd{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+.lgd span{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--t3)}
+.lgd i{width:11px;height:11px;border-radius:3px;display:block;flex:none}
+
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{
+  font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--t4);font-weight:500;text-align:left;padding:0 0 9px;border-bottom:1px solid var(--line);
+}
+/* every column after the label is numeric — right-align so digits stack */
+.tbl th:nth-child(n+2),.tbl td:nth-child(n+2){text-align:right}
+.tbl td{padding:9px 0;border-bottom:1px solid var(--line-soft);font-size:13.5px;color:var(--t2)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl .nm{color:var(--t1);font-weight:500;display:flex;align-items:center;gap:8px}
+.tbl .v{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--t1);font-weight:500}
+.sw{width:9px;height:9px;border-radius:2px;flex:none}
+
+/* ═════════ SECTIONS ═════════ */
+.sec{padding-block:clamp(50px,6vw,92px)}
+.sechead{max-width:64ch;margin-bottom:clamp(28px,3.4vw,46px)}
+.sechead h2{margin:14px 0 14px;text-wrap:balance}
+.sechead p{color:var(--t3);font-size:clamp(15.5px,1.25vw,18px);line-height:1.6}
+
+/* the matrix */
+.matrix__wrap{overflow-x:auto;padding-bottom:4px}
+.matrix{min-width:900px;width:100%;height:auto;display:block}
+
+/* flow */
+.flow__g{display:grid;grid-template-columns:1fr 1.4fr;gap:clamp(26px,4vw,60px);align-items:center}
+
+/* evidence */
+.ev{padding:clamp(20px,2.4vw,30px)}
+.ev__q{
+  font-family:'Familjen Grotesk',sans-serif;font-weight:500;font-size:clamp(18px,1.9vw,25px);
+  color:var(--t1);line-height:1.28;margin-bottom:18px;letter-spacing:-.022em;
+}
+.ev__a{font-size:16px;line-height:1.8;color:var(--t2)}
+mark.you{background:rgba(34,211,238,.14);color:#7DE9F9;padding:1px 6px;border-radius:4px;border:1px solid var(--you-dk)}
+mark.rival{background:rgba(167,139,250,.13);color:#C4B2FD;padding:1px 6px;border-radius:4px;border:1px solid #5B3FA8}
+.ev__f{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+
+/* pricing — a comparison table, not three cards */
+.ptbl{width:100%;border-collapse:collapse;font-size:15px}
+.ptbl thead th{
+  text-align:left;padding:20px 18px;vertical-align:top;border-bottom:1px solid var(--line);
+  background:var(--s1);
+}
+.ptbl thead th:first-child{background:transparent;width:34%}
+.ptbl thead th.feat{background:var(--s2);box-shadow:inset 0 2px 0 var(--you)}
+.pname{font-family:'Familjen Grotesk',sans-serif;font-size:18px;font-weight:600;color:var(--t1);display:block;margin-bottom:5px}
+.pcost{font-family:'Familjen Grotesk',sans-serif;font-size:31px;font-weight:600;color:var(--t1);letter-spacing:-.035em;line-height:1;display:block;margin:12px 0 4px}
+.pcost span{font-size:13px;color:var(--t4);font-weight:400;letter-spacing:0}
+.pdesc{font-size:13px;color:var(--t3);line-height:1.45;font-weight:400;display:block;min-height:38px}
+.ptbl tbody td{padding:13px 18px;border-bottom:1px solid var(--line-soft);text-align:center}
+.ptbl tbody td:first-child{text-align:left;color:var(--t2);font-size:14.5px}
+.ptbl tbody td.feat{background:var(--s2)}
+.ptbl tfoot td{padding:20px 18px}
+.ptbl tfoot td.feat{background:var(--s2)}
+.yes{color:var(--you)}
+.no{color:var(--t4)}
+.val{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--t1)}
+
+/* faq */
+.faq{max-width:840px;border-top:1px solid var(--line)}
+details{border-bottom:1px solid var(--line)}
+summary{
+  list-style:none;cursor:pointer;padding-block:18px;
+  display:grid;grid-template-columns:1fr 18px;gap:18px;align-items:center;
+  font-family:'Familjen Grotesk',sans-serif;font-weight:500;font-size:clamp(16.5px,1.55vw,21px);
+  color:var(--t1);letter-spacing:-.02em;line-height:1.3;transition:.16s;
+}
+summary:hover{color:var(--you)}
+summary::-webkit-details-marker{display:none}
+summary::after{
+  content:'';width:13px;height:13px;justify-self:end;align-self:center;
+  background-image:linear-gradient(var(--you),var(--you)),linear-gradient(var(--you),var(--you));
+  background-position:center,center;background-repeat:no-repeat;
+  background-size:100% 1.5px, 1.5px 100%;
+  transition:background-size .24s cubic-bezier(.32,.72,0,1);
+}
+details[open] summary::after{background-size:100% 1.5px, 1.5px 0%}
+details p{padding-bottom:22px;color:var(--t3);font-size:15.5px;line-height:1.7;max-width:72ch}
+
+/* cta + footer */
+.cta{
+  border:1px solid var(--line);border-radius:14px;padding:clamp(30px,4vw,52px);
+  background:
+    radial-gradient(70% 120% at 50% 0%, rgba(34,211,238,.1), transparent 62%),
+    var(--s1);
+  text-align:center;box-shadow:inset 0 1px 0 var(--line-lift);
+}
+.cta h2{max-width:20ch;margin:14px auto 14px;text-wrap:balance}
+.cta p{color:var(--t3);max-width:52ch;margin:0 auto 26px;font-size:16.5px}
+.form{display:flex;gap:9px;max-width:450px;margin-inline:auto;flex-wrap:wrap}
+.form input{
+  flex:1;min-width:190px;height:46px;border-radius:8px;padding:0 16px;background:var(--bg);
+  border:1px solid var(--line);color:var(--t1);font:inherit;font-size:15px;outline:0;
+}
+.form input::placeholder{color:var(--t4)}
+.form input:focus{border-color:var(--you-dk)}
+.form .btn{height:46px}
+
+footer{border-top:1px solid var(--line);margin-top:clamp(46px,5vw,80px);padding-block:42px 24px}
+.foot{display:grid;grid-template-columns:1.7fr repeat(3,1fr);gap:28px;padding-bottom:30px}
+.foot h5{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--t4);margin:0 0 13px;font-weight:500}
+.foot a{display:block;font-size:14.5px;color:var(--t3);padding-block:5px;transition:.16s}
+.foot a:hover{color:var(--you)}
+.foot__b{display:flex;justify-content:space-between;padding-top:20px;border-top:1px solid var(--line-soft);flex-wrap:wrap;gap:10px}
+
+@media(max-width:1080px){
+  .hero__g,.deck__2,.deck__3,.flow__g{grid-template-columns:1fr;gap:26px}
+  .deck__body{grid-template-columns:1fr}
+  .deck__side{display:none}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .foot{grid-template-columns:1fr 1fr}
+  .top nav{display:none}
+  .ptbl{font-size:14px}
+  .ptbl thead th,.ptbl tbody td,.ptbl tfoot td{padding-inline:10px}
+}
+@media(max-width:620px){
+  /* the status chip and the CTA cannot both fit — the CTA wins */
+  .top__r .chip{display:none}
+  .top__in{gap:12px}
+  .tiles{grid-template-columns:1fr}
+  .rd{grid-template-columns:1fr auto;row-gap:4px}
+  .rd__e{grid-column:1/-1}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════ TOP ═══════ -->
+<div class="top">
+  <div class="wrap top__in">
+    <a href="#" class="brand">
+      <span class="brand__m">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="9"/></svg>
+      </span>
+      perceev
+    </a>
+    <nav>
+      <a href="#deck">The deck</a>
+      <a href="#coverage">Coverage</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#pricing">Pricing</a>
+    </nav>
+    <div class="top__r">
+      <span class="chip chip--good"><i class="led"></i> 3 engines live</span>
+      <a href="#cta" class="btn btn--go btn--sm">Run a free probe</a>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ HERO ═══════ -->
+<header class="hero wrap">
+  <div class="hero__g">
+    <div>
+      <span class="key key--you">Answer-engine intelligence</span>
+      <h1>Measure the answer, <em>not the ranking.</em></h1>
+      <p class="hero__p">
+        Perceev puts 36 unbranded buyer questions through Google AI Overview, ChatGPT and Perplexity,
+        then reports, per question and per engine, which brand the answer actually recommends.
+      </p>
+      <form class="hero__f" onsubmit="return false">
+        <input type="text" placeholder="yourcompany.com" aria-label="Your domain">
+        <button class="btn btn--go" type="submit">Run the probe</button>
+      </form>
+      <div class="hero__k">
+        <span class="key">Free</span><span class="key">No signup</span><span class="key">Answers kept verbatim</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel__h">
+        <b>Live probe stream</b>
+        <span class="chip chip--good" style="margin-left:auto"><i class="led"></i> Running</span>
+      </div>
+      <div class="readout__rows">
+        <div class="rd">
+          <span class="rd__e">AI Overview</span>
+          <span class="rd__q">best EHR platform for a 200-bed hospital</span>
+          <span class="rd__v"><span class="chip" style="color:var(--r1);border-color:#5B3FA8">NorthPeak</span></span>
+        </div>
+        <div class="rd">
+          <span class="rd__e">ChatGPT</span>
+          <span class="rd__q">top patient engagement software in India</span>
+          <span class="rd__v"><span class="chip chip--you">You</span></span>
+        </div>
+        <div class="rd">
+          <span class="rd__e">Perplexity</span>
+          <span class="rd__q">which analytics tools track clinical outcomes</span>
+          <span class="rd__v"><span class="chip" style="color:var(--r1);border-color:#5B3FA8">Lumen IQ</span></span>
+        </div>
+        <div class="rd">
+          <span class="rd__e">AI Overview</span>
+          <span class="rd__q">teleconsultation platforms for tier-2 cities</span>
+          <span class="rd__v"><span class="chip chip--you">You</span></span>
+        </div>
+        <div class="rd">
+          <span class="rd__e">ChatGPT</span>
+          <span class="rd__q">affordable HIMS for multi-specialty clinics</span>
+          <span class="rd__v"><span class="chip">No brand</span></span>
+        </div>
+        <div class="rd">
+          <span class="rd__e">Perplexity</span>
+          <span class="rd__q">NABH compliance software comparison</span>
+          <span class="rd__v"><span class="chip" style="color:var(--r1);border-color:#5B3FA8">NorthPeak</span></span>
+        </div>
+      </div>
+      <div class="panel__h" style="border-bottom:0;border-top:1px solid var(--line)">
+        <span class="key">36 questions · 3 engines</span>
+        <span class="key key--you" style="margin-left:auto">15 reached you</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════ COMMAND DECK ═══════ -->
+<section class="deck wrap" id="deck">
+  <div class="deck__frame">
+    <div class="deck__bar">
+      <span class="chip chip--you">brightwave.io</span>
+      <span class="key">Healthcare · India</span>
+      <span class="key">Reading 06 · 16 Aug 2026</span>
+      <span class="chip chip--good" style="margin-left:auto"><i class="led"></i> Complete</span>
+      <span class="chip">Next scan in 71h</span>
+    </div>
+
+    <div class="deck__body">
+      <aside class="deck__side">
+        <p class="key sgrp">Reading</p>
+        <div class="sitem sitem--on">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          Overview
+        </div>
+        <div class="sitem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          Answers <b>36</b>
+        </div>
+        <div class="sitem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          Rivals <b>7</b>
+        </div>
+        <div class="sitem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.5.5l3-3a5 5 0 00-7-7L12 5"/><path d="M14 11a5 5 0 00-7.5-.5l-3 3a5 5 0 007 7l1.7-1.7"/></svg>
+          Sources <b>64</b>
+        </div>
+        <p class="key sgrp">Studio</p>
+        <div class="sitem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.6 6.6L21 10l-5 4.2L17.5 21 12 17.5 6.5 21 8 14.2 3 10l6.4-1.4z"/></svg>
+          Opportunities <b>9</b>
+        </div>
+        <div class="sitem">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5V6a2 2 0 012-2h13v16H6a2 2 0 01-2-2z"/></svg>
+          Content runs <b>3</b>
+        </div>
+      </aside>
+
+      <div class="deck__main">
+        <!-- tiles -->
+        <div class="tiles">
+          <div class="tile">
+            <p class="tile__k">Share of AI</p>
+            <p class="tile__v is-you num">41<small>%</small></p>
+            <p class="tile__d up">▲ 11.0 pts</p>
+          </div>
+          <div class="tile">
+            <p class="tile__k">Answers naming you</p>
+            <p class="tile__v num">15<small>/36</small></p>
+            <p class="tile__d up">▲ 4</p>
+          </div>
+          <div class="tile">
+            <p class="tile__k">Rivals discovered</p>
+            <p class="tile__v num">7</p>
+            <p class="tile__d flat">3 new this reading</p>
+          </div>
+          <div class="tile">
+            <p class="tile__k">Sources cited</p>
+            <p class="tile__v num">64</p>
+            <p class="tile__d dn">only 6 are yours</p>
+          </div>
+        </div>
+
+        <!-- trend + split -->
+        <div class="deck__2">
+          <div class="panel">
+            <div class="panel__h"><b>Share of AI · 6 readings</b><span class="key">% of answers</span></div>
+            <div class="panel__b">
+              <svg class="chart" viewBox="0 0 520 176" role="img"
+                   aria-label="Share of AI rising from 22 to 41 percent while NorthPeak declines from 44 to 33 percent">
+                <defs>
+                  <linearGradient id="youFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#22D3EE" stop-opacity=".24"/>
+                    <stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <g stroke="#1C2739" stroke-width="1">
+                  <line x1="32" y1="16" x2="512" y2="16"/><line x1="32" y1="50" x2="512" y2="50"/>
+                  <line x1="32" y1="84" x2="512" y2="84"/><line x1="32" y1="118" x2="512" y2="118"/>
+                </g>
+                <g font-family="IBM Plex Mono, monospace" font-size="9" fill="#4C5A73" text-anchor="end">
+                  <text x="24" y="19">50</text><text x="24" y="53">33</text>
+                  <text x="24" y="87">17</text><text x="24" y="121">0</text>
+                </g>
+                <!-- rival -->
+                <path d="M46 26 L138 34 L230 44 L322 42 L414 52 L504 50"
+                      fill="none" stroke="#A78BFA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <!-- you -->
+                <path d="M46 104 L138 96 L230 84 L322 86 L414 62 L504 34 L504 118 L46 118 Z" fill="url(#youFill)"/>
+                <path d="M46 104 L138 96 L230 84 L322 86 L414 62 L504 34"
+                      fill="none" stroke="#22D3EE" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="504" cy="34" r="4" fill="#22D3EE"/>
+                <g font-family="IBM Plex Mono, monospace" font-size="9" fill="#4C5A73" text-anchor="middle">
+                  <text x="46" y="140">MAR</text><text x="138" y="140">APR</text><text x="230" y="140">MAY</text>
+                  <text x="322" y="140">JUN</text><text x="414" y="140">JUL</text><text x="504" y="140">AUG</text>
+                </g>
+              </svg>
+              <div class="lgd">
+                <span><i style="background:#22D3EE"></i> Brightwave (you)</span>
+                <span><i style="background:#A78BFA"></i> NorthPeak</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel__h"><b>Who holds the answer</b><span class="key">n = 36</span></div>
+            <div class="panel__b">
+              <table class="tbl">
+                <thead><tr><th>Brand</th><th>Answers</th><th>Share</th></tr></thead>
+                <tbody>
+                  <tr>
+                    <td><span class="nm"><i class="sw" style="background:var(--you)"></i> Brightwave <span class="chip chip--you" style="padding:1px 5px;font-size:9px">YOU</span></span></td>
+                    <td class="v">15</td><td class="v" style="color:var(--you)">41%</td>
+                  </tr>
+                  <tr>
+                    <td><span class="nm"><i class="sw" style="background:var(--r1)"></i> NorthPeak</span></td>
+                    <td class="v">12</td><td class="v">33%</td>
+                  </tr>
+                  <tr>
+                    <td><span class="nm"><i class="sw" style="background:var(--r2)"></i> Lumen IQ</span></td>
+                    <td class="v">6</td><td class="v">17%</td>
+                  </tr>
+                  <tr>
+                    <td><span class="nm"><i class="sw" style="background:var(--none)"></i> No brand named</span></td>
+                    <td class="v">3</td><td class="v">9%</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="key" style="margin-top:14px;line-height:1.5;text-transform:none;letter-spacing:.01em;font-size:11.5px">
+                Rivals are discovered from the answers themselves: co-mentions and citations, not a list you maintain.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- per-engine -->
+        <div class="deck__3">
+          <div class="panel">
+            <div class="panel__h"><b>By engine</b><span class="key">12 questions each</span></div>
+            <div class="panel__b">
+              <svg class="chart" viewBox="0 0 380 130" role="img"
+                   aria-label="Answers reaching you: ChatGPT 6 of 12, Google AI Overview 5 of 12, Perplexity 4 of 12">
+                <g font-family="IBM Plex Sans, sans-serif" font-size="12" fill="#99A7C0">
+                  <text x="0" y="20">ChatGPT</text><text x="0" y="62">AI Overview</text><text x="0" y="104">Perplexity</text>
+                </g>
+                <g>
+                  <rect x="104" y="8" width="240" height="16" rx="3" fill="#172236"/>
+                  <rect x="104" y="8" width="120" height="16" rx="3" fill="#22D3EE"/>
+                  <rect x="104" y="50" width="240" height="16" rx="3" fill="#172236"/>
+                  <rect x="104" y="50" width="100" height="16" rx="3" fill="#22D3EE"/>
+                  <rect x="104" y="92" width="240" height="16" rx="3" fill="#172236"/>
+                  <rect x="104" y="92" width="80" height="16" rx="3" fill="#22D3EE"/>
+                </g>
+                <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="#E9EEF7" text-anchor="end">
+                  <text x="380" y="20">6/12</text><text x="380" y="62">5/12</text><text x="380" y="104">4/12</text>
+                </g>
+                <line x1="224" y1="4" x2="224" y2="112" stroke="#4C5A73" stroke-width="1" stroke-dasharray="3 3"/>
+                <text x="228" y="126" font-family="IBM Plex Mono, monospace" font-size="9" fill="#4C5A73">50% threshold</text>
+              </svg>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel__h"><b>Highest-value gaps</b><span class="key">9 open</span></div>
+            <div class="panel__b">
+              <table class="tbl">
+                <thead><tr><th>Question</th><th>Holder</th></tr></thead>
+                <tbody>
+                  <tr><td>best EHR platform for a 200-bed hospital</td><td><span class="chip" style="color:var(--r1);border-color:#5B3FA8">NorthPeak</span></td></tr>
+                  <tr><td>NABH compliance software comparison</td><td><span class="chip" style="color:var(--r1);border-color:#5B3FA8">NorthPeak</span></td></tr>
+                  <tr><td>which analytics tools track clinical outcomes</td><td><span class="chip" style="color:var(--r2);border-color:#78350F">Lumen IQ</span></td></tr>
+                  <tr><td>affordable HIMS for multi-specialty clinics</td><td><span class="chip">No brand</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ COVERAGE MATRIX ═══════ -->
+<section class="sec wrap" id="coverage" style="padding-top:0">
+  <div class="sechead">
+    <span class="key key--you">Coverage</span>
+    <h2>Every question, against every engine, in one grid.</h2>
+    <p>A brand that owns AI Overview can be completely absent from Perplexity. One averaged number would
+    hide that, so we never produce one. This is the whole reading at once.</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel__h">
+      <b>Question × engine coverage</b>
+      <span class="key">36 cells · reading 06</span>
+    </div>
+    <div class="panel__b matrix__wrap">
+      <svg class="matrix" viewBox="0 0 1040 210" role="img"
+           aria-label="Coverage grid of 12 questions across 3 engines. ChatGPT reaches you 6 times, Google AI Overview 5, Perplexity 4.">
+        <g font-family="IBM Plex Mono, monospace" font-size="9" fill="#4C5A73" letter-spacing=".5">
+          <text x="150" y="14">Q01</text><text x="222" y="14">Q02</text><text x="294" y="14">Q03</text>
+          <text x="366" y="14">Q04</text><text x="438" y="14">Q05</text><text x="510" y="14">Q06</text>
+          <text x="582" y="14">Q07</text><text x="654" y="14">Q08</text><text x="726" y="14">Q09</text>
+          <text x="798" y="14">Q10</text><text x="870" y="14">Q11</text><text x="942" y="14">Q12</text>
+        </g>
+        <g font-family="IBM Plex Sans, sans-serif" font-size="13" fill="#99A7C0">
+          <text x="0" y="46">Google AI Overview</text>
+          <text x="0" y="104">ChatGPT</text>
+          <text x="0" y="162">Perplexity</text>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="12" fill="#22D3EE" text-anchor="end">
+          <text x="1040" y="46">5/12</text><text x="1040" y="104">6/12</text><text x="1040" y="162">4/12</text>
+        </g>
+
+        <!-- row 1 : Google AI Overview -->
+        <g>
+          <rect x="150" y="26" width="60" height="28" rx="4" fill="#334155"/>
+          <rect x="222" y="26" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="294" y="26" width="60" height="28" rx="4" fill="#A78BFA"/>
+          <rect x="366" y="26" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="438" y="26" width="60" height="28" rx="4" fill="#334155"/>
+          <rect x="510" y="26" width="60" height="28" rx="4" fill="#FBBF24"/>
+          <rect x="582" y="26" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="654" y="26" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="726" y="26" width="60" height="28" rx="4" fill="#A78BFA"/>
+          <rect x="798" y="26" width="60" height="28" rx="4" fill="#334155"/>
+          <rect x="870" y="26" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="942" y="26" width="60" height="28" rx="4" fill="#A78BFA"/>
+        </g>
+        <!-- row 2 : ChatGPT -->
+        <g>
+          <rect x="150" y="84" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="222" y="84" width="60" height="28" rx="4" fill="#A78BFA"/>
+          <rect x="294" y="84" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="366" y="84" width="60" height="28" rx="4" fill="#FBBF24"/>
+          <rect x="438" y="84" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="510" y="84" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="582" y="84" width="60" height="28" rx="4" fill="#334155"/>
+          <rect x="654" y="84" width="60" height="28" rx="4" fill="#A78BFA"/>
+          <rect x="726" y="84" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="798" y="84" width="60" height="28" rx="4" fill="#A78BFA"/>
+          <rect x="870" y="84" width="60" height="28" rx="4" fill="#334155"/>
+          <rect x="942" y="84" width="60" height="28" rx="4" fill="#22D3EE"/>
+        </g>
+        <!-- row 3 : Perplexity -->
+        <g>
+          <rect x="150" y="142" width="60" height="28" rx="4" fill="#A78BFA"/>
+          <rect x="222" y="142" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="294" y="142" width="60" height="28" rx="4" fill="#FBBF24"/>
+          <rect x="366" y="142" width="60" height="28" rx="4" fill="#334155"/>
+          <rect x="438" y="142" width="60" height="28" rx="4" fill="#A78BFA"/>
+          <rect x="510" y="142" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="582" y="142" width="60" height="28" rx="4" fill="#A78BFA"/>
+          <rect x="654" y="142" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="726" y="142" width="60" height="28" rx="4" fill="#334155"/>
+          <rect x="798" y="142" width="60" height="28" rx="4" fill="#22D3EE"/>
+          <rect x="870" y="142" width="60" height="28" rx="4" fill="#FBBF24"/>
+          <rect x="942" y="142" width="60" height="28" rx="4" fill="#A78BFA"/>
+        </g>
+
+        <line x1="0" y1="188" x2="1040" y2="188" stroke="#1C2739"/>
+      </svg>
+      <div class="lgd">
+        <span><i style="background:#22D3EE"></i> The answer names you</span>
+        <span><i style="background:#A78BFA"></i> NorthPeak holds it</span>
+        <span><i style="background:#FBBF24"></i> Lumen IQ holds it</span>
+        <span><i style="background:#334155"></i> No brand named</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ EVIDENCE ═══════ -->
+<section class="sec wrap" id="evidence" style="padding-top:0">
+  <div class="flow__g">
+    <div>
+      <span class="key key--you">Evidence</span>
+      <h2 style="margin:14px 0 16px;font-size:clamp(24px,2.9vw,38px)">Every cell opens into the sentence that produced it.</h2>
+      <p style="color:var(--t3);font-size:16.5px;max-width:40ch;line-height:1.6">
+        Click any square in the grid and you get the answer the engine actually returned — marked where
+        your name appears and where a rival took the recommendation instead. No paraphrase, no score you
+        have to take on faith.
+      </p>
+      <a href="#cta" class="btn btn--line" style="margin-top:26px">Open a sample reading</a>
+    </div>
+
+    <div class="panel">
+      <div class="panel__h">
+        <span class="chip">Perplexity</span>
+        <span class="key">Q04 · 16 Aug 2026 09:14 IST</span>
+        <span class="chip" style="margin-left:auto;color:var(--r2);border-color:#78350F">Rival cited first</span>
+      </div>
+      <div class="ev">
+        <p class="ev__q">“which analytics tools track clinical outcomes”</p>
+        <p class="ev__a">
+          Clinical outcome analytics generally splits between registry-based reporting and real-time
+          dashboards. <mark class="you">Brightwave</mark> covers the dashboard side well for mid-size
+          hospitals and is frequently named for readmission tracking. For registry submission and
+          NABH-aligned reporting, <mark class="rival">NorthPeak</mark> is cited more often, particularly
+          by Indian implementation partners.
+        </p>
+        <div class="ev__f">
+          <span class="chip chip--you">You · mentioned</span>
+          <span class="chip">4 sources</span>
+          <span class="chip">1 of them yours</span>
+          <a href="#" style="margin-left:auto;font-size:14px;color:var(--you);font-weight:600">Open full answer →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ PRICING ═══════ -->
+<section class="sec wrap" id="pricing" style="padding-top:0">
+  <div class="sechead">
+    <span class="key key--you">Pricing</span>
+    <h2>The reading is free. You pay to keep it running.</h2>
+    <p>No trial timer and no feature held back. The first probe is complete, and it stays free.</p>
+  </div>
+
+  <div class="panel" style="overflow-x:auto">
+    <table class="ptbl">
+      <thead>
+        <tr>
+          <th></th>
+          <th>
+            <span class="pname">Probe</span>
+            <span class="pdesc">One complete reading of your domain.</span>
+            <span class="pcost">Free</span>
+            <span class="key">No signup · no card</span>
+          </th>
+          <th class="feat">
+            <span class="pname">Register <span class="chip chip--you" style="vertical-align:middle">Most chosen</span></span>
+            <span class="pdesc">The reading on a cadence, with history and alerts.</span>
+            <span class="pcost">₹40k <span>/ month</span></span>
+            <span class="key">Cancel anytime</span>
+          </th>
+          <th>
+            <span class="pname">Operation</span>
+            <span class="pdesc">The reading plus the agent content operation.</span>
+            <span class="pcost">Custom</span>
+            <span class="key">Scoped per category</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Unbranded questions tracked</td>
+          <td><span class="val">36</span></td>
+          <td class="feat"><span class="val">up to 100</span></td>
+          <td><span class="val">up to 100</span></td>
+        </tr>
+        <tr>
+          <td>Answer engines probed</td>
+          <td><span class="val">All configured</span></td>
+          <td class="feat"><span class="val">All configured</span></td>
+          <td><span class="val">All configured</span></td>
+        </tr>
+        <tr>
+          <td>Rival discovery from answers</td>
+          <td class="yes">✓</td><td class="feat yes">✓</td><td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td>Verbatim answer evidence</td>
+          <td class="yes">✓</td><td class="feat yes">✓</td><td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td>Recurring cadence &amp; trend history</td>
+          <td class="no"><span aria-label="not included">–</span></td><td class="feat yes">✓</td><td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td>Sources view &amp; crawlability</td>
+          <td class="no"><span aria-label="not included">–</span></td><td class="feat yes">✓</td><td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td>Movement alerts</td>
+          <td class="no"><span aria-label="not included">–</span></td><td class="feat yes">✓</td><td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td>Opportunity queue from live gaps</td>
+          <td class="no"><span aria-label="not included">–</span></td><td class="feat no"><span aria-label="not included">–</span></td><td class="yes">✓</td>
+        </tr>
+        <tr>
+          <td>Agent drafting, human approval</td>
+          <td class="no"><span aria-label="not included">–</span></td><td class="feat no"><span aria-label="not included">–</span></td><td class="yes">✓</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td></td>
+          <td><a href="#cta" class="btn btn--line btn--sm">Run a probe</a></td>
+          <td class="feat"><a href="#cta" class="btn btn--go btn--sm">Start tracking</a></td>
+          <td><a href="#cta" class="btn btn--line btn--sm">Book a walkthrough</a></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</section>
+
+<!-- ═══════ FAQ ═══════ -->
+<section class="sec wrap" style="padding-top:0">
+  <div class="sechead">
+    <span class="key key--you">Objections</span>
+    <h2 style="font-size:clamp(24px,2.9vw,38px)">Answered without marketing language.</h2>
+  </div>
+  <div class="faq">
+    <details open>
+      <summary>Why unbranded questions?</summary>
+      <p>A branded question already contains the answer. Ask an engine “is Brightwave good for hospitals”
+      and it will find something kind to say — it is a completion machine and you handed it the premise.
+      Your buyer types “best EHR for a 200-bed hospital”, and there the engine actually has to choose.</p>
+    </details>
+    <details>
+      <summary>How is this different from rank tracking?</summary>
+      <p>A rank tracker tells you where a page sits in a list of blue links. There is no list here — there
+      is one paragraph naming two vendors. We measure whether that paragraph says your name, and we keep
+      the paragraph.</p>
+    </details>
+    <details>
+      <summary>Why store per question, per engine, per day?</summary>
+      <p>Because an aggregate cannot answer “did that page work”. Storing the reading normalised means a
+      question that flipped from a rival to you can be traced to the source the engine started citing on
+      a specific date.</p>
+    </details>
+    <details>
+      <summary>Does adding questions break my history?</summary>
+      <p>No. The tracked set only ever grows additively, and the score is always a share of the set as it
+      stood on that day, so a reading from March stays comparable to one from August.</p>
+    </details>
+  </div>
+</section>
+
+<!-- ═══════ CTA ═══════ -->
+<section class="wrap" id="cta">
+  <div class="cta">
+    <span class="key key--you">Free · 36 questions · no signup</span>
+    <h2>Run the same probe on your own domain.</h2>
+    <p>Enter a domain. We ask the questions your buyers ask and report which brand each answer names.</p>
+    <form class="form" onsubmit="return false">
+      <input type="text" placeholder="yourcompany.com" aria-label="Your domain">
+      <button class="btn btn--go" type="submit">Run the probe</button>
+    </form>
+    <p class="key" style="margin-top:16px">Most readings finish in a few minutes</p>
+  </div>
+</section>
+
+<footer class="wrap">
+  <div class="foot">
+    <div>
+      <a href="#" class="brand" style="font-size:17px">
+        <span class="brand__m"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="9"/></svg></span>
+        perceev
+      </a>
+      <p style="font-size:14.5px;color:var(--t4);max-width:32ch;margin-top:13px;line-height:1.55">
+        Answer-engine intelligence for teams whose buyers have stopped searching and started asking.
+      </p>
+    </div>
+    <div><h5>Product</h5><a href="#">Overview</a><a href="#">Coverage</a><a href="#">Rivals</a><a href="#">Sources</a></div>
+    <div><h5>Company</h5><a href="#">How it works</a><a href="#">Pricing</a><a href="#">Changelog</a><a href="#">Contact</a></div>
+    <div><h5>Legal</h5><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Data handling</a></div>
+  </div>
+  <div class="foot__b">
+    <span class="key">© 2026 Perceev</span>
+    <span class="key">Demonstration data uses fictional brands</span>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,20 +1,10 @@
-/**
- * An unlit berth waiting for its code. Loading on this panel is not a
- * shimmer sweeping across a card — it is a recessed slot with nothing in
- * it yet, breathing faintly.
- */
+/** A loading placeholder: a calm opacity pulse, never a sweeping shimmer. */
 
 export const Skeleton = ({ className = '', style: outerStyle, ...props }) => (
   <div
-    className={`berth-wait ${className}`}
+    className={`skel ${className}`.trim()}
     aria-hidden="true"
-    style={{
-      background: 'var(--panel-0)',
-      border: '1px solid var(--rule-1)',
-      borderRadius: '1px',
-      boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.5)',
-      ...outerStyle,
-    }}
+    style={outerStyle}
     {...props}
   />
 );

@@ -1,68 +1,43 @@
 'use client';
 
 /**
- * An instrument readout.
+ * A KPI tile: label, big tabular value, supporting line.
  *
- * Not a metric card. A readout is a cell in a strip of instruments along a
- * panel: engraved plate, recessed value window, and a state lamp when the
- * value carries one. Meant to sit inside a ReadoutStrip so a row of them
- * reads as one instrument bank divided by scribed rules — never as four
- * floating cards.
+ * `you` is the accent tone, and it is indigo — the same indigo you take in
+ * every chart. The semantic tones are for states that genuinely are good,
+ * caution or critical.
  */
 
-import { Lamp } from '@/components/signal/Lamp';
-
-const TONE_LAMP = { neutral: null, good: 'green', warn: 'amber', crit: 'red', you: 'white' };
+const TONE_CLASS = { you: 'is-you' };
 const TONE_COLOR = {
-  neutral: 'var(--text-1)',
-  good: 'var(--lamp-green)',
-  warn: 'var(--lamp-amber)',
-  crit: 'var(--lamp-red)',
-  you: 'var(--lamp-white)',
+  good: 'var(--good)',
+  warn: 'var(--warn)',
+  crit: 'var(--crit)',
 };
 
-export const KpiCard = ({ label, value, suffix, sub, tone = 'neutral', testId, className = '' }) => {
-  const lamp = TONE_LAMP[tone];
-  const color = TONE_COLOR[tone] || TONE_COLOR.neutral;
+export const KpiCard = ({
+  label,
+  value,
+  suffix,
+  sub,
+  tone = 'neutral',
+  testId,
+  className = '',
+}) => {
   const blank = value == null || (typeof value === 'number' && !Number.isFinite(value));
   const shown = blank ? '—' : value;
 
   return (
-    <div
-      data-testid={testId}
-      className={className}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 'var(--space-3)',
-        padding: 'var(--space-4) var(--space-5)',
-        minWidth: 0,
-      }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-        {lamp && <Lamp lamp={lamp} size={7} />}
-        <span className="t-plate">{label}</span>
+    <div data-testid={testId} className={`stat ${className}`.trim()}>
+      <span className="stat__k">{label}</span>
+      <span
+        className={`stat__v ${TONE_CLASS[tone] || ''}`.trim()}
+        style={blank ? { color: 'var(--ink-4)' } : TONE_COLOR[tone] ? { color: TONE_COLOR[tone] } : undefined}
+      >
+        {shown}
+        {!blank && suffix && <small>{suffix}</small>}
       </span>
-
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-        <span
-          className="t-tally"
-          style={{ fontSize: 32, lineHeight: 1, color: blank ? 'var(--text-3)' : color }}
-        >
-          {shown}
-        </span>
-        {suffix && !blank && (
-          <span className="t-tally" style={{ fontSize: 14, color: 'var(--text-3)' }}>
-            {suffix}
-          </span>
-        )}
-      </div>
-
-      {sub && (
-        <span style={{ font: 'var(--type-body-sm)', color: 'var(--text-3)', lineHeight: 1.45 }}>
-          {sub}
-        </span>
-      )}
+      {sub && <span className="stat__d dim">{sub}</span>}
     </div>
   );
 };

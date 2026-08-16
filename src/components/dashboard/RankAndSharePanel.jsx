@@ -15,15 +15,9 @@ export const RankAndSharePanel = ({ result, rankedEntries }) => {
   const brandLabel = result?.brand || "Your brand";
 
   return (
-    <div
-      data-testid="rank-share-row"
-      style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(320px, 1.3fr) minmax(280px, 1fr)",
-        gap: "var(--space-6)",
-        alignItems: "start",
-      }}
-    >
+    /* g-wide collapses to one column at 1080px. Fixed minimums here (320px
+       + 280px) could not fit a 375px viewport and pushed the page sideways. */
+    <div data-testid="rank-share-row" className="grid g-wide">
       <div>
         <SectionStrap testId="rank-strap">Visibility Rank</SectionStrap>
         <RankTable rows={rankedEntries} />

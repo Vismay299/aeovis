@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perceev — Option 4 · Obsidian</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500&family=Manrope:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   OPTION 4 — "OBSIDIAN"
+   Dark. Premium restraint. Thin large display type,
+   warm champagne accent, REAL luminance steps.
+   Sources: Radix Colors (dark ramp discipline),
+            Open Props (shadow scale), motion-primitives
+   ============================================================ */
+
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+html{scroll-behavior:smooth}
+
+:root{
+  /* Seven real steps — the failure of the current page was that
+     every surface sat within 6% luminance of every other one.     */
+  --n0: #08090B;   /* page floor        */
+  --n1: #0D0E12;   /* recessed          */
+  --n2: #131519;   /* card              */
+  --n3: #191C21;   /* raised            */
+  --n4: #21242B;   /* hover             */
+  --n5: #2B2F37;   /* pressed / border-strong */
+
+  --line:      #1E2127;
+  --line-soft: #171A1F;
+  --line-lift: rgba(255,255,255,.055);
+
+  --t1: #F4F4F6;
+  --t2: #ADB1BA;
+  --t3: #7B808B;
+  --t4: #565B65;
+
+  /* one warm metal, three states */
+  --gold:      #D3B884;
+  --gold-lit:  #EBD9B4;
+  --gold-deep: #8C7748;
+  --gold-glow: rgba(211,184,132,.16);
+
+  --sage:  #7FA08C;
+  --oxide: #B5705E;
+
+  --maxw: 1160px;
+  --pad: clamp(20px, 4vw, 44px);
+}
+
+body{
+  background:var(--n0);color:var(--t2);
+  font-family:'Manrope',-apple-system,'Segoe UI',sans-serif;
+  font-size:16.5px;line-height:1.65;font-weight:400;
+  -webkit-font-smoothing:antialiased;
+}
+/* fine grain — the only texture, and it is barely there */
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:200;opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+h1,h2,h3{
+  margin:0;color:var(--t1);font-family:'Outfit',sans-serif;font-weight:200;
+  letter-spacing:-.028em;line-height:1.04;
+}
+h1{font-size:clamp(40px,6.2vw,86px);letter-spacing:-.036em}
+h2{font-size:clamp(30px,4.1vw,58px)}
+h3{font-size:21px;font-weight:300;letter-spacing:-.018em;line-height:1.25}
+p{margin:0}
+a{color:inherit;text-decoration:none}
+
+.wrap{max-width:var(--maxw);margin-inline:auto;padding-inline:var(--pad)}
+.mono{font-family:'Roboto Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.plate{
+  font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.19em;
+  text-transform:uppercase;color:var(--t4);font-weight:400;
+}
+.plate--gold{color:var(--gold)}
+.lede{font-size:clamp(16.5px,1.3vw,19px);line-height:1.62;color:var(--t2)}
+
+/* raised surface: a light top edge and a deep shadow, never a glow */
+.surface{
+  background:var(--n2);border-radius:14px;
+  box-shadow:inset 0 1px 0 var(--line-lift),
+             0 0 0 1px var(--line),
+             0 20px 44px -24px rgba(0,0,0,.9);
+}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  height:46px;padding:0 24px;border-radius:8px;cursor:pointer;border:0;
+  font-family:'Manrope',sans-serif;font-size:15px;font-weight:600;
+  transition:.2s cubic-bezier(.32,.72,0,1);white-space:nowrap;letter-spacing:-.005em;
+}
+.btn--gold{
+  background:linear-gradient(180deg,var(--gold-lit),var(--gold));color:#221B0C;
+  /* neutral elevation, not a chromatic halo — depth here is offset + blur */
+  box-shadow:0 1px 0 rgba(255,255,255,.32) inset, 0 8px 20px -10px rgba(0,0,0,.85);
+}
+.btn--gold:hover{background:linear-gradient(180deg,#F5E7C9,var(--gold-lit));transform:translateY(-1px)}
+.btn--line{
+  background:var(--n2);color:var(--t1);
+  box-shadow:inset 0 1px 0 var(--line-lift), 0 0 0 1px var(--n5);
+}
+.btn--line:hover{background:var(--n3);box-shadow:inset 0 1px 0 var(--line-lift),0 0 0 1px var(--gold-deep)}
+.btn--sm{height:38px;padding:0 17px;font-size:14px;border-radius:7px}
+
+/* ═════════ NAV ═════════ */
+.nav{
+  position:sticky;top:0;z-index:80;
+  background:rgba(8,9,11,.76);backdrop-filter:blur(16px) saturate(150%);
+  border-bottom:1px solid var(--line-soft);
+}
+.nav__in{display:flex;align-items:center;height:68px;gap:34px}
+.mark{
+  font-family:'Outfit',sans-serif;font-weight:300;font-size:22px;color:var(--t1);
+  letter-spacing:.005em;display:flex;align-items:center;gap:10px;
+}
+.mark::before{
+  content:'';width:9px;height:9px;border-radius:50%;
+  background:var(--gold);box-shadow:inset 0 -1px 1px rgba(0,0,0,.35);
+}
+.nav nav{display:flex;gap:30px;margin-left:auto}
+.nav nav a{font-size:14.5px;color:var(--t3);transition:.18s}
+.nav nav a:hover{color:var(--t1)}
+.nav__r{display:flex;align-items:center;gap:14px}
+
+/* ═════════ HERO ═════════ */
+.hero{position:relative;overflow:hidden;padding-block:clamp(56px,8vw,116px) clamp(40px,5vw,70px)}
+.hero__aura{
+  position:absolute;top:-320px;left:50%;transform:translateX(-50%);
+  width:1180px;height:820px;pointer-events:none;
+  background:radial-gradient(46% 48% at 50% 50%, rgba(211,184,132,.13) 0%, rgba(211,184,132,.045) 40%, transparent 70%);
+}
+.hero__in{position:relative;z-index:1;text-align:center}
+.hero h1{max-width:16ch;margin:22px auto 22px;text-wrap:balance}
+.hero h1 em{font-style:normal;color:var(--gold);font-weight:300}
+.hero__sub{max-width:57ch;margin:0 auto 32px;color:var(--t2);font-size:clamp(16.5px,1.35vw,19px);line-height:1.6}
+.hero__row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.hero__fine{margin-top:18px}
+
+/* the instrument — an arc, not a toy dial */
+.inst{
+  margin-top:clamp(44px,5.5vw,76px);display:grid;
+  grid-template-columns:auto 1px 1fr;gap:clamp(26px,4vw,58px);
+  align-items:center;padding:clamp(24px,3vw,40px);
+}
+.inst__div{background:var(--line);align-self:stretch}
+.arc{display:block}
+.arc__wrap{position:relative;display:grid;place-items:center}
+.arc__c{position:absolute;text-align:center}
+.arc__n{
+  font-family:'Outfit',sans-serif;font-weight:200;font-size:66px;color:var(--t1);
+  line-height:1;letter-spacing:-.04em;
+}
+.arc__n sup{font-size:.32em;color:var(--gold);vertical-align:super;font-weight:300;margin-left:2px}
+.arc__l{margin-top:4px}
+
+.inst__read{text-align:left}
+.inst__read h3{margin-bottom:10px}
+.inst__read p{font-size:15.5px;color:var(--t3);max-width:46ch;line-height:1.55}
+.rows{margin-top:22px;text-align:left}
+.row{
+  display:grid;grid-template-columns:1fr 52px;gap:7px 14px;align-items:center;
+  padding-block:11px;border-bottom:1px solid var(--line-soft);
+}
+.row:last-child{border-bottom:0}
+.row__n{font-size:14.5px;color:var(--t2);display:flex;align-items:center;gap:9px}
+.row__n b{color:var(--t1);font-weight:600}
+.row__v{font-size:14px;color:var(--t1);font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.row__b{grid-column:1/-1;height:5px;background:#252932;border-radius:3px;overflow:hidden}
+.row__b i{display:block;height:100%;border-radius:3px}
+.you{
+  font-family:'Roboto Mono',monospace;font-size:9px;letter-spacing:.13em;
+  color:var(--gold);border:1px solid var(--gold-deep);padding:1px 5px;border-radius:3px;
+}
+
+/* ═════════ ENGINE RAIL ═════════ */
+.rail{border-block:1px solid var(--line-soft);background:var(--n1)}
+.rail__in{display:grid;grid-template-columns:repeat(3,1fr);gap:0}
+.rail__i{padding:26px clamp(14px,2vw,30px);border-right:1px solid var(--line-soft)}
+.rail__i:last-child{border-right:0}
+.rail__i:first-child{padding-left:0}
+.rail__h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px}
+.rail__h b{font-size:15px;color:var(--t1);font-weight:600}
+.rail__h span{font-family:'Roboto Mono',monospace;font-size:13px;color:var(--gold)}
+.ticks{display:flex;gap:3px}
+.ticks i{flex:1;height:22px;border-radius:2px;background:var(--n4)}
+.ticks i.on{background:linear-gradient(180deg,var(--gold-lit),var(--gold))}
+.ticks i.dim{background:var(--n3)}
+.rail__c{font-size:13px;color:var(--t4);margin-top:11px}
+
+/* ═════════ SECTIONS ═════════ */
+.sec{padding-block:clamp(58px,7.5vw,120px)}
+.sechead{max-width:62ch}
+.sechead h2{margin:16px 0 16px;text-wrap:balance}
+.sechead p{color:var(--t3);font-size:clamp(16px,1.3vw,18.5px);line-height:1.6}
+
+/* alternating feature rows — thin rules, wide space, no card grid */
+.feat{border-top:1px solid var(--line)}
+.feat__r{
+  display:grid;grid-template-columns:1fr 1.15fr;gap:clamp(26px,4vw,72px);
+  padding-block:clamp(34px,4.4vw,64px);border-bottom:1px solid var(--line);align-items:center;
+}
+.feat__r:nth-child(even) .feat__t{order:2}
+.feat__t h3{margin:14px 0 12px;font-size:clamp(22px,2.3vw,32px)}
+.feat__t p{color:var(--t3);font-size:16px;line-height:1.62;max-width:46ch}
+
+.mini{padding:22px;border-radius:12px;background:var(--n2);box-shadow:inset 0 1px 0 var(--line-lift),0 0 0 1px var(--line)}
+.mini__h{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.mini__h b{font-size:13.5px;color:var(--t1);font-weight:600}
+
+.qlist{display:grid;gap:1px;background:var(--line-soft);border-radius:8px;overflow:hidden}
+.qlist__i{
+  background:var(--n2);padding:11px 14px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;
+}
+.qlist__q{font-size:14px;color:var(--t2);line-height:1.35}
+.tag{
+  font-family:'Roboto Mono',monospace;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 7px;border-radius:4px;white-space:nowrap;
+}
+.tag--you{color:var(--gold);background:rgba(211,184,132,.1);box-shadow:inset 0 0 0 1px var(--gold-deep)}
+.tag--rival{color:var(--oxide);background:rgba(181,112,94,.1);box-shadow:inset 0 0 0 1px rgba(181,112,94,.35)}
+.tag--none{color:var(--t4);background:var(--n3)}
+
+.trend{width:100%;height:auto;display:block}
+
+.srcs{display:flex;flex-wrap:wrap;gap:6px}
+.src{
+  font-family:'Roboto Mono',monospace;font-size:11.5px;padding:5px 10px;border-radius:5px;
+  background:var(--n3);color:var(--t3);
+}
+.src--mine{color:var(--gold);background:rgba(211,184,132,.08);box-shadow:inset 0 0 0 1px var(--gold-deep)}
+
+/* ═════════ EVIDENCE ═════════ */
+.ev{position:relative;overflow:hidden;background:var(--n1);border-block:1px solid var(--line)}
+.ev__aura{
+  position:absolute;top:-260px;right:-160px;width:760px;height:640px;pointer-events:none;
+  background:radial-gradient(50% 50% at 50% 50%, rgba(211,184,132,.09), transparent 70%);
+}
+.ev__g{position:relative;z-index:1;display:grid;grid-template-columns:.9fr 1.25fr;gap:clamp(28px,4vw,66px);align-items:center}
+.ev__card{padding:clamp(22px,2.6vw,34px);border-radius:16px;background:var(--n2);
+  box-shadow:inset 0 1px 0 var(--line-lift),0 0 0 1px var(--line),0 32px 64px -28px rgba(0,0,0,.95)}
+.ev__top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-bottom:16px;border-bottom:1px solid var(--line-soft);margin-bottom:20px}
+.ev__q{font-family:'Outfit',sans-serif;font-weight:300;font-size:clamp(19px,2vw,26px);color:var(--t1);line-height:1.25;margin-bottom:18px;letter-spacing:-.02em}
+.ev__a{font-size:16px;line-height:1.78;color:var(--t2)}
+mark.you{background:rgba(211,184,132,.16);color:var(--gold-lit);padding:1px 6px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--gold-deep)}
+mark.rival{background:rgba(181,112,94,.15);color:#DFA08C;padding:1px 6px;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(181,112,94,.4)}
+.ev__f{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-top:16px;margin-top:20px;border-top:1px solid var(--line-soft)}
+
+/* ═════════ PRICING ═════════ */
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start}
+.plan{
+  padding:30px 26px;border-radius:16px;background:var(--n2);display:flex;flex-direction:column;
+  box-shadow:inset 0 1px 0 var(--line-lift),0 0 0 1px var(--line);
+}
+.plan--feat{
+  background:linear-gradient(180deg,var(--n3),var(--n2));
+  box-shadow:inset 0 1px 0 rgba(211,184,132,.25),0 0 0 1px var(--gold-deep),0 26px 56px -26px rgba(0,0,0,.9);
+  position:relative;
+}
+.plan__tag{position:absolute;top:-11px;left:26px}
+.plan h3{margin-bottom:6px;font-size:19px;font-weight:400;color:var(--t1)}
+.plan__d{font-size:14px;color:var(--t3);min-height:44px;line-height:1.5}
+.plan__v{display:flex;align-items:baseline;gap:6px;margin:20px 0 3px}
+.plan__v b{font-family:'Outfit',sans-serif;font-weight:200;font-size:42px;color:var(--t1);line-height:1;letter-spacing:-.035em}
+.plan__v span{font-size:13.5px;color:var(--t4)}
+.plan ul{list-style:none;padding:0;margin:24px 0;display:grid;gap:12px}
+.plan li{display:flex;gap:10px;font-size:14.5px;color:var(--t2);align-items:flex-start;line-height:1.45}
+.plan li svg{flex:none;margin-top:3px;color:var(--gold)}
+.plan .btn{width:100%;margin-top:auto}
+
+/* ═════════ FAQ ═════════ */
+.faq{border-top:1px solid var(--line);max-width:860px}
+details{border-bottom:1px solid var(--line)}
+summary{
+  list-style:none;cursor:pointer;padding-block:20px;
+  display:grid;grid-template-columns:1fr 20px;gap:20px;align-items:center;
+  font-family:'Outfit',sans-serif;font-weight:300;font-size:clamp(18px,1.7vw,23px);
+  color:var(--t1);letter-spacing:-.018em;line-height:1.28;transition:.18s;
+}
+summary:hover{color:var(--gold-lit)}
+summary::-webkit-details-marker{display:none}
+summary::after{
+  content:'';width:14px;height:14px;justify-self:end;align-self:center;
+  background-image:linear-gradient(var(--gold),var(--gold)),linear-gradient(var(--gold),var(--gold));
+  background-position:center,center;background-repeat:no-repeat;
+  background-size:100% 1.5px, 1.5px 100%;
+  transition:background-size .26s cubic-bezier(.32,.72,0,1);
+}
+details[open] summary::after{background-size:100% 1.5px, 1.5px 0%}
+details p{padding-bottom:24px;color:var(--t3);font-size:15.5px;line-height:1.7;max-width:70ch}
+
+/* ═════════ CTA + FOOTER ═════════ */
+.cta{position:relative;overflow:hidden;text-align:center;padding-block:clamp(58px,7vw,110px)}
+.cta__aura{
+  position:absolute;bottom:-380px;left:50%;transform:translateX(-50%);
+  width:1080px;height:720px;pointer-events:none;
+  background:radial-gradient(46% 46% at 50% 50%, rgba(211,184,132,.15), transparent 70%);
+}
+.cta__in{position:relative;z-index:1}
+.cta h2{max-width:19ch;margin:18px auto 18px;text-wrap:balance}
+.cta p{max-width:50ch;margin:0 auto 30px;color:var(--t3);font-size:17px}
+.form{display:flex;gap:9px;max-width:470px;margin-inline:auto;flex-wrap:wrap}
+.form input{
+  flex:1;min-width:200px;height:48px;border-radius:9px;border:0;padding:0 17px;
+  background:var(--n2);color:var(--t1);font:inherit;font-size:15.5px;outline:0;
+  box-shadow:inset 0 1px 0 var(--line-lift),0 0 0 1px var(--n5);
+}
+.form input::placeholder{color:var(--t4)}
+.form input:focus{box-shadow:inset 0 1px 0 var(--line-lift),0 0 0 1px var(--gold-deep)}
+.form .btn{height:48px}
+
+footer{border-top:1px solid var(--line);padding-block:48px 28px;background:var(--n1)}
+.foot{display:grid;grid-template-columns:1.7fr repeat(3,1fr);gap:30px;padding-bottom:34px}
+.foot h5{font-family:'Roboto Mono',monospace;font-size:10.5px;letter-spacing:.17em;text-transform:uppercase;color:var(--t4);margin:0 0 14px;font-weight:400}
+.foot a{display:block;font-size:14.5px;color:var(--t3);padding-block:5px;transition:.16s}
+.foot a:hover{color:var(--gold)}
+.foot__b{display:flex;justify-content:space-between;padding-top:22px;border-top:1px solid var(--line-soft);flex-wrap:wrap;gap:10px}
+
+@media(max-width:980px){
+  .inst{grid-template-columns:1fr;gap:30px}
+  .inst__div{display:none}
+  .rail__in{grid-template-columns:1fr}
+  .rail__i{border-right:0;border-bottom:1px solid var(--line-soft);padding-left:0}
+  .feat__r,.ev__g{grid-template-columns:1fr;gap:28px}
+  .feat__r:nth-child(even) .feat__t{order:0}
+  .plans{grid-template-columns:1fr}
+  .foot{grid-template-columns:1fr 1fr}
+  .nav nav{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════ NAV ═══════ -->
+<div class="nav">
+  <div class="wrap nav__in">
+    <a href="#" class="mark">perceev</a>
+    <nav>
+      <a href="#reading">The reading</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav__r">
+      <a href="#" style="font-size:14.5px;color:var(--t3)">Sign in</a>
+      <a href="#cta" class="btn btn--gold btn--sm">Run a free probe</a>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ HERO ═══════ -->
+<header class="hero">
+  <div class="hero__aura"></div>
+  <div class="wrap hero__in">
+    <span class="plate plate--gold">Answer-engine intelligence</span>
+
+    <h1>The answer names two brands. <em>Find out if one is yours.</em></h1>
+
+    <p class="hero__sub">
+      Perceev asks Google AI Overview, ChatGPT and Perplexity the 36 unbranded questions your buyers
+      actually type — then reports which brand each answer recommends, with the answer kept word for word.
+    </p>
+
+    <div class="hero__row">
+      <a href="#cta" class="btn btn--gold">Run a free probe</a>
+      <a href="#reading" class="btn btn--line">See a sample reading</a>
+    </div>
+    <p class="plate hero__fine">Free · no signup · no card</p>
+
+    <!-- the instrument -->
+    <div class="inst surface" id="reading">
+      <div class="arc__wrap">
+        <svg class="arc" width="248" height="248" viewBox="0 0 248 248" role="img"
+             aria-label="Share of AI: 41 percent of 36 answers name you">
+          <defs>
+            <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#EBD9B4"/><stop offset="100%" stop-color="#B79A66"/>
+            </linearGradient>
+          </defs>
+          <!-- track: 270° sweep, starting at 7:30 and ending at 4:30 -->
+          <circle cx="124" cy="124" r="100" fill="none" stroke="#2F343D" stroke-width="11" stroke-linecap="round"
+                  stroke-dasharray="471 628" transform="rotate(135 124 124)"/>
+          <!-- lit portion : 41% of that 471px sweep -->
+          <circle cx="124" cy="124" r="100" fill="none" stroke="url(#gold)" stroke-width="11" stroke-linecap="round"
+                  stroke-dasharray="193 628" transform="rotate(135 124 124)"/>
+          <!-- the 50% threshold. A 270° sweep starting at 7:30 puts half-way at 12 o'clock. -->
+          <line x1="124" y1="11" x2="124" y2="31" stroke="#7B808B" stroke-width="1.5"/>
+          <text x="124" y="7" font-family="Roboto Mono, monospace" font-size="8.5" fill="#7B808B"
+                letter-spacing="1" text-anchor="middle">50</text>
+        </svg>
+        <div class="arc__c">
+          <div class="arc__n">41<sup>%</sup></div>
+          <div class="plate arc__l">Share of AI</div>
+        </div>
+      </div>
+
+      <div class="inst__div"></div>
+
+      <div class="inst__read">
+        <h3>15 of 36 answers named Brightwave.</h3>
+        <p>The other 21 named a rival, or named nobody at all. That second number is the one that moves —
+        and every point of it is a specific question you can go and win.</p>
+
+        <div class="rows">
+          <div class="row">
+            <span class="row__n"><b>Brightwave</b><span class="you">YOU</span></span>
+            <span class="row__v">41%</span>
+            <span class="row__b"><i style="width:41%;background:linear-gradient(90deg,var(--gold),var(--gold-lit))"></i></span>
+          </div>
+          <div class="row">
+            <span class="row__n">NorthPeak</span><span class="row__v">33%</span>
+            <span class="row__b"><i style="width:33%;background:#5C616B"></i></span>
+          </div>
+          <div class="row">
+            <span class="row__n">Lumen IQ</span><span class="row__v">17%</span>
+            <span class="row__b"><i style="width:17%;background:#454A54"></i></span>
+          </div>
+          <div class="row">
+            <span class="row__n" style="color:var(--t4)">No brand named</span><span class="row__v" style="color:var(--t3)">9%</span>
+            <span class="row__b"><i style="width:9%;background:#33373F"></i></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════ ENGINE RAIL ═══════ -->
+<div class="rail">
+  <div class="wrap rail__in">
+    <div class="rail__i">
+      <div class="rail__h"><b>Google AI Overview</b><span>5 / 12</span></div>
+      <div class="ticks">
+        <i class="dim"></i><i class="on"></i><i></i><i class="on"></i><i class="dim"></i><i></i>
+        <i class="on"></i><i class="on"></i><i></i><i class="dim"></i><i class="on"></i><i></i>
+      </div>
+      <p class="rail__c">Three of your four highest-intent questions live here.</p>
+    </div>
+    <div class="rail__i">
+      <div class="rail__h"><b>ChatGPT</b><span>6 / 12</span></div>
+      <div class="ticks">
+        <i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i><i class="on"></i>
+        <i class="dim"></i><i></i><i class="on"></i><i></i><i class="dim"></i><i class="on"></i>
+      </div>
+      <p class="rail__c">Your strongest engine — and your rivals' weakest.</p>
+    </div>
+    <div class="rail__i">
+      <div class="rail__h"><b>Perplexity</b><span>4 / 12</span></div>
+      <div class="ticks">
+        <i></i><i class="on"></i><i></i><i class="dim"></i><i></i><i class="on"></i>
+        <i></i><i class="on"></i><i class="dim"></i><i class="on"></i><i></i><i></i>
+      </div>
+      <p class="rail__c">Cites sources hardest. Only 6 of 64 are pages you control.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ FEATURES ═══════ -->
+<section class="sec wrap">
+  <div class="sechead">
+    <span class="plate plate--gold">What a reading contains</span>
+    <h2>Not a rank. A verdict, with the sentence that produced it.</h2>
+    <p>Four things arrive with every scan, and none of them require you to configure anything first.</p>
+  </div>
+
+  <div class="feat" style="margin-top:clamp(34px,4vw,58px)">
+
+    <div class="feat__r">
+      <div class="feat__t">
+        <span class="plate">01 · The set</span>
+        <h3>36 questions, and not one of them says your name</h3>
+        <p>A leading question returns a flattering answer, so the tracked set never contains one. Every
+        entry is a phrasing a buyer would type on their own — which is the entire reason the verdict is
+        worth reading.</p>
+      </div>
+      <div class="mini">
+        <div class="mini__h"><b>Tracked set · healthcare · India</b><span class="plate">36 total</span></div>
+        <div class="qlist">
+          <div class="qlist__i"><span class="qlist__q">best EHR platform for a 200-bed hospital</span><span class="tag tag--rival">NorthPeak</span></div>
+          <div class="qlist__i"><span class="qlist__q">top patient engagement software in India</span><span class="tag tag--you">You</span></div>
+          <div class="qlist__i"><span class="qlist__q">NABH compliance software comparison</span><span class="tag tag--rival">NorthPeak</span></div>
+          <div class="qlist__i"><span class="qlist__q">teleconsultation platforms for tier-2 cities</span><span class="tag tag--you">You</span></div>
+          <div class="qlist__i"><span class="qlist__q">affordable HIMS for multi-specialty clinics</span><span class="tag tag--none">No brand</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feat__r">
+      <div class="feat__t">
+        <span class="plate">02 · The trend</span>
+        <h3>One number, tracked long enough to prove cause</h3>
+        <p>Readings run on a cadence and are stored per question, per engine, per day. When a question
+        flips from a rival to you, we can point at the exact page the engine started citing.</p>
+      </div>
+      <div class="mini">
+        <div class="mini__h"><b>Share of AI</b><span class="plate">Last 6 readings</span></div>
+        <svg class="trend" viewBox="0 0 420 152" role="img" aria-label="Share of AI rising from 22 to 41 percent across six readings">
+          <defs>
+            <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#D3B884" stop-opacity=".2"/>
+              <stop offset="100%" stop-color="#D3B884" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <g stroke="#1E2127" stroke-width="1">
+            <line x1="34" y1="16" x2="412" y2="16"/><line x1="34" y1="48" x2="412" y2="48"/>
+            <line x1="34" y1="80" x2="412" y2="80"/><line x1="34" y1="112" x2="412" y2="112"/>
+          </g>
+          <g font-family="Roboto Mono, monospace" font-size="9" fill="#565B65" text-anchor="end">
+            <text x="26" y="19">50</text><text x="26" y="51">33</text>
+            <text x="26" y="83">17</text><text x="26" y="115">0</text>
+          </g>
+          <!-- threshold -->
+          <line x1="34" y1="48" x2="412" y2="48" stroke="#565B65" stroke-width="1" stroke-dasharray="3 4"/>
+          <path d="M46 100 L118 92 L190 80 L262 82 L334 60 L404 34 L404 112 L46 112 Z" fill="url(#fill)"/>
+          <path d="M46 100 L118 92 L190 80 L262 82 L334 60 L404 34"
+                fill="none" stroke="#D3B884" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="404" cy="34" r="4" fill="#EBD9B4"/>
+          <circle cx="404" cy="34" r="8.5" fill="none" stroke="#D3B884" stroke-opacity=".3" stroke-width="1"/>
+          <g font-family="Roboto Mono, monospace" font-size="9" fill="#565B65" text-anchor="middle">
+            <text x="46" y="134">MAR</text><text x="118" y="134">APR</text><text x="190" y="134">MAY</text>
+            <text x="262" y="134">JUN</text><text x="334" y="134">JUL</text><text x="404" y="134">AUG</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="feat__r">
+      <div class="feat__t">
+        <span class="plate">03 · The field</span>
+        <h3>The rivals the engines believe in, not the ones you listed</h3>
+        <p>Every brand co-mentioned or cited alongside you is collected from the answers themselves and
+        ranked by how often it takes a recommendation you wanted. On a first reading, the surprises are
+        usually the useful part.</p>
+      </div>
+      <div class="mini">
+        <div class="mini__h"><b>Discovered rivals</b><span class="plate">7 found · 3 new</span></div>
+        <div class="rows">
+          <div class="row"><span class="row__n">NorthPeak <span class="tag tag--none" style="font-size:9px">NEW</span></span><span class="row__v">33%</span><span class="row__b"><i style="width:33%;background:#5C616B"></i></span></div>
+          <div class="row"><span class="row__n">Lumen IQ</span><span class="row__v">17%</span><span class="row__b"><i style="width:17%;background:#4E535D"></i></span></div>
+          <div class="row"><span class="row__n">Vantage <span class="tag tag--none" style="font-size:9px">NEW</span></span><span class="row__v">11%</span><span class="row__b"><i style="width:11%;background:#454A54"></i></span></div>
+          <div class="row"><span class="row__n">Coreset</span><span class="row__v">7%</span><span class="row__b"><i style="width:7%;background:#3B3F48"></i></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feat__r">
+      <div class="feat__t">
+        <span class="plate">04 · The sources</span>
+        <h3>Every page the engines drew the answer from</h3>
+        <p>Sixty-four sources fed this reading. Six of them are yours. The remaining fifty-eight are the
+        shape of the work — and where the content operation starts.</p>
+      </div>
+      <div class="mini">
+        <div class="mini__h"><b>Cited sources</b><span class="plate">64 · 6 yours</span></div>
+        <div class="srcs">
+          <span class="src src--mine">brightwave.io/ehr</span>
+          <span class="src src--mine">brightwave.io/blog/readmission</span>
+          <span class="src">g2.com</span>
+          <span class="src">nabh.co</span>
+          <span class="src">healthtech.in</span>
+          <span class="src">reddit.com/r/healthIT</span>
+          <span class="src">capterra.com</span>
+          <span class="src">northpeak.com/compare</span>
+          <span class="src">+56 more</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══════ EVIDENCE ═══════ -->
+<div class="ev" id="evidence">
+  <section class="wrap" style="padding-block:clamp(56px,7vw,104px)">
+    <div class="ev__aura"></div>
+    <div class="ev__g">
+      <div>
+        <span class="plate plate--gold">Evidence</span>
+        <h2 style="margin:16px 0 18px;font-size:clamp(28px,3.4vw,46px)">Kept word for word.</h2>
+        <p style="color:var(--t3);font-size:17px;max-width:38ch;line-height:1.6">
+          Every reading is backed by the text the engine actually returned — marked where your name
+          appears, and where a rival took the recommendation instead. No paraphrase, no black box, no
+          score you have to take on faith.
+        </p>
+        <a href="#cta" class="btn btn--line" style="margin-top:26px">Read the full report</a>
+      </div>
+
+      <div class="ev__card">
+        <div class="ev__top">
+          <span class="tag tag--none">Perplexity</span>
+          <span class="plate">16 Aug 2026 · 09:14 IST</span>
+          <span class="tag tag--rival" style="margin-left:auto">Rival cited first</span>
+        </div>
+        <p class="ev__q">“which analytics tools track clinical outcomes”</p>
+        <p class="ev__a">
+          Clinical outcome analytics generally splits between registry-based reporting and real-time
+          dashboards. <mark class="you">Brightwave</mark> covers the dashboard side well for mid-size
+          hospitals and is frequently named for readmission tracking. For registry submission and
+          NABH-aligned reporting, <mark class="rival">NorthPeak</mark> is cited more often, particularly
+          by Indian implementation partners.
+        </p>
+        <div class="ev__f">
+          <span class="tag tag--you">You · mentioned</span>
+          <span class="tag tag--none">4 sources</span>
+          <a href="#" style="margin-left:auto;font-size:14px;color:var(--gold);font-weight:600">Open full answer →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ═══════ PRICING ═══════ -->
+<section class="sec wrap" id="pricing">
+  <div class="sechead">
+    <span class="plate plate--gold">Pricing</span>
+    <h2>The reading is free. You pay to keep it running.</h2>
+    <p>No trial timer, no feature held hostage. The first probe is complete, and it stays free.</p>
+  </div>
+
+  <div class="plans" style="margin-top:clamp(32px,4vw,52px)">
+    <div class="plan">
+      <h3>Probe</h3>
+      <p class="plan__d">One complete reading of your domain, with every answer kept.</p>
+      <div class="plan__v"><b>Free</b></div>
+      <p class="plate">No signup · no card</p>
+      <ul>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> 36 unbranded questions</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> All configured engines</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Rival discovery</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Verbatim evidence</li>
+      </ul>
+      <a href="#cta" class="btn btn--line">Run a probe</a>
+    </div>
+
+    <div class="plan plan--feat">
+      <span class="plan__tag tag tag--you" style="background:var(--n3)">Most chosen</span>
+      <h3>Register</h3>
+      <p class="plan__d">The reading on a cadence, with history, alerts and the sources view.</p>
+      <div class="plan__v"><b>₹40k</b><span>/ month</span></div>
+      <p class="plate">Billed monthly · cancel anytime</p>
+      <ul>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Everything in Probe</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Up to 100 tracked questions</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Daily / weekly cadence + trend</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Rival benchmarking &amp; sources</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Movement alerts by email</li>
+      </ul>
+      <a href="#cta" class="btn btn--gold">Start tracking</a>
+    </div>
+
+    <div class="plan">
+      <h3>Operation</h3>
+      <p class="plan__d">The reading plus the agent content operation that closes the gaps.</p>
+      <div class="plan__v"><b>Custom</b></div>
+      <p class="plate">Scoped per category</p>
+      <ul>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Everything in Register</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Opportunity queue from live gaps</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Agent drafting, human approval</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg> Lift measured against the score</li>
+      </ul>
+      <a href="#cta" class="btn btn--line">Book a walkthrough</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ FAQ ═══════ -->
+<section class="sec wrap" id="faq" style="padding-top:0">
+  <div class="sechead" style="margin-bottom:clamp(28px,3.4vw,48px)">
+    <span class="plate plate--gold">Objections</span>
+    <h2 style="font-size:clamp(26px,3.2vw,42px)">Answered without marketing language.</h2>
+  </div>
+
+  <div class="faq">
+    <details open>
+      <summary>Why unbranded questions?</summary>
+      <p>A branded question already contains the answer. Ask an engine “is Brightwave good for hospitals”
+      and it will find something kind to say — it is a completion machine and you handed it the premise.
+      Your buyer types “best EHR for a 200-bed hospital”, and there the engine actually has to choose.
+      Unbranded is the only phrasing where being named means anything.</p>
+    </details>
+    <details>
+      <summary>How is this different from rank tracking?</summary>
+      <p>A rank tracker tells you where a page sits in a list of blue links. There is no list here — there
+      is one paragraph naming two vendors. The unit of measurement is whether that paragraph says your
+      name, so we measure that directly and keep the paragraph.</p>
+    </details>
+    <details>
+      <summary>Does the score actually move?</summary>
+      <p>Yes, and that is why it runs on a cadence. Readings are stored per question, per engine, per day.
+      The tracked set only ever grows additively, so a reading from March is still comparable to one from
+      August even after the set has expanded.</p>
+    </details>
+    <details>
+      <summary>What do you need access to?</summary>
+      <p>A domain. Nothing else. The questions are generated from public information about your category —
+      we never need your analytics, your CMS, or your CRM.</p>
+    </details>
+  </div>
+</section>
+
+<!-- ═══════ CTA ═══════ -->
+<section class="cta">
+  <div class="cta__aura"></div>
+  <div class="wrap cta__in">
+    <span class="plate plate--gold">Free · 36 questions · no signup</span>
+    <h2>Find out what the engines say when you are not in the room.</h2>
+    <p>Enter a domain. We will ask the questions your buyers ask and show you which brand each answer names.</p>
+    <form class="form" onsubmit="return false">
+      <input type="text" placeholder="yourcompany.com" aria-label="Your domain">
+      <button class="btn btn--gold" type="submit">Run the probe</button>
+    </form>
+    <p class="plate" style="margin-top:16px">Most readings finish in a few minutes</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div>
+        <a href="#" class="mark" style="font-size:20px">perceev</a>
+        <p style="font-size:14.5px;color:var(--t4);max-width:32ch;margin-top:14px;line-height:1.55">
+          Answer-engine intelligence for teams whose buyers have stopped searching and started asking.
+        </p>
+      </div>
+      <div><h5>Product</h5><a href="#">The reading</a><a href="#">Rivals</a><a href="#">Sources</a><a href="#">Content Studio</a></div>
+      <div><h5>Company</h5><a href="#">How it works</a><a href="#">Pricing</a><a href="#">Changelog</a><a href="#">Contact</a></div>
+      <div><h5>Legal</h5><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Data handling</a></div>
+    </div>
+    <div class="foot__b">
+      <span class="plate">© 2026 Perceev</span>
+      <span class="plate">Demonstration data uses fictional brands</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

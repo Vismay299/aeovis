@@ -1,37 +1,39 @@
 'use client';
 
 /**
- * The cabin's control column.
+ * The app sidebar.
  *
- * Identity at the head, the brand under observation in its berth, the panel
- * regions as engraved legend buttons with an indicator lamp each, and the
- * train register of previous readings below. Selection is shown by a lit
- * lamp and a lit legend — position and light, not colour alone.
+ * Real navigation, not a picture of navigation: the five product views live
+ * inside one shell and this switches between them. Below 1080px it collapses
+ * into a horizontal scroller and the groups and footer drop away.
  */
 
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
-import { Wordmark } from './Wordmark';
-import { Button } from './Button';
-import { Describer } from '@/components/signal/Describer';
-import { Lamp } from '@/components/signal/Lamp';
+import {
+  Plus, LayoutDashboard, MessageSquareText, Users, Link2,
+  ListChecks, Bot, Radar,
+} from 'lucide-react';
+import { Wordmark } from '@/components/landing/SiteNav';
 
-const NAV_ITEMS = [
-  { key: 'overview', label: 'overview', testId: 'sidebar-overview' },
-  { key: 'answers', label: 'answers', testId: 'sidebar-answers' },
-  { key: 'rivals', label: 'rivals', testId: 'sidebar-rivals' },
-  { key: 'sources', label: 'sources', testId: 'sidebar-sources' },
-  { key: 'queries', label: 'queries', testId: 'sidebar-queries' },
-  { key: 'crawlability', label: 'crawlability', testId: 'sidebar-crawlability' },
-  { key: 'studio', label: 'studio', testId: 'sidebar-studio' },
+const GROUPS = [
+  {
+    label: 'Reading',
+    items: [
+      { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+      { key: 'answers', label: 'Answers', icon: MessageSquareText },
+      { key: 'rivals', label: 'Rivals', icon: Users },
+      { key: 'sources', label: 'Sources', icon: Link2 },
+    ],
+  },
+  {
+    label: 'Operate',
+    items: [
+      { key: 'queries', label: 'Queries', icon: ListChecks },
+      { key: 'crawlability', label: 'Crawlability', icon: Radar },
+      { key: 'studio', label: 'Studio', icon: Bot },
+    ],
+  },
 ];
-
-function readingLamp(v) {
-  if (v == null) return 'amber';
-  if (v >= 50) return 'green';
-  if (v >= 25) return 'amber';
-  return 'red';
-}
 
 export const Sidebar = ({
   brand,
@@ -48,115 +50,113 @@ export const Sidebar = ({
   const router = useRouter();
 
   return (
-    <aside data-testid="sidebar" className="sb-cabin">
-      <div className="sb-cabin__head">
-        <a
-          href="/"
-          style={{ display: 'inline-flex' }}
-          onClick={(e) => {
-            e.preventDefault();
-            router.push('/');
-          }}
-        >
-          <Wordmark size="sm" />
+    <aside data-testid="sidebar" className="side">
+      <div className="side__brand">
+        <a href="/" onClick={(e) => { e.preventDefault(); router.push('/'); }}>
+          <Wordmark />
         </a>
       </div>
 
       {brand && (
-        <div className="sb-cabin__berth">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <Lamp lamp={readingLamp(currentScore)} size={8} />
-            <span className="sb-cabin__brand" title={brand}>
+        <div
+          style={{
+            padding: '10px 10px 12px', marginBottom: 6,
+            borderBottom: '1px solid var(--line-soft)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+            <b
+              title={brand}
+              style={{
+                fontSize: 14, fontWeight: 640, color: 'var(--ink-1)', letterSpacing: '-.015em',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >
               {brand}
-            </span>
+            </b>
             {currentScore != null && Number.isFinite(currentScore) && (
-              <span style={{ marginLeft: 'auto' }}>
-                <Describer
-                  value={String(Math.round(currentScore)).padStart(2, '0')}
-                  size={14}
-                  bloom={false}
-                  lamp={readingLamp(currentScore)}
-                />
+              <span className="mono" style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--brand)' }}>
+                {Math.round(currentScore)}%
               </span>
             )}
           </div>
           {website && (
-            <div className="t-stamp sb-cabin__site" title={website}>
+            <div
+              className="tag"
+              title={website}
+              style={{ marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis' }}
+            >
               {website}
             </div>
           )}
         </div>
       )}
 
-      <nav className="sb-cabin__nav" aria-label="Panel regions">
-        <div className="sb-cabin__legends">
-          {NAV_ITEMS.map((item) => {
-            const isActive = view === item.key;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                data-testid={item.testId}
-                className="sb-legend"
-                data-active={isActive ? 'true' : 'false'}
-                aria-current={isActive ? 'page' : undefined}
-                onClick={() => onViewChange(item.key)}
-              >
-                <Lamp lamp="white" lit={isActive} size={7} />
-                <span>{item.label}</span>
-                {item.key === 'studio' && studioBadge > 0 && (
-                  <span data-testid="sidebar-studio-badge" className="sb-legend__count">
-                    {studioBadge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {history && history.length > 0 && (
-          <div className="sb-cabin__register">
-            <span className="t-plate" style={{ padding: '0 12px 8px', display: 'block' }}>
-              register
-            </span>
-            <div className="sb-scroll" data-lenis-prevent style={{ maxHeight: 168 }}>
-              {history.slice(0, 8).map((scan, i) => {
-                const isActive =
-                  activeScanTimestamp &&
-                  new Date(scan.scanned_at).getTime() === new Date(activeScanTimestamp).getTime();
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    className="sb-entry"
-                    data-active={isActive ? 'true' : 'false'}
-                    onClick={() => onHistoryClick?.(scan)}
-                  >
-                    <span className="sb-entry__time">
-                      {new Date(scan.scanned_at).toLocaleDateString(undefined, {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </span>
-                    <span className="sb-entry__val t-tally">{scan.visibility_pct}%</span>
-                  </button>
-                );
-              })}
-            </div>
+      <nav className="side__nav" aria-label="Views">
+        {GROUPS.map((g) => (
+          <div key={g.label}>
+            <div className="side__g tag">{g.label}</div>
+            {g.items.map((item) => {
+              const Icon = item.icon;
+              const isActive = view === item.key;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  data-testid={`sidebar-${item.key}`}
+                  className={`side__i${isActive ? ' is-on' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => onViewChange(item.key)}
+                >
+                  <Icon size={15} strokeWidth={1.8} aria-hidden="true" />
+                  <span>{item.label}</span>
+                  {item.key === 'studio' && studioBadge > 0 && (
+                    <b data-testid="sidebar-studio-badge">{studioBadge}</b>
+                  )}
+                </button>
+              );
+            })}
           </div>
-        )}
+        ))}
       </nav>
 
-      <div className="sb-cabin__foot">
-        <Button
-          variant="primary"
-          size="md"
+      {history && history.length > 0 && (
+        <div className="side__foot">
+          <div className="tag" style={{ marginBottom: 8 }}>Readings</div>
+          <div style={{ maxHeight: 168, overflowY: 'auto' }} data-lenis-prevent>
+            {history.slice(0, 8).map((scan, i) => {
+              const isActive = activeScanTimestamp
+                && new Date(scan.scanned_at).getTime() === new Date(activeScanTimestamp).getTime();
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className={`side__i${isActive ? ' is-on' : ''}`}
+                  onClick={() => onHistoryClick?.(scan)}
+                >
+                  <span style={{ fontSize: 13 }}>
+                    {new Date(scan.scanned_at).toLocaleDateString(undefined, {
+                      month: 'short', day: 'numeric',
+                    })}
+                  </span>
+                  <b>{scan.visibility_pct}%</b>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="side__foot">
+        <button
+          type="button"
+          className="btn btn--primary btn--sm"
           style={{ width: '100%' }}
           onClick={onNewScan || (() => router.push('/scan'))}
         >
-          <Plus size={13} />
-          new scan
-        </Button>
+          <Plus size={14} aria-hidden="true" />
+          New scan
+        </button>
       </div>
     </aside>
   );

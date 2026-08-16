@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perceev — five design directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* A deliberately neutral chooser — it must not compete with the five options. */
+*,*::before,*::after{box-sizing:border-box}
+body{
+  margin:0;background:#F4F4F5;color:#3F3F46;
+  font-family:'Inter',-apple-system,'Segoe UI',sans-serif;font-size:16px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{margin:0;color:#18181B;letter-spacing:-.028em;line-height:1.1}
+p{margin:0}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1120px;margin-inline:auto;padding-inline:clamp(20px,4vw,40px)}
+.mono{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:#8A8A93}
+
+header{padding-block:clamp(44px,6vw,76px) 34px;border-bottom:1px solid #E1E1E4}
+header h1{font-size:clamp(30px,4vw,48px);margin:12px 0 14px;max-width:20ch}
+header p{max-width:62ch;color:#5B5B63;font-size:17.5px}
+.meta{display:flex;gap:26px;margin-top:22px;flex-wrap:wrap}
+.meta div b{display:block;font-size:22px;color:#18181B;font-weight:600;letter-spacing:-.02em}
+.meta div span{font-size:13px;color:#8A8A93}
+
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;padding-block:34px 20px}
+.card{
+  background:#fff;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;
+  box-shadow:0 1px 2px rgba(0,0,0,.05),0 0 0 1px rgba(0,0,0,.06);
+  transition:.22s cubic-bezier(.32,.72,0,1);
+}
+.card:hover{transform:translateY(-3px);box-shadow:0 8px 28px -8px rgba(0,0,0,.22),0 0 0 1px rgba(0,0,0,.07)}
+
+/* each preview paints the option's real palette and type feeling */
+.prev{height:172px;padding:20px 22px;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between}
+.prev__t{font-size:27px;line-height:1.02;letter-spacing:-.03em;max-width:14ch}
+.prev__s{display:flex;gap:6px}
+.prev__s i{height:22px;border-radius:3px;display:block}
+.prev__bar{display:flex;flex-direction:column;gap:5px;width:56%}
+.prev__bar i{height:5px;border-radius:3px;display:block}
+
+.p1{background:#FCFBF7}
+.p1 .prev__t{font-family:Georgia,'Times New Roman',serif;color:#17160F;font-weight:400}
+.p1 .prev__t em{color:#B8371F}
+.p2{background:#F6F7F9}
+.p2 .prev__t{color:#0A0C11;font-weight:700}
+.p2 .prev__t em{font-style:normal;color:#4F46E5}
+.p3{background:#fff}
+.p3 .prev__t{color:#0C0C0B;font-weight:800;letter-spacing:-.045em;font-size:31px}
+.p3 .prev__t em{font-style:normal;color:#FF4A17}
+.p4{background:#0D0E12}
+.p4 .prev__t{color:#F4F4F6;font-weight:300;font-size:29px}
+.p4 .prev__t em{font-style:normal;color:#D3B884}
+.p5{background:#070C15}
+.p5 .prev__t{color:#E9EEF7;font-weight:600;letter-spacing:-.032em}
+.p5 .prev__t em{font-style:normal;color:#22D3EE}
+
+.body{padding:20px 22px 22px;display:flex;flex-direction:column;flex:1}
+.tags{display:flex;gap:6px;margin-bottom:11px;flex-wrap:wrap}
+.tag{
+  font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+  padding:3px 7px;border-radius:4px;background:#F1F1F3;color:#6B6B73;
+}
+.tag--dark{background:#18181B;color:#E4E4E7}
+.tag--light{background:#FEF3C7;color:#92400E}
+.body h3{font-size:19px;margin-bottom:7px}
+.body>p{font-size:14.5px;color:#5B5B63;line-height:1.55}
+.pick{
+  margin-top:14px;padding-top:13px;border-top:1px solid #EDEDEF;
+  font-size:13.5px;color:#5B5B63;
+}
+.pick b{color:#18181B;font-weight:600}
+.foot{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
+.open{
+  font-size:14px;font-weight:600;color:#18181B;padding:9px 15px;border-radius:8px;
+  background:#F1F1F3;transition:.16s;
+}
+.card:hover .open{background:#18181B;color:#fff}
+.spec{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#A1A1AA;margin-left:auto}
+
+.note{
+  margin-block:14px 60px;padding:22px 24px;border-radius:12px;background:#fff;
+  box-shadow:0 0 0 1px rgba(0,0,0,.06);
+}
+.note h3{font-size:16px;margin-bottom:10px}
+.note ul{margin:0;padding-left:19px;font-size:14.5px;color:#5B5B63}
+.note li{margin-bottom:6px}
+.note a{color:#4F46E5;font-weight:500}
+
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <span class="mono">Perceev · design exploration · 16 Aug 2026</span>
+  <h1>Five directions for the product page.</h1>
+  <p>Each is a complete, self-contained page (nav, hero, evidence, pricing, FAQ, footer), so you can
+  judge it the way a client will. They are deliberately not variations on one idea: different grids,
+  different type systems, different shape languages. Pick a direction, then we iterate inside it.</p>
+  <div class="meta">
+    <div><b>5</b><span>complete pages</span></div>
+    <div><b>3 / 2</b><span>light / dark</span></div>
+    <div><b>30</b><span>source repos reviewed</span></div>
+    <div><b>0</b><span>segment-display digits</span></div>
+  </div>
+</header>
+
+<div class="wrap grid">
+
+  <!-- 01 -->
+  <a class="card" href="01-ledger-light.html">
+    <div class="prev p1">
+      <div class="prev__t">AI answers your buyers. <em>Whose name does it say?</em></div>
+      <div class="prev__bar">
+        <i style="width:41%;background:#17160F"></i>
+        <i style="width:33%;background:#B0AA95"></i>
+        <i style="width:17%;background:#CFC9B4"></i>
+      </div>
+    </div>
+    <div class="body">
+      <div class="tags">
+        <span class="tag tag--light">Light</span>
+        <span class="tag">Serif display</span>
+        <span class="tag">Editorial grid</span>
+        <span class="tag">Rules, not boxes</span>
+      </div>
+      <h3>01 · Ledger</h3>
+      <p>A printed intelligence report. Warm paper, Instrument Serif headlines, an asymmetric editorial
+      grid, and hairline rules instead of containers. Data lives in real tables and a coverage grid.</p>
+      <p class="pick"><b>Pick this if</b> the buyer is a CXO and you want the page to feel like research
+      someone commissioned, not software someone is selling.</p>
+      <div class="foot">
+        <span class="open">Open →</span>
+        <span class="spec">Instrument Serif · Inter · IBM Plex Mono</span>
+      </div>
+    </div>
+  </a>
+
+  <!-- 02 -->
+  <a class="card" href="02-console-light.html">
+    <div class="prev p2">
+      <div class="prev__t">Your buyers stopped searching. They're <em>asking.</em></div>
+      <div class="prev__s">
+        <i style="width:74px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)"></i>
+        <i style="width:74px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)"></i>
+        <i style="width:74px;background:#4F46E5"></i>
+        <i style="width:74px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.12)"></i>
+      </div>
+    </div>
+    <div class="body">
+      <div class="tags">
+        <span class="tag tag--light">Light</span>
+        <span class="tag">Bento grid</span>
+        <span class="tag">Elevated cards</span>
+        <span class="tag">Product-led</span>
+      </div>
+      <h3>02 · Console</h3>
+      <p>The dashboard is the hero. A full product mock sits under the headline (sidebar, KPI tiles,
+      trend chart, rival table), then a bento grid of capabilities. Soft shadows, rounded surfaces, indigo.</p>
+      <p class="pick"><b>Pick this if</b> the product itself is the strongest argument and you want the
+      page to read like a 2026 SaaS company that has shipped.</p>
+      <div class="foot">
+        <span class="open">Open →</span>
+        <span class="spec">Plus Jakarta Sans · JetBrains Mono</span>
+      </div>
+    </div>
+  </a>
+
+  <!-- 03 -->
+  <a class="card" href="03-beacon-light.html">
+    <div class="prev p3">
+      <div class="prev__t">AI decides who your buyer <em>hears about.</em></div>
+      <div class="prev__s">
+        <i style="width:100%;background:#FF4A17;height:26px"></i>
+      </div>
+    </div>
+    <div class="body">
+      <div class="tags">
+        <span class="tag tag--light">Light</span>
+        <span class="tag">Oversized type</span>
+        <span class="tag">Full-bleed blocks</span>
+        <span class="tag">High contrast</span>
+      </div>
+      <h3>03 · Beacon</h3>
+      <p>A brand site with volume. Huge Bricolage Grotesque headlines, full-bleed orange and black
+      blocks, a live ticker, a scrolling question marquee, and pricing as stacked rows rather than cards.</p>
+      <p class="pick"><b>Pick this if</b> you need to be remembered after one scroll and want Perceev to
+      look like a category-definer rather than a tool.</p>
+      <div class="foot">
+        <span class="open">Open →</span>
+        <span class="spec">Bricolage Grotesque · DM Sans · DM Mono</span>
+      </div>
+    </div>
+  </a>
+
+  <!-- 04 -->
+  <a class="card" href="04-obsidian-dark.html">
+    <div class="prev p4">
+      <div class="prev__t">The answer names two brands. <em>Find out if one is yours.</em></div>
+      <div class="prev__bar">
+        <i style="width:41%;background:linear-gradient(90deg,#D3B884,#EBD9B4)"></i>
+        <i style="width:33%;background:#5C616B"></i>
+        <i style="width:17%;background:#454A54"></i>
+      </div>
+    </div>
+    <div class="body">
+      <div class="tags">
+        <span class="tag tag--dark">Dark</span>
+        <span class="tag">Thin display</span>
+        <span class="tag">Champagne accent</span>
+        <span class="tag">Generous space</span>
+      </div>
+      <h3>04 · Obsidian</h3>
+      <p>Dark done properly: seven real luminance steps instead of the current page's flat black. A
+      270° arc instrument for the score, warm metal accent, fine grain, and alternating feature rows.</p>
+      <p class="pick"><b>Pick this if</b> you want to keep the dark world the brand already committed to,
+      but with the depth, contrast and restraint it is currently missing.</p>
+      <div class="foot">
+        <span class="open">Open →</span>
+        <span class="spec">Outfit · Manrope · Roboto Mono</span>
+      </div>
+    </div>
+  </a>
+
+  <!-- 05 -->
+  <a class="card" href="05-aperture-dark.html">
+    <div class="prev p5">
+      <div class="prev__t">Measure the answer, <em>not the ranking.</em></div>
+      <div class="prev__s">
+        <i style="width:44px;background:#22D3EE"></i>
+        <i style="width:44px;background:#A78BFA"></i>
+        <i style="width:44px;background:#22D3EE"></i>
+        <i style="width:44px;background:#FBBF24"></i>
+        <i style="width:44px;background:#334155"></i>
+        <i style="width:44px;background:#22D3EE"></i>
+      </div>
+    </div>
+    <div class="body">
+      <div class="tags">
+        <span class="tag tag--dark">Dark</span>
+        <span class="tag">Data-dense</span>
+        <span class="tag">Deep slate</span>
+        <span class="tag">Tabular numerics</span>
+      </div>
+      <h3>05 · Aperture</h3>
+      <p>A command deck. Blue-slate rather than black, colour reserved entirely for data, a full-width
+      dashboard, a 36-cell question × engine coverage grid, and pricing as a comparison table.</p>
+      <p class="pick"><b>Pick this if</b> your buyers are analytical and you want the page to prove
+      rigour. This is the one that looks like it measures things.</p>
+      <div class="foot">
+        <span class="open">Open →</span>
+        <span class="spec">Familjen Grotesk · IBM Plex Sans · IBM Plex Mono</span>
+      </div>
+    </div>
+  </a>
+
+</div>
+
+<div class="wrap">
+  <div class="note">
+    <h3>What every option fixes from the current page</h3>
+    <ul>
+      <li><b>No segment-display digits.</b> The "digital clock" glyphs were on roughly thirty elements at
+      once and carried no information. They are gone from all five.</li>
+      <li><b>Real surface contrast.</b> The live page's four surfaces sit within ~6% luminance of each
+      other. The dark options use seven distinct steps; the light ones use paper against ink.</li>
+      <li><b>No wall of identical boxes.</b> The twelve same-size prompt tiles became a table, a chip
+      cloud, a marquee, a labelled list and a coverage grid: one per option.</li>
+      <li><b>Four or more distinct section layouts per page</b>, so the scroll has rhythm instead of five
+      repeats of the same block.</li>
+      <li><b>16px+ body copy at readable contrast</b>, and a credible non-zero demo score (the live page's
+      hero gauge reads 0%).</li>
+      <li><b>The full marketing furniture</b> (nav, engine strip, evidence, pricing, FAQ, CTA, footer),
+      so it reads as a finished product, not a prototype.</li>
+    </ul>
+    <p style="margin-top:14px;font-size:14px;color:#8A8A93">
+      Research behind these choices: <a href="../docs/design/ui-research-sources.md">docs/design/ui-research-sources.md</a>.
+      30 GitHub repos, star counts and licenses verified live against the GitHub API.
+    </p>
+  </div>
+</div>
+
+</body>
+</html>

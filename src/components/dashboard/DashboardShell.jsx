@@ -2,12 +2,9 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, FlaskConical, Loader2, Download, ShieldAlert, AlertCircle } from "lucide-react";
+import { RefreshCw, FlaskConical, Loader2, Download, ShieldAlert } from "lucide-react";
 import { Sidebar } from "@/components/perceev/Sidebar";
-import { Skeleton } from "@/components/perceev/Skeleton";
-import { Button } from "@/components/perceev/Button";
-import { ScoreMeter } from "@/components/perceev/ScoreMeter";
-import { Alert } from "@/components/perceev/Alert";
+import { ThemeToggle } from "@/components/perceev/ThemeToggle";
 import { ScoreBand } from "@/components/dashboard/ScoreBand";
 import { OverviewView } from "@/components/dashboard/OverviewView";
 import { AnswersView } from "@/components/dashboard/AnswersView";
@@ -21,44 +18,60 @@ import {
   normalizeResult,
   getHistoryNonBrandedCount,
 } from "@/services/api";
-import { scoreTier, tierLabel, formatTimestamp, relativeTime } from "@/utils/format";
+import { scoreTier, formatTimestamp, relativeTime } from "@/utils/format";
 import { getBrandAliases } from "@/lib/scoring/aliases";
 import { resolveBrandKey } from "@/lib/scoring/brandKey";
 import {
   AIO_ERROR_RATE_LIMIT_PCT,
   AIO_MIN_NON_BRANDED_COVERAGE,
-  AIO_COVERAGE_WARNING_PCT,
 } from "@/lib/scoring/aioConstants";
 
 const RERUN_STAGES = [
   "Submitting brand for analysis",
-  "Sourcing real Google queries",
-  "Probing Google AI Overview via Bright Data",
+  "Sourcing real buyer queries",
+  "Probing the answer engines",
   "Scoring visibility & composing evidence",
 ];
 
+const VIEW_TITLE = {
+  overview: "Overview",
+  answers: "Answers",
+  rivals: "Rivals",
+  sources: "Sources",
+  queries: "Tracked queries",
+  crawlability: "Crawlability",
+  studio: "Studio",
+};
+
+/* Engines are configured per deployment, so every engine-facing label is
+   derived from what the scan actually reported — never a fixed list. */
+const ENGINE_LABEL = {
+  aio: "AI Overview",
+  google_ai_overview: "AI Overview",
+  chatgpt: "ChatGPT",
+  openai: "ChatGPT",
+  perplexity: "Perplexity",
+  gemini: "Gemini",
+};
+
+function engineLabel(key) {
+  return ENGINE_LABEL[key] || String(key || "").toUpperCase();
+}
+
 /**
- * DashboardShell — P0.3.
+ * DashboardShell.
  *
- * The entire dashboard UI, extracted verbatim from the pre-P0.3
- * `src/app/dashboard/page.js` so every route (server-backed `/dashboard/[brand]`,
- * `/dashboard/[brand]/[scanId]`, and the legacy `/dashboard` migration shim)
- * renders identical markup, view routing, and `data-testid`s.
+ * The whole product surface: one app shell with a real sidebar and an inner
+ * view router, so the five reading views and Studio share the same chrome.
  *
  * Props:
- *   scan   — the raw scan record to display, in the same three-state contract
- *            the old sessionStorage-backed page used:
+ *   scan   — the raw scan record to display, in a three-state contract:
  *              undefined -> still loading (skeleton)
  *              null      -> nothing to show (empty state)
  *              object    -> a scan record (DB row shape or a sample record);
  *                           normalized internally via normalizeResult()
- *   scanId — optional, the concrete `scans.id` of the record being shown (the
- *            caller route knows this even though normalizeResult()'s output
- *            does not carry `.id` forward). Not wired to any behavior yet —
- *            reserved for a future precise "view this exact scan" deep link
- *            or the brand-key analytics endpoints (resolveBrandKey(scan.brand,
- *            scan.website) -> /api/brands/[brand]/metrics), which this
- *            package intentionally does not call.
+ *   scanId — optional, the concrete `scans.id` of the record being shown.
+ *            Reserved for a future precise "view this exact scan" deep link.
  */
 export default function DashboardShell({ scan, scanId }) {
   const router = useRouter();
@@ -90,8 +103,6 @@ export default function DashboardShell({ scan, scanId }) {
 
   // `scan` is supplied by the route: undefined while loading, null when there
   // is nothing to show, or the raw record (DB row or sample) once available.
-  // Re-runs whenever the route hands down a different record (e.g. the user
-  // navigates from one /dashboard/[brand] to another without a full reload).
   useEffect(() => {
     const normalized = scan
       ? normalizeResult(scan, scan.brand, scan.website)
@@ -222,84 +233,59 @@ export default function DashboardShell({ scan, scanId }) {
     return { scoreTrend, previousScan, sortedHistory, deltaSamePromptSet };
   }, [result, history]);
 
-  // Empty state
+  // ── empty state ───────────────────────────────────────────────────
   if (result === null) {
     return (
-      <div style={{ minHeight: "100vh", background: "var(--bg-0)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div
-          data-testid="dashboard-empty"
-          style={{
-            maxWidth: "420px",
-            margin: "0 auto",
-            textAlign: "center",
-            background: "var(--bg-1)",
-            border: "1px solid var(--border-1)",
-            borderRadius: "var(--radius-2)",
-            padding: "var(--space-9)",
-          }}
-        >
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              fontWeight: 500,
-              textTransform: "uppercase",
-              letterSpacing: "0.14em",
-              color: "var(--accent-text)",
-            }}
-          >
-            No report yet
-          </span>
-          <h2
-            style={{
-              fontFamily: "var(--font-sans)",
-              fontSize: "var(--type-h1)",
-              fontWeight: 600,
-              letterSpacing: "var(--track-h1)",
-              color: "var(--text-1)",
-              marginTop: "var(--space-4)",
-            }}
-          >
-            Your dashboard is waiting
-          </h2>
-          <p
-            style={{
-              color: "var(--text-2)",
-              marginTop: "var(--space-4)",
-              lineHeight: 1.55,
-              fontSize: "14px",
-            }}
-          >
-            Run your first Google AI Overview visibility check to see your score, top
-            answers, and competitor gaps right here.
-          </p>
-          <div style={{ marginTop: "var(--space-8)" }}>
-            <Button
-              data-testid="empty-run-scan"
-              variant="primary"
-              size="lg"
-              onClick={() => router.push("/scan")}
-            >
-              Run a visibility check
-            </Button>
+      <div className="scan">
+        <div className="scan__in">
+          <div className="card" data-testid="dashboard-empty" style={{ padding: "clamp(28px,4vw,48px)" }}>
+            <span className="tag tag--brand">No report yet</span>
+            <h2 style={{ margin: "16px 0 14px", fontSize: "clamp(26px,3vw,38px)" }}>
+              Your dashboard is waiting
+            </h2>
+            <p className="scan__sub">
+              Run your first visibility check to see your share of AI, the answers behind it, and
+              which rivals are taking the recommendations you wanted.
+            </p>
+            <div style={{ marginTop: 28 }}>
+              <button
+                type="button"
+                data-testid="empty-run-scan"
+                className="btn btn--primary btn--lg"
+                onClick={() => router.push("/scan")}
+              >
+                Run a visibility check
+              </button>
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // Loading state
+  // ── loading state ─────────────────────────────────────────────────
   if (result === undefined) {
     return (
-      <div style={{ minHeight: "100vh", background: "var(--bg-0)", display: "flex" }}>
-        <Sidebar />
-        <main style={{ flex: 1, padding: "var(--space-9)" }}>
-          <div style={{ maxWidth: "900px" }}>
-            <Skeleton style={{ height: "16px", width: "120px", marginBottom: "var(--space-4)" }} />
-            <Skeleton style={{ height: "48px", width: "280px", marginBottom: "var(--space-9)" }} />
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "var(--space-5)", marginBottom: "var(--space-8)" }}>
-              <Skeleton style={{ height: "180px" }} />
-              <Skeleton style={{ height: "180px" }} />
+      <div className="app">
+        <aside className="side">
+          <div className="side__brand"><div className="skel" style={{ width: 110, height: 20 }} /></div>
+          <div style={{ padding: "0 10px" }}>
+            {Array.from({ length: 7 }, (_, i) => (
+              <div key={i} className="skel" style={{ height: 30, marginBottom: 6 }} />
+            ))}
+          </div>
+        </aside>
+        <main className="main">
+          <div className="topbar"><div className="skel" style={{ width: 160, height: 18 }} /></div>
+          <div className="viewpad">
+            <div className="grid g4" style={{ marginBottom: 13 }}>
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className="skel" style={{ height: 96 }} />
+              ))}
+            </div>
+            <div className="grid g-wide">
+              <div className="skel" style={{ height: 280 }} />
+              <div className="skel" style={{ height: 280 }} />
             </div>
           </div>
         </main>
@@ -385,44 +371,35 @@ export default function DashboardShell({ scan, scanId }) {
 
   const tierLabelMap = { strong: "Strong", moderate: "Moderate", weak: "Weak" };
 
+  /* Whatever engines actually reported — not a hardcoded count of three. */
+  const probeSources = result.isMultiEngine ? (result.probeSources || []) : ["aio"];
+
   return (
-    <div style={{ minHeight: "100vh", background: "var(--bg-0)", display: "flex" }}>
-      {/* Scanning overlay */}
+    <div className="app">
+      {/* Re-run overlay */}
       {isScanning && (
         <div
+          role="status"
+          aria-live="polite"
           style={{
-            position: "fixed",
-            inset: 0,
-            zIndex: 50,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(14,13,11, 0.85)",
-            backdropFilter: "var(--blur-overlay)",
-            WebkitBackdropFilter: "var(--blur-overlay)",
+            position: "fixed", inset: 0, zIndex: 50,
+            display: "grid", placeItems: "center", padding: 24,
+            background: "color-mix(in srgb, var(--paper) 88%, transparent)",
+            backdropFilter: "blur(12px)",
           }}
         >
-          <Loader2
-            size={40}
-            style={{ color: "var(--accent)", animation: "spin 1s linear infinite", marginBottom: "var(--space-4)" }}
-          />
-          <h2
-            style={{
-              fontFamily: "var(--font-sans)",
-              fontSize: "20px",
-              fontWeight: 600,
-              color: "var(--text-1)",
-            }}
-          >
-            {RERUN_STAGES[rerunStage] || "Probing Google AI Overview"} ({rerunProgress}%)
-          </h2>
-          <p style={{ color: "var(--text-2)", marginTop: "var(--space-2)", fontSize: "14px" }}>
-            Probing live Google AI Overview via Bright Data. Can take several minutes if the
-            SERP provider is retrying — this will keep updating, it isn&apos;t frozen.
-          </p>
-          <div style={{ marginTop: "var(--space-6)", width: "260px" }}>
-            <ScoreMeter segments={20} value={rerunProgress} />
+          <div className="card" style={{ padding: 30, maxWidth: 460, textAlign: "center" }}>
+            <Loader2 size={26} style={{ color: "var(--brand)", margin: "0 auto 14px" }} aria-hidden="true" />
+            <h4 style={{ marginBottom: 8 }}>
+              {RERUN_STAGES[rerunStage] || "Probing the answer engines"}
+            </h4>
+            <p style={{ color: "var(--ink-3)", fontSize: 14, marginBottom: 18 }}>
+              This keeps updating — it is not frozen. A slow run can take several minutes.
+            </p>
+            <div className="probe__bar">
+              <i style={{ transform: `scaleX(${Math.max(0, Math.min(1, rerunProgress / 100))})` }} />
+            </div>
+            <div className="tag" style={{ marginTop: 10 }}>{rerunProgress}% complete</div>
           </div>
         </div>
       )}
@@ -440,315 +417,196 @@ export default function DashboardShell({ scan, scanId }) {
         currentScore={heroScore ?? result.visibilityScore}
       />
 
-      <main
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          height: "100vh",
-          overflow: "hidden",
-        }}
-      >
-        {/* Header strip */}
-        <header
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "var(--space-5) var(--space-7)",
-            borderBottom: "1px solid var(--border-1)",
-            background: "var(--bg-0)",
-            flexShrink: 0,
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "10px",
-                fontWeight: 500,
-                textTransform: "uppercase",
-                letterSpacing: "0.12em",
-                color: "var(--text-3)",
-              }}
-            >
-              {view === "overview"
-                ? "Visibility Overview"
-                : view === "answers"
-                ? "Answers"
-                : view === "rivals"
-                ? "Rivals"
-                : view === "sources"
-                ? "Sources"
-                : view === "studio"
-                ? "Content Studio"
-                : view === "crawlability"
-                ? "Crawlability"
-                : "Tracked Queries"}
-            </div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "var(--space-3)", marginTop: "2px" }}>
-              <h1
-                data-testid="dashboard-brand"
-                style={{
-                  fontFamily: "var(--font-sans)",
-                  fontSize: "20px",
-                  fontWeight: 600,
-                  color: "var(--text-1)",
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                {result.brand}
-              </h1>
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "11px",
-                  color: "var(--text-3)",
-                }}
-              >
-                {result.website}
-              </span>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-            <span
-              data-testid="dashboard-timestamp"
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "10px",
-                color: "var(--text-3)",
-                marginRight: "var(--space-2)",
-              }}
-            >
-              {formatTimestamp(result.scanTimestamp)} ({relativeTime(result.scanTimestamp)})
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "9px",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                padding: "2px 8px",
-                borderRadius: "var(--radius-1)",
-                background: "var(--info-bg)",
-                color: "var(--info)",
-                border: "1px solid var(--info-border)",
-              }}
-            >
-              {result.isMultiEngine
-                ? `Sources: ${(result.probeSources || []).map((s) => s === "aio" ? "AIO" : s === "chatgpt" ? "ChatGPT" : s === "perplexity" ? "PPLX" : s.toUpperCase()).join(" + ")}`
-                : "Source: Google AIO"}
-            </span>
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "9px",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                padding: "2px 8px",
-                borderRadius: "var(--radius-1)",
-                background: "var(--bg-2)",
-                color: "var(--text-2)",
-                border: "1px solid var(--border-2)",
-              }}
-            >
-              {result.scoringVersion}
-            </span>
-            <Button data-print="hide" variant="secondary" size="sm" onClick={() => window.print()}>
-              <Download size={14} />
-              Export
-            </Button>
-            <Button
-              data-testid="rerun-scan-btn"
-              data-print="hide"
-              variant="secondary"
-              size="sm"
-              onClick={handleRerun}
-              disabled={isScanning}
-            >
-              <RefreshCw size={14} className={isScanning ? "animate-spin" : ""} />
-              {isScanning ? "Scanning..." : "Re-run"}
-            </Button>
-          </div>
-        </header>
+      <main className="main">
+        <div className="topbar">
+          <h4>{VIEW_TITLE[view] || view}</h4>
+          <span className="chip chip--you" data-testid="dashboard-brand">{result.brand}</span>
+          <span className="tag">{result.website}</span>
+          <span className="chip" title={`Scoring ${result.scoringVersion}`}>
+            {probeSources.map(engineLabel).join(" · ")}
+          </span>
+          <span data-testid="dashboard-timestamp" className="tag" style={{ marginLeft: "auto" }}>
+            {formatTimestamp(result.scanTimestamp)} ({relativeTime(result.scanTimestamp)})
+          </span>
+          <ThemeToggle />
+          <button
+            type="button"
+            data-print="hide"
+            className="btn btn--ghost btn--sm"
+            onClick={() => window.print()}
+          >
+            <Download size={14} aria-hidden="true" />
+            Export
+          </button>
+          <button
+            type="button"
+            data-testid="rerun-scan-btn"
+            data-print="hide"
+            className="btn btn--ghost btn--sm"
+            onClick={handleRerun}
+            disabled={isScanning}
+          >
+            <RefreshCw size={14} aria-hidden="true" />
+            {isScanning ? "Scanning…" : "Re-run"}
+          </button>
+        </div>
 
-        {/* Scrollable content */}
-        <div style={{ flex: 1, overflow: "auto", padding: "var(--space-7)" }} data-testid="dashboard">
-          {/* Banners */}
+        <div className="viewpad" data-testid="dashboard">
+          {/* ── banners ──────────────────────────────────────────── */}
           {scanError && (
-            <div style={{ marginBottom: "var(--space-6)" }}>
-              <Alert variant="crit" onDismiss={() => setScanError(null)}>
-                {scanError}
-              </Alert>
-            </div>
-          )}
-
-          {result.isSample && (
-            <div style={{ marginBottom: "var(--space-6)" }}>
-              <Alert data-testid="sample-banner" variant="warn">
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                  <FlaskConical size={16} />
-                  Sample report — run a real scan to analyze your own brand.
-                </div>
-              </Alert>
-            </div>
-          )}
-
-          {/* Data-source issue banner */}
-          {dataSourceIssue && (
-            <div style={{ marginBottom: "var(--space-6)" }}>
-              <Alert
-                data-testid="data-source-issue-banner"
-                variant="crit"
-                title={
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                    <ShieldAlert size={18} />
-                    Data source issue — scan incomplete
-                  </div>
-                }
-                action={
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={handleRerun}
-                    disabled={isScanning}
-                  >
-                    <RefreshCw size={14} />
-                    Retry scan
-                  </Button>
-                }
-              >
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-                  <p>
-                    Bright Data returned no AI Overview for the majority of tracked queries,
-                    or the SERP API errored out too often. We are not showing a visibility
-                    score to avoid misleading you with a false 0%.
-                  </p>
-                  <div style={{ display: "flex", gap: "var(--space-6)", flexWrap: "wrap", fontSize: "11px", fontWeight: 600 }}>
-                    <span>
-                      AIO coverage: <strong>{result.aioCoveragePct ?? 0}%</strong>{" "}
-                      (need ≥ {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}%)
-                    </span>
-                    <span>
-                      SERP error rate: <strong>{result.aioErrorRatePct ?? 0}%</strong>{" "}
-                      (limit {AIO_ERROR_RATE_LIMIT_PCT}%)
-                    </span>
-                  </div>
-                </div>
-              </Alert>
-            </div>
-          )}
-
-          {!dataSourceIssue && result.insufficientSample && (
-            <div style={{ marginBottom: "var(--space-6)" }}>
-              <Alert
-                data-testid="small-sample-warning"
-                variant="warn"
-              >
-                Only {result.queriesWithAio ?? result.nonBrandedWithAio} of{" "}
-                {result.promptsTracked ?? result.promptsAnalyzed} tracked prompts had a live AI
-                Overview. Treat this score with caution.
-              </Alert>
-            </div>
-          )}
-
-          {/* History row */}
-          {sortedHistory && sortedHistory.length > 1 && (
-            <div
-              style={{
-                marginBottom: "var(--space-6)",
-                background: "var(--bg-1)",
-                border: "1px solid var(--border-1)",
-                borderRadius: "var(--radius-2)",
-                padding: "var(--space-5)",
-              }}
-            >
-              <h3
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.1em",
-                  color: "var(--text-2)",
-                  marginBottom: "var(--space-4)",
-                }}
-              >
-                Previous Scans
-              </h3>
-              <div style={{ display: "flex", gap: "var(--space-4)", overflowX: "auto", paddingBottom: "var(--space-2)" }}>
-                {sortedHistory.map((scan, i) => {
-                  const isActive =
-                    new Date(scan.scanned_at).getTime() ===
-                    new Date(result.scanTimestamp).getTime();
-                  const next = sortedHistory[i - 1];
-                  const cardDelta = next
-                    ? (next.visibility_pct - (scan.visibility_pct || 0)).toFixed(1)
-                    : null;
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => handleHistoryClick(scan)}
-                      style={{
-                        minWidth: "130px",
-                        textAlign: "left",
-                        padding: "var(--space-4)",
-                        borderRadius: "var(--radius-1)",
-                        border: isActive
-                          ? "1px solid var(--accent-border)"
-                          : "1px solid var(--border-1)",
-                        background: isActive ? "var(--accent-soft)" : "var(--bg-0)",
-                        cursor: "pointer",
-                        transition: "all var(--dur-fast)",
-                      }}
-                    >
-                      <div style={{ fontSize: "11px", color: "var(--text-3)", whiteSpace: "nowrap" }}>
-                        {formatTimestamp(scan.scanned_at)}
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: "var(--font-sans)",
-                          fontSize: "20px",
-                          fontWeight: 600,
-                          color: "var(--accent)",
-                          marginTop: "var(--space-2)",
-                        }}
-                      >
-                        {scan.visibility_pct}%
-                      </div>
-                      {cardDelta !== null && (
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            marginTop: "2px",
-                            fontWeight: 600,
-                            color:
-                              parseFloat(cardDelta) > 0
-                                ? "var(--good)"
-                                : parseFloat(cardDelta) < 0
-                                ? "var(--crit)"
-                                : "var(--text-3)",
-                          }}
-                        >
-                          {parseFloat(cardDelta) > 0 ? "+" : ""}
-                          {cardDelta}%
-                        </div>
-                      )}
-                      <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "var(--space-1)" }}>
-                        {getHistoryNonBrandedCount(scan)} non-branded tracked
-                      </div>
-                    </button>
-                  );
-                })}
+            <div className="panel" style={{ marginBottom: 16, borderColor: "var(--crit)" }}>
+              <div className="panel__h">
+                <span className="chip chip--crit"><i className="chip__led" /> Error</span>
+                <b>{scanError}</b>
+                <button
+                  type="button"
+                  className="btn btn--quiet btn--sm"
+                  style={{ marginLeft: "auto" }}
+                  onClick={() => setScanError(null)}
+                >
+                  Dismiss
+                </button>
               </div>
             </div>
           )}
 
-          {/* ScoreBand — only on overview and no dataSourceIssue */}
+          {result.isSample && (
+            <div className="panel" data-testid="sample-banner" style={{ marginBottom: 16 }}>
+              <div className="panel__h">
+                <span className="chip chip--warn">
+                  <FlaskConical size={11} aria-hidden="true" /> Sample
+                </span>
+                <b>Sample report — run a real scan to analyse your own brand.</b>
+                <button
+                  type="button"
+                  className="btn btn--primary btn--sm"
+                  style={{ marginLeft: "auto" }}
+                  onClick={() => router.push("/scan")}
+                >
+                  Run a scan
+                </button>
+              </div>
+            </div>
+          )}
+
+          {dataSourceIssue && (
+            <div
+              className="panel"
+              data-testid="data-source-issue-banner"
+              style={{ marginBottom: 16, borderColor: "var(--crit)" }}
+            >
+              <div className="panel__h">
+                <span className="chip chip--crit">
+                  <ShieldAlert size={11} aria-hidden="true" /> Incomplete
+                </span>
+                <b>Data source issue — scan incomplete</b>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  style={{ marginLeft: "auto" }}
+                  onClick={handleRerun}
+                  disabled={isScanning}
+                >
+                  <RefreshCw size={14} aria-hidden="true" />
+                  Retry scan
+                </button>
+              </div>
+              <div className="panel__b">
+                <p style={{ fontSize: 14, color: "var(--ink-3)", marginBottom: 12 }}>
+                  The engines returned no answer for the majority of tracked queries, or the SERP
+                  API errored out too often. We are not showing a score rather than misleading you
+                  with a false 0%.
+                </p>
+                <div className="rows">
+                  <div className="row">
+                    <span className="row__n">
+                      Answer coverage
+                      <span className="dim">
+                        (need ≥ {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}%)
+                      </span>
+                    </span>
+                    <span className="row__v">{result.aioCoveragePct ?? 0}%</span>
+                  </div>
+                  <div className="row">
+                    <span className="row__n">
+                      SERP error rate
+                      <span className="dim">(limit {AIO_ERROR_RATE_LIMIT_PCT}%)</span>
+                    </span>
+                    <span className="row__v">{result.aioErrorRatePct ?? 0}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!dataSourceIssue && result.insufficientSample && (
+            <div className="panel" data-testid="small-sample-warning" style={{ marginBottom: 16 }}>
+              <div className="panel__h">
+                <span className="chip chip--warn">Small sample</span>
+                <b>
+                  Only {result.queriesWithAio ?? result.nonBrandedWithAio} of{" "}
+                  {result.promptsTracked ?? result.promptsAnalyzed} tracked prompts returned a live
+                  answer. Treat this score with caution.
+                </b>
+              </div>
+            </div>
+          )}
+
+          {/* ── previous readings ────────────────────────────────── */}
+          {sortedHistory && sortedHistory.length > 1 && (
+            <div className="panel" style={{ marginBottom: 16 }}>
+              <div className="panel__h">
+                <b>Previous readings</b>
+                <span className="tag">{sortedHistory.length} on record</span>
+              </div>
+              {/* wide content scrolls inside its own container */}
+              <div className="panel__b panel__b--scroll">
+                <div style={{ display: "flex", gap: 10 }}>
+                  {sortedHistory.map((s, i) => {
+                    const isActive = new Date(s.scanned_at).getTime()
+                      === new Date(result.scanTimestamp).getTime();
+                    const next = sortedHistory[i - 1];
+                    const cardDelta = next
+                      ? (next.visibility_pct - (s.visibility_pct || 0)).toFixed(1)
+                      : null;
+                    const d = cardDelta === null ? null : parseFloat(cardDelta);
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        className="stat"
+                        onClick={() => handleHistoryClick(s)}
+                        style={{
+                          minWidth: 148, textAlign: "left", cursor: "pointer",
+                          borderColor: isActive ? "var(--brand)" : undefined,
+                          background: isActive ? "var(--brand-tint)" : undefined,
+                        }}
+                      >
+                        <span className="stat__k">{formatTimestamp(s.scanned_at)}</span>
+                        <span className={`stat__v${isActive ? " is-you" : ""}`}>
+                          {s.visibility_pct}<small>%</small>
+                        </span>
+                        <span className="stat__d">
+                          {d !== null && (
+                            <span className={d > 0 ? "up" : d < 0 ? "dn" : "flat"}>
+                              {d > 0 ? "+" : ""}{cardDelta}
+                            </span>
+                          )}
+                          <span className="dim">
+                            {getHistoryNonBrandedCount(s)} tracked
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── the verdict ──────────────────────────────────────── */}
           {!dataSourceIssue && view === "overview" && (
-            <div style={{ marginBottom: "var(--space-6)" }}>
+            <div style={{ marginBottom: 16 }}>
               <ScoreBand
                 score={heroScore}
                 tier={tierLabelMap[tier]}
@@ -756,26 +614,20 @@ export default function DashboardShell({ scan, scanId }) {
                 promptSetChanged={!deltaSamePromptSet && !!previousScan}
                 scoreLabel={result.isMultiEngine ? "AI Visibility Index" : null}
                 engineChips={result.isMultiEngine && result.perEngineSummaries
-                  ? [
-                      { key: "aio", label: "AIO" },
-                      { key: "chatgpt", label: "ChatGPT" },
-                      { key: "perplexity", label: "PPLX" },
-                    ]
-                      .filter(({ key }) => result.perEngineSummaries[key])
-                      .map(({ key, label }) => ({
-                        label,
-                        value: result.perEngineSummaries[key].share_of_ai_pct ?? "—",
-                      }))
+                  ? Object.keys(result.perEngineSummaries).map((key) => ({
+                      label: engineLabel(key),
+                      value: result.perEngineSummaries[key].share_of_ai_pct ?? "—",
+                    }))
                   : null
                 }
                 stats={[
                   {
                     value: `${result.visibleNonBranded ?? 0}/${result.nonBrandedWithAio ?? 0}`,
-                    label: "visible in AI Overviews",
+                    label: "answers naming you",
                   },
                   {
                     value: `${result.aioCoveragePct ?? 0}%`,
-                    label: "AIO coverage",
+                    label: "answer coverage",
                   },
                   {
                     value: `${result.promptsAnalyzed ?? 0}`,
@@ -786,52 +638,29 @@ export default function DashboardShell({ scan, scanId }) {
             </div>
           )}
 
-          {/* Content area — dataSourceIssue placeholder (Studio stays reachable) */}
+          {/* ── views ────────────────────────────────────────────── */}
           {dataSourceIssue && view !== "studio" ? (
-            <div
-              data-testid="dashboard-unreliable-placeholder"
-              style={{
-                background: "var(--bg-1)",
-                border: "1px solid var(--border-1)",
-                borderRadius: "var(--radius-2)",
-                padding: "var(--space-9)",
-                textAlign: "center",
-                maxWidth: "600px",
-                margin: "var(--space-9) auto",
-              }}
-            >
-              <ShieldAlert
-                size={40}
-                style={{ color: "var(--crit)", margin: "0 auto var(--space-4)" }}
-              />
-              <h3
-                style={{
-                  fontFamily: "var(--font-sans)",
-                  fontSize: "20px",
-                  fontWeight: 600,
-                  color: "var(--text-1)",
-                }}
-              >
-                Not enough AI Overview data
-              </h3>
-              <p
-                style={{
-                  color: "var(--text-2)",
-                  marginTop: "var(--space-3)",
-                  fontSize: "13px",
-                  lineHeight: 1.55,
-                }}
-              >
-                Bright Data returned an AI Overview for less than{" "}
-                {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}% of your tracked
-                queries. Rather than pretending we have a real signal, we&apos;re showing
-                nothing. Retry the scan or add more high-intent queries in the &quot;Tracked
-                Queries&quot; tab.
-              </p>
+            <div className="panel" data-testid="dashboard-unreliable-placeholder">
+              <div className="blank">
+                <ShieldAlert size={28} style={{ color: "var(--crit)" }} aria-hidden="true" />
+                <h4>Not enough answer data</h4>
+                <p>
+                  The engines returned an answer for less than{" "}
+                  {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}% of your tracked queries. Rather
+                  than pretending we have a real signal, we are showing nothing. Retry the scan, or
+                  add more high-intent queries under Tracked queries.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  onClick={() => setView("queries")}
+                >
+                  Open tracked queries
+                </button>
+              </div>
             </div>
           ) : (
             <>
-              {/* View routing */}
               {view === "overview" && (
                 <OverviewView
                   result={result}
@@ -853,13 +682,13 @@ export default function DashboardShell({ scan, scanId }) {
               )}
 
               {view === "answers" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)", height: "100%" }}>
+                <div className="stack">
                   <AnswersView
                     data-testid="non-branded-evidence"
                     title="Non-branded queries"
                     subtitle={result.isMultiEngine
-                      ? "Real searches your buyers make in this category. Click a row to see the actual AI answer from each engine."
-                      : "Real Google searches your buyers make in this category. Click a row to see the actual AI Overview."}
+                      ? "Real searches your buyers make in this category. Open a row to read the actual answer from each engine."
+                      : "Real Google searches your buyers make in this category. Open a row to read the actual AI Overview."}
                     prompts={result.nonBrandedResults || []}
                     brandAliases={brandAliases}
                     emptyLabel="No non-branded queries in this scan."
@@ -869,7 +698,7 @@ export default function DashboardShell({ scan, scanId }) {
                     <AnswersView
                       data-testid="branded-evidence"
                       title={`Brand presence queries (${result.brandPresencePromptsCount || 0})`}
-                      subtitle="Intentional own-name searches (branded seeds). Excluded from the headline visibility score."
+                      subtitle="Intentional own-name searches. Excluded from the headline score, because a branded question already contains its answer."
                       prompts={result.brandPresenceResults || []}
                       brandAliases={brandAliases}
                       emptyLabel="No brand presence queries were tracked in this scan."
@@ -904,20 +733,29 @@ export default function DashboardShell({ scan, scanId }) {
               )}
 
               {view === "studio" && (
-                <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+                <div className="stack stack--tight">
                   {studioNotice && (
-                    <Alert variant="crit" onDismiss={() => setStudioNotice(null)}>
-                      {studioNotice}
-                    </Alert>
+                    <div className="panel" style={{ borderColor: "var(--crit)" }}>
+                      <div className="panel__h">
+                        <span className="chip chip--crit">Error</span>
+                        <b>{studioNotice}</b>
+                        <button
+                          type="button"
+                          className="btn btn--quiet btn--sm"
+                          style={{ marginLeft: "auto" }}
+                          onClick={() => setStudioNotice(null)}
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
                   )}
-                  <div style={{ flex: 1, minHeight: 0 }}>
-                    <StudioView
-                      brand={result.brand}
-                      scan={result}
-                      initialItemId={studioInitialItem}
-                      onCountsChange={({ awaiting }) => setStudioBadge(awaiting)}
-                    />
-                  </div>
+                  <StudioView
+                    brand={result.brand}
+                    scan={result}
+                    initialItemId={studioInitialItem}
+                    onCountsChange={({ awaiting }) => setStudioBadge(awaiting)}
+                  />
                 </div>
               )}
             </>

@@ -1,123 +1,102 @@
-import { Card } from "@/components/perceev/Card";
-import { KpiCard } from "@/components/perceev/KpiCard";
-import { Badge } from "@/components/perceev/Badge";
-import { Globe, Link as LinkIcon } from "lucide-react";
+'use client';
+
+/**
+ * Sources.
+ *
+ * The pages the engines actually drew on, and which of them you control.
+ * The ones you own are the accent; everything else is the shape of the work.
+ */
 
 export const SourcesView = ({ result }) => {
   const topDomains = result.topDomains || [];
   const totalCitations = (result.rawResults || []).reduce(
     (sum, r) => sum + ((r.aio_citations || r.aio_references || []).length),
-    0
+    0,
   );
+
+  const ownCount = topDomains
+    .filter((d) => d.type === 'brand')
+    .reduce((s, d) => s + (d.count || 0), 0);
+  const rivalCount = topDomains
+    .filter((d) => d.type === 'competitor')
+    .reduce((s, d) => s + (d.count || 0), 0);
 
   if (totalCitations === 0 && topDomains.length === 0) {
     return (
-      <Card>
-        <p style={{ textAlign: "center", fontSize: "13px", color: "var(--text-3)" }}>
-          No AI Overview citations were captured in this scan.
-        </p>
-      </Card>
+      <div className="panel">
+        <div className="blank">
+          <h4>No citations captured</h4>
+          <p>The engines did not cite any sources in the answers for this scan.</p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <div data-testid="citations-panel" style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
-          gap: "var(--space-5)",
-        }}
-      >
-        <KpiCard
-          label="Total citations"
-          value={totalCitations}
-          sub="URLs referenced across all AI Overviews"
-        />
-        <KpiCard
-          label="Your domain share"
-          value={result.brandCitationSharePct ?? 0}
-          suffix="%"
-          sub="of non-branded queries where the AIO cites your domain"
-        />
+    <div data-testid="citations-panel" className="stack">
+      <div className="grid g4">
+        <div className="stat">
+          <span className="stat__k">Sources cited</span>
+          <span className="stat__v">{totalCitations}</span>
+          <span className="stat__d dim">URLs referenced across all answers</span>
+        </div>
+        <div className="stat">
+          <span className="stat__k">Distinct domains</span>
+          <span className="stat__v">{topDomains.length}</span>
+          <span className="stat__d dim">The shape of the work</span>
+        </div>
+        <div className="stat">
+          <span className="stat__k">Pages you control</span>
+          <span className="stat__v is-you">{ownCount}</span>
+          <span className="stat__d dim">Where the content operation starts</span>
+        </div>
+        <div className="stat">
+          <span className="stat__k">Your domain share</span>
+          <span className="stat__v is-you">
+            {result.brandCitationSharePct ?? 0}<small>%</small>
+          </span>
+          <span className="stat__d dim">
+            of non-branded answers citing you{rivalCount > 0 ? ` · rivals cited ${rivalCount}×` : ''}
+          </span>
+        </div>
       </div>
 
-      <Card>
-        <div
-          style={{
-            paddingBottom: "var(--space-5)",
-            borderBottom: "1px solid var(--border-1)",
-            marginBottom: "var(--space-4)",
-          }}
-        >
-          <h3
-            style={{
-              fontFamily: "var(--font-sans)",
-              fontSize: "var(--type-h3)",
-              fontWeight: 600,
-              color: "var(--text-1)",
-              letterSpacing: "var(--track-h3)",
-            }}
-          >
-            Top cited domains
-          </h3>
-          <p style={{ fontSize: "13px", color: "var(--text-2)", marginTop: "4px" }}>
-            Domains Google&apos;s AI Overview reaches for when answering your category queries.
-          </p>
+      <div className="panel">
+        <div className="panel__h">
+          <b>Cited domains</b>
+          <span className="tag">
+            {topDomains.length} shown
+          </span>
         </div>
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div className="panel__b panel__b--flush">
           {topDomains.map((item, i) => (
-            <div
-              key={item.domain}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "var(--space-4) 0",
-                borderBottom: i < topDomains.length - 1 ? "1px solid var(--border-1)" : "none",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                <span
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "12px",
-                    color: "var(--text-3)",
-                    width: "16px",
-                  }}
-                >
-                  {i + 1}
+            <div className="src" key={item.domain}>
+              <span className={`src__d${item.type === 'brand' ? ' mine' : ''}`} title={item.domain}>
+                <span className="dim" style={{ marginRight: 10 }}>
+                  {String(i + 1).padStart(2, '0')}
                 </span>
-                <span
-                  style={{
-                    fontWeight: 600,
-                    fontSize: "14px",
-                    color:
-                      item.type === "brand"
-                        ? "var(--good)"
-                        : item.type === "competitor"
-                        ? "var(--crit)"
-                        : "var(--text-1)",
-                  }}
-                >
-                  {item.domain}
-                </span>
-                {item.type === "brand" && <Badge variant="strong">Own Domain</Badge>}
-                {item.type === "competitor" && <Badge variant="weak">Competitor</Badge>}
-              </div>
-              <div style={{ fontSize: "13px", color: "var(--text-2)" }}>
-                <span style={{ fontWeight: 600, color: "var(--text-1)" }}>{item.count}</span>{" "}
-                citation{item.count === 1 ? "" : "s"}
-              </div>
+                {item.domain}
+              </span>
+              <span className="row__v" style={{ textAlign: 'right' }}>{item.count}</span>
+              <span style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                {item.type === 'brand' && <span className="chip chip--you">Yours</span>}
+                {item.type === 'competitor' && <span className="chip">Rival</span>}
+                {item.type !== 'brand' && item.type !== 'competitor' && (
+                  <span className="chip">Third party</span>
+                )}
+              </span>
             </div>
           ))}
           {topDomains.length === 0 && (
-            <div style={{ padding: "var(--space-8)", textAlign: "center", fontSize: "13px", color: "var(--text-3)" }}>
-              No domain data yet.
+            <div className="blank">
+              <h4>No domain data yet</h4>
+              <p>Citations were counted but no domains could be resolved from them.</p>
             </div>
           )}
         </div>
-      </Card>
+      </div>
     </div>
   );
 };
+
+export default SourcesView;

@@ -1,14 +1,12 @@
 /**
- * A panel: an engraved rectangle of painted steel bolted to the wall.
- * `raised` adds the nickel bevel for a panel that stands off the face.
- * `keyline` runs a 2px lamp strip along the top edge to mark which role
- * owns the region — top edge only, never a thick side border.
+ * A surface. `flush` gives the bare panel so the caller can supply its own
+ * `.panel__h` / `.panel__b`; the default pads the body for simple content.
  */
 
 export const Card = ({
   variant = 'padded',
   raised = false,
-  keyline = null,
+  keyline = null,   /* accepted and ignored: the rejected world's lamp strip */
   className = '',
   children,
   style: outerStyle,
@@ -18,15 +16,14 @@ export const Card = ({
 
   return (
     <div
-      className={`sb-panel ${raised ? 'sb-panel--raised' : ''} ${className}`}
+      className={`panel ${className}`.trim()}
       {...props}
       style={{
-        padding: padded ? 'var(--space-5)' : 0,
-        borderTop: keyline ? `2px solid var(--lamp-${keyline})` : undefined,
+        boxShadow: raised ? 'var(--shadow-2)' : undefined,
         ...outerStyle,
       }}
     >
-      {children}
+      {padded ? <div className="panel__b">{children}</div> : children}
     </div>
   );
 };

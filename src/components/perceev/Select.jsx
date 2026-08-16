@@ -1,8 +1,4 @@
-/**
- * A rotary selector. The indicator is an engraved position mark — two
- * nickel chevrons scribed into the panel beside the window, not a
- * software chevron floating over a field.
- */
+/** A labelled select, sharing the text field's shape. */
 
 export const Select = ({
   label,
@@ -15,41 +11,16 @@ export const Select = ({
   ...props
 }) => (
   <div className={className} style={outerStyle}>
-    {label && (
-      <label htmlFor={id} className="t-plate" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
-        {label}
-      </label>
-    )}
-    <div style={{ position: 'relative' }}>
-      <select
-        id={id}
-        className={`sb-field sb-select${size !== 'md' ? ` sb-field--${size}` : ''}`}
-        {...props}
-      >
-        {children}
-      </select>
-      <svg
-        width="9"
-        height="14"
-        viewBox="0 0 9 14"
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          right: '12px',
-          top: '50%',
-          transform: 'translateY(-50%)',
-          pointerEvents: 'none',
-        }}
-      >
-        <path d="M1 5.5 4.5 2 8 5.5" stroke="var(--nickel-dim)" strokeWidth="1.4" fill="none" />
-        <path d="M1 8.5 4.5 12 8 8.5" stroke="var(--nickel)" strokeWidth="1.4" fill="none" />
-      </svg>
-    </div>
-    {hint && (
-      <p style={{ marginTop: 'var(--space-2)', font: 'var(--type-body-sm)', color: 'var(--text-3)' }}>
-        {hint}
-      </p>
-    )}
+    {label && <label htmlFor={id} className="lbl">{label}</label>}
+    <select
+      id={id}
+      className="inp"
+      style={size === 'sm' ? { height: 36, fontSize: 14 } : undefined}
+      {...props}
+    >
+      {children}
+    </select>
+    {hint && <p style={{ marginTop: 6, fontSize: 13, color: 'var(--ink-3)' }}>{hint}</p>}
   </div>
 );
 

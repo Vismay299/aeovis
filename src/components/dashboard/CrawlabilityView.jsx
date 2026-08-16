@@ -430,6 +430,10 @@ export const CrawlabilityView = ({ brand, competitors }) => {
 
           {/* Bot table */}
           <Card variant="flush" data-testid="crawlability-table">
+            {/* Five columns of bot detail cannot fit a phone. Wide content
+                scrolls inside its own container; the page body never does. */}
+            <div className="panel__b--scroll">
+            <div style={{ minWidth: 640 }}>
             <div
               style={{
                 display: "grid",
@@ -491,6 +495,8 @@ export const CrawlabilityView = ({ brand, competitors }) => {
                 </div>
               ))
             )}
+            </div>
+            </div>
           </Card>
 
           {/* Rival comparison */}

@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perceev — Option 3 · Beacon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400;12..96,75..100,600;12..96,75..100,800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   OPTION 3 — "BEACON"
+   Light. Bold brand site. Full-bleed colour blocks,
+   oversized display type, stacked (not columned) sections.
+   Sources: HyperUI (section inventory), react-bits (count-up),
+            Open Props (scales)
+   ============================================================ */
+
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+html{scroll-behavior:smooth}
+
+:root{
+  --white:  #FFFFFF;
+  --bone:   #F3F0E9;
+  --bone-2: #E7E2D6;
+  --black:  #0C0C0B;
+  --char:   #1E1E1C;
+
+  --ink-1: #0C0C0B;
+  --ink-2: #46453F;
+  --ink-3: #78766D;
+
+  --flare:      #FF4A17;
+  --flare-deep: #D93A0C;
+  --flare-tint: #FFE9E1;
+
+  --maxw: 1280px;
+  --pad: clamp(20px, 4.5vw, 56px);
+}
+
+body{
+  background:var(--white);color:var(--ink-2);
+  font-family:'DM Sans',-apple-system,'Segoe UI',sans-serif;
+  font-size:17px;line-height:1.58;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+h1,h2,h3{
+  margin:0;color:var(--ink-1);font-family:'Bricolage Grotesque','DM Sans',sans-serif;
+  font-weight:800;line-height:.92;letter-spacing:-.035em;font-variation-settings:'wdth' 96;
+}
+h1{font-size:clamp(46px,8.4vw,132px)}
+h2{font-size:clamp(36px,5.6vw,88px)}
+h3{font-size:clamp(21px,1.7vw,27px);line-height:1.12;letter-spacing:-.025em}
+p{margin:0}
+a{color:inherit;text-decoration:none}
+
+.wrap{max-width:var(--maxw);margin-inline:auto;padding-inline:var(--pad)}
+.mono{font-family:'DM Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.label{
+  font-family:'DM Mono',monospace;font-size:11.5px;letter-spacing:.16em;
+  text-transform:uppercase;font-weight:500;
+}
+
+/* ══════════ FACT STRIP ══════════
+   Static. An auto-scrolling ticker of "live" probes would be inventing
+   telemetry the product does not have yet — these are stated as what
+   they are: a demonstration reading. */
+.ticker{background:var(--black);color:var(--white);padding-block:10px}
+.ticker__in{display:flex;align-items:center;gap:clamp(12px,2.2vw,30px);flex-wrap:wrap}
+.ticker__in span{
+  font-family:'DM Mono',monospace;font-size:11.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:rgba(255,255,255,.6);
+}
+.ticker__in span b{color:var(--flare);font-weight:500}
+.ticker__in .r{margin-left:auto;color:rgba(255,255,255,.38)}
+@keyframes slide{to{transform:translateX(-50%)}}
+
+/* ══════════ NAV ══════════ */
+.nav{
+  position:sticky;top:0;z-index:60;background:rgba(255,255,255,.9);
+  backdrop-filter:blur(12px);border-bottom:1.5px solid var(--black);
+}
+.nav__in{display:flex;align-items:center;gap:34px;height:66px}
+.mark{
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:24px;
+  color:var(--ink-1);letter-spacing:-.05em;font-variation-settings:'wdth' 92;
+}
+.mark i{color:var(--flare);font-style:normal}
+.nav nav{display:flex;gap:28px;margin-left:auto}
+.nav nav a{font-size:15px;font-weight:500;color:var(--ink-2);position:relative;padding-block:4px}
+.nav nav a::after{
+  content:'';position:absolute;left:0;bottom:0;height:2px;width:0;background:var(--flare);transition:.22s;
+}
+.nav nav a:hover::after{width:100%}
+.nav nav a:hover{color:var(--ink-1)}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  font-family:'DM Sans',sans-serif;font-size:15.5px;font-weight:700;
+  padding:13px 24px;border:2px solid var(--black);cursor:pointer;transition:.18s;
+  background:var(--black);color:var(--white);
+}
+.btn:hover{background:var(--flare);border-color:var(--flare)}
+.btn--flare{background:var(--flare);border-color:var(--flare);color:var(--white)}
+.btn--flare:hover{background:var(--black);border-color:var(--black)}
+.btn--ghost{background:transparent;color:var(--ink-1)}
+.btn--ghost:hover{background:var(--black);color:var(--white);border-color:var(--black)}
+.btn--white{background:var(--white);border-color:var(--white);color:var(--ink-1)}
+.btn--white:hover{background:var(--black);border-color:var(--black);color:var(--white)}
+.btn--sm{padding:9px 17px;font-size:14px}
+
+/* ══════════ HERO ══════════ */
+.hero{padding-block:clamp(46px,6vw,88px) 0;position:relative}
+.hero__top{display:grid;grid-template-columns:1fr auto;gap:26px;align-items:end;margin-bottom:26px}
+.hero h1{text-wrap:balance;max-width:14ch}
+.hero h1 u{text-decoration:none;color:var(--flare);position:relative;white-space:nowrap}
+.hero h1 u::after{
+  content:'';position:absolute;left:0;right:0;bottom:.06em;height:.07em;background:var(--flare);
+}
+.hero__meta{text-align:right;padding-bottom:12px}
+.hero__meta .label{color:var(--ink-3);display:block;margin-bottom:5px}
+.hero__meta b{
+  font-family:'Bricolage Grotesque',sans-serif;font-size:15px;color:var(--ink-1);font-weight:600;
+}
+
+.hero__bar{
+  display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(24px,4vw,64px);
+  border-top:1.5px solid var(--black);padding-top:26px;align-items:start;
+}
+.hero__lede{font-size:clamp(18px,1.6vw,21px);line-height:1.5;color:var(--ink-2);max-width:46ch}
+.hero__form{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.hero__form input{
+  flex:1;min-width:200px;border:2px solid var(--black);padding:12px 16px;
+  font:inherit;font-size:16px;outline:0;background:var(--white);color:var(--ink-1);
+}
+.hero__form input:focus{border-color:var(--flare)}
+.hero__note{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap}
+.hero__note span{font-size:13.5px;color:var(--ink-3)}
+
+/* compact per-engine readout, balances the hero's left column */
+.eng{margin-top:clamp(28px,3.4vw,48px);border-top:1.5px solid var(--black)}
+.eng__r{display:grid;grid-template-columns:150px 1fr 54px;gap:14px;align-items:center;padding-block:14px;border-bottom:1px solid var(--bone-2)}
+.eng__n{font-size:15px;color:var(--ink-1);font-weight:500}
+.eng__t{display:flex;gap:3px}
+.eng__t i{flex:1;height:16px;background:var(--bone)}
+.eng__t i.on{background:var(--flare)}
+.eng__t i.off{background:var(--bone-2)}
+.eng__v{font-family:'DM Mono',monospace;font-size:13px;color:var(--ink-1);text-align:right;font-weight:500}
+
+/* the big reading */
+.figure{border-left:1.5px solid var(--black);padding-left:clamp(20px,2.6vw,36px)}
+.figure__n{
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:800;
+  font-size:clamp(92px,13.4vw,186px);line-height:.86;letter-spacing:-.022em;color:var(--ink-1);
+  font-variation-settings:'wdth' 92;display:flex;align-items:flex-start;gap:.04em;
+}
+.figure__n em{font-style:normal;font-size:.3em;color:var(--flare);padding-top:.2em;letter-spacing:0}
+.figure__c{font-size:16px;color:var(--ink-2);max-width:32ch;margin-top:10px;line-height:1.45}
+.figure__c b{color:var(--ink-1);font-weight:700}
+
+/* stacked share bars — flat, wide, no card */
+.shares{margin-top:26px;border-top:1.5px solid var(--black)}
+.share{display:grid;grid-template-columns:1fr auto;gap:6px 14px;padding-block:13px;border-bottom:1px solid var(--bone-2)}
+.share__n{font-size:15.5px;color:var(--ink-1);font-weight:500;display:flex;align-items:center;gap:9px}
+.share__v{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:19px;color:var(--ink-1)}
+.share__b{grid-column:1/-1;height:9px;background:var(--bone)}
+.share__b i{display:block;height:100%}
+.tagyou{
+  font-family:'DM Mono',monospace;font-size:9.5px;letter-spacing:.1em;
+  background:var(--flare);color:var(--white);padding:2px 6px;
+}
+
+/* ══════════ FULL-BLEED BLOCKS ══════════ */
+.bleed{width:100%;padding-block:clamp(56px,7.5vw,120px)}
+.bleed--flare{background:var(--flare);color:var(--white)}
+.bleed--flare h2,.bleed--flare h3{color:var(--white)}
+.bleed--black{background:var(--black);color:#B7B5AC}
+.bleed--black h2,.bleed--black h3{color:var(--white)}
+.bleed--bone{background:var(--bone)}
+
+.claim{max-width:19ch;text-wrap:balance}
+.claim--wide{max-width:24ch}
+.bleed__two{display:grid;grid-template-columns:1.25fr 1fr;gap:clamp(28px,4vw,72px);align-items:end}
+.bleed__side{font-size:clamp(17px,1.4vw,19.5px);line-height:1.5}
+.bleed--flare .bleed__side{color:rgba(255,255,255,.9)}
+
+/* engine numbers */
+.enums{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:clamp(38px,5vw,70px);
+  border-top:1px solid rgba(255,255,255,.25);
+}
+.enum{padding:26px clamp(16px,2vw,30px) 4px 0;border-right:1px solid rgba(255,255,255,.25)}
+.enum:last-child{border-right:0}
+.enum b{
+  display:block;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;
+  font-size:clamp(52px,7vw,104px);line-height:.85;letter-spacing:-.055em;color:var(--white);
+  font-variation-settings:'wdth' 88;
+}
+.enum b sup{font-size:.3em;vertical-align:super;opacity:.55;letter-spacing:0}
+.enum p{margin-top:12px;font-size:15.5px;line-height:1.45}
+.bleed--black .enum p{color:#8F8D85}
+.enum .label{display:block;margin-bottom:14px;color:var(--flare)}
+
+/* marquee of questions */
+.qmarq{overflow:hidden;padding-block:clamp(26px,3vw,44px);white-space:nowrap}
+.qmarq__t{display:inline-block;animation:slide 52s linear infinite}
+.qmarq__t i{
+  display:inline-block;font-style:normal;font-size:clamp(19px,2.1vw,32px);
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:600;letter-spacing:-.02em;
+  padding-inline:20px;color:var(--ink-1);
+}
+.qmarq__t i::after{content:'·';color:var(--flare);padding-left:40px}
+.qmarq__t i.hit{color:var(--flare)}
+@media(prefers-reduced-motion:reduce){.qmarq__t{animation:none}}
+
+/* ══════════ MANIFESTO / NUMBERED ══════════ */
+.sec{padding-block:clamp(56px,7vw,110px)}
+.sechead{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,3vw,60px);align-items:end;margin-bottom:clamp(34px,4vw,58px)}
+.sechead .label{color:var(--flare);display:block;margin-bottom:16px}
+.sechead p{font-size:clamp(17px,1.4vw,19.5px);color:var(--ink-3);line-height:1.5;max-width:44ch}
+
+.mani{border-top:1.5px solid var(--black)}
+.mani__i{
+  display:grid;grid-template-columns:clamp(64px,7vw,124px) 1fr 1.1fr;
+  gap:clamp(14px,2.4vw,38px);padding-block:clamp(24px,3vw,40px);
+  border-bottom:1px solid var(--bone-2);align-items:start;transition:.2s;
+}
+.mani__i:hover{background:var(--bone)}
+.mani__n{
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:800;
+  font-size:clamp(38px,4.4vw,72px);line-height:.8;color:var(--bone-2);letter-spacing:-.05em;
+  font-variation-settings:'wdth' 88;transition:.2s;
+}
+.mani__i:hover .mani__n{color:var(--flare)}
+.mani__i p{font-size:16.5px;color:var(--ink-2);line-height:1.55}
+
+/* ══════════ EVIDENCE ══════════ */
+.ev{display:grid;grid-template-columns:1fr 1.35fr;gap:clamp(28px,4vw,66px);align-items:start}
+.ev__panel{background:var(--white);border:1.5px solid var(--black);padding:clamp(22px,2.6vw,36px)}
+.ev__top{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding-bottom:16px;border-bottom:1px solid var(--bone-2);margin-bottom:20px}
+.ev__q{
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:600;
+  font-size:clamp(20px,2vw,28px);line-height:1.18;color:var(--ink-1);
+  letter-spacing:-.02em;margin-bottom:18px;
+}
+.ev__a{font-size:17px;line-height:1.72;color:var(--ink-2)}
+mark.you{background:var(--flare);color:var(--white);padding:1px 6px;font-weight:500}
+mark.rival{background:var(--black);color:var(--white);padding:1px 6px;font-weight:500}
+.ev__f{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding-top:16px;margin-top:20px;border-top:1px solid var(--bone-2)}
+.chip{
+  font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+  padding:5px 10px;border:1px solid var(--bone-2);color:var(--ink-3);
+}
+.chip--flare{border-color:var(--flare);color:var(--flare)}
+.chip--solid{background:var(--black);border-color:var(--black);color:var(--white)}
+
+/* ══════════ PRICING — stacked rows ══════════ */
+.plans{border-top:1.5px solid var(--black)}
+.plan{
+  display:grid;grid-template-columns:1fr 1.5fr auto;gap:clamp(18px,3vw,52px);
+  padding-block:clamp(26px,3.2vw,44px);border-bottom:1px solid var(--bone-2);align-items:center;
+}
+.plan--feat{background:var(--bone);padding-inline:clamp(16px,2vw,28px)}
+.plan__l h3{margin-bottom:8px}
+.plan__price{display:flex;align-items:baseline;gap:6px}
+.plan__price b{
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:clamp(34px,3.6vw,54px);
+  line-height:1;color:var(--ink-1);letter-spacing:-.045em;font-variation-settings:'wdth' 90;
+}
+.plan__price span{font-size:14px;color:var(--ink-3)}
+.plan__f{display:flex;flex-wrap:wrap;gap:8px 22px}
+.plan__f span{display:flex;align-items:center;gap:8px;font-size:15px;color:var(--ink-2)}
+.plan__f svg{flex:none;color:var(--flare)}
+
+/* ══════════ FAQ ══════════ */
+.faq{border-top:1.5px solid var(--black)}
+details{border-bottom:1px solid var(--bone-2)}
+summary{
+  list-style:none;cursor:pointer;padding-block:clamp(18px,2vw,26px);
+  display:grid;grid-template-columns:1fr 30px;gap:20px;align-items:center;
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:600;
+  font-size:clamp(19px,1.9vw,27px);color:var(--ink-1);letter-spacing:-.022em;line-height:1.16;
+}
+summary::-webkit-details-marker{display:none}
+summary::after{
+  content:'';width:18px;height:18px;justify-self:end;align-self:center;
+  background-image:linear-gradient(var(--flare),var(--flare)),
+                   linear-gradient(var(--flare),var(--flare));
+  background-position:center,center;
+  background-repeat:no-repeat;
+  background-size:100% 2.5px, 2.5px 100%;
+  transition:background-size .24s cubic-bezier(.32,.72,0,1);
+}
+details[open] summary::after{background-size:100% 2.5px, 2.5px 0%}
+details p{padding-bottom:26px;max-width:66ch;font-size:16.5px;color:var(--ink-3)}
+
+/* ══════════ CTA + FOOTER ══════════ */
+.cta__form{display:flex;gap:10px;flex-wrap:wrap;max-width:520px;margin-top:26px}
+.cta__form input{
+  flex:1;min-width:200px;border:2px solid var(--white);background:transparent;
+  padding:14px 18px;font:inherit;font-size:16.5px;color:var(--white);outline:0;
+}
+.cta__form input::placeholder{color:rgba(255,255,255,.62)}
+.cta__form input:focus{background:rgba(255,255,255,.12)}
+
+footer{background:var(--black);color:#7E7C74;padding-block:clamp(46px,5vw,72px) 26px;overflow:hidden}
+.foot__g{display:grid;grid-template-columns:repeat(4,1fr);gap:28px;padding-bottom:38px}
+.foot__g h5{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--flare);margin:0 0 14px;font-weight:500}
+.foot__g a{display:block;font-size:15px;color:#B7B5AC;padding-block:5px}
+.foot__g a:hover{color:var(--white)}
+.foot__mark{
+  font-family:'Bricolage Grotesque',sans-serif;font-weight:800;
+  font-size:clamp(64px,15.5vw,240px);line-height:.78;color:#1B1B18;letter-spacing:-.055em;
+  font-variation-settings:'wdth' 90;margin-block:14px 0;user-select:none;
+}
+.foot__b{display:flex;justify-content:space-between;padding-top:22px;border-top:1px solid #232320;flex-wrap:wrap;gap:12px;font-size:13.5px}
+
+@media(max-width:960px){
+  .hero__bar,.bleed__two,.ev,.sechead{grid-template-columns:1fr;gap:30px}
+  .hero__top{grid-template-columns:1fr}
+  .hero__meta{text-align:left}
+  .figure{border-left:0;border-top:1.5px solid var(--black);padding-left:0;padding-top:24px}
+  .enums{grid-template-columns:1fr}
+  .enum{border-right:0;border-bottom:1px solid rgba(255,255,255,.25);padding-right:0}
+  .mani__i{grid-template-columns:56px 1fr}
+  .mani__i p{grid-column:2}
+  .plan{grid-template-columns:1fr;gap:18px}
+  .foot__g{grid-template-columns:1fr 1fr}
+  .nav nav{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════ FACT STRIP ═══════ -->
+<div class="ticker">
+  <div class="wrap ticker__in">
+    <span>Demonstration reading · <b>brightwave.io</b></span>
+    <span>36 unbranded questions</span>
+    <span>3 engines</span>
+    <span><b>15</b> answers named you</span>
+    <span class="r">Synthetic brands</span>
+  </div>
+</div>
+
+<!-- ═══════ NAV ═══════ -->
+<div class="nav">
+  <div class="wrap nav__in">
+    <a href="#" class="mark">perceev<i>.</i></a>
+    <nav>
+      <a href="#problem">The problem</a>
+      <a href="#how">How</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#pricing">Pricing</a>
+    </nav>
+    <a href="#cta" class="btn btn--sm">Run a free probe</a>
+  </div>
+</div>
+
+<!-- ═══════ HERO ═══════ -->
+<header class="hero wrap">
+  <div class="hero__top">
+    <h1>AI decides who your buyer <u>hears about.</u></h1>
+    <div class="hero__meta">
+      <span class="label">Demonstration reading</span>
+      <b>brightwave.io · healthcare · India</b>
+    </div>
+  </div>
+
+  <div class="hero__bar">
+    <div>
+      <p class="hero__lede">
+        Google's AI Overview, ChatGPT and Perplexity answer your buyer's question with two or three
+        vendor names. Perceev asks all 36 of those questions — unbranded — and tells you whose name
+        comes out.
+      </p>
+
+      <form class="hero__form" onsubmit="return false">
+        <input type="text" placeholder="yourcompany.com" aria-label="Your domain">
+        <button class="btn btn--flare" type="submit">Run the probe</button>
+      </form>
+      <div class="hero__note">
+        <span>Free forever</span><span>No signup</span><span>Answers kept verbatim</span>
+      </div>
+
+      <div class="eng">
+        <div class="eng__r">
+          <span class="eng__n">Google AI Overview</span>
+          <span class="eng__t">
+            <i class="off"></i><i class="on"></i><i></i><i class="on"></i><i class="off"></i><i></i>
+            <i class="on"></i><i class="on"></i><i></i><i class="off"></i><i class="on"></i><i></i>
+          </span>
+          <span class="eng__v">5/12</span>
+        </div>
+        <div class="eng__r">
+          <span class="eng__n">ChatGPT</span>
+          <span class="eng__t">
+            <i class="on"></i><i></i><i class="on"></i><i></i><i class="on"></i><i class="on"></i>
+            <i class="off"></i><i></i><i class="on"></i><i></i><i class="off"></i><i class="on"></i>
+          </span>
+          <span class="eng__v">6/12</span>
+        </div>
+        <div class="eng__r">
+          <span class="eng__n">Perplexity</span>
+          <span class="eng__t">
+            <i></i><i class="on"></i><i></i><i class="off"></i><i></i><i class="on"></i>
+            <i></i><i class="on"></i><i class="off"></i><i class="on"></i><i></i><i></i>
+          </span>
+          <span class="eng__v">4/12</span>
+        </div>
+      </div>
+      <p style="font-size:13.5px;color:var(--ink-3);margin-top:12px">
+        Each mark is one question. <b style="color:var(--flare)">Orange</b> reached you.
+      </p>
+    </div>
+
+    <div class="figure">
+      <span class="label" style="color:var(--ink-3)">Share of AI</span>
+      <div class="figure__n">41<em>%</em></div>
+      <p class="figure__c">
+        of the 36 unbranded answers named <b>Brightwave</b>. The other 59% went to someone else.
+      </p>
+
+      <div class="shares">
+        <div class="share">
+          <span class="share__n">Brightwave <span class="tagyou">YOU</span></span>
+          <span class="share__v">41%</span>
+          <span class="share__b"><i style="width:41%;background:var(--flare)"></i></span>
+        </div>
+        <div class="share">
+          <span class="share__n">NorthPeak</span><span class="share__v">33%</span>
+          <span class="share__b"><i style="width:33%;background:var(--black)"></i></span>
+        </div>
+        <div class="share">
+          <span class="share__n">Lumen IQ</span><span class="share__v">17%</span>
+          <span class="share__b"><i style="width:17%;background:#8C8A82"></i></span>
+        </div>
+        <div class="share">
+          <span class="share__n" style="color:var(--ink-3)">No brand named</span><span class="share__v" style="color:var(--ink-3)">9%</span>
+          <span class="share__b"><i style="width:9%;background:var(--bone-2)"></i></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════ QUESTION MARQUEE ═══════ -->
+<div class="qmarq" style="border-top:1.5px solid var(--black);border-bottom:1.5px solid var(--black);margin-top:clamp(40px,5vw,72px)">
+  <div class="qmarq__t">
+    <i class="hit">best EHR platform for a 200-bed hospital</i>
+    <i>how do mid-size hospitals cut readmission rates</i>
+    <i class="hit">top patient engagement software in India</i>
+    <i>which analytics tools track clinical outcomes</i>
+    <i>affordable HIMS for multi-specialty clinics</i>
+    <i class="hit">teleconsultation platforms for tier-2 cities</i>
+    <i>NABH compliance software comparison</i>
+    <i class="hit">best EHR platform for a 200-bed hospital</i>
+    <i>how do mid-size hospitals cut readmission rates</i>
+    <i class="hit">top patient engagement software in India</i>
+    <i>which analytics tools track clinical outcomes</i>
+    <i>affordable HIMS for multi-specialty clinics</i>
+    <i class="hit">teleconsultation platforms for tier-2 cities</i>
+    <i>NABH compliance software comparison</i>
+  </div>
+</div>
+
+<!-- ═══════ THE PROBLEM — FULL BLEED FLARE ═══════ -->
+<section class="bleed bleed--flare" id="problem">
+  <div class="wrap">
+    <div class="bleed__two">
+      <h2 class="claim">Nobody is scrolling to result number four any more.</h2>
+      <p class="bleed__side">
+        The ten blue links used to be a queue you could join. An answer is not a queue. It names two
+        vendors, and everyone else in the category simply does not exist for that buyer, on that day,
+        for that question.
+      </p>
+    </div>
+
+    <div class="enums" style="border-top-color:rgba(255,255,255,.3)">
+      <div class="enum" style="border-right-color:rgba(255,255,255,.3)">
+        <span class="label" style="color:rgba(255,255,255,.7)">Named per answer</span>
+        <b>2–3</b>
+        <p style="color:rgba(255,255,255,.85)">vendors, typically. There is no fourth slot to compete for.</p>
+      </div>
+      <div class="enum" style="border-right-color:rgba(255,255,255,.3)">
+        <span class="label" style="color:rgba(255,255,255,.7)">Your current share</span>
+        <b>41<sup>%</sup></b>
+        <p style="color:rgba(255,255,255,.85)">of the answers reach you. The rest reach a rival, or nobody.</p>
+      </div>
+      <div class="enum">
+        <span class="label" style="color:rgba(255,255,255,.7)">Highest-intent lost</span>
+        <b>9</b>
+        <p style="color:rgba(255,255,255,.85)">comparison and “best tool for…” questions, where a buyer is closest to choosing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ HOW — MANIFESTO ═══════ -->
+<section class="sec wrap" id="how">
+  <div class="sechead">
+    <div>
+      <span class="label">How a reading is made</span>
+      <h2 class="claim--wide">Four moves. No configuration.</h2>
+    </div>
+    <p>Enter a domain and everything below happens on its own. The tracked question set is frozen per
+    domain, so any two readings are always comparable.</p>
+  </div>
+
+  <div class="mani">
+    <div class="mani__i">
+      <span class="mani__n">01</span>
+      <h3>Your category is inferred from your site</h3>
+      <p>Not from a form you fill in, and not from keywords you nominate. If the inference is wrong,
+      the reading would be wrong — so you can see and edit exactly what we concluded.</p>
+    </div>
+    <div class="mani__i">
+      <span class="mani__n">02</span>
+      <h3>36 unbranded questions are written</h3>
+      <p>Every one is a phrasing a buyer would actually type, and not one of them contains your name.
+      A leading question returns a flattering answer, which is worth nothing.</p>
+    </div>
+    <div class="mani__i">
+      <span class="mani__n">03</span>
+      <h3>Every engine is asked every question</h3>
+      <p>Google AI Overview, ChatGPT and Perplexity, in parallel — because they disagree, and averaging
+      them hides the engine you are invisible in.</p>
+    </div>
+    <div class="mani__i">
+      <span class="mani__n">04</span>
+      <h3>The answers are kept, word for word</h3>
+      <p>Who was named, who was cited, and the sentence that proves it. Rivals come out of the answers
+      themselves, so the list is the one the engines actually believe in.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ ENGINES — FULL BLEED BLACK ═══════ -->
+<section class="bleed bleed--black">
+  <div class="wrap">
+    <div class="bleed__two">
+      <h2 class="claim">Three engines. Three different verdicts.</h2>
+      <p class="bleed__side">
+        A brand that owns AI Overview can be completely absent from Perplexity. One number for
+        “AI visibility” would hide that, so we never produce one.
+      </p>
+    </div>
+
+    <div class="enums">
+      <div class="enum">
+        <span class="label">Google AI Overview</span>
+        <b>5<sup>/12</sup></b>
+        <p>answers reach you. Three of your four highest-intent questions live here.</p>
+      </div>
+      <div class="enum">
+        <span class="label">ChatGPT</span>
+        <b>6<sup>/12</sup></b>
+        <p>answers reach you — your strongest engine, and the one your rivals are weakest in.</p>
+      </div>
+      <div class="enum">
+        <span class="label">Perplexity</span>
+        <b>4<sup>/12</sup></b>
+        <p>answers reach you. It cites sources hardest, and only 6 of 64 are pages you control.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ EVIDENCE ═══════ -->
+<section class="sec wrap" id="evidence">
+  <div class="ev">
+    <div>
+      <span class="label" style="color:var(--flare)">Evidence</span>
+      <h2 style="margin:16px 0 18px;font-size:clamp(30px,3.6vw,54px)">No score without the sentence that made it.</h2>
+      <p style="font-size:17.5px;color:var(--ink-3);max-width:38ch">
+        Every reading is backed by the text the engine actually returned — marked where your name
+        appears and where a rival took the recommendation instead. No paraphrase, no black box.
+      </p>
+      <a href="#cta" class="btn btn--ghost" style="margin-top:26px">See the full report</a>
+    </div>
+
+    <div class="ev__panel">
+      <div class="ev__top">
+        <span class="chip chip--solid">Perplexity</span>
+        <span class="chip">16 Aug 2026 · 09:14 IST</span>
+        <span class="chip chip--flare">Rival cited first</span>
+      </div>
+      <p class="ev__q">“which analytics tools track clinical outcomes”</p>
+      <p class="ev__a">
+        Clinical outcome analytics generally splits between registry-based reporting and real-time
+        dashboards. <mark class="you">Brightwave</mark> covers the dashboard side well for mid-size
+        hospitals and is frequently named for readmission tracking. For registry submission and
+        NABH-aligned reporting, <mark class="rival">NorthPeak</mark> is cited more often, particularly
+        by Indian implementation partners.
+      </p>
+      <div class="ev__f">
+        <span class="chip">4 sources cited</span>
+        <span class="chip">1 of them yours</span>
+        <a href="#" style="margin-left:auto;font-size:14.5px;font-weight:700;color:var(--flare)">Open full answer →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ PRICING ═══════ -->
+<section class="bleed bleed--bone" id="pricing" style="padding-block:clamp(50px,6vw,92px)">
+  <div class="wrap">
+    <div class="sechead">
+      <div>
+        <span class="label">Pricing</span>
+        <h2 class="claim--wide" style="font-size:clamp(32px,4.4vw,64px)">The reading is free. Always.</h2>
+      </div>
+      <p>You pay when you want it tracked over time, and when you want the content operation that
+      closes the gaps it finds.</p>
+    </div>
+
+    <div class="plans">
+      <div class="plan">
+        <div class="plan__l">
+          <h3>Probe</h3>
+          <div class="plan__price"><b>Free</b></div>
+        </div>
+        <div class="plan__f">
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> 36 unbranded questions</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> All engines</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Rival discovery</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Verbatim evidence</span>
+        </div>
+        <a href="#cta" class="btn btn--ghost">Run a probe</a>
+      </div>
+
+      <div class="plan plan--feat">
+        <div class="plan__l">
+          <h3>Register <span class="chip chip--flare" style="vertical-align:middle;margin-left:6px">Most chosen</span></h3>
+          <div class="plan__price"><b>₹40k</b><span>/ month</span></div>
+        </div>
+        <div class="plan__f">
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Everything in Probe</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Up to 100 tracked questions</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Daily / weekly cadence + trend</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Rival benchmarking &amp; sources</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Movement alerts</span>
+        </div>
+        <a href="#cta" class="btn btn--flare">Start tracking</a>
+      </div>
+
+      <div class="plan">
+        <div class="plan__l">
+          <h3>Operation</h3>
+          <div class="plan__price"><b>Custom</b></div>
+        </div>
+        <div class="plan__f">
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Everything in Register</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Opportunity queue from live gaps</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Agent drafting, human approval</span>
+          <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M20 6L9 17l-5-5"/></svg> Lift measured against the score</span>
+        </div>
+        <a href="#cta" class="btn btn--ghost">Book a walkthrough</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ FAQ ═══════ -->
+<section class="sec wrap">
+  <div class="sechead">
+    <div>
+      <span class="label">Objections</span>
+      <h2 style="font-size:clamp(32px,4.4vw,64px)">Fair questions.</h2>
+    </div>
+    <p>The four that come up on every first call, answered without marketing language.</p>
+  </div>
+
+  <div class="faq">
+    <details open>
+      <summary>Why not just ask the engine about my brand?</summary>
+      <p>Because a branded question already contains the answer. Ask "is Brightwave good for hospitals"
+      and the engine will find something kind to say — it is a completion machine and you handed it the
+      premise. Your buyer types "best EHR for a 200-bed hospital", and there the engine has to choose.</p>
+    </details>
+    <details>
+      <summary>How is this different from rank tracking?</summary>
+      <p>A rank tracker tells you where a page sits in a list of blue links. There is no list here.
+      There is one paragraph naming two vendors. We measure whether that paragraph says your name, and
+      we keep the paragraph so you can argue with it.</p>
+    </details>
+    <details>
+      <summary>Does the number actually move?</summary>
+      <p>Yes, and that is the whole point of running it on a cadence. Readings are stored per question,
+      per engine, per day, so when a question flips from a rival to you we can point at the page the
+      engine started citing. The tracked set only ever grows additively, so history stays comparable.</p>
+    </details>
+    <details>
+      <summary>Who decides which brands count as rivals?</summary>
+      <p>The engines do. Every brand co-mentioned or cited alongside you is collected and ranked by how
+      often it takes a recommendation you wanted. You never maintain a competitor list — and on a first
+      reading, the surprises are usually the useful part.</p>
+    </details>
+  </div>
+</section>
+
+<!-- ═══════ CTA ═══════ -->
+<section class="bleed bleed--flare" id="cta" style="padding-block:clamp(52px,6.5vw,104px)">
+  <div class="wrap">
+    <div class="bleed__two" style="align-items:start">
+      <div>
+        <span class="label" style="color:rgba(255,255,255,.78)">Free · 36 questions · no signup</span>
+        <h2 class="claim" style="margin-top:18px;font-size:clamp(34px,5vw,76px)">Find out whose name the answer says.</h2>
+        <form class="cta__form" onsubmit="return false">
+          <input type="text" placeholder="yourcompany.com" aria-label="Your domain">
+          <button class="btn btn--white" type="submit">Run the probe</button>
+        </form>
+      </div>
+      <p class="bleed__side" style="padding-top:8px">
+        You will get a share-of-AI reading, the field it was measured against, every rival the engines
+        named, and each answer word for word. Most readings finish in a few minutes, and you get a link
+        you can send to your board.
+      </p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot__g">
+      <div>
+        <h5>Product</h5>
+        <a href="#">The reading</a><a href="#">Rivals</a><a href="#">Sources</a><a href="#">Content Studio</a>
+      </div>
+      <div>
+        <h5>Company</h5>
+        <a href="#">How it works</a><a href="#">Pricing</a><a href="#">Changelog</a><a href="#">Contact</a>
+      </div>
+      <div>
+        <h5>Legal</h5>
+        <a href="#">Privacy</a><a href="#">Terms</a><a href="#">Data handling</a>
+      </div>
+      <div>
+        <h5>Get in touch</h5>
+        <a href="#">hello@perceev.com</a><a href="#">Book a walkthrough</a>
+      </div>
+    </div>
+    <div class="foot__mark">perceev</div>
+    <div class="foot__b">
+      <span>© 2026 Perceev</span>
+      <span>Demonstration data uses fictional brands</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
