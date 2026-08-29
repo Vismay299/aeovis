@@ -49,6 +49,13 @@ An implementer can never close its own task; the CLI rejects `verify` from the
 same flow that submitted, because closing is the controller's act on a separate
 verifier's word.
 
+## Registration caveat
+
+Claude Code loads `.claude/agents/` at session start. The session that first adds
+these files cannot address them by `subagent_type` — restart, or spawn
+`general-purpose` and paste the agent file's body into the prompt. See
+`.claude/skills/rebuild/SKILL.md`.
+
 ## Task states
 
 `todo -> in_progress -> in_verification -> done`, with `blocked` reachable from

@@ -22,11 +22,22 @@ for and nothing else — it reads its own state:
 The controller owns dispatch. Do not spawn implementers yourself alongside it —
 two dispatchers on one ledger will collide on the same files.
 
-## If nested subagents are unavailable
+## If the agent types are not registered
 
-Some Claude Code versions do not let a subagent spawn subagents. If the controller
-reports it cannot dispatch, act as the controller from the main session: follow
-`.claude/agents/rebuild-controller.md` yourself and spawn the workers directly.
+Claude Code loads `.claude/agents/` **at session start**. In the session that first
+creates or renames these files, `subagent_type: rebuild-controller` fails with
+"agent type not found" until the session restarts. Two fallbacks, in order:
+
+1. **Restart the session.** The types register and the normal path works.
+2. **Carry the definition inline.** Spawn `general-purpose` and paste the contents
+   of `.claude/agents/rebuild-controller.md` into the prompt as its operating
+   instructions. The controller then does the same for its workers: read
+   `.claude/agents/rebuild-implementer.md` (and the rest) from disk and include
+   the file's body in each subagent prompt.
+
+The same applies if a Claude Code version does not let a subagent spawn subagents:
+act as the controller from the main session, following
+`.claude/agents/rebuild-controller.md` yourself and spawning the workers directly.
 The protocol is identical — only who runs the loop changes.
 
 ## Read first
