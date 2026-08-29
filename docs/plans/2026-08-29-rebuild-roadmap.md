@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**8 / 121 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**8 / 121 closed** · 7 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -35,9 +35,9 @@ Baseline commit: `5111219`
 - [x] **R0.1.7** /api/health route — closed at `src/app/api/health/route.js:29`, `src/lib/health.js:61`, `src/lib/health.js:38`, `src/lib/db/analytics.js:494`, `src/lib/db/analytics.js:510`, `supabase/migrations/008_system_heartbeats.sql:12`, `src/lib/health.test.mjs:23`, `src/app/api/scan/worker/route.js:47`
 ### R0.2
 
-- [ ] **R0.2.1** Create docs/BUILD_JOURNAL.md seeded with the 37 findings
-- [ ] **R0.2.2** Tracker rule in force; status headers on all plans
-- [ ] **R0.2.3** Supersede the SerpAPI ADR with a dated Bright Data ADR
+- [-] **R0.2.1** Create docs/BUILD_JOURNAL.md seeded with the 37 findings — blocked: needs-decision
+- [-] **R0.2.2** Tracker rule in force; status headers on all plans — blocked: needs-decision
+- [-] **R0.2.3** Supersede the SerpAPI ADR with a dated Bright Data ADR — blocked: needs-decision
 ### R0.3
 
 - [x] **R0.3.1** openrouter.js throws LlmUnavailableError instead of returning empty text — closed at `src/lib/llmErrors.js:15`, `src/lib/openrouter.js:26`, `src/lib/openrouter.js:134`, `src/lib/llm.js:3`, `src/lib/openrouter.test.mjs:70`, `src/lib/openrouter.test.mjs:81`, `src/lib/analytics/citationEnrich.js:528`

@@ -1,5 +1,8 @@
 # aeovis — Post-Rebuild Cleanup & Integration Plan
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** A record of work done at the time, not an authority for current decisions. It predates the 2026-08-29 honesty audit, so any claim it makes about what is finished must be checked against [docs/BUILD_JOURNAL.md](../BUILD_JOURNAL.md) and [2026-08-29-rebuild-roadmap.md](./2026-08-29-rebuild-roadmap.md).
+
 **Date:** 2026-07-18
 **Follows:** `docs/plans/2026-07-15-aio-unbranded-30-prompt-rebuild.md` (the v8 rebuild)
 **Status of that rebuild:** implemented, uncommitted, 69/69 tests pass, `npm run build` succeeds.

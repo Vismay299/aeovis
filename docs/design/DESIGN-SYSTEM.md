@@ -1,5 +1,8 @@
 # Perceev — design system
 
+> <!-- doc-status -->
+> **Status: SUPERSEDED-BY** [DESIGN.md](../../DESIGN.md). This document describes the earlier `design-options/prototype.src.html` prototype and names it the source of truth. It is not: none of its tokens appear in the shipped components, which use the Signal Box ramp from DESIGN.md. Kept for the prototype's measurements and rationale; do not implement from it.
+
 **Reference implementation:** https://claude.ai/code/artifact/a5da71e6-0605-46a4-b955-7b548601fd4e
 **Source of truth for markup and CSS:** `design-options/prototype.src.html` (2,651 lines, self-contained)
 **Built artifact:** `design-options/perceev-prototype.html` — the source with fonts inlined

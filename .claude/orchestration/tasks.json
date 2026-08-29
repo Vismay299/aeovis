@@ -367,11 +367,23 @@
         "docs/"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
+      "status": "blocked",
+      "owner": "rebuild-scribe",
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-08-29T15:54:12.972Z",
+          "by": "rebuild-scribe",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:57:51.008Z",
+          "by": "rebuild-scribe",
+          "text": "blocked (needs-decision): FILE WRITTEN with 34 of the 37 findings; the remaining three are NOT RECOVERABLE from this repository. docs/BUILD_JOURNAL.md carries entry #1 (the 2026-07-29 postmortem, with its 16/56 measurement) and a register of every A/B/C finding the ledger still references, each with a mechanism and a file:line, plus an honest Verified column ('read' = mechanism re-confirmed at this commit, 'anchor only' = the location exists but the mechanism was not re-read). BLOCKER: the findings originate in the companion artifact 'The Honesty Gap' (bbd113a7), which is not committed. The only surviving in-repo record is tasks.json's per-task findings lists, and B8, B9 and B12 are referenced by no task — so they have no description, mechanism or anchor anywhere in the tree. Renumbering 34 as 37 would be exactly the lie this file catalogues. Note also that docs/plans/production-plan.md contains UNRELATED sections also labelled B8/B9 (its own numbering) — do not mistake them for the missing findings. ALSO RECORDED: eight audit anchors had already moved (Donut.jsx, Sidebar.jsx, interlocking.js, worker/, docs/vendors/) — the appendix lists each. 5 guard tests keep the register in step with the ledger and fail if it ever claims 37. Unblock by pasting B8/B9/B12 from the companion artifact, or recording a decision to drop them."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-decision"
     },
     {
       "id": "R0.2.2",
@@ -394,11 +406,18 @@
         "PRODUCT.md"
       ],
       "phase": "R0",
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-08-29T16:01:49.285Z",
+          "by": "controller",
+          "text": "blocked (needs-decision): WORK COMPLETE; blocked only because its ledger dependency R0.2.1 is blocked on three unrecoverable findings. Done: all 21 governed docs now carry a machine-readable status header (DESIGN.md:4, PRODUCT.md, every file under docs/ including docs/plans, docs/design and docs/decisions). The FOUR-WAY DESIGN CONFLICT IS RESOLVED on evidence, not taste: DESIGN.md is LIVE because the shipped components use its Signal Box tokens (--lamp-*, --steel-*, --nickel in src/components/perceev/charts/chartMath.js); docs/design/DESIGN-SYSTEM.md is SUPERSEDED-BY it (none of its tokens appear in shipped code, and it names a prototype file as source of truth); docs/plans/2026-07-18-perceev-dark-redesign.md is SUPERSEDED-BY it too. The close rule is written into docs/plans/README.md:36 — tick + file:line + criterion exercised, in one commit, or blocked with the reason. 6 guard tests, teeth proven by flipping DESIGN.md to HISTORICAL (2 fail). CAVEAT ON THE ACCEPT WORDING: it says the rule goes 'into the tracker'. The tracker is GENERATED from standing_rules in tasks.json and orchestrate.mjs has no command to write that array, so adding a standing rule would require hand-editing the ledger, which the controller brief forbids. The rule therefore lives in docs/plans/README.md, the folder's own LIVE authority. Adding a 'rule' subcommand to orchestrate.mjs is the real fix."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-decision"
     },
     {
       "id": "R0.2.3",
@@ -419,11 +438,18 @@
         "README.md"
       ],
       "phase": "R0",
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-08-29T16:01:49.326Z",
+          "by": "controller",
+          "text": "blocked (needs-decision): WORK COMPLETE; blocked only because its dependency chain (R0.2.2 -> R0.2.1) is blocked. Done: docs/decisions/2026-08-29-serp-provider-bright-data.md (dated, LIVE, names BRIGHTDATA_API_KEY and the api.brightdata.com integration, records alternatives and what would reverse it), docs/decisions/serp-provider.md:4 marked SUPERSEDED-BY and linked to it rather than deleted, README.md:144 migration table extended through 009 (the task asked for 006; 007/008/009 were added by this phase). The new ADR is explicit that cost, coverage and latency versus SerpAPI were NOT measured and that the old note's per-query figures describe SerpAPI only — the superseded document was persuasive on numbers that describe nothing we run, and repeating that pattern would defeat the point. FOUND IN PASSING: SERPAPI_KEY is still live at src/lib/engines/types.js:43, where it counts as 'a SERP provider is configured' even though nothing calls SerpAPI — an unconfigured deployment can look configured. Recorded as follow-up 1 in the ADR; deserves its own task. 4 guard tests, teeth proven by removing a migration row from the README."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-decision"
     },
     {
       "id": "R0.3.1",

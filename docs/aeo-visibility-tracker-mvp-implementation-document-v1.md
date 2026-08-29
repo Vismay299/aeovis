@@ -1,4 +1,7 @@
 # AI Visibility & Answer Engine Optimization (AEO) Tracker
+
+> <!-- doc-status -->
+> **Status: HISTORICAL.** The original MVP specification. A record of the product as first conceived; check any claim it makes about behaviour against [BUILD_JOURNAL.md](./BUILD_JOURNAL.md) and [plans/2026-08-29-rebuild-roadmap.md](./plans/2026-08-29-rebuild-roadmap.md).
 ## MVP Implementation Document v1.0
 
 **July 2026**

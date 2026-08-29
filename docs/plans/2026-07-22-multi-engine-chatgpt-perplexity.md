@@ -1,5 +1,8 @@
 # Multi-Engine Visibility — ChatGPT + Perplexity (+ AIO upgrades)
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** A record of work done at the time, not an authority for current decisions. It predates the 2026-08-29 honesty audit, so any claim it makes about what is finished must be checked against [docs/BUILD_JOURNAL.md](../BUILD_JOURNAL.md) and [2026-08-29-rebuild-roadmap.md](./2026-08-29-rebuild-roadmap.md).
+
 **Date:** 2026-07-22
 **Scope:** Add ChatGPT and Perplexity as visibility engines alongside Google AI Overviews; ship four small AIO-side upgrades in the same push.
 **Verified baseline:** v8.1 pipeline green — two clean E2E scans today (italica 34/34, Snitch 34/34, 0% errors), merged to `main` at `1a65301`.

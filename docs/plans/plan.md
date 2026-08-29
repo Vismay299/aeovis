@@ -1,5 +1,8 @@
 # Perceev Analytics Platform — Competitive Parity Plan
 
+> <!-- doc-status -->
+> **Status: SUPERSEDED-BY** [2026-08-29-rebuild-roadmap.md](./2026-08-29-rebuild-roadmap.md). The P0–P7 analytics plan. Parts of it shipped; the 2026-08-29 audit found which of its outcomes are actually true and which only looked true. The roadmap is the live tracker.
+
 **Date:** 2026-07-23
 **Status:** Reviewed — reviewer-agent findings (19 defects) incorporated. Pending user go/no-go.
 **Owner:** Orchestrator (main session) · Developer agent (execution) · Reviewer agent (gates)

@@ -140,6 +140,10 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `003_content_agents` | `content_agents` + agent columns on jobs/items |
 | `004_crew_canvas_knowledge` | composable agent pipelines, `knowledge_blocks` |
 | `005_analytics_platform` | `prompt_results`, `result_brands`, `citations`, `brand_metrics_daily`, `scan_schedules`, `topics`; job `checkpoint`/`heartbeat_at` |
+| `006_agent_control_plane` | agent control-plane tables and the `content_jobs` heartbeat index |
+| `007_scan_seal` | unique partial index enforcing one running scan per brand (closes the duplicate-scan race) |
+| `008_system_heartbeats` | `system_heartbeats` — the "did the cron actually fire?" record behind `/api/health` |
+| `009_scan_rate_limit` | `scan_rate_limits` + the atomic `increment_scan_rate_limit()` behind the free-scan per-IP cap |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

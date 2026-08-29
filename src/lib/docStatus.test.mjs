@@ -1,0 +1,149 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+/**
+ * R0.2.2 (findings S28/S30) — every doc declares its own authority.
+ *
+ * Four documents claimed design authority at once with no supersession markers,
+ * so "what does the design say" had four answers. A status header is cheap; a
+ * team implementing from a superseded document is not.
+ */
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const MARK = "<!-- doc-status -->";
+
+/** Every markdown doc that must carry a header. */
+async function governedDocs() {
+  const out = ["DESIGN.md", "PRODUCT.md"];
+  async function walk(rel) {
+    for (const entry of await readdir(path.join(REPO, rel), { withFileTypes: true })) {
+      const child = `${rel}/${entry.name}`;
+      if (entry.isDirectory()) await walk(child);
+      else if (entry.name.endsWith(".md")) out.push(child);
+    }
+  }
+  await walk("docs");
+  return out;
+}
+
+test("GUARD — every governed doc carries a status header", async () => {
+  const missing = [];
+  for (const rel of await governedDocs()) {
+    const src = await readFile(path.join(REPO, rel), "utf8");
+    // The generated tracker declares its status in its own generator template.
+    if (rel.endsWith("2026-08-29-rebuild-roadmap.md")) {
+      assert.match(src, /> Status: \*\*LIVE\*\*/, `${rel} lost its generated header`);
+      continue;
+    }
+    if (!src.includes(MARK)) missing.push(rel);
+  }
+  assert.deepEqual(missing, [], `these docs have no status header:\n  ${missing.join("\n  ")}`);
+});
+
+test("GUARD — every status header uses one of the three permitted values", async () => {
+  const bad = [];
+  for (const rel of await governedDocs()) {
+    const src = await readFile(path.join(REPO, rel), "utf8");
+    if (!src.includes(MARK)) continue;
+    const header = src.slice(src.indexOf(MARK), src.indexOf(MARK) + 400);
+    if (!/\*\*Status: (LIVE|HISTORICAL|SUPERSEDED-BY)/.test(header)) bad.push(rel);
+  }
+  assert.deepEqual(bad, [], `status must be LIVE, HISTORICAL or SUPERSEDED-BY: ${bad}`);
+});
+
+test("GUARD — a SUPERSEDED-BY header names where authority went", async () => {
+  // "Superseded" with no forwarding address is worse than no marker: it tells
+  // the reader to stop without telling them where to go.
+  const bad = [];
+  for (const rel of await governedDocs()) {
+    const src = await readFile(path.join(REPO, rel), "utf8");
+    const at = src.indexOf("**Status: SUPERSEDED-BY**");
+    if (at === -1) continue;
+    if (!/\[[^\]]+\]\([^)]+\)/.test(src.slice(at, at + 300))) bad.push(rel);
+  }
+  assert.deepEqual(bad, [], `SUPERSEDED-BY must link to the superseding doc: ${bad}`);
+});
+
+test("GUARD — exactly one design authority is LIVE", async () => {
+  // The four-way conflict this task exists to resolve.
+  const designDocs = ["DESIGN.md", "docs/design/DESIGN-SYSTEM.md", "docs/plans/2026-07-18-perceev-dark-redesign.md"];
+  const live = [];
+  for (const rel of designDocs) {
+    const src = await readFile(path.join(REPO, rel), "utf8");
+    if (/\*\*Status: LIVE\.\*\*/.test(src)) live.push(rel);
+  }
+  assert.deepEqual(live, ["DESIGN.md"], `exactly one design doc may be LIVE, found: ${live}`);
+});
+
+test("GUARD — the live design doc is the one the code actually implements", async () => {
+  // Not a matter of taste: whichever document's tokens appear in the shipped
+  // components IS the authority, and the header must agree.
+  const chartMath = await readFile(path.join(REPO, "src/components/perceev/charts/chartMath.js"), "utf8");
+  assert.match(chartMath, /--steel-1/, "the shipped ramp should use the Signal Box tokens");
+  const design = await readFile(path.join(REPO, "DESIGN.md"), "utf8");
+  assert.match(design, /\*\*Status: LIVE\.\*\*/);
+  assert.match(design, /Signal Box/i);
+});
+
+test("GUARD — the close rule is written down where plans are read", async () => {
+  const readme = await readFile(path.join(REPO, "docs/plans/README.md"), "utf8");
+  assert.match(readme, /## Closing an item/);
+  assert.match(readme, /in the same commit/i);
+  assert.match(readme, /file:line/);
+  assert.match(readme, /blocked with the reason/i, "the rule must name the alternative to closing");
+});
+
+// ---------------------------------------------------------------------------
+// R0.2.3 (finding S19) — the ADR must describe the provider that actually ships.
+// ---------------------------------------------------------------------------
+
+test("GUARD — the SerpAPI ADR is superseded and points at the Bright Data one", async () => {
+  const old = await readFile(path.join(REPO, "docs/decisions/serp-provider.md"), "utf8");
+  assert.match(old, /\*\*Status: SUPERSEDED-BY\*\*/);
+  assert.match(old, /2026-08-29-serp-provider-bright-data\.md/);
+  const adr = await readFile(
+    path.join(REPO, "docs/decisions/2026-08-29-serp-provider-bright-data.md"),
+    "utf8"
+  );
+  assert.match(adr, /\*\*Status: LIVE\.\*\*/);
+  assert.match(adr, /\*\*Date:\*\* 2026-08-29/, "an ADR must be dated");
+  assert.match(adr, /Supersedes/);
+});
+
+test("GUARD — the live ADR names the provider the code actually calls", async () => {
+  const adr = await readFile(
+    path.join(REPO, "docs/decisions/2026-08-29-serp-provider-bright-data.md"),
+    "utf8"
+  );
+  assert.match(adr, /BRIGHTDATA_API_KEY/);
+  const engine = await readFile(path.join(REPO, "src/lib/engines/brightdata.js"), "utf8");
+  assert.match(engine, /api\.brightdata\.com/, "the ADR's claim must match the integration");
+});
+
+test("GUARD — the ADR does not assert cost or coverage it never measured", async () => {
+  // The superseded note was persuasive on numbers that describe nothing we run.
+  // Its replacement must be explicit about what was and was not verified.
+  const adr = await readFile(
+    path.join(REPO, "docs/decisions/2026-08-29-serp-provider-bright-data.md"),
+    "utf8"
+  );
+  assert.match(adr, /NOT verified here/);
+  assert.match(adr, /Cost per query, coverage rate, and latency/);
+});
+
+test("GUARD — the README migration table lists every migration on disk", async () => {
+  const readme = await readFile(path.join(REPO, "README.md"), "utf8");
+  const onDisk = (await readdir(path.join(REPO, "supabase/migrations")))
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => f.replace(/\.sql$/, ""))
+    .sort();
+  const missing = onDisk.filter((m) => !readme.includes("`" + m + "`"));
+  assert.deepEqual(
+    missing,
+    [],
+    `these migrations exist but the README table does not list them: ${missing}`
+  );
+});

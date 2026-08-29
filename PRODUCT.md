@@ -1,5 +1,8 @@
 # Product
 
+> <!-- doc-status -->
+> **Status: LIVE.** The authority for product scope and positioning. Claims marked `[inferred ...]` inside it are exactly that — not user-confirmed.
+
 <!-- impeccable:product-schema 1 -->
 
 ## Platform

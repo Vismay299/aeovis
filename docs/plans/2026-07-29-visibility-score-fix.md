@@ -1,5 +1,8 @@
 # Visibility score — why it was wrong, and the fix
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** The postmortem that started the honesty audit. Recorded as **entry #1** of [docs/BUILD_JOURNAL.md](../BUILD_JOURNAL.md) and still the format template for a new entry.
+
 **Date:** 2026-07-29
 **Branch:** `fix/visibility-score-prompt-set`
 **Trigger:** "the score is still coming out to be really shit... 10 different platforms have way better scoring"
