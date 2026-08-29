@@ -219,11 +219,33 @@
         "src/lib/db.js:403-408"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "supabase/migrations/007_scan_seal.sql:25",
+        "src/lib/duplicateScan.js:56",
+        "src/lib/duplicateScan.js:41",
+        "src/lib/db.js:383",
+        "src/app/api/scan/route.js:49",
+        "src/lib/duplicateScan.test.mjs:72"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-29T15:33:54.950Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:40:28.436Z",
+          "by": "rebuild-implementer",
+          "text": "Migration 007 adds a unique partial index on lower(btrim(brand)) over the running statuses. The predicate cannot include heartbeat freshness (partial-index predicates must be IMMUTABLE), so createScanJob resolves the violation: a live holder is a typed DuplicateScanError -> 409, a crashed holder is failed and the insert retried once, so a brand is never locked forever. isDuplicateScanViolation is deliberately narrow — a connection error or a different constraint is NOT reported as 'already scanning'. A drift guard fails if db.js SCAN_JOB_RUNNING and the index predicate disagree. Exercised against a REAL PostgreSQL 16 cluster started locally, not just unit-tested."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-29T15:40:28.482Z",
+        "note": "Both clauses exercised for real. Started a local PostgreSQL 16 cluster, applied 001+005+007: 007 applies cleanly and is idempotent on re-run (NOTICE ... skipping, no error). Then two GENUINELY CONCURRENT psql sessions inserted a running scan_jobs row for the same brand with different casing ('Italica' vs 'ITALICA'): session 2 blocked on the index and then failed with 'duplicate key value violates unique constraint scan_jobs_one_running_per_brand', exactly one row survived. Rejection is therefore by the database, not application logic. Also confirmed complete/failed jobs do not block a new scan, and that failing a stale holder lets the retry insert succeed. 8 unit tests; the SCAN_JOB_RUNNING drift guard proven by removing a status from the predicate and watching it fail. Suite 667/667."
+      }
     },
     {
       "id": "R0.1.6",

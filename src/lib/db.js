@@ -1,6 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 import { buildScanBaseRecord } from "./db/scanRow.js";
+import {
+  DuplicateScanError,
+  isDuplicateScanViolation,
+  resolveDuplicateScan,
+  reclaimReason,
+} from "./duplicateScan.js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -364,10 +370,45 @@ export async function createScanJob({ brand, url, industry, competitors }, deps 
     return job;
   }
 
-  const { data, error } = await client
-    .from("scan_jobs")
-    .insert([job])
-    .select();
+  const insert = async () => client.from("scan_jobs").insert([job]).select();
+
+  let { data, error } = await insert();
+
+  // R0.1.5: migration 007's unique partial index is now the authority on
+  // "one running scan per brand". Its predicate cannot include heartbeat
+  // freshness (partial-index predicates must be IMMUTABLE), so a job that
+  // crashed while running would otherwise hold its brand's lock forever.
+  // Resolve that here: a genuinely live holder is a 409; a dead one is
+  // failed and the insert retried exactly once.
+  if (error && isDuplicateScanViolation(error)) {
+    const { data: blocking, error: readErr } = await client
+      .from("scan_jobs")
+      .select("id, status, heartbeat_at")
+      .ilike("brand", String(brand || "").trim())
+      .in("status", SCAN_JOB_RUNNING)
+      .limit(20);
+    // Never fail-soft here. If we cannot tell whether the holder is alive,
+    // the safe answer is "someone is scanning" — refusing a scan costs a
+    // retry, permitting a duplicate costs a full vendor budget.
+    if (readErr) throw new DuplicateScanError(brand, null);
+
+    const decision = resolveDuplicateScan(blocking, isJobAlive);
+    if (decision.action === "reject") throw new DuplicateScanError(brand, decision.liveJobId);
+
+    if (decision.deadJobIds.length) {
+      const { error: failErr } = await client
+        .from("scan_jobs")
+        .update({ status: "failed", error_message: reclaimReason(now) })
+        .in("id", decision.deadJobIds);
+      if (failErr) throw new DuplicateScanError(brand, decision.deadJobIds[0]);
+    }
+
+    ({ data, error } = await insert());
+    // A second violation means someone else won the reclaim race. That is a
+    // real 409, not a retry loop.
+    if (error && isDuplicateScanViolation(error)) throw new DuplicateScanError(brand, null);
+  }
+
   if (error) throw error;
   return data[0];
 }

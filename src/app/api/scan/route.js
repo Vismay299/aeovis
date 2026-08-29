@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createScanJob, hasActiveScanForBrand } from "@/lib/db";
+import { DuplicateScanError } from "@/lib/duplicateScan";
 import { runScanChunk } from "@/lib/workers/scanWorker";
 
 // A chunk can run for up to ~150s (CHUNK_TIME_BUDGET_MS in scanWorker.js)
@@ -41,6 +42,16 @@ export async function POST(request) {
       progress_pct: job.progress_pct
     }, { status: 201 });
   } catch (error) {
+    // R0.1.5: the database (migration 007's unique partial index) is now the
+    // authority on "one running scan per brand". The pre-flight
+    // hasActiveScanForBrand check above is a courtesy that fails open; this is
+    // the one that actually holds, and it must surface as 409, not 500.
+    if (error instanceof DuplicateScanError || error?.name === "DuplicateScanError") {
+      return NextResponse.json(
+        { detail: "A scan for this brand is already in progress. Please wait for it to finish." },
+        { status: 409 }
+      );
+    }
     console.error("Scan API POST handler error:", error);
     return NextResponse.json({ detail: "Internal Server Error" }, { status: 500 });
   }
