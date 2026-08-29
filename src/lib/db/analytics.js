@@ -478,6 +478,40 @@ export async function getResultBrandsForScan(scanId, deps = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// scan rate limit (migration 009)
+// ---------------------------------------------------------------------------
+
+global.memoryRateLimits = global.memoryRateLimits || new Map();
+
+/**
+ * Atomically add one to a rate-limit bucket and return the resulting count
+ * (R0.1.4). Atomic because two concurrent requests must not both read the
+ * same pre-increment value and both proceed.
+ *
+ * Postgres has no PostgREST verb for "upsert and return count+1", so this
+ * uses the `increment_scan_rate_limit` function created in migration 009.
+ * Throws on failure — checkScanRateLimit decides what a broken counter means,
+ * and it says so out loud rather than silently allowing.
+ */
+export async function incrementScanRateLimit({ bucketKey, windowStart }, deps = {}) {
+  const client = resolveClient(deps);
+
+  if (!client) {
+    const key = `${bucketKey}|${windowStart}`;
+    const next = (global.memoryRateLimits.get(key) || 0) + 1;
+    global.memoryRateLimits.set(key, next);
+    return next;
+  }
+
+  const { data, error } = await client.rpc("increment_scan_rate_limit", {
+    p_bucket_key: bucketKey,
+    p_window_start: windowStart,
+  });
+  if (error) throw error;
+  return Number(data);
+}
+
+// ---------------------------------------------------------------------------
 // system heartbeats (migration 008) — "did the cron actually fire?"
 // ---------------------------------------------------------------------------
 

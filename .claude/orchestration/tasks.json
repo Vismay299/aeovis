@@ -173,11 +173,18 @@
         "src/app/api"
       ],
       "phase": "R0",
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-08-29T15:50:14.793Z",
+          "by": "controller",
+          "text": "blocked (needs-vercel): CODE COMPLETE AND FULLY UNIT-TESTED; blocked only because its ledger dependency R0.1.1 is itself blocked on Vercel, and because the literal 'returns 401' needs a running server (no next binary here). Written: src/middleware.js (Next binding, matcher /api/:path*), src/lib/operatorPerimeter.js:128 (the whole decision, pure, Edge-safe — hand-rolled constant-time compare because node:crypto is unavailable in middleware), src/lib/operatorPerimeter.js:72 (the ALLOWLIST — a denylist fails open for every route added later), .env.example:29, src/lib/operatorPerimeter.test.mjs:38 and :75 (16 tests). BOTH accept clauses exercised at the decision level: unauthenticated POST /api/content is refused, and the entire free-scan sequence from src/services/api.js runScan (POST /api/scan, GET /api/scan/<id>/status, GET /api/scans/by-id/<id>, /api/scans/<brand>, /<brand>/latest, /api/industries, /api/health) passes with no credentials — including with OPERATOR_TOKEN unset in production. A route walker over the real src/app/api tree asserts the public set is exactly those six and no more. IMPORTANT TRAP CAUGHT: /api/scan/worker and /api/content/worker are EXEMPT, not public — the worker's own self-continue fetch carries x-cron-secret and no operator token, so gating them here would have 401'd it and stalled every scan longer than one chunk. Teeth proven both ways: opening /api/content fails 3 tests; removing POST /api/scan from the allowlist fails 5."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-vercel"
     },
     {
       "id": "R0.1.4",
@@ -197,11 +204,18 @@
         "src/app/api/scan/route.js"
       ],
       "phase": "R0",
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-08-29T15:50:14.832Z",
+          "by": "controller",
+          "text": "blocked (needs-vercel): CODE COMPLETE AND EXERCISED AGAINST A REAL POSTGRES; blocked only because its ledger dependency chain (R0.1.3 -> R0.1.1) is blocked on Vercel. Written: supabase/migrations/009_scan_rate_limit.sql:41 (scan_rate_limits + an atomic ON CONFLICT ... RETURNING increment — read-then-write would have reintroduced the TOCTOU migration 007 just closed), src/lib/rateLimit.js:97, src/lib/db/analytics.js:496, src/app/api/scan/route.js:39 (429 with Retry-After and X-RateLimit-*), .env.example:33, src/lib/rateLimit.test.mjs:31 (15 tests). BOTH accept clauses exercised: the 6th scan in an hour from one IP is refused (5 allowed, 6th 429) and the limit is env-configurable. Migration 009 applied to a real PostgreSQL 16 cluster and the counter driven for real — 7 sequential increments returned 1..7, a new window reset to 1, and 6 GENUINELY CONCURRENT sessions produced exactly 6 with no lost update. The IP is hashed with a per-deployment salt: this is a counter, not a visitor log. The broken-counter path fails open by design and is loud about it (degraded:true, remaining:null, and a log naming the duplicate-scan index as what still bounds the damage). NOT EXERCISED: an actual HTTP 429 over the wire."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-vercel"
     },
     {
       "id": "R0.1.5",

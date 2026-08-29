@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createScanJob, hasActiveScanForBrand } from "@/lib/db";
 import { DuplicateScanError } from "@/lib/duplicateScan";
+import { checkScanRateLimit } from "@/lib/rateLimit";
+import { incrementScanRateLimit } from "@/lib/db/analytics";
 import { runScanChunk } from "@/lib/workers/scanWorker";
 
 // A chunk can run for up to ~150s (CHUNK_TIME_BUDGET_MS in scanWorker.js)
@@ -17,6 +19,31 @@ export async function POST(request) {
     const competitors = (payload.competitors || "").trim();
     if (!brand) {
       return NextResponse.json({ detail: "Brand name is required." }, { status: 400 });
+    }
+
+    // R0.1.4: the free scan is anonymous and spends real Bright Data +
+    // Perplexity + LLM budget per call. Counted BEFORE the duplicate check so
+    // a caller cannot probe for free by hammering an already-scanning brand.
+    const rate = await checkScanRateLimit({
+      header: (name) => request.headers.get(name),
+      increment: (args) => incrementScanRateLimit(args),
+    });
+    if (!rate.allowed) {
+      return NextResponse.json(
+        {
+          detail: `Too many scans from this address. Try again in ${Math.ceil(
+            rate.retryAfterSec / 60
+          )} minute(s).`,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(rate.retryAfterSec),
+            "X-RateLimit-Limit": String(rate.limit),
+            "X-RateLimit-Remaining": String(rate.remaining),
+          },
+        }
+      );
     }
 
     if (await hasActiveScanForBrand(brand)) {
