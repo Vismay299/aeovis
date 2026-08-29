@@ -420,7 +420,7 @@
         "src/lib/engines/types.js:43"
       ],
       "phase": "R0",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/engines/types.js:47",
@@ -445,7 +445,11 @@
           "text": "types.js:43->47 now reads BRIGHTDATA_API_KEY only, with a comment naming the Bright Data ADR so the next reader knows why SERPAPI_KEY is absent. New src/lib/engines/types.test.mjs (7 tests, getEnabledEngines had zero direct coverage): stale-key case (only SERPAPI_KEY -> GOOGLE_AI_OVERVIEW NOT enabled), BrightData-only -> enabled, SERPAPI_KEY adds nothing on top of BrightData, llm_only still suppresses AIO (so the first assertions pass on the credential and not on PROBE_MODE), explicit ENGINES_ENABLED branch unchanged, health vendorFlags({SERPAPI_KEY}) -> brightdata unconfigured, plus a GUARD test that reads src/lib/engines/types.js, src/lib/health.js and scripts/check-secrets.mjs and fails if any NON-COMMENT line treats SERPAPI_KEY as a credential -- so the 'check-secrets and /api/health agree' half is demonstrated, not asserted, and the three cannot drift apart again. check-secrets.mjs and health.js were verified to already reference only BRIGHTDATA_API_KEY and were NOT edited. Did NOT touch src/lib/engines/serp.js or serp.test.mjs: the SerpAPI request path there is genuinely LIVE (real serpapi.com fetch via getSerpProvider fallback), the ADR's claim that it is dead is wrong as written, and deleting it is task R1.7.3. Negative-tested the guard: reverting the types.js line makes 2 of the 7 new tests fail. npm run test:scoring: 819 tests / 819 pass / 0 fail (baseline 808; the delta above my 7 is a concurrent implementer's cronAuth tests in the same worktree). Cannot exercise a real deployment/health HTTP route here (no .env.local, no Vercel, next build/lint do not run) -- the /api/health half is exercised through buildHealthPayload/vendorFlags, the pure function the route returns."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-29T16:38:09.641Z",
+        "note": "Verified by a fresh rebuild-verifier. Original bug REPRODUCED against pre-fix source: with only SERPAPI_KEY set, getEnabledEngines returned [gemini, google_ai_overview] (AIO enabled: true). Fixed tree, same input: [gemini], AIO false; BRIGHTDATA_API_KEY-only still enables it. The 'agree' half was exercised, not asserted: check-secrets run directly via env -i with only SERPAPI_KEY emits 'brightdata UNCONFIGURED required missing BRIGHTDATA_API_KEY', and buildHealthPayload on the same env returns brightdata.configured=false, missing:[BRIGHTDATA_API_KEY], status=degraded. Both surfaces POSITIVELY report the vendor unconfigured rather than merely omitting SERPAPI_KEY. Negative control: restoring the SERPAPI_KEY fallback fails the stale-key behavioural test and the drift guard; tree restored, sha256 matches pristine, 836/836/0. health.js and check-secrets.mjs were NOT edited, so the agreement is pre-existing and not manufactured. serp.js/serp.test.mjs untouched — deleting the live SerpAPI path remains R1.7.3's. Env isolation confirmed under a simulated worst case with both vars pre-set in-process. Evidence line nits for the record: types.test.mjs:98 is the closing brace of the preceding test (the vendorFlags case is :100) and :114 is the guard body (declared :113); both resolve to the new file and the intended cases."
+      }
     },
     {
       "id": "R0.2.1",
@@ -1516,6 +1520,35 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.7.4",
+      "subphase": "R1.7",
+      "lane": "backend",
+      "title": "fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY",
+      "detail": "R0.1.9 stopped SERPAPI_KEY counting as a configured SERP provider in getEnabledEngines, which makes the AIO probe unreachable on a stale key. But src/lib/scoring/promptGen.js:2 imports fetchPeopleAlsoAsk directly, gated on isSerpConfigured() -> getSerpProvider(), which still falls back to \"serpapi\" at src/lib/engines/serp.js:14. That caller never consults getEnabledEngines, so a deployment holding only SERPAPI_KEY can still make a live serpapi.com call at prompt-generation time and spend money the capability check says it cannot. Found by the R0.1.9 verifier, out of scope there. Belongs with R1.7.3, which deletes the SerpAPI probe path.",
+      "accept": "A deployment with only SERPAPI_KEY set makes no serpapi.com request from promptGen; the PAA path is gated by the same capability check as the AIO probe; a test covers the stale-key case at the promptGen entry point.",
+      "deps": [
+        "R1.7.3"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/scoring/promptGen.js:2",
+        "src/lib/engines/serp.js:14"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-29T16:38:24.830Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
       "verification": null
     },
     {
@@ -3395,6 +3428,33 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.5.4",
+      "subphase": "R6.5",
+      "lane": "test",
+      "title": "serp.test.mjs passes only because no BRIGHTDATA_API_KEY is in the environment",
+      "detail": "src/lib/engines/serp.test.mjs sets SERPAPI_KEY but never scrubs BRIGHTDATA_API_KEY. With a Bright Data key present in the ambient environment — the normal state for this project on a developer machine or in CI — getSerpProvider picks brightdata, the SerpAPI mocks never match, and three tests fail: probeGoogleAiOverview mock parsing correctness with text_blocks, mock deferred page_token loading, and fetchPeopleAlsoAsk mock fetches. The suite is green in this repo only because no .env.local exists. Found by the R0.1.9 test-author; left alone because serp.js belongs to R1.7.3.",
+      "accept": "The full suite passes with BRIGHTDATA_API_KEY exported ambiently; serp.test.mjs scrubs every env var getSerpProvider branches on and restores them, the way types.test.mjs does.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/engines/serp.test.mjs:65",
+        "src/lib/engines/serp.js:9-16"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-29T16:38:24.882Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
       "verification": null
     }
   ]

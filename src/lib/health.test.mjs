@@ -62,6 +62,76 @@ test("buildHealthPayload - an optional vendor being absent does NOT degrade the 
   assert.deepEqual(p.missing_required, []);
 });
 
+// ---------------------------------------------------------------------------
+// R0.1.9 — a stale SERPAPI_KEY must not make the SERP provider look configured.
+//
+// Bright Data is the SERP provider
+// (docs/decisions/2026-08-29-serp-provider-bright-data.md); SERPAPI_KEY is
+// superseded. These assert through buildHealthPayload — the object /api/health
+// actually returns — rather than through vendorFlags one layer below it,
+// because the failure being guarded is a deployment reading HEALTHY at boot and
+// only discovering the missing SERP credential at probe time. The matching
+// half for check:secrets, and the test that the two AGREE, is in
+// src/lib/checkSecrets.test.mjs.
+// ---------------------------------------------------------------------------
+
+test("buildHealthPayload - only SERPAPI_KEY set: the SERP vendor reads NOT configured", () => {
+  // Everything else configured, so brightdata is the only variable and the
+  // verdict below cannot be caused by some other absent vendor.
+  const env = { ...FULL_ENV, BRIGHTDATA_API_KEY: "", SERPAPI_KEY: "stale-serpapi-key" };
+  const p = buildHealthPayload({ db: { ok: true }, env, ticks: [], now: NOW });
+
+  assert.equal(
+    p.vendors.brightdata.configured,
+    false,
+    "a superseded SERPAPI_KEY is not a SERP credential"
+  );
+  assert.deepEqual(p.vendors.brightdata.missing, ["BRIGHTDATA_API_KEY"], "name the fix, not just a red flag");
+  assert.deepEqual(p.missing_required, ["brightdata"]);
+});
+
+test("buildHealthPayload - only SERPAPI_KEY set: the OVERALL verdict is degraded, never ok", () => {
+  // The finding: a deployment that cannot run a SERP probe reported healthy.
+  const env = { ...FULL_ENV, BRIGHTDATA_API_KEY: "", SERPAPI_KEY: "stale-serpapi-key" };
+  const p = buildHealthPayload({ db: { ok: true }, env, ticks: [], now: NOW });
+  assert.notEqual(p.status, "ok", "a deployment with no SERP provider must not render as healthy");
+  assert.equal(p.status, "degraded");
+});
+
+test("buildHealthPayload - POSITIVE CONTROL: with BRIGHTDATA_API_KEY it is ok again", () => {
+  // Proves the two assertions above pin the CREDENTIAL and not the env shape:
+  // same payload call, brightdata restored, SERPAPI_KEY still absent.
+  const p = buildHealthPayload({ db: { ok: true }, env: FULL_ENV, ticks: [], now: NOW });
+  assert.equal(p.vendors.brightdata.configured, true);
+  assert.equal(p.status, "ok");
+  assert.deepEqual(p.missing_required, []);
+});
+
+test("buildHealthPayload - SERPAPI_KEY changes NOTHING about the payload", () => {
+  // Strongest form of "it is not a credential here": adding it is a no-op on
+  // an otherwise identical environment, for every vendor, not just brightdata.
+  const bare = buildHealthPayload({ db: { ok: true }, env: {}, ticks: [], now: NOW });
+  const stale = buildHealthPayload({
+    db: { ok: true },
+    env: { SERPAPI_KEY: "stale-serpapi-key" },
+    ticks: [],
+    now: NOW,
+  });
+  assert.deepEqual(stale, bare);
+  assert.equal(stale.vendors.brightdata.configured, false);
+});
+
+test("buildHealthPayload - no vendor in the table is satisfied by SERPAPI_KEY", () => {
+  // A drift guard on the DATA, not on the file text: if anyone re-adds
+  // SERPAPI_KEY to a vendor's env list, this fails.
+  const allEnvVars = VENDORS.flatMap((v) => v.env);
+  assert.equal(
+    allEnvVars.includes("SERPAPI_KEY"),
+    false,
+    `SERPAPI_KEY is superseded by BRIGHTDATA_API_KEY; vendor table lists ${allEnvVars.join(", ")}`
+  );
+});
+
 test("buildHealthPayload - a cron that has NEVER ticked reports null, not zero or absent", () => {
   // Standing rule 1: never-ran must not render the same as just-ran.
   const p = buildHealthPayload({ db: { ok: true }, env: FULL_ENV, ticks: [], now: NOW });

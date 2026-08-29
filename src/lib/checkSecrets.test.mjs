@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildHealthPayload, vendorFlags, VENDORS } from "./health.js";
 
 const execFileAsync = promisify(execFile);
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -81,6 +82,100 @@ test("check:secrets - a malformed GSC service account is FAIL, not a skip", asyn
   const { code, stdout } = await run({ GSC_SERVICE_ACCOUNT_KEY: "definitely not json" });
   assert.equal(code, 1, stdout);
   assert.match(stdout, /\[ FAIL \] gsc/);
+});
+
+// ---------------------------------------------------------------------------
+// R0.1.9 — the stale-SERPAPI_KEY deployment, and the "check-secrets and
+// /api/health AGREE" half of the accept criterion.
+//
+// These are BEHAVIOURAL, not textual: they run the real scripts/check-secrets.mjs
+// and compare its parsed output against the real health payload. Both sides see
+// the same environment. No stub stands in for either.
+//
+// It stays hermetic because SERPAPI_KEY satisfies no vendor's `keys`, so every
+// vendor short-circuits to UNCONFIGURED and no `check()` — hence no fetch —
+// runs. That is precisely the property under test: if check-secrets ever
+// accepted SERPAPI_KEY for brightdata, the vendor would go CONFIGURED, attempt
+// a live call with no Bright Data credential, and these tests would fail on
+// both the verdict and the exit code.
+//
+// Note the child is spawned as `node scripts/check-secrets.mjs`, not via
+// `npm run check:secrets`, so the `--env-file-if-exists=.env.local` flag is not
+// applied and a developer's local .env.local cannot leak a real credential in.
+// ---------------------------------------------------------------------------
+
+const STALE = { SERPAPI_KEY: "stale-serpapi-key" };
+
+/** Parse the verdict table into structured rows, so we assert on data not prose. */
+function parseVerdicts(stdout) {
+  const rows = {};
+  for (const line of stdout.split("\n")) {
+    const m = line.match(/^\[.{6}\]\s+(\S+)\s+(PASS|FAIL|UNCONFIGURED)\s+(required|optional)\s*(.*)$/);
+    if (m) rows[m[1]] = { verdict: m[2], required: m[3] === "required", detail: m[4].trim() };
+  }
+  return rows;
+}
+
+test("check:secrets - only SERPAPI_KEY set: the SERP vendor is UNCONFIGURED, naming BRIGHTDATA_API_KEY", async () => {
+  const { code, stdout } = await run(STALE);
+  const rows = parseVerdicts(stdout);
+  assert.ok(rows.brightdata, `no brightdata row in:\n${stdout}`);
+  assert.equal(rows.brightdata.verdict, "UNCONFIGURED", "a superseded key is not a SERP credential");
+  assert.match(rows.brightdata.detail, /missing BRIGHTDATA_API_KEY/);
+  assert.equal(rows.brightdata.required, true, "SERP is required for a scan to run");
+  // Exit 0 because UNCONFIGURED is not a failure — but the stale key must not
+  // have provoked a live call either, which a FAIL row would betray.
+  assert.equal(code, 0, stdout);
+  assert.doesNotMatch(stdout, /\bPASS\b|\bFAIL\b/, "a stale key must not produce a pass or a live-call failure");
+  assert.doesNotMatch(stdout, /SERPAPI/i, "check:secrets must not report on a superseded provider at all");
+});
+
+test("check:secrets - SERPAPI_KEY changes nothing: byte-identical report with and without it", async () => {
+  // The no-op form of "it is not a credential here", across every vendor.
+  const [stale, bare] = await Promise.all([run(STALE), run()]);
+  assert.equal(stale.code, bare.code);
+  assert.equal(stale.stdout, bare.stdout);
+});
+
+test("check:secrets and /api/health AGREE on a deployment holding only SERPAPI_KEY", async () => {
+  // The accept criterion's "agree" half, asserted rather than assumed: same
+  // env into both surfaces, then compare vendor-for-vendor.
+  const { stdout } = await run(STALE);
+  const rows = parseVerdicts(stdout);
+  const flags = vendorFlags(STALE);
+
+  assert.deepEqual(
+    Object.keys(rows).sort(),
+    Object.keys(flags).sort(),
+    "the two vendor tables have drifted apart — one surface knows about a vendor the other does not"
+  );
+
+  for (const [name, row] of Object.entries(rows)) {
+    assert.equal(
+      row.verdict === "UNCONFIGURED",
+      flags[name].configured === false,
+      `${name}: check:secrets says ${row.verdict} but /api/health says configured=${flags[name].configured}`
+    );
+    assert.equal(row.required, flags[name].required, `${name}: the two disagree on required-ness`);
+  }
+
+  // And the specific claim R0.1.9 is about, from both sides at once.
+  assert.equal(rows.brightdata.verdict, "UNCONFIGURED");
+  const payload = buildHealthPayload({ db: { ok: true }, env: STALE, ticks: [], now: "2026-08-29T12:00:00.000Z" });
+  assert.equal(payload.vendors.brightdata.configured, false);
+  assert.ok(payload.missing_required.includes("brightdata"));
+  assert.notEqual(payload.status, "ok");
+});
+
+test("check:secrets and /api/health agree on every REQUIRED vendor name", async () => {
+  // Cheap drift guard with a fixed expectation, so that deleting a vendor from
+  // BOTH tables at once still has to be a deliberate edit to this line.
+  const { stdout } = await run(STALE);
+  const rows = parseVerdicts(stdout);
+  const requiredFromScript = Object.entries(rows).filter(([, r]) => r.required).map(([n]) => n).sort();
+  const requiredFromHealth = VENDORS.filter((v) => v.required).map((v) => v.key).sort();
+  assert.deepEqual(requiredFromScript, requiredFromHealth);
+  assert.deepEqual(requiredFromScript, ["brightdata", "cron", "llm", "supabase"]);
 });
 
 test("check:secrets - the GSC pass line SAYS it was an offline shape check only", async () => {
