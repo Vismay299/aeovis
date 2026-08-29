@@ -47,3 +47,5 @@ next-env.d.ts
 /design-options/perceev-prototype.html
 # design review screenshots (6MB+); the prototype itself is the record
 /design-options/previews/
+.claude/orchestration/tasks.json.lock
+.claude/orchestration/*.tmp

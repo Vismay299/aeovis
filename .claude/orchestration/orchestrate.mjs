@@ -36,15 +36,60 @@ const TRACKER = path.join(REPO, "docs/plans/2026-08-29-rebuild-roadmap.md");
 
 const STATUSES = ["todo", "in_progress", "in_verification", "done", "blocked"];
 
+const LOCK = LEDGER + ".lock";
+
+/**
+ * Concurrent workers all call claim/submit, so read-modify-write on one JSON
+ * file races: two claims a millisecond apart and one silently loses. Found the
+ * first time workers ran in parallel. An exclusive lockfile plus an atomic
+ * rename makes the ledger safe to share; without it the audit trail is the
+ * thing that gets corrupted, which defeats the point of having one.
+ */
+function withLock(fn) {
+  const deadline = Date.now() + 15000;
+  let fd;
+  for (;;) {
+    try {
+      fd = fs.openSync(LOCK, "wx");
+      break;
+    } catch (e) {
+      if (e.code !== "EEXIST") throw e;
+      // Reap a lock orphaned by a killed process rather than deadlocking.
+      try {
+        if (Date.now() - fs.statSync(LOCK).mtimeMs > 30000) fs.unlinkSync(LOCK);
+      } catch {}
+      if (Date.now() > deadline) die("timed out waiting for the ledger lock");
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    fs.closeSync(fd);
+    try {
+      fs.unlinkSync(LOCK);
+    } catch {}
+  }
+}
+
 function load() {
   return JSON.parse(fs.readFileSync(LEDGER, "utf8"));
 }
+
+/** Atomic: write a temp file and rename, so a crash mid-write cannot truncate. */
 function save(g) {
-  fs.writeFileSync(LEDGER, JSON.stringify(g, null, 2) + "\n");
+  const tmp = `${LEDGER}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(g, null, 2) + "\n");
+  fs.renameSync(tmp, LEDGER);
 }
+/**
+ * Throws rather than exiting: `die` is called from inside withLock, and
+ * process.exit() skips the `finally` that releases the lockfile — which left
+ * every other waiter to block until the 30s orphan reap. Caught at top level.
+ */
+class Died extends Error {}
 function die(msg) {
-  console.error(`error: ${msg}`);
-  process.exit(1);
+  throw new Died(msg);
 }
 function stamp() {
   return new Date().toISOString();
@@ -367,5 +412,19 @@ if (!cmd || !cmds[cmd]) {
   console.error(`usage: orchestrate.mjs <${Object.keys(cmds).join("|")}> [args]`);
   process.exit(1);
 }
-const g = load();
-cmds[cmd](g, parseArgs(rest));
+const MUTATES = ["claim", "submit", "verify", "block", "unblock", "add", "rule", "amend"];
+const args = parseArgs(rest);
+try {
+  if (MUTATES.includes(cmd)) {
+    // Re-read INSIDE the lock: a copy loaded before waiting is already stale.
+    withLock(() => cmds[cmd](load(), args));
+  } else {
+    cmds[cmd](load(), args);
+  }
+} catch (e) {
+  if (e instanceof Died) {
+    console.error(`error: ${e.message}`);
+    process.exit(1);
+  }
+  throw e;
+}
