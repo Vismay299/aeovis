@@ -1,9 +1,22 @@
 import { generateContent, robustJsonParse } from "./openrouter.js";
 
+export { LlmUnavailableError, isLlmUnavailable } from "./llmErrors.js";
+
 /**
  * Single choke-point for all LLM JSON generation/extraction in the app.
  * promptGen.js and competitorExtract.js must call only this — never a
  * provider module directly — so the free-model-only policy holds in one place.
+ *
+ * CONTRACT — two distinct failure modes, and callers must not conflate them:
+ *   - returns `null`  → the model answered, but not with usable JSON after
+ *                       `jsonRetries` attempts. A real (bad) answer.
+ *   - throws `LlmUnavailableError` → the model was never reached at all
+ *                       (no key, or every transport retry exhausted). NOT an
+ *                       answer. Propagated deliberately, not swallowed: a
+ *                       caller that treats this as "nothing was found" is the
+ *                       bug that made Share of Voice read a false 100%.
+ * A caller may still degrade on the throw, but it must do so explicitly and
+ * label the degraded value as unmeasured.
  */
 export async function llmJson(prompt, options = {}, jsonRetries = 2) {
   // Callers doing creative/varied generation (e.g. prompt-gen) can pass a

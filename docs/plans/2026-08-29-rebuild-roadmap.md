@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**0 / 121 closed** · 0 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**1 / 121 closed** · 0 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -20,7 +20,7 @@ Baseline commit: `5111219`
 6. Trust source, git log, and the tracker over any prose claiming completeness; close items with file:line in the same commit.
 7. Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes.
 
-## R0 — Ground zero  `0/17`
+## R0 — Ground zero  `1/17`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -40,7 +40,7 @@ Baseline commit: `5111219`
 - [ ] **R0.2.3** Supersede the SerpAPI ADR with a dated Bright Data ADR
 ### R0.3
 
-- [ ] **R0.3.1** openrouter.js throws LlmUnavailableError instead of returning empty text
+- [x] **R0.3.1** openrouter.js throws LlmUnavailableError instead of returning empty text — closed at `src/lib/llmErrors.js:15`, `src/lib/openrouter.js:26`, `src/lib/openrouter.js:134`, `src/lib/llm.js:3`, `src/lib/openrouter.test.mjs:70`, `src/lib/openrouter.test.mjs:81`, `src/lib/analytics/citationEnrich.js:528`
 - [ ] **R0.3.2** SOV donut, Rivals view and verdict panel render 'not assessed' while extraction is offline
 - [ ] **R0.3.3** Roster continuity — reuse the last persisted roster, labelled carried_forward
 - [ ] **R0.3.4** New-brand scan fails loud at sourcing when the LLM is off

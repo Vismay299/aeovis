@@ -1,4 +1,5 @@
 import { llmJson } from "../llm.js";
+import { isLlmUnavailable } from "../llmErrors.js";
 import { domainMatches } from "../scoring/enginePipeline.js";
 import { classifyCitation } from "../scoring/citations.js";
 
@@ -518,8 +519,17 @@ export async function enrichCitations(rows, ctx = {}, deps = {}) {
       // must never fail an otherwise-successful scan. Logged so a systemic
       // LLM outage stays visible; every affected row still gets a definite
       // (if generic) content_type via the fallback below.
+      //
+      // This is one of the few callers that legitimately tolerates an
+      // LlmUnavailableError (src/lib/llmErrors.js): content_type is a
+      // presentational label with a definite "other" fallback, not a metric.
+      // It is named separately so a total outage does not read like a
+      // per-batch hiccup in the logs.
+      const unavailable = isLlmUnavailable(err);
       console.warn(
-        `[citationEnrich] LLM content_type batch failed for ${keys.length} unresolved URL shape(s): ${err.message}`
+        `[citationEnrich] LLM content_type batch ${
+          unavailable ? `SKIPPED — LLM unavailable (${err.reason})` : "failed"
+        } for ${keys.length} unresolved URL shape(s): ${err.message} — all affected rows fall back to "other".`
       );
     }
 

@@ -1,3 +1,5 @@
+import { LlmUnavailableError } from "./llmErrors.js";
+
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 
 function getBaseUrl() {
@@ -18,8 +20,13 @@ export function getOpenRouterModel() {
 export async function generateContent(prompt, options = {}, retries = 2) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    console.error("OPENROUTER_API_KEY is not configured.");
-    return { text: "", model_used: "" };
+    // Do NOT return { text: "" } here. An unconfigured key is not an empty
+    // answer, and every caller that cannot tell them apart fabricates a clean
+    // result from a total outage (finding B6 -> the false 100% SOV, A8).
+    throw new LlmUnavailableError("OPENROUTER_API_KEY is not configured", {
+      reason: "missing_key",
+      provider: "openrouter",
+    });
   }
 
   const model = options.model || getOpenRouterModel();
@@ -121,8 +128,13 @@ export async function generateContent(prompt, options = {}, retries = 2) {
     }
   }
 
-  console.error(`[openrouter] all attempts failed after ${retries} retries: ${lastErr}`);
-  return { text: "", model_used: "" };
+  // Same rule as the missing key above: exhausted retries is an outage, not an
+  // answer. Throw so the caller has to decide what an unmeasured value looks
+  // like instead of silently inheriting an empty string.
+  throw new LlmUnavailableError(
+    `OpenRouter failed after ${retries + 1} attempt(s): ${lastErr?.message || lastErr}`,
+    { reason: "exhausted_retries", provider: "openrouter", model, cause: lastErr }
+  );
 }
 
 /**

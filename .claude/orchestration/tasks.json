@@ -330,11 +330,34 @@
         "src/lib/workers/scanWorker.js:692-698"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/llmErrors.js:15",
+        "src/lib/openrouter.js:26",
+        "src/lib/openrouter.js:134",
+        "src/lib/llm.js:3",
+        "src/lib/openrouter.test.mjs:70",
+        "src/lib/openrouter.test.mjs:81",
+        "src/lib/analytics/citationEnrich.js:528"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-29T15:11:57.564Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:13:55.358Z",
+          "by": "rebuild-implementer",
+          "text": "generateContent now throws LlmUnavailableError on missing key and on exhausted retries. Audited all 5 downstream callers of llmJson/contentLlmJson: promptGen.js:226 and competitorExtract.js:95 propagate (R0.3.4/R0.3.3 handle), content/steps/shared.js:16 and weeklyReport.js:161 propagate to fail the job (correct), citationEnrich.js:499 legitimately tolerates it (definite 'other' fallback) and was adapted to name the outage rather than log it as a per-batch hiccup. 5 new tests; proven to have teeth by reverting the throw (3 fail). Suite 294/275/19 vs baseline 289/270/19 — no new failures."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-29T15:14:52.684Z",
+        "note": "Reproduced the original failure: reverted both returns to { text: '' } and watched 3 of the new tests fail (missing-key, exhausted-retries, llmJson propagation); restored, 12/12 pass. Traced every caller of the throw by hand: sourceUnbrandedQueries (scanWorker.js:197) and finalize's extractCompetitorsFn (scanWorker.js:653) both propagate with no intervening catch, content/steps/shared.js:16 and weeklyReport.js:161 propagate to fail the job, citationEnrich.js:499 is the only catch and it assigns a definite 'other' with an explicit outage log — no caller converts the throw into a clean empty result. Suite 294/275/19 against the 289/270/19 baseline, identical failing-file set."
+      }
     },
     {
       "id": "R0.3.2",
