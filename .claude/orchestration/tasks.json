@@ -74,7 +74,8 @@
     "An unpriced model id fails loud, never $0.",
     "Trust source, git log, and the tracker over any prose claiming completeness; close items with file:line in the same commit.",
     "Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes.",
-    "Closing a task is an act on a verifier's word, never the implementer's. The agent that wrote the code never closes it."
+    "Closing a task is an act on a verifier's word, never the implementer's. The agent that wrote the code never closes it.",
+    "A change to the orchestration tooling is itself ledger work. The machine is not exempt from the discipline it enforces."
   ],
   "tasks": [
     {
@@ -452,6 +453,38 @@
       }
     },
     {
+      "id": "R0.1.10",
+      "subphase": "R0.1",
+      "lane": "infra",
+      "title": "check:secrets validates the wrong Bright Data credential",
+      "detail": "scripts/check-secrets.mjs:79 always calls get_all_zones and never reads BRIGHTDATA_SERP_ZONE, while src/lib/engines/brightdata.js:10 short-circuits on that zone. So the check can report PASS on an account whose every probe fails, and FAIL on an account whose scans work. Worse, a wrong zone is swallowed at src/lib/engines/serp.js:301-307 into google_ai_overview-skipped with cost 0.0 — a silent zero from a credential that looks valid. This is the C-class false-success pattern inside the tool built to detect it.",
+      "accept": "check:secrets exercises the configured BRIGHTDATA_SERP_ZONE on the same code path brightdata.js uses; a wrong zone reports FAIL rather than PASS; a wrong zone at probe time surfaces as an error state, not a skipped result with cost 0.0.",
+      "deps": [],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [
+        "C4"
+      ],
+      "anchors": [
+        "scripts/check-secrets.mjs:79",
+        "src/lib/engines/brightdata.js:10",
+        "src/lib/engines/serp.js:301-307"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-29T17:01:35.024Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R0.2.1",
       "subphase": "R0.2",
       "lane": "docs",
@@ -571,10 +604,10 @@
       "status": "in_verification",
       "owner": "rebuild-scribe",
       "evidence": [
-        "docs/decisions/2026-08-29-serp-provider-bright-data.md:70",
-        "docs/decisions/2026-08-29-serp-provider-bright-data.md:87",
-        "docs/decisions/2026-08-29-serp-provider-bright-data.md:109",
-        "docs/decisions/2026-08-29-serp-provider-bright-data.md:126",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:72",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:89",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:113",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:127",
         "docs/decisions/2026-08-29-serp-provider-bright-data.md:203",
         "docs/decisions/2026-08-29-serp-provider-bright-data.md:239",
         "src/lib/engines/serp.js:14",
@@ -606,9 +639,23 @@
           "at": "2026-08-29T16:49:26.594Z",
           "by": "rebuild-scribe",
           "text": "Evidence section of the Bright Data ADR rewritten; DECISION UNCHANGED. Every file:line below was read at 6308cb7 before it was written, and re-printed from source in a final pass. WHAT WAS FALSE: (1) 'Neither makes a SerpAPI call' was never true at any commit -- serp.js:62 is a live fetch to https://serpapi.com/search, reached from :189 (AIO probe), :224 (deferred page_token, a second billed call) and :335 (PAA), selected by getSerpProvider() at :14 on a SERPAPI_KEY-only deployment, and charged at :212 ($0.01) / :230 (+$0.01). git diff b6e3610 HEAD -- src/lib/engines/serp.js is EMPTY, so the path was live when the ADR was written too. (2) 'Bright Data is the only SERP provider actually invoked for AIO probing' -- false for the same reason; corrected to 'the only one invoked when its key is present' with the preference-order citations serp.js:13, :164-165, :323-325. (3) The types.js:43 half was TRUE when written (git show b6e3610:src/lib/engines/types.js line 43 = 'const serpConfigured = process.env.BRIGHTDATA_API_KEY || process.env.SERPAPI_KEY;') and went stale 37 minutes later at 6308cb7 -- recorded as stale-not-wrong so the next reader does not distrust the citation habit itself. R0.1.9 SCOPE MADE EXPLICIT (new section 4): it changed the CAPABILITY CHECK only (types.js:47, tests types.test.mjs:55/:65/:71) and did not touch serp.js at all; the spend path is untouched by it. R1.7.4 LINKED from Follow-ups #2 and from evidence 3a, with the exact ungated chain promptGen.js:2 -> :127 -> fetchPeopleAlsoAsk -> isSerpConfigured() serp.js:312 -> getSerpProvider() :317 -> serpFetch :335, and the fact that it never consults getEnabledEngines(). Stale Follow-up #1 ('remove the types.js branch') struck through and marked done by R0.1.9/6308cb7 rather than deleted. OTHER FALSE OR IMPRECISE CLAIMS FIXED IN THE SAME PASS: (a) the ADR called the SerpAPI alternative 'superseded in practice' -- it is demoted in preference order, not removed, and remains reachable and billable; (b) 'no cost figure is available in the repository' omitted serp.js:287, which hard-codes 'const cost = 0.0015;' for Bright Data and feeds every scan cost total -- now flagged as an assumption, not a measurement; (c) the check:secrets claim was imprecise -- scripts/check-secrets.mjs:79 always calls get_all_zones and NEVER reads BRIGHTDATA_SERP_ZONE, whereas brightdata.js:10-11 short-circuits on it, so the check can FAIL on a working account and PASS on a misconfigured zone; (d) the no-active-serp-zone failure mode is silent, not loud -- brightdata.js:29 throws and serp.js:301-307 catches it and returns google_ai_overview-skipped with cost 0.0; (e) 'R0.4.1 baseline corpus' now states that test_reports/baseline-2026-08/ holds protocol docs and ZERO archived scans. NEW FINDING, not previously recorded anywhere: the R0.1.9 drift guard at types.test.mjs:113-132 reads only types.js, health.js and check-secrets.mjs (source list at :114-118) -- serp.js is NOT in its scope, so nothing in the suite would fail if the SerpAPI request path grew back. Noted in evidence 5 and attached to Follow-up #1 for R1.7.3. Also recorded: SERPAPI_KEY appears in NO operator-facing surface (.env.example, README.md, health.js, check-secrets.mjs) while still being honoured by code -- the trap that produced the original error. NO SOURCE CODE EDITED: git diff touches only the ADR and tasks.json. npm run test:scoring 836/836 pass; docStatus guard 10/10; LIVE status header and supersession link to serp-provider.md preserved. NOT DONE / UNVERIFIED: I did not add a BUILD_JOURNAL entry -- that file's stated scope is silently-wrong NUMBERS in code, and this was a false claim in a document; if the verifier wants it journalled, say so and it is a two-line append. The ADR's Context claim that production has run on Bright Data 'for some time' is NOT verifiable from this repository; it is now explicitly listed under 'not asserted', with the only in-repo corroboration being the 93.3% Italica answer yield at docs/BUILD_JOURNAL.md:37-38."
+        },
+        {
+          "at": "2026-08-29T16:59:37.140Z",
+          "by": "verifier",
+          "text": "rejected: DOCUMENT VERIFIED, ANCHORS NOT. This fails only on the ledger evidence array; the ADR itself needs no further edit -- do not rewrite it.\n\nEXERCISED (all passing): reproduced the original false claim behaviourally. On a SERPAPI_KEY-only env (BRIGHTDATA_API_KEY/SERP_PROVIDER/ENGINES_ENABLED unset) with a recording fetch stub: getEnabledEngines() -> [\"gemini\"] (AIO reads unconfigured), yet fetchPeopleAlsoAsk(\"aeo\") issued https://serpapi.com/search?q=aeo&engine=google&hl=en&gl=us&api_key=... and probeGoogleAiOverview(\"best crm\") issued a second serpapi.com request returning cost 0.01. Two live billed calls on a deployment the capability check calls unconfigured -- exactly what the new SS2/SS3a say, and the direct disproof of b6e3610's 'Neither makes a SerpAPI call'. ENGINES_ENABLED=google_ai_overview with no credential -> [\"google_ai_overview\"], confirming SS3b's bypass.\n\nCITATIONS: checked every file:line in the ADR, not a sample -- ~50 anchors across serp.js, types.js, brightdata.js, promptGen.js, probe.js, adapter.js, check-secrets.mjs, package.json, serp.test.mjs, types.test.mjs, health.test.mjs, checkSecrets.test.mjs, serp-provider.md, BUILD_JOURNAL.md. All 16 source citations exact; no source file modified since 6308cb7 (git diff --stat 6308cb7 HEAD -- src/ scripts/ package.json is empty). The four hard claims confirmed: git diff b6e3610 HEAD -- src/lib/engines/serp.js is 0 bytes (so 'wrong, not stale' is right); git show b6e3610:src/lib/engines/types.js line 43 is verbatim as described (so 'stale, not wrong' is right); BRIGHTDATA_SERP_ZONE's only repo-wide occurrence is brightdata.js:10, never check-secrets.mjs; types.test.mjs:114-118 lists types.js/health.js/check-secrets.mjs with serp.js absent. LIVE header and supersession link byte-identical to b6e3610. R1.7.4 cross-referenced at :99 and :227-230 with its real acceptance and its real dep on R1.7.3. test:scoring 836/836, docStatus 10/10.\n\nWHY FAIL: the 4 ADR self-citations in evidence do not resolve. Each names a section and lands in the previous one: :70 -> SS1 tail (SS2 is :72); :87 -> SS2's last table row (SS3 is :89); :109 -> mid-sentence in SS3b (SS4 is :113); :126 -> blank line (SS5 is :127). Three of four point at a different numbered section's claim. They are already published in docs/plans/2026-08-29-rebuild-roadmap.md, and verify cannot amend the array, so passing would permanently render 'closed at ...:70, :87, :109, :126' -- non-resolving citations in the audit trail of the task about non-resolving citations. :203 and :239 land exactly.\n\nTO CLEAR: re-submit with evidence identical except :70->:72, :87->:89, :109->:113, :126->:127. I confirmed all four corrected values land on their section headings. No document change.\n\nFINDINGS FOR SEPARATE TASKS (not defects in this work): (1) src/lib/engines/adapter.js:3 imports probeOpenAI from ./openai.js, which exports only isChatGptConfigured/probeChatGpt -- src/lib/scoring/probe.js fails to import at HEAD and at b6e3610. Pre-existing and out of scope, but it makes SS3b's 'the chain runs unimpeded' optimistic; every line SS3b cites is correct. (2) the 0.0015 Bright Data constant is hard-coded in three places, not one: serp.js:287 plus aioPipeline.js:110 and enginePipeline.js:62 -- Follow-up #4 should name all three. (3) commit b46358d swept in .claude/orchestration/orchestrate.mjs (evidence label 'closed at' -> 'submitted') and the regenerated roadmap; no ledger task covers that tooling change and the scribe's note disclaimed it."
+        },
+        {
+          "at": "2026-08-29T17:01:53.705Z",
+          "by": "rebuild-scribe",
+          "text": "Re-anchored the four self-citations the verifier rejected (:70->:72, :87->:89, :109->:113, :126->:127); all four now land on their section headings. Source citations unchanged and unmodified. Resubmitted by the controller on the scribe's behalf; closing remains a verifier act."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "fail",
+        "at": "2026-08-29T16:59:37.139Z",
+        "note": "DOCUMENT VERIFIED, ANCHORS NOT. This fails only on the ledger evidence array; the ADR itself needs no further edit -- do not rewrite it.\n\nEXERCISED (all passing): reproduced the original false claim behaviourally. On a SERPAPI_KEY-only env (BRIGHTDATA_API_KEY/SERP_PROVIDER/ENGINES_ENABLED unset) with a recording fetch stub: getEnabledEngines() -> [\"gemini\"] (AIO reads unconfigured), yet fetchPeopleAlsoAsk(\"aeo\") issued https://serpapi.com/search?q=aeo&engine=google&hl=en&gl=us&api_key=... and probeGoogleAiOverview(\"best crm\") issued a second serpapi.com request returning cost 0.01. Two live billed calls on a deployment the capability check calls unconfigured -- exactly what the new SS2/SS3a say, and the direct disproof of b6e3610's 'Neither makes a SerpAPI call'. ENGINES_ENABLED=google_ai_overview with no credential -> [\"google_ai_overview\"], confirming SS3b's bypass.\n\nCITATIONS: checked every file:line in the ADR, not a sample -- ~50 anchors across serp.js, types.js, brightdata.js, promptGen.js, probe.js, adapter.js, check-secrets.mjs, package.json, serp.test.mjs, types.test.mjs, health.test.mjs, checkSecrets.test.mjs, serp-provider.md, BUILD_JOURNAL.md. All 16 source citations exact; no source file modified since 6308cb7 (git diff --stat 6308cb7 HEAD -- src/ scripts/ package.json is empty). The four hard claims confirmed: git diff b6e3610 HEAD -- src/lib/engines/serp.js is 0 bytes (so 'wrong, not stale' is right); git show b6e3610:src/lib/engines/types.js line 43 is verbatim as described (so 'stale, not wrong' is right); BRIGHTDATA_SERP_ZONE's only repo-wide occurrence is brightdata.js:10, never check-secrets.mjs; types.test.mjs:114-118 lists types.js/health.js/check-secrets.mjs with serp.js absent. LIVE header and supersession link byte-identical to b6e3610. R1.7.4 cross-referenced at :99 and :227-230 with its real acceptance and its real dep on R1.7.3. test:scoring 836/836, docStatus 10/10.\n\nWHY FAIL: the 4 ADR self-citations in evidence do not resolve. Each names a section and lands in the previous one: :70 -> SS1 tail (SS2 is :72); :87 -> SS2's last table row (SS3 is :89); :109 -> mid-sentence in SS3b (SS4 is :113); :126 -> blank line (SS5 is :127). Three of four point at a different numbered section's claim. They are already published in docs/plans/2026-08-29-rebuild-roadmap.md, and verify cannot amend the array, so passing would permanently render 'closed at ...:70, :87, :109, :126' -- non-resolving citations in the audit trail of the task about non-resolving citations. :203 and :239 land exactly.\n\nTO CLEAR: re-submit with evidence identical except :70->:72, :87->:89, :109->:113, :126->:127. I confirmed all four corrected values land on their section headings. No document change.\n\nFINDINGS FOR SEPARATE TASKS (not defects in this work): (1) src/lib/engines/adapter.js:3 imports probeOpenAI from ./openai.js, which exports only isChatGptConfigured/probeChatGpt -- src/lib/scoring/probe.js fails to import at HEAD and at b6e3610. Pre-existing and out of scope, but it makes SS3b's 'the chain runs unimpeded' optimistic; every line SS3b cites is correct. (2) the 0.0015 Bright Data constant is hard-coded in three places, not one: serp.js:287 plus aioPipeline.js:110 and enginePipeline.js:62 -- Follow-up #4 should name all three. (3) commit b46358d swept in .claude/orchestration/orchestrate.mjs (evidence label 'closed at' -> 'submitted') and the regenerated roadmap; no ledger task covers that tooling change and the scribe's note disclaimed it."
+      }
     },
     {
       "id": "R0.3.1",
@@ -2749,6 +2796,38 @@
       "verification": null
     },
     {
+      "id": "R3.6.4",
+      "subphase": "R3.6",
+      "lane": "backend",
+      "title": "The Bright Data per-query price is hardcoded in three places",
+      "detail": "const 0.0015 appears at src/lib/engines/serp.js:287, src/lib/scoring/aioPipeline.js:110 and src/lib/scoring/enginePipeline.js:62. Three copies of a price drift independently, and the ADR follow-up that says to start with serp.js:287 would leave two behind. Folds into the R3.6.1 price table: one table, one lookup, unknown id throws.",
+      "accept": "No hardcoded per-query price remains outside the price table; a guard test fails on a reintroduced numeric literal price in the scan path.",
+      "deps": [
+        "R3.6.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S18"
+      ],
+      "anchors": [
+        "src/lib/engines/serp.js:287",
+        "src/lib/scoring/aioPipeline.js:110",
+        "src/lib/scoring/enginePipeline.js:62"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-29T17:01:34.980Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R3.7.1",
       "subphase": "R3.7",
       "lane": "backend",
@@ -3272,6 +3351,32 @@
       "verification": null
     },
     {
+      "id": "R6.1.3",
+      "subphase": "R6.1",
+      "lane": "infra",
+      "title": "Track the orchestration tooling change made outside the ledger",
+      "detail": "Commit b46358d changed the tracker renderer in .claude/orchestration/orchestrate.mjs — evidence was labelled closed at on tasks that were only submitted — and swept the regenerated tracker in with a docs commit. The change is correct and is why R0.2.4 renders honestly, but no ledger task covered it, so it could not be attributed from the record. Caught by the R0.2.4 verifier. This task is that record. Standing rule: a change to the orchestration tooling is itself ledger work.",
+      "accept": "The renderer change is described at file:line and the standing rule is added via orchestrate.mjs rule.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        ".claude/orchestration/orchestrate.mjs"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-29T17:01:35.071Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R6.2.1",
       "subphase": "R6.2",
       "lane": "docs",
@@ -3487,6 +3592,34 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.5.3",
+      "subphase": "R6.5",
+      "lane": "backend",
+      "title": "Delete the orphaned adapter.js/probe.js pair — it does not even parse",
+      "detail": "src/lib/engines/adapter.js:3 imports probeOpenAI from ./openai.js, which exports only isChatGptConfigured and probeChatGpt. Importing adapter.js or scoring/probe.js throws SyntaxError. Nothing imports probe.js and nothing outside it imports adapter.js, so this is unreachable dead code, not a live outage — the scan path runs through enginePipeline.js, which imports probeChatGpt correctly and loads clean. Verified: probeOpenAI has never been exported since a1ed0e0. This is concrete evidence for R1.7.3 and R6.5.2: the dead second registry is so dead it stopped parsing and no test noticed, because no test imports it. Delete both files with any tests, or repair the import if a caller is planned.",
+      "accept": "Either both files are deleted with their tests and nothing references them, or the import is repaired and a test imports the module so a future break fails the suite. Test count before and after recorded in the build journal.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/engines/adapter.js:3",
+        "src/lib/engines/openai.js:8",
+        "src/lib/scoring/probe.js:1"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-29T17:01:34.935Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
       "verification": null
     },
     {

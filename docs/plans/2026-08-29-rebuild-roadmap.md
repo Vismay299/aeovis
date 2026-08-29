@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**10 / 126 closed** · 9 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**10 / 130 closed** · 9 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -20,8 +20,9 @@ Baseline commit: `5111219`
 6. Trust source, git log, and the tracker over any prose claiming completeness; close items with file:line in the same commit.
 7. Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes.
 8. Closing a task is an act on a verifier's word, never the implementer's. The agent that wrote the code never closes it.
+9. A change to the orchestration tooling is itself ledger work. The machine is not exempt from the discipline it enforces.
 
-## R0 — Ground zero  `10/20`
+## R0 — Ground zero  `10/21`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -36,12 +37,13 @@ Baseline commit: `5111219`
 - [x] **R0.1.7** /api/health route — closed at `src/app/api/health/route.js:29`, `src/lib/health.js:61`, `src/lib/health.js:38`, `src/lib/db/analytics.js:494`, `src/lib/db/analytics.js:510`, `supabase/migrations/008_system_heartbeats.sql:12`, `src/lib/health.test.mjs:23`, `src/app/api/scan/worker/route.js:47`
 - [x] **R0.1.8** Remove the forgeable x-vercel-cron bypass from the worker gate — closed at `src/lib/cronAuth.js:48-55`, `src/lib/cronAuth.js:22`, `src/lib/cronAuth.test.mjs:47`, `src/lib/cronAuth.test.mjs:57`, `src/lib/cronAuth.test.mjs:69`, `src/lib/cronAuth.test.mjs:77`, `src/app/api/scan/worker/route.js:28`, `src/app/api/content/worker/route.js:33`, `docs/BUILD_JOURNAL.md:136`, `README.md:111`, `README.md:130`
 - [x] **R0.1.9** Stop SERPAPI_KEY counting as a configured SERP provider — closed at `src/lib/engines/types.js:47`, `src/lib/engines/types.test.mjs:55`, `src/lib/engines/types.test.mjs:98`, `src/lib/engines/types.test.mjs:114`
+- [ ] **R0.1.10** check:secrets validates the wrong Bright Data credential `needs-secrets`
 ### R0.2
 
 - [-] **R0.2.1** Create docs/BUILD_JOURNAL.md seeded with the 37 findings — blocked: needs-decision
 - [-] **R0.2.2** Tracker rule in force; status headers on all plans — blocked: needs-decision
 - [-] **R0.2.3** Supersede the SerpAPI ADR with a dated Bright Data ADR — blocked: needs-decision
-- [~] **R0.2.4** Correct the false evidence claims in the Bright Data ADR — submitted `docs/decisions/2026-08-29-serp-provider-bright-data.md:70`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:87`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:109`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:126`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:203`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:239`, `src/lib/engines/serp.js:14`, `src/lib/engines/serp.js:23`, `src/lib/engines/serp.js:62`, `src/lib/engines/serp.js:189`, `src/lib/engines/serp.js:212`, `src/lib/engines/serp.js:287`, `src/lib/engines/serp.js:335`, `src/lib/scoring/promptGen.js:127`, `src/lib/scoring/probe.js:99`, `src/lib/engines/types.js:47`, `src/lib/engines/types.test.mjs:114`, `src/lib/engines/serp.test.mjs:65`, `scripts/check-secrets.mjs:79`
+- [~] **R0.2.4** Correct the false evidence claims in the Bright Data ADR — submitted `docs/decisions/2026-08-29-serp-provider-bright-data.md:72`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:89`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:113`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:127`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:203`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:239`, `src/lib/engines/serp.js:14`, `src/lib/engines/serp.js:23`, `src/lib/engines/serp.js:62`, `src/lib/engines/serp.js:189`, `src/lib/engines/serp.js:212`, `src/lib/engines/serp.js:287`, `src/lib/engines/serp.js:335`, `src/lib/scoring/promptGen.js:127`, `src/lib/scoring/probe.js:99`, `src/lib/engines/types.js:47`, `src/lib/engines/types.test.mjs:114`, `src/lib/engines/serp.test.mjs:65`, `scripts/check-secrets.mjs:79`
 ### R0.3
 
 - [x] **R0.3.1** openrouter.js throws LlmUnavailableError instead of returning empty text — closed at `src/lib/llmErrors.js:15`, `src/lib/openrouter.js:26`, `src/lib/openrouter.js:134`, `src/lib/llm.js:3`, `src/lib/openrouter.test.mjs:70`, `src/lib/openrouter.test.mjs:81`, `src/lib/analytics/citationEnrich.js:528`
@@ -155,7 +157,7 @@ Baseline commit: `5111219`
 - [ ] **R2.10.1** De-fake the landing page
 - [ ] **R2.10.2** Probe counter backed by a real count query
 
-## R3 — Durable backend  `0/20`
+## R3 — Durable backend  `0/21`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -189,6 +191,7 @@ Baseline commit: `5111219`
 - [ ] **R3.6.1** Price table that fails loud on an unknown model id
 - [ ] **R3.6.2** Per-scan and per-day spend caps enforced from the ledger
 - [ ] **R3.6.3** Weekly report metered per brand per day
+- [ ] **R3.6.4** The Bright Data per-query price is hardcoded in three places
 ### R3.7
 
 - [ ] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability
@@ -239,7 +242,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `0/12`
+## R6 — Apparatus & guards  `0/14`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -247,6 +250,7 @@ Baseline commit: `5111219`
 
 - [ ] **R6.1.1** Migrations ledger and transaction per file
 - [ ] **R6.1.2** docs/PROD_MIGRATIONS.md with per-migration verification queries
+- [ ] **R6.1.3** Track the orchestration tooling change made outside the ledger
 ### R6.2
 
 - [ ] **R6.2.1** docs/OPERATOR_LEDGER.md
@@ -264,5 +268,6 @@ Baseline commit: `5111219`
 
 - [ ] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures
 - [ ] **R6.5.2** The great deletion
+- [ ] **R6.5.3** Delete the orphaned adapter.js/probe.js pair — it does not even parse
 - [ ] **R6.5.4** serp.test.mjs passes only because no BRIGHTDATA_API_KEY is in the environment
 
