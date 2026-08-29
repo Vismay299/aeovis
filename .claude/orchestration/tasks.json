@@ -1,0 +1,3026 @@
+{
+  "$schema": "./schema.md",
+  "version": 1,
+  "source": {
+    "plan": "The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026",
+    "companion": "The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30",
+    "baseline_commit": "5111219",
+    "tracker": "docs/plans/2026-08-29-rebuild-roadmap.md"
+  },
+  "block_reasons": {
+    "needs-llm": "Requires a working LLM key; blocked until R5.1.2 re-enable checklist passes.",
+    "needs-secrets": "Requires live vendor credentials not present in this environment.",
+    "needs-vercel": "Requires Vercel project access (env vars, cron config).",
+    "needs-decision": "Requires a human decision recorded in an ADR before work can start.",
+    "needs-soak": "Requires multi-day live soak data that cannot be produced in one session."
+  },
+  "lanes": {
+    "backend": "Server code: scan/content pipeline, engines, db, workers, API routes.",
+    "frontend": "React views under src/components and src/app pages.",
+    "data": "SQL migrations, schema, ledger tables.",
+    "infra": "CI, scripts, middleware, deploy config, worker fleet scaffolding.",
+    "docs": "Plans, contracts, ADRs, journals, runbooks, trackers.",
+    "test": "Test suites, fixtures, guard walkers, calibration harnesses."
+  },
+  "phases": [
+    {
+      "id": "R0",
+      "title": "Ground zero",
+      "estimate": "2-3 days",
+      "why": "Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against."
+    },
+    {
+      "id": "R1",
+      "title": "Real-surface probe fleet",
+      "estimate": "2-3 weeks",
+      "why": "Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes."
+    },
+    {
+      "id": "R2",
+      "title": "Scoring truth",
+      "estimate": "1 week",
+      "why": "Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number."
+    },
+    {
+      "id": "R3",
+      "title": "Durable backend",
+      "estimate": "1 week",
+      "why": "Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0."
+    },
+    {
+      "id": "R4",
+      "title": "Ground truth & analytics completion",
+      "estimate": "1 week",
+      "why": "Probe scores sitting next to Google-verified numbers, change detection, referral capture."
+    },
+    {
+      "id": "R5",
+      "title": "Content OS quality",
+      "estimate": "1 week",
+      "why": "Model-layer truth, a publish loop that stops pretending, drafts benchmarked against what engines cite."
+    },
+    {
+      "id": "R6",
+      "title": "Apparatus & guards",
+      "estimate": "starts day one, finishes last",
+      "why": "The paper trail and the tests that keep every earlier phase from regressing."
+    }
+  ],
+  "standing_rules": [
+    "A skip is not a success; an empty state is not a clean one; measured zero must look different from never ran.",
+    "Never fail-soft a create call; preserve the error envelope.",
+    "'Set in the environment' and 'works' are different claims — run check:secrets before blaming code.",
+    "Run the SQL with the merge, never after.",
+    "An unpriced model id fails loud, never $0.",
+    "Trust source, git log, and the tracker over any prose claiming completeness; close items with file:line in the same commit.",
+    "Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes."
+  ],
+  "tasks": [
+    {
+      "id": "R0.1.1",
+      "subphase": "R0.1",
+      "lane": "infra",
+      "title": "CRON_SECRET set and both worker gates fail closed in prod",
+      "detail": "Set CRON_SECRET in Vercel + .env.local; flip the warn-once fail-open gates in both worker routes to fail-closed whenever NODE_ENV is production. Add CRON_SECRET to .env.example.",
+      "accept": "curl without the header returns 401 in production; a unit test asserts the gate rejects a missing/incorrect secret.",
+      "deps": [],
+      "tags": [
+        "needs-vercel"
+      ],
+      "findings": [
+        "C9"
+      ],
+      "anchors": [
+        "src/app/api/scan/worker/route.js:29-47",
+        "src/app/api/content/worker/route.js:25-52"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.1.2",
+      "subphase": "R0.1",
+      "lane": "frontend",
+      "title": "Gate or delete /chart-preview",
+      "detail": "The route self-describes as 'not a product route' and renders a real third-party brand's live trend from the production DB, unauthenticated and without noindex. Delete it, or put it behind the operator token with noindex.",
+      "accept": "Route returns 404 in production (or 401 behind the operator gate); no real customer data reachable anonymously.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "C12"
+      ],
+      "anchors": [
+        "src/app/chart-preview/page.js:17-30"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.1.3",
+      "subphase": "R0.1",
+      "lane": "infra",
+      "title": "Minimal operator perimeter in src/middleware.js",
+      "detail": "Shared operator token over everything except the public free-scan flow (POST /api/scan, scan status, scan reads, industries). Timing-safe compare. This is the choke point real auth occupies in Phase Z.",
+      "accept": "Unauthenticated POST /api/content returns 401; the free scan flow is unaffected end to end.",
+      "deps": [
+        "R0.1.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S17"
+      ],
+      "anchors": [
+        "src/app/api"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.1.4",
+      "subphase": "R0.1",
+      "lane": "backend",
+      "title": "Per-IP rate limit on POST /api/scan",
+      "detail": "DB-backed token bucket, no new infrastructure. The scan path currently has no cap at all and spends Bright Data + Perplexity budget per anonymous request.",
+      "accept": "The 6th scan in an hour from one IP returns 429; limit is configurable by env.",
+      "deps": [
+        "R0.1.3"
+      ],
+      "tags": [],
+      "findings": [
+        "S17"
+      ],
+      "anchors": [
+        "src/app/api/scan/route.js"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.1.5",
+      "subphase": "R0.1",
+      "lane": "data",
+      "title": "Unique partial index on scan_jobs(brand) while running",
+      "detail": "Closes the fail-open duplicate-scan TOCTOU: a DB error during hasActiveScanForBrand currently allows concurrent duplicate scans.",
+      "accept": "Migration applies cleanly; a concurrent duplicate insert is rejected by the database, not by application logic.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "B11"
+      ],
+      "anchors": [
+        "src/lib/db.js:403-408"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.1.6",
+      "subphase": "R0.1",
+      "lane": "infra",
+      "title": "scripts/check-secrets.mjs — smallest live call per vendor",
+      "detail": "Supabase select-1, Bright Data zone list, Perplexity 1-token, LLM ping, Firecrawl scrape of example.com, GSC property list, OpenAI if keyed. One verdict line each. Wire as npm run check:secrets.",
+      "accept": "npm run check:secrets prints one PASS/FAIL/UNCONFIGURED line per vendor and exits non-zero if a configured vendor fails.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "S20"
+      ],
+      "anchors": [
+        "scripts/"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.1.7",
+      "subphase": "R0.1",
+      "lane": "backend",
+      "title": "/api/health route",
+      "detail": "DB reachability, per-vendor configured flags (not live calls on every hit), last cron tick.",
+      "accept": "GET /api/health returns JSON with db status, vendor configured flags, and last cron tick timestamp.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "S20"
+      ],
+      "anchors": [
+        "src/app/api"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.2.1",
+      "subphase": "R0.2",
+      "lane": "docs",
+      "title": "Create docs/BUILD_JOURNAL.md seeded with the 37 findings",
+      "detail": "Every A1-A12, B1-B13, C1-C12 finding at file:line with its mechanism. The 2026-07-29 score-fix postmortem is the format template and retroactive entry #1.",
+      "accept": "File exists with all 37 findings, each carrying file:line and a one-line mechanism; entry #1 is the July postmortem.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "S25"
+      ],
+      "anchors": [
+        "docs/"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.2.2",
+      "subphase": "R0.2",
+      "lane": "docs",
+      "title": "Tracker rule in force; status headers on all plans",
+      "detail": "Close = checkbox + file:line in the same commit. Add LIVE / SUPERSEDED-BY / HISTORICAL headers to all 13 plans plus DESIGN.md and PRODUCT.md, resolving the four-way design-authority conflict.",
+      "accept": "Every doc under docs/plans plus DESIGN.md and PRODUCT.md carries a status header; the rule is written into the tracker.",
+      "deps": [
+        "R0.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S28",
+        "S30"
+      ],
+      "anchors": [
+        "docs/plans/",
+        "DESIGN.md",
+        "PRODUCT.md"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.2.3",
+      "subphase": "R0.2",
+      "lane": "docs",
+      "title": "Supersede the SerpAPI ADR with a dated Bright Data ADR",
+      "detail": "The one ADR in the repo says SerpAPI won; production ships Bright Data. Also extend the README migration table through 006.",
+      "accept": "docs/decisions/serp-provider.md marked superseded and linked to a new dated Bright Data ADR; README migration table lists 001-006.",
+      "deps": [
+        "R0.2.2"
+      ],
+      "tags": [],
+      "findings": [
+        "S19"
+      ],
+      "anchors": [
+        "docs/decisions/serp-provider.md",
+        "README.md"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.3.1",
+      "subphase": "R0.3",
+      "lane": "backend",
+      "title": "openrouter.js throws LlmUnavailableError instead of returning empty text",
+      "detail": "Missing key or exhausted retries currently return {text:''} silently, which is why SOV renders a false 100% today. Throw a typed error; audit every caller for the swallow.",
+      "accept": "Missing key and exhausted retries both throw LlmUnavailableError; unit tests cover both; no caller treats the throw as an empty answer.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "B6",
+        "A8"
+      ],
+      "anchors": [
+        "src/lib/openrouter.js:22-25",
+        "src/lib/openrouter.js:124-125",
+        "src/lib/workers/scanWorker.js:692-698"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.3.2",
+      "subphase": "R0.3",
+      "lane": "frontend",
+      "title": "SOV donut, Rivals view and verdict panel render 'not assessed' while extraction is offline",
+      "detail": "The pipeline already returns share_of_voice_pct: null without rivals precisely to prevent '100%'. Make the three surfaces honour it — never 100%, never 'no rivals co-mentioned' when the extractor was down.",
+      "accept": "With rival extraction offline the donut, Rivals view and verdict panel all read 'Not assessed — rival extraction offline'; a test covers the offline state.",
+      "deps": [
+        "R0.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "A8",
+        "A9"
+      ],
+      "anchors": [
+        "src/components/dashboard/RankAndSharePanel.jsx:26-28",
+        "src/components/charts/Donut.jsx:29-44",
+        "src/components/dashboard/RivalsView.jsx:44-46",
+        "src/components/dashboard/VisibilityVerdictPanel.jsx:51-58"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.3.3",
+      "subphase": "R0.3",
+      "lane": "backend",
+      "title": "Roster continuity — reuse the last persisted roster, labelled carried_forward",
+      "detail": "Deterministic, no LLM. Finalize reuses the brand's last persisted result_brands roster when extraction is unavailable, labelled carried_forward. Also fixes the 'scans.competitors always null' known-open.",
+      "accept": "A scan run with the extractor offline carries the previous roster with roster_source='carried_forward'; scans.competitors is written; tests cover first-scan (no roster) and repeat-scan cases.",
+      "deps": [
+        "R0.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "B3",
+        "A9"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js:653",
+        "src/lib/workers/scanWorker.js:868-914"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.3.4",
+      "subphase": "R0.3",
+      "lane": "backend",
+      "title": "New-brand scan fails loud at sourcing when the LLM is off",
+      "detail": "Today a new brand with no LLM silently falls back to the static industry pack and the result passes as generated. Fail loud at sourcing; if the static pack is used, record that on the scan.",
+      "accept": "A new-brand scan with the LLM unavailable aborts with a typed error, or records prompt_source='static_industry_pack' on the scan; a test covers both paths.",
+      "deps": [
+        "R0.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "B7"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js",
+        "src/lib/prompts.js"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.4.1",
+      "subphase": "R0.4",
+      "lane": "test",
+      "title": "Reference scans for 3 brands, archived as the 'before' corpus",
+      "detail": "Frozen prompt sets, results archived under test_reports/baseline-2026-08/ so the rebuild has something to measure against.",
+      "accept": "Three reference scans archived with their prompt_set_id and raw results; the corpus is committed.",
+      "deps": [],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [
+        "test_reports/"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.4.2",
+      "subphase": "R0.4",
+      "lane": "test",
+      "title": "Hand-label 60-100 answers as calibration fixtures",
+      "detail": "Mention yes/no and position per roster brand, drawn from the 674+ persisted results. Feeds the R2.5 judge calibration.",
+      "accept": "60-100 labelled answers committed as fixtures with a documented labelling protocol.",
+      "deps": [
+        "R0.4.1"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [
+        "S11"
+      ],
+      "anchors": [
+        "src/lib/scoring/"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R0.4.3",
+      "subphase": "R0.4",
+      "lane": "infra",
+      "title": "CI on push; fix the test glob; add .gitattributes",
+      "detail": "Run test:scoring plus build on push. The current glob orphans 57 tests. Add .gitattributes for consistent line endings.",
+      "accept": "CI workflow runs on push and fails on a red test; the glob picks up every *.test.mjs under src; .gitattributes committed.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        ".github/",
+        "package.json"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.1.1",
+      "subphase": "R1.1",
+      "lane": "docs",
+      "title": "Probe Result Contract v2",
+      "detail": "docs/contracts/probe-result.md: typed state (answered|no_answer|blocked|captcha|login_wall|timeout|parse_error|skipped), text, citations, evidence ids, engine_surface (ui|api), geo, timings. Rule: only answered and no_answer ever enter a scoring denominator.",
+      "accept": "Contract committed; the eight states and the denominator rule are stated normatively; R2.1 consumes it.",
+      "deps": [
+        "R0.2.2"
+      ],
+      "tags": [],
+      "findings": [
+        "S1"
+      ],
+      "anchors": [
+        "docs/contracts/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.1.2",
+      "subphase": "R1.1",
+      "lane": "docs",
+      "title": "ADR + 2-day spike: browser infrastructure",
+      "detail": "Bright Data Scraping Browser (account exists, managed anti-bot) vs self-hosted Playwright + residential proxies vs Browserless. Decide on measured block rate from IN egress and cost per probe, not vibes.",
+      "accept": "Dated ADR recording measured block rate and cost per probe for each option, with the decision and its reversal conditions.",
+      "deps": [
+        "R1.1.1"
+      ],
+      "tags": [
+        "needs-secrets",
+        "needs-decision"
+      ],
+      "findings": [],
+      "anchors": [
+        "docs/decisions/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.1.3",
+      "subphase": "R1.1",
+      "lane": "docs",
+      "title": "ADR: worker host",
+      "detail": "Long-lived container (Railway/Fly/Hetzner); laptop worker is dev mode from day one; Vercel functions ruled out in writing.",
+      "accept": "Dated ADR naming the host, why Vercel functions cannot serve this workload, and the dev-mode story.",
+      "deps": [
+        "R1.1.1"
+      ],
+      "tags": [
+        "needs-decision"
+      ],
+      "findings": [],
+      "anchors": [
+        "docs/decisions/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.1.4",
+      "subphase": "R1.1",
+      "lane": "docs",
+      "title": "Engine surface matrix",
+      "detail": "Perplexity (logged-out, first), ChatGPT search (logged-out, login-wall risk documented), AIO (keep), AI Mode (stretch), Gemini/Copilot/Grok (deferred, openly).",
+      "accept": "Matrix committed naming each engine's surface, status, and the reason for any deferral.",
+      "deps": [
+        "R1.1.1"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "docs/contracts/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.1.5",
+      "subphase": "R1.1",
+      "lane": "docs",
+      "title": "Politeness & risk budget",
+      "detail": "Per-engine concurrency 1-2, randomized delays, daily probe caps, canary policy. Throttling as a decision, not an accident.",
+      "accept": "Budget committed with per-engine numbers; the fleet reads them from config rather than hard-coding.",
+      "deps": [
+        "R1.1.4"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "docs/contracts/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.2.1",
+      "subphase": "R1.2",
+      "lane": "infra",
+      "title": "worker/ workspace: long-lived Node + Playwright",
+      "detail": "Separate workspace with no Next imports, so the fleet can run on a container host independent of the web app.",
+      "accept": "worker/ builds and starts standalone; a lint rule or guard test forbids importing from src/app.",
+      "deps": [
+        "R1.1.3"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.2.2",
+      "subphase": "R1.2",
+      "lane": "data",
+      "title": "probe_tasks queue table; fleet claims batches via jobLease",
+      "detail": "Adopts the existing jobLease.js primitive on the scan side — the lease adoption the control-plane plan deferred.",
+      "accept": "Migration applies; two workers racing for the same batch produce exactly one claim; tests cover the race.",
+      "deps": [
+        "R1.2.1"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/jobLease.js",
+        "supabase/migrations/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.2.3",
+      "subphase": "R1.2",
+      "lane": "data",
+      "title": "Create the scan_runs ledger table",
+      "detail": "Created here, fully wired in R3.2. Fleet heartbeats plus one row per probe batch.",
+      "accept": "Migration applies; the fleet writes a heartbeat row per batch.",
+      "deps": [
+        "R1.2.2"
+      ],
+      "tags": [],
+      "findings": [
+        "S13"
+      ],
+      "anchors": [
+        "supabase/migrations/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.2.4",
+      "subphase": "R1.2",
+      "lane": "backend",
+      "title": "Authenticated ingest POST /api/internal/probe-results",
+      "detail": "Worker token, fail-closed, contract-validated against Probe Result Contract v2, idempotent upsert on (job_id, engine, query).",
+      "accept": "Unauthenticated POST returns 401; a malformed body returns 422; a repeated valid body produces one row.",
+      "deps": [
+        "R1.2.3",
+        "R1.1.1"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/app/api/internal/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.2.5",
+      "subphase": "R1.2",
+      "lane": "docs",
+      "title": "Dev runbook for the fleet",
+      "detail": "One command runs the fleet on a laptop against dev Supabase.",
+      "accept": "Runbook committed; a new operator can start the fleet from it without asking questions.",
+      "deps": [
+        "R1.2.4"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "docs/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.2.6",
+      "subphase": "R1.2",
+      "lane": "infra",
+      "title": "Fleet config validated at boot",
+      "detail": "assertEnv pattern — a missing value means refuse to start, never degrade mid-probe.",
+      "accept": "Starting the fleet without a required var exits non-zero with the missing names listed.",
+      "deps": [
+        "R1.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S20"
+      ],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.3.1",
+      "subphase": "R1.3",
+      "lane": "infra",
+      "title": "Spike: Playwright against perplexity.ai",
+      "detail": "Detect answer-stream completion; dump HTML plus screenshot; save at least 5 fixtures including a no-answer and a block page.",
+      "accept": "Five or more fixtures committed covering answered, no-answer and blocked.",
+      "deps": [
+        "R1.2.1",
+        "R1.1.2"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.3.2",
+      "subphase": "R1.3",
+      "lane": "test",
+      "title": "Perplexity extractor as a pure function + fixture tests",
+      "detail": "Answer text and sources (url/domain/title). Parse failure yields parse_error, never empty-answered.",
+      "accept": "Extractor is pure and tested against every R1.3.1 fixture; a corrupted fixture yields parse_error.",
+      "deps": [
+        "R1.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "B1"
+      ],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.3.3",
+      "subphase": "R1.3",
+      "lane": "backend",
+      "title": "Perplexity adapter: retries, block classification, evidence capture",
+      "detail": "Evidence captured on every outcome — failure evidence is how blocks get debugged.",
+      "accept": "Each of the eight typed outcomes is reachable in tests; every outcome writes an evidence id.",
+      "deps": [
+        "R1.3.2",
+        "R1.5.1"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.3.4",
+      "subphase": "R1.3",
+      "lane": "backend",
+      "title": "Perplexity canary",
+      "detail": "Hourly known-good query; two consecutive non-answered outcomes raise a loud alert. UI redesigns and IP bans surface as events, not quiet score drops.",
+      "accept": "Canary runs on schedule; a simulated two-failure sequence produces an alert.",
+      "deps": [
+        "R1.3.3"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.3.5",
+      "subphase": "R1.3",
+      "lane": "test",
+      "title": "Perplexity soak: 3+ days x ~30 prompts/day",
+      "detail": "Characterise the real answer and block rates before trusting the adapter.",
+      "accept": "At least 90 percent answered across the soak; block rate characterised in the R1.1.2 ADR.",
+      "deps": [
+        "R1.3.4"
+      ],
+      "tags": [
+        "needs-soak",
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.4.1",
+      "subphase": "R1.4",
+      "lane": "infra",
+      "title": "Spike: logged-out chatgpt.com with search",
+      "detail": "Measure login-wall and block frequency from IN proxies; save fixtures.",
+      "accept": "Fixtures committed; login-wall frequency measured and recorded.",
+      "deps": [
+        "R1.3.1"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.4.2",
+      "subphase": "R1.4",
+      "lane": "test",
+      "title": "ChatGPT extractor + fixtures",
+      "detail": "Answer text, citation chips, inline links.",
+      "accept": "Extractor is pure and tested against every R1.4.1 fixture.",
+      "deps": [
+        "R1.4.1"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.4.3",
+      "subphase": "R1.4",
+      "lane": "backend",
+      "title": "ChatGPT adapter + canary + soak",
+      "detail": "Same acceptance as the Perplexity adapter.",
+      "accept": "At least 90 percent answered across the soak; canary quiet; all eight outcomes reachable.",
+      "deps": [
+        "R1.4.2"
+      ],
+      "tags": [
+        "needs-soak",
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [
+        "worker/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.4.4",
+      "subphase": "R1.4",
+      "lane": "backend",
+      "title": "Fallback policy: UI blocked records blocked",
+      "detail": "The API may run only as engine_surface:'api' — separate provenance and separate trend series, never silently mixed.",
+      "accept": "A blocked UI probe writes state='blocked'; any API fallback row carries engine_surface='api' and is charted separately.",
+      "deps": [
+        "R1.4.3",
+        "R1.1.1"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "worker/",
+        "src/lib/engines/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.5.1",
+      "subphase": "R1.5",
+      "lane": "data",
+      "title": "Storage bucket probe-evidence",
+      "detail": "PNG plus gzipped HTML, 90-day retention, size budget documented.",
+      "accept": "Bucket exists with a retention policy; the size budget is written down.",
+      "deps": [
+        "R1.2.3"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [
+        "supabase/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.5.2",
+      "subphase": "R1.5",
+      "lane": "data",
+      "title": "prompt_results evidence-id columns",
+      "detail": "Same migration as the queue table.",
+      "accept": "Migration applies; evidence ids round-trip from the fleet to the row.",
+      "deps": [
+        "R1.5.1"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "supabase/migrations/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.5.3",
+      "subphase": "R1.5",
+      "lane": "frontend",
+      "title": "AnswersView 'View evidence' -> signed-URL screenshot",
+      "detail": "A CXO seeing the actual Perplexity screen with a rival's name on it is the strongest artifact the product can show.",
+      "accept": "Clicking through opens the stored screenshot via a signed URL that expires.",
+      "deps": [
+        "R1.5.2"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/components/dashboard/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.6.1",
+      "subphase": "R1.6",
+      "lane": "backend",
+      "title": "Verify IN egress per engine",
+      "detail": "Rupee pricing, Indian brands, .in citations. Record geo on every probe row.",
+      "accept": "Each engine's IN egress verified with evidence; geo written on every row.",
+      "deps": [
+        "R1.3.3"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [
+        "worker/",
+        "src/lib/engines/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.6.2",
+      "subphase": "R1.6",
+      "lane": "backend",
+      "title": "Fix the SERP_GEO default inconsistency",
+      "detail": "The two SERP clients default to 'in' and 'us' respectively.",
+      "accept": "One default, defined once; a test asserts both clients read it.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/engines/serp.js",
+        "src/lib/engines/brightdata.js"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.7.1",
+      "subphase": "R1.7",
+      "lane": "test",
+      "title": "Dual-run the reference corpus through API and UI paths",
+      "detail": "docs/PARITY.md with answer rate, mention rate, citations and roster overlap per engine. The numbers decide the story we tell users about the switch.",
+      "accept": "PARITY.md committed with all four metrics per engine for both surfaces.",
+      "deps": [
+        "R1.4.4",
+        "R0.4.1"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [
+        "docs/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.7.2",
+      "subphase": "R1.7",
+      "lane": "backend",
+      "title": "Cutover per engine behind the ENGINES flag",
+      "detail": "Only once soak is 7+ days at 90 percent with a quiet canary. The trend chart gets an 'engine surface changed' marker, same pattern as the prompt-set marker.",
+      "accept": "Cutover is flag-driven and reversible; the marker renders on the trend chart at the cutover date.",
+      "deps": [
+        "R1.7.1",
+        "R1.3.5"
+      ],
+      "tags": [
+        "needs-soak"
+      ],
+      "findings": [],
+      "anchors": [
+        "src/lib/engines/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.7.3",
+      "subphase": "R1.7",
+      "lane": "backend",
+      "title": "Demote API adapters to explicit fallback; delete dead paths",
+      "detail": "Delete the dead second engine registry and the dead SerpAPI probe path while touching the registry.",
+      "accept": "Dead registry and SerpAPI probe path removed with their tests; API adapters reachable only as declared fallback.",
+      "deps": [
+        "R1.7.2"
+      ],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        "src/lib/engines/"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.1.1",
+      "subphase": "R2.1",
+      "lane": "backend",
+      "title": "Per-engine summaries emit state + state_reason",
+      "detail": "share_of_ai_pct: null (never 0) on an empty eliciting pool or a data-source issue. State is one of measured | measured_zero | not_assessed | failed.",
+      "accept": "An engine with an empty pool emits null plus state='not_assessed' and a reason; tests cover all four states.",
+      "deps": [
+        "R1.1.1"
+      ],
+      "tags": [],
+      "findings": [
+        "A1",
+        "S1"
+      ],
+      "anchors": [
+        "src/lib/scoring/enginePipeline.js:298-308"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.1.2",
+      "subphase": "R2.1",
+      "lane": "backend",
+      "title": "Delete every ?? 0 null-coalescing metric in the normalize layer",
+      "detail": "Eight places coalesce a null metric to 0. The render contract for null is an em dash plus the state chip, never 0.",
+      "accept": "No metric-bearing ?? 0 remains in services/api.js; a guard test forbids reintroduction.",
+      "deps": [
+        "R2.1.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S1"
+      ],
+      "anchors": [
+        "src/services/api.js:486-493"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.1.3",
+      "subphase": "R2.1",
+      "lane": "frontend",
+      "title": "UI chips for did-not-report / not-assessed / small-sample; render engines_counted",
+      "detail": "engines_counted is persisted today and never rendered.",
+      "accept": "Each of the three chips renders in its own state; engines_counted appears on the dashboard.",
+      "deps": [
+        "R2.1.2"
+      ],
+      "tags": [],
+      "findings": [
+        "A1",
+        "A3"
+      ],
+      "anchors": [
+        "src/components/dashboard/DashboardShell.jsx:616-621",
+        "src/lib/scoring/enginePipeline.js:502-506"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.1.4",
+      "subphase": "R2.1",
+      "lane": "test",
+      "title": "Tests: a fully-errored engine renders failed and contributes nothing",
+      "detail": "Also assert the headline label always matches its source, closing A2.",
+      "accept": "A 100-percent-errored engine contributes nothing to the index and renders 'failed'; the hero label matches the value's provenance.",
+      "deps": [
+        "R2.1.3"
+      ],
+      "tags": [],
+      "findings": [
+        "A1",
+        "A2"
+      ],
+      "anchors": [
+        "src/components/dashboard/DashboardShell.jsx:299-301"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.2.1",
+      "subphase": "R2.2",
+      "lane": "backend",
+      "title": "answer_present set only after the text check",
+      "detail": "A 200 with an empty body currently becomes an answered non-mention — a fabricated zero in the denominator.",
+      "accept": "An empty 200 produces an error row, not an answered row; a test covers it.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "B1"
+      ],
+      "anchors": [
+        "src/lib/scoring/enginePipeline.js:154-157"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.2.2",
+      "subphase": "R2.2",
+      "lane": "backend",
+      "title": "Perplexity citation-leg failure marks citations_state unverified",
+      "detail": "If /search dies but the answer survives, the row currently reports no error and zero citations: 'uncited' and 'citations unverifiable' are the same value.",
+      "accept": "An answer-ok/search-failed row carries citations_state='unverified' and is excluded from citation-share denominators.",
+      "deps": [
+        "R2.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "B2"
+      ],
+      "anchors": [
+        "src/lib/engines/perplexity.js:147-160"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.2.3",
+      "subphase": "R2.2",
+      "lane": "backend",
+      "title": "upsertPrompts throws; audit all write helpers for the return-{error} idiom",
+      "detail": "Adopt the rule verbatim: never fail-soft a create call.",
+      "accept": "upsertPrompts throws on failure and the worker's catch fires; every write helper under src/lib/db is audited and listed in the commit message.",
+      "deps": [
+        "R2.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "B5"
+      ],
+      "anchors": [
+        "src/lib/db/prompts.js:96-100",
+        "src/lib/workers/scanWorker.js:388-390"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.2.4",
+      "subphase": "R2.2",
+      "lane": "backend",
+      "title": "Remove insertScan's silent 3-tier column-drop cascade",
+      "detail": "The cascade discards CI, stability, mention-rate, then scoring_version on schema mismatch. Schema mismatch must fail loud.",
+      "accept": "A schema mismatch throws; no column is silently dropped; a test covers the mismatch path.",
+      "deps": [
+        "R2.2.3"
+      ],
+      "tags": [],
+      "findings": [
+        "B10"
+      ],
+      "anchors": [
+        "src/lib/db.js:122-167"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.3.1",
+      "subphase": "R2.3",
+      "lane": "backend",
+      "title": "Two-pass finalize: discovered roster feeds the headline",
+      "detail": "Reorder finalize: extract or carry forward the roster, re-judge all rows, then summarize and compute the headline. The single highest-leverage scoring fix.",
+      "accept": "The eliciting gate, SOV and top rivals all engage on a scan where the user typed no competitors.",
+      "deps": [
+        "R0.3.3"
+      ],
+      "tags": [],
+      "findings": [
+        "B3"
+      ],
+      "anchors": [
+        "src/lib/scoring/enginePipeline.js:279-284",
+        "src/lib/workers/scanWorker.js:653"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.3.2",
+      "subphase": "R2.3",
+      "lane": "test",
+      "title": "Tests: an empty-competitors scan gets the gate, SOV and top rivals",
+      "detail": "This is the shape of most free scans.",
+      "accept": "A fixture scan with no typed competitors produces a gated score, a non-null SOV and a populated rival list.",
+      "deps": [
+        "R2.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "B3"
+      ],
+      "anchors": [
+        "src/lib/scoring/"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.3.3",
+      "subphase": "R2.3",
+      "lane": "backend",
+      "title": "Persist the roster to scans.competitors with roster_source provenance",
+      "detail": "Carry forward across scans. Closes the score-fix known-open.",
+      "accept": "scans.competitors is non-null after a scan that discovered or carried a roster; roster_source records which.",
+      "deps": [
+        "R2.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "B3"
+      ],
+      "anchors": [
+        "src/lib/db.js"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.4.1",
+      "subphase": "R2.4",
+      "lane": "backend",
+      "title": "Top-level scan fields become blended/index values",
+      "detail": "scans.visibility_pct, data_source_issue and insufficient_sample currently describe AIO only; a totally failed second engine raises no top-level flag. Quality flags become any-engine flags.",
+      "accept": "Top-level fields carry the blended value; a failed second engine raises the top-level flag; a test covers it.",
+      "deps": [
+        "R2.1.4"
+      ],
+      "tags": [],
+      "findings": [
+        "B4"
+      ],
+      "anchors": [
+        "src/lib/scoring/enginePipeline.js:583-613"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.4.2",
+      "subphase": "R2.4",
+      "lane": "frontend",
+      "title": "One gate-honoring score selector used by hero, history, sidebar and homepage",
+      "detail": "Four surfaces read different fields today; the homepage paints color-banded scores the dashboard refuses to show.",
+      "accept": "All four surfaces call one selector; listRecentScans reads the quality flags; a null renders an em dash, never a bare percent sign.",
+      "deps": [
+        "R2.4.1"
+      ],
+      "tags": [],
+      "findings": [
+        "A6",
+        "A7"
+      ],
+      "anchors": [
+        "src/lib/db.js:242-286",
+        "src/components/home/HomeDashboard.jsx:142-144",
+        "src/components/dashboard/DashboardShell.jsx:570-597",
+        "src/components/dashboard/Sidebar.jsx:138-143"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.5.1",
+      "subphase": "R2.5",
+      "lane": "test",
+      "title": "Point the calibration harness at the live judge",
+      "detail": "test_calibration.js grades the dead judge with 20 fixtures. Point it at detectMention and judgeBrandsSymmetric with live position semantics, run it on the R0.4.2 labels, publish precision and recall in the build journal.",
+      "accept": "Harness runs against the live judge; precision and recall are published in BUILD_JOURNAL.md.",
+      "deps": [
+        "R0.4.2"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [
+        "S11"
+      ],
+      "anchors": [
+        "src/lib/scoring/test_calibration.js"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.5.2",
+      "subphase": "R2.5",
+      "lane": "backend",
+      "title": "Alias hardening: stoplist, domain-stem context rule, short-alias guard",
+      "detail": "A brand at apex.com currently matches every prose 'apex'; suffix-stripping yields dangerously short aliases.",
+      "accept": "All three guards implemented; calibration shows no regression against R2.5.1's baseline.",
+      "deps": [
+        "R2.5.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S11"
+      ],
+      "anchors": [
+        "src/lib/scoring/"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.6.1",
+      "subphase": "R2.6",
+      "lane": "backend",
+      "title": "Finalize writes per-prompt brands_elicited",
+      "detail": "The field exists and nothing writes it.",
+      "accept": "Every prompt row carries brands_elicited after finalize; a test covers it.",
+      "deps": [
+        "R2.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S9"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.6.2",
+      "subphase": "R2.6",
+      "lane": "frontend",
+      "title": "isDudPrompt -> suggested_retire, surfaced in the Queries tab",
+      "detail": "Retire is a prompt-set version bump using the existing trend marker. Additive-only contract preserved: retire, never mutate.",
+      "accept": "Duds flag as suggested_retire and appear in the Queries tab; one-click retire bumps the prompt-set version and drops a trend marker.",
+      "deps": [
+        "R2.6.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S9"
+      ],
+      "anchors": [
+        "src/lib/scoring/",
+        "src/components/dashboard/"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.7.1",
+      "subphase": "R2.7",
+      "lane": "frontend",
+      "title": "SOV donut consumes the real share_of_voice_pct",
+      "detail": "The panel currently feeds per-competitor visibility to the donut and prints '100.0% share' — the exact lie the backend refused. Null renders 'not available'.",
+      "accept": "The donut reads share_of_voice_pct; a null renders 'not available'; the 100 percent path is unreachable in tests.",
+      "deps": [
+        "R0.3.2",
+        "R2.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "A8"
+      ],
+      "anchors": [
+        "src/components/dashboard/RankAndSharePanel.jsx:26-28",
+        "src/components/charts/Donut.jsx:29-44"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.7.2",
+      "subphase": "R2.7",
+      "lane": "frontend",
+      "title": "SourcesView reads v9 field names",
+      "detail": "It reads dead v8 names (aio_citations) the v9 pipeline never writes, producing 'Sources cited: 0' beside 'Distinct domains: 14'.",
+      "accept": "Sources count and distinct-domain count agree; the contradiction is unreachable.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "A10"
+      ],
+      "anchors": [
+        "src/components/dashboard/SourcesView.jsx:12-15",
+        "src/components/dashboard/SourcesView.jsx:24-33"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.7.3",
+      "subphase": "R2.7",
+      "lane": "frontend",
+      "title": "Delete the new Date() timestamp fallback",
+      "detail": "A record with no timestamp is stamped with the current time and renders 'just now'. No collection time must render an em dash.",
+      "accept": "A record without a timestamp renders an em dash; the fallback is gone; a guard test forbids reintroduction.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "C1"
+      ],
+      "anchors": [
+        "src/services/api.js:550",
+        "src/utils/format.js:48"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.7.4",
+      "subphase": "R2.7",
+      "lane": "backend",
+      "title": "Persist and render the collection window",
+      "detail": "First to last probe write, not the finalize instant. sourced_at is captured today and never surfaced.",
+      "accept": "collected_from and collected_to are persisted and rendered as a window.",
+      "deps": [
+        "R2.7.3"
+      ],
+      "tags": [],
+      "findings": [
+        "C2"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js:411",
+        "src/lib/workers/scanWorker.js:626"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.8.1",
+      "subphase": "R2.8",
+      "lane": "frontend",
+      "title": "Gate Studio and Opportunities on data quality",
+      "detail": "Studio says 'your brand is cited across the tracked queries' on a scan where every engine errored. 'No gaps' and 'nothing was answered' are different screens.",
+      "accept": "An all-errored scan renders the data-quality state in Studio, not a clean 'no gaps'.",
+      "deps": [
+        "R2.1.3"
+      ],
+      "tags": [],
+      "findings": [
+        "A5"
+      ],
+      "anchors": [
+        "src/components/studio/OpportunitiesPanel.jsx:20-28",
+        "src/components/studio/OpportunitiesPanel.jsx:210-216",
+        "src/components/dashboard/DashboardShell.jsx:642"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.8.2",
+      "subphase": "R2.8",
+      "lane": "frontend",
+      "title": "Engine gauges: a zero-row engine says 'no data'",
+      "detail": "An engine with zero rows currently falls back to all rows and invents a probe count.",
+      "accept": "A zero-row engine renders 'no data'; no all-rows fallback; the 'N reporting' count excludes engines that reported nothing.",
+      "deps": [
+        "R2.8.1"
+      ],
+      "tags": [],
+      "findings": [
+        "A4"
+      ],
+      "anchors": [
+        "src/lib/scoring/interlocking.js:98-113",
+        "src/components/dashboard/OverviewView.jsx:140"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.8.3",
+      "subphase": "R2.8",
+      "lane": "frontend",
+      "title": "Unknown status renders 'reconnecting', never rewinds to 0 percent",
+      "detail": "A DB read failure returns {status:'working', progress_pct:null} and the scan page renders the null as '% complete'.",
+      "accept": "A transient status error renders 'reconnecting'; progress never rewinds; a test covers the null.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "A11"
+      ],
+      "anchors": [
+        "src/app/api/scan/[job_id]/status/route.js:28-33",
+        "src/app/scan/page.js:303-306"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.8.4",
+      "subphase": "R2.8",
+      "lane": "frontend",
+      "title": "DB-down state distinct from 'no scans yet'",
+      "detail": "A 404 and any transient error currently collapse to the cheerful first-run empty state.",
+      "accept": "A DB failure renders an error state; only a genuine empty result renders the first-run state.",
+      "deps": [
+        "R2.8.3"
+      ],
+      "tags": [],
+      "findings": [
+        "A12"
+      ],
+      "anchors": [
+        "src/app/dashboard/[brand]/page.js:52-57"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.9.1",
+      "subphase": "R2.9",
+      "lane": "frontend",
+      "title": "Provenance strip under the hero",
+      "detail": "Engines counted and skipped, eliciting pool size and elicitation rate, dead prompts, prompt-set version, geo, collection window. All computed today; none rendered.",
+      "accept": "The strip renders every listed field, reading persisted values only.",
+      "deps": [
+        "R2.1.3",
+        "R2.7.4",
+        "R2.6.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S8"
+      ],
+      "anchors": [
+        "src/components/dashboard/DashboardShell.jsx"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.10.1",
+      "subphase": "R2.10",
+      "lane": "frontend",
+      "title": "De-fake the landing page",
+      "detail": "Remove the 'Live' chip from the scripted demo, label samples as samples, and make engine claims match the deployment.",
+      "accept": "No 'Live' chip on scripted content; sample cards labelled; the engine list matches what is actually deployed.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "C11"
+      ],
+      "anchors": [
+        "src/components/landing/AnswerSheet.jsx:63-65",
+        "src/app/page.js:126-129",
+        "src/app/page.js:227-253"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.10.2",
+      "subphase": "R2.10",
+      "lane": "backend",
+      "title": "Probe counter backed by a real count query",
+      "detail": "The landing counter is simulated today and already self-flagged in PRODUCT.md.",
+      "accept": "The counter reads a real count; the simulation is deleted.",
+      "deps": [
+        "R2.10.1"
+      ],
+      "tags": [],
+      "findings": [
+        "C11"
+      ],
+      "anchors": [
+        "src/app/page.js"
+      ],
+      "phase": "R2",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.1.1",
+      "subphase": "R3.1",
+      "lane": "infra",
+      "title": "Scan worker cron every 10 minutes",
+      "detail": "Rescue stops depending on an open browser tab.",
+      "accept": "vercel.json schedules the scan worker every 10 minutes; a stale job is rescued without any client polling.",
+      "deps": [
+        "R0.1.1"
+      ],
+      "tags": [
+        "needs-vercel"
+      ],
+      "findings": [
+        "S12"
+      ],
+      "anchors": [
+        "vercel.json"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.1.2",
+      "subphase": "R3.1",
+      "lane": "infra",
+      "title": "Add the missing ?batch=1 cron entry",
+      "detail": "The one automated scan-to-content chain is unreachable because the cron entry has no query string.",
+      "accept": "The daily batch fires and produces drafts; batch decisions are recorded.",
+      "deps": [
+        "R3.1.1"
+      ],
+      "tags": [
+        "needs-vercel",
+        "needs-llm"
+      ],
+      "findings": [
+        "C8"
+      ],
+      "anchors": [
+        "vercel.json",
+        "src/app/api/content/worker/route.js:88-122",
+        "src/lib/content/dailyBatch.js:20-23"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.2.1",
+      "subphase": "R3.2",
+      "lane": "backend",
+      "title": "One scan_runs row per chunk execution",
+      "detail": "Phase, timings, outcome (succeeded|failed|skipped|reaped|noop), reason, probes, errors recovered.",
+      "accept": "Every chunk execution writes exactly one row carrying all listed fields.",
+      "deps": [
+        "R1.2.3"
+      ],
+      "tags": [],
+      "findings": [
+        "S13"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.2.2",
+      "subphase": "R3.2",
+      "lane": "backend",
+      "title": "Every discarded skip reason becomes a ledger row",
+      "detail": "Scheduler skips, engine skips, batch decisions, claim losses — all structured and then thrown away today.",
+      "accept": "Each of the four skip classes writes a ledger row with its reason; a test covers each.",
+      "deps": [
+        "R3.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S3"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js:1059-1062",
+        "src/lib/scoring/enginePipeline.js:502-506"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.2.3",
+      "subphase": "R3.2",
+      "lane": "backend",
+      "title": "Status route and dashboard read run history",
+      "detail": "Instead of guessing from heartbeats.",
+      "accept": "The status route reports from scan_runs; heartbeat guessing is removed.",
+      "deps": [
+        "R3.2.2"
+      ],
+      "tags": [],
+      "findings": [
+        "S13"
+      ],
+      "anchors": [
+        "src/app/api/scan/[job_id]/status/route.js"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.3.1",
+      "subphase": "R3.3",
+      "lane": "backend",
+      "title": "attempts column with a cap of 3",
+      "detail": "Beyond the cap the job is terminal: failed with reason 'max_attempts'. No more infinite daily retries.",
+      "accept": "A job that fails three times is terminal and stops being retried; a test covers the cap.",
+      "deps": [
+        "R3.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S12"
+      ],
+      "anchors": [
+        "supabase/migrations/",
+        "src/lib/workers/scanWorker.js"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.3.2",
+      "subphase": "R3.3",
+      "lane": "backend",
+      "title": "Sweep reaps heartbeat-stale runs",
+      "detail": "Today nothing ever closes them; a killed process hangs in probing forever.",
+      "accept": "A run with a heartbeat staler than N x TTL closes as failed with reason 'reaped'.",
+      "deps": [
+        "R3.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S12"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.3.3",
+      "subphase": "R3.3",
+      "lane": "backend",
+      "title": "Content cost accumulates across rescues",
+      "detail": "It currently overwrites, under-reporting spend on every rescue.",
+      "accept": "A rescued content job's cost_total is the sum across attempts, not the last attempt.",
+      "deps": [
+        "R3.3.2"
+      ],
+      "tags": [],
+      "findings": [
+        "S12"
+      ],
+      "anchors": [
+        "src/lib/content/"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.4.1",
+      "subphase": "R3.4",
+      "lane": "backend",
+      "title": "First scan of a brand upserts its schedule row",
+      "detail": "Today a never-visited brand is never rescanned.",
+      "accept": "A brand's first scan creates its scan_schedules row; a test covers it.",
+      "deps": [
+        "R3.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S14"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.4.2",
+      "subphase": "R3.4",
+      "lane": "backend",
+      "title": "Skips bump next_run_at and write a skip row",
+      "detail": "A skipped brand's clock does not advance today, and the only evidence of a skip is the absence of a scan.",
+      "accept": "A skipped brand's next_run_at advances and a skip row is written.",
+      "deps": [
+        "R3.4.1",
+        "R3.2.2"
+      ],
+      "tags": [],
+      "findings": [
+        "C5"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js:1059-1062"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.4.3",
+      "subphase": "R3.4",
+      "lane": "backend",
+      "title": "display_name written so scheduled and manual scans share one identity",
+      "detail": "Scheduled scans key by domain and manual scans by display name, splitting a brand's history in two.",
+      "accept": "A brand scanned both ways has one continuous history; a test covers the join.",
+      "deps": [
+        "R3.4.2"
+      ],
+      "tags": [],
+      "findings": [
+        "C7"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js:1061",
+        "src/app/api/brands/[brand]/coverage/route.js:24-30"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.4.4",
+      "subphase": "R3.4",
+      "lane": "backend",
+      "title": "Worker honors per-brand prompt_target, engines and geo",
+      "detail": "The UI validates and stores them; the worker reads global env instead, contradicting the migration's own comment.",
+      "accept": "The worker reads the schedule row and falls back to env only when it is absent.",
+      "deps": [
+        "R3.4.3"
+      ],
+      "tags": [],
+      "findings": [
+        "C6"
+      ],
+      "anchors": [
+        "src/lib/brandAnalyticsApi.js:152-172",
+        "src/lib/workers/scanWorker.js:91-95",
+        "src/lib/scoring/enginePipeline.js:489"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.5.1",
+      "subphase": "R3.5",
+      "lane": "backend",
+      "title": "Per-block checkpoints in content jobs",
+      "detail": "A rescue resumes instead of re-spending every LLM call. The scan worker already models this.",
+      "accept": "A content job killed mid-run resumes at the next block without repeating a paid call.",
+      "deps": [
+        "R3.3.3"
+      ],
+      "tags": [],
+      "findings": [
+        "S16"
+      ],
+      "anchors": [
+        "src/lib/content/"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.5.2",
+      "subphase": "R3.5",
+      "lane": "data",
+      "title": "Natural key on content_items (job_id, cycle)",
+      "detail": "Closes the die-between-insert-and-status window that creates duplicate drafts.",
+      "accept": "Migration applies; a repeated insert in the window produces one row.",
+      "deps": [
+        "R3.5.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S16"
+      ],
+      "anchors": [
+        "supabase/migrations/"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.5.3",
+      "subphase": "R3.5",
+      "lane": "backend",
+      "title": "Stage transitions warn-to-throw after a quiet telemetry week",
+      "detail": "enforceTransitions is warn-only today; the control-plane plan already scheduled the promotion.",
+      "accept": "Transitions throw; the telemetry week is recorded in the build journal before the flip.",
+      "deps": [
+        "R3.5.2",
+        "R3.2.1"
+      ],
+      "tags": [
+        "needs-soak"
+      ],
+      "findings": [
+        "S16"
+      ],
+      "anchors": [
+        "src/lib/content/"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.6.1",
+      "subphase": "R3.6",
+      "lane": "backend",
+      "title": "Price table that fails loud on an unknown model id",
+      "detail": "Model prefix, SERP, proxy. An unknown id throws and alerts, never $0. We are living this bug today.",
+      "accept": "An unpriced model id throws to the run ledger and alerts; no code path can produce a silent $0.",
+      "deps": [
+        "R3.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "C4",
+        "S18"
+      ],
+      "anchors": [
+        "src/lib/openrouter.js:28-29",
+        "src/lib/openrouter.js:101"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.6.2",
+      "subphase": "R3.6",
+      "lane": "backend",
+      "title": "Per-scan and per-day spend caps enforced from the ledger",
+      "detail": "Fleet costs included. The scan path has no cap at all today.",
+      "accept": "Exceeding either cap halts new spend and records the reason.",
+      "deps": [
+        "R3.6.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S18"
+      ],
+      "anchors": [
+        "src/lib/"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.6.3",
+      "subphase": "R3.6",
+      "lane": "backend",
+      "title": "Weekly report metered per brand per day",
+      "detail": "The paid refresh button is unmetered today.",
+      "accept": "Report generation is quota'd per brand per day and the quota is enforced.",
+      "deps": [
+        "R3.6.2"
+      ],
+      "tags": [],
+      "findings": [
+        "C3"
+      ],
+      "anchors": [
+        "src/lib/content/weeklyReport.js"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.7.1",
+      "subphase": "R3.7",
+      "lane": "backend",
+      "title": "SSRF guard module for Firecrawl fallback and crawlability",
+      "detail": "Block private, link-local and metadata ranges; no inward redirects.",
+      "accept": "Requests to private, link-local and metadata addresses are refused, including via redirect; tests cover each range.",
+      "deps": [
+        "R0.1.3"
+      ],
+      "tags": [],
+      "findings": [
+        "S17"
+      ],
+      "anchors": [
+        "src/lib/firecrawl.js",
+        "src/lib/crawlers/"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.7.2",
+      "subphase": "R3.7",
+      "lane": "backend",
+      "title": "Firecrawl degrade becomes a recorded state",
+      "detail": "The literal string 'No website content available.' can currently be fed to prompt generation as if it were site content.",
+      "accept": "A Firecrawl degrade records its state on the scan and can never enter a prompt as content; a test asserts the string never reaches prompt generation.",
+      "deps": [
+        "R3.7.1"
+      ],
+      "tags": [],
+      "findings": [
+        "B7"
+      ],
+      "anchors": [
+        "src/lib/firecrawl.js:1",
+        "src/lib/firecrawl.js:62-83"
+      ],
+      "phase": "R3",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R4.1.1",
+      "subphase": "R4.1",
+      "lane": "backend",
+      "title": "Wire the orphaned GSC client",
+      "detail": "A working service-account client exists, imported only by a test script. Weekly ingest per connected brand into gsc_daily; document the connect flow.",
+      "accept": "A connected brand's GSC data lands in gsc_daily weekly; the connect flow is documented.",
+      "deps": [
+        "R3.4.4"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [
+        "S21"
+      ],
+      "anchors": [
+        "src/lib/engines/gsc.js"
+      ],
+      "phase": "R4",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R4.1.2",
+      "subphase": "R4.1",
+      "lane": "backend",
+      "title": "Prompt grounding seeds from real GSC queries",
+      "detail": "Deterministic seeding now; phrasing needs the LLM. Make query_source truthful or delete the 'hybrid' label — it is written on every job for a blend that never happens.",
+      "accept": "query_source reflects what actually happened; GSC-seeded prompts are traceable to their source query.",
+      "deps": [
+        "R4.1.1"
+      ],
+      "tags": [
+        "needs-llm"
+      ],
+      "findings": [
+        "S21"
+      ],
+      "anchors": [
+        "src/lib/prompts.js"
+      ],
+      "phase": "R4",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R4.2.1",
+      "subphase": "R4.2",
+      "lane": "backend",
+      "title": "Dual-number pattern where our probe meets a verifiable source",
+      "detail": "Both stored, preference documented, never averaged. The sales answer to 'other tools show a different number'.",
+      "accept": "Both readings are stored with a documented preference function; no code path averages them.",
+      "deps": [
+        "R4.1.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S22"
+      ],
+      "anchors": [
+        "src/lib/scoring/"
+      ],
+      "phase": "R4",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R4.3.1",
+      "subphase": "R4.3",
+      "lane": "data",
+      "title": "crawlability_audits history and change detection",
+      "detail": "'Your site started blocking GPTBot on Tuesday' becomes an event — our first detector.",
+      "accept": "Audit history persists; a change between runs raises a detected event.",
+      "deps": [
+        "R3.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S23"
+      ],
+      "anchors": [
+        "supabase/migrations/",
+        "src/lib/crawlers/"
+      ],
+      "phase": "R4",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R4.4.1",
+      "subphase": "R4.4",
+      "lane": "backend",
+      "title": "AI-referral capture",
+      "detail": "GA4 read or a first-party snippet attributing sessions from known AI referrers. Prerequisite for any causal lift claim.",
+      "accept": "Sessions from AI referrers are attributed and stored; the method is documented.",
+      "deps": [
+        "R4.3.1"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "findings": [
+        "S24"
+      ],
+      "anchors": [
+        "src/lib/analytics/"
+      ],
+      "phase": "R4",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R4.5.1",
+      "subphase": "R4.5",
+      "lane": "backend",
+      "title": "Decide-or-delete pass on schema-only subsystems",
+      "detail": "topics, content_feedback reads, the phantom 'analyzing' status — wire or delete, per item, with the decision recorded.",
+      "accept": "Each item is either wired with a test or deleted with its schema; the decision is recorded in the build journal.",
+      "deps": [
+        "R4.4.1"
+      ],
+      "tags": [
+        "needs-decision"
+      ],
+      "findings": [],
+      "anchors": [
+        "supabase/migrations/",
+        "src/lib/"
+      ],
+      "phase": "R4",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.1.1",
+      "subphase": "R5.1",
+      "lane": "backend",
+      "title": "Provider-neutral LLM config",
+      "detail": "LLM_BASE_URL / LLM_MODEL / LLM_API_KEY. MiMo quirks (max_completion_tokens, thinking-disable, JSON-lines) documented in docs/vendors/.",
+      "accept": "No OPENROUTER_* name remains for a non-OpenRouter provider; the vendor doc exists.",
+      "deps": [
+        "R0.3.1"
+      ],
+      "tags": [],
+      "findings": [
+        "C4",
+        "S19"
+      ],
+      "anchors": [
+        "src/lib/openrouter.js",
+        "docs/vendors/"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.1.2",
+      "subphase": "R5.1",
+      "lane": "docs",
+      "title": "Key re-enable checklist",
+      "detail": "check:secrets passes, then one metered call proves cost lands non-zero in the price table, then SOV surfaces exit 'not assessed'. Nothing else in R5 starts before this.",
+      "accept": "Checklist committed and executed; each of the three gates is evidenced.",
+      "deps": [
+        "R5.1.1",
+        "R0.1.6",
+        "R3.6.1"
+      ],
+      "tags": [
+        "needs-llm",
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [
+        "docs/"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.2.1",
+      "subphase": "R5.2",
+      "lane": "backend",
+      "title": "Kill the fabricated studio.perceev.app URL",
+      "detail": "Approval is not publication. The synthesized URL is stored as a content event and feeds real lift attribution.",
+      "accept": "No URL is synthesized on approval; the fabricated-URL path is deleted with its test.",
+      "deps": [
+        "R5.1.2"
+      ],
+      "tags": [],
+      "findings": [
+        "B13"
+      ],
+      "anchors": [
+        "src/app/api/content-items/[id]/decision/route.js:19-27",
+        "src/app/api/content-items/[id]/decision/route.js:93-102"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.2.2",
+      "subphase": "R5.2",
+      "lane": "backend",
+      "title": "Explicit publish step with verification",
+      "detail": "The operator pastes the real live URL; the system verifies it resolves and the content matches before the stage flips to PUBLISHED.",
+      "accept": "PUBLISHED is reachable only through a verified live URL; a mismatched page is rejected.",
+      "deps": [
+        "R5.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S5"
+      ],
+      "anchors": [
+        "src/app/api/content-items/"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.2.3",
+      "subphase": "R5.2",
+      "lane": "frontend",
+      "title": "Lift copy honest until PUBLISHED exists",
+      "detail": "'Since approval' with the correlation caveat. Add the known-open ledger row: approve-to-publish-to-lift is unproven end to end.",
+      "accept": "Lift copy reads 'since approval' with the caveat; the known-open row exists in the build journal.",
+      "deps": [
+        "R5.2.2"
+      ],
+      "tags": [],
+      "findings": [
+        "B13"
+      ],
+      "anchors": [
+        "src/components/studio/ContentItemView.jsx:246-259"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.3.1",
+      "subphase": "R5.3",
+      "lane": "backend",
+      "title": "Benchmark step grounded in winners",
+      "detail": "Feed top-cited competitor pages — we already store per-answer citations — into research and benchmark context.",
+      "accept": "The benchmark step consumes real top-cited pages; a trace shows which pages were used.",
+      "deps": [
+        "R5.1.2"
+      ],
+      "tags": [
+        "needs-llm"
+      ],
+      "findings": [],
+      "anchors": [
+        "src/lib/content/"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.3.2",
+      "subphase": "R5.3",
+      "lane": "backend",
+      "title": "Fact-check on revision cycles too, cost-gated",
+      "detail": "Fact-checking currently runs only on the first pass.",
+      "accept": "Revisions are fact-checked within the cost gate; the gate is enforced from the ledger.",
+      "deps": [
+        "R5.3.1",
+        "R3.6.2"
+      ],
+      "tags": [
+        "needs-llm"
+      ],
+      "findings": [],
+      "anchors": [
+        "src/lib/content/"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.3.3",
+      "subphase": "R5.3",
+      "lane": "backend",
+      "title": "Rubric versioning on review verdicts",
+      "detail": "So quality trend is measurable across prompt-skill edits.",
+      "accept": "Every verdict carries a rubric version; trend queries group by it.",
+      "deps": [
+        "R5.3.2"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/content/"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.4.1",
+      "subphase": "R5.4",
+      "lane": "test",
+      "title": "Lessons loop test",
+      "detail": "A stored lesson demonstrably alters a later draft, asserted through the trace.",
+      "accept": "A test proves a stored lesson changed a subsequent draft.",
+      "deps": [
+        "R5.3.3"
+      ],
+      "tags": [
+        "needs-llm"
+      ],
+      "findings": [],
+      "anchors": [
+        "src/lib/content/"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.4.2",
+      "subphase": "R5.4",
+      "lane": "backend",
+      "title": "Weekly report integrity",
+      "detail": "Real period labels, generated-at plus scan dates rendered, gated scans excluded, a hollow-section state on LLM failure instead of an empty heading.",
+      "accept": "All four hold; a fixture with a gated scan and an LLM failure renders honestly.",
+      "deps": [
+        "R5.1.2",
+        "R3.6.3"
+      ],
+      "tags": [
+        "needs-llm"
+      ],
+      "findings": [
+        "C3"
+      ],
+      "anchors": [
+        "src/lib/content/weeklyReport.js:22-40",
+        "src/components/studio/WeeklyReport.jsx:91-137"
+      ],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R5.4.3",
+      "subphase": "R5.4",
+      "lane": "test",
+      "title": "One end-to-end run on a real brand",
+      "detail": "Scan, gap, batch, draft, approval, manual publish, next-scan lift readout. The chain has never run whole; this is the acceptance test.",
+      "accept": "The whole chain completes once on a real brand with each stage evidenced.",
+      "deps": [
+        "R5.4.2",
+        "R5.2.2",
+        "R3.1.2"
+      ],
+      "tags": [
+        "needs-llm",
+        "needs-secrets"
+      ],
+      "findings": [],
+      "anchors": [],
+      "phase": "R5",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.1.1",
+      "subphase": "R6.1",
+      "lane": "data",
+      "title": "Migrations ledger and transaction per file",
+      "detail": "schema_migrations table; verify-list updated (006 is missing today); resolve the 007 numbering collision with plan.md's pre-assignments.",
+      "accept": "setup:db records what it applied, wraps each file in a transaction, and reports a DB missing 006 as incomplete.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "C10",
+        "S26"
+      ],
+      "anchors": [
+        "scripts/setup-supabase.mjs:52-96"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.1.2",
+      "subphase": "R6.1",
+      "lane": "docs",
+      "title": "docs/PROD_MIGRATIONS.md with per-migration verification queries",
+      "detail": "Standing rule: run the SQL with the merge, never after — paid for twice already.",
+      "accept": "Every migration has a verification query; the standing rule is stated.",
+      "deps": [
+        "R6.1.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S26"
+      ],
+      "anchors": [
+        "docs/"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.2.1",
+      "subphase": "R6.2",
+      "lane": "docs",
+      "title": "docs/OPERATOR_LEDGER.md",
+      "detail": "Everything a human must still do, and why.",
+      "accept": "Ledger committed covering secrets, migrations, key rotation and content approval.",
+      "deps": [
+        "R0.2.2"
+      ],
+      "tags": [],
+      "findings": [
+        "S27"
+      ],
+      "anchors": [
+        "docs/"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.2.2",
+      "subphase": "R6.2",
+      "lane": "docs",
+      "title": "docs/RUNBOOK.md seeded with 10 symptom rows",
+      "detail": "Dashboard empty, score 0 percent, SOV 100 percent, costs $0, job never runs, probe block spike, split brand history, content stuck, citations zero, sources 0 beside domains 14.",
+      "accept": "All ten rows present, each naming the symptom and what to look at.",
+      "deps": [
+        "R6.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S27"
+      ],
+      "anchors": [
+        "docs/"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.3.1",
+      "subphase": "R6.3",
+      "lane": "docs",
+      "title": "Vendor contract docs",
+      "detail": "Bright Data SERP shape, Perplexity UI and API, ChatGPT UI, MiMo, Firecrawl — plus the gateway-catalog lesson that a model id valid on one gateway is not valid on another.",
+      "accept": "One doc per vendor under docs/vendors/, each with the response shape and known quirks.",
+      "deps": [
+        "R5.1.1"
+      ],
+      "tags": [],
+      "findings": [
+        "S19"
+      ],
+      "anchors": [
+        "docs/vendors/"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.4.1",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "Guard: route-perimeter walker",
+      "detail": "Every API route gates or is on the explicit public allowlist.",
+      "accept": "The guard walks src/app/api and fails on an ungated route not on the allowlist.",
+      "deps": [
+        "R0.1.3"
+      ],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        "src/app/api/"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.4.2",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "Guard: fail-loud walker",
+      "detail": "No bare catch {} or return-{error} writes in the scan path.",
+      "accept": "The guard fails on a reintroduced bare catch or fail-soft write helper in the scan path.",
+      "deps": [
+        "R2.2.3"
+      ],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        "src/lib/"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.4.3",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "Guard: infra vendors never in rendered copy, engine names required",
+      "detail": "Both directions, following the white-label test's trick. Bright Data, MiMo and Firecrawl must never be user-visible; engine names must remain.",
+      "accept": "The guard fails in both directions on a deliberate violation.",
+      "deps": [
+        "R6.4.2"
+      ],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        "src/components/"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.4.4",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "Guard: engine-count-agnostic UI",
+      "detail": "No surface may assume a fixed number of engines.",
+      "accept": "The guard fails when a surface hard-codes an engine count.",
+      "deps": [
+        "R6.4.3"
+      ],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        "src/components/"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.5.1",
+      "subphase": "R6.5",
+      "lane": "test",
+      "title": "Route tests for the money paths and Bright Data parser fixtures",
+      "detail": "The live AIO transport has zero direct coverage today.",
+      "accept": "POST /api/scan, both workers and the Bright Data parser have tests; parser fixtures cover a real response shape.",
+      "deps": [
+        "R0.4.3"
+      ],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        "src/app/api/",
+        "src/lib/engines/brightdata.js"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.5.2",
+      "subphase": "R6.5",
+      "lane": "test",
+      "title": "The great deletion",
+      "detail": "Dead scorer, dead probes, dead registries, repo debris — deleted with their tests, so the count is honest.",
+      "accept": "Dead code removed with its suites; the test count before and after is recorded in the build journal.",
+      "deps": [
+        "R6.5.1",
+        "R1.7.3"
+      ],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        "src/lib/"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [],
+      "verification": null
+    }
+  ]
+}
