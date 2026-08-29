@@ -26,6 +26,11 @@ import {
 import { generateUnbrandedPrompts } from "../scoring/promptGen.js";
 import { extractCompetitors } from "../scoring/competitorExtract.js";
 import { resolveCompetitorRoster } from "../scoring/rosterContinuity.js";
+import {
+  classifyPromptSource,
+  PromptSourcingUnavailableError,
+} from "../scoring/promptSource.js";
+import { isLlmUnavailable } from "../llmErrors.js";
 import { summarizeAioResults, aggregateAioTopDomains } from "../scoring/aioPipeline.js";
 import {
   summarizeEngineResults,
@@ -187,7 +192,13 @@ export async function sourceUnbrandedQueries(brand, url, industry, stats, brandA
     .map(mapDbPromptRow);
 
   if (existing.length >= target) {
-    return { queries: existing.slice(0, target), newlyGenerated: [], promptKey };
+    const reused = existing.slice(0, target);
+    return {
+      queries: reused,
+      newlyGenerated: [],
+      promptKey,
+      ...classifyPromptSource(reused),
+    };
   }
 
   const seen = new Set(existing.map((q) => queryTextKey(q.text)));
@@ -197,7 +208,17 @@ export async function sourceUnbrandedQueries(brand, url, industry, stats, brandA
   while (merged.length < target && attempts < MAX_SOURCING_ATTEMPTS) {
     attempts++;
     const shortfall = target - merged.length;
-    const generated = await generate(brand, url, industry, stats, shortfall);
+    let generated;
+    try {
+      generated = await generate(brand, url, industry, stats, shortfall);
+    } catch (err) {
+      // B7: the LLM being off used to end in a silent top-up from the static
+      // industry pack, published as a generated set. Abort loudly instead —
+      // typed, and naming the stage so an operator is not left guessing which
+      // of the scan's LLM calls died.
+      if (isLlmUnavailable(err)) throw new PromptSourcingUnavailableError(brand, err);
+      throw err;
+    }
     for (const q of generated) {
       const key = queryTextKey(q.text);
       if (seen.has(key)) continue;
@@ -213,10 +234,14 @@ export async function sourceUnbrandedQueries(brand, url, industry, stats, brandA
     );
   }
 
+  const queries = merged.slice(0, target);
   return {
-    queries: merged.slice(0, target),
+    queries,
     newlyGenerated: merged.slice(existing.length),
     promptKey,
+    // Provenance travels with the set: if the static industry pack was used,
+    // the scan says so rather than presenting generic questions as generated.
+    ...classifyPromptSource(queries),
   };
 }
 
@@ -365,7 +390,17 @@ export async function runSourcingPhase(job, deps = {}) {
     queries: unbrandedQueries,
     newlyGenerated,
     promptKey,
+    prompt_source: promptSource,
+    static_pack_prompts: staticPackPrompts,
   } = await sourceQueries(brand, url, industry, stats, brandAliases, deps);
+
+  if (staticPackPrompts > 0) {
+    console.warn(
+      `[scan-chunk] "${brand}" prompt set includes ${staticPackPrompts}/${unbrandedQueries.length} ` +
+        `prompts from the static industry pack — recorded as prompt_source=${promptSource} on the scan. ` +
+        `These questions were not chosen for this brand.`
+    );
+  }
 
   const brandedQueries = buildBranded(brand, url).filter((q) => {
     const key = queryTextKey(q.text);
@@ -407,6 +442,8 @@ export async function runSourcingPhase(job, deps = {}) {
     competitors,
     competitors_raw: competitorsRaw,
     prompt_key: promptKey,
+    prompt_source: promptSource,
+    static_pack_prompts: staticPackPrompts,
     queries,
     unbranded_texts: unbrandedQueries.map((q) => q.text.toLowerCase().trim()),
     engines: enabledEngineNames,
@@ -596,6 +633,8 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
     competitors_raw: competitorsRaw,
     unbranded_texts: unbrandedTexts,
     prompt_key: promptKey,
+    prompt_source: promptSource,
+    static_pack_prompts: staticPackPrompts,
   } = checkpoint;
 
   const results = allRows.map((r) => r.raw);
@@ -772,6 +811,9 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
     scoring_version: scoringVersion,
     prompt_set_id,
     prompt_set_hash,
+    // B7: where this scan's questions came from. `null` on pre-R0.3.4 scans.
+    prompt_source: promptSource ?? null,
+    static_pack_prompts: staticPackPrompts ?? null,
     brand_citation_share_pct: summary.citation_share_pct,
     branded_visibility_pct: summary.branded_visibility_pct,
     aio_error_rate_pct: summary.error_rate_pct,

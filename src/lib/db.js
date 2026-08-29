@@ -82,6 +82,9 @@ export async function insertScan(scanRecord) {
     sample_size_adequacy: scanRecord.sample_size_adequacy,
     prompt_set_id: scanRecord.prompt_set_id,
     prompt_set_hash: scanRecord.prompt_set_hash,
+    // R0.3.4: "llm_generated" or "static_industry_pack" — null on older scans.
+    prompt_source: scanRecord.prompt_source ?? null,
+    static_pack_prompts: scanRecord.static_pack_prompts ?? null,
     intent_breakdown: scanRecord.intent_breakdown,
     topic_scores: scanRecord.topic_scores,
     share_of_voice_pct: scanRecord.share_of_voice_pct,

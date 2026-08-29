@@ -458,11 +458,35 @@
         "src/lib/prompts.js"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/scoring/promptSource.js:45",
+        "src/lib/scoring/promptSource.js:68",
+        "src/lib/workers/scanWorker.js:219",
+        "src/lib/workers/scanWorker.js:815",
+        "src/lib/db.js:88",
+        "src/lib/workers/promptSourcing.test.mjs:170",
+        "src/lib/workers/promptSourcing.test.mjs:208",
+        "src/lib/scoring/promptSource.test.mjs:24"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-29T15:22:15.167Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:24:41.835Z",
+          "by": "rebuild-implementer",
+          "text": "Both accept paths implemented and tested. ABORT: sourceUnbrandedQueries wraps only isLlmUnavailable errors in PromptSourcingUnavailableError (subclass of LlmUnavailableError, stage='sourcing', cause preserved); a non-LLM generation failure is re-thrown untouched, covered by its own test. RECORD: classifyPromptSource marks a set static_industry_pack if ANY prompt carries promptGen's industry_fallback stamp; it flows onto the checkpoint, the scan record and raw_results.prompt_source, and the reused-pool early return reports it too. A source-text guard fails if promptGen renames the stamp — proven by renaming it and watching the guard fail."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-29T15:24:41.877Z",
+        "note": "Exercised: 11 tests in promptSourcing.test.mjs (real sourceUnbrandedQueries, injected generator) prove the typed abort on a new brand with no persisted pool, the pass-through of a non-LLM error, and prompt_source=static_industry_pack on both the top-up and reused-pool paths; 6 in promptSource.test.mjs cover the classifier and the error. Guard teeth proven by renaming promptGen's industry_fallback literal and watching it fail. Full suite 635/635 green with local dependency stubs (623 before this task)."
+      }
     },
     {
       "id": "R0.4.1",
