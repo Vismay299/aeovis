@@ -117,11 +117,31 @@
         "src/app/chart-preview/page.js:17-30"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/scoring/publicRouteExposure.test.mjs:49",
+        "src/lib/scoring/publicRouteExposure.test.mjs:55",
+        "src/components/dashboard/RankAndSharePanel.jsx:9",
+        "src/components/dashboard/SectionStrap.jsx:5"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-29T15:28:18.627Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:29:33.876Z",
+          "by": "rebuild-implementer",
+          "text": "DELETED rather than gated — the safer of the two options the task offered. Gating leaves a named customer's real visibility numbers in the repository and in every build; deleting removes the route AND the data. The harness's own docstring said it was safe to delete once its components were wired into the real dashboard, and they now are. Deleting the page file is also what makes the URL 404 under Next's app router, which is a stronger guarantee than an auth check nobody in this environment can exercise. Two dangling doc references updated. FINDING CORRECTION: C12 says the page renders a live trend from the production DB; it does not — the data was hardcoded constants copied from the DB by hand. Same exposure, different mechanism."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-29T15:29:33.914Z",
+        "note": "Exercised by a 3-test route walker over src/app: chart-preview is absent, no public page route mentions a real customer identifier, and no page route still self-describes as a temporary harness. Teeth proven by git-stashing the deletion — all three tests fail with the file restored, all three pass without it. Confirmed the only two remaining repo references to the route were prose comments, both updated. Suite 649/649 green."
+      }
     },
     {
       "id": "R0.1.3",

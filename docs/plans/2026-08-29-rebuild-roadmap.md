@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**4 / 121 closed** · 0 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**5 / 121 closed** · 0 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -20,14 +20,14 @@ Baseline commit: `5111219`
 6. Trust source, git log, and the tracker over any prose claiming completeness; close items with file:line in the same commit.
 7. Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes.
 
-## R0 — Ground zero  `4/17`
+## R0 — Ground zero  `5/17`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
 ### R0.1
 
 - [ ] **R0.1.1** CRON_SECRET set and both worker gates fail closed in prod `needs-vercel`
-- [ ] **R0.1.2** Gate or delete /chart-preview
+- [x] **R0.1.2** Gate or delete /chart-preview — closed at `src/lib/scoring/publicRouteExposure.test.mjs:49`, `src/lib/scoring/publicRouteExposure.test.mjs:55`, `src/components/dashboard/RankAndSharePanel.jsx:9`, `src/components/dashboard/SectionStrap.jsx:5`
 - [ ] **R0.1.3** Minimal operator perimeter in src/middleware.js
 - [ ] **R0.1.4** Per-IP rate limit on POST /api/scan
 - [ ] **R0.1.5** Unique partial index on scan_jobs(brand) while running

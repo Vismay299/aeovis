@@ -2,7 +2,7 @@
  * Broadcast strap — the condensed-caps segment marker DESIGN.md calls for
  * ("Section kickers are broadcast straps: condensed caps on a gold-keyline
  * strap. Not an eyebrow grammar — straps mark segments, like a rundown.").
- * Mirrors the `Strap` proven in src/app/chart-preview/page.js so the new
+ * Mirrors the `Strap` from the deleted /chart-preview design harness so the new
  * Overview analytics blocks read as the same "Results Night" rundown as the
  * chart-library design harness.
  */

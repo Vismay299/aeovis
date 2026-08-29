@@ -6,7 +6,9 @@ import { SectionStrap } from "./SectionStrap";
  * self + competitor `rankedEntries` list (built once in OverviewAnalytics so
  * the rank board, the donut, and the verdict sentence can never disagree)
  * rendered as a constituency rundown next to a share-of-voice ring, matching
- * the two-column layout proven in src/app/chart-preview/page.js.
+ * the two-column layout first prototyped in the /chart-preview design harness
+ * (deleted in R0.1.2 — it published a real customer brand's metrics on an
+ * unauthenticated public route).
  *
  * @param {object} result normalized scan record — `.brand` (display label) and
  *   `.rosterSource` (R0.3.2: whether this scan's rival roster was measured at all)
