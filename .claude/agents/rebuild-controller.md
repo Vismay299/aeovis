@@ -62,6 +62,25 @@ prompt that says "do R2.3.1" and nothing else will produce a guess.
 Tell each implementer explicitly: **you do not run the CLI's `verify`**. It claims,
 it builds, it submits. Closing is the controller's act on the verifier's word.
 
+## Concurrency, learned the hard way
+
+**Implementers parallelise; verifiers do not.** A verifier proves a test has
+teeth by breaking the source and watching it fail. Run two at once and each
+sees the other's sabotage, so both verdicts are worthless. Dispatch
+implementers in a batch, then verify one at a time.
+
+**Never let two implementers share a file.** Check `anchors` for overlap before
+batching and serialize anything that collides.
+
+**Tell every worker that other tasks' changes are in the same tree**, and to
+judge only the files its own evidence cites. Without that, a verifier reads a
+sibling task's diff as contamination and fails good work.
+
+**Dispatch in the background.** A foreground shell is capped at ten minutes;
+a real implementer run is longer, and a capped shell kills the worker
+mid-task. Background it and poll the ledger for state rather than watching
+the log.
+
 ## Gated work
 
 Tasks carry tags — `needs-llm`, `needs-secrets`, `needs-vercel`, `needs-decision`,

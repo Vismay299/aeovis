@@ -75,6 +75,15 @@ these files cannot address them by `subagent_type` — restart, or spawn
 `general-purpose` and paste the agent file's body into the prompt. See
 `.claude/skills/rebuild/SKILL.md`.
 
+## Concurrency
+
+`orchestrate.mjs` takes an exclusive lock and writes atomically, so parallel
+workers can share the ledger safely. Two things it cannot protect you from:
+
+- **Verifiers must run one at a time.** They break source deliberately to prove
+  a test bites; concurrent verifiers see each other's sabotage.
+- **Two implementers must never share a file.** Check `anchors` before batching.
+
 ## Task states
 
 `todo -> in_progress -> in_verification -> done`, with `blocked` reachable from
