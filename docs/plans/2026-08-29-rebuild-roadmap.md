@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**6 / 121 closed** · 1 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**7 / 121 closed** · 1 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -20,7 +20,7 @@ Baseline commit: `5111219`
 6. Trust source, git log, and the tracker over any prose claiming completeness; close items with file:line in the same commit.
 7. Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes.
 
-## R0 — Ground zero  `6/17`
+## R0 — Ground zero  `7/17`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -32,7 +32,7 @@ Baseline commit: `5111219`
 - [ ] **R0.1.4** Per-IP rate limit on POST /api/scan
 - [x] **R0.1.5** Unique partial index on scan_jobs(brand) while running — closed at `supabase/migrations/007_scan_seal.sql:25`, `src/lib/duplicateScan.js:56`, `src/lib/duplicateScan.js:41`, `src/lib/db.js:383`, `src/app/api/scan/route.js:49`, `src/lib/duplicateScan.test.mjs:72`
 - [ ] **R0.1.6** scripts/check-secrets.mjs — smallest live call per vendor
-- [ ] **R0.1.7** /api/health route
+- [x] **R0.1.7** /api/health route — closed at `src/app/api/health/route.js:29`, `src/lib/health.js:61`, `src/lib/health.js:38`, `src/lib/db/analytics.js:494`, `src/lib/db/analytics.js:510`, `supabase/migrations/008_system_heartbeats.sql:12`, `src/lib/health.test.mjs:23`, `src/app/api/scan/worker/route.js:47`
 ### R0.2
 
 - [ ] **R0.2.1** Create docs/BUILD_JOURNAL.md seeded with the 37 findings

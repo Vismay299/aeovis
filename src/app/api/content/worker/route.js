@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/cronAuth";
+import { recordCronTick } from "@/lib/db/analytics";
 import { supabase } from "@/lib/db";
 import { listResumableContentJobs } from "@/lib/db/content";
 import { acquireLease, newLeaseOwner } from "@/lib/jobLease";
@@ -83,6 +84,10 @@ export async function GET(request) {
   if (!isAuthorized(request, searchParams)) {
     return NextResponse.json({ detail: "Unauthorized." }, { status: 401 });
   }
+
+  // R0.1.7: record the tick AFTER the auth gate, so a rejected request never
+  // makes a dead cron look alive on /api/health. Non-fatal by design.
+  await recordCronTick("content-worker");
 
   if (!supabase) {
     return NextResponse.json({

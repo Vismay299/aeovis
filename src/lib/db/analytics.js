@@ -478,6 +478,44 @@ export async function getResultBrandsForScan(scanId, deps = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// system heartbeats (migration 008) — "did the cron actually fire?"
+// ---------------------------------------------------------------------------
+
+global.memorySystemHeartbeats = global.memorySystemHeartbeats || new Map();
+
+/**
+ * Record that a named scheduled job ran. Called by the worker routes AFTER
+ * their auth gate, so a rejected request never looks like a healthy tick.
+ *
+ * Deliberately non-fatal: a heartbeat write failing must not fail the worker
+ * run it is only observing. It IS logged, so a systematically broken
+ * heartbeat does not become invisible.
+ */
+export async function recordCronTick(name, detail = null, deps = {}) {
+  const row = { name, last_tick_at: new Date().toISOString(), detail };
+  const client = resolveClient(deps);
+  if (!client) {
+    global.memorySystemHeartbeats.set(name, row);
+    return row;
+  }
+  const { error } = await client.from("system_heartbeats").upsert([row], { onConflict: "name" });
+  if (error) {
+    console.warn(`[heartbeat] could not record the "${name}" tick: ${error.message}`);
+    return null;
+  }
+  return row;
+}
+
+/** Every recorded ticker, for /api/health. */
+export async function getCronTicks(deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) return Array.from(global.memorySystemHeartbeats.values());
+  const { data, error } = await client.from("system_heartbeats").select("*");
+  if (error) throw error;
+  return data || [];
+}
+
+// ---------------------------------------------------------------------------
 // finalize: stamp scan_id
 // ---------------------------------------------------------------------------
 
