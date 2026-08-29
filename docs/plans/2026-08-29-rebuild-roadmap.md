@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**10 / 125 closed** · 9 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**10 / 126 closed** · 9 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -21,7 +21,7 @@ Baseline commit: `5111219`
 7. Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes.
 8. Closing a task is an act on a verifier's word, never the implementer's. The agent that wrote the code never closes it.
 
-## R0 — Ground zero  `10/19`
+## R0 — Ground zero  `10/20`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -41,6 +41,7 @@ Baseline commit: `5111219`
 - [-] **R0.2.1** Create docs/BUILD_JOURNAL.md seeded with the 37 findings — blocked: needs-decision
 - [-] **R0.2.2** Tracker rule in force; status headers on all plans — blocked: needs-decision
 - [-] **R0.2.3** Supersede the SerpAPI ADR with a dated Bright Data ADR — blocked: needs-decision
+- [~] **R0.2.4** Correct the false evidence claims in the Bright Data ADR — submitted `docs/decisions/2026-08-29-serp-provider-bright-data.md:70`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:87`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:109`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:126`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:203`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:239`, `src/lib/engines/serp.js:14`, `src/lib/engines/serp.js:23`, `src/lib/engines/serp.js:62`, `src/lib/engines/serp.js:189`, `src/lib/engines/serp.js:212`, `src/lib/engines/serp.js:287`, `src/lib/engines/serp.js:335`, `src/lib/scoring/promptGen.js:127`, `src/lib/scoring/probe.js:99`, `src/lib/engines/types.js:47`, `src/lib/engines/types.test.mjs:114`, `src/lib/engines/serp.test.mjs:65`, `scripts/check-secrets.mjs:79`
 ### R0.3
 
 - [x] **R0.3.1** openrouter.js throws LlmUnavailableError instead of returning empty text — closed at `src/lib/llmErrors.js:15`, `src/lib/openrouter.js:26`, `src/lib/openrouter.js:134`, `src/lib/llm.js:3`, `src/lib/openrouter.test.mjs:70`, `src/lib/openrouter.test.mjs:81`, `src/lib/analytics/citationEnrich.js:528`

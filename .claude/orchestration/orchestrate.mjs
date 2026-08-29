@@ -321,7 +321,14 @@ const cmds = {
           out.push("");
         }
         const tags = t.tags.length ? ` \`${t.tags.join("` `")}\`` : "";
-        const ev = t.evidence.length ? ` — closed at ${t.evidence.map((e) => `\`${e}\``).join(", ")}` : "";
+        // Label evidence by state. A task in verification has *submitted*
+        // citations, not closed ones — rendering "closed at" on unclosed work
+        // is precisely the false-success class this rebuild exists to remove,
+        // and the tracker is not exempt from its own standard.
+        const evLabel = t.status === "done" ? "closed at" : "submitted";
+        const ev = t.evidence.length
+          ? ` — ${evLabel} ${t.evidence.map((e) => `\`${e}\``).join(", ")}`
+          : "";
         const blockNote = t.status === "blocked" ? ` — blocked: ${t.blocked_reason}` : "";
         out.push(`- ${mark(t)} **${t.id}** ${t.title}${tags}${ev}${blockNote}`);
       }

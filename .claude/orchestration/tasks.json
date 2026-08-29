@@ -552,6 +552,65 @@
       "blocked_reason": "needs-decision"
     },
     {
+      "id": "R0.2.4",
+      "subphase": "R0.2",
+      "lane": "docs",
+      "title": "Correct the false evidence claims in the Bright Data ADR",
+      "detail": "The ADR asserts SERPAPI_KEY survives in exactly two places (types.js and a test fixture) and that neither makes a SerpAPI call. Both claims are false at HEAD: getSerpProvider() at src/lib/engines/serp.js:14 falls back to serpapi whenever a key is present, serpFetch issues a live https://serpapi.com/search request at :62, and src/lib/scoring/promptGen.js:2 imports fetchPeopleAlsoAsk, so a SERPAPI_KEY-only deployment still spends at prompt-generation time. R1.7.3 is planned from this ADR, so the error propagates. Correct the evidence section, keep the decision, and cross-reference R1.7.4.",
+      "accept": "The ADR describes the real call paths at verified file:line; no claim in it contradicts source at HEAD; the R1.7.4 follow-up is linked from it.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:44",
+        "src/lib/engines/serp.js:14",
+        "src/lib/engines/serp.js:62",
+        "src/lib/scoring/promptGen.js:2"
+      ],
+      "phase": "R0",
+      "status": "in_verification",
+      "owner": "rebuild-scribe",
+      "evidence": [
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:70",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:87",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:109",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:126",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:203",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:239",
+        "src/lib/engines/serp.js:14",
+        "src/lib/engines/serp.js:23",
+        "src/lib/engines/serp.js:62",
+        "src/lib/engines/serp.js:189",
+        "src/lib/engines/serp.js:212",
+        "src/lib/engines/serp.js:287",
+        "src/lib/engines/serp.js:335",
+        "src/lib/scoring/promptGen.js:127",
+        "src/lib/scoring/probe.js:99",
+        "src/lib/engines/types.js:47",
+        "src/lib/engines/types.test.mjs:114",
+        "src/lib/engines/serp.test.mjs:65",
+        "scripts/check-secrets.mjs:79"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-29T16:40:23.506Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-08-29T16:40:58.235Z",
+          "by": "rebuild-scribe",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T16:49:26.594Z",
+          "by": "rebuild-scribe",
+          "text": "Evidence section of the Bright Data ADR rewritten; DECISION UNCHANGED. Every file:line below was read at 6308cb7 before it was written, and re-printed from source in a final pass. WHAT WAS FALSE: (1) 'Neither makes a SerpAPI call' was never true at any commit -- serp.js:62 is a live fetch to https://serpapi.com/search, reached from :189 (AIO probe), :224 (deferred page_token, a second billed call) and :335 (PAA), selected by getSerpProvider() at :14 on a SERPAPI_KEY-only deployment, and charged at :212 ($0.01) / :230 (+$0.01). git diff b6e3610 HEAD -- src/lib/engines/serp.js is EMPTY, so the path was live when the ADR was written too. (2) 'Bright Data is the only SERP provider actually invoked for AIO probing' -- false for the same reason; corrected to 'the only one invoked when its key is present' with the preference-order citations serp.js:13, :164-165, :323-325. (3) The types.js:43 half was TRUE when written (git show b6e3610:src/lib/engines/types.js line 43 = 'const serpConfigured = process.env.BRIGHTDATA_API_KEY || process.env.SERPAPI_KEY;') and went stale 37 minutes later at 6308cb7 -- recorded as stale-not-wrong so the next reader does not distrust the citation habit itself. R0.1.9 SCOPE MADE EXPLICIT (new section 4): it changed the CAPABILITY CHECK only (types.js:47, tests types.test.mjs:55/:65/:71) and did not touch serp.js at all; the spend path is untouched by it. R1.7.4 LINKED from Follow-ups #2 and from evidence 3a, with the exact ungated chain promptGen.js:2 -> :127 -> fetchPeopleAlsoAsk -> isSerpConfigured() serp.js:312 -> getSerpProvider() :317 -> serpFetch :335, and the fact that it never consults getEnabledEngines(). Stale Follow-up #1 ('remove the types.js branch') struck through and marked done by R0.1.9/6308cb7 rather than deleted. OTHER FALSE OR IMPRECISE CLAIMS FIXED IN THE SAME PASS: (a) the ADR called the SerpAPI alternative 'superseded in practice' -- it is demoted in preference order, not removed, and remains reachable and billable; (b) 'no cost figure is available in the repository' omitted serp.js:287, which hard-codes 'const cost = 0.0015;' for Bright Data and feeds every scan cost total -- now flagged as an assumption, not a measurement; (c) the check:secrets claim was imprecise -- scripts/check-secrets.mjs:79 always calls get_all_zones and NEVER reads BRIGHTDATA_SERP_ZONE, whereas brightdata.js:10-11 short-circuits on it, so the check can FAIL on a working account and PASS on a misconfigured zone; (d) the no-active-serp-zone failure mode is silent, not loud -- brightdata.js:29 throws and serp.js:301-307 catches it and returns google_ai_overview-skipped with cost 0.0; (e) 'R0.4.1 baseline corpus' now states that test_reports/baseline-2026-08/ holds protocol docs and ZERO archived scans. NEW FINDING, not previously recorded anywhere: the R0.1.9 drift guard at types.test.mjs:113-132 reads only types.js, health.js and check-secrets.mjs (source list at :114-118) -- serp.js is NOT in its scope, so nothing in the suite would fail if the SerpAPI request path grew back. Noted in evidence 5 and attached to Follow-up #1 for R1.7.3. Also recorded: SERPAPI_KEY appears in NO operator-facing surface (.env.example, README.md, health.js, check-secrets.mjs) while still being honoured by code -- the trap that produced the original error. NO SOURCE CODE EDITED: git diff touches only the ADR and tasks.json. npm run test:scoring 836/836 pass; docStatus guard 10/10; LIVE status header and supersession link to serp-provider.md preserved. NOT DONE / UNVERIFIED: I did not add a BUILD_JOURNAL entry -- that file's stated scope is silently-wrong NUMBERS in code, and this was a false claim in a document; if the verifier wants it journalled, say so and it is a two-line append. The ADR's Context claim that production has run on Bright Data 'for some time' is NOT verifiable from this repository; it is now explicitly listed under 'not asserted', with the only in-repo corroboration being the 93.3% Italica answer yield at docs/BUILD_JOURNAL.md:37-38."
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R0.3.1",
       "subphase": "R0.3",
       "lane": "backend",
