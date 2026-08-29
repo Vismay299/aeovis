@@ -328,6 +328,11 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
       competitorsRaw,
       competitorsConfigured,
       competitorsFound,
+      // R0.3.2/R0.3.3: how this scan's rival roster was obtained
+      // ("extracted" / "carried_forward" / "unavailable"). null on scans
+      // taken before R0.3.3, which are treated as measured.
+      rosterSource:
+        data.rosterSource ?? data.roster_source ?? (data.raw_results || {}).roster_source ?? null,
       brandPresenceResults,
       brandPresencePromptsCount,
       brandedPromptsCount,
@@ -519,6 +524,8 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     brand,
     website,
     industry: data.industry ?? "",
+    // See the note on the already-normalized branch above.
+    rosterSource: data.roster_source ?? raw.roster_source ?? null,
     visibilityScore: visibilityPct,
     /** Hero metric — same value as visibilityScore, named for the "Share of AI answers" hero. */
     shareOfAiPct,

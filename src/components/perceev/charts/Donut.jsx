@@ -1,6 +1,7 @@
 'use client';
 
 import { formatPercent, neutralRampVar } from './chartMath';
+import { describeRosterState } from '@/lib/scoring/rosterContinuity';
 
 /**
  * Share of the line.
@@ -24,7 +25,13 @@ export const Donut = ({
   showLegend = true,
   keyline = null,
   testId = 'sov-donut',
+  rosterSource = null,
 }) => {
+  // R0.3.2: with one segment (self alone) the share arithmetic below produces
+  // a confident 100%. That is only true if the extractor RAN and found no
+  // rivals. `rosterSource` says which happened; when it says the extractor was
+  // offline this renders the state instead of the number.
+  const rosterState = describeRosterState(rosterSource);
   const safe = Array.isArray(segments) ? segments : [];
   const total = safe.reduce((s, seg) => s + (Number(seg.value) || 0), 0);
   const hasData = total > 0;
@@ -41,7 +48,10 @@ export const Donut = ({
       : neutralRampVar(rivalRampT(rivalsByValue.indexOf(seg.name), rivalsByValue.length));
 
   const selfSeg = safe.find((s) => s.isSelf) || safe[0];
-  const selfPct = hasData && selfSeg ? ((Number(selfSeg.value) || 0) / total) * 100 : null;
+  const selfPct =
+    rosterState.assessable && hasData && selfSeg
+      ? ((Number(selfSeg.value) || 0) / total) * 100
+      : null;
 
   return (
     <div
@@ -59,8 +69,17 @@ export const Donut = ({
         <span className="t-tally" style={{ fontSize: 34, lineHeight: 1, color: 'var(--lamp-white)' }}>
           {selfPct == null ? '—' : formatPercent(selfPct)}
         </span>
-        <span className="t-plate">{centerLabel}</span>
+        <span className="t-plate">{rosterState.assessable ? centerLabel : rosterState.label}</span>
       </div>
+
+      {!rosterState.assessable && (
+        <p
+          data-testid={`${testId}-not-assessed`}
+          style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}
+        >
+          {rosterState.detail}
+        </p>
+      )}
 
       {/* the run of track, divided by who holds it */}
       <div
@@ -75,10 +94,11 @@ export const Donut = ({
           boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.45)',
         }}
       >
-        {!hasData && (
+        {(!hasData || !rosterState.assessable) && (
           <div className="sb-hatch" style={{ flex: 1, borderRadius: '1px' }} />
         )}
         {hasData &&
+          rosterState.assessable &&
           safe.map((seg, i) => {
             const pct = ((Number(seg.value) || 0) / total) * 100;
             if (pct <= 0) return null;
@@ -97,7 +117,7 @@ export const Donut = ({
           })}
       </div>
 
-      {showLegend && (
+      {showLegend && rosterState.assessable && (
         <div style={{ display: 'grid', gap: '6px' }}>
           {safe.map((seg, i) => {
             const pct = hasData ? ((Number(seg.value) || 0) / total) * 100 : 0;

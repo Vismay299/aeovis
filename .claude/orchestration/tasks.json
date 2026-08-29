@@ -381,11 +381,37 @@
         "src/components/dashboard/VisibilityVerdictPanel.jsx:51-58"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/scoring/rosterContinuity.js:140",
+        "src/components/perceev/charts/Donut.jsx:52",
+        "src/components/dashboard/RivalsView.jsx:50",
+        "src/components/dashboard/VisibilityVerdictPanel.jsx:52",
+        "src/components/dashboard/RankAndSharePanel.jsx:32",
+        "src/components/dashboard/DashboardShell.jsx:715",
+        "src/services/api.js:334",
+        "src/services/api.js:528",
+        "src/lib/scoring/rosterContinuity.test.mjs:139",
+        "src/lib/scoring/rosterOfflineSurfaces.test.mjs:37"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-29T15:25:01.913Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:28:11.342Z",
+          "by": "rebuild-implementer",
+          "text": "One predicate (describeRosterState) drives all three surfaces so they cannot disagree. Donut: selfPct is gated on assessability, the bar hatches and the legend is suppressed rather than drawing unmeasured shares. RivalsView: a new competitor-not-assessed empty state precedes the 'no rival brands were co-mentioned' claim. VerdictPanel: the unassessable branch precedes every rival clause. rosterSource is plumbed through both normalizeResult branches. NOTE — the roadmap's premise that 'the pipeline already returns share_of_voice_pct: null without rivals' does NOT reproduce: computeBrandRollups (analytics/rollup.js:88) returns null only when nothing was measured at all; a self-only roster yields a real 100%. That is why the fix had to be a provenance label rather than a null check."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-29T15:28:11.380Z",
+        "note": "Exercised: 4 describeRosterState tests pin the exact 'Not assessed — rival extraction offline' headline for both offline states, and a 7-test guard walker proves each of the three .jsx surfaces imports the predicate, branches on it, and receives rosterSource from the scan record. Teeth proven three ways: removing the donut's assessability gate fails the donut guard; disabling the verdict panel's roster branch fails the ordering guard; both restored. Components are .jsx and this runner has no JSX transform (the same reason chartMath.test.mjs exists beside the charts), so the decision was extracted to a pure, fully-unit-tested function and the walker guards the wiring. Suite 646/646 green."
+      }
     },
     {
       "id": "R0.3.3",

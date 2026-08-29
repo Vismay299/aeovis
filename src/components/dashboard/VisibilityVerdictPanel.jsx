@@ -1,5 +1,6 @@
 import { formatPercent, isFiniteNumber } from "@/components/perceev/charts/chartMath";
 import { SectionStrap } from "./SectionStrap";
+import { describeRosterState } from "@/lib/scoring/rosterContinuity";
 
 // Only 2 engines are configured today (aio, perplexity), but this map is
 // deliberately not the source of truth for which engines exist — it only
@@ -38,13 +39,23 @@ export const VisibilityVerdictPanel = ({ result, rankedEntries }) => {
   const hasRivals = entries.length > 1;
   const leader = entries[0];
   const runnerUp = entries[1];
+  // R0.3.2: the headline's rival clauses below are positive claims about what
+  // the answers contained. They are only true when rival extraction actually
+  // ran; otherwise the sentence must say the scan could not look at all.
+  const rosterState = describeRosterState(result?.rosterSource ?? null);
 
   // Zero is a real measurement, but "visible at 0.0%" / "leads at 0.0%" reads
   // self-contradictory in prose (unlike a bar or wedge, where 0 just renders
   // empty) — branch on it explicitly rather than let the generic phrasing
   // claim a "lead" or "visibility" that isn't there.
   let headline;
-  if (!hasRivals) {
+  if (!rosterState.assessable) {
+    headline = (
+      <>
+        <Emph>{rosterState.label}.</Emph> {rosterState.detail}
+      </>
+    );
+  } else if (!hasRivals) {
     headline =
       selfEntry.value > 0 ? (
         <>

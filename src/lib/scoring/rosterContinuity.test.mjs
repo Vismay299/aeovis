@@ -5,6 +5,7 @@ import {
   carriedForwardRosterFromResultBrands,
   resolveCompetitorRoster,
   isRosterAssessable,
+  describeRosterState,
 } from "./rosterContinuity.js";
 import { LlmUnavailableError } from "../llmErrors.js";
 
@@ -120,4 +121,40 @@ test("isRosterAssessable - only a genuinely extracted roster (or a pre-R0.3.3 sc
   assert.equal(isRosterAssessable(undefined), true);
   assert.equal(isRosterAssessable(ROSTER_SOURCE.CARRIED_FORWARD), false);
   assert.equal(isRosterAssessable(ROSTER_SOURCE.UNAVAILABLE), false);
+});
+
+// ---------------------------------------------------------------------------
+// R0.3.2 — the dashboard's offline state. describeRosterState is the single
+// predicate the donut, the Rivals view and the verdict sentence all read.
+// ---------------------------------------------------------------------------
+
+test("describeRosterState - a measured roster renders the real numbers", () => {
+  for (const src of [ROSTER_SOURCE.EXTRACTED, null, undefined]) {
+    const state = describeRosterState(src);
+    assert.equal(state.assessable, true);
+    assert.equal(state.label, null);
+  }
+});
+
+test("OFFLINE STATE — carried_forward reads 'Not assessed — rival extraction offline'", () => {
+  const state = describeRosterState(ROSTER_SOURCE.CARRIED_FORWARD);
+  assert.equal(state.assessable, false);
+  assert.equal(state.label, "Not assessed — rival extraction offline");
+  assert.match(state.detail, /carried forward/);
+  // Must never claim the rivals were re-measured this scan.
+  assert.match(state.detail, /could not look for rivals/);
+});
+
+test("OFFLINE STATE — unavailable reads the same headline and never claims 'no rivals found'", () => {
+  const state = describeRosterState(ROSTER_SOURCE.UNAVAILABLE);
+  assert.equal(state.assessable, false);
+  assert.equal(state.label, "Not assessed — rival extraction offline");
+  assert.match(state.detail, /not the same as finding no rivals/);
+});
+
+test("describeRosterState - the two offline states share one headline so surfaces cannot disagree", () => {
+  assert.equal(
+    describeRosterState(ROSTER_SOURCE.CARRIED_FORWARD).label,
+    describeRosterState(ROSTER_SOURCE.UNAVAILABLE).label
+  );
 });

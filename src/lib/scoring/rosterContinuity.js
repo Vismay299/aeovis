@@ -125,3 +125,36 @@ export async function resolveCompetitorRoster({ extract, loadPreviousRoster, log
 export function isRosterAssessable(rosterSource) {
   return rosterSource == null || rosterSource === ROSTER_SOURCE.EXTRACTED;
 }
+
+/**
+ * The single description every rival-facing surface renders for a scan's
+ * roster state. One function so the donut, the Rivals view and the verdict
+ * sentence can never disagree about whether a number was measured — three
+ * independent string comparisons on `roster_source` is how they would drift
+ * back apart.
+ *
+ * @param {string|null|undefined} rosterSource the scan's `roster_source`
+ * @returns {{assessable: boolean, label: string|null, detail: string|null}}
+ *   `assessable: true` with null label means "render the real numbers".
+ */
+export function describeRosterState(rosterSource) {
+  if (isRosterAssessable(rosterSource)) {
+    return { assessable: true, label: null, detail: null };
+  }
+  if (rosterSource === ROSTER_SOURCE.CARRIED_FORWARD) {
+    return {
+      assessable: false,
+      label: "Not assessed — rival extraction offline",
+      detail:
+        "The rivals below are carried forward from this brand's previous scan. " +
+        "This scan could not look for rivals, so share of voice is not a measurement of it.",
+    };
+  }
+  return {
+    assessable: false,
+    label: "Not assessed — rival extraction offline",
+    detail:
+      "Rival extraction was unavailable for this scan and there is no earlier roster to fall back on. " +
+      "This is not the same as finding no rivals.",
+  };
+}

@@ -712,6 +712,7 @@ export default function DashboardShell({ scan, scanId }) {
                   competitors={result.competitors}
                   results={result.rawResults || []}
                   competitorsConfigured={result.competitorsConfigured}
+                  rosterSource={result.rosterSource ?? null}
                 />
               )}
 

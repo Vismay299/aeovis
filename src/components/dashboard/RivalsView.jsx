@@ -9,8 +9,17 @@
  */
 
 import { RIVAL_RAMP } from '@/components/charts/FlowDiagram';
+import { describeRosterState } from '@/lib/scoring/rosterContinuity';
 
-export const RivalsView = ({ competitors = [], results = [], competitorsConfigured }) => {
+export const RivalsView = ({
+  competitors = [],
+  results = [],
+  competitorsConfigured,
+  rosterSource = null,
+}) => {
+  // R0.3.2: an empty rival list means "none were co-mentioned" ONLY if the
+  // extractor actually ran. When it did not, saying so is the whole point.
+  const rosterState = describeRosterState(rosterSource);
   const answeredNonBranded = (results || []).filter(
     (r) =>
       !(r.is_branded_query ?? r.isBrandedQuery)
@@ -37,7 +46,18 @@ export const RivalsView = ({ competitors = [], results = [], competitorsConfigur
           </span>
         </div>
 
-        {displayList.length === 0 ? (
+        {!rosterState.assessable ? (
+          <div className="blank" data-testid="competitor-not-assessed">
+            <h4>{rosterState.label}</h4>
+            <p>{rosterState.detail}</p>
+            {displayList.length > 0 && (
+              <p style={{ marginTop: 8 }}>
+                {displayList.length} rival{displayList.length === 1 ? '' : 's'} shown below are
+                carried forward from the previous scan and were not re-measured here.
+              </p>
+            )}
+          </div>
+        ) : displayList.length === 0 ? (
           <div className="blank" data-testid="competitor-empty">
             <h4>No rivals discovered yet</h4>
             <p>

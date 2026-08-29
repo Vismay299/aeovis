@@ -8,7 +8,8 @@ import { SectionStrap } from "./SectionStrap";
  * rendered as a constituency rundown next to a share-of-voice ring, matching
  * the two-column layout proven in src/app/chart-preview/page.js.
  *
- * @param {object} result normalized scan record — only `.brand` is read here (display label)
+ * @param {object} result normalized scan record — `.brand` (display label) and
+ *   `.rosterSource` (R0.3.2: whether this scan's rival roster was measured at all)
  * @param {{name: string, value: number, isSelf?: boolean, delta?: number|null}[]} rankedEntries self + competitors, sorted descending by value
  */
 export const RankAndSharePanel = ({ result, rankedEntries }) => {
@@ -24,7 +25,12 @@ export const RankAndSharePanel = ({ result, rankedEntries }) => {
       </div>
       <div>
         <SectionStrap testId="share-strap">Share of Voice</SectionStrap>
-        <Donut segments={rankedEntries} centerLabel={`${brandLabel} share`} keyline="accent" />
+        <Donut
+          segments={rankedEntries}
+          centerLabel={`${brandLabel} share`}
+          keyline="accent"
+          rosterSource={result?.rosterSource ?? null}
+        />
       </div>
     </div>
   );
