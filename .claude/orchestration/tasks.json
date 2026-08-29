@@ -670,11 +670,23 @@
         "test_reports/"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
+      "status": "blocked",
+      "owner": "rebuild-test-author",
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-08-29T16:02:03.290Z",
+          "by": "rebuild-test-author",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T16:04:48.991Z",
+          "by": "rebuild-test-author",
+          "text": "blocked (needs-secrets): APPARATUS WRITTEN; the corpus itself is EMPTY and the directory says so. Written: scripts/archive-reference-scan.mjs (read-only capture of prompt_set_id/hash, raw per-prompt results, normalized prompt_results rows, headline metrics and roster — it never STARTS a scan, because a corpus captured from scans run under observation is not a baseline of production behaviour), package.json baseline:archive, test_reports/baseline-2026-08/README.md:24 (the protocol and the frozen-baseline rules). The script refuses rather than degrades in three cases and each was chosen deliberately: unconfigured Supabase, a scan with no per-prompt results, and an output file that already exists. EXERCISED: the unconfigured refusal — running it here prints 'Supabase is not configured. This script reads production scans; it cannot fabricate a baseline.' NOT DONE: zero of the three brands are archived. That needs live Supabase credentials and real persisted scans; this environment has neither, and its outbound proxy refuses vendor hosts. The README states the corpus is empty in its own status header so that no downstream 'no regression against baseline' claim can be made against an absent comparison."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-secrets"
     },
     {
       "id": "R0.4.2",
@@ -696,11 +708,18 @@
         "src/lib/scoring/"
       ],
       "phase": "R0",
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-08-29T16:04:49.028Z",
+          "by": "controller",
+          "text": "blocked (needs-secrets): SCHEMA, VALIDATOR AND PROTOCOL WRITTEN AND FULLY TESTED; zero labels produced. Written: src/lib/scoring/calibrationFixture.js:96 (validateCalibrationFixture), :49 (the load-bearing rule — a missing 'mentioned' is REJECTED, never coerced to false, so an unfilled label cannot become a negative training example), test_reports/baseline-2026-08/LABELLING-PROTOCOL.md (stratified sampling table, five conventions decided once, and the rule that a truncated/error answer is DROPPED rather than labelled a non-mention), src/lib/scoring/calibrationFixture.test.mjs:141 (15 tests). The validator refuses a set that is under 15% or over 85% 'mentioned', because a one-sided set cannot distinguish a good judge from a constant one — the calibration equivalent of the false 100%. NOT DONE: the 60-100 labels themselves. They must be drawn from real persisted prompt_results in the production database; no credentials here. A committed guard fails the moment the first *.labels.json lands, so a test validating the real fixture gets written at the same time."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-secrets"
     },
     {
       "id": "R0.4.3",

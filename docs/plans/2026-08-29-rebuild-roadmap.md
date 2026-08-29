@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**8 / 121 closed** · 7 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**8 / 121 closed** · 9 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -46,8 +46,8 @@ Baseline commit: `5111219`
 - [x] **R0.3.4** New-brand scan fails loud at sourcing when the LLM is off — closed at `src/lib/scoring/promptSource.js:45`, `src/lib/scoring/promptSource.js:68`, `src/lib/workers/scanWorker.js:219`, `src/lib/workers/scanWorker.js:815`, `src/lib/db.js:88`, `src/lib/workers/promptSourcing.test.mjs:170`, `src/lib/workers/promptSourcing.test.mjs:208`, `src/lib/scoring/promptSource.test.mjs:24`
 ### R0.4
 
-- [ ] **R0.4.1** Reference scans for 3 brands, archived as the 'before' corpus `needs-secrets`
-- [ ] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets`
+- [-] **R0.4.1** Reference scans for 3 brands, archived as the 'before' corpus `needs-secrets` — blocked: needs-secrets
+- [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
 ## R1 — Real-surface probe fleet  `0/28`

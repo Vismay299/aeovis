@@ -13,7 +13,8 @@
     "test:gsc": "node --env-file=.env.local scripts/test-gsc.mjs",
     "setup:db": "node --env-file=.env.local scripts/setup-supabase.mjs",
     "check:secrets": "node --env-file-if-exists=.env.local scripts/check-secrets.mjs",
-    "test": "node --test \"src/**/*.test.mjs\""
+    "test": "node --test \"src/**/*.test.mjs\"",
+    "baseline:archive": "node --env-file-if-exists=.env.local scripts/archive-reference-scan.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
