@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**7 / 121 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**8 / 121 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -20,7 +20,7 @@ Baseline commit: `5111219`
 6. Trust source, git log, and the tracker over any prose claiming completeness; close items with file:line in the same commit.
 7. Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes.
 
-## R0 — Ground zero  `7/17`
+## R0 — Ground zero  `8/17`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -48,7 +48,7 @@ Baseline commit: `5111219`
 
 - [ ] **R0.4.1** Reference scans for 3 brands, archived as the 'before' corpus `needs-secrets`
 - [ ] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets`
-- [ ] **R0.4.3** CI on push; fix the test glob; add .gitattributes
+- [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
 ## R1 — Real-surface probe fleet  `0/28`
 

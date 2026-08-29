@@ -693,11 +693,32 @@
         "package.json"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "rebuild-test-author",
+      "evidence": [
+        "package.json:11",
+        ".github/workflows/ci.yml:8",
+        ".gitattributes:5",
+        "src/lib/testCoverageGuard.test.mjs:46",
+        "src/components/perceev/charts/chartMath.test.mjs:309"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-29T15:50:39.784Z",
+          "by": "rebuild-test-author",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:54:05.637Z",
+          "by": "rebuild-test-author",
+          "text": "The glob is now a single src/**/*.test.mjs. Confirmed the old eight-directory glob orphaned EXACTLY 57 tests in 2 files (src/components/perceev/charts/chartMath.test.mjs, src/services/api.test.mjs), matching S29's number precisely. One of those 57 was RED and had been since the design-system port: chartMath's neutralRampVar assertion still named the pre-redesign --bg-2/--border-3/--text-2 tokens instead of the steel ramp. Test corrected (the implementation is right). CI runs tests + build on push and PR with no continue-on-error and no exit-code swallow. The orphan check is a TEST, not a CI step, so it fails locally too."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-29T15:54:05.676Z",
+        "note": "All three clauses exercised. GLOB: the guard resolves package.json's pattern with fs.globSync and compares it against an independent recursive walk of src/ — teeth proven by narrowing the glob back to src/lib and watching it fail. RED TEST: the previously-hidden chartMath failure is now visible and fixed; suite is 778/778 (up from 717 collected, +57 previously orphaned + 4 new guards). CI: workflow asserted to run on push, run the suite and the build, and carry no continue-on-error or '|| true' — teeth proven by appending '|| true' to the test step and watching the guard fail; the guard strips comment lines so its own prose cannot false-positive. .gitattributes committed and asserted. NOT exercised: an actual GitHub Actions run — no push is permitted from this session."
+      }
     },
     {
       "id": "R1.1.1",

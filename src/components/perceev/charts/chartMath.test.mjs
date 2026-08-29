@@ -301,9 +301,14 @@ test("normalize returns null for non-finite input (renders as an empty cell, not
 });
 
 test("neutralRampVar returns a var() reference from the neutral token ramp at both ends and mid-scale", () => {
-  assert.equal(neutralRampVar(0), "var(--bg-2)");
-  assert.equal(neutralRampVar(1), "var(--text-2)");
-  assert.equal(neutralRampVar(0.5), "var(--border-3)");
+  // Token names updated for the Results Night steel ramp (NEUTRAL_RAMP_TOKENS
+  // in chartMath.js). This assertion still named the pre-redesign
+  // --bg-2/--border-3/--text-2 tokens and had been failing since the design
+  // system was ported — invisibly, because the package.json test glob did not
+  // reach src/components. Fixed alongside the glob in R0.4.3.
+  assert.equal(neutralRampVar(0), "var(--steel-1)");
+  assert.equal(neutralRampVar(1), "var(--nickel)");
+  assert.equal(neutralRampVar(0.5), "var(--steel-4)");
 });
 
 test("neutralRampVar never returns a teal or rival token regardless of input", () => {
