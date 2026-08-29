@@ -22,6 +22,14 @@ for and nothing else — it reads its own state:
 The controller owns dispatch. Do not spawn implementers yourself alongside it —
 two dispatchers on one ledger will collide on the same files.
 
+## Spawn depth
+
+`.claude/settings.json` sets `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2` so the
+controller can dispatch workers. Cloud sessions default to `1` with the session
+itself already counted as a child, which leaves the controller unable to spawn.
+If a controller reports it has no `Agent`/`Task` tool, check that value first —
+then use the main-session fallback below, which needs no nesting at all.
+
 ## If the agent types are not registered
 
 Claude Code loads `.claude/agents/` **at session start**. In the session that first

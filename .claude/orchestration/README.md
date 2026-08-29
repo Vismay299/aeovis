@@ -49,6 +49,25 @@ An implementer can never close its own task; the CLI rejects `verify` from the
 same flow that submitted, because closing is the controller's act on a separate
 verifier's word.
 
+## Subagent spawn depth
+
+The controller dispatches workers, so it needs to spawn from inside a subagent —
+one level of nesting. Cloud sessions ship with
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` **and** `CLAUDE_CODE_CHILD_SESSION=1`,
+so the whole session already counts as a child and the budget is spent before
+the controller starts: the main session can spawn workers, the controller cannot.
+
+`.claude/settings.json` raises it to `2`, which is exactly what this design
+needs — controller to worker, no deeper. Verified: a `claude` process started in
+this project picks the value up automatically from project settings, overriding
+the runner's `1`.
+
+Not verified: that the agent runtime honours it for in-process nesting. The
+session that made the change lost its `Agent` tool before it could run the probe.
+**Confirm it on the next session** by asking the controller to dispatch one
+worker; if it still reports it cannot, fall back to the main session acting as
+controller (below), which works at any depth.
+
 ## Registration caveat
 
 Claude Code loads `.claude/agents/` at session start. The session that first adds
