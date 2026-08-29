@@ -263,11 +263,23 @@
         "scripts/"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
+      "status": "blocked",
+      "owner": "rebuild-implementer",
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-08-29T15:43:47.382Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:45:49.400Z",
+          "by": "rebuild-implementer",
+          "text": "blocked (needs-secrets): CODE COMPLETE; the acceptance criterion's PURPOSE is not exercisable here. Written: scripts/check-secrets.mjs (9 vendors, three verdicts, hard per-call timeout, exits non-zero only when a CONFIGURED vendor fails), package.json:15 (npm run check:secrets), src/lib/checkSecrets.test.mjs (7 hermetic subprocess tests, scrubbed env, zero network). EXERCISED: the UNCONFIGURED path (all 9 vendors, exit 0), the FAIL path and non-zero exit (short CRON_SECRET, malformed GSC key, and a live 403 from a bogus OpenRouter key). NOT EXERCISED: the PASS path for any networked vendor. Two hard blockers — there are no vendor credentials in this environment, and the outbound proxy refuses the vendor hosts outright (the OpenRouter attempt returned 'HTTP 403 — Host not in allowlist: openrouter.ai'). That second one matters: it means the per-vendor endpoint choices (Bright Data get_all_zones + active-serp-zone assertion, Firecrawl v1/scrape, Perplexity chat/completions, OpenAI v1/models, Gemini v1beta/models) are UNVALIDATED, and a wrong endpoint would report FAIL for a working key — an actively misleading script. Unblock by running it once against a real .env.local and confirming each configured vendor reports PASS."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-secrets"
     },
     {
       "id": "R0.1.7",
