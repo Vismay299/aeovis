@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isCronAuthorized } from "@/lib/cronAuth";
 import { supabase } from "@/lib/db";
 import { runScanChunk, runSchedulerTick, shouldRescueJob } from "@/lib/workers/scanWorker";
 
@@ -12,7 +13,8 @@ export const maxDuration = 300;
 
 const MAX_CONCURRENT_RESUMES = 3;
 
-let warnedNoSecret = false;
+// Boxed so the shared gate can flip it; one warning per process per route.
+const warnedNoSecret = { value: false };
 
 /**
  * Cron/worker auth (reviewer D4). This endpoint resumes scans AND — via the
@@ -23,27 +25,13 @@ let warnedNoSecret = false;
  * When CRON_SECRET is set (production), a caller must present it as
  * `Authorization: Bearer <secret>`, `x-cron-secret: <secret>`, or `?secret=`.
  * Vercel's own cron invocations are also accepted via the `x-vercel-cron`
- * header they inject. When CRON_SECRET is unset (local dev) we allow the call
- * but warn once, so dev/self-continue keeps working out of the box.
+ * header they inject. When CRON_SECRET is unset the gate FAILS CLOSED in
+ * production (401) and allows-with-a-warning everywhere else, so dev and the
+ * self-continue fetch keep working. The implementation is shared with
+ * /api/content/worker in src/lib/cronAuth.js so the two cannot drift.
  */
 function isAuthorized(request, searchParams) {
-  const secret = (process.env.CRON_SECRET || "").trim();
-  if (!secret) {
-    if (!warnedNoSecret) {
-      warnedNoSecret = true;
-      console.warn(
-        "[worker] CRON_SECRET is not set — /api/scan/worker is UNAUTHENTICATED. " +
-          "Set CRON_SECRET before exposing this deployment publicly."
-      );
-    }
-    return true;
-  }
-  if (request.headers.get("x-vercel-cron")) return true;
-  const auth = request.headers.get("authorization") || "";
-  if (auth === `Bearer ${secret}`) return true;
-  if (request.headers.get("x-cron-secret") === secret) return true;
-  if (searchParams.get("secret") === secret) return true;
-  return false;
+  return isCronAuthorized(request, searchParams, { label: "worker", warned: warnedNoSecret });
 }
 
 export async function GET(request) {

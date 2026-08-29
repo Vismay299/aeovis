@@ -95,11 +95,23 @@
         "src/app/api/content/worker/route.js:25-52"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
+      "status": "blocked",
+      "owner": "rebuild-implementer",
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-08-29T15:29:55.870Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:31:56.891Z",
+          "by": "rebuild-implementer",
+          "text": "blocked (needs-vercel): CODE COMPLETE AND UNIT-TESTED; the acceptance criterion's first clause is not exercisable here. Written: src/lib/cronAuth.js:43 (the fail-closed flip — a missing CRON_SECRET now DENIES when NODE_ENV=production instead of returning true after a warning), src/lib/cronAuth.js:37 (shared pure gate replacing two drifting private copies), src/app/api/scan/worker/route.js:34 and src/app/api/content/worker/route.js:39 (both routes delegate to it), .env.example:19 (CRON_SECRET documented as production-required), src/lib/cronAuth.test.mjs:19 (10 tests; the 4 C9 regressions proven to fail when the flip is reverted). NOT DONE: 'curl without the header returns 401 in production' needs a deployed instance, and CRON_SECRET must be set in the Vercel project — no Vercel access and no next binary in this environment (node_modules is empty). Unblock after setting CRON_SECRET in Vercel and curling /api/scan/worker without a header."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-vercel"
     },
     {
       "id": "R0.1.2",
