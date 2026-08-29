@@ -25,8 +25,18 @@ export function tierClasses(tier) {
   }
 }
 
+/**
+ * True when `iso` can be read as a real instant. A missing or unparseable
+ * timestamp is a *state*, not a time — callers must render it as an em dash
+ * rather than substituting the current clock (finding C1).
+ */
+export function hasTimestamp(iso) {
+  if (!iso) return false;
+  return !Number.isNaN(new Date(iso).getTime());
+}
+
 export function formatTimestamp(iso) {
-  if (!iso) return "—";
+  if (!hasTimestamp(iso)) return "—";
   try {
     const d = new Date(iso);
     return d.toLocaleString(undefined, {
@@ -42,7 +52,10 @@ export function formatTimestamp(iso) {
 }
 
 export function relativeTime(iso) {
-  if (!iso) return "—";
+  // No timestamp is not "just now". Without this guard an unparseable value
+  // fell through to `NaNd ago`, and a null one used to never arrive here at all
+  // because the caller stamped it with the current clock (finding C1).
+  if (!hasTimestamp(iso)) return "—";
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.round(diff / 60000);
   if (mins < 1) return "just now";

@@ -19,16 +19,28 @@ export async function GET(request, { params }) {
       // Transient DB read failure. The client (services/api.js) tolerates up
       // to 5 CONSECUTIVE poll errors before giving up on an otherwise-healthy
       // multi-minute scan, but a hard 500 here would burn one of those for
-      // what's often a one-tick blip. Returning a same-shape "working" status
-      // instead keeps the poll loop alive for the next tick (2s later) to
-      // retry the read; if the DB is genuinely down, every subsequent tick
-      // fails this same read and the client's own timeout still bounds how
-      // long a user waits. Chosen deliberately over a 503 — documented here
-      // per P0.2's "your call" note.
+      // what's often a one-tick blip. Answering 200 instead keeps the poll
+      // loop alive for the next tick (2s later) to retry the read; if the DB
+      // is genuinely down, every subsequent tick fails this same read and the
+      // client's own timeout still bounds how long a user waits. Chosen
+      // deliberately over a 503 — documented here per P0.2's "your call" note.
+      //
+      // R2.8.3 (finding A11): this used to answer `status: "working"`, which
+      // claimed a reading it did not have. The client mapped it to stage 0 and
+      // rendered `progress_pct: null` as "% complete", rewinding a half-done
+      // scan to an empty bar. The status is now "unknown" and says so in three
+      // ways the client can act on — status, transient_error, progress_known —
+      // and progress_pct stays null (never 0), because we did not measure it.
       console.error(`Transient error reading job ${job_id}:`, error);
       return NextResponse.json(
-        { status: "working", progress_pct: null, transient_error: true },
-        { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
+        {
+          status: "unknown",
+          progress_pct: null,
+          progress_known: false,
+          transient_error: true,
+          detail: "Job status is temporarily unreadable. Retry on the next poll.",
+        },
+        { status: 200, headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
       );
     }
 

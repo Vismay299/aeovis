@@ -554,7 +554,18 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     ),
     /** All probed queries (non-branded + alias-branded + brand presence) */
     queriesTracked: uniquePromptCount(results),
-    scanTimestamp: data.scanned_at ?? data.scanTimestamp ?? new Date().toISOString(),
+    /**
+     * R2.7.3 (finding C1) — NO `new Date()` FALLBACK HERE, EVER.
+     *
+     * This used to end in `?? new Date().toISOString()`, which stamped a record
+     * that carried no collection time with the moment the browser happened to
+     * normalize it. The dashboard then rendered "just now" for data of entirely
+     * unknown age — a record that was never stamped looked identical to one
+     * collected seconds ago. A missing collection time is null, and null renders
+     * as an em dash plus a "no collection time" chip. See format.js/relativeTime
+     * and DashboardShell's timestamp cell.
+     */
+    scanTimestamp: data.scanned_at ?? data.scanTimestamp ?? null,
     scoringVersion: data.scoring_version ?? raw.scoring_version ?? "v7-aio-only",
     seeds: data.seeds ?? raw.seeds ?? [],
     querySource: data.query_source ?? raw.query_source ?? "aio_paa_autocomplete",
@@ -683,7 +694,26 @@ function generateSummary(brand, score, coverage, dataSourceIssue, engineNames = 
   return `${b} is largely invisible across ${surface} for its category. Competitors dominate AI recommendations across the tracked queries.`;
 }
 
-export async function runScan({ brand, website, industry, competitors }, onProgress = () => {}) {
+/**
+ * Run a scan to completion, reporting progress as it polls.
+ *
+ * `onProgress(stage, progressPct)` is called ONLY for real readings, and
+ * `progressPct` may be null/undefined when the job has not recorded one — that
+ * is "unknown", and callers must not render it as 0 (see lib/scanProgress.js).
+ *
+ * `onUnknown({ reason })` (R2.8.3, finding A11) is called for a poll tick that
+ * produced no reading at all: a fetch/HTTP failure, the status route's
+ * transient_error envelope, or a status string this client does not know. It
+ * used to be silent — the transient envelope's `status: "working"` was mapped
+ * to stage 0 and its null percentage rendered as "% complete", rewinding the
+ * bar. Nothing is synthesised here now; the caller is told the tick was a miss
+ * and keeps what it already had.
+ */
+export async function runScan(
+  { brand, website, industry, competitors },
+  onProgress = () => {},
+  onUnknown = () => {}
+) {
   onProgress(0);
 
   // The bare "Failed to fetch" TypeError (server unreachable / not running)
@@ -742,6 +772,7 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
     await delay(2000);
     attempts++;
 
+    const pollErrorsBeforeThisTick = consecutivePollErrors;
     let statusData;
     try {
       const pollRes = await fetch(`/api/scan/${jobId}/status`);
@@ -755,11 +786,33 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
           "Lost connection to the scanning service while the scan was running. Please try again."
         );
       }
-      continue; // transient — retry on the next tick
+      // Transient — retry on the next tick, but SAY that this tick told us
+      // nothing. Skipping silently left the UI looking live while it was blind.
+      onUnknown({ reason: `poll_failed: ${err?.message || "unknown error"}` });
+      continue;
     }
 
-    const stage = statusToStage[statusData.status] ?? 0;
-    onProgress(stage, statusData.progress_pct);
+    // A tick that carried no reading: either the route's transient_error
+    // envelope (a DB read it could not make) or a status string this client
+    // has no stage for. Neither is stage 0 and neither is 0% — report it as
+    // unknown and let the caller keep the progress it already has. Note the
+    // error counter is deliberately NOT reset above for this case (the fetch
+    // succeeded, the read did not), so an unknown tick cannot launder itself
+    // into evidence that the pipeline is healthy.
+    const mappedStage = statusToStage[statusData?.status];
+    if (statusData?.transient_error === true || mappedStage === undefined) {
+      consecutivePollErrors = pollErrorsBeforeThisTick;
+      onUnknown({
+        reason: statusData?.transient_error === true
+          ? "status_unreadable"
+          : `unknown_status: ${statusData?.status ?? "missing"}`,
+      });
+      continue;
+    }
+
+    // progress_pct may be null here too (the job row has not recorded one yet).
+    // That is passed through as-is: unknown stays unknown downstream.
+    onProgress(mappedStage, statusData.progress_pct);
 
     if (statusData.status === "complete") {
       // P0.3: the canonical record now lives in the `scans` table

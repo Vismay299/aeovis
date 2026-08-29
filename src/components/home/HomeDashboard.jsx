@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { fetchScanHistory, saveScan } from '@/services/api';
+import { hasTimestamp } from '@/utils/format';
 
 /* The reading's own band. Rivals never take a semantic colour, but this is
    your own score against a threshold, which is exactly what they are for. */
@@ -23,7 +24,10 @@ function scoreChip(v) {
 }
 
 function timeAgo(iso) {
-  if (!iso) return '';
+  // R2.7.3 (finding C1) — a reading with no collection time renders an em dash,
+  // not an empty string and never "just now". Unparseable counts as missing:
+  // without this the NaN fell through the ladder and printed "NaNd ago".
+  if (!hasTimestamp(iso)) return '—';
   const s = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
   if (s < 60) return 'just now';
   const m = Math.floor(s / 60);

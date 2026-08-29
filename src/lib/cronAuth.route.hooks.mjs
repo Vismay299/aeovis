@@ -19,7 +19,8 @@
  * thing the bundler would otherwise have answered. If this file ever starts
  * substituting behaviour, the route test stops being evidence.
  *
- * Consumed by cronAuth.route.test.mjs via node:module register().
+ * Consumed by cronAuth.route.test.mjs and scanStatusTransient.route.test.mjs
+ * via node:module register().
  */
 import { statSync } from "node:fs";
 import path from "node:path";

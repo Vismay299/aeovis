@@ -18,13 +18,26 @@ import {
   normalizeResult,
   getHistoryNonBrandedCount,
 } from "@/services/api";
-import { scoreTier, formatTimestamp, relativeTime } from "@/utils/format";
+import { scoreTier, formatTimestamp, relativeTime, hasTimestamp } from "@/utils/format";
 import { getBrandAliases } from "@/lib/scoring/aliases";
 import { resolveBrandKey } from "@/lib/scoring/brandKey";
 import {
   AIO_ERROR_RATE_LIMIT_PCT,
   AIO_MIN_NON_BRANDED_COVERAGE,
 } from "@/lib/scoring/aioConstants";
+
+/**
+ * R2.7.3 (finding C1) — two records match only when BOTH carry a real instant.
+ *
+ * `scanTimestamp` is now null when a record has no collection time, and
+ * `new Date(null).getTime()` is 0, not NaN. Comparing raw getTime() values would
+ * make every unstamped record collide at the epoch and light up an unrelated
+ * history card as "active". Missing is never equal to missing.
+ */
+function sameInstant(a, b) {
+  if (!hasTimestamp(a) || !hasTimestamp(b)) return false;
+  return new Date(a).getTime() === new Date(b).getTime();
+}
 
 const RERUN_STAGES = [
   "Submitting brand for analysis",
@@ -182,9 +195,7 @@ export default function DashboardShell({ scan, scanId }) {
     sortedHistory = [...history].sort(
       (a, b) => new Date(b.scanned_at) - new Date(a.scanned_at)
     );
-    const idx = sortedHistory.findIndex(
-      (s) => new Date(s.scanned_at).getTime() === new Date(result.scanTimestamp).getTime()
-    );
+    const idx = sortedHistory.findIndex((s) => sameInstant(s.scanned_at, result.scanTimestamp));
     let prev = null;
 
     if (idx !== -1 && idx + 1 < sortedHistory.length) {
@@ -425,9 +436,20 @@ export default function DashboardShell({ scan, scanId }) {
           <span className="chip" title={`Scoring ${result.scoringVersion}`}>
             {probeSources.map(engineLabel).join(" · ")}
           </span>
-          <span data-testid="dashboard-timestamp" className="tag" style={{ marginLeft: "auto" }}>
-            {formatTimestamp(result.scanTimestamp)} ({relativeTime(result.scanTimestamp)})
-          </span>
+          {/* A record with no collection time reads as an em dash and says so —
+              it must not be indistinguishable from one collected a moment ago. */}
+          {hasTimestamp(result.scanTimestamp) ? (
+            <span data-testid="dashboard-timestamp" className="tag" style={{ marginLeft: "auto" }}>
+              {formatTimestamp(result.scanTimestamp)} ({relativeTime(result.scanTimestamp)})
+            </span>
+          ) : (
+            <span data-testid="dashboard-timestamp" className="tag" style={{ marginLeft: "auto" }}>
+              —{" "}
+              <span className="chip chip--warn" title="This record carries no collection time, so its age is unknown.">
+                No collection time
+              </span>
+            </span>
+          )}
           <ThemeToggle />
           <button
             type="button"
@@ -563,8 +585,7 @@ export default function DashboardShell({ scan, scanId }) {
               <div className="panel__b panel__b--scroll">
                 <div style={{ display: "flex", gap: 10 }}>
                   {sortedHistory.map((s, i) => {
-                    const isActive = new Date(s.scanned_at).getTime()
-                      === new Date(result.scanTimestamp).getTime();
+                    const isActive = sameInstant(s.scanned_at, result.scanTimestamp);
                     const next = sortedHistory[i - 1];
                     const cardDelta = next
                       ? (next.visibility_pct - (s.visibility_pct || 0)).toFixed(1)
