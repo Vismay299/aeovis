@@ -30,8 +30,9 @@ const warnedNoSecret = { value: false };
  *
  * When CRON_SECRET is set (production), a caller must present it as
  * `Authorization: Bearer <secret>`, `x-cron-secret: <secret>`, or `?secret=`.
- * Vercel's own cron invocations are also accepted via the `x-vercel-cron`
- * header they inject. When CRON_SECRET is unset the gate FAILS CLOSED in
+ * The secret is the only credential — the client-settable `x-vercel-cron`
+ * header no longer grants access (R0.1.8); Vercel's own cron invocations
+ * authenticate with the bearer secret. When CRON_SECRET is unset the gate FAILS CLOSED in
  * production (401) and allows-with-a-warning everywhere else. The
  * implementation is shared with /api/scan/worker in src/lib/cronAuth.js so the
  * two cannot drift.

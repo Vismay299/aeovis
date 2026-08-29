@@ -368,17 +368,43 @@
         "src/lib/cronAuth.js:52-56"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/cronAuth.js:48-55",
+        "src/lib/cronAuth.js:22",
+        "src/lib/cronAuth.test.mjs:47",
+        "src/lib/cronAuth.test.mjs:57",
+        "src/lib/cronAuth.test.mjs:69",
+        "src/lib/cronAuth.test.mjs:77",
+        "src/app/api/scan/worker/route.js:28",
+        "src/app/api/content/worker/route.js:33",
+        "docs/BUILD_JOURNAL.md:136",
+        "README.md:111",
+        "README.md:130"
+      ],
       "notes": [
         {
           "at": "2026-08-29T16:08:57.581Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-08-29T16:15:04.424Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T16:16:34.450Z",
+          "by": "rebuild-implementer",
+          "text": "Deleted the x-vercel-cron branch and its rationalising comment from authorizeCronRequest (cronAuth.js:48-55 now carries a comment stating the new rule: the header is client-settable, the secret is the only credential) and removed CRON_AUTH.OK_VERCEL_CRON (was :23; grep confirmed no other reference outside this file). Dev/no-secret allowance at :39-45 and all three secret paths (bearer/x-cron-secret/?secret=) untouched. Route docstrings updated at scan/worker/route.js:28 and content/worker/route.js:33; no route logic changed. Tests added, none weakened or removed: cronAuth.test.mjs:47 (prod + CRON_SECRET set + only x-vercel-cron -> authorized:false, DENY_BAD_SECRET), :57 (same for development/test/undefined), :69 (no 'vercel' acceptance reason remains in CRON_AUTH), :77 positive control (all three secret paths still pass WITH x-vercel-cron present, so nobody later 'fixes' this by rejecting the header). Operator ledger: BUILD_JOURNAL.md:136 C9 row appended (not rewritten) noting the residual forgeable-header half is closed by R0.1.8 and the production cron entry now authenticates only via the secret; README.md:111 and :124-135 state that with the bypass gone the vercel.json cron entries authenticate solely by CRON_SECRET, which MUST be set in the deployment or scheduled scans 401. npm run test:scoring: 819 tests, 819 pass, 0 fail (baseline 808; +4 mine, the rest from a concurrent implementer's src/lib/engines/types tests, which I did not touch). Exercised the acceptance in-process: isCronAuthorized with NODE_ENV=production, CRON_SECRET set, and only x-vercel-cron returns false -> the route's GET path returns 401. I could NOT issue a live HTTP request or a real Vercel 401 here: no .env.local, no Vercel access, next build/lint do not run in this environment. Runtime precondition not provable from this diff: CRON_SECRET must actually be set in the Vercel project so Vercel attaches Authorization: Bearer <CRON_SECRET> to its cron invocations (check-secrets.mjs:188-202 already marks it required)."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-29T16:37:25.382Z",
+        "note": "Verified by a fresh rebuild-verifier that never saw the implementer's reasoning. It built its OWN resolver hook and harness under /tmp and imported the real GET handlers from both worker routes under NODE_ENV=production with CRON_SECRET set. Original bug REPRODUCED first (git show HEAD:src/lib/cronAuth.js): x-vercel-cron alone returned HTTP 200 on both routes, as did mixed-case X-Vercel-Cron and forged-header-plus-WRONG-bearer — an anonymous caller into both budget-spending routes. Against the fixed tree the same six inputs return 401 on both routes. All three legitimate secret paths (bearer, x-cron-secret, ?secret=) return 200 on both routes, and still 200 with an x-vercel-cron header present, so the header is ignored rather than rejected. Negative control: re-adding the bypass fails 7 named tests; tree restored byte-identical, final run 836/836/0. cronAuth.route.hooks.mjs exports only resolve, has no load hook, and is structurally incapable of substituting the module under test. Self-continue fetch unaffected (scanWorker.js:347 sends x-cron-secret, never the header). Operator precondition recorded at README.md:130-135 and BUILD_JOURNAL.md:136. All test diffs additive, zero deletions."
+      }
     },
     {
       "id": "R0.1.9",
@@ -394,14 +420,29 @@
         "src/lib/engines/types.js:43"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/engines/types.js:47",
+        "src/lib/engines/types.test.mjs:55",
+        "src/lib/engines/types.test.mjs:98",
+        "src/lib/engines/types.test.mjs:114"
+      ],
       "notes": [
         {
           "at": "2026-08-29T16:08:57.630Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-08-29T16:15:06.563Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T16:16:32.493Z",
+          "by": "rebuild-implementer",
+          "text": "types.js:43->47 now reads BRIGHTDATA_API_KEY only, with a comment naming the Bright Data ADR so the next reader knows why SERPAPI_KEY is absent. New src/lib/engines/types.test.mjs (7 tests, getEnabledEngines had zero direct coverage): stale-key case (only SERPAPI_KEY -> GOOGLE_AI_OVERVIEW NOT enabled), BrightData-only -> enabled, SERPAPI_KEY adds nothing on top of BrightData, llm_only still suppresses AIO (so the first assertions pass on the credential and not on PROBE_MODE), explicit ENGINES_ENABLED branch unchanged, health vendorFlags({SERPAPI_KEY}) -> brightdata unconfigured, plus a GUARD test that reads src/lib/engines/types.js, src/lib/health.js and scripts/check-secrets.mjs and fails if any NON-COMMENT line treats SERPAPI_KEY as a credential -- so the 'check-secrets and /api/health agree' half is demonstrated, not asserted, and the three cannot drift apart again. check-secrets.mjs and health.js were verified to already reference only BRIGHTDATA_API_KEY and were NOT edited. Did NOT touch src/lib/engines/serp.js or serp.test.mjs: the SerpAPI request path there is genuinely LIVE (real serpapi.com fetch via getSerpProvider fallback), the ADR's claim that it is dead is wrong as written, and deleting it is task R1.7.3. Negative-tested the guard: reverting the types.js line makes 2 of the 7 new tests fail. npm run test:scoring: 819 tests / 819 pass / 0 fail (baseline 808; the delta above my 7 is a concurrent implementer's cronAuth tests in the same worktree). Cannot exercise a real deployment/health HTTP route here (no .env.local, no Vercel, next build/lint do not run) -- the /api/health half is exercised through buildHealthPayload/vendorFlags, the pure function the route returns."
         }
       ],
       "verification": null

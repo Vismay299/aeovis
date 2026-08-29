@@ -108,7 +108,7 @@ FIRECRAWL_API_KEY=...          # site scrape for prompt gen + research
 GSC_SERVICE_ACCOUNT_KEY=...    # Search Console (service-account JSON or base64)
 SERP_GEO=in                    # probe geography
 PROMPT_TARGET=30               # default tracked-set size for new brands
-CRON_SECRET=...                # REQUIRED in production — gates /api/scan/worker
+CRON_SECRET=...                # REQUIRED in production — the ONLY credential for the worker cron routes
 ```
 
 Apply the schema, then run:
@@ -124,8 +124,15 @@ npm run dev
 > **`CRON_SECRET` matters.** `/api/scan/worker` resumes scans and, via the
 > scheduler tick, creates new ones — each costing real SERP and LLM spend. When
 > `CRON_SECRET` is set the route requires it (`Authorization: Bearer …`,
-> `x-cron-secret`, `?secret=`, or Vercel's own cron header). It is left open
-> only when the variable is unset, for local development.
+> `x-cron-secret`, or `?secret=`). It is left open only when the variable is
+> unset, for local development.
+>
+> The `x-vercel-cron` header is no longer accepted as a credential (R0.1.8) —
+> any client can set it. That means the cron entries in `vercel.json`
+> authenticate **solely** by `CRON_SECRET`, which Vercel attaches as
+> `Authorization: Bearer <CRON_SECRET>` when the variable is set on the
+> project. **`CRON_SECRET` MUST be set in the deployment environment or every
+> scheduled scan and content batch will 401 and silently never run.**
 
 ---
 

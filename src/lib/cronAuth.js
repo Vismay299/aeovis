@@ -20,7 +20,6 @@
 /** Why a request was allowed or refused. Returned, not just logged. */
 export const CRON_AUTH = Object.freeze({
   OK_SECRET: "ok_secret",
-  OK_VERCEL_CRON: "ok_vercel_cron",
   OK_DEV_NO_SECRET: "ok_dev_no_secret",
   DENY_NO_SECRET_IN_PRODUCTION: "deny_no_secret_in_production",
   DENY_BAD_SECRET: "deny_bad_secret",
@@ -46,15 +45,13 @@ export function authorizeCronRequest({ secret, nodeEnv, header, querySecret = nu
     return { authorized: true, reason: CRON_AUTH.OK_DEV_NO_SECRET };
   }
 
-  // Vercel injects this on its own cron invocations. NOTE: it is a plain
-  // request header and therefore forgeable by any caller, so this is a
-  // weaker check than the secret — kept because production cron currently
-  // depends on it. Tightening it is tracked separately; do not read this as
-  // an endorsement.
-  if (header("x-vercel-cron")) {
-    return { authorized: true, reason: CRON_AUTH.OK_VERCEL_CRON };
-  }
-
+  // No `x-vercel-cron` branch (R0.1.8, finding C9). That header is a plain
+  // request header any client can set, so accepting it bypassed the very
+  // secret the operator configured. The secret is now the ONLY credential:
+  // Vercel attaches `Authorization: Bearer <CRON_SECRET>` to its own cron
+  // invocations when CRON_SECRET is set on the project, which the bearer
+  // branch below already accepts. An `x-vercel-cron` header is simply
+  // ignored — present or not, the request stands or falls on the secret.
   if ((header("authorization") || "") === `Bearer ${configured}`) {
     return { authorized: true, reason: CRON_AUTH.OK_SECRET };
   }
