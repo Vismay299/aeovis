@@ -73,7 +73,8 @@
     "Run the SQL with the merge, never after.",
     "An unpriced model id fails loud, never $0.",
     "Trust source, git log, and the tracker over any prose claiming completeness; close items with file:line in the same commit.",
-    "Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes."
+    "Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes.",
+    "Closing a task is an act on a verifier's word, never the implementer's. The agent that wrote the code never closes it."
   ],
   "tasks": [
     {
@@ -350,6 +351,60 @@
         "at": "2026-08-29T15:43:32.837Z",
         "note": "Every citation re-read and confirmed to point at the change it claims. Accept criterion exercised at the payload level: 12 tests assert the response carries db status, per-vendor configured flags with the missing env var names, and a per-ticker last_tick_at; teeth proven by removing the degraded branch and the finite-age check (2 tests fail). The route itself is I/O only and is guarded — it must be force-dynamic, must return buildHealthPayload, must read real ticks, and must make no vendor fetch. Migration 008 applied twice to a real PostgreSQL 16 cluster, cleanly and idempotently, and the upsert exercised. Guard also proves both workers tick AFTER their 401. Suite 679/679. NOT exercised: an actual HTTP GET, since there is no next binary in this environment (empty node_modules) — the route is a 25-line wrapper over the tested builder."
       }
+    },
+    {
+      "id": "R0.1.8",
+      "subphase": "R0.1",
+      "lane": "backend",
+      "title": "Remove the forgeable x-vercel-cron bypass from the worker gate",
+      "detail": "authorizeCronRequest accepts any request carrying an x-vercel-cron header, before it ever checks CRON_SECRET. That header is client-settable, so with the secret configured an anonymous caller can still reach both budget-spending worker routes — which partly defeats R0.1.1. Vercel's own guidance is to authenticate cron with the bearer secret, not this header. Remove the branch; keep the secret paths.",
+      "accept": "A request carrying x-vercel-cron but no valid secret is refused in production; existing secret paths (bearer, x-cron-secret, ?secret=) still pass; tests cover the forged header.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "C9"
+      ],
+      "anchors": [
+        "src/lib/cronAuth.js:52-56"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-29T16:08:57.581Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R0.1.9",
+      "subphase": "R0.1",
+      "lane": "backend",
+      "title": "Stop SERPAPI_KEY counting as a configured SERP provider",
+      "detail": "types.js still treats SERPAPI_KEY as satisfying the SERP-provider check although nothing calls SerpAPI any more, so a deployment with only that stale key looks configured and fails at probe time instead of at boot. The Bright Data ADR supersedes SerpAPI; the capability check should follow it.",
+      "accept": "A deployment with only SERPAPI_KEY set reports the SERP provider as unconfigured; check-secrets and /api/health agree; a test covers the stale-key case.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/engines/types.js:43"
+      ],
+      "phase": "R0",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-29T16:08:57.630Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R0.2.1",

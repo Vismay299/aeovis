@@ -19,6 +19,8 @@
  *   node .claude/orchestration/orchestrate.mjs verify <id> --verdict pass|fail [--note "..."]
  *   node .claude/orchestration/orchestrate.mjs block <id> --reason <code> [--note "..."]
  *   node .claude/orchestration/orchestrate.mjs unblock <id> [--note "..."]
+ *   node .claude/orchestration/orchestrate.mjs add <--json '{...}'>
+ *   node .claude/orchestration/orchestrate.mjs rule --add "<text>"
  *   node .claude/orchestration/orchestrate.mjs render
  *   node .claude/orchestration/orchestrate.mjs validate
  */
@@ -195,6 +197,62 @@ const cmds = {
     t.notes.push({ at: stamp(), by: "controller", text: `unblocked: ${flags.note || ""}` });
     save(g);
     console.log(`${t.id} unblocked`);
+  },
+
+  /**
+   * Append a standing rule. The tracker is generated from `standing_rules`, so
+   * without this the only way to add one was to hand-edit the ledger — which the
+   * agent protocol forbids. Found by the first controller run.
+   */
+  rule(g, { flags }) {
+    if (!flags.add) die('--add "<rule text>" is required');
+    const text = String(flags.add).trim();
+    if (g.standing_rules.includes(text)) die("that rule is already in force");
+    g.standing_rules.push(text);
+    save(g);
+    console.log(`standing rule ${g.standing_rules.length} added — run render to publish it`);
+  },
+
+  /**
+   * File a new task. Follow-ups discovered mid-rebuild belong in the ledger, not
+   * in a report nobody re-reads. Takes the same shape as a tasks.json entry.
+   */
+  add(g, { flags }) {
+    if (!flags.json) die("--json '<task object>' is required");
+    let t;
+    try {
+      t = JSON.parse(String(flags.json));
+    } catch (e) {
+      die(`--json is not valid JSON: ${e.message}`);
+    }
+    for (const f of ["id", "subphase", "lane", "title", "detail", "accept"])
+      if (!t[f]) die(`task is missing required field: ${f}`);
+    if (g.tasks.some((x) => x.id === t.id)) die(`task ${t.id} already exists`);
+    if (!Object.keys(g.lanes).includes(t.lane))
+      die(`unknown lane ${t.lane} — one of: ${Object.keys(g.lanes).join(", ")}`);
+    t.phase = t.id.split(".")[0];
+    if (!g.phases.some((p) => p.id === t.phase)) die(`unknown phase ${t.phase}`);
+    t.deps = t.deps || [];
+    for (const d of t.deps)
+      if (!g.tasks.some((x) => x.id === d)) die(`unknown dependency ${d}`);
+    t.tags = t.tags || [];
+    for (const tag of t.tags)
+      if (!Object.keys(g.block_reasons).includes(tag)) die(`unknown tag ${tag}`);
+    Object.assign(t, {
+      findings: t.findings || [],
+      anchors: t.anchors || [],
+      status: "todo",
+      owner: null,
+      evidence: [],
+      notes: [{ at: stamp(), by: "controller", text: "filed mid-rebuild" }],
+      verification: null,
+    });
+    g.tasks.push(t);
+    g.tasks.sort((a, b) =>
+      a.id.localeCompare(b.id, undefined, { numeric: true, sensitivity: "base" })
+    );
+    save(g);
+    console.log(`${t.id} filed in ${t.phase} [${t.lane}]`);
   },
 
   validate(g) {
