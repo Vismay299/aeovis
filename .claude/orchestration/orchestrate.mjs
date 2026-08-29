@@ -21,6 +21,7 @@
  *   node .claude/orchestration/orchestrate.mjs unblock <id> [--note "..."]
  *   node .claude/orchestration/orchestrate.mjs add <--json '{...}'>
  *   node .claude/orchestration/orchestrate.mjs rule --add "<text>"
+ *   node .claude/orchestration/orchestrate.mjs amend <id> --note "..." [--anchors f:l]
  *   node .claude/orchestration/orchestrate.mjs render
  *   node .claude/orchestration/orchestrate.mjs validate
  */
@@ -253,6 +254,27 @@ const cmds = {
     );
     save(g);
     console.log(`${t.id} filed in ${t.phase} [${t.lane}]`);
+  },
+
+  /**
+   * Refine a task's evidence as it is discovered — appends to `detail` and
+   * `anchors` only. It deliberately CANNOT touch `accept`: moving an acceptance
+   * criterion to fit what was built is the failure this ledger exists to stop.
+   * A criterion that is genuinely wrong needs a new task, not a quiet edit.
+   */
+  amend(g, { positional, flags }) {
+    const t = find(g, positional[0]);
+    if (flags.accept) die("`accept` is immutable — file a new task instead of moving the goalposts");
+    if (!flags.note && !flags.anchors) die("--note and/or --anchors is required");
+    if (flags.note) {
+      t.detail += ` ${String(flags.note)}`;
+      t.notes.push({ at: stamp(), by: "controller", text: `amended: ${flags.note}` });
+    }
+    if (flags.anchors)
+      for (const a of String(flags.anchors).split(",").map((x) => x.trim()).filter(Boolean))
+        if (!t.anchors.includes(a)) t.anchors.push(a);
+    save(g);
+    console.log(`${t.id} amended (accept unchanged)`);
   },
 
   validate(g) {

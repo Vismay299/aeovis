@@ -39,6 +39,15 @@ pass — if it needs a change, that is a `fail` with a precise note.
 4. **The evidence is honest.** Every cited file:line points at the change it
    claims to. A citation pointing at an unrelated line is a fail on its own.
 
+**Check liveness, not just existence.** A correct `file:line` proves a line
+exists — never that anything reaches it. Before accepting any claim that code
+runs, trace it to an HTTP route or a cron entry yourself, hop by hop. Before
+accepting that code is dead, grep the whole tree for importers, static and
+dynamic. This caught a document that was wrong twice in opposite directions
+while every individual citation in it resolved correctly: the arrows between
+the lines were never checked. Rebuild the trace; do not accept one you were
+handed.
+
 **Fail for any of these, even when the code looks right:**
 
 - The change is wider than the task — unrequested refactors ride in on the diff.

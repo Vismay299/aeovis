@@ -16,6 +16,15 @@ line that moved is worse than no doc: it teaches the next reader to distrust the
 whole file. When a cited finding no longer reproduces, write that instead, with
 the commit that fixed it.
 
+**Verify liveness, not just existence.** Every `file:line` you cite resolves to
+a line — that is not the same as that line running. Before you describe a call
+site as live, trace it to an HTTP route or a cron entry. Before you call one
+dead, grep the tree for importers. The first two drafts of the Bright Data ADR
+were each wrong in opposite directions — one said live code was dead, the next
+said dead code was live — and every citation in both resolved correctly. What
+went unchecked was whether the chain drawn *between* the correct lines could
+execute.
+
 **Status headers are mandatory.** Every doc under `docs/` carries one of
 `LIVE` / `SUPERSEDED-BY <link>` / `HISTORICAL` at the top. Four competing design
 authorities with no supersession markers is a finding in its own right.
