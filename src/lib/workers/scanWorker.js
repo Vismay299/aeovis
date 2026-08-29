@@ -7,6 +7,7 @@ import {
   hasActiveScanForBrand,
   isJobAlive,
   claimJobStatus,
+  getScansByDomain,
 } from "../db.js";
 import {
   upsertPromptResults,
@@ -17,12 +18,14 @@ import {
   getCompletedPairsForJob,
   getPromptResultsForJob,
   stampScanIdForJob,
+  getResultBrandsForScan,
   upsertBrandMetricsDaily,
   listDueSchedules,
   upsertScanSchedule,
 } from "../db/analytics.js";
 import { generateUnbrandedPrompts } from "../scoring/promptGen.js";
 import { extractCompetitors } from "../scoring/competitorExtract.js";
+import { resolveCompetitorRoster } from "../scoring/rosterContinuity.js";
 import { summarizeAioResults, aggregateAioTopDomains } from "../scoring/aioPipeline.js";
 import {
   summarizeEngineResults,
@@ -541,6 +544,8 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
   const computeHeadlineFn = deps.computeHeadline || computeHeadline;
   const summarizeAio = deps.summarizeAioResults || summarizeAioResults;
   const extractCompetitorsFn = deps.extractCompetitors || extractCompetitors;
+  const getScansByDomainFn = deps.getScansByDomain || getScansByDomain;
+  const getResultBrandsForScanFn = deps.getResultBrandsForScan || getResultBrandsForScan;
   const aggregateTopDomainsFn = deps.aggregateAioTopDomains || aggregateAioTopDomains;
   const enrichCitationsFn = deps.enrichCitations || enrichCitations;
   const judgeBrandsSymmetricFn = deps.judgeBrandsSymmetric || judgeBrandsSymmetric;
@@ -650,13 +655,39 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
   // call exists purely to keep the job looking alive.
   await updateJob(jobId, {});
 
-  const competitorObjects = await extractCompetitorsFn({
-    results: normalizedForCompetitors,
-    brand,
-    brandUrl: url,
-    userCompetitors: competitors,
-    stats,
-    max: 10,
+  // R0.3.3 — roster continuity. extractCompetitorsFn reaches the LLM; since
+  // R0.3.1 an unreachable LLM THROWS LlmUnavailableError rather than
+  // returning an empty answer. resolveCompetitorRoster turns that throw into
+  // a labelled state (carried_forward / unavailable) and lets every other
+  // error propagate, so finalize still dies on a real fault.
+  const {
+    competitors: competitorObjects,
+    roster_source: rosterSource,
+    extraction_offline: rosterExtractionOffline,
+    extraction_error: rosterExtractionError,
+  } = await resolveCompetitorRoster({
+    extract: () =>
+      extractCompetitorsFn({
+        results: normalizedForCompetitors,
+        brand,
+        brandUrl: url,
+        userCompetitors: competitors,
+        stats,
+        max: 10,
+      }),
+    // Chronology comes from scans.scanned_at (result_brands has no date
+    // column and a random-uuid pk), so the previous scan is resolved first
+    // and its id is what the roster lookup is keyed on. `alreadyStamped` is
+    // this job's own scan on a crash-recovery re-finalize — never carry a
+    // roster forward from ourselves.
+    loadPreviousRoster: async () => {
+      const priorScans = await getScansByDomainFn(url || promptKey);
+      const previous = (priorScans || []).find(
+        (row) => row?.id && row.id !== alreadyStamped?.scan_id
+      );
+      if (!previous) return [];
+      return getResultBrandsForScanFn(previous.id);
+    },
   });
 
   const topDomains = aggregateTopDomainsFn(
@@ -667,7 +698,9 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
 
   console.log(
     `[scan-chunk] Competitors: ${
-      competitorObjects.map((c) => `${c.name}(${c.visibilityScore}%/${c.source})`).join(", ") || "(none)"
+      competitorObjects
+        .map((c) => `${c.name}(${c.visibilityScore == null ? "—" : `${c.visibilityScore}%`}/${c.source})`)
+        .join(", ") || `(none — roster_source=${rosterSource})`
     }`
   );
 
@@ -689,13 +722,17 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
   // reconstructed non-branded answer from scratch instead of trusting
   // whatever narrower roster was baked into raw.brands at probe time.
   //
-  // Empty-competitor degradation (by design, not a bug): if
-  // extractCompetitorsFn found nothing AND no user-supplied competitors were
-  // given (e.g. the free LLM is down — extractCompetitors fails soft to
-  // fewer/no competitors, never throws), rosterCompetitorNames is `[]` and
-  // fullRoster is `[self]` alone — sov_pct legitimately comes out 100% (self
-  // ÷ self) for that scan, same as "no rivals were ever found to compare
-  // against." That is an acceptable degradation, not a regression.
+  // Empty-competitor degradation — and the difference that matters. If the
+  // extractor RAN and genuinely found nothing (and no user competitors were
+  // given), fullRoster is `[self]` alone and sov_pct is a real 100%: nobody
+  // else was co-mentioned. If the extractor could not run at all,
+  // `rosterSource` above is `carried_forward` or `unavailable` and that same
+  // `[self]`-alone shape means NOTHING WAS MEASURED. The two used to be
+  // indistinguishable — the old comment here called the second case "an
+  // acceptable degradation, not a regression", and that is precisely how a
+  // total LLM outage rendered as a confident 100% Share of Voice (A8/A9).
+  // `roster_source` travels onto the scan record below so every downstream
+  // surface can tell them apart.
   const brandAliases = getBrandAliases(brand, url);
   const rosterCompetitorNames = unionCompetitorNames(competitors, competitorObjects);
   const fullRoster = buildTrackedBrandRoster(brand, brandAliases, rosterCompetitorNames);
@@ -723,6 +760,10 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
     prompts_mentioned: summary.visible_non_branded,
     competitors: competitorObjects,
     competitors_raw: competitorsRaw,
+    // Standing rule 1: a measured zero must look different from never-ran.
+    roster_source: rosterSource,
+    roster_extraction_offline: rosterExtractionOffline,
+    roster_extraction_error: rosterExtractionError,
     results,
     scanned_at: scannedAt,
     used_dynamic_prompts: true,

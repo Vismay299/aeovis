@@ -450,6 +450,33 @@ export async function getResultBrandsForBrand(brand, { limit = DEFAULT_RESULT_BR
   return data || [];
 }
 
+/**
+ * Every result_brands row belonging to ONE scan (R0.3.3 roster continuity).
+ *
+ * Used by finalize to recover the last roster a scan actually measured, so a
+ * scan whose rival extractor was unreachable can carry that roster forward
+ * under an explicit `carried_forward` label instead of silently reporting an
+ * empty rival set (which is what made Share of Voice read a false 100%).
+ *
+ * Deliberately keyed on scan_id, not on brand: result_brands carries no
+ * created_at column, and its `id` is a random uuid, so rows for a brand
+ * cannot be ordered chronologically from this table alone. The caller
+ * establishes chronology from `scans.scanned_at` and passes the winning
+ * scan_id in.
+ */
+export async function getResultBrandsForScan(scanId, deps = {}) {
+  if (!scanId) return [];
+  const client = resolveClient(deps);
+
+  if (!client) {
+    return Array.from(global.memoryResultBrands.values()).filter((r) => r.scan_id === scanId);
+  }
+
+  const { data, error } = await client.from("result_brands").select("*").eq("scan_id", scanId);
+  if (error) throw error;
+  return data || [];
+}
+
 // ---------------------------------------------------------------------------
 // finalize: stamp scan_id
 // ---------------------------------------------------------------------------

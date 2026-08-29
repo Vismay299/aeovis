@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import { buildScanBaseRecord } from "./db/scanRow.js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -62,6 +63,14 @@ export async function insertScan(scanRecord) {
     results: scanRecord.results || [],
     competitors: scanRecord.competitors || [],
     competitors_raw: scanRecord.competitors_raw,
+    // R0.3.3: how this scan's roster was obtained — "extracted",
+    // "carried_forward" or "unavailable". Lives in JSONB rather than its own
+    // column so it ships without a migration this environment cannot apply;
+    // every dashboard surface reads it to decide whether Share of Voice is a
+    // measurement or an unassessed state.
+    roster_source: scanRecord.roster_source ?? null,
+    roster_extraction_offline: scanRecord.roster_extraction_offline ?? null,
+    roster_extraction_error: scanRecord.roster_extraction_error ?? null,
     used_dynamic_prompts: !!scanRecord.used_dynamic_prompts,
     platform: scanRecord.platform,
     scoring_version: scanRecord.scoring_version,
@@ -107,16 +116,7 @@ export async function insertScan(scanRecord) {
     tokens_used: scanRecord.tokens_used,
   };
 
-  const baseRecord = {
-    brand: scanRecord.brand,
-    url: scanRecord.url,
-    industry: scanRecord.industry,
-    visibility_pct: scanRecord.visibility_pct,
-    prompts_tracked: scanRecord.prompts_tracked,
-    prompts_mentioned: scanRecord.prompts_mentioned,
-    raw_results: rawPayload,
-    scanned_at: scanRecord.scanned_at,
-  };
+  const baseRecord = buildScanBaseRecord({ ...scanRecord, raw_results: rawPayload });
 
   // Cascade 1: try to insert with all new columns
   try {

@@ -407,11 +407,37 @@
         "src/lib/workers/scanWorker.js:868-914"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/scoring/rosterContinuity.js:73",
+        "src/lib/scoring/rosterContinuity.js:42",
+        "src/lib/db/analytics.js:467",
+        "src/lib/workers/scanWorker.js:668",
+        "src/lib/workers/scanWorker.js:683",
+        "src/lib/db/scanRow.js:33",
+        "src/lib/db.js:119",
+        "src/lib/scoring/rosterContinuity.test.mjs:50",
+        "src/lib/scoring/rosterContinuity.test.mjs:70",
+        "src/lib/db/scanRow.test.mjs:5"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-29T15:15:07.412Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-29T15:21:10.303Z",
+          "by": "rebuild-implementer",
+          "text": "Finalize now routes rival extraction through resolveCompetitorRoster: LlmUnavailableError is caught and turned into roster_source=carried_forward (previous scan's result_brands, resolved via scans.scanned_at chronology since result_brands has no date column) or 'unavailable' on a first scan; every other error still propagates. scans.competitors is now written to the column via buildScanBaseRecord (extracted from db.js precisely so it is testable — db.js imports the Supabase SDK at module scope). The old 'acceptable degradation' comment at scanWorker.js:692 is replaced with the measured-zero vs never-ran distinction. 12 new tests covering first-scan and repeat-scan."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-29T15:21:46.173Z",
+        "note": "Exercised at both levels. Unit: 8 rosterContinuity tests cover repeat-scan (carried_forward from previous result_brands) and first-scan (unavailable, empty roster but labelled), plus proof that a non-LLM error and a DB failure both still propagate. Integration: scanChunk.test.mjs (45 tests, the finalize suite) passes unchanged against the rewired finalize. scans.competitors proven written by buildScanBaseRecord's 4 tests. NOTE — the 19 'failing' files in the given baseline are all ERR_MODULE_NOT_FOUND on @supabase/supabase-js and @google/generative-ai; with local stubs in the gitignored node_modules the full suite is 624/624 green (612 before this task), which is how the finalize wiring was actually verified rather than merely read."
+      }
     },
     {
       "id": "R0.3.4",
