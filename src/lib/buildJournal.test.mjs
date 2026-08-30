@@ -59,14 +59,50 @@ test("GUARD — every register row carries an anchor and a mechanism", async () 
   }
 });
 
-test("GUARD — the journal does NOT claim to hold all 37 findings", async () => {
-  // Three (B8, B9, B12) are unrecoverable from this repository. A register
-  // that rounded 34 up to "all of them" would be the same lie it catalogues.
+test("GUARD — the register holds all 37 findings and says how it got the last three", async () => {
+  // 2026-08-29..30 the register held 34 and said so: B8, B9 and B12 were not
+  // recoverable from this repository. They were then pasted in from the
+  // companion artifact and their anchors re-verified at HEAD. Both halves are
+  // guarded: the count must be 37, AND the file must still explain the
+  // provenance — a register that grew three rows without saying where they
+  // came from is back to being unverifiable.
   const md = await journal();
-  const count = journalFindingIds(md).length;
-  assert.equal(count, 34, `the register holds ${count} findings`);
-  assert.match(md, /B8.*B9.*B12|`B8`, `B9` and `B12`/s, "the gap must be named explicitly");
-  assert.match(md, /not recoverable from this\s+repository/i, "the gap must say why");
+  const ids = journalFindingIds(md);
+  assert.equal(ids.length, 37, `the register holds ${ids.length} findings`);
+  for (const id of ["B8", "B9", "B12"]) {
+    assert.ok(ids.includes(id), `${id} must have a register row`);
+  }
+  assert.match(md, /companion artifact/i, "the three pasted rows must name their source");
+  assert.match(md, /re-?verified|re-?read/i, "the paste must record that anchors were re-checked at HEAD");
+});
+
+test("GUARD — the closed gap does not silently reopen as a stale claim", async () => {
+  // The opposite failure to the one above: the register must not still assert
+  // the three are unrecoverable now that they are sitting in it.
+  const md = await journal();
+  const gaps = md.slice(md.indexOf("## Gaps"));
+  assert.ok(gaps.length > 0, "the Gaps section must survive; it carries the trap warning");
+  assert.doesNotMatch(
+    gaps,
+    /^\*\*`B8`, `B9` and `B12` are missing/m,
+    "the gap is closed; this claim is stale"
+  );
+  // The renumbering trap is NOT closed: production-plan.md still has its own
+  // unrelated B8/B9 sections, and mistaking them for findings is exactly how
+  // three wrong rows get in.
+  assert.match(gaps, /production-plan\.md/, "the production-plan.md B8/B9 trap must stay documented");
+  assert.match(gaps, /unrelated/i, "the trap warning must say the sections are unrelated");
+});
+
+test("GUARD — B9's row carries the corrected anchor, not the audit's stale one", async () => {
+  // B9 is the cautionary case: the audit's scanWorker.js:432-439 STILL
+  // RESOLVES at HEAD, to unrelated code. A row that quietly reverted to it
+  // would look correct and describe the wrong function.
+  const md = await journal();
+  const row = md.split("\n").find((l) => l.startsWith("| B9 |"));
+  assert.ok(row, "B9 must have a register row");
+  assert.match(row, /scanWorker\.js:472-479/, "B9 must cite the anchor verified at HEAD");
+  assert.match(row, /\*\*moved\*\*/, "B9's anchor moved and the row must say so");
 });
 
 test("GUARD — entry #1 is the July postmortem and links to it", async () => {

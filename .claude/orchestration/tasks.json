@@ -507,9 +507,24 @@
         "docs/"
       ],
       "phase": "R0",
-      "status": "blocked",
+      "status": "done",
       "owner": "rebuild-scribe",
-      "evidence": [],
+      "evidence": [
+        "docs/BUILD_JOURNAL.md:123",
+        "docs/BUILD_JOURNAL.md:124",
+        "docs/BUILD_JOURNAL.md:127",
+        "src/lib/scoring/enginePipeline.js:510",
+        "src/lib/scoring/enginePipeline.js:450",
+        "src/lib/scoring/enginePipeline.js:98",
+        "src/lib/workers/scanWorker.js:472",
+        "src/lib/workers/scanWorker.js:436",
+        "src/lib/db.js:11",
+        "src/lib/db.js:298",
+        "src/lib/db.js:62",
+        "src/app/api/scan/route.js:62",
+        "src/app/api/scan/worker/route.js:60",
+        "src/lib/buildJournal.test.mjs:62"
+      ],
       "notes": [
         {
           "at": "2026-08-29T15:54:12.972Z",
@@ -520,10 +535,28 @@
           "at": "2026-08-29T15:57:51.008Z",
           "by": "rebuild-scribe",
           "text": "blocked (needs-decision): FILE WRITTEN with 34 of the 37 findings; the remaining three are NOT RECOVERABLE from this repository. docs/BUILD_JOURNAL.md carries entry #1 (the 2026-07-29 postmortem, with its 16/56 measurement) and a register of every A/B/C finding the ledger still references, each with a mechanism and a file:line, plus an honest Verified column ('read' = mechanism re-confirmed at this commit, 'anchor only' = the location exists but the mechanism was not re-read). BLOCKER: the findings originate in the companion artifact 'The Honesty Gap' (bbd113a7), which is not committed. The only surviving in-repo record is tasks.json's per-task findings lists, and B8, B9 and B12 are referenced by no task — so they have no description, mechanism or anchor anywhere in the tree. Renumbering 34 as 37 would be exactly the lie this file catalogues. Note also that docs/plans/production-plan.md contains UNRELATED sections also labelled B8/B9 (its own numbering) — do not mistake them for the missing findings. ALSO RECORDED: eight audit anchors had already moved (Donut.jsx, Sidebar.jsx, interlocking.js, worker/, docs/vendors/) — the appendix lists each. 5 guard tests keep the register in step with the ledger and fail if it ever claims 37. Unblock by pasting B8/B9/B12 from the companion artifact, or recording a decision to drop them."
+        },
+        {
+          "at": "2026-08-30T05:27:11.561Z",
+          "by": "controller",
+          "text": "unblocked: Unblocking: the operator supplied B8/B9/B12 verbatim from the companion artifact 'The Honesty Gap' (bbd113a7). The blocker was that these three are referenced by no task and so had no description, mechanism or anchor anywhere in the tree; that is now resolved from outside the repo. Anchors will be re-verified against source at HEAD before any row is written — not pasted as given."
+        },
+        {
+          "at": "2026-08-30T05:27:15.562Z",
+          "by": "rebuild-scribe",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-30T05:27:36.018Z",
+          "by": "rebuild-scribe",
+          "text": "Gap closed: B8/B9/B12 pasted from the companion artifact and added to section B, register now holds all 37. Every anchor re-read at HEAD before its row was written. FINDINGS: (1) B9 MOVED +40 — audit said scanWorker.js:432-439, exact at 5111219 per git show, now :472-479; the stale range STILL RESOLVES at HEAD to unrelated code (the 'Prepared N queries' log), so a reader trusting it would have documented the wrong function. (2) B12 MOVED — db.js:5-8 -> :11-15 and :289 -> :298, shifted by 4f7b6b6 adding the duplicateScan imports; mechanism reproduces in full. (3) B8 anchor holds at :510-514 (audit's :515 is the blank line) but its MECHANISM AS WRITTEN DOES NOT REPRODUCE and did not at the audit commit either: aio hardcodes isConfigured: () => true (:450, byte-identical at 5111219), so the resolver can never 'prove aio unconfigured'. Recorded a Correction to B8 with what does reproduce — an unrequested aio default, and an aio with no BRIGHTDATA_API_KEY resolving as enabled while probeAio's catch (:98-101) turns every failed query into a zero-valued row. LIVENESS (standing rule 10): B8/B9 traced to entry points — resolveEnabledEngines has 4 call sites; 3 live via runScanChunk (scanWorker :375/:464/:579 -> :1082/:1088) reached from POST /api/scan (route.js:62) and the vercel.json cron GET /api/scan/worker (:60,:94); the 4th, runMultiEngineScan (enginePipeline:533-534), is DEAD — no importer in src/, already listed in production-plan.md E1.4 — and sits 19 lines below B8's anchor looking like the obvious consumer. Same trap as adapter.js/probe.js. Also recorded: B12's DB-error sibling was already fixed by 480fd9a BEFORE the audit (unconfigured case untouched), and /api/health reports supabase required but gates nothing. Gaps section rewritten to record how the gap closed; production-plan.md B8/B9 renumbering trap kept and re-guarded. All three rows are 'open — no task': documenting them did not create the work. DEVIATION: src/lib/buildJournal.test.mjs edited — its guard asserted count===34 and 'not recoverable', now false. Replaced with 3 guards (37 rows + provenance; stale-claim/trap regression; B9 must carry :472-479 and be marked moved). No product source touched. npm run test:scoring 869/869 (867 baseline + 2 net new guards). Not committed."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-decision"
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-30T05:33:59.109Z",
+        "note": "PASS. Verifier independent of the scribe; every trace rebuilt from source, not accepted from the note. Edited nothing; worktree still shows only tasks.json, BUILD_JOURNAL.md, buildJournal.test.mjs.\n\nREGISTER COMPLETE. 37 register rows, ids exactly A1-A12/B1-B13/C1-C12, no duplicates (the 47 raw table-row matches are the register's 37 plus the 3-row Gaps table and 7-row Appendix). Every row carries all five columns. Entry #1 is the 2026-07-29 postmortem at :30 with the 16/56 measurement and a link to docs/plans/2026-07-29-visibility-score-fix.md, which exists.\n\nALL CITATIONS OPENED, NOT SPOT-CHECKED. Extracted all 70 distinct path citations and checked existence + line range on each. Eight paths do not exist -- chart-preview/page.js, components/charts/Donut.jsx, dashboard/Sidebar.jsx, scoring/interlocking.js -- and all eight are exactly the anchors the file itself quotes as the audit's stale value under 'audit said'/**moved**/'file deleted'. No range overruns its file. Bare :NNN continuations opened by hand (openrouter :22-25/:124-125, db :62-65/:122-167/:180-182/:252/:300-318/:347/:426/:457/:473/:530, cronAuth :49-56, health.js:20, brightdata :139-140).\n\nTHE THREE CLAIMS -- ALL TRUE, ALL REPRODUCED.\n(1) B9 CONFIRMED, and the dangerous half is real. git show 5111219:scanWorker.js :432-439 is byte-identical to HEAD :472-479 (allEngineDefs/frozenNames/filtered + the defensive-fallback comment + engineDefs). At HEAD :432-439 STILL RESOLVES -- to the '[scan-chunk] Prepared N queries' log and the head of the sourcing checkpoint return. A reader trusting the audit number would have written up real, unrelated code as B9. +40 exact. The freeze contract at :364-370 says verbatim 'never re-resolve which engines are \"the\" engines for this job even if env vars change mid-scan'; :436/:449 write engines onto the checkpoint. Mechanism reproduces as written.\n(2) B8 CONFIRMED -- artifact wrong, Correction right. isConfigured: () => true at :450 is byte-identical at 5111219 and HEAD, so the skip loop at :502-506 can never reject aio; 'proved unconfigured' never happens. EXECUTED, not read: ENGINES=chatgpt,perplexity with no keys -> two skip warnings, 'No engines enabled! Defaulting to aio.', RESOLVED [\"aio\"], aio.isConfigured() true. Second half executed too: probeAio with no BRIGHTDATA_API_KEY returns a fully-populated 19-field row, answer_present false / visible false / cost 0, from the catch at :98-101 on the brightdata.js:139-140 throw. :510-514 is the block and :515 is length-0 blank, as claimed.\n(3) B12 CONFIRMED. git show 5111219 db.js: supabase ternary at :8 -> HEAD :15; global.memoryJobs at :289 -> :298 (+9 exact). 4f7b6b6 'fix(db): let the database reject duplicate concurrent scans' adds a 6-line duplicateScan import at :4-9, first hunk @@ -1,6 +1,12 @@. Mechanism reproduces in full: insertScan logs 'Skipping database insert' and returns (:62-65), getScansForBrand [] (:180-182), listRecentScans [] (:252), hasDb false at :347/:426/:457/:473/:530. 480fd9a is 2026-07-24 and merge-base confirms it is an ancestor of 5111219, so 'already fixed before the audit' is right. /api/health: health.js:20 is the supabase required:true entry; grep across api/scan, workers and scoring for any health consult returns nothing -- 'a report, not a gate' holds.\n\nSTANDING RULE 10 -- TRACE REBUILT MYSELF. resolveEnabledEngines (:488) has exactly four non-test references tree-wide: enginePipeline :534 and scanWorker :375/:464/:579. Walked each hop: runScanChunk (:1028) calls sourcing :1082 and probing :1088; importers are app/api/scan/route.js:6 firing at :62 inside POST (:13) and app/api/scan/worker/route.js:5 firing at :60 and :94 inside GET (:39), with vercel.json cron path /api/scan/worker schedule '0 0 * * *'. LIVE, confirmed. Dead-code claims verified independently and they hold: runMultiEngineScan (:533, resolving :534) has zero importers in src/, no dynamic import, and is listed in production-plan.md E1.4; it sits 19 lines below B8's anchor. The adapter/probe parallel holds too -- types.js:47 reads BRIGHTDATA_API_KEY, its only consumer is probe.js:70, and probe.js has zero importers.\n\nTESTS. npm run test:scoring 869/869 pass 0 fail (867 baseline, -1 obsolete count===34 guard, +3 new = +2 net). Guard liveness proven by mutation in a throwaway git worktree (repo untouched): reverting B9's row to :432-439 fails guard 5; deleting the B12 row fails guard 3; stripping the production-plan.md trap warning fails guard 4; removing the 'companion artifact' provenance fails guard 3. Restored copy passes 7/7. The guards bite; they are not tautological. The test-file edit was forced -- the old guard asserted 34 and 'not recoverable', both now false -- and is in scope. tasks.json diff is bookkeeping only (blocked -> in_verification plus notes).\n\nTWO UNDERSTATEMENTS FOR WHOEVER EDITS NEXT -- neither a false claim nor a bad citation, so neither blocks. (a) 'dispatched from two entry points' undercounts: app/api/scan/[job_id]/status/route.js:57 is a third live caller of runScanChunk, a poll-driven rescue gated on shouldRescueJob. It strengthens the liveness conclusion rather than weakening it, but the list reads as exhaustive and is not. (b) The preamble bullet still says 'eight of them had in fact moved' while the Appendix now says eleven; the Appendix narrates both passes correctly, so the preamble is stale-but-scoped, not wrong. Also minor: B12's :11-15 starts one line above the audit range's true counterpart (:12-15), a widening that includes supabaseUrl -- more accurate, not less."
+      }
     },
     {
       "id": "R0.2.2",

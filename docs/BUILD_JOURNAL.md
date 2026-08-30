@@ -73,10 +73,13 @@ They are the source of the R0–R6 rebuild in
 
 Read this before trusting a row.
 
-- **34 of the 37 findings are recorded below.** `B8`, `B9` and `B12` are **not
-  recoverable from this repository** — see *Gaps* at the end. A register that
-  quietly renumbered 34 findings as "all of them" would be the same lie it
-  exists to catalogue.
+- **All 37 findings are recorded below.** 34 were recoverable from the tree;
+  `B8`, `B9` and `B12` were pasted in from the companion artifact on
+  2026-08-30 and their anchors re-verified against source at HEAD — see *Gaps*
+  at the end for exactly how, and for the trap that still sits next to them.
+  Until that paste the register held 34 and said so, because quietly
+  renumbering 34 findings as "all of them" would be the same lie it exists to
+  catalogue.
 - The **Anchor** column was re-checked against the tree at the time of writing.
   Anchors that had already moved are marked **`moved`** with the corrected path.
   This matters: the audit's own closing note says to re-verify every line number
@@ -117,9 +120,65 @@ Status values: `open` · `closed <task>` · `does not reproduce`.
 | B5 | `upsertPrompts` returns `{ error }` instead of throwing; callers treat the envelope as a value. A fail-soft create is how a write that never happened reads as one that did. | `src/lib/db/prompts.js:96-100` | anchor only | open — R2.2.3 |
 | B6 | Same defect as A8, from the pipeline side: missing key and exhausted retries both returned empty text. | `src/lib/openrouter.js:22-25`, `:124-125` | **read** | **closed R0.3.1** |
 | B7 | A new brand with no LLM silently fell back to the hardcoded per-industry prompt pack, and the resulting scan published as if the questions had been generated for that brand. | `src/lib/scoring/promptGen.js` (industry-pack top-up); `src/lib/workers/scanWorker.js` sourcing | **read** | **closed R0.3.4** |
+| B8 | "No engines enabled!" runs one anyway: when every requested engine is skipped as unconfigured, the resolver warns and returns `aio` regardless — an engine the operator did not ask for, whose configuredness is the hardcoded constant `isConfigured: () => true`, so an aio run with no Bright Data key resolves as "enabled" and every query lands in `probeAio`'s catch as a complete zero-valued row. | `src/lib/scoring/enginePipeline.js:510-514` (audit said `:510-515`; `:515` is the blank line closing the block); the constant at `:450`; the swallowing catch at `:98-101` | **read** | open — no task; see *Correction to B8* below |
+| B9 | The frozen engine set can be silently replaced mid-run. Sourcing freezes the resolved engine names onto the checkpoint precisely so a resume cannot re-resolve them, then probing discards that freeze: if no frozen name matches the live registry, `engineDefs` falls back to whatever is enabled today, with no warning and nothing recorded on the scan. | `src/lib/workers/scanWorker.js:472-479` **moved** (audit said `:432-439`, which was exact at `5111219`); the freeze contract it voids is stated at `:364-370` | **read** | open — no task |
 | B10 | `insertScan` has a three-tier column-drop cascade: an insert that fails silently retries with fewer columns, so a scan can persist with fields quietly missing. | `src/lib/db.js:122-167` | **read** | open — R2.2.4 |
 | B11 | `hasActiveScanForBrand` fails open on any DB error and leaves a TOCTOU window, so two concurrent requests could each start a full-budget duplicate scan. | `src/lib/db.js:403-408` | **read** | **closed R0.1.5** |
+| B12 | No Supabase env gives a memory mode that "works": the client is null, so scan jobs live only in a per-instance `global.memoryJobs` map, `insertScan` logs "Skipping database insert" and returns, and every read returns empty. The scan completes and reports success, nothing persists, the dashboard is permanently empty rather than erroring, and two serverless instances disagree about the same job. | `src/lib/db.js:11-15` **moved** (audit said `:5-8`) and `:298` **moved** (audit said `:289`); the silent skip at `:62-65`; empty reads at `:180-182` and `:252` | **read** | open — no task; reproduces in full, see *Note on B12* below |
 | B13 | A fabricated `studio.perceev.app` URL is presented to the user as a real published location. | `src/app/api/content-items/[id]/decision/route.js:19-27` | anchor only | open — R5.2.1 |
+
+**Liveness of B8 and B9 (standing rule 10).** Both are on the live scan path,
+but not by the route the file's own shape suggests. `resolveEnabledEngines`
+(`enginePipeline.js:488`) has four call sites. Three are live —
+`scanWorker.js:375` (sourcing, which writes the resolved names onto the
+checkpoint at `:436`/`:449`), `:464` (probing) and `:579` (finalize) — and all
+three are reached through `runScanChunk` (`scanWorker.js:1028`, calling
+sourcing at `:1082` and probing at `:1088`), which is dispatched from **two**
+entry points: `POST /api/scan` (`src/app/api/scan/route.js:13`, firing at
+`:62`) and `GET /api/scan/worker` (`src/app/api/scan/worker/route.js:39`,
+firing at `:60` and `:94`), the latter being a cron entry in `vercel.json`
+(`/api/scan/worker`, `0 0 * * *`).
+
+The fourth call site is **dead**: `runMultiEngineScan`
+(`enginePipeline.js:533`, resolving at `:534`) has no importer anywhere in
+`src/` — `docs/plans/production-plan.md` E1.4 already lists it as a dead export
+to delete. It sits nineteen lines below B8's anchor and reads like the obvious
+consumer, and it is not. This is the same trap as the `adapter.js`/`probe.js`
+pair (`src/lib/engines/types.js:47` computes engine availability from
+`BRIGHTDATA_API_KEY`, but its only consumer is `src/lib/scoring/probe.js`,
+which nothing live imports). Do not cite the dead consumer as proof either
+finding runs; cite the worker chain above.
+
+**Correction to B8 as written.** The companion artifact says the resolver
+"returns the aio definition it just proved unconfigured". It never proves that,
+and did not at the audit commit either: `aio`'s registry entry hardcodes
+`isConfigured: () => true` (`enginePipeline.js:450`, byte-identical at
+`5111219`), so the skip loop at `:502-506` can never reject it. Two things do
+reproduce, and they are the same class of defect the artifact was pointing at.
+First, with `ENGINES=chatgpt,perplexity` and neither key set, both are skipped
+and `:510-514` returns `[aio]` — an engine the operator did not request, and
+the scan then publishes as an aio scan with no record that the requested
+engines never ran. Second, and worse, because aio's configuredness is a
+constant rather than a credential check, a deployment with no
+`BRIGHTDATA_API_KEY` still resolves aio as "enabled"; `brightDataSearch` throws
+"Bright Data SERP is not configured" (`src/lib/engines/brightdata.js:139-140`),
+`probeAio` catches it per query (`enginePipeline.js:98-101`), and each query
+returns a fully-populated row with `answer_present: false`, `visible: false`
+and `cost: 0`. A completely unconfigured engine therefore produces a full set
+of measured-looking zeroes rather than a failure.
+
+**Note on B12.** The finding reproduces in full at HEAD, for the trigger the
+artifact names — *no Supabase env*. A neighbouring trigger for the same map was
+already gone before the audit: `480fd9a` made the job store DB-authoritative,
+so a transient DB error on a **configured** deployment now throws instead of
+tipping the job into `global.memoryJobs` (the mechanism is written up in the
+doc comment at `src/lib/db.js:300-318`). That fix does not touch the
+unconfigured case, which is what B12 is about: `hasDb` is simply `false`
+(`:347`, `:426`, `:457`, `:473`, `:530`) and memory is the only store. Added
+since the audit, `/api/health` reports supabase as `required` with the missing
+env vars named (`src/lib/health.js:20`, `src/app/api/health/route.js:4`) — but
+it is a report, not a gate: nothing on the scan path consults it, so an
+unconfigured deployment still accepts scans and still completes them.
 
 ## C — operational and data integrity
 
@@ -145,34 +204,58 @@ the DB by hand. The exposure is the same; the mechanism is not. The route was
 deleted rather than gated, because gating leaves the customer's numbers in the
 repository and in every build.
 
-## Gaps — what is NOT in this register
+## Gaps — closed 2026-08-30, and the trap that is still open
 
-**`B8`, `B9` and `B12` are missing. They are not recoverable from this
-repository.**
+**`B8`, `B9` and `B12` are now in the register.** From 2026-08-29 to
+2026-08-30 they were not, and this section said so: the findings originate in a
+companion document — *The Honesty Gap* (artifact `bbd113a7`) — which is **not
+committed here**, and the only in-repo record of which findings exist is
+`.claude/orchestration/tasks.json`, where each task lists the finding ids it
+addresses. No task references B8, B9 or B12, so nothing in the tree carried
+their description, mechanism or anchor.
 
-The findings originate in a companion document — *The Honesty Gap* (artifact
-`bbd113a7`) — which is **not committed here**. The only surviving record inside
-the repo is `.claude/orchestration/tasks.json`, where each task lists the
-finding ids it addresses. Every finding that no task references therefore has no
-description, no mechanism and no anchor anywhere in the tree. Three fall in that
-hole.
+**How the gap was closed.** The operator holding the artifact supplied the
+three verbatim, with the anchors the audit recorded at commit `5111219`. They
+were not pasted as given. Each anchor was re-read against source at HEAD before
+its row was written, because the audit's own closing note says to re-verify
+every line number and eight had already moved:
 
-Do not resolve this by renumbering. `docs/plans/production-plan.md` happens to
-contain sections also labelled `B8` and `B9` ("Remaining input/output hygiene",
-"Dependency patching") — those belong to that document's own scheme and are
-**unrelated** to the audit's finding ids. Treating them as the missing findings
-would put three wrong rows in a register whose entire purpose is that its rows
-are true.
+| Finding | Audit anchor | At HEAD | Outcome |
+|---|---|---|---|
+| B8 | `enginePipeline.js:510-515` | `enginePipeline.js:510-514` | resolves; `:515` is the blank line closing the block. Mechanism **corrected** — the artifact's "the aio definition it just proved unconfigured" is not what the code does; see *Correction to B8* above. |
+| B9 | `scanWorker.js:432-439` | `scanWorker.js:472-479` | **moved** `+40`. Exact at `5111219` (confirmed with `git show`); the block was displaced by later work in the same file. Mechanism reproduces as written. |
+| B12 | `db.js:5-8`, `:289` | `db.js:11-15`, `:298` | **moved** `+7` / `+9`, by `4f7b6b6` adding the `duplicateScan` imports at `:4-9`. Mechanism reproduces in full; see *Note on B12* above. |
 
-**To close this gap:** paste the three findings from the companion artifact into
-this file, or record a decision that they are dropped and why.
+B9's stale anchor is the reason this mattered. At HEAD, `scanWorker.js:432-439`
+still resolves — to the "Prepared N queries" log and the head of the sourcing
+checkpoint. A reader who trusted the number would have written up a real,
+different piece of code as B9 and never known.
+
+Both B8 and B9 were also traced to an entry point before being described as
+live, under standing rule 10 — see *Liveness of B8 and B9* above. This is not
+ceremony: the nearest plausible consumer of B8's code, `runMultiEngineScan`,
+is dead.
+
+**The renumbering trap is still live.** `docs/plans/production-plan.md`
+contains sections also labelled `B8` and `B9` ("Remaining input/output
+hygiene", "Dependency patching"). They belong to that document's own scheme and
+are **unrelated** to the audit's finding ids. They were not used here and must
+not be: the rows above come from the artifact and from source, not from that
+file.
+
+**What is still missing.** Closing the documentation gap did not create the
+work. No rebuild task references B8, B9 or B12, so all three rows read `open —
+no task`. Until a task claims them they are recorded and unowned, which is a
+better state than unrecorded, and not the same as fixed.
 
 ---
 
 ## Appendix — anchors that had already moved
 
 The audit's own closing note says to re-verify its line numbers before acting on
-them. Checked at the time of writing, eight anchors no longer resolved:
+them. Checked when this register was written (2026-08-29), eight anchors no
+longer resolved. Re-checked when B8, B9 and B12 were pasted in from the
+companion artifact (2026-08-30), three more had moved — **eleven in total**:
 
 | Finding | Audit said | Actually at |
 |---|---|---|
@@ -180,5 +263,8 @@ them. Checked at the time of writing, eight anchors no longer resolved:
 | A6, A7 | `src/components/dashboard/Sidebar.jsx:138-143` | `src/components/perceev/Sidebar.jsx` |
 | A8, A9 | `src/components/charts/Donut.jsx:29-44` | `src/components/perceev/charts/Donut.jsx` |
 | B1 | `worker/` | no such directory; the extractor lives in `src/lib/engines/perplexity.js` |
+| B9 | `src/lib/workers/scanWorker.js:432-439` | `:472-479` — the old range still resolves, to unrelated code |
+| B12 | `src/lib/db.js:5-8` | `:11-15` (shifted by `4f7b6b6`) |
+| B12 | `src/lib/db.js:289` | `:298` |
 | C4 | `docs/vendors/` | does not exist yet; created by R5.1.1 |
 | C12 | `src/app/chart-preview/page.js` | deleted by R0.1.2 |
