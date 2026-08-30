@@ -3411,7 +3411,7 @@
       "subphase": "R5.1",
       "lane": "docs",
       "title": "Key re-enable checklist",
-      "detail": "check:secrets passes, then one metered call proves cost lands non-zero in the price table, then SOV surfaces exit 'not assessed'. Nothing else in R5 starts before this.",
+      "detail": "check:secrets passes, then one metered call proves cost lands non-zero in the price table, then SOV surfaces exit 'not assessed'. Nothing else in R5 starts before this. Input from R5.1.3 (2026-08-30): the gateway is now OpenRouter and the model is z-ai/glm-5.2:free. This sharpens the open question about the middle gate. OpenRouter's public catalogue reports this id at prompt 0 and completion 0 — a price the vendor STATES, not a price we failed to look up. So the gate's real requirement is not 'cost must be non-zero' but 'the price must be known', and a free-tier branch can pass honestly by asserting the id resolves in the catalogue with an explicit zero, while an id ABSENT from the catalogue still fails loud. That keeps standing rule 5 intact — an unpriced model id fails loud, never $0 — without needing a paid call purely to prove the meter works.",
       "accept": "Checklist committed and executed; each of the three gates is evidenced.",
       "deps": [
         "R5.1.1",
@@ -3430,7 +3430,13 @@
       "status": "todo",
       "owner": null,
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-08-30T08:34:27.622Z",
+          "by": "controller",
+          "text": "amended: Input from R5.1.3 (2026-08-30): the gateway is now OpenRouter and the model is z-ai/glm-5.2:free. This sharpens the open question about the middle gate. OpenRouter's public catalogue reports this id at prompt 0 and completion 0 — a price the vendor STATES, not a price we failed to look up. So the gate's real requirement is not 'cost must be non-zero' but 'the price must be known', and a free-tier branch can pass honestly by asserting the id resolves in the catalogue with an explicit zero, while an id ABSENT from the catalogue still fails loud. That keeps standing rule 5 intact — an unpriced model id fails loud, never $0 — without needing a paid call purely to prove the meter works."
+        }
+      ],
       "verification": null
     },
     {
@@ -3438,7 +3444,7 @@
       "subphase": "R5.1",
       "lane": "infra",
       "title": "The LLM gateway is MiMo while every var is named OPENROUTER_*",
-      "detail": "OPENROUTER_BASE_URL is https://api.xiaomimimo.com/v1 and OPENROUTER_API_KEY holds a MiMo key (sk- + 48 chars; an OpenRouter key is sk-or-v1- + 64 hex). So no LLM call in this repo has ever reached OpenRouter. The 402 Insufficient account balance is MiMo reporting an empty MiMo balance, and it was read for a week as an OpenRouter billing failure — the roadmap says the key is disabled, the handoff says rotate it at openrouter.ai/keys, and both fixes would have changed nothing. Proven by sending the same key to both hosts: api.xiaomimimo.com returns 402, openrouter.ai returns 401 Missing Authentication header because it does not recognise the token shape. This is finding C4/S19 recurring, and .env.example:10-13 already warns about it in as many words. The operator has chosen to move to OpenRouter proper, which needs a real sk-or-v1 key, LLM_BASE_URL=https://openrouter.ai/api/v1, a model id valid THERE, and the deprecated OPENROUTER_* aliases retired.",
+      "detail": "OPENROUTER_BASE_URL is https://api.xiaomimimo.com/v1 and OPENROUTER_API_KEY holds a MiMo key (sk- + 48 chars; an OpenRouter key is sk-or-v1- + 64 hex). So no LLM call in this repo has ever reached OpenRouter. The 402 Insufficient account balance is MiMo reporting an empty MiMo balance, and it was read for a week as an OpenRouter billing failure — the roadmap says the key is disabled, the handoff says rotate it at openrouter.ai/keys, and both fixes would have changed nothing. Proven by sending the same key to both hosts: api.xiaomimimo.com returns 402, openrouter.ai returns 401 Missing Authentication header because it does not recognise the token shape. This is finding C4/S19 recurring, and .env.example:10-13 already warns about it in as many words. The operator has chosen to move to OpenRouter proper, which needs a real sk-or-v1 key, LLM_BASE_URL=https://openrouter.ai/api/v1, a model id valid THERE, and the deprecated OPENROUTER_* aliases retired. CONFIG SWITCHED, KEY STILL MISSING. .env.local now sets only the canonical names: LLM_BASE_URL=https://openrouter.ai/api/v1, LLM_MODEL=z-ai/glm-5.2:free (operator's choice), CONTENT_MODEL=z-ai/glm-5.2:free. All three OPENROUTER_* aliases retired; the old MiMo key is preserved commented out as MIMO_LEGACY_KEY in case that account is topped up instead. MODEL ID VERIFIED AGAINST OPENROUTER'S PUBLIC CATALOGUE BEFORE WIRING, not assumed: GET /api/v1/models returns 396 models and z-ai/glm-5.2:free is an exact match — Z.ai GLM 5.2 (free), 256000 context, pricing prompt 0 completion 0. Sixteen z-ai ids exist and only this one is free, so a near-miss would have been easy. Resolution proven through the app's own llmConfig: base https://openrouter.ai/api/v1, model z-ai/glm-5.2:free, provider openrouter, token param max_tokens (not MiMo's max_completion_tokens). check:secrets now reports llm UNCONFIGURED missing LLM_API_KEY rather than FAIL, which is the correct distinction between an absent credential and a broken one, and the three llmConfig deprecation warnings are gone. 879/879 green. REMAINING: one sk-or-v1 key. Nothing else about this task is unresolved. NOTE FOR R5.1.2: this model is priced at a MEASURED zero — OpenRouter's catalogue reports prompt 0 and completion 0 — which is a different thing from an unpriced id defaulting to $0. That distinction is the honest free-tier branch its middle gate needs.",
       "accept": "check:secrets reports llm PASS naming openrouter as the gateway it called, .env.local sets only the canonical LLM_* names, and no OPENROUTER_* alias remains in the environment.",
       "deps": [],
       "tags": [
@@ -3467,6 +3473,11 @@
           "at": "2026-08-30T08:31:18.812Z",
           "by": "controller",
           "text": "blocked (needs-llm): Needs a real sk-or-v1 OpenRouter key from the operator; none exists on this machine (searched .env*, the repo tree and the worktrees — every sk-or-v1 hit is a format example in docs or tests)."
+        },
+        {
+          "at": "2026-08-30T08:34:16.777Z",
+          "by": "controller",
+          "text": "amended: CONFIG SWITCHED, KEY STILL MISSING. .env.local now sets only the canonical names: LLM_BASE_URL=https://openrouter.ai/api/v1, LLM_MODEL=z-ai/glm-5.2:free (operator's choice), CONTENT_MODEL=z-ai/glm-5.2:free. All three OPENROUTER_* aliases retired; the old MiMo key is preserved commented out as MIMO_LEGACY_KEY in case that account is topped up instead. MODEL ID VERIFIED AGAINST OPENROUTER'S PUBLIC CATALOGUE BEFORE WIRING, not assumed: GET /api/v1/models returns 396 models and z-ai/glm-5.2:free is an exact match — Z.ai GLM 5.2 (free), 256000 context, pricing prompt 0 completion 0. Sixteen z-ai ids exist and only this one is free, so a near-miss would have been easy. Resolution proven through the app's own llmConfig: base https://openrouter.ai/api/v1, model z-ai/glm-5.2:free, provider openrouter, token param max_tokens (not MiMo's max_completion_tokens). check:secrets now reports llm UNCONFIGURED missing LLM_API_KEY rather than FAIL, which is the correct distinction between an absent credential and a broken one, and the three llmConfig deprecation warnings are gone. 879/879 green. REMAINING: one sk-or-v1 key. Nothing else about this task is unresolved. NOTE FOR R5.1.2: this model is priced at a MEASURED zero — OpenRouter's catalogue reports prompt 0 and completion 0 — which is a different thing from an unpriced id defaulting to $0. That distinction is the honest free-tier branch its middle gate needs."
         }
       ],
       "verification": null,
