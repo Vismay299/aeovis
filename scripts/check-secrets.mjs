@@ -36,11 +36,20 @@ async function get(url, init = {}) {
   return fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
 }
 
-/** Turn an HTTP response into a verdict, naming the status on failure. */
-async function fromResponse(res, okDetail) {
+/**
+ * Turn an HTTP response into a verdict, naming the status on failure.
+ *
+ * `failContext` names WHO answered, and only the failure path needs it: a PASS
+ * detail already says. It exists because a 402 reading "Insufficient account
+ * balance" from a gateway configured as MiMo was read for a week as an
+ * OpenRouter billing problem, and the fix attempted was rotating an OpenRouter
+ * key that nothing calls. The host is the one fact that disambiguates it.
+ */
+async function fromResponse(res, okDetail, failContext = "") {
   if (res.ok) return { verdict: PASS, detail: okDetail };
   const body = await res.text().catch(() => "");
-  return { verdict: FAIL, detail: `HTTP ${res.status}${body ? ` — ${body.slice(0, 120)}` : ""}` };
+  const who = failContext ? ` from ${failContext}` : "";
+  return { verdict: FAIL, detail: `HTTP ${res.status}${who}${body ? ` — ${body.slice(0, 120)}` : ""}` };
 }
 
 /**
@@ -112,7 +121,11 @@ const VENDORS = [
         },
         body: JSON.stringify({ model, messages: [{ role: "user", content: "hi" }], ...cap }),
       });
-      return fromResponse(res, `model ${model} answered on ${provider} (${base})`);
+      return fromResponse(
+        res,
+        `model ${model} answered on ${provider} (${base})`,
+        `${provider} (${base})`
+      );
     },
   },
   {

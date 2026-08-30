@@ -3434,6 +3434,45 @@
       "verification": null
     },
     {
+      "id": "R5.1.3",
+      "subphase": "R5.1",
+      "lane": "infra",
+      "title": "The LLM gateway is MiMo while every var is named OPENROUTER_*",
+      "detail": "OPENROUTER_BASE_URL is https://api.xiaomimimo.com/v1 and OPENROUTER_API_KEY holds a MiMo key (sk- + 48 chars; an OpenRouter key is sk-or-v1- + 64 hex). So no LLM call in this repo has ever reached OpenRouter. The 402 Insufficient account balance is MiMo reporting an empty MiMo balance, and it was read for a week as an OpenRouter billing failure — the roadmap says the key is disabled, the handoff says rotate it at openrouter.ai/keys, and both fixes would have changed nothing. Proven by sending the same key to both hosts: api.xiaomimimo.com returns 402, openrouter.ai returns 401 Missing Authentication header because it does not recognise the token shape. This is finding C4/S19 recurring, and .env.example:10-13 already warns about it in as many words. The operator has chosen to move to OpenRouter proper, which needs a real sk-or-v1 key, LLM_BASE_URL=https://openrouter.ai/api/v1, a model id valid THERE, and the deprecated OPENROUTER_* aliases retired.",
+      "accept": "check:secrets reports llm PASS naming openrouter as the gateway it called, .env.local sets only the canonical LLM_* names, and no OPENROUTER_* alias remains in the environment.",
+      "deps": [],
+      "tags": [
+        "needs-llm"
+      ],
+      "findings": [
+        "C4",
+        "S19"
+      ],
+      "anchors": [
+        "scripts/check-secrets.mjs:100",
+        ".env.example:10",
+        "src/lib/llmConfig.js:22"
+      ],
+      "phase": "R5",
+      "status": "blocked",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-30T08:31:18.600Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-08-30T08:31:18.812Z",
+          "by": "controller",
+          "text": "blocked (needs-llm): Needs a real sk-or-v1 OpenRouter key from the operator; none exists on this machine (searched .env*, the repo tree and the worktrees — every sk-or-v1 hit is a format example in docs or tests)."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-llm"
+    },
+    {
       "id": "R5.2.1",
       "subphase": "R5.2",
       "lane": "backend",
