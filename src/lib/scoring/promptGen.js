@@ -4,14 +4,15 @@ import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery } from "./aioQueryClassify.js";
 import { isEliciting, assessPromptSet, MIN_ELICITING_RATIO } from "./promptQuality.js";
 import { llmJson } from "../llm.js";
+import { getLlmBaseUrl, getLlmModel } from "../llmConfig.js";
 import { INDUSTRY_PROMPTS } from "../../data/industries.js";
 
 const INTENT_TIERS = ["informational", "commercial", "comparison", "problem_aware"];
 
 /**
  * Small local industry-key resolver. Kept local so this module's only LLM
- * dependency stays `llmJson` (OpenRouter free model) — nothing here may reach
- * a paid provider.
+ * dependency stays `llmJson` (the free utility model on LLM_BASE_URL) —
+ * nothing here may reach a paid provider.
  */
 function resolveIndustryPack(industry) {
   if (!industry) return null;
@@ -273,9 +274,9 @@ export async function generateUnbrandedPrompts(
   if (collected.length < count) {
     throw new Error(
       `generateUnbrandedPrompts: only produced ${collected.length}/${count} unbranded prompts. ` +
-        `Check that OPENROUTER_API_KEY is set and OPENROUTER_MODEL ("${
-          process.env.OPENROUTER_MODEL || "google/gemma-4-31b-it:free"
-        }") is available on OpenRouter.`
+        `Check that LLM_API_KEY is set and that LLM_MODEL ("${getLlmModel()}") is available on ` +
+        `the configured gateway LLM_BASE_URL ("${getLlmBaseUrl()}") — a model id valid on one ` +
+        `OpenAI-compatible gateway is routinely invalid on another.`
     );
   }
 

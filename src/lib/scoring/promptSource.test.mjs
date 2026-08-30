@@ -50,7 +50,7 @@ test("classifyPromptSource - an empty set reports null, never llm_generated", ()
 });
 
 test("ABORT PATH — PromptSourcingUnavailableError is typed, names the stage, and keeps the cause", () => {
-  const cause = new LlmUnavailableError("OPENROUTER_API_KEY is not configured", {
+  const cause = new LlmUnavailableError("LLM_API_KEY is not configured", {
     reason: "missing_key",
     provider: "openrouter",
   });

@@ -175,7 +175,7 @@ test("ABORT PATH — a new brand + an unavailable LLM aborts sourcing with a typ
       getPromptsForBrand: async () => [],           // new brand: nothing persisted
       upsertPrompts: async () => ({}),
       generateUnbrandedPrompts: async () => {
-        throw new LlmUnavailableError("OPENROUTER_API_KEY is not configured", {
+        throw new LlmUnavailableError("LLM_API_KEY is not configured", {
           reason: "missing_key",
           provider: "openrouter",
         });

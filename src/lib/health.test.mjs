@@ -7,7 +7,7 @@ const NOW = "2026-08-29T12:00:00.000Z";
 const FULL_ENV = Object.fromEntries(VENDORS.flatMap((v) => v.env.map((n) => [n, "set"])));
 
 test("vendorFlags - reports configured-ness and NAMES what is missing", () => {
-  const flags = vendorFlags({ OPENROUTER_API_KEY: "k", NEXT_PUBLIC_SUPABASE_URL: "u" });
+  const flags = vendorFlags({ LLM_API_KEY: "k", NEXT_PUBLIC_SUPABASE_URL: "u" });
   assert.equal(flags.llm.configured, true);
   assert.deepEqual(flags.llm.missing, []);
   // Supabase needs both vars; one is not enough.
@@ -17,7 +17,38 @@ test("vendorFlags - reports configured-ness and NAMES what is missing", () => {
 });
 
 test("vendorFlags - whitespace is not a credential", () => {
+  assert.equal(vendorFlags({ LLM_API_KEY: "   " }).llm.configured, false);
   assert.equal(vendorFlags({ OPENROUTER_API_KEY: "   " }).llm.configured, false);
+});
+
+// ---------------------------------------------------------------------------
+// R5.1.1 (findings C4/S19) — the LLM credential is provider-neutral, and the
+// deprecated OPENROUTER_* name must keep an existing deployment working while
+// being VISIBLE as deprecated rather than silently equivalent.
+// ---------------------------------------------------------------------------
+
+test("vendorFlags - the deprecated OPENROUTER_API_KEY still configures the LLM, and says so", () => {
+  const flags = vendorFlags({ OPENROUTER_API_KEY: "k" });
+  assert.equal(flags.llm.configured, true, "an existing deployment must not break on deploy");
+  assert.deepEqual(flags.llm.missing, []);
+  assert.deepEqual(
+    flags.llm.deprecated,
+    ["OPENROUTER_API_KEY"],
+    "a credential carried by a name we are removing must not look identical to the canonical one"
+  );
+});
+
+test("vendorFlags - the canonical LLM_API_KEY reports nothing deprecated", () => {
+  const flags = vendorFlags({ LLM_API_KEY: "k", OPENROUTER_API_KEY: "old" });
+  assert.equal(flags.llm.configured, true);
+  assert.deepEqual(flags.llm.deprecated, [], "canonical set: the legacy name is not in use");
+});
+
+test("vendorFlags - neither LLM name set names the CANONICAL one as the fix", () => {
+  const flags = vendorFlags({});
+  assert.equal(flags.llm.configured, false);
+  assert.deepEqual(flags.llm.missing, ["LLM_API_KEY"]);
+  assert.deepEqual(flags.llm.deprecated, []);
 });
 
 test("buildHealthPayload - the accept criterion: db status, vendor flags, last cron tick", () => {
@@ -49,7 +80,9 @@ test("buildHealthPayload - an unreachable DB is 'down' and keeps the error", () 
 test("buildHealthPayload - a missing REQUIRED vendor is 'degraded', never 'ok'", () => {
   // An endpoint reporting ok while the LLM is unconfigured is the health-check
   // equivalent of a 100% share of voice.
-  const env = { ...FULL_ENV, OPENROUTER_API_KEY: "" };
+  // Both the canonical name and its deprecated alias must be absent — either
+  // one alone still configures the vendor (R5.1.1).
+  const env = { ...FULL_ENV, LLM_API_KEY: "", OPENROUTER_API_KEY: "" };
   const p = buildHealthPayload({ db: { ok: true }, env, now: NOW });
   assert.equal(p.status, "degraded");
   assert.deepEqual(p.missing_required, ["llm"]);
@@ -164,7 +197,7 @@ test("buildHealthPayload - an unparseable tick timestamp yields null age, not a 
 test("buildHealthPayload - the payload leaks no credential VALUES, only their names", async () => {
   const p = buildHealthPayload({
     db: { ok: true },
-    env: { ...FULL_ENV, OPENROUTER_API_KEY: "sk-or-v1-super-secret" },
+    env: { ...FULL_ENV, LLM_API_KEY: "sk-or-v1-super-secret" },
     ticks: [],
     now: NOW,
   });

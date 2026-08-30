@@ -21,6 +21,8 @@
  *   node scripts/check-secrets.mjs     # reads the ambient environment
  */
 
+import { LLM_ENV, getLlmApiKey, getLlmBaseUrl, getLlmModel, getLlmProvider } from "../src/lib/llmConfig.js";
+
 const PASS = "PASS";
 const FAIL = "FAIL";
 const UNCONFIGURED = "UNCONFIGURED";
@@ -43,7 +45,9 @@ async function fromResponse(res, okDetail) {
 
 /**
  * One entry per vendor. `keys` are the env vars it needs; when any is missing
- * the vendor is UNCONFIGURED and `check` is never called.
+ * the vendor is UNCONFIGURED and `check` is never called. `anyKeys` is the
+ * either/or form for a credential with a deprecated alias: at least one must
+ * be set, and the FIRST (canonical) one is what an operator is told to set.
  */
 const VENDORS = [
   {
@@ -84,22 +88,31 @@ const VENDORS = [
   {
     name: "llm",
     required: true,
-    keys: ["OPENROUTER_API_KEY"],
+    // LLM_API_KEY is canonical; OPENROUTER_API_KEY still configures the vendor
+    // as a deprecated alias (R5.1.1). Either one makes this CONFIGURED, and
+    // the report names the canonical one when neither is set.
+    keys: [],
+    anyKeys: [LLM_ENV.apiKey.canonical, LLM_ENV.apiKey.legacy],
     // One token against the configured model. Also proves the MODEL is valid
     // on this gateway, which a key check alone does not: a model id valid on
     // one OpenAI-compatible gateway is routinely invalid on another.
     async check() {
-      const base = (env("OPENROUTER_BASE_URL") || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
-      const model = env("OPENROUTER_MODEL") || "google/gemma-4-31b-it:free";
+      const base = getLlmBaseUrl(process.env);
+      const model = getLlmModel(process.env);
+      const provider = getLlmProvider(base);
+      // Mirror the client's per-gateway request shape (src/lib/openrouter.js):
+      // MiMo reads max_completion_tokens rather than max_tokens, so probing it
+      // with the portable spelling can report FAIL on a working deployment.
+      const cap = provider === "mimo" ? { max_completion_tokens: 1 } : { max_tokens: 1 };
       const res = await get(`${base}/chat/completions`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${env("OPENROUTER_API_KEY")}`,
+          Authorization: `Bearer ${getLlmApiKey(process.env)}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ model, messages: [{ role: "user", content: "hi" }], max_tokens: 1 }),
+        body: JSON.stringify({ model, messages: [{ role: "user", content: "hi" }], ...cap }),
       });
-      return fromResponse(res, `model ${model} answered`);
+      return fromResponse(res, `model ${model} answered on ${provider} (${base})`);
     },
   },
   {
@@ -209,6 +222,9 @@ async function main() {
 
   for (const vendor of VENDORS) {
     const missing = vendor.keys.filter((k) => !env(k));
+    // Either/or credentials: none of the accepted names set means the vendor is
+    // UNCONFIGURED, reported under its canonical name.
+    if (vendor.anyKeys?.length && !vendor.anyKeys.some((k) => env(k))) missing.push(vendor.anyKeys[0]);
     if (missing.length) {
       results.push({
         name: vendor.name,

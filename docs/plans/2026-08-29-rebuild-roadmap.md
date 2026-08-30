@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**15 / 130 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**16 / 130 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -219,13 +219,13 @@ Baseline commit: `5111219`
 
 - [ ] **R4.5.1** Decide-or-delete pass on schema-only subsystems `needs-decision`
 
-## R5 — Content OS quality  `0/11`
+## R5 — Content OS quality  `1/11`
 
 *1 week.* Model-layer truth, a publish loop that stops pretending, drafts benchmarked against what engines cite.
 
 ### R5.1
 
-- [ ] **R5.1.1** Provider-neutral LLM config
+- [x] **R5.1.1** Provider-neutral LLM config — closed at `src/lib/llmConfig.js:53`, `src/lib/llmConfig.js:99`, `src/lib/openrouter.js:20`, `src/lib/openrouter.js:48`, `src/lib/health.js:25`, `scripts/check-secrets.mjs:95`, `src/lib/scoring/promptGen.js:275`, `.env.example:11`, `docs/vendors/mimo.md:40`, `src/lib/openrouter.test.mjs:191`
 - [ ] **R5.1.2** Key re-enable checklist `needs-llm` `needs-secrets`
 ### R5.2
 

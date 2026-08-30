@@ -3203,11 +3203,37 @@
         "docs/vendors/"
       ],
       "phase": "R5",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/llmConfig.js:53",
+        "src/lib/llmConfig.js:99",
+        "src/lib/openrouter.js:20",
+        "src/lib/openrouter.js:48",
+        "src/lib/health.js:25",
+        "scripts/check-secrets.mjs:95",
+        "src/lib/scoring/promptGen.js:275",
+        ".env.example:11",
+        "docs/vendors/mimo.md:40",
+        "src/lib/openrouter.test.mjs:191"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-30T07:01:44.996Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-30T07:11:29.021Z",
+          "by": "rebuild-implementer",
+          "text": "LLM_BASE_URL/LLM_MODEL/LLM_API_KEY are canonical (src/lib/llmConfig.js); OPENROUTER_* read only as a deprecated fallback that warns once per process (llmConfig.js:53-70). Gateway quirks preserved verbatim and now selected by getLlmProvider(baseUrl) (llmConfig.js:99-104) instead of a vendor-named var: MiMo max_completion_tokens (openrouter.js:48-52), thinking-disable (62-67), OpenRouter-only usage.include (56-61) + attribution headers (82); JSON-Lines recovery untouched (169-190). R0.3.1 contract untouched: no key -> LlmUnavailableError, never text:''. health.js llm vendor is LLM_API_KEY with OPENROUTER_API_KEY as a legacy alias that configures but is reported in a new vendors[].deprecated array. check:secrets probes with the provider-correct token cap. docs/vendors/mimo.md records the three quirks + the gateway-catalog lesson with file:line verified at HEAD. Exercised: node scripts/check-secrets.mjs with a scrubbed env -> '[ ---- ] llm UNCONFIGURED required missing LLM_API_KEY'; with only OPENROUTER_API_KEY set -> one deprecation warning on stderr and the vendor goes CONFIGURED (attempts the call). NOT exercised: any live call to openrouter.ai or api.xiaomimimo.com - no gateway credential exists in this environment, so the MiMo wire-format claims are the shipped client's encoded behaviour, not a fresh probe; the doc says so at docs/vendors/mimo.md:57. npm run test:scoring 879/879 (baseline 867 + 12 new). No key written anywhere, no .env.local."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-08-30T07:15:16.807Z",
+        "note": "VERIFIED BY EXECUTION, not reading. Independent harness (/tmp/vfy/harness.mjs) imported the live client and diffed it against git show HEAD:src/lib/openrouter.js. (1) R0.3.1 intact: no key -> LlmUnavailableError reason=missing_key ('LLM_API_KEY is not configured (legacy OPENROUTER_API_KEY is also unset)'), blank/whitespace key also throws (no anonymous request); total network failure -> LlmUnavailableError reason=exhausted_retries; HTTP 400 -> throws; HTTP 500 retried twice then throws. No path returned {text:''} in any of the 6 cases. (2) Legacy fallback proven live: with ONLY OPENROUTER_BASE_URL=api.xiaomimimo.com/v1 + OPENROUTER_API_KEY + OPENROUTER_MODEL, two consecutive calls hit https://api.xiaomimimo.com/v1/chat/completions with Bearer legacy-secret and model MiMo-VL-7B-RL, and warned exactly once per var. Canonical LLM_* wins when both set, with zero warnings. Original failure reproduced first: HEAD client with only LLM_* set threw 'OPENROUTER_API_KEY is not configured'; new client with the identical env resolves. (3) Both branches byte-identical to HEAD across 7 scenarios (deepEqual on body+headers+url): mimo -> max_completion_tokens, thinking{disabled}, NO max_tokens, NO usage, NO attribution headers; openrouter paid -> max_tokens + usage{include:true} + HTTP-Referer/X-Title; openrouter free z-ai/glm-5.2:free -> max_tokens, NO usage.include, cost 0; unset base URL still defaults to openrouter.ai; trailing slashes stripped; unknown host -> portable 'custom' shape. (4) No credential in the diff: only sk-or-v1 hits are a deleted .env.example placeholder and the pre-existing fake fixture 'sk-or-v1-super-secret' in health.test.mjs; no .env.local; new files clean. Confirmed buildHealthPayload does not leak the key value. (5) Liveness rebuilt hop by hop for the doc's 'Status: LIVE': vercel.json cron /api/scan/worker -> src/app/api/scan/worker/route.js:5 runScanChunk -> scanWorker.js:26-27 generateUnbrandedPrompts/extractCompetitors -> promptGen.js:6 llmJson -> llm.js:1 generateContent -> openrouter.js -> llmConfig.js. Claim true. check:secrets run in 3 env states: unset -> 'UNCONFIGURED required missing LLM_API_KEY' (canonical name); legacy-only -> configured + warns + attempts the call; canonical-only -> attempts the call. Both live probes blocked by sandbox egress (403 host-not-in-allowlist), which matches the implementer's explicit 'NOT exercised live' disclosure at docs/vendors/mimo.md:58 - no live-credential claim was overstated. npm run test:scoring 879/879, 0 fail (baseline 867 + 12 new). No new bare catch{}, ??0, ||0 or fail-soft added by the diff. Every cited line resolves; two are off by one/imprecise but land in the correct block (evidence says mimo.md:57, the disclaimer is 58-59; .env.example:11 is the rename rationale comment, LLM_BASE_URL is line 18) - non-blocking. Residual, non-blocking: docs/plans/plan.md:488 and production-plan.md:179/197/206 still name OPENROUTER_MODEL/OPENROUTER_API_KEY, but those are historical planning records, not config surfaces; no runtime code outside the deprecated-alias path reads an OPENROUTER_* name."
+      }
     },
     {
       "id": "R5.1.2",

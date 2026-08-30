@@ -47,7 +47,7 @@ export function getContentModel() {
 
 /**
  * Content-pipeline variant of llmJson: same JSON-retry contract, but routed
- * to the paid CONTENT_MODEL via the existing OpenRouter client. Scoring and
+ * to the paid CONTENT_MODEL via the same gateway client. Scoring and
  * prompt-gen callers must keep using llmJson (free model) — this entry point
  * exists ONLY for content steps (coordinate/research/benchmark/draft/review/
  * learn), which need a capable model and track real cost via options.stats.

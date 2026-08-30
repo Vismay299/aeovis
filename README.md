@@ -65,8 +65,8 @@ the UI can mark the point where a tracked set changed.
 - **Supabase** (Postgres) — schema in `supabase/migrations/`
 - **Engines**: Google AI Overview via Bright Data SERP · ChatGPT via the OpenAI
   Responses API with `web_search` · Perplexity `sonar`
-- **Utility LLM**: OpenRouter-compatible free model for prompt generation,
-  competitor extraction, and classification chores
+- **Utility LLM**: a free model on any OpenAI-compatible gateway (`LLM_BASE_URL`)
+  for prompt generation, competitor extraction, and classification chores
 - **Content OS**: a paid model (`CONTENT_MODEL`) with a hard per-item cost cap
 
 ---
@@ -95,9 +95,12 @@ PERPLEXITY_API_KEY=...
 OPENAI_API_KEY=...            # required for the `chatgpt` engine
 
 # --- Utility LLM (prompt gen, competitor extraction, classification) ---
-OPENROUTER_API_KEY=...
-OPENROUTER_BASE_URL=...
-OPENROUTER_MODEL=...
+# Provider-neutral: any OpenAI-compatible gateway. The model id must be valid
+# on THIS gateway (docs/vendors/mimo.md). OPENROUTER_* still works as a
+# deprecated alias and warns once.
+LLM_API_KEY=...
+LLM_BASE_URL=...               # default https://openrouter.ai/api/v1
+LLM_MODEL=...                  # default google/gemma-4-31b-it:free
 
 # --- Content OS ---
 CONTENT_MODEL=...

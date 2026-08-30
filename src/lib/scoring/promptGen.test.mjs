@@ -91,7 +91,11 @@ test("generateUnbrandedPrompts - throws a clear error when it cannot reach count
         llmJson,
       }),
     (err) => {
-      assert.match(err.message, /OPENROUTER/);
+      // Names the provider-neutral vars (R5.1.1), not a vendor the deployment
+      // may not even be pointed at.
+      assert.match(err.message, /LLM_API_KEY/);
+      assert.match(err.message, /LLM_MODEL/);
+      assert.match(err.message, /LLM_BASE_URL/);
       return true;
     }
   );

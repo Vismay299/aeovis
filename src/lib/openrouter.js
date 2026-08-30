@@ -1,39 +1,39 @@
 import { LlmUnavailableError } from "./llmErrors.js";
+import { LLM_ENV, getLlmApiKey, getLlmBaseUrl, getLlmModel, getLlmProvider } from "./llmConfig.js";
 
-const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
-
-function getBaseUrl() {
-  return (process.env.OPENROUTER_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
-}
-
-export function getOpenRouterModel() {
-  return process.env.OPENROUTER_MODEL || "google/gemma-4-31b-it:free";
-}
+export { getLlmModel };
 
 /**
- * OpenRouter chat-completion client. Mirrors gemini.js's generateContent
- * signature/contract so callers (llm.js) stay swappable between providers.
+ * OpenAI-compatible chat-completion client for the utility LLM. Mirrors
+ * gemini.js's generateContent signature/contract so callers (llm.js) stay
+ * swappable between providers.
+ *
+ * The gateway is whatever LLM_BASE_URL names (OpenRouter by default, MiMo on
+ * the current deployment); per-gateway request quirks come from
+ * getLlmProvider(), not from a variable named after one vendor. See
+ * docs/vendors/mimo.md.
  *
  * `options.model` overrides the default free model — used only by the
  * content pipeline (llm.js contentLlmJson) for paid content generation.
  */
 export async function generateContent(prompt, options = {}, retries = 2) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const baseUrl = getLlmBaseUrl();
+  const provider = getLlmProvider(baseUrl);
+  const apiKey = getLlmApiKey();
   if (!apiKey) {
     // Do NOT return { text: "" } here. An unconfigured key is not an empty
     // answer, and every caller that cannot tell them apart fabricates a clean
     // result from a total outage (finding B6 -> the false 100% SOV, A8).
-    throw new LlmUnavailableError("OPENROUTER_API_KEY is not configured", {
-      reason: "missing_key",
-      provider: "openrouter",
-    });
+    throw new LlmUnavailableError(
+      `${LLM_ENV.apiKey.canonical} is not configured (legacy ${LLM_ENV.apiKey.legacy} is also unset)`,
+      { reason: "missing_key", provider }
+    );
   }
 
-  const model = options.model || getOpenRouterModel();
-  const baseUrl = getBaseUrl();
+  const model = options.model || getLlmModel();
   const url = `${baseUrl}/chat/completions`;
-  const isOpenRouter = baseUrl.includes("openrouter.ai");
-  const isMimo = baseUrl.includes("xiaomimimo.com");
+  const isOpenRouter = provider === "openrouter";
+  const isMimo = provider === "mimo";
   const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 
   const messages = [];
@@ -91,11 +91,11 @@ export async function generateContent(prompt, options = {}, retries = 2) {
         const errText = await res.text();
         const retryable = res.status === 429 || res.status >= 500;
         if (retryable && attempt < retries) {
-          lastErr = new Error(`OpenRouter HTTP ${res.status}: ${errText}`);
+          lastErr = new Error(`${provider} HTTP ${res.status}: ${errText}`);
           await wait(1500 * Math.pow(2, attempt));
           continue;
         }
-        throw new Error(`OpenRouter HTTP ${res.status}: ${errText}`);
+        throw new Error(`${provider} HTTP ${res.status}: ${errText}`);
       }
 
       const data = await res.json();
@@ -132,8 +132,8 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   // answer. Throw so the caller has to decide what an unmeasured value looks
   // like instead of silently inheriting an empty string.
   throw new LlmUnavailableError(
-    `OpenRouter failed after ${retries + 1} attempt(s): ${lastErr?.message || lastErr}`,
-    { reason: "exhausted_retries", provider: "openrouter", model, cause: lastErr }
+    `LLM gateway ${baseUrl} failed after ${retries + 1} attempt(s): ${lastErr?.message || lastErr}`,
+    { reason: "exhausted_retries", provider, model, cause: lastErr }
   );
 }
 

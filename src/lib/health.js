@@ -18,7 +18,11 @@
  */
 export const VENDORS = Object.freeze([
   { key: "supabase", env: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"], required: true },
-  { key: "llm", env: ["OPENROUTER_API_KEY"], required: true },
+  // The utility LLM is provider-neutral (R5.1.1): LLM_API_KEY is canonical and
+  // OPENROUTER_API_KEY is a deprecated alias that still configures it. `legacy`
+  // names satisfy the vendor but are reported, so a deployment running on the
+  // old name is visible rather than merely working.
+  { key: "llm", env: ["LLM_API_KEY"], legacy: { LLM_API_KEY: ["OPENROUTER_API_KEY"] }, required: true },
   { key: "brightdata", env: ["BRIGHTDATA_API_KEY"], required: true },
   { key: "firecrawl", env: ["FIRECRAWL_API_KEY"], required: false },
   { key: "perplexity", env: ["PERPLEXITY_API_KEY"], required: false },
@@ -34,15 +38,25 @@ const present = (env, name) => String(env[name] || "").trim().length > 0;
  * Configured-ness per vendor. `configured` is true only when EVERY env var
  * the vendor needs is non-empty; `missing` names the ones that are not, so an
  * operator gets the fix rather than just a red flag.
+ *
+ * A canonical name may have deprecated aliases (`vendor.legacy`). An alias
+ * satisfies the requirement — the deployment works — but is listed in
+ * `deprecated` so "configured on a name we are removing" does not render
+ * identically to "configured correctly". Pure: it never warns or logs, so
+ * /api/health stays free of side effects.
  */
 export function vendorFlags(env = {}) {
   const out = {};
   for (const vendor of VENDORS) {
-    const missing = vendor.env.filter((name) => !present(env, name));
+    const aliasesFor = (name) => (vendor.legacy?.[name] || []).filter((alias) => present(env, alias));
+    const unsatisfied = vendor.env.filter((name) => !present(env, name));
+    const missing = unsatisfied.filter((name) => aliasesFor(name).length === 0);
     out[vendor.key] = {
       configured: missing.length === 0,
       required: vendor.required,
       missing,
+      // Names that ARE carrying the value but are on their way out.
+      deprecated: unsatisfied.flatMap(aliasesFor),
     };
   }
   return out;
