@@ -129,10 +129,13 @@ const VENDORS = [
         body: JSON.stringify({
           model: env("PERPLEXITY_MODEL") || "sonar",
           messages: [{ role: "user", content: "hi" }],
-          max_tokens: 1,
+          // Perplexity rejects max_tokens below 16 with a 400 before it ever
+          // looks at the key, so a 1-token probe reported FAIL for a working
+          // credential — the misleading-script failure this check exists to prevent.
+          max_tokens: 16,
         }),
       });
-      return fromResponse(res, "1-token completion");
+      return fromResponse(res, "16-token completion");
     },
   },
   {

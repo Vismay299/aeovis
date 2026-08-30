@@ -26,7 +26,11 @@ async function testFilesOnDisk(dir = path.join(REPO, "src"), acc = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) await testFilesOnDisk(full, acc);
-    else if (entry.name.endsWith(".test.mjs")) acc.push(path.relative(REPO, full));
+    // Normalised to forward slashes to match collectedByScript: on Windows
+    // path.relative yields backslashes, so every file read as orphaned and the
+    // guard failed on a suite it had in fact collected in full.
+    else if (entry.name.endsWith(".test.mjs"))
+      acc.push(path.relative(REPO, full).split(path.sep).join("/"));
   }
   return acc;
 }

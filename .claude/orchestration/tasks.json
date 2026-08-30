@@ -76,7 +76,8 @@
     "Ledger what is unproven — today: the publish->lift loop, and each UI surface until its soak passes.",
     "Closing a task is an act on a verifier's word, never the implementer's. The agent that wrote the code never closes it.",
     "A change to the orchestration tooling is itself ledger work. The machine is not exempt from the discipline it enforces.",
-    "Trace a call site to an HTTP route or a cron entry before describing it as live. A correct file:line proves a line exists, not that anything reaches it."
+    "Trace a call site to an HTTP route or a cron entry before describing it as live. A correct file:line proves a line exists, not that anything reaches it.",
+    "Close an item only when, in the same commit, its box is ticked, the commit body cites the file:line where the change lives, and the acceptance criterion was exercised — run, not read and not reasoned about. If it could not be exercised here, the item is blocked with the reason, never closed."
   ],
   "tasks": [
     {
@@ -98,9 +99,15 @@
         "src/app/api/content/worker/route.js:25-52"
       ],
       "phase": "R0",
-      "status": "blocked",
-      "owner": "rebuild-implementer",
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/cronAuth.js:43",
+        "src/app/api/scan/worker/route.js:34",
+        "src/app/api/content/worker/route.js:39",
+        ".env.example:19",
+        "src/lib/cronAuth.test.mjs:19"
+      ],
       "notes": [
         {
           "at": "2026-08-29T15:29:55.870Z",
@@ -111,10 +118,24 @@
           "at": "2026-08-29T15:31:56.891Z",
           "by": "rebuild-implementer",
           "text": "blocked (needs-vercel): CODE COMPLETE AND UNIT-TESTED; the acceptance criterion's first clause is not exercisable here. Written: src/lib/cronAuth.js:43 (the fail-closed flip — a missing CRON_SECRET now DENIES when NODE_ENV=production instead of returning true after a warning), src/lib/cronAuth.js:37 (shared pure gate replacing two drifting private copies), src/app/api/scan/worker/route.js:34 and src/app/api/content/worker/route.js:39 (both routes delegate to it), .env.example:19 (CRON_SECRET documented as production-required), src/lib/cronAuth.test.mjs:19 (10 tests; the 4 C9 regressions proven to fail when the flip is reverted). NOT DONE: 'curl without the header returns 401 in production' needs a deployed instance, and CRON_SECRET must be set in the Vercel project — no Vercel access and no next binary in this environment (node_modules is empty). Unblock after setting CRON_SECRET in Vercel and curling /api/scan/worker without a header."
+        },
+        {
+          "at": "2026-08-30T07:58:48.629Z",
+          "by": "controller",
+          "text": "unblocked: The environment changed: this machine can build and run the app in production mode, so the fail-closed gate is exercisable over real HTTP. Only the Vercel project's own env remains outside reach, and that is a deploy step rather than a property of this code."
+        },
+        {
+          "at": "2026-08-30T07:58:48.790Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-30T07:58:48.985Z",
+          "by": "local-session",
+          "text": "EXERCISED OVER HTTP against next start (NODE_ENV=production, next build exit 0, middleware 27.2 kB). Server A, CRON_SECRET set: GET /api/scan/worker no header -> 401; with Authorization: Bearer <secret> -> 200; with a wrong secret -> 401. Same three on /api/content/worker. Server B, CRON_SECRET UNSET, still NODE_ENV=production — this is the C9 regression itself: both worker routes -> 401 rather than the warn-and-allow they used to return. That 401 can ONLY come from the isProduction branch at cronAuth.js:41-43, since the same absent-secret input returns authorized:true when nodeEnv is anything else, so the run is proof the server was genuinely in production mode. The forgeable x-vercel-cron bypass is gone at :48-56. Public surface unharmed alongside: /api/industries 200, /api/health 200. NOT EXERCISED: whether CRON_SECRET is actually set on the Vercel project. The handoff asserts it is, but standing rule 3 says set and works are different claims, and check:secrets reports cron UNCONFIGURED here. Filed as its own task rather than folded into this one."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-vercel"
+      "verification": null
     },
     {
       "id": "R0.1.2",
@@ -176,7 +197,7 @@
         "src/app/api"
       ],
       "phase": "R0",
-      "status": "blocked",
+      "status": "todo",
       "owner": null,
       "evidence": [],
       "notes": [
@@ -184,10 +205,14 @@
           "at": "2026-08-29T15:50:14.793Z",
           "by": "controller",
           "text": "blocked (needs-vercel): CODE COMPLETE AND FULLY UNIT-TESTED; blocked only because its ledger dependency R0.1.1 is itself blocked on Vercel, and because the literal 'returns 401' needs a running server (no next binary here). Written: src/middleware.js (Next binding, matcher /api/:path*), src/lib/operatorPerimeter.js:128 (the whole decision, pure, Edge-safe — hand-rolled constant-time compare because node:crypto is unavailable in middleware), src/lib/operatorPerimeter.js:72 (the ALLOWLIST — a denylist fails open for every route added later), .env.example:29, src/lib/operatorPerimeter.test.mjs:38 and :75 (16 tests). BOTH accept clauses exercised at the decision level: unauthenticated POST /api/content is refused, and the entire free-scan sequence from src/services/api.js runScan (POST /api/scan, GET /api/scan/<id>/status, GET /api/scans/by-id/<id>, /api/scans/<brand>, /<brand>/latest, /api/industries, /api/health) passes with no credentials — including with OPERATOR_TOKEN unset in production. A route walker over the real src/app/api tree asserts the public set is exactly those six and no more. IMPORTANT TRAP CAUGHT: /api/scan/worker and /api/content/worker are EXEMPT, not public — the worker's own self-continue fetch carries x-cron-secret and no operator token, so gating them here would have 401'd it and stalled every scan longer than one chunk. Teeth proven both ways: opening /api/content fails 3 tests; removing POST /api/scan from the allowlist fails 5."
+        },
+        {
+          "at": "2026-08-30T07:58:55.165Z",
+          "by": "controller",
+          "text": "unblocked: Its block was inherited from R0.1.1, which is now in verification with both worker gates exercised over HTTP. R0.1.3's own accept names no deployment at all, and both of its clauses have now been run against a local production server."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-vercel"
+      "verification": null
     },
     {
       "id": "R0.1.4",
@@ -207,7 +232,7 @@
         "src/app/api/scan/route.js"
       ],
       "phase": "R0",
-      "status": "blocked",
+      "status": "todo",
       "owner": null,
       "evidence": [],
       "notes": [
@@ -215,10 +240,14 @@
           "at": "2026-08-29T15:50:14.832Z",
           "by": "controller",
           "text": "blocked (needs-vercel): CODE COMPLETE AND EXERCISED AGAINST A REAL POSTGRES; blocked only because its ledger dependency chain (R0.1.3 -> R0.1.1) is blocked on Vercel. Written: supabase/migrations/009_scan_rate_limit.sql:41 (scan_rate_limits + an atomic ON CONFLICT ... RETURNING increment — read-then-write would have reintroduced the TOCTOU migration 007 just closed), src/lib/rateLimit.js:97, src/lib/db/analytics.js:496, src/app/api/scan/route.js:39 (429 with Retry-After and X-RateLimit-*), .env.example:33, src/lib/rateLimit.test.mjs:31 (15 tests). BOTH accept clauses exercised: the 6th scan in an hour from one IP is refused (5 allowed, 6th 429) and the limit is env-configurable. Migration 009 applied to a real PostgreSQL 16 cluster and the counter driven for real — 7 sequential increments returned 1..7, a new window reset to 1, and 6 GENUINELY CONCURRENT sessions produced exactly 6 with no lost update. The IP is hashed with a per-deployment salt: this is a counter, not a visitor log. The broken-counter path fails open by design and is loud about it (degraded:true, remaining:null, and a log naming the duplicate-scan index as what still bounds the damage). NOT EXERCISED: an actual HTTP 429 over the wire."
+        },
+        {
+          "at": "2026-08-30T07:58:55.289Z",
+          "by": "controller",
+          "text": "unblocked: Its block was inherited from the R0.1.3 -> R0.1.1 chain. Its own criterion is exercisable here, but a real blocker was found underneath it: migration 009 is NOT applied to the live database, so this is being re-blocked on that rather than on Vercel."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-vercel"
+      "verification": null
     },
     {
       "id": "R0.1.5",
@@ -280,9 +309,13 @@
         "scripts/"
       ],
       "phase": "R0",
-      "status": "blocked",
-      "owner": "rebuild-implementer",
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "scripts/check-secrets.mjs:132",
+        "package.json:15",
+        "src/lib/checkSecrets.test.mjs"
+      ],
       "notes": [
         {
           "at": "2026-08-29T15:43:47.382Z",
@@ -293,10 +326,24 @@
           "at": "2026-08-29T15:45:49.400Z",
           "by": "rebuild-implementer",
           "text": "blocked (needs-secrets): CODE COMPLETE; the acceptance criterion's PURPOSE is not exercisable here. Written: scripts/check-secrets.mjs (9 vendors, three verdicts, hard per-call timeout, exits non-zero only when a CONFIGURED vendor fails), package.json:15 (npm run check:secrets), src/lib/checkSecrets.test.mjs (7 hermetic subprocess tests, scrubbed env, zero network). EXERCISED: the UNCONFIGURED path (all 9 vendors, exit 0), the FAIL path and non-zero exit (short CRON_SECRET, malformed GSC key, and a live 403 from a bogus OpenRouter key). NOT EXERCISED: the PASS path for any networked vendor. Two hard blockers — there are no vendor credentials in this environment, and the outbound proxy refuses the vendor hosts outright (the OpenRouter attempt returned 'HTTP 403 — Host not in allowlist: openrouter.ai'). That second one matters: it means the per-vendor endpoint choices (Bright Data get_all_zones + active-serp-zone assertion, Firecrawl v1/scrape, Perplexity chat/completions, OpenAI v1/models, Gemini v1beta/models) are UNVALIDATED, and a wrong endpoint would report FAIL for a working key — an actively misleading script. Unblock by running it once against a real .env.local and confirming each configured vendor reports PASS."
+        },
+        {
+          "at": "2026-08-30T07:50:50.522Z",
+          "by": "controller",
+          "text": "unblocked: Credentials are present on the local developer machine (.env.local carries live Supabase, Bright Data, Perplexity, Firecrawl, Gemini, GSC and LLM values) and outbound network reaches every vendor host. Both conditions the block named are gone."
+        },
+        {
+          "at": "2026-08-30T07:50:50.621Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-30T07:51:01.863Z",
+          "by": "local-session",
+          "text": "PASS PATH NOW EXERCISED AGAINST LIVE VENDORS — the gap the block named. Run on Windows 11 with the real .env.local: 6 pass, 1 fail, 2 unconfigured, process exit 1. Per-vendor verdicts: supabase PASS (select 1 from scans), brightdata PASS (1 active serp zone), perplexity PASS, firecrawl PASS (scraped example.com), gemini PASS (model list), gsc PASS-shape-only (labelled in its own output as NOT verified against the API), openai UNCONFIGURED, cron UNCONFIGURED, llm FAIL. Both accept clauses hold: one verdict line per vendor, and exit is non-zero because a CONFIGURED vendor (llm) failed. ONE DEFECT FOUND AND FIXED WHILE VERIFYING — exactly the misleading-script risk the block predicted. check-secrets.mjs:132 sent max_tokens:1; Perplexity rejects anything under 16 with a 400 invalid_request BEFORE authenticating, so a working PERPLEXITY_API_KEY reported FAIL. Raised to 16 and it now reports PASS with the same key. The other five endpoint choices are validated by their live PASS. TWO SUBSTANTIVE FINDINGS FOR THE OPERATOR, not script defects: (1) the LLM 402 is 'Insufficient account balance', NOT a disabled key as the roadmap and R5 notes assume — the diagnosis changes the fix from re-enable to top-up-or-free-tier. (2) gsc is offline-shape-only, so 'PASS' there is weaker than the other five and says so. I EDITED :132, so per standing rule 8 this stays in verification for an agent that did not write that line."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-secrets"
+      "verification": null
     },
     {
       "id": "R0.1.7",
@@ -492,6 +539,83 @@
       "verification": null
     },
     {
+      "id": "R0.1.11",
+      "subphase": "R0.1",
+      "lane": "data",
+      "title": "Migrations 007-009 are unapplied in production, and 007 cannot apply as-is",
+      "detail": "Verified against the live AEO database (nggyizuwqepxaqnpcqqj) via the Postgres catalog: neither system_heartbeats nor scan_rate_limits exists, increment_scan_rate_limit does not exist, and scan_jobs carries only scan_jobs_pkey and scan_jobs_heartbeat_idx — the 007 seal index scan_jobs_one_running_per_brand is absent. Three consequences are live right now: the duplicate-scan TOCTOU is still open, /api/health has no heartbeat table to read, and checkScanRateLimit catches the missing RPC and returns allowed:true degraded:true, so POST /api/scan has no cap at all. Worse, npm run setup:db cannot fix it unaided: 44 scan_jobs rows are stranded in the four statuses 007 indexes (30 of them brand italica, plus italica tiles, wrike, quiller), every one created between 2026-07-07 and 2026-07-24 with no heartbeat since 2026-07-30, so CREATE UNIQUE INDEX fails on duplicate keys. The stale rows must be reconciled to a terminal status first. That is a mutation of production data and needs the operator, which is why this is filed rather than done.",
+      "accept": "The catalog shows scan_jobs_one_running_per_brand, system_heartbeats, scan_rate_limits and increment_scan_rate_limit all present on the live database, and a fresh POST /api/scan reports remaining rather than degraded:true.",
+      "deps": [],
+      "tags": [
+        "needs-decision"
+      ],
+      "findings": [
+        "C10",
+        "B11"
+      ],
+      "anchors": [
+        "supabase/migrations/007_scan_seal.sql:28",
+        "supabase/migrations/009_scan_rate_limit.sql",
+        "src/lib/rateLimit.js:112"
+      ],
+      "phase": "R0",
+      "status": "blocked",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-30T07:59:16.650Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-08-30T07:59:16.850Z",
+          "by": "controller",
+          "text": "blocked (needs-decision): Reconciling 44 stranded production scan_jobs rows is a data mutation on the operator's live database; it needs an explicit go-ahead, not an agent's judgement."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-decision"
+    },
+    {
+      "id": "R0.1.12",
+      "subphase": "R0.1",
+      "lane": "infra",
+      "title": "Confirm CRON_SECRET and OPERATOR_TOKEN are live on the Vercel project",
+      "detail": "R0.1.1 and R0.1.3 are now proven over HTTP against a local production-mode server, which settles the code. What is still unproven is the deployment: check:secrets reports cron UNCONFIGURED, and the handoff asserts both values are set on Vercel without having been able to reach the API to confirm it. Standing rule 3 applies — set and works are different claims. This matters asymmetrically: OPERATOR_TOKEN fails closed, so if src/middleware.js ships while the value is unset every operator route 401s and the dashboard goes dark. Both values were also pasted into a session transcript and are due for rotation, so the confirmation and the rotation are one job.",
+      "accept": "Against the deployed instance: GET /api/scan/worker with no header returns 401 and with the bearer secret returns 200; POST /api/content with no token returns 401; GET /api/industries and GET /api/health both return 200 — using freshly rotated values.",
+      "deps": [],
+      "tags": [
+        "needs-vercel"
+      ],
+      "findings": [
+        "C9",
+        "S17"
+      ],
+      "anchors": [
+        "src/middleware.js",
+        "scripts/check-secrets.mjs"
+      ],
+      "phase": "R0",
+      "status": "blocked",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-30T07:59:26.425Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-08-30T07:59:26.595Z",
+          "by": "controller",
+          "text": "blocked (needs-vercel): No Vercel credentials on this machine and the Vercel MCP server is unauthorised in this session."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-vercel"
+    },
+    {
       "id": "R0.2.1",
       "subphase": "R0.2",
       "lane": "docs",
@@ -579,18 +703,37 @@
         "PRODUCT.md"
       ],
       "phase": "R0",
-      "status": "blocked",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "docs/plans/2026-08-29-rebuild-roadmap.md:25",
+        "docs/plans/README.md:36",
+        "DESIGN.md:4",
+        "src/lib/docStatus.test.mjs:32"
+      ],
       "notes": [
         {
           "at": "2026-08-29T16:01:49.285Z",
           "by": "controller",
           "text": "blocked (needs-decision): WORK COMPLETE; blocked only because its ledger dependency R0.2.1 is blocked on three unrecoverable findings. Done: all 21 governed docs now carry a machine-readable status header (DESIGN.md:4, PRODUCT.md, every file under docs/ including docs/plans, docs/design and docs/decisions). The FOUR-WAY DESIGN CONFLICT IS RESOLVED on evidence, not taste: DESIGN.md is LIVE because the shipped components use its Signal Box tokens (--lamp-*, --steel-*, --nickel in src/components/perceev/charts/chartMath.js); docs/design/DESIGN-SYSTEM.md is SUPERSEDED-BY it (none of its tokens appear in shipped code, and it names a prototype file as source of truth); docs/plans/2026-07-18-perceev-dark-redesign.md is SUPERSEDED-BY it too. The close rule is written into docs/plans/README.md:36 — tick + file:line + criterion exercised, in one commit, or blocked with the reason. 6 guard tests, teeth proven by flipping DESIGN.md to HISTORICAL (2 fail). CAVEAT ON THE ACCEPT WORDING: it says the rule goes 'into the tracker'. The tracker is GENERATED from standing_rules in tasks.json and orchestrate.mjs has no command to write that array, so adding a standing rule would require hand-editing the ledger, which the controller brief forbids. The rule therefore lives in docs/plans/README.md, the folder's own LIVE authority. Adding a 'rule' subcommand to orchestrate.mjs is the real fix."
+        },
+        {
+          "at": "2026-08-30T07:51:54.345Z",
+          "by": "controller",
+          "text": "unblocked: Both halves of the block are gone. (1) The ledger dependency R0.2.1 is now done — the operator supplied B8/B9/B12 and the register holds all 37. (2) The caveat said the accept's 'written into the tracker' clause could not be met because orchestrate.mjs had no way to append a standing rule; the rule subcommand now exists, so the close rule is in standing_rules and renders into the tracker rather than living only in docs/plans/README.md."
+        },
+        {
+          "at": "2026-08-30T07:51:54.510Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-30T07:51:54.709Z",
+          "by": "local-session",
+          "text": "ACCEPT EXERCISED, BOTH CLAUSES. Clause 1 — status headers: walked all 15 files under docs/plans plus DESIGN.md and PRODUCT.md by hand; every one carries a header. The tracker is the one exception to the marker format and is not an omission: it is generated, so it declares '> Status: **LIVE**' from the render template (roadmap line 3) and the guard asserts that variant explicitly at docStatus.test.mjs:37 rather than skipping it. My first sweep mis-read the tracker as bare because I grepped only the marker form — checking the guard, not the grep, is what caught it. Clause 2 — the rule is now IN the tracker: standing rule 11, rendered to roadmap:25, added through the CLI so tasks.json was never hand-edited. All 10 docStatus guards pass. I did not write the headers, the conflict resolution or the guards (rebuild-scribe did) and verified them independently; I DID add standing rule 11, so a verifier should re-run render and confirm the tracker is reproducible from the ledger."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-decision"
+      "verification": null
     },
     {
       "id": "R0.2.3",
@@ -611,7 +754,7 @@
         "README.md"
       ],
       "phase": "R0",
-      "status": "blocked",
+      "status": "todo",
       "owner": null,
       "evidence": [],
       "notes": [
@@ -619,10 +762,14 @@
           "at": "2026-08-29T16:01:49.326Z",
           "by": "controller",
           "text": "blocked (needs-decision): WORK COMPLETE; blocked only because its dependency chain (R0.2.2 -> R0.2.1) is blocked. Done: docs/decisions/2026-08-29-serp-provider-bright-data.md (dated, LIVE, names BRIGHTDATA_API_KEY and the api.brightdata.com integration, records alternatives and what would reverse it), docs/decisions/serp-provider.md:4 marked SUPERSEDED-BY and linked to it rather than deleted, README.md:144 migration table extended through 009 (the task asked for 006; 007/008/009 were added by this phase). The new ADR is explicit that cost, coverage and latency versus SerpAPI were NOT measured and that the old note's per-query figures describe SerpAPI only — the superseded document was persuasive on numbers that describe nothing we run, and repeating that pattern would defeat the point. FOUND IN PASSING: SERPAPI_KEY is still live at src/lib/engines/types.js:43, where it counts as 'a SERP provider is configured' even though nothing calls SerpAPI — an unconfigured deployment can look configured. Recorded as follow-up 1 in the ADR; deserves its own task. 4 guard tests, teeth proven by removing a migration row from the README."
+        },
+        {
+          "at": "2026-08-30T07:52:45.418Z",
+          "by": "controller",
+          "text": "unblocked: Dependency chain resolved: R0.2.1 is done and R0.2.2 is in verification with both accept clauses exercised. The block was never about this task's own work, which the note recorded as complete."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-decision"
+      "verification": null
     },
     {
       "id": "R0.2.4",
@@ -3722,6 +3869,47 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R6.4.5",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "testCoverageGuard fails on Windows: path.relative yields backslashes",
+      "detail": "R0.4.3 shipped the guard that proves the test glob reaches every *.test.mjs. On Windows testFilesOnDisk pushed path.relative output (backslash-separated) while collectedByScript normalised its glob results to forward slashes, so set membership never matched and every one of the 64 files read as orphaned. The suite was red on the developer machine the rebuild has now moved to, and the failure accused the glob of a defect the glob did not have.",
+      "accept": "npm run test:scoring is green on Windows; the guard still fails when the glob genuinely orphans a test file.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        "src/lib/testCoverageGuard.test.mjs:29"
+      ],
+      "phase": "R6",
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/testCoverageGuard.test.mjs:29",
+        "src/lib/testCoverageGuard.test.mjs:41"
+      ],
+      "notes": [
+        {
+          "at": "2026-08-30T07:49:47.397Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-08-30T07:49:47.586Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-30T07:49:47.795Z",
+          "by": "local-session",
+          "text": "Normalised the walker's output to forward slashes at :33, matching collectedByScript's existing normalisation at :41 — one line, no change to what the guard asserts. EXERCISED on Windows 11 / node --test: full suite went 878 pass 1 fail -> 879 pass 0 fail (exit 0), and package.json is byte-identical to HEAD (git diff --stat shows only this file). TEETH PROVEN BOTH WAYS: narrowing test:scoring to src/lib/**/*.test.mjs made the guard fail with the orphan list naming src/components and src/services — the exact S29 regression it exists to catch — and it went green again on restore. NOT VERIFIED BY A SECOND AGENT: I wrote this fix, so per standing rule 8 it stays in verification until a verifier that did not write it re-runs both directions."
+        }
+      ],
       "verification": null
     },
     {
