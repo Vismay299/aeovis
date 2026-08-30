@@ -120,6 +120,33 @@ export async function getPromptResultsForJob(jobId, deps = {}) {
 }
 
 /**
+ * All prompt_results rows for a finished SCAN.
+ *
+ * The archive script needs this because `scans` has no job_id column at all —
+ * the link runs the other way, prompt_results carrying scan_id once
+ * stampScanIdForJob has run at finalize. Looking the rows up by a column that
+ * does not exist returned undefined, which a truthiness guard read as "no job"
+ * and skipped silently, writing an empty array that looked like a measured zero.
+ */
+export async function getPromptResultsForScan(scanId, deps = {}) {
+  const client = resolveClient(deps);
+
+  if (!client) {
+    return Array.from(global.memoryPromptResults.values())
+      .filter((r) => r.scan_id === scanId)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  }
+
+  const { data, error } = await client
+    .from("prompt_results")
+    .select("*")
+    .eq("scan_id", scanId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+/**
  * Set of `"engine|query"` pairs already persisted for a job, from a
  * lightweight column-limited select. The chunk worker (P0.2) diffs its
  * (engine, query) worklist against this set on resume so it skips pairs a

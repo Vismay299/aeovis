@@ -47,7 +47,7 @@ async function main() {
   }
 
   const { listRecentScans, getScansByDomain } = await import("../src/lib/db.js");
-  const { getPromptResultsForJob } = await import("../src/lib/db/analytics.js");
+  const { getPromptResultsForScan } = await import("../src/lib/db/analytics.js");
 
   if (wantsList) {
     const recent = await listRecentScans(40);
@@ -74,13 +74,28 @@ async function main() {
     );
   }
 
-  // The job id lets us pull the normalized per-prompt rows too, which carry the
-  // per-engine detail raw_results does not.
+  // The normalized per-prompt rows carry per-engine detail raw_results does not.
+  //
+  // Keyed on scan.id, NOT scan.job_id: the `scans` table has no job_id column,
+  // so the previous `if (scan.job_id)` guard was permanently false and this
+  // array was always empty — silently, and about to be frozen into a corpus
+  // whose own note says do not regenerate. An empty array here must mean the
+  // scan genuinely had no rows, never that the lookup was skipped, so a read
+  // failure now stops the archive instead of quietly shrinking it.
   let promptRows = [];
   try {
-    if (scan.job_id) promptRows = await getPromptResultsForJob(scan.job_id);
+    promptRows = await getPromptResultsForScan(scan.id);
+    if (!promptRows.length) {
+      console.warn(
+        `[archive] no normalized prompt_results for scan ${scan.id}. Archiving raw ` +
+          `results only — recorded as a measured zero, not a skipped read.`
+      );
+    }
   } catch (err) {
-    console.warn(`[archive] normalized prompt_results unavailable (${err.message}) — archiving raw only.`);
+    die(
+      `normalized prompt_results could not be read for scan ${scan.id}: ${err.message}. ` +
+        `Refusing to freeze a baseline whose per-engine detail is missing for an unknown reason.`
+    );
   }
 
   const record = {

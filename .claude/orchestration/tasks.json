@@ -1101,9 +1101,15 @@
         "test_reports/"
       ],
       "phase": "R0",
-      "status": "blocked",
-      "owner": "w7",
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "test_reports/baseline-2026-08/italicatiles.com.json",
+        "test_reports/baseline-2026-08/snitch.com.json",
+        "test_reports/baseline-2026-08/zouk.co.in.json",
+        "test_reports/baseline-2026-08/README.md:3",
+        "scripts/archive-reference-scan.mjs:84"
+      ],
       "notes": [
         {
           "at": "2026-08-29T16:02:03.290Z",
@@ -1129,10 +1135,24 @@
           "at": "2026-08-29T22:25:12.892Z",
           "by": "w7",
           "text": "blocked (needs-secrets): reset after concurrency test"
+        },
+        {
+          "at": "2026-08-30T08:43:18.737Z",
+          "by": "controller",
+          "text": "unblocked: Both halves of the block are false on this machine: Supabase is reachable and live, and the database holds real persisted scans from July (12 archivable, 6 brands with prompt_results)."
+        },
+        {
+          "at": "2026-08-30T08:43:18.985Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-30T08:43:19.338Z",
+          "by": "local-session",
+          "text": "CORPUS CAPTURED. Three brands archived from the live database, each with its prompt_set_id, 68 raw per-prompt results and 68 normalized rows: Italica (scan f1ef17a5, set 0aa8fea8, 0%), Snitch (224d4e35, 33683ce1, 6.7%), zouk (00f6c4d2, b3b5efa2, 29.6%). Three distinct prompt_set_ids, so a later score change cannot be explained away by the questions having moved. No scan was re-run — the script only reads, and the scans date from 22-30 July. A DEFECT WAS FOUND AND FIXED BEFORE FREEZING, which matters because the corpus note says do not regenerate. The script pulled normalized rows via getPromptResultsForJob(scan.job_id), but the scans table HAS NO job_id COLUMN — information_schema returns nothing for it. So the guard if (scan.job_id) was permanently false, the fetch never ran, and every record carried prompt_results: [] with no warning: never-ran wearing the face of a measured zero, standing rule 1, inside the baseline everything downstream compares against. The first archive I ran had exactly that hole. Now keyed on scan.id against prompt_results.scan_id (the direction the link actually runs, stamped at finalize), an empty result warns explicitly that it is a measured zero, and an unreadable one aborts rather than silently shrinking the baseline. Re-archived: 68 normalized rows on all three. HONEST CAVEAT RECORDED IN THE README: these were captured while the LLM gateway was 402, so Italica's 0% and the null share_of_ai_pct on all three describe a degraded pipeline. Faithful, not clean — and a later comparison must not read those zeros as a regression it fixed. Also documented that the script takes the URL host, not the brand name its own --list prints. I wrote the getPromptResultsForScan fix, so per standing rule 8 a verifier that did not write it should re-run the archive and confirm 68/68. 879/879 green."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-secrets"
+      "verification": null
     },
     {
       "id": "R0.4.2",
@@ -3982,6 +4002,36 @@
           "at": "2026-08-30T07:49:47.795Z",
           "by": "local-session",
           "text": "Normalised the walker's output to forward slashes at :33, matching collectedByScript's existing normalisation at :41 — one line, no change to what the guard asserts. EXERCISED on Windows 11 / node --test: full suite went 878 pass 1 fail -> 879 pass 0 fail (exit 0), and package.json is byte-identical to HEAD (git diff --stat shows only this file). TEETH PROVEN BOTH WAYS: narrowing test:scoring to src/lib/**/*.test.mjs made the guard fail with the orphan list naming src/components and src/services — the exact S29 regression it exists to catch — and it went green again on restore. NOT VERIFIED BY A SECOND AGENT: I wrote this fix, so per standing rule 8 it stays in verification until a verifier that did not write it re-runs both directions."
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.4.6",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "archive-reference-scan takes a URL host but --list prints brand names",
+      "detail": "The usage string says <brand-key> and --list prints scans.brand, but the lookup calls getScansByDomain, which matches on the scan URL host. So the script rejects every value its own listing shows: archiving zouk fails, archiving zouk.co.in works. Discovered while capturing R0.4.1, where three archive attempts failed with no scans found against brands that plainly existed. Documented in the corpus README for now; the fix is for --list to print the host it accepts, or for the lookup to fall back to a brand match.",
+      "accept": "Running --list then passing any value it printed archives that scan, with no separate lookup step.",
+      "deps": [],
+      "tags": [],
+      "findings": [
+        "S29"
+      ],
+      "anchors": [
+        "scripts/archive-reference-scan.mjs:52",
+        "scripts/archive-reference-scan.mjs:62",
+        "src/lib/db.js:211"
+      ],
+      "phase": "R6",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-08-30T08:43:29.140Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
         }
       ],
       "verification": null

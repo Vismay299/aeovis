@@ -1,8 +1,11 @@
 # Baseline corpus — August 2026
 
 > <!-- doc-status -->
-> **Status: LIVE.** The protocol is live. **The corpus itself is EMPTY** — see
-> *Current state* below. Do not read an absent baseline as a passing one.
+> **Status: LIVE.** The protocol is live and **the corpus is populated**: three
+> brands archived on 2026-08-30 — `italicatiles.com`, `snitch.com`,
+> `zouk.co.in` — each with 68 raw and 68 normalized per-prompt results and its
+> own `prompt_set_id`. Frozen: do not regenerate, a baseline that moves is not
+> a baseline.
 
 ## Why this exists
 
@@ -17,16 +20,26 @@ point. Its job is to make a change visible, not to bless a value.
 
 ## Current state — read this first
 
-**Zero brands are archived.** The corpus is empty.
+**Three brands are archived**, captured 2026-08-30 from the live database:
 
-Capturing it requires live Supabase credentials and real persisted scans,
-neither of which exists in the environment where the rebuild's R0 phase ran.
-Rebuild task **R0.4.1 is BLOCKED** on exactly this, and the accompanying
-labelling task **R0.4.2** is blocked behind it.
+| File | Brand | Scan | Raw | Normalized | visibility_pct |
+|---|---|---|---|---|---|
+| `italicatiles.com.json` | Italica | `f1ef17a5` | 68 | 68 | 0% |
+| `snitch.com.json` | Snitch | `224d4e35` | 68 | 68 | 6.7% |
+| `zouk.co.in.json` | zouk | `00f6c4d2` | 68 | 68 | 29.6% |
 
-Nothing downstream may treat this directory as satisfied. In particular, a
-scoring change that claims "no regression against baseline" while this directory
-is empty is claiming a comparison it did not make.
+The scans themselves date from 22–30 July 2026; nothing was re-run to produce
+this corpus, which is the point — a baseline captured from scans run under
+observation is not a baseline of production behaviour.
+
+One caveat worth carrying forward: these were archived while the LLM gateway
+was returning 402, so Italica's 0% and the null `share_of_ai_pct` on all three
+record what the pipeline produced *with a degraded LLM*. That is a faithful
+before-picture, not a clean one, and a later comparison must not read those
+zeros as a scoring regression it fixed.
+
+`archive-reference-scan.mjs` takes the scan's **URL host**, not the brand name
+its own `--list` prints — `zouk.co.in`, not `zouk`.
 
 ## Capturing it
 
