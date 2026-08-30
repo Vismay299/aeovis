@@ -22,6 +22,7 @@
  *   node .claude/orchestration/orchestrate.mjs add <--json '{...}'>
  *   node .claude/orchestration/orchestrate.mjs rule --add "<text>"
  *   node .claude/orchestration/orchestrate.mjs amend <id> --note "..." [--anchors f:l]
+ *   node .claude/orchestration/orchestrate.mjs depend <id> [--add x] [--remove y] --reason "..."
  *   node .claude/orchestration/orchestrate.mjs render
  *   node .claude/orchestration/orchestrate.mjs validate
  */
@@ -322,6 +323,46 @@ const cmds = {
     console.log(`${t.id} amended (accept unchanged)`);
   },
 
+  /**
+   * Correct a dependency edge. Unlike `accept`, a dep is a modelling claim
+   * about the world and can simply be wrong — two edges in the first graph
+   * gated ~60 tasks each on work that did not actually need them. Requires a
+   * reason and records it, because removing a dep unblocks work by fiat and
+   * that must be auditable rather than quiet.
+   */
+  depend(g, { positional, flags }) {
+    const t = find(g, positional[0]);
+    if (!flags.reason) die("--reason is required: a dep change unblocks work and must be auditable");
+    const add = String(flags.add || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const rm = String(flags.remove || "").split(",").map((x) => x.trim()).filter(Boolean);
+    if (!add.length && !rm.length) die("--add and/or --remove is required");
+    for (const d of add) {
+      if (!g.tasks.some((x) => x.id === d)) die(`unknown dependency ${d}`);
+      if (!t.deps.includes(d)) t.deps.push(d);
+    }
+    for (const d of rm) {
+      if (!t.deps.includes(d)) die(`${t.id} does not depend on ${d}`);
+      t.deps = t.deps.filter((x) => x !== d);
+    }
+    // Re-check for cycles before persisting.
+    const seen = {};
+    const walk = (id, trail) => {
+      if (seen[id] === "closed") return;
+      if (seen[id] === "open") die(`that edge creates a cycle: ${trail.concat(id).join(" -> ")}`);
+      seen[id] = "open";
+      for (const d of g.tasks.find((x) => x.id === id).deps) walk(d, trail.concat(id));
+      seen[id] = "closed";
+    };
+    for (const x of g.tasks) walk(x.id, []);
+    t.notes.push({
+      at: stamp(),
+      by: "controller",
+      text: `deps ${add.length ? "+" + add.join(",") : ""}${rm.length ? " -" + rm.join(",") : ""}: ${flags.reason}`,
+    });
+    save(g);
+    console.log(`${t.id} deps now: ${t.deps.join(", ") || "(none)"}`);
+  },
+
   validate(g) {
     const ids = new Set(g.tasks.map((t) => t.id));
     const problems = [];
@@ -412,7 +453,7 @@ if (!cmd || !cmds[cmd]) {
   console.error(`usage: orchestrate.mjs <${Object.keys(cmds).join("|")}> [args]`);
   process.exit(1);
 }
-const MUTATES = ["claim", "submit", "verify", "block", "unblock", "add", "rule", "amend"];
+const MUTATES = ["claim", "submit", "verify", "block", "unblock", "add", "rule", "amend", "depend"];
 const args = parseArgs(rest);
 try {
   if (MUTATES.includes(cmd)) {

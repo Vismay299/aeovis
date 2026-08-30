@@ -1169,9 +1169,7 @@
       "title": "worker/ workspace: long-lived Node + Playwright",
       "detail": "Separate workspace with no Next imports, so the fleet can run on a container host independent of the web app.",
       "accept": "worker/ builds and starts standalone; a lint rule or guard test forbids importing from src/app.",
-      "deps": [
-        "R1.1.3"
-      ],
+      "deps": [],
       "tags": [],
       "findings": [],
       "anchors": [
@@ -1181,7 +1179,13 @@
       "status": "todo",
       "owner": null,
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-08-30T06:00:38.052Z",
+          "by": "controller",
+          "text": "deps  -R1.1.3: Wrong edge, authored not observed. A worker/ workspace of Node + Playwright with no Next imports is host-agnostic: only the Dockerfile differs between Railway, Fly and Hetzner. This single edge gated 56 tasks on a vendor preference. R1.1.3 still decides the host before anything DEPLOYS, but it does not block writing the workspace."
+        }
+      ],
       "verification": null
     },
     {
