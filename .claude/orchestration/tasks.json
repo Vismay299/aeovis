@@ -219,7 +219,7 @@
       "subphase": "R0.1",
       "lane": "backend",
       "title": "Per-IP rate limit on POST /api/scan",
-      "detail": "DB-backed token bucket, no new infrastructure. The scan path currently has no cap at all and spends Bright Data + Perplexity budget per anonymous request.",
+      "detail": "DB-backed token bucket, no new infrastructure. The scan path currently has no cap at all and spends Bright Data + Perplexity budget per anonymous request. BOTH ACCEPT CLAUSES ARE NOW EXERCISED OVER HTTP — recorded here because the ledger dependency chain (R0.1.3 -> R0.1.1) is still in verification, so this cannot be claimed yet. Against next start in production mode with migration 009 live on the real database: with SCAN_RATE_LIMIT=5 and the counter for one IP seeded to 5, the next POST /api/scan carrying that x-real-ip returned 429 with retry-after 3350, x-ratelimit-limit 5, x-ratelimit-remaining 0 — literally the sixth scan in the hour from one address. Clause two, configurability: a second IP seeded to 2 with SCAN_RATE_LIMIT=2 was refused on its third request and reported x-ratelimit-limit 2, so the threshold moves with the env var. ZERO VENDOR SPEND AND NO SCAN CREATED: the counter was pre-seeded through increment_scan_rate_limit so every HTTP request landed on the refusal path, and scan_jobs holds 0 rows for either probe brand. The two test buckets were deleted afterwards; their final hits of 6 and 3 confirm the route counts before it decides, which is what stops two concurrent callers both reading 4 and both proceeding.",
       "accept": "The 6th scan in an hour from one IP returns 429; limit is configurable by env.",
       "deps": [
         "R0.1.3"
@@ -245,6 +245,11 @@
           "at": "2026-08-30T07:58:55.289Z",
           "by": "controller",
           "text": "unblocked: Its block was inherited from the R0.1.3 -> R0.1.1 chain. Its own criterion is exercisable here, but a real blocker was found underneath it: migration 009 is NOT applied to the live database, so this is being re-blocked on that rather than on Vercel."
+        },
+        {
+          "at": "2026-08-30T08:05:27.641Z",
+          "by": "controller",
+          "text": "amended: BOTH ACCEPT CLAUSES ARE NOW EXERCISED OVER HTTP — recorded here because the ledger dependency chain (R0.1.3 -> R0.1.1) is still in verification, so this cannot be claimed yet. Against next start in production mode with migration 009 live on the real database: with SCAN_RATE_LIMIT=5 and the counter for one IP seeded to 5, the next POST /api/scan carrying that x-real-ip returned 429 with retry-after 3350, x-ratelimit-limit 5, x-ratelimit-remaining 0 — literally the sixth scan in the hour from one address. Clause two, configurability: a second IP seeded to 2 with SCAN_RATE_LIMIT=2 was refused on its third request and reported x-ratelimit-limit 2, so the threshold moves with the env var. ZERO VENDOR SPEND AND NO SCAN CREATED: the counter was pre-seeded through increment_scan_rate_limit so every HTTP request landed on the refusal path, and scan_jobs holds 0 rows for either probe brand. The two test buckets were deleted afterwards; their final hits of 6 and 3 confirm the route counts before it decides, which is what stops two concurrent callers both reading 4 and both proceeding."
         }
       ],
       "verification": null
@@ -559,9 +564,14 @@
         "src/lib/rateLimit.js:112"
       ],
       "phase": "R0",
-      "status": "blocked",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "supabase/migrations/007_scan_seal.sql:28",
+        "supabase/migrations/008_system_heartbeats.sql:12",
+        "supabase/migrations/009_scan_rate_limit.sql:44",
+        "src/lib/rateLimit.js:112"
+      ],
       "notes": [
         {
           "at": "2026-08-30T07:59:16.650Z",
@@ -572,10 +582,24 @@
           "at": "2026-08-30T07:59:16.850Z",
           "by": "controller",
           "text": "blocked (needs-decision): Reconciling 44 stranded production scan_jobs rows is a data mutation on the operator's live database; it needs an explicit go-ahead, not an agent's judgement."
+        },
+        {
+          "at": "2026-08-30T08:05:18.545Z",
+          "by": "controller",
+          "text": "unblocked: The operator gave an explicit go-ahead to reconcile the stranded rows and apply the migrations."
+        },
+        {
+          "at": "2026-08-30T08:05:18.723Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-08-30T08:05:18.960Z",
+          "by": "local-session",
+          "text": "APPLIED AND VERIFIED AGAINST THE CATALOG, not against setup:db. Reconcile first: 44 scan_jobs rows retired to status failed, scoped three ways so no live job could be caught — running status AND no heartbeat in the last day AND created before 2026-08-01. Every row matched on all three (created 2026-07-07..2026-07-24, freshest heartbeat 2026-07-30). Each carries an error_message naming this reconcile, appended to any existing message rather than replacing it; the full 44-row before-state was captured first. Then 007, 008 and 009 applied in order. Catalog now shows scan_jobs_one_running_per_brand, system_heartbeats, scan_rate_limits, scan_rate_limits_window_idx and increment_scan_rate_limit, with 0 rows left in a running status. TEETH PROVEN, NOT ASSUMED. The 007 seal: inserting two running jobs whose brands differ only by case and surrounding whitespace raises unique_violation on the second, while a terminal-status row for the same brand is still accepted — run inside a DO block that aborts, so nothing persisted (confirmed: 0 probe rows). The 009 counter: five RPC calls against production returned 1,2,3,4,5. /api/health now answers 200 with db.ok true against a real system_heartbeats table. NOTE FOR R0.1.7: /api/health reports llm configured:true while the key is 402 out of balance — it checks env presence, not liveness, which is the standing-rule-3 distinction and belongs to check:secrets."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-decision"
+      "verification": null
     },
     {
       "id": "R0.1.12",
