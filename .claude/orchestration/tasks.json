@@ -3821,10 +3821,26 @@
         "scripts/setup-supabase.mjs:52-96"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "scripts/setup-supabase.mjs:16",
+        "scripts/setup-supabase.mjs:40",
+        "scripts/setup-supabase.mjs:112",
+        "src/lib/migrationsLedger.test.mjs"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-02T20:47:41.476Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:47:41.734Z",
+          "by": "local-session",
+          "text": "ALL THREE ACCEPT CLAUSES MET AND RUN AGAINST THE LIVE DATABASE. Records what it applied: schema_migrations (filename, checksum, applied_at) is created first and written inside each file's transaction; the live table now holds all nine rows with checksums. Transaction per file: BEGIN / apply / record / COMMIT with ROLLBACK on failure, so a migration that dies halfway no longer leaves a schema no file describes for the next run to layer over. Reports a DB missing 006 as incomplete: the verify list stopped at 005 and now covers 001-009 keyed BY MIGRATION FILE, checked against the catalog, printing INCOMPLETE and setting exit 1 on any miss. Verified live: all 24 expected objects across 9 migrations tick, exit 0. THIS IS THE TOOL THAT FAILED TODAY, so two details are deliberate. The old runner printed 'Migrations applied successfully.' BEFORE verifying — the sentence that made a broken run look fine; success is now claimed only after the check, and a test asserts that string cannot return. And function existence is checked via pg_proc, not to_regclass, because 009 was found this morning with its TABLE present and its increment_scan_rate_limit FUNCTION absent — a to_regclass-only check would have passed on exactly that state. Also added: a checksum mismatch warns that a migration was edited after being applied, so the file no longer describes the database. GUARD IS AGAINST STALENESS, not against today's list: it walks supabase/migrations and fails if any file lacks an entry, and also fails on an entry for a file that no longer exists. TEETH: deleting the 006 entry — the literal C10 shape — fails 2 of 6."
+        }
+      ],
       "verification": null
     },
     {

@@ -253,7 +253,7 @@ Baseline commit: `5111219`
 
 ### R6.1
 
-- [ ] **R6.1.1** Migrations ledger and transaction per file
+- [~] **R6.1.1** Migrations ledger and transaction per file — submitted `scripts/setup-supabase.mjs:16`, `scripts/setup-supabase.mjs:40`, `scripts/setup-supabase.mjs:112`, `src/lib/migrationsLedger.test.mjs`
 - [ ] **R6.1.2** docs/PROD_MIGRATIONS.md with per-migration verification queries
 - [~] **R6.1.3** Track the orchestration tooling change made outside the ledger — submitted `.claude/orchestration/orchestrate.mjs:436`, `docs/BUILD_JOURNAL.md`
 ### R6.2

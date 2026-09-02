@@ -12,9 +12,83 @@
 import { readFileSync, readdirSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { createHash } from "crypto";
 import pg from "pg";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * R6.1.1 — the ledger. Before this, nothing recorded what had been applied.
+ *
+ * On 2026-08-30 the live database was found to be missing 007, 008 AND 009
+ * while `npm run setup:db` would have reported success, because its verify list
+ * stopped at 005 and it kept no record of its own runs. A migration runner that
+ * cannot say what it applied is not a migration runner.
+ */
+const SCHEMA_MIGRATIONS_DDL = `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  filename   text PRIMARY KEY,
+  checksum   text NOT NULL,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);`;
+
+/**
+ * What each migration must leave behind, checked against the Postgres catalog.
+ *
+ * Keyed by migration file so a new migration without an entry fails the guard
+ * test in src/lib/migrationsLedger.test.mjs — the stale-list failure (finding
+ * C10) was this list silently ending at 005 while four more migrations shipped.
+ *
+ * `to_regclass` covers tables and indexes; functions need pg_proc, because a
+ * table can exist while the function that makes it usable does not — exactly
+ * the state 009 was found in.
+ */
+const EXPECTED_OBJECTS = {
+  "001_initial_schema.sql": [
+    { kind: "table", name: "scans" },
+    { kind: "table", name: "brand_prompts" },
+    { kind: "table", name: "scan_jobs" },
+    { kind: "table", name: "content_events" },
+  ],
+  "002_content_os.sql": [
+    { kind: "table", name: "content_jobs" },
+    { kind: "table", name: "content_items" },
+    { kind: "table", name: "content_feedback" },
+    { kind: "table", name: "brand_briefs" },
+    { kind: "table", name: "content_lessons" },
+  ],
+  "003_content_agents.sql": [{ kind: "table", name: "content_agents" }],
+  "004_crew_canvas_knowledge.sql": [{ kind: "table", name: "knowledge_blocks" }],
+  "005_analytics_platform.sql": [
+    { kind: "table", name: "prompt_results" },
+    { kind: "table", name: "result_brands" },
+    { kind: "table", name: "citations" },
+    { kind: "table", name: "brand_metrics_daily" },
+    { kind: "table", name: "scan_schedules" },
+    { kind: "table", name: "topics" },
+  ],
+  "006_agent_control_plane.sql": [{ kind: "index", name: "content_jobs_heartbeat_idx" }],
+  "007_scan_seal.sql": [{ kind: "index", name: "scan_jobs_one_running_per_brand" }],
+  "008_system_heartbeats.sql": [{ kind: "table", name: "system_heartbeats" }],
+  "009_scan_rate_limit.sql": [
+    { kind: "table", name: "scan_rate_limits" },
+    { kind: "index", name: "scan_rate_limits_window_idx" },
+    { kind: "function", name: "increment_scan_rate_limit" },
+  ],
+};
+
+async function objectExists(client, { kind, name }) {
+  if (kind === "function") {
+    const { rows } = await client.query(
+      `SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = $1 LIMIT 1`,
+      [name]
+    );
+    return rows.length > 0;
+  }
+  const { rows } = await client.query("SELECT to_regclass($1) AS regclass", [`public.${name}`]);
+  return rows[0]?.regclass !== null;
+}
 
 function getConnectionString() {
   if (process.env.DATABASE_URL) {
@@ -59,40 +133,72 @@ async function main() {
 
   try {
     await client.connect();
-    for (const file of migrationFiles) {
-      console.log(`Applying migration: ${file}`);
-      const sql = readFileSync(join(migrationsDir, file), "utf8");
-      await client.query(sql);
-    }
-    console.log("Migrations applied successfully.\n");
+    await client.query(SCHEMA_MIGRATIONS_DDL);
 
-    const tables = [
-      "scans",
-      "brand_prompts",
-      "scan_jobs",
-      "content_events",
-      "content_jobs",
-      "content_items",
-      "content_feedback",
-      "brand_briefs",
-      "content_lessons",
-      "content_agents",
-      "knowledge_blocks",
-      // 005 analytics platform
-      "prompt_results",
-      "result_brands",
-      "citations",
-      "brand_metrics_daily",
-      "scan_schedules",
-      "topics",
-    ];
-    for (const table of tables) {
-      const { rows } = await client.query(
-        `SELECT to_regclass('public.${table}') AS regclass`
+    const { rows: recorded } = await client.query(
+      "SELECT filename, checksum FROM schema_migrations"
+    );
+    const priorChecksums = new Map(recorded.map((r) => [r.filename, r.checksum]));
+
+    for (const file of migrationFiles) {
+      const sql = readFileSync(join(migrationsDir, file), "utf8");
+      const checksum = createHash("sha256").update(sql).digest("hex").slice(0, 16);
+
+      // A migration edited AFTER it was applied is a silent schema drift: the
+      // file no longer describes the database, and every reader who diffs the
+      // two will be misled. Loud, and not fatal — the operator decides.
+      const prior = priorChecksums.get(file);
+      if (prior && prior !== checksum) {
+        console.warn(
+          `  ! ${file} has CHANGED since it was applied (${prior} -> ${checksum}). ` +
+            `The file no longer describes what is in the database.`
+        );
+      }
+
+      // One transaction per file. Without this a migration that fails halfway
+      // leaves the schema in a state no file describes, and the next run
+      // re-applies from the top over that wreckage.
+      process.stdout.write(`Applying migration: ${file} ... `);
+      try {
+        await client.query("BEGIN");
+        await client.query(sql);
+        await client.query(
+          `INSERT INTO schema_migrations (filename, checksum, applied_at)
+           VALUES ($1, $2, now())
+           ON CONFLICT (filename) DO UPDATE SET checksum = EXCLUDED.checksum, applied_at = now()`,
+          [file, checksum]
+        );
+        await client.query("COMMIT");
+        console.log("ok");
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        console.log("FAILED");
+        throw new Error(`${file}: ${err.message}`);
+      }
+    }
+    console.log("\nMigrations applied.\n");
+
+    console.log("Verifying schema against the catalog:\n");
+    let missing = 0;
+    for (const [migration, expectations] of Object.entries(EXPECTED_OBJECTS)) {
+      const results = [];
+      for (const obj of expectations) {
+        const exists = await objectExists(client, obj);
+        if (!exists) missing++;
+        results.push(`${exists ? "✓" : "✗"} ${obj.kind} ${obj.name}`);
+      }
+      console.log(`  ${migration}`);
+      for (const r of results) console.log(`    ${r}`);
+    }
+
+    if (missing > 0) {
+      console.error(
+        `\n${missing} expected object(s) missing. The database is INCOMPLETE — ` +
+          `do not read the "Migrations applied" line above as success.`
       );
-      const exists = rows[0]?.regclass !== null;
-      console.log(`  ${exists ? "✓" : "✗"} public.${table}`);
-      if (!exists) process.exitCode = 1;
+      process.exitCode = 1;
+    } else {
+      console.log("\nAll expected objects present.");
     }
   } catch (err) {
     console.error("Migration failed:", err.message);
