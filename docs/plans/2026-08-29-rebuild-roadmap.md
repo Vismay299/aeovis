@@ -73,7 +73,7 @@ Baseline commit: `5111219`
 - [ ] **R1.1.5** Politeness & risk budget
 ### R1.2
 
-- [ ] **R1.2.1** worker/ workspace: long-lived Node + Playwright
+- [~] **R1.2.1** worker/ workspace: long-lived Node + Playwright — submitted `worker/package.json`, `worker/src/index.js`, `worker/src/config.js`, `worker/README.md`, `src/lib/workerIsolation.test.mjs`
 - [ ] **R1.2.2** probe_tasks queue table; fleet claims batches via jobLease
 - [ ] **R1.2.3** Create the scan_runs ledger table
 - [ ] **R1.2.4** Authenticated ingest POST /api/internal/probe-results

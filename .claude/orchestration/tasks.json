@@ -1367,14 +1367,30 @@
         "worker/"
       ],
       "phase": "R1",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "worker/package.json",
+        "worker/src/index.js",
+        "worker/src/config.js",
+        "worker/README.md",
+        "src/lib/workerIsolation.test.mjs"
+      ],
       "notes": [
         {
           "at": "2026-08-30T06:00:38.052Z",
           "by": "controller",
           "text": "deps  -R1.1.3: Wrong edge, authored not observed. A worker/ workspace of Node + Playwright with no Next imports is host-agnostic: only the Dockerfile differs between Railway, Fly and Hetzner. This single edge gated 56 tasks on a vendor preference. R1.1.3 still decides the host before anything DEPLOYS, but it does not block writing the workspace."
+        },
+        {
+          "at": "2026-09-02T20:55:26.450Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:55:26.728Z",
+          "by": "local-session",
+          "text": "BOTH ACCEPT CLAUSES MET. Builds and starts standalone: worker/ has its own package.json (perceev-worker, type module, its own playwright and supabase-js dependencies — not the app's), and 'npm --prefix worker run check' parses every file then runs --selftest, which boots the REAL config path and completes one claim/probe/report pass against stubs, exiting 0. It needs no database, no browser and no credential, which is the point: proving the workspace starts standalone must not require the things it is independent of. Verified: exit 0 with 'one pass completed — the workspace starts standalone'. Guard test forbids importing from src/app: src/lib/workerIsolation.test.mjs, deliberately in the MAIN suite rather than worker/'s own, because CI runs the main suite and an isolation rule that fires only when someone remembers to run the worker's tests is not a rule. It is BROADER than the accept asks — it fails on src/app, on any next/* import, AND on any relative import that resolves outside worker/, because the container image does not ship src/ and any escape breaks the host at runtime after a deploy. TEETH: a file importing next/server and ../../src/lib/scoring/enginePipeline.js fails 2 of 5 guards, each naming the offending import. THE STUBS THROW, and a guard asserts they keep throwing. claimBatch, reportBatch and probeBatch all refuse with a message naming the task that will build them — an empty batch and an unbuilt queue are indistinguishable, and a fleet reporting 'nothing to do' while its queue fills is the false success this rebuild exists to remove. PROBE_OUTCOMES is present and frozen, carrying the D2 vocabulary so blocked can never be scored as no_answer. Suite 927 pass 0 fail; next build still exits 0, unaffected by the new workspace."
         }
       ],
       "verification": null
