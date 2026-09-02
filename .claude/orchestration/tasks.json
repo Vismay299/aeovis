@@ -526,9 +526,13 @@
         "src/lib/scoring/enginePipeline.js:98-101"
       ],
       "phase": "R0",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "scripts/check-secrets.mjs:81",
+        "src/lib/engines/brightdata.js:10",
+        "src/lib/engines/brightdataZone.test.mjs"
+      ],
       "notes": [
         {
           "at": "2026-08-29T17:01:35.024Z",
@@ -539,6 +543,16 @@
           "at": "2026-08-29T17:28:45.472Z",
           "by": "controller",
           "text": "amended: The ADR notes the live mechanism for the swallowed no-active-zone failure is enginePipeline.js:98-101, which catches, warns and leaves cost at 0; serp.js:301-307 is the dormant twin inside probeGoogleAiOverview. Fix the live path."
+        },
+        {
+          "at": "2026-09-02T21:04:36.894Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T21:04:37.144Z",
+          "by": "local-session",
+          "text": "ALL THREE ACCEPT CLAUSES, and the first two were exercised against the REAL Bright Data account. (1) check:secrets now exercises the configured zone on the same path brightdata.js uses: it reads BRIGHTDATA_SERP_ZONE and asserts THAT zone exists and is an active serp zone, rather than passing because some unrelated zone was healthy. (2) A wrong zone reports FAIL, verified live: BRIGHTDATA_SERP_ZONE=nope_not_real gives FAIL with \"does not exist on this account. Every AIO probe will fail. Active serp zones: serp_api1\" and a non-zero exit; BRIGHTDATA_SERP_ZONE=serp_api1 gives PASS naming the zone. With the var unset it still passes but now NAMES the zone probes will actually use, because \"it picked one for you\" is a fact worth seeing. (3) A wrong zone at probe time surfaces as an error state: driven through resolveEnabledEngines and the real aio engine def with a mocked transport returning Bright Data zone-not-found, the row carries an error, answer_present is false, and summarizeEngineSlice counts it — errored_queries 1, error_rate_pct 100. It is not a skipped result wearing a clean cost 0.0. TWO OF MY OWN ASSERTIONS WERE WRONG AND THE FAILURES TAUGHT ME SOMETHING. I asserted getBrightDataConfig throws without a key; it returns null, and callers branch on that. And I asserted a no-active-zone account throws — it does, but my test got the PREVIOUS test cached value, because cachedZoneName in brightdata.js is module-level with no invalidation. That is now pinned as its own test rather than worked around: once auto-discovery succeeds, a zone suspended afterwards keeps being used until the process restarts, which matters for the long-lived worker in R1.2. Suite 949 pass 0 fail."
         }
       ],
       "verification": null
@@ -1509,6 +1523,37 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R1.2.7",
+      "subphase": "R1.2",
+      "lane": "backend",
+      "title": "The Bright Data zone cache never invalidates",
+      "detail": "resolveBrightDataSerpZone caches the auto-discovered zone in a module-level cachedZoneName with no TTL and no invalidation path. In a request-scoped Vercel function that is harmless, because the module reloads. In the long-lived worker container built by R1.2.1 it is not: a zone that is suspended, deleted or exhausted mid-run keeps being used until someone restarts the process, and every probe then fails for a reason the fleet cannot see. Found while testing R0.1.10, where a no-active-zone fixture silently returned the previous test cached value instead of throwing — the cache is invisible until it misleads you.",
+      "accept": "The resolved zone is re-checked at least once per fleet poll cycle, or the cache carries a TTL; a zone that stops being active surfaces as a typed configuration error rather than as N failed probes.",
+      "deps": [
+        "R1.2.1"
+      ],
+      "tags": [],
+      "findings": [
+        "C4"
+      ],
+      "anchors": [
+        "src/lib/engines/brightdata.js:10",
+        "src/lib/engines/brightdataZone.test.mjs"
+      ],
+      "phase": "R1",
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-02T21:05:14.144Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
       "verification": null
     },
     {

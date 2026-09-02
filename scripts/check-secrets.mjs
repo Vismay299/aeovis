@@ -78,20 +78,61 @@ const VENDORS = [
     name: "brightdata",
     required: true,
     keys: ["BRIGHTDATA_API_KEY"],
-    // Mirrors src/lib/engines/brightdata.js's own zone lookup, and also tells
-    // the operator whether an ACTIVE serp zone exists — a valid key with no
-    // active serp zone fails every scan and is otherwise invisible here.
+    // R0.1.10 (finding C4) — validate the credential the CLIENT will use.
+    //
+    // This used to call get_all_zones and pass if ANY active serp zone existed,
+    // never reading BRIGHTDATA_SERP_ZONE. But brightdata.js:10 short-circuits on
+    // that variable: when it is set, that zone is the one every probe uses. So a
+    // typo'd zone reported PASS here — an account with a healthy zone list and
+    // not a single working probe — and the failure then arrived per-query, as a
+    // cost-0.0 error row on all thirty. The check said the credential was good
+    // and the scan quietly measured nothing.
+    //
+    // Now: resolve the zone the same way the client does, then assert THAT zone
+    // is present and active.
     async check() {
       const res = await get("https://api.brightdata.com/zone/get_all_zones", {
         headers: { Authorization: `Bearer ${env("BRIGHTDATA_API_KEY")}` },
       });
-      if (!res.ok) return fromResponse(res);
+      if (!res.ok) return fromResponse(res, undefined, "api.brightdata.com");
+
       const zones = await res.json().catch(() => []);
       const serp = (zones || []).filter((z) => z.type === "serp" && z.status === "active");
+      const configured = (process.env.BRIGHTDATA_SERP_ZONE || "").trim();
+
+      if (configured) {
+        const match = (zones || []).find((z) => z.name === configured);
+        if (!match) {
+          return {
+            verdict: FAIL,
+            detail:
+              `BRIGHTDATA_SERP_ZONE="${configured}" does not exist on this account. ` +
+              `Every AIO probe will fail. Active serp zones: ${
+                serp.map((z) => z.name).join(", ") || "(none)"
+              }`,
+          };
+        }
+        if (match.status !== "active" || match.type !== "serp") {
+          return {
+            verdict: FAIL,
+            detail:
+              `BRIGHTDATA_SERP_ZONE="${configured}" exists but is type=${match.type} ` +
+              `status=${match.status}, not an active serp zone. Every AIO probe will fail.`,
+          };
+        }
+        return { verdict: PASS, detail: `configured zone "${configured}" is an active serp zone` };
+      }
+
+      // Unset: the client falls back to the first active serp zone, so that is
+      // what gets validated — and the operator is told which one it resolved to,
+      // because "it picked one for you" is a fact worth seeing.
       if (!serp.length) {
         return { verdict: FAIL, detail: "key works, but no ACTIVE serp zone — every AIO probe will fail" };
       }
-      return { verdict: PASS, detail: `${serp.length} active serp zone(s)` };
+      return {
+        verdict: PASS,
+        detail: `${serp.length} active serp zone(s); no BRIGHTDATA_SERP_ZONE set, so probes will use "${serp[0].name}"`,
+      };
     },
   },
   {
