@@ -16,6 +16,8 @@ that document) and every brand on it is fictional.
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+import { DEFAULT_UNBRANDED_TARGET } from '@/lib/scoring/promptSetSize';
+import { deployedEngineLabels, formatEngineList } from '@/lib/engines/deployedEngines';
 import { SiteNav } from '@/components/landing/SiteNav';
 import { SiteFooter } from '@/components/landing/SiteFooter';
 import { Reveal } from '@/components/landing/Reveal';
@@ -31,27 +33,54 @@ import { saveScan } from '@/services/api';
 import { SAMPLE_RESULT } from '@/data/mockData';
 
 /* ── the one demonstration reading ──────────────────────────────────
-   15 + 12 + 6 + 3 = 36. Change one of these and change all of them. */
-const TRACKED = 36;
+   DESTINATIONS must sum to TRACKED. Change one and change all of them —
+   a guard test (landingHonesty.test.mjs) now enforces it rather than
+   trusting this comment. */
+// R2.10.1 — was a hardcoded 36 while a scan tracks 30 by default and every
+// archived reference scan recorded prompts_tracked=30, so the page promised a
+// fifth more than the product delivers. Now derived from the same constant the
+// worker uses.
+const TRACKED = DEFAULT_UNBRANDED_TARGET;
 
+// R2.10.1 — the engines this deployment actually probes, not a hardcoded three.
+// The hero used to name Google AI Overview, ChatGPT and Perplexity while the
+// deployment ran ENGINES=aio,perplexity with no OPENAI_API_KEY at all, so
+// ChatGPT could not have run even if it had been configured. Claiming an engine
+// we do not probe is a claim about coverage, and it was wrong in the flattering
+// direction. See src/lib/engines/deployedEngines.js.
+const ENGINE_SENTENCE = formatEngineList(deployedEngineLabels());
+
+// 13 + 10 + 5 + 2 = 30 = TRACKED.
 const DESTINATIONS = [
-  { key: 'you', label: 'Brightwave', answers: 15, colour: 'var(--you)', isYou: true },
-  { key: 'r1', label: 'NorthPeak', answers: 12, colour: 'var(--rival-1)' },
-  { key: 'r2', label: 'Lumen IQ', answers: 6, colour: 'var(--rival-2)' },
-  { key: 'none', label: 'No brand named', answers: 3, colour: 'var(--rival-3)', muted: true },
+  { key: 'you', label: 'Brightwave', answers: 13, colour: 'var(--you)', isYou: true },
+  { key: 'r1', label: 'NorthPeak', answers: 10, colour: 'var(--rival-1)' },
+  { key: 'r2', label: 'Lumen IQ', answers: 5, colour: 'var(--rival-2)' },
+  { key: 'none', label: 'No brand named', answers: 2, colour: 'var(--rival-3)', muted: true },
 ];
 
-const DEMO_ENGINES = [
-  { name: 'Google AI Overview', asked: 12, reached: 5 },
-  { name: 'ChatGPT', asked: 12, reached: 6 },
-  { name: 'Perplexity', asked: 12, reached: 4 },
-];
+// R2.10.1 — the rail showed a fixed three engines including ChatGPT, which this
+// deployment does not probe. The illustrative per-engine figures stay (this is a
+// sample reading for a fictional brand), but the ENGINES SHOWN are the ones we
+// actually run: advertising coverage we do not have is the overclaim, not the
+// worked example. Split evenly so the asked counts still sum to TRACKED.
+const DEMO_ENGINE_STATS = {
+  'Google AI Overview': { reachedShare: 0.42, note: 'Three of your four highest-intent questions live in AI Overview.' },
+  ChatGPT: { reachedShare: 0.5, note: "ChatGPT is your strongest engine, and your rivals' weakest." },
+  Perplexity: { reachedShare: 0.33, note: 'Perplexity cites sources hardest — six of its 64 are pages you control.' },
+};
 
-const RAIL_NOTES = [
-  'Three of your four highest-intent questions live in AI Overview.',
-  "ChatGPT is your strongest engine, and your rivals' weakest.",
-  'Perplexity cites sources hardest — six of its 64 are pages you control.',
-];
+const DEPLOYED_ENGINE_LABELS = deployedEngineLabels();
+const PER_ENGINE_ASKED = Math.floor(TRACKED / Math.max(1, DEPLOYED_ENGINE_LABELS.length));
+
+const DEMO_ENGINES = DEPLOYED_ENGINE_LABELS.map((name) => ({
+  name,
+  asked: PER_ENGINE_ASKED,
+  reached: Math.round(PER_ENGINE_ASKED * (DEMO_ENGINE_STATS[name]?.reachedShare ?? 0.4)),
+}));
+
+const RAIL_NOTES = DEPLOYED_ENGINE_LABELS
+  .map((name) => DEMO_ENGINE_STATS[name]?.note)
+  .filter(Boolean);
 
 const SLIDES = [
   {
@@ -123,7 +152,7 @@ export default function Landing() {
               The answer names two brands. <em>Is one of them yours?</em>
             </Reveal>
             <Reveal as="p" className="lede hero__sub" delay={120}>
-              Perceev asks Google AI Overview, ChatGPT and Perplexity the {TRACKED} unbranded
+              Perceev asks {ENGINE_SENTENCE} the {TRACKED} unbranded
               questions your buyers actually type, then shows you which brand each answer
               recommends.
             </Reveal>
@@ -153,7 +182,7 @@ export default function Landing() {
       </div>
 
       {/* ── engine coverage ──────────────────────────────────────── */}
-      <EngineRail engines={DEMO_ENGINES} notes={RAIL_NOTES} total={12} />
+      <EngineRail engines={DEMO_ENGINES} notes={RAIL_NOTES} total={PER_ENGINE_ASKED} />
 
       {/* ── the gap: one statement, one graphic, air ──────────────── */}
       <section className="sec shell" id="gap">
@@ -231,8 +260,13 @@ export default function Landing() {
                   paddingBottom: 16, borderBottom: '1px solid var(--line-soft)', marginBottom: 18,
                 }}
               >
+                {/* R2.10.1 — this card is an illustration with fictional brands
+                    (NorthPeak, Brightwave). It carried a precise timestamp,
+                    "16 Aug 2026 · 09:14 IST", which reads as provenance for a
+                    real probe. A made-up answer wearing a real answer's
+                    metadata is the exact confusion this page has to avoid. */}
                 <span className="chip">Google AI Overview</span>
-                <span className="tag">16 Aug 2026 · 09:14 IST</span>
+                <span className="tag">Sample · illustrative brands</span>
                 <span className="chip chip--warn" style={{ marginLeft: 'auto' }}>Rival first</span>
               </div>
               <p

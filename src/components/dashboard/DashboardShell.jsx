@@ -86,7 +86,7 @@ function engineLabel(key) {
  *   scanId — optional, the concrete `scans.id` of the record being shown.
  *            Reserved for a future precise "view this exact scan" deep link.
  */
-export default function DashboardShell({ scan, scanId }) {
+export default function DashboardShell({ scan, scanId, error = null }) {
   const router = useRouter();
   const [result, setResult] = useState(undefined);
   const [history, setHistory] = useState([]);
@@ -243,6 +243,42 @@ export default function DashboardShell({ scan, scanId }) {
     }
     return { scoreTrend, previousScan, sortedHistory, deltaSamePromptSet };
   }, [result, history]);
+
+  // ── error state ───────────────────────────────────────────────────
+  //
+  // R2.8.4 — kept ABOVE the empty state deliberately. A failed load must never
+  // fall through to "Your dashboard is waiting": that tells a user with real
+  // history that they have none, and invites them to spend a scan to fix a
+  // problem that is ours. This state says what happened and offers a retry;
+  // it does NOT offer to run a scan.
+  if (error) {
+    return (
+      <div className="scan">
+        <div className="scan__in">
+          <div className="card" data-testid="dashboard-error" style={{ padding: "clamp(28px,4vw,48px)" }}>
+            <span className="tag">Couldn't load</span>
+            <h2 style={{ margin: "16px 0 14px", fontSize: "clamp(26px,3vw,38px)" }}>
+              We couldn't reach your data
+            </h2>
+            <p className="scan__sub">
+              {error} This is a problem on our side, not a missing report — your
+              existing scans are unaffected.
+            </p>
+            <div style={{ marginTop: 28 }}>
+              <button
+                type="button"
+                data-testid="error-retry"
+                className="btn btn--primary btn--lg"
+                onClick={() => window.location.reload()}
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ── empty state ───────────────────────────────────────────────────
   if (result === null) {

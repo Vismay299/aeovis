@@ -60,8 +60,12 @@ export function AnswerSheet() {
       <div className="sheet__top">
         <span className="chip">Perplexity</span>
         <span className="tag">Unbranded question 04</span>
-        <span className="chip chip--good" style={{ marginLeft: 'auto' }}>
-          <i className="chip__led" /> Live
+        {/* R2.10.1 — this sheet types out a hardcoded script (SHEET above). It
+            was labelled "Live" with a status LED, the strongest claim the design
+            system can make and the one thing this content cannot support. It is
+            an illustration, and now says so. */}
+        <span className="chip" style={{ marginLeft: 'auto' }}>
+          Sample answer
         </span>
       </div>
       <div className="sheet__body">

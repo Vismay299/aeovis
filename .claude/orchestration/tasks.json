@@ -2658,10 +2658,25 @@
         "src/app/dashboard/[brand]/page.js:52-57"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/app/dashboard/[brand]/page.js:60",
+        "src/components/dashboard/DashboardShell.jsx:248",
+        "src/lib/dashboardLoadState.test.mjs"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-02T20:31:44.860Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:31:45.073Z",
+          "by": "local-session",
+          "text": "ACCEPT MET and VERIFIED IN A BROWSER, not just in source. The route now branches on res.status === 404 for the genuine no-scans case and sets an error for every other non-ok status and for a thrown fetch. The shell takes an error prop and returns its own branch BEFORE the empty state — ordering matters, since a later branch would still fall through. ALL THREE STATES EXERCISED against the dev server: a brand with no scans renders 'Your dashboard is waiting' (404 -> empty, unchanged); a forced 503 renders 'We couldn't reach your data ... This is a problem on our side, not a missing report — your existing scans are unaffected' with a Try again button; and /dashboard/italica renders the real dashboard with 38 readings on record. Screenshot taken of the error state; it matches the design system. THE COPY IS PART OF THE FIX. The old behaviour told a user with a year of history that they had never scanned, and offered them a button to spend scan budget fixing an outage that was ours. The error state deliberately offers a retry and does NOT offer to run a scan, and a test asserts that — a future edit that drops a 'Run a visibility check' button into it fails. Four tests, source-level because this repo has no component-render harness; they pin the two load-bearing decisions and the branch ordering. TEETH: collapsing the 404 and error paths back together fails 1 of 4. Suite green."
+        }
+      ],
       "verification": null
     },
     {
@@ -2708,10 +2723,27 @@
         "src/app/page.js:227-253"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/components/landing/AnswerSheet.jsx:67",
+        "src/app/page.js:51",
+        "src/app/page.js:43",
+        "src/lib/engines/deployedEngines.js:36",
+        "src/lib/landingHonesty.test.mjs"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-02T20:45:02.416Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:45:02.701Z",
+          "by": "local-session",
+          "text": "ALL THREE ACCEPT CLAUSES MET, VERIFIED IN THE BROWSER. (1) No Live chip: AnswerSheet types out a hardcoded script and was labelled Live with a status LED — the strongest claim the design system makes and the one thing that content cannot support. Now 'Sample answer', LED removed; the rendered chip reads SAMPLE ANSWER. (2) Sample cards labelled: the fictional NorthPeak/Brightwave answer carried '16 Aug 2026 · 09:14 IST', a precise timestamp reading as provenance for a probe that never ran. Now 'Sample · illustrative brands'. (3) Engine list matches the deployment: the hero named Google AI Overview, ChatGPT and Perplexity while ENGINES=aio,perplexity and OPENAI_API_KEY is UNCONFIGURED, so ChatGPT could not have run. Derived from deployedEngines.js; the page now renders 'Perceev asks Google AI Overview and Perplexity'. The EngineRail had the same hardcoded three and is now filtered to the deployed list. TWO FURTHER OVERCLAIMS OF THE SAME CLASS, found while fixing these and fixed with them rather than left behind on a page being de-faked. The count: the page advertised 36 questions in four places while DEFAULT_UNBRANDED_TARGET is 30 and all three archived reference scans recorded prompts_tracked=30 — a fifth more than the product delivers. TRACKED is now the same constant the worker imports. The donut: DESTINATIONS summed to 36 with a comment asking a human to keep it in step; it now sums to 30 and a guard asserts it. A BUG I INTRODUCED AND CAUGHT IN THE BROWSER: the first version read env.NEXT_PUBLIC_ENGINES off a variable, which Next cannot statically inline, so SSR rendered both engines and the client bundle rendered one — a hydration mismatch that was also wrong half the time. Now captured as a literal process.env expression at module scope. Ten guards; teeth proven by restoring the Live chip (1 fails). Suite 910 pass 0 fail."
+        }
+      ],
       "verification": null
     },
     {

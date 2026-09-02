@@ -152,13 +152,13 @@ Baseline commit: `5111219`
 - [ ] **R2.8.1** Gate Studio and Opportunities on data quality
 - [ ] **R2.8.2** Engine gauges: a zero-row engine says 'no data'
 - [x] **R2.8.3** Unknown status renders 'reconnecting', never rewinds to 0 percent — closed at `src/lib/scanProgress.js:50`, `src/lib/scanProgress.js:74`, `src/lib/scanProgress.js:92`, `src/app/scan/page.js:134`, `src/app/scan/page.js:341`, `src/services/api.js:805`, `src/app/api/scan/[job_id]/status/route.js:37`, `src/lib/scanProgress.test.mjs:40`, `src/lib/scanStatusTransient.route.test.mjs:99`
-- [ ] **R2.8.4** DB-down state distinct from 'no scans yet'
+- [~] **R2.8.4** DB-down state distinct from 'no scans yet' — submitted `src/app/dashboard/[brand]/page.js:60`, `src/components/dashboard/DashboardShell.jsx:248`, `src/lib/dashboardLoadState.test.mjs`
 ### R2.9
 
 - [ ] **R2.9.1** Provenance strip under the hero
 ### R2.10
 
-- [ ] **R2.10.1** De-fake the landing page
+- [~] **R2.10.1** De-fake the landing page — submitted `src/components/landing/AnswerSheet.jsx:67`, `src/app/page.js:51`, `src/app/page.js:43`, `src/lib/engines/deployedEngines.js:36`, `src/lib/landingHonesty.test.mjs`
 - [ ] **R2.10.2** Probe counter backed by a real count query
 
 ## R3 — Durable backend  `0/21`

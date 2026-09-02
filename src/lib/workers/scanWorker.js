@@ -1,3 +1,4 @@
+import { DEFAULT_UNBRANDED_TARGET } from "../scoring/promptSetSize.js";
 import crypto from "crypto";
 import {
   insertScan,
@@ -50,7 +51,9 @@ import { extractBrandDomain } from "../scoring/citations.js";
 import { enrichCitations } from "../analytics/citationEnrich.js";
 
 const MAX_SOURCING_ATTEMPTS = 3;
-const DEFAULT_UNBRANDED_TARGET = 30;
+// R2.10.1 — shared with the landing page so the advertised prompt count and
+// the count a scan actually tracks cannot drift apart.
+// (imported above from ../scoring/promptSetSize.js)
 
 /**
  * Soft per-chunk time budget (P0.2). Governs when a chunk stops STARTING new
