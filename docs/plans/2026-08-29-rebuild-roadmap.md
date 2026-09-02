@@ -262,7 +262,7 @@ Baseline commit: `5111219`
 - [ ] **R6.2.2** docs/RUNBOOK.md seeded with 10 symptom rows
 ### R6.3
 
-- [ ] **R6.3.1** Vendor contract docs
+- [~] **R6.3.1** Vendor contract docs — submitted `docs/vendors/brightdata.md`, `docs/vendors/perplexity.md`, `docs/vendors/chatgpt.md`, `docs/vendors/firecrawl.md`, `docs/vendors/gateway-catalog.md`, `docs/vendors/mimo.md`
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker
@@ -273,7 +273,7 @@ Baseline commit: `5111219`
 - [~] **R6.4.6** archive-reference-scan takes a URL host but --list prints brand names — submitted `scripts/archive-reference-scan.mjs:83`, `scripts/archive-reference-scan.mjs:105`, `scripts/archive-reference-scan.mjs:54`, `scripts/archive-reference-scan.mjs:155`
 ### R6.5
 
-- [ ] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures
+- [~] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures — submitted `src/lib/scanRoute.route.test.mjs`, `src/lib/engines/brightdataParser.test.mjs`, `src/lib/cronAuth.route.test.mjs`
 - [ ] **R6.5.2** The great deletion
 - [~] **R6.5.3** Delete the orphaned adapter.js/probe.js pair — it does not even parse — submitted `docs/BUILD_JOURNAL.md`, `src/lib/engines/openai.js:8`, `src/lib/scoring/enginePipeline.js`
 - [~] **R6.5.4** serp.test.mjs passes only because no BRIGHTDATA_API_KEY is in the environment — submitted `src/lib/engines/serp.test.mjs:15`, `src/lib/engines/serp.test.mjs:27`, `src/lib/engines/serp.test.mjs:39`

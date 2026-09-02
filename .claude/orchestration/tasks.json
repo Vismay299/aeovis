@@ -3992,7 +3992,7 @@
       "subphase": "R6.3",
       "lane": "docs",
       "title": "Vendor contract docs",
-      "detail": "Bright Data SERP shape, Perplexity UI and API, ChatGPT UI, MiMo, Firecrawl — plus the gateway-catalog lesson that a model id valid on one gateway is not valid on another.",
+      "detail": "Bright Data SERP shape, Perplexity UI and API, ChatGPT UI, MiMo, Firecrawl — plus the gateway-catalog lesson that a model id valid on one gateway is not valid on another. CORRECTION to the submit note above: two backticked fragments were eaten by shell substitution before the note was recorded. The Bright Data line should read \"payload arrives as a JSON string under the body field\", and the ChatGPT line \"its parser needs role assistant as well as type message\". Nothing about the docs themselves changed; only my description of them was mangled. Recording it rather than leaving a note with a hole in it.",
       "accept": "One doc per vendor under docs/vendors/, each with the response shape and known quirks.",
       "deps": [
         "R5.1.1"
@@ -4005,10 +4005,33 @@
         "docs/vendors/"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "docs/vendors/brightdata.md",
+        "docs/vendors/perplexity.md",
+        "docs/vendors/chatgpt.md",
+        "docs/vendors/firecrawl.md",
+        "docs/vendors/gateway-catalog.md",
+        "docs/vendors/mimo.md"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-02T21:01:06.042Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T21:01:06.492Z",
+          "by": "local-session",
+          "text": "ACCEPT MET: one doc per vendor under docs/vendors/, each with the response shape and known quirks, plus the gateway-catalog lesson the task named explicitly. Six files — brightdata, perplexity, chatgpt, firecrawl, gateway-catalog, and the pre-existing mimo. All carry status headers and pass the docStatus guard. THE QUIRKS ARE THE ONES THAT ACTUALLY COST US, not a feature list. Bright Data: the wrapped body (payload arrives as a JSON string under ), ai_overview in five shapes with texts winning, references under three different keys, and four failure modes with their retry semantics — including that a truncated body costs a 9s backoff, which is why a mock with an empty body wastes it before asserting anything. Perplexity: the API and the UI are DIFFERENT PRODUCTS and D1 says the API is not the product surface; plus max_tokens must be at least 16, rejected with a 400 BEFORE authentication, which made a working key report FAIL. ChatGPT: leads with the fact that it is not deployed at all (OPENAI_API_KEY unconfigured, ENGINES=aio,perplexity), and records that its parser needs role:'assistant' as well as type:'message' — omitting it parses to empty text with no error, which silently turned two of my own test fixtures into empty-answer cases that passed for the wrong reason. Firecrawl: optional means optional; UNCONFIGURED is not FAIL. GATEWAY-CATALOG is the one the task singled out and it is written as a rule with its two incidents, because it has now cost this project twice: the same misreading recurred on 2026-08-30 and survived a week in the roadmap, the handoff and my own first pass. It carries the one experiment that settles it — send the same key to both hosts — and the pre-change checklist, including that OpenRouter's catalogue is public and that z-ai/glm-5.2 without the :free suffix bills at $1.19/M. Suite 944 pass 0 fail."
+        },
+        {
+          "at": "2026-09-02T21:01:17.784Z",
+          "by": "controller",
+          "text": "amended: CORRECTION to the submit note above: two backticked fragments were eaten by shell substitution before the note was recorded. The Bright Data line should read \"payload arrives as a JSON string under the body field\", and the ChatGPT line \"its parser needs role assistant as well as type message\". Nothing about the docs themselves changed; only my description of them was mangled. Recording it rather than leaving a note with a hole in it."
+        }
+      ],
       "verification": null
     },
     {
@@ -4212,10 +4235,25 @@
         "src/lib/engines/brightdata.js"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/scanRoute.route.test.mjs",
+        "src/lib/engines/brightdataParser.test.mjs",
+        "src/lib/cronAuth.route.test.mjs"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-02T20:58:21.763Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:58:22.081Z",
+          "by": "local-session",
+          "text": "ACCEPT COVERED, and the gap was narrower than the task assumed. Both workers ALREADY had route tests (cronAuth.route.test.mjs imports the real GET handlers and asserts on Response.status), so the two genuine holes were POST /api/scan and the Bright Data parser. POST /api/scan — seven tests through the real handler using the same module-resolution hooks cronAuth.route.test.mjs uses; nothing is stubbed and the handler body runs unmodified. Covers: no brand and blank brand refused 400; the sixth scan in an hour from one address refused 429 with x-ratelimit-limit 5, remaining 0 and a retry-after inside the window; the limit following SCAN_RATE_LIMIT observed at the route; and that a malformed body does NOT consume quota, because letting a typo burn a slot would lock a user out for an hour. NO SCAN IS EVER STARTED: every request under test returns before createScanJob — validation exits on the first line, and the rate-limit cases are driven by pre-seeding the in-memory counter so the request under test is already over when it arrives. A test that spent real vendor budget to prove a refusal would be its own false economy. BRIGHT DATA PARSER — ten fixtures over the real response shapes: ai_overview.texts as primary with text_blocks and paragraphs as fallbacks (and texts winning when both are present, so a vendor shipping both cannot silently change which one the score comes from), references under all three of references/sources/citations, hrefless references dropped, PAA question/text keys, organic capped at ten with www stripped and position falling back to index. Absence returns empty and never throws — the parser reports absence; R2.2.1 is what decides absence is not a non-mention. TEETH: disabling the route's rate-limit refusal fails 2 of 7. One test asserts an anonymous refusal names no vendor, which is R6.4.3's rule checked at the surface a stranger actually sees. Suite green."
+        }
+      ],
       "verification": null
     },
     {
