@@ -644,29 +644,6 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
   const engineNames = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : allEngineDefs.map((e) => e.name);
   const isMultiEngine = engineNames.length > 1;
 
-  let summary;
-  let engineSummaries = null;
-  let headline = null;
-  let visibilityIndexPct = null;
-  let enginesCounted = 0;
-
-  if (isMultiEngine) {
-    engineSummaries = {};
-    for (const name of engineNames) {
-      const sliceResults = results.filter((r) => r.engine === name);
-      engineSummaries[name] = summarizeEngineSlice(sliceResults, name);
-    }
-    headline = computeHeadlineFn(Object.values(engineSummaries));
-    const multiSummary = summarizeMulti({ results, engines: engineSummaries, headline });
-    summary = multiSummary.summary;
-    engineSummaries = multiSummary.engines;
-    visibilityIndexPct = headline.visibility_index_pct;
-    enginesCounted = headline.engines_counted;
-  } else {
-    const single = summarizeAio(results);
-    summary = single.summary;
-  }
-
   const scannedAt = new Date().toISOString();
 
   // Same shape-normalization the pre-P0.2 code used, unchanged: both pipeline
@@ -775,6 +752,72 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
   const brandAliases = getBrandAliases(brand, url);
   const rosterCompetitorNames = unionCompetitorNames(competitors, competitorObjects);
   const fullRoster = buildTrackedBrandRoster(brand, brandAliases, rosterCompetitorNames);
+
+  // -------------------------------------------------------------------
+  // R2.3.1 — PASS TWO. Re-judge every row against the discovered roster,
+  // then summarize. The order used to be the other way round.
+  //
+  // Probe-time judging only ever knew the competitors the USER typed
+  // (enginePipeline.js builds its roster from the checkpoint), so on a scan
+  // where nobody typed any, `r.brands` held [self] alone. Three things
+  // downstream then failed together, all silently:
+  //
+  //   - the eliciting gate in summarizeEngineSlice needs at least one
+  //     NON-SELF brand somewhere in the slice before it will engage. With a
+  //     self-only roster it disables itself and falls back to scoring over
+  //     every answered prompt — including the taxonomy and how-to answers
+  //     that name no vendor at all, which is the cap the gate exists to lift;
+  //   - Share of Voice came out self / self = 100%;
+  //   - top rivals had no rivals to rank.
+  //
+  // The roster is known HERE, one line above, and the answers are already
+  // stored verbatim. So judging them again against the full roster costs one
+  // pass over rows already in memory and no vendor call. The headline is
+  // computed from the re-judged rows below.
+  //
+  // Per-row failure is contained the same way the result_brands judging
+  // below contains it: one row that cannot be judged keeps its probe-time
+  // verdict rather than sinking an otherwise-complete finalize.
+  let rejudgedRows = 0;
+  for (const r of results) {
+    const text = r.text || r.aio_text || "";
+    if (!text) continue;
+    try {
+      r.brands = judgeBrandsSymmetricFn(text, fullRoster);
+      rejudgedRows++;
+    } catch (err) {
+      console.warn(
+        `[scan-chunk] Job ${jobId}: re-judge failed for a ${r.engine} row — keeping the probe-time verdict: ${err.message}`
+      );
+    }
+  }
+  console.log(
+    `[scan-chunk] Re-judged ${rejudgedRows}/${results.length} rows against a roster of ${fullRoster.length} (roster_source=${rosterSource})`
+  );
+
+  let summary;
+  let engineSummaries = null;
+  let headline = null;
+  let visibilityIndexPct = null;
+  let enginesCounted = 0;
+
+  if (isMultiEngine) {
+    engineSummaries = {};
+    for (const name of engineNames) {
+      const sliceResults = results.filter((r) => r.engine === name);
+      engineSummaries[name] = summarizeEngineSlice(sliceResults, name);
+    }
+    headline = computeHeadlineFn(Object.values(engineSummaries));
+    const multiSummary = summarizeMulti({ results, engines: engineSummaries, headline });
+    summary = multiSummary.summary;
+    engineSummaries = multiSummary.engines;
+    visibilityIndexPct = headline.visibility_index_pct;
+    enginesCounted = headline.engines_counted;
+  } else {
+    const single = summarizeAio(results);
+    summary = single.summary;
+  }
+
 
   // Hash the unbranded set only (frozen at sourcing time), so prompt-set
   // identity is stable/comparable across scans regardless of branded seeds.

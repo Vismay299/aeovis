@@ -304,3 +304,38 @@ because they had none. Neither file had a test. `npm run build` still exits 0.
 
 Evidence for R6.5.2's remaining deletions: this pair is the sharpest case, but
 it is unlikely to be the only dead code the suite cannot see.
+
+---
+
+# Entry #4 — 2026-08-30 — the tracker rendered its own false success
+
+`b46358d` changed the tracker renderer, and no ledger task covered it. This
+entry is that record (R6.1.3).
+
+**What changed.** `.claude/orchestration/orchestrate.mjs:436` now reads:
+
+```js
+const evLabel = t.status === "done" ? "closed at" : "submitted";
+```
+
+Before it, every task carrying evidence rendered as `— closed at <file:line>`,
+regardless of status. A task sitting in verification — evidence submitted, not
+yet checked by anyone — appeared in the generated tracker as closed, with a
+citation next to it. The tracker is the artifact a reader consults to answer
+"what is done", and it was answering wrongly in exactly the direction that
+flatters progress.
+
+That is the false-success class this rebuild exists to remove, appearing inside
+the tool built to remove it. The same shape as `check-secrets.mjs` reporting a
+vendor healthy without reading the zone it short-circuits on, and as
+`setup:db`'s verify list passing on a database missing 006.
+
+**Why it needed its own entry.** The change was correct and shipped inside a
+docs commit about the Bright Data ADR, with the regenerated tracker swept along
+with it. Nothing in the ledger pointed at it, so it could not be attributed
+from the record — you could see the renderer was right, but not when it became
+right or who decided. Caught by the R0.2.4 verifier.
+
+**Standing rule 9**, already in force, is the general form: *a change to the
+orchestration tooling is itself ledger work — the machine is not exempt from
+the discipline it enforces.*

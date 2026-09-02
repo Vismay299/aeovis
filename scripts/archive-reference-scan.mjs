@@ -32,6 +32,36 @@ function die(msg) {
   process.exit(1);
 }
 
+/** The host getScansByDomain matches on, derived the same way it derives it. */
+function hostOf(url) {
+  return String(url || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0];
+}
+
+/**
+ * Fallback lookup by brand name, for a value that is not a host.
+ *
+ * Resolves the brand to its URL host and then goes back through
+ * getScansByDomain rather than returning listRecentScans rows directly:
+ * listRecentScans aggregates one row per brand and does not carry the full
+ * raw_results, so returning its rows produced "has no per-prompt results" —
+ * a refusal that described the summary shape, not the scan.
+ */
+async function scansByBrandName(name) {
+  const { listRecentScans, getScansByDomain } = await import("../src/lib/db.js");
+  const wanted = String(name || "").trim().toLowerCase();
+  if (!wanted) return [];
+  const recent = await listRecentScans(200);
+  const match = recent.find((s) => String(s.brand || "").trim().toLowerCase() === wanted);
+  if (!match) return [];
+  const host = hostOf(match.url);
+  return host ? getScansByDomain(host) : [];
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const wantsList = args.includes("--list");
@@ -50,16 +80,30 @@ async function main() {
   const { getPromptResultsForScan } = await import("../src/lib/db/analytics.js");
 
   if (wantsList) {
+    // R6.4.6 — print the value the lookup below actually accepts.
+    //
+    // This used to print s.brand while the lookup matched on the URL host, so
+    // every value it showed you was rejected: `--list` said "zouk", and only
+    // "zouk.co.in" archived anything. A listing whose output its own command
+    // will not take is worse than no listing.
     const recent = await listRecentScans(40);
+    console.log("ARGUMENT              SCAN ID                               SCANNED AT            BRAND");
     for (const s of recent) {
-      console.log(`${s.id}  ${s.scanned_at}  ${s.brand}  ${s.visibility_pct ?? "—"}%`);
+      const host = hostOf(s.url) || s.brand;
+      console.log(
+        `${String(host).padEnd(21)} ${s.id}  ${String(s.scanned_at).slice(0, 19)}  ${s.brand}`
+      );
     }
     return;
   }
 
-  if (!brand) die("usage: archive-reference-scan.mjs <brand-key> [--scan-id <id>] | --list");
+  if (!brand) die("usage: archive-reference-scan.mjs <host|brand> [--scan-id <id>] | --list");
 
-  const scans = await getScansByDomain(brand);
+  // Accept either the URL host or the brand name. getScansByDomain matches on
+  // host; falling back to a brand match means a value copied from --list, or
+  // typed from memory, resolves either way.
+  let scans = await getScansByDomain(brand);
+  if (!scans.length) scans = await scansByBrandName(brand);
   if (!scans.length) die(`no scans found for "${brand}". Run --list to see what exists.`);
 
   const scan = scanId ? scans.find((s) => s.id === scanId) : scans[0];
@@ -105,7 +149,10 @@ async function main() {
       "BEFORE corpus for the R0-R6 rebuild. Frozen as-is. Do not regenerate: a " +
       "baseline that moves is not a baseline.",
     brand: scan.brand,
-    brand_key: brand,
+    // The resolved host, not the argument: archiving the same scan as "Snitch"
+    // and as "snitch.com" must produce ONE corpus entry, not two under different
+    // names. The argument is a lookup convenience; the host is the identity.
+    brand_key: hostOf(scan.url) || brand,
     url: scan.url,
     industry: scan.industry,
     scan_id: scan.id,
@@ -136,7 +183,8 @@ async function main() {
   };
 
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const file = path.join(OUT_DIR, `${brand.replace(/[^a-z0-9.-]/gi, "_")}.json`);
+  const slug = (hostOf(scan.url) || brand).replace(/[^a-z0-9.-]/gi, "_");
+  const file = path.join(OUT_DIR, `${slug}.json`);
   if (fs.existsSync(file)) {
     die(`${path.relative(process.cwd(), file)} already exists. A baseline is frozen — delete it deliberately if you really mean to replace it.`);
   }

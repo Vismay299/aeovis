@@ -126,7 +126,7 @@ Baseline commit: `5111219`
 - [ ] **R2.2.4** Remove insertScan's silent 3-tier column-drop cascade
 ### R2.3
 
-- [ ] **R2.3.1** Two-pass finalize: discovered roster feeds the headline
+- [~] **R2.3.1** Two-pass finalize: discovered roster feeds the headline — submitted `src/lib/workers/scanWorker.js:757`, `src/lib/workers/scanWorker.js:781`, `src/lib/workers/scanWorker.js:798`, `src/lib/workers/twoPassFinalize.test.mjs`
 - [ ] **R2.3.2** Tests: an empty-competitors scan gets the gate, SOV and top rivals
 - [ ] **R2.3.3** Persist the roster to scans.competitors with roster_source provenance
 ### R2.4
@@ -255,7 +255,7 @@ Baseline commit: `5111219`
 
 - [ ] **R6.1.1** Migrations ledger and transaction per file
 - [ ] **R6.1.2** docs/PROD_MIGRATIONS.md with per-migration verification queries
-- [ ] **R6.1.3** Track the orchestration tooling change made outside the ledger
+- [~] **R6.1.3** Track the orchestration tooling change made outside the ledger — submitted `.claude/orchestration/orchestrate.mjs:436`, `docs/BUILD_JOURNAL.md`
 ### R6.2
 
 - [ ] **R6.2.1** docs/OPERATOR_LEDGER.md
@@ -270,7 +270,7 @@ Baseline commit: `5111219`
 - [ ] **R6.4.3** Guard: infra vendors never in rendered copy, engine names required
 - [ ] **R6.4.4** Guard: engine-count-agnostic UI
 - [~] **R6.4.5** testCoverageGuard fails on Windows: path.relative yields backslashes — submitted `src/lib/testCoverageGuard.test.mjs:29`, `src/lib/testCoverageGuard.test.mjs:41`
-- [ ] **R6.4.6** archive-reference-scan takes a URL host but --list prints brand names
+- [~] **R6.4.6** archive-reference-scan takes a URL host but --list prints brand names — submitted `scripts/archive-reference-scan.mjs:83`, `scripts/archive-reference-scan.mjs:105`, `scripts/archive-reference-scan.mjs:54`, `scripts/archive-reference-scan.mjs:155`
 ### R6.5
 
 - [ ] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures

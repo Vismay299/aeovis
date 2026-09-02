@@ -2178,10 +2178,26 @@
         "src/lib/workers/scanWorker.js:653"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/workers/scanWorker.js:757",
+        "src/lib/workers/scanWorker.js:781",
+        "src/lib/workers/scanWorker.js:798",
+        "src/lib/workers/twoPassFinalize.test.mjs"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-02T20:27:25.435Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:27:25.990Z",
+          "by": "local-session",
+          "text": "FINALIZE REORDERED to roster -> re-judge -> summarize. Previously it summarized at what was :647 and only discovered competitors ~50 lines later, so the headline was computed from rows judged at PROBE time, when enginePipeline knows only the competitors the user typed. With none typed, every row's brands held [self] alone at the moment the headline was fixed. The summarize block now runs at :798, after resolveCompetitorRoster and after a re-judge pass at :781 that re-runs judgeBrandsSymmetric over every row's stored answer text against fullRoster. No extra vendor call — the roster is known one line above and the answers are already in memory. Per-row failure is contained the same way the result_brands judging already contains it: a row that cannot be judged keeps its probe-time verdict rather than sinking finalize. ACCEPT EXERCISED — all three engage on a scan where the user typed no competitors, against a fixture of five answers where three name a vendor and two are taxonomy/how-to answers naming nobody. Eliciting gate: eliciting_queries 3, dead_prompts 2, share_of_ai_pct 66.7 (2 of 3) instead of the 40% (2 of 5) the disabled gate produced. SOV: no longer self/self=100%, and total_brand_mentions exceeds self_mentions. Top rivals: populated with the discovered names. TEETH — reverting scanWorker.js to the old ordering fails exactly those three and passes the other two, which is the right split: result_brands re-judging and honest empty-roster degradation already worked at :964 and were never the bug. A fifth test pins the degradation case: when the extractor RAN and genuinely found nobody, the gate must STAY disabled rather than score against a self-only roster, because absence of a rival roster is absence of evidence. Full suite 896 pass 0 fail, build exits 0. The existing multi-engine fidelity test still passes because its extractCompetitors returns [], so its roster is self-only and re-judging is a no-op for it."
+        }
+      ],
       "verification": null
     },
     {
@@ -3817,14 +3833,27 @@
         ".claude/orchestration/orchestrate.mjs"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        ".claude/orchestration/orchestrate.mjs:436",
+        "docs/BUILD_JOURNAL.md"
+      ],
       "notes": [
         {
           "at": "2026-08-29T17:01:35.071Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-02T20:22:58.397Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:22:58.606Z",
+          "by": "local-session",
+          "text": "BOTH ACCEPT CLAUSES SATISFIED, one of them already. The standing rule was added through orchestrate.mjs rule and is standing rule 9 — 'A change to the orchestration tooling is itself ledger work. The machine is not exempt from the discipline it enforces.' It renders into the tracker from standing_rules, so it was not hand-edited into the ledger. The renderer change is now described at file:line: orchestrate.mjs:436 sets evLabel from t.status, replacing an unconditional 'closed at' that rendered every task carrying evidence as closed — including tasks sitting in verification with citations submitted but nothing checked. Recorded as BUILD_JOURNAL entry #4 with the mechanism, the commit that made it (b46358d), why it needed its own entry (correct change, shipped inside an unrelated docs commit with the regenerated tracker swept along, so it could not be attributed from the record) and who caught it (the R0.2.4 verifier). Worth noting the line has MOVED since b46358d — the diff shows :321-328, it is :436 at HEAD — which is the anchor-drift pattern this journal's own appendix catalogues, so I cited HEAD rather than transcribing the commit."
         }
       ],
       "verification": null
@@ -4056,14 +4085,29 @@
         "src/lib/db.js:211"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "scripts/archive-reference-scan.mjs:83",
+        "scripts/archive-reference-scan.mjs:105",
+        "scripts/archive-reference-scan.mjs:54",
+        "scripts/archive-reference-scan.mjs:155"
+      ],
       "notes": [
         {
           "at": "2026-08-30T08:43:29.140Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-02T20:22:22.297Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:22:22.554Z",
+          "by": "local-session",
+          "text": "ACCEPT MET both ways round. --list now prints an ARGUMENT column carrying the URL host the lookup actually matches on, alongside the brand for recognition (:83). And the lookup accepts either form (:105): getScansByDomain first, falling back to scansByBrandName. Verified end to end — 'Snitch', which previously died with 'no scans found', now archives 68 raw and 68 normalized rows from scan 224d4e35, and every value --list prints resolves. TWO DEFECTS FOUND WHILE FIXING IT, neither in the original task. First, the naive fallback returned listRecentScans rows directly, but that function aggregates one row per brand and drops the full raw_results, so the archive refused with 'has no per-prompt results' — a message describing the summary shape rather than the scan. It now resolves the brand to its host and goes back through getScansByDomain, so both entry points share one code path (:54). Second, the output filename came from the ARGUMENT, so archiving one scan as 'Snitch' wrote Snitch.json while 'snitch.com' wrote snitch.com.json — two corpus entries for one scan, in a directory whose whole purpose is a single frozen baseline. Filename and brand_key now derive from the resolved scan's host (:155), so the identity is the scan, not how you spelled it. The corpus is unchanged: re-archiving snitch produced a byte-identical record apart from archived_at, and I restored the committed file rather than let a frozen baseline drift on a timestamp. Suite 891 pass 0 fail."
         }
       ],
       "verification": null
