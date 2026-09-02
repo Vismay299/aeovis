@@ -268,3 +268,39 @@ companion artifact (2026-08-30), three more had moved — **eleven in total**:
 | B12 | `src/lib/db.js:289` | `:298` |
 | C4 | `docs/vendors/` | does not exist yet; created by R5.1.1 |
 | C12 | `src/app/chart-preview/page.js` | deleted by R0.1.2 |
+
+---
+
+# Entry #3 — 2026-08-30 — the dead registry that stopped parsing
+
+`src/lib/engines/adapter.js` and `src/lib/scoring/probe.js` are deleted.
+
+They were a second, parallel engine registry, superseded by
+`src/lib/scoring/enginePipeline.js`. `adapter.js:3` imported `probeOpenAI` from
+`./openai.js`, which has never exported it — `openai.js` exports exactly
+`isChatGptConfigured` and `probeChatGpt`. So both modules threw
+`SyntaxError: The requested module './openai.js' does not provide an export
+named 'probeOpenAI'` on import, and had done since `a1ed0e0`.
+
+This was **not** an outage. Nothing imported `probe.js`, and the only importer of
+`adapter.js` was `probe.js` itself. The live scan path runs through
+`enginePipeline.js`, which imports `probeChatGpt` correctly and loads clean.
+
+The point worth keeping is *why nobody noticed*. A module in the source tree
+stopped parsing entirely and the suite stayed green, because no test imported
+it. A green suite is evidence only about the code it actually loads — the same
+lesson as S29, where 57 tests sat outside the glob, and the reason
+`testCoverageGuard.test.mjs` exists.
+
+**Test count before: 880 passing. After: 880 passing.** Unchanged, which is the
+measurement that matters here: deleting these files removed no coverage,
+because they had none. Neither file had a test. `npm run build` still exits 0.
+
+| | Before | After |
+|---|---|---|
+| Tests | 880 pass / 0 fail | 880 pass / 0 fail |
+| Files that throw on import | 2 | 0 |
+| Engine registries | 2 (one unreachable) | 1 |
+
+Evidence for R6.5.2's remaining deletions: this pair is the sharpest case, but
+it is unlikely to be the only dead code the suite cannot see.

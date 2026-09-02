@@ -1817,10 +1817,27 @@
         "src/lib/engines/brightdata.js"
       ],
       "phase": "R1",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/engines/serpGeo.js:15",
+        "src/lib/engines/serp.js:169",
+        "src/lib/engines/brightdata.js:144",
+        "src/lib/engines/brightdata.js:83",
+        "src/lib/engines/serpGeo.test.mjs"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-02T20:16:03.874Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:16:04.115Z",
+          "by": "local-session",
+          "text": "ONE DEFAULT, DEFINED ONCE. src/lib/engines/serpGeo.js:15 holds DEFAULT_SERP_GEO = in, with resolveSerpGeo() reading SERP_GEO over it. Three hardcoded sites now call it: serp.js:169 (was process.env.SERP_GEO || us), brightdata.js:144 (was || in) and brightdata.js:83, where the buildGoogleSearchUrl parameter default also hardcoded in — the task named two clients, but the third site would have kept a second literal alive. WHICH DEFAULT IS RIGHT, on evidence not taste: in. The product is India-first — rollup.js:19 buckets brand_metrics_daily by IST and citationEnrich.js:218 curates India-first press, both citing SERP_GEO=in. us was the outlier. resolveSerpGeo also treats blank or whitespace as unset, because an empty SERP_GEO would otherwise send gl= — an unqualified search, not a targeted one. TEST ASSERTS BOTH CLIENTS READ IT, not that the constant exists: each client is driven through a mocked fetch and the gl it actually sent is read back — SerpAPI from the request URL, Bright Data from the POST body, where the test also asserts the proxy country matches the gl it searched with. A third test drives both to gb together, so a client that stopped consulting the shared value would fail even though the constant stayed correct. TEETH: reverting serp.js to the us literal fails 1 test; restoring passes 6. Full suite 886 pass 0 fail. Also fixed my own mock twice — it first returned an empty text() body, which sent the Bright Data client down its truncated-JSON retry and cost 9s per test before asserting anything."
+        }
+      ],
       "verification": null
     },
     {
@@ -2048,10 +2065,25 @@
         "src/lib/scoring/enginePipeline.js:154-157"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/scoring/enginePipeline.js:177",
+        "src/lib/scoring/enginePipeline.js:180",
+        "src/lib/scoring/emptyAnswer.test.mjs"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-02T20:19:37.842Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:19:38.137Z",
+          "by": "local-session",
+          "text": "ACCEPT MET: an empty 200 now produces an error row, and a test covers it. enginePipeline.js:177 computes hasText/hasCitations BEFORE any answer_present assignment; :180 returns an error row typed EMPTY_ANSWER with answer_present false. The old line read 'text-matching engines always answer unless they errored' and set answer_present = true unconditionally — that comment WAS the bug, so it is rewritten rather than left to mislead the next reader. PREDICATE CHOSEN TO MATCH probeAio AT :64-69 — an answer counts if it has text OR citations. The AIO path already got this right; only the text-engine path did not, and having the two disagree about what 'answered' means while feeding the same rate would have been a second bug. So a citations-only answer still counts as answered, and that case is tested. TESTED THROUGH THE LIVE PATH, not a private function: the tests call resolveEnabledEngines(), take the registry def that scanWorker.js:496 invokes, and mock only fetch — so a change to the registry wiring fails them too. Five tests: empty, whitespace-only, citations-without-text, a normal answer, and the one that matters — an empty answer alongside a real one leaves the denominator at 1, so a brand named in the real answer scores 100% rather than the 50% the old code produced by halving it with a row the engine never returned. TEETH: restoring the unconditional assignment fails 3 of 5; restoring the fix passes 5. Full suite 891 pass 0 fail. CORRECTION TO MY OWN TEST: the first version omitted role:'assistant' from the mocked OpenAI payload, which openai.js:73 filters on — every payload parsed to empty text, so the two empty-answer tests passed for the wrong reason while the real-answer tests failed. The failures were the tell."
+        }
+      ],
       "verification": null
     },
     {
@@ -4102,14 +4134,28 @@
         "src/lib/scoring/probe.js:1"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "docs/BUILD_JOURNAL.md",
+        "src/lib/engines/openai.js:8",
+        "src/lib/scoring/enginePipeline.js"
+      ],
       "notes": [
         {
           "at": "2026-08-29T17:01:34.935Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-02T20:13:06.746Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:13:06.924Z",
+          "by": "local-session",
+          "text": "DELETED, and the premise was re-verified rather than trusted. Both modules genuinely threw on import: 'The requested module ./openai.js does not provide an export named probeOpenAI', confirmed by importing each directly. openai.js exports exactly isChatGptConfigured (:8) and probeChatGpt (:16) — probeOpenAI has never existed. Reachability checked before deleting: a tree-wide grep for adapter.js, probeEngine, scoring/probe and probeOpenAI found references ONLY inside the two files themselves (plus a stale copy under .claude/worktrees, which is not part of the build). Neither file had a test. Deleted both with git rm. TEST COUNT BEFORE 880 pass / 0 fail, AFTER 880 pass / 0 fail — recorded in docs/BUILD_JOURNAL.md entry #3 as the accept requires, along with why unchanged is the right number: removing them removed no coverage because they had none. npm run build still exits 0. The lesson recorded is the transferable one — a module in the source tree stopped parsing and the suite stayed green because nothing imported it, the same shape as S29's 57 orphaned tests."
         }
       ],
       "verification": null
@@ -4129,14 +4175,28 @@
         "src/lib/engines/serp.js:9-16"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/engines/serp.test.mjs:15",
+        "src/lib/engines/serp.test.mjs:27",
+        "src/lib/engines/serp.test.mjs:39"
+      ],
       "notes": [
         {
           "at": "2026-08-29T16:38:24.882Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-02T20:11:30.017Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:11:30.229Z",
+          "by": "local-session",
+          "text": "REPRODUCED FIRST, on the machine the rebuild moved to. With the real BRIGHTDATA_API_KEY exported ambiently, serp.test.mjs went 2 pass 3 fail — exactly the three the task names. ACCEPT MET: the full suite now passes with that key exported (880 pass, 0 fail, exit 0), and serp.test.mjs also passes with SERP_PROVIDER=brightdata forced on top. FIX: SERP_ENV at :15 lists every var getSerpProvider branches on (SERP_PROVIDER, SERPAPI_KEY, BRIGHTDATA_API_KEY, BRIGHTDATA_SERP_ZONE) and useSerpEnv at :27 scrubs all four, applies the wanted ones and restores through t.after — the types.test.mjs idiom. Restoring via t.after also fixes a second latent bug: the old trailing delete process.env.SERPAPI_KEY never ran when an assertion threw. TEETH PROVEN: removing BRIGHTDATA_API_KEY from SERP_ENV with the key ambient gives 4 failures; restoring gives 6 pass. TWO CORRECTIONS TO MY OWN WORK, both caught by the sabotage refusing to bite. First, the guard test restored with an unconditional delete, which stripped a genuinely ambient key for every later test in the file and silently disarmed the regression — it now restores the captured value. Second, my sabotage script matched on LF while the working file is CRLF, so it was a silent no-op and I twice read no failures as proof of nothing. The passing sabotage was the tell."
         }
       ],
       "verification": null

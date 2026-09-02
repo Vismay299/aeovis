@@ -1,4 +1,5 @@
 import { normalizeUrl } from "../scoring/citations.js";
+import { resolveSerpGeo } from "./serpGeo.js";
 
 let cachedZoneName = null;
 
@@ -79,7 +80,7 @@ function proxySessionError(data) {
   return null;
 }
 
-function buildGoogleSearchUrl(query, { geo = "in", aiOverview = true } = {}) {
+function buildGoogleSearchUrl(query, { geo = resolveSerpGeo(), aiOverview = true } = {}) {
   const params = new URLSearchParams({
     q: query,
     hl: "en",
@@ -140,7 +141,7 @@ export async function brightDataSearch(query, options = {}) {
     throw new Error("Bright Data SERP is not configured (set BRIGHTDATA_API_KEY).");
   }
 
-  const geo = process.env.SERP_GEO || "in";
+  const geo = resolveSerpGeo();
   const timeoutMs = options.timeout || 60000;
   const maxAttempts = options.attempts ?? 2;
   const backoffMs = options.backoffMs ?? 3000;

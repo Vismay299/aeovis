@@ -100,7 +100,7 @@ Baseline commit: `5111219`
 ### R1.6
 
 - [ ] **R1.6.1** Verify IN egress per engine `needs-secrets`
-- [ ] **R1.6.2** Fix the SERP_GEO default inconsistency
+- [~] **R1.6.2** Fix the SERP_GEO default inconsistency — submitted `src/lib/engines/serpGeo.js:15`, `src/lib/engines/serp.js:169`, `src/lib/engines/brightdata.js:144`, `src/lib/engines/brightdata.js:83`, `src/lib/engines/serpGeo.test.mjs`
 ### R1.7
 
 - [ ] **R1.7.1** Dual-run the reference corpus through API and UI paths `needs-secrets`
@@ -120,7 +120,7 @@ Baseline commit: `5111219`
 - [ ] **R2.1.4** Tests: a fully-errored engine renders failed and contributes nothing
 ### R2.2
 
-- [ ] **R2.2.1** answer_present set only after the text check
+- [~] **R2.2.1** answer_present set only after the text check — submitted `src/lib/scoring/enginePipeline.js:177`, `src/lib/scoring/enginePipeline.js:180`, `src/lib/scoring/emptyAnswer.test.mjs`
 - [ ] **R2.2.2** Perplexity citation-leg failure marks citations_state unverified
 - [ ] **R2.2.3** upsertPrompts throws; audit all write helpers for the return-{error} idiom
 - [ ] **R2.2.4** Remove insertScan's silent 3-tier column-drop cascade
@@ -275,6 +275,6 @@ Baseline commit: `5111219`
 
 - [ ] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures
 - [ ] **R6.5.2** The great deletion
-- [ ] **R6.5.3** Delete the orphaned adapter.js/probe.js pair — it does not even parse
-- [ ] **R6.5.4** serp.test.mjs passes only because no BRIGHTDATA_API_KEY is in the environment
+- [~] **R6.5.3** Delete the orphaned adapter.js/probe.js pair — it does not even parse — submitted `docs/BUILD_JOURNAL.md`, `src/lib/engines/openai.js:8`, `src/lib/scoring/enginePipeline.js`
+- [~] **R6.5.4** serp.test.mjs passes only because no BRIGHTDATA_API_KEY is in the environment — submitted `src/lib/engines/serp.test.mjs:15`, `src/lib/engines/serp.test.mjs:27`, `src/lib/engines/serp.test.mjs:39`
 

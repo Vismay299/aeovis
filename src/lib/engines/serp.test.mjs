@@ -2,6 +2,64 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { probeGoogleAiOverview, extractTextFromBlocks, fetchPeopleAlsoAsk, fetchAutocomplete } from './serp.js';
 
+/**
+ * Every env var getSerpProvider() branches on (serp.js:9-16, brightdata.js:5).
+ *
+ * R6.5.4 — these tests used to set SERPAPI_KEY and nothing else, which was only
+ * sufficient because no .env.local existed. With BRIGHTDATA_API_KEY present in
+ * the ambient environment — the normal state on a developer machine and in CI —
+ * getSerpProvider returns "brightdata" before it ever consults SERPAPI_KEY, the
+ * SerpAPI mocks never match, and three of these tests fail. The suite was green
+ * for a reason that had nothing to do with the code under test.
+ */
+const SERP_ENV = [
+  "SERP_PROVIDER",
+  "SERPAPI_KEY",
+  "BRIGHTDATA_API_KEY",
+  "BRIGHTDATA_SERP_ZONE",
+];
+
+/**
+ * Scrub every provider var, apply `env`, and restore on the way out — via
+ * t.after so an assertion that throws still restores, which the old inline
+ * `delete process.env.SERPAPI_KEY` at the end of each test did not.
+ */
+function useSerpEnv(t, env) {
+  const saved = Object.fromEntries(SERP_ENV.map((k) => [k, process.env[k]]));
+  for (const k of SERP_ENV) delete process.env[k];
+  for (const [k, v] of Object.entries(env)) process.env[k] = v;
+  t.after(() => {
+    for (const k of SERP_ENV) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+}
+
+test('GUARD — an ambient Bright Data key is scrubbed, not inherited', (t) => {
+  // Simulate the ambient key that made three tests below fail, then prove the
+  // helper removes it. Without this, the SerpAPI mocks measure leakage.
+  //
+  // The restore must put back what was THERE, not delete unconditionally: an
+  // unconditional delete strips a genuinely ambient key for every later test in
+  // this file, which silently disarms the regression this guard exists for. The
+  // first version of this test did exactly that, and the sabotage check that
+  // should have failed passed instead.
+  const ambient = process.env.BRIGHTDATA_API_KEY;
+  process.env.BRIGHTDATA_API_KEY = 'bd-ambient';
+  t.after(() => {
+    if (ambient === undefined) delete process.env.BRIGHTDATA_API_KEY;
+    else process.env.BRIGHTDATA_API_KEY = ambient;
+  });
+
+  useSerpEnv(t, { SERPAPI_KEY: 'mock-key' });
+
+  assert.equal(process.env.BRIGHTDATA_API_KEY, undefined,
+    'an ambient Bright Data key must be scrubbed — getSerpProvider prefers it over SERPAPI_KEY');
+  assert.equal(process.env.SERP_PROVIDER, undefined, 'an explicit provider override must be scrubbed too');
+  assert.equal(process.env.SERPAPI_KEY, 'mock-key');
+});
+
 test('extractTextFromBlocks - nested list, snippets, tables, and expandable formats', () => {
   const blocks = [
     { snippet: "Here is the first paragraph." },
@@ -41,7 +99,7 @@ test('extractTextFromBlocks - nested list, snippets, tables, and expandable form
   );
 });
 
-test('probeGoogleAiOverview - mock parsing correctness with text_blocks', async () => {
+test('probeGoogleAiOverview - mock parsing correctness with text_blocks', async (t) => {
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = async () => {
@@ -62,7 +120,7 @@ test('probeGoogleAiOverview - mock parsing correctness with text_blocks', async 
     };
   };
 
-  process.env.SERPAPI_KEY = "mock-key";
+  useSerpEnv(t, { SERPAPI_KEY: "mock-key" });
 
   const result = await probeGoogleAiOverview("best crm");
   assert.equal(result.text, "Acme CRM is highly rated.\nIt is built for small businesses.");
@@ -73,10 +131,9 @@ test('probeGoogleAiOverview - mock parsing correctness with text_blocks', async 
   ]);
 
   globalThis.fetch = originalFetch;
-  delete process.env.SERPAPI_KEY;
 });
 
-test('probeGoogleAiOverview - mock deferred page_token loading', async () => {
+test('probeGoogleAiOverview - mock deferred page_token loading', async (t) => {
   const originalFetch = globalThis.fetch;
   let callCount = 0;
 
@@ -106,7 +163,7 @@ test('probeGoogleAiOverview - mock deferred page_token loading', async () => {
     }
   };
 
-  process.env.SERPAPI_KEY = "mock-key";
+  useSerpEnv(t, { SERPAPI_KEY: "mock-key" });
 
   const result = await probeGoogleAiOverview("best crm");
   assert.equal(result.text, "Deferred content loaded successfully.");
@@ -116,10 +173,9 @@ test('probeGoogleAiOverview - mock deferred page_token loading', async () => {
   assert.equal(result.cost, 0.02);
 
   globalThis.fetch = originalFetch;
-  delete process.env.SERPAPI_KEY;
 });
 
-test('fetchPeopleAlsoAsk - mock fetches and returns question strings', async () => {
+test('fetchPeopleAlsoAsk - mock fetches and returns question strings', async (t) => {
   const originalFetch = globalThis.fetch;
 
   globalThis.fetch = async () => {
@@ -134,7 +190,7 @@ test('fetchPeopleAlsoAsk - mock fetches and returns question strings', async () 
     };
   };
 
-  process.env.SERPAPI_KEY = "mock-key";
+  useSerpEnv(t, { SERPAPI_KEY: "mock-key" });
 
   const result = await fetchPeopleAlsoAsk("aeo");
   assert.deepEqual(result, [
@@ -143,7 +199,6 @@ test('fetchPeopleAlsoAsk - mock fetches and returns question strings', async () 
   ]);
 
   globalThis.fetch = originalFetch;
-  delete process.env.SERPAPI_KEY;
 });
 
 test('fetchAutocomplete - mock suggestions', async () => {

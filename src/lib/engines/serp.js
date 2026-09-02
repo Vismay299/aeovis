@@ -1,4 +1,5 @@
 import { normalizeUrl } from "../scoring/citations.js";
+import { resolveSerpGeo } from "./serpGeo.js";
 import {
   getBrightDataApiKey,
   brightDataSearch,
@@ -165,7 +166,7 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
     return probeGoogleAiOverviewBrightData(prompt, options);
   }
 
-  const geo = process.env.SERP_GEO || "us";
+  const geo = resolveSerpGeo();
   const device = process.env.SERP_DEVICE || "desktop";
   
   // hl=en is required for AI Overview support

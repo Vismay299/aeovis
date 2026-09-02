@@ -104,8 +104,21 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
 }
 
 /**
+ * A probe that succeeded at the transport level but carried nothing back.
+ *
+ * Exported so the four-state outcome vocabulary (R2.1) and the surfaces that
+ * render provenance can recognise this case by identity rather than by
+ * string-matching a log line.
+ */
+export const EMPTY_ANSWER = "empty_answer";
+
+/**
  * Probes a single query on a text-matching engine (ChatGPT or Perplexity).
- * These engines always produce an answer (text) unless the API errors.
+ *
+ * These engines USUALLY produce text, but not always: a 200 can carry an empty
+ * body, and that is an error row rather than an answered one (R2.2.1). The
+ * previous wording here — "always produce an answer unless the API errors" —
+ * was the assumption that made the bug invisible.
  */
 async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, competitors, stats) {
   const probeFn = engine.probe;
@@ -151,7 +164,33 @@ async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, 
     source: r.source || "",
     domain: extractBrandDomain(r.href),
   }));
-  // Text-matching engines always answer unless they errored
+
+  // R2.2.1 — answer_present is decided AFTER the text check, never before it.
+  //
+  // This used to read "text-matching engines always answer unless they errored"
+  // and set answer_present = true unconditionally. A 200 carrying an empty body
+  // therefore became an ANSWERED NON-MENTION: text "", so no mention detection
+  // ran, so visible stayed false — a zero in the numerator and a one in the
+  // denominator at summarizeEngineSlice, both fabricated. The engine never said
+  // the brand was absent. It said nothing at all, and those are different
+  // claims. A skip is not a success and an empty answer is not a non-mention.
+  //
+  // The predicate matches probeAio's at :64-69 deliberately: an answer counts
+  // if it has text OR citations, so the two engine paths cannot disagree about
+  // what "answered" means while feeding the same rate.
+  const hasText = Boolean(result.text && result.text.trim());
+  const hasCitations = result.citations.length > 0 || result.references.length > 0;
+
+  if (!hasText && !hasCitations) {
+    result.error = EMPTY_ANSWER;
+    result.answer_present = false;
+    console.warn(
+      `[${engineName}] Empty answer: "${query.text}" — the call succeeded but returned ` +
+        `no text and no citations. Typed as an error, not as a non-mention.`
+    );
+    return result;
+  }
+
   result.answer_present = true;
 
   if (result.text) {
