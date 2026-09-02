@@ -18,7 +18,7 @@ import {
   normalizeResult,
   getHistoryNonBrandedCount,
 } from "@/services/api";
-import { scoreTier, formatTimestamp, relativeTime, hasTimestamp } from "@/utils/format";
+import { scoreTier, formatTimestamp, relativeTime, hasTimestamp, formatCollectionWindow } from "@/utils/format";
 import { getBrandAliases } from "@/lib/scoring/aliases";
 import { resolveBrandKey } from "@/lib/scoring/brandKey";
 import {
@@ -475,8 +475,31 @@ export default function DashboardShell({ scan, scanId, error = null }) {
           {/* A record with no collection time reads as an em dash and says so —
               it must not be indistinguishable from one collected a moment ago. */}
           {hasTimestamp(result.scanTimestamp) ? (
-            <span data-testid="dashboard-timestamp" className="tag" style={{ marginLeft: "auto" }}>
+            <span
+              data-testid="dashboard-timestamp"
+              className="tag"
+              style={{ marginLeft: "auto" }}
+              /* R2.7.4 — the collection window, when we have one. A chunked or
+                 crash-resumed scan collects over a real span, and reporting the
+                 finalize instant as "when this was measured" compresses that
+                 span to its far end. The headline stays the single timestamp
+                 people scan for; the window is the honest detail behind it. */
+              title={
+                result.collectedFrom && result.collectedTo
+                  ? `Answers collected ${formatTimestamp(result.collectedFrom)} → ${formatTimestamp(result.collectedTo)}`
+                  : undefined
+              }
+            >
               {formatTimestamp(result.scanTimestamp)} ({relativeTime(result.scanTimestamp)})
+              {result.collectedFrom && result.collectedTo && (
+                <span
+                  data-testid="collection-window"
+                  className="chip"
+                  style={{ marginLeft: 8 }}
+                >
+                  collected {formatCollectionWindow(result.collectedFrom, result.collectedTo)}
+                </span>
+              )}
             </span>
           ) : (
             <span data-testid="dashboard-timestamp" className="tag" style={{ marginLeft: "auto" }}>

@@ -566,6 +566,12 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
      * and DashboardShell's timestamp cell.
      */
     scanTimestamp: data.scanned_at ?? data.scanTimestamp ?? null,
+    // R2.7.4 — the window the answers were collected in, first to last probe
+    // write. Distinct from scanTimestamp, which is when finalize ran; on a
+    // chunked or crash-resumed scan those can be hours apart. Null on scans
+    // taken before this landed, which is what a before-corpus should show.
+    collectedFrom: data.collected_from ?? raw.collected_from ?? null,
+    collectedTo: data.collected_to ?? raw.collected_to ?? null,
     scoringVersion: data.scoring_version ?? raw.scoring_version ?? "v7-aio-only",
     seeds: data.seeds ?? raw.seeds ?? [],
     querySource: data.query_source ?? raw.query_source ?? "aio_paa_autocomplete",

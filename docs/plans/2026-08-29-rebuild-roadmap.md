@@ -146,7 +146,7 @@ Baseline commit: `5111219`
 - [ ] **R2.7.1** SOV donut consumes the real share_of_voice_pct
 - [x] **R2.7.2** SourcesView reads v9 field names — closed at `src/components/dashboard/SourcesView.jsx:19`, `src/components/dashboard/SourcesView.jsx:71`, `src/components/dashboard/sourcesMetrics.js:41`, `src/components/dashboard/sourcesMetrics.js:97`, `src/components/dashboard/sourcesMetrics.test.mjs:90`
 - [x] **R2.7.3** Delete the new Date() timestamp fallback — closed at `src/services/api.js:568`, `src/utils/format.js:34`, `src/utils/format.js:55`, `src/components/dashboard/DashboardShell.jsx:439`, `src/components/dashboard/DashboardShell.jsx:29`, `src/components/home/HomeDashboard.jsx:26`, `src/utils/format.test.mjs:63`, `src/services/api.test.mjs:493`
-- [ ] **R2.7.4** Persist and render the collection window
+- [~] **R2.7.4** Persist and render the collection window — submitted `src/lib/workers/scanWorker.js:582`, `src/lib/workers/scanWorker.js:889`, `src/services/api.js:573`, `src/utils/format.js`, `src/lib/collectionWindow.test.mjs`
 ### R2.8
 
 - [ ] **R2.8.1** Gate Studio and Opportunities on data quality

@@ -568,6 +568,31 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
 // logic, fail-loud on insertScan, roll up brand_metrics_daily.
 // ---------------------------------------------------------------------------
 
+/**
+ * The window the answers were actually collected in (R2.7.4).
+ *
+ * min/max of the persisted rows' created_at. Returns nulls rather than
+ * guessing when the rows carry no timestamps — a window that silently
+ * collapses to the finalize instant is the thing this replaces, so an unknown
+ * window must read as unknown, not as "now".
+ *
+ * @param {Array<{created_at?: string}>} rows
+ * @returns {{collected_from: string|null, collected_to: string|null}}
+ */
+export function collectionWindow(rows) {
+  const times = (rows || [])
+    .map((r) => r?.created_at)
+    .filter(Boolean)
+    .map((t) => Date.parse(t))
+    .filter((n) => Number.isFinite(n));
+
+  if (!times.length) return { collected_from: null, collected_to: null };
+
+  return {
+    collected_from: new Date(Math.min(...times)).toISOString(),
+    collected_to: new Date(Math.max(...times)).toISOString(),
+  };
+}
 export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
   const updateJob = deps.updateScanJob || updateScanJob;
   const claimJob = deps.claimJobStatus || claimJobStatus;
@@ -851,6 +876,17 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
     roster_extraction_error: rosterExtractionError,
     results,
     scanned_at: scannedAt,
+    // R2.7.4 — the collection window: first to last probe WRITE, not the
+    // finalize instant.
+    //
+    // `scanned_at` is stamped when finalize runs, which on a chunked scan can
+    // be hours after the first probe and minutes after the last. Reporting it
+    // as "when this was measured" compresses a real window into a point, and
+    // the point it picks is the one furthest from most of the evidence. A scan
+    // resumed the next morning after a crash looked like a single reading taken
+    // that morning. These two come from the persisted rows themselves, so they
+    // describe when the answers were actually collected.
+    ...collectionWindow(allRows),
     used_dynamic_prompts: true,
     tokens_used: stats.tokens || 0,
     cost_total: stats.cost || 0,

@@ -2535,10 +2535,27 @@
         "src/lib/workers/scanWorker.js:626"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/workers/scanWorker.js:582",
+        "src/lib/workers/scanWorker.js:889",
+        "src/services/api.js:573",
+        "src/utils/format.js",
+        "src/lib/collectionWindow.test.mjs"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-02T20:51:39.600Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-02T20:51:39.848Z",
+          "by": "local-session",
+          "text": "PERSISTED AND RENDERED. collectionWindow() at scanWorker.js:582 takes min/max of created_at across the job's persisted prompt_results — first to last probe WRITE, which is what the task asks for and not the finalize instant. Spread onto the scan record at :889 as collected_from / collected_to, so it lands in the stored scan with no schema change; the fields ride in the existing record shape rather than needing a migration 010 against production. normalizeResult carries them through as collectedFrom/collectedTo (api.js:573). RENDERED AS A WINDOW, verified in the browser: the topbar timestamp cell now carries a 'COLLECTED OVER 42 MIN' chip with the full span in its title — 'Answers collected Jul 30, 2026, 9:33 PM → Jul 30, 2026, 10:15 PM'. The headline stays the single timestamp people scan for; the window is the detail behind it. WHY IT MATTERS: scanned_at is stamped when finalize runs, which on a chunked scan is long after the first probe and on a crash-resumed one can be the next day, so reporting it as 'when this was measured' compresses a real span to the point furthest from most of the evidence. AN UNKNOWN WINDOW READS AS UNKNOWN: no timestamps gives nulls, not Date.now(), and the chip is omitted entirely rather than rendering a half-known span — the same rule scanTimestamp already follows after C1. Scans taken before this landed show no chip, which is what a before-corpus should show. Six tests including the rounding trap I hit: Math.round(30s) is 1 minute, so testing rounded minutes reported a half-minute window as 'over 1 min'; the check is on the raw span. Suite 922 pass 0 fail."
+        }
+      ],
       "verification": null
     },
     {
