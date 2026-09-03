@@ -1,6 +1,7 @@
 import { DEFAULT_UNBRANDED_TARGET } from "../scoring/promptSetSize.js";
 import crypto from "crypto";
 import {
+  supabase,
   insertScan,
   updateScanJob,
   getScanJob,
@@ -49,6 +50,14 @@ import { getBrandAliases } from "../scoring/aliases.js";
 import { resolveBrandKey } from "../scoring/brandKey.js";
 import { extractBrandDomain } from "../scoring/citations.js";
 import { enrichCitations } from "../analytics/citationEnrich.js";
+import {
+  openScanRun,
+  heartbeatScanRun,
+  closeScanRun,
+  describeRun,
+  RUN_OUTCOMES,
+  RUNNERS,
+} from "../scanRuns.js";
 
 const MAX_SOURCING_ATTEMPTS = 3;
 // R2.10.1 — shared with the landing page so the advertised prompt count and
@@ -74,6 +83,324 @@ const MAX_SOURCING_ATTEMPTS = 3;
  * just bounds how many batches accumulate before a chunk voluntarily yields.
  */
 export const CHUNK_TIME_BUDGET_MS = 150_000;
+
+// ---------------------------------------------------------------------------
+// The scan_runs ledger, from the web chunk's side (R3.2.1)
+// ---------------------------------------------------------------------------
+//
+// One row per CHUNK EXECUTION -- one call of runScanChunk -- opened before the
+// work, heartbeated while it is in flight, closed with an outcome, a reason and
+// counters that were MEASURED. worker/src/lib/runLedger.js + worker/src/index.js
+// are the fleet's copy of this shape (R1.2.3) and this deliberately mirrors them.
+//
+// WHAT THIS REPLACES. Every early return below already computes a structured
+// reason -- "sourcing_claimed_elsewhere", "checkpointed", "noop", "read_failed"
+// -- and then throws it away with the stack frame. Afterwards a chunk that ran
+// and did nothing, a chunk that never ran, a chunk that died halfway and a chunk
+// that declined for a good reason all leave the same evidence: scan_jobs.heartbeat_at
+// moved, or it did not. Migration 011's header is the long form of this argument.
+
+/**
+ * The phase a chunk ENTERED, written to scan_runs.phase.
+ *
+ * Migration 011 pre-declared the chunk vocabulary as
+ * 'sourcing' | 'probing' | 'scoring' | 'finalize'. This file runs the FINALIZE
+ * phase for a job whose STATUS is 'scoring', so those two names are one thing:
+ * the column carries 'finalize' (the function that ran) and the job status at
+ * entry is kept in `detail.entry_status`, so neither name is lost.
+ *
+ * 'entry' is the fifth, and it is new here. It is what a chunk was doing when it
+ * never reached a work phase at all: the job could not be read, did not exist,
+ * or was already finished. Those executions HAPPENED and so they get a row;
+ * labelling them 'sourcing' would be a claim about work that never started. 011
+ * left `phase` an open vocabulary (unlike `outcome`) precisely so R3.2 could
+ * add a name like this without an ALTER on a live table.
+ *
+ * ONE ROW, ONE PHASE, FOR A CHUNK THAT MAY TRAVERSE THREE. The task is one row
+ * per chunk execution, not one per phase, so `phase` is where the chunk STARTED
+ * and `detail.phases_run` lists every phase it actually entered. Splitting one
+ * chunk into three rows would make a single execution look like three, which is
+ * the double-count this ledger must not introduce.
+ */
+export const CHUNK_PHASES = Object.freeze({
+  ENTRY: "entry",
+  SOURCING: "sourcing",
+  PROBING: "probing",
+  FINALIZE: "finalize",
+});
+
+/**
+ * How often an in-flight chunk says its run is still alive.
+ *
+ * A chunk is up to CHUNK_TIME_BUDGET_MS (150s) of wall clock and finalize can
+ * add more on top. Without this, heartbeat_at would never move off started_at,
+ * every long chunk would read as stale, and R3.3.2's sweep would reap runs that
+ * are working perfectly. Same cadence and same reasoning as the fleet's
+ * FALLBACK_HEARTBEAT_MS.
+ */
+export const CHUNK_RUN_HEARTBEAT_MS = 30_000;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * scan_runs.scan_job_id is a uuid column, and /api/scan/worker takes `job_id`
+ * straight off the query string. A malformed id is recorded verbatim in
+ * `detail.job_id` instead of being cast: the row still exists and still says
+ * which id it was asked about, rather than the whole execution going
+ * unrecorded because someone typed a bad one.
+ */
+function asUuid(value) {
+  return typeof value === "string" && UUID_RE.test(value) ? value : null;
+}
+
+/**
+ * What a chunk MEASURED, as opposed to what it assumed.
+ *
+ * Every counter starts null -- NOT MEASURED -- and only a phase that genuinely
+ * counts arms it to 0. That is what migration 011's nullable counters are for:
+ * a chunk that only finalized never attempted a probe, and writing
+ * `probes_attempted = 0` there would claim it looked and found none. Standing
+ * rule 1, and standing rule 5's "never `?? 0` on a metric" applied before the
+ * write rather than after it.
+ */
+export function createChunkTally() {
+  return { probesAttempted: null, probesSucceeded: null, errorsRecovered: null, phases: [] };
+}
+
+/** "This phase is counting <key>" -- turns NOT MEASURED into a measured zero. */
+function armCount(tally, key) {
+  if (!tally || typeof tally !== "object") return;
+  if (!Number.isInteger(tally[key])) tally[key] = 0;
+}
+
+/** Add to a counter, arming it first: you cannot add to "not measured". */
+function bumpCount(tally, key, by = 1) {
+  if (!tally || typeof tally !== "object") return;
+  armCount(tally, key);
+  if (Number.isFinite(by) && by > 0) tally[key] += by;
+}
+
+/**
+ * The three ledger calls this file uses -- or an explicit, announced refusal.
+ *
+ * WHY A DISABLED MODE EXISTS, AND WHY IT IS NOT A FAIL-SOFT
+ * With no Supabase client there is no `scan_jobs` table either: db.js runs the
+ * entire persistence layer out of `global.memoryJobs`. A chunk in that mode is
+ * a local-dev or test execution, not a production one, and demanding a ledger
+ * row from a database that does not exist would stop local dev and prove
+ * nothing. So the ledger stands down -- and SAYS SO, loudly, once per chunk,
+ * naming exactly what will go unrecorded. A skip that announces nothing is the
+ * failure this ledger exists to remove (standing rule 1).
+ *
+ * When a client DOES exist, a failed open is not swallowed: openScanRun throws
+ * and the throw leaves runScanChunk. There is deliberately no "could not open a
+ * run, carry on anyway" path -- a chunk that runs unrecorded is a chunk whose
+ * absence from the ledger reads as "it never ran" (standing rule 2).
+ *
+ * deps.openScanRun / heartbeatScanRun / closeScanRun are test injection, the
+ * same shape as every other dep in this file.
+ */
+function resolveChunkLedger(deps = {}) {
+  const injected = deps.openScanRun || deps.heartbeatScanRun || deps.closeScanRun;
+  if (!injected && !supabase) {
+    return { enabled: false, reason: "no Supabase client is configured (in-memory mode)" };
+  }
+  return {
+    enabled: true,
+    reason: null,
+    open: deps.openScanRun || openScanRun,
+    beat: deps.heartbeatScanRun || heartbeatScanRun,
+    close: deps.closeScanRun || closeScanRun,
+  };
+}
+
+/**
+ * Open the chunk's run. Returns null ONLY when the ledger is disabled, and that
+ * case is announced rather than passed over in silence.
+ *
+ * A real failure to open propagates: see resolveChunkLedger.
+ */
+async function openChunkRun(ledger, fields) {
+  if (!ledger.enabled) {
+    const subject = (fields.detail && fields.detail.job_id) || fields.scanJobId || "(unknown job)";
+    console.warn(
+      `[scan-chunk] SCAN_RUNS LEDGER DISABLED (${ledger.reason}) — this chunk execution for job ` +
+        `${subject} will write NO scan_runs row. Its phase, outcome, reason and counters go ` +
+        `unrecorded, and its ABSENCE from the ledger must not be read as "the chunk never ran": ` +
+        `the status read (R3.2.3) and the reaper (R3.3.2) cannot see this execution at all.`
+    );
+    return null;
+  }
+  return await ledger.open(fields);
+}
+
+/**
+ * Close the chunk's run, exactly once.
+ *
+ * A FAILURE TO CLOSE IS ANNOUNCED, NOT THROWN, and that is not fail-soft: the
+ * consequence is the row staying OPEN with a stale heartbeat, which is a visible
+ * state R3.3.2 sweeps and closes as 'reaped'. Replacing the chunk's own result
+ * with a ledger-write error would be the worse trade -- the fleet's closeOrWarn
+ * makes the same call for the same reason.
+ */
+async function closeChunkRun(ledger, run, fields) {
+  if (!run) return null;
+  try {
+    const closed = await ledger.close({ runId: run.id, ...fields });
+    console.log(`[scan-chunk] ${describeRun(closed)}`);
+    return closed;
+  } catch (err) {
+    console.error(
+      `[scan-chunk] WARNING: could not close run ${run.id} (${fields.outcome}/${fields.reason}): ` +
+        `${err.message} — it stays OPEN and will be reaped rather than accounted for.`
+    );
+    return null;
+  }
+}
+
+/**
+ * Beat the run's heartbeat while the chunk is in flight.
+ *
+ * A failed beat is logged, not thrown, for the same reason as above: the cost of
+ * a missed beat is the run going stale and being reaped -- a visible state
+ * something else acts on -- and tearing down a live chunk over one UPDATE would
+ * be worse. deps.setIntervalFn / deps.clearIntervalFn / deps.runHeartbeatMs are
+ * test-only injection.
+ */
+function startChunkHeartbeat(ledger, run, deps = {}) {
+  if (!run || !ledger.enabled) return () => {};
+  const every = deps.setIntervalFn || setInterval;
+  const cancel = deps.clearIntervalFn || clearInterval;
+  const ms = Number.isFinite(deps.runHeartbeatMs) ? deps.runHeartbeatMs : CHUNK_RUN_HEARTBEAT_MS;
+  const handle = every(() => {
+    Promise.resolve(ledger.beat({ runId: run.id })).catch((err) =>
+      console.warn(
+        `[scan-chunk] WARNING: heartbeat for run ${run.id} failed: ${err.message} — this run will ` +
+          `read as stale and may be reaped while the chunk is still working`
+      )
+    );
+  }, ms);
+  // Never hold a serverless invocation open for a heartbeat.
+  if (handle && typeof handle.unref === "function") handle.unref();
+  return () => cancel(handle);
+}
+
+/**
+ * Which phase this chunk is about to enter, decided from the job it just read.
+ *
+ * A job with no checkpoint has not finished sourcing; 'probing' and 'scoring'
+ * name themselves. Anything else -- a job that is already finished, or a
+ * checkpointed job sitting in a status this chunk has no work for -- never
+ * enters a work phase, so it is 'entry', and the run closes 'noop' with the
+ * status in its reason rather than being filed under a phase that did not run.
+ * A completed job in particular has no checkpoint of its own to read, and
+ * calling that 'sourcing' would file a decision to do nothing under the phase
+ * that would have done the most.
+ */
+export function resolveEntryPhase(job) {
+  if (!job) return CHUNK_PHASES.ENTRY;
+  if (job.status === "complete" || job.status === "failed") return CHUNK_PHASES.ENTRY;
+  if (!job.checkpoint) return CHUNK_PHASES.SOURCING;
+  if (job.status === "probing") return CHUNK_PHASES.PROBING;
+  if (job.status === "scoring") return CHUNK_PHASES.FINALIZE;
+  return CHUNK_PHASES.ENTRY;
+}
+
+/**
+ * runScanChunk's own return value + what it measured -> the close_scan_run call.
+ *
+ * PURE, and exported, so every branch of the mapping is testable without a
+ * database. Two properties matter more than the rest:
+ *   1. An unrecognised reason closes as FAILED with the reason spelled out, not
+ *      as 'succeeded'. A new early return added to runScanChunk later must show
+ *      up in the ledger as an unmapped failure, loudly, rather than being
+ *      rounded up to success by a default branch that shrugs.
+ *   2. Counters pass through as null when the phase that would have measured
+ *      them never ran. Never `?? 0` here.
+ */
+export function chunkRunOutcome(result, tally = {}) {
+  const counts = {
+    probesAttempted: Number.isInteger(tally.probesAttempted) ? tally.probesAttempted : null,
+    probesSucceeded: Number.isInteger(tally.probesSucceeded) ? tally.probesSucceeded : null,
+    errorsRecovered: Number.isInteger(tally.errorsRecovered) ? tally.errorsRecovered : null,
+  };
+  const detail = {
+    phases_run: Array.isArray(tally.phases) ? tally.phases : [],
+    chunk_reason: (result && result.reason) || null,
+  };
+  const reason = result && result.reason ? String(result.reason) : null;
+
+  switch (reason) {
+    // The chunk carried the job all the way to a saved scan.
+    case "complete":
+      return { outcome: RUN_OUTCOMES.SUCCEEDED, reason: "complete", ...counts, detail };
+
+    // Hit the soft time budget with work left. The CHUNK succeeded -- it probed,
+    // checkpointed and handed off -- even though the JOB is not finished, and
+    // 'succeeded' with reason 'checkpointed' is how the ledger says both at once.
+    case "checkpointed":
+      return {
+        outcome: RUN_OUTCOMES.SUCCEEDED,
+        reason: "checkpointed",
+        ...counts,
+        detail: { ...detail, progress_pct: result.progress_pct ?? null },
+      };
+
+    // Lost a claim to a concurrent invocation. It DECLINED to run: 'skipped',
+    // never 'noop' -- collapsing the two is how a job being fought over comes to
+    // look like a job with nothing to do.
+    case "sourcing_claimed_elsewhere":
+    case "finalize_claimed_elsewhere":
+      return { outcome: RUN_OUTCOMES.SKIPPED, reason, ...counts, detail };
+
+    // Asked about a job that is not there. Nothing to measure, nothing to do.
+    case "not_found":
+      return { outcome: RUN_OUTCOMES.SKIPPED, reason, ...counts, detail };
+
+    // Looked, and the job was genuinely already done: a MEASURED nothing-to-do.
+    case "already_finished":
+      return {
+        outcome: RUN_OUTCOMES.NOOP,
+        reason,
+        ...counts,
+        detail: { ...detail, job_status: result.status ?? null },
+      };
+
+    // Checkpointed, but in a status this chunk has no work for. The status goes
+    // in the reason: an unexplained noop is what the reason column exists for.
+    case "noop":
+      return {
+        outcome: RUN_OUTCOMES.NOOP,
+        reason: `noop_status_${result.status ?? "unknown"}`,
+        ...counts,
+        detail: { ...detail, job_status: result.status ?? null },
+      };
+
+    // Could not even read the job. It ran and did not finish: 'failed'.
+    case "read_failed":
+      return { outcome: RUN_OUTCOMES.FAILED, reason, error: result.error ?? null, ...counts, detail };
+
+    case "error":
+      return {
+        outcome: RUN_OUTCOMES.FAILED,
+        reason: "chunk_failed",
+        error: result.error ?? null,
+        ...counts,
+        detail,
+      };
+
+    default:
+      return {
+        outcome: RUN_OUTCOMES.FAILED,
+        reason: `unmapped_chunk_reason:${reason ?? "none"}`,
+        error:
+          `runScanChunk returned a reason this ledger has no mapping for (${JSON.stringify(reason)}). ` +
+          `Recorded as failed rather than rounded up to success -- add the case.`,
+        ...counts,
+        detail,
+      };
+  }
+}
 
 const CADENCE_MS = {
   "72h": 72 * 60 * 60 * 1000,
@@ -371,7 +698,12 @@ function defaultSelfContinue(jobId) {
  * contract) and never re-resolve which engines are "the" engines for this
  * job even if env vars change mid-scan.
  */
-export async function runSourcingPhase(job, deps = {}) {
+export async function runSourcingPhase(job, deps = {}, tally = {}) {
+  // This phase watches for absorbed errors (the prompt-persist failure below),
+  // so it declares that measurement even when the count comes out zero. A
+  // sourcing pass that swallowed nothing and a chunk that never sourced must
+  // not both read as "errors_recovered: 0".
+  armCount(tally, "errorsRecovered");
   const sourceQueries = deps.sourceUnbrandedQueries || sourceUnbrandedQueries;
   const buildBranded = deps.buildBrandedQueries || buildBrandedQueries;
   const upsert = deps.upsertPrompts || upsertPrompts;
@@ -427,6 +759,9 @@ export async function runSourcingPhase(job, deps = {}) {
         }))
       );
     } catch (err) {
+      // Absorbed and continued past: the prompts are still used for this scan,
+      // they just are not durable for the next one. Counted, not only logged.
+      bumpCount(tally, "errorsRecovered");
       console.warn("[scan-chunk] Failed to persist prompts:", err.message);
     }
   }
@@ -460,7 +795,15 @@ export async function runSourcingPhase(job, deps = {}) {
 // writes + heartbeat after every batch, bail out at the soft time budget.
 // ---------------------------------------------------------------------------
 
-export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs = Date.now()) {
+export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs = Date.now(), tally = {}) {
+  // This phase is the one that counts probes, so it arms all three counters
+  // here rather than on first use. A chunk that entered probing and found every
+  // pair already persisted must report a MEASURED zero -- it looked -- and that
+  // is a different row from a chunk that never probed at all, whose counters
+  // stay NULL. Migration 011's nullable counters exist for exactly this.
+  armCount(tally, "probesAttempted");
+  armCount(tally, "probesSucceeded");
+  armCount(tally, "errorsRecovered");
   const updateJob = deps.updateScanJob || updateScanJob;
   const getCompletedPairs = deps.getCompletedPairsForJob || getCompletedPairsForJob;
   const upsertResults = deps.upsertPromptResults || upsertPromptResults;
@@ -498,6 +841,19 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       const batchResults = await Promise.all(
         batch.map((query) => engine.probe(query, brand, brandAliases, brandDomain, competitors, stats))
       );
+
+      // ATTEMPTED moves here, before the write: these probes really ran and
+      // really cost money, and they stay counted even if the upsert below
+      // throws. A probe that came back carrying `error` (enginePipeline sets
+      // that field on every engine path) is one this chunk absorbed and
+      // continued past -- the row is still written, marked as an error -- which
+      // is what errors_recovered means. SUCCEEDED moves only after the write
+      // lands, a few lines down: the fleet counts what is durable and so does
+      // this, which is also why probes_succeeded can never exceed
+      // probes_attempted (migration 011's scan_runs_counts_chk).
+      const probeErrors = batchResults.filter((r) => r && r.error).length;
+      bumpCount(tally, "probesAttempted", batch.length);
+      bumpCount(tally, "errorsRecovered", probeErrors);
 
       // Persist prompt_results ONLY — the COMPLETE probe result (including
       // `references`) is stored verbatim in `raw`, so finalize can both
@@ -539,6 +895,7 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
         };
       });
       await upsertResults(rows);
+      bumpCount(tally, "probesSucceeded", batch.length - probeErrors);
 
       batch.forEach((q) => completed.add(`${engine.name}|${q.text}`));
       doneCount += batch.length;
@@ -593,7 +950,7 @@ export function collectionWindow(rows) {
     collected_to: new Date(Math.max(...times)).toISOString(),
   };
 }
-export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
+export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {}) {
   const updateJob = deps.updateScanJob || updateScanJob;
   const claimJob = deps.claimJobStatus || claimJobStatus;
   const getResultsForJob = deps.getPromptResultsForJob || getPromptResultsForJob;
@@ -650,6 +1007,13 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
       return null;
     }
   }
+
+  // Past the claim, so this invocation really is doing the finalize work and is
+  // therefore the one watching for the errors it absorbs below (re-judge,
+  // citation enrichment, per-row roster judging). Armed HERE and not at the top
+  // of the function so a chunk that lost the claim reports "not measured"
+  // rather than a zero it never looked for.
+  armCount(tally, "errorsRecovered");
 
   await updateJob(jobId, { status: "scoring", progress_pct: 90 });
 
@@ -814,6 +1178,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
       r.brands = judgeBrandsSymmetricFn(text, fullRoster);
       rejudgedRows++;
     } catch (err) {
+      bumpCount(tally, "errorsRecovered");
       console.warn(
         `[scan-chunk] Job ${jobId}: re-judge failed for a ${r.engine} row — keeping the probe-time verdict: ${err.message}`
       );
@@ -996,6 +1361,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
       deps
     );
   } catch (err) {
+    bumpCount(tally, "errorsRecovered");
     console.warn(
       `[scan-chunk] Citation enrichment failed for job ${jobId} — inserting unenriched rows: ${err.message}`
     );
@@ -1047,7 +1413,10 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
     } catch (err) {
       // Fail-loud everywhere else in this file; here, one row's judging
       // blowing up must not sink an otherwise-successful finalize — skip
-      // just this row's roster judgment and keep going.
+      // just this row's roster judgment and keep going. Counted into
+      // errors_recovered: a finalize that "succeeded" after swallowing nine of
+      // these is not the same run as one that met none.
+      bumpCount(tally, "errorsRecovered");
       console.warn(
         `[scan-chunk] Job ${jobId}: full-roster judging failed for result ${row.id} (${row.engine}) — skipping: ${err.message}`
       );
@@ -1105,6 +1474,33 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}) {
 // Main entry point — advances a job by one time-bounded chunk. Safe to call
 // repeatedly (poll rescue / cron resume / self-continue): resumes from
 // checkpoint + persisted prompt_results, never reprocesses finished work.
+//
+// EVERY CALL WRITES EXACTLY ONE scan_runs ROW (R3.2.1), including the calls that
+// decline to do any work. One open, one close, on every path — the close is
+// funnelled through the single `finish()` below precisely so a later edit cannot
+// add an early return that escapes the ledger. The fleet's runOnce has the same
+// invariant for the same reason.
+//
+// ONE ROW PER CHUNK, NOT PER JOB, AND NOT PER PHASE.
+//   * Per PHASE would turn one execution into three rows and make a single
+//     chunk look like three; `phase` is where this chunk STARTED and
+//     detail.phases_run lists everything it entered.
+//   * Per JOB is impossible: a scan is deliberately many chunks. A job resumed
+//     by the status-poll rescue, by cron or by the self-continue fetch is a
+//     SECOND EXECUTION and gets a second row, honestly — same scan_job_id,
+//     a fresh worker_id, and its own phase/outcome. That is not double
+//     counting: the first row already closed as 'succeeded'/'checkpointed'
+//     (it handed off) or, if it died, is still OPEN for R3.3.2 to reap, so
+//     summing the ledger counts each chunk's work once and only once.
+//   * Where a rescue genuinely races a live chunk, the loser closes as
+//     'skipped' with 'sourcing_claimed_elsewhere' / 'finalize_claimed_elsewhere'
+//     and counters that are NULL — a row that says "I did nothing", which is
+//     the opposite of a duplicate of the work.
+//
+// A CHUNK THAT DIES LEAVES EVIDENCE. The run is opened before the work and the
+// process crashing (or being frozen by the platform) leaves it OPEN with a stale
+// heartbeat_at — sweepable, and visibly different from both a clean close and
+// from never having run. Nothing here closes a run on the way out of a crash.
 // ---------------------------------------------------------------------------
 
 export async function runScanChunk(jobId, deps = {}) {
@@ -1114,29 +1510,77 @@ export async function runScanChunk(jobId, deps = {}) {
   const selfContinue = deps.selfContinue || defaultSelfContinue;
   const nowFn = deps.now || Date.now;
 
-  let job;
+  const ledger = resolveChunkLedger(deps);
+  // Identifies THIS invocation, so two chunks racing over one job are two
+  // distinguishable rows rather than an ambiguous pair. scan_jobs has no
+  // lease_owner of its own (single-flight here is claimJobStatus plus R0.1.5's
+  // unique partial index on scan_jobs(brand) while running), so the ledger's
+  // worker_id is minted per call. It also guarantees scan_runs_subject_chk is
+  // satisfied even when jobId is not a uuid.
+  const chunkId = deps.chunkId || `chunk-${crypto.randomUUID()}`;
+  const tally = createChunkTally();
+
+  // The job read comes first because a ledger row cannot name its subject
+  // before the subject has been looked up — the fleet opens its run after
+  // claimBatch for the same reason. The window this leaves (a crash inside this
+  // one SELECT) leaves the scan_job itself untouched and still rescuable, which
+  // is the evidence for that case.
+  let job = null;
+  let readError = null;
   try {
     job = await getJob(jobId);
   } catch (err) {
     // Transient read failure — we don't even have a confirmed job to mark
     // failed, and a retry from the DB is likely to hit the same transient
-    // condition. Log and let the next poll/cron tick try again.
+    // condition. Log, record it, and let the next poll/cron tick try again.
+    readError = err;
     console.error(`[scan-chunk] Failed to read job ${jobId}:`, err.message);
-    return { ok: false, reason: "read_failed", error: err.message };
+  }
+
+  const run = await openChunkRun(ledger, {
+    runner: RUNNERS.SCAN_CHUNK,
+    phase: resolveEntryPhase(job),
+    workerId: chunkId,
+    scanJobId: asUuid(jobId),
+    brand: (job && job.brand) || null,
+    detail: {
+      job_id: jobId,
+      entry_status: (job && job.status) || null,
+      has_checkpoint: Boolean(job && job.checkpoint),
+      read_failed: Boolean(readError),
+    },
+  });
+
+  /** The only close in this function. Every return goes through it. */
+  const finish = async (result) => {
+    await closeChunkRun(ledger, run, chunkRunOutcome(result, tally));
+    return result;
+  };
+
+  if (readError) {
+    return finish({ ok: false, reason: "read_failed", error: readError.message });
   }
 
   if (!job) {
     console.warn(`[scan-chunk] Job ${jobId} not found — nothing to resume.`);
-    return { ok: false, reason: "not_found" };
+    return finish({ ok: false, reason: "not_found" });
   }
 
   if (job.status === "complete" || job.status === "failed") {
-    return { ok: true, reason: "already_finished", status: job.status };
+    return finish({ ok: true, reason: "already_finished", status: job.status });
   }
 
   const chunkStartMs = nowFn();
+  // From here on the chunk is working, so the run says so until it stops.
+  const stopHeartbeat = startChunkHeartbeat(ledger, run, deps);
+  let result;
 
-  try {
+  // LABELLED so the early exits below can leave the BODY without leaving the
+  // FUNCTION. A bare return here would skip finish() and abandon an open
+  // ledger row on two of the commonest paths in this file; break chunkBody
+  // runs the finally, falls through to the single close, and cannot be
+  // forgotten by an edit that adds another early exit.
+  chunkBody: try {
     let status = job.status;
     let checkpoint = job.checkpoint || null;
 
@@ -1158,35 +1602,42 @@ export async function runScanChunk(jobId, deps = {}) {
       // Only the winner proceeds; the loser returns immediately.
       const claimed = await claimJob(jobId, ["pending", "generating_prompts"], "generating_prompts");
       if (!claimed) {
-        return { ok: true, reason: "sourcing_claimed_elsewhere" };
+        result = { ok: true, reason: "sourcing_claimed_elsewhere" };
+        break chunkBody;
       }
       await updateJob(jobId, { progress_pct: 10 });
-      checkpoint = await runSourcingPhase(job, deps);
+      tally.phases.push(CHUNK_PHASES.SOURCING);
+      checkpoint = await runSourcingPhase(job, deps, tally);
       await updateJob(jobId, { status: "probing", progress_pct: 25, checkpoint });
       status = "probing";
     }
 
     if (status === "probing") {
-      const outcome = await runProbingPhase(jobId, checkpoint, deps, chunkStartMs);
+      tally.phases.push(CHUNK_PHASES.PROBING);
+      const outcome = await runProbingPhase(jobId, checkpoint, deps, chunkStartMs, tally);
       checkpoint = outcome.checkpoint;
       if (outcome.budgetHit) {
         selfContinue(jobId);
-        return { ok: true, reason: "checkpointed", progress_pct: outcome.progressPct };
+        result = { ok: true, reason: "checkpointed", progress_pct: outcome.progressPct };
+        break chunkBody;
       }
       status = "scoring";
     }
 
     if (status === "scoring") {
-      const finalJob = await runFinalizePhase(jobId, checkpoint, deps);
+      tally.phases.push(CHUNK_PHASES.FINALIZE);
+      const finalJob = await runFinalizePhase(jobId, checkpoint, deps, tally);
       if (!finalJob) {
         // Lost the finalize claim to another instance — it owns completing
         // this job now (see runFinalizePhase's claim comment).
-        return { ok: true, reason: "finalize_claimed_elsewhere" };
+        result = { ok: true, reason: "finalize_claimed_elsewhere" };
+        break chunkBody;
       }
-      return { ok: true, reason: "complete", job: finalJob };
+      result = { ok: true, reason: "complete", job: finalJob };
+      break chunkBody;
     }
 
-    return { ok: true, reason: "noop", status };
+    result = { ok: true, reason: "noop", status };
   } catch (err) {
     console.error(`[scan-chunk] Job ${jobId} failed:`, err);
     try {
@@ -1198,8 +1649,19 @@ export async function runScanChunk(jobId, deps = {}) {
     } catch (err2) {
       console.error(`[scan-chunk] Also failed to mark job ${jobId} failed:`, err2.message);
     }
-    return { ok: false, reason: "error", error: err.message };
+    result = { ok: false, reason: "error", error: err.message };
+  } finally {
+    // The chunk is no longer in flight, whichever way it left. Stopping the
+    // beat before the close is what keeps a heartbeat from racing the close and
+    // hitting heartbeat_scan_run's "already closed" exception.
+    stopHeartbeat();
   }
+
+  // `result` is set on every path above, including the catch. If a future edit
+  // ever leaves it unset, chunkRunOutcome's default branch closes the run as
+  // FAILED with 'unmapped_chunk_reason:none' rather than letting an unaccounted
+  // execution read as a success.
+  return finish(result);
 }
 
 // ---------------------------------------------------------------------------
