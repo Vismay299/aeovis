@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**34 / 145 closed** · 3 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**36 / 148 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -24,7 +24,7 @@ Baseline commit: `5111219`
 10. Trace a call site to an HTTP route or a cron entry before describing it as live. A correct file:line proves a line exists, not that anything reaches it.
 11. Close an item only when, in the same commit, its box is ticked, the commit body cites the file:line where the change lives, and the acceptance criterion was exercised — run, not read and not reasoned about. If it could not be exercised here, the item is blocked with the reason, never closed.
 
-## R0 — Ground zero  `17/25`
+## R0 — Ground zero  `18/27`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -39,11 +39,13 @@ Baseline commit: `5111219`
 - [x] **R0.1.7** /api/health route — closed at `src/app/api/health/route.js:29`, `src/lib/health.js:61`, `src/lib/health.js:38`, `src/lib/db/analytics.js:494`, `src/lib/db/analytics.js:510`, `supabase/migrations/008_system_heartbeats.sql:12`, `src/lib/health.test.mjs:23`, `src/app/api/scan/worker/route.js:47`
 - [x] **R0.1.8** Remove the forgeable x-vercel-cron bypass from the worker gate — closed at `src/lib/cronAuth.js:48-55`, `src/lib/cronAuth.js:22`, `src/lib/cronAuth.test.mjs:47`, `src/lib/cronAuth.test.mjs:57`, `src/lib/cronAuth.test.mjs:69`, `src/lib/cronAuth.test.mjs:77`, `src/app/api/scan/worker/route.js:28`, `src/app/api/content/worker/route.js:33`, `docs/BUILD_JOURNAL.md:136`, `README.md:111`, `README.md:130`
 - [x] **R0.1.9** Stop SERPAPI_KEY counting as a configured SERP provider — closed at `src/lib/engines/types.js:47`, `src/lib/engines/types.test.mjs:55`, `src/lib/engines/types.test.mjs:98`, `src/lib/engines/types.test.mjs:114`
-- [~] **R0.1.10** check:secrets validates the wrong Bright Data credential `needs-secrets` — submitted `src/lib/checkSecretsBrightdata.test.mjs:154`, `src/lib/checkSecretsBrightdataNoZone.test.mjs:54`, `src/lib/checkSecretsBrightdata.test.mjs:191`, `scripts/check-secrets.mjs:111`
+- [x] **R0.1.10** check:secrets validates the wrong Bright Data credential `needs-secrets` — closed at `src/lib/checkSecretsBrightdata.test.mjs:154`, `src/lib/checkSecretsBrightdataNoZone.test.mjs:54`, `src/lib/checkSecretsBrightdata.test.mjs:191`, `scripts/check-secrets.mjs:111`
 - [x] **R0.1.11** Migrations 007-009 are unapplied in production, and 007 cannot apply as-is `needs-decision` — closed at `supabase/migrations/007_scan_seal.sql:28`, `supabase/migrations/008_system_heartbeats.sql:12`, `supabase/migrations/009_scan_rate_limit.sql:44`, `src/lib/rateLimit.js:112`
 - [-] **R0.1.12** Confirm CRON_SECRET and OPERATOR_TOKEN are live on the Vercel project `needs-vercel` — blocked: needs-vercel
 - [ ] **R0.1.13** cronAuth fails OPEN when NODE_ENV is unset
 - [ ] **R0.1.14** The operator perimeter opens silently in a non-production NODE_ENV
+- [-] **R0.1.15** ROTATE the GSC service-account key — leaked into an agent transcript `needs-secrets` — blocked: needs-secrets
+- [ ] **R0.1.16** health.js keeps a second vendor list and claims it is shared
 ### R0.2
 
 - [x] **R0.2.1** Create docs/BUILD_JOURNAL.md seeded with the 37 findings — closed at `docs/BUILD_JOURNAL.md:123`, `docs/BUILD_JOURNAL.md:124`, `docs/BUILD_JOURNAL.md:127`, `src/lib/scoring/enginePipeline.js:510`, `src/lib/scoring/enginePipeline.js:450`, `src/lib/scoring/enginePipeline.js:98`, `src/lib/workers/scanWorker.js:472`, `src/lib/workers/scanWorker.js:436`, `src/lib/db.js:11`, `src/lib/db.js:298`, `src/lib/db.js:62`, `src/app/api/scan/route.js:62`, `src/app/api/scan/worker/route.js:60`, `src/lib/buildJournal.test.mjs:62`
@@ -254,22 +256,23 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `6/19`
+## R6 — Apparatus & guards  `7/20`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
 ### R6.1
 
-- [~] **R6.1.1** Migrations ledger and transaction per file — submitted `scripts/setup-supabase.mjs:28`, `scripts/setup-supabase.mjs:178`, `scripts/setup-supabase.mjs:216`, `src/lib/migrationsRunner.test.mjs`
+- [~] **R6.1.1** Migrations ledger and transaction per file — submitted `scripts/setup-supabase.mjs:28`, `scripts/setup-supabase.mjs:192`, `scripts/setup-supabase.mjs:215`, `scripts/setup-supabase.mjs:250`, `scripts/setup-supabase.mjs:255`, `scripts/setup-supabase.mjs:200`, `src/lib/migrationsRunner.test.mjs:277`, `src/lib/migrationsLedger.test.mjs:98`
 - [ ] **R6.1.2** docs/PROD_MIGRATIONS.md with per-migration verification queries
 - [x] **R6.1.3** Track the orchestration tooling change made outside the ledger — closed at `.claude/orchestration/orchestrate.mjs:436`, `docs/BUILD_JOURNAL.md`
+- [ ] **R6.1.4** Agents grep secrets into transcripts; the exclusion must be in the brief, not the discipline
 ### R6.2
 
 - [ ] **R6.2.1** docs/OPERATOR_LEDGER.md
 - [ ] **R6.2.2** docs/RUNBOOK.md seeded with 10 symptom rows
 ### R6.3
 
-- [~] **R6.3.1** Vendor contract docs — submitted `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
+- [x] **R6.3.1** Vendor contract docs — closed at `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker
