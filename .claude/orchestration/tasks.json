@@ -3046,7 +3046,7 @@
         "src/app/page.js:227-253"
       ],
       "phase": "R2",
-      "status": "in_verification",
+      "status": "done",
       "owner": "local-session",
       "evidence": [
         "src/data/mockData.js:51",
@@ -3083,9 +3083,9 @@
         }
       ],
       "verification": {
-        "verdict": "fail",
-        "at": "2026-09-03T01:49:21.220Z",
-        "note": "REJECTED. All three accept clauses ARE met on the landing page and were exercised against a live render — DO NOT REDO that work. Clause 1: SSR HTML has zero chip__led and zero Live chip; the whole landing tree was grepped, and surviving chip__led uses are in dashboard/studio/scan, all driven by real state. Clause 2: SSR shows \"Sample - illustrative brands\"; the fabricated 16 Aug 2026 09:14 IST appears zero times in rendered output. Clause 3: GENUINELY DERIVED — setting NEXT_PUBLIC_ENGINES=aio,chatgpt,perplexity, clearing .next and restarting made both the hero and the rail follow to three engines, so it is not a hardcoded pair that happens to be right today. The hydration fix is real, confirmed in the COMPILED BROWSER BUNDLE rather than the source comment: the chunk contains INLINED_PUBLIC_ENGINES = \"aio,perplexity\" statically replaced by Next, and with the var unset the same chunk shows the un-replaced process.env expression. Guards have teeth: reverting to 06f820b^ fails 6 of 10, and the donut guard genuinely SUMS the data against the imported constant. The note claim of \"1 fails\" undersells the work.\n\nWHY IT FAILS: the out-of-accept count change (TRACKED 36 to 30, DESTINATIONS 15/12/6/3 to 13/10/5/2) HALF-LANDED. src/data/mockData.js:7-13 still declares 36 unbranded questions, 15/12/6/3, and AI Overview 5/12 / ChatGPT 6/12 / Perplexity 4/12. Traced hop by hop: page.js:137-140 \"See a sample report\" (present in the SSR HTML) to saveScan to services/api.js:6 sessionStorage to dashboard/page.js:42 loadScan, :49 isSample, to DashboardShell to OverviewView.jsx:67,77,83 which renders promptsTracked. SAMPLE_RESULT evaluates to promptsTracked 36, promptsAnalyzed 36, with its 36 topPrompts split across aio/chatgpt/perplexity — TWELVE ATTRIBUTED TO CHATGPT. So one click from a hero that now says \"Google AI Overview and Perplexity - 30 unbranded questions\", the user sees a report claiming 36 tracked prompts, a third of them from an engine this deployment has no API key for. Before the diff both surfaces said 36 and named three engines, consistently. This diff made them disagree, on the primary conversion path, and it falsifies the invariant page.js:12-13 still asserts. The existing guard only checks DESTINATIONS sums to TRACKED within page.js; nothing ties mockData.js to DEFAULT_UNBRANDED_TARGET.\n\nTO FIX (preferred): finish the count change through src/data/mockData.js — derive its tracked total from DEFAULT_UNBRANDED_TARGET, rebalance to match page.js, derive its engine split from deployedEngineLabels(), and add a guard asserting SAMPLE_RESULT.promptsTracked equals DEFAULT_UNBRANDED_TARGET and that its engines are a subset of deployedEngines(). Or revert TRACKED and DESTINATIONS so both surfaces agree again, and file the 36-vs-30 overclaim as its own task covering both surfaces.\n\nFOUR MORE FINDINGS: (1) engineDriftWarning() HAS NO PRODUCTION CALLER — only landingHonesty.test.mjs imports it, yet .env.example tells operators it reports a mismatch, implying a live check. Wire it into check-secrets.mjs or reword the comment. (2) deployedEngines() never consults isConfigured(), while resolveEnabledEngines (enginePipeline.js:527-546) drops engines with a missing key — set ENGINES=aio,chatgpt,perplexity with no OPENAI_API_KEY and the page advertises ChatGPT while the fleet skips it: the original C11 bug, reachable by config. (3) THE CLAUSE-3 GUARD HAS A HOLE — replacing line 51 with a literal ENGINE_SENTENCE naming all three engines restores the full overclaim in the rendered hero and all 10 guards still pass, because the guard only requires the token to appear and forbids one specific phrasing. Assert it is assigned from formatEngineList(deployedEngineLabels()), as the rail guard already does for DEMO_ENGINES. (4) deployedEngines.js:61 reads process.env.ENGINES inside a use client module, so on the fallback path SSR and client diverge again; the direction is an under-claim, so not blocking. Evidence citation deployedEngines.js:36 is a docblock prose line; the actual change is at :40."
+        "verdict": "pass",
+        "at": "2026-09-03T02:56:03.562Z",
+        "note": "VERIFIED on re-submission by a second independent verifier at 272a0f6. THE ROUND-1 DEFECT WAS REPRODUCED THROUGH THE REAL USER HOP, then seen gone. Evaluating the parent commit's module and replaying saveScan -> sessionStorage -> loadScan -> isSample -> normalizeResult -> DashboardShell, the parent dashboard rendered 36 tracked, 15 visible, with chatgpt in the payload — while page.js already said 30. At HEAD the same hop renders 30 tracked, \"13 of 30 answers name you\", probeSources [aio, perplexity], and ZERO occurrences of chatgpt anywhere in the normalized payload. THE NUMBER A USER WOULD ACTUALLY SEE IS 30.\n\nTHEY AGREE BY DERIVATION, PROVEN BY REBUILD RATHER THAN BY READING. Rebuilt under NEXT_PUBLIC_ENGINES=aio, the freshly prerendered hero narrowed to \"Perceev asks Google AI Overview the 30 unbranded questions\" and the rail collapsed to a single gauge reading 13/30, while the donut correctly stayed 13/10/5/2 because it is engine-agnostic. The client bundle carries 30 rows with NO STORED ENGINE FIELD — the engine comes from the inlined NEXT_PUBLIC_ENGINES at runtime, and the only chatgpt string in the chunk is the frozen ENGINE_LABELS registry, not an attribution.\n\nTHE CHILD-PROCESS GUARD HAS REAL TEETH, and this is the important result. Three distinct child pids, three different envs, three different readings, with the parent's own NEXT_PUBLIC_ENGINES undefined — it genuinely spawns and genuinely varies. The verifier then applied the subtlest possible sabotage: a literal ENGINE_KEYS = ['aio'], which EQUALS what deployedEngines() returns in-process and therefore \"matches today\". It passed 15 of 16 guards; only \"the sample report FOLLOWS the deployed engine list\" caught it. That is precisely the round-1 defect class, and nothing else in the suite sees it.\n\nCLAUSE-3 HOLE CLOSED: the verifier reproduced the round-1 state properly — parent page.js plus parent guards plus the literal ENGINE_SENTENCE — and got 10/10 passing with the full three-engine overclaim restored. At HEAD the identical sabotage fails naming the required assignment.\n\nTHE THREE FLAGGED ITEMS, JUDGED. The module-scope throw is the right trade and BETTER than the implementer claimed: page.js and scan/page.js are its only importers and both are statically prerendered, so breaking the invariant makes npm run build EXIT 1 at prerender with the exact message, and also fails CI because the test file cannot load. It cannot white-screen production, because production never gets built. The two out-of-accept files are necessary rather than creep: scan/page.js held a third typed copy on the same conversion path, and the rail prose was genuinely false of its own data — \"six of its 64 are pages you control\" was actually 2 of 14 for Perplexity. The absence of a browser check is sufficient: no playwright, puppeteer or jsdom exists in the tree at all, and the verifier independently replayed the hop through the REAL saveScan/loadScan/normalizeResult and confirmed the client bundle, leaving only React rendering a prop unexercised. check-secrets was exercised across eight env configurations with ZERO vendor credentials, proving the engines check alone moves the exit code; C11 is now a hard FAIL and the 31 contract tests are intact.\n\nONE OVERSTATEMENT CORRECTED: deployedEngines.js claims the config gap is \"made UNREACHABLE at deploy time\". Overstated by one hop — check:secrets is NOT in CI (.github/workflows/ci.yml runs only test:scoring and next build) and is operator-invoked, needing real credentials. What CI enforces is the guard asserting the call exists in source. Still strictly better than the parent, where .env.example described a zero-caller function as live, but the wording is a notch stronger than the mechanism.\n\nTWO SMALLER NOTES: round 1's \"zero chip__led across the whole landing tree\" is not literally true of /scan, which renders one on scan-progress-state reading \"Progress not reported yet\" — an honest unmeasured state, not a Live chip on a script. And the sample dashboard shows 43.3 while /scan shows 43, the same rows rounded differently; pre-existing, and better than the parent's 41.7 versus a typed 41.\n\nA NEW PRE-EXISTING FINDING, outside the cited files and filed separately: AnswerSheet.jsx:61 hardcodes a Perplexity chip on the hero sample card and does NOT derive — under the aio-only rebuild the hero correctly narrowed while that card still said Perplexity. Accurate under the real deployment, so clause 3 holds today, and untouched by this diff. Baseline 983/983 before and after; worktree restored byte-identical by sha256 on all four files."
       }
     },
     {
@@ -3135,6 +3135,37 @@
       "notes": [
         {
           "at": "2026-09-03T02:35:53.569Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R2.10.5",
+      "subphase": "R2.10",
+      "lane": "frontend",
+      "title": "The hero sample card hardcodes a Perplexity chip",
+      "detail": "src/components/landing/AnswerSheet.jsx:61 renders a literal Perplexity chip on the hero's sample answer card. It does not derive from deployedEngines(). Proven by the R2.10.1 verifier: rebuilt under NEXT_PUBLIC_ENGINES=aio the hero sentence and the engine rail both correctly narrowed to Google AI Overview alone, while this card still said Perplexity. It is accurate under today's deployment, so R2.10.1's clause 3 genuinely holds and this was correctly not treated as blocking, and it is untouched by that diff (last changed in 06f820b). But it is the last hardcoded engine name on the landing page, and the landingHonesty guards read this file only for the Live-chip and timestamp clauses, so nothing would catch it drifting.",
+      "accept": "The sample card's engine chip derives from the deployed engine list; the child-process guard that varies NEXT_PUBLIC_ENGINES covers this card too, and fails if the literal returns.",
+      "deps": [
+        "R2.10.1"
+      ],
+      "anchors": [
+        "src/components/landing/AnswerSheet.jsx:61",
+        "src/lib/engines/deployedEngines.js"
+      ],
+      "findings": [
+        "C11"
+      ],
+      "phase": "R2",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T02:56:15.241Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
