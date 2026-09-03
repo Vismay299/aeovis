@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { summarizeEngineResults, summarizeEngineSlice, resolveEnabledEngines, buildTrackedBrandRoster } from "./enginePipeline.js";
 import { getBrandAliases } from "./aliases.js";
+import { TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE } from "./enginePipeline.js";
+import { AIO_MIN_NON_BRANDED_COVERAGE } from "./aioConstants.js";
 
 function makeAioRow(overrides = {}) {
   return {
@@ -452,4 +454,145 @@ test("share of voice is null (not 100) when the roster has no rivals", () => {
   assert.equal(s.share_of_voice_pct, null);
   assert.deepEqual(s.top_rivals, []);
   assert.equal(s.visibility_pct, 3.3, "visibility is still computable without rivals");
+});
+
+// --- R2.2.5: coverage is a gate for TEXT engines too ---------------------
+//
+// Before this gate, dataSourceIssue for a text engine was errorRatePct > 50
+// and nothing else, on the (pre-R2.2.1) assumption that text engines always
+// answer. Since R2.2.1 an empty answer is an EMPTY_ANSWER error row with
+// answer_present false, so a text engine returning nothing for 40% of prompts
+// reported coverage_pct 60, error_rate_pct 40 and data_source_issue FALSE —
+// a degraded collection presented as clean.
+
+function textAnswerRow(i) {
+  return {
+    query: `unbranded prompt ${i}`,
+    is_branded_query: false,
+    answer_present: true,
+    error: null,
+    text: "Vendors worth considering include Kajaria and Somany.",
+    visible: false,
+    brand_mentioned_in_text: false,
+    brand_cited: false,
+    brands: [
+      { name: "Italica", is_self: true, mentioned: false },
+      { name: "Kajaria", is_self: false, mentioned: true },
+    ],
+  };
+}
+
+// What R2.2.1 produces for an empty / whitespace-only / null answer body.
+function textEmptyRow(i) {
+  return {
+    query: `unbranded prompt ${i}`,
+    is_branded_query: false,
+    answer_present: false,
+    error: "EMPTY_ANSWER",
+    text: "",
+    visible: false,
+    brand_mentioned_in_text: false,
+    brand_cited: false,
+    brands: [],
+  };
+}
+
+function textSlice(answered, empty) {
+  return [
+    ...Array.from({ length: answered }, (_, i) => textAnswerRow(i)),
+    ...Array.from({ length: empty }, (_, i) => textEmptyRow(1000 + i)),
+  ];
+}
+
+test("text engine — 40% empty answers raise data_source_issue, not a clean read", () => {
+  const s = summarizeEngineSlice(textSlice(6, 4), "perplexity");
+  assert.equal(s.coverage_pct, 60, "6 of 10 non-branded prompts answered");
+  assert.equal(s.errored_queries, 4);
+  // TEETH: the error-rate gate is errorRatePct > 50 and this slice sits at 40,
+  // so ONLY the coverage gate can raise the flag. Remove the coverage gate
+  // from summarizeEngineSlice and this assertion fails.
+  assert.ok(s.error_rate_pct <= 50, "error rate alone must not reach its gate");
+  assert.equal(s.data_source_issue, true, "coverage 60 is a degraded read, not a clean one");
+});
+
+test("text engine — the coverage gate fires on chatgpt too, at exactly the threshold", () => {
+  // 27/30 = 90.0% is the threshold itself: tolerated.
+  const atThreshold = summarizeEngineSlice(textSlice(27, 3), "chatgpt");
+  assert.equal(atThreshold.coverage_pct, 90);
+  assert.equal(atThreshold.data_source_issue, false, "90% is the floor, not below it");
+  // 26/30 = 86.7% is below it: flagged.
+  const below = summarizeEngineSlice(textSlice(26, 4), "chatgpt");
+  assert.equal(below.coverage_pct, 86.7);
+  assert.ok(below.error_rate_pct <= 50, "error rate alone must not reach its gate");
+  assert.equal(below.data_source_issue, true);
+});
+
+test("text engine — one flaky empty answer in 30 is not a data source issue", () => {
+  const s = summarizeEngineSlice(textSlice(29, 1), "perplexity");
+  assert.equal(s.coverage_pct, 96.7);
+  assert.equal(s.data_source_issue, false, "a single transient empty must not cry wolf");
+});
+
+test("text engine — a fully answered slice stays clean", () => {
+  const s = summarizeEngineSlice(textSlice(30, 0), "perplexity");
+  assert.equal(s.coverage_pct, 100);
+  assert.equal(s.errored_queries, 0);
+  assert.equal(s.data_source_issue, false);
+});
+
+test("text engine — a slice that never ran is not a degraded read", () => {
+  // Rule 1: measured zero must look different from never ran. coverage_pct is
+  // 0 for an empty slice by construction, so the gate requires a non-empty
+  // non-branded denominator. insufficient_sample is what speaks here instead.
+  const s = summarizeEngineSlice([], "perplexity");
+  assert.equal(s.non_branded_queries, 0);
+  assert.equal(s.data_source_issue, false, "never-ran must not be reported as degraded");
+  assert.equal(s.insufficient_sample, true, "...but it must not look adequate either");
+
+  // Branded-only slice: still no non-branded denominator to judge.
+  const brandedOnly = summarizeEngineSlice(
+    [
+      {
+        query: "italica tiles",
+        is_branded_query: true,
+        answer_present: true,
+        error: null,
+        visible: true,
+        brands: [],
+      },
+    ],
+    "perplexity"
+  );
+  assert.equal(brandedOnly.non_branded_queries, 0);
+  assert.equal(brandedOnly.data_source_issue, false);
+});
+
+test("text engine — a genuine refusal is an ANSWER and does not trip the gate", () => {
+  // R2.2.1: "I don't know" means the engine answered. Only empty, whitespace-
+  // only or null bodies become EMPTY_ANSWER rows, so refusals cost no coverage.
+  const refusals = Array.from({ length: 10 }, (_, i) => ({
+    ...textAnswerRow(i),
+    text: "I don't know which vendors serve that market.",
+    brands: [],
+  }));
+  const s = summarizeEngineSlice(refusals, "perplexity");
+  assert.equal(s.coverage_pct, 100, "a refusal is an answer");
+  assert.equal(s.data_source_issue, false);
+});
+
+test("the text coverage gate does NOT tighten the aio path", () => {
+  // A SERP carrying no AI Overview is a normal state, so aio keeps its own,
+  // much looser AIO_MIN_NON_BRANDED_COVERAGE. Guards against the text
+  // threshold being applied to both branches.
+  const s = summarizeEngineSlice(textSlice(6, 4), "aio");
+  assert.equal(s.coverage_pct, 60);
+  assert.equal(s.data_source_issue, false, "aio tolerates 60% coverage by design");
+});
+
+test("the text coverage threshold is stricter than the aio one, on purpose", () => {
+  assert.ok(
+    TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE > AIO_MIN_NON_BRANDED_COVERAGE,
+    "a text engine has no legitimate no-answer state; an AIO SERP does"
+  );
+  assert.ok(TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE < 1, "must tolerate transient flake");
 });

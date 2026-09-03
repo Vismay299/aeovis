@@ -16,6 +16,24 @@ import {
 const CHATGPT_CONCURRENCY = 4;
 const PERPLEXITY_CONCURRENCY = 4;
 
+/**
+ * Minimum non-branded coverage a TEXT engine (chatgpt, perplexity) must reach
+ * before its slice is trusted as a complete read.
+ *
+ * Deliberately far stricter than AIO_MIN_NON_BRANDED_COVERAGE (0.15). That one
+ * is loose because a Google SERP carrying no AI Overview is a normal, expected
+ * state — absence there is data. A text engine has no such state: since R2.2.1
+ * an empty, whitespace-only or null answer is an EMPTY_ANSWER error row with
+ * answer_present false, while a genuine refusal ("I don't know") still counts as
+ * answered. So anything missing from a text slice is a collection failure, and
+ * the only tolerance the gate needs is for transient transport flake.
+ *
+ * 0.9 leaves room for up to 3 empties in a standard 30-prompt set (29/30 = 96.7%
+ * and 27/30 = 90.0% stay clean) while catching the degradation this constant was
+ * added for: 4-of-10 empty, which reported coverage_pct 60 with no flag.
+ */
+export const TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE = 0.9;
+
 export function domainMatches(candidateDomain, target) {
   if (!candidateDomain || !target) return false;
   return candidateDomain === target || candidateDomain.endsWith("." + target);
@@ -395,13 +413,32 @@ export function summarizeEngineSlice(results, engineName) {
       ? Math.round((visibleNonBranded / nonBranded.length) * 1000) / 10
       : 0;
 
-  // Text engines always answer, so coverage is always 100% and error rate is the only gate.
+  // A degraded read must not report as clean, on EITHER engine class.
+  //
+  // This comment used to say "text engines always answer, so coverage is always
+  // 100% and error rate is the only gate". R2.2.1 deleted that assumption: an
+  // empty, whitespace-only or null answer is now an EMPTY_ANSWER error row with
+  // answer_present false, so coverage_pct genuinely drops below 100 for text
+  // engines. Error rate alone does not catch it — it only trips above 50%, so a
+  // text engine returning nothing for 40% of prompts produced coverage_pct 60,
+  // error_rate_pct 40 and NO issue flag. Coverage is gated too, at a threshold
+  // chosen for text engines rather than borrowed from aio (see
+  // TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE).
+  //
+  // Both branches require a non-empty denominator: a slice with no non-branded
+  // prompts never ran, and never-ran is not a degraded read. The guard is
+  // explicit rather than leaning on 0/0 being NaN and NaN < x being false —
+  // coverage_pct is reported as 0 for such a slice, so any rewrite of this gate
+  // in terms of coverage_pct would flag every empty slice without it.
+  // insufficient_sample is what speaks for a slice that never ran.
   const dataSourceIssue =
     engineName === "aio"
       ? errorRatePct > AIO_ERROR_RATE_LIMIT_PCT ||
         (nonBranded.length > 0 &&
           nonBrandedWithAnswer.length / nonBranded.length < AIO_MIN_NON_BRANDED_COVERAGE)
-      : errorRatePct > 50;
+      : errorRatePct > 50 ||
+        (nonBranded.length > 0 &&
+          nonBrandedWithAnswer.length / nonBranded.length < TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE);
 
   // Sample adequacy is judged on the ELICITING pool — the prompts that can
   // actually produce a mention. 56 answered prompts of which only 16 name any
