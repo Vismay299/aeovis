@@ -17,9 +17,11 @@
 --
 -- LEASE COLUMNS ARE jobLease's COLUMNS
 -- `lease_owner` / `lease_expires_at` are named and used exactly as
--- src/lib/jobLease.js defines them: a NULL owner or a past expiry means free,
--- re-acquiring your own lease is allowed, and the default TTL below is
--- jobLease's LEASE_TTL_MS (3 minutes). renew_probe_lease and
+-- src/lib/jobLease.js defines them, and the default TTL below is jobLease's
+-- LEASE_TTL_MS (3 minutes). The free-lease predicate is jobLease's MINUS its
+-- `lease_owner = me` clause: a NULL owner or a past expiry means free, but
+-- re-acquiring your OWN live lease is NOT allowed here -- see ONE DELIBERATE
+-- DIVERGENCE in claim_probe_tasks (line 172). renew_probe_lease and
 -- release_probe_tasks are the same verbs jobLease exposes, on the same columns.
 -- What is NOT reused is the acquire STATEMENT: jobLease.acquireLease claims one
 -- row whose id the caller already knows, and a queue claim has to CHOOSE which
