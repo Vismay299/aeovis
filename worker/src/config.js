@@ -45,6 +45,9 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
     );
   }
 
+  // Hoisted because heartbeatMs is clamped against it below.
+  const leaseMs = intFromEnv(env.FLEET_LEASE_MS, 300_000, { min: 30_000, max: 3_600_000 });
+
   return {
     supabaseUrl,
     supabaseKey,
@@ -53,9 +56,23 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
     /** Probe batch size per claim. */
     batchSize: intFromEnv(env.FLEET_BATCH_SIZE, 5, { min: 1, max: 50 }),
     /** How long a claimed batch stays leased before it can be reaped. */
-    leaseMs: intFromEnv(env.FLEET_LEASE_MS, 300_000, { min: 30_000, max: 3_600_000 }),
+    leaseMs,
     /** Gap between polls when the queue came back empty. */
     idlePollMs: intFromEnv(env.FLEET_IDLE_POLL_MS, 10_000, { min: 1_000, max: 300_000 }),
+    /**
+     * How often an in-flight scan_runs row says it is still alive (R1.2.3).
+     *
+     * CLAMPED TO HALF THE LEASE, and that is a correctness bound rather than a
+     * preference: a run whose heartbeat has stopped moving is how R3.3.2's
+     * sweep decides a container died, so a heartbeat slower than the lease
+     * would have the fleet declared dead in the middle of a probe it is still
+     * running. FLEET_LEASE_MS can be set as low as 30s, so a fixed ceiling here
+     * could not make that promise -- the clamp can.
+     */
+    heartbeatMs: Math.min(
+      intFromEnv(env.FLEET_HEARTBEAT_MS, 30_000, { min: 5_000, max: 600_000 }),
+      Math.floor(leaseMs / 2)
+    ),
     /** Identity written onto every claim and heartbeat. */
     workerId: env.FLEET_WORKER_ID || `worker-${process.pid}`,
     /** Set by --selftest; the loop exits after one pass instead of running forever. */

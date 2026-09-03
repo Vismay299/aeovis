@@ -51,8 +51,13 @@ let cachedClient = null;
 /**
  * The Supabase client, built once from config. `deps.client` is test-only
  * injection; the real loop never passes it.
+ *
+ * EXPORTED for ./runLedger.js (R1.2.3), which needs the SAME memoised client
+ * rather than a second one: two clients in one container are two connection
+ * pools for no reason, and a ledger that reached the database by a different
+ * route than the claim could report a run for a batch it could not have claimed.
  */
-function resolveClient(config, deps) {
+export function resolveClient(config, deps) {
   if (deps && Object.prototype.hasOwnProperty.call(deps, "client")) return deps.client;
   if (cachedClient) return cachedClient;
   if (!config || !config.supabaseUrl || !config.supabaseKey) return null;
@@ -87,8 +92,12 @@ function requireClient(client, fn) {
   return client;
 }
 
-/** Rethrow a PostgREST error with its code/details/hint intact (standing rule 2). */
-function dbError(fn, error) {
+/**
+ * Rethrow a PostgREST error with its code/details/hint intact (standing rule 2).
+ * Exported for ./runLedger.js (R1.2.3): the envelope must survive identically
+ * whichever of the fleet's two database modules the call went through.
+ */
+export function dbError(fn, error) {
   const err = new Error(
     `${fn}: ${error.message || "database error"}` +
       (error.code ? ` [${error.code}]` : "") +

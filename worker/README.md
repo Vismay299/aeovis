@@ -50,6 +50,7 @@ acceptance criterion.
 | `FLEET_BATCH_SIZE` | `5` | Tasks claimed per poll. |
 | `FLEET_LEASE_MS` | `300000` | How long a claim is held before it can be reaped. |
 | `FLEET_IDLE_POLL_MS` | `10000` | Gap between polls when the queue was empty. |
+| `FLEET_HEARTBEAT_MS` | `30000` | How often an in-flight run says it is alive. Clamped to half `FLEET_LEASE_MS`. |
 | `FLEET_WORKER_ID` | `worker-<pid>` | Identity on every claim and heartbeat. |
 
 Starting without Supabase is fatal on purpose. A worker with no queue to read
@@ -60,7 +61,7 @@ would poll nothing forever and report itself perfectly healthy.
 | Stage | Lands in | Today |
 |---|---|---|
 | `probe_tasks` queue + lease claiming | R1.2.2 | **built** — see *The claim* below |
-| `scan_runs` ledger + heartbeats | R1.2.3 | not wired |
+| `scan_runs` ledger + heartbeats | R1.2.3 | **built** — see *The ledger* below |
 | Perplexity adapter | R1.3 | `probeBatch` throws |
 | ChatGPT adapter | R1.4 | — |
 | Evidence screenshots | R1.5 | — |
@@ -70,6 +71,44 @@ reporting "nothing to do" while its queue fills up is exactly the false success
 this rebuild exists to remove. Standing rule 1: a skip is not a success.
 `claimBatch` throws for the same reason when the queue is unreachable — an
 unreachable queue and an empty one must not produce the same signal.
+
+## The ledger (R1.2.3)
+
+**Every pass writes exactly one `scan_runs` row** — including the passes that
+claim nothing. `runLedger.js` calls the three Postgres functions migration 011
+created: `open_scan_run` before the work, `heartbeat_scan_run` on a timer while
+it is in flight, `close_scan_run` after it.
+
+| Pass | phase | outcome | reason | counters |
+|---|---|---|---|---|
+| claimed a batch, all written | `probe_batch` | `succeeded` | — | attempted / answered-and-landed / errors |
+| claimed a batch, some writes refused | `probe_batch` | `failed` | `lease_lost` | same, refused ones excluded from succeeded |
+| probe threw | `probe_batch` | `failed` | `probe_failed` | attempted, 0 succeeded |
+| report threw | `probe_batch` | `failed` | `report_failed` | attempted, 0 succeeded |
+| queue was empty | `idle` | `noop` | `queue_empty` | 0 / 0 / 0 |
+| every task held by someone else | `idle` | `noop` | `all_leased` | 0 / 0 / 0 |
+
+**Why the idle rows.** "The fleet is idle" and "the fleet is dead" leave exactly
+the same evidence if only busy passes are recorded: no rows. The idle row's
+`probes_attempted = 0` is a *measured* zero, and a measured zero is a different
+row from no row at all. The volume that costs — roughly 8.6k rows a day at the
+default poll interval — is stated in migration 011's *THE IDLE ROWS* note, and
+retention is R3.2.3's to decide when it builds the reader.
+
+**Why a blocked probe is not a success.** `probes_succeeded` counts only results
+that both answered *and* landed in the database. A blocked or captcha'd probe
+goes to `errors_recovered`; an answer whose write was refused because the lease
+had lapsed counts as neither. See `summarizeBatchRun`.
+
+**Counters are NULL when they were not measured**, never 0. The columns have no
+`DEFAULT 0` for that reason: a column that cannot say "unknown" forces every
+reader above it to report a confident zero.
+
+**If the ledger cannot be written, the pass does not run.** `openRun` throws
+rather than continuing unrecorded, and the batch is handed back to the queue.
+A heartbeat that fails is logged instead — the consequence there is not silence
+but the run going stale and being reaped, which is a state something else acts
+on.
 
 ## The claim (R1.2.2)
 

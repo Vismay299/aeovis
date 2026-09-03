@@ -236,6 +236,50 @@ test("worker reportBatch — refused ids are surfaced, not swallowed", async () 
 // The loop
 // ---------------------------------------------------------------------------
 
+/**
+ * R1.2.3 gave `runOnce` a second obligation: every pass writes exactly one
+ * scan_runs row. The real ledger calls need a database, so these loop tests
+ * stub them — the LEDGER's own behaviour is proven in src/lib/scanRuns.test.mjs
+ * (hermetically) and src/lib/scanRunsLive.test.mjs (against Postgres). What is
+ * asserted here is still what it always was: what the LOOP does.
+ */
+function ledgerStubs(sink = []) {
+  let n = 0;
+  return {
+    sink,
+    openRun: async (fields) => {
+      const id = `run-${++n}`;
+      sink.push({ kind: "open", id, ...fields });
+      return {
+        id,
+        runner: "probe-fleet",
+        phase: fields.phase,
+        open: true,
+        startedAt: "2026-09-03T06:00:00.000Z",
+        heartbeatAt: "2026-09-03T06:00:00.000Z",
+      };
+    },
+    heartbeatRun: async (runId) => {
+      sink.push({ kind: "beat", id: runId });
+      return { runId, heartbeatAt: "2026-09-03T06:00:30.000Z" };
+    },
+    closeRun: async (runId, fields) => {
+      sink.push({ kind: "close", id: runId, ...fields });
+      return {
+        id: runId,
+        runner: "probe-fleet",
+        phase: "probe_batch",
+        outcome: fields.outcome,
+        reason: fields.reason ?? null,
+        probesAttempted: fields.probesAttempted ?? null,
+        probesSucceeded: fields.probesSucceeded ?? null,
+        errorsRecovered: fields.errorsRecovered ?? null,
+        open: false,
+      };
+    },
+  };
+}
+
 test("runOnce — an empty queue and a starved fleet return the same 0 but log different lines", async () => {
   const lines = [];
   const origLog = console.log;
@@ -244,9 +288,11 @@ test("runOnce — an empty queue and a starved fleet return the same 0 but log d
     const config = { workerId: "w", engines: [], batchSize: 1, leaseMs: 180000, idlePollMs: 1 };
     const emptyN = await workerIndex.runOnce(config, {
       claimBatch: async () => workerQueue.normalizeClaim(report({ outstanding: 0 })),
+      ...ledgerStubs(),
     });
     const starvedN = await workerIndex.runOnce(config, {
       claimBatch: async () => workerQueue.normalizeClaim(report({ outstanding: 12, leased: 12 })),
+      ...ledgerStubs(),
     });
     assert.equal(emptyN, 0);
     assert.equal(starvedN, 0);
@@ -254,10 +300,12 @@ test("runOnce — an empty queue and a starved fleet return the same 0 but log d
     console.log = origLog;
   }
 
-  assert.equal(lines.length, 2, "every pass must say what it saw, including the empty ones");
-  assert.notEqual(lines[0], lines[1]);
-  assert.match(lines[0], /queue is empty/);
-  assert.match(lines[1], /NOT empty/);
+  // Only the CLAIM lines: since R1.2.3 each pass also logs its ledger row.
+  const claimLines = lines.filter((l) => /claimed \d/.test(l));
+  assert.equal(claimLines.length, 2, "every pass must say what it saw, including the empty ones");
+  assert.notEqual(claimLines[0], claimLines[1]);
+  assert.match(claimLines[0], /queue is empty/);
+  assert.match(claimLines[1], /NOT empty/);
 });
 
 test("runOnce — a failed probe hands the lease back instead of parking the batch for its TTL", async () => {
@@ -278,6 +326,7 @@ test("runOnce — a failed probe hands the lease back instead of parking the bat
             released.push(...ids);
             return ids.length;
           },
+          ...ledgerStubs(),
         }),
       /no adapter is built yet/
     );
@@ -298,6 +347,7 @@ test("runOnce — a short write is announced, not counted as a clean pass", asyn
         claimBatch: async () => workerQueue.normalizeClaim(report({ tasks: [{ id: "t1" }], outstanding: 1 })),
         probeBatch: async (batch) => batch.map((t) => ({ id: t.id, outcome: "answered" })),
         reportBatch: async () => ({ asked: 1, applied: 0, rejected: ["t1"] }),
+        ...ledgerStubs(),
       }
     );
   } finally {
