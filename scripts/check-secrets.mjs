@@ -108,8 +108,18 @@ export const VENDORS = [
     // So the zone under test is now `resolveBrightDataSerpZone()`'s actual
     // return value — the same function, with the same env short-circuit and the
     // same cache, that every probe goes through. There is one code path and
-    // this check is on it. It throws on a no-active-zone account, which main()'s
-    // catch turns into a FAIL, so that branch gets stronger rather than weaker.
+    // this check is on it. It throws on a no-active-zone account, and the LOCAL
+    // try/catch around the call below is what converts that throw into a FAIL
+    // carrying the resolver's own reason plus the consequence. An earlier version
+    // of this comment credited "main()'s catch", which is wrong twice over: the
+    // local catch runs first, main()'s per-vendor catch would give only a bare
+    // err.message, and main()'s outer catch exits 2 as a crash. Exercised, not
+    // assumed — src/lib/checkSecretsBrightdataNoZone.test.mjs drives this branch.
+    //
+    // The env read and the type/status filter below are still here on purpose and
+    // are NOT a second copy of the resolver: they only pick the PASS wording and
+    // the zone count/list in the failure detail. Neither one chooses the zone
+    // that gets validated. The `zone` variable comes from the resolver, nowhere else.
     async check() {
       const res = await get("https://api.brightdata.com/zone/get_all_zones", {
         headers: { Authorization: `Bearer ${env("BRIGHTDATA_API_KEY")}` },
