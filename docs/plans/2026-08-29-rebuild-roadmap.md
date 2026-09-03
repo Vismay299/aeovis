@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**44 / 156 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**45 / 157 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -33,7 +33,7 @@ Baseline commit: `5111219`
 - [x] **R0.1.1** CRON_SECRET set and both worker gates fail closed in prod `needs-vercel` — closed at `src/lib/cronAuth.js:43`, `src/app/api/scan/worker/route.js:34`, `src/app/api/content/worker/route.js:39`, `.env.example:19`, `src/lib/cronAuth.test.mjs:19`
 - [x] **R0.1.2** Gate or delete /chart-preview — closed at `src/lib/scoring/publicRouteExposure.test.mjs:49`, `src/lib/scoring/publicRouteExposure.test.mjs:55`, `src/components/dashboard/RankAndSharePanel.jsx:9`, `src/components/dashboard/SectionStrap.jsx:5`
 - [x] **R0.1.3** Minimal operator perimeter in src/middleware.js — closed at `src/middleware.js:24`, `src/lib/operatorPerimeter.js:128`, `src/lib/operatorPerimeter.js:72`, `src/lib/operatorPerimeter.js:154`, `src/lib/operatorPerimeter.test.mjs:262`, `src/lib/operatorPerimeter.test.mjs:231`
-- [ ] **R0.1.4** Per-IP rate limit on POST /api/scan
+- [~] **R0.1.4** Per-IP rate limit on POST /api/scan — submitted `src/lib/rateLimit.js:73`, `src/lib/rateLimit.js:76`, `src/lib/rateLimit.js:106`, `src/lib/rateLimit.js:164`, `src/lib/scanRateLimitSpoof.route.test.mjs:100`, `src/lib/rateLimit.test.mjs:133`
 - [x] **R0.1.5** Unique partial index on scan_jobs(brand) while running — closed at `supabase/migrations/007_scan_seal.sql:25`, `src/lib/duplicateScan.js:56`, `src/lib/duplicateScan.js:41`, `src/lib/db.js:383`, `src/app/api/scan/route.js:49`, `src/lib/duplicateScan.test.mjs:72`
 - [x] **R0.1.6** scripts/check-secrets.mjs — smallest live call per vendor — closed at `scripts/check-secrets.mjs:286-296`, `scripts/check-secrets.mjs:232-237`, `src/lib/checkSecrets.test.mjs:181-209`, `docs/vendors/README.md:117-118`, `docs/vendors/README.md:130-140`
 - [x] **R0.1.7** /api/health route — closed at `src/app/api/health/route.js:29`, `src/lib/health.js:61`, `src/lib/health.js:38`, `src/lib/db/analytics.js:494`, `src/lib/db/analytics.js:510`, `supabase/migrations/008_system_heartbeats.sql:12`, `src/lib/health.test.mjs:23`, `src/app/api/scan/worker/route.js:47`
@@ -43,7 +43,7 @@ Baseline commit: `5111219`
 - [x] **R0.1.11** Migrations 007-009 are unapplied in production, and 007 cannot apply as-is `needs-decision` — closed at `supabase/migrations/007_scan_seal.sql:28`, `supabase/migrations/008_system_heartbeats.sql:12`, `supabase/migrations/009_scan_rate_limit.sql:44`, `src/lib/rateLimit.js:112`
 - [-] **R0.1.12** Confirm CRON_SECRET and OPERATOR_TOKEN are live on the Vercel project `needs-vercel` — blocked: needs-vercel
 - [x] **R0.1.13** cronAuth fails OPEN when NODE_ENV is unset — closed at `src/lib/cronAuth.js:20`, `src/lib/cronAuth.js:55`, `src/lib/cronAuth.js:116`, `src/lib/cronAuth.test.mjs:244`, `src/lib/cronAuth.test.mjs:269`, `src/lib/cronAuth.test.mjs:318`, `src/lib/cronAuth.test.mjs:187`
-- [ ] **R0.1.14** The operator perimeter opens silently in a non-production NODE_ENV
+- [~] **R0.1.14** The operator perimeter opens silently in a non-production NODE_ENV — submitted `src/lib/operatorPerimeter.js:180`, `src/lib/operatorPerimeter.js:189`, `src/middleware.js:24`, `src/middleware.js:54`, `src/lib/operatorPerimeter.test.mjs:308`, `src/lib/operatorPerimeter.test.mjs:428`
 - [-] **R0.1.15** ROTATE the GSC service-account key — leaked into an agent transcript `needs-secrets` — blocked: needs-secrets
 - [ ] **R0.1.16** health.js keeps a second vendor list and claims it is shared
 - [ ] **R0.1.17** Nothing detects a NODE_ENV that lies
@@ -65,7 +65,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `3/31`
+## R1 — Real-surface probe fleet  `3/32`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -80,12 +80,13 @@ Baseline commit: `5111219`
 
 - [x] **R1.2.1** worker/ workspace: long-lived Node + Playwright — closed at `worker/package.json`, `worker/src/index.js`, `worker/src/config.js`, `worker/README.md`, `src/lib/workerIsolation.test.mjs`
 - [x] **R1.2.2** probe_tasks queue table; fleet claims batches via jobLease — closed at `supabase/migrations/010_probe_tasks.sql:21`, `supabase/migrations/010_probe_tasks.sql:23`, `supabase/migrations/010_probe_tasks.sql:166`, `supabase/migrations/010_probe_tasks.sql:172`, `supabase/migrations/010_probe_tasks.sql:183`, `src/lib/probeTasksRace.test.mjs:275`, `src/lib/probeTasksRace.test.mjs:282`, `src/lib/probeTasksRace.test.mjs:124`, `src/lib/probeQueue.test.mjs:135`, `worker/src/lib/queue.js:172`, `src/lib/probeQueue.js:111`, `src/lib/liveDbGate.js:22`, `worker/src/index.js:40`, `scripts/setup-supabase.mjs:85`
-- [ ] **R1.2.3** Create the scan_runs ledger table
+- [~] **R1.2.3** Create the scan_runs ledger table — submitted `supabase/migrations/011_scan_runs.sql:78`, `scripts/setup-supabase.mjs:111`, `scripts/setup-supabase.mjs:493`, `src/lib/scanRunsLive.test.mjs:346`, `src/lib/scanRunsLive.test.mjs:44`, `worker/src/lib/probe.js:27`
 - [ ] **R1.2.4** Authenticated ingest POST /api/internal/probe-results
 - [ ] **R1.2.5** Dev runbook for the fleet
 - [ ] **R1.2.6** Fleet config validated at boot
-- [ ] **R1.2.7** The Bright Data zone cache never invalidates
+- [~] **R1.2.7** The Bright Data zone cache never invalidates — submitted `src/lib/engines/brightdata.js:81`, `src/lib/engines/brightdata.js:91`, `src/lib/engines/brightdata.js:116`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:291`, `src/lib/engines/brightdata.js:313`, `src/lib/engines/brightdata.js:398`, `src/lib/engines/brightdata.js:478`, `src/lib/engines/brightdataZone.test.mjs:101`, `src/lib/engines/brightdataZone.test.mjs:167`, `src/lib/engines/brightdataZone.test.mjs:249`
 - [ ] **R1.2.8** The six-way race tests pass with SKIP LOCKED removed
+- [ ] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced
 ### R1.3
 
 - [ ] **R1.3.1** Spike: Playwright against perplexity.ai `needs-secrets`
@@ -115,7 +116,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `9/34`
+## R2 — Scoring truth  `10/34`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -131,7 +132,7 @@ Baseline commit: `5111219`
 - [ ] **R2.2.2** Perplexity citation-leg failure marks citations_state unverified
 - [ ] **R2.2.3** upsertPrompts throws; audit all write helpers for the return-{error} idiom
 - [ ] **R2.2.4** Remove insertScan's silent 3-tier column-drop cascade
-- [~] **R2.2.5** dataSourceIssue still assumes text engines always answer — submitted `src/lib/scoring/enginePipeline.js:35`, `src/lib/scoring/enginePipeline.js:416`, `src/lib/scoring/enginePipeline.js:441`, `src/lib/scoring/enginePipeline.test.mjs:507`, `src/lib/scoring/aioConstants.js:4`
+- [x] **R2.2.5** dataSourceIssue still assumes text engines always answer — closed at `src/lib/scoring/enginePipeline.js:35`, `src/lib/scoring/enginePipeline.js:416`, `src/lib/scoring/enginePipeline.js:441`, `src/lib/scoring/enginePipeline.test.mjs:507`, `src/lib/scoring/aioConstants.js:4`
 - [ ] **R2.2.6** The scan-level data_source_issue banner is derived from aio alone
 ### R2.3
 
@@ -172,7 +173,7 @@ Baseline commit: `5111219`
 - [ ] **R2.10.2** Probe counter backed by a real count query
 - [ ] **R2.10.4** ENGINE_REGISTRY says aio is always configured
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
-- [ ] **R2.10.6** A second hardcoded engine chip survives at page.js:295
+- [~] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — submitted `src/app/page.js:308`, `src/app/page.js:76`, `src/lib/landingHonesty.test.mjs:36`, `src/lib/landingHonesty.test.mjs:58`, `src/lib/landingHonesty.test.mjs:455`, `src/lib/landingHonesty.test.mjs:478`
 
 ## R3 — Durable backend  `0/21`
 
@@ -280,7 +281,7 @@ Baseline commit: `5111219`
 ### R6.3
 
 - [x] **R6.3.1** Vendor contract docs — closed at `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
-- [ ] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current
+- [~] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker

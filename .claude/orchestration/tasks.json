@@ -257,9 +257,16 @@
         "src/app/api/scan/route.js"
       ],
       "phase": "R0",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/rateLimit.js:73",
+        "src/lib/rateLimit.js:76",
+        "src/lib/rateLimit.js:106",
+        "src/lib/rateLimit.js:164",
+        "src/lib/scanRateLimitSpoof.route.test.mjs:100",
+        "src/lib/rateLimit.test.mjs:133"
+      ],
       "notes": [
         {
           "at": "2026-08-29T15:50:14.832Z",
@@ -280,6 +287,11 @@
           "at": "2026-09-03T11:35:18.761Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T11:44:31.148Z",
+          "by": "rebuild-implementer",
+          "text": "SURVEY FIRST: the accept's two clauses were already true and already tested — scanRoute.route.test.mjs proves 429 + x-ratelimit-limit 5 + remaining 0 on the 6th request and that the threshold follows SCAN_RATE_LIMIT, over the real POST handler. What was NOT true is that 'one IP' meant an IP. clientBucketKey read x-real-ip first, unconditionally, and x-real-ip is a request header. REPRODUCED against the real module + the real in-memory counter at SCAN_RATE_LIMIT=5: 25 requests with a rotating x-real-ip were allowed 25/25; 25 with a rotating x-forwarded-for were allowed 25/25; and 25 where x-vercel-forwarded-for named ONE client the whole time but x-real-ip rotated were also allowed 25/25. The counter was never wrong, the identity was. FIX (rateLimit.js:73 resolveClientIp): trust ordering, not header ordering. x-vercel-forwarded-for is used first and marked trusted ONLY when VERCEL/VERCEL_URL is set (Vercel strips inbound x-vercel-*; off Vercel that header is as forgeable as any other and is now ignored rather than promoted). SCAN_RATE_LIMIT_IP_HEADER lets a non-Vercel operator declare the header their proxy OVERWRITES. x-real-ip / leftmost x-forwarded-for remain as fallbacks but are reported trusted:false and warn once per process that the limit is bypassable by rotating that header — rule 1: a limit that quietly stops limiting must say so. After the fix all four spoof scenarios give 5 allowed / 20 refused. EXERCISED BY RUNNING, not reading: 33 tests across rateLimit.test.mjs (22, +7), scanRoute.route.test.mjs (7, untouched, still green) and the new scanRateLimitSpoof.route.test.mjs (4) — the last drives the REAL POST /api/scan handler with a trusted address plus two forged ones and asserts which counter moved (trusted 5->6, both forgeries still 5). NEGATIVE CONTROL: with HEAD's rateLimit.js restored from git show (index untouched) that test fails 'expected 6, actual 5'; with the fix it passes. ZERO VENDOR SPEND: every identity the route could derive — including the shared 'unidentified' bucket — is pre-seeded over the limit before any test runs, so a WRONG implementation still lands on the refusal path. That seed was added after the first negative-control run returned 201 and started an in-memory scan; no credentials are loaded under node --test so nothing was billed, but the hazard is now closed. NOT DONE, deliberately: (a) route.js unchanged — the fix belongs in the identity, not the handler; (b) the DB-unreachable fail-open (allowed:true, degraded:true, remaining:null + a warn) left exactly as R0.1.4 shipped it — turning it fail-closed is a product decision outside this accept; it is covered by an existing unit test but I did NOT exercise it over HTTP because the fail-open path by definition starts a real scan; (c) SCAN_RATE_LIMIT_IP_HEADER is undocumented in .env.example, which is outside my allowed file set. Suite: 1123 tests / 1104 pass / 0 fail / 19 skipped, against a 1106/1087/0/19 baseline; the +17 is my +11 plus concurrent implementers in this tree. 0 fail and 19 skipped both unchanged."
         }
       ],
       "verification": null
@@ -820,9 +832,16 @@
       ],
       "phase": "R0",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/operatorPerimeter.js:180",
+        "src/lib/operatorPerimeter.js:189",
+        "src/middleware.js:24",
+        "src/middleware.js:54",
+        "src/lib/operatorPerimeter.test.mjs:308",
+        "src/lib/operatorPerimeter.test.mjs:428"
+      ],
       "notes": [
         {
           "at": "2026-09-03T02:48:08.213Z",
@@ -833,6 +852,11 @@
           "at": "2026-09-03T11:36:23.085Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T11:44:26.159Z",
+          "by": "rebuild-implementer",
+          "text": "Silence reproduced first by driving the REAL src/middleware.js (next/server stubbed, @/ alias mapped via a loader hook) with OPERATOR_TOKEN unset: NODE_ENV=development and NODE_ENV=staging both admitted POST /api/content, GET /api/knowledge and GET /api/agents with zero lines on console.warn/error/log. Fix: warnDevPerimeterOpen() in operatorPerimeter.js:180 mirrors isCronAuthorized's OK_DEV_NO_SECRET warn-once — caller-owned {value} once-flag (module state here would be shared across the whole test process and silence every test after the first), throws if the flag is missing rather than silently not disclosing, returns whether it actually warned so a suppressed repeat is distinguishable from never taking the branch. middleware.js:24 holds the module-level flag; middleware.js:54 calls it on the allow path, passing the SAME resolved nodeEnv the decision used (hoisted to runtimeNodeEnv) so the warning provably names the value that opened the gate. ONCE = once per Edge ISOLATE, not once per deploy: Next evaluates middleware.js per isolate and the platform recycles them, so a cold start warns again. Stated in the code, not overclaimed. Re-run after the fix: one warning across three operator requests in the same instance; NODE_ENV=production and NODE_ENV unset still 401 with the pre-existing REFUSING error; free-scan flow (POST /api/scan, status poll, /api/scans/*, /api/industries, /api/health) and both SELF_GATED workers pass through with zero log lines; OPERATOR_TOKEN set + dev = 401, no warn. Teeth, each applied against copies kept outside git and then restored byte-identical: S1 delete the logger.warn body -> 2 fails; S2 delete the middleware call site -> GUARD fails; S3 move the once-flag inside middleware() so it fires per request -> GUARD fails. Admission behaviour is unchanged — this adds a log, not a rule; the allowlist, SELF_GATED and R0.1.3's absent/blank->production resolution are untouched and re-asserted at operatorPerimeter.test.mjs:415. Suite: 1123 tests, 1104 pass, 0 fail, 19 skipped (baseline 1106/1087/0/19; the extra tests are mine plus concurrent implementers'). Not exercised: a real Next Edge runtime — no deploy available here, so the isolate-lifetime claim is argued from Next's per-isolate module evaluation, not observed. Prettier reformats the file, but HEAD's middleware.js already fails default prettier and there is no format script, so I did not reformat."
         }
       ],
       "verification": null
@@ -1785,14 +1809,26 @@
         "supabase/migrations/"
       ],
       "phase": "R1",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "supabase/migrations/011_scan_runs.sql:78",
+        "scripts/setup-supabase.mjs:111",
+        "scripts/setup-supabase.mjs:493",
+        "src/lib/scanRunsLive.test.mjs:346",
+        "src/lib/scanRunsLive.test.mjs:44",
+        "worker/src/lib/probe.js:27"
+      ],
       "notes": [
         {
           "at": "2026-09-03T11:34:38.178Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T11:39:06.947Z",
+          "by": "rebuild-implementer",
+          "text": "Procedural close only: I wrote ZERO source files. The engineering (011 + scanRunsLive.test.mjs, committed at 5e40514) was left as found. The one gap was that schema_migrations did not know about 011.\n\nWHAT I RAN. Pre-flight, read-only against prod (nggyizuwqepxaqnpcqqj): schema_migrations held 10 rows (001-010), NO sql_checksum column, no 011 row -- confirming the current runner had never executed here. I audited all 11 migrations for idempotence before pointing anything at prod: every CREATE TABLE/INDEX is IF NOT EXISTS, every function is CREATE OR REPLACE, and every CREATE POLICY / ADD CONSTRAINT / ADD COLUMN is inside a DO block guarded on pg_policies / pg_constraint / information_schema.columns (e.g. 001:113, 001:88, 011:187). I also compared all 8 live pg_proc signatures against the file headers first, because CREATE OR REPLACE errors on a changed return type or parameter name -- they matched exactly, so the re-apply was safe.\n\nnpm run setup:db -> EXIT CODE 0, 'All expected objects present', 40/40 ticks. Functions checked via pg_proc, tables/indexes via to_regclass.\n\nTHE 010 DRIFT SENTENCE (live check of R6.1.5). It printed the THIRD sentence, the unknown one, NOT the comment one and NOT the sql one:\n  ? 010_probe_tasks.sql: the file TEXT changed since it was applied (be27ae10f9467429 -> ed5bc223145c0461), but whether the SQL changed is UNKNOWN -- the ledger row was written before this runner recorded a comment-independent checksum. Diff the file against git before deciding; this run cannot tell you.\nThat is the correct verdict, not a miss: classifyDrift (setup-supabase.mjs:342) returns 'unknown' because the 010 row predated sql_checksum, so the runner genuinely could not tell a comment edit from a SQL edit and said exactly that instead of borrowing either verdict. R6.1.5 behaved as designed. Because the DO UPDATE overwrites checksum (accepted at setup-supabase.mjs:472-486), this warning is one-shot; the next run will be silent and 010's row now carries sql_checksum 8653a0cf0838eebe, so a future real edit WILL classify as sql or comment.\n\nCATALOG CONFIRMATION (post-run, via information_schema + pg_proc, never a head-probe): schema_migrations now has 11 rows and a sql_checksum column; 011_scan_runs.sql is recorded, checksum 212faa9e72b07640, sql_checksum 1cae15f3949ad573. All 11 rows have sql_checksum populated. first_applied_at for 001-009 is still NULL and was NOT backfilled -- unknown still reads as unknown.\n\nNO DATA TOUCHED. Row counts for scans/scan_jobs/prompt_results/probe_tasks/brand_metrics_daily/scan_rate_limits/system_heartbeats/content_jobs/content_items/citations/result_brands were byte-identical before and after. I did not hand-edit schema_migrations, start a scan, or spend vendor budget.\n\nTESTS. node --env-file=.env.local --test src/lib/scanRunsLive.test.mjs -> 10 pass, 0 fail, 0 skipped, against live prod; scan_runs back to 0 rows afterwards, no residue. Full suite without credentials: 1106 tests, 1087 pass, 0 fail, 19 skipped -- identical to baseline. The skip announces itself: the no-credential run printed 'R1.2.3 LIVE-POSTGRES scan_runs LEDGER: NOT RUN' to stderr and a guard test asserts it (gate at scanRunsLive.test.mjs:44, reusing R1.2.2's liveDbGate.js rather than a second gate).\n\nWHAT THIS CLOSE DOES NOT MEAN (standing rule 1). 'The fleet writes a heartbeat row per batch' is true of the code and proven against a real database, but it is NOT something a deployed fleet can do today. I verified both halves myself: worker/src/lib/probe.js:27 throws ('no adapter is built yet (R1.3)'), and enqueueProbeTasks (src/lib/probeQueue.js:202) has no production caller -- grep for probeQueue across src/ and worker/ finds only comments and tests. So probe_tasks is never populated and a deployed loop can only ever take the IDLE branch; the batch branch is unreachable outside the test that drives runOnce with claim/probe/report stubbed. Do not read this close as a running fleet. It becomes reachable at R1.3 (adapter) plus whatever task wires the enqueue.\n\nR1.2.2's four hand-offs remain deliberately out of scope and are documented as such at 011_scan_runs.sql:380-391, not silently dropped."
         }
       ],
       "verification": null
@@ -1885,14 +1921,36 @@
         "src/lib/engines/brightdataZone.test.mjs"
       ],
       "phase": "R1",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/engines/brightdata.js:81",
+        "src/lib/engines/brightdata.js:91",
+        "src/lib/engines/brightdata.js:116",
+        "src/lib/engines/brightdata.js:145",
+        "src/lib/engines/brightdata.js:291",
+        "src/lib/engines/brightdata.js:313",
+        "src/lib/engines/brightdata.js:398",
+        "src/lib/engines/brightdata.js:478",
+        "src/lib/engines/brightdataZone.test.mjs:101",
+        "src/lib/engines/brightdataZone.test.mjs:167",
+        "src/lib/engines/brightdataZone.test.mjs:249"
+      ],
       "notes": [
         {
           "at": "2026-09-02T21:05:14.144Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-03T11:38:44.150Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T11:49:11.605Z",
+          "by": "rebuild-implementer",
+          "text": "POLICY: three levers, combined, not one chosen. (1) TTL — cachedZone is now {name, at} (brightdata.js:81) and resolve serves it only while fresh (:145); default 5 minutes (:72), overridable via BRIGHTDATA_ZONE_TTL_MS, 0 = never cache. A malformed TTL throws instead of falling back to the default (:91) — a silent fallback would tell an operator who wrote '30s' that they had a 30s re-check while a dead zone lived on for five minutes. (2) invalidateBrightDataZoneCache() (:116) is exported for the R1.2 fleet to force a re-check per poll cycle; it returns the dropped name, or null when nothing was cached, so 'cleared' and 'was already empty' are different events. (3) Probe-time rejection: zoneRejectionDetail (:291) reads Bright Data's zone refusals out of the HTTP body (:398) and the 200 envelope (:445), zoneRejectedError (:313) drops the cache and returns a typed BrightDataZoneError, and the retry loop refuses to retry one (:478). Recovery is therefore ONE failed probe, not one TTL; the TTL is the backstop for the case Bright Data never tells us about. Per-probe re-listing was rejected on cost: get_all_zones is a real call and that would be ~30 extra per scan. WHY NOT PER-PROBE, WHY BOTH CONSUMERS ARE SERVED: web requests (aioPipeline/enginePipeline) never get to call an invalidator, so they need the clock; a 5-minute TTL is longer than a typical invocation, so their cost profile is unchanged at one lookup per process. The fleet gets the clock AND the explicit invalidator. A re-check that could not be COMPLETED (get_all_zones itself failing) throws lookup_failed and does NOT refresh the timestamp — a grace window serving the stale name through an outage was considered and rejected as exactly the fail-soft this task removes. TYPED, NOT SILENT: BrightDataZoneError carries reason no_active_zone|zone_rejected|lookup_failed|bad_ttl_config, and a re-check that changes nothing logs 'still active' so 'the TTL fired and all is well' cannot be confused with 'the TTL never fired'. R0.1.10 IS NOT REGRESSED: a rejected probe is still an ERROR row and still counted — brightdataZone.test.mjs:334 keeps errored_queries 1 / error_rate_pct 100 and gains an assertion that a PINNED bad zone says it cannot self-heal. THE EXISTING TEST WAS CHANGED, NOT DELETED: brightdataZone.test.mjs:101 'THE BEHAVIOUR CHANGE (R1.2.7)' quotes the old assertions verbatim, keeps them as the within-TTL half (cache still wins, 0 calls), and reverses the second half (expired cache over a suspended-only account throws a typed error and drops the entry). REPRODUCED THEN RECOVERED, mocked fetch only, no live SERP probe: before, a suspended zone gave 3 error rows from 3 wasted SERP calls and 0 lookups; after, 1 SERP call then a typed config error, cache dropped, next resolve follows the account to the new zone. TTL expiry also exercised by the real clock (40ms TTL, 60ms wait), not just the 0 case. TEETH PROVEN by three sabotages against a pristine copy kept outside git (TTL ignored -> 3 fails; rejection no longer drops the cache -> 1 fail; silent TTL fallback -> 1 fail), each restored and diffed identical. check-secrets cold-cache tests still pass (9/9 across checkSecretsBrightdata.test.mjs + checkSecretsBrightdataNoZone.test.mjs); I made COMMENT-ONLY edits in those two files because their prose asserted 'module-level with no invalidator ... wins forever', which my change makes false — the process-isolation rationale is retained and restated, no assertions touched. Suite: 1128 tests, 1109 pass, 0 fail, 19 skipped (baseline 1106/1087/0/19; the extra tests are mine plus other lanes' concurrent work). NOT DONE, needs its own task: (a) scripts/check-secrets.mjs still tells the operator the zone is cached 'for the process lifetime' (the PASS detail string and the comment above it) — now overstated, and outside my allowed file set; (b) docs/vendors/brightdata.md:73-87 documents the old no-invalidator behaviour and cites brightdataZone.test.mjs:71-82; (c) the worker cannot import src/ by design (workerIsolation guard), so nothing calls invalidateBrightDataZoneCache() per poll cycle yet — the TTL is what satisfies the accept today."
         }
       ],
       "verification": null
@@ -1922,6 +1980,38 @@
       "notes": [
         {
           "at": "2026-09-03T07:51:10.592Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R1.2.9",
+      "subphase": "R1.2",
+      "lane": "docs",
+      "title": "Two records describe the zone cache R1.2.7 just replaced",
+      "detail": "R1.2.7 gave the Bright Data zone cache a TTL, an exported invalidator and probe-time rejection. Two records still describe the old behaviour and were flagged by its own implementer rather than left to rot. scripts/check-secrets.mjs tells the operator the auto-discovered zone is cached for the process lifetime, in the PASS detail string and the comment above it near line 176; that is now overstated and should say for BRIGHTDATA_ZONE_TTL_MS, default five minutes. docs/vendors/brightdata.md:73-87 documents the zone as cached with no way to invalidate it and cites brightdataZone.test.mjs:71-82, and both the claim and the citation are now stale. This is the third instance this session of a correct fix making a neighbouring record false — the same shape as R6.3.2, where R6.5.6 falsified gemini.md — which is itself worth noticing when deciding whether a citation guard is worth building.",
+      "accept": "Both records describe the shipped behaviour: the zone is cached for a bounded TTL, can be invalidated explicitly, and is dropped when a probe is rejected. Every citation resolves at HEAD.",
+      "deps": [
+        "R1.2.7"
+      ],
+      "anchors": [
+        "scripts/check-secrets.mjs:176",
+        "docs/vendors/brightdata.md:73",
+        "src/lib/engines/brightdata.js:72"
+      ],
+      "findings": [
+        "S30"
+      ],
+      "phase": "R1",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T11:51:14.874Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -2629,7 +2719,7 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/scoring/enginePipeline.js:35",
@@ -2666,9 +2756,9 @@
         }
       ],
       "verification": {
-        "verdict": "fail",
-        "at": "2026-09-03T11:29:56.084Z",
-        "note": "REJECTED — and the defect is MINE, not the implementer's. The code is correct and fully verified; the commit message I wrote for 55f2544 states a threshold that does not exist and a justification the code explicitly disclaims.\n\nTHE CODE IS RIGHT AND MUST NOT BE TOUCHED. The old failure was reproduced at the true pre-fix commit 55f2544~1 (the verifier corrected my brief again — 5e40514~1 already contains the fix): 6 answered / 4 empty gave coverage_pct 60, error_rate_pct 40, data_source_issue FALSE. At HEAD the same rows give data_source_issue TRUE. The lie is closed.\n\nMY COMMIT MESSAGE IS FALSE TWICE OVER. It reads \"The threshold is 80, matching the AIO branch rather than inventing a second number.\" The real constant is TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE = 0.9 at enginePipeline.js:35 — ninety, not eighty, confirmed empirically because an 80.0% slice IS flagged. And the AIO branch is AIO_MIN_NON_BRANDED_COVERAGE = 0.15 at aioConstants.js:4 — fifteen. Nothing was matched. Worse, the ledger submit note AND the in-code comment at enginePipeline.js:20-34 both say the correct thing and argue the case explicitly: an AIO SERP with no overview is a legitimate state, a text engine returning nothing is always a collection failure, so the value was chosen for text engines specifically and deliberately NOT borrowed from aio. I contradicted the code's own reasoning in the permanent record a future engineer reads.\n\nIt IS a floor, not a match: 27/30 = 90.0% exactly stays quiet, 26/30 = 86.7% flags, 29/30 = 96.7% stays quiet.\n\nEVERYTHING ELSE VERIFIED. Four sabotages, each proven applied by diff against a copy kept outside git: removing the coverage clause fails 2; loosening the floor to strict fails the boundary alone; applying the text threshold to the aio branch fails the does-NOT-tighten-aio test; dropping the never-ran guard fails 0 — which confirms the implementer's own disclosure that it is not load-bearing today, since 0/0 is NaN and NaN < 0.9 is false. They said so in the note and in the code rather than overclaiming.\n\nBOUNDARIES ALL CORRECT, including the one that usually goes wrong: an empty slice gives data_source_issue FALSE with insufficient_sample TRUE — never-ran is not a degraded read, standing rule 1 held. A branded-only slice likewise. An all-errored slice flags once, no double-flag, with both coverage_pct and error_rate_pct persisted so an operator can tell which gate tripped. R2.2.1 consistency confirmed at source: ten genuine refusals give coverage 100 and no flag, because the gate keys on answer_present and a refusal has text.\n\nLIVENESS TRACED HOP BY HOP, AND IT MOVES A NUMBER THE USER SEES: /api/scan and both worker routes to runScanChunk to runFinalizePhase to summarizeEngineSlice at scanWorker.js:836 to computeHeadline, which filters on !s.data_source_issue. With a healthy aio slice and a perplexity slice answering 80% (error rate 20, BELOW the old 50 gate), the headline went from visibility_index_pct 60 / engines_counted 2 to 20 / 1. A degraded engine used to be blended in as healthy and inflate the headline threefold.\n\nTO CLOSE: no code edit. Correct the record — a follow-up commit superseding 55f2544's false sentence, stating 0.9 and the real justification. Do not touch enginePipeline.js or its test; every behavioural claim in the ledger note checks out.\n\nTWO THINGS FILED SEPARATELY. The scan-level data_source_issue that drives the red \"scan incomplete\" banner is still derived from AIO ONLY at enginePipeline.js:690, so a text-engine-only degradation now silently drops the headline from two engines to one with no banner explaining why, and the engine chip renders share_of_ai_pct with no degraded marker. Strictly better than pre-fix, same false-success class, its own ticket. And a fixture nit with zero behavioural effect: the test helper writes error \"EMPTY_ANSWER\" where the real constant is lowercase \"empty_answer\".\n\nAlso noted: the file is pure LF in a fresh worktree though the ledger note called it CRLF — checkout normalisation, not a defect. Suite 1106/1087/0/19 before and after."
+        "verdict": "pass",
+        "at": "2026-09-03T11:47:31.226Z",
+        "note": "VERIFIED — the record correction is accurate and no code moved. Constants read at HEAD: TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE = 0.9 at enginePipeline.js:35 and AIO_MIN_NON_BRANDED_COVERAGE = 0.15 at aioConstants.js:4, both line numbers exact. git diff 55f2544 18fa380 -- src/lib/scoring/ is EMPTY, and 18fa380 is a genuinely empty commit — its tree hash is identical to its parent's. 55f2544 is confirmed an ancestor of HEAD that did touch src/lib/scoring/, so the empty diff is a real absence of change rather than a wrong path.\n\nTHE VERIFIER CHECKED THE CORRECTION'S OWN SUBSTANTIVE CLAIMS rather than taking them: the 80.0% slice is flagged, 90.0% exactly stays quiet, the empty slice raises insufficient_sample and not data_source_issue — and the headline inflation was REPRODUCED EXACTLY. A healthy chatgpt slice with a degraded perplexity slice gives visibility_index_pct 20 / engines_counted 1 with the gate, and 60 / 2 with data_source_issue forced false. The 20-to-60 claim is not decorative.\n\nLEAK CHECK CLEAN: the false claim exists in exactly two places in the repository, the original 55f2544 message and its verbatim quotation inside 18fa380, both correct places to have it. Recursive greps for the phrasing across the working tree return nothing; a programmatic scan of every task object in tasks.json returns zero hits; the in-code comment says \"chosen for text engines rather than borrowed from aio\" and names no number; test names carry no number. Nothing to correct anywhere else. All five evidence citations resolve at HEAD. Baseline 1106/1087/0/19, unmoved as it must be for an empty commit.\n\nONE IMPRECISION IN MY OWN CORRECTION, recorded rather than triple-corrected: it says HEAD had moved FOUR commits past 55f2544; the true count is five. Charitably it meant the four non-ledger commits. The argument it supports — do not rewrite shared history to fix a sentence — is unaffected either way, and a third commit correcting the count of the second would add more noise than the error costs.\n\nTWO RECORD OBSERVATIONS, not failures: the ledger carries no trace of the previous round's rejection because verify overwrites rather than appends, so that history lives only in git; and the implementer's note quotes suite counts from when other agents' untracked files were present, which are stale but self-explaining and were true when written."
       }
     },
     {
@@ -3525,9 +3615,16 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/app/page.js:308",
+        "src/app/page.js:76",
+        "src/lib/landingHonesty.test.mjs:36",
+        "src/lib/landingHonesty.test.mjs:58",
+        "src/lib/landingHonesty.test.mjs:455",
+        "src/lib/landingHonesty.test.mjs:478"
+      ],
       "notes": [
         {
           "at": "2026-09-03T11:32:58.019Z",
@@ -3538,6 +3635,11 @@
           "at": "2026-09-03T11:35:56.298Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T11:44:17.252Z",
+          "by": "rebuild-implementer",
+          "text": "Reproduced first: NEXT_PUBLIC_ENGINES=perplexity build, .next/server/app/index.html held exactly one 'Google AI Overview' and it was the evidence-card chip beside 'Sample - illustrative brands'. Fix: page.js:76 const SAMPLE_CARD_ENGINE = primaryDeployedEngineLabel() (module scope, via deployedEngines' inlined NEXT_PUBLIC_ literal), rendered at page.js:308. Rebuilt: perplexity-only -> chip 'Perplexity', 0 'Google AI Overview' anywhere in the HTML; aio-only -> chip 'Google AI Overview', 0 'Perplexity'. Client chunk carries NEXT_PUBLIC_ENGINES:\"aio\" inlined, 0 runtime process.env reads, so no hydration divergence. Guard widened, not cloned: LITERAL_SCAN_FILES (test:36) drives the existing sampleReadingUnder child; both clauses now run per file (offDeployment at :455, typed-at-all at :465) plus a coverage assertion that both files were actually scanned (:478). ENGINE_NOTE is exempted only for each entry's own key (:58), fail-loud if the declaration shape or the DEPLOYED_ENGINE_LABELS filter changes. Sabotages, each diffed against a pristine copy kept outside git: equals-today literal chip -> caught by the TYPED clause under ENGINES=aio where the value clause passes; typed assignment 'Google AI Overview' -> same; off-deployment literal 'Perplexity' -> caught by the value clause; ENGINE_NOTE shape change and filter removal -> both throw loudly; page.js dropped from the scan list -> coverage assertion fails; AnswerSheet regression still caught. Sweep of src/app and src/components/landing: no further RENDERED engine literal; only comments and the ENGINE_NOTE dictionary. npm run test:scoring: 1123 tests, 1104 pass, 0 fail, 19 skipped (count above the 1106 baseline is concurrent agents' new tests; landingHonesty is 16 tests before and after)."
         }
       ],
       "verification": null
