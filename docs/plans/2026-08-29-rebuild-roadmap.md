@@ -88,7 +88,7 @@ Baseline commit: `5111219`
 - [ ] **R1.2.6** Fleet config validated at boot
 - [x] **R1.2.7** The Bright Data zone cache never invalidates — closed at `src/lib/engines/brightdata.js:81`, `src/lib/engines/brightdata.js:91`, `src/lib/engines/brightdata.js:116`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:291`, `src/lib/engines/brightdata.js:313`, `src/lib/engines/brightdata.js:398`, `src/lib/engines/brightdata.js:478`, `src/lib/engines/brightdataZone.test.mjs:101`, `src/lib/engines/brightdataZone.test.mjs:167`, `src/lib/engines/brightdataZone.test.mjs:249`
 - [ ] **R1.2.8** The six-way race tests pass with SKIP LOCKED removed
-- [ ] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced
+- [~] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced
 - [ ] **R1.2.10** The Bright Data 200-envelope zone rejection has no test
 ### R1.3
 
@@ -136,7 +136,7 @@ Baseline commit: `5111219`
 - [ ] **R2.2.3** upsertPrompts throws; audit all write helpers for the return-{error} idiom
 - [ ] **R2.2.4** Remove insertScan's silent 3-tier column-drop cascade
 - [x] **R2.2.5** dataSourceIssue still assumes text engines always answer — closed at `src/lib/scoring/enginePipeline.js:35`, `src/lib/scoring/enginePipeline.js:416`, `src/lib/scoring/enginePipeline.js:441`, `src/lib/scoring/enginePipeline.test.mjs:507`, `src/lib/scoring/aioConstants.js:4`
-- [ ] **R2.2.6** The scan-level data_source_issue banner is derived from aio alone
+- [~] **R2.2.6** The scan-level data_source_issue banner is derived from aio alone
 ### R2.3
 
 - [x] **R2.3.1** Two-pass finalize: discovered roster feeds the headline — closed at `src/lib/workers/scanWorker.js:757`, `src/lib/workers/scanWorker.js:781`, `src/lib/workers/scanWorker.js:798`, `src/lib/workers/twoPassFinalize.test.mjs`
@@ -188,7 +188,7 @@ Baseline commit: `5111219`
 - [ ] **R3.1.2** Add the missing ?batch=1 cron entry `needs-vercel` `needs-llm`
 ### R3.2
 
-- [ ] **R3.2.1** One scan_runs row per chunk execution
+- [~] **R3.2.1** One scan_runs row per chunk execution
 - [ ] **R3.2.2** Every discarded skip reason becomes a ledger row
 - [ ] **R3.2.3** Status route and dashboard read run history
 ### R3.3
@@ -215,7 +215,7 @@ Baseline commit: `5111219`
 - [ ] **R3.6.4** The Bright Data per-query price is hardcoded in three places
 ### R3.7
 
-- [ ] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability
+- [~] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability
 - [ ] **R3.7.2** Firecrawl degrade becomes a recorded state
 
 ## R4 — Ground truth & analytics completion  `0/6`

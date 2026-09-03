@@ -2086,14 +2086,19 @@
       ],
       "phase": "R1",
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "docs-R1.2.9",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-03T11:51:14.874Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-03T12:06:23.371Z",
+          "by": "docs-R1.2.9",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -2893,14 +2898,19 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-03T11:32:59.345Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-03T12:06:00.112Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -3727,7 +3737,7 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "in_verification",
+      "status": "in_progress",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/app/page.js:308",
@@ -3752,9 +3762,18 @@
           "at": "2026-09-03T11:44:17.252Z",
           "by": "rebuild-implementer",
           "text": "Reproduced first: NEXT_PUBLIC_ENGINES=perplexity build, .next/server/app/index.html held exactly one 'Google AI Overview' and it was the evidence-card chip beside 'Sample - illustrative brands'. Fix: page.js:76 const SAMPLE_CARD_ENGINE = primaryDeployedEngineLabel() (module scope, via deployedEngines' inlined NEXT_PUBLIC_ literal), rendered at page.js:308. Rebuilt: perplexity-only -> chip 'Perplexity', 0 'Google AI Overview' anywhere in the HTML; aio-only -> chip 'Google AI Overview', 0 'Perplexity'. Client chunk carries NEXT_PUBLIC_ENGINES:\"aio\" inlined, 0 runtime process.env reads, so no hydration divergence. Guard widened, not cloned: LITERAL_SCAN_FILES (test:36) drives the existing sampleReadingUnder child; both clauses now run per file (offDeployment at :455, typed-at-all at :465) plus a coverage assertion that both files were actually scanned (:478). ENGINE_NOTE is exempted only for each entry's own key (:58), fail-loud if the declaration shape or the DEPLOYED_ENGINE_LABELS filter changes. Sabotages, each diffed against a pristine copy kept outside git: equals-today literal chip -> caught by the TYPED clause under ENGINES=aio where the value clause passes; typed assignment 'Google AI Overview' -> same; off-deployment literal 'Perplexity' -> caught by the value clause; ENGINE_NOTE shape change and filter removal -> both throw loudly; page.js dropped from the scan list -> coverage assertion fails; AnswerSheet regression still caught. Sweep of src/app and src/components/landing: no further RENDERED engine literal; only comments and the ENGINE_NOTE dictionary. npm run test:scoring: 1123 tests, 1104 pass, 0 fail, 19 skipped (count above the 1106 baseline is concurrent agents' new tests; landingHonesty is 16 tests before and after)."
+        },
+        {
+          "at": "2026-09-03T12:16:27.949Z",
+          "by": "verifier",
+          "text": "rejected: REJECTED. The chip fix is correct and proven — KEEP page.js:76 and page.js:308 exactly as they are. The guard is not what its own shipped comment says it is, and the verifier got a renderable off-deployment engine name past it with the whole suite green.\n\nWHAT IS VERIFIED AND MUST BE KEPT. The old failure was reproduced at 671081c: under NEXT_PUBLIC_ENGINES=perplexity exactly one \"Google AI Overview\" survived in the prerendered HTML, beside the Sample - illustrative brands tag. The fix follows the deployment across THREE configurations (perplexity, chatgpt, aio), and the verifier enumerated every label occurrence in each build and accounted for all of them as derived. The compiled chunk was checked rather than the source: exactly ONE occurrence of NEXT_PUBLIC_ENGINES in the entire client bundle, zero process.env, and the chip compiles to a module-scope CALL rendered as a child — SSR and client cannot diverge. Both guard clauses bite: the equals-today literal passes the value clause and fires the typed clause under ENGINES=aio, and an off-deployment literal fires the value clause; each names the offending file. The coverage assertion genuinely closes the empty-Object.entries hole, failing both when a file is dropped and when the list is emptied. The independent sweep confirms nothing else renders an engine literal.\n\nWHY IT FAILS. landingHonesty.test.mjs:48-51 promises, in shipped code, that \"a note keyed Google AI Overview whose prose names ChatGPT — which WOULD render, on an aio-only deployment — still fails the scan.\" THAT IS FALSE. The exemption's key-cut is LINE-BASED, so a note VALUE that starts its own line and begins with \"Label:\" satisfies head.startsWith(label) plus the colon test, is treated as that line's key, and is deleted. On one line the case is correctly caught. WRAPPED ONTO A CONTINUATION LINE IT IS NOT: the full suite reports 1104 pass / 0 fail while a build under ENGINES=aio renders \"ChatGPT: an AI Overview answer is the one your buyer reads without clicking anything\" into the engine rail. An off-deployment engine name, in the served HTML, on an aio-only deployment, every guard clean. That is the C11 class this task and R2.10.5 both exist to close, and it is the exact case the comment promises is caught. A Prettier wrap of a long note is enough — no malice required.\n\nA SECOND FALSE COMMENT: \"on each entry's line, ONLY that entry's own key is removed\" is also untrue. line.split(own).join(\"\") removes EVERY occurrence of the own label on the line, and the current dictionary depends on that over-removal to pass today.\n\nTO FIX, in withoutEngineNoteDictionary at landingHonesty.test.mjs:58-95. Cut only the KEY TOKEN, not everything on a line that starts with a label and a colon: anchor on the key as written, match the optional quote, the label, the closing quote and the colon, and remove only that captured span, leaving the value in the scanned text. Require that an exempted line actually BE a key line of the object and reject continuation lines — anything inside the dictionary block that is not a key line must be scanned verbatim. Today's ChatGPT entry will then trip on its own value, so either reword it or, the honest fix, allow the own key's label inside its own value while still scanning for every OTHER label, which is a one-line labels.filter. Add a regression case for the WRAPPED form so this cannot come back. And correct the two comment claims to describe the function that actually shipped.\n\nTWO THINGS IN THE RECORD TO DROP. The submit note's backtick and dollar-brace fragility caveat is NOT REAL: the body already contains six backticks and passes today, and the verifier additionally injected an escaped backtick and a template expression without breaking it. And the shape guards DO hold — freezing the dictionary or removing the RAIL_NOTES filter both throw loudly. sourceOf keying off the literal path is safe in the fail-loud direction: adding a third file scans it whole and the coverage assertion forces the list to be updated.\n\nAll six evidence citations resolve exactly to what they claim.\n\nA METHODOLOGICAL CORRECTION THAT IS MINE, NOT THE IMPLEMENTER'S: my briefs carried 1109 as the baseline at ef9909b and several verifiers measured 1104. They are right and I was wrong — I measured in the main repo while R1.2.7's five new tests were still uncommitted in the working tree, so my figure counted work that was not at that commit. Baselines must be measured in a clean worktree, never in a main repo carrying in-flight work."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "fail",
+        "at": "2026-09-03T12:16:27.948Z",
+        "note": "REJECTED. The chip fix is correct and proven — KEEP page.js:76 and page.js:308 exactly as they are. The guard is not what its own shipped comment says it is, and the verifier got a renderable off-deployment engine name past it with the whole suite green.\n\nWHAT IS VERIFIED AND MUST BE KEPT. The old failure was reproduced at 671081c: under NEXT_PUBLIC_ENGINES=perplexity exactly one \"Google AI Overview\" survived in the prerendered HTML, beside the Sample - illustrative brands tag. The fix follows the deployment across THREE configurations (perplexity, chatgpt, aio), and the verifier enumerated every label occurrence in each build and accounted for all of them as derived. The compiled chunk was checked rather than the source: exactly ONE occurrence of NEXT_PUBLIC_ENGINES in the entire client bundle, zero process.env, and the chip compiles to a module-scope CALL rendered as a child — SSR and client cannot diverge. Both guard clauses bite: the equals-today literal passes the value clause and fires the typed clause under ENGINES=aio, and an off-deployment literal fires the value clause; each names the offending file. The coverage assertion genuinely closes the empty-Object.entries hole, failing both when a file is dropped and when the list is emptied. The independent sweep confirms nothing else renders an engine literal.\n\nWHY IT FAILS. landingHonesty.test.mjs:48-51 promises, in shipped code, that \"a note keyed Google AI Overview whose prose names ChatGPT — which WOULD render, on an aio-only deployment — still fails the scan.\" THAT IS FALSE. The exemption's key-cut is LINE-BASED, so a note VALUE that starts its own line and begins with \"Label:\" satisfies head.startsWith(label) plus the colon test, is treated as that line's key, and is deleted. On one line the case is correctly caught. WRAPPED ONTO A CONTINUATION LINE IT IS NOT: the full suite reports 1104 pass / 0 fail while a build under ENGINES=aio renders \"ChatGPT: an AI Overview answer is the one your buyer reads without clicking anything\" into the engine rail. An off-deployment engine name, in the served HTML, on an aio-only deployment, every guard clean. That is the C11 class this task and R2.10.5 both exist to close, and it is the exact case the comment promises is caught. A Prettier wrap of a long note is enough — no malice required.\n\nA SECOND FALSE COMMENT: \"on each entry's line, ONLY that entry's own key is removed\" is also untrue. line.split(own).join(\"\") removes EVERY occurrence of the own label on the line, and the current dictionary depends on that over-removal to pass today.\n\nTO FIX, in withoutEngineNoteDictionary at landingHonesty.test.mjs:58-95. Cut only the KEY TOKEN, not everything on a line that starts with a label and a colon: anchor on the key as written, match the optional quote, the label, the closing quote and the colon, and remove only that captured span, leaving the value in the scanned text. Require that an exempted line actually BE a key line of the object and reject continuation lines — anything inside the dictionary block that is not a key line must be scanned verbatim. Today's ChatGPT entry will then trip on its own value, so either reword it or, the honest fix, allow the own key's label inside its own value while still scanning for every OTHER label, which is a one-line labels.filter. Add a regression case for the WRAPPED form so this cannot come back. And correct the two comment claims to describe the function that actually shipped.\n\nTWO THINGS IN THE RECORD TO DROP. The submit note's backtick and dollar-brace fragility caveat is NOT REAL: the body already contains six backticks and passes today, and the verifier additionally injected an escaped backtick and a template expression without breaking it. And the shape guards DO hold — freezing the dictionary or removing the RAIL_NOTES filter both throw loudly. sourceOf keying off the literal path is safe in the fail-loud direction: adding a third file scans it whole and the coverage assertion forces the list to be updated.\n\nAll six evidence citations resolve exactly to what they claim.\n\nA METHODOLOGICAL CORRECTION THAT IS MINE, NOT THE IMPLEMENTER'S: my briefs carried 1109 as the baseline at ef9909b and several verifiers measured 1104. They are right and I was wrong — I measured in the main repo while R1.2.7's five new tests were still uncommitted in the working tree, so my figure counted work that was not at that commit. Baselines must be measured in a clean worktree, never in a main repo carrying in-flight work."
+      }
     },
     {
       "id": "R3.1.1",
@@ -3829,10 +3848,16 @@
         "src/lib/workers/scanWorker.js"
       ],
       "phase": "R3",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-03T12:08:48.444Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -4257,10 +4282,16 @@
         "src/lib/crawlers/"
       ],
       "phase": "R3",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-03T12:08:21.507Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
