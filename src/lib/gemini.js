@@ -31,26 +31,37 @@ export async function generateContent(prompt, options = {}, retries = 2) {
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     for (const modelName of MODEL_FALLBACKS) {
+      const timeoutMs = options.timeout || 20000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      let raceTimeoutId = null;
+
       try {
         const model = genAI.getGenerativeModel({ 
           model: modelName,
           ...modelConfig 
         });
 
-        const timeoutMs = options.timeout || 20000;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        // R6.5.6 (finding A1): requestOptions is the SDK's SECOND ARGUMENT, not a
+        // field on it. `{ requestOptions }` hid the signal from buildFetchOptions,
+        // so the fetch init had no `signal` and the controller was inert — the
+        // request was abandoned by Promise.race, never cancelled. Pinned by
+        // src/lib/geminiAbort.test.mjs; do not re-wrap this.
+        //
+        // No `timeout` here on purpose: the SDK's timeout branch schedules its own
+        // setTimeout(abort) that it never clears, so it would strand one timer per
+        // rung for the full deadline — the same leak, moved. The controller above
+        // is the deadline, and the finally block does clear it.
+        const requestOptions = { signal: controller.signal };
+        const resultPromise = model.generateContent(prompt, requestOptions);
 
-        // Natively pass AbortController to the Google SDK if supported, while keeping Promise.race as a safety net
-        const requestOptions = { timeout: timeoutMs, signal: controller.signal };
-        const resultPromise = model.generateContent(prompt, { requestOptions });
-        
         const result = await Promise.race([
           resultPromise,
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini timeout")), timeoutMs))
+          new Promise((_, reject) => {
+            raceTimeoutId = setTimeout(() => reject(new Error("Gemini timeout")), timeoutMs);
+          })
         ]);
 
-        clearTimeout(timeoutId);
         const response = await result.response;
         
         let tokens = 0;
@@ -71,6 +82,16 @@ export async function generateContent(prompt, options = {}, retries = 2) {
       } catch (e) {
         lastErr = e;
         continue; // try next model
+      } finally {
+        // Retire THIS rung before the ladder advances. Clearing the deadlines is
+        // what stops five models x three attempts stranding fifteen live timers.
+        // The abort is belt-and-braces (today the deadline above fires at the
+        // same instant the race gives up) but it is what makes clearing the
+        // deadline safe: otherwise an in-flight rung would have nothing left to
+        // stop it. No test kills this line on its own.
+        clearTimeout(timeoutId);
+        if (raceTimeoutId !== null) clearTimeout(raceTimeoutId);
+        controller.abort();
       }
     }
     
