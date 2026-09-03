@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**27 / 136 closed** · 3 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**29 / 136 closed** · 3 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -32,7 +32,7 @@ Baseline commit: `5111219`
 
 - [x] **R0.1.1** CRON_SECRET set and both worker gates fail closed in prod `needs-vercel` — closed at `src/lib/cronAuth.js:43`, `src/app/api/scan/worker/route.js:34`, `src/app/api/content/worker/route.js:39`, `.env.example:19`, `src/lib/cronAuth.test.mjs:19`
 - [x] **R0.1.2** Gate or delete /chart-preview — closed at `src/lib/scoring/publicRouteExposure.test.mjs:49`, `src/lib/scoring/publicRouteExposure.test.mjs:55`, `src/components/dashboard/RankAndSharePanel.jsx:9`, `src/components/dashboard/SectionStrap.jsx:5`
-- [ ] **R0.1.3** Minimal operator perimeter in src/middleware.js
+- [~] **R0.1.3** Minimal operator perimeter in src/middleware.js — submitted `src/middleware.js:24`, `src/lib/operatorPerimeter.js:128`, `src/lib/operatorPerimeter.js:72`, `src/lib/operatorPerimeter.js:154`, `src/lib/operatorPerimeter.test.mjs:262`, `src/lib/operatorPerimeter.test.mjs:231`
 - [ ] **R0.1.4** Per-IP rate limit on POST /api/scan
 - [x] **R0.1.5** Unique partial index on scan_jobs(brand) while running — closed at `supabase/migrations/007_scan_seal.sql:25`, `src/lib/duplicateScan.js:56`, `src/lib/duplicateScan.js:41`, `src/lib/db.js:383`, `src/app/api/scan/route.js:49`, `src/lib/duplicateScan.test.mjs:72`
 - [~] **R0.1.6** scripts/check-secrets.mjs — smallest live call per vendor — submitted `scripts/check-secrets.mjs:132`, `package.json:15`, `src/lib/checkSecrets.test.mjs`
@@ -60,7 +60,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `1/30`
+## R1 — Real-surface probe fleet  `2/30`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -101,7 +101,7 @@ Baseline commit: `5111219`
 ### R1.6
 
 - [ ] **R1.6.1** Verify IN egress per engine `needs-secrets`
-- [~] **R1.6.2** Fix the SERP_GEO default inconsistency — submitted `src/lib/engines/serp.js:340`, `src/lib/engines/serpGeo.test.mjs:147`, `src/lib/engines/serpGeo.test.mjs:158`, `src/lib/engines/serpGeo.test.mjs:175`, `src/lib/engines/serpGeo.test.mjs:204`, `src/lib/engines/serpGeo.js:15`
+- [x] **R1.6.2** Fix the SERP_GEO default inconsistency — closed at `src/lib/engines/serp.js:340`, `src/lib/engines/serpGeo.test.mjs:147`, `src/lib/engines/serpGeo.test.mjs:158`, `src/lib/engines/serpGeo.test.mjs:175`, `src/lib/engines/serpGeo.test.mjs:204`, `src/lib/engines/serpGeo.js:15`
 ### R1.7
 
 - [ ] **R1.7.1** Dual-run the reference corpus through API and UI paths `needs-secrets`
@@ -109,7 +109,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `5/28`
+## R2 — Scoring truth  `6/28`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -147,13 +147,13 @@ Baseline commit: `5111219`
 - [ ] **R2.7.1** SOV donut consumes the real share_of_voice_pct
 - [x] **R2.7.2** SourcesView reads v9 field names — closed at `src/components/dashboard/SourcesView.jsx:19`, `src/components/dashboard/SourcesView.jsx:71`, `src/components/dashboard/sourcesMetrics.js:41`, `src/components/dashboard/sourcesMetrics.js:97`, `src/components/dashboard/sourcesMetrics.test.mjs:90`
 - [x] **R2.7.3** Delete the new Date() timestamp fallback — closed at `src/services/api.js:568`, `src/utils/format.js:34`, `src/utils/format.js:55`, `src/components/dashboard/DashboardShell.jsx:439`, `src/components/dashboard/DashboardShell.jsx:29`, `src/components/home/HomeDashboard.jsx:26`, `src/utils/format.test.mjs:63`, `src/services/api.test.mjs:493`
-- [~] **R2.7.4** Persist and render the collection window — submitted `src/lib/db.js:97`, `src/lib/db.js:98`, `src/components/dashboard/DashboardShell.jsx:431`, `src/components/dashboard/DashboardShell.jsx:503`, `src/lib/collectionWindowPersist.test.mjs:393`, `src/lib/collectionWindowPersist.test.mjs:336`, `src/lib/collectionWindowPersist.test.mjs:185`, `src/lib/collectionWindowPersist.test.mjs:471`
+- [x] **R2.7.4** Persist and render the collection window — closed at `src/lib/db.js:97`, `src/lib/db.js:98`, `src/components/dashboard/DashboardShell.jsx:431`, `src/components/dashboard/DashboardShell.jsx:503`, `src/lib/collectionWindowPersist.test.mjs:393`, `src/lib/collectionWindowPersist.test.mjs:336`, `src/lib/collectionWindowPersist.test.mjs:185`, `src/lib/collectionWindowPersist.test.mjs:471`
 ### R2.8
 
 - [ ] **R2.8.1** Gate Studio and Opportunities on data quality
 - [ ] **R2.8.2** Engine gauges: a zero-row engine says 'no data'
 - [x] **R2.8.3** Unknown status renders 'reconnecting', never rewinds to 0 percent — closed at `src/lib/scanProgress.js:50`, `src/lib/scanProgress.js:74`, `src/lib/scanProgress.js:92`, `src/app/scan/page.js:134`, `src/app/scan/page.js:341`, `src/services/api.js:805`, `src/app/api/scan/[job_id]/status/route.js:37`, `src/lib/scanProgress.test.mjs:40`, `src/lib/scanStatusTransient.route.test.mjs:99`
-- [~] **R2.8.4** DB-down state distinct from 'no scans yet' — submitted `src/app/dashboard/[brand]/page.js:60`, `src/components/dashboard/DashboardShell.jsx:248`, `src/lib/dashboardLoadState.test.mjs`
+- [~] **R2.8.4** DB-down state distinct from 'no scans yet' — submitted `src/lib/db.js:241`, `src/lib/db.js:255`, `src/lib/db.js:204`, `src/app/api/scans/[brand]/latest/route.js:27`, `src/lib/latestScanRoute.route.test.mjs:209`, `src/lib/latestScanRoute.route.test.mjs:245`, `src/app/api/content/worker/route.js:141`, `src/lib/content/dailyBatch.js:70`, `src/lib/content/weeklyReport.js:109`, `src/lib/content/contentWorker.js:226`
 ### R2.9
 
 - [ ] **R2.9.1** Provenance strip under the hero
@@ -277,5 +277,5 @@ Baseline commit: `5111219`
 - [x] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures — closed at `src/lib/scanRoute.route.test.mjs`, `src/lib/engines/brightdataParser.test.mjs`, `src/lib/cronAuth.route.test.mjs`
 - [ ] **R6.5.2** The great deletion
 - [x] **R6.5.3** Delete the orphaned adapter.js/probe.js pair — it does not even parse — closed at `docs/BUILD_JOURNAL.md`, `src/lib/engines/openai.js:8`, `src/lib/scoring/enginePipeline.js`
-- [~] **R6.5.4** serp.test.mjs passes only because no BRIGHTDATA_API_KEY is in the environment — submitted `src/lib/engines/serp.test.mjs:15`, `src/lib/engines/serp.test.mjs:27`, `src/lib/engines/serp.test.mjs:39`
+- [~] **R6.5.4** serp.test.mjs passes only because no BRIGHTDATA_API_KEY is in the environment — submitted `src/lib/engines/serp.test.mjs:65`, `src/lib/engines/serp.test.mjs:72`, `src/lib/engines/serp.test.mjs:29`, `src/lib/engines/serp.test.mjs:246`
 
