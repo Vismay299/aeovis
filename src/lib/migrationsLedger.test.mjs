@@ -83,35 +83,46 @@ test("GUARD — a missing object sets a non-zero exit, and says so", async () =>
   assert.match(src, /process\.exitCode = 1/, "and the process must fail");
 
   // The old runner announced success before verifying, which is the sentence
-  // that made a broken run look fine. Checked against what the script PRINTS,
-  // not against its source text: a comment explaining the ban is not a
-  // violation of it, and the first version of this guard failed on exactly
-  // that — its own explanation quoted the banned string.
-  const printed = [...src.matchAll(/console\.(log|warn)\(([^;]*)\);/g)].map((m) => m[2]).join("\n");
+  // that made a broken run look fine. This scans `console.log`/`console.warn`
+  // ARGUMENTS IN THE SOURCE — not what the script prints, and not comments, so
+  // a comment explaining the ban is not a violation of it. What the script
+  // actually prints is asserted in src/lib/migrationsRunner.test.mjs, which
+  // runs it.
+  const consoleArgs = [...src.matchAll(/console\.(log|warn)\(([^;]*)\);/g)].map((m) => m[2]).join("\n");
   assert.ok(
-    !/applied successfully/i.test(printed),
-    "do not claim success before the verification has run"
+    !/applied successfully/i.test(consoleArgs),
+    "no console call may carry the old pre-verification success sentence"
   );
 });
 
-test("GUARD — no success sentence appears before the verification runs", async () => {
-  // The previous version banned ONE literal string, so a DIFFERENT success
-  // sentence in the same pre-verification slot passed all six guards. Assert
-  // the ORDERING instead: anything that reads as a verdict must come after the
-  // catalog check, not before it.
+test("GUARD — four banned literals do not appear in a console call before the verify loop", async () => {
+  // WHAT THIS IS, EXACTLY, so nobody mistakes it for more: a regex over the
+  // runner's SOURCE TEXT that bans four literals inside `console.log`/
+  // `console.warn` call sites appearing before the verify section. That is a
+  // cheap lint, not an ordering proof, and a verifier evaded it twice — with a
+  // different sentence, and with the original banned sentence moved into a
+  // `process.stdout.write`, which this regex does not look at.
+  //
+  // THE REAL ORDERING TEETH ARE IN src/lib/migrationsRunner.test.mjs, in the
+  // "ORDERING — no verdict reaches stdout before the catalog check" cases:
+  // those run the script and read its actual stdout, so the call used to print
+  // is irrelevant. Both evasions above fail there. This test is kept because it
+  // localises the failure to a source line, and it is free.
   const src = await read(RUNNER);
   const verifyAt = src.indexOf('Verifying schema against the catalog');
   assert.ok(verifyAt > 0, "the verification section must exist");
 
   const beforeVerify = src.slice(0, verifyAt);
-  // Only the console output matters, not the prose in comments — a comment
-  // explaining why success must not be claimed early is not itself a claim.
-  const printed = [...beforeVerify.matchAll(/console\.(log|warn)\(([^;]*)\);/g)]
+  // Comment prose is excluded deliberately — a comment explaining why success
+  // must not be claimed early is not itself a claim, and the first version of
+  // this guard failed on exactly that, because its own explanation quoted the
+  // banned string.
+  const consoleArgs = [...beforeVerify.matchAll(/console\.(log|warn)\(([^;]*)\);/g)]
     .map((m) => m[2])
     .join("\n");
   assert.ok(
-    !/successfully|✓ done|all good|migrations complete/i.test(printed),
-    `nothing may announce success before the catalog has been checked:\n${printed.slice(0, 300)}`
+    !/successfully|✓ done|all good|migrations complete/i.test(consoleArgs),
+    `a console call before the catalog check carries a banned success literal:\n${consoleArgs.slice(0, 300)}`
   );
 
   // And the one real success sentence must sit after it.

@@ -114,7 +114,15 @@ function runRunner(dir) {
       },
     }
   );
-  return { status: res.status, out: `${res.stdout || ""}${res.stderr || ""}` };
+  // `out` is the two streams concatenated, which is fine for "did it say X".
+  // The ordering test needs them apart: position within a concatenation of two
+  // streams is not the order they were written in.
+  return {
+    status: res.status,
+    out: `${res.stdout || ""}${res.stderr || ""}`,
+    stdout: res.stdout || "",
+    stderr: res.stderr || "",
+  };
 }
 
 function pathToFileUrlString(p) {
@@ -236,3 +244,76 @@ test("a failing migration ROLLS BACK, records nothing, and stops the run", () =>
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+/**
+ * Phrases that read as a verdict on the DATABASE. None of them may be printed
+ * before the catalog check has run, because that is the exact shape of the
+ * 2026-08-30 failure: "Migrations applied successfully." over a database
+ * missing four migrations.
+ *
+ * This list is a list, and is honest about that — it cannot recognise every
+ * possible sentence. What it does do is read the runner's ACTUAL STDOUT, so it
+ * does not care which call printed it: `console.log`, `process.stdout.write`
+ * and anything else are all caught identically. The previous ordering guard
+ * regexed `console.(log|warn)` call sites in the source, and a verifier evaded
+ * it twice — once with a different sentence, once with the ORIGINAL banned
+ * sentence moved into a `process.stdout.write`. Both are covered below.
+ */
+const VERDICT_PHRASES = [
+  /successfully/i,
+  /migrations applied/i, // "Migrations applied. Your database is fully up to date."
+  /up to date/i,
+  /all good/i,
+  /✓ done/i,
+  /migrations complete/i,
+  /(database|schema) is (now |fully )*(complete|correct|current|ready)/i,
+  /everything (is )?(in place|present|fine)/i,
+];
+
+for (const scenario of [
+  { name: "a complete database", omit: null, status: 0 },
+  { name: "a database missing 006", omit: "content_jobs_heartbeat_idx", status: 1 },
+]) {
+  test(`ORDERING — no verdict reaches stdout before the catalog check, on ${scenario.name}`, () => {
+    const catalog = scenario.omit ? FULL_CATALOG.filter((n) => n !== scenario.omit) : FULL_CATALOG;
+    const dir = withRegister(makeSandbox({ catalog }));
+    try {
+      const { status, stdout, stderr } = runRunner(dir);
+      assert.equal(status, scenario.status, `exit ${status}:\n${stdout}${stderr}`);
+
+      const verifyAt = stdout.indexOf("Verifying schema against the catalog");
+      assert.ok(verifyAt > 0, `the verification must announce itself on stdout:\n${stdout}`);
+
+      const before = stdout.slice(0, verifyAt);
+      for (const phrase of VERDICT_PHRASES) {
+        const hit = before.match(phrase);
+        assert.equal(
+          hit,
+          null,
+          `"${hit?.[0]}" was printed BEFORE the catalog was checked. Nothing may ` +
+            `pronounce on the database until the verification has run:\n${before}`
+        );
+      }
+
+      // Verdicts belong on stdout after the check; stderr is for the failure
+      // path, which says INCOMPLETE, not that anything went well.
+      for (const phrase of VERDICT_PHRASES) {
+        assert.equal(stderr.match(phrase), null, `stderr claimed a verdict:\n${stderr}`);
+      }
+
+      if (scenario.status === 0) {
+        assert.ok(
+          stdout.indexOf("All expected objects present") > verifyAt,
+          "the one real success sentence must follow the verification"
+        );
+      } else {
+        assert.ok(
+          !/All expected objects present/.test(stdout),
+          "an incomplete database must not print the success sentence at all"
+        );
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}

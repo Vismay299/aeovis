@@ -197,9 +197,21 @@ async function main() {
           // Without it every row carried one timestamp — the last run — and
           // "when did 007 actually reach production" became unanswerable.
           //
-          // The checksum is still updated, but only after the mismatch above
-          // has been reported: the drift signal used to fire once and then
-          // erase its own evidence, leaving the next run silent.
+          // THE CHECKSUM OVERWRITE BELOW IS ACCEPTED, NOT FIXED. Say it in the
+          // present tense, because it is still true: this DO UPDATE replaces
+          // the recorded checksum with the new one, so the drift warning above
+          // fires ONCE — on the first run after an edit — and the next run is
+          // silent. `first_applied_at` does not cover this; it preserves a
+          // timestamp, not the prior checksum. Nothing tests the drift path.
+          //
+          // Accepted because the row is written INSIDE the transaction that
+          // just applied this file: after COMMIT the database really does match
+          // the new text, and a row still carrying the old checksum would claim
+          // the opposite on every subsequent run. Keeping the prior value would
+          // need a second column and a rule for which of N prior checksums to
+          // keep — a bigger change than this task, and one nothing yet needs.
+          // Treat the warning as a one-shot notification, not durable state:
+          // `git log` on the migration file is the record that survives.
           `INSERT INTO schema_migrations (filename, checksum, applied_at, first_applied_at)
            VALUES ($1, $2, now(), now())
            ON CONFLICT (filename) DO UPDATE SET
