@@ -257,7 +257,7 @@
         "src/app/api/scan/route.js"
       ],
       "phase": "R0",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/rateLimit.js:73",
@@ -294,7 +294,11 @@
           "text": "SURVEY FIRST: the accept's two clauses were already true and already tested — scanRoute.route.test.mjs proves 429 + x-ratelimit-limit 5 + remaining 0 on the 6th request and that the threshold follows SCAN_RATE_LIMIT, over the real POST handler. What was NOT true is that 'one IP' meant an IP. clientBucketKey read x-real-ip first, unconditionally, and x-real-ip is a request header. REPRODUCED against the real module + the real in-memory counter at SCAN_RATE_LIMIT=5: 25 requests with a rotating x-real-ip were allowed 25/25; 25 with a rotating x-forwarded-for were allowed 25/25; and 25 where x-vercel-forwarded-for named ONE client the whole time but x-real-ip rotated were also allowed 25/25. The counter was never wrong, the identity was. FIX (rateLimit.js:73 resolveClientIp): trust ordering, not header ordering. x-vercel-forwarded-for is used first and marked trusted ONLY when VERCEL/VERCEL_URL is set (Vercel strips inbound x-vercel-*; off Vercel that header is as forgeable as any other and is now ignored rather than promoted). SCAN_RATE_LIMIT_IP_HEADER lets a non-Vercel operator declare the header their proxy OVERWRITES. x-real-ip / leftmost x-forwarded-for remain as fallbacks but are reported trusted:false and warn once per process that the limit is bypassable by rotating that header — rule 1: a limit that quietly stops limiting must say so. After the fix all four spoof scenarios give 5 allowed / 20 refused. EXERCISED BY RUNNING, not reading: 33 tests across rateLimit.test.mjs (22, +7), scanRoute.route.test.mjs (7, untouched, still green) and the new scanRateLimitSpoof.route.test.mjs (4) — the last drives the REAL POST /api/scan handler with a trusted address plus two forged ones and asserts which counter moved (trusted 5->6, both forgeries still 5). NEGATIVE CONTROL: with HEAD's rateLimit.js restored from git show (index untouched) that test fails 'expected 6, actual 5'; with the fix it passes. ZERO VENDOR SPEND: every identity the route could derive — including the shared 'unidentified' bucket — is pre-seeded over the limit before any test runs, so a WRONG implementation still lands on the refusal path. That seed was added after the first negative-control run returned 201 and started an in-memory scan; no credentials are loaded under node --test so nothing was billed, but the hazard is now closed. NOT DONE, deliberately: (a) route.js unchanged — the fix belongs in the identity, not the handler; (b) the DB-unreachable fail-open (allowed:true, degraded:true, remaining:null + a warn) left exactly as R0.1.4 shipped it — turning it fail-closed is a product decision outside this accept; it is covered by an existing unit test but I did NOT exercise it over HTTP because the fail-open path by definition starts a real scan; (c) SCAN_RATE_LIMIT_IP_HEADER is undocumented in .env.example, which is outside my allowed file set. Suite: 1123 tests / 1104 pass / 0 fail / 19 skipped, against a 1106/1087/0/19 baseline; the +17 is my +11 plus concurrent implementers in this tree. 0 fail and 19 skipped both unchanged."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-03T12:01:44.313Z",
+        "note": "VERIFIED. THE BYPASS REPRODUCED AND CLOSED, on a 25-request harness against both revisions of the module: pre-fix, rotating x-real-ip gives 25 allowed / 0 refused across 25 buckets, and the decisive row — x-vercel-forwarded-for PINNED to one client for all 25 requests while a forged x-real-ip rotates — also gives 25 buckets. Post-fix that row is 1 bucket, 5 allowed, 20 refused. ONE CORRECTION: the pre-fix \"5 allowed\" in the honest-client row is NOT the old code identifying the client; with no x-real-ip and no x-forwarded-for it falls into the shared unidentified bucket, so it throttled for the wrong reason. Rows 2 and 3 staying 25/0 post-fix is correct, not a miss — with the trusted header absent the code deliberately falls back and says so.\n\nEIGHT ATTACKS ON THE NEW TRUST MODEL, NONE SUCCEEDED against the default config: forging x-vercel-forwarded-for with VERCEL unset is IGNORED rather than promoted; a comma chain takes the leftmost; empty, whitespace and comma-only values fall through to the untrusted fallback with trusted:false and the warning, a downgrade but a LABELLED one; a 200,000-character header leaves the bucket key at 32 chars thanks to sha256 truncation; garbage or absent SCAN_RATE_LIMIT_IP_HEADER degrades safely; mixed case and padding are trimmed and lowercased; both trusted sources present is deterministic.\n\nTHE WARN-ONCE PATH IS HONEST: zero warnings on both trusted paths, one on each untrusted fallback, latching correctly across mixed traffic. TEETH PROVEN BY SHA against a pristine copy outside git — reverting rateLimit.js fails 3 tests and EVERY FAILURE IS ON THE COUNTER, never a status code (5!==6, 5!==6, 2!==3). A second sabotage replacing the VERCEL gate with if(true) fails the gate's own unit test.\n\nTHE IMPLEMENTER'S OWN WARNING CHECKS OUT: tests 2 and 3 pre-seed the shared bucket so their 429 is satisfiable by a wrong implementation, and the hits(ip)===6 / ===3 assertions are what carry them — both were watched failing against the old code. Test 4 passes against the old code and is coverage, not a discriminator, which the test does not claim otherwise. The seed at :98 is what makes the suite safe: under the sabotaged module all four requests landed on 429 and none reached createScanJob.\n\nLIVENESS TRACED: middleware matcher to operatorPerimeter's anonymous allow-list for POST /api/scan to route.js:27 to resolveClientIp. The route is genuinely reachable by an unauthenticated stranger, which is why the identity matters. scan/route.js is byte-identical across the fix and the DB-unreachable fail-open was driven directly and is unchanged.\n\nTHREE RESIDUAL FOOTGUNS FILED, none defeating the default: SCAN_RATE_LIMIT_IP_HEADER set to host, x-real-ip or x-forwarded-for yields trusted:true AND SUPPRESSES THE WARNING, so a bad declaration is strictly worse than leaving it unset; VERCEL=\"0\" and \"false\" are truthy strings and open the gate; and the knob is undocumented in .env.example. Also latent: an IPv6 value carrying a port produces two buckets, no normalisation — Vercel does not emit ports on this header.\n\nON THE VERCEL ASSUMPTION the verifier judged it sound — it is the same property that makes x-vercel-ip-country usable and what @vercel/functions ipAddress() relies on — but corrected the note's \"neutral-to-no-worse\" as HALF RIGHT: if Vercel did not strip the header the bypass severity is unchanged, but the envelope would carry trusted:true and the warning would stay silent, so the system would assert a confidence it never verified. That is the false-success class arriving through the back door, and nothing corroborates the assumption at runtime.\n\nEvidence nits: :164 is a blank line (the warn block is 165-169) and the spoof test's :120 is a closing paren (assertions at 126-128); :73 and :98 are exact. One comment overstates that VERCEL_URL is what scanWorker depends on — it is the second fallback there. Suite 1123 tests / 1104 pass / 0 fail / 19 skipped, versus 1093 pre-fix, delta exactly the 11 new tests. NOTE FOR THE RECORD: my brief's baseline of 1109 was wrong; the true figure at ef9909b is 1104."
+      }
     },
     {
       "id": "R0.1.5",
@@ -832,7 +836,7 @@
       ],
       "phase": "R0",
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/operatorPerimeter.js:180",
@@ -859,7 +863,11 @@
           "text": "Silence reproduced first by driving the REAL src/middleware.js (next/server stubbed, @/ alias mapped via a loader hook) with OPERATOR_TOKEN unset: NODE_ENV=development and NODE_ENV=staging both admitted POST /api/content, GET /api/knowledge and GET /api/agents with zero lines on console.warn/error/log. Fix: warnDevPerimeterOpen() in operatorPerimeter.js:180 mirrors isCronAuthorized's OK_DEV_NO_SECRET warn-once — caller-owned {value} once-flag (module state here would be shared across the whole test process and silence every test after the first), throws if the flag is missing rather than silently not disclosing, returns whether it actually warned so a suppressed repeat is distinguishable from never taking the branch. middleware.js:24 holds the module-level flag; middleware.js:54 calls it on the allow path, passing the SAME resolved nodeEnv the decision used (hoisted to runtimeNodeEnv) so the warning provably names the value that opened the gate. ONCE = once per Edge ISOLATE, not once per deploy: Next evaluates middleware.js per isolate and the platform recycles them, so a cold start warns again. Stated in the code, not overclaimed. Re-run after the fix: one warning across three operator requests in the same instance; NODE_ENV=production and NODE_ENV unset still 401 with the pre-existing REFUSING error; free-scan flow (POST /api/scan, status poll, /api/scans/*, /api/industries, /api/health) and both SELF_GATED workers pass through with zero log lines; OPERATOR_TOKEN set + dev = 401, no warn. Teeth, each applied against copies kept outside git and then restored byte-identical: S1 delete the logger.warn body -> 2 fails; S2 delete the middleware call site -> GUARD fails; S3 move the once-flag inside middleware() so it fires per request -> GUARD fails. Admission behaviour is unchanged — this adds a log, not a rule; the allowlist, SELF_GATED and R0.1.3's absent/blank->production resolution are untouched and re-asserted at operatorPerimeter.test.mjs:415. Suite: 1123 tests, 1104 pass, 0 fail, 19 skipped (baseline 1106/1087/0/19; the extra tests are mine plus concurrent implementers'). Not exercised: a real Next Edge runtime — no deploy available here, so the isolate-lifetime claim is argued from Next's per-isolate module evaluation, not observed. Prettier reformats the file, but HEAD's middleware.js already fails default prettier and there is no format script, so I did not reformat."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-03T12:02:36.268Z",
+        "note": "VERIFIED. THE SILENCE REPRODUCED at 671081c~1, driving the real middleware with OPERATOR_TOKEN unset: five operator routes admitted under NODE_ENV=development with ZERO lines on warn, error or log, and identical under staging, while unset correctly 401'd with the REFUSING error — R0.1.3 intact. Post-fix the same five requests emit exactly ONE line, on the first request only, under each of development, staging and preview, naming the resolved NODE_ENV. BONUS FINDING: NODE_ENV=Production with a capital P was previously a silent open and is now audible, with the typo quoted back verbatim.\n\nQUIET ON THE HAPPY PATH: zero lines for the free-scan flow, both SELF_GATED workers, production, and development with a configured token across valid, missing and wrong tokens. Flag-burning order was checked too — two worker calls and two free-scan calls first, then an operator route, and the operator route still warned, so the quiet allow-reasons do not consume the once-flag.\n\nADMISSION UNCHANGED, PROVEN AT SCALE: 44 requests across 8 env and token scenarios, 352 pre-versus-post comparisons, ZERO mismatches, and authorizeOperatorRequest is byte-identical to the pre-fix file with all 55 changed lines confined to the new helper. Crafted URLs still 401 including %77orker, worker with a trailing space, worker.json, encoded traversal and the /_next/data JSON form. Three teeth confirmed, each proved applied and restored byte-identical.\n\nTHE VERIFIER EVADED THE GUARD IN ONE LINE, AND IT IS WRONG IN BOTH DIRECTIONS. Keeping the module-level declaration as a decoy and adding the same declaration inside middleware() passes the guard 25/25 while the behaviour regresses to three warnings per three requests — S3's regression achieved by ADDING rather than moving. Inserting a single warnedDevOpen.value = false above the call does the same. And renaming the flag to warned with ES2015 shorthand makes the code CORRECT while the guard FAILS. So the guard's own assertion message, that the flag must live at module scope or the warning fires every request, asserts something it does not establish.\n\nThat is filed rather than gated because the shipped behaviour is right, the accept asks for a test that fires and fails when removed and it does, and the evasions require deliberately adding a decoy. But the verifier's judgement on the source-guard rationale is worth recording: the \"no Edge runtime here\" argument is a NON-SEQUITUR for this property, because once-ness is a module-scope property observable in plain Node — and this repo already ships the machinery, src/lib/cronAuth.route.hooks.mjs, whose own header makes exactly this argument about inference. The verifier wrote a ~30-line behavioural test using that unmodified hooks file and Next's real next/server, imported the real middleware, drove 11 requests and asserted one warning: it passes on HEAD, FAILS on both evasions, and passes on the shorthand shape — correct in all three cases where the source guard is wrong in two.\n\nTHE ONCE-PER-ISOLATE CLAIM IS HONESTLY STATED, not overclaimed: it appears in the middleware docblock, the helper JSDoc, and the emitted log line itself, and both the submit note and commit message carry an explicit NOT EXERCISED for the real Edge runtime. All three design choices are genuinely true of the code — the flag is passed in, a missing flag throws a TypeError rather than no-opping, and it returns true only on the emitting call — and the shared-module-state reasoning holds, since the first test's four-env loop would otherwise interfere.\n\nSix citations all resolve exactly. No bare catch, no ?? 0, no fail-soft; three files and nothing rides along. CORRECTION TO MY BRIEF: the baseline of 1109 is wrong; the measured figure at ef9909b is 1104 pass / 0 fail / 19 skipped, reproduced twice, and the implementer's note says 1104 too."
+      }
     },
     {
       "id": "R0.1.15",
@@ -954,6 +962,70 @@
       "notes": [
         {
           "at": "2026-09-03T11:32:59.006Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R0.1.18",
+      "subphase": "R0.1",
+      "lane": "infra",
+      "title": "Three footguns in the rate-limit trust knob",
+      "detail": "R0.1.4 closed the spoofable per-IP limit and its verifier found three residual footguns, none defeating the default config but each reachable by an operator. First and worst: SCAN_RATE_LIMIT_IP_HEADER set to host, x-real-ip or x-forwarded-for yields trusted:true AND SUPPRESSES the warn-once, so a bad declaration is strictly worse than leaving the knob unset, which at least warns. The knob does not reject known-forgeable names. Second: VERCEL is tested for presence, so the strings 0 and false are truthy and open the gate — anyone self-hosting who writes VERCEL=0 to mean not-Vercel silently trusts a forgeable header. Third: the knob is undocumented; .env.example lists SCAN_RATE_LIMIT, _WINDOW_MS and _SALT and not this one, so a security-relevant setting whose misuse converts spoofable-and-loud into spoofable-and-silent is documented only in a JSDoc block. Also latent, not live: an IPv6 value carrying a port produces two different buckets with no normalisation, which Vercel does not emit on this header. And nothing corroborates the Vercel-strips-inbound assumption at runtime, so if it were false the envelope would carry trusted:true while staying silent — asserting a confidence never verified.",
+      "accept": "A forgeable header name declared in SCAN_RATE_LIMIT_IP_HEADER either is refused or keeps trusted:false and the warning; VERCEL is judged by value rather than presence; and the knob is documented in .env.example with the warning that it must name a header the proxy OVERWRITES. Tests cover the bad-declaration and VERCEL=0 cases.",
+      "deps": [
+        "R0.1.4"
+      ],
+      "anchors": [
+        "src/lib/rateLimit.js:73",
+        "src/lib/rateLimit.js:79",
+        ".env.example:41"
+      ],
+      "findings": [
+        "C9"
+      ],
+      "phase": "R0",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T12:03:50.063Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R0.1.19",
+      "subphase": "R0.1",
+      "lane": "test",
+      "title": "The perimeter warn-once guard is evadable in one added line",
+      "detail": "R0.1.14's verifier evaded its source guard three ways and found it wrong in BOTH directions. Keeping the module-level flag declaration as a decoy and adding the same declaration inside middleware() passes the guard 25 of 25 while the behaviour regresses to one warning per request — the same regression the guard's own sabotage catches when the declaration is MOVED, achieved instead by ADDING. Inserting a single warnedDevOpen.value = false above the call does the same. And renaming the flag to warned with ES2015 shorthand makes the code correct while the guard FAILS. So the guard's assertion message, that the flag must live at module scope or the warning fires every request, asserts something it does not establish. The verifier also rejected the rationale for a source guard: the no-Edge-runtime-here argument is a non-sequitur, because once-ness is a module-scope property observable in plain Node, and this repo already ships the machinery in src/lib/cronAuth.route.hooks.mjs whose own header makes exactly this argument about removing an inference. They wrote a roughly 30-line behavioural test using that unmodified hooks file and Next's real next/server, imported the real middleware, drove 11 requests and asserted one warning: it passes on HEAD, fails on both evasions, and passes on the shorthand shape — correct in all three cases where the source guard is wrong in two.",
+      "accept": "A behavioural test replaces or supplements the source guard: it fails when the flag is shadowed inside middleware() or reset before the call, and passes when the flag is merely renamed. The verifier's approach using cronAuth.route.hooks.mjs is known to work.",
+      "deps": [
+        "R0.1.14"
+      ],
+      "anchors": [
+        "src/lib/operatorPerimeter.test.mjs:428",
+        "src/lib/cronAuth.route.hooks.mjs",
+        "src/middleware.js:24"
+      ],
+      "findings": [
+        "S17"
+      ],
+      "phase": "R0",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T12:04:13.628Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -1809,7 +1881,7 @@
         "supabase/migrations/"
       ],
       "phase": "R1",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "supabase/migrations/011_scan_runs.sql:78",
@@ -1831,7 +1903,11 @@
           "text": "Procedural close only: I wrote ZERO source files. The engineering (011 + scanRunsLive.test.mjs, committed at 5e40514) was left as found. The one gap was that schema_migrations did not know about 011.\n\nWHAT I RAN. Pre-flight, read-only against prod (nggyizuwqepxaqnpcqqj): schema_migrations held 10 rows (001-010), NO sql_checksum column, no 011 row -- confirming the current runner had never executed here. I audited all 11 migrations for idempotence before pointing anything at prod: every CREATE TABLE/INDEX is IF NOT EXISTS, every function is CREATE OR REPLACE, and every CREATE POLICY / ADD CONSTRAINT / ADD COLUMN is inside a DO block guarded on pg_policies / pg_constraint / information_schema.columns (e.g. 001:113, 001:88, 011:187). I also compared all 8 live pg_proc signatures against the file headers first, because CREATE OR REPLACE errors on a changed return type or parameter name -- they matched exactly, so the re-apply was safe.\n\nnpm run setup:db -> EXIT CODE 0, 'All expected objects present', 40/40 ticks. Functions checked via pg_proc, tables/indexes via to_regclass.\n\nTHE 010 DRIFT SENTENCE (live check of R6.1.5). It printed the THIRD sentence, the unknown one, NOT the comment one and NOT the sql one:\n  ? 010_probe_tasks.sql: the file TEXT changed since it was applied (be27ae10f9467429 -> ed5bc223145c0461), but whether the SQL changed is UNKNOWN -- the ledger row was written before this runner recorded a comment-independent checksum. Diff the file against git before deciding; this run cannot tell you.\nThat is the correct verdict, not a miss: classifyDrift (setup-supabase.mjs:342) returns 'unknown' because the 010 row predated sql_checksum, so the runner genuinely could not tell a comment edit from a SQL edit and said exactly that instead of borrowing either verdict. R6.1.5 behaved as designed. Because the DO UPDATE overwrites checksum (accepted at setup-supabase.mjs:472-486), this warning is one-shot; the next run will be silent and 010's row now carries sql_checksum 8653a0cf0838eebe, so a future real edit WILL classify as sql or comment.\n\nCATALOG CONFIRMATION (post-run, via information_schema + pg_proc, never a head-probe): schema_migrations now has 11 rows and a sql_checksum column; 011_scan_runs.sql is recorded, checksum 212faa9e72b07640, sql_checksum 1cae15f3949ad573. All 11 rows have sql_checksum populated. first_applied_at for 001-009 is still NULL and was NOT backfilled -- unknown still reads as unknown.\n\nNO DATA TOUCHED. Row counts for scans/scan_jobs/prompt_results/probe_tasks/brand_metrics_daily/scan_rate_limits/system_heartbeats/content_jobs/content_items/citations/result_brands were byte-identical before and after. I did not hand-edit schema_migrations, start a scan, or spend vendor budget.\n\nTESTS. node --env-file=.env.local --test src/lib/scanRunsLive.test.mjs -> 10 pass, 0 fail, 0 skipped, against live prod; scan_runs back to 0 rows afterwards, no residue. Full suite without credentials: 1106 tests, 1087 pass, 0 fail, 19 skipped -- identical to baseline. The skip announces itself: the no-credential run printed 'R1.2.3 LIVE-POSTGRES scan_runs LEDGER: NOT RUN' to stderr and a guard test asserts it (gate at scanRunsLive.test.mjs:44, reusing R1.2.2's liveDbGate.js rather than a second gate).\n\nWHAT THIS CLOSE DOES NOT MEAN (standing rule 1). 'The fleet writes a heartbeat row per batch' is true of the code and proven against a real database, but it is NOT something a deployed fleet can do today. I verified both halves myself: worker/src/lib/probe.js:27 throws ('no adapter is built yet (R1.3)'), and enqueueProbeTasks (src/lib/probeQueue.js:202) has no production caller -- grep for probeQueue across src/ and worker/ finds only comments and tests. So probe_tasks is never populated and a deployed loop can only ever take the IDLE branch; the batch branch is unreachable outside the test that drives runOnce with claim/probe/report stubbed. Do not read this close as a running fleet. It becomes reachable at R1.3 (adapter) plus whatever task wires the enqueue.\n\nR1.2.2's four hand-offs remain deliberately out of scope and are documented as such at 011_scan_runs.sql:380-391, not silently dropped."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-03T12:02:12.180Z",
+        "note": "VERIFIED against the live production catalog, read-only. ALL OBJECTS PRESENT via pg_class, pg_indexes and pg_proc, never to_regclass: scan_runs with RLS on and its anon policy, 18 columns matching the file, ZERO foreign keys as 011's header intends; four indexes whose partial and ordered definitions match exactly; three functions with full signatures; six CHECK constraints live; and probes_attempted/succeeded/errors_recovered carrying NO default, so NULL means not measured. schema_migrations has 11 rows, and the verifier RECOMPUTED BOTH HASHES for all eleven through the runner's own checksumsFor — every row matches its file on both checksums, with no file on disk missing from the ledger.\n\nTHE IMPLEMENTER'S PROPOSED CONFIRMATION WAS RUN AND PASSED: a second setup:db prints NO drift line of any kind, not the sql sentence, not the comment sentence, not the unknown one, with all 11 files ok, 40/40 catalog ticks and exit 0. The unknown line 010 produced was genuinely one-shot.\n\nNO DAMAGE. Row counts across eleven tables identical before setup:db, after it, and after the live test. first_applied_at for 001-009 is STILL NULL and was not backfilled; 010's and 011's stayed pinned while applied_at moved. The R6.1.1 incident is not repeated.\n\nLIVE TEST 10/10 with scan_runs back to 0 rows, and the verifier did not take the green on trust — two sabotages, each diffed against pristine copies outside git: an early return in runOnce's idle branch fails \"one row per pass\" with actual 1 expected 2, and adding blocked to ANSWERING_OUTCOMES fails \"the blocked probe is not a success\". Both restored.\n\nCLAUSE 2 JUDGED AS WIRING, AND MET ON THAT READING. The task's own detail says \"Created here, fully wired in R3.2\", so reading it as requiring a deployed fleet would make the task unachievable at its position and contradict its own spec. What was proven is that the fleet's code path writes the row into a real database through the fleet's OWN PostgREST client, not a pg socket, with only claim and probe stubbed — and the heartbeat half is proven for real, with heartbeat_at observably advancing and a beat after close raising \"already closed\" rather than a quiet no-op.\n\nTHE BATCH BRANCH IS UNREACHABLE, AND MORE COMPLETELY THAN THE NOTE SAID. probe.js:27 throws, probeQueue.js has no production importer at all, and prod probe_tasks holds 0 rows — so claimBatch can only return queue_empty. Beyond that: THERE IS NO DEPLOYED FLEET WHATSOEVER. No Dockerfile, fly.toml, render.yaml or railway config anywhere in the tree, CI never mentions worker/, and vercel.json's two crons touch neither. The note's phrasing implies a fleet is deployed; nothing is. The disclosure is otherwise prominent and accurate.\n\nSkip announcement reuses liveDbGate rather than a second gate, names the consequence, and is asserted by a guard. All six citations resolve. ON THE SUSPICION THAT THE CITATIONS ARE THE SANCTIONED PATH RATHER THAN AUTHORED LINES: the verifier judged that the honest citation here, since the change genuinely is a row in prod plus recovered code, and the note opens by stating zero source files were written. first_applied_at for 011 being the runner's time rather than when the objects appeared was judged acceptable, not misleading: the column is written by one line and read by NOTHING, so it is human-grade provenance, and the alternatives were fabrication or a NULL that asserts something less accurate.\n\nFOUR RECORD CORRECTIONS: my brief's baseline of 1109 is wrong, the true figure at ef9909b is 1104 and the +5 is the brightdata commits; the implementer's \"identical to baseline\" quoted a figure four commits stale; scanRunsLive.test.mjs:401-404 carries a comment describing a heartbeat fired by hand when the captured timer is never invoked, though the real RPC is exercised by the following test; and pre-existing, not introduced here, 010 defaults the claim lease to 3 minutes while worker/src/config.js defaults FLEET_LEASE_MS to 5.\n\nNo bare catch, no ?? 0, no fail-soft create. The two catches in worker/src/index.js log loudly and leave the run OPEN for the reaper, degrading to a visible state rather than a quiet one, and probe_failed and report_failed both record probes_succeeded 0 — the truth about what is durable rather than what was hoped."
+      }
     },
     {
       "id": "R1.2.4",
@@ -1921,7 +1997,7 @@
         "src/lib/engines/brightdataZone.test.mjs"
       ],
       "phase": "R1",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/engines/brightdata.js:81",
@@ -1953,7 +2029,11 @@
           "text": "POLICY: three levers, combined, not one chosen. (1) TTL — cachedZone is now {name, at} (brightdata.js:81) and resolve serves it only while fresh (:145); default 5 minutes (:72), overridable via BRIGHTDATA_ZONE_TTL_MS, 0 = never cache. A malformed TTL throws instead of falling back to the default (:91) — a silent fallback would tell an operator who wrote '30s' that they had a 30s re-check while a dead zone lived on for five minutes. (2) invalidateBrightDataZoneCache() (:116) is exported for the R1.2 fleet to force a re-check per poll cycle; it returns the dropped name, or null when nothing was cached, so 'cleared' and 'was already empty' are different events. (3) Probe-time rejection: zoneRejectionDetail (:291) reads Bright Data's zone refusals out of the HTTP body (:398) and the 200 envelope (:445), zoneRejectedError (:313) drops the cache and returns a typed BrightDataZoneError, and the retry loop refuses to retry one (:478). Recovery is therefore ONE failed probe, not one TTL; the TTL is the backstop for the case Bright Data never tells us about. Per-probe re-listing was rejected on cost: get_all_zones is a real call and that would be ~30 extra per scan. WHY NOT PER-PROBE, WHY BOTH CONSUMERS ARE SERVED: web requests (aioPipeline/enginePipeline) never get to call an invalidator, so they need the clock; a 5-minute TTL is longer than a typical invocation, so their cost profile is unchanged at one lookup per process. The fleet gets the clock AND the explicit invalidator. A re-check that could not be COMPLETED (get_all_zones itself failing) throws lookup_failed and does NOT refresh the timestamp — a grace window serving the stale name through an outage was considered and rejected as exactly the fail-soft this task removes. TYPED, NOT SILENT: BrightDataZoneError carries reason no_active_zone|zone_rejected|lookup_failed|bad_ttl_config, and a re-check that changes nothing logs 'still active' so 'the TTL fired and all is well' cannot be confused with 'the TTL never fired'. R0.1.10 IS NOT REGRESSED: a rejected probe is still an ERROR row and still counted — brightdataZone.test.mjs:334 keeps errored_queries 1 / error_rate_pct 100 and gains an assertion that a PINNED bad zone says it cannot self-heal. THE EXISTING TEST WAS CHANGED, NOT DELETED: brightdataZone.test.mjs:101 'THE BEHAVIOUR CHANGE (R1.2.7)' quotes the old assertions verbatim, keeps them as the within-TTL half (cache still wins, 0 calls), and reverses the second half (expired cache over a suspended-only account throws a typed error and drops the entry). REPRODUCED THEN RECOVERED, mocked fetch only, no live SERP probe: before, a suspended zone gave 3 error rows from 3 wasted SERP calls and 0 lookups; after, 1 SERP call then a typed config error, cache dropped, next resolve follows the account to the new zone. TTL expiry also exercised by the real clock (40ms TTL, 60ms wait), not just the 0 case. TEETH PROVEN by three sabotages against a pristine copy kept outside git (TTL ignored -> 3 fails; rejection no longer drops the cache -> 1 fail; silent TTL fallback -> 1 fail), each restored and diffed identical. check-secrets cold-cache tests still pass (9/9 across checkSecretsBrightdata.test.mjs + checkSecretsBrightdataNoZone.test.mjs); I made COMMENT-ONLY edits in those two files because their prose asserted 'module-level with no invalidator ... wins forever', which my change makes false — the process-isolation rationale is retained and restated, no assertions touched. Suite: 1128 tests, 1109 pass, 0 fail, 19 skipped (baseline 1106/1087/0/19; the extra tests are mine plus other lanes' concurrent work). NOT DONE, needs its own task: (a) scripts/check-secrets.mjs still tells the operator the zone is cached 'for the process lifetime' (the PASS detail string and the comment above it) — now overstated, and outside my allowed file set; (b) docs/vendors/brightdata.md:73-87 documents the old no-invalidator behaviour and cites brightdataZone.test.mjs:71-82; (c) the worker cannot import src/ by design (workerIsolation guard), so nothing calls invalidateBrightDataZoneCache() per poll cycle yet — the TTL is what satisfies the accept today."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-03T12:03:01.687Z",
+        "note": "VERIFIED. THE STALE CACHE REPRODUCED with a mocked fetch and the zone suspended mid-run: pre-fix, 3 wasted SERP calls, 3 error rows, errored_queries 3 and error_rate_pct 100, and the resolver returned the dead zone FOREVER. Post-fix the same fixture gives one typed BrightDataZoneError on probe 1 then self-heals — probes 2 and 3 succeed on the new zone at real cost, errored_queries 1, error_rate_pct 33.3. Recovery is one failed probe, not one TTL, exactly as claimed.\n\nTHE TTL IS PROVEN BY WALL CLOCK, not the TTL=0 special case: two resolves inside a 40ms window keep the call count at 1, a real 60ms wait, then the account swaps and the resolver follows. AND IT IS NOT FLAKY — 88 runs, zero failures, including 48 concurrent on 12 cores at 4x oversubscription. The only theoretical window is a >40ms preemption between two consecutive resolves; the 60ms wait cannot flake the other way since setTimeout is a floor.\n\nTHE 200-ENVELOPE PATH IS GENUINELY REACHED, driven directly rather than read: both an ok:true body carrying \"zone not found\" and a status:error message form classify as zone_rejected. Rate-limit precedence holds on that path, with quota and 429 wordings still classified as rate limit. THE VERIFIER FOUND AN ASYMMETRY THE NOTE DID NOT CLAIM: precedence does NOT exist on the !res.ok path, where zoneRejectionDetail runs first, so an HTTP 429 whose body says \"zone quota expired\" is typed as a zone rejection and not retried where the pre-fix code retried with backoff. Contrived wording, the row still errors and counts, so not fail-worthy — but the symmetry is looser than stated. False negatives are also internally inconsistent: snake_case forms like zone_suspended fall through to a plain Error because two patterns need a word boundary that underscore cannot provide. Cost is bounded: it degrades to the TTL, slower recovery, never silent success.\n\nTHE FAIL-LOUD LOOKUP BRANCH IS MILDER THAN SUPPOSED AND THE VERIFIER AGREES WITH IT: getBrightDataConfig is called OUTSIDE the retry loop, so a control-plane outage lands in enginePipeline's per-query catch and produces N loud counted error rows — identical to what pre-fix did on a cold cache, with no fabricated clean state. The cache is retained and its timestamp not refreshed, so the re-check succeeds once the outage ends. The grace-window alternative could not distinguish \"control plane down, zone fine\" from \"control plane down, zone dead\".\n\nTHREE CLAIMED SABOTAGES REPRODUCE EXACTLY 3/1/1, each diffed against a pristine copy outside git and restored byte-identical. THE VERIFIER ADDED A FOURTH AND FOUND THE ONE GAP: deleting the 200-envelope check leaves the suite FULLY GREEN, because both zone-rejection tests use ok:false and nothing pins the envelope. The branch works — proven manually — but is unprotected against the next editor. Not a fail: the accept is met via the HTTP path and deleting it degrades to the TTL rather than to a false success. Filed as the next task.\n\nR0.1.10 HAS NOT REGRESSED: 9/9 across both cold-cache files, with the diff on them verified line by line as comment-only and no assertion touched. The probe-time error state holds — row.error set, answer_present false, errored_queries 1 — never a skip with a clean cost 0.0.\n\nTEST-ORDER COUPLING BREAKS LOUDLY, NEVER VACUOUSLY: each order-dependent test opens by asserting the state it inherits, so running one in isolation fails on that line rather than passing on an empty cache. Documented in the file header. And the rewritten test is honest — the verifier pulled the pre-fix version and compared: the comment quotes the old name and both old assertions character for character, the fixture is preserved identically, and the test is NAMED \"THE BEHAVIOUR CHANGE\". Not a quiet swap.\n\nAll 8 citations resolve exactly. invalidateBrightDataZoneCache has no production consumer yet, which the note states honestly; the TTL branch is independently live through POST /api/scan to runScanChunk to enginePipeline to brightDataSearch. CORRECTION TO MY BRIEF: the baseline of 1109 already counted this commit; the true figure at ef9909b is 1104, and post-fix is 1109, exactly +5 for the 5 new tests."
+      }
     },
     {
       "id": "R1.2.8",
@@ -2012,6 +2092,38 @@
       "notes": [
         {
           "at": "2026-09-03T11:51:14.874Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R1.2.10",
+      "subphase": "R1.2",
+      "lane": "test",
+      "title": "The Bright Data 200-envelope zone rejection has no test",
+      "detail": "R1.2.7's verifier drove the 200-envelope rejection path directly and confirmed it works: an ok:true body carrying zone not found, and a status:error message form, both classify as zone_rejected and drop the cache. But deleting that branch at brightdata.js:445 leaves the suite FULLY GREEN, because both zone-rejection tests use ok:false and nothing pins the envelope case. The branch is unprotected against the next editor. Not grounds to reject R1.2.7 — the accept is met through the HTTP path and deleting the branch degrades to the TTL rather than to a false success — but it is the subtle case, since a zone refusal arriving with HTTP 200 is exactly what a naive reader would not expect. The same verifier found two related asymmetries worth fixing in the same pass: rate-limit precedence exists on the 200 path but NOT on the not-ok path, where zoneRejectionDetail runs first so an HTTP 429 whose body mentions zone quota is typed as a zone rejection and not retried; and snake_case forms such as zone_suspended, zone_disabled and zone_expired fall through to a plain Error because two patterns need a word boundary an underscore cannot provide.",
+      "accept": "Deleting the 200-envelope rejection branch fails a test; rate-limit precedence is consistent across the ok and not-ok paths, or the difference is documented with its reason; the snake_case zone-state wordings are matched or their omission is recorded.",
+      "deps": [
+        "R1.2.7"
+      ],
+      "anchors": [
+        "src/lib/engines/brightdata.js:445",
+        "src/lib/engines/brightdata.js:291",
+        "src/lib/engines/brightdataZone.test.mjs"
+      ],
+      "findings": [
+        "C4"
+      ],
+      "phase": "R1",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T12:04:14.162Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -5109,7 +5221,7 @@
       "subphase": "R6.3",
       "lane": "docs",
       "title": "gemini.md asserts a bug R6.5.6 just fixed as still current",
-      "detail": "R6.5.6 fixed the inert abort signal in src/lib/gemini.js. docs/vendors/gemini.md now documents that bug as present. Its quirk 3 heading reads The SDK never receives the timeout or the abort signal; its body says fixing it is a one-line change, named here rather than fixed because R6.3.1 is a documentation task, and that fix has now landed. The contract row still says the timeout is enforced by a Promise.race only, false since clearTimeout moved into a finally block. Every citation in that section now resolves to unrelated code, with one landing inside the new R6.5.6 comment block. This is the worse-than-absent case R6.3.1 was itself rejected for twice, and it was caused by a correct fix landing in a neighbouring file. No test guards vendor-doc citations: docStatus.test.mjs checks status headers, the design-authority rule, the ADR rules and the migration table, not whether a doc file:line claim still resolves, so the suite will not catch this or the next one.",
+      "detail": "R6.5.6 fixed the inert abort signal in src/lib/gemini.js. docs/vendors/gemini.md now documents that bug as present. Its quirk 3 heading reads The SDK never receives the timeout or the abort signal; its body says fixing it is a one-line change, named here rather than fixed because R6.3.1 is a documentation task, and that fix has now landed. The contract row still says the timeout is enforced by a Promise.race only, false since clearTimeout moved into a finally block. Every citation in that section now resolves to unrelated code, with one landing inside the new R6.5.6 comment block. This is the worse-than-absent case R6.3.1 was itself rejected for twice, and it was caused by a correct fix landing in a neighbouring file. No test guards vendor-doc citations: docStatus.test.mjs checks status headers, the design-authority rule, the ADR rules and the migration table, not whether a doc file:line claim still resolves, so the suite will not catch this or the next one. CORRECTION to the submitted evidence, not to the accept criterion. Eight of the doc line numbers in the submit --evidence list landed on BLANK lines (gemini.md :205 :232 :264, README.md :167 among them) because I picked them from memory instead of deriving them - the exact failure this task exists to fix, committed in the act of reporting the fix. The corrected anchors are attached: gemini.md:111 the Timeout contract row now naming both the signal and the race; :233 the quirk-3 heading reading FIXED in ee5504e; :265 the identity-vs-linkage note; :277 why the SDK timeout option is not passed. README.md:41 new Rule 4 verify against the committed blob; :97 the decision section; :124 the measurements rejecting the citation guard; :158 the recommended staleness tripwire; :180 why it cannot be built from this task. The source anchors in the original evidence (src/lib/gemini.js:55, :92, src/lib/docStatus.test.mjs:19, index.mjs:444) were derived and verified and stand unchanged.",
       "accept": "gemini.md describes the shipped behaviour: the signal reaches the SDK, the timeout is enforced by both the signal and the race, and every citation resolves at HEAD. Consider whether a guard asserting vendor-doc citations still resolve is worth its cost, and record the decision either way.",
       "deps": [
         "R6.5.6"
@@ -5117,16 +5229,43 @@
       "anchors": [
         "docs/vendors/gemini.md",
         "src/lib/gemini.js:56",
-        "src/lib/gemini.js:92"
+        "src/lib/gemini.js:92",
+        "docs/vendors/gemini.md:111",
+        "docs/vendors/gemini.md:233",
+        "docs/vendors/gemini.md:265",
+        "docs/vendors/gemini.md:277",
+        "docs/vendors/README.md:41",
+        "docs/vendors/README.md:97",
+        "docs/vendors/README.md:124",
+        "docs/vendors/README.md:158",
+        "docs/vendors/README.md:180"
       ],
       "findings": [
         "S30"
       ],
       "phase": "R6",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "docs-R632",
-      "evidence": [],
+      "evidence": [
+        "docs/vendors/gemini.md:9",
+        "docs/vendors/gemini.md:47",
+        "docs/vendors/gemini.md:88",
+        "docs/vendors/gemini.md:205",
+        "docs/vendors/gemini.md:232",
+        "docs/vendors/gemini.md:253",
+        "docs/vendors/gemini.md:264",
+        "docs/vendors/gemini.md:290",
+        "docs/vendors/README.md:41",
+        "docs/vendors/README.md:94",
+        "docs/vendors/README.md:127",
+        "docs/vendors/README.md:167",
+        "src/lib/gemini.js:55",
+        "src/lib/gemini.js:85",
+        "src/lib/gemini.js:92",
+        "src/lib/docStatus.test.mjs:19",
+        "node_modules/@google/generative-ai/dist/index.mjs:444"
+      ],
       "notes": [
         {
           "at": "2026-09-03T11:32:58.342Z",
@@ -5137,6 +5276,16 @@
           "at": "2026-09-03T11:36:36.574Z",
           "by": "docs-R632",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T11:54:36.960Z",
+          "by": "docs-R632",
+          "text": "Rewrote quirk 3 as FIXED in ee5504e and re-derived every citation. Corrected claims: (1) heading 'The SDK never receives the timeout or the abort signal' -> the init now carries a signal, observed keys [body,headers,method,signal]; (2) 'enforced by a Promise.race only' -> enforced by BOTH the AbortController deadline (gemini.js:35-36) and the race (:58-63), both timers cleared in finally (:92-93); (3) 'clearTimeout runs only on the success path' -> it runs in finally on every path, measured as 0 pending Timeout resources after a 5-rung failure; (4) 'fixing it is a one-line change, named here rather than fixed' -> deleted, the fix landed. Added the two design notes: the SDK's own timeout option is deliberately NOT passed because buildFetchOptions (index.mjs:443-445) schedules setTimeout(abort) it never clears (measured +1 stranded Timeout per call), and the SDK relays via its own AbortController so init.signal !== controller.signal (measured false) - linkage not identity is the test. All re-derived by executing the shipped module against a stubbed fetch; no live GEMINI_API_KEY, no network. Also fixed R6.3.1 errors this task was not asked about: 13 drifted gemini.js line numbers (:40,:44,:44-46,:46,:48-51,:53,:54-70,:62,:64-67,:70,:71-74,:78-82,:85-86), a cost value printed as 0.0000111 inside a claimed literal JSON.stringify capture (actual 0.000011099999999999999), an unverified 'x-goog-api-key' auth claim (now captured off the wire), and the fact that the perimeter test asserts GET while the shipped handler is POST. DECISION on the citation guard: NOT building a file:line resolution test; recorded with measurements in docs/vendors/README.md 'The R6.5.6 drift, and the guard that was not built'. Measured over the 9 vendor docs: 161 named citations + 41 bare :N citations; an existence-only guard catches 0 of the 13 broken ones (gemini.js is 108 lines, every stale number was < 108); 15 citations name an ambiguous bare filename. Content matching would need 202 hand-written expectations that rot into silent false negatives. Recommended instead and FILED NOT BUILT: a staleness tripwire on 34 doc->file edges, which replayed over 40 commits fires 7 times INCLUDING ee5504e. It cannot be built here - test:scoring runs src/**/*.test.mjs (package.json:11) and this task may only write docs/vendors/ - so it needs its own ledger item owning src/. Interim mitigation shipped: gemini.md carries a Verified-at commit and a one-line git log staleness command. HEAD moved twice mid-task (18fa380 -> ef9909b -> 86c1f07); all 43 line citations were asserted against the committed blob via git show HEAD:<file> at each, 0 failures each time. That is also how I caught myself: I had 'corrected' operatorPerimeter.test.mjs:94 to :95 from a dirty worktree when :94 was right at HEAD - that citation is now an anchor, not a number, and README Rule 4 was added. Suite: 1128 tests, 1109 pass, 0 fail, 19 skipped (baseline 1106/1087/0/19 was at 18fa380; the +22 come from six commits by other lanes since, adding tests to 7 files - my diff is docs-only and adds no tests). docStatus.test.mjs 10/10 green."
+        },
+        {
+          "at": "2026-09-03T11:55:24.614Z",
+          "by": "controller",
+          "text": "amended: CORRECTION to the submitted evidence, not to the accept criterion. Eight of the doc line numbers in the submit --evidence list landed on BLANK lines (gemini.md :205 :232 :264, README.md :167 among them) because I picked them from memory instead of deriving them - the exact failure this task exists to fix, committed in the act of reporting the fix. The corrected anchors are attached: gemini.md:111 the Timeout contract row now naming both the signal and the race; :233 the quirk-3 heading reading FIXED in ee5504e; :265 the identity-vs-linkage note; :277 why the SDK timeout option is not passed. README.md:41 new Rule 4 verify against the committed blob; :97 the decision section; :124 the measurements rejecting the citation guard; :158 the recommended staleness tripwire; :180 why it cannot be built from this task. The source anchors in the original evidence (src/lib/gemini.js:55, :92, src/lib/docStatus.test.mjs:19, index.mjs:444) were derived and verified and stand unchanged."
         }
       ],
       "verification": null
@@ -5353,6 +5502,37 @@
       "notes": [
         {
           "at": "2026-09-03T02:22:24.166Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.4.8",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "Doc-to-source staleness tripwire, recommended by R6.3.2 and not buildable there",
+      "detail": "R6.3.2 weighed a citation guard and recommended against it, with measurements: across the nine vendor docs there are 161 named file:line citations, 41 bare ones inheriting their file from prose, and 15 naming an ambiguous filename. An existence check catches ZERO of the thirteen citations that were broken in gemini.md, because gemini.js is 108 lines and every stale number was under 108 — a guard that passes on the exact defect that prompted it converts an open question into a false assurance. Content matching would need 202 hand-written expectations, each rotting into a silent false negative. The recommended alternative is a staleness TRIPWIRE on 34 doc-to-source edges: fail when a cited source file changes in a commit that does not touch the doc citing it. Replayed over the last 40 commits it fires 7 times, INCLUDING ee5504e, the commit that falsified gemini.md. It could not be built in R6.3.2 because that task was scoped to docs/vendors while test:scoring globs src/**, so it needs its own item owning src/. Two costs are unmeasured: noise from comment-only edits to cited files, and the reviewed-at bump ritual it imposes. It has never run. This session alone produced three instances of a correct fix falsifying a neighbouring record: R6.5.6 to gemini.md, R1.2.7 to brightdata.md and check-secrets, and R2.10.5's close claim to page.js.",
+      "accept": "Either a tripwire exists that fails when a cited source file changes without its citing doc, proven by replaying it over history and by a live case; or the decision not to build it is recorded with the noise measurement that justifies it. A guard that passes on the gemini.md defect is not acceptable either way.",
+      "deps": [
+        "R6.3.2"
+      ],
+      "anchors": [
+        "docs/vendors/README.md:97",
+        "src/lib/docStatus.test.mjs"
+      ],
+      "findings": [
+        "S30"
+      ],
+      "phase": "R6",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T12:03:49.541Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }

@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**45 / 157 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**49 / 161 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -24,7 +24,7 @@ Baseline commit: `5111219`
 10. Trace a call site to an HTTP route or a cron entry before describing it as live. A correct file:line proves a line exists, not that anything reaches it.
 11. Close an item only when, in the same commit, its box is ticked, the commit body cites the file:line where the change lives, and the acceptance criterion was exercised — run, not read and not reasoned about. If it could not be exercised here, the item is blocked with the reason, never closed.
 
-## R0 — Ground zero  `20/28`
+## R0 — Ground zero  `22/30`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -33,7 +33,7 @@ Baseline commit: `5111219`
 - [x] **R0.1.1** CRON_SECRET set and both worker gates fail closed in prod `needs-vercel` — closed at `src/lib/cronAuth.js:43`, `src/app/api/scan/worker/route.js:34`, `src/app/api/content/worker/route.js:39`, `.env.example:19`, `src/lib/cronAuth.test.mjs:19`
 - [x] **R0.1.2** Gate or delete /chart-preview — closed at `src/lib/scoring/publicRouteExposure.test.mjs:49`, `src/lib/scoring/publicRouteExposure.test.mjs:55`, `src/components/dashboard/RankAndSharePanel.jsx:9`, `src/components/dashboard/SectionStrap.jsx:5`
 - [x] **R0.1.3** Minimal operator perimeter in src/middleware.js — closed at `src/middleware.js:24`, `src/lib/operatorPerimeter.js:128`, `src/lib/operatorPerimeter.js:72`, `src/lib/operatorPerimeter.js:154`, `src/lib/operatorPerimeter.test.mjs:262`, `src/lib/operatorPerimeter.test.mjs:231`
-- [~] **R0.1.4** Per-IP rate limit on POST /api/scan — submitted `src/lib/rateLimit.js:73`, `src/lib/rateLimit.js:76`, `src/lib/rateLimit.js:106`, `src/lib/rateLimit.js:164`, `src/lib/scanRateLimitSpoof.route.test.mjs:100`, `src/lib/rateLimit.test.mjs:133`
+- [x] **R0.1.4** Per-IP rate limit on POST /api/scan — closed at `src/lib/rateLimit.js:73`, `src/lib/rateLimit.js:76`, `src/lib/rateLimit.js:106`, `src/lib/rateLimit.js:164`, `src/lib/scanRateLimitSpoof.route.test.mjs:100`, `src/lib/rateLimit.test.mjs:133`
 - [x] **R0.1.5** Unique partial index on scan_jobs(brand) while running — closed at `supabase/migrations/007_scan_seal.sql:25`, `src/lib/duplicateScan.js:56`, `src/lib/duplicateScan.js:41`, `src/lib/db.js:383`, `src/app/api/scan/route.js:49`, `src/lib/duplicateScan.test.mjs:72`
 - [x] **R0.1.6** scripts/check-secrets.mjs — smallest live call per vendor — closed at `scripts/check-secrets.mjs:286-296`, `scripts/check-secrets.mjs:232-237`, `src/lib/checkSecrets.test.mjs:181-209`, `docs/vendors/README.md:117-118`, `docs/vendors/README.md:130-140`
 - [x] **R0.1.7** /api/health route — closed at `src/app/api/health/route.js:29`, `src/lib/health.js:61`, `src/lib/health.js:38`, `src/lib/db/analytics.js:494`, `src/lib/db/analytics.js:510`, `supabase/migrations/008_system_heartbeats.sql:12`, `src/lib/health.test.mjs:23`, `src/app/api/scan/worker/route.js:47`
@@ -43,10 +43,12 @@ Baseline commit: `5111219`
 - [x] **R0.1.11** Migrations 007-009 are unapplied in production, and 007 cannot apply as-is `needs-decision` — closed at `supabase/migrations/007_scan_seal.sql:28`, `supabase/migrations/008_system_heartbeats.sql:12`, `supabase/migrations/009_scan_rate_limit.sql:44`, `src/lib/rateLimit.js:112`
 - [-] **R0.1.12** Confirm CRON_SECRET and OPERATOR_TOKEN are live on the Vercel project `needs-vercel` — blocked: needs-vercel
 - [x] **R0.1.13** cronAuth fails OPEN when NODE_ENV is unset — closed at `src/lib/cronAuth.js:20`, `src/lib/cronAuth.js:55`, `src/lib/cronAuth.js:116`, `src/lib/cronAuth.test.mjs:244`, `src/lib/cronAuth.test.mjs:269`, `src/lib/cronAuth.test.mjs:318`, `src/lib/cronAuth.test.mjs:187`
-- [~] **R0.1.14** The operator perimeter opens silently in a non-production NODE_ENV — submitted `src/lib/operatorPerimeter.js:180`, `src/lib/operatorPerimeter.js:189`, `src/middleware.js:24`, `src/middleware.js:54`, `src/lib/operatorPerimeter.test.mjs:308`, `src/lib/operatorPerimeter.test.mjs:428`
+- [x] **R0.1.14** The operator perimeter opens silently in a non-production NODE_ENV — closed at `src/lib/operatorPerimeter.js:180`, `src/lib/operatorPerimeter.js:189`, `src/middleware.js:24`, `src/middleware.js:54`, `src/lib/operatorPerimeter.test.mjs:308`, `src/lib/operatorPerimeter.test.mjs:428`
 - [-] **R0.1.15** ROTATE the GSC service-account key — leaked into an agent transcript `needs-secrets` — blocked: needs-secrets
 - [ ] **R0.1.16** health.js keeps a second vendor list and claims it is shared
 - [ ] **R0.1.17** Nothing detects a NODE_ENV that lies
+- [ ] **R0.1.18** Three footguns in the rate-limit trust knob
+- [ ] **R0.1.19** The perimeter warn-once guard is evadable in one added line
 ### R0.2
 
 - [x] **R0.2.1** Create docs/BUILD_JOURNAL.md seeded with the 37 findings — closed at `docs/BUILD_JOURNAL.md:123`, `docs/BUILD_JOURNAL.md:124`, `docs/BUILD_JOURNAL.md:127`, `src/lib/scoring/enginePipeline.js:510`, `src/lib/scoring/enginePipeline.js:450`, `src/lib/scoring/enginePipeline.js:98`, `src/lib/workers/scanWorker.js:472`, `src/lib/workers/scanWorker.js:436`, `src/lib/db.js:11`, `src/lib/db.js:298`, `src/lib/db.js:62`, `src/app/api/scan/route.js:62`, `src/app/api/scan/worker/route.js:60`, `src/lib/buildJournal.test.mjs:62`
@@ -65,7 +67,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `3/32`
+## R1 — Real-surface probe fleet  `5/33`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -80,13 +82,14 @@ Baseline commit: `5111219`
 
 - [x] **R1.2.1** worker/ workspace: long-lived Node + Playwright — closed at `worker/package.json`, `worker/src/index.js`, `worker/src/config.js`, `worker/README.md`, `src/lib/workerIsolation.test.mjs`
 - [x] **R1.2.2** probe_tasks queue table; fleet claims batches via jobLease — closed at `supabase/migrations/010_probe_tasks.sql:21`, `supabase/migrations/010_probe_tasks.sql:23`, `supabase/migrations/010_probe_tasks.sql:166`, `supabase/migrations/010_probe_tasks.sql:172`, `supabase/migrations/010_probe_tasks.sql:183`, `src/lib/probeTasksRace.test.mjs:275`, `src/lib/probeTasksRace.test.mjs:282`, `src/lib/probeTasksRace.test.mjs:124`, `src/lib/probeQueue.test.mjs:135`, `worker/src/lib/queue.js:172`, `src/lib/probeQueue.js:111`, `src/lib/liveDbGate.js:22`, `worker/src/index.js:40`, `scripts/setup-supabase.mjs:85`
-- [~] **R1.2.3** Create the scan_runs ledger table — submitted `supabase/migrations/011_scan_runs.sql:78`, `scripts/setup-supabase.mjs:111`, `scripts/setup-supabase.mjs:493`, `src/lib/scanRunsLive.test.mjs:346`, `src/lib/scanRunsLive.test.mjs:44`, `worker/src/lib/probe.js:27`
+- [x] **R1.2.3** Create the scan_runs ledger table — closed at `supabase/migrations/011_scan_runs.sql:78`, `scripts/setup-supabase.mjs:111`, `scripts/setup-supabase.mjs:493`, `src/lib/scanRunsLive.test.mjs:346`, `src/lib/scanRunsLive.test.mjs:44`, `worker/src/lib/probe.js:27`
 - [ ] **R1.2.4** Authenticated ingest POST /api/internal/probe-results
 - [ ] **R1.2.5** Dev runbook for the fleet
 - [ ] **R1.2.6** Fleet config validated at boot
-- [~] **R1.2.7** The Bright Data zone cache never invalidates — submitted `src/lib/engines/brightdata.js:81`, `src/lib/engines/brightdata.js:91`, `src/lib/engines/brightdata.js:116`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:291`, `src/lib/engines/brightdata.js:313`, `src/lib/engines/brightdata.js:398`, `src/lib/engines/brightdata.js:478`, `src/lib/engines/brightdataZone.test.mjs:101`, `src/lib/engines/brightdataZone.test.mjs:167`, `src/lib/engines/brightdataZone.test.mjs:249`
+- [x] **R1.2.7** The Bright Data zone cache never invalidates — closed at `src/lib/engines/brightdata.js:81`, `src/lib/engines/brightdata.js:91`, `src/lib/engines/brightdata.js:116`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:291`, `src/lib/engines/brightdata.js:313`, `src/lib/engines/brightdata.js:398`, `src/lib/engines/brightdata.js:478`, `src/lib/engines/brightdataZone.test.mjs:101`, `src/lib/engines/brightdataZone.test.mjs:167`, `src/lib/engines/brightdataZone.test.mjs:249`
 - [ ] **R1.2.8** The six-way race tests pass with SKIP LOCKED removed
 - [ ] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced
+- [ ] **R1.2.10** The Bright Data 200-envelope zone rejection has no test
 ### R1.3
 
 - [ ] **R1.3.1** Spike: Playwright against perplexity.ai `needs-secrets`
@@ -261,7 +264,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `11/24`
+## R6 — Apparatus & guards  `11/25`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -281,7 +284,7 @@ Baseline commit: `5111219`
 ### R6.3
 
 - [x] **R6.3.1** Vendor contract docs — closed at `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
-- [~] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current
+- [~] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current — submitted `docs/vendors/gemini.md:9`, `docs/vendors/gemini.md:47`, `docs/vendors/gemini.md:88`, `docs/vendors/gemini.md:205`, `docs/vendors/gemini.md:232`, `docs/vendors/gemini.md:253`, `docs/vendors/gemini.md:264`, `docs/vendors/gemini.md:290`, `docs/vendors/README.md:41`, `docs/vendors/README.md:94`, `docs/vendors/README.md:127`, `docs/vendors/README.md:167`, `src/lib/gemini.js:55`, `src/lib/gemini.js:85`, `src/lib/gemini.js:92`, `src/lib/docStatus.test.mjs:19`, `node_modules/@google/generative-ai/dist/index.mjs:444`
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker
@@ -291,6 +294,7 @@ Baseline commit: `5111219`
 - [x] **R6.4.5** testCoverageGuard fails on Windows: path.relative yields backslashes — closed at `src/lib/testCoverageGuard.test.mjs:29`, `src/lib/testCoverageGuard.test.mjs:41`
 - [x] **R6.4.6** archive-reference-scan takes a URL host but --list prints brand names — closed at `scripts/archive-reference-scan.mjs:83`, `scripts/archive-reference-scan.mjs:105`, `scripts/archive-reference-scan.mjs:54`, `scripts/archive-reference-scan.mjs:155`
 - [ ] **R6.4.7** The working tree is half CRLF despite .gitattributes eol=lf
+- [ ] **R6.4.8** Doc-to-source staleness tripwire, recommended by R6.3.2 and not buildable there
 ### R6.5
 
 - [x] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures — closed at `src/lib/scanRoute.route.test.mjs`, `src/lib/engines/brightdataParser.test.mjs`, `src/lib/cronAuth.route.test.mjs`
