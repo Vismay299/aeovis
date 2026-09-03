@@ -44,11 +44,28 @@ const LITERAL_SCAN_FILES = [
  * through DEPLOYED_ENGINE_LABELS.map(...), so an entry for an engine this
  * deployment does not probe can never render.
  *
- * An exemption is a place to hide a literal, so this one is as small as the
- * fact that justifies it: on each entry's line, ONLY that entry's own key is
- * removed. Everything else in the dictionary is still scanned, so a note keyed
- * "Google AI Overview" whose prose names ChatGPT — which WOULD render, on an
- * aio-only deployment — still fails the scan.
+ * An exemption is a place to hide a literal, so this one cuts exactly the KEY
+ * TOKEN of a key line — the optional quote, the label, its matching quote and
+ * the colon — and nothing else. The VALUE stays in the scanned text, with one
+ * stated allowance: an entry's own label may appear in its own prose ("ChatGPT
+ * returns a single paragraph"), so the own label is also dropped from that
+ * entry's value. That is the string form of labels.filter((l) => l !== own):
+ * every OTHER label in the value survives and is scanned.
+ *
+ * And a line is a key line only if it BEGINS an entry — the previous non-blank
+ * line opened the object or closed the entry before it — and matches
+ * quote-label-quote-colon with the quotes agreeing. Everything else inside the
+ * block, above all a long value Prettier wrapped onto its own line, is scanned
+ * verbatim.
+ *
+ * R2.10.6, second pass. The first version cut per LINE: any line starting with
+ * a label and a colon was taken for that line's key and deleted whole. So a
+ * note keyed "Google AI Overview" whose value wrapped onto its own line and
+ * began 'ChatGPT: ...' was erased instead of scanned. Rebuilt under
+ * NEXT_PUBLIC_ENGINES=aio that note put "ChatGPT: an AI Overview answer is the
+ * one your buyer reads..." into the engine rail of the served HTML — an
+ * off-deployment engine name, rendered, with all 16 guards green. Both forms,
+ * wrapped and single-line, are pinned by a test below.
  *
  * And it fails rather than exempting more than it understands: if the
  * declaration is not there in this shape, or the DEPLOYED_ENGINE_LABELS filter
@@ -79,16 +96,48 @@ function withoutEngineNoteDictionary(src, labels) {
         + "That filter is gone, so the exemption now hides a renderable literal."
     );
   }
+  // True when the next non-blank line BEGINS an entry, because the line before
+  // it either opened the object or ended the previous entry. A value that
+  // wrapped onto its own line is therefore never mistaken for a key.
+  let atEntryStart = false;
   const scoped = src
     .slice(start, end + 3)
     .split("\n")
     .map((line) => {
-      // The key this line declares, if it declares one: `Label:` or `'Label':`.
-      const head = line.trim().replace(/^['"`]/, "");
-      const own = labels.find(
-        (label) => head.startsWith(label) && /^['"`]?\s*:/.test(head.slice(label.length))
-      );
-      return own ? line.split(own).join("") : line;
+      let kept = line;
+      if (atEntryStart) {
+        for (const label of labels) {
+          // The key AS WRITTEN, walked character by character: the indent, an
+          // optional quote, the label, the SAME quote again, then the colon.
+          // Requiring the closing quote is what rejects a VALUE like
+          // "'ChatGPT: an AI Overview answer...'" — it opens with a label and
+          // a colon, but the quote never closes before the colon, so it is not
+          // this line's key and goes back whole.
+          const quotes = ["'", '"', "`"];
+          let i = line.length - line.trimStart().length;
+          const quote = quotes.includes(line[i]) ? line[i] : "";
+          if (quote) i += 1;
+          if (!line.startsWith(label, i)) continue;
+          i += label.length;
+          if (quote) {
+            if (line[i] !== quote) continue;
+            i += 1;
+          }
+          while (line[i] === " " || line[i] === "\t") i += 1;
+          if (line[i] !== ":") continue;
+          // Cut the key token and nothing more. What follows is value text and
+          // stays in the scanned string, minus this entry's OWN label, which
+          // its own prose may name: labels.filter((l) => l !== label) is what
+          // the rest of the line is effectively scanned for.
+          kept = line.slice(i + 1).split(label).join("");
+          break;
+        }
+      }
+      // Matching no key is the SAFE direction and is not silent: the line goes
+      // back whole, so any engine label on it fails the scan that called this.
+      const trimmed = line.trim();
+      if (trimmed) atEntryStart = /[{,]$/.test(trimmed);
+      return kept;
     })
     .join("\n");
   return src.slice(0, start) + scoped + rest;
@@ -510,6 +559,118 @@ test("GUARD — the sample report FOLLOWS the deployed engine list", () => {
     page,
     /className="chip">\{SAMPLE_CARD_ENGINE\}/,
     "and the evidence card's chip must render it"
+  );
+});
+
+/**
+ * R2.10.6, second pass — the ENGINE_NOTE exemption itself, exercised directly.
+ *
+ * The scan above reads the page.js on disk, so it can only ever pin the
+ * dictionary as it is written TODAY. This pins the EXEMPTION, against the
+ * shapes a future edit can produce, and it is not hypothetical: the wrapped
+ * case below is exactly what got past the first version of this guard. That
+ * note rendered "ChatGPT: an AI Overview answer..." into the engine rail of an
+ * aio-only build while all sixteen tests here reported clean. A Prettier wrap
+ * of one long note is all it takes.
+ *
+ * Same function, same inputs the child process gives it: the source with
+ * comments already stripped, and the full label list.
+ */
+test("GUARD — the ENGINE_NOTE exemption cuts the key token, never a value", () => {
+  const labels = Object.values(ENGINE_LABELS);
+  const deployedUnderAio = deployedEngineLabels({ ENGINES: "aio" });
+
+  const RAIL = "const RAIL_NOTES = DEPLOYED_ENGINE_LABELS.map((name) => ENGINE_NOTE[name]).filter(Boolean);\n";
+  const pageShaped = (entries) => `const ENGINE_NOTE = {\n${entries}\n};\n\n${RAIL}`;
+
+  // The two clauses the child asserts, over a page.js-shaped source.
+  const scan = (entries) => {
+    const src = withoutEngineNoteDictionary(withoutComments(pageShaped(entries)), labels);
+    const typed = labels.filter((l) => src.includes(l));
+    return { typed, offDeployment: typed.filter((l) => !deployedUnderAio.includes(l)) };
+  };
+
+  // Today's shape: the keys are exempt, and a note may name its OWN engine in
+  // its own prose. That allowance is the whole exemption, stated.
+  assert.deepEqual(
+    scan(
+      "  'Google AI Overview': 'An AI Overview answer is the one your buyer reads.',\n"
+        + "  ChatGPT: 'ChatGPT returns a single paragraph. There is no second place inside it.',\n"
+        + "  Perplexity: 'Perplexity cites its sources, so a lost answer names the page that took it.',"
+    ).typed,
+    [],
+    "an entry's own key, and its own label inside its own note, are what this exemption is for"
+  );
+
+  // THE REGRESSION. The value wrapped onto its own line, opening with a label
+  // and a colon. The old key-cut was line-based, so it read that as the line's
+  // key and deleted it whole.
+  const wrapped = scan(
+    "  'Google AI Overview':\n"
+      + "    'ChatGPT: an AI Overview answer is the one your buyer reads without clicking anything.',"
+  );
+  assert.deepEqual(
+    wrapped.typed,
+    ["ChatGPT"],
+    "a wrapped note VALUE must be scanned, never mistaken for the line's key"
+  );
+  assert.deepEqual(
+    wrapped.offDeployment,
+    ["ChatGPT"],
+    "and under ENGINES=aio that note RENDERS, so it must fail as an engine this deployment does not probe"
+  );
+
+  // The same note on one line was caught before this fix, and still is.
+  assert.deepEqual(
+    scan("  'Google AI Overview': 'ChatGPT: an AI Overview answer is the one your buyer reads.',").typed,
+    ["ChatGPT"],
+    "the single-line form must not regress while the wrapped one is closed"
+  );
+
+  // Another engine's name anywhere in a value, however the value is written.
+  assert.deepEqual(
+    scan("  ChatGPT: 'Perplexity cites its sources, ChatGPT does not.',").typed,
+    ["Perplexity"],
+    "only the entry's OWN label is allowed inside its value"
+  );
+  assert.deepEqual(
+    scan("  'Google AI Overview': `an AI Overview answer\nChatGPT: and what it costs you`,").typed,
+    ["ChatGPT"],
+    "a template literal's continuation line is not a key line either"
+  );
+  // Here the previous line DOES end in a comma, so only the second half of the
+  // key test — the quote that must close before the colon — rejects this.
+  assert.deepEqual(
+    scan("  'Google AI Overview': ['an AI Overview answer',\n    'ChatGPT: and what it costs you'],").typed,
+    ["ChatGPT"],
+    "a quoted value opening with a label and a colon is a value, not a key"
+  );
+
+  // Only the KEY TOKEN is cut, not every occurrence of the label on the line.
+  // Two entries on one line is not a shape this exemption claims to
+  // understand, so the second one is scanned rather than guessed at — the
+  // fail-loud direction.
+  assert.deepEqual(
+    scan("  'Google AI Overview': 'one', ChatGPT: 'two',").typed,
+    ["ChatGPT"],
+    "the cut is the key token at the start of an entry line, and nothing else"
+  );
+
+  // And the shape guards still throw rather than exempting what they cannot
+  // reason about.
+  assert.throws(
+    () => withoutEngineNoteDictionary("const SOMETHING_ELSE = {};\n", labels),
+    /no longer declares ENGINE_NOTE/,
+    "a moved or renamed dictionary must stop the guard, not silently widen it"
+  );
+  assert.throws(
+    () => withoutEngineNoteDictionary(pageShaped("  ChatGPT: 'a',").replace(RAIL, "const RAIL_NOTES = Object.values(ENGINE_NOTE);\n"), labels),
+    /filters it down to the deployed engines/,
+    "without the DEPLOYED_ENGINE_LABELS filter the exemption hides a renderable literal"
+  );
+  assert.throws(
+    () => withoutEngineNoteDictionary(pageShaped("  ChatGPT: 'a',"), []),
+    /needs the label list to scope itself/
   );
 });
 
