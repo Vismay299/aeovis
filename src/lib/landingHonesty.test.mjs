@@ -1,8 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   ENGINE_LABELS,
   deployedEngines,
@@ -12,9 +14,47 @@ import {
   engineDriftWarning,
 } from "./engines/deployedEngines.js";
 import { DEFAULT_UNBRANDED_TARGET } from "./scoring/promptSetSize.js";
+import { SAMPLE_DESTINATIONS, SAMPLE_RESULT } from "../data/mockData.js";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (rel) => readFile(path.join(REPO, rel), "utf8");
+
+/**
+ * Evaluate the sample report under a given NEXT_PUBLIC_ENGINES.
+ *
+ * deployedEngines() captures the inlined env expression at MODULE LOAD, so an
+ * in-process test can only ever see one engine list. A child process is the
+ * only way to assert the sample actually FOLLOWS the deployment rather than
+ * happening to match it today — the same thing the verifier did by hand with a
+ * rebuild.
+ */
+function sampleReadingUnder(engines) {
+  const href = pathToFileURL(path.join(REPO, "src/data/mockData.js")).href;
+  const code = `
+    const m = await import(${JSON.stringify(href)});
+    const r = m.SAMPLE_RESULT;
+    process.stdout.write(JSON.stringify({
+      tracked: r.promptsTracked,
+      analyzed: r.promptsAnalyzed,
+      rows: r.results.length,
+      topPrompts: r.topPrompts.length,
+      rowEngines: [...new Set(r.results.map((x) => x.engine))],
+      promptEngines: [...new Set(r.topPrompts.map((x) => x.engine))],
+      engineKeys: Object.keys(r.engines),
+      probeSources: r.probeSources,
+      destinations: m.SAMPLE_DESTINATIONS,
+      wins: r.results.filter((x) => x.visible).length,
+      share: r.visibilityScore,
+      refs: r.results.reduce((a, x) => a + x.aio_references.length, 0),
+      ownRefs: r.results.filter((x) => x.brand_cited).length,
+    }));
+  `;
+  const out = execFileSync(process.execPath, ["--input-type=module", "-e", code], {
+    env: { ...process.env, NEXT_PUBLIC_ENGINES: engines, ENGINES: engines },
+    encoding: "utf8",
+  });
+  return JSON.parse(out);
+}
 
 /**
  * R2.10.1 — the landing page must not claim more than the deployment does.
@@ -58,9 +98,24 @@ test("engineDriftWarning fires when the copy and the fleet disagree", () => {
 test("GUARD — the landing page names no engine in prose", async () => {
   const src = await read("src/app/page.js");
 
-  // The hero sentence must be derived, not typed. A hardcoded list is how it
-  // came to advertise an engine with no API key configured.
-  assert.match(src, /ENGINE_SENTENCE/, "the hero must render the derived sentence");
+  // The hero sentence must be DERIVED, not typed.
+  //
+  // This used to assert only that the token ENGINE_SENTENCE appeared somewhere
+  // and that one specific phrasing did not. That left the whole overclaim one
+  // line away: replacing the assignment with
+  //   const ENGINE_SENTENCE = 'Google AI Overview, ChatGPT and Perplexity';
+  // put all three engines back in the rendered hero and every guard here still
+  // passed. Assert the ASSIGNMENT, the way the rail guard does for DEMO_ENGINES.
+  assert.match(
+    src,
+    /const ENGINE_SENTENCE = formatEngineList\(deployedEngineLabels\(\)\);/,
+    "ENGINE_SENTENCE must be assigned from formatEngineList(deployedEngineLabels())"
+  );
+  assert.ok(
+    !/const ENGINE_SENTENCE\s*=\s*['"`]/.test(src),
+    "a typed sentence is exactly how the hero came to advertise an engine with no API key"
+  );
+  assert.match(src, /Perceev asks \{ENGINE_SENTENCE\}/, "and the hero must render it");
   assert.ok(
     !/asks Google AI Overview, ChatGPT and Perplexity/.test(src),
     "the hardcoded three-engine claim must not return"
@@ -124,29 +179,60 @@ test("GUARD — the advertised question count is the count a scan tracks", async
   );
 });
 
-test("GUARD — the demonstration figures sum to the advertised count", async () => {
+test("GUARD — the donut is the sample report's own split, not a second copy", async () => {
   const src = withoutComments(await read("src/app/page.js"));
 
-  // DESTINATIONS is the donut on the page: it must account for every tracked
-  // question, or the illustration contradicts the number beside it. The old
-  // comment asked a human to keep these in step; this asserts it instead.
-  const block = src.slice(src.indexOf("const DESTINATIONS"), src.indexOf("const DEMO_ENGINE_STATS"));
-  const answers = [...block.matchAll(/answers:\s*(\d+)/g)].map((m) => Number(m[1]));
-  assert.equal(answers.length, 4, "expected four destinations");
+  // The donut must account for every tracked question, or the illustration
+  // contradicts the number beside it. It used to be four typed literals in
+  // page.js, which is how the page reached 13/10/5/2 while the sample report
+  // one click away stayed on 15/12/6/3. Now it renders the report's own array.
+  assert.match(
+    src,
+    /const DESTINATIONS = SAMPLE_DESTINATIONS\.map/,
+    "the donut must render the sample report's split, not a second copy of it"
+  );
+  assert.ok(
+    !/answers:\s*\d+/.test(src),
+    "a typed answer count on the landing page is the drift this guard exists to stop"
+  );
+
+  assert.equal(SAMPLE_DESTINATIONS.length, 4, "expected four destinations");
+  const sum = SAMPLE_DESTINATIONS.reduce((a, d) => a + d.answers, 0);
   assert.equal(
-    answers.reduce((a, b) => a + b, 0),
+    sum,
     DEFAULT_UNBRANDED_TARGET,
-    `the destinations sum to ${answers.reduce((a, b) => a + b, 0)}, not the ${DEFAULT_UNBRANDED_TARGET} the page advertises`
+    `the destinations sum to ${sum}, not the ${DEFAULT_UNBRANDED_TARGET} the page advertises`
+  );
+
+  // And the split is the ROWS, not a plausible set of numbers beside them.
+  const held = (key) => SAMPLE_DESTINATIONS.find((d) => d.key === key).answers;
+  assert.equal(held("you"), SAMPLE_RESULT.results.filter((r) => r.visible).length);
+  assert.equal(
+    held("r1") + held("r2"),
+    SAMPLE_RESULT.results.filter((r) => r.competitors_found_in_text.length > 0).length
   );
 });
 
-test("GUARD — the engine rail shows only deployed engines", async () => {
+test("GUARD — the engine rail shows only deployed engines, with the report's own tallies", async () => {
   const src = await read("src/app/page.js");
 
-  assert.match(src, /DEMO_ENGINES = DEPLOYED_ENGINE_LABELS\.map/, "the rail must be derived from the deployed list");
+  assert.match(
+    src,
+    /DEMO_ENGINES = DEPLOYED_ENGINE_KEYS\.map/,
+    "the rail must be derived from the deployed list"
+  );
+  assert.match(
+    src,
+    /SAMPLE_RESULT\.engines\[key\]/,
+    "and its asked/reached must be the sample report's rows, not a share typed beside them"
+  );
   assert.ok(
     !/\{ name: 'ChatGPT', asked:/.test(src),
     "a hardcoded ChatGPT row advertises an engine this deployment does not probe"
+  );
+  assert.ok(
+    !/reachedShare/.test(src),
+    "a hardcoded reach share is a gauge with nothing behind it — it read 42% while the report it previews said 40%"
   );
 });
 
@@ -154,4 +240,145 @@ test("GUARD — every engine label the page can render is a known engine", () =>
   for (const label of deployedEngineLabels({ ENGINES: "aio,chatgpt,perplexity" })) {
     assert.ok(Object.values(ENGINE_LABELS).includes(label), `${label} is not a known engine label`);
   }
+});
+
+/**
+ * R2.10.1 (second pass) — the sample report is ONE CLICK from the hero.
+ *
+ * page.js "See a sample report" -> saveScan -> services/api.js sessionStorage
+ * -> dashboard/page.js loadScan/isSample -> DashboardShell -> OverviewView,
+ * which renders promptsTracked verbatim. The first pass moved the landing page
+ * to 30 questions and two engines and left mockData.js on 36 with twelve
+ * answers credited to ChatGPT, an engine with no API key on this deployment.
+ * Nothing tied the two files together. These do.
+ */
+
+test("GUARD — the sample report tracks the count a scan tracks", () => {
+  assert.equal(
+    SAMPLE_RESULT.promptsTracked,
+    DEFAULT_UNBRANDED_TARGET,
+    "the report behind the hero button must not claim more questions than a scan runs"
+  );
+  assert.equal(SAMPLE_RESULT.promptsAnalyzed, DEFAULT_UNBRANDED_TARGET);
+  assert.equal(SAMPLE_RESULT.results.length, DEFAULT_UNBRANDED_TARGET, "one row per tracked question");
+  assert.equal(SAMPLE_RESULT.topPrompts.length, DEFAULT_UNBRANDED_TARGET, "and one tracked-prompt row per question");
+});
+
+test("GUARD — the sample report names no engine this deployment does not probe", () => {
+  const deployed = new Set(deployedEngines());
+
+  for (const key of Object.keys(SAMPLE_RESULT.engines)) {
+    assert.ok(deployed.has(key), `engines has "${key}", which this deployment does not probe`);
+  }
+  for (const key of SAMPLE_RESULT.probeSources) {
+    assert.ok(deployed.has(key), `probeSources has "${key}", which this deployment does not probe`);
+  }
+  for (const row of SAMPLE_RESULT.results) {
+    assert.ok(deployed.has(row.engine), `a result row is attributed to "${row.engine}"`);
+  }
+  for (const row of SAMPLE_RESULT.topPrompts) {
+    assert.ok(deployed.has(row.engine), `a tracked prompt is attributed to "${row.engine}"`);
+  }
+
+  // Every per-engine tally must add back up to the whole reading, or the
+  // dashboard's multi-engine mode shows a total nothing sums to.
+  const answered = Object.values(SAMPLE_RESULT.engines).reduce((a, e) => a + e.answered, 0);
+  const visible = Object.values(SAMPLE_RESULT.engines).reduce((a, e) => a + e.visible, 0);
+  assert.equal(answered, DEFAULT_UNBRANDED_TARGET);
+  assert.equal(visible, SAMPLE_RESULT.results.filter((r) => r.visible).length);
+});
+
+test("GUARD — the sample report FOLLOWS the deployed engine list", () => {
+  // Not "matches today" — follows. Run it under a different deployment and the
+  // report has to move, the way the hero and the rail were proven to.
+  const two = sampleReadingUnder("aio,perplexity");
+  assert.deepEqual(two.probeSources, ["aio", "perplexity"]);
+  assert.deepEqual(two.rowEngines.sort(), ["aio", "perplexity"]);
+  assert.deepEqual(two.promptEngines.sort(), ["aio", "perplexity"]);
+  assert.equal(two.tracked, DEFAULT_UNBRANDED_TARGET);
+
+  const three = sampleReadingUnder("aio,chatgpt,perplexity");
+  assert.deepEqual(three.probeSources, ["aio", "chatgpt", "perplexity"]);
+  assert.deepEqual(three.rowEngines.sort(), ["aio", "chatgpt", "perplexity"]);
+  assert.equal(three.tracked, DEFAULT_UNBRANDED_TARGET, "the count does not move with the engine list");
+
+  const one = sampleReadingUnder("aio");
+  assert.deepEqual(one.probeSources, ["aio"]);
+  assert.deepEqual(one.rowEngines, ["aio"], "a single-engine deployment must not show a second engine");
+  assert.equal(one.tracked, DEFAULT_UNBRANDED_TARGET);
+
+  // The verdict itself is the same reading whatever the split.
+  assert.equal(one.wins, two.wins);
+  assert.equal(two.wins, three.wins);
+  assert.equal(one.share, three.share);
+  assert.deepEqual(one.destinations, three.destinations);
+});
+
+test("GUARD — the sample report backs the '64 pages, six of them yours' claim", () => {
+  const refs = SAMPLE_RESULT.results.reduce((a, r) => a + r.aio_references.length, 0);
+  const mine = SAMPLE_RESULT.results.filter((r) => r.brand_cited).length;
+
+  // page.js states these as words ("The 64 pages...", "The other fifty-eight")
+  // and hands them to SourcesViz as literals. They are only true because the
+  // data below produces them; if it stops, this fails instead of the copy
+  // quietly becoming fiction.
+  assert.equal(refs, 64, "the sample must actually cite 64 sources");
+  assert.equal(mine, 6, "six of them must actually be pages the brand controls");
+
+  const src = withoutComments(readFileSync(path.join(REPO, "src/app/page.js"), "utf8"));
+  assert.match(src, /SourcesViz total=\{64\} mine=\{6\}/, "the slide must quote those same two numbers");
+});
+
+test("GUARD — the scan page's sample panel is read off the sample report", async () => {
+  const src = withoutComments(await read("src/app/scan/page.js"));
+
+  // Scoped to the panel, because a CSS width of '100%' elsewhere on the page is
+  // not a claim about anything.
+  const start = src.indexOf("const SAMPLE_FACTS");
+  assert.ok(start >= 0, "the scan page must still declare SAMPLE_FACTS");
+  const block = src.slice(start, src.indexOf("export default function Scan"));
+
+  // It used to type '41%' and '15 / 36' beside a button that opens a report
+  // now reading 43% and 13 / 30.
+  assert.ok(!/'\d+%'/.test(block), "a typed share of AI cannot follow the report this panel previews");
+  assert.ok(!/\d+ \/ \d+/.test(block), "nor a typed 'n / total'");
+  assert.match(block, /SAMPLE_RESULT\.visibilityScore/);
+  assert.match(block, /SAMPLE_RESULT\.promptsTracked/);
+  assert.match(block, /SAMPLE_RESULT\.competitorsFound/);
+});
+
+test("GUARD — engineDriftWarning runs in production, not only here", async () => {
+  // It was written for a real failure and documented in .env.example as though
+  // it ran on deploy, but the ONLY caller anywhere was this file. A guard that
+  // exists solely inside its own test is the same shape of claim as a Live chip
+  // on a script.
+  const script = await read("scripts/check-secrets.mjs");
+  assert.match(
+    script,
+    /engineDriftWarning\(process\.env\)/,
+    "check:secrets must actually call it, on the real environment"
+  );
+  assert.match(
+    script,
+    /engine advertising — what the landing page names vs what the fleet can probe/,
+    "and report it under its own heading, so it is never silent"
+  );
+  assert.match(
+    script,
+    /failures\.length \|\| !engines\.ok \? 1 : 0/,
+    "a mismatch must move the exit code — a warning nobody reads is what this replaces"
+  );
+
+  // The same check closes the isConfigured() gap deployedEngines() cannot see:
+  // an advertised engine with no key is an engine every scan skips.
+  assert.match(script, /OPENAI_API_KEY/, "the advertised-vs-funded check must know chatgpt's key");
+  assert.match(script, /PERPLEXITY_API_KEY/, "and perplexity's");
+
+  // And the operator-facing comment must name the thing that actually runs.
+  const envExample = await read(".env.example");
+  assert.match(
+    envExample,
+    /check:secrets/,
+    ".env.example must point operators at the check that exists, not at a function nothing calls"
+  );
 });

@@ -17,7 +17,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 import { DEFAULT_UNBRANDED_TARGET } from '@/lib/scoring/promptSetSize';
-import { deployedEngineLabels, formatEngineList } from '@/lib/engines/deployedEngines';
+import {
+  ENGINE_LABELS, deployedEngineLabels, deployedEngines, formatEngineList,
+} from '@/lib/engines/deployedEngines';
 import { SiteNav } from '@/components/landing/SiteNav';
 import { SiteFooter } from '@/components/landing/SiteFooter';
 import { Reveal } from '@/components/landing/Reveal';
@@ -30,12 +32,19 @@ import {
   CapabilityDeck, TrackedSetViz, TrendViz, RivalViz, SourcesViz,
 } from '@/components/landing/CapabilityDeck';
 import { saveScan } from '@/services/api';
-import { SAMPLE_RESULT } from '@/data/mockData';
+import { SAMPLE_DESTINATIONS, SAMPLE_RESULT } from '@/data/mockData';
 
 /* ── the one demonstration reading ──────────────────────────────────
-   DESTINATIONS must sum to TRACKED. Change one and change all of them —
-   a guard test (landingHonesty.test.mjs) now enforces it rather than
-   trusting this comment. */
+   Nothing below is a number typed twice. TRACKED is the constant a scan runs
+   on, the donut is the array the sample report renders, and the rail is that
+   report's own per-engine tally.
+
+   R2.10.1 — the first pass at this kept a SECOND copy of each and they drifted
+   inside one commit: this page moved to 30 questions and 13/10/5/2 while the
+   sample report one click away (src/data/mockData.js, reached from the "See a
+   sample report" button below) stayed on 36 and 15/12/6/3, and still credited
+   twelve of them to ChatGPT. landingHonesty.test.mjs asserts the tie now,
+   rather than asking a human to hold two files in their head. */
 // R2.10.1 — was a hardcoded 36 while a scan tracks 30 by default and every
 // archived reference scan recorded prompts_tracked=30, so the page promised a
 // fifth more than the product delivers. Now derived from the same constant the
@@ -50,37 +59,55 @@ const TRACKED = DEFAULT_UNBRANDED_TARGET;
 // direction. See src/lib/engines/deployedEngines.js.
 const ENGINE_SENTENCE = formatEngineList(deployedEngineLabels());
 
-// 13 + 10 + 5 + 2 = 30 = TRACKED.
-const DESTINATIONS = [
-  { key: 'you', label: 'Brightwave', answers: 13, colour: 'var(--you)', isYou: true },
-  { key: 'r1', label: 'NorthPeak', answers: 10, colour: 'var(--rival-1)' },
-  { key: 'r2', label: 'Lumen IQ', answers: 5, colour: 'var(--rival-2)' },
-  { key: 'none', label: 'No brand named', answers: 2, colour: 'var(--rival-3)', muted: true },
-];
-
-// R2.10.1 — the rail showed a fixed three engines including ChatGPT, which this
-// deployment does not probe. The illustrative per-engine figures stay (this is a
-// sample reading for a fictional brand), but the ENGINES SHOWN are the ones we
-// actually run: advertising coverage we do not have is the overclaim, not the
-// worked example. Split evenly so the asked counts still sum to TRACKED.
-const DEMO_ENGINE_STATS = {
-  'Google AI Overview': { reachedShare: 0.42, note: 'Three of your four highest-intent questions live in AI Overview.' },
-  ChatGPT: { reachedShare: 0.5, note: "ChatGPT is your strongest engine, and your rivals' weakest." },
-  Perplexity: { reachedShare: 0.33, note: 'Perplexity cites sources hardest — six of its 64 are pages you control.' },
-};
-
+const DEPLOYED_ENGINE_KEYS = deployedEngines();
 const DEPLOYED_ENGINE_LABELS = deployedEngineLabels();
-const PER_ENGINE_ASKED = Math.floor(TRACKED / Math.max(1, DEPLOYED_ENGINE_LABELS.length));
 
-const DEMO_ENGINES = DEPLOYED_ENGINE_LABELS.map((name) => ({
-  name,
-  asked: PER_ENGINE_ASKED,
-  reached: Math.round(PER_ENGINE_ASKED * (DEMO_ENGINE_STATS[name]?.reachedShare ?? 0.4)),
+// The donut. Colour is presentation and belongs here; the counts are the sample
+// report's own, so the two surfaces cannot disagree again.
+const DESTINATION_COLOUR = {
+  you: 'var(--you)', r1: 'var(--rival-1)', r2: 'var(--rival-2)', none: 'var(--rival-3)',
+};
+const DESTINATIONS = SAMPLE_DESTINATIONS.map((d) => ({
+  ...d,
+  colour: DESTINATION_COLOUR[d.key] ?? 'var(--rival-3)',
 }));
 
-const RAIL_NOTES = DEPLOYED_ENGINE_LABELS
-  .map((name) => DEMO_ENGINE_STATS[name]?.note)
-  .filter(Boolean);
+// R2.10.1 — the rail showed a fixed three engines including ChatGPT, which this
+// deployment does not probe, and derived `reached` from a hardcoded share per
+// engine. Both the engines AND their tallies now come from the sample report:
+// `asked`/`reached` are the rows it actually holds, so this gauge and the
+// report behind the button cannot say different things.
+const DEMO_ENGINES = DEPLOYED_ENGINE_KEYS.map((key) => {
+  const stat = SAMPLE_RESULT.engines[key];
+  if (!stat) {
+    // Both lists come from deployedEngines(), so this is unreachable. If it
+    // ever fires, a gauge with no reading behind it still LOOKS like a reading.
+    throw new Error(
+      `landing: the sample report holds no reading for "${key}", so this rail `
+      + 'would render a gauge with nothing behind it.',
+    );
+  }
+  return { name: ENGINE_LABELS[key], asked: stat.answered, reached: stat.visible };
+});
+
+// The rail says "the same N questions go to each", which is only true when the
+// set divides evenly across the deployed engines. Take the smallest, so an
+// uneven split under-claims rather than over-claims.
+const PER_ENGINE_ASKED = DEMO_ENGINES.length
+  ? Math.min(...DEMO_ENGINES.map((e) => e.asked))
+  : 0;
+
+// Prose only. Two of these notes used to carry arithmetic — "three of your four
+// highest-intent questions", "six of its 64" — that was never true of the
+// demonstration data behind them. The numbers on this rail are the gauges, and
+// those are derived.
+const ENGINE_NOTE = {
+  'Google AI Overview': 'An AI Overview answer is the one your buyer reads without clicking anything.',
+  ChatGPT: 'ChatGPT returns a single paragraph. There is no second place inside it.',
+  Perplexity: 'Perplexity cites its sources, so a lost answer names the page that took it.',
+};
+
+const RAIL_NOTES = DEPLOYED_ENGINE_LABELS.map((name) => ENGINE_NOTE[name]).filter(Boolean);
 
 const SLIDES = [
   {

@@ -15,6 +15,20 @@
  *
  * The default matches resolveEnabledEngines' own default ("aio") deliberately:
  * an unconfigured deployment should under-claim, never over-claim.
+ *
+ * WHAT THIS FILE CANNOT DO, and where that is covered.
+ *
+ * resolveEnabledEngines (src/lib/scoring/enginePipeline.js:527) additionally
+ * drops any engine whose isConfigured() is false. This module CANNOT: it is
+ * bundled into a client component, so it must never read OPENAI_API_KEY or
+ * PERPLEXITY_API_KEY, and if it tried, the value would be undefined in the
+ * browser anyway. So ENGINES=aio,chatgpt,perplexity with no OPENAI_API_KEY
+ * makes the page advertise an engine the fleet skips — the original C11 bug,
+ * still reachable by config and harmless today only because ENGINES excludes
+ * chatgpt. That gap is closed at deploy time, on the server, where both halves
+ * are visible: the "engine advertising" section of scripts/check-secrets.mjs
+ * FAILS the run on it, and on ENGINES/NEXT_PUBLIC_ENGINES drift in either
+ * direction — including the one-sided case below.
  */
 
 /** Registry name -> the label a human should see. */
@@ -58,6 +72,14 @@ export function deployedEngines(env = null) {
   // browser bundle carries the real value. Tests pass an env object and get
   // pure behaviour with no bundler involvement.
   const publicRaw = env ? env.NEXT_PUBLIC_ENGINES : INLINED_PUBLIC_ENGINES;
+  // `ENGINES` is server-only, so in the browser this expression is NOT inlined
+  // and evaluates to undefined. On this fallback path SSR renders the server's
+  // ENGINES list and the client renders the "aio" default: one page, two
+  // answers, and a React hydration mismatch. The direction is an under-claim,
+  // so it is not urgent, and it cannot be fixed here — a client bundle has no
+  // way to read a server-only variable. It is instead made UNREACHABLE at
+  // deploy time: check:secrets FAILS when ENGINES is set and
+  // NEXT_PUBLIC_ENGINES is not, which is the only way to arrive here.
   const serverRaw = env ? env.ENGINES : process.env.ENGINES;
 
   const fromPublic = parseEngineList(publicRaw);

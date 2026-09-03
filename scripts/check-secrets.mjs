@@ -11,8 +11,10 @@
  * Rules this script follows, because it exists to tell the truth about state:
  *   - Exactly three verdicts. UNCONFIGURED (no credential) is NOT a pass and
  *     NOT a failure; it is a third thing, and it must look different from both.
- *   - Exit code is non-zero only when a CONFIGURED vendor fails. An
- *     unconfigured optional vendor must not break a deploy gate.
+ *   - Exit code is non-zero only when a CONFIGURED vendor fails, or when the
+ *     engine-advertising check below finds the landing page naming an engine
+ *     the fleet will skip (R2.10.1). An unconfigured optional vendor must not
+ *     break a deploy gate; a page that lies about coverage should.
  *   - Every call is the cheapest read the vendor offers, with a hard timeout.
  *     Nothing here creates, writes, or spends more than a token or two.
  *
@@ -22,6 +24,13 @@
  */
 
 import { LLM_ENV, getLlmApiKey, getLlmBaseUrl, getLlmModel, getLlmProvider } from "../src/lib/llmConfig.js";
+import {
+  ENGINE_LABELS,
+  deployedEngines,
+  engineDriftWarning,
+  formatEngineList,
+  parseEngineList,
+} from "../src/lib/engines/deployedEngines.js";
 
 const PASS = "PASS";
 const FAIL = "FAIL";
@@ -272,6 +281,105 @@ const VENDORS = [
   },
 ];
 
+/**
+ * The one NON-VENDOR check in this script, reported under its own heading.
+ *
+ * R2.10.1 (finding C11, second pass). It closes two holes at once:
+ *
+ *   1. engineDriftWarning() had NO production caller. It was written for
+ *      exactly this failure and .env.example told operators it "reports a
+ *      mismatch", but the only thing that ever invoked it was a unit test. A
+ *      guard documented as live that runs only in its own test is the same
+ *      shape of claim as a "Live" chip on a hardcoded script.
+ *
+ *   2. deployedEngines() — which drives the hero sentence, the engine rail and
+ *      the sample report — cannot consult isConfigured(). It is bundled into a
+ *      client component, so it must never read OPENAI_API_KEY, and in the
+ *      browser the value would be undefined anyway. So
+ *      ENGINES=aio,chatgpt,perplexity with no OPENAI_API_KEY makes the page
+ *      advertise ChatGPT while resolveEnabledEngines (enginePipeline.js:527)
+ *      skips it behind a console.warn nobody reads: every scan measures two
+ *      engines and every visitor is told three. Only a server-side check sees
+ *      both halves. This is that check.
+ *
+ * It is deliberately NOT a row in VENDORS. That table is a credential table
+ * and checkSecrets.test.mjs asserts it stays name-for-name identical to
+ * /api/health's; "engines" is not a credential, and it has an answer even on a
+ * deployment holding none. Hence its own heading, its own vocabulary, and no
+ * PASS/FAIL/UNCONFIGURED token to be miscounted as a vendor verdict.
+ *
+ * The key map MIRRORS ENGINE_REGISTRY.isConfigured deliberately. aio has no key
+ * of its own there (it probes through Bright Data, which IS a vendor row), so
+ * inventing one here would fail deployments the fleet would happily run.
+ */
+const ENGINE_API_KEY = { aio: null, chatgpt: "OPENAI_API_KEY", perplexity: "PERPLEXITY_API_KEY" };
+
+/** resolveEnabledEngines' own fallback when ENGINES is unset (enginePipeline.js). */
+const FLEET_DEFAULT = "aio";
+
+function checkEngineAdvertising() {
+  const label = (names) => formatEngineList(names.map((n) => ENGINE_LABELS[n]));
+  const drift = engineDriftWarning(process.env);
+  if (drift) return { ok: false, line: `MISMATCH: ${drift}` };
+
+  // engineDriftWarning returns null when only ONE of the pair is set, because
+  // it compares two lists and here there is only one. That is still the two
+  // variables out of step, and it has a worse symptom than a wrong label:
+  // ENGINES is server-only, so SSR renders the real list and the browser
+  // renders the "aio" default (deployedEngines.js, the fallback path). Same
+  // page, two answers, plus a React hydration mismatch.
+  const pub = parseEngineList(process.env.NEXT_PUBLIC_ENGINES);
+  const srv = parseEngineList(process.env.ENGINES);
+
+  if (srv.length && !pub.length) {
+    return {
+      ok: false,
+      line:
+        `MISMATCH: ENGINES=${srv.join(",")} is set but NEXT_PUBLIC_ENGINES is not. ENGINES is ` +
+        `server-only, so the server would render ${label(srv)} and the browser the aio default. ` +
+        `Set NEXT_PUBLIC_ENGINES to the same list.`,
+    };
+  }
+
+  // The mirror image, and the one that flatters: the page reads
+  // NEXT_PUBLIC_ENGINES first, so it names whatever is there, while the fleet
+  // falls back to resolveEnabledEngines' own "aio" default. Every visitor is
+  // told about engines no scan ever runs.
+  if (pub.length && !srv.length && pub.join(",") !== FLEET_DEFAULT) {
+    return {
+      ok: false,
+      line:
+        `MISMATCH: NEXT_PUBLIC_ENGINES=${pub.join(",")} is set but ENGINES is not, so the page ` +
+        `advertises ${label(pub)} while the fleet falls back to its ${FLEET_DEFAULT} default and ` +
+        `probes ${label(parseEngineList(FLEET_DEFAULT))}. Set ENGINES to the same list.`,
+    };
+  }
+
+  const advertised = deployedEngines(process.env);
+  const unfunded = advertised.filter((n) => ENGINE_API_KEY[n] && !env(ENGINE_API_KEY[n]));
+  if (unfunded.length) {
+    const one = unfunded.length === 1;
+    return {
+      ok: false,
+      line:
+        `MISMATCH: the page advertises ${label(unfunded)}, but ` +
+        `${unfunded.map((n) => ENGINE_API_KEY[n]).join(", ")} ${one ? "is" : "are"} not set, so ` +
+        `resolveEnabledEngines skips ${one ? "it" : "them"} on every scan. Set the key, or drop ` +
+        `${one ? "it" : "them"} from ENGINES and NEXT_PUBLIC_ENGINES.`,
+    };
+  }
+
+  const from = env("NEXT_PUBLIC_ENGINES")
+    ? "NEXT_PUBLIC_ENGINES"
+    : env("ENGINES")
+      ? "ENGINES"
+      : "the aio default";
+  return {
+    ok: true,
+    line: `in step: the page advertises ${label(advertised)} (from ${from}), and the fleet can probe every one`,
+  };
+}
+
 const MARK = { [PASS]: "  ok  ", [FAIL]: " FAIL ", [UNCONFIGURED]: " ---- " };
 
 async function main() {
@@ -326,8 +434,18 @@ async function main() {
     );
   }
 
-  // The contract: non-zero ONLY when a CONFIGURED vendor failed.
-  process.exit(failures.length ? 1 : 0);
+  // Not a vendor, not a credential, and printed outside the table above so it
+  // cannot be parsed as one. It always has an answer, including on a machine
+  // holding no credentials at all — which is the point: the page advertises
+  // engines whether or not anything is configured.
+  const engines = checkEngineAdvertising();
+  console.log("");
+  console.log("engine advertising — what the landing page names vs what the fleet can probe:");
+  console.log(`  ${engines.line}`);
+
+  // The contract: non-zero when a CONFIGURED vendor failed, or when the page
+  // and the fleet disagree about what this deployment measures.
+  process.exit(failures.length || !engines.ok ? 1 : 0);
 }
 
 main().catch((err) => {

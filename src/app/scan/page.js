@@ -40,11 +40,19 @@ const STAGES = [
 ];
 
 /* The sample report, quoting the one demonstration reading. Brightwave is
-   fictional, and the page says so. */
+   fictional, and the page says so.
+
+   R2.10.1 — these three were typed: '41%', '15 / 36', '7'. The report they
+   preview moved to 30 questions and a 13-answer win, so this panel advertised a
+   reading that no longer existed anywhere. Read off SAMPLE_RESULT now; it is
+   the same object the button below hands to the dashboard. */
 const SAMPLE_FACTS = [
-  { k: 'Share of AI', v: '41%' },
-  { k: 'Answers naming you', v: '15 / 36' },
-  { k: 'Rivals discovered', v: '7' },
+  { k: 'Share of AI', v: `${SAMPLE_RESULT.visibilityScore}%` },
+  {
+    k: 'Answers naming you',
+    v: `${SAMPLE_RESULT.results.filter((r) => r.visible).length} / ${SAMPLE_RESULT.promptsTracked}`,
+  },
+  { k: 'Rivals discovered', v: String(SAMPLE_RESULT.competitorsFound) },
 ];
 
 export default function Scan() {
