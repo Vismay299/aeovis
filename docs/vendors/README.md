@@ -114,21 +114,31 @@ revision of this paragraph got it wrong:
 **That second one makes a live authenticated Search Console call.** Until
 2026-09-03 this paragraph said the opposite — that the `gsc` entry "validates
 the key's shape offline… explicitly making no live call — grep `offline check
-only`". That string occurs nowhere in the script. Its only occurrence in the
-tree is `src/lib/checkSecrets.test.mjs:206`, a **guard asserting it must not
-appear** ("the offline-only disclaimer is obsolete — the check is live"). The
-doc cited, as evidence of offline-ness, a string a passing test exists to keep
-absent. Recorded here rather than quietly deleted, because it is the failure
-Rule 2 above is about.
+only`". That string occurs nowhere in the script. Its only occurrence **in
+code** is `src/lib/checkSecrets.test.mjs:206`, a **guard asserting it must not
+appear** ("the offline-only disclaimer is obsolete — the check is live"). Scoped
+to *code* on purpose: the retired string also survives as quotation in this
+directory's own prose — in the table above, and in the sentence you just read —
+so "nowhere in the tree" would be false by self-reference. The doc cited, as
+evidence of offline-ness, a string a passing test exists to keep absent.
+Recorded here rather than quietly deleted, because it is the failure Rule 2
+above is about.
 
 Re-verified at HEAD by sweeping `src`, `scripts`, `worker` and `supabase` for
 `engines/gsc`, `GSC_SERVICE_ACCOUNT_KEY` and every symbol `gsc.js` actually
 exports (`getGscServiceAccount`, `listGscSites`, `candidateSiteUrls`,
-`fetchSearchQueries`, `fetchSearchQueriesForUrl`). Outside the module the only
-hits are the two scripts above, their tests, and two non-calls:
-`src/lib/health.js:31` reports whether the credential is *configured*, and
-`src/lib/db.js:37,425` is a `gsc_queries jsonb` column written as `[]`. No route
-file imports it, and neither `vercel.json` cron path (`/api/scan/worker`,
+`fetchSearchQueries`, `fetchSearchQueriesForUrl`). Outside the module that
+sweep returns exactly **four** files: the two scripts above; the test of one of
+them, `src/lib/checkSecrets.test.mjs` (`test-gsc.mjs` has no test); and one
+non-call, `src/lib/health.js:31`, which reports only whether the credential is
+*configured*. `src/lib/db.js:37,425` is deliberately **not** in that list: those
+lines are the `gsc_queries jsonb` column written as `[]`, they match none of the
+seven terms, and they surface only under a looser case-insensitive grep for
+`gsc` — alongside that column's migration
+(`supabase/migrations/001_initial_schema.sql:65,99`) and the test that pins it
+empty (`src/lib/scoring/asyncJob.test.mjs:24`). The only write to that column
+anywhere in the tree is the `[]` at `db.js:425`. No route file imports
+`gsc.js`, and neither `vercel.json` cron path (`/api/scan/worker`,
 `/api/content/worker`) reaches it.
 
 **The rationale, restated, because the old one is now false.** It used to read
