@@ -3885,6 +3885,37 @@
       "verification": null
     },
     {
+      "id": "R3.1.3",
+      "subphase": "R3.1",
+      "lane": "backend",
+      "title": "The scan worker route reports processed:1 for a request that failed",
+      "detail": "GET /api/scan/worker with a garbage job_id returns HTTP 200 with {processed: 1}. getScanJob throws on a non-uuid, runScanChunk returns {ok:false, reason:read_failed}, and src/app/api/scan/worker/route.js:61 reports processed:1 regardless of what runScanChunk returned. This is a false success on a route the cron drives every day, so a chunk that did nothing is indistinguishable in the response from one that worked. Found by the R3.2.1 implementer, whose change now makes the failure VISIBLE in the scan_runs ledger — a failed row with reason read_failed — but the route response is still wrong and was outside that accept. Standing rule 1: a skip is not a success.",
+      "accept": "The worker route reports what actually happened: a chunk that returned ok:false is not counted as processed, and the response distinguishes processed, skipped and failed. A test drives the real GET handler with a garbage job_id and fails if it reports a success.",
+      "deps": [
+        "R3.2.1"
+      ],
+      "anchors": [
+        "src/app/api/scan/worker/route.js:61",
+        "src/lib/workers/scanWorker.js"
+      ],
+      "findings": [
+        "A1"
+      ],
+      "phase": "R3",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T12:31:30.112Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R3.2.1",
       "subphase": "R3.2",
       "lane": "backend",
@@ -3980,6 +4011,38 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.2.4",
+      "subphase": "R3.2",
+      "lane": "test",
+      "title": "A live test wrote to production because only its reads were stubbed",
+      "detail": "While building R3.2.1, an earlier draft of its live test stubbed only the READ side of the chunk. The chunk therefore ran through to finalize and the real insertScan wrote 2 rows into scans plus 2 into brand_metrics_daily on the production database. The implementer self-reported it, deleted exactly those four rows in one transaction, and verified restoration; the controller independently confirmed the counts before committing (scans 60, brand_metrics_daily 46, scan_jobs 80, prompt_results 1070, citations 6631, result_brands 2822, newest scan still 2026-07-30). No customer data was lost and nothing was overwritten. The live file now stubs every finalize and sourcing write behind an assert.fail guard, but that guard is a convention the next author has to remember rather than a property of the harness. Two other live-test authors this session came close to the same edge: R0.1.4's negative control returned 201 and started an in-memory scan, saved only by no credentials being loaded under node --test, which its author called luck rather than design. The pattern is that a live-DB test harness that stubs reads looks finished, and the write path only announces itself by writing.",
+      "accept": "A live test cannot reach a production write by omission: the harness refuses writes by default and a test must opt in explicitly per table, so a newly added live test that forgets to stub a writer fails loudly rather than writing. Proven by writing a test that omits a stub and watching it fail.",
+      "deps": [
+        "R3.2.1"
+      ],
+      "anchors": [
+        "src/lib/workers/scanChunkLedgerLive.test.mjs",
+        "src/lib/liveDbGate.js",
+        "src/lib/scanRunsLive.test.mjs"
+      ],
+      "findings": [
+        "A1"
+      ],
+      "phase": "R3",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T12:31:10.280Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
       "verification": null
     },
     {
@@ -4403,6 +4466,38 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.7.4",
+      "subphase": "R3.7",
+      "lane": "backend",
+      "title": "Apply the SSRF guard to the crawlability route",
+      "detail": "R3.7.1 built src/lib/ssrfGuard.js and applied it to the Firecrawl path, and its implementer stated plainly what they could not reach. Crawlability fetching does not live in src/lib/crawlers, which is pure parsing — it is src/app/api/brands/[brand]/crawlability/route.js. Its isSafeDomain was executed verbatim and ALLOWS 7 of 11 adversarial hosts including 169.254.169.254, 127.0.0.2, 127.1, 0177.0.0.1, 100.64.0.1, 198.18.0.1 and 224.0.0.1, and its fetches use redirect:follow so a public URL can 302 into the metadata range. The guard to apply already exists and carries 154 tests. SCOPE NOTE, AND THE FAULT IS THE CONTROLLER: R3.7.1 is titled SSRF guard module for Firecrawl fallback AND CRAWLABILITY, but the brief I wrote scoped the implementer to firecrawl.js and a new module, so they correctly reported the accept met for one path and not the other. R3.7.1 verifier must judge whether its accept is met with this outstanding; this task exists either way. Three smaller items from the same implementer belong here too: TOCTOU and DNS rebinding at connect time are narrowed but not closed anywhere, because closing them needs address pinning at the dispatcher and undici is not a declared dependency; /api/knowledge returns 500 rather than 400 on a policy refusal; and promptGen catches the refusal and continues with an empty snippet, so a blocked scan still produces prompts with only a log line to say so.",
+      "accept": "The crawlability route validates through classifyAddress and fetches through safeFetch with redirects re-checked per hop; the eleven adversarial hosts are refused and legitimate domains still pass; isSafeDomain is deleted rather than left beside the guard. The TOCTOU gap is either closed by address pinning or recorded with what it would take.",
+      "deps": [
+        "R3.7.1"
+      ],
+      "anchors": [
+        "src/app/api/brands/[brand]/crawlability/route.js",
+        "src/lib/ssrfGuard.js:366",
+        "src/lib/ssrfGuard.js:552"
+      ],
+      "findings": [
+        "C12"
+      ],
+      "phase": "R3",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T12:32:03.701Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
       "verification": null
     },
     {
