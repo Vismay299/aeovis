@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**29 / 140 closed** · 3 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**30 / 142 closed** · 3 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -110,7 +110,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `6/30`
+## R2 — Scoring truth  `6/31`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -162,8 +162,9 @@ Baseline commit: `5111219`
 - [ ] **R2.9.1** Provenance strip under the hero
 ### R2.10
 
-- [~] **R2.10.1** De-fake the landing page — submitted `src/components/landing/AnswerSheet.jsx:67`, `src/app/page.js:51`, `src/app/page.js:43`, `src/lib/engines/deployedEngines.js:36`, `src/lib/landingHonesty.test.mjs`
+- [~] **R2.10.1** De-fake the landing page — submitted `src/data/mockData.js:51`, `src/data/mockData.js:106`, `src/data/mockData.js:123`, `src/app/page.js:70`, `src/app/page.js:80`, `src/app/scan/page.js:50`, `src/lib/landingHonesty.test.mjs:111`, `src/lib/landingHonesty.test.mjs:291`, `scripts/check-secrets.mjs:320`, `src/lib/engines/deployedEngines.js:75`
 - [ ] **R2.10.2** Probe counter backed by a real count query
+- [ ] **R2.10.4** ENGINE_REGISTRY says aio is always configured
 
 ## R3 — Durable backend  `0/21`
 
@@ -251,7 +252,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `5/17`
+## R6 — Apparatus & guards  `6/18`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -266,7 +267,7 @@ Baseline commit: `5111219`
 - [ ] **R6.2.2** docs/RUNBOOK.md seeded with 10 symptom rows
 ### R6.3
 
-- [~] **R6.3.1** Vendor contract docs — submitted `docs/vendors/brightdata.md`, `docs/vendors/perplexity.md`, `docs/vendors/chatgpt.md`, `docs/vendors/firecrawl.md`, `docs/vendors/gateway-catalog.md`, `docs/vendors/mimo.md`
+- [~] **R6.3.1** Vendor contract docs — submitted `docs/vendors/README.md:39`, `docs/vendors/gemini.md:19`, `docs/vendors/gemini.md:137`, `docs/vendors/perplexity.md:100`, `docs/vendors/perplexity.md:123`, `docs/vendors/firecrawl.md:59`, `docs/vendors/brightdata.md:47`, `docs/vendors/brightdata.md:70`, `docs/vendors/mimo.md:47`, `src/lib/gemini.js:4`, `src/lib/gemini.js:12`, `src/lib/engines/perplexity.js:47`, `src/lib/engines/perplexity.js:93`, `src/lib/engines/perplexity.js:119`, `src/lib/firecrawl.js:35`, `src/lib/firecrawl.js:61`, `src/lib/engines/brightdata.js:13`, `src/lib/engines/brightdataZone.test.mjs:71`, `src/app/api/opportunities/route.js:27`, `src/lib/engines/gsc.js:1`, `src/lib/engines/serp.js:13`
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker
@@ -281,5 +282,6 @@ Baseline commit: `5111219`
 - [x] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures — closed at `src/lib/scanRoute.route.test.mjs`, `src/lib/engines/brightdataParser.test.mjs`, `src/lib/cronAuth.route.test.mjs`
 - [ ] **R6.5.2** The great deletion
 - [x] **R6.5.3** Delete the orphaned adapter.js/probe.js pair — it does not even parse — closed at `docs/BUILD_JOURNAL.md`, `src/lib/engines/openai.js:8`, `src/lib/scoring/enginePipeline.js`
-- [~] **R6.5.4** serp.test.mjs passes only because no BRIGHTDATA_API_KEY is in the environment — submitted `src/lib/engines/serp.test.mjs:65`, `src/lib/engines/serp.test.mjs:72`, `src/lib/engines/serp.test.mjs:29`, `src/lib/engines/serp.test.mjs:246`
+- [x] **R6.5.4** serp.test.mjs passes only because no BRIGHTDATA_API_KEY is in the environment — closed at `src/lib/engines/serp.test.mjs:65`, `src/lib/engines/serp.test.mjs:72`, `src/lib/engines/serp.test.mjs:29`, `src/lib/engines/serp.test.mjs:246`
+- [ ] **R6.5.5** serp.test.mjs env guard stops looking if a test is appended below it
 

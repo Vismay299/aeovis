@@ -2988,14 +2988,19 @@
         "src/app/page.js:227-253"
       ],
       "phase": "R2",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "local-session",
       "evidence": [
-        "src/components/landing/AnswerSheet.jsx:67",
-        "src/app/page.js:51",
-        "src/app/page.js:43",
-        "src/lib/engines/deployedEngines.js:36",
-        "src/lib/landingHonesty.test.mjs"
+        "src/data/mockData.js:51",
+        "src/data/mockData.js:106",
+        "src/data/mockData.js:123",
+        "src/app/page.js:70",
+        "src/app/page.js:80",
+        "src/app/scan/page.js:50",
+        "src/lib/landingHonesty.test.mjs:111",
+        "src/lib/landingHonesty.test.mjs:291",
+        "scripts/check-secrets.mjs:320",
+        "src/lib/engines/deployedEngines.js:75"
       ],
       "notes": [
         {
@@ -3012,6 +3017,11 @@
           "at": "2026-09-03T01:49:21.221Z",
           "by": "verifier",
           "text": "rejected: REJECTED. All three accept clauses ARE met on the landing page and were exercised against a live render — DO NOT REDO that work. Clause 1: SSR HTML has zero chip__led and zero Live chip; the whole landing tree was grepped, and surviving chip__led uses are in dashboard/studio/scan, all driven by real state. Clause 2: SSR shows \"Sample - illustrative brands\"; the fabricated 16 Aug 2026 09:14 IST appears zero times in rendered output. Clause 3: GENUINELY DERIVED — setting NEXT_PUBLIC_ENGINES=aio,chatgpt,perplexity, clearing .next and restarting made both the hero and the rail follow to three engines, so it is not a hardcoded pair that happens to be right today. The hydration fix is real, confirmed in the COMPILED BROWSER BUNDLE rather than the source comment: the chunk contains INLINED_PUBLIC_ENGINES = \"aio,perplexity\" statically replaced by Next, and with the var unset the same chunk shows the un-replaced process.env expression. Guards have teeth: reverting to 06f820b^ fails 6 of 10, and the donut guard genuinely SUMS the data against the imported constant. The note claim of \"1 fails\" undersells the work.\n\nWHY IT FAILS: the out-of-accept count change (TRACKED 36 to 30, DESTINATIONS 15/12/6/3 to 13/10/5/2) HALF-LANDED. src/data/mockData.js:7-13 still declares 36 unbranded questions, 15/12/6/3, and AI Overview 5/12 / ChatGPT 6/12 / Perplexity 4/12. Traced hop by hop: page.js:137-140 \"See a sample report\" (present in the SSR HTML) to saveScan to services/api.js:6 sessionStorage to dashboard/page.js:42 loadScan, :49 isSample, to DashboardShell to OverviewView.jsx:67,77,83 which renders promptsTracked. SAMPLE_RESULT evaluates to promptsTracked 36, promptsAnalyzed 36, with its 36 topPrompts split across aio/chatgpt/perplexity — TWELVE ATTRIBUTED TO CHATGPT. So one click from a hero that now says \"Google AI Overview and Perplexity - 30 unbranded questions\", the user sees a report claiming 36 tracked prompts, a third of them from an engine this deployment has no API key for. Before the diff both surfaces said 36 and named three engines, consistently. This diff made them disagree, on the primary conversion path, and it falsifies the invariant page.js:12-13 still asserts. The existing guard only checks DESTINATIONS sums to TRACKED within page.js; nothing ties mockData.js to DEFAULT_UNBRANDED_TARGET.\n\nTO FIX (preferred): finish the count change through src/data/mockData.js — derive its tracked total from DEFAULT_UNBRANDED_TARGET, rebalance to match page.js, derive its engine split from deployedEngineLabels(), and add a guard asserting SAMPLE_RESULT.promptsTracked equals DEFAULT_UNBRANDED_TARGET and that its engines are a subset of deployedEngines(). Or revert TRACKED and DESTINATIONS so both surfaces agree again, and file the 36-vs-30 overclaim as its own task covering both surfaces.\n\nFOUR MORE FINDINGS: (1) engineDriftWarning() HAS NO PRODUCTION CALLER — only landingHonesty.test.mjs imports it, yet .env.example tells operators it reports a mismatch, implying a live check. Wire it into check-secrets.mjs or reword the comment. (2) deployedEngines() never consults isConfigured(), while resolveEnabledEngines (enginePipeline.js:527-546) drops engines with a missing key — set ENGINES=aio,chatgpt,perplexity with no OPENAI_API_KEY and the page advertises ChatGPT while the fleet skips it: the original C11 bug, reachable by config. (3) THE CLAUSE-3 GUARD HAS A HOLE — replacing line 51 with a literal ENGINE_SENTENCE naming all three engines restores the full overclaim in the rendered hero and all 10 guards still pass, because the guard only requires the token to appear and forbids one specific phrasing. Assert it is assigned from formatEngineList(deployedEngineLabels()), as the rail guard already does for DEMO_ENGINES. (4) deployedEngines.js:61 reads process.env.ENGINES inside a use client module, so on the fallback path SSR and client diverge again; the direction is an under-claim, so not blocking. Evidence citation deployedEngines.js:36 is a docblock prose line; the actual change is at :40."
+        },
+        {
+          "at": "2026-09-03T02:32:51.031Z",
+          "by": "local-session",
+          "text": "SECOND PASS. Did not redo the three accept clauses; re-confirmed them against a live render on :3120 and left AnswerSheet.jsx untouched. Fixed the half-landing and the four verifier findings.\n\nCHOSE THE PREFERRED OPTION: finished the count change through mockData.js rather than reverting page.js to 36. Reverting would have restored a genuine overclaim (the page promising a fifth more than DEFAULT_UNBRANDED_TARGET) on a task whose whole subject is overclaims, and it would have put ChatGPT back on the primary conversion path. The mockData rework turned out proportionate: 30 questions instead of 36, engine attribution derived, everything else already computed from the rows.\n\nWHAT THE SAMPLE REPORT NOW DERIVES. mockData.js:51 ENGINE_KEYS = deployedEngines() (was a literal aio/chatgpt/perplexity); :118 engineFor() assigns engines round-robin at build time, so the engine is no longer STORED on an engine-agnostic buyer question; :106 throws on load if SET.length stops equalling DEFAULT_UNBRANDED_TARGET; :123 exports SAMPLE_DESTINATIONS, the 13/10/5/2 split, counted off the rows. Also de-typed inside the file: share was literally 41 under a comment explaining why it disagreed with its own data (now round(wins/total) = 43); OWN_CITED_AT pointed at row 35 of a 30-row set; Lumen IQ was published with 5 citations while nothing in the data ever cited it (now 3, counted); two rivals with the same mention count carried different visibility scores.\n\nBOTH SURFACES NOW READ THE SAME OBJECT, not a copy of it. page.js:70 DESTINATIONS = SAMPLE_DESTINATIONS.map(...) adding only colour; page.js:80 DEMO_ENGINES asked/reached come from SAMPLE_RESULT.engines[key] instead of a hardcoded reachedShare (which said 42% while the report it previews said 40%). scan/page.js:50 SAMPLE_FACTS was a third typed copy of the same reading, '41%' and '15 / 36'; now read off SAMPLE_RESULT. Live render: hero \"Google AI Overview and Perplexity ... 30 unbranded questions\", legend \"Brightwave 13 / NorthPeak 10 / Lumen IQ 5 / No brand named 2\", rail \"Google AI Overview 6/15, Perplexity 7/15\", scan page \"43% / 13 of 30 / 7\". Zero chip__led, zero Live, zero \"16 Aug 2026\", zero \"ChatGPT\", zero \"36\" in the rendered text. Round-tripped through the actual hop (JSON stringify/parse, then normalizeResult as DashboardShell calls it): promptsTracked 30, visibleCount 13, no \"chatgpt\" anywhere in the record. At HEAD the same trace gives 36 and chatgpt true.\n\nCLAUSE-3 HOLE CLOSED, WITH TEETH PROVEN. landingHonesty.test.mjs:111 now asserts the ASSIGNMENT (const ENGINE_SENTENCE = formatEngineList(deployedEngineLabels());), forbids any string-literal assignment, and asserts the hero renders it. Sabotage S1 applied the verifier's exact edit (literal naming all three engines), proved it landed on disk, and the guard now FAILS where all 10 previously passed. Five more sabotages, each proven applied on disk and restored: hardcoding the sample onto three engines fails 2 guards; retyping the donut fails 1; adding a 31st question throws on module load with \"the demonstration set holds 31 questions but a scan tracks 30\"; removing engineDriftWarning from check:secrets fails 1; retyping the scan panel fails 1.\n\nFINDING 1 + 3, CLOSED TOGETHER IN check-secrets.mjs:320. engineDriftWarning() now has a production caller. It is deliberately NOT a VENDORS row: my first attempt made it one and broke 4 pre-existing contract tests in checkSecrets.test.mjs, which pin the vendor table name-for-name against /api/health and assert \"nothing can pass with no credentials\". It is a separate section with its own heading and its own vocabulary, and it moves the exit code (:448). Same section closes the isConfigured() gap that deployedEngines() cannot see: it is bundled into a client component and must never read OPENAI_API_KEY, so only a server-side check sees both halves. The key map mirrors ENGINE_REGISTRY.isConfigured exactly (aio has no key of its own there; brightdata is already its own vendor row). EXERCISED, not read: nothing set -> in step, exit 0; ENGINES=aio,chatgpt with no OPENAI_API_KEY -> MISMATCH naming the key, exit 1; ENGINES/NEXT_PUBLIC drift -> MISMATCH, exit 1; the real .env.local -> in step, exit 0.\n\nWENT ONE STEP FURTHER THAN THE BRIEF ON THE LOW-PRIORITY ITEM, and say so. I first wrote a comment on deployedEngines.js:75 claiming check:secrets enforced NEXT_PUBLIC_ENGINES being set. It did not. Rather than weaken the comment I made it true: the section now also FAILS when ENGINES is set and NEXT_PUBLIC_ENGINES is not (SSR renders the real list, the browser renders the aio default: a hydration mismatch), and when NEXT_PUBLIC_ENGINES is set and ENGINES is not (the page advertises engines the fleet's aio default never probes, which engineDriftWarning returns null for). Both exercised. The fallback path at :75 is now unreachable at deploy time rather than merely recorded.\n\nSUITE. Baseline had moved: HEAD is ecda213, not 641b27f. Measured it by reverting my 7 files to HEAD, running, then restoring and verifying byte-identical: 977 pass / 0 fail at HEAD, 983 pass / 0 fail with this change. +6 tests, 0 new failures. npx next lint clean on all four source files.\n\nDELIBERATELY NOT DONE. (a) The sample's structure: a real scan puts all 30 questions to EVERY engine; this sample splits 30 across them, so the rail says \"the same 15 questions go to each\" while the hero says both engines get 30. That contradiction is pre-existing and identical in shape before the diff (36 total, 12 each, 3 engines); fixing it means redesigning the demonstration reading into 30 x N rows, which is its own task. It under-claims, so it is safe. (b) The five long-tail rivals (Vantage Health etc.) still declare mentions 4/3/2/2/1 while no row ever names them; only NorthPeak and Lumen IQ appear in the answers, so competitorsFound: 7 is not \"discovered from the answers themselves\". Pre-existing, left alone. (c) ENGINE_REGISTRY's aio entry returns isConfigured: () => true while aio needs BRIGHTDATA_API_KEY; my check mirrors that on purpose so it cannot be stricter than the fleet.\n\nMOST SUSPICIOUS OF: (1) the two out-of-accept files, scan/page.js and the rail's prose. scan/page.js was a third typed copy of the same reading and leaving it would have recreated exactly the inconsistency that got this rejected. The two rail notes I replaced carried arithmetic (\"three of your four highest-intent questions live in AI Overview\", \"six of its 64 are pages you control\") that was false of the demonstration data BEFORE this diff too; they are now number-free prose and the rail's only numbers are the derived gauges. (2) mockData.js throws at module scope on a count mismatch, which would white-screen the landing page. Both invariants are compile-time constants and both are guarded; a loud break beat a quiet lie. (3) I could not drive a browser (no playwright/puppeteer installed), so the sample DASHBOARD was exercised by replaying its exact hop in node rather than by clicking the button; the landing and scan pages were exercised over HTTP against a real dev render, and the compiled client chunk was checked directly (INLINED_PUBLIC_ENGINES = \"aio,perplexity\", 30 won: entries, none of the six removed questions)."
         }
       ],
       "verification": {
@@ -3042,6 +3052,35 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R2.10.4",
+      "subphase": "R2.10",
+      "lane": "backend",
+      "title": "ENGINE_REGISTRY says aio is always configured",
+      "detail": "The aio entry in ENGINE_REGISTRY returns isConfigured: () => true, while aio cannot probe at all without BRIGHTDATA_API_KEY. Every other engine reports its real configuration state. Found by the R2.10.1 implementer, who deliberately mirrored the registry in the new check-secrets engines check rather than being stricter than the fleet — so the check inherits the same blind spot. The consequence is that resolveEnabledEngines cannot drop aio when its credential is missing, so a deployment with ENGINES=aio and no Bright Data key believes it is probing and produces a scan with no AI Overview data rather than refusing. That is a measured zero wearing the face of a real reading, which is standing rule 1.",
+      "accept": "aio's isConfigured reflects BRIGHTDATA_API_KEY; resolveEnabledEngines drops aio when the key is absent; a test asserts both and fails if isConfigured is pinned true again.",
+      "deps": [],
+      "anchors": [
+        "src/lib/scoring/enginePipeline.js:527",
+        "src/lib/engines/brightdata.js:7"
+      ],
+      "findings": [
+        "C11"
+      ],
+      "phase": "R2",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T02:35:53.569Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
       "verification": null
     },
     {
@@ -4250,15 +4289,30 @@
         "docs/vendors/"
       ],
       "phase": "R6",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "local-session",
       "evidence": [
-        "docs/vendors/brightdata.md",
-        "docs/vendors/perplexity.md",
-        "docs/vendors/chatgpt.md",
-        "docs/vendors/firecrawl.md",
-        "docs/vendors/gateway-catalog.md",
-        "docs/vendors/mimo.md"
+        "docs/vendors/README.md:39",
+        "docs/vendors/gemini.md:19",
+        "docs/vendors/gemini.md:137",
+        "docs/vendors/perplexity.md:100",
+        "docs/vendors/perplexity.md:123",
+        "docs/vendors/firecrawl.md:59",
+        "docs/vendors/brightdata.md:47",
+        "docs/vendors/brightdata.md:70",
+        "docs/vendors/mimo.md:47",
+        "src/lib/gemini.js:4",
+        "src/lib/gemini.js:12",
+        "src/lib/engines/perplexity.js:47",
+        "src/lib/engines/perplexity.js:93",
+        "src/lib/engines/perplexity.js:119",
+        "src/lib/firecrawl.js:35",
+        "src/lib/firecrawl.js:61",
+        "src/lib/engines/brightdata.js:13",
+        "src/lib/engines/brightdataZone.test.mjs:71",
+        "src/app/api/opportunities/route.js:27",
+        "src/lib/engines/gsc.js:1",
+        "src/lib/engines/serp.js:13"
       ],
       "notes": [
         {
@@ -4636,7 +4690,7 @@
         "src/lib/engines/serp.js:9-16"
       ],
       "phase": "R6",
-      "status": "in_verification",
+      "status": "done",
       "owner": "local-session",
       "evidence": [
         "src/lib/engines/serp.test.mjs:65",
@@ -4672,10 +4726,41 @@
         }
       ],
       "verification": {
-        "verdict": "fail",
-        "at": "2026-09-03T01:51:07.543Z",
-        "note": "REJECTED. The substantive fix is real and was verified — but the second half of the accept sentence, \"and restores them\", is NOT met, and the specific self-correction the note claims to have made does not achieve what it says.\n\nWHAT WORKS: the old failure was reproduced (pre-fix file restored from 75e9ca5^, proven applied): with the key ambient, serp.test.mjs went 2 pass / 3 fail and the full suite 945/3, and the three failures are exactly the three the task names. Post-fix with the key ambient: serp.test.mjs 6/0 and the FULL SUITE 949 pass / 0 fail, also with SERP_PROVIDER=brightdata forced on top. Accept clause 1 is MET.\n\nCLAUSE 2a MET, with a correction to the enumeration. The verifier traced getSerpProvider itself: serp.js:11 SERP_PROVIDER; :12,:14 via getBrightDataApiKey to brightdata.js:7 BRIGHTDATA_API_KEY; :13,:15 via resolveSerpCredentials to serp.js:24 SERPAPI_KEY. That is THREE, not the four the note claims. SERP_ENV also lists BRIGHTDATA_SERP_ZONE, which getSerpProvider does not consult (it is read by resolveBrightDataSerpZone at brightdata.js:11, downstream of provider selection). A harmless superset, and no fifth var exists, so the clause holds.\n\nCLAUSE 2b NOT MET — the defect is an ordering hazard in the GUARD test, not in useSerpEnv. node:test runs t.after hooks in REGISTRATION order (the verifier established this independently with a two-hook probe). serp.test.mjs:39-61 registers its own restore at :50-53 BEFORE calling useSerpEnv(t, ...) at :55. So the :50 hook runs first and correctly puts back the real ambient key, then useSerpEnv's hook (:31) runs LAST and overwrites it with the sentinel it captured. MEASURED, not inferred: after serp.test.mjs completes, BRIGHTDATA_API_KEY === 'bd-ambient' — a FABRICATED CREDENTIAL VALUE where a real one was. That is literally not \"restores them\", and it is not \"the way types.test.mjs does\": withEnv at types.test.mjs:40-53 uses try/finally and has no ordering hazard.\n\nTHE FIX IS A TWO-LINE MOVE, verified in a throwaway copy: move the t.after block at :50-53 to AFTER the useSerpEnv(t, ...) call at :55 so it is registered second and runs last. End state becomes the real key, 7 pass / 0 fail. CHANGE NOTHING ELSE — SERP_ENV, useSerpEnv and the four call sites are all correct.\n\nTEETH CONFIRMED: dropping BRIGHTDATA_API_KEY from SERP_ENV gives 2 pass / 4 fail with the key ambient and 1 fail with the key UNSET — so the regression is armed even in a keyless CI, which is better than claimed. Reverting the guard's restore to an unconditional delete and then applying the same sabotage gives only 1 fail instead of 4, independently confirming bug 1 was real and that the current form restores sabotage-detection strength. It is the UN-sabotaged end state that is still wrong.\n\nCORRECTION TO THE NOTE, and a correction to my own brief: the note says \"my sabotage script matched on LF while the working file is CRLF\". In a FRESH WORKTREE the file is LF (.gitattributes:5 pins eol=lf), which is what the verifier measured. In the MAIN working tree src/lib/engines/serp.test.mjs IS genuinely CRLF (byte-measured: 224 CR, 224 CRLF) while scanWorker.js, package.json and docs are LF — the tree is MIXED, because files checked out before .gitattributes landed were never renormalised. So the implementer's CRLF diagnosis was right for their tree and the verifier's LF measurement was right for theirs. Also note grep -c $'\\r' is an unreliable way to test this and has produced wrong answers in this session; measure CR bytes with node.\n\nAll three evidence citations resolve exactly (:15 SERP_ENV, :27 useSerpEnv, :39 the GUARD test) and both anchors resolve. The R6.5.4 diff touches only serp.test.mjs. Under --experimental-test-isolation=none the suite shows 2 failures identical with and without the key: pre-existing single-process artifacts, not attributable to this task."
+        "verdict": "pass",
+        "at": "2026-09-03T02:30:18.025Z",
+        "note": "VERIFIED on re-submission by a second independent verifier at 7e45990. Both clauses met.\n\nCLAUSE 1: full suite 974 pass / 0 fail WITH the real BRIGHTDATA_API_KEY exported ambiently, and keyless, and via npm run test:scoring with the guard's diagnostic visibly printing \"set (len 36)\" so the run is demonstrably not vacuous. serp.test.mjs is 7/0 in all three configs — keyless, key ambient, and key with SERP_PROVIDER=brightdata forced.\n\nCLAUSE 2 VERIFIED INDEPENDENTLY OF THE FILE'S OWN GUARD, which is the right way to check a guard. The verifier wrote an out-of-band observer that snapshots the four vars, dynamically imports serp.test.mjs, and prints from process.on('exit') — after every test and every hook. All four vars come back strictly === their start values, keyed and keyless. Identity comparison on the real strings rules out a same-length substitute.\n\nFIVE SABOTAGES, NONE OF THEM EDITING serp.test.mjs — each was a generated sibling copy outside the *.test.mjs glob, with the transform asserting non-no-op and printing the mutated region. S1 reverting the :65/:72 ordering reproduces the round-1 defect byte for byte: 6/1 with \"started set (len 36), ended set (len 10)\" and the observer confirming identical=false. S2 dropping BRIGHTDATA_API_KEY from SERP_ENV gives 3/4 keyed and 6/1 keyless, matching the claim exactly. S3 neutering useSerpEnv's restore catches the SERPAPI_KEY mock-key leak. S5 restoring a SAME-LENGTH fake ('X'.repeat(36)) still fails with \"holding a different value\" — the guard is not fooled by a fabricated credential of the right shape.\n\nTHE ORDERING MECHANISM WAS VERIFIED, NOT ASSUMED: a separate probe established that node:test runs top-level tests sequentially in registration order, runs t.after hooks in registration order, and completes all of test N's hooks before test N+1's body — so :246 observes the true post-hook state of everything above it.\n\nTHE APPEND-BELOW-:246 FRAGILITY IS REAL AND WAS DEMONSTRATED: S4 appends a leaking test below the guard and the file reports 8/0 GREEN while the observer shows SERPAPI_KEY leaking. Accepted here because it is coverage decay rather than runtime false-success — the guard cannot lie, it can only stop looking — the accept does not ask for position independence, and :247-255 warns future editors. The immune version was verified to work and costs nothing: a file-scoped after() imported from node:test, registered anywhere, runs after EVERY test in the file including appended ones, and node:test reports the thrown assertion as a file-level failure. Filed as a follow-up.\n\nONE CORRECTION TO THE IMPLEMENTER'S REASONING, right conclusion by the wrong mechanism: the note claims the keyless bite for the round-1 bug comes from the SERPAPI_KEY/mock-key path. Measured, it does not — under the ordering bug useSerpEnv's hook still deletes SERPAPI_KEY correctly. The true keyless bite is stronger: BRIGHTDATA_API_KEY goes unset -> 'bd-ambient', i.e. the file CONJURES A CREDENTIAL FROM NOTHING, which is the more serious shape.\n\nLENGTH DISCLOSURE JUDGED CORRECT TO KEEP: it is load-bearing, not incidental. \"started set (len 36), ended set (len 10)\" is what makes the failure diagnosable; a bare \"set\" would render the round-1 defect as \"started set, ended set\", which reads like a nothing-burger. The equal-length case is already covered without disclosure by the \"holding a different value\" suffix, and check-secrets.mjs:268 is a real precedent whose citation resolves.\n\nBranch-var enumeration re-confirmed as three (SERP_PROVIDER, BRIGHTDATA_API_KEY via brightdata.js:7, SERPAPI_KEY via resolveSerpCredentials) with BRIGHTDATA_SERP_ZONE a harmless superset; and no module in the import graph writes process.env at load, so PROCESS_START_ENV really is the inherited environment. Scope clean: commit 99e6060 is one file, test-only, +47/-2. Worktree verified pristine afterwards by sha256 against the committed file."
       }
+    },
+    {
+      "id": "R6.5.5",
+      "subphase": "R6.5",
+      "lane": "test",
+      "title": "serp.test.mjs env guard stops looking if a test is appended below it",
+      "detail": "R6.5.4 added an end-state guard asserting every SERP_ENV var is restored to what the process inherited. It works, but it is a positional top-level test: its verifier demonstrated that appending a leaking test BELOW it leaves the file 8/0 green while an out-of-band observer shows SERPAPI_KEY leaking. That is coverage decay rather than runtime false-success — the guard cannot lie, it can only stop looking — and the R6.5.4 accept did not ask for position independence, so it was not grounds to reject. The immune form was verified to work by that same verifier and costs nothing: a file-scoped after() imported from node:test, registered anywhere, runs after EVERY test in the file including appended ones, and node:test reports the thrown assertion as a file-level failure. Same treatment is worth considering for any other file using the useSerpEnv idiom.",
+      "accept": "Appending a test that leaks an env var below the guard makes the file fail; proven by adding such a test, watching it go red, and removing it.",
+      "deps": [
+        "R6.5.4"
+      ],
+      "anchors": [
+        "src/lib/engines/serp.test.mjs:246",
+        "src/lib/engines/types.test.mjs:40"
+      ],
+      "findings": [
+        "S29"
+      ],
+      "phase": "R6",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T02:35:42.094Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     }
   ]
 }
