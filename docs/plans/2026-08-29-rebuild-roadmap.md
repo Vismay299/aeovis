@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**39 / 149 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**39 / 151 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -64,7 +64,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `3/30`
+## R1 — Real-surface probe fleet  `3/31`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -84,6 +84,7 @@ Baseline commit: `5111219`
 - [ ] **R1.2.5** Dev runbook for the fleet
 - [ ] **R1.2.6** Fleet config validated at boot
 - [ ] **R1.2.7** The Bright Data zone cache never invalidates
+- [ ] **R1.2.8** The six-way race tests pass with SKIP LOCKED removed
 ### R1.3
 
 - [ ] **R1.3.1** Spike: Playwright against perplexity.ai `needs-secrets`
@@ -256,7 +257,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `8/21`
+## R6 — Apparatus & guards  `8/22`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -267,6 +268,7 @@ Baseline commit: `5111219`
 - [x] **R6.1.3** Track the orchestration tooling change made outside the ledger — closed at `.claude/orchestration/orchestrate.mjs:436`, `docs/BUILD_JOURNAL.md`
 - [ ] **R6.1.4** Agents grep secrets into transcripts; the exclusion must be in the brief, not the discipline
 - [ ] **R6.1.5** The checksum drift warning asserts a schema mismatch that may not exist
+- [ ] **R6.1.6** The migrations ordering guard measures from the first anchor, not the last
 ### R6.2
 
 - [ ] **R6.2.1** docs/OPERATOR_LEDGER.md

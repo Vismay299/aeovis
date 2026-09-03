@@ -1828,6 +1828,37 @@
       "verification": null
     },
     {
+      "id": "R1.2.8",
+      "subphase": "R1.2",
+      "lane": "test",
+      "title": "The six-way race tests pass with SKIP LOCKED removed",
+      "detail": "R1.2.2's two six-worker cases in src/lib/probeTasksRace.test.mjs carry NO atomicity teeth: its verifier ran them against a claim function with FOR UPDATE SKIP LOCKED stripped and both still passed. Real concurrency on a small local pool tends to serialize, so the racers arrive in sequence and each correctly finds the previous claim, which looks like a win. The entire proof of atomicity is the one deterministic case that holds worker A's transaction open from a third connection while B tries — that case does fail when SKIP LOCKED is removed (B blocks indefinitely) and when the locking clause goes entirely (B steals the row). Before real concurrent workers hit this in R1.2.4, the six-way cases should either be hardened so they genuinely contend, or relabelled as smoke coverage so nobody mistakes them for the atomicity proof they are not.",
+      "accept": "Removing FOR UPDATE SKIP LOCKED from the claim function fails at least one six-way race test, or those tests are renamed and commented to state they do not prove atomicity and to point at the deterministic case that does.",
+      "deps": [
+        "R1.2.2"
+      ],
+      "anchors": [
+        "src/lib/probeTasksRace.test.mjs:124",
+        "supabase/migrations/010_probe_tasks.sql:183"
+      ],
+      "findings": [
+        "S29"
+      ],
+      "phase": "R1",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T07:51:10.592Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R1.3.1",
       "subphase": "R1.3",
       "lane": "infra",
@@ -4544,6 +4575,36 @@
       "notes": [
         {
           "at": "2026-09-03T07:47:29.591Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.1.6",
+      "subphase": "R6.1",
+      "lane": "test",
+      "title": "The migrations ordering guard measures from the first anchor, not the last",
+      "detail": "src/lib/migrationsRunner.test.mjs computes the verify-stage anchor with indexOf, so a duplicated marker string moves the measurement point to the earliest occurrence. R6.1.1's verifier demonstrated the evasion: planting a decoy line containing 'Verifying schema against the catalog' at the connect stage, together with the round-1 banned literal printed via process.stdout.write, gives 14/14 green. It needs a deliberately planted duplicate rather than the ordinary print-call swap the runner genuinely does, and the accept's hard teeth (exit 1 and the INCOMPLETE line) survive it, so it was recorded rather than gated. One-line fix: use lastIndexOf, or assert the marker appears exactly once before measuring.",
+      "accept": "A planted duplicate of the verify-stage anchor no longer lets a verdict phrase printed before the real verify stage pass; a test covers the duplicated-anchor case and fails if the measurement reverts to indexOf.",
+      "deps": [
+        "R6.1.1"
+      ],
+      "anchors": [
+        "src/lib/migrationsRunner.test.mjs:277"
+      ],
+      "findings": [
+        "C10"
+      ],
+      "phase": "R6",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T07:51:11.111Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
