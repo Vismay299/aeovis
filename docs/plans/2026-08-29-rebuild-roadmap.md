@@ -35,11 +35,11 @@ Baseline commit: `5111219`
 - [x] **R0.1.3** Minimal operator perimeter in src/middleware.js — closed at `src/middleware.js:24`, `src/lib/operatorPerimeter.js:128`, `src/lib/operatorPerimeter.js:72`, `src/lib/operatorPerimeter.js:154`, `src/lib/operatorPerimeter.test.mjs:262`, `src/lib/operatorPerimeter.test.mjs:231`
 - [ ] **R0.1.4** Per-IP rate limit on POST /api/scan
 - [x] **R0.1.5** Unique partial index on scan_jobs(brand) while running — closed at `supabase/migrations/007_scan_seal.sql:25`, `src/lib/duplicateScan.js:56`, `src/lib/duplicateScan.js:41`, `src/lib/db.js:383`, `src/app/api/scan/route.js:49`, `src/lib/duplicateScan.test.mjs:72`
-- [~] **R0.1.6** scripts/check-secrets.mjs — smallest live call per vendor — submitted `scripts/check-secrets.mjs:218`, `scripts/check-secrets.mjs:271`, `src/lib/checkSecrets.test.mjs`
+- [~] **R0.1.6** scripts/check-secrets.mjs — smallest live call per vendor — submitted `docs/vendors/README.md:98`, `docs/vendors/README.md:105`, `docs/vendors/README.md:114`, `docs/vendors/README.md:134`, `docs/vendors/README.md:149`, `docs/vendors/README.md:24`, `scripts/check-secrets.mjs:286`, `src/lib/checkSecrets.test.mjs:206`, `src/lib/engines/gsc.js:132`, `scripts/test-gsc.mjs:17`
 - [x] **R0.1.7** /api/health route — closed at `src/app/api/health/route.js:29`, `src/lib/health.js:61`, `src/lib/health.js:38`, `src/lib/db/analytics.js:494`, `src/lib/db/analytics.js:510`, `supabase/migrations/008_system_heartbeats.sql:12`, `src/lib/health.test.mjs:23`, `src/app/api/scan/worker/route.js:47`
 - [x] **R0.1.8** Remove the forgeable x-vercel-cron bypass from the worker gate — closed at `src/lib/cronAuth.js:48-55`, `src/lib/cronAuth.js:22`, `src/lib/cronAuth.test.mjs:47`, `src/lib/cronAuth.test.mjs:57`, `src/lib/cronAuth.test.mjs:69`, `src/lib/cronAuth.test.mjs:77`, `src/app/api/scan/worker/route.js:28`, `src/app/api/content/worker/route.js:33`, `docs/BUILD_JOURNAL.md:136`, `README.md:111`, `README.md:130`
 - [x] **R0.1.9** Stop SERPAPI_KEY counting as a configured SERP provider — closed at `src/lib/engines/types.js:47`, `src/lib/engines/types.test.mjs:55`, `src/lib/engines/types.test.mjs:98`, `src/lib/engines/types.test.mjs:114`
-- [~] **R0.1.10** check:secrets validates the wrong Bright Data credential `needs-secrets` — submitted `scripts/check-secrets.mjs:31`, `scripts/check-secrets.mjs:125`, `src/lib/checkSecretsBrightdata.test.mjs`
+- [~] **R0.1.10** check:secrets validates the wrong Bright Data credential `needs-secrets` — submitted `src/lib/checkSecretsBrightdata.test.mjs:154`, `src/lib/checkSecretsBrightdataNoZone.test.mjs:54`, `src/lib/checkSecretsBrightdata.test.mjs:191`, `scripts/check-secrets.mjs:111`
 - [x] **R0.1.11** Migrations 007-009 are unapplied in production, and 007 cannot apply as-is `needs-decision` — closed at `supabase/migrations/007_scan_seal.sql:28`, `supabase/migrations/008_system_heartbeats.sql:12`, `supabase/migrations/009_scan_rate_limit.sql:44`, `src/lib/rateLimit.js:112`
 - [-] **R0.1.12** Confirm CRON_SECRET and OPERATOR_TOKEN are live on the Vercel project `needs-vercel` — blocked: needs-vercel
 - [ ] **R0.1.13** cronAuth fails OPEN when NODE_ENV is unset
@@ -76,7 +76,7 @@ Baseline commit: `5111219`
 ### R1.2
 
 - [x] **R1.2.1** worker/ workspace: long-lived Node + Playwright — closed at `worker/package.json`, `worker/src/index.js`, `worker/src/config.js`, `worker/README.md`, `src/lib/workerIsolation.test.mjs`
-- [ ] **R1.2.2** probe_tasks queue table; fleet claims batches via jobLease
+- [~] **R1.2.2** probe_tasks queue table; fleet claims batches via jobLease — submitted `supabase/migrations/010_probe_tasks.sql:181`, `supabase/migrations/010_probe_tasks.sql:164`, `worker/src/lib/queue.js:172`, `src/lib/probeQueue.js:111`, `src/lib/probeTasksRace.test.mjs:124`, `src/lib/probeQueue.test.mjs:135`, `src/lib/liveDbGate.js:22`, `worker/src/index.js:40`, `scripts/setup-supabase.mjs:85`
 - [ ] **R1.2.3** Create the scan_runs ledger table
 - [ ] **R1.2.4** Authenticated ingest POST /api/internal/probe-results
 - [ ] **R1.2.5** Dev runbook for the fleet
@@ -269,7 +269,7 @@ Baseline commit: `5111219`
 - [ ] **R6.2.2** docs/RUNBOOK.md seeded with 10 symptom rows
 ### R6.3
 
-- [~] **R6.3.1** Vendor contract docs — submitted `docs/vendors/README.md`, `src/lib/engines/serp.js:372`, `docs/vendors/perplexity.md`
+- [~] **R6.3.1** Vendor contract docs — submitted `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker
