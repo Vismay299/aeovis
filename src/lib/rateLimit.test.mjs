@@ -5,9 +5,12 @@ import {
   checkScanRateLimit,
   clientBucketKey,
   evaluate,
+  resolveClientIp,
+  resetUntrustedSourceWarning,
   resolveRateLimit,
   windowStart,
   DEFAULTS,
+  TRUSTED_IP_HEADER,
 } from "./rateLimit.js";
 
 const HOUR = 60 * 60 * 1000;
@@ -116,6 +119,125 @@ test("clientBucketKey - an unidentifiable client is throttled in a shared bucket
     false,
     "no bucket at all would mean no limit at all"
   );
+});
+
+// ---------------------------------------------------------------------------
+// R0.1.4 — "per IP" has to mean an IP, not a header the caller writes.
+//
+// Reproduced before the trust ordering existed, driving this module with the
+// real in-memory counter: 25 requests carrying a ROTATING x-real-ip were
+// allowed 25 times under SCAN_RATE_LIMIT=5, and so were 25 with a rotating
+// x-forwarded-for. The counter was never wrong; the identity was.
+// ---------------------------------------------------------------------------
+
+test("THE BYPASS — rotating a client-settable header no longer buys fresh buckets", async () => {
+  const increment = counter();
+  const env = { SCAN_RATE_LIMIT: "5", VERCEL: "1", SCAN_RATE_LIMIT_SALT: "s" };
+  let allowed = 0;
+  for (let i = 0; i < 25; i++) {
+    const verdict = await checkScanRateLimit({
+      // One real client per Vercel; twenty-five different stories from the caller.
+      header: headers({ [TRUSTED_IP_HEADER]: "203.0.113.9", "x-real-ip": `192.0.2.${i + 20}` }),
+      increment,
+      env,
+      now: T0,
+      logger: silent,
+    });
+    if (verdict.allowed) allowed++;
+  }
+  assert.equal(allowed, 5, "the spoofer must get the same five scans as an honest caller, not 25");
+});
+
+test("resolveClientIp - the platform header is trusted ONLY when running on Vercel", () => {
+  const header = headers({ [TRUSTED_IP_HEADER]: "203.0.113.9" });
+
+  const onVercel = resolveClientIp({ header, env: { VERCEL: "1" } });
+  assert.equal(onVercel.ip, "203.0.113.9");
+  assert.equal(onVercel.source, TRUSTED_IP_HEADER);
+  assert.equal(onVercel.trusted, true);
+
+  // Off Vercel nothing strips inbound x-vercel-*, so the same header is just
+  // another claim — and is ignored rather than quietly promoted.
+  const offVercel = resolveClientIp({ header, env: {} });
+  assert.equal(offVercel.ip, null, "an unenforced x-vercel-* header must not become an identity");
+  assert.equal(offVercel.trusted, false);
+});
+
+test("resolveClientIp - the trusted header outranks both headers a caller can set", () => {
+  const out = resolveClientIp({
+    header: headers({
+      [TRUSTED_IP_HEADER]: "203.0.113.9",
+      "x-real-ip": "192.0.2.1",
+      "x-forwarded-for": "198.51.100.1, 10.0.0.1",
+    }),
+    env: { VERCEL: "1" },
+  });
+  assert.equal(out.ip, "203.0.113.9");
+});
+
+test("resolveClientIp - an operator can declare the header their own proxy overwrites", () => {
+  const out = resolveClientIp({
+    header: headers({ "cf-connecting-ip": "203.0.113.9", "x-real-ip": "192.0.2.1" }),
+    env: { SCAN_RATE_LIMIT_IP_HEADER: "CF-Connecting-IP" },
+  });
+  assert.equal(out.ip, "203.0.113.9");
+  assert.equal(out.source, "cf-connecting-ip");
+  assert.equal(out.trusted, true);
+});
+
+test("resolveClientIp - the conventional fallbacks still work, and admit they are guesses", () => {
+  const viaReal = resolveClientIp({ header: headers({ "x-real-ip": "203.0.113.9" }), env: {} });
+  assert.equal(viaReal.ip, "203.0.113.9");
+  assert.equal(viaReal.trusted, false, "x-real-ip is whatever the caller typed");
+
+  const viaFwd = resolveClientIp({ header: headers({ "x-forwarded-for": "5.5.5.5, 10.0.0.1" }), env: {} });
+  assert.equal(viaFwd.ip, "5.5.5.5", "the leftmost entry, by convention");
+  assert.equal(viaFwd.trusted, false);
+
+  const none = resolveClientIp({ header: headers({}), env: {} });
+  assert.equal(none.source, "none");
+  assert.equal(none.trusted, false);
+});
+
+test("an untrusted address source is announced, not assumed away", async () => {
+  resetUntrustedSourceWarning();
+  let warned = "";
+  const out = await checkScanRateLimit({
+    header: headers({ "x-real-ip": "203.0.113.9" }),
+    increment: counter(),
+    env: {},
+    now: T0,
+    logger: { warn: (m) => (warned = m) },
+  });
+  assert.equal(out.trusted, false, "the envelope must carry how much the address is worth");
+  assert.equal(out.source, "x-real-ip");
+  assert.match(warned, /bypassable by rotating/, "a limit that a header defeats must say so");
+
+  // Once per process: a per-request warning is a log nobody reads.
+  let second = "";
+  await checkScanRateLimit({
+    header: headers({ "x-real-ip": "203.0.113.9" }),
+    increment: counter(),
+    env: {},
+    now: T0,
+    logger: { warn: (m) => (second = m) },
+  });
+  assert.equal(second, "");
+});
+
+test("a trusted address source warns about nothing and says so in the envelope", async () => {
+  resetUntrustedSourceWarning();
+  let warned = "";
+  const out = await checkScanRateLimit({
+    header: headers({ [TRUSTED_IP_HEADER]: "203.0.113.9" }),
+    increment: counter(),
+    env: { VERCEL: "1" },
+    now: T0,
+    logger: { warn: (m) => (warned = m) },
+  });
+  assert.equal(out.trusted, true);
+  assert.equal(out.source, TRUSTED_IP_HEADER);
+  assert.equal(warned, "");
 });
 
 test("a salt change separates buckets across deployments", () => {
