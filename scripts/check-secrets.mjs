@@ -164,16 +164,33 @@ export const VENDORS = [
         return { verdict: PASS, detail: `configured zone "${zone}" is an active serp zone` };
       }
       // Unset is not UNCONFIGURED: the credential is present and works, and the
-      // variable is documented as optional. But the operator should know the
-      // name was picked FOR them, and that it is then cached for the life of
-      // the process with no invalidator (R1.2.7) — a zone that dies mid-run
-      // keeps being used, and this check runs in a different process from the
-      // worker, so it can report the truth while the worker acts on a stale answer.
+      // variable is documented as optional. But the operator should know the name
+      // was picked FOR them, and for how long it will be reused before anything
+      // re-checks it.
+      //
+      // THAT REUSE IS NOW BOUNDED (R1.2.7). This comment and the detail below used
+      // to say "for the life of the process". That was a true reading of the old
+      // bare-string cache; against the shipped code it is overstated three ways.
+      // The cache entry carries a timestamp and expires after
+      // BRIGHTDATA_ZONE_TTL_MS, default five minutes
+      // (DEFAULT_BRIGHTDATA_ZONE_TTL_MS, brightdata.js:72). A probe Bright Data
+      // refuses drops the entry on the spot (brightdata.js:313-327), so recovery
+      // is one failed probe rather than one TTL. And invalidateBrightDataZoneCache()
+      // (brightdata.js:116-124) can force a re-check at any time. The window in
+      // which THIS process can report the truth while a probing process acts on a
+      // stale name is therefore one TTL, not one process lifetime.
+      //
+      // The detail names the VARIABLE rather than the resolved number on purpose.
+      // Reading the number would mean calling brightDataZoneTtlMs() here, outside
+      // this entry's local try/catch, and that function throws on a malformed
+      // value; main()'s per-vendor catch would then report a TTL typo as a bare
+      // err.message on the brightdata row, losing "Every AIO probe will fail."
       return {
         verdict: PASS,
         detail:
           `${serp.length} active serp zone(s); no BRIGHTDATA_SERP_ZONE set, so probes ` +
-          `AUTO-DISCOVERED "${zone}" and will cache it for the process lifetime`,
+          `AUTO-DISCOVERED "${zone}" and will cache it for BRIGHTDATA_ZONE_TTL_MS ` +
+          `(default 5 min) before re-checking it`,
       };
     },
   },
