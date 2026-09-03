@@ -20,6 +20,79 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const read = (rel) => readFile(path.join(REPO, rel), "utf8");
 
 const SHEET_PATH = path.join(REPO, "src/components/landing/AnswerSheet.jsx");
+const PAGE_PATH = path.join(REPO, "src/app/page.js");
+
+/**
+ * The landing surfaces that attribute a sample answer to an engine. Both carry
+ * a chip beside a fabricated answer, and both got there by typing a name.
+ *
+ * R2.10.6 widened this from AnswerSheet.jsx alone. R2.10.5 closed the hero
+ * sheet's chip and its close record said that was the last typed engine name on
+ * the page; page.js:295 was a second one, on a second sample card, and rebuilt
+ * under NEXT_PUBLIC_ENGINES=perplexity it was the ONLY "Google AI Overview"
+ * left in the served HTML. The list is the fix: a guard that scans one of two
+ * identical surfaces is a guard that certifies the one it does not read.
+ */
+const LITERAL_SCAN_FILES = [
+  ["src/components/landing/AnswerSheet.jsx", SHEET_PATH],
+  ["src/app/page.js", PAGE_PATH],
+];
+
+/**
+ * page.js types engine names in exactly ONE place that is not an attribution:
+ * the ENGINE_NOTE dictionary (page.js:105-107). Its entries are reached only
+ * through DEPLOYED_ENGINE_LABELS.map(...), so an entry for an engine this
+ * deployment does not probe can never render.
+ *
+ * An exemption is a place to hide a literal, so this one is as small as the
+ * fact that justifies it: on each entry's line, ONLY that entry's own key is
+ * removed. Everything else in the dictionary is still scanned, so a note keyed
+ * "Google AI Overview" whose prose names ChatGPT — which WOULD render, on an
+ * aio-only deployment — still fails the scan.
+ *
+ * And it fails rather than exempting more than it understands: if the
+ * declaration is not there in this shape, or the DEPLOYED_ENGINE_LABELS filter
+ * that makes it safe has gone, this throws instead of quietly scanning a file
+ * it can no longer reason about.
+ */
+function withoutEngineNoteDictionary(src, labels) {
+  if (!Array.isArray(labels) || labels.length === 0) {
+    throw new Error("landingHonesty: the ENGINE_NOTE exemption needs the label list to scope itself");
+  }
+  const start = src.indexOf("const ENGINE_NOTE = {");
+  if (start < 0) {
+    throw new Error(
+      "landingHonesty: page.js no longer declares ENGINE_NOTE in the shape this "
+        + "guard exempts from the typed-literal scan. Re-read the exemption before "
+        + "widening it — it is the one blind spot in this check."
+    );
+  }
+  const end = src.indexOf("\n};", start);
+  if (end < 0) {
+    throw new Error("landingHonesty: the ENGINE_NOTE declaration in page.js is unterminated");
+  }
+  const rest = src.slice(end + 3);
+  if (!/RAIL_NOTES = DEPLOYED_ENGINE_LABELS\.map\(\(name\) => ENGINE_NOTE\[name\]\)/.test(rest)) {
+    throw new Error(
+      "landingHonesty: ENGINE_NOTE is exempt from the typed-literal scan ONLY "
+        + "because DEPLOYED_ENGINE_LABELS filters it down to the deployed engines. "
+        + "That filter is gone, so the exemption now hides a renderable literal."
+    );
+  }
+  const scoped = src
+    .slice(start, end + 3)
+    .split("\n")
+    .map((line) => {
+      // The key this line declares, if it declares one: `Label:` or `'Label':`.
+      const head = line.trim().replace(/^['"`]/, "");
+      const own = labels.find(
+        (label) => head.startsWith(label) && /^['"`]?\s*:/.test(head.slice(label.length))
+      );
+      return own ? line.split(own).join("") : line;
+    })
+    .join("\n");
+  return src.slice(0, start) + scoped + rest;
+}
 
 /**
  * Evaluate the sample report AND the hero's sample card under a given
@@ -31,12 +104,17 @@ const SHEET_PATH = path.join(REPO, "src/components/landing/AnswerSheet.jsx");
  * happening to match it today — the same thing the verifier did by hand with a
  * rebuild.
  *
- * R2.10.5 widened it past mockData.js. AnswerSheet.jsx is JSX and cannot be
- * imported by bare node, so the card is covered two ways in the SAME child, at
- * the same env: `sheetEngine` is the value the chip is now assigned, evaluated
- * under this deployment, and `sheetLiterals` is every engine name still TYPED
- * into that file. A returned literal shows up in the second even when the first
- * is right, which is exactly the state the card was found in.
+ * R2.10.5 widened it past mockData.js. AnswerSheet.jsx and page.js are JSX and
+ * cannot be imported by bare node, so each card is covered two ways in the SAME
+ * child, at the same env: `primaryEngine` is the value both chips are now
+ * assigned, evaluated under this deployment, and `typed[file].literals` is
+ * every engine name still TYPED into that file. A returned literal shows up in
+ * the second even when the first is right, which is exactly the state both
+ * cards were found in — and a literal that happens to EQUAL today's deployed
+ * engine is caught by the second clause only, which is how page.js:295 would
+ * have been missed by a value check alone.
+ *
+ * R2.10.6 widened the file list from AnswerSheet.jsx to LITERAL_SCAN_FILES.
  */
 function sampleReadingUnder(engines) {
   const href = pathToFileURL(path.join(REPO, "src/data/mockData.js")).href;
@@ -49,16 +127,28 @@ function sampleReadingUnder(engines) {
     // rather than re-typed, so a comment that EXPLAINS this fix cannot read as
     // the literal it removed.
     const withoutComments = ${withoutComments.toString()};
-    const sheetSrc = withoutComments(readFileSync(${JSON.stringify(SHEET_PATH)}, "utf8"));
+    const withoutEngineNoteDictionary = ${withoutEngineNoteDictionary.toString()};
     const allLabels = Object.values(eng.ENGINE_LABELS);
     const deployedLabels = eng.deployedEngineLabels();
+    // Only page.js gets the ENGINE_NOTE cut; every other file is scanned whole.
+    const sourceOf = (rel, abs) => {
+      const stripped = withoutComments(readFileSync(abs, "utf8"));
+      return rel === "src/app/page.js" ? withoutEngineNoteDictionary(stripped, allLabels) : stripped;
+    };
+    const typed = {};
+    for (const [rel, abs] of ${JSON.stringify(LITERAL_SCAN_FILES)}) {
+      const src = sourceOf(rel, abs);
+      typed[rel] = {
+        literals: allLabels.filter((l) => src.includes(l)),
+        offDeployment: allLabels.filter(
+          (l) => src.includes(l) && !deployedLabels.includes(l),
+        ),
+      };
+    }
     const r = m.SAMPLE_RESULT;
     process.stdout.write(JSON.stringify({
-      sheetEngine: eng.primaryDeployedEngineLabel(),
-      sheetLiterals: allLabels.filter((l) => sheetSrc.includes(l)),
-      sheetLiteralsOffDeployment: allLabels.filter(
-        (l) => sheetSrc.includes(l) && !deployedLabels.includes(l),
-      ),
+      primaryEngine: eng.primaryDeployedEngineLabel(),
+      typed,
       tracked: r.promptsTracked,
       analyzed: r.promptsAnalyzed,
       rows: r.results.length,
@@ -347,31 +437,50 @@ test("GUARD — the sample report FOLLOWS the deployed engine list", () => {
   // typed "Google AI Overview" would still look right.
   const solo = sampleReadingUnder("perplexity");
   assert.deepEqual(solo.probeSources, ["perplexity"]);
-  assert.equal(one.sheetEngine, "Google AI Overview");
-  assert.equal(two.sheetEngine, "Google AI Overview");
-  assert.equal(three.sheetEngine, "Google AI Overview");
+  assert.equal(one.primaryEngine, "Google AI Overview");
+  assert.equal(two.primaryEngine, "Google AI Overview");
+  assert.equal(three.primaryEngine, "Google AI Overview");
   assert.equal(
-    solo.sheetEngine,
+    solo.primaryEngine,
     "Perplexity",
-    "the sample card's chip must move with the deployment, not merely match it today"
+    "the sample cards' chips must move with the deployment, not merely match it today"
   );
 
+  // Clause one, the VALUE clause: nothing typed into either file names an
+  // engine outside this deployment. Clause two, the TYPED clause: nothing types
+  // an engine name into either file at all. Both are needed and R2.10.5's
+  // verifier proved why — a literal that equals TODAY'S deployed engine passes
+  // clause one under every env, and page.js:295 was exactly that literal.
+  for (const [name, reading] of [["aio", one], ["aio,perplexity", two], ["aio,chatgpt,perplexity", three], ["perplexity", solo]]) {
+    for (const [file, found] of Object.entries(reading.typed)) {
+      assert.deepEqual(
+        found.offDeployment,
+        [],
+        `under ENGINES=${name} ${file} still types ${found.offDeployment.join(", ")}, `
+          + "an engine this deployment does not probe"
+      );
+      assert.deepEqual(
+        found.literals,
+        [],
+        `no engine name may be TYPED into ${file} at all — it happening to be `
+          + "true of today's deployment is how the Perplexity chip survived R2.10.1 "
+          + "and how the page.js sample chip survived R2.10.5"
+      );
+    }
+  }
+
+  // Both files must actually have been scanned. Object.entries of an empty
+  // object iterates zero times and the loop above passes without reading a
+  // thing, which is the failure mode this guard exists to prevent.
   for (const [name, reading] of [["aio", one], ["aio,perplexity", two], ["aio,chatgpt,perplexity", three], ["perplexity", solo]]) {
     assert.deepEqual(
-      reading.sheetLiteralsOffDeployment,
-      [],
-      `under ENGINES=${name} the sample card still types ${reading.sheetLiteralsOffDeployment.join(", ")}, `
-        + "an engine this deployment does not probe"
-    );
-    assert.deepEqual(
-      reading.sheetLiterals,
-      [],
-      "no engine name may be TYPED into the sample card at all — it happening to be "
-        + "true of today's deployment is how the Perplexity chip survived R2.10.1"
+      Object.keys(reading.typed).sort(),
+      ["src/app/page.js", "src/components/landing/AnswerSheet.jsx"],
+      `under ENGINES=${name} the typed-literal scan did not cover both sample cards`
     );
   }
 
-  // And the chip must be assigned from the deployed list, not from a string
+  // And each chip must be assigned from the deployed list, not from a string
   // that happens to spell one. Assert the assignment, the way the hero
   // sentence and the rail do.
   const sheet = withoutComments(readFileSync(SHEET_PATH, "utf8"));
@@ -385,6 +494,23 @@ test("GUARD — the sample report FOLLOWS the deployed engine list", () => {
     "a typed chip is exactly how this card came to name Perplexity on an aio-only deployment"
   );
   assert.match(sheet, /className="chip">\{SHEET_ENGINE\}/, "and the chip must render it");
+
+  // R2.10.6 — the evidence section's sample card, the second one.
+  const page = withoutComments(readFileSync(PAGE_PATH, "utf8"));
+  assert.match(
+    page,
+    /const SAMPLE_CARD_ENGINE = primaryDeployedEngineLabel\(\);/,
+    "SAMPLE_CARD_ENGINE must be assigned from primaryDeployedEngineLabel()"
+  );
+  assert.ok(
+    !/const SAMPLE_CARD_ENGINE\s*=\s*['"`]/.test(page),
+    "a typed chip is how this card went on naming Google AI Overview under NEXT_PUBLIC_ENGINES=perplexity"
+  );
+  assert.match(
+    page,
+    /className="chip">\{SAMPLE_CARD_ENGINE\}/,
+    "and the evidence card's chip must render it"
+  );
 });
 
 test("GUARD — the sample report backs the '64 pages, six of them yours' claim", () => {

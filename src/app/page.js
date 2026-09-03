@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { DEFAULT_UNBRANDED_TARGET } from '@/lib/scoring/promptSetSize';
 import {
   ENGINE_LABELS, deployedEngineLabels, deployedEngines, formatEngineList,
+  primaryDeployedEngineLabel,
 } from '@/lib/engines/deployedEngines';
 import { SiteNav } from '@/components/landing/SiteNav';
 import { SiteFooter } from '@/components/landing/SiteFooter';
@@ -61,6 +62,18 @@ const ENGINE_SENTENCE = formatEngineList(deployedEngineLabels());
 
 const DEPLOYED_ENGINE_KEYS = deployedEngines();
 const DEPLOYED_ENGINE_LABELS = deployedEngineLabels();
+
+/* R2.10.6 — the evidence section's sample card carries a chip naming the engine
+   that supposedly returned the answer below it, and that chip was typed. R2.10.5
+   fixed the hero sheet's identical chip and its close record claimed this page
+   held no more; rebuilt under NEXT_PUBLIC_ENGINES=perplexity the hero sentence,
+   the rail and the hero sheet all narrowed correctly and the served HTML still
+   held exactly one Google AI Overview — this chip, attributing a fabricated
+   answer to an engine the deployment does not probe. The card shows ONE answer,
+   so it names one engine, and it is the deployment's own. Read at module scope
+   through deployedEngines' inlined NEXT_PUBLIC_ literal, so SSR and the browser
+   cannot pick differently. */
+const SAMPLE_CARD_ENGINE = primaryDeployedEngineLabel();
 
 // The donut. Colour is presentation and belongs here; the counts are the sample
 // report's own, so the two surfaces cannot disagree again.
@@ -292,7 +305,7 @@ export default function Landing() {
                     "16 Aug 2026 · 09:14 IST", which reads as provenance for a
                     real probe. A made-up answer wearing a real answer's
                     metadata is the exact confusion this page has to avoid. */}
-                <span className="chip">Google AI Overview</span>
+                <span className="chip">{SAMPLE_CARD_ENGINE}</span>
                 <span className="tag">Sample · illustrative brands</span>
                 <span className="chip chip--warn" style={{ marginLeft: 'auto' }}>Rival first</span>
               </div>
