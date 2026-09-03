@@ -9,8 +9,8 @@
  * Get the password from: Supabase Dashboard → Project Settings → Database → Database password
  */
 
-import { readFileSync, readdirSync } from "fs";
-import { fileURLToPath } from "url";
+import { readFileSync, readdirSync, realpathSync } from "fs";
+import { fileURLToPath, pathToFileURL } from "url";
 import { dirname, join } from "path";
 import { createHash } from "crypto";
 import pg from "pg";
@@ -37,7 +37,15 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 -- would claim they first landed on whatever day the column was added. An
 -- unknown must read as unknown; that is the whole point of this ledger.
 ALTER TABLE schema_migrations
-  ADD COLUMN IF NOT EXISTS first_applied_at timestamptz;`;
+  ADD COLUMN IF NOT EXISTS first_applied_at timestamptz;
+-- R6.1.5. Also NULLABLE and also deliberately undefaulted, for the same
+-- reason: rows recorded before this column existed have no comment-independent
+-- checksum, so for those rows the runner CANNOT tell a comment edit from a SQL
+-- edit and must say exactly that rather than guess either way. Backfilling it
+-- from today's file would assert the file matches the database, which is the
+-- claim under dispute.
+ALTER TABLE schema_migrations
+  ADD COLUMN IF NOT EXISTS sql_checksum text;`;
 
 /**
  * What each migration must leave behind, checked against the Postgres catalog.
@@ -95,7 +103,272 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "renew_probe_lease" },
     { kind: "function", name: "release_probe_tasks" },
   ],
+  // Added by R6.1.5/R6.1.6, not by R1.2.3 which authored 011, because this file
+  // was owned by this task for the round;
+  // the names below are read off supabase/migrations/011_scan_runs.sql
+  // (CREATE TABLE line 78, the four CREATE INDEX at 163/169/176/183, the three
+  // CREATE OR REPLACE FUNCTION at 220/257/299), not inferred from the title.
+  "011_scan_runs.sql": [
+    { kind: "table", name: "scan_runs" },
+    { kind: "index", name: "scan_runs_job_idx" },
+    { kind: "index", name: "scan_runs_batch_idx" },
+    { kind: "index", name: "scan_runs_open_idx" },
+    { kind: "index", name: "scan_runs_runner_idx" },
+    // A ledger nothing can write to is not a ledger: 009 was found as a table
+    // with its function missing, and 011 has three of them.
+    { kind: "function", name: "open_scan_run" },
+    { kind: "function", name: "heartbeat_scan_run" },
+    { kind: "function", name: "close_scan_run" },
+  ],
 };
+
+/**
+ * A dollar-quote opener: `$$`, `$fn$`, `$policy$`. The tag may not START with a
+ * digit, which is what keeps `$1` (a positional parameter) from being read as
+ * the beginning of a quoted block.
+ */
+// Assembled rather than written as a literal so the non-ASCII range carries no
+// escape ambiguity: PostgreSQL allows any letter above U+007F in a tag.
+const HIGH = String.fromCharCode(0x80) + "-" + String.fromCharCode(0xffff);
+const DOLLAR_TAG = new RegExp(`^[$]([A-Za-z_${HIGH}][A-Za-z0-9_${HIGH}]*)?[$]`);
+
+/**
+ * R6.1.5 — the migration text with COMMENTS REMOVED, or an honest refusal.
+ *
+ * Why this exists: the ledger checksum hashes the whole file, so correcting a
+ * comment moved 010_probe_tasks.sql from be27ae10f9467429 to ed5bc223145c0461
+ * (commit 39af3a9) while the SQL was byte-identical, and the runner announced
+ * "The file no longer describes what is in the database." That warning was
+ * false, and a warning that is false often is a warning an operator learns to
+ * wave through — which is how the next real drift gets missed.
+ *
+ * WHY A LEXER AND NOT `sql.replace(/--.*$/gm, "")`. A naive strip eats `--`
+ * inside a string literal and inside the `$fn$ ... $fn$` bodies that 010 is
+ * mostly made of. That is the dangerous direction of error: over-stripping
+ * makes a REAL SQL change hash identically to the text it replaced, which turns
+ * this from a noisy warning into a silent one. So this walks the four PostgreSQL
+ * lexical contexts that can contain a `--`: single-quoted strings (with '' and,
+ * after an E prefix, backslash escapes), double-quoted identifiers, nestable
+ * slash-star block comments, and dollar-quoted blocks.
+ *
+ * WHAT IT DELIBERATELY DOES NOT DO: it does not strip comments INSIDE a
+ * dollar-quoted body. Lexically that body is a string literal; that PL/pgSQL
+ * reads `--` inside it as a comment is a second grammar, and guessing at it is
+ * exactly the over-stripping this function refuses to do. The consequence is
+ * that editing a comment inside a function body still trips the loud warning.
+ * That is the safe direction: under-stripping degrades to the behaviour we
+ * already had.
+ *
+ * Returns { text, reliable, reason }. `reliable: false` means the file ended
+ * inside a literal or a comment, i.e. this function does not understand it — and
+ * an unparsed file must fall back to the loud message, never to a reassuring one.
+ */
+export function semanticSql(sql) {
+  const s = sql.replace(/\r\n/g, "\n");
+  const parts = [];
+  let code = "";
+  // Whitespace OUTSIDE literals is collapsed, so that removing a trailing
+  // comment (and the blank line it leaves) cannot itself change the hash.
+  // Whitespace inside a literal is preserved verbatim: it is data.
+  const flushCode = () => {
+    if (code) {
+      parts.push(code.replace(/\s+/g, " "));
+      code = "";
+    }
+  };
+  const unreadable = (reason) => ({ text: null, reliable: false, reason });
+
+  let i = 0;
+  const n = s.length;
+  while (i < n) {
+    const c = s[i];
+
+    if (c === "-" && s[i + 1] === "-") {
+      const nl = s.indexOf("\n", i);
+      i = nl === -1 ? n : nl;
+      code += " "; // a space, never nothing, so `a-/**/-b` cannot become `a--b`
+      continue;
+    }
+
+    if (c === "/" && s[i + 1] === "*") {
+      let depth = 1;
+      i += 2;
+      while (i < n && depth > 0) {
+        if (s[i] === "/" && s[i + 1] === "*") {
+          depth++;
+          i += 2;
+        } else if (s[i] === "*" && s[i + 1] === "/") {
+          depth--;
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+      if (depth > 0) return unreadable("unterminated block comment");
+      code += " ";
+      continue;
+    }
+
+    if (c === "'") {
+      // With standard_conforming_strings on (the default) a backslash is an
+      // ordinary character in '...'; only E'...' gives it escape meaning.
+      const prev = i > 0 ? s[i - 1] : "";
+      const prev2 = i > 1 ? s[i - 2] : "";
+      const backslashEscapes = (prev === "e" || prev === "E") && !/[A-Za-z0-9_]/.test(prev2);
+      let j = i + 1;
+      let closed = false;
+      while (j < n) {
+        if (backslashEscapes && s[j] === "\\") {
+          j += 2;
+          continue;
+        }
+        if (s[j] === "'") {
+          if (s[j + 1] === "'") {
+            j += 2;
+            continue;
+          }
+          j++;
+          closed = true;
+          break;
+        }
+        j++;
+      }
+      if (!closed) return unreadable("unterminated string literal");
+      flushCode();
+      parts.push(s.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (c === '"') {
+      let j = i + 1;
+      let closed = false;
+      while (j < n) {
+        if (s[j] === '"') {
+          if (s[j + 1] === '"') {
+            j += 2;
+            continue;
+          }
+          j++;
+          closed = true;
+          break;
+        }
+        j++;
+      }
+      if (!closed) return unreadable("unterminated quoted identifier");
+      flushCode();
+      parts.push(s.slice(i, j));
+      i = j;
+      continue;
+    }
+
+    if (c === "$") {
+      const m = DOLLAR_TAG.exec(s.slice(i));
+      if (m) {
+        const tag = m[0];
+        const close = s.indexOf(tag, i + tag.length);
+        if (close === -1) return unreadable(`unterminated dollar-quoted block ${tag}`);
+        flushCode();
+        parts.push(s.slice(i, close + tag.length));
+        i = close + tag.length;
+        continue;
+      }
+    }
+
+    code += c;
+    i++;
+  }
+  flushCode();
+  return { text: parts.join("").trim(), reliable: true, reason: null };
+}
+
+const shortHash = (text) => createHash("sha256").update(text).digest("hex").slice(0, 16);
+
+/**
+ * Both checksums for one migration file.
+ *
+ * `checksum` is unchanged from before this task, on purpose: it is the ledger's
+ * existing identity, and redefining it would make the first run after this merge
+ * print a drift warning for EVERY migration at once — the same desensitisation
+ * this task exists to stop. The comment-independent hash is recorded ALONGSIDE
+ * it, in `sql_checksum`.
+ */
+export function checksumsFor(sql) {
+  // Hash the NORMALISED text. 001 and 006 are CRLF in the main working tree and
+  // LF in any fresh, Linux or CI checkout (.gitattributes pins eol=lf), so
+  // hashing raw bytes made setup:db warn that files nobody had touched "had
+  // CHANGED" — purely because of where it ran. Normalising line endings and
+  // trailing whitespace means the checksum describes the SQL, not the checkout.
+  // See R6.4.7 for the mixed-line-endings tree.
+  const checksum = shortHash(sql.replace(/\r\n/g, "\n").replace(/\s+$/, ""));
+
+  const stripped = semanticSql(sql);
+  // Idempotence is the cheap self-check on the lexer: stripping an already
+  // stripped file must be a no-op. If it is not, the lexer has misread
+  // something, and a misread file must not be allowed to reassure anyone.
+  const reliable =
+    stripped.reliable &&
+    (() => {
+      const again = semanticSql(stripped.text);
+      return again.reliable && again.text === stripped.text;
+    })();
+
+  return {
+    checksum,
+    sqlChecksum: reliable ? shortHash(stripped.text) : null,
+    strippedReason: reliable ? null : stripped.reason || "the comment stripper could not re-read its own output",
+  };
+}
+
+/**
+ * R6.1.5 — classify a checksum difference instead of asserting a schema drift.
+ *
+ * Three outcomes, three DIFFERENT sentences, because they are three different
+ * facts and collapsing them is the bug:
+ *   sql      — the SQL itself changed. The file really does not describe the DB.
+ *   comment  — only comment or layout text changed. Say so; claim nothing about
+ *              the schema, because nothing about the schema is in question.
+ *   unknown  — the row predates `sql_checksum`, or this file could not be
+ *              parsed. We do not know which of the two it is, and an unknown
+ *              must read as unknown rather than borrow either verdict.
+ */
+export function classifyDrift({ prior, priorSqlChecksum, checksum, sqlChecksum, strippedReason }) {
+  if (!prior || prior === checksum) return { kind: "none" };
+  // Absent for either reason — the stripper refused, or a caller passed nothing —
+  // is "not known", never "fine".
+  if (sqlChecksum === null || sqlChecksum === undefined) {
+    return { kind: "unknown", why: strippedReason || "this migration could not be parsed" };
+  }
+  if (priorSqlChecksum === null || priorSqlChecksum === undefined) {
+    return {
+      kind: "unknown",
+      why: "the ledger row was written before this runner recorded a comment-independent checksum",
+    };
+  }
+  if (priorSqlChecksum === sqlChecksum) return { kind: "comment" };
+  return { kind: "sql" };
+}
+
+/** The operator-facing line for each verdict. One sentence per fact. */
+export function driftMessage(file, verdict, { prior, checksum }) {
+  if (verdict.kind === "sql") {
+    return (
+      `  ! ${file}: the SQL has CHANGED since it was applied (${prior} -> ${checksum}). ` +
+      `The file no longer describes what is in the database.`
+    );
+  }
+  if (verdict.kind === "comment") {
+    return (
+      `  - ${file}: COMMENTS ONLY changed since it was applied (${prior} -> ${checksum}). ` +
+      `The SQL is unchanged, so this is not a schema drift.`
+    );
+  }
+  return (
+    `  ? ${file}: the file TEXT changed since it was applied (${prior} -> ${checksum}), ` +
+    `but whether the SQL changed is UNKNOWN — ${verdict.why}. ` +
+    `Diff the file against git before deciding; this run cannot tell you.`
+  );
+}
 
 async function objectExists(client, { kind, name }) {
   if (kind === "function") {
@@ -156,32 +429,31 @@ async function main() {
     await client.query(SCHEMA_MIGRATIONS_DDL);
 
     const { rows: recorded } = await client.query(
-      "SELECT filename, checksum FROM schema_migrations"
+      "SELECT filename, checksum, sql_checksum FROM schema_migrations"
     );
-    const priorChecksums = new Map(recorded.map((r) => [r.filename, r.checksum]));
+    const priorRows = new Map(recorded.map((r) => [r.filename, r]));
 
     for (const file of migrationFiles) {
       const sql = readFileSync(join(migrationsDir, file), "utf8");
-      // Hash the NORMALISED text. 001 and 006 are CRLF in the main working
-      // tree and LF in any fresh, Linux or CI checkout (.gitattributes pins
-      // eol=lf), so hashing raw bytes made setup:db warn that files nobody had
-      // touched "had CHANGED" — purely because of where it ran. Normalising
-      // line endings and trailing whitespace means the checksum describes the
-      // SQL, not the checkout. See R6.4.7 for the mixed-line-endings tree.
-      const checksum = createHash("sha256")
-        .update(sql.replace(/\r\n/g, "\n").replace(/\s+$/, ""))
-        .digest("hex")
-        .slice(0, 16);
+      const { checksum, sqlChecksum, strippedReason } = checksumsFor(sql);
 
-      // A migration edited AFTER it was applied is a silent schema drift: the
-      // file no longer describes the database, and every reader who diffs the
-      // two will be misled. Loud, and not fatal — the operator decides.
-      const prior = priorChecksums.get(file);
-      if (prior && prior !== checksum) {
-        console.warn(
-          `  ! ${file} has CHANGED since it was applied (${prior} -> ${checksum}). ` +
-            `The file no longer describes what is in the database.`
-        );
+      // A migration edited AFTER it was applied MAY be a silent schema drift.
+      // R6.1.5: which of the three it is decides what gets said, because
+      // "the file no longer describes what is in the database" was printed for
+      // a comment fix that changed no SQL at all, and a warning that cries wolf
+      // is a warning the next operator waves through. Loud, and not fatal — the
+      // operator decides.
+      const priorRow = priorRows.get(file);
+      const prior = priorRow?.checksum;
+      const verdict = classifyDrift({
+        prior,
+        priorSqlChecksum: priorRow ? priorRow.sql_checksum ?? null : null,
+        checksum,
+        sqlChecksum,
+        strippedReason,
+      });
+      if (verdict.kind !== "none") {
+        console.warn(driftMessage(file, verdict, { prior, checksum }));
       }
 
       // One transaction per file. Without this a migration that fails halfway
@@ -212,12 +484,19 @@ async function main() {
           // keep — a bigger change than this task, and one nothing yet needs.
           // Treat the warning as a one-shot notification, not durable state:
           // `git log` on the migration file is the record that survives.
-          `INSERT INTO schema_migrations (filename, checksum, applied_at, first_applied_at)
-           VALUES ($1, $2, now(), now())
+          //
+          // `sql_checksum` is written as NULL when the comment stripper could
+          // not read the file, rather than falling back to the full-text hash.
+          // A NULL here means "not known", and the next run says so; storing
+          // the full hash in that column would make the run after this one
+          // compare two different kinds of number and call the answer a fact.
+          `INSERT INTO schema_migrations (filename, checksum, sql_checksum, applied_at, first_applied_at)
+           VALUES ($1, $2, $3, now(), now())
            ON CONFLICT (filename) DO UPDATE SET
              checksum = EXCLUDED.checksum,
+             sql_checksum = EXCLUDED.sql_checksum,
              applied_at = now()`,
-          [file, checksum]
+          [file, checksum, sqlChecksum]
         );
         await client.query("COMMIT");
         console.log("ok");
@@ -264,4 +543,32 @@ async function main() {
   }
 }
 
-main();
+/**
+ * R6.1.5 — run only when this file IS the command, so the checksum helpers above
+ * can be imported and tested without opening a database connection.
+ *
+ * The dangerous failure of an entrypoint guard is that it silently declines to
+ * run and the operator reads exit 0 as "migrations applied", so the mismatch
+ * branch below is loud and fatal instead of quiet. The guard itself is exercised
+ * on every run of src/lib/migrationsRunner.test.mjs, which spawns this script as
+ * a subprocess: if the comparison ever stops matching, those tests go red rather
+ * than the runner going quiet in production.
+ */
+const invokedPath = process.argv[1] || "";
+const sameFile = (a, b) => {
+  try {
+    return pathToFileURL(realpathSync(a)).href === pathToFileURL(realpathSync(b)).href;
+  } catch {
+    return false;
+  }
+};
+
+if (invokedPath && sameFile(invokedPath, fileURLToPath(import.meta.url))) {
+  main();
+} else if (/setup-supabase\.mjs$/i.test(invokedPath)) {
+  console.error(
+    `Refusing to run: ${invokedPath} was invoked as the entrypoint but does not resolve to ` +
+      `${fileURLToPath(import.meta.url)}. Nothing has been applied.`
+  );
+  process.exit(1);
+}
