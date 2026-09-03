@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DEFAULT_SERP_GEO, resolveSerpGeo } from "./serpGeo.js";
-import { probeGoogleAiOverview } from "./serp.js";
+import { fetchPeopleAlsoAsk, probeGoogleAiOverview } from "./serp.js";
 import { brightDataSearch } from "./brightdata.js";
 
 /**
@@ -116,4 +116,114 @@ test("both clients follow SERP_GEO to the same non-default country", async (t) =
 
   assert.match(sent.serpapi, /[?&]gl=gb(&|$)/);
   assert.match(sent.brightdata, /[?&]gl=gb(&|$)/);
+});
+
+/**
+ * R1.6.2 (round two) — `fetchPeopleAlsoAsk` is the second place in serp.js
+ * where the two clients pick a country, and it carried its own `gl: "us"`
+ * literal that never read SERP_GEO at all. The tests above structurally
+ * cannot see it: they drive probeGoogleAiOverview and brightDataSearch.
+ *
+ * The path is live: POST /api/scan -> runScanChunk -> runSourcingPhase ->
+ * sourceUnbrandedQueries -> generateUnbrandedPrompts (as paaFn) ->
+ * fetchPeopleAlsoAsk. PAA questions seed the prompt set, so a split here
+ * makes the India-first prompt set incomparable between providers.
+ *
+ * Each test also asserts the questions came back, not just that a request
+ * went out — fetchPeopleAlsoAsk swallows per-term failures into a warn and
+ * returns [], so an empty list would otherwise read as a pass.
+ */
+
+/** A Bright Data envelope carrying PAA, with AIO not requested. */
+const BD_PAA = {
+  body: JSON.stringify({
+    people_also_ask: [{ question: "Is Acme any good?" }],
+    organic: [{ title: "Acme", link: "https://acme.io" }],
+  }),
+};
+
+const SERPAPI_PAA = { people_also_ask: [{ question: "Is Acme any good?" }] };
+
+test("PAA via SerpAPI reads the shared default — gl=in when SERP_GEO is unset", async (t) => {
+  useEnv(t, { SERP_PROVIDER: "serpapi", SERPAPI_KEY: "mock-key" });
+  const calls = captureFetch(t, SERPAPI_PAA);
+
+  const questions = await fetchPeopleAlsoAsk("best crm");
+
+  assert.ok(calls.length, "the client must have issued a request");
+  assert.deepEqual(questions, ["Is Acme any good?"], "the PAA response must have been consumed");
+  assert.match(calls[0].url, /[?&]gl=in(&|$)/, `SerpAPI PAA sent ${calls[0].url}`);
+});
+
+test("PAA via Bright Data reads the shared default — gl=in when SERP_GEO is unset", async (t) => {
+  useEnv(t, {
+    SERP_PROVIDER: "brightdata",
+    BRIGHTDATA_API_KEY: "bd-key",
+    BRIGHTDATA_SERP_ZONE: "serp_zone",
+  });
+  const calls = captureFetch(t, BD_PAA);
+
+  const questions = await fetchPeopleAlsoAsk("best crm");
+
+  assert.ok(calls.length, "the client must have issued a request");
+  assert.deepEqual(questions, ["Is Acme any good?"], "the PAA response must have been consumed");
+  const body = JSON.parse(calls[0].init.body);
+  assert.match(body.url, /[?&]gl=in(&|$)/, `Bright Data PAA sent ${body.url}`);
+  assert.equal(body.country, "in", "the proxy country must match the gl it searched with");
+});
+
+test("PAA under both providers agrees on the same country when SERP_GEO is unset", async (t) => {
+  const sent = {};
+
+  await t.test("serpapi", async (t2) => {
+    useEnv(t2, { SERP_PROVIDER: "serpapi", SERPAPI_KEY: "mock-key" });
+    const calls = captureFetch(t2, SERPAPI_PAA);
+    await fetchPeopleAlsoAsk("best crm");
+    sent.serpapi = new URL(calls[0].url).searchParams.get("gl");
+  });
+
+  await t.test("brightdata", async (t2) => {
+    useEnv(t2, {
+      SERP_PROVIDER: "brightdata",
+      BRIGHTDATA_API_KEY: "bd-key",
+      BRIGHTDATA_SERP_ZONE: "serp_zone",
+    });
+    const calls = captureFetch(t2, BD_PAA);
+    await fetchPeopleAlsoAsk("best crm");
+    sent.brightdata = new URL(JSON.parse(calls[0].init.body).url).searchParams.get("gl");
+  });
+
+  assert.equal(sent.serpapi, DEFAULT_SERP_GEO);
+  assert.equal(
+    sent.brightdata,
+    sent.serpapi,
+    `the two providers seeded prompts from different countries: serpapi=${sent.serpapi} brightdata=${sent.brightdata}`
+  );
+});
+
+test("PAA via SerpAPI follows SERP_GEO — gl=gb, not the default", async (t) => {
+  useEnv(t, { SERP_PROVIDER: "serpapi", SERPAPI_KEY: "mock-key", SERP_GEO: "gb" });
+  const calls = captureFetch(t, SERPAPI_PAA);
+
+  await fetchPeopleAlsoAsk("best crm");
+
+  assert.ok(calls.length, "the client must have issued a request");
+  assert.match(calls[0].url, /[?&]gl=gb(&|$)/, `SerpAPI PAA sent ${calls[0].url}`);
+});
+
+test("PAA via Bright Data follows SERP_GEO — gl=gb, not the default", async (t) => {
+  useEnv(t, {
+    SERP_PROVIDER: "brightdata",
+    BRIGHTDATA_API_KEY: "bd-key",
+    BRIGHTDATA_SERP_ZONE: "serp_zone",
+    SERP_GEO: "gb",
+  });
+  const calls = captureFetch(t, BD_PAA);
+
+  await fetchPeopleAlsoAsk("best crm");
+
+  assert.ok(calls.length, "the client must have issued a request");
+  const body = JSON.parse(calls[0].init.body);
+  assert.match(body.url, /[?&]gl=gb(&|$)/, `Bright Data PAA sent ${body.url}`);
+  assert.equal(body.country, "gb");
 });

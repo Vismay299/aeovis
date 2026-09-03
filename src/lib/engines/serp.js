@@ -327,11 +327,17 @@ export async function fetchPeopleAlsoAsk(seedTerms) {
         continue;
       }
 
+      // R1.6.2 — resolved per call, not at module load, so a SERP_GEO set
+      // after import (or per-request in tests) is honoured. The Bright Data
+      // branch above already routes through resolveSerpGeo() inside
+      // brightDataSearch; a literal here would seed the India-first prompt
+      // set from US People-Also-Ask questions under SerpAPI and Indian ones
+      // under Bright Data — prompt sets that are not comparable.
       const searchParams = new URLSearchParams({
         q: term,
         engine: "google",
         hl: "en",
-        gl: "us",
+        gl: resolveSerpGeo(),
       });
       const res = await serpFetch(searchParams);
       if (res.ok) {
