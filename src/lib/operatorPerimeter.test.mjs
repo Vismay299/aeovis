@@ -9,6 +9,7 @@ import {
   isSelfGated,
   timingSafeEquals,
   extractOperatorToken,
+  resolveNodeEnv,
   PERIMETER,
 } from "./operatorPerimeter.js";
 
@@ -211,4 +212,71 @@ test("GUARD — middleware.js binds the tested decision and scopes itself to /ap
   assert.match(src, /authorizeOperatorRequest/, "must use the tested decision, not its own");
   assert.match(src, /matcher: \["\/api\/:path\*"\]/, "must not gate page routes");
   assert.match(src, /status: 401/);
+});
+
+// ---------------------------------------------------------------------------
+// RUNTIME vs BUILD-TIME NODE_ENV.
+//
+// R0.1.1's verifier found middleware.js passing the literal
+// process.env.NODE_ENV into the decision. Next substitutes that exact
+// expression at BUILD time in the Edge bundle (define-env-plugin.js), so the
+// perimeter's notion of "production" was fixed by the compile and could not be
+// moved by the environment the server was started with. It failed CLOSED, so
+// it was not a hole — but it meant any test that flipped NODE_ENV at runtime
+// to exercise the dev branch of middleware.js would have exercised nothing at
+// all, and a test that passes while testing nothing is the thing this rebuild
+// exists to delete. The guard below is what stops that being written again.
+// ---------------------------------------------------------------------------
+
+test("resolveNodeEnv — an environment that will not say what it is counts as production", () => {
+  assert.equal(resolveNodeEnv({ NODE_ENV: "development" }), "development");
+  assert.equal(resolveNodeEnv({ NODE_ENV: "test" }), "test");
+  assert.equal(resolveNodeEnv({ NODE_ENV: "production" }), "production");
+  // Fail closed. Making the read dynamic must not turn the perimeter fail-open
+  // wherever NODE_ENV happens to be missing.
+  assert.equal(resolveNodeEnv({}), "production");
+  assert.equal(resolveNodeEnv({ NODE_ENV: "" }), "production");
+  assert.equal(resolveNodeEnv({ NODE_ENV: "   " }), "production");
+  assert.equal(resolveNodeEnv(undefined), "production");
+  assert.equal(resolveNodeEnv(null), "production");
+});
+
+test("resolveNodeEnv — the resolved value still drives the real decision", () => {
+  const askEnv = (env) =>
+    authorizeOperatorRequest({
+      method: "GET",
+      pathname: "/api/agents",
+      operatorToken: "",
+      nodeEnv: resolveNodeEnv(env),
+      header: headers({}),
+    });
+  assert.equal(askEnv({ NODE_ENV: "development" }).reason, PERIMETER.ALLOW_DEV_NO_TOKEN);
+  assert.equal(askEnv({ NODE_ENV: "production" }).reason, PERIMETER.DENY_NO_TOKEN_CONFIGURED);
+  assert.equal(
+    askEnv({}).reason,
+    PERIMETER.DENY_NO_TOKEN_CONFIGURED,
+    "no NODE_ENV must be closed, not open"
+  );
+});
+
+test("GUARD — middleware.js reads NODE_ENV at RUNTIME, not at build time", async () => {
+  const src = await readFile(path.join(REPO, "src/middleware.js"), "utf8");
+  // Comments may name the forbidden expression; only executable code matters,
+  // because Next substitutes expressions, not prose.
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.doesNotMatch(
+    code,
+    /process\.env\.NODE_ENV/,
+    "middleware.js must not contain the literal process.env.NODE_ENV: Next inlines it at build " +
+      "time, which makes the perimeter judge production by how it was compiled and makes any " +
+      "runtime NODE_ENV test silently vacuous. Use resolveNodeEnv(process.env)."
+  );
+  assert.match(
+    code,
+    /resolveNodeEnv\(\s*process\.env\s*\)/,
+    "middleware.js must resolve NODE_ENV off the runtime env object"
+  );
+  // OPERATOR_TOKEN is safe to read directly: Next only inlines NEXT_PUBLIC_* and
+  // next.config `env` keys, so this one comes from the Edge runtime env.
+  assert.match(code, /process\.env\.OPERATOR_TOKEN/);
 });

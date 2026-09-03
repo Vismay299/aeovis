@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authorizeOperatorRequest, PERIMETER } from "@/lib/operatorPerimeter";
+import { authorizeOperatorRequest, resolveNodeEnv, PERIMETER } from "@/lib/operatorPerimeter";
 
 /**
  * Operator perimeter (R0.1.3). The decision lives in
@@ -16,7 +16,12 @@ export function middleware(request) {
     method: request.method,
     pathname,
     operatorToken: process.env.OPERATOR_TOKEN,
-    nodeEnv: process.env.NODE_ENV,
+    // resolveNodeEnv(process.env), never the literal process.env.NODE_ENV:
+    // Next inlines that exact expression at build time in the Edge bundle, so
+    // writing it here would judge "production" by how this was compiled rather
+    // than how it is run. Passing the whole env object is not substituted.
+    // Guarded by a test in operatorPerimeter.test.mjs — do not "simplify" it.
+    nodeEnv: resolveNodeEnv(process.env),
     header: (name) => request.headers.get(name),
     cookie: (name) => request.cookies.get(name)?.value ?? null,
   });

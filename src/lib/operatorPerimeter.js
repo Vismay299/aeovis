@@ -104,6 +104,32 @@ export function extractOperatorToken({ header, cookie }) {
   return cookie("operator_token") || null;
 }
 
+/**
+ * Resolve the RUNTIME NODE_ENV for the perimeter.
+ *
+ * middleware.js must never write the literal `process.env.NODE_ENV`. Next
+ * substitutes that exact expression textually at BUILD time for every bundle,
+ * the Edge one included (see define-env-plugin.js: "process.env.NODE_ENV":
+ * dev ? "development" : "production"), so a perimeter written that way judges
+ * "production" by how it was COMPILED, not by how it is RUN. R0.1.1's verifier
+ * proved it: a server started with NODE_ENV=development still logged the
+ * production refusal.
+ *
+ * Reading the key off a dynamic binding is not substituted — the same shape
+ * isCronAuthorized uses in src/lib/cronAuth.js:76 — and Next's Edge sandbox
+ * builds process.env from the real runtime environment
+ * (next/dist/server/web/sandbox/context.js, buildEnvironmentVariablesFrom),
+ * so the value that arrives here is the one the server was started with.
+ *
+ * An absent or blank NODE_ENV resolves to "production". Moving this read to
+ * runtime must not convert a fail-closed perimeter into a fail-open one: an
+ * environment that will not say what it is gets treated as the dangerous one.
+ */
+export function resolveNodeEnv(env) {
+  const raw = String((env && env.NODE_ENV) || "").trim();
+  return raw || "production";
+}
+
 export const PERIMETER = Object.freeze({
   ALLOW_PUBLIC: "allow_public",
   ALLOW_SELF_GATED: "allow_self_gated",
