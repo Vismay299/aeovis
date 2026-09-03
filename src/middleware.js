@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { authorizeOperatorRequest, resolveNodeEnv, PERIMETER } from "@/lib/operatorPerimeter";
+import {
+  authorizeOperatorRequest,
+  resolveNodeEnv,
+  warnDevPerimeterOpen,
+  PERIMETER,
+} from "@/lib/operatorPerimeter";
 
 /**
  * Operator perimeter (R0.1.3). The decision lives in
@@ -9,8 +14,21 @@ import { authorizeOperatorRequest, resolveNodeEnv, PERIMETER } from "@/lib/opera
  * Scoped to /api by the matcher below — page routes are untouched, so the
  * marketing site and the scan form still render for anyone.
  */
+/**
+ * The once-flag for the dev-open disclosure (R0.1.14). Module scope, so it
+ * survives between requests handled by the SAME Edge isolate — which is what
+ * makes the warning once rather than per-request. Next evaluates this module
+ * per isolate, and the platform recycles isolates, so a cold start warns
+ * again. Once per isolate, not once per deploy; see warnDevPerimeterOpen.
+ */
+const warnedDevOpen = { value: false };
+
 export function middleware(request) {
   const { pathname, searchParams } = new URL(request.url);
+
+  // Resolved ONCE and reused by the decision and by the disclosure below, so
+  // the NODE_ENV the warning names is provably the one that opened the gate.
+  const runtimeNodeEnv = resolveNodeEnv(process.env);
 
   const { allow, reason } = authorizeOperatorRequest({
     method: request.method,
@@ -21,12 +39,27 @@ export function middleware(request) {
     // writing it here would judge "production" by how this was compiled rather
     // than how it is run. Passing the whole env object is not substituted.
     // Guarded by a test in operatorPerimeter.test.mjs — do not "simplify" it.
-    nodeEnv: resolveNodeEnv(process.env),
+    nodeEnv: runtimeNodeEnv,
     header: (name) => request.headers.get(name),
     cookie: (name) => request.cookies.get(name)?.value ?? null,
   });
 
-  if (allow) return NextResponse.next();
+  if (allow) {
+    // An open perimeter must not be a silent one. This is the counterpart of
+    // isCronAuthorized's OK_DEV_NO_SECRET warning: with OPERATOR_TOKEN unset
+    // and a declared non-production NODE_ENV, every operator route below is
+    // unauthenticated, and the only other evidence of that was the source.
+    // No-ops for every other allow reason, so the free-scan flow and the
+    // self-gated workers stay quiet.
+    warnDevPerimeterOpen({
+      reason,
+      nodeEnv: runtimeNodeEnv,
+      method: request.method,
+      pathname,
+      warned: warnedDevOpen,
+    });
+    return NextResponse.next();
+  }
 
   if (reason === PERIMETER.DENY_NO_TOKEN_CONFIGURED) {
     console.error(

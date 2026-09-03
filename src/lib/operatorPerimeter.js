@@ -140,6 +140,61 @@ export const PERIMETER = Object.freeze({
 });
 
 /**
+ * Disclose the dev allowance, ONCE (R0.1.14, finding S17).
+ *
+ * `authorizeOperatorRequest` returns ALLOW_DEV_NO_TOKEN whenever
+ * OPERATOR_TOKEN is unset and the resolved NODE_ENV is anything other than
+ * "production" — so a deployment running with NODE_ENV=development or
+ * NODE_ENV=staging serves POST /api/content and GET /api/knowledge to anyone
+ * who asks. That rule is deliberate and matches src/lib/cronAuth.js. What was
+ * NOT deliberate is that the cron gate SAYS SO on its equivalent branch
+ * (CRON_AUTH.OK_DEV_NO_SECRET) while this one said nothing at all — an open
+ * perimeter whose only evidence was reading the source. The two gates must
+ * disclose alike, so this mirrors isCronAuthorized's warn-once.
+ *
+ * The once-flag is passed IN rather than held here, for the same reason
+ * cronAuth's is: module state in this file would be shared by every test in
+ * the process, so the first test to trip it would silence the rest and the
+ * assertion would pass while proving nothing. The caller owns the box.
+ *
+ * Scope of "once": one warning per module instance. In Next's Edge runtime
+ * middleware.js is evaluated per ISOLATE, and isolates are created, reused
+ * across many requests, then recycled by the platform — so this is once per
+ * ISOLATE, not once per deploy. A long-lived isolate warns on its first
+ * dev-open request and stays quiet after; a cold start warns again. That is
+ * the same guarantee the worker routes already give, and it is deliberately
+ * not per-request: a line on every call is a line nobody reads (R6.1.5).
+ *
+ * Returns whether it actually warned, so a caller — and a test — can tell
+ * "suppressed as a repeat" apart from "never reached this branch".
+ *
+ * @param {object} args
+ * @param {string} args.reason   a PERIMETER.* value from authorizeOperatorRequest
+ * @param {string} args.nodeEnv  the RESOLVED NODE_ENV (resolveNodeEnv's output)
+ * @param {string} args.method
+ * @param {string} args.pathname
+ * @param {{value: boolean}} args.warned caller-owned once-flag
+ * @param {{warn: Function}} [args.logger]
+ * @returns {boolean} true only on the call that emitted the warning
+ */
+export function warnDevPerimeterOpen({ reason, nodeEnv, method, pathname, warned, logger }) {
+  if (reason !== PERIMETER.ALLOW_DEV_NO_TOKEN) return false;
+  // No silent no-op if the caller forgot the box. A disclosure helper that
+  // quietly declines to disclose is the exact bug it exists to prevent.
+  if (!warned || typeof warned !== "object") {
+    throw new TypeError("warnDevPerimeterOpen requires a caller-owned { value } once-flag");
+  }
+  if (warned.value) return false;
+  warned.value = true;
+  (logger || console).warn(
+    `[perimeter] OPERATOR_TOKEN is not set — every operator route is UNAUTHENTICATED in ` +
+      `NODE_ENV=${nodeEnv}. First seen at ${method} ${pathname}. Operator routes are refused ` +
+      `outright in production. This warns once per Edge isolate, not once per request.`
+  );
+  return true;
+}
+
+/**
  * The whole decision.
  *
  * @param {object} args

@@ -10,6 +10,7 @@ import {
   timingSafeEquals,
   extractOperatorToken,
   resolveNodeEnv,
+  warnDevPerimeterOpen,
   PERIMETER,
 } from "./operatorPerimeter.js";
 
@@ -279,4 +280,171 @@ test("GUARD — middleware.js reads NODE_ENV at RUNTIME, not at build time", asy
   // OPERATOR_TOKEN is safe to read directly: Next only inlines NEXT_PUBLIC_* and
   // next.config `env` keys, so this one comes from the Edge runtime env.
   assert.match(code, /process\.env\.OPERATOR_TOKEN/);
+});
+
+// ---------------------------------------------------------------------------
+// R0.1.14 — the dev-open perimeter must SAY it is open.
+//
+// R0.1.3 made the NODE_ENV read dynamic and resolved absent/blank to
+// "production", so an undeclared environment stays closed. But a DECLARED
+// non-production value (development, staging, preview...) still opens the
+// perimeter when OPERATOR_TOKEN is unset: POST /api/content and
+// GET /api/knowledge are served to anyone. That rule is pre-existing and
+// matches cronAuth.js. What did NOT match was the disclosure: isCronAuthorized
+// warns once on OK_DEV_NO_SECRET; ALLOW_DEV_NO_TOKEN logged nothing at all.
+// Verified before the fix by driving the real middleware with OPERATOR_TOKEN
+// unset and NODE_ENV=development — three operator routes admitted, zero lines
+// on console.warn/error/log.
+//
+// Deleting warnDevPerimeterOpen's logger.warn call fails the first test here;
+// deleting the call site in middleware.js fails the GUARD at the end.
+// ---------------------------------------------------------------------------
+
+const captureLogger = () => {
+  const warnings = [];
+  return { warnings, logger: { warn: (m) => warnings.push(m) } };
+};
+
+test("R0.1.14 — the dev-open branch warns, and names the resolved NODE_ENV", () => {
+  for (const nodeEnv of ["development", "staging", "test", "preview"]) {
+    const decision = authorizeOperatorRequest({
+      method: "POST",
+      pathname: "/api/content",
+      operatorToken: "",
+      nodeEnv: resolveNodeEnv({ NODE_ENV: nodeEnv }),
+      header: headers({}),
+    });
+    assert.equal(decision.reason, PERIMETER.ALLOW_DEV_NO_TOKEN, `${nodeEnv} must still open`);
+
+    const { warnings, logger } = captureLogger();
+    const warned = { value: false };
+    const fired = warnDevPerimeterOpen({
+      reason: decision.reason,
+      nodeEnv: resolveNodeEnv({ NODE_ENV: nodeEnv }),
+      method: "POST",
+      pathname: "/api/content",
+      warned,
+      logger,
+    });
+    assert.equal(fired, true, `taking the dev-open branch in ${nodeEnv} must disclose it`);
+    assert.equal(warnings.length, 1, "exactly one line");
+    assert.match(warnings[0], /UNAUTHENTICATED/, "the line must say what is wrong, not just hum");
+    assert.ok(
+      warnings[0].includes("NODE_ENV=" + nodeEnv + "."),
+      "the warning must name the RESOLVED NODE_ENV that opened the gate, exactly: " + warnings[0]
+    );
+    assert.match(warnings[0], /OPERATOR_TOKEN/, "it must name the variable an operator has to set");
+    assert.match(warnings[0], /POST \/api\/content/, "and where it first saw the open route");
+  }
+});
+
+test("R0.1.14 — it fires exactly ONCE per flag, however many requests arrive", () => {
+  const { warnings, logger } = captureLogger();
+  const warned = { value: false };
+  const call = (pathname) =>
+    warnDevPerimeterOpen({
+      reason: PERIMETER.ALLOW_DEV_NO_TOKEN,
+      nodeEnv: "development",
+      method: "GET",
+      pathname,
+      warned,
+      logger,
+    });
+  assert.equal(call("/api/knowledge"), true);
+  for (let i = 0; i < 25; i++) assert.equal(call("/api/agents"), false, "repeats stay silent");
+  assert.equal(warnings.length, 1, "a line on every request is a line nobody reads");
+  assert.equal(warned.value, true);
+  // The return value, not just the log, separates "suppressed repeat" from
+  // "never took the branch" — measured zero must not look like never ran.
+  assert.match(warnings[0], /\/api\/knowledge/, "the one line names the FIRST route, not the last");
+});
+
+test("R0.1.14 — every other verdict stays silent", () => {
+  const quiet = [
+    PERIMETER.ALLOW_PUBLIC,
+    PERIMETER.ALLOW_SELF_GATED,
+    PERIMETER.ALLOW_OPERATOR,
+    PERIMETER.DENY_NO_TOKEN_CONFIGURED,
+    PERIMETER.DENY_BAD_TOKEN,
+  ];
+  for (const reason of quiet) {
+    const { warnings, logger } = captureLogger();
+    const warned = { value: false };
+    assert.equal(
+      warnDevPerimeterOpen({
+        reason,
+        nodeEnv: "development",
+        method: "POST",
+        pathname: "/api/scan",
+        warned,
+        logger,
+      }),
+      false,
+      `${reason} is not the dev-open branch`
+    );
+    assert.equal(warnings.length, 0, `${reason} must not warn — the free scan runs on this path`);
+    assert.equal(warned.value, false, `${reason} must not burn the once-flag`);
+  }
+});
+
+test("R0.1.14 — a missing once-flag throws rather than silently not disclosing", () => {
+  assert.throws(
+    () =>
+      warnDevPerimeterOpen({
+        reason: PERIMETER.ALLOW_DEV_NO_TOKEN,
+        nodeEnv: "development",
+        method: "GET",
+        pathname: "/api/agents",
+        logger: { warn: () => {} },
+      }),
+    /once-flag/,
+    "a disclosure helper that quietly declines to disclose is the bug it exists to prevent"
+  );
+});
+
+test("R0.1.14 — the warning must not change who gets in", () => {
+  // The disclosure is a log, not a gate. R0.1.3 admission rules stand.
+  const askEnvOpen = (env) =>
+    authorizeOperatorRequest({
+      method: "GET",
+      pathname: "/api/knowledge",
+      operatorToken: "",
+      nodeEnv: resolveNodeEnv(env),
+      header: headers({}),
+    });
+  assert.equal(askEnvOpen({}).allow, false, "NODE_ENV unset must still be REFUSED (R0.1.3)");
+  assert.equal(askEnvOpen({ NODE_ENV: "" }).allow, false, "NODE_ENV blank must still be REFUSED");
+  assert.equal(askEnvOpen({ NODE_ENV: "  " }).allow, false, "whitespace NODE_ENV still REFUSED");
+  assert.equal(askEnvOpen({ NODE_ENV: "production" }).reason, PERIMETER.DENY_NO_TOKEN_CONFIGURED);
+  // And the two exemptions the perimeter depends on are untouched.
+  assert.equal(ask("POST", "/api/scan", { headers: {} }).reason, PERIMETER.ALLOW_PUBLIC);
+  assert.equal(ask("POST", "/api/scan/worker", { headers: {} }).reason, PERIMETER.ALLOW_SELF_GATED);
+  assert.equal(
+    ask("POST", "/api/content/worker", { headers: {} }).reason,
+    PERIMETER.ALLOW_SELF_GATED
+  );
+});
+
+test("GUARD — middleware.js actually calls the disclosure, with a module-level once-flag", async () => {
+  const src = await readFile(path.join(REPO, "src/middleware.js"), "utf8");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.match(
+    code,
+    /warnDevPerimeterOpen\(/,
+    "middleware.js must disclose the dev-open perimeter (R0.1.14). The unit tests above pin the " +
+      "helper; only this guard stops the CALL being deleted and the perimeter going quiet again."
+  );
+  const flagDecl = code.match(/^const\s+(\w+)\s*=\s*\{\s*value:\s*false\s*\}\s*;/m);
+  assert.ok(
+    flagDecl,
+    "the once-flag must live at MODULE scope, or the warning fires on every request"
+  );
+  const normalised = code.replace(/\s+/g, " ");
+  assert.ok(
+    normalised.includes("warned: " + flagDecl[1]),
+    "the call site must pass the module-level flag, not a per-request object literal"
+  );
+  // cronAuth is the reference implementation; the two gates must stay aligned.
+  const cron = await readFile(path.join(REPO, "src/lib/cronAuth.js"), "utf8");
+  assert.match(cron, /ctx\.warned\.value = true;/, "cronAuth warn-once is the model for this");
 });
