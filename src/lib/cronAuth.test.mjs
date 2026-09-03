@@ -179,7 +179,13 @@ test("PRODUCTION + the correct secret — accepted via bearer, header, or query"
 });
 
 test("DEV + no CRON_SECRET — still allowed, so local dev and self-continue keep working", () => {
-  for (const nodeEnv of ["development", "test", undefined]) {
+  // R0.1.13 removed `undefined` from this list. It used to sit here asserting
+  // that an environment which never declared NODE_ENV may run an uncredentialed
+  // worker — i.e. this test PINNED the fail-open. An environment must now say
+  // what it is out loud to earn the dev allowance; the R0.1.13 block below pins
+  // the silence case as a DENY. "local" stands in for any declared
+  // non-production value, so this stays a rule and not a whitelist.
+  for (const nodeEnv of ["development", "test", "local"]) {
     const out = authorizeCronRequest({ secret: "", nodeEnv, header: () => null });
     assert.equal(out.authorized, true, `NODE_ENV=${nodeEnv}`);
     assert.equal(out.reason, CRON_AUTH.OK_DEV_NO_SECRET);
@@ -216,6 +222,144 @@ test("isCronAuthorized - reads the ?secret= query parameter", () => {
     logger: silent,
   });
   assert.equal(authorized, true);
+});
+
+// ---------------------------------------------------------------------------
+// R0.1.13 — the gate must not fail OPEN when NODE_ENV is absent or blank.
+//
+// `nodeEnv === "production"` scored an undeclared environment as non-prod and
+// handed back OK_DEV_NO_SECRET: an unauthenticated worker route that spends
+// real Bright Data / Perplexity / model budget, and genuinely reachable
+// because isCronAuthorized reads env.NODE_ENV off a DYNAMIC binding at
+// runtime (unlike the operator perimeter, whose value Next inlines at build
+// time). Every case below returns authorized:true if the fallback is removed.
+// ---------------------------------------------------------------------------
+
+/** The three shapes of "this environment will not say what it is". */
+const UNDECLARED_ENVS = [
+  ["unset", undefined],
+  ["blank", ""],
+  ["whitespace", "   "],
+];
+
+test("UNDECLARED NODE_ENV + no CRON_SECRET — REFUSED, not waved through as dev", () => {
+  for (const [label, nodeEnv] of UNDECLARED_ENVS) {
+    const out = authorizeCronRequest({ secret: undefined, nodeEnv, header: () => null });
+    assert.equal(
+      out.authorized,
+      false,
+      `NODE_ENV ${label} must NOT authorise an uncredentialed worker call`
+    );
+    assert.equal(
+      out.reason,
+      CRON_AUTH.DENY_NO_SECRET_IN_PRODUCTION,
+      `NODE_ENV ${label} must resolve to production, not to the dev allowance`
+    );
+  }
+});
+
+test("UNDECLARED NODE_ENV — a whitespace-only CRON_SECRET does not rescue it either", () => {
+  for (const [label, nodeEnv] of UNDECLARED_ENVS) {
+    const out = authorizeCronRequest({ secret: "   ", nodeEnv, header: () => null });
+    assert.equal(out.authorized, false, `NODE_ENV ${label} + blank secret`);
+    assert.equal(out.reason, CRON_AUTH.DENY_NO_SECRET_IN_PRODUCTION);
+  }
+});
+
+test("UNDECLARED NODE_ENV — the ROUTE WRAPPER refuses too, and says so out loud", () => {
+  // The pure gate is only half the reachability story: both worker routes call
+  // isCronAuthorized with no `env`, so this is the shape a real deploy hits.
+  const envs = [
+    ["key absent from env entirely", {}],
+    ["NODE_ENV=''", { NODE_ENV: "" }],
+    ["NODE_ENV='   '", { NODE_ENV: "   " }],
+  ];
+  for (const [label, env] of envs) {
+    const warned = { value: false };
+    const errors = [];
+    const authorized = isCronAuthorized(req(), qs(), {
+      label: "worker",
+      warned,
+      env,
+      logger: {
+        warn: () => assert.fail(`${label} took the dev warn path — it was allowed`),
+        error: (m) => errors.push(m),
+      },
+    });
+    assert.equal(authorized, false, `${label} must be refused`);
+    assert.equal(warned.value, false, "the dev warn-once must not fire on a deny");
+    assert.equal(errors.length, 1, `${label} must not refuse silently`);
+    assert.match(errors[0], /REFUS/i);
+    // A silent deny is as hard to operate as a silent allow: the message must
+    // name NODE_ENV as the reason, or the operator hunts CRON_SECRET in an
+    // environment where NODE_ENV is the actual problem.
+    assert.match(
+      errors[0],
+      /NODE_ENV/,
+      `${label}: the log must name why this counted as production`
+    );
+  }
+});
+
+test("UNDECLARED NODE_ENV + a VALID secret — still authorised (the fix must not lock cron out)", () => {
+  // Failing closed on an undeclared env must not break Vercel's own scheduled
+  // invocation, which authenticates with the bearer secret.
+  for (const [label, nodeEnv] of UNDECLARED_ENVS) {
+    const out = authorizeCronRequest({
+      secret: SECRET,
+      nodeEnv,
+      header: (n) => req({ authorization: `Bearer ${SECRET}` }).headers.get(n),
+    });
+    assert.equal(out.authorized, true, `NODE_ENV ${label} + correct bearer must still pass`);
+    assert.equal(out.reason, CRON_AUTH.OK_SECRET);
+  }
+});
+
+test("R0.1.13 — production is decided by the SHARED resolveNodeEnv, not a second local copy", async () => {
+  // Two gates each deciding "am I production?" their own way is how
+  // operatorPerimeter and cronAuth would drift back apart. cronAuth imports the
+  // perimeter's resolver; this pins the import and the agreement.
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(new URL("./cronAuth.js", import.meta.url), "utf8");
+  assert.match(
+    src,
+    /import \{ resolveNodeEnv \} from "\.\/operatorPerimeter\.js"/,
+    "cronAuth must reuse operatorPerimeter's resolveNodeEnv, not fork it"
+  );
+  // Strip comments first — the fix DESCRIBES the old shape in a comment, and a
+  // naive scan of the raw file would match that prose instead of live code.
+  const code = src
+    .split("\n")
+    .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+    .join("\n");
+  assert.doesNotMatch(
+    code,
+    /nodeEnv === "production"/,
+    "the bare equality check is the fail-open shape R0.1.13 removed"
+  );
+  const { resolveNodeEnv } = await import("./operatorPerimeter.js");
+  for (const [label, nodeEnv] of UNDECLARED_ENVS) {
+    assert.equal(resolveNodeEnv({ NODE_ENV: nodeEnv }), "production", label);
+  }
+  assert.equal(resolveNodeEnv({ NODE_ENV: "development" }), "development");
+});
+
+test("R0.1.13 must not have cost the dev warn-once (the good example R0.1.14 was filed against)", () => {
+  // cronAuth WARNS on the no-secret dev allowance; the operator perimeter does
+  // not, which is why R0.1.14 exists. Hardening this gate must not quietly
+  // delete the one warning that works.
+  const warned = { value: false };
+  const warnings = [];
+  const ctx = {
+    label: "worker",
+    warned,
+    env: { NODE_ENV: "development" },
+    logger: { warn: (m) => warnings.push(m), error: () => assert.fail("explicit dev must not deny") },
+  };
+  assert.equal(isCronAuthorized(req(), qs(), ctx), true, "explicit development must still allow");
+  assert.equal(isCronAuthorized(req(), qs(), ctx), true);
+  assert.equal(warnings.length, 1, "still exactly one warning per route");
+  assert.match(warnings[0], /UNAUTHENTICATED/);
 });
 
 // ---------------------------------------------------------------------------

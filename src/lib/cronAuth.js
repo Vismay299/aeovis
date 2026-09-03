@@ -17,6 +17,8 @@
  * every branch is unit-testable without a running server.
  */
 
+import { resolveNodeEnv } from "./operatorPerimeter.js";
+
 /** Why a request was allowed or refused. Returned, not just logged. */
 export const CRON_AUTH = Object.freeze({
   OK_SECRET: "ok_secret",
@@ -35,7 +37,22 @@ export const CRON_AUTH = Object.freeze({
  */
 export function authorizeCronRequest({ secret, nodeEnv, header, querySecret = null }) {
   const configured = String(secret || "").trim();
-  const isProduction = nodeEnv === "production";
+  // R0.1.13. This used to be `nodeEnv === "production"`, which meant a
+  // deployment whose NODE_ENV was absent, blank or whitespace scored as NOT
+  // production and fell straight through to OK_DEV_NO_SECRET — the very
+  // unauthenticated, budget-spending worker endpoint this module exists to
+  // close (C9), reopened by an environment variable nobody set. Unlike the
+  // operator perimeter, whose NODE_ENV Next inlines at build time,
+  // isCronAuthorized below reads env.NODE_ENV off a dynamic binding, so an
+  // environment that never sets the key reaches this line at RUNTIME.
+  //
+  // resolveNodeEnv is IMPORTED from operatorPerimeter.js, not copied: R0.1.3
+  // hardened the identical shape there, and a second local copy is precisely
+  // how two gates drift into disagreeing about what "production" means. It
+  // takes an env-shaped object while this gate is handed the bare string,
+  // hence the one-key wrapper. An environment that will not say what it is
+  // gets treated as the dangerous one.
+  const isProduction = resolveNodeEnv({ NODE_ENV: nodeEnv }) === "production";
 
   if (!configured) {
     // THE FLIP (C9). This branch used to `return true` unconditionally.
@@ -92,8 +109,16 @@ export function isCronAuthorized(request, searchParams, ctx) {
     );
   }
   if (reason === CRON_AUTH.DENY_NO_SECRET_IN_PRODUCTION) {
+    // Name WHY this counted as production. With NODE_ENV absent or blank the
+    // bare "in production" reads as a lie to an operator who never set
+    // NODE_ENV=production, and sends them hunting the wrong bug.
+    const declared = String(env.NODE_ENV || "").trim();
+    const because = declared
+      ? "in production"
+      : `because NODE_ENV is ${env.NODE_ENV === undefined ? "unset" : "blank"} and an ` +
+        `environment that will not say what it is is treated as production (R0.1.13)`;
     logger.error(
-      `[${ctx.label}] REFUSING a worker request: CRON_SECRET is not set in production. ` +
+      `[${ctx.label}] REFUSING a worker request: CRON_SECRET is not set ${because}. ` +
         `Set it in the deployment's environment — this endpoint spends real vendor budget.`
     );
   }
