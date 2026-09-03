@@ -675,6 +675,36 @@
       "blocked_reason": "needs-vercel"
     },
     {
+      "id": "R0.1.13",
+      "subphase": "R0.1",
+      "lane": "infra",
+      "title": "cronAuth fails OPEN when NODE_ENV is unset",
+      "detail": "src/lib/cronAuth.js:37 computes isProduction as nodeEnv === \"production\", so a deployment where NODE_ENV is absent or blank yields OK_DEV_NO_SECRET — an unauthenticated worker endpoint that spends real vendor budget. Unlike the operator perimeter, which Next fixed at build time, cronAuth's callers read env.NODE_ENV dynamically at :76, so this is genuinely reachable at runtime. R0.1.3 hardened the identical shape out of operatorPerimeter.js by resolving an absent or blank value to \"production\"; apply the same treatment here. Found by the R0.1.3 implementer while fixing the perimeter, and left alone because cronAuth.js was outside that task's files.",
+      "accept": "With NODE_ENV unset and with NODE_ENV blank, a worker request carrying no credential is REFUSED; a unit test pins both cases and fails if the fallback is removed.",
+      "deps": [],
+      "anchors": [
+        "src/lib/cronAuth.js:37",
+        "src/lib/cronAuth.js:76",
+        "src/lib/operatorPerimeter.js:128"
+      ],
+      "findings": [
+        "C9"
+      ],
+      "phase": "R0",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T02:21:50.622Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R0.2.1",
       "subphase": "R0.2",
       "lane": "docs",
@@ -2273,6 +2303,36 @@
       "verification": null
     },
     {
+      "id": "R2.2.5",
+      "subphase": "R2.2",
+      "lane": "backend",
+      "title": "dataSourceIssue still assumes text engines always answer",
+      "detail": "src/lib/scoring/enginePipeline.js:398 still reads 'Text engines always answer, so coverage is always 100% and error rate is the only gate.' That is precisely the assumption R2.2.1 deleted — an empty or refused answer is now an error row, so coverage_pct genuinely falls below 100 for text engines. The comment is load-bearing rather than decorative: dataSourceIssue for text engines is gated only on errorRatePct > 50 with no coverage gate, so a text engine returning empty for 40% of prompts now produces coverage_pct 60 and NO data_source_issue flag. The scan reports a degraded collection as clean. Predates R2.2.1 (git log -S traces it to f05b094), so it was correctly out of that task's scope, but R2.2.1 is what made it wrong. Found by the R2.2.1 verifier.",
+      "accept": "A text-engine slice with coverage_pct materially below 100 raises data_source_issue; a test drives summarizeEngineSlice with a mix of answered and empty rows and fails if the coverage gate is removed. The stale comment is corrected.",
+      "deps": [
+        "R2.2.1"
+      ],
+      "anchors": [
+        "src/lib/scoring/enginePipeline.js:398"
+      ],
+      "findings": [
+        "B3"
+      ],
+      "phase": "R2",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T02:22:24.816Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R2.3.1",
       "subphase": "R2.3",
       "lane": "backend",
@@ -2850,6 +2910,39 @@
         "at": "2026-09-03T01:42:50.377Z",
         "note": "REJECTED. A verifier reproduced a REAL DB outage over HTTP and the dashboard still lands in the first-run state. ROOT CAUSE: getScansForBrand FAILS QUIET at src/lib/db.js:179-196 — returns [] on error and [] when supabase is null, NEVER throws. postgrest-js turns network/DNS/5xx failures into {data:null,error} rather than rejecting (client built with no throwOnError), so the routes 500-on-throw guard at src/app/api/scans/[brand]/latest/route.js:26-34 is DEAD CODE for this failure mode — the routes own comment admits it. Execution reaches if(!latest) at :37 and returns 404, which page.js:63 maps to setScan(null) -> first-run empty state. LIVE REPRO (dev server, NEXT_PUBLIC_SUPABASE_URL repointed at an unresolvable host, .env.local restored and SHA-256 verified): DB up italica -> 200; DB up nosuchbrand -> 404 (correct); DB DOWN italica -> 404 \"No scans found for this brand\" with getaddrinfo ENOTFOUND in the log. The routes .then handler, sliced verbatim from source and run against that response, took the EMPTY FIRST-RUN branch. Italica has 38 real scans; with the DB down the user is told they never scanned and offered the Run a visibility check button — verbatim the bug this task exists to kill. WHAT THE NOTE GOT WRONG: \"sets an error for every other non-ok status\" is true of the client but no DB failure on this route PRODUCES a non-404 status. The only 503 in the API is /api/health:60, which the dashboard never calls, so the forced-503 browser check exercised a status the real system cannot emit for a DB outage. KEEP (do not redo): shell ordering is real (error branch DashboardShell.jsx:254-281 returns before empty at :284 and loading at :314, hooks all above :254); genuine-empty holds; a thrown fetch does reach the error state; the four tests do have teeth. But they are regex assertions over file text and could never have caught this. TO FIX: db.js:179-196 must not return [] on error nor on !supabase — throw, or return a discriminated result; the routes existing catch already turns a throw into a 500. Throwing changes 8 call sites to audit: api/brands/[brand]/coverage/route.js:52, api/content-events/route.js:15, api/content-items/[id]/lift/route.js:34, api/scans/[brand]/route.js:75, lib/content/contentWorker.js:226 and :459, lib/content/dailyBatch.js:70, lib/content/weeklyReport.js:109. Add a test driving the ROUTE HANDLER with a DB client stubbed to {data:null,error}, asserting 5xx not 404. Evidence drift noted: page.js:60 and DashboardShell.jsx:248 are comment lines; the branches are :63 and :254."
       }
+    },
+    {
+      "id": "R2.8.5",
+      "subphase": "R2.8",
+      "lane": "backend",
+      "title": "The remaining fail-quiet DB reads, same class as R2.8.4",
+      "detail": "R2.8.4 fixed getScansForBrand, which returned [] on a postgrest error so an outage rendered as 'no scans yet'. Three siblings survive. src/app/api/content/worker/route.js:117 destructures only { data: brandsRows } from a raw supabase query and ignores error, so a total outage yields brands = [] and a silent no-op cron pass — a dead batch that reports itself healthy. src/lib/db.js:230 getScansByDomain still catches and returns []; harmless on the coverage route today, but scanWorker.js:728 reads prior scans through it, so an outage there silently becomes 'this brand has no history'. src/app/api/scans/_lib/scanRow.js:20 getScanById returns null when supabase is null, so /dashboard/[brand]/[scanId] 404s on a misconfigured deploy. Found by the R2.8.4 implementer while auditing call sites; its comment at :13-24 cited the old getScansForBrand convention as house style and would have propagated the bug further.",
+      "accept": "None of the three can return an empty or null result that is indistinguishable from a genuine empty; each surfaces the failure to a caller that reports it. A test per site drives a DB client returning { data: null, error } and asserts the failure is visible, failing if the fail-quiet returns.",
+      "deps": [
+        "R2.8.4"
+      ],
+      "anchors": [
+        "src/app/api/content/worker/route.js:117",
+        "src/lib/db.js:230",
+        "src/app/api/scans/_lib/scanRow.js:20",
+        "src/lib/workers/scanWorker.js:728"
+      ],
+      "findings": [
+        "A1"
+      ],
+      "phase": "R2",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T02:22:25.483Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R2.9.1",
@@ -4384,6 +4477,34 @@
         "at": "2026-09-03T01:50:42.812Z",
         "note": "VERIFIED independently against the live production database, read-only. ORIGINAL FAILURE REPRODUCED FIRST: the pre-fix script from 55776bb^ rejected every value its own listing printed — zouk, Snitch, Italica, Wrike all exited 1 with \"no scans found\". ACCEPT MET LITERALLY AND COMPREHENSIVELY: the verifier round-tripped ALL 24 VALUES --list prints (10 distinct ARGUMENT hosts and 12 BRAND names, plus duplicates), each in an isolated cwd so the committed corpus was never the target. Every one exits 0 and archives; zero \"no scans found\". Both forms resolve to the same scan and the same output filename.\n\nBOTH-SPELLINGS-ONE-FILE, the important one: in the same cwd, snitch.com then Snitch gives exactly ONE file (snitch.com.json) with the second dying at the frozen-file guard; reversing the order gives the same single file. brand_key is \"snitch.com\" from BOTH spellings. SABOTAGE PROOF that this is load-bearing: reverting :155/:186 to brand produces TWO files, snitch.com.json (brand_key snitch.com) and Snitch.json (brand_key Snitch), with the SAME scan_id — the described defect is real and the shipped code prevents it.\n\nSELF-CORRECTION 1 CONFIRMED BY PROBE AND SABOTAGE: listRecentScans really does drop raw_results (key dump shows id, brand, url, industry, score, scanned_at, engines, scan_count — no raw_results), so the naive fallback really would have refused. Reverting scansByBrandName to return [match] makes Snitch fail with \"has no per-prompt results\", exactly the defect described. Convergence confirmed behaviourally as well as by reading: the brand path and the host path produce a BYTE-IDENTICAL refusal for scan f8ed7802, and that refusal is honest — that scan genuinely has zero results.\n\nCORPUS INTEGRITY: committed corpus unchanged at HEAD (git status and git diff --stat empty, mtimes unchanged). Fresh re-archives differ from the committed files in archived_at ONLY, single-line diff, for all three brands under BOTH spellings. Snitch scan 224d4e35 confirmed 68 raw / 68 normalized, matching the committed record. DB access verified read-only before running (db.js:224, :254 and db/analytics.js:140 are all select). FAILURE PATHS FAIL LOUDLY: unknown brand, unknown domain, a partial name and a whitespace-only argument all exit 1 with a usable message and zero files written; no bare catch, no fail-soft, the catch at :138 dies rather than degrades. Suite 949/0.\n\nTHREE FINDINGS RECORDED: (1) STALE DOC CONTRADICTING THE SHIPPED FIX — test_reports/baseline-2026-08/README.md:40-41 still says the script \"takes the scan's URL host, not the brand name its own --list prints — zouk.co.in, not zouk\". That is now FALSE; zouk archives. The task detail framed this as the interim workaround the fix supersedes, and commit 55776bb did not touch the README. It is a live artifact telling the next person the tool rejects a value it accepts, and should be deleted as a follow-up. (2) SHARED-HOST ROWS resolve to the newest scan on that host, not the listed row: two rows print example.com and two print italicatiles.com, so passing brand test-probe-brand archives the test-probe-failedscan row. --scan-id disambiguates and is printed in the same listing, so \"with no separate lookup step\" still holds, but \"archives THAT scan\" is only literally true for those rows if you also copy the scan id. Worth a line in the usage text. (3) UNDISCLOSED INCIDENTAL CHANGE: the old --list printed a visibility_pct column that was ALWAYS an em dash, because listRecentScans returns score, not visibility_pct. The new listing drops it — removal of a permanently-false display, not a loss, but the note does not mention it. EVIDENCE CITATIONS: :54 and :155 exact; :83 is the comment heading the --list change (the ARGUMENT header is :90, the value :92); :105 is the getScansByDomain call and the fallback it claims is :106. All point into the right block. The :186 slug change, a real part of self-correction 2, is not cited in evidence at all."
       }
+    },
+    {
+      "id": "R6.4.7",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "The working tree is half CRLF despite .gitattributes eol=lf",
+      "detail": "174 of 560 tracked text files are CRLF in the main working tree — including src/lib/engines/serp.js, serp.test.mjs, brightdata.js, enginePipeline.js, src/data/mockData.js and src/lib/content/contentWorker.js — while .gitattributes:5 pins * text=auto eol=lf and a fresh git worktree checks the same files out as LF. Files checked out before .gitattributes landed were never renormalised, and core.autocrlf=true is set globally. This has already cost real time twice: one implementer's LF-anchored sabotage was a silent no-op on a CRLF file and they read no failures as proof of nothing, and a verifier measured LF in a worktree while the implementer measured CRLF in the main tree, so the two disagreed about the same file and neither was wrong. Separately, grep -c $'\r' is unreliable here and has produced both false positives and correct answers in the same session; CR bytes must be counted with node. Fix: git add --renormalize . in one commit that touches nothing else, so the diff is reviewable as pure line-ending churn.",
+      "accept": "Every tracked text file in the working tree is LF; a guard asserts it so the split cannot silently return; the renormalisation lands in its own commit with no content change, and the full suite is green before and after.",
+      "deps": [],
+      "anchors": [
+        ".gitattributes:5"
+      ],
+      "findings": [
+        "S29"
+      ],
+      "phase": "R6",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-03T02:22:24.166Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R6.5.1",
