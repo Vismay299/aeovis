@@ -152,12 +152,16 @@ test("the verdict names the configured zone, never the first in the list", async
 });
 
 test("UNSET zone — the reported name comes from the RESOLVER'S OWN lookup, not this file's", async (t) => {
-  // THE ONLY UNSET-PATH TEST IN THIS FILE, deliberately. `cachedZoneName` in
-  // src/lib/engines/brightdata.js:4 is module-level with no invalidator, so the
-  // first auto-discovery in this process wins forever. A second unset test here
-  // would either poison this one or be poisoned by it. The resolver-throws case
-  // therefore lives in its own file (checkSecretsBrightdataNoZone.test.mjs),
-  // which gets a cold cache because node --test runs each file in its own process.
+  // THE ONLY UNSET-PATH TEST IN THIS FILE, deliberately. The resolver's zone
+  // cache is module-level, so the first auto-discovery in this process wins for
+  // as long as the cache lives. A second unset test here would either poison this
+  // one or be poisoned by it. The resolver-throws case therefore lives in its own
+  // file (checkSecretsBrightdataNoZone.test.mjs), which gets a cold cache because
+  // node --test runs each file in its own process.
+  //
+  // R1.2.7 gave that cache a TTL (default 5 minutes) and an invalidator, so it is
+  // no longer "for the life of the process" — but a test file finishes in well
+  // under one TTL, so the isolation this test depends on is unchanged.
   //
   // This is the branch the live deployment actually runs: .env.local sets no
   // BRIGHTDATA_SERP_ZONE, so probes auto-discover. It is also the ONLY branch on

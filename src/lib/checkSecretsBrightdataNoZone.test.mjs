@@ -11,12 +11,17 @@ import { VENDORS } from "../../scripts/check-secrets.mjs";
  * previously asserted in a close note ("so that branch gets stronger") and
  * never run, which standing rule 11 does not accept.
  *
- * It cannot live in checkSecretsBrightdata.test.mjs. `cachedZoneName` at
- * src/lib/engines/brightdata.js:4 is module-level and has no invalidator, so
- * once that file's unset-path test auto-discovers a zone the resolver returns
- * it forever and never reaches the throw. `node --test` runs each file in its
- * own process, so a separate file is the only reliable way to get a cold cache
- * — this must stay the ONLY unset-path test in THIS file too.
+ * It cannot live in checkSecretsBrightdata.test.mjs. The resolver's zone cache
+ * is module-level, so once that file's unset-path test auto-discovers a zone the
+ * resolver keeps returning it and never reaches the throw. `node --test` runs
+ * each file in its own process, so a separate file is the only reliable way to
+ * get a cold cache — this must stay the ONLY unset-path test in THIS file too.
+ *
+ * R1.2.7 UPDATE: that cache now carries a TTL (default 5 minutes) and exports
+ * `invalidateBrightDataZoneCache()`, so "forever" is no longer true — but this
+ * file stays split. A test file runs in well under one TTL, and a process
+ * boundary is a cold cache nobody has to remember to ask for; an invalidator
+ * call in a `beforeEach` is one edit away from being dropped.
  */
 
 const vendor = VENDORS.find((v) => v.name === "brightdata");
