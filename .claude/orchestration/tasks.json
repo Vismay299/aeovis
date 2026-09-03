@@ -2086,9 +2086,35 @@
       ],
       "phase": "R1",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "docs-R1.2.9",
-      "evidence": [],
+      "evidence": [
+        "docs/vendors/brightdata.md:18",
+        "docs/vendors/brightdata.md:73",
+        "docs/vendors/brightdata.md:80",
+        "docs/vendors/brightdata.md:103",
+        "docs/vendors/brightdata.md:169",
+        "docs/vendors/brightdata.md:195",
+        "docs/vendors/brightdata.md:213",
+        "docs/vendors/brightdata.md:238",
+        "scripts/check-secrets.mjs:166",
+        "src/lib/engines/brightdata.js:72",
+        "src/lib/engines/brightdata.js:81",
+        "src/lib/engines/brightdata.js:116",
+        "src/lib/engines/brightdata.js:145",
+        "src/lib/engines/brightdata.js:160",
+        "src/lib/engines/brightdata.js:291",
+        "src/lib/engines/brightdata.js:313",
+        "src/lib/engines/brightdata.js:441",
+        "src/lib/engines/brightdata.js:478",
+        "src/lib/engines/brightdataZone.test.mjs:66",
+        "src/lib/engines/brightdataZone.test.mjs:101",
+        "src/lib/engines/brightdataZone.test.mjs:334",
+        "worker/src/lib/probe.js:28",
+        "src/lib/workerIsolation.test.mjs:72",
+        "src/app/api/scan/route.js:62",
+        "src/lib/scoring/aioPipeline.js:171"
+      ],
       "notes": [
         {
           "at": "2026-09-03T11:51:14.874Z",
@@ -2099,6 +2125,11 @@
           "at": "2026-09-03T12:06:23.371Z",
           "by": "docs-R1.2.9",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T12:25:25.653Z",
+          "by": "docs-R1.2.9",
+          "text": "BOTH RECORDS NOW DESCRIBE THE SHIPPED BEHAVIOUR, RE-DERIVED FROM SOURCE AT 967bda6 (git show HEAD:<file>, never the working tree, which five concurrent lanes had dirty).\n\n(1) scripts/check-secrets.mjs. The PASS detail now ends: AUTO-DISCOVERED \"<zone>\" and will cache it for BRIGHTDATA_ZONE_TTL_MS (default 5 min) before re-checking it -- instead of \"for the process lifetime\". Verified by EXECUTION, not by reading: called the brightdata vendor entry's own check() against a stubbed fetch on a one-zone account and captured the rendered string. The comment above it now states all three levers with citations, and records WHY the string names the variable rather than the resolved number: brightDataZoneTtlMs() throws on a malformed value and the PASS return sits OUTSIDE this entry's local try/catch (the try covers only the resolveBrightDataSerpZone call), so main()'s per-vendor catch would report a TTL typo as a bare err.message and lose \"Every AIO probe will fail.\" No logic touched; the AUTO-DISCOVERED grep anchor and the template-concatenation shape are preserved, so checkSecretsBrightdata.test.mjs's two assertions on that line still hold.\n\n(2) docs/vendors/brightdata.md. The \"cached with no way to invalidate it\" quirk is rewritten as fixed-under-R1.2.7 per README Rule 3, and a new section \"The zone cache (R1.2.7)\" carries the mechanism, an executed-evidence table, the caveats, and a liveness trace.\n\nEVERY CLAIM RE-DERIVED, NOT COPIED. Executed against a stubbed fetch, no live vendor call: the 200-envelope rejection works in BOTH forms (error:... and status:\"error\"/message:...) giving zone_rejected, cache dropped to null, exactly 1 SERP call; TTL parsing unset/empty gives 300000, \"0\" gives 0, \"40\" gives 40, and \"30s\"/\"-1\"/\"1.5\" throw bad_ttl_config; the invalidator returns the dropped name and then null; lookup_failed proven on a real clock (TTL 40ms, 60ms wait, then HTTP 503) -- it throws, the entry survives at ageMs 71, and the NEXT resolve re-lists immediately, so a failed re-check buys no extra TTL; a stale entry plus no API key is invalidated and null returned.\n\nTHREE CITATION CLASSES WERE STALE AND ARE NOW CORRECT. R1.2.7 added ~130 lines to the top of brightdata.js, so EVERY brightdata.js citation in the file had drifted, not only the two the ledger named: :6 to :137 (credential); :4,13,33 to :141-142 / :156 / :175-177 / :81 / :192 / :72 (zone row); :112-123 to :329-340 (innerBody); :48-65 to :215-232 (normalizeBrightDataResponse); :11-12 to :141-142 (R0.1.10 bullet). The R0.1.10 status line said in_verification; the ledger says done. All 59 code citations in the file were resolved mechanically against HEAD blobs and each was checked to contain the code described.\n\nTHE STALE TEST CITATION IS DOCUMENTED RATHER THAN QUIETLY REPOINTED. brightdataZone.test.mjs:71-82 still RESOLVES (the file is 386 lines) but now lands inside \"the configured zone short-circuits the lookup\" (:66-82), a test about BRIGHTDATA_SERP_ZONE. That is R6.3.2's argument made concrete: an existence check is green on it, and a content check would have been authored against the deleted assertion. Written into the doc as such.\n\nTHE TWO CAVEATS ARE A NAMED SECTION, \"Two things this does not yet prove\", not a footnote. (a) invalidateBrightDataZoneCache() HAS NO PRODUCTION CONSUMER -- swept src, scripts, worker and supabase; outside brightdata.js the only callers are brightdataZone.test.mjs and checkSecretsBrightdataNoZone.test.mjs, both tests; worker/src/lib/probe.js:28 still throws \"no adapter is built yet (R1.3)\" and R1.3.1 through R1.3.5 are all todo. The TTL, not the invalidator, is what satisfies R1.2.7's accept today. (b) THE 200-ENVELOPE BRANCH WORKS BUT NOTHING PINS IT -- both zone-rejection tests drive ok:false, so deleting brightdata.js:444-445 leaves the suite green; filed as R1.2.10.\n\nTWO FINDINGS I VERIFIED BY EXECUTION AND ADDED TO THE DOC. R1.2.10's classifier asymmetries reproduce: HTTP 400 with body error \"zone_suspended\" is a plain Error and LEAVES THE CACHE IN PLACE (the underscore defeats the word boundary in two of the six patterns); and on the not-ok path zoneRejectionDetail (:397) runs before the 429 retry branch (:399), so an HTTP 429 whose body mentions a zone is typed zone_rejected and not retried, whereas on the 200 path the rate-limit check (:435) precedes the zone check (:441). Both degrade to the TTL, never to a silent success.\n\nA LIVENESS ERROR IN THE OLD DOC IS CORRECTED IN BOTH DIRECTIONS (Rule 2). The old text said the long-lived worker holds this cache. It cannot: worker/ may not import src/ (workerIsolation.test.mjs:72) and a sweep of worker/src for \"brightdata\" and \"engines/\" returns nothing. The live holder is the Next process -- POST /api/scan (route.js:62) and cron /api/scan/worker (vercel.json:4, route.js:60,94) to runScanChunk to enginePipeline's aio entry to brightDataSearch to resolveBrightDataSerpZone, with ENGINES defaulting to \"aio\" and aio.isConfigured() returning true. In the other direction: aioPipeline.js:99 is the second importer of brightDataSearch AND IT IS DEAD -- probeQueryOnce (:73) is called only by runAioScan (:171), which nothing in src, scripts or worker calls.\n\nCITATION-CHURN DISCIPLINE. check-secrets.mjs, scanWorker.js and enginePipeline.js are cited by name plus greppable string, never by line, because concurrent lanes are editing all three; every such string was grepped before being written, and the two that are ambiguous (result.cost = 0.0015 and brightDataSearch(query.text, which both also match aioPipeline.js) say so in the doc. A CONSTRAINT I ACCEPTED AND WROTE DOWN: docs/vendors/README.md cites this file at :62, :63-64, :65, :97 and :101, and R1.2.9 may not edit README.md. So every correction above line 72 was made IN PLACE at identical line counts, the quirk list was rewritten at its original length of 23 lines, and every new section was appended after :101. All five were re-read after the final edit and still resolve. The doc states this explicitly and warns that a later unconstrained rewrite must move them.\n\nSUITE. Baseline at HEAD was 1128 tests / 1109 pass / 0 fail / 19 skipped. THAT NUMBER NO LONGER HOLDS, AND NOT BECAUSE OF ME: five concurrent lanes are landing tests, and the total went 1128 to 1298 to 1324 to 1326 during this task. MY DELTA IS PROVEN ZERO by stashing only my two files and re-running in the same window: 1324 tests without them, 1324 with them. The last two consecutive runs with my changes in place are 1326 tests / 1307 pass / 0 fail / 19 skipped. src/lib/docStatus.test.mjs is 10/10. The 56 tests that actually read my two files (docStatus, checkSecrets, checkSecretsBrightdata, checkSecretsBrightdataNoZone, brightdataZone, landingHonesty) are 56/56. Transient failures seen mid-task were in landingHonesty and scanChunkLedger and reproduced WITH MY FILES STASHED OUT (3 fail without mine, 1 with), so they belong to the concurrent lanes.\n\nNO LIVE VENDOR CALL WAS MADE. NO CREDENTIAL VALUE WAS PRINTED. Files touched: docs/vendors/brightdata.md and scripts/check-secrets.mjs. Not committed."
         }
       ],
       "verification": null
@@ -2898,9 +2929,19 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/scoring/enginePipeline.js:606",
+        "src/lib/scoring/enginePipeline.js:910",
+        "src/lib/scoring/enginePipeline.js:56",
+        "src/components/dashboard/DashboardShell.jsx:369",
+        "src/components/dashboard/DashboardShell.jsx:383",
+        "src/components/dashboard/DashboardShell.jsx:704",
+        "src/components/dashboard/DashboardShell.jsx:823",
+        "src/lib/scoring/enginePipeline.test.mjs:637",
+        "src/components/dashboard/degradedEngineBanner.test.mjs:54"
+      ],
       "notes": [
         {
           "at": "2026-09-03T11:32:59.345Z",
@@ -2911,6 +2952,11 @@
           "at": "2026-09-03T12:06:00.112Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T12:23:29.268Z",
+          "by": "rebuild-implementer",
+          "text": "Scan-level data_source_issue now derives from every engine slice, not aioSummary alone. New describeScanDataSourceIssue (enginePipeline.js:606) returns one of three severities plus the banner's words; summarizeEngineResults:910 sets summary.data_source_issue from it (that is the anchor at old :690). engineHealthThresholds:56 is now the single source for both the per-slice gate and the numbers the banner quotes, so an aio threshold can never be quoted at a text engine; the aio/text gates stay deliberately different. DashboardShell:369 recomputes the descriptor from result.perEngineSummaries; :383 narrows score suppression to severity==='critical' so a text-only degradation annotates the index instead of blanking it; :704 is the new named partial banner ('Perplexity degraded - the index counts 1 of 2 engines' + the 6/10, 60%, 90% numbers); :823 marks the degraded engine's chip. REPRODUCED FIRST by running: healthy aio (10/10, share 20) + degraded perplexity (6/10, share 100) gave engines_counted 2->1, visibility_index_pct 20, scan flag FALSE. Now TRUE with a named banner. TEETH PROVEN BY RUNNING five sabotages against pristine copies kept outside git, each diffed: (1) revert :910 to aioSummary -> 1 fail; (2) fixed generic title in the descriptor -> 5 fails; (3) re-type the banner headline as a literal in DashboardShell -> guard fails; (4) collapse severity to 'any engine degraded' -> guard fails; (5) let never-ran slices count as ran -> 2 fails. Boundaries all exercised by running: aio-only degradation still flags and names aio against the 15% floor; both degraded -> ONE critical banner naming both, each against its own gate; single-engine aio degraded -> still critical, score still suppressed; empty scan -> severity 'none', flag false, insufficient_sample speaks instead; a slice with no counters prints a named gap, not a blank reason, and null not 0. WHICH HALF I RAN vs GUARDED, plainly: every word of the banner is decided in describeScanDataSourceIssue and I exercised it by RUNNING (13 tests in enginePipeline.test.mjs, driven from real summarizeEngineSlice output). The COMPONENT is not rendered - this repo has no jsdom/testing-library and I did not add one - so DashboardShell is covered by a source guard (degradedEngineBanner.test.mjs) proving it imports the function, renders scanHealth.title/detail in both banners, no longer types the old fixed copy, and gates suppression on severity. I did not render React and do not claim to have. No live vendor call, no scan started, nothing committed. Suite: npm run test:scoring = 1325 tests / 1306 pass / 0 fail / 19 skipped (baseline 1128/1109/0/19; the rest of the growth is concurrent implementers' tests). KNOWN COST, documented at DashboardShell.jsx:28 not hidden: importing enginePipeline into a client component pulls 10 server modules incl. src/lib/gemini.js and @google/generative-ai into the dashboard bundle (no secret leaks - Next inlines only NEXT_PUBLIC_*). The remedy is a leaf module R2.2.6 was scoped not to create; recommending it as its own task."
         }
       ],
       "verification": null
@@ -3737,15 +3783,18 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
       "evidence": [
-        "src/app/page.js:308",
+        "src/lib/landingHonesty.test.mjs:47",
+        "src/lib/landingHonesty.test.mjs:102",
+        "src/lib/landingHonesty.test.mjs:110",
+        "src/lib/landingHonesty.test.mjs:132",
+        "src/lib/landingHonesty.test.mjs:139",
+        "src/lib/landingHonesty.test.mjs:579",
+        "src/lib/landingHonesty.test.mjs:608",
         "src/app/page.js:76",
-        "src/lib/landingHonesty.test.mjs:36",
-        "src/lib/landingHonesty.test.mjs:58",
-        "src/lib/landingHonesty.test.mjs:455",
-        "src/lib/landingHonesty.test.mjs:478"
+        "src/app/page.js:308"
       ],
       "notes": [
         {
@@ -3767,6 +3816,11 @@
           "at": "2026-09-03T12:16:27.949Z",
           "by": "verifier",
           "text": "rejected: REJECTED. The chip fix is correct and proven — KEEP page.js:76 and page.js:308 exactly as they are. The guard is not what its own shipped comment says it is, and the verifier got a renderable off-deployment engine name past it with the whole suite green.\n\nWHAT IS VERIFIED AND MUST BE KEPT. The old failure was reproduced at 671081c: under NEXT_PUBLIC_ENGINES=perplexity exactly one \"Google AI Overview\" survived in the prerendered HTML, beside the Sample - illustrative brands tag. The fix follows the deployment across THREE configurations (perplexity, chatgpt, aio), and the verifier enumerated every label occurrence in each build and accounted for all of them as derived. The compiled chunk was checked rather than the source: exactly ONE occurrence of NEXT_PUBLIC_ENGINES in the entire client bundle, zero process.env, and the chip compiles to a module-scope CALL rendered as a child — SSR and client cannot diverge. Both guard clauses bite: the equals-today literal passes the value clause and fires the typed clause under ENGINES=aio, and an off-deployment literal fires the value clause; each names the offending file. The coverage assertion genuinely closes the empty-Object.entries hole, failing both when a file is dropped and when the list is emptied. The independent sweep confirms nothing else renders an engine literal.\n\nWHY IT FAILS. landingHonesty.test.mjs:48-51 promises, in shipped code, that \"a note keyed Google AI Overview whose prose names ChatGPT — which WOULD render, on an aio-only deployment — still fails the scan.\" THAT IS FALSE. The exemption's key-cut is LINE-BASED, so a note VALUE that starts its own line and begins with \"Label:\" satisfies head.startsWith(label) plus the colon test, is treated as that line's key, and is deleted. On one line the case is correctly caught. WRAPPED ONTO A CONTINUATION LINE IT IS NOT: the full suite reports 1104 pass / 0 fail while a build under ENGINES=aio renders \"ChatGPT: an AI Overview answer is the one your buyer reads without clicking anything\" into the engine rail. An off-deployment engine name, in the served HTML, on an aio-only deployment, every guard clean. That is the C11 class this task and R2.10.5 both exist to close, and it is the exact case the comment promises is caught. A Prettier wrap of a long note is enough — no malice required.\n\nA SECOND FALSE COMMENT: \"on each entry's line, ONLY that entry's own key is removed\" is also untrue. line.split(own).join(\"\") removes EVERY occurrence of the own label on the line, and the current dictionary depends on that over-removal to pass today.\n\nTO FIX, in withoutEngineNoteDictionary at landingHonesty.test.mjs:58-95. Cut only the KEY TOKEN, not everything on a line that starts with a label and a colon: anchor on the key as written, match the optional quote, the label, the closing quote and the colon, and remove only that captured span, leaving the value in the scanned text. Require that an exempted line actually BE a key line of the object and reject continuation lines — anything inside the dictionary block that is not a key line must be scanned verbatim. Today's ChatGPT entry will then trip on its own value, so either reword it or, the honest fix, allow the own key's label inside its own value while still scanning for every OTHER label, which is a one-line labels.filter. Add a regression case for the WRAPPED form so this cannot come back. And correct the two comment claims to describe the function that actually shipped.\n\nTWO THINGS IN THE RECORD TO DROP. The submit note's backtick and dollar-brace fragility caveat is NOT REAL: the body already contains six backticks and passes today, and the verifier additionally injected an escaped backtick and a template expression without breaking it. And the shape guards DO hold — freezing the dictionary or removing the RAIL_NOTES filter both throw loudly. sourceOf keying off the literal path is safe in the fail-loud direction: adding a third file scans it whole and the coverage assertion forces the list to be updated.\n\nAll six evidence citations resolve exactly to what they claim.\n\nA METHODOLOGICAL CORRECTION THAT IS MINE, NOT THE IMPLEMENTER'S: my briefs carried 1109 as the baseline at ef9909b and several verifiers measured 1104. They are right and I was wrong — I measured in the main repo while R1.2.7's five new tests were still uncommitted in the working tree, so my figure counted work that was not at that commit. Baselines must be measured in a clean worktree, never in a main repo carrying in-flight work."
+        },
+        {
+          "at": "2026-09-03T12:26:52.978Z",
+          "by": "rebuild-implementer",
+          "text": "Second pass: guard only. src/app/page.js is BYTE-IDENTICAL to HEAD (git diff empty; page.js:76 and :308 untouched); the only changed file is src/lib/landingHonesty.test.mjs.\n\nREPRODUCED THE EVASION FIRST, exactly as reported. Wrapped the aio note onto a continuation line beginning 'ChatGPT: ...': node --test landingHonesty -> 16/16 pass, and NEXT_PUBLIC_ENGINES=aio ENGINES=aio next build put exactly one ChatGPT into .next/server/app/index.html, inside <p class=rail__foot>: 'ChatGPT: an AI Overview answer is the one your buyer reads without clicking anything.' Off-deployment engine name, rendered, every guard green.\n\nFIX, all inside withoutEngineNoteDictionary. (a) :110-131 the key is now matched AS WRITTEN, walked character by character - indent, optional quote, label, the SAME quote again, colon - and :132 cuts only that span, so the VALUE stays in the scanned text. Requiring the closing quote before the colon is what rejects \"'ChatGPT: prose'\". (b) :102/:139 a line is a key line only if it BEGINS an entry: the previous non-blank line ended with { or , . A wrapped value is therefore scanned verbatim. Two independent defences; each is pinned by its own assertion (proof below).\n\nOWN-LABEL-IN-OWN-VALUE: took the labels.filter option, not the reword. Two reasons. Rewording page.js was not available to me this pass (page.js is out of scope and must stay byte-identical), and it is the weaker fix regardless: it leaves the guard unable to express a rule it needs, so the next honest note that names its own engine either fails or gets reworded again. Implemented at :132 as 'cut the key token, then drop this entry's OWN label from the rest of the line' - the string form of labels.filter(l => l !== own). Every OTHER label in that value survives and is scanned; the new test pins both halves.\n\nCORRECTED BOTH FALSE COMMENTS at :47-73. The block now says what ships: the key TOKEN is cut, the value is scanned, the own label is the one stated allowance, and a line must begin an entry to be exempt. It also records the wrapped-value defect and the rendered HTML it produced, so the next reader sees why the shape is what it is.\n\nREGRESSION TEST, :579-676, 'GUARD - the ENGINE_NOTE exemption cuts the key token, never a value'. It runs the shipped function over page.js-shaped fixtures with the same inputs the child gives it (comments stripped, full label list) and asserts both clauses: the wrapped 'ChatGPT: ...' value must appear in typed AND in offDeployment under deployedEngineLabels({ENGINES:'aio'}) - i.e. it must fail the scan. Also pinned: the single-line form; a value naming another engine; a template-literal continuation line; a quoted continuation after a comma-terminated line; two entries on one line (only the key token is cut, so the second is scanned - fail-loud direction); and today's dictionary shape still passing.\n\nPROVEN BY SABOTAGE, each diffed against pristine copies kept OUTSIDE git (scratchpad), restored by byte-comparison, never by git checkout. Guard mutations: original line-based implementation restored verbatim -> new test fails on 'a wrapped note VALUE must be scanned'; entry-start gate removed -> fails on the template continuation line; closing-quote requirement removed -> 2 failures. page.js sabotages (all restored, git diff 0 lines): wrapped value -> value clause fails naming src/app/page.js and ChatGPT; typed chip equal to TODAY'S engine -> typed clause fires; off-deployment 'Perplexity' chip -> value clause fires; RAIL_NOTES filter removed -> throws; Object.freeze(ENGINE_NOTE) -> throws. Dropping page.js from LITERAL_SCAN_FILES -> coverage assertion still fails. Clean aio rebuild after all restores: 4 'Google AI Overview', 0 ChatGPT, 0 Perplexity, rail note reads the real aio prose.\n\nDROPPED, as instructed: the backtick/${ fragility caveat from my first note. It was wrong - the function text is inserted at runtime via toString(), so template-literal interpolation never re-runs over it.\n\nSUITE: npm run test:scoring -> 1330 tests, 1307 pass, 0 fail, 23 skipped. Baseline 1123/1104/0/19; the growth is other lanes landing tests concurrently (ssrfGuard, firecrawl, scanChunkLedger, degradedEngineBanner are all new in the tree and not mine). My own delta is +1 test in this file (16 -> 17). 0 failures.\n\nRESIDUAL, stated rather than hidden: on a key line the own label is deleted from the value by string removal, so if ENGINE_LABELS ever gains a label that is a substring of another, that removal could take the shorter one with it. Not reachable with today's three labels, and the failure it could cause on splice-joined text is a false POSITIVE, not a miss."
         }
       ],
       "verification": {
@@ -3835,7 +3889,7 @@
       "subphase": "R3.2",
       "lane": "backend",
       "title": "One scan_runs row per chunk execution",
-      "detail": "Phase, timings, outcome (succeeded|failed|skipped|reaped|noop), reason, probes, errors recovered.",
+      "detail": "Phase, timings, outcome (succeeded|failed|skipped|reaped|noop), reason, probes, errors recovered. CORRECTION to the submit note: one clause lost a word to shell quoting. It should read \"the REAL insertScan wrote 2 rows to the scans table plus 2 brand_metrics_daily rows on production\". Both were deleted; scans is back to 60 rows and brand_metrics_daily to 46, and scan_runs is 0.",
       "accept": "Every chunk execution writes exactly one row carrying all listed fields.",
       "deps": [
         "R1.2.3"
@@ -3848,14 +3902,33 @@
         "src/lib/workers/scanWorker.js"
       ],
       "phase": "R3",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/workers/scanWorker.js:1540",
+        "src/lib/workers/scanWorker.js:1555",
+        "src/lib/workers/scanWorker.js:321",
+        "src/lib/workers/scanWorker.js:854",
+        "src/lib/workers/scanWorker.js:203",
+        "src/lib/workers/scanWorker.js:270",
+        "src/lib/workers/scanChunkLedger.test.mjs:327",
+        "src/lib/workers/scanChunkLedgerLive.test.mjs:176"
+      ],
       "notes": [
         {
           "at": "2026-09-03T12:08:48.444Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T12:28:52.132Z",
+          "by": "rebuild-implementer",
+          "text": "One scan_runs row per runScanChunk invocation. Open at scanWorker.js:1540 (after the job read, mirroring the fleet's open-after-claim), single close funnelled through finish() at :1555 so no early return can escape the ledger; the body is a labelled try (:1583) with break chunkBody, not return, for that reason. chunkRunOutcome (:321) is the pure result->close mapping: complete/checkpointed=succeeded, *_claimed_elsewhere and not_found=skipped, already_finished and unworkable-status=noop with the status in the reason, read_failed/error=failed; an UNMAPPED reason closes FAILED with 'unmapped_chunk_reason:<x>', never rounded up to succeeded. Counters start null (NOT MEASURED) and are armed to 0 only by the phase that really counts: probing arms all three (:388-390) so 'probed nothing' is a measured 0 while a finalize-only chunk keeps probes NULL; probes_attempted moves when the probes return (money spent) and probes_succeeded only after the upsert lands (:854,:869), so a failed write reports 2/0 not 2/2. errors_recovered counts absorbed errors in sourcing (prompt persist), probing (probe rows carrying .error) and finalize (re-judge, citation enrichment, roster judging). Crash evidence: the row is opened before the work and nothing closes it on a hard death, so it stays OPEN with a stale heartbeat for R3.3.2; a failed CLOSE is announced loudly and deliberately leaves the row open (closeChunkRun :246, same trade as the fleet's closeOrWarn). Heartbeat every 30s while in flight, unref'd, stopped in a finally before the close (:270). Double-count decision: one row per CHUNK, not per phase or per job -- a rescued/resumed scan is honestly a second chunk (same scan_job_id, fresh per-invocation worker_id, its own phase); a rescue that races a live chunk closes 'skipped' with the claim reason and NULL/zero counters, so summing the ledger counts each probe once (test asserts this). Idempotence: the run id is minted and closed inside one invocation and never reused, so cron re-entry cannot open a second run for the same chunk; a second close raises (fake ledger enforces it). No Supabase client at all = ledger disabled, announced once per chunk with a banner naming what goes unrecorded (resolveChunkLedger :203); with a client present a failed open PROPAGATES, never fail-soft. EXERCISED LIVE against prod nggyizuwqepxaqnpcqqj via node --env-file=.env.local --test src/lib/workers/scanChunkLedgerLive.test.mjs: 4/4 pass -- real open_scan_run/close_scan_run through the app's anon key, NULL counters confirmed NULL in the column, measured 2/1 with 1 error recovered confirmed as integers, and heartbeat_at confirmed moving off started_at mid-probe. Gated by liveDbGate (reused, not re-invented) and prints a NOT RUN banner with no credentials. scan_runs is back to 0 rows. INCIDENT, self-reported: an earlier draft of the live test stubbed only reads, so the chunk ran into finalize and the REAL insertScan wrote 2 rows to  plus 2 brand_metrics_daily rows on production. I deleted exactly those 4 rows in one transaction and verified the tables are back to their prior counts (scans 60, brand_metrics_daily 46, newest scan 2026-07-30); the live file now stubs every finalize/sourcing write with an assert.fail guard so it cannot recur. Suite: npm run test:scoring = 1330 tests, 1307 pass, 0 fail, 23 skipped (19 pre-existing skips + my 4 live-gated). Baseline was 1109/0/19 of 1128; the total grew because other implementers added tests to the same tree concurrently -- 0 failures either way. Hermetic file adds 26 tests including a GUARD that reads runScanChunk's source and fails if any reason literal it can return has no chunkRunOutcome case. src/lib/scanRuns.js and src/lib/workers/scanChunk.test.mjs are byte-identical to HEAD."
+        },
+        {
+          "at": "2026-09-03T12:29:07.467Z",
+          "by": "controller",
+          "text": "amended: CORRECTION to the submit note: one clause lost a word to shell quoting. It should read \"the REAL insertScan wrote 2 rows to the scans table plus 2 brand_metrics_daily rows on production\". Both were deleted; scans is back to 60 rows and brand_metrics_daily to 46, and scan_runs is 0."
         }
       ],
       "verification": null
@@ -4282,14 +4355,27 @@
         "src/lib/crawlers/"
       ],
       "phase": "R3",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/ssrfGuard.js:366",
+        "src/lib/ssrfGuard.js:482",
+        "src/lib/ssrfGuard.js:552",
+        "src/lib/firecrawl.js:45",
+        "src/lib/firecrawl.js:115",
+        "src/lib/ssrfGuard.test.mjs:1",
+        "src/lib/firecrawl.test.mjs:1"
+      ],
       "notes": [
         {
           "at": "2026-09-03T12:08:21.507Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-03T12:18:08.006Z",
+          "by": "rebuild-implementer",
+          "text": "New src/lib/ssrfGuard.js; wired into the Firecrawl fallback. ENTRY POINTS TRACED to a server-side fetch of a user-controlled URL: (1) POST /api/scan [ANONYMOUS, operatorPerimeter PUBLIC_EXACT] -> createScanJob({url}) -> runScanChunk -> scanWorker.js:381 job.url -> sourceUnbrandedQueries -> promptGen.js:127 scrapeForSummary -> firecrawl.js raw fetch; (2) POST /api/knowledge:51 (operator-gated); (3) content/steps/research.js:24 (operator-gated); (4) GET /api/brands/[brand]/crawlability -> fetchRobotsTxt/checkLlmsTxt (operator-gated) -- NOT FIXED, see gaps. REPRO (stubbed fetch, nothing left the machine, no metadata endpoint contacted): 6/6 of 169.254.169.254, 127.0.0.1:5432, [::1], 2130706433, 0x7f000001, file:// reached fetch() and the body was RETURNED to the caller. After the guard: 6/6 refused with SsrfBlockedError, 0 fetches; a legitimate https URL still fetched and scraped. COVERAGE: scheme allow-list (file/gopher/data/ftp/javascript/jar/ws/httpx refused); credentials in URL; length caps; full inet_aton IPv4 parsing (dotted/decimal/octal/hex/mixed/short/zero-padded); 15 IPv4 non-public CIDRs incl 169.254/16, 0/8, 100.64/10, 224/4, 240/4; IPv6 ::1, ::, fc00::/7, fe80::/10, ff00::/8, 2001:db8::/32, 2001::/32, 100::/64; IPv4-mapped ::ffff:, IPv4-compat, 6to4 2002::, NAT64 64:ff9b:: all unwrapped to the IPv4 rules; DNS resolution with EVERY returned address checked (rebinding); redirects followed manually with redirect:'manual' and each hop re-validated. 154 new tests, table-driven (68 blocked literals x notation, 21 public boundary addresses that must still pass). TEETH PROVEN 3x against pristine copies kept outside git (diffs shown): remove guard from firecrawl.js -> 24/28 fail; neuter classifyIpv4 -> 68 fail; redirect:'follow' instead of manual -> 9 fail; restored byte-identical (sha256 verified). NOT CLOSED, deliberately: (a) TOCTOU -- assertPublicUrl resolves, then fetch resolves again; a 0-TTL rebinding attacker can still win the second lookup. NARROWED, not closed. Closing it needs address pinning at connect time (undici Dispatcher connect.lookup, or node:http with lookup+servername); undici is not a declared dep and Next's global fetch is not swappable per-call, so I did not fake it. Documented at ssrfGuard.js:28-49. (b) THE CRAWLABILITY ROUTE IS STILL VULNERABLE. The crawlability fetch does not live in src/lib/crawlers/ (that dir is pure parsing, no fetch) -- it lives in src/app/api/brands/[brand]/crawlability/route.js, which my task's file boundary told me to read and report rather than edit. I RAN its isSafeDomain() verbatim: it ALLOWS 169.254.169.254, 127.0.0.2, 127.1, 0177.0.0.1, 100.64.0.1, 198.18.0.1, 224.0.0.1 (7 of 11 adversarial hosts) and its fetches use redirect:'follow'. Needs a follow-up task to swap isSafeDomain for classifyAddress and fetchRobotsTxt/checkLlmsTxt for safeFetch. The accept criterion is therefore met for the Firecrawl path and NOT for the crawlability path. (c) ports and response size are not restricted. CALLER CONTRACT: a policy refusal (address/scheme/credentials) THROWS SsrfBlockedError and logs [ssrf-guard] refused; merely-unusable input (typo, NXDOMAIN) still returns 'No website content available.' with a distinct [ssrf-guard] unusable log line, so a customer typo does not turn a 422 into a 500 -- no fetch happens in either case. Note promptGen.js swallows the throw and continues with an empty snippet (pre-existing rule-1 gap, not mine to fix). SUITE: npm run test:scoring = 1263 pass / 0 fail / 19 skipped / 1282 total, vs baseline 1109/0/19/1128. +154 all mine, no regressions. Did not commit; did not touch scanWorker/scanRuns, enginePipeline/DashboardShell, check-secrets/brightdata.md."
         }
       ],
       "verification": null
@@ -5276,7 +5362,7 @@
       ],
       "phase": "R6",
       "tags": [],
-      "status": "in_verification",
+      "status": "in_progress",
       "owner": "docs-R632",
       "evidence": [
         "docs/vendors/gemini.md:9",
@@ -5317,9 +5403,18 @@
           "at": "2026-09-03T11:55:24.614Z",
           "by": "controller",
           "text": "amended: CORRECTION to the submitted evidence, not to the accept criterion. Eight of the doc line numbers in the submit --evidence list landed on BLANK lines (gemini.md :205 :232 :264, README.md :167 among them) because I picked them from memory instead of deriving them - the exact failure this task exists to fix, committed in the act of reporting the fix. The corrected anchors are attached: gemini.md:111 the Timeout contract row now naming both the signal and the race; :233 the quirk-3 heading reading FIXED in ee5504e; :265 the identity-vs-linkage note; :277 why the SDK timeout option is not passed. README.md:41 new Rule 4 verify against the committed blob; :97 the decision section; :124 the measurements rejecting the citation guard; :158 the recommended staleness tripwire; :180 why it cannot be built from this task. The source anchors in the original evidence (src/lib/gemini.js:55, :92, src/lib/docStatus.test.mjs:19, index.mjs:444) were derived and verified and stand unchanged."
+        },
+        {
+          "at": "2026-09-03T12:27:24.800Z",
+          "by": "verifier",
+          "text": "rejected: REJECTED on a fourth false composed sentence — the same failure mode this doc set has now been rejected for four times — plus a fifth created inside this very commit. Everything else is verified and the execution work behind it is the best in this doc set; keep all of it.\n\nVERIFIED BY EXECUTION, every clause: the init carries a signal and the second argument is FLAT (own keys exactly [signal], with requestOptions and timeout both undefined); BOTH enforcers are real and were separated — a fetch that HONOURS abort yields GoogleGenerativeAIAbortError so the deadline wins, while a fetch that IGNORES abort yields \"Gemini timeout\" so the race wins, making the race a genuine second line of defence rather than decoration; clearTimeout in finally gives a Timeout delta of ZERO across four paths including the success path; retries 0 and 2 give 5 and 15 fetches all torn down; passing the SDK's own timeout strands +1 pending Timeout, confirming why it is omitted; and init.signal !== controller.signal, so linkage rather than identity is the right check. The pre-fix shape was reproduced: no signal, request never settles.\n\nCITATIONS ARE HONEST: 52 numeric resolutions against committed blobs, ZERO failing, each target line saying what the prose claims. The gemini.js blob is byte-identical across five commits. The thirteen re-derived numbers are EXACTLY the set that drifted, confirmed by diffing R6.3.1's citation set against HEAD. The :94-to-:95 self-report is exactly true. Both cross-file claims hold, including that no test asserts the POST case on /api/opportunities.\n\nTHE GUARD-DECISION MEASUREMENTS ARE MOSTLY REAL AND THE DECISION IS ACTIONABLE. Independently reproduced: 161 named citations exactly, 41 bare ones exactly, and — the decisive one — ZERO of the thirteen broken citations caught by an existence check, since gemini.js is 108 lines and the largest stale number is 86. The tripwire replay reproduced EXACTLY: 7 firings over the last 40 commits including ee5504e, the commit that caused this. That is the load-bearing evidence for R6.4.8 and it is real. The decision names what will not be built, why, what is recommended instead with a reproduced hit rate, two unmeasured costs stated AS unmeasured, and why this task could not build it. Keep it.\n\nWHY IT FAILS. gemini.md:137-138 says a response blocked by a safety filter, or truncated by MAX_TOKENS, \"therefore arrives as ordinary short text with no marker.\" Both endpoints are individually correct — gemini.js:65-81 genuinely never reads finishReason or safetyRatings — but THE INFERENCE IS FALSE, because the SDK's own text() helper reads finishReason and THROWS on SAFETY, RECITATION or LANGUAGE. Executed in the most generous case, with text present in the blocked candidate: a SAFETY finishReason gives {text:\"\",model_used:\"\"} after burning ALL FIVE RUNGS, with lastErr \"Candidate was blocked due to SAFETY\". Only the MAX_TOKENS half is true. So a safety block does not arrive as short text — text() throws inside the try, the inner catch swallows it, and the caller gets the fail-soft empty object. That is the failure-path-fabricating-a-clean-state class this rebuild exists to close, and the doc states the reassuring version. It also CONTRADICTS THE SAME DOCUMENT TWICE, at :167-169 and :211-212, where the doc's own quirk 1 knows a safety block is swallowed and the Response-shape section denies it. There is a fourth condition collapsing into the indistinguishable value.\n\nA FIFTH, CREATED IN THIS COMMIT: README.md:186-188 says gemini.md is \"the only file in this directory\" carrying a Verified at commit — and the same diff adds one to README.md:9. It sits inside the compensating control the whole not-built decision leans on.\n\nTO FIX, narrowly: (1) rewrite :137-138 with the executed transcript, distinguishing the three badFinishReasons that throw from MAX_TOKENS and the reasons absent from 0.24.1's list that do arrive as unmarked text, and add the safety block as the fourth condition at :211-212. (2) Correct the \"only file\" claim. (3) Relabel the 15 figure: it is 15 distinct bare FILENAMES, not 15 citations — the citation-level figure is roughly 111 to 127, which STRENGTHENS the argument — and only 3 of the 15 are genuinely ambiguous repo-wide, so \"resolution is a guess\" is overstated. (4) Drop the universal at :344-345; the explicit list of thirteen is correct. (5) Minor: :261 prints an error string never rendered, since e.name is \"Error\"; :128 says \"reads three things\" before a table whose third row is what it does NOT read; :35 counts 43 named citations where the verifier counts 44."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "fail",
+        "at": "2026-09-03T12:27:24.800Z",
+        "note": "REJECTED on a fourth false composed sentence — the same failure mode this doc set has now been rejected for four times — plus a fifth created inside this very commit. Everything else is verified and the execution work behind it is the best in this doc set; keep all of it.\n\nVERIFIED BY EXECUTION, every clause: the init carries a signal and the second argument is FLAT (own keys exactly [signal], with requestOptions and timeout both undefined); BOTH enforcers are real and were separated — a fetch that HONOURS abort yields GoogleGenerativeAIAbortError so the deadline wins, while a fetch that IGNORES abort yields \"Gemini timeout\" so the race wins, making the race a genuine second line of defence rather than decoration; clearTimeout in finally gives a Timeout delta of ZERO across four paths including the success path; retries 0 and 2 give 5 and 15 fetches all torn down; passing the SDK's own timeout strands +1 pending Timeout, confirming why it is omitted; and init.signal !== controller.signal, so linkage rather than identity is the right check. The pre-fix shape was reproduced: no signal, request never settles.\n\nCITATIONS ARE HONEST: 52 numeric resolutions against committed blobs, ZERO failing, each target line saying what the prose claims. The gemini.js blob is byte-identical across five commits. The thirteen re-derived numbers are EXACTLY the set that drifted, confirmed by diffing R6.3.1's citation set against HEAD. The :94-to-:95 self-report is exactly true. Both cross-file claims hold, including that no test asserts the POST case on /api/opportunities.\n\nTHE GUARD-DECISION MEASUREMENTS ARE MOSTLY REAL AND THE DECISION IS ACTIONABLE. Independently reproduced: 161 named citations exactly, 41 bare ones exactly, and — the decisive one — ZERO of the thirteen broken citations caught by an existence check, since gemini.js is 108 lines and the largest stale number is 86. The tripwire replay reproduced EXACTLY: 7 firings over the last 40 commits including ee5504e, the commit that caused this. That is the load-bearing evidence for R6.4.8 and it is real. The decision names what will not be built, why, what is recommended instead with a reproduced hit rate, two unmeasured costs stated AS unmeasured, and why this task could not build it. Keep it.\n\nWHY IT FAILS. gemini.md:137-138 says a response blocked by a safety filter, or truncated by MAX_TOKENS, \"therefore arrives as ordinary short text with no marker.\" Both endpoints are individually correct — gemini.js:65-81 genuinely never reads finishReason or safetyRatings — but THE INFERENCE IS FALSE, because the SDK's own text() helper reads finishReason and THROWS on SAFETY, RECITATION or LANGUAGE. Executed in the most generous case, with text present in the blocked candidate: a SAFETY finishReason gives {text:\"\",model_used:\"\"} after burning ALL FIVE RUNGS, with lastErr \"Candidate was blocked due to SAFETY\". Only the MAX_TOKENS half is true. So a safety block does not arrive as short text — text() throws inside the try, the inner catch swallows it, and the caller gets the fail-soft empty object. That is the failure-path-fabricating-a-clean-state class this rebuild exists to close, and the doc states the reassuring version. It also CONTRADICTS THE SAME DOCUMENT TWICE, at :167-169 and :211-212, where the doc's own quirk 1 knows a safety block is swallowed and the Response-shape section denies it. There is a fourth condition collapsing into the indistinguishable value.\n\nA FIFTH, CREATED IN THIS COMMIT: README.md:186-188 says gemini.md is \"the only file in this directory\" carrying a Verified at commit — and the same diff adds one to README.md:9. It sits inside the compensating control the whole not-built decision leans on.\n\nTO FIX, narrowly: (1) rewrite :137-138 with the executed transcript, distinguishing the three badFinishReasons that throw from MAX_TOKENS and the reasons absent from 0.24.1's list that do arrive as unmarked text, and add the safety block as the fourth condition at :211-212. (2) Correct the \"only file\" claim. (3) Relabel the 15 figure: it is 15 distinct bare FILENAMES, not 15 citations — the citation-level figure is roughly 111 to 127, which STRENGTHENS the argument — and only 3 of the 15 are genuinely ambiguous repo-wide, so \"resolution is a guess\" is overstated. (4) Drop the universal at :344-345; the explicit list of thirteen is correct. (5) Minor: :261 prints an error string never rendered, since e.name is \"Error\"; :128 says \"reads three things\" before a table whose third row is what it does NOT read; :35 counts 43 named citations where the verifier counts 44."
+      }
     },
     {
       "id": "R6.4.1",
