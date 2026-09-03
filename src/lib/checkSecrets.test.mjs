@@ -178,13 +178,32 @@ test("check:secrets and /api/health agree on every REQUIRED vendor name", async 
   assert.deepEqual(requiredFromScript, ["brightdata", "cron", "llm", "supabase"]);
 });
 
-test("check:secrets - the GSC pass line SAYS it was an offline shape check only", async () => {
-  // The script must never imply it verified something it did not.
+test("check:secrets - a shape-valid but unusable GSC key does NOT pass", async () => {
+  // This test used to assert the opposite: that GSC's PASS line admitted it was
+  // an offline shape check only. That was the right assertion for a check that
+  // could not run — but the justification for not running it was false. The
+  // comment claimed signing the JWT "would pull in a dependency this script
+  // deliberately does not have", while src/lib/engines/gsc.js imports nothing
+  // but node's own crypto and already exposes listGscSites(). So the check is
+  // live now, and a key that cannot possibly work must FAIL rather than pass
+  // with a caveat.
+  //
+  // Still hermetic: this private_key is malformed, so crypto.createSign throws
+  // locally and nothing is sent. The check must say THAT, not blame the API —
+  // otherwise it sends the operator to audit Search Console permissions for a
+  // problem in their own file.
   const account = JSON.stringify({
     type: "service_account",
     client_email: "svc@example.iam.gserviceaccount.com",
     private_key: "-----BEGIN PRIVATE KEY-----",
   });
   const { stdout } = await run({ GSC_SERVICE_ACCOUNT_KEY: Buffer.from(account).toString("base64") });
-  assert.match(stdout, /NOT verified against the API \(offline check only\)/);
+
+  assert.match(stdout, /gsc\s+FAIL/, "an unusable credential must not report PASS");
+  assert.match(stdout, /private_key could not be used to sign/, "and must name the real cause");
+  assert.match(stdout, /nothing was sent/, "and must not imply a request was made");
+  assert.ok(
+    !/offline check only/.test(stdout),
+    "the offline-only disclaimer is obsolete — the check is live"
+  );
 });

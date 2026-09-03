@@ -96,11 +96,21 @@ SerpAPI is still **reachable**, not dead. `getSerpProvider()`
 (`src/lib/engines/serp.js:10-17`) selects it when either
 `SERP_PROVIDER=serpapi` with a resolvable `SERPAPI_KEY` (`:13`), or
 `BRIGHTDATA_API_KEY` is absent and `SERPAPI_KEY` is present (`:15`). On that
-branch `fetchPeopleAlsoAsk` (`:312`) and `fetchAutocomplete` (`:366`) hit
-`https://serpapi.com/search` (`:63`), and that path is cron-reachable:
-`/api/scan/worker` → `scanWorker.js:1110` `runScanChunk` → `:1164`
-`runSourcingPhase` → `:375` → `:132` `generateUnbrandedPrompts` →
-`promptGen.js:2,128-129`.
+branch `fetchPeopleAlsoAsk` (`:312`) hits `https://serpapi.com/search` (`:63`),
+and that path is cron-reachable: `/api/scan/worker` → `scanWorker.js:1110`
+`runScanChunk` → `:1164` `runSourcingPhase` → `:375` → `:132`
+`generateUnbrandedPrompts` → `promptGen.js:2,128-129`.
+
+> **`fetchAutocomplete` is NOT on that branch and does not touch SerpAPI.**
+> `serp.js:372` calls `https://suggestqueries.google.com/complete/search`
+> **unconditionally** — no provider gate, no credential, no cost. An earlier
+> version of this section grouped it with `fetchPeopleAlsoAsk`, which would
+> have hidden an always-on outbound call to a *different* vendor inside the
+> "SerpAPI is superseded" bucket. That matters concretely for **R1.7.3**:
+> deleting the SerpAPI adapter on the strength of this paragraph would have
+> left `fetchAutocomplete` live, undocumented, and calling Google on every
+> prompt-sourcing run. It needs its own decision, not inheritance from
+> SerpAPI's.
 
 It gets no file here for two reasons:
 

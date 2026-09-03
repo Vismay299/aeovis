@@ -82,11 +82,42 @@ test("GUARD — a missing object sets a non-zero exit, and says so", async () =>
   assert.match(src, /INCOMPLETE/, "the operator must be told the database is incomplete");
   assert.match(src, /process\.exitCode = 1/, "and the process must fail");
 
-  // The old runner printed "Migrations applied successfully." before verifying,
-  // which is the sentence that made a broken run look fine.
+  // The old runner announced success before verifying, which is the sentence
+  // that made a broken run look fine. Checked against what the script PRINTS,
+  // not against its source text: a comment explaining the ban is not a
+  // violation of it, and the first version of this guard failed on exactly
+  // that — its own explanation quoted the banned string.
+  const printed = [...src.matchAll(/console\.(log|warn)\(([^;]*)\);/g)].map((m) => m[2]).join("\n");
   assert.ok(
-    !/Migrations applied successfully/.test(src),
+    !/applied successfully/i.test(printed),
     "do not claim success before the verification has run"
+  );
+});
+
+test("GUARD — no success sentence appears before the verification runs", async () => {
+  // The previous version banned ONE literal string, so a DIFFERENT success
+  // sentence in the same pre-verification slot passed all six guards. Assert
+  // the ORDERING instead: anything that reads as a verdict must come after the
+  // catalog check, not before it.
+  const src = await read(RUNNER);
+  const verifyAt = src.indexOf('Verifying schema against the catalog');
+  assert.ok(verifyAt > 0, "the verification section must exist");
+
+  const beforeVerify = src.slice(0, verifyAt);
+  // Only the console output matters, not the prose in comments — a comment
+  // explaining why success must not be claimed early is not itself a claim.
+  const printed = [...beforeVerify.matchAll(/console\.(log|warn)\(([^;]*)\);/g)]
+    .map((m) => m[2])
+    .join("\n");
+  assert.ok(
+    !/successfully|✓ done|all good|migrations complete/i.test(printed),
+    `nothing may announce success before the catalog has been checked:\n${printed.slice(0, 300)}`
+  );
+
+  // And the one real success sentence must sit after it.
+  assert.ok(
+    src.indexOf("All expected objects present") > verifyAt,
+    "the success line must follow the verification, not precede it"
   );
 });
 

@@ -27,10 +27,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  */
 const SCHEMA_MIGRATIONS_DDL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
-  filename   text PRIMARY KEY,
-  checksum   text NOT NULL,
-  applied_at timestamptz NOT NULL DEFAULT now()
-);`;
+  filename         text PRIMARY KEY,
+  checksum         text NOT NULL,
+  applied_at       timestamptz NOT NULL DEFAULT now(),
+  first_applied_at timestamptz
+);
+-- NULLABLE, and deliberately no default. Rows written before this column
+-- existed have an UNKNOWN first-apply time, and backfilling them with now()
+-- would claim they first landed on whatever day the column was added. An
+-- unknown must read as unknown; that is the whole point of this ledger.
+ALTER TABLE schema_migrations
+  ADD COLUMN IF NOT EXISTS first_applied_at timestamptz;`;
 
 /**
  * What each migration must leave behind, checked against the Postgres catalog.
@@ -142,7 +149,16 @@ async function main() {
 
     for (const file of migrationFiles) {
       const sql = readFileSync(join(migrationsDir, file), "utf8");
-      const checksum = createHash("sha256").update(sql).digest("hex").slice(0, 16);
+      // Hash the NORMALISED text. 001 and 006 are CRLF in the main working
+      // tree and LF in any fresh, Linux or CI checkout (.gitattributes pins
+      // eol=lf), so hashing raw bytes made setup:db warn that files nobody had
+      // touched "had CHANGED" — purely because of where it ran. Normalising
+      // line endings and trailing whitespace means the checksum describes the
+      // SQL, not the checkout. See R6.4.7 for the mixed-line-endings tree.
+      const checksum = createHash("sha256")
+        .update(sql.replace(/\r\n/g, "\n").replace(/\s+$/, ""))
+        .digest("hex")
+        .slice(0, 16);
 
       // A migration edited AFTER it was applied is a silent schema drift: the
       // file no longer describes the database, and every reader who diffs the
@@ -163,9 +179,19 @@ async function main() {
         await client.query("BEGIN");
         await client.query(sql);
         await client.query(
-          `INSERT INTO schema_migrations (filename, checksum, applied_at)
-           VALUES ($1, $2, now())
-           ON CONFLICT (filename) DO UPDATE SET checksum = EXCLUDED.checksum, applied_at = now()`,
+          // `first_applied_at` is never overwritten, so the ledger keeps when a
+          // migration FIRST landed as well as when it was last re-applied.
+          // Without it every row carried one timestamp — the last run — and
+          // "when did 007 actually reach production" became unanswerable.
+          //
+          // The checksum is still updated, but only after the mismatch above
+          // has been reported: the drift signal used to fire once and then
+          // erase its own evidence, leaving the next run silent.
+          `INSERT INTO schema_migrations (filename, checksum, applied_at, first_applied_at)
+           VALUES ($1, $2, now(), now())
+           ON CONFLICT (filename) DO UPDATE SET
+             checksum = EXCLUDED.checksum,
+             applied_at = now()`,
           [file, checksum]
         );
         await client.query("COMMIT");
@@ -176,7 +202,12 @@ async function main() {
         throw new Error(`${file}: ${err.message}`);
       }
     }
-    console.log("\nMigrations applied.\n");
+    // NOT a success sentence, deliberately. Every file executed; whether the
+    // DATABASE is correct is what the next section decides. Saying anything
+    // conclusive at this point is how the old runner made a broken run look
+    // fine — it printed "Migrations applied successfully." and 17 ticks over a
+    // database missing four migrations.
+    console.log("\nAll migration files executed. Verifying the result...\n");
 
     console.log("Verifying schema against the catalog:\n");
     let missing = 0;
@@ -194,7 +225,7 @@ async function main() {
     if (missing > 0) {
       console.error(
         `\n${missing} expected object(s) missing. The database is INCOMPLETE — ` +
-          `do not read the "Migrations applied" line above as success.`
+          `do not read the "All migration files executed" line above as success.`
       );
       process.exitCode = 1;
     } else {

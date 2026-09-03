@@ -167,15 +167,29 @@ the `perplexity` entry of `scripts/check-secrets.mjs` (grep
 `name: "perplexity"`), and that one *does* carry a token cap.
 
 **`max_tokens` must be at least 16.** Perplexity rejects anything lower with a
-`400 invalid_request` **before it authenticates**, so a 1-token liveness probe
-reports `FAIL` for a perfectly good credential. `check-secrets.mjs` did exactly
-that until 2026-08-30; it now sends 16 — grep `max_tokens: 16` in
-`scripts/check-secrets.mjs` — and
-the same key reports PASS.
+`400 invalid_request`, so a 1-token liveness probe reports `FAIL` for a
+perfectly good credential. `check-secrets.mjs` did exactly that until
+2026-08-30; it now sends 16 — grep `max_tokens: 16` in
+`scripts/check-secrets.mjs` — and the same key reports PASS.
 
-The transferable lesson: a health check's *smallest possible* request is not
-always a *valid* request, and a 400 is not a 401. A liveness probe has to
-distinguish "the key is bad" from "the request was".
+**The ordering, measured rather than assumed.** An earlier version of this note
+and of the source comment said the 400 came back *before* authentication. That
+is wrong, and wrong in the direction that misleads. The full 2×2 against the
+live API:
+
+| | `max_tokens: 1` | `max_tokens: 16` |
+|---|---|---|
+| **real key** | `400` invalid_request | `200` |
+| **bogus key** | `401` invalid_api_key | `401` invalid_api_key |
+
+Perplexity **authenticates first**. So a `400` from this endpoint actually
+*proves* the key is good — the opposite of what the old comment told the next
+reader.
+
+The transferable lesson survives, and is sharper for it: a health check's
+*smallest possible* request is not always a *valid* request, and a 400 is not a
+401. A liveness probe has to distinguish "the key is bad" from "the request
+was" — and it must not guess which of the two the vendor checks first.
 
 The corollary is why this section is separate from the contract above: **the
 probe's request shape is not the engine's.** A `PASS` here proves the key works

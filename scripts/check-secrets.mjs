@@ -23,7 +23,12 @@
  *   node scripts/check-secrets.mjs     # reads the ambient environment
  */
 
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { LLM_ENV, getLlmApiKey, getLlmBaseUrl, getLlmModel, getLlmProvider } from "../src/lib/llmConfig.js";
+// R0.1.10 — the client's OWN zone resolver, so this check is on the same code
+// path every probe uses rather than a mirror of it.
+import { resolveBrightDataSerpZone } from "../src/lib/engines/brightdata.js";
 import {
   ENGINE_LABELS,
   deployedEngines,
@@ -67,7 +72,7 @@ async function fromResponse(res, okDetail, failContext = "") {
  * either/or form for a credential with a deprecated alias: at least one must
  * be set, and the FIRST (canonical) one is what an operator is told to set.
  */
-const VENDORS = [
+export const VENDORS = [
   {
     name: "supabase",
     required: true,
@@ -87,60 +92,78 @@ const VENDORS = [
     name: "brightdata",
     required: true,
     keys: ["BRIGHTDATA_API_KEY"],
-    // R0.1.10 (finding C4) — validate the credential the CLIENT will use.
+    // R0.1.10 (finding C4) — validate the credential the CLIENT will use, by
+    // ASKING THE CLIENT, not by reproducing its reasoning here.
     //
-    // This used to call get_all_zones and pass if ANY active serp zone existed,
-    // never reading BRIGHTDATA_SERP_ZONE. But brightdata.js:10 short-circuits on
-    // that variable: when it is set, that zone is the one every probe uses. So a
-    // typo'd zone reported PASS here — an account with a healthy zone list and
-    // not a single working probe — and the failure then arrived per-query, as a
-    // cost-0.0 error row on all thirty. The check said the credential was good
-    // and the scan quietly measured nothing.
+    // Two rounds of this check have now been wrong in the same way. The first
+    // called get_all_zones and passed if ANY active serp zone existed, never
+    // reading BRIGHTDATA_SERP_ZONE — so a typo'd zone reported PASS on an
+    // account with a healthy zone list and not one working probe. The second
+    // read the variable and re-picked the zone inline, which is a MIRROR of
+    // brightdata.js, and a mirror is exactly what drifted into C4 the first
+    // time. It could also still lie: it validated its own `serp[0]` while the
+    // client picks from a separate, later call, and nothing makes two
+    // get_all_zones responses agree on order.
     //
-    // Now: resolve the zone the same way the client does, then assert THAT zone
-    // is present and active.
+    // So the zone under test is now `resolveBrightDataSerpZone()`'s actual
+    // return value — the same function, with the same env short-circuit and the
+    // same cache, that every probe goes through. There is one code path and
+    // this check is on it. It throws on a no-active-zone account, which main()'s
+    // catch turns into a FAIL, so that branch gets stronger rather than weaker.
     async check() {
       const res = await get("https://api.brightdata.com/zone/get_all_zones", {
         headers: { Authorization: `Bearer ${env("BRIGHTDATA_API_KEY")}` },
       });
       if (!res.ok) return fromResponse(res, undefined, "api.brightdata.com");
 
-      const zones = await res.json().catch(() => []);
-      const serp = (zones || []).filter((z) => z.type === "serp" && z.status === "active");
+      const zones = (await res.json().catch(() => [])) || [];
+      const serp = zones.filter((z) => z.type === "serp" && z.status === "active");
       const configured = (process.env.BRIGHTDATA_SERP_ZONE || "").trim();
 
-      if (configured) {
-        const match = (zones || []).find((z) => z.name === configured);
-        if (!match) {
-          return {
-            verdict: FAIL,
-            detail:
-              `BRIGHTDATA_SERP_ZONE="${configured}" does not exist on this account. ` +
-              `Every AIO probe will fail. Active serp zones: ${
-                serp.map((z) => z.name).join(", ") || "(none)"
-              }`,
-          };
-        }
-        if (match.status !== "active" || match.type !== "serp") {
-          return {
-            verdict: FAIL,
-            detail:
-              `BRIGHTDATA_SERP_ZONE="${configured}" exists but is type=${match.type} ` +
-              `status=${match.status}, not an active serp zone. Every AIO probe will fail.`,
-          };
-        }
-        return { verdict: PASS, detail: `configured zone "${configured}" is an active serp zone` };
+      let zone;
+      try {
+        zone = await resolveBrightDataSerpZone(env("BRIGHTDATA_API_KEY"));
+      } catch (err) {
+        return { verdict: FAIL, detail: `${err.message} Every AIO probe will fail.` };
+      }
+      if (!zone) {
+        return { verdict: FAIL, detail: "no SERP zone could be resolved — every AIO probe will fail" };
       }
 
-      // Unset: the client falls back to the first active serp zone, so that is
-      // what gets validated — and the operator is told which one it resolved to,
-      // because "it picked one for you" is a fact worth seeing.
-      if (!serp.length) {
-        return { verdict: FAIL, detail: "key works, but no ACTIVE serp zone — every AIO probe will fail" };
+      const match = zones.find((z) => z.name === zone);
+      if (!match) {
+        return {
+          verdict: FAIL,
+          detail:
+            `BRIGHTDATA_SERP_ZONE="${zone}" does not exist on this account. ` +
+            `Every AIO probe will fail. Active serp zones: ${
+              serp.map((z) => z.name).join(", ") || "(none)"
+            }`,
+        };
       }
+      if (match.status !== "active" || match.type !== "serp") {
+        return {
+          verdict: FAIL,
+          detail:
+            `BRIGHTDATA_SERP_ZONE="${zone}" exists but is type=${match.type} ` +
+            `status=${match.status}, not an active serp zone. Every AIO probe will fail.`,
+        };
+      }
+
+      if (configured) {
+        return { verdict: PASS, detail: `configured zone "${zone}" is an active serp zone` };
+      }
+      // Unset is not UNCONFIGURED: the credential is present and works, and the
+      // variable is documented as optional. But the operator should know the
+      // name was picked FOR them, and that it is then cached for the life of
+      // the process with no invalidator (R1.2.7) — a zone that dies mid-run
+      // keeps being used, and this check runs in a different process from the
+      // worker, so it can report the truth while the worker acts on a stale answer.
       return {
         verdict: PASS,
-        detail: `${serp.length} active serp zone(s); no BRIGHTDATA_SERP_ZONE set, so probes will use "${serp[0].name}"`,
+        detail:
+          `${serp.length} active serp zone(s); no BRIGHTDATA_SERP_ZONE set, so probes ` +
+          `AUTO-DISCOVERED "${zone}" and will cache it for the process lifetime`,
       };
     },
   },
@@ -192,9 +215,16 @@ const VENDORS = [
         body: JSON.stringify({
           model: env("PERPLEXITY_MODEL") || "sonar",
           messages: [{ role: "user", content: "hi" }],
-          // Perplexity rejects max_tokens below 16 with a 400 before it ever
-          // looks at the key, so a 1-token probe reported FAIL for a working
-          // credential — the misleading-script failure this check exists to prevent.
+          // Perplexity rejects max_tokens below 16 with a 400, so a 1-token
+          // probe reported FAIL for a working credential — the misleading-script
+          // failure this check exists to prevent.
+          //
+          // ORDERING, measured rather than assumed: Perplexity AUTHENTICATES
+          // FIRST. A bogus key with max_tokens 1 returns 401, not 400. So a 400
+          // here actually proves the key is good — the opposite of what an
+          // earlier version of this comment claimed. Corrected because a
+          // liveness check that misinforms about its own failure modes is the
+          // same defect it exists to catch.
           max_tokens: 16,
         }),
       });
@@ -243,11 +273,17 @@ const VENDORS = [
     name: "gsc",
     required: false,
     keys: ["GSC_SERVICE_ACCOUNT_KEY"],
-    // No live call: the credential is a service-account JSON, and exchanging
-    // it for a token needs a JWT signature that would pull in a dependency
-    // this script deliberately does not have. Validate what CAN be validated
-    // offline and SAY that is what happened — reporting "PASS" for a check
-    // that never ran is the exact lie this whole script exists to prevent.
+    // This check WAS offline-only, justified by a comment claiming that signing
+    // the JWT "would pull in a dependency this script deliberately does not
+    // have". That was false: src/lib/engines/gsc.js imports nothing but node's
+    // own `crypto`, signs the assertion with crypto.createSign at :78, and
+    // already exposes listGscSites() — the cheapest authenticated read Search
+    // Console offers. The dependency was imaginary and the gap was avoidable.
+    //
+    // Shape is still validated first, because a malformed key should say so
+    // rather than surface as an opaque auth failure. But a valid shape is no
+    // longer reported as a pass on its own: that was a PASS for a check that
+    // never ran, which is the exact lie this script exists to prevent.
     async check() {
       const raw = env("GSC_SERVICE_ACCOUNT_KEY");
       let json;
@@ -258,10 +294,33 @@ const VENDORS = [
       }
       const missing = ["client_email", "private_key", "type"].filter((k) => !json[k]);
       if (missing.length) return { verdict: FAIL, detail: `service account is missing ${missing.join(", ")}` };
-      return {
-        verdict: PASS,
-        detail: `shape valid for ${json.client_email} — NOT verified against the API (offline check only)`,
-      };
+
+      try {
+        const { listGscSites } = await import("../src/lib/engines/gsc.js");
+        const sites = await listGscSites();
+        return {
+          verdict: PASS,
+          detail:
+            `${json.client_email} authenticated; ${sites.length} Search Console ` +
+            `propert${sites.length === 1 ? "y" : "ies"} readable` +
+            (sites.length === 0
+              ? " — the key works but is not yet a user on any property, so every GSC read will come back empty"
+              : ""),
+        };
+      } catch (err) {
+        // Distinguish a LOCAL signing failure from an API refusal. A malformed
+        // private key never reaches Google — it dies in crypto.createSign — and
+        // reporting that as "the API refused it" would send the operator to
+        // check Search Console permissions for a problem in their own file.
+        const msg = String(err.message || err);
+        const localSigningFailure = /DECODER|PEM|no start line|unsupported|asn1/i.test(msg);
+        return {
+          verdict: FAIL,
+          detail: localSigningFailure
+            ? `shape valid for ${json.client_email}, but its private_key could not be used to sign — the key itself is malformed, nothing was sent: ${msg.slice(0, 100)}`
+            : `shape valid for ${json.client_email}, but the API refused it: ${msg.slice(0, 140)}`,
+        };
+      }
     },
   },
   {
@@ -448,7 +507,16 @@ async function main() {
   process.exit(failures.length || !engines.ok ? 1 : 0);
 }
 
-main().catch((err) => {
-  console.error(`check:secrets crashed: ${err.stack || err}`);
-  process.exit(2);
-});
+// Run only when invoked as a script. checkSecrets.test.mjs still executes the
+// real file as a subprocess (so the CLI contract stays under test), while
+// checkSecretsBrightdata.test.mjs imports VENDORS to drive one check() against a
+// mocked fetch — which an unconditional main() would have made impossible.
+const isEntry =
+  process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+
+if (isEntry) {
+  main().catch((err) => {
+    console.error(`check:secrets crashed: ${err.stack || err}`);
+    process.exit(2);
+  });
+}
