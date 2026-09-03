@@ -19,21 +19,46 @@ import { SAMPLE_DESTINATIONS, SAMPLE_RESULT } from "../data/mockData.js";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (rel) => readFile(path.join(REPO, rel), "utf8");
 
+const SHEET_PATH = path.join(REPO, "src/components/landing/AnswerSheet.jsx");
+
 /**
- * Evaluate the sample report under a given NEXT_PUBLIC_ENGINES.
+ * Evaluate the sample report AND the hero's sample card under a given
+ * NEXT_PUBLIC_ENGINES.
  *
  * deployedEngines() captures the inlined env expression at MODULE LOAD, so an
  * in-process test can only ever see one engine list. A child process is the
  * only way to assert the sample actually FOLLOWS the deployment rather than
  * happening to match it today — the same thing the verifier did by hand with a
  * rebuild.
+ *
+ * R2.10.5 widened it past mockData.js. AnswerSheet.jsx is JSX and cannot be
+ * imported by bare node, so the card is covered two ways in the SAME child, at
+ * the same env: `sheetEngine` is the value the chip is now assigned, evaluated
+ * under this deployment, and `sheetLiterals` is every engine name still TYPED
+ * into that file. A returned literal shows up in the second even when the first
+ * is right, which is exactly the state the card was found in.
  */
 function sampleReadingUnder(engines) {
   const href = pathToFileURL(path.join(REPO, "src/data/mockData.js")).href;
+  const enginesHref = pathToFileURL(path.join(REPO, "src/lib/engines/deployedEngines.js")).href;
   const code = `
     const m = await import(${JSON.stringify(href)});
+    const eng = await import(${JSON.stringify(enginesHref)});
+    const { readFileSync } = await import("node:fs");
+    // The same comment-stripper the source guards use, shipped into the child
+    // rather than re-typed, so a comment that EXPLAINS this fix cannot read as
+    // the literal it removed.
+    const withoutComments = ${withoutComments.toString()};
+    const sheetSrc = withoutComments(readFileSync(${JSON.stringify(SHEET_PATH)}, "utf8"));
+    const allLabels = Object.values(eng.ENGINE_LABELS);
+    const deployedLabels = eng.deployedEngineLabels();
     const r = m.SAMPLE_RESULT;
     process.stdout.write(JSON.stringify({
+      sheetEngine: eng.primaryDeployedEngineLabel(),
+      sheetLiterals: allLabels.filter((l) => sheetSrc.includes(l)),
+      sheetLiteralsOffDeployment: allLabels.filter(
+        (l) => sheetSrc.includes(l) && !deployedLabels.includes(l),
+      ),
       tracked: r.promptsTracked,
       analyzed: r.promptsAnalyzed,
       rows: r.results.length,
@@ -312,6 +337,54 @@ test("GUARD — the sample report FOLLOWS the deployed engine list", () => {
   assert.equal(two.wins, three.wins);
   assert.equal(one.share, three.share);
   assert.deepEqual(one.destinations, three.destinations);
+
+  // R2.10.5 — the hero's own answer sheet, in the same child, under the same
+  // varied env. Its chip was the literal 'Perplexity': rebuilt under
+  // NEXT_PUBLIC_ENGINES=aio the hero sentence and the rail both narrowed to
+  // Google AI Overview and the served HTML still held exactly one Perplexity,
+  // and it was this chip. A second deployment where perplexity is the ONLY
+  // engine is what makes this follow rather than match — under "aio" alone a
+  // typed "Google AI Overview" would still look right.
+  const solo = sampleReadingUnder("perplexity");
+  assert.deepEqual(solo.probeSources, ["perplexity"]);
+  assert.equal(one.sheetEngine, "Google AI Overview");
+  assert.equal(two.sheetEngine, "Google AI Overview");
+  assert.equal(three.sheetEngine, "Google AI Overview");
+  assert.equal(
+    solo.sheetEngine,
+    "Perplexity",
+    "the sample card's chip must move with the deployment, not merely match it today"
+  );
+
+  for (const [name, reading] of [["aio", one], ["aio,perplexity", two], ["aio,chatgpt,perplexity", three], ["perplexity", solo]]) {
+    assert.deepEqual(
+      reading.sheetLiteralsOffDeployment,
+      [],
+      `under ENGINES=${name} the sample card still types ${reading.sheetLiteralsOffDeployment.join(", ")}, `
+        + "an engine this deployment does not probe"
+    );
+    assert.deepEqual(
+      reading.sheetLiterals,
+      [],
+      "no engine name may be TYPED into the sample card at all — it happening to be "
+        + "true of today's deployment is how the Perplexity chip survived R2.10.1"
+    );
+  }
+
+  // And the chip must be assigned from the deployed list, not from a string
+  // that happens to spell one. Assert the assignment, the way the hero
+  // sentence and the rail do.
+  const sheet = withoutComments(readFileSync(SHEET_PATH, "utf8"));
+  assert.match(
+    sheet,
+    /const SHEET_ENGINE = primaryDeployedEngineLabel\(\);/,
+    "SHEET_ENGINE must be assigned from primaryDeployedEngineLabel()"
+  );
+  assert.ok(
+    !/const SHEET_ENGINE\s*=\s*['"`]/.test(sheet),
+    "a typed chip is exactly how this card came to name Perplexity on an aio-only deployment"
+  );
+  assert.match(sheet, /className="chip">\{SHEET_ENGINE\}/, "and the chip must render it");
 });
 
 test("GUARD — the sample report backs the '64 pages, six of them yours' claim", () => {

@@ -94,6 +94,31 @@ export function deployedEngineLabels(env = null) {
   return deployedEngines(env).map((name) => ENGINE_LABELS[name]);
 }
 
+/**
+ * The one engine to name where a surface can only carry a single name.
+ *
+ * R2.10.5. The hero's answer sheet shows ONE answer, so its chip names one
+ * engine. It used to name "Perplexity" as a typed literal: rebuilt under
+ * NEXT_PUBLIC_ENGINES=aio the hero sentence and the engine rail both correctly
+ * narrowed to Google AI Overview while that chip went on naming an engine the
+ * deployment does not probe. First rather than any-of, so the choice is
+ * deterministic and SSR and the client cannot pick differently.
+ */
+export function primaryDeployedEngineLabel(env = null) {
+  const [label] = deployedEngineLabels(env);
+  if (!label) {
+    // Unreachable while DEFAULT_ENGINES parses to at least one engine, which is
+    // what deployedEngines() falls back to. If that ever stops being true, an
+    // empty chip beside a written-out answer still READS as an attribution, so
+    // it fails here instead.
+    throw new Error(
+      'deployedEngines: no engine to name, so a surface that must attribute an '
+      + 'answer to one would render an empty attribution.',
+    );
+  }
+  return label;
+}
+
 /** "A, B and C" — for prose that names the engines. */
 export function formatEngineList(labels) {
   if (labels.length === 0) return "no answer engines";
