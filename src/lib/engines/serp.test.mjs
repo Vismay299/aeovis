@@ -20,6 +20,20 @@ const SERP_ENV = [
 ];
 
 /**
+ * Captured at module load, before any test touches the environment: exactly what
+ * this process inherited. The end-state guard at the bottom of this file asserts
+ * every var is back to this on the way out. Without it, "restores them" has no
+ * teeth: a file that leaves a sentinel standing where a real credential was has
+ * restored nothing, and every later test in the run measures the sentinel.
+ */
+const PROCESS_START_ENV = Object.fromEntries(SERP_ENV.map((k) => [k, process.env[k]]));
+
+/** Shape of a value, never the value: assertion output must not leak a real key. */
+function describeEnv(v) {
+  return v === undefined ? "unset" : `set (len ${v.length})`;
+}
+
+/**
  * Scrub every provider var, apply `env`, and restore on the way out — via
  * t.after so an assertion that throws still restores, which the old inline
  * `delete process.env.SERPAPI_KEY` at the end of each test did not.
@@ -47,12 +61,18 @@ test('GUARD — an ambient Bright Data key is scrubbed, not inherited', (t) => {
   // should have failed passed instead.
   const ambient = process.env.BRIGHTDATA_API_KEY;
   process.env.BRIGHTDATA_API_KEY = 'bd-ambient';
+
+  useSerpEnv(t, { SERPAPI_KEY: 'mock-key' });
+
+  // Registered AFTER useSerpEnv, and that ordering IS the fix: node:test runs
+  // t.after hooks in registration order. Registered first, this hook ran first
+  // and useSerpEnv's ran last, putting the sentinel 'bd-ambient' back over the
+  // real ambient key and leaving a fabricated credential standing for the rest
+  // of the run. Last registered, last to run, so this one has the final word.
   t.after(() => {
     if (ambient === undefined) delete process.env.BRIGHTDATA_API_KEY;
     else process.env.BRIGHTDATA_API_KEY = ambient;
   });
-
-  useSerpEnv(t, { SERPAPI_KEY: 'mock-key' });
 
   assert.equal(process.env.BRIGHTDATA_API_KEY, undefined,
     'an ambient Bright Data key must be scrubbed — getSerpProvider prefers it over SERPAPI_KEY');
@@ -221,4 +241,29 @@ test('fetchAutocomplete - mock suggestions', async () => {
   ]);
 
   globalThis.fetch = originalFetch;
+});
+
+test("GUARD — every provider var is restored to what the process started with", (t) => {
+  // Registered last, so it runs last: node:test runs top-level tests in
+  // registration order, and a test's t.after hooks have all run before the next
+  // test starts. This is the only thing that measures the END state of the file.
+  //
+  // It was written because the guard above used to register its restore BEFORE
+  // calling useSerpEnv, and t.after hooks run in registration order too — so
+  // useSerpEnv's hook ran last and put the sentinel "bd-ambient" back over the
+  // real ambient key, leaving a fabricated credential standing for the rest of
+  // the run. Do not reorder the two calls in that test without re-reading this.
+  t.diagnostic(
+    `ambient at start — ` +
+      SERP_ENV.map((k) => `${k}: ${describeEnv(PROCESS_START_ENV[k])}`).join(", ")
+  );
+  for (const k of SERP_ENV) {
+    const before = PROCESS_START_ENV[k];
+    const after = process.env[k];
+    assert.ok(
+      after === before,
+      `${k} was not restored: started ${describeEnv(before)}, ended ${describeEnv(after)}` +
+        (describeEnv(before) === describeEnv(after) ? " holding a different value" : "")
+    );
+  }
 });
