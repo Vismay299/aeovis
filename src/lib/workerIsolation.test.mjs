@@ -94,15 +94,21 @@ test("GUARD — the unbuilt stages refuse rather than returning empty", async ()
   // A stub that returns [] is indistinguishable from an empty queue, and a
   // fleet reporting "nothing to do" while its queue fills is the false success
   // this rebuild exists to remove.
-  const queue = await readFile(path.join(WORKER, "src/lib/queue.js"), "utf8");
+  //
+  // R1.2.2 built the queue, so queue.js is no longer a stub and is guarded
+  // BEHAVIOURALLY in src/lib/probeQueue.test.mjs instead — the version of this
+  // guard that read queue.js's source text for /throw new Error/ would have
+  // passed a `return new Array()`. probe.js is still a stub, and still checked
+  // here by source text, which is all a not-yet-written function offers.
   const probe = await readFile(path.join(WORKER, "src/lib/probe.js"), "utf8");
-
-  assert.match(queue, /throw new Error/, "claimBatch/reportBatch must refuse while unbuilt");
   assert.match(probe, /throw new Error/, "probeBatch must refuse while unbuilt");
-  assert.ok(
-    !/return \[\];/.test(queue),
-    "an empty batch and an unbuilt queue must not look the same"
+
+  // Invoked, not read: an adapter that quietly resolved to [] would score every
+  // prompt as a non-mention.
+  const { probeBatch } = await import(
+    path.join(WORKER, "src/lib/probe.js").replace(/\\/g, "/").replace(/^([A-Za-z]):/, "file:///$1:")
   );
+  await assert.rejects(() => probeBatch([{ id: "x" }], {}), /no adapter is built yet/);
 });
 
 test("GUARD — the typed outcome vocabulary is present and closed", async () => {

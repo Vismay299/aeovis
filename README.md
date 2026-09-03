@@ -154,6 +154,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `007_scan_seal` | unique partial index enforcing one running scan per brand (closes the duplicate-scan race) |
 | `008_system_heartbeats` | `system_heartbeats` — the "did the cron actually fire?" record behind `/api/health` |
 | `009_scan_rate_limit` | `scan_rate_limits` + the atomic `increment_scan_rate_limit()` behind the free-scan per-IP cap |
+| `010_probe_tasks` | `probe_tasks` — the probe fleet's queue — and `claim_probe_tasks()`, the `FOR UPDATE SKIP LOCKED` claim two workers cannot both win |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

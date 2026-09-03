@@ -13,15 +13,14 @@
  * an import ever crosses the line — the copy is the deliberate cost of the
  * fleet being deployable on its own.
  *
- * Today this is the workspace and the loop. The claim/probe/report stages are
- * stubs that say so: R1.2.2 adds the probe_tasks queue and lease-based
- * claiming, R1.2.3 the scan_runs ledger, and R1.3 the first real adapter.
- * A stub that pretends to work would be the exact failure this rebuild exists
- * to remove, so each one refuses out loud instead.
+ * The claim is real as of R1.2.2: probe_tasks and a lease-based claim settled
+ * in Postgres. R1.2.3 adds the scan_runs ledger and R1.3 the first real
+ * adapter, and until then `probeBatch` refuses out loud rather than returning
+ * plausible zero-valued rows.
  */
 
 import { resolveConfig } from "./config.js";
-import { claimBatch, reportBatch } from "./lib/queue.js";
+import { claimBatch, reportBatch, releaseBatch, describeClaim, CLAIM_REASONS } from "./lib/queue.js";
 import { probeBatch } from "./lib/probe.js";
 
 const log = (msg) => console.log(`[fleet] ${msg}`);
@@ -31,13 +30,42 @@ export async function runOnce(config, deps = {}) {
   const claim = deps.claimBatch || claimBatch;
   const probe = deps.probeBatch || probeBatch;
   const report = deps.reportBatch || reportBatch;
+  const release = deps.releaseBatch || releaseBatch;
 
-  const batch = await claim(config);
-  if (!batch || batch.length === 0) return 0;
+  const result = await claim(config);
 
-  log(`claimed ${batch.length} task(s)`);
-  const outcomes = await probe(batch, config);
-  await report(outcomes, config);
+  // ALWAYS logged, including — especially — when nothing was claimed. An idle
+  // fleet and a starved one produce the same zero, and only this line tells
+  // them apart. Standing rule 1: measured zero must not look like never ran.
+  log(describeClaim(result));
+
+  if (result.reason !== CLAIM_REASONS.CLAIMED) return 0;
+
+  const batch = result.tasks;
+  let outcomes;
+  try {
+    outcomes = await probe(batch, config);
+  } catch (err) {
+    // The batch is leased to us and we cannot finish it. Hand it back now
+    // rather than parking it for the full TTL on every failed pass.
+    const ids = batch.map((t) => t.id);
+    const released = await release(ids, config).catch((e) => {
+      log(`could not release ${ids.length} task(s) after a failed probe: ${e.message}`);
+      return null;
+    });
+    if (released !== null) log(`released ${released}/${ids.length} task(s) after a failed probe`);
+    throw err;
+  }
+
+  const written = await report(outcomes, config);
+  // A short write is not a successful one. `rejected` means our lease lapsed
+  // mid-probe and those results were refused by the database.
+  if (written && written.rejected && written.rejected.length) {
+    log(
+      `WARNING: ${written.applied}/${written.asked} outcome(s) written; ` +
+        `${written.rejected.length} refused — this worker no longer held their lease`
+    );
+  }
   return batch.length;
 }
 
@@ -88,10 +116,20 @@ async function selftest() {
 
   let reported = null;
   await start(config, {
-    claimBatch: async () => [{ id: "selftest-1", engine: "perplexity", query: "selftest" }],
-    probeBatch: async (batch) => batch.map((t) => ({ ...t, outcome: "skipped", reason: "selftest" })),
+    claimBatch: async () => ({
+      owner: config.workerId,
+      tasks: [{ id: "selftest-1", engine: "perplexity", query: "selftest" }],
+      claimedCount: 1,
+      outstanding: 1,
+      leasedElsewhere: 0,
+      reason: "claimed",
+      leaseExpiresAt: null,
+      observedAt: null,
+    }),
+    probeBatch: async (batch) => batch.map((t) => ({ ...t, outcome: "skipped", detail: { reason: "selftest" } })),
     reportBatch: async (outcomes) => {
       reported = outcomes;
+      return { asked: outcomes.length, applied: outcomes.length, rejected: [] };
     },
     sleep: async () => {},
   });

@@ -1,9 +1,10 @@
 # Probe fleet (`worker/`)
 
 > <!-- doc-status -->
-> **Status: LIVE.** The workspace and its loop exist (R1.2.1). The queue,
-> ledger and adapters do not yet — see *What is not built* below. Nothing here
-> probes anything today, and the stubs refuse rather than pretend.
+> **Status: LIVE.** The workspace, its loop and its queue claim exist (R1.2.1,
+> R1.2.2). The ledger and the adapters do not yet — see *What is not built*
+> below. **Nothing here probes anything today**: `probeBatch` refuses rather
+> than pretend.
 
 A long-lived Node process that drives **real consumer surfaces** —
 perplexity.ai and chatgpt.com as a logged-out human sees them — and reports
@@ -58,16 +59,52 @@ would poll nothing forever and report itself perfectly healthy.
 
 | Stage | Lands in | Today |
 |---|---|---|
-| `probe_tasks` queue + lease claiming | R1.2.2 | `claimBatch` throws |
+| `probe_tasks` queue + lease claiming | R1.2.2 | **built** — see *The claim* below |
 | `scan_runs` ledger + heartbeats | R1.2.3 | not wired |
 | Perplexity adapter | R1.3 | `probeBatch` throws |
 | ChatGPT adapter | R1.4 | — |
 | Evidence screenshots | R1.5 | — |
 
-Each stub **throws** rather than returning an empty result. An empty batch and
-an unbuilt queue would otherwise look identical, and a fleet reporting "nothing
-to do" while its queue fills up is exactly the false success this rebuild
-exists to remove. Standing rule 1: a skip is not a success.
+`probeBatch` **throws** rather than returning an empty result. A fleet
+reporting "nothing to do" while its queue fills up is exactly the false success
+this rebuild exists to remove. Standing rule 1: a skip is not a success.
+`claimBatch` throws for the same reason when the queue is unreachable — an
+unreachable queue and an empty one must not produce the same signal.
+
+## The claim (R1.2.2)
+
+`claimBatch` calls the Postgres function `claim_probe_tasks` (migration 010).
+The race is settled by `FOR UPDATE SKIP LOCKED` **in the database**, not by two
+JS processes agreeing to be careful.
+
+It is SQL and not `src/lib/jobLease.js` because this workspace may not import
+from `src/`. The alternatives were to copy the lease in here (a second copy that
+drifts) or to extract a shared package (heavier than the task warrants). A
+database function is one implementation with two callers and nothing to
+duplicate. jobLease remains the authority for the **lease itself**: the
+`lease_owner` / `lease_expires_at` columns, the free/expired predicate, the
+3-minute TTL and the acquire/renew/release triple are its semantics. The one
+deliberate divergence is that a queue does **not** treat "my own live lease" as
+free — re-handing a worker the batch it is still probing is not idempotence.
+
+`claimBatch` returns a **report**, not an array:
+
+| field | meaning |
+|---|---|
+| `tasks` | the rows claimed |
+| `claimedCount` | how many |
+| `outstanding` | non-terminal tasks in scope, including the ones just claimed |
+| `leasedElsewhere` | of those, how many another worker holds a live lease on |
+| `reason` | `claimed` · `queue_empty` · `all_leased` |
+
+`reason` is the point. "0 claimed because the queue is empty" and "0 claimed
+because every task is leased" are different facts, and an array says neither.
+Every pass logs `describeClaim(...)`, including the empty ones — a measured zero
+has to look different from never having run.
+
+The race itself is proven against a real Postgres in
+`src/lib/probeTasksRace.test.mjs`, which skips **loudly** when no database is
+configured.
 
 ## Typed outcomes
 

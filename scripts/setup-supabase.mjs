@@ -82,6 +82,19 @@ const EXPECTED_OBJECTS = {
     { kind: "index", name: "scan_rate_limits_window_idx" },
     { kind: "function", name: "increment_scan_rate_limit" },
   ],
+  "010_probe_tasks.sql": [
+    { kind: "table", name: "probe_tasks" },
+    { kind: "index", name: "probe_tasks_claim_idx" },
+    { kind: "index", name: "probe_tasks_batch_idx" },
+    { kind: "index", name: "probe_tasks_lease_idx" },
+    // The claim IS the migration. A probe_tasks table without
+    // claim_probe_tasks is a queue nothing can take work from, and that is
+    // exactly the shape 009 was found in — table present, function absent.
+    { kind: "function", name: "claim_probe_tasks" },
+    { kind: "function", name: "complete_probe_tasks" },
+    { kind: "function", name: "renew_probe_lease" },
+    { kind: "function", name: "release_probe_tasks" },
+  ],
 };
 
 async function objectExists(client, { kind, name }) {

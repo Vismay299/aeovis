@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -121,7 +121,7 @@ function pathToFileUrlString(p) {
   return new URL(`file://${p.replace(/\\/g, "/").replace(/^([A-Za-z]:)/, "/$1")}`).href;
 }
 
-/** Everything 001-009 must leave behind, per the runner's own expectations. */
+/** Everything 001-010 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
   "scans", "brand_prompts", "scan_jobs", "content_events",
   "content_jobs", "content_items", "content_feedback", "brand_briefs", "content_lessons",
@@ -131,6 +131,8 @@ const FULL_CATALOG = [
   "scan_jobs_one_running_per_brand",
   "system_heartbeats",
   "scan_rate_limits", "scan_rate_limits_window_idx", "increment_scan_rate_limit",
+  "probe_tasks", "probe_tasks_claim_idx", "probe_tasks_batch_idx", "probe_tasks_lease_idx",
+  "claim_probe_tasks", "complete_probe_tasks", "renew_probe_lease", "release_probe_tasks",
 ];
 
 function withRegister(dir) {
@@ -202,7 +204,11 @@ test("the ledger INSERT happens INSIDE the migration's own transaction", () => {
     // Every ledger INSERT must sit between a BEGIN and a COMMIT carrying the
     // SAME transaction id — adjacent to the apply is not the same as inside it.
     const inserts = log.filter((e) => e.sql === "INSERT_LEDGER");
-    assert.equal(inserts.length, 9, "all nine migrations must be recorded");
+    // Counted from disk, not hard-coded. The literal `9` here went stale the
+    // moment 010 landed, which is the same stale-list failure C10 was.
+    const onDisk = readdirSync(path.join(REPO, "supabase/migrations")).filter((f) => f.endsWith(".sql"));
+    assert.ok(onDisk.length >= 10, `expected the full migration set, found ${onDisk.length}`);
+    assert.equal(inserts.length, onDisk.length, "every migration on disk must be recorded");
 
     for (const ins of inserts) {
       const idx = log.indexOf(ins);
