@@ -77,6 +77,25 @@ export async function insertScan(scanRecord) {
     roster_source: scanRecord.roster_source ?? null,
     roster_extraction_offline: scanRecord.roster_extraction_offline ?? null,
     roster_extraction_error: scanRecord.roster_extraction_error ?? null,
+    // R2.7.4 — the window the answers were actually COLLECTED in: first to
+    // last probe write, computed by collectionWindow() in scanWorker.js and
+    // spread onto the scan record there. Like roster_source above it rides in
+    // this JSONB payload rather than in its own column: `scans` has no
+    // collected_from/collected_to (no migration 001-009 adds them), and a new
+    // column would be dropped in silence by the cascade-2/3 retries below on
+    // any deployment where the migration had not landed yet.
+    //
+    // THIS ALLOWLIST IS THE ONLY WAY IN. insertScan is not a pass-through, so
+    // a field the worker computes and this object never names is discarded
+    // before the write with nothing logged — which is exactly how the window
+    // was computed correctly and persisted as nothing.
+    //
+    // Explicit `?? null` rather than a bare read: a scan whose rows carried no
+    // timestamps stores an EXPLICIT unknown, so "we looked and there was no
+    // window" stays distinguishable from a pre-R2.7.4 row where the key is
+    // absent entirely.
+    collected_from: scanRecord.collected_from ?? null,
+    collected_to: scanRecord.collected_to ?? null,
     used_dynamic_prompts: !!scanRecord.used_dynamic_prompts,
     platform: scanRecord.platform,
     scoring_version: scanRecord.scoring_version,

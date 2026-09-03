@@ -421,6 +421,15 @@ export default function DashboardShell({ scan, scanId, error = null }) {
   /* Whatever engines actually reported — not a hardcoded count of three. */
   const probeSources = result.isMultiEngine ? (result.probeSources || []) : ["aio"];
 
+  /* R2.7.4 — the collection-window chip's ENTIRE rendering decision, resolved
+     once so the guard and the label can never disagree. formatCollectionWindow
+     returns null both for a half-known window (one end missing) and for one it
+     cannot parse, so a window we cannot read is omitted exactly like a window
+     we never had. Guarding on the raw strings instead — which is what shipped —
+     let `collectedFrom: "garbage"` render a bare "collected" chip titled
+     "Answers collected — → —": a malformed window claiming to be a measurement. */
+  const collectionWindowLabel = formatCollectionWindow(result.collectedFrom, result.collectedTo);
+
   return (
     <div className="app">
       {/* Re-run overlay */}
@@ -485,19 +494,19 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                  span to its far end. The headline stays the single timestamp
                  people scan for; the window is the honest detail behind it. */
               title={
-                result.collectedFrom && result.collectedTo
+                collectionWindowLabel
                   ? `Answers collected ${formatTimestamp(result.collectedFrom)} → ${formatTimestamp(result.collectedTo)}`
                   : undefined
               }
             >
               {formatTimestamp(result.scanTimestamp)} ({relativeTime(result.scanTimestamp)})
-              {result.collectedFrom && result.collectedTo && (
+              {collectionWindowLabel && (
                 <span
                   data-testid="collection-window"
                   className="chip"
                   style={{ marginLeft: 8 }}
                 >
-                  collected {formatCollectionWindow(result.collectedFrom, result.collectedTo)}
+                  collected {collectionWindowLabel}
                 </span>
               )}
             </span>
