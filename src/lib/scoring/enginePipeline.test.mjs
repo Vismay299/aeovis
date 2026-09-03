@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { summarizeEngineResults, summarizeEngineSlice, resolveEnabledEngines, buildTrackedBrandRoster } from "./enginePipeline.js";
 import { getBrandAliases } from "./aliases.js";
 import { TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE } from "./enginePipeline.js";
+import {
+  describeScanDataSourceIssue,
+  engineHealthThresholds,
+} from "./enginePipeline.js";
 import { AIO_MIN_NON_BRANDED_COVERAGE } from "./aioConstants.js";
 
 function makeAioRow(overrides = {}) {
@@ -595,4 +599,276 @@ test("the text coverage threshold is stricter than the aio one, on purpose", () 
     "a text engine has no legitimate no-answer state; an AIO SERP does"
   );
   assert.ok(TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE < 1, "must tolerate transient flake");
+});
+
+// --- R2.2.6: the SCAN-level flag is every engine's business ---------------
+//
+// R2.2.5 taught a text slice to raise its own data_source_issue and the
+// headline to drop it. What it could not do, and this covers, is the flag one
+// level up: summarizeEngineResults read summary.data_source_issue off
+// aioSummary alone. So a scan whose perplexity slice collapsed while aio
+// answered every prompt reported engines_counted 1 instead of 2, moved
+// visibility_index_pct, and set the scan-level flag FALSE — the red banner
+// stayed down and nothing on screen said an engine had gone missing.
+
+function healthyAioRows() {
+  // 10 non-branded prompts, all answered, 2 naming the brand -> share_of_ai 20.
+  return [
+    ...Array.from({ length: 2 }, (_, i) => ({ ...textAnswerRow(i), visible: true })),
+    ...Array.from({ length: 8 }, (_, i) => textAnswerRow(100 + i)),
+  ];
+}
+
+function degradedPerplexityRows() {
+  // 6 of 10 answered = coverage 60, under the 90 a text engine needs. All six
+  // name the brand, so its share_of_ai is a flattering 100 read off a broken
+  // slice — exactly the number that must not reach the headline unexplained.
+  return [
+    ...Array.from({ length: 6 }, (_, i) => ({ ...textAnswerRow(200 + i), visible: true })),
+    ...Array.from({ length: 4 }, (_, i) => textEmptyRow(300 + i)),
+  ];
+}
+
+function scanOf(engines) {
+  const headline = computeHeadline(Object.values(engines));
+  return { engines, headline, results: [] };
+}
+
+test("R2.2.6 — a text-only degradation raises the SCAN-level flag, not just the slice's", () => {
+  const engines = {
+    aio: summarizeEngineSlice(healthyAioRows(), "aio"),
+    perplexity: summarizeEngineSlice(degradedPerplexityRows(), "perplexity"),
+  };
+
+  // The premise, restated so this test fails loudly if R2.2.5 regresses under it.
+  assert.equal(engines.aio.data_source_issue, false, "aio answered everything");
+  assert.equal(engines.perplexity.data_source_issue, true, "perplexity is degraded");
+
+  const scan = scanOf(engines);
+  assert.equal(scan.headline.engines_counted, 1, "the degraded slice is dropped");
+  assert.equal(scan.headline.visibility_index_pct, 20, "...and the index is aio's alone");
+
+  // TEETH: derive summary.data_source_issue from aioSummary again and this is
+  // false, which is what shipped before R2.2.6.
+  const out = summarizeEngineResults(scan);
+  assert.equal(
+    out.summary.data_source_issue,
+    true,
+    "an engine dropped out of the headline; the scan-level flag must say so"
+  );
+});
+
+test("R2.2.6 — the banner names the degraded engine and explains the smaller count", () => {
+  const engines = {
+    aio: summarizeEngineSlice(healthyAioRows(), "aio"),
+    perplexity: summarizeEngineSlice(degradedPerplexityRows(), "perplexity"),
+  };
+  const headline = computeHeadline(Object.values(engines));
+  const d = describeScanDataSourceIssue(engines, { enginesCounted: headline.engines_counted });
+
+  assert.equal(d.dataSourceIssue, true);
+  assert.equal(d.severity, "partial", "aio still scores, so the index is real but narrower");
+
+  // TEETH: "the banner stays silent" is exactly an empty title/detail, and a
+  // banner that merely says something went wrong is what this task replaces.
+  assert.ok(d.title && d.title.length > 0, "the banner must have something to say");
+  assert.ok(d.detail && d.detail.length > 0, "...and a reason under it");
+
+  // WHICH engine.
+  assert.match(d.title, /Perplexity/, "the banner must name the engine that degraded");
+  assert.match(d.detail, /Perplexity/);
+  assert.ok(!/Google AI Overview/.test(d.title), "aio was fine; it must not be blamed");
+  assert.deepEqual(d.degradedEngines.map((e) => e.engine), ["perplexity"]);
+
+  // WHY the headline counts fewer engines.
+  assert.match(d.title, /1 of 2 engines/, "the reduced count is stated, not implied");
+  assert.equal(d.enginesCounted, 1);
+  assert.equal(d.enginesRan, 2);
+  assert.match(d.detail, /6 of 10/, "the numbers that condemned the slice are shown");
+  assert.match(d.detail, /60%/);
+  assert.match(
+    d.detail,
+    /90%/,
+    "quoted against the TEXT threshold, not the aio one it used to borrow"
+  );
+  assert.match(d.detail, /Google AI Overview only/, "and it says what the score still rests on");
+});
+
+test("R2.2.6 — an aio-only degradation still flags, and is named as aio", () => {
+  const engines = {
+    aio: summarizeEngineSlice(
+      [
+        ...Array.from({ length: 1 }, (_, i) => ({ ...textAnswerRow(i), visible: true })),
+        ...Array.from({ length: 9 }, (_, i) => textEmptyRow(400 + i)),
+      ],
+      "aio"
+    ),
+    perplexity: summarizeEngineSlice(healthyAioRows(), "perplexity"),
+  };
+  assert.equal(engines.aio.data_source_issue, true);
+  assert.equal(engines.perplexity.data_source_issue, false);
+
+  const headline = computeHeadline(Object.values(engines));
+  const d = describeScanDataSourceIssue(engines, { enginesCounted: headline.engines_counted });
+  assert.equal(d.dataSourceIssue, true, "the pre-R2.2.6 case must not have been traded away");
+  assert.equal(d.severity, "partial");
+  assert.match(d.title, /Google AI Overview/);
+  assert.ok(!/Perplexity degraded/.test(d.title), "perplexity answered everything");
+  // The aio slice is judged against the aio floor (15%), never the text one.
+  assert.match(d.detail, new RegExp(`${Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}%`));
+  assert.equal(d.degradedEngines[0].min_coverage_pct, AIO_MIN_NON_BRANDED_COVERAGE * 100);
+});
+
+test("R2.2.6 — a single-engine aio scan that degrades leaves nothing to score", () => {
+  const engines = {
+    aio: summarizeEngineSlice(Array.from({ length: 10 }, (_, i) => textEmptyRow(500 + i)), "aio"),
+  };
+  const headline = computeHeadline(Object.values(engines));
+  const d = describeScanDataSourceIssue(engines, { enginesCounted: headline.engines_counted });
+  assert.equal(d.dataSourceIssue, true);
+  assert.equal(
+    d.severity,
+    "critical",
+    "one engine, and it failed — the score must still be suppressed, as it always was"
+  );
+  assert.equal(d.enginesCounted, 0);
+});
+
+test("R2.2.6 — both engines degraded reads as ONE banner naming both, not two", () => {
+  const engines = {
+    aio: summarizeEngineSlice(Array.from({ length: 10 }, (_, i) => textEmptyRow(600 + i)), "aio"),
+    perplexity: summarizeEngineSlice(degradedPerplexityRows(), "perplexity"),
+  };
+  const headline = computeHeadline(Object.values(engines));
+  const d = describeScanDataSourceIssue(engines, { enginesCounted: headline.engines_counted });
+
+  assert.equal(d.severity, "critical", "nothing eligible is left");
+  assert.equal(d.dataSourceIssue, true);
+  // One severity means the caller renders one banner; both engines are inside it.
+  assert.equal(d.degradedEngines.length, 2);
+  assert.match(d.title, /Google AI Overview and Perplexity/);
+  assert.match(d.detail, /Google AI Overview/);
+  assert.match(d.detail, /Perplexity/);
+  // Each engine is quoted against its OWN gate inside the shared banner.
+  assert.equal(
+    d.degradedEngines.find((e) => e.engine === "aio").min_coverage_pct,
+    AIO_MIN_NON_BRANDED_COVERAGE * 100
+  );
+  assert.equal(
+    d.degradedEngines.find((e) => e.engine === "perplexity").min_coverage_pct,
+    TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE * 100
+  );
+});
+
+test("R2.2.6 — a healthy multi-engine scan raises nothing", () => {
+  const engines = {
+    aio: summarizeEngineSlice(healthyAioRows(), "aio"),
+    perplexity: summarizeEngineSlice(healthyAioRows(), "perplexity"),
+  };
+  const headline = computeHeadline(Object.values(engines));
+  assert.equal(headline.engines_counted, 2);
+  const d = describeScanDataSourceIssue(engines, { enginesCounted: headline.engines_counted });
+  assert.equal(d.dataSourceIssue, false);
+  assert.equal(d.severity, "none");
+  assert.equal(d.title, null, "no banner when nothing degraded");
+  assert.equal(summarizeEngineResults({ engines, headline, results: [] }).summary.data_source_issue, false);
+});
+
+test("R2.2.6 — a scan with no rows at all stays clean; never-ran is not degraded", () => {
+  // Rule 1. Every slice reports coverage_pct 0, and a scan-level flag written
+  // in terms of coverage rather than the slices' own verdicts would light the
+  // red banner on a scan that simply never collected anything.
+  const engines = {
+    aio: summarizeEngineSlice([], "aio"),
+    perplexity: summarizeEngineSlice([], "perplexity"),
+  };
+  const headline = computeHeadline(Object.values(engines));
+  assert.equal(headline.engines_counted, 0, "nothing eligible, because nothing ran");
+
+  const d = describeScanDataSourceIssue(engines, { enginesCounted: headline.engines_counted });
+  assert.equal(d.dataSourceIssue, false, "never-ran must not be reported as a degraded read");
+  assert.equal(d.severity, "none");
+  assert.deepEqual(d.degradedEngines, []);
+  assert.equal(d.enginesRan, 0);
+  // insufficient_sample is what speaks for it instead.
+  assert.equal(engines.aio.insufficient_sample, true);
+  assert.equal(
+    summarizeEngineResults({ engines, headline, results: [] }).summary.data_source_issue,
+    false
+  );
+});
+
+test("R2.2.6 — an engine that never ran does not dilute the count of engines that did", () => {
+  const engines = {
+    aio: summarizeEngineSlice(healthyAioRows(), "aio"),
+    perplexity: summarizeEngineSlice(degradedPerplexityRows(), "perplexity"),
+    chatgpt: summarizeEngineSlice([], "chatgpt"),
+  };
+  const headline = computeHeadline(Object.values(engines));
+  const d = describeScanDataSourceIssue(engines, { enginesCounted: headline.engines_counted });
+  assert.equal(d.enginesRan, 2, "chatgpt produced no rows; it is absent, not degraded");
+  assert.match(d.title, /1 of 2 engines/);
+  assert.deepEqual(d.degradedEngines.map((e) => e.engine), ["perplexity"]);
+});
+
+test("R2.2.6 — a record with no per-engine slices falls back to its stored flag", () => {
+  // Scans written before multi-engine summaries existed carry one boolean and
+  // nothing to explain it. The banner still renders, with the generic wording
+  // it has always had — but nothing invents an engine name it does not have.
+  const legacy = describeScanDataSourceIssue(null, { fallbackIssue: true });
+  assert.equal(legacy.dataSourceIssue, true);
+  assert.equal(legacy.severity, "critical");
+  assert.deepEqual(legacy.degradedEngines, []);
+  assert.ok(legacy.title && legacy.detail, "a flag with no slices still gets words");
+
+  const clean = describeScanDataSourceIssue(null, { fallbackIssue: false });
+  assert.equal(clean.dataSourceIssue, false);
+  assert.equal(clean.severity, "none");
+  assert.equal(clean.title, null);
+});
+
+test("R2.2.6 — a degraded slice with no counters says so instead of showing an empty reason", () => {
+  // A stored slice that lost its counters, or one flagged by a future gate this
+  // function does not model, must not produce a banner with a blank reason.
+  const d = describeScanDataSourceIssue(
+    { perplexity: { engine: "perplexity", non_branded_queries: 10, data_source_issue: true } },
+    { enginesCounted: 0 }
+  );
+  assert.equal(d.severity, "critical");
+  const reason = d.degradedEngines[0].reason;
+  assert.ok(reason && reason.trim().length > 0);
+  assert.match(reason, /does not carry/, "the gap is named, not papered over");
+  assert.equal(d.degradedEngines[0].coverage_pct, null, "and the missing number is null, not 0");
+});
+
+test("R2.2.6 — engineHealthThresholds keeps the two engine classes apart", () => {
+  const aio = engineHealthThresholds("aio");
+  const text = engineHealthThresholds("perplexity");
+  assert.equal(aio.minNonBrandedCoverage, AIO_MIN_NON_BRANDED_COVERAGE);
+  assert.equal(text.minNonBrandedCoverage, TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE);
+  assert.ok(
+    text.minNonBrandedCoverage > aio.minNonBrandedCoverage,
+    "unifying these would forgive a text engine that stopped answering"
+  );
+  assert.deepEqual(engineHealthThresholds("chatgpt"), text, "chatgpt is a text engine too");
+  assert.deepEqual(
+    engineHealthThresholds("some-engine-added-later"),
+    text,
+    "an unknown engine gets the strict gate, not the loose one"
+  );
+});
+
+test("R2.2.6 — a defaulted engines_counted of 0 must not blank a scan that still scores", () => {
+  // normalizeResult does `data.engines_counted ?? raw.engines_counted ?? 0`, so
+  // a record missing the column hands the dashboard a 0 that was never measured.
+  // Taking that on trust would call a healthy-aio scan unscoreable and hide an
+  // index we have. The count is recomputed from the slices instead.
+  const engines = {
+    aio: summarizeEngineSlice(healthyAioRows(), "aio"),
+    perplexity: summarizeEngineSlice(degradedPerplexityRows(), "perplexity"),
+  };
+  const d = describeScanDataSourceIssue(engines, { enginesCounted: 0, fallbackIssue: false });
+  assert.equal(d.severity, "partial", "aio still scores; a defaulted zero must not say otherwise");
+  assert.equal(d.enginesCounted, 1);
+  assert.match(d.title, /1 of 2 engines/);
 });

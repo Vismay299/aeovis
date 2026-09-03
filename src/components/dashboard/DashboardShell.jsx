@@ -25,6 +25,20 @@ import {
   AIO_ERROR_RATE_LIMIT_PCT,
   AIO_MIN_NON_BRANDED_COVERAGE,
 } from "@/lib/scoring/aioConstants";
+/**
+ * KNOWN COST, NOT A SECRET: this is a client component, and enginePipeline.js
+ * also imports the probe modules (brightdata/openai/perplexity) and, through
+ * judge.js, src/lib/gemini.js. package.json declares no `sideEffects`, so
+ * webpack keeps those modules in the dashboard client bundle even though only
+ * describeScanDataSourceIssue is used here — @google/generative-ai ships to the
+ * browser as a result. Nothing leaks (Next inlines only NEXT_PUBLIC_* env, so
+ * no key is in the bundle) and nothing breaks; it is weight. The fix is to lift
+ * describeScanDataSourceIssue + engineHealthThresholds into a leaf module that
+ * imports only aioConstants and deployedEngines, which is a file R2.2.6 was
+ * scoped not to create. Written down rather than left for someone to discover
+ * in a bundle report.
+ */
+import { describeScanDataSourceIssue } from "@/lib/scoring/enginePipeline";
 
 /**
  * R2.7.3 (finding C1) — two records match only when BOTH carry a real instant.
@@ -340,7 +354,33 @@ export default function DashboardShell({ scan, scanId, error = null }) {
     );
   }
 
-  const dataSourceIssue = result.dataSourceIssue;
+  /**
+   * R2.2.6 (finding B3). This component does not decide what a degraded scan
+   * is or how to word it — describeScanDataSourceIssue does, in the same module
+   * that owns the thresholds the gate used, and it is unit-tested there. What
+   * lives here is only the rendering.
+   *
+   * It is recomputed from the per-engine slices rather than read off
+   * result.dataSourceIssue because the flag is one bit and the banner has to
+   * name an engine and a number. Scans stored before this landed carry the
+   * slices too, so the explanation is available for history, and `fallbackIssue`
+   * covers the older single-engine records that have no slices at all.
+   */
+  const scanHealth = describeScanDataSourceIssue(result.perEngineSummaries, {
+    enginesCounted: result.enginesCounted,
+    fallbackIssue: result.dataSourceIssue,
+  });
+  const degradedEngineKeys = new Set(scanHealth.degradedEngines.map((e) => e.engine));
+
+  /**
+   * "There is no trustworthy slice left" — the state that suppresses the score
+   * and replaces the views with the placeholder. It is deliberately NOT "any
+   * engine degraded": a scan whose perplexity slice collapsed while aio answered
+   * every prompt still has a real, if narrower, index, and blanking it would
+   * hide a number we have in order to report one we do not. The partial banner
+   * below is what says the index got narrower and why.
+   */
+  const dataSourceIssue = scanHealth.severity === "critical";
   // Hero metric. Multi-engine: AI Visibility Index (equal-weight mean).
   // Single-engine: shareOfAiPct (the AIO-only value).
   const heroScore = result.isMultiEngine
@@ -589,7 +629,7 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                 <span className="chip chip--crit">
                   <ShieldAlert size={11} aria-hidden="true" /> Incomplete
                 </span>
-                <b>Data source issue — scan incomplete</b>
+                <b>{scanHealth.title}</b>
                 <button
                   type="button"
                   className="btn btn--ghost btn--sm"
@@ -603,27 +643,99 @@ export default function DashboardShell({ scan, scanId, error = null }) {
               </div>
               <div className="panel__b">
                 <p style={{ fontSize: 14, color: "var(--ink-3)", marginBottom: 12 }}>
-                  The engines returned no answer for the majority of tracked queries, or the SERP
-                  API errored out too often. We are not showing a score rather than misleading you
-                  with a false 0%.
+                  {scanHealth.detail}
+                </p>
+                {/* Per-engine numbers when the record carries slices; the aio-only
+                    rows below are the fallback for records stored before it did.
+                    Quoting the AIO thresholds at a Perplexity failure was part of
+                    what made this banner uninformative. */}
+                {scanHealth.degradedEngines.length > 0 ? (
+                  <div className="rows">
+                    {scanHealth.degradedEngines.map((engine) => (
+                      <div className="row" key={engine.engine}>
+                        <span className="row__n">
+                          {engine.label} answer coverage
+                          <span className="dim">(need ≥ {engine.min_coverage_pct}%)</span>
+                        </span>
+                        <span className="row__v">
+                          {engine.coverage_pct === null ? "—" : `${engine.coverage_pct}%`}
+                        </span>
+                      </div>
+                    ))}
+                    {scanHealth.degradedEngines.map((engine) => (
+                      <div className="row" key={`${engine.engine}-errors`}>
+                        <span className="row__n">
+                          {engine.label} error rate
+                          <span className="dim">(limit {engine.error_rate_limit_pct}%)</span>
+                        </span>
+                        <span className="row__v">
+                          {engine.error_rate_pct === null ? "—" : `${engine.error_rate_pct}%`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rows">
+                    <div className="row">
+                      <span className="row__n">
+                        Answer coverage
+                        <span className="dim">
+                          (need ≥ {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}%)
+                        </span>
+                      </span>
+                      <span className="row__v">{result.aioCoveragePct ?? 0}%</span>
+                    </div>
+                    <div className="row">
+                      <span className="row__n">
+                        SERP error rate
+                        <span className="dim">(limit {AIO_ERROR_RATE_LIMIT_PCT}%)</span>
+                      </span>
+                      <span className="row__v">{result.aioErrorRatePct ?? 0}%</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {scanHealth.severity === "partial" && (
+            <div
+              className="panel"
+              data-testid="engine-degraded-banner"
+              style={{ marginBottom: 16, borderColor: "var(--warn)" }}
+            >
+              <div className="panel__h">
+                <span className="chip chip--warn">
+                  <ShieldAlert size={11} aria-hidden="true" /> Partial read
+                </span>
+                <b>{scanHealth.title}</b>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  style={{ marginLeft: "auto" }}
+                  onClick={handleRerun}
+                  disabled={isScanning}
+                >
+                  <RefreshCw size={14} aria-hidden="true" />
+                  Retry scan
+                </button>
+              </div>
+              <div className="panel__b">
+                <p style={{ fontSize: 14, color: "var(--ink-3)", marginBottom: 12 }}>
+                  {scanHealth.detail}
                 </p>
                 <div className="rows">
-                  <div className="row">
-                    <span className="row__n">
-                      Answer coverage
-                      <span className="dim">
-                        (need ≥ {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}%)
+                  {scanHealth.degradedEngines.map((engine) => (
+                    <div className="row" key={engine.engine}>
+                      <span className="row__n">
+                        {engine.label} answer coverage
+                        <span className="dim">(need ≥ {engine.min_coverage_pct}%)</span>
                       </span>
-                    </span>
-                    <span className="row__v">{result.aioCoveragePct ?? 0}%</span>
-                  </div>
-                  <div className="row">
-                    <span className="row__n">
-                      SERP error rate
-                      <span className="dim">(limit {AIO_ERROR_RATE_LIMIT_PCT}%)</span>
-                    </span>
-                    <span className="row__v">{result.aioErrorRatePct ?? 0}%</span>
-                  </div>
+                      <span className="row__v">
+                        {engine.coverage_pct === null ? "—" : `${engine.coverage_pct}%`}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -704,7 +816,13 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                 scoreLabel={result.isMultiEngine ? "AI Visibility Index" : null}
                 engineChips={result.isMultiEngine && result.perEngineSummaries
                   ? Object.keys(result.perEngineSummaries).map((key) => ({
-                      label: engineLabel(key),
+                      // A degraded engine's share is a real measurement of an
+                      // incomplete read, so it is still shown — but never bare.
+                      // Unmarked, it looked exactly like the engines the index
+                      // was actually blended from.
+                      label: degradedEngineKeys.has(key)
+                        ? `${engineLabel(key)} (degraded)`
+                        : engineLabel(key),
                       value: result.perEngineSummaries[key].share_of_ai_pct ?? "—",
                     }))
                   : null

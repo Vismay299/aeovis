@@ -12,6 +12,7 @@ import {
   AIO_MIN_NON_BRANDED_COVERAGE,
   AIO_MIN_NON_BRANDED_WITH_AIO,
 } from "./aioConstants.js";
+import { ENGINE_LABELS, formatEngineList } from "../engines/deployedEngines.js";
 
 const CHATGPT_CONCURRENCY = 4;
 const PERPLEXITY_CONCURRENCY = 4;
@@ -33,6 +34,36 @@ const PERPLEXITY_CONCURRENCY = 4;
  * added for: 4-of-10 empty, which reported coverage_pct 60 with no flag.
  */
 export const TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE = 0.9;
+
+/**
+ * The error-rate ceiling for a TEXT engine slice. Kept beside the coverage
+ * floor so the pair that defines "a text slice is degraded" reads in one place;
+ * the value is the one this gate has always used.
+ */
+export const TEXT_ENGINE_ERROR_RATE_LIMIT_PCT = 50;
+
+/**
+ * The health gates for one engine class, in ONE place.
+ *
+ * The two classes are deliberately different (see the comment above
+ * TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE) and must stay different. What must NOT
+ * differ is the numbers the flag was computed from and the numbers the banner
+ * quotes at the reader. R2.2.6 exists because the scan-level flag was derived
+ * from aio alone while the slices were judged per class, so a text-only
+ * degradation moved the headline with nothing on screen to explain it. Both
+ * summarizeEngineSlice and describeScanDataSourceIssue read this.
+ */
+export function engineHealthThresholds(engineName) {
+  return engineName === "aio"
+    ? {
+        minNonBrandedCoverage: AIO_MIN_NON_BRANDED_COVERAGE,
+        errorRateLimitPct: AIO_ERROR_RATE_LIMIT_PCT,
+      }
+    : {
+        minNonBrandedCoverage: TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE,
+        errorRateLimitPct: TEXT_ENGINE_ERROR_RATE_LIMIT_PCT,
+      };
+}
 
 export function domainMatches(candidateDomain, target) {
   if (!candidateDomain || !target) return false;
@@ -431,14 +462,11 @@ export function summarizeEngineSlice(results, engineName) {
   // coverage_pct is reported as 0 for such a slice, so any rewrite of this gate
   // in terms of coverage_pct would flag every empty slice without it.
   // insufficient_sample is what speaks for a slice that never ran.
+  const gates = engineHealthThresholds(engineName);
   const dataSourceIssue =
-    engineName === "aio"
-      ? errorRatePct > AIO_ERROR_RATE_LIMIT_PCT ||
-        (nonBranded.length > 0 &&
-          nonBrandedWithAnswer.length / nonBranded.length < AIO_MIN_NON_BRANDED_COVERAGE)
-      : errorRatePct > 50 ||
-        (nonBranded.length > 0 &&
-          nonBrandedWithAnswer.length / nonBranded.length < TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE);
+    errorRatePct > gates.errorRateLimitPct ||
+    (nonBranded.length > 0 &&
+      nonBrandedWithAnswer.length / nonBranded.length < gates.minNonBrandedCoverage);
 
   // Sample adequacy is judged on the ELICITING pool — the prompts that can
   // actually produce a mention. 56 answered prompts of which only 16 name any
@@ -497,12 +525,19 @@ export const ENGINE_WEIGHTS = {
 };
 
 /**
+ * The number of non-branded answers a slice must carry before the headline will
+ * blend it. Named because describeScanDataSourceIssue has to reproduce the same
+ * eligibility test to explain the count it reports.
+ */
+export const HEADLINE_MIN_NON_BRANDED_ANSWERS = 5;
+
+/**
  * Computes the headline "AI Visibility Index" — weighted mean of per-engine
  * share_of_ai across engines that produced ≥5 non-branded answers.
  */
 export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS) {
   const eligible = engineSummaries.filter(
-    (s) => !s.data_source_issue && s.non_branded_with_answer >= 5
+    (s) => !s.data_source_issue && s.non_branded_with_answer >= HEADLINE_MIN_NON_BRANDED_ANSWERS
   );
   if (eligible.length === 0) {
     return { visibility_index_pct: null, engines_counted: 0 };
@@ -517,6 +552,184 @@ export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS) {
   );
   const mean = Math.round((weightedSum / totalWeight) * 10) / 10;
   return { visibility_index_pct: mean, engines_counted: eligible.length };
+}
+
+/**
+ * Why the headline counts the engines it counts — the ONE derivation of the
+ * scan-level data source flag, and the words that explain it.
+ *
+ * R2.2.6 (finding B3). The scan-level flag used to be aioSummary.data_source_issue
+ * and nothing else. Once R2.2.5 taught a text slice to raise its own flag, a
+ * perplexity engine that stopped answering was correctly dropped from
+ * computeHeadline — engines_counted fell from 2 to 1 and visibility_index_pct
+ * moved — while the scan-level flag stayed false and the dashboard said
+ * nothing. The number moved and the reason was invisible: rule 1, in the shape
+ * where the flag exists but is read off the wrong engine.
+ *
+ * Three states, not two, because "degraded" and "unscoreable" are different
+ * facts and collapsing them costs the reader either a score they could have had
+ * or an explanation they needed:
+ *
+ *   "none"     — nothing degraded. Includes the scan that simply has no rows:
+ *                a slice that never ran has no non-branded denominator, its own
+ *                data_source_issue is false by construction, and insufficient_sample
+ *                is what speaks for it. Never-ran is not a degraded read.
+ *   "partial"  — at least one engine degraded AND at least one clean engine is
+ *                still eligible, so the index is real but blended from fewer
+ *                engines. The score stays on screen with the missing engine named.
+ *   "critical" — at least one engine degraded and NOTHING eligible is left, so
+ *                there is no trustworthy slice to show. This is the state the
+ *                dashboard has always blanked the score for.
+ *
+ * Exactly one severity is returned, so callers render exactly one banner: a
+ * scan degraded in both aio and a text engine names both engines in one line
+ * rather than stacking two banners.
+ *
+ * @param {object|Array} engineSummaries  the per-engine slices, as the map
+ *   summarizeEngineResults returns or a plain array.
+ * THE COUNT IS RECOMPUTED FROM THE SLICES, NOT TAKEN ON TRUST. When slices are
+ * present this applies computeHeadline's own eligibility test to them, so the
+ * "1 of 2 engines" in the banner is derived from the same rows as the index it
+ * is explaining. A stored engines_counted is NOT used for that: normalizeResult
+ * defaults it to 0 when the column is absent, and a defaulted 0 read as
+ * authoritative would declare an otherwise-healthy scan unscoreable and blank a
+ * score we have. It is only echoed back on the legacy path, where there are no
+ * slices to recompute from.
+ *
+ * @param {object} [options]
+ * @param {number|null} [options.enginesCounted]  headline.engines_counted when the
+ *   caller has it. Echoed on the legacy path only; see above.
+ * @param {boolean} [options.fallbackIssue]  the record-level flag, for scans
+ *   stored before per-engine slices existed. Only consulted when the slices
+ *   cannot answer.
+ */
+export function describeScanDataSourceIssue(engineSummaries, options = {}) {
+  const fallbackIssue = !!options.fallbackIssue;
+  const suppliedCount = Number(options.enginesCounted);
+  const hasSuppliedCount = Number.isFinite(suppliedCount);
+
+  const slices = (
+    Array.isArray(engineSummaries)
+      ? engineSummaries.map((slice) => [slice && slice.engine, slice])
+      : Object.entries(engineSummaries || {})
+  )
+    .filter(([, slice]) => slice && typeof slice === "object")
+    .map(([key, slice]) => ({ ...slice, engine: slice.engine || key }));
+
+  // A slice with no non-branded denominator never ran. It is not a degraded
+  // read and it is not a counted engine either — it is absent, and
+  // insufficient_sample is the flag that speaks for it.
+  const ran = slices.filter((slice) => Number(slice.non_branded_queries) > 0);
+
+  const legacy = () => ({
+    dataSourceIssue: fallbackIssue,
+    severity: fallbackIssue ? "critical" : "none",
+    degradedEngines: [],
+    countedEngines: [],
+    enginesCounted: hasSuppliedCount ? suppliedCount : 0,
+    enginesRan: ran.length,
+    title: fallbackIssue ? "Data source issue — scan incomplete" : null,
+    detail: fallbackIssue
+      ? "The engines returned no answer for the majority of tracked queries, or the SERP API errored out too often. We are not showing a score rather than misleading you with a false 0%."
+      : null,
+  });
+
+  if (ran.length === 0) return legacy();
+
+  const degraded = ran.filter((slice) => slice.data_source_issue).map(describeDegradedSlice);
+  if (degraded.length === 0) return legacy();
+
+  const counted = ran.filter(
+    (slice) =>
+      !slice.data_source_issue &&
+      Number(slice.non_branded_with_answer) >= HEADLINE_MIN_NON_BRANDED_ANSWERS
+  );
+  const enginesCounted = counted.length;
+  const countedEngines = counted.map((slice) => ({
+    engine: slice.engine,
+    label: engineDisplayLabel(slice.engine),
+  }));
+
+  const severity = enginesCounted > 0 ? "partial" : "critical";
+  const degradedNames = formatEngineList(degraded.map((d) => d.label));
+  const reasons = degraded.map((d) => `${d.label} ${d.reason}.`).join(" ");
+
+  const title =
+    severity === "partial"
+      ? `${degradedNames} degraded — the index counts ${enginesCounted} of ${ran.length} engines`
+      : `${degradedNames} degraded — no engine left to score`;
+
+  const detail =
+    severity === "partial"
+      ? `${reasons} A slice that incomplete cannot be trusted, so it is left out of the AI Visibility Index above` +
+        (countedEngines.length > 0
+          ? ` — the score is ${formatEngineList(countedEngines.map((e) => e.label))} only, `
+          : " — the score is blended from ") +
+        `${enginesCounted} of the ${ran.length} engines this scan probed. Re-run the scan to bring ${degradedNames} back.`
+      : `${reasons} No engine produced a slice complete enough to score, so we are showing no score rather than misleading you with a false 0%.`;
+
+  return {
+    dataSourceIssue: true,
+    severity,
+    degradedEngines: degraded,
+    countedEngines,
+    enginesCounted,
+    enginesRan: ran.length,
+    title,
+    detail,
+  };
+}
+
+/** The engine name as prose. Falls back to the raw key rather than inventing one. */
+function engineDisplayLabel(name) {
+  return ENGINE_LABELS[name] || String(name || "unknown engine");
+}
+
+/**
+ * Restates one degraded slice in the numbers that condemned it, read from the
+ * same engineHealthThresholds the gate used so the banner cannot quote an aio
+ * threshold at a text engine.
+ *
+ * If neither gate reconstructs — a slice flagged by a version of the gate this
+ * function does not know, or a stored slice missing its counters — it says so
+ * instead of printing an empty reason. A banner with no reason is the thing
+ * this task exists to replace.
+ */
+function describeDegradedSlice(slice) {
+  const gates = engineHealthThresholds(slice.engine);
+  const minCoveragePct = Math.round(gates.minNonBrandedCoverage * 1000) / 10;
+  const nonBranded = Number(slice.non_branded_queries);
+  const answered = Number(slice.non_branded_with_answer);
+  const errorRatePct = Number(slice.error_rate_pct);
+
+  const reasons = [];
+  if (
+    Number.isFinite(nonBranded) &&
+    nonBranded > 0 &&
+    Number.isFinite(answered) &&
+    answered / nonBranded < gates.minNonBrandedCoverage
+  ) {
+    const coveragePct = Math.round((answered / nonBranded) * 1000) / 10;
+    reasons.push(
+      `answered ${answered} of ${nonBranded} tracked prompts (${coveragePct}%), under the ${minCoveragePct}% this engine needs`
+    );
+  }
+  if (Number.isFinite(errorRatePct) && errorRatePct > gates.errorRateLimitPct) {
+    reasons.push(`errored on ${errorRatePct}% of its prompts, over its ${gates.errorRateLimitPct}% limit`);
+  }
+
+  return {
+    engine: slice.engine,
+    label: engineDisplayLabel(slice.engine),
+    reason:
+      reasons.length > 0
+        ? reasons.join(" and ")
+        : "was flagged as a degraded read, but this record does not carry the coverage and error numbers that would explain why",
+    coverage_pct: Number.isFinite(slice.coverage_pct) ? slice.coverage_pct : null,
+    error_rate_pct: Number.isFinite(errorRatePct) ? errorRatePct : null,
+    min_coverage_pct: minCoveragePct,
+    error_rate_limit_pct: gates.errorRateLimitPct,
+  };
 }
 
 const ENGINE_REGISTRY = [
@@ -658,6 +871,10 @@ export function summarizeEngineResults(scanOutput) {
   // The AIO engine summary serves as the backward-compat "summary" object
   const aioSummary = engines.aio || Object.values(engines)[0] || {};
 
+  const scanHealth = describeScanDataSourceIssue(engines, {
+    enginesCounted: headline ? headline.engines_counted : null,
+  });
+
   return {
     results: scanOutput.results,
     summary: {
@@ -687,7 +904,10 @@ export function summarizeEngineResults(scanOutput) {
       citation_share_pct: aioSummary.non_branded_with_answer > 0
         ? Math.round((aioSummary.cited_non_branded / aioSummary.non_branded_with_answer) * 1000) / 10
         : 0,
-      data_source_issue: aioSummary.data_source_issue || false,
+      // R2.2.6: the scan-level flag is every engine's business, not aio's.
+      // Reading it off aioSummary alone let a text-only degradation drop the
+      // headline from two engines to one with no banner to explain it.
+      data_source_issue: scanHealth.dataSourceIssue,
       insufficient_sample: aioSummary.insufficient_sample || false,
       thresholds: {
         error_rate_limit_pct: AIO_ERROR_RATE_LIMIT_PCT,
@@ -697,5 +917,9 @@ export function summarizeEngineResults(scanOutput) {
     },
     engines,
     headline,
+    // The words behind summary.data_source_issue. Recomputable from `engines`
+    // by any reader (the dashboard does exactly that for scans stored before
+    // this landed), so nothing downstream is required to persist it.
+    data_source_status: scanHealth,
   };
 }
