@@ -11,11 +11,16 @@ export function isValidScanId(id) {
 }
 
 /**
- * Fetch one `scans` row by its uuid primary key. Returns null both when the
- * row is absent AND when Supabase isn't configured — same fail-quiet
- * convention as getScansForBrand in src/lib/db.js (which returns [] rather
- * than throwing when `!supabase`), so a dev environment without a DB reads
- * as a clean 404 instead of a 500.
+ * Fetch one `scans` row by its uuid primary key. A postgrest error is
+ * rethrown, so a DB outage reaches the route's catch as a 500 rather than a
+ * 404 — the distinction R2.8.4 is about.
+ *
+ * NOT the same convention as getScansForBrand: that function used to return []
+ * when `!supabase`, and R2.8.4 changed it to throw ScansUnavailableError
+ * because "no client" is not a measurement. This one still returns null in
+ * that case, so an unconfigured dev environment reads as a 404. Do not copy
+ * that branch forward as a pattern — it is a narrower fail-quiet awaiting its
+ * own task, not the house style.
  */
 export async function getScanById(scanId) {
   if (!supabase) return null;

@@ -24,8 +24,12 @@ export async function GET(request, { params }) {
     try {
       scans = await getScansForBrand(brand);
     } catch (dbError) {
-      // getScansForBrand currently fails quiet internally (returns []), but
-      // guard anyway in case that ever changes — never echo the raw DB error.
+      // R2.8.4: this guard is LIVE, not defensive. getScansForBrand throws
+      // ScansUnavailableError when the read could not be performed; it used to
+      // return [], which fell through to the `if (!latest)` 404 below and told
+      // a brand with 38 scans it had never been scanned. A 404 from this route
+      // now means one thing only: the DB answered, and there is nothing there.
+      // Never echo the raw DB error — the client only needs the status.
       console.error(`Error fetching latest scan for "${brand}":`, dbError);
       return NextResponse.json(
         { detail: "Internal Server Error" },

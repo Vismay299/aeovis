@@ -113,6 +113,13 @@ export async function GET(request) {
 
     // 2. Daily batch (opt-in).
     const batchCreated = [];
+    // R2.8.4: createDailyBatchJobs now propagates a scan-read failure instead
+    // of returning []. The per-brand catch below is kept deliberately — one
+    // brand's failure must not abort the whole pass — but a swallowed failure
+    // made `batch_created: 0` mean either "no gaps today" or "we could not
+    // look", which is the same collapse this task exists to remove. The
+    // failures are counted and named in the response.
+    const batchFailed = [];
     if (runBatch && getDailyBatchSize() > 0) {
       const { data: brandsRows } = await supabase
         .from("scans")
@@ -131,6 +138,7 @@ export async function GET(request) {
           }
         } catch (err) {
           console.warn(`[content-cron] batch for ${brand} failed:`, err.message);
+          batchFailed.push({ brand, reason: err.code || err.name || "error" });
         }
       }
     }
@@ -141,6 +149,8 @@ export async function GET(request) {
       skipped_leased: skippedIds.length,
       batch_created: batchCreated.length,
       batch_ids: batchCreated,
+      batch_failed: batchFailed.length,
+      batch_failed_brands: batchFailed,
     });
   } catch (error) {
     console.error("Content cron worker error:", error);

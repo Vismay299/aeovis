@@ -106,6 +106,11 @@ function worstGaps(scan, limit = 8) {
 }
 
 export async function generateWeeklyReport(brand, deps = {}) {
+  // R2.8.4: a scan-read failure propagates out of here to the route's outer
+  // catch, which answers 500. That is deliberate — before, a DB outage came
+  // back as [] and this branch told the user "No scans yet" over a 400, the
+  // same lie the dashboard was telling. This message is now reachable only
+  // when the database answered and the brand really has no scans.
   const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
   if (!scans || scans.length === 0) {
     return { brand, error: "No scans yet — run a scan before generating a report." };

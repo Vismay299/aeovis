@@ -52,5 +52,21 @@ export async function resolve(specifier, context, nextResolve) {
     if (hit) return { url: pathToFileURL(hit).href, shortCircuit: true };
   }
   if (specifier === "next/server") return nextResolve("next/server.js", context);
-  return nextResolve(specifier, context);
+
+  // 3. Extensionless RELATIVE specifiers (added for R2.8.4, whose route imports
+  //    `../../_lib/scanRow`). Node requires the extension for ESM; webpack does
+  //    not. Fallback-only: this runs solely after Node has already failed to
+  //    resolve the specifier as written, so no previously-working resolution
+  //    changes meaning. Same probing order as the `@/` branch above.
+  try {
+    return await nextResolve(specifier, context);
+  } catch (error) {
+    if (error?.code !== "ERR_MODULE_NOT_FOUND" || !specifier.startsWith(".") || !context.parentURL) {
+      throw error;
+    }
+    const base = path.resolve(path.dirname(fileURLToPath(context.parentURL)), specifier);
+    const hit = firstExistingFile([`${base}.js`, `${base}.mjs`, path.join(base, "index.js")]);
+    if (!hit) throw error;
+    return { url: pathToFileURL(hit).href, shortCircuit: true };
+  }
 }

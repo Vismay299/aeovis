@@ -223,6 +223,11 @@ export async function startContentJob(jobId, deps = {}) {
     const lessons = await (deps.listLessons || listLessons)(brand, playbook, {
       activeOnly: true,
     });
+    // R2.8.4: a scan-read failure throws and is caught by this function’s own
+    // catch, which marks the job `failed` with the reason and releases the
+    // lease. That is the right outcome, not a regression: drafting against
+    // `scan: null` would spend the full LLM budget producing content with no
+    // gap context, and could not be persisted anyway with the DB down.
     const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
     const scan = scans?.[0] || null;
     const knowledgeBlocks = await (deps.listKnowledgeBlocks || listKnowledgeBlocks)(brand, {
@@ -456,6 +461,10 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
   const lessons = await (deps.listLessons || listLessons)(brand, playbook, {
     activeOnly: true,
   });
+  // R2.8.4: this read sits BEFORE the try below, so a scan-read failure
+  // propagates to the caller (POST /api/content-items/[id]/decision, which
+  // logs it against the item id). Deliberate: it fails before any LLM spend
+  // instead of redrafting blind and failing at the write anyway.
   const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
 
   const benchmarkNotes = { ...(item.benchmark_notes || {}) };

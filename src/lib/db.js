@@ -195,9 +195,53 @@ export async function insertScan(scanRecord) {
   }
 }
 
+/**
+ * Raised when scan history could not be READ at all — as opposed to being read
+ * and found empty. Carries a `code` so a caller can tell a missing client
+ * ("db_not_configured") from a database that answered with an error or did not
+ * answer at all ("db_read_failed").
+ */
+export class ScansUnavailableError extends Error {
+  constructor(message, { cause, code = "scans_unavailable" } = {}) {
+    super(message);
+    this.name = "ScansUnavailableError";
+    this.code = code;
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
+/**
+ * Every scan for a brand, newest first.
+ *
+ * CONTRACT (R2.8.4 / finding A12): the returned array means "the database
+ * answered". An empty array means the brand genuinely has no scans. A read
+ * that could not be performed THROWS — it never fabricates [].
+ *
+ * This function used to return [] both when the Supabase client was missing
+ * and when the query came back with an error, so a total outage was reported
+ * to every caller as "this brand has never been scanned". postgrest-js does
+ * not reject on DNS/network/5xx failures (the client above is built without
+ * `throwOnError`), so those arrive here as { data: null, error } and were
+ * swallowed on the very next line. The consequence, reproduced live: with the
+ * DB unreachable, /api/scans/italica/latest returned 404 for a brand with 38
+ * real scans and the dashboard rendered "run your first visibility check" —
+ * inviting the user to spend scan budget to fix our outage. Every `catch`
+ * around a call to this function was dead code for that failure mode.
+ *
+ * Throwing rather than returning a discriminated union is deliberate: nine
+ * call sites already treat the result as an array, and a union that one of
+ * them forgot to unwrap would land on `scans[0] === undefined` — reproducing
+ * exactly the "no scans" lie this change exists to remove. A throw cannot be
+ * silently mis-handled.
+ */
 export async function getScansForBrand(brand) {
   if (!supabase) {
-    return [];
+    // No memory fallback exists for scans (insertScan is a no-op without a
+    // client), so [] here could only ever have been a fabricated measurement.
+    throw new ScansUnavailableError(
+      "Supabase is not configured — scan history cannot be read.",
+      { code: "db_not_configured" }
+    );
   }
 
   const { data, error } = await supabase
@@ -208,10 +252,14 @@ export async function getScansForBrand(brand) {
 
   if (error) {
     console.error("Error fetching scans from Supabase:", error);
-    return [];
+    throw new ScansUnavailableError(
+      `Could not read scans for "${brand}": ${error.message || error.code || "unknown database error"}`,
+      { cause: error, code: "db_read_failed" }
+    );
   }
 
-  return data;
+  // No error means the DB answered; [] here is a real, measured empty.
+  return data || [];
 }
 
 /**
