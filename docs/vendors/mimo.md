@@ -45,9 +45,9 @@ branch is preserved verbatim: `max_completion_tokens` when the provider is
 `mimo`, `max_tokens` everywhere else.
 
 - `src/lib/openrouter.js:48-52` — the branch.
-- `scripts/check-secrets.mjs:104-106` — the same choice in the liveness probe,
-  so a 1-token check does not report `FAIL` for a working deployment merely by
-  spelling the cap the other way.
+- `scripts/check-secrets.mjs`, the `llm` entry — grep `const cap =` — makes the
+  same choice in the liveness probe, so a 1-token check does not report `FAIL`
+  for a working deployment merely by spelling the cap the other way.
 
 **Symptom if this regresses:** the cap is rejected or silently ignored. A
 rejection surfaces as a gateway HTTP error, which `generateContent` turns into
@@ -120,8 +120,8 @@ Consequences that are already wired:
   deployment whose env vars all look set.
 - **`npm run check:secrets` is the check that catches it**, because it makes a
   real 1-token completion against the configured model rather than merely
-  observing that a key is non-empty — `scripts/check-secrets.mjs:88-116`. Its
-  pass line names the model, provider and base URL it actually reached.
+  observing that a key is non-empty — `scripts/check-secrets.mjs`, the `llm`
+  entry (grep `name: "llm"`). Its pass line names the model, provider and base URL it actually reached.
 - **`/api/health` cannot catch it**, by design: it reports whether a credential
   is *configured*, never the result of a live call, so polling health never
   spends vendor budget (`src/lib/health.js:1-13`). "Configured" and "works" are
@@ -142,3 +142,16 @@ Consequences that are already wired:
    that the model id exists on that gateway.
 4. Remove the `OPENROUTER_*` variables once the canonical names are set — while
    both are present the canonical one wins and the legacy one is dead weight.
+
+---
+
+*Citation maintenance, 2026-09-03, R6.3.1: the two `check-secrets.mjs`
+citations in this file had drifted onto unrelated code — `:104-106` had become
+Bright Data zone matching and `:88-116` the Bright Data check — and were
+repointed to the `max_completion_tokens` branch and the `llm`
+live-completion check as they stand today. The `openrouter.js`,
+`llmConfig.js` and `health.js` citations were re-read and are correct.
+`scripts/check-secrets.mjs` is cited by vendor-entry name and
+greppable string rather than by line, because a concurrent task is rewriting it
+and its line numbers drifted three times during this revision — see
+[the note in `README.md`](./README.md#a-note-on-citing-check-secretsmjs).*
