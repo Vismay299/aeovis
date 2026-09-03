@@ -62,8 +62,11 @@ rendered as a blank link.
   zones — grep `does not exist on this account`. A zone that exists but is not
   `type=serp status=active` returns `FAIL` naming its real type and status — grep
   `not an active serp zone`. With no zone configured, the `PASS` line names the zone
-  probes will actually use — grep `so probes will use`. (Line numbers are omitted for
-  this file on purpose; see the note in [`README.md`](./README.md#a-note-on-citing-check-secretsmjs).)
+  probes will actually use — grep `AUTO-DISCOVERED`. (An earlier revision cited
+  `so probes will use`, which matched nothing: the real text is split across a
+  template concatenation, `` `…so probes ` + `AUTO-DISCOVERED "${zone}"…` ``.)
+  (Line numbers are omitted for this file on purpose; see the note in
+  [`README.md`](./README.md#a-note-on-citing-check-secretsmjs).)
 
   The ledger item `R0.1.10` is `in_verification`, not yet closed — the code is what is being
   verified, not the claim above.
