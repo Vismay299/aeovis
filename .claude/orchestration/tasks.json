@@ -2086,34 +2086,32 @@
       ],
       "phase": "R1",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "docs-R1.2.9",
       "evidence": [
-        "docs/vendors/brightdata.md:18",
-        "docs/vendors/brightdata.md:73",
-        "docs/vendors/brightdata.md:80",
-        "docs/vendors/brightdata.md:103",
-        "docs/vendors/brightdata.md:169",
-        "docs/vendors/brightdata.md:195",
-        "docs/vendors/brightdata.md:213",
-        "docs/vendors/brightdata.md:238",
-        "scripts/check-secrets.mjs:166",
-        "src/lib/engines/brightdata.js:72",
-        "src/lib/engines/brightdata.js:81",
-        "src/lib/engines/brightdata.js:116",
+        "docs/vendors/brightdata.md:113",
+        "docs/vendors/brightdata.md:150",
+        "docs/vendors/brightdata.md:217",
+        "docs/vendors/brightdata.md:253",
+        "docs/vendors/brightdata.md:314",
+        "src/lib/engines/serp.js:5",
+        "src/lib/engines/serp.js:14",
+        "src/lib/engines/serp.js:286",
+        "src/lib/engines/serp.js:325",
+        "src/lib/engines/serp.js:352-354",
+        "src/lib/scoring/promptGen.js:129",
+        "src/lib/scoring/promptGen.js:212",
+        "src/lib/scoring/promptGen.js:222-224",
+        "src/lib/scoring/promptGen.js:266-268",
+        "src/lib/scoring/aioPipeline.js:99",
+        "src/lib/scoring/enginePipeline.js:101",
+        "src/lib/engines/brightdata.js:69",
         "src/lib/engines/brightdata.js:145",
-        "src/lib/engines/brightdata.js:160",
-        "src/lib/engines/brightdata.js:291",
-        "src/lib/engines/brightdata.js:313",
-        "src/lib/engines/brightdata.js:441",
-        "src/lib/engines/brightdata.js:478",
-        "src/lib/engines/brightdataZone.test.mjs:66",
-        "src/lib/engines/brightdataZone.test.mjs:101",
-        "src/lib/engines/brightdataZone.test.mjs:334",
-        "worker/src/lib/probe.js:28",
-        "src/lib/workerIsolation.test.mjs:72",
+        "src/lib/engines/brightdata.js:192",
+        "src/lib/checkSecretsBrightdataNoZone.test.mjs:21",
+        "src/lib/engines/brightdataZone.test.mjs:206",
         "src/app/api/scan/route.js:62",
-        "src/lib/scoring/aioPipeline.js:171"
+        "src/app/api/scan/worker/route.js:138"
       ],
       "notes": [
         {
@@ -2135,6 +2133,11 @@
           "at": "2026-09-04T03:55:28.988Z",
           "by": "verifier",
           "text": "rejected: REJECTED, narrowly, on ONE false composed claim in the new material — exactly the class this task's own section bolds a rule about. Everything else is verified and must be kept.\n\nCONFIRMED BY EXECUTION, all of it. Old failure reproduced at 134600f~1: check-secrets:176 read \"will cache it for the process lifetime\" and brightdata.md:73-86 read \"cached with no way to invalidate it\", citing three drifted lines. Cache shape {name,at} confirmed via peek; a second resolve inside TTL makes 0 extra list calls. TTL: default 300000; unset/empty 300000; \"0\" gives 0 with 3 resolves making 3 list calls; \"40\" gives 40; and \"30s\", \"-1\", \"1.5\", \"abc\" ALL THROW bad_ttl_config with no fallback. Invalidator returns the name then null. PROBE-TIME REJECTION ON BOTH TRANSPORTS — HTTP 400 body, HTTP 200 envelope {error}, HTTP 200 envelope {status:\"error\"} — all give zone_rejected, cache null, EXACTLY 1 SERP call against a control of 2 for a plain 503. Failed re-check buys no extra TTL on a real clock: TTL 40ms, 60ms wait, 503 on list, throws lookup_failed, entry SURVIVES at ageMs 64 unreset, and the next resolve re-lists immediately and follows the account to serp_api2. All five R1.2.10 asymmetry rows reproduce verbatim. The PASS string was produced by calling the vendor entry's own check() and is BYTE-IDENTICAL to the doc, with no \"process lifetime\" anywhere.\n\nPoint 3 verified: check-secrets:134-138 is the only local try and wraps only the resolve call; the PASS return at :188-194 is outside it; main()'s per-vendor catch at :494 emits a bare err.message, losing \"Every AIO probe will fail.\" The rationale is correct as written.\n\nPoint 2: 58 of 58 citations resolve and land on the described code, resolved against git show HEAD, not the working tree. Point 4: the stale test citation is honest, not evasive — it still resolves, now lands inside a different test, and the doc says exactly that rather than silently repointing. Point 5: both caveats are a named section ahead of the liveness section, and the second was confirmed BY FALSIFICATION — deleting brightdata.js:444-445 leaves brightdataZone 10/10 and the full suite 1330/1307/0/23, so the 200-envelope branch is genuinely unpinned.\n\nWHY IT FAILS. brightdata.md:229 states, in bold: \"src/lib/scoring/aioPipeline.js:99 is THE OTHER importer of brightDataSearch, and it is dead.\" Both endpoints are individually true; the exhaustiveness gate in \"the other\" is FALSE. There are three non-test importers, and the third is src/lib/engines/serp.js:5, WHICH IS LIVE: api/scan/route.js:62 to runScanChunk to runSourcingPhase to sourceUnbrandedQueries to generateUnbrandedPrompts to promptGen.js:128 paaFn to serp.js:312 fetchPeopleAlsoAsk to :325 brightDataSearch to getBrightDataConfig to resolveBrightDataSerpZone. serp.js:14 makes brightdata the provider whenever BRIGHTDATA_API_KEY is set — the same default-path argument the doc itself makes for aio. So the sourcing phase touches this cache on EVERY scan, before probing.\n\nWorse for a section that bolds \"Existence is not liveness in either direction\": the omitted consumer is the one that FAIL-SOFTS. serp.js:352-354 swallows any throw from brightDataSearch — including a typed zone_rejected — into a console.warn and returns an empty question list, and promptGen.js:253-255 swallows it again. A dead zone during sourcing degrades to \"PAA found nothing\" while silently dropping the cache. That fail-soft is pre-existing and is not why this is rejected; the rejection is that the new section claims to enumerate this exact set and missed the member that matters most. The ledger note carries the same error.\n\nTO FIX, narrowly: (1) rewrite brightdata.md:229-234 — three non-test importers, enginePipeline.js:1 live for probing, serp.js:5 live via fetchPeopleAlsoAsk for sourcing, aioPipeline.js:1 dead; within serp.js distinguish :325 (live) from :286 probeGoogleAiOverviewBrightData (no non-test caller, dead); and state that the sourcing path swallows a zone_rejected at serp.js:352-354 and again at promptGen.js:253-255, so a zone fault there is invisible — then file that fail-soft as its own task. (2) Correct brightdata.md:200-201: checkSecretsBrightdataNoZone.test.mjs only MENTIONS the invalidator in a comment at :21, it does not call it; the only external caller is brightdataZone.test.mjs. The conclusion (no production consumer) is unaffected and correct. (3) Optionally restore the source's qualifier at :140 — TTL 0 re-checks on every resolve; it does not stop the entry being written, and peek returns a live entry under TTL 0. (4) Amend the ledger note, which repeats the second-importer error.\n\nKeep everything else exactly as it is."
+        },
+        {
+          "at": "2026-09-04T04:21:53.349Z",
+          "by": "docs-R1.2.9",
+          "text": "RETRACTION FIRST. My 2026-09-03 note on this task ended with: \"aioPipeline.js:99 is the second importer of brightDataSearch AND IT IS DEAD.\" THAT SENTENCE IS FALSE, and so was the doc line it came from (brightdata.md:229). Both endpoints were true; the exhaustiveness gate in \"second\"/\"the other\" was not. There are THREE non-test importers, and the third -- src/lib/engines/serp.js:5 -- is LIVE. Nothing else in that note is withdrawn.\n\nFIXED, all four points, re-derived at bf332fe from git show HEAD:<file>, never the working tree.\n\n(1) THE IMPORTER SECTION IS REWRITTEN (brightdata.md:253-312). Swept src, scripts, worker and supabase for files that IMPORT the symbol rather than merely mention it: five importers besides brightdata.js, three of them non-test. enginePipeline.js:1 -> brightDataSearch inside probeAio (declared enginePipeline.js:77, call at :101) = LIVE, the probing phase, every scan. serp.js:5 = LIVE, the sourcing phase. aioPipeline.js:1 -> :99 in probeQueryOnce (:73) -> runAioScan (declared :171, calling at :177) = DEAD, nothing under src, scripts or worker calls it. The other two importers are brightdataZone.test.mjs:6 and serpGeo.test.mjs:5.\n\nTHE TWO serp.js CALL SITES ARE DISTINGUISHED. :325 in fetchPeopleAlsoAsk is LIVE. :286 in probeGoogleAiOverviewBrightData is DEAD: it is reachable only from probeGoogleAiOverview (declared :158, dispatching at :166), and probeGoogleAiOverview has no non-test caller -- outside serp.js the only hits are serp.test.mjs and serpGeo.test.mjs.\n\nI DID NOT COPY THE VERIFIER'S CHAIN, I RE-DERIVED IT, AND TWO THINGS CHANGED. (a) The verifier's promptGen.js line numbers were stale, because promptGen.js MOVED between 967bda6 and HEAD: paaFn is :129 not :128, and the second swallow is :222-224 / :266-268, not :253-255. (b) THE VERIFIER'S \"ON EVERY SCAN\" IS ITSELF AN OVERSTATEMENT AND I DID NOT REPEAT IT. sourceUnbrandedQueries returns early when the stored pool already meets the target (grep \"if (existing.length >= target)\"), so a repeat scan of a brand with a full frozen prompt set never reaches paaFn and never touches this cache. Sourcing touches it on the FIRST scan for a brand key, and on any later scan whose pool is short of the target. The doc says exactly that, and records that a draft said \"every scan\" and was wrong.\n\n(2) THE FAIL-SOFT IS DOCUMENTED AND PROVEN BY EXECUTION, not read (brightdata.md:314-352). Stubbed fetch, NO LIVE VENDOR CALL. With the zone refused by an HTTP 200 envelope: brightDataSearch throws BrightDataZoneError / zone_rejected and drops the cache to null; fetchPeopleAlsoAsk around it RETURNS EMPTY AND DOES NOT THROW, 1 SERP call, cache still null, one console.warn the only trace from serp.js; generateUnbrandedPrompts around that returns a full 30-prompt set with no throw. AND ONE ROW IS WORSE THAN THE BRIEF SAID: with the typed error reaching promptGen directly there is NO THROW AND NO LOG LINE AT ALL, because promptGen.js:222-224 is a BARE catch with an empty body around the paaFn/autoFn race at :212. The console.warn at :266-268 belongs to the CONDITIONAL realism-blend call at :264, gated at :259 on the LLM coming up short; in both runs the LLM met the count, so it never fired. The outer net is quieter than the inner one.\n\nI ALSO CHECKED THE OPPOSITE DIRECTION rather than asserting invisibility: the engine does log \"[brightdata] SERP zone cache invalidated\" (brightdata.js:120-122). The doc says so, and says a log line is not a counted failure -- probing turns a rejected zone into a counted error row (brightdataZone.test.mjs:334-378, errored_queries 1), whereas sourcing turns it into \"PAA found nothing\" with the scan still reporting success and the prompt set losing its Google grounding silently.\n\nTHIS FAIL-SOFT DESERVES ITS OWN TASK. serp.js:352-354 and promptGen.js:222-224 are pre-existing, predate R1.2.7, and are outside R1.2.9's file boundary. I did not touch them. Suggested scope: a zone/config error must not be swallowed as \"no questions\" -- either rethrow when isBrightDataZoneError, exactly as probeGoogleAiOverviewBrightData already rethrows rate-limit/quota at serp.js:304-306, or surface it on the scan record; and promptGen.js:222-224 should at minimum log.\n\n(3) THE INVALIDATOR CALLER CLAIM IS CORRECTED (brightdata.md:217-228). checkSecretsBrightdataNoZone.test.mjs only MENTIONS the symbol at :21, inside the file comment explaining why that file stays split; it never calls it. scripts/check-secrets.mjs mentions it in a comment too. The ONLY external caller is brightdataZone.test.mjs (:206, :218, :223, :253). The doc now states that grepping a symbol finds mentions and a mention is not a call site. The conclusion -- no production consumer -- is unaffected, and is narrowed rather than widened: one test consumer, not two.\n\n(4) THE TTL-0 QUALIFIER IS RESTORED (brightdata.md:150-159). brightdata.js:69-70 says 0 means \"re-check on every resolve\"; the doc had compressed that to \"never cache\". Wrong: :192 assigns cachedZone unconditionally, and 0 only makes the freshness test at :145 unpassable. PROVEN BY EXECUTION with BRIGHTDATA_ZONE_TTL_MS=0 -- peekBrightDataZoneCache() returns name serp_api1 with ageMs 0 immediately after a resolve, and two resolves make two get_all_zones calls. It matters to anyone reading peek for diagnostics.\n\nA FIFTH THING, FOUND UNASKED AND FIXED. HEAD MOVED TWICE UNDER ME (d845e97 -> bf332fe) and scanWorker.js moved again mid-task. A citation had already rotted since the last submission: this doc cited the cron route at src/app/api/scan/worker/route.js:60,94, and R3.1.3 (aa71cbf) rewrote that file -- at bf332fe those lines are a doc comment and an unrelated helper, while the runScanChunk calls are at :138 and :215. BOTH OLD LINES STILL RESOLVED, which is Rule 2 exactly: an existence check would have been green on a citation pointing at nothing. That route is now anchor-only (grep \"runScanChunk(directJobId)\" and \"[cron-worker] Error resuming job\", one hit each at bf332fe). enginePipeline.js also moved, so its line numbers in my new section were replaced with the \"brightDataSearch(query.text\" anchor.\n\nCITATION HYGIENE. All 92 line citations in the file were re-resolved mechanically against HEAD blobs; 92/92 resolve, and every new one was opened and checked to contain the code described. Blob identity was CHECKED, not assumed, with git rev-parse commit:file -- every file cited by line is byte-identical between 967bda6 and bf332fe except promptGen.js, which is new in this round and was read at bf332fe. Volatile files (check-secrets.mjs, scanWorker.js, enginePipeline.js, the cron route) are anchor-only and every anchor hit count was re-checked at bf332fe. The doc is restamped 2026-09-04 / bf332fe, and the rejection itself is disclosed in the section head at brightdata.md:113 rather than quietly overwritten.\n\nREADME CONSTRAINT HELD AGAIN. docs/vendors/README.md cites this file at :62, :63-64, :65, :91-95, :97 and :101. EVERY EDIT IN THIS ROUND IS BELOW LINE 101 -- the earliest is :113 -- so none of them moved, and all six were re-checked by content after the last edit. I also noticed but did NOT fix an inconsistency inside README.md: :32 lists brightdata.md:91-95 while :523-525 records that same range as a wrong citation from an earlier revision. R1.2.9 may not edit README.md, so it is flagged in this doc for whoever does.\n\nWHAT I DID NOT DO. Did not touch scripts/check-secrets.mjs (verified correct, already committed). Did not touch scanWorker.js, liveDbGate.js, liveWriteGuard.js or landingHonesty.test.mjs (other lanes). Did not commit or push. Did not run verify. The only file changed is docs/vendors/brightdata.md.\n\nSUITE. Baseline at task start 1452 tests / 1426 pass / 0 fail / 26 skipped. After my change 1453 / 1427 / 0 fail / 26 skipped -- the +1 is a concurrent lane landing a test while HEAD advanced, not me; a docs-only change moves nothing. 0 FAIL BEFORE AND AFTER is the number that matters. docStatus.test.mjs 10/10. The targeted set (docStatus, checkSecretsBrightdata, checkSecretsBrightdataNoZone, brightdataZone, serpGeo, serp, promptGen) 53/53. No test in the repo reads brightdata.md by name. NO LIVE VENDOR CALL WAS MADE, no credential value was printed, and the stub key is a literal placeholder."
         }
       ],
       "verification": {
@@ -3007,6 +3010,37 @@
       "verification": null
     },
     {
+      "id": "R2.2.8",
+      "subphase": "R2.2",
+      "lane": "backend",
+      "title": "promptGen swallows a PAA failure with no log at all",
+      "detail": "Proven by execution during R1.2.9, and worse than the rejection that prompted the look. When a typed BrightDataZoneError reaches promptGen directly there is NO throw and NO LOG LINE: promptGen.js:222-224 is a bare catch around the paaFn/autoFn race at :212. The console.warn at :266-268 that a reader might mistake for the net belongs to a CONDITIONAL realism blend gated at :259 and never fires on this path. So the outer net is quieter than the inner one — serp.js:352 at least warns once and drops the cache before returning an empty list. The consequence is that a dead Bright Data zone during sourcing produces a scan whose prompt set was seeded from nothing, with no evidence anywhere that seeding was attempted and failed. Standing rule 1: a skip is not a success. Note R3.7.4 already rethreaded ONE path through here — a policy refusal now rethrows from promptGen.js:176 rather than becoming an empty snippet — so the precedent for making this loud exists in the same function. R3.7.6 covers the leaked timer in the same file and could be done in one pass.",
+      "accept": "A PAA or autocomplete seeding failure is visible to the caller rather than swallowed: either it propagates, or it is recorded where the scan can see it, and a bare catch with no log remains nowhere on that path. A test drives a typed zone error into prompt generation and fails if nothing is emitted.",
+      "deps": [],
+      "anchors": [
+        "src/lib/scoring/promptGen.js:222",
+        "src/lib/scoring/promptGen.js:212",
+        "src/lib/engines/serp.js:352",
+        "src/lib/scoring/promptGen.js:176"
+      ],
+      "findings": [
+        "A1"
+      ],
+      "phase": "R2",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-04T04:23:02.275Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R2.3.1",
       "subphase": "R2.3",
       "lane": "backend",
@@ -3859,16 +3893,20 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
       "evidence": [
-        "src/lib/landingHonesty.test.mjs:47",
-        "src/lib/landingHonesty.test.mjs:102",
-        "src/lib/landingHonesty.test.mjs:110",
-        "src/lib/landingHonesty.test.mjs:132",
-        "src/lib/landingHonesty.test.mjs:139",
-        "src/lib/landingHonesty.test.mjs:579",
-        "src/lib/landingHonesty.test.mjs:608",
+        "src/lib/landingHonesty.test.mjs:99",
+        "src/lib/landingHonesty.test.mjs:107",
+        "src/lib/landingHonesty.test.mjs:145",
+        "src/lib/landingHonesty.test.mjs:179",
+        "src/lib/landingHonesty.test.mjs:189",
+        "src/lib/landingHonesty.test.mjs:214",
+        "src/lib/landingHonesty.test.mjs:225",
+        "src/lib/landingHonesty.test.mjs:235",
+        "src/lib/landingHonesty.test.mjs:245",
+        "src/lib/landingHonesty.test.mjs:305",
+        "src/lib/landingHonesty.test.mjs:710",
         "src/app/page.js:76",
         "src/app/page.js:308"
       ],
@@ -3902,6 +3940,11 @@
           "at": "2026-09-04T03:54:57.048Z",
           "by": "verifier",
           "text": "rejected: REJECTED, third round, SAME CLASS. A verifier got an off-deployment engine name rendered into the served HTML of an aio-only build with the entire suite green. One comma is enough.\n\nTHE ROUND-2 EVASION IS GENUINELY CLOSED: reproduced at 433669b~1 (16/16 pass with the wrapped quoted value), and the shipped guard fails it by name. Mutation tests confirm the line-based cut is what closed it.\n\nTHE NEW EVASION, PROVEN END TO END. Make the AIO note a TEMPLATE LITERAL and wrap it after a comma:\n  'Google AI Overview': `An AI Overview answer is the one your buyer reads,\n  ChatGPT: and the click that never happens is what it costs you.`\nlandingHonesty 17/17 pass. Full suite 1330/1307/0/23, byte-for-byte the baseline. Build under NEXT_PUBLIC_ENGINES=aio: index.html contains Google AI Overview x4, CHATGPT x1, Perplexity x0 — and the ChatGPT hit is inside the rendered rail__foot paragraph.\n\nWHY BOTH DEFENCES MISS, AND WHY THEY ARE NOT INDEPENDENT. For an unquoted continuation line there is only ever ONE defence. The entry-start gate at :139 is `if (trimmed) atEntryStart = /[{,]$/.test(trimmed);` — raw text, no string or template awareness, so a prose line ending in a comma INSIDE a template literal sets atEntryStart true. And the closing-quote requirement at :124-127 is `if (quote) { ... }` — the continuation line has no opening quote, so quote is empty and THE ENTIRE CHECK IS SKIPPED. It cannot fire on the class that matters. The submit note's central claim, \"two independent defences, each pinned by its own assertion\", is wrong: for unquoted continuation lines the quote defence is unreachable by construction.\n\nTHE SHIPPED REGRESSION TEST PASSES FOR THE WRONG REASON. :626 asserts a template literal's continuation line is not a key line, using a first line ending in the word \"answer\". Change that word to \"answer,\" and the same assertion evades. The author picked, by luck, the one first-line ending the surviving defence catches.\n\nNINE MORE SHAPES EVADE: the same template wrap indented; with a tab; with \"ChatGPT :\" (space before colon); with the first line ending in \"{\"; a whole-line // comment inside a template (withoutComments strips it, the template still renders it); a block comment inside a template; a nested object value whose nested key line is ChatGPT:; and a fmt({-terminated line followed by a nested key line.\n\nCAUGHT CORRECTLY, and worth keeping: the round-1 Prettier wrap after 'Label':; the single-line form; a label mid-sentence on a continuation line; a three-line +-concatenated value; a QUOTED continuation after a comma (this is where the closing-quote check earns its keep); a backtick-quoted continuation; a trailing // on a key line; own-label-filter abuse (entry A naming its own label plus another engine leaves the other scanned); and a label spliced by the own-label removal, which flags a false positive in the safe direction.\n\nEVERYTHING THAT PREVIOUSLY BIT STILL BITES — seven sabotages, each byte-verified and restored from a pristine tree outside git, never git checkout: off-deployment chip, equals-today chip, RAIL_NOTES filter removed (throws), Object.freeze shape change (throws), page.js dropped from the scan list, the list emptied, and AnswerSheet SHEET_ENGINE typed. Guard mutants die too. THE CHIP DERIVATION IS CORRECT AND MUST BE KEPT: page.js:76 SAMPLE_CARD_ENGINE = primaryDeployedEngineLabel() rendered at :308; perplexity build gives 0/0/5 with the chip reading Perplexity, aio build 4/0/0; client chunks carry exactly one NEXT_PUBLIC_ENGINES inlined as a literal and ZERO process.env reads.\n\nTHE COMMENTS STILL DO NOT DESCRIBE THE SHIPPED FUNCTION, which is the third round running. :55-59 says a long value Prettier-wrapped onto its own line \"is scanned verbatim\" — false in exactly the way round 1 was false. And \"the previous non-blank line opened the object or closed the entry before it\" describes an intent /[{,]$/ does not implement, since it cannot tell a structural comma from one inside a string.\n\nTO FIX — only landingHonesty.test.mjs; keep page.js:76 and :308 byte-identical. THE LINE-ORIENTED HEURISTIC CANNOT BE PATCHED INTO CORRECTNESS; its third iteration fell in under ten minutes. Stop guessing at key lines and make the exemption refuse what it cannot reason about: (1) parse the ENGINE_NOTE block structurally, tracking string/template/escape state so a comma or brace inside a value is never read as structure; (2) assert the shape and THROW on anything else — every entry must be a quoted key plus a single-line, single-quoted string value, and a multi-line or template value must fail loudly rather than be scanned by heuristic, which is the fail-loud posture the declaration and filter guards already take; (3) keep the labels.filter own-label allowance, which is sound; (4) fix :626 so its template's first line ends in a comma, and add the tab-indented and \"Label :\" variants; (5) rewrite :55-59 to state what ships.\n\nSeparately, pre-existing and wider: withoutComments at :307 strips a whole-line // or a block comment INSIDE a template literal before scanning, while it still renders."
+        },
+        {
+          "at": "2026-09-04T04:18:19.626Z",
+          "by": "rebuild-implementer",
+          "text": "Fourth pass, guard only. src/app/page.js and AnswerSheet.jsx are BYTE-IDENTICAL to HEAD (md5 checked after every mutation; git status clean for both); the only changed file is src/lib/landingHonesty.test.mjs.\n\nREPRODUCED THE ROUND-3 EVASION FIRST, end to end. AIO note as a template literal wrapped after a comma: node --test landingHonesty -> 17/17 pass, and NEXT_PUBLIC_ENGINES=aio ENGINES=aio next build put 'An AI Overview answer is the one your buyer reads,\\nChatGPT: and the click that never happens is what it costs you.' inside <p class=rail__foot> of .next/server/app/index.html (Google AI Overview x4, ChatGPT x1, Perplexity x0).\n\nTHE FIX IS A PARSER, NOT A FOURTH HEURISTIC. withoutEngineNoteDictionary (:99) now walks the declaration one character at a time, always knowing which quote it is inside, and accepts ONE shape: a key (bare identifier or quoted string, and it must be a known engine label) plus a colon plus EXACTLY ONE quoted string value on ONE line, then a comma or the closing brace, then the semicolon. The key is dropped; the VALUE stays in the scanned text minus this entry's own label (labels.filter own-label allowance, kept, :245). A comma or brace inside a value is never read as structure, so the class that killed rounds 1-3 cannot exist. Every other shape THROWS by name: a value that is not a quoted string (:179 - template, concatenation, array, nested object, call), a value spanning two lines (:189) or backslash-continued, a comment or spread where a key belongs (:168), an entry not followed by a comma or the brace (:211), a declaration that does not end at a semicolon (:214), an EMPTY dictionary (:225 - a scan that covered nothing must say so), a key that is not a known engine label (:235), and engine labels that overlap so the own-label replacement could delete one (:107; today's three do not overlap - this replaces round 2's stated residual, and the placeholder means the allowance can no longer splice neighbours into a label either).\n\nI ALSO FOUND AND CLOSED THE withoutComments HOLE THE BRIEF ASKED ABOUT, because it is the same class and it is live. Value 'An AI Overview answer/* ChatGPT: and the click that never happens */ is what your buyer reads.' EVADED my first parser: withoutComments ran BEFORE the exemption and deleted the engine name out of the scanned text, while the aio build rendered it verbatim - proven, index.html ChatGPT x1 in rail__foot with the suite green. Fix: sourceOf (:305) now parses the RAW file and strips comments from what comes back, and each value is handed back with its comment openers defanged (:248) so the regex cannot reach into it afterwards. A REAL comment inside the declaration is now refused (loud). This closes the whole-line // and block-comment-inside-a-value cases for page.js; it does NOT close the same regex hole for any other file, which stays a finding.\n\nALL 27 SHAPES RE-RUN AGAINST THE REAL page.js, each mutation applied, node --test run, then restored by byte copy from a pristine tree OUTSIDE git (never git checkout); the harness re-verified page.js/AnswerSheet.jsx/the test byte-identical at the end. ELEVEN EVADING SHAPES, ALL NOW CAUGHT: template wrapped after a comma; the same indented; tab-indented; 'ChatGPT :'; first line ending in {; whole-line // inside a template; block comment inside a template; nested object value; fmt({ call argument; single-line template; and the block comment inside a single-line value I found myself. NINE PREVIOUSLY-CAUGHT CASES STILL CAUGHT: Prettier wrap after the colon (scanned, fails naming ChatGPT); single-line form; label mid-sentence on a wrapped value; three-line + concatenation (now refused); array with a quoted continuation after a comma (refused); backtick continuation (refused); trailing // on a key line (refused); own-label-filter abuse (entry naming its own label plus Perplexity -> fails on Perplexity); no space after the colon. SEVEN SABOTAGES STILL BITE: off-deployment chip literal; equals-today chip literal (typed clause); RAIL_NOTES filter removed (throws); Object.freeze declaration shape (throws); AnswerSheet SHEET_ENGINE typed; page.js dropped from LITERAL_SCAN_FILES; the list emptied (both hit the coverage assertion).\n\nGUARD MUTATION: allow backticks as a value quote and drop the newline check -> the new test dies at the first assertion ('Missing expected exception: the template wrapped after a comma...'), so the refusals are load-bearing, not decorative.\n\nTWO BEHAVIOURS I CHANGED DELIBERATELY, both stated rather than hidden. (1) Two entries on one line now scan as TWO ENTRIES (typed []), where round 2 flagged the second as a false positive - the parser knows it is structure; a companion assertion pins that the second entry's VALUE is still scanned. (2) The spliced-label false positive is gone, because the own-label allowance replaces rather than deletes and the overlap guard refuses labels where a replacement could destroy a real one. Both are pinned by assertions at :868-:880 and :933.\n\nCOMMENTS REWRITTEN TO STATE WHAT SHIPS (:41-:98): what is accepted, what is dropped, what is kept, what throws, the raw-source ordering and why, and the two evasions with the HTML they produced. No claim in that block is broader than the code.\n\nBUILD: clean NEXT_PUBLIC_ENGINES=aio ENGINES=aio next build with page.js pristine -> index.html Google AI Overview x4, ChatGPT x0, Perplexity x0, rail note reads the real aio prose. No dev server, no scan, no vendor call.\n\nSUITE: baseline measured myself immediately before this work at d845e97 + the concurrent lanes' working tree: 1452 tests / 1426 pass / 0 fail / 26 skipped. After: 1453 / 1427 / 0 fail / 26 skipped. The +1 is accounted for by name-diffing the two runs: my test is a 1-for-1 rename (cuts the key token -> parses the dictionary), net 0; the extra test is another lane's 'runSchedulerTick - a tick that died inside listDueSchedules reports due as NOT MEASURED'. landingHonesty is 17 tests before and after.\n\nNOT DONE, ON PURPOSE: page.js untouched; no third guard mechanism; withoutComments (:365) itself unchanged, so the same regex still strips a whole-line // or a block comment out of a template or a string in AnswerSheet.jsx and every other scanned file while it renders - closed for page.js's dictionary only, and filed as a finding below. Also unhandled and general: a unicode or hex escape inside any string ('Chat\\u0047PT') renders an engine name that a plain includes() scan cannot see, in this file's scan and in every other source guard."
         }
       ],
       "verification": {
@@ -6180,6 +6223,38 @@
       "notes": [
         {
           "at": "2026-09-03T12:03:49.541Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.4.9",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "withoutComments strips engine names out of strings in every other guarded file",
+      "detail": "R2.10.6 closed this for page.js ENGINE_NOTE only, and its author proved the class is exploitable end to end rather than merely arguing it. withoutComments at src/lib/landingHonesty.test.mjs:365 deletes a whole-line // or a block comment from the scanned text even when it sits INSIDE a string or template literal, which the browser renders verbatim. The demonstrated payload was a value reading An AI Overview answer, then a block comment containing ChatGPT and a colon, then more prose: the guard saw nothing, the build put ChatGPT into the engine rail. R2.10.6 fixed it by having sourceOf parse the raw file and defang comment openers in the returned values, but only for that one declaration. AnswerSheet.jsx and every other source guard sharing this helper keep the hole. A second, wider finding from the same author belongs with it: a unicode or hex escape defeats every includes()-based source guard in the repo, since ChatGPT renders an engine name no scan in this file or any sibling can see. That one is not exemption-specific and applies to the typed clause itself.",
+      "accept": "A comment sequence inside a string or template in any guarded file no longer hides a token from the scan, and an escaped-character spelling of a forbidden token is caught or the limitation is documented at each guard that relies on includes(). Both proven by a build that renders the payload and a test that fails on it.",
+      "deps": [
+        "R2.10.6"
+      ],
+      "anchors": [
+        "src/lib/landingHonesty.test.mjs:365",
+        "src/lib/landingHonesty.test.mjs:305",
+        "src/components/landing/AnswerSheet.jsx"
+      ],
+      "findings": [
+        "C11"
+      ],
+      "phase": "R6",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-04T04:22:26.926Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }

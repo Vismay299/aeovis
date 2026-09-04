@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**52 / 173 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**52 / 175 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -88,7 +88,7 @@ Baseline commit: `5111219`
 - [ ] **R1.2.6** Fleet config validated at boot
 - [x] **R1.2.7** The Bright Data zone cache never invalidates — closed at `src/lib/engines/brightdata.js:81`, `src/lib/engines/brightdata.js:91`, `src/lib/engines/brightdata.js:116`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:291`, `src/lib/engines/brightdata.js:313`, `src/lib/engines/brightdata.js:398`, `src/lib/engines/brightdata.js:478`, `src/lib/engines/brightdataZone.test.mjs:101`, `src/lib/engines/brightdataZone.test.mjs:167`, `src/lib/engines/brightdataZone.test.mjs:249`
 - [ ] **R1.2.8** The six-way race tests pass with SKIP LOCKED removed
-- [~] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced — submitted `docs/vendors/brightdata.md:18`, `docs/vendors/brightdata.md:73`, `docs/vendors/brightdata.md:80`, `docs/vendors/brightdata.md:103`, `docs/vendors/brightdata.md:169`, `docs/vendors/brightdata.md:195`, `docs/vendors/brightdata.md:213`, `docs/vendors/brightdata.md:238`, `scripts/check-secrets.mjs:166`, `src/lib/engines/brightdata.js:72`, `src/lib/engines/brightdata.js:81`, `src/lib/engines/brightdata.js:116`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:160`, `src/lib/engines/brightdata.js:291`, `src/lib/engines/brightdata.js:313`, `src/lib/engines/brightdata.js:441`, `src/lib/engines/brightdata.js:478`, `src/lib/engines/brightdataZone.test.mjs:66`, `src/lib/engines/brightdataZone.test.mjs:101`, `src/lib/engines/brightdataZone.test.mjs:334`, `worker/src/lib/probe.js:28`, `src/lib/workerIsolation.test.mjs:72`, `src/app/api/scan/route.js:62`, `src/lib/scoring/aioPipeline.js:171`
+- [~] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced — submitted `docs/vendors/brightdata.md:113`, `docs/vendors/brightdata.md:150`, `docs/vendors/brightdata.md:217`, `docs/vendors/brightdata.md:253`, `docs/vendors/brightdata.md:314`, `src/lib/engines/serp.js:5`, `src/lib/engines/serp.js:14`, `src/lib/engines/serp.js:286`, `src/lib/engines/serp.js:325`, `src/lib/engines/serp.js:352-354`, `src/lib/scoring/promptGen.js:129`, `src/lib/scoring/promptGen.js:212`, `src/lib/scoring/promptGen.js:222-224`, `src/lib/scoring/promptGen.js:266-268`, `src/lib/scoring/aioPipeline.js:99`, `src/lib/scoring/enginePipeline.js:101`, `src/lib/engines/brightdata.js:69`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:192`, `src/lib/checkSecretsBrightdataNoZone.test.mjs:21`, `src/lib/engines/brightdataZone.test.mjs:206`, `src/app/api/scan/route.js:62`, `src/app/api/scan/worker/route.js:138`
 - [ ] **R1.2.10** The Bright Data 200-envelope zone rejection has no test
 ### R1.3
 
@@ -119,7 +119,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `11/36`
+## R2 — Scoring truth  `11/37`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -138,6 +138,7 @@ Baseline commit: `5111219`
 - [x] **R2.2.5** dataSourceIssue still assumes text engines always answer — closed at `src/lib/scoring/enginePipeline.js:35`, `src/lib/scoring/enginePipeline.js:416`, `src/lib/scoring/enginePipeline.js:441`, `src/lib/scoring/enginePipeline.test.mjs:507`, `src/lib/scoring/aioConstants.js:4`
 - [x] **R2.2.6** The scan-level data_source_issue banner is derived from aio alone — closed at `src/lib/scoring/enginePipeline.js:606`, `src/lib/scoring/enginePipeline.js:910`, `src/lib/scoring/enginePipeline.js:56`, `src/components/dashboard/DashboardShell.jsx:369`, `src/components/dashboard/DashboardShell.jsx:383`, `src/components/dashboard/DashboardShell.jsx:704`, `src/components/dashboard/DashboardShell.jsx:823`, `src/lib/scoring/enginePipeline.test.mjs:637`, `src/components/dashboard/degradedEngineBanner.test.mjs:54`
 - [ ] **R2.2.7** The degraded-banner guard proves a declaration, not a gate
+- [ ] **R2.2.8** promptGen swallows a PAA failure with no log at all
 ### R2.3
 
 - [x] **R2.3.1** Two-pass finalize: discovered roster feeds the headline — closed at `src/lib/workers/scanWorker.js:757`, `src/lib/workers/scanWorker.js:781`, `src/lib/workers/scanWorker.js:798`, `src/lib/workers/twoPassFinalize.test.mjs`
@@ -178,7 +179,7 @@ Baseline commit: `5111219`
 - [ ] **R2.10.2** Probe counter backed by a real count query
 - [ ] **R2.10.4** ENGINE_REGISTRY says aio is always configured
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
-- [~] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — submitted `src/lib/landingHonesty.test.mjs:47`, `src/lib/landingHonesty.test.mjs:102`, `src/lib/landingHonesty.test.mjs:110`, `src/lib/landingHonesty.test.mjs:132`, `src/lib/landingHonesty.test.mjs:139`, `src/lib/landingHonesty.test.mjs:579`, `src/lib/landingHonesty.test.mjs:608`, `src/app/page.js:76`, `src/app/page.js:308`
+- [~] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — submitted `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 
 ## R3 — Durable backend  `2/31`
 
@@ -276,7 +277,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `11/25`
+## R6 — Apparatus & guards  `11/26`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -307,6 +308,7 @@ Baseline commit: `5111219`
 - [x] **R6.4.6** archive-reference-scan takes a URL host but --list prints brand names — closed at `scripts/archive-reference-scan.mjs:83`, `scripts/archive-reference-scan.mjs:105`, `scripts/archive-reference-scan.mjs:54`, `scripts/archive-reference-scan.mjs:155`
 - [ ] **R6.4.7** The working tree is half CRLF despite .gitattributes eol=lf
 - [ ] **R6.4.8** Doc-to-source staleness tripwire, recommended by R6.3.2 and not buildable there
+- [ ] **R6.4.9** withoutComments strips engine names out of strings in every other guarded file
 ### R6.5
 
 - [x] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures — closed at `src/lib/scanRoute.route.test.mjs`, `src/lib/engines/brightdataParser.test.mjs`, `src/lib/cronAuth.route.test.mjs`
