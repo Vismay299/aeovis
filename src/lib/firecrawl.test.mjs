@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { scrapeForSummary } from "./firecrawl.js";
+import { NO_CONTENT_SENTINEL, SCRAPE_REASON, SCRAPE_STATE, scrapeSite } from "./firecrawl.js";
 import { SsrfBlockedError, isPolicyRefusal } from "./ssrfGuard.js";
 
 /**
  * R3.7.1 — the Firecrawl fallback is a server-side fetch of a URL that an
  * ANONYMOUS caller supplies (POST /api/scan -> scan_jobs.url -> scanWorker ->
- * generateUnbrandedPrompts -> scrapeForSummary). Before the guard, a target
+ * generateUnbrandedPrompts -> scrapeSite). Before the guard, a target
  * like http://169.254.169.254/latest/meta-data/ was fetched and its body was
  * returned to the caller.
  *
@@ -68,12 +68,12 @@ const SSRF_TARGETS = [
 ];
 
 for (const [target, code] of SSRF_TARGETS) {
-  test(`scrapeForSummary refuses ${target} and never fetches it`, async () => {
+  test(`scrapeSite refuses ${target} and never fetches it`, async () => {
     const { impl, calls } = makeFetch(() => {
       throw new Error("the guard let a blocked target through to fetch()");
     });
     await assert.rejects(
-      () => scrapeForSummary(target, { fetchImpl: impl, lookup: PUBLIC }),
+      () => scrapeSite(target, { fetchImpl: impl, lookup: PUBLIC }),
       (err) => {
         assert.ok(err instanceof SsrfBlockedError, `expected SsrfBlockedError, got ${err?.name}`);
         assert.equal(err.code, code);
@@ -89,7 +89,7 @@ test("a hostname that rebinds to loopback is refused before any fetch", async ()
     throw new Error("should not fetch");
   });
   await assert.rejects(
-    () => scrapeForSummary("https://rebind.example.com/", {
+    () => scrapeSite("https://rebind.example.com/", {
       fetchImpl: impl,
       lookup: async () => ["127.0.0.1"],
     }),
@@ -117,7 +117,7 @@ test("a public page that redirects to the metadata address is refused at the hop
   };
 
   await assert.rejects(
-    () => scrapeForSummary("https://innocent.example.com/", { fetchImpl: impl, lookup: PUBLIC }),
+    () => scrapeSite("https://innocent.example.com/", { fetchImpl: impl, lookup: PUBLIC }),
     (err) => {
       assert.ok(err instanceof SsrfBlockedError);
       assert.equal(err.code, "link_local");
@@ -138,7 +138,7 @@ test("a refusal throws — it never degrades to the 'no content' string", async 
   const { impl } = makeFetch(() => htmlResponse("<html><body>x</body></html>"));
   let returned = null;
   try {
-    returned = await scrapeForSummary("http://169.254.169.254/", { fetchImpl: impl, lookup: PUBLIC });
+    returned = await scrapeSite("http://169.254.169.254/", { fetchImpl: impl, lookup: PUBLIC });
   } catch (err) {
     assert.ok(err instanceof SsrfBlockedError);
   }
@@ -151,7 +151,7 @@ test("a name that does not resolve is unusable input, not a policy refusal", asy
   const { impl, calls } = makeFetch(() => {
     throw new Error("should not fetch an unresolvable name");
   });
-  const out = await scrapeForSummary("https://nxdomain.example/", {
+  const out = await scrapeSite("https://nxdomain.example/", {
     fetchImpl: impl,
     lookup: async () => {
       const err = new Error("getaddrinfo ENOTFOUND");
@@ -159,7 +159,9 @@ test("a name that does not resolve is unusable input, not a policy refusal", asy
       throw err;
     },
   });
-  assert.equal(out, "No website content available.");
+  assert.equal(out.content, null);
+  assert.equal(out.state, SCRAPE_STATE.UNAVAILABLE);
+  assert.equal(out.state_reason, SCRAPE_REASON.UNUSABLE_TARGET);
   assert.deepEqual(calls, [], "an unresolvable name must still never be fetched");
 });
 
@@ -167,8 +169,10 @@ test("malformed input is unusable, not a policy refusal", async () => {
   const { impl, calls } = makeFetch(() => {
     throw new Error("should not fetch garbage");
   });
-  const out = await scrapeForSummary("http://exa mple.com/", { fetchImpl: impl, lookup: PUBLIC });
-  assert.equal(out, "No website content available.");
+  const out = await scrapeSite("http://exa mple.com/", { fetchImpl: impl, lookup: PUBLIC });
+  assert.equal(out.content, null);
+  assert.equal(out.state, SCRAPE_STATE.UNAVAILABLE);
+  assert.equal(out.state_reason, SCRAPE_REASON.UNUSABLE_TARGET);
   assert.deepEqual(calls, []);
 });
 
@@ -186,20 +190,26 @@ test("an ordinary network failure still degrades to the documented empty state",
   const { impl } = makeFetch(() => {
     throw new Error("ECONNREFUSED");
   });
-  const out = await scrapeForSummary("https://legit-customer.example/", {
+  const out = await scrapeSite("https://legit-customer.example/", {
     fetchImpl: impl,
     lookup: PUBLIC,
   });
-  assert.equal(out, "No website content available.");
+  // R3.7.2 changed the SHAPE of this empty state, not its meaning: no content,
+  // named. It is no longer a sentence that can be mistaken for page copy.
+  assert.equal(out.content, null);
+  assert.equal(out.state, SCRAPE_STATE.UNAVAILABLE);
+  assert.equal(out.state_reason, SCRAPE_REASON.FALLBACK_REQUEST_FAILED);
 });
 
 test("a 404 from a real site still degrades to the documented empty state", async () => {
   const { impl } = makeFetch(() => htmlResponse("not found", 404));
-  const out = await scrapeForSummary("https://legit-customer.example/", {
+  const out = await scrapeSite("https://legit-customer.example/", {
     fetchImpl: impl,
     lookup: PUBLIC,
   });
-  assert.equal(out, "No website content available.");
+  assert.equal(out.content, null);
+  assert.equal(out.state, SCRAPE_STATE.UNAVAILABLE);
+  assert.equal(out.state_reason, SCRAPE_REASON.FALLBACK_HTTP_ERROR);
 });
 
 // ---------------------------------------------------------------------------
@@ -210,11 +220,12 @@ test("a legitimate customer URL is still scraped through the fallback", async ()
   const { impl, calls } = makeFetch(() =>
     htmlResponse("<html><head><title>t</title></head><body><h1>Acme Analytics</h1><p>Dashboards for ops teams.</p></body></html>")
   );
-  const out = await scrapeForSummary("https://acme-analytics.co.in", {
+  const out = await scrapeSite("https://acme-analytics.co.in", {
     fetchImpl: impl,
     lookup: PUBLIC,
   });
-  assert.equal(out, "Acme Analytics Dashboards for ops teams.");
+  assert.equal(out.content, "Acme Analytics Dashboards for ops teams.");
+  assert.equal(out.source, "fallback_fetch");
   assert.ok(
     calls.includes("https://acme-analytics.co.in/"),
     `expected the customer URL to be fetched, saw ${JSON.stringify(calls)}`
@@ -223,8 +234,8 @@ test("a legitimate customer URL is still scraped through the fallback", async ()
 
 test("a bare domain with no scheme still works", async () => {
   const { impl, calls } = makeFetch(() => htmlResponse("<html><body>Bare domain page</body></html>"));
-  const out = await scrapeForSummary("acme-analytics.co.in", { fetchImpl: impl, lookup: PUBLIC });
-  assert.equal(out, "Bare domain page");
+  const out = await scrapeSite("acme-analytics.co.in", { fetchImpl: impl, lookup: PUBLIC });
+  assert.equal(out.content, "Bare domain page");
   assert.ok(calls.includes("https://acme-analytics.co.in/"));
 });
 
@@ -245,12 +256,39 @@ test("a legitimate redirect between public hosts is followed", async () => {
     }
     return htmlResponse("<html><body>Canonical page</body></html>");
   };
-  const out = await scrapeForSummary("https://acme-analytics.co.in", { fetchImpl: impl, lookup: PUBLIC });
-  assert.equal(out, "Canonical page");
+  const out = await scrapeSite("https://acme-analytics.co.in", { fetchImpl: impl, lookup: PUBLIC });
+  assert.equal(out.content, "Canonical page");
 });
 
 test("an empty website field is still the documented no-op, not a throw", async () => {
-  assert.equal(await scrapeForSummary(""), "No website content available.");
-  assert.equal(await scrapeForSummary(null), "No website content available.");
-  assert.equal(await scrapeForSummary(undefined), "No website content available.");
+  for (const nothing of ["", null, undefined]) {
+    const out = await scrapeSite(nothing);
+    assert.equal(out.content, null);
+    assert.equal(out.state, SCRAPE_STATE.UNAVAILABLE);
+    assert.equal(out.state_reason, SCRAPE_REASON.NO_URL);
+  }
+});
+
+test("no path in this file ever returns the legacy sentinel as content", async () => {
+  // R3.7.2 / B7. The sentence still exists as an exported constant so callers
+  // can REFUSE it; it must never come back out of scrapeSite as content again.
+  const { impl } = makeFetch(() => {
+    throw new Error("ECONNREFUSED");
+  });
+  const outcomes = [
+    await scrapeSite(""),
+    await scrapeSite("https://legit-customer.example/", { fetchImpl: impl, lookup: PUBLIC }),
+    await scrapeSite("https://nxdomain.example/", {
+      fetchImpl: impl,
+      lookup: async () => {
+        const err = new Error("getaddrinfo ENOTFOUND");
+        err.code = "ENOTFOUND";
+        throw err;
+      },
+    }),
+  ];
+  for (const out of outcomes) {
+    assert.notEqual(out.content, NO_CONTENT_SENTINEL);
+    assert.equal(out.content, null);
+  }
 });

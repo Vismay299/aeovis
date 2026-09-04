@@ -1,4 +1,10 @@
-import { scrapeForSummary } from "../firecrawl.js";
+import {
+  NO_CONTENT_SENTINEL,
+  SCRAPE_STATE,
+  normalizeScrapeResult,
+  scrapeSite,
+  summarizeScrape,
+} from "../firecrawl.js";
 import { isPolicyRefusal } from "../ssrfGuard.js";
 import { fetchPeopleAlsoAsk, fetchAutocomplete } from "../engines/serp.js";
 import { getBrandAliases } from "./aliases.js";
@@ -9,6 +15,14 @@ import { getLlmBaseUrl, getLlmModel } from "../llmConfig.js";
 import { INDUSTRY_PROMPTS } from "../../data/industries.js";
 
 const INTENT_TIERS = ["informational", "commercial", "comparison", "problem_aware"];
+
+/**
+ * Deadline for one seed term's PAA + autocomplete pair. Exported so a test can
+ * assert on the timer rather than wait for it: the whole point of R3.7.6 is that
+ * this deadline is CLEARED when the fetch settles first, so nothing should ever
+ * observe it elapsing.
+ */
+export const SEED_FETCH_TIMEOUT_MS = 10000;
 
 /**
  * Small local industry-key resolver. Kept local so this module's only LLM
@@ -31,6 +45,25 @@ function wordCount(text) {
     .trim()
     .split(/\s+/)
     .filter(Boolean).length;
+}
+
+/**
+ * The one place a scraped website snippet is allowed to become prompt text.
+ *
+ * R3.7.2, finding B7: a degraded scrape used to arrive here as the sentence
+ * "No website content available." and was interpolated under the heading
+ * "Website summary:", so the model read it as the site's own copy. Anything
+ * that is not real content collapses to "" here — including the legacy
+ * sentinel, which a caller that still injects the old string-returning scraper
+ * can otherwise smuggle in. This is the belt to scrapeSite's braces: the
+ * sentinel is not produced any more AND it is not accepted here.
+ */
+export function sanitizeWebsiteSnippet(content) {
+  if (typeof content !== "string") return "";
+  const trimmed = content.trim();
+  if (!trimmed) return "";
+  if (trimmed === NO_CONTENT_SENTINEL) return "";
+  return trimmed;
 }
 
 function buildGenPrompt({ brand, website, industryHint, websiteSnippet, need, avoid = [], seedQueries = [] }) {
@@ -67,8 +100,14 @@ Queries that PASS (write these):
 
 Website: ${website}
 ${industryHint ? `Industry: ${industryHint}` : ""}
-Website summary:
-${(websiteSnippet || "").slice(0, 2500)}
+${
+    // R3.7.2: no summary means the heading is omitted entirely. An empty — or,
+    // as it used to be, apologetic — "Website summary:" block is itself a claim
+    // that we read the site, and the model answers it as if we had.
+    sanitizeWebsiteSnippet(websiteSnippet)
+      ? `Website summary:\n${sanitizeWebsiteSnippet(websiteSnippet).slice(0, 2500)}`
+      : ""
+  }
 ${seedSection}
 Step 1 (do this silently, do not output it): from the summary above, identify 6-10
 DISTINCT buyer DECISIONS in this category — a use case, a budget level, a customer
@@ -111,6 +150,23 @@ not all be the same string):
 }
 
 /**
+ * Which scraper this run uses, and how a legacy one is made safe.
+ *
+ * `deps.scrapeSite` is the current contract ({ content, state, ... }).
+ * `deps.scrapeForSummary` is the pre-R3.7.2 string contract and several test
+ * suites still inject it. It is ADAPTED rather than trusted: a string is turned
+ * into a proper envelope, and the legacy sentinel is recognised as "there was
+ * nothing" instead of being carried forward as content. That is what keeps the
+ * sentence out of a prompt even when the caller is old.
+ */
+function resolveScraper(deps = {}) {
+  if (deps.scrapeSite) return deps.scrapeSite;
+  const legacy = deps.scrapeForSummary;
+  if (!legacy) return scrapeSite;
+  return async (url) => normalizeScrapeResult(await legacy(url));
+}
+
+/**
  * Guarantees exactly `count` unbranded query objects for a scan, or throws.
  * Passes, in order: LLM gen (1-2 calls) -> PAA/autocomplete realism blend ->
  * static industry-pack top-up. Never imports a provider directly — only
@@ -125,7 +181,7 @@ export async function generateUnbrandedPrompts(
   deps = {}
 ) {
   const llmJsonFn = deps.llmJson || llmJson;
-  const scrapeFn = deps.scrapeForSummary || scrapeForSummary;
+  const scrapeFn = resolveScraper(deps);
   const paaFn = deps.fetchPeopleAlsoAsk || fetchPeopleAlsoAsk;
   const autoFn = deps.fetchAutocomplete || fetchAutocomplete;
 
@@ -159,8 +215,14 @@ export async function generateUnbrandedPrompts(
   };
 
   let websiteSnippet = "";
+  let scrapeState = null;
   try {
-    websiteSnippet = (await scrapeFn(website)) || "";
+    const scrape = await scrapeFn(website);
+    scrapeState = summarizeScrape(scrape);
+    // The ONLY assignment of prompt-bound site text in this function, and it
+    // goes through the sanitizer: a null, a blank, or the legacy sentinel all
+    // become "" rather than becoming words in an LLM prompt (R3.7.2 / B7).
+    websiteSnippet = sanitizeWebsiteSnippet(scrape?.content);
   } catch (err) {
     // R3.7.4 / rule 1: an SSRF POLICY refusal is not "the page had no content".
     // This catch used to swallow it, so a scan whose website URL we refused to
@@ -168,13 +230,49 @@ export async function generateUnbrandedPrompts(
     // dressed as a success, with one log line as the only trace. Rethrow: the
     // scan fails loudly and the refusal reaches whoever submitted the URL.
     //
-    // Everything else stays best-effort on purpose. scrapeForSummary already
-    // returns its no-content string for an unusable target (a typo, an
-    // NXDOMAIN) and for an unreachable site, so what reaches this catch is a
-    // genuine defect, and a brand's site being momentarily down is not a
-    // reason to refuse to generate prompts for it.
+    // Everything else stays best-effort on purpose. scrapeSite already reports
+    // state=unavailable for an unusable target (a typo, an NXDOMAIN) and for an
+    // unreachable site, so what reaches this catch is a genuine defect, and a
+    // brand's site being momentarily down is not a reason to refuse to generate
+    // prompts for it.
     if (isPolicyRefusal(err)) throw err;
     console.warn(`[promptGen] website scrape failed for "${website}":`, err?.message || err);
+    scrapeState = {
+      state: SCRAPE_STATE.UNAVAILABLE,
+      state_reason: "scrape_threw",
+      reasons: ["scrape_threw"],
+      detail: String(err?.message || err).slice(0, 200),
+      source: null,
+      content_chars: 0,
+    };
+  }
+
+  // Record the state where it can travel with the scan. `stats` is the mutable
+  // accumulator the worker already threads through this call for cost/tokens,
+  // and it is the only channel that crosses back into the sourcing phase
+  // without changing a signature the chunk worker owns.
+  //
+  // KNOWN GAP, stated rather than hidden: runSourcingPhase in
+  // src/lib/workers/scanWorker.js currently copies only { cost, tokens } out of
+  // this object into the checkpoint, so `website_scrape` stops there and never
+  // reaches scan_runs.detail. Closing that is a three-line change in a file
+  // this task is not permitted to touch — see the submit note for R3.7.2.
+  // Until then the warning below is the durable trace.
+  if (stats && typeof stats === "object") {
+    stats.website_scrape = scrapeState;
+  }
+
+  if (scrapeState && scrapeState.state !== SCRAPE_STATE.OK) {
+    // A degraded scrape is not a successful one. Said out loud, with the reason
+    // and the size of what we actually got, so "the site was read" and "the
+    // site was not read" never look the same in a log again.
+    console.warn(
+      `[promptGen] website scrape for "${website}" is ${scrapeState.state} ` +
+        `(${scrapeState.state_reason}${scrapeState.detail ? `: ${scrapeState.detail}` : ""}) — ` +
+        `${scrapeState.content_chars ?? "an unrecorded number of"} chars of site content ` +
+        `available to prompt generation. ` +
+        `These prompts are grounded in the brand name and industry alone.`
+    );
   }
 
   const industryPack = resolveIndustryPack(industry);
@@ -207,10 +305,27 @@ export async function generateUnbrandedPrompts(
     const paaResults = [];
     for (const term of uniqueTerms) {
       if (paaResults.length >= 30) break;
+      // R3.7.6 (finding A1): the deadline is held in a variable and cleared in a
+      // `finally`, not left to expire. The executor below runs synchronously
+      // inside `new Promise`, so `seedTimeoutId` is always assigned before the
+      // first await — there is no path that reaches the finally with the timer
+      // scheduled but unrecorded.
+      //
+      // Uncleared, this stranded ONE live 10s Timeout per seed term (up to five)
+      // on every call: ten seconds of event loop kept alive after prompt
+      // generation had already returned, which is a held-open serverless
+      // invocation billed for nothing and, on the long-lived fleet, a timer per
+      // term per scan. Same shape and same fix as R6.5.6 in src/lib/gemini.js:92.
+      let seedTimeoutId = null;
       try {
         const result = await Promise.race([
           Promise.all([paaFn(term), autoFn(term)]),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 10000)),
+          new Promise((_, reject) => {
+            seedTimeoutId = setTimeout(
+              () => reject(new Error(`seed term timeout after ${SEED_FETCH_TIMEOUT_MS}ms`)),
+              SEED_FETCH_TIMEOUT_MS
+            );
+          }),
         ]);
         const [paa, autos] = result;
         const merged = [...(paa || []), ...(autos || [])];
@@ -219,13 +334,28 @@ export async function generateUnbrandedPrompts(
             paaResults.push(q.trim());
           }
         }
-      } catch {
-        // best-effort per term
+      } catch (err) {
+        // R3.7.6 / rule 1: still best-effort per term, but no longer silent. A
+        // seed term that timed out or threw produced zero queries, and the
+        // sibling branches in the realism blend below already say so; this one
+        // used to look identical to a term that legitimately had nothing.
+        console.warn(
+          `[promptGen] seed fetch failed for "${term}" — 0 seed queries from this term:`,
+          err?.message || err
+        );
+      } finally {
+        if (seedTimeoutId !== null) clearTimeout(seedTimeoutId);
       }
     }
     seedQueries = paaResults;
-  } catch {
-    // best-effort; prompt gen still works without seeds
+  } catch (err) {
+    // R3.7.6 / rule 1: prompt generation genuinely does still work without
+    // seeds, so this stays best-effort — but an ungrounded prompt set must not
+    // be indistinguishable from a seeded one in the log.
+    console.warn(
+      `[promptGen] seed derivation failed for "${brand}" — generating prompts with no PAA seeding:`,
+      err?.message || err
+    );
   }
 
   // Pass 1
