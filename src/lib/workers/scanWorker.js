@@ -164,7 +164,102 @@ function asUuid(value) {
  * write rather than after it.
  */
 export function createChunkTally() {
-  return { probesAttempted: null, probesSucceeded: null, errorsRecovered: null, phases: [] };
+  // `skips` is null for the same reason the counters are: NOT MEASURED. A phase
+  // that watches for discarded skips arms it to [], and only then does an empty
+  // list mean "it looked and there were none". See armSkips/recordSkip.
+  return { probesAttempted: null, probesSucceeded: null, errorsRecovered: null, phases: [], skips: null };
+}
+
+/**
+ * The skip reasons a chunk COMPUTES and used to discard (R3.2.2).
+ *
+ * Each of these is a place where the chunk decided not to do something it could
+ * have done -- an engine it will not probe, a probe that came back empty, a row
+ * it could not judge -- and then continued as though nothing had happened. The
+ * outcome of the chunk was unaffected, so the ledger recorded a clean
+ * 'succeeded' over work that had quietly shrunk. Standing rule 1: a skip is not
+ * a success.
+ *
+ * These are NOT outcomes and they do NOT get rows of their own. R3.2.1's accept
+ * is one scan_runs row per chunk EXECUTION, and a verifier proved that
+ * `sum(probes_attempted)` counts each probe exactly once across those rows; one
+ * row per skip would break both. They ride on the single chunk row, in
+ * `detail.skips`, aggregated by reason with an exact count.
+ */
+export const CHUNK_SKIP_REASONS = Object.freeze({
+  /** A checkpoint-frozen engine that no longer resolves against the live registry. */
+  ENGINE_NOT_REGISTERED: "engine_not_registered",
+  /** NONE of the frozen engines resolve, so the chunk probed today's set instead. */
+  ENGINE_SET_FALLBACK: "engine_set_fallback",
+  /** A probe returned carrying `error`: the row is still written, the answer is not real. */
+  PROBE_ERROR: "probe_error",
+  /** The prompt set was used for this scan but could not be persisted for the next one. */
+  PROMPT_PERSIST_FAILED: "prompt_persist_failed",
+  /** One row kept its probe-time verdict because the full-roster re-judge threw. */
+  REJUDGE_FAILED: "rejudge_failed",
+  /** One row contributed no result_brands because its roster judging threw. */
+  ROSTER_JUDGE_FAILED: "roster_judge_failed",
+  /** Citations were inserted unclassified because enrichment threw. */
+  CITATION_ENRICH_FAILED: "citation_enrich_failed",
+});
+
+/**
+ * How many distinct subjects one skip reason keeps. The COUNT is always exact;
+ * only the sample is capped, and an entry that dropped subjects says so with
+ * `sample_truncated: true` rather than looking like a complete list.
+ */
+export const SKIP_SAMPLE_MAX = 5;
+const SKIP_SUBJECT_MAX_CHARS = 200;
+
+/** "This phase watches for skips" -- turns NOT MEASURED into a measured zero. */
+function armSkips(tally) {
+  if (!tally || typeof tally !== "object") return;
+  if (!Array.isArray(tally.skips)) tally.skips = [];
+}
+
+/**
+ * Record one discarded skip against the chunk's single run.
+ *
+ * Aggregated by reason so a 60-pair scan whose engine died cannot write 60
+ * detail entries; `count` stays exact either way. A skip with no reason throws:
+ * an unexplained skip is the exact thing this task exists to abolish, and
+ * silently accepting one here would reintroduce it one level down.
+ */
+export function recordSkip(tally, reason, subject = null) {
+  if (!String(reason ?? "").trim()) {
+    throw new Error(
+      "recordSkip: a skip with no reason is the discarded fact R3.2.2 exists to keep — name it"
+    );
+  }
+  if (!tally || typeof tally !== "object") return;
+  armSkips(tally);
+  let entry = tally.skips.find((s) => s.reason === reason);
+  if (!entry) {
+    entry = { reason, count: 0, sample: [] };
+    tally.skips.push(entry);
+  }
+  entry.count++;
+  if (subject !== null && subject !== undefined) {
+    const text = String(subject).slice(0, SKIP_SUBJECT_MAX_CHARS);
+    if (entry.sample.length < SKIP_SAMPLE_MAX) entry.sample.push(text);
+    else entry.sample_truncated = true;
+  }
+}
+
+/**
+ * The skips a chunk recorded, in the shape `detail.skips` carries.
+ *
+ * Returns null when nothing armed the list: a chunk that never entered a phase
+ * that could skip must not report an empty list, because an empty list reads as
+ * "nothing was skipped" and that is a claim it is in no position to make.
+ * Exported so the honesty property is testable without a database.
+ */
+export function summarizeSkips(tally = {}) {
+  if (!tally || !Array.isArray(tally.skips)) return { skips: null, skips_total: null };
+  return {
+    skips: tally.skips.map((s) => ({ ...s, sample: [...s.sample] })),
+    skips_total: tally.skips.reduce((n, s) => n + s.count, 0),
+  };
 }
 
 /** "This phase is counting <key>" -- turns NOT MEASURED into a measured zero. */
@@ -220,13 +315,17 @@ function resolveChunkLedger(deps = {}) {
  *
  * A real failure to open propagates: see resolveChunkLedger.
  */
-async function openChunkRun(ledger, fields) {
+async function openChunkRun(ledger, fields, opts = {}) {
   if (!ledger.enabled) {
-    const subject = (fields.detail && fields.detail.job_id) || fields.scanJobId || "(unknown job)";
+    const label = opts.label || "scan-chunk";
+    const what = opts.what || "chunk execution";
+    const noun = opts.noun || "chunk";
+    const subject =
+      opts.subject || `job ${(fields.detail && fields.detail.job_id) || fields.scanJobId || "(unknown job)"}`;
     console.warn(
-      `[scan-chunk] SCAN_RUNS LEDGER DISABLED (${ledger.reason}) — this chunk execution for job ` +
+      `[${label}] SCAN_RUNS LEDGER DISABLED (${ledger.reason}) — this ${what} for ` +
         `${subject} will write NO scan_runs row. Its phase, outcome, reason and counters go ` +
-        `unrecorded, and its ABSENCE from the ledger must not be read as "the chunk never ran": ` +
+        `unrecorded, and its ABSENCE from the ledger must not be read as "the ${noun} never ran": ` +
         `the status read (R3.2.3) and the reaper (R3.3.2) cannot see this execution at all.`
     );
     return null;
@@ -243,15 +342,15 @@ async function openChunkRun(ledger, fields) {
  * with a ledger-write error would be the worse trade -- the fleet's closeOrWarn
  * makes the same call for the same reason.
  */
-async function closeChunkRun(ledger, run, fields) {
+async function closeChunkRun(ledger, run, fields, { label = "scan-chunk" } = {}) {
   if (!run) return null;
   try {
     const closed = await ledger.close({ runId: run.id, ...fields });
-    console.log(`[scan-chunk] ${describeRun(closed)}`);
+    console.log(`[${label}] ${describeRun(closed)}`);
     return closed;
   } catch (err) {
     console.error(
-      `[scan-chunk] WARNING: could not close run ${run.id} (${fields.outcome}/${fields.reason}): ` +
+      `[${label}] WARNING: could not close run ${run.id} (${fields.outcome}/${fields.reason}): ` +
         `${err.message} — it stays OPEN and will be reaped rather than accounted for.`
     );
     return null;
@@ -327,6 +426,10 @@ export function chunkRunOutcome(result, tally = {}) {
   const detail = {
     phases_run: Array.isArray(tally.phases) ? tally.phases : [],
     chunk_reason: (result && result.reason) || null,
+    // R3.2.2. `skips` is null when no phase armed it (NOT MEASURED) and [] with
+    // skips_total 0 when a phase looked and found none. Never `?? 0` here: a
+    // chunk that never watched for skips must not report zero of them.
+    ...summarizeSkips(tally),
   };
   const reason = result && result.reason ? String(result.reason) : null;
 
@@ -704,6 +807,10 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
   // sourcing pass that swallowed nothing and a chunk that never sourced must
   // not both read as "errors_recovered: 0".
   armCount(tally, "errorsRecovered");
+  // …and it watches for the skip that absorbed error IS (R3.2.2). Armed here so
+  // a sourcing pass that persisted everything reports `skips_total: 0` — it
+  // looked — rather than the null of a chunk that never sourced.
+  armSkips(tally);
   const sourceQueries = deps.sourceUnbrandedQueries || sourceUnbrandedQueries;
   const buildBranded = deps.buildBrandedQueries || buildBrandedQueries;
   const upsert = deps.upsertPrompts || upsertPrompts;
@@ -760,8 +867,10 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
       );
     } catch (err) {
       // Absorbed and continued past: the prompts are still used for this scan,
-      // they just are not durable for the next one. Counted, not only logged.
+      // they just are not durable for the next one. Counted AND named — the
+      // count says how much was swallowed, the reason says what it was.
       bumpCount(tally, "errorsRecovered");
+      recordSkip(tally, CHUNK_SKIP_REASONS.PROMPT_PERSIST_FAILED, err.message);
       console.warn("[scan-chunk] Failed to persist prompts:", err.message);
     }
   }
@@ -804,6 +913,10 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
   armCount(tally, "probesAttempted");
   armCount(tally, "probesSucceeded");
   armCount(tally, "errorsRecovered");
+  // Probing is also where engines get dropped and probes come back empty
+  // (R3.2.2), so it declares that watch too: `skips: []` here is "I looked",
+  // and it is a different row from the null of a chunk that never probed.
+  armSkips(tally);
   const updateJob = deps.updateScanJob || updateScanJob;
   const getCompletedPairs = deps.getCompletedPairsForJob || getCompletedPairsForJob;
   const upsertResults = deps.upsertPromptResults || upsertPromptResults;
@@ -818,11 +931,43 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
   const allEngineDefs = resolveEngines();
   const frozenNames = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : null;
   const filtered = frozenNames ? allEngineDefs.filter((e) => frozenNames.includes(e.name)) : allEngineDefs;
+
+  // R3.2.2 — THE ENGINE SKIP, which until now happened in total silence.
+  //
+  // `engines` is frozen onto the checkpoint at sourcing time so a mid-scan env
+  // change cannot re-pick this scan's engines. The consequence nobody recorded:
+  // an engine frozen into the checkpoint that no longer resolves against the
+  // live registry (its key was pulled, its flag was flipped) is simply not in
+  // `filtered`, is never probed, and the scan finalizes with a headline blended
+  // over the engines that remain. The scan looked complete, the ledger said
+  // 'succeeded', and the fact that a whole engine had been dropped existed only
+  // as the difference between two array lengths inside one stack frame.
+  const registered = new Set(allEngineDefs.map((e) => e.name));
+  for (const name of frozenNames || []) {
+    if (registered.has(name)) continue;
+    recordSkip(tally, CHUNK_SKIP_REASONS.ENGINE_NOT_REGISTERED, name);
+    console.warn(
+      `[scan-chunk] Job ${jobId}: engine "${name}" was frozen into this scan's checkpoint but is no ` +
+        `longer registered — it will NOT be probed, and this scan's headline is blended over the ` +
+        `engines that remain. Recorded on the run as ${CHUNK_SKIP_REASONS.ENGINE_NOT_REGISTERED}.`
+    );
+  }
+
   // Defensive fallback only: if none of the checkpoint-frozen engine names
   // resolve against the live registry any more (e.g. env fully reconfigured
   // mid-scan), fall back to whatever's enabled today rather than stalling
-  // the job forever on an empty engine list.
+  // the job forever on an empty engine list. That fallback silently changes
+  // WHICH questions this scan is answered by, so it is recorded as its own
+  // reason rather than hiding among the per-engine drops above.
   const engineDefs = filtered.length > 0 ? filtered : allEngineDefs;
+  if (frozenNames && filtered.length === 0) {
+    recordSkip(tally, CHUNK_SKIP_REASONS.ENGINE_SET_FALLBACK, frozenNames.join(","));
+    console.warn(
+      `[scan-chunk] Job ${jobId}: NONE of the checkpoint-frozen engines (${frozenNames.join(", ")}) ` +
+        `resolve any more — probing today's set (${allEngineDefs.map((e) => e.name).join(", ") || "none"}) ` +
+        `instead. This scan is no longer comparable to the set it was started with.`
+    );
+  }
 
   const completed = await getCompletedPairs(jobId);
   const totalPairs = Math.max(queries.length * engineDefs.length, 1);
@@ -854,6 +999,14 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       const probeErrors = batchResults.filter((r) => r && r.error).length;
       bumpCount(tally, "probesAttempted", batch.length);
       bumpCount(tally, "errorsRecovered", probeErrors);
+      // R3.2.2 — WHY those errors happened, not just how many. errors_recovered
+      // is a number; "5 probes were absorbed" and "5 probes were absorbed
+      // because Bright Data returned 502" are different facts, and only the
+      // first one survived until now. Aggregated by reason (recordSkip), so a
+      // whole engine timing out costs one detail entry with an exact count.
+      batchResults.forEach((r) => {
+        if (r && r.error) recordSkip(tally, CHUNK_SKIP_REASONS.PROBE_ERROR, `${engine.name}: ${r.error}`);
+      });
 
       // Persist prompt_results ONLY — the COMPLETE probe result (including
       // `references`) is stored verbatim in `raw`, so finalize can both
@@ -1014,6 +1167,10 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   // of the function so a chunk that lost the claim reports "not measured"
   // rather than a zero it never looked for.
   armCount(tally, "errorsRecovered");
+  // R3.2.2 — and the same arming for the REASONS those absorbed errors carry.
+  // Also after the claim: a chunk that lost the finalize claim watched for
+  // nothing and must report `skips: null`, not an empty list it never filled.
+  armSkips(tally);
 
   await updateJob(jobId, { status: "scoring", progress_pct: 90 });
 
@@ -1179,6 +1336,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
       rejudgedRows++;
     } catch (err) {
       bumpCount(tally, "errorsRecovered");
+      recordSkip(tally, CHUNK_SKIP_REASONS.REJUDGE_FAILED, `${r.engine}: ${err.message}`);
       console.warn(
         `[scan-chunk] Job ${jobId}: re-judge failed for a ${r.engine} row — keeping the probe-time verdict: ${err.message}`
       );
@@ -1362,6 +1520,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     );
   } catch (err) {
     bumpCount(tally, "errorsRecovered");
+    recordSkip(tally, CHUNK_SKIP_REASONS.CITATION_ENRICH_FAILED, err.message);
     console.warn(
       `[scan-chunk] Citation enrichment failed for job ${jobId} — inserting unenriched rows: ${err.message}`
     );
@@ -1417,6 +1576,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
       // errors_recovered: a finalize that "succeeded" after swallowing nine of
       // these is not the same run as one that met none.
       bumpCount(tally, "errorsRecovered");
+      recordSkip(tally, CHUNK_SKIP_REASONS.ROSTER_JUDGE_FAILED, `${row.engine}: ${err.message}`);
       console.warn(
         `[scan-chunk] Job ${jobId}: full-roster judging failed for result ${row.id} (${row.engine}) — skipping: ${err.message}`
       );
@@ -1667,7 +1827,81 @@ export async function runScanChunk(jobId, deps = {}) {
 // ---------------------------------------------------------------------------
 // Scheduler tick — enqueues scans for due, non-active scan_schedules brands.
 // Called by the cron worker route after its resume sweep.
+//
+// R3.2.2 — THE SCHEDULER SKIPS. Two `continue` statements below decided, for a
+// named brand, not to run a scan it was due for, and left no trace anywhere:
+// not a log line, not a row, not a field in the response. A brand whose
+// schedule cadence had been flipped to 'off' and a brand whose previous scan
+// was wedged in 'probing' forever both simply stopped being scanned, and the
+// only evidence was the absence of new `scans` rows — which is indistinguishable
+// from cron never firing at all. Standing rule 1.
+//
+// WHY THESE GET ROWS OF THEIR OWN AND THE CHUNK'S SKIPS DO NOT. Migration 011's
+// header names this case as the reason scan_job_id carries no foreign key: "A
+// scheduler skip (R3.2.2) happens precisely because no job was created." There
+// is no chunk execution to hang the fact on — nothing ran — so the skip IS the
+// execution. It names a brand, which satisfies scan_runs_subject_chk, and its
+// counters stay NULL because a decision not to scan measured no probes.
+// Cardinality is bounded by the number of due schedules per cron tick.
+//
+// The tick itself also gets ONE row, phase 'tick', so a cron pass that looked
+// and found nothing due is a measured zero rather than a silence. Readers that
+// want executions filter `phase = 'tick'`; readers that want the skips filter
+// `phase = 'schedule'`, exactly as the fleet's callers filter `phase <> 'idle'`.
 // ---------------------------------------------------------------------------
+
+/** The scheduler's two phases in scan_runs.phase. See the block comment above. */
+export const SCHEDULER_PHASES = Object.freeze({
+  TICK: "tick",
+  SCHEDULE: "schedule",
+});
+
+/**
+ * Why the scheduler declined a due schedule. Closed vocabulary here even though
+ * migration 011 leaves `reason` free text: an unexplained skip is what this task
+ * abolishes, and a typo'd reason is an unexplained skip wearing a label.
+ */
+export const SCHEDULER_SKIP_REASONS = Object.freeze({
+  /** cadence flipped to 'off' while `enabled` still says true. */
+  CADENCE_OFF: "cadence_off",
+  /** a scan for this brand is already running — don't pile on. */
+  BRAND_ALREADY_ACTIVE: "brand_already_active",
+});
+
+/** Why a whole tick closed the way it did. */
+export const SCHEDULER_TICK_REASONS = Object.freeze({
+  /** It looked and nothing was due. A MEASURED zero, not a silence. */
+  NO_SCHEDULES_DUE: "no_schedules_due",
+  /** Schedules were due and every one of them was declined. */
+  ALL_DUE_SKIPPED: "all_due_skipped",
+  /** The tick threw; the error is on the row and then rethrown. */
+  TICK_FAILED: "scheduler_tick_failed",
+});
+
+const SCHEDULER_LOG = { label: "scheduler", what: "scheduler decision", noun: "scheduler" };
+
+/**
+ * One scan_runs row for one declined schedule, opened and closed together.
+ *
+ * Standing rule 2 applies to the OPEN: if the ledger cannot record the skip the
+ * error propagates and the tick fails loudly, rather than the scheduler quietly
+ * carrying on declining brands off the record — which is the state this whole
+ * function exists to end.
+ */
+async function recordSchedulerSkip(ledger, { workerId, brand, reason, detail }) {
+  const run = await openChunkRun(
+    ledger,
+    { runner: RUNNERS.SCHEDULER, phase: SCHEDULER_PHASES.SCHEDULE, workerId, brand, detail },
+    { ...SCHEDULER_LOG, subject: `brand ${brand}` }
+  );
+  console.warn(
+    `[scheduler] "${brand}" was due and was NOT scanned (${reason}). Recorded as a skipped ` +
+      `scan_runs row — no scan job was created, so nothing else would have said so.`
+  );
+  // Counters stay NULL on purpose: a decision not to scan measured no probes,
+  // and 0 here would claim it looked for some.
+  await closeChunkRun(ledger, run, { outcome: RUN_OUTCOMES.SKIPPED, reason, detail }, SCHEDULER_LOG);
+}
 
 export async function runSchedulerTick(nowIso, deps = {}) {
   const listDue = deps.listDueSchedules || listDueSchedules;
@@ -1676,50 +1910,129 @@ export async function runSchedulerTick(nowIso, deps = {}) {
   const upsertSchedule = deps.upsertScanSchedule || upsertScanSchedule;
   const kickChunk = deps.runScanChunk || runScanChunk;
 
-  const due = await listDue(nowIso);
+  const ledger = resolveChunkLedger(deps);
+  // Identifies THIS tick, so the skip rows it wrote can be joined back to the
+  // pass that wrote them (they share no job and no batch).
+  const schedulerId = deps.schedulerId || `scheduler-${crypto.randomUUID()}`;
+
+  const tickRun = await openChunkRun(
+    ledger,
+    {
+      runner: RUNNERS.SCHEDULER,
+      phase: SCHEDULER_PHASES.TICK,
+      workerId: schedulerId,
+      detail: { now: nowIso },
+    },
+    { ...SCHEDULER_LOG, what: "scheduler tick", noun: "tick", subject: `tick at ${nowIso}` }
+  );
+
   const started = [];
+  /** Every schedule this tick declined, with the reason it used to discard. */
+  const skipped = [];
+  let due = [];
+  // NOT MEASURED until listDue actually returns. A tick that died inside the
+  // query has no idea how many schedules were due, and `due: 0` on its row
+  // would be a count it never took — the same lie the nullable counters exist
+  // to prevent.
+  let dueCount = null;
 
-  for (const schedule of due) {
-    // Defensive: cadence 'off' should never fire a scan even if `enabled`
-    // says otherwise (the two fields are independent columns; the P0.4
-    // schedule editor that keeps them in sync doesn't exist yet).
-    if (schedule.cadence === "off") continue;
+  try {
+    due = await listDue(nowIso);
+    dueCount = due.length;
 
-    const brandLabel = schedule.display_name || schedule.brand;
-    if (await hasActive(brandLabel)) continue; // already running — don't pile on
+    for (const schedule of due) {
+      const brandLabel = schedule.display_name || schedule.brand;
 
-    const job = await createJob({
-      brand: brandLabel,
-      // scan_schedules.brand IS the resolveBrandKey() domain key (not a
-      // display name) — reused as the `url` input so
-      // resolveBrandKey(brandLabel, schedule.brand) re-derives that exact
-      // same key. scan_schedules has no url/industry/competitors columns
-      // (schema gap, not something P0.2 introduces): a scheduled re-scan
-      // reuses the brand's EXISTING tracked prompt pool; industry/competitors
-      // only matter if that pool is short, in which case generation falls
-      // back to its own industry-pack heuristics with no industry hint.
-      url: schedule.brand,
-      industry: "",
-      competitors: "",
-    });
+      // Defensive: cadence 'off' should never fire a scan even if `enabled`
+      // says otherwise (the two fields are independent columns; the P0.4
+      // schedule editor that keeps them in sync doesn't exist yet).
+      if (schedule.cadence === "off") {
+        skipped.push({ brand: brandLabel, reason: SCHEDULER_SKIP_REASONS.CADENCE_OFF });
+        await recordSchedulerSkip(ledger, {
+          workerId: schedulerId,
+          brand: brandLabel,
+          reason: SCHEDULER_SKIP_REASONS.CADENCE_OFF,
+          detail: { schedule_key: schedule.brand, cadence: schedule.cadence ?? null, now: nowIso },
+        });
+        continue;
+      }
 
-    // Bump the schedule BEFORE the fire-and-forget kick below (reviewer D7).
-    // createJob has already durably enqueued the work, so if this instance
-    // dies right after — including inside the kick itself — next_run_at must
-    // already be advanced, or listDueSchedules keeps finding this schedule
-    // "due" on every subsequent tick and piles up a fresh job each time. The
-    // job just created is still recoverable on its own via the staleness
-    // sweep even when the kick below never lands.
-    await upsertSchedule(schedule.brand, {
-      last_run_at: nowIso,
-      next_run_at: computeNextRunAt(schedule.cadence, nowIso),
-    });
+      if (await hasActive(brandLabel)) {
+        // already running — don't pile on
+        skipped.push({ brand: brandLabel, reason: SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE });
+        await recordSchedulerSkip(ledger, {
+          workerId: schedulerId,
+          brand: brandLabel,
+          reason: SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE,
+          detail: { schedule_key: schedule.brand, cadence: schedule.cadence ?? null, now: nowIso },
+        });
+        continue;
+      }
 
-    kickChunk(job.id).catch((err) => {
-      console.error(`[scheduler] Chunk kick failed for job ${job.id} (brand ${brandLabel}):`, err.message);
-    });
-    started.push({ brand: brandLabel, job_id: job.id });
+      const job = await createJob({
+        brand: brandLabel,
+        // scan_schedules.brand IS the resolveBrandKey() domain key (not a
+        // display name) — reused as the `url` input so
+        // resolveBrandKey(brandLabel, schedule.brand) re-derives that exact
+        // same key. scan_schedules has no url/industry/competitors columns
+        // (schema gap, not something P0.2 introduces): a scheduled re-scan
+        // reuses the brand's EXISTING tracked prompt pool; industry/competitors
+        // only matter if that pool is short, in which case generation falls
+        // back to its own industry-pack heuristics with no industry hint.
+        url: schedule.brand,
+        industry: "",
+        competitors: "",
+      });
+
+      // Bump the schedule BEFORE the fire-and-forget kick below (reviewer D7).
+      // createJob has already durably enqueued the work, so if this instance
+      // dies right after — including inside the kick itself — next_run_at must
+      // already be advanced, or listDueSchedules keeps finding this schedule
+      // "due" on every subsequent tick and piles up a fresh job each time. The
+      // job just created is still recoverable on its own via the staleness
+      // sweep even when the kick below never lands.
+      await upsertSchedule(schedule.brand, {
+        last_run_at: nowIso,
+        next_run_at: computeNextRunAt(schedule.cadence, nowIso),
+      });
+
+      kickChunk(job.id).catch((err) => {
+        console.error(`[scheduler] Chunk kick failed for job ${job.id} (brand ${brandLabel}):`, err.message);
+      });
+      started.push({ brand: brandLabel, job_id: job.id });
+    }
+  } catch (err) {
+    // The tick's own row closes FAILED before the error leaves — a tick that
+    // threw halfway through must not be indistinguishable from one that never
+    // ran. The error still propagates: this records, it does not absorb.
+    await closeChunkRun(
+      ledger,
+      tickRun,
+      {
+        outcome: RUN_OUTCOMES.FAILED,
+        reason: SCHEDULER_TICK_REASONS.TICK_FAILED,
+        error: err.message,
+        detail: { due: dueCount, started: started.length, skipped: skipped.length, skips: skipped },
+      },
+      SCHEDULER_LOG
+    );
+    throw err;
   }
 
-  return { started };
+  // Three different ticks, three different rows. 'succeeded' started something;
+  // 'noop' with no_schedules_due looked and found an empty queue; 'noop' with
+  // all_due_skipped found work and declined every piece of it — which is the
+  // one that used to be invisible, and the one an operator most needs to see.
+  const detail = { due: dueCount, started: started.length, skipped: skipped.length, skips: skipped };
+  const verdict = started.length
+    ? { outcome: RUN_OUTCOMES.SUCCEEDED, reason: null }
+    : {
+        outcome: RUN_OUTCOMES.NOOP,
+        reason: due.length ? SCHEDULER_TICK_REASONS.ALL_DUE_SKIPPED : SCHEDULER_TICK_REASONS.NO_SCHEDULES_DUE,
+      };
+  await closeChunkRun(ledger, tickRun, { ...verdict, detail }, SCHEDULER_LOG);
+
+  // `skipped` is returned as well as ledgered so the cron route's response can
+  // stop reporting an empty `started` as a clean tick (R3.2.3's read).
+  return { started, skipped };
 }

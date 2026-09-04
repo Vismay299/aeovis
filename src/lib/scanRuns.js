@@ -25,9 +25,15 @@ import { supabase } from "./db.js";
  * is duplicated deliberately and checked by a guard test in
  * src/lib/scanRuns.test.mjs.
  *
- * NOT YET WIRED: R3.2.1 wires the scan chunk, R3.2.2 the discarded skip
- * reasons, R3.2.3 the status route. `worker/src/lib/runLedger.js` is the fleet's
- * copy and IS wired, in worker/src/index.js.
+ * WIRED BY: R3.2.1 (the scan chunk's one row per execution) and R3.2.2 (the
+ * skip reasons that used to be discarded — the scheduler's declined schedules
+ * get rows of their own under RUNNERS.SCHEDULER, and the chunk's in-flight
+ * skips ride on its single row in `detail.skips`). Both live in
+ * src/lib/workers/scanWorker.js. STILL UNWIRED: R3.2.3's status route reads
+ * nothing from here yet, so a row written today is written for a reader that
+ * does not exist — which is why the writes must be right before it does.
+ * `worker/src/lib/runLedger.js` is the fleet's copy and IS wired, in
+ * worker/src/index.js.
  *
  * `deps.client` is test-only injection, matching db.js, jobLease.js and
  * probeQueue.js.

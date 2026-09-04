@@ -927,3 +927,798 @@ test("runSourcingPhase — a swallowed prompt-persist failure is COUNTED, not on
 
   assert.equal(tally.errorsRecovered, 1, "the chunk continued past this error; the ledger must show it did");
 });
+
+// ===========================================================================
+// R3.2.2 — every discarded skip reason becomes a ledger row
+// ===========================================================================
+//
+// R3.2.1 gave a chunk ONE row carrying its outcome. What still vanished was
+// every decision INSIDE that row: an engine that could not be probed, a probe
+// that came back empty, a row that could not be judged, and — worst, because it
+// left no trace at all — a due brand the scheduler declined to scan.
+//
+// Two levels, deliberately, and the tests below hold both:
+//   * IN-CHUNK skips ride on the chunk's single row, in `detail.skips`,
+//     aggregated by reason with an exact count. One row per skip would break
+//     R3.2.1's accept and the `sum(probes_attempted) === queries.length`
+//     property a verifier proved; the last two tests here re-prove both.
+//   * SCHEDULER skips get rows of their OWN, because no chunk ran for them to
+//     ride on. Migration 011's header names exactly this case as the reason
+//     scan_job_id carries no foreign key.
+//
+// And the arming rule from R3.2.1 extends to skips: `skips: null` means the
+// chunk never watched for any, `skips: []` with `skips_total: 0` means it
+// watched and found none. Those are different rows.
+
+import {
+  runSchedulerTick,
+  runFinalizePhase,
+  recordSkip,
+  summarizeSkips,
+  CHUNK_SKIP_REASONS,
+  SCHEDULER_PHASES,
+  SCHEDULER_SKIP_REASONS,
+  SCHEDULER_TICK_REASONS,
+  SKIP_SAMPLE_MAX,
+} from "./scanWorker.js";
+
+/** The one skip entry for `reason` on a closed row, or undefined. */
+function skipEntry(row, reason) {
+  return ((row.detail && row.detail.skips) || []).find((s) => s.reason === reason);
+}
+
+/** A scheduler backend: schedules in, jobs out, nothing else. */
+function makeSchedulerBackend({ due = [], active = new Set() } = {}) {
+  const jobs = [];
+  const schedules = [];
+  const kicked = [];
+  let n = 0;
+  return {
+    jobs,
+    schedules,
+    kicked,
+    deps: {
+      listDueSchedules: async () => due,
+      hasActiveScanForBrand: async (brand) => active.has(brand),
+      createScanJob: async (fields) => {
+        const job = { id: `job-${n++}`, ...fields };
+        jobs.push(job);
+        return job;
+      },
+      upsertScanSchedule: async (key, fields) => {
+        schedules.push({ key, ...fields });
+        return fields;
+      },
+      runScanChunk: async (id) => {
+        kicked.push(id);
+      },
+      schedulerId: "scheduler-under-test",
+    },
+  };
+}
+
+function schedule(brand, cadence = "daily", displayName = null) {
+  return { brand, display_name: displayName, cadence, enabled: true, next_run_at: null };
+}
+
+/** Rows the scheduler wrote for one phase. */
+function rowsInPhase(ledger, phase) {
+  return ledger.rows.filter((r) => r.phase === phase);
+}
+
+// ---------------------------------------------------------------------------
+// summarizeSkips — the arming rule, pure
+// ---------------------------------------------------------------------------
+
+test("summarizeSkips — a tally nothing armed reports NOT MEASURED, never an empty list", () => {
+  const tally = createChunkTally();
+  assert.equal(tally.skips, null, "createChunkTally must not hand out a pre-armed empty list");
+  const { skips, skips_total } = summarizeSkips(tally);
+  assert.equal(skips, null, "[] would claim 'nothing was skipped' — a claim this chunk cannot make");
+  assert.equal(skips_total, null, "and 0 would be that same claim as a number");
+});
+
+test("summarizeSkips — an armed-but-clean tally is a MEASURED zero, distinct from never armed", () => {
+  const { skips, skips_total } = summarizeSkips({ skips: [] });
+  assert.deepEqual(skips, []);
+  assert.equal(skips_total, 0);
+  assert.notEqual(skips_total, summarizeSkips(createChunkTally()).skips_total);
+});
+
+test("chunkRunOutcome — carries skips onto detail, null when nothing measured them", () => {
+  const never = chunkRunOutcome({ reason: "complete" }, createChunkTally());
+  assert.equal(never.detail.skips, null);
+  assert.equal(never.detail.skips_total, null);
+
+  const measured = chunkRunOutcome(
+    { reason: "complete" },
+    { phases: ["probing"], skips: [{ reason: "probe_error", count: 3, sample: ["aio: 502"] }] }
+  );
+  assert.equal(measured.detail.skips_total, 3, "the count is exact even when the sample is not");
+  assert.equal(measured.detail.skips[0].reason, "probe_error");
+});
+
+// ---------------------------------------------------------------------------
+// CLASS 1 — scheduler skips: their own rows, because no job was ever created
+// ---------------------------------------------------------------------------
+
+test("runSchedulerTick — a cadence:'off' schedule writes a SKIPPED row naming the brand", async () => {
+  const ledger = makeLedger();
+  const backend = makeSchedulerBackend({ due: [schedule("off-co.com", "off", "Off Co")] });
+
+  const result = await runSchedulerTick("2026-09-04T00:00:00.000Z", { ...backend.deps, ...ledger.deps });
+
+  assert.equal(backend.jobs.length, 0, "it really did decline to scan");
+  assert.deepEqual(result.skipped, [{ brand: "Off Co", reason: SCHEDULER_SKIP_REASONS.CADENCE_OFF }]);
+
+  const skips = rowsInPhase(ledger, SCHEDULER_PHASES.SCHEDULE);
+  assert.equal(skips.length, 1, "the decision not to scan IS the execution, so it gets the row");
+  assert.equal(skips[0].runner, RUNNERS.SCHEDULER);
+  assert.equal(skips[0].outcome, RUN_OUTCOMES.SKIPPED);
+  assert.equal(skips[0].reason, SCHEDULER_SKIP_REASONS.CADENCE_OFF);
+  assert.equal(skips[0].brand, "Off Co", "scan_runs_subject_chk is satisfied by the brand alone");
+  assert.equal(skips[0].scan_job_id, null, "no job was created — that is the whole point of the row");
+  assert.equal(skips[0].detail.schedule_key, "off-co.com");
+  assert.ok(skips[0].ended_at, "opened and closed together; it leaves nothing open");
+});
+
+test("runSchedulerTick — a brand with a scan already running writes SKIPPED/brand_already_active", async () => {
+  const ledger = makeLedger();
+  const backend = makeSchedulerBackend({
+    due: [schedule("busy.com", "daily", "Busy Co")],
+    active: new Set(["Busy Co"]),
+  });
+
+  const result = await runSchedulerTick("2026-09-04T00:00:00.000Z", { ...backend.deps, ...ledger.deps });
+
+  assert.equal(backend.jobs.length, 0);
+  assert.equal(result.skipped[0].reason, SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE);
+
+  const [row] = rowsInPhase(ledger, SCHEDULER_PHASES.SCHEDULE);
+  assert.equal(row.outcome, RUN_OUTCOMES.SKIPPED);
+  assert.equal(row.reason, SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE);
+  assert.notEqual(
+    row.reason,
+    SCHEDULER_SKIP_REASONS.CADENCE_OFF,
+    "'nobody wants this scanned' and 'it is already being scanned' are different facts"
+  );
+});
+
+test("runSchedulerTick — a scheduler skip measures no probes, so its counters stay NULL", async () => {
+  const ledger = makeLedger();
+  const backend = makeSchedulerBackend({ due: [schedule("off-co.com", "off", "Off Co")] });
+  await runSchedulerTick("2026-09-04T00:00:00.000Z", { ...backend.deps, ...ledger.deps });
+
+  for (const row of ledger.rows) {
+    assert.equal(
+      row.probes_attempted,
+      null,
+      `${row.phase}: a scheduler row reporting 0 probes would claim it looked for some`
+    );
+    assert.equal(row.probes_succeeded, null);
+    assert.equal(row.errors_recovered, null);
+  }
+});
+
+test("runSchedulerTick — an empty due list is a MEASURED zero (noop/no_schedules_due), not a silence", async () => {
+  const ledger = makeLedger();
+  const backend = makeSchedulerBackend({ due: [] });
+
+  const result = await runSchedulerTick("2026-09-04T00:00:00.000Z", { ...backend.deps, ...ledger.deps });
+
+  assert.deepEqual(result.started, []);
+  const ticks = rowsInPhase(ledger, SCHEDULER_PHASES.TICK);
+  assert.equal(ticks.length, 1, "exactly one row per tick");
+  assert.equal(ticks[0].outcome, RUN_OUTCOMES.NOOP);
+  assert.equal(ticks[0].reason, SCHEDULER_TICK_REASONS.NO_SCHEDULES_DUE);
+  assert.equal(ticks[0].detail.due, 0);
+  assert.equal(
+    rowsInPhase(ledger, SCHEDULER_PHASES.SCHEDULE).length,
+    0,
+    "nothing was declined, so nothing is filed as declined"
+  );
+});
+
+test("runSchedulerTick — 'nothing was due' and 'everything due was declined' are different rows", async () => {
+  const quiet = makeLedger();
+  await runSchedulerTick("2026-09-04T00:00:00.000Z", {
+    ...makeSchedulerBackend({ due: [] }).deps,
+    ...quiet.deps,
+  });
+
+  const starved = makeLedger();
+  await runSchedulerTick("2026-09-04T00:00:00.000Z", {
+    ...makeSchedulerBackend({
+      due: [schedule("a.com", "off", "A Co"), schedule("b.com", "daily", "B Co")],
+      active: new Set(["B Co"]),
+    }).deps,
+    ...starved.deps,
+  });
+
+  const quietTick = rowsInPhase(quiet, SCHEDULER_PHASES.TICK)[0];
+  const starvedTick = rowsInPhase(starved, SCHEDULER_PHASES.TICK)[0];
+
+  assert.equal(quietTick.reason, SCHEDULER_TICK_REASONS.NO_SCHEDULES_DUE);
+  assert.equal(starvedTick.reason, SCHEDULER_TICK_REASONS.ALL_DUE_SKIPPED);
+  assert.notEqual(
+    quietTick.reason,
+    starvedTick.reason,
+    "two brands going unscanned must not read the same as an idle scheduler"
+  );
+  assert.equal(starvedTick.detail.due, 2);
+  assert.equal(starvedTick.detail.skipped, 2);
+  assert.equal(rowsInPhase(starved, SCHEDULER_PHASES.SCHEDULE).length, 2, "one row per declined brand");
+  assert.deepEqual(
+    rowsInPhase(starved, SCHEDULER_PHASES.SCHEDULE)
+      .map((r) => r.reason)
+      .sort(),
+    [SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE, SCHEDULER_SKIP_REASONS.CADENCE_OFF]
+  );
+});
+
+test("runSchedulerTick — a tick that started work closes SUCCEEDED and files no skip for it", async () => {
+  const ledger = makeLedger();
+  const backend = makeSchedulerBackend({
+    due: [schedule("go.com", "daily", "Go Co"), schedule("off.com", "off", "Off Co")],
+  });
+
+  const result = await runSchedulerTick("2026-09-04T00:00:00.000Z", { ...backend.deps, ...ledger.deps });
+
+  assert.equal(result.started.length, 1, "the working path is untouched by the ledger");
+  assert.equal(backend.kicked.length, 1);
+  const tick = rowsInPhase(ledger, SCHEDULER_PHASES.TICK)[0];
+  assert.equal(tick.outcome, RUN_OUTCOMES.SUCCEEDED);
+  assert.equal(tick.detail.started, 1);
+  assert.equal(tick.detail.skipped, 1);
+  const skips = rowsInPhase(ledger, SCHEDULER_PHASES.SCHEDULE);
+  assert.equal(skips.length, 1);
+  assert.equal(skips[0].brand, "Off Co", "only the declined brand gets a skip row");
+  assert.ok(
+    ledger.rows.every((r) => r.worker_id === "scheduler-under-test"),
+    "the tick and its skips share a worker_id so they can be joined back together"
+  );
+});
+
+test("runSchedulerTick — a tick that throws closes FAILED and still rethrows", async () => {
+  const ledger = makeLedger();
+  const backend = makeSchedulerBackend({ due: [schedule("boom.com", "daily", "Boom Co")] });
+
+  await assert.rejects(
+    () =>
+      runSchedulerTick("2026-09-04T00:00:00.000Z", {
+        ...backend.deps,
+        ...ledger.deps,
+        createScanJob: async () => {
+          throw new Error("scan_jobs insert refused");
+        },
+      }),
+    /scan_jobs insert refused/,
+    "recording the failure must not swallow it"
+  );
+
+  const tick = rowsInPhase(ledger, SCHEDULER_PHASES.TICK)[0];
+  assert.equal(tick.outcome, RUN_OUTCOMES.FAILED);
+  assert.equal(tick.reason, SCHEDULER_TICK_REASONS.TICK_FAILED);
+  assert.match(tick.error, /scan_jobs insert refused/);
+  assert.ok(tick.ended_at, "a tick that died halfway is closed FAILED, not left looking un-run");
+});
+
+test("runSchedulerTick — a tick that died inside listDueSchedules reports due as NOT MEASURED", async () => {
+  // It never got the list, so it has no idea how many were due. `due: 0` there
+  // would be a count it never took — the same lie the nullable counters ban.
+  const ledger = makeLedger();
+  await assert.rejects(() =>
+    runSchedulerTick("2026-09-04T00:00:00.000Z", {
+      ...makeSchedulerBackend().deps,
+      ...ledger.deps,
+      listDueSchedules: async () => {
+        throw new Error("scan_schedules read refused");
+      },
+    })
+  );
+
+  const tick = rowsInPhase(ledger, SCHEDULER_PHASES.TICK)[0];
+  assert.equal(tick.outcome, RUN_OUTCOMES.FAILED);
+  assert.equal(tick.detail.due, null, "0 would claim it looked and found nothing due");
+  assert.equal(tick.detail.skipped, 0, "…while the skips it DID take are a real measured zero");
+});
+
+test("runSchedulerTick — with no ledger client, the declined brand is still ANNOUNCED", async () => {
+  // The suite has no Supabase credentials, so this is the path production takes
+  // when the client is missing. A silent decline here is the original bug.
+  const backend = makeSchedulerBackend({ due: [schedule("off.com", "off", "Off Co")] });
+  const warnings = [];
+  const realWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+  try {
+    await runSchedulerTick("2026-09-04T00:00:00.000Z", backend.deps);
+  } finally {
+    console.warn = realWarn;
+  }
+
+  assert.ok(
+    warnings.some((w) => /"Off Co" was due and was NOT scanned \(cadence_off\)/.test(w)),
+    `the skip must name the brand and the reason; got ${JSON.stringify(warnings)}`
+  );
+  assert.ok(
+    warnings.some((w) => w.includes("SCAN_RUNS LEDGER DISABLED")),
+    "and the disabled ledger must still announce what goes unrecorded"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// CLASS 2 — engine skips: an engine frozen into the scan that is gone today
+// ---------------------------------------------------------------------------
+
+test("runScanChunk — an engine frozen into the checkpoint but no longer registered is recorded, not dropped", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const queries = makeQueries(2);
+  const job = backend.seed({
+    id: "10101010-1010-4010-8010-101010101010",
+    status: "probing",
+    // Two engines were frozen at sourcing time…
+    checkpoint: makeCheckpoint(queries, ["aio", "perplexity"]),
+  });
+
+  const warn = console.warn;
+  console.warn = () => {};
+  let result;
+  try {
+    result = await runScanChunk(job.id, {
+      ...backend.deps,
+      ...ledger.deps,
+      // …and only one of them resolves today: perplexity's key was pulled.
+      resolveEnabledEngines: () => [
+        { name: "aio", concurrency: 2, probe: async (q) => probeResult("aio", q) },
+      ],
+      extractCompetitors: async () => [],
+    });
+  } finally {
+    console.warn = warn;
+  }
+
+  assert.equal(result.reason, "complete", "the scan still finishes — that is exactly why this was invisible");
+  const row = soleRow(ledger);
+  assert.equal(row.outcome, RUN_OUTCOMES.SUCCEEDED);
+
+  const skip = skipEntry(row, CHUNK_SKIP_REASONS.ENGINE_NOT_REGISTERED);
+  assert.ok(skip, "a whole engine going unprobed must not be invisible under a 'succeeded' row");
+  assert.equal(skip.count, 1);
+  assert.deepEqual(skip.sample, ["perplexity"], "and the row must say WHICH engine");
+  assert.equal(row.detail.skips_total, 1);
+  assert.equal(row.probes_attempted, 2, "only the surviving engine's pairs were attempted");
+});
+
+test("runScanChunk — when NO frozen engine resolves, the silent substitution is its own reason", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const queries = makeQueries(1);
+  const job = backend.seed({
+    id: "20202020-2020-4020-8020-202020202020",
+    status: "probing",
+    checkpoint: makeCheckpoint(queries, ["perplexity", "chatgpt"]),
+  });
+
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await runScanChunk(job.id, {
+      ...backend.deps,
+      ...ledger.deps,
+      resolveEnabledEngines: () => [
+        { name: "aio", concurrency: 1, probe: async (q) => probeResult("aio", q) },
+      ],
+      extractCompetitors: async () => [],
+    });
+  } finally {
+    console.warn = warn;
+  }
+
+  const row = soleRow(ledger);
+  const fallback = skipEntry(row, CHUNK_SKIP_REASONS.ENGINE_SET_FALLBACK);
+  assert.ok(fallback, "answering the scan with a different engine set is a decision, not a detail");
+  assert.deepEqual(fallback.sample, ["perplexity,chatgpt"]);
+  assert.equal(
+    skipEntry(row, CHUNK_SKIP_REASONS.ENGINE_NOT_REGISTERED).count,
+    2,
+    "…and each individual engine that went missing is still counted"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// CLASS 3 — batch decisions: probes that came back carrying an error
+// ---------------------------------------------------------------------------
+
+test("runScanChunk — a probe that errored records WHY, not only that errors_recovered went up", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const queries = makeQueries(4);
+  const job = backend.seed({
+    id: "30303030-3030-4030-8030-303030303030",
+    status: "probing",
+    checkpoint: makeCheckpoint(queries),
+  });
+
+  let seen = 0;
+  const result = await runScanChunk(job.id, {
+    ...backend.deps,
+    ...ledger.deps,
+    resolveEnabledEngines: () => [
+      {
+        name: "aio",
+        concurrency: 4,
+        probe: async (q) => probeResult("aio", q, { error: seen++ < 2 ? "upstream 502" : null }),
+      },
+    ],
+    extractCompetitors: async () => [],
+  });
+
+  assert.equal(result.reason, "complete");
+  const row = soleRow(ledger);
+  assert.equal(row.errors_recovered, 2, "R3.2.1's count is unchanged…");
+  const skip = skipEntry(row, CHUNK_SKIP_REASONS.PROBE_ERROR);
+  assert.equal(skip.count, 2, "…and R3.2.2 adds the reason behind it");
+  assert.ok(
+    skip.sample.every((s) => s.includes("aio: upstream 502")),
+    `the sample must carry the engine and the error; got ${JSON.stringify(skip.sample)}`
+  );
+});
+
+test("runScanChunk — a clean probing chunk reports skips_total 0: it LOOKED and found none", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const job = backend.seed({
+    id: "40404040-4040-4040-8040-404040404040",
+    status: "probing",
+    checkpoint: makeCheckpoint(makeQueries(2)),
+  });
+
+  await runScanChunk(job.id, {
+    ...backend.deps,
+    ...ledger.deps,
+    resolveEnabledEngines: () => [{ name: "aio", concurrency: 2, probe: async (q) => probeResult("aio", q) }],
+    extractCompetitors: async () => [],
+  });
+
+  const row = soleRow(ledger);
+  assert.deepEqual(row.detail.skips, [], "armed and empty");
+  assert.equal(row.detail.skips_total, 0);
+  assert.notEqual(row.detail.skips_total, null, "0 and 'not measured' are different rows and must stay different");
+});
+
+test("runScanChunk — a chunk that entered no phase reports skips as NOT MEASURED", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const job = backend.seed({ id: "50505050-5050-4050-8050-505050505050", status: "complete" });
+
+  await runScanChunk(job.id, { ...backend.deps, ...ledger.deps });
+
+  const row = soleRow(ledger);
+  assert.equal(row.outcome, RUN_OUTCOMES.NOOP);
+  assert.equal(row.detail.skips, null, "it never watched for a skip, so it may not report zero of them");
+  assert.equal(row.detail.skips_total, null);
+});
+
+test("runScanChunk — losing the sourcing claim leaves skips NOT MEASURED, like its counters", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const job = backend.seed({ id: "60606060-6060-4060-8060-606060606060", status: "pending" });
+
+  await runScanChunk(job.id, { ...backend.deps, ...ledger.deps, claimJobStatus: async () => null });
+
+  const row = soleRow(ledger);
+  assert.equal(row.outcome, RUN_OUTCOMES.SKIPPED);
+  assert.equal(row.detail.skips, null, "a chunk that declined before entering a phase measured nothing at all");
+});
+
+// ---------------------------------------------------------------------------
+// CLASS 4 — finalize's per-row absorptions, which kept a 'succeeded' clean
+// ---------------------------------------------------------------------------
+
+test("runFinalizePhase — a row that could not be judged names its reason on the run", async () => {
+  const backend = makeBackend();
+  const queries = makeQueries(2);
+  const jobId = "finalize-judge";
+  backend.seed({ id: jobId, status: "probing" });
+  queries.forEach((q, i) =>
+    backend.promptResults.push({
+      id: `pr-${i}`,
+      job_id: jobId,
+      engine: "aio",
+      query: q.text,
+      is_branded_query: false,
+      scan_id: null,
+      raw: probeResult("aio", q),
+    })
+  );
+
+  const tally = createChunkTally();
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await runFinalizePhase(
+      jobId,
+      makeCheckpoint(queries),
+      {
+        ...backend.deps,
+        resolveEnabledEngines: () => [{ name: "aio", concurrency: 2 }],
+        extractCompetitors: async () => [],
+        judgeBrandsSymmetric: () => {
+          throw new Error("judge exploded");
+        },
+        enrichCitations: async () => {
+          throw new Error("enricher exploded");
+        },
+      },
+      tally
+    );
+  } finally {
+    console.warn = warn;
+  }
+
+  const byReason = Object.fromEntries(tally.skips.map((s) => [s.reason, s]));
+  assert.ok(byReason[CHUNK_SKIP_REASONS.REJUDGE_FAILED], "a kept-probe-time verdict is a skipped re-judge");
+  assert.equal(byReason[CHUNK_SKIP_REASONS.REJUDGE_FAILED].count, 2);
+  assert.ok(byReason[CHUNK_SKIP_REASONS.ROSTER_JUDGE_FAILED], "a row that produced no result_brands is a skip");
+  assert.ok(byReason[CHUNK_SKIP_REASONS.CITATION_ENRICH_FAILED], "unclassified citations are a degraded write");
+  assert.equal(byReason[CHUNK_SKIP_REASONS.CITATION_ENRICH_FAILED].count, 1);
+  assert.equal(
+    tally.errorsRecovered,
+    5,
+    "the counter and the reasons must agree: 2 re-judges + 2 roster judges + 1 enrich"
+  );
+  assert.equal(summarizeSkips(tally).skips_total, tally.errorsRecovered);
+});
+
+test("runSourcingPhase — the swallowed prompt-persist failure now carries its reason too", async () => {
+  const tally = createChunkTally();
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await runSourcingPhase(
+      { brand: "Acme", url: "acme.com", industry: "saas", competitors: "" },
+      {
+        promptTarget: 2,
+        getPromptsForBrand: async () => [],
+        generateUnbrandedPrompts: async () => makeQueries(2).map((q) => ({ ...q, weight: 1, enabled: true })),
+        upsertPrompts: async () => {
+          throw new Error("brand_prompts write refused");
+        },
+        buildBrandedQueries: () => [],
+        resolveEnabledEngines: () => [{ name: "aio" }],
+      },
+      tally
+    );
+  } finally {
+    console.warn = warn;
+  }
+
+  const skip = tally.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.PROMPT_PERSIST_FAILED);
+  assert.ok(skip, "next scan's prompt set silently failing to persist is a skip, not a success");
+  assert.match(skip.sample[0], /brand_prompts write refused/);
+});
+
+// ---------------------------------------------------------------------------
+// Aggregation: the count is exact even when the sample is not
+// ---------------------------------------------------------------------------
+
+test("recordSkip — many skips of one reason stay ONE entry, with an exact count and an honest sample", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const n = SKIP_SAMPLE_MAX + 4;
+  const queries = makeQueries(n);
+  const job = backend.seed({
+    id: "70707070-7070-4070-8070-707070707070",
+    status: "probing",
+    checkpoint: makeCheckpoint(queries),
+  });
+
+  let i = 0;
+  await runScanChunk(job.id, {
+    ...backend.deps,
+    ...ledger.deps,
+    resolveEnabledEngines: () => [
+      { name: "aio", concurrency: n, probe: async (q) => probeResult("aio", q, { error: `boom ${i++}` }) },
+    ],
+    extractCompetitors: async () => [],
+  });
+
+  const row = soleRow(ledger);
+  const skip = skipEntry(row, CHUNK_SKIP_REASONS.PROBE_ERROR);
+  assert.equal(skip.count, n, "the count is exact — a truncated sample must never truncate the count");
+  assert.equal(skip.sample.length, SKIP_SAMPLE_MAX, "the sample is bounded so one bad engine cannot bloat the row");
+  assert.equal(skip.sample_truncated, true, "…and a bounded sample must SAY it is bounded, not look complete");
+  assert.equal(row.errors_recovered, n);
+});
+
+// ---------------------------------------------------------------------------
+// R3.2.1's invariants, re-proved against the new writes
+// ---------------------------------------------------------------------------
+
+test("R3.2.1 STILL HOLDS — skips ride on the chunk's ONE row; they never become rows of their own", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const queries = makeQueries(3);
+  const job = backend.seed({
+    id: "80808080-8080-4080-8080-808080808080",
+    status: "probing",
+    checkpoint: makeCheckpoint(queries, ["aio", "perplexity"]),
+  });
+
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await runScanChunk(job.id, {
+      ...backend.deps,
+      ...ledger.deps,
+      resolveEnabledEngines: () => [
+        { name: "aio", concurrency: 3, probe: async (q) => probeResult("aio", q, { error: "upstream 502" }) },
+      ],
+      extractCompetitors: async () => [],
+    });
+  } finally {
+    console.warn = warn;
+  }
+
+  // One dropped engine + three errored probes = four recorded skips, one row.
+  const row = soleRow(ledger);
+  assert.equal(row.detail.skips_total, 4);
+  assert.equal(ledger.rows.length, 1, "one row per chunk EXECUTION — R3.2.2 may not multiply rows");
+});
+
+test("R3.2.1 STILL HOLDS — sum(probes_attempted) counts each probe exactly once across a rescue", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const queries = makeQueries(4);
+  const job = backend.seed({
+    id: "90909090-9090-4090-8090-909090909090",
+    status: "probing",
+    checkpoint: makeCheckpoint(queries),
+  });
+
+  const engineDeps = {
+    ...backend.deps,
+    ...ledger.deps,
+    resolveEnabledEngines: () => [
+      { name: "aio", concurrency: 1, probe: async (q) => probeResult("aio", q, { error: "upstream 502" }) },
+    ],
+    extractCompetitors: async () => [],
+  };
+
+  await runScanChunk(job.id, { ...engineDeps, chunkBudgetMs: 0 });
+  await runScanChunk(job.id, engineDeps);
+
+  const attempted = ledger.rows.reduce((n, r) => n + r.probes_attempted, 0);
+  assert.equal(attempted, queries.length, "the skip rows R3.2.2 adds must not re-count any probe");
+  const skipTotal = ledger.rows.reduce((n, r) => n + r.detail.skips_total, 0);
+  assert.equal(skipTotal, queries.length, "each errored probe is recorded once, on the row that ran it");
+});
+
+test("runScanChunk — a chunk that stops at the budget still reports skips_total 0: PROBING armed the watch", async () => {
+  // Deliberately a chunk that never reaches finalize. Without this case the
+  // probing arm is untestable: finalize arms the same list a few lines later,
+  // so a chunk that runs both would look armed either way.
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const job = backend.seed({
+    id: "a1a1a1a1-a1a1-4a1a-8a1a-a1a1a1a1a1a1",
+    status: "probing",
+    checkpoint: makeCheckpoint(makeQueries(4)),
+  });
+
+  const result = await runScanChunk(job.id, {
+    ...backend.deps,
+    ...ledger.deps,
+    resolveEnabledEngines: () => [{ name: "aio", concurrency: 1, probe: async (q) => probeResult("aio", q) }],
+    chunkBudgetMs: 0,
+  });
+
+  assert.equal(result.reason, "checkpointed", "it stopped inside probing, before finalize");
+  const row = soleRow(ledger);
+  assert.deepEqual(row.detail.phases_run, [CHUNK_PHASES.PROBING]);
+  assert.equal(row.detail.skips_total, 0, "probing LOOKED for skips and found none — a measured zero");
+  assert.notEqual(row.detail.skips_total, null);
+});
+
+test("each phase arms the skip watch on entry, so 'found none' never reads as 'never looked'", async () => {
+  // Called directly, one phase at a time, because inside runScanChunk the
+  // phases run back to back and any one of them arming would mask the rest.
+  const backend = makeBackend();
+  const queries = makeQueries(1);
+
+  const sourcing = createChunkTally();
+  await runSourcingPhase(
+    { brand: "Acme", url: "acme.com", industry: "saas", competitors: "" },
+    {
+      promptTarget: 1,
+      getPromptsForBrand: async () => [],
+      generateUnbrandedPrompts: async () => queries.map((q) => ({ ...q, weight: 1, enabled: true })),
+      upsertPrompts: async () => [],
+      buildBrandedQueries: () => [],
+      resolveEnabledEngines: () => [{ name: "aio" }],
+    },
+    sourcing
+  );
+  assert.deepEqual(sourcing.skips, [], "sourcing watches for the prompt-persist skip");
+
+  const probing = createChunkTally();
+  await runProbingPhase(
+    "arm-probing",
+    makeCheckpoint(queries),
+    {
+      ...backend.deps,
+      resolveEnabledEngines: () => [{ name: "aio", concurrency: 1, probe: async (q) => probeResult("aio", q) }],
+    },
+    Date.now(),
+    probing
+  );
+  assert.deepEqual(probing.skips, [], "probing watches for dropped engines and errored probes");
+
+  const finalize = createChunkTally();
+  const jobId = "arm-finalize";
+  backend.seed({ id: jobId, status: "probing" });
+  backend.promptResults.push({
+    id: "pr-arm",
+    job_id: jobId,
+    engine: "aio",
+    query: queries[0].text,
+    is_branded_query: false,
+    scan_id: null,
+    raw: probeResult("aio", queries[0]),
+  });
+  await runFinalizePhase(
+    jobId,
+    makeCheckpoint(queries),
+    { ...backend.deps, resolveEnabledEngines: () => [{ name: "aio", concurrency: 1 }], extractCompetitors: async () => [] },
+    finalize
+  );
+  assert.deepEqual(finalize.skips, [], "finalize watches for the absorbed judge/enrich failures");
+
+  // …and the chunk that entered none of them still says NOT MEASURED.
+  assert.equal(createChunkTally().skips, null);
+});
+
+test("recordSkip — REFUSES a skip with no reason; it does not file an anonymous one", () => {
+  // The whole task is "an unexplained skip must not exist". Accepting one here
+  // would recreate it a level down: an entry that says something was skipped
+  // and cannot say what for, which a reader rounds off to noise.
+  const tally = createChunkTally();
+  for (const bad of [undefined, null, "", "   "]) {
+    assert.throws(
+      () => recordSkip(tally, bad, "some subject"),
+      /a skip with no reason/,
+      `recordSkip must refuse ${JSON.stringify(bad)}`
+    );
+  }
+  assert.equal(tally.skips, null, "and a refused skip must not arm the watch as a side effect");
+});
+
+// ---------------------------------------------------------------------------
+// GUARD — a reason constant nobody records is a site that went unledgered
+// ---------------------------------------------------------------------------
+
+test("GUARD — every declared skip reason is actually recorded somewhere in scanWorker.js", async () => {
+  // The failure mode this catches: someone adds a reason to the vocabulary,
+  // means to wire it, and never does. The constant then looks like coverage
+  // that does not exist — the same shape of false success as the skips
+  // themselves.
+  const { readFile } = await import("node:fs/promises");
+  const src = await readFile(new URL("./scanWorker.js", import.meta.url), "utf8");
+
+  for (const [key, value] of Object.entries(CHUNK_SKIP_REASONS)) {
+    assert.match(
+      src,
+      new RegExp(`recordSkip\\([^;]*?CHUNK_SKIP_REASONS\\.${key}\\b`, "s"),
+      `CHUNK_SKIP_REASONS.${key} ("${value}") is declared but never passed to recordSkip — ` +
+        `a reason nobody records is a skip site that is still invisible`
+    );
+  }
+  for (const [key, value] of Object.entries(SCHEDULER_SKIP_REASONS)) {
+    assert.match(
+      src,
+      new RegExp(`reason: SCHEDULER_SKIP_REASONS\\.${key}\\b`),
+      `SCHEDULER_SKIP_REASONS.${key} ("${value}") is declared but never used to close a run`
+    );
+  }
+});
