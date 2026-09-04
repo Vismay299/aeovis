@@ -40,43 +40,87 @@ const LITERAL_SCAN_FILES = [
 
 /**
  * page.js types engine names in exactly ONE place that is not an attribution:
- * the ENGINE_NOTE dictionary (page.js:105-107). Its entries are reached only
+ * the ENGINE_NOTE dictionary (page.js:117-121). Its entries are reached only
  * through DEPLOYED_ENGINE_LABELS.map(...), so an entry for an engine this
  * deployment does not probe can never render.
  *
- * An exemption is a place to hide a literal, so this one cuts exactly the KEY
- * TOKEN of a key line — the optional quote, the label, its matching quote and
- * the colon — and nothing else. The VALUE stays in the scanned text, with one
- * stated allowance: an entry's own label may appear in its own prose ("ChatGPT
- * returns a single paragraph"), so the own label is also dropped from that
- * entry's value. That is the string form of labels.filter((l) => l !== own):
- * every OTHER label in the value survives and is scanned.
+ * WHAT SHIPS, exactly. This PARSES the declaration; it does not read lines. It
+ * walks from `const ENGINE_NOTE = {` one character at a time, always knowing
+ * which quote it is inside, and accepts one shape and no other:
  *
- * And a line is a key line only if it BEGINS an entry — the previous non-blank
- * line opened the object or closed the entry before it — and matches
- * quote-label-quote-colon with the quotes agreeing. Everything else inside the
- * block, above all a long value Prettier wrapped onto its own line, is scanned
- * verbatim.
+ *     <key>: <value>,     key   = a bare identifier or a quoted string, and it
+ *                                 must be a known engine label
+ *                         value = ONE quoted string literal, on ONE line
  *
- * R2.10.6, second pass. The first version cut per LINE: any line starting with
- * a label and a colon was taken for that line's key and deleted whole. So a
- * note keyed "Google AI Overview" whose value wrapped onto its own line and
- * began 'ChatGPT: ...' was erased instead of scanned. Rebuilt under
- * NEXT_PUBLIC_ENGINES=aio that note put "ChatGPT: an AI Overview answer is the
- * one your buyer reads..." into the engine rail of the served HTML — an
- * off-deployment engine name, rendered, with all 16 guards green. Both forms,
- * wrapped and single-line, are pinned by a test below.
+ * The KEY is dropped from the scanned text. The VALUE is KEPT in it, so every
+ * engine label written into any note's prose is scanned, with one stated
+ * allowance: an entry's own key label may appear in its own prose ("ChatGPT
+ * returns a single paragraph"), so occurrences of that ONE label are replaced
+ * by a placeholder before the value is handed back. That is
+ * labels.filter((l) => l !== own) — every OTHER label in that value survives
+ * and is scanned. Replaced rather than deleted, so the allowance can never
+ * splice a value's neighbouring words into a label nobody wrote.
  *
- * And it fails rather than exempting more than it understands: if the
- * declaration is not there in this shape, or the DEPLOYED_ENGINE_LABELS filter
- * that makes it safe has gone, this throws instead of quietly scanning a file
- * it can no longer reason about.
+ * EVERYTHING ELSE THROWS. A template-literal value, a value spanning two lines,
+ * a concatenation, an array, a nested object, a call, a comment inside the
+ * block, a key that is not a known engine label, an empty dictionary, a
+ * declaration that does not end at `};`, engine labels that overlap so the
+ * own-label allowance could hide one, a missing DEPLOYED_ENGINE_LABELS filter:
+ * every one of those is a shape this exemption cannot reason about, and an
+ * exemption that cannot reason about a shape must REFUSE it, not guess at it.
+ * That is the posture the declaration and filter guards already take.
+ *
+ * WHY A PARSER AND NOT A HEURISTIC. Three line-oriented versions shipped and
+ * all three were evaded within minutes, always by the same move: put an engine
+ * name in a note VALUE where the line heuristic reads a key.
+ *   1. The first cut per LINE: any line opening with a label and a colon was
+ *      taken for that line's key and deleted whole, so a value Prettier-wrapped
+ *      onto its own line beginning "ChatGPT: ..." was erased instead of scanned.
+ *   2. The second cut only the key TOKEN and gated it on the previous non-blank
+ *      line ending in `{` or `,` — raw text, with no idea which quote it was
+ *      inside. So a TEMPLATE-LITERAL value whose first line ended in a comma
+ *      made its own continuation line look like the start of an entry, and
+ *      "ChatGPT: and the click that never happens is what it costs you."
+ *      rendered into the engine rail of a NEXT_PUBLIC_ENGINES=aio build with
+ *      all 17 tests here reporting green. One comma was enough.
+ * A comma inside a string is not structure, and only something that knows which
+ * quote it is inside can tell the two apart. So that is what this is.
+ *
+ * IT READS THE RAW FILE, BEFORE withoutComments. Same reason: a slash-star
+ * "comment" written inside a note is not a comment at all, it is prose the page
+ * renders. Stripping first took the engine name out of a value that reads
+ * "An AI Overview answer, slash-star ChatGPT: and the click that never happens
+ * star-slash, is what your buyer reads." and the aio-only build printed it into
+ * the rail with every test green. So the parse happens first, on raw text; a
+ * real comment INSIDE the declaration is refused like any other shape this
+ * cannot parse; and every value is handed back with its comment openers
+ * defanged, so the stripper that runs afterwards cannot reach into it either.
  */
 function withoutEngineNoteDictionary(src, labels) {
   if (!Array.isArray(labels) || labels.length === 0) {
     throw new Error("landingHonesty: the ENGINE_NOTE exemption needs the label list to scope itself");
   }
-  const start = src.indexOf("const ENGINE_NOTE = {");
+  // The own-label allowance is a text replacement inside one value, which is
+  // only sound while no label can run into or contain another. If one could,
+  // replacing the own label might take a real off-deployment label out of the
+  // scanned text with it. Refuse rather than silently under-scan.
+  for (const a of labels) {
+    for (const b of labels) {
+      if (a === b) continue;
+      let clash = b.includes(a);
+      for (let k = 1; !clash && k < a.length; k += 1) clash = b.startsWith(a.slice(a.length - k));
+      if (clash) {
+        throw new Error(
+          'landingHonesty: engine labels "' + a + '" and "' + b + '" overlap, so the '
+            + "ENGINE_NOTE own-label allowance could delete the second one out of a "
+            + "note it was written into. Rework the allowance before shipping a label "
+            + "that contains or runs into another."
+        );
+      }
+    }
+  }
+  const DECL = "const ENGINE_NOTE = {";
+  const start = src.indexOf(DECL);
   if (start < 0) {
     throw new Error(
       "landingHonesty: page.js no longer declares ENGINE_NOTE in the shape this "
@@ -84,11 +128,91 @@ function withoutEngineNoteDictionary(src, labels) {
         + "widening it — it is the one blind spot in this check."
     );
   }
-  const end = src.indexOf("\n};", start);
-  if (end < 0) {
-    throw new Error("landingHonesty: the ENGINE_NOTE declaration in page.js is unterminated");
+  const lineOf = (at) => src.slice(0, at).split("\n").length;
+  const refuse = (at, what) => {
+    throw new Error(
+      "landingHonesty: the ENGINE_NOTE exemption refuses to scan " + what
+        + " (page.js line " + lineOf(at) + "). Every entry must be a key and a "
+        + "single-line quoted string. A shape this guard cannot parse is a shape it "
+        + "cannot exempt safely: a template literal wrapped after a comma is how an "
+        + "off-deployment engine name last reached the served HTML."
+    );
+  };
+  const SPACE = " \t\r\n";
+  const entries = [];
+  let i = start + DECL.length;
+  let closed = false;
+  while (i < src.length) {
+    while (i < src.length && SPACE.includes(src[i])) i += 1;
+    if (i >= src.length) break;
+    if (src[i] === "}") {
+      closed = true;
+      i += 1;
+      break;
+    }
+    // --- the key: a bare identifier, or a string in matching quotes ---
+    const keyAt = i;
+    let key;
+    if (src[i] === "'" || src[i] === '"') {
+      const q = src[i];
+      i += 1;
+      const from = i;
+      while (i < src.length && src[i] !== q && src[i] !== "\n") i += 1;
+      if (src[i] !== q) refuse(keyAt, "a key that is not a plain single-line quoted string");
+      key = src.slice(from, i);
+      i += 1;
+    } else {
+      const from = i;
+      while (i < src.length && /[A-Za-z0-9_$]/.test(src[i])) i += 1;
+      if (i === from) {
+        refuse(keyAt, "something that is not a key: a spread, a computed key, or a comment");
+      }
+      key = src.slice(from, i);
+    }
+    while (src[i] === " " || src[i] === "\t") i += 1;
+    if (src[i] !== ":") refuse(i, "a key that is not followed by a colon");
+    i += 1;
+    // --- the value: exactly one quoted string, on exactly one line ---
+    while (i < src.length && SPACE.includes(src[i])) i += 1;
+    const valueAt = i;
+    const q = src[i];
+    if (q !== "'" && q !== '"') {
+      refuse(
+        valueAt,
+        "a value that is not a quoted string: a template literal, a concatenation, "
+          + "an array, a nested object or a call"
+      );
+    }
+    i += 1;
+    const from = i;
+    while (i < src.length && src[i] !== q) {
+      if (src[i] === "\n") refuse(valueAt, "a value that spans more than one line");
+      if (src[i] === "\\") {
+        if (src[i + 1] === "\n") refuse(valueAt, "a value continued onto a second line by a backslash");
+        i += 2;
+      } else {
+        i += 1;
+      }
+    }
+    if (i >= src.length) refuse(valueAt, "a value whose quote never closes");
+    entries.push({ key, value: src.slice(from, i), at: keyAt });
+    i += 1;
+    // --- the separator: a comma, or the end of the dictionary ---
+    while (i < src.length && SPACE.includes(src[i])) i += 1;
+    if (src[i] === ",") {
+      i += 1;
+      continue;
+    }
+    if (src[i] === "}") {
+      closed = true;
+      i += 1;
+      break;
+    }
+    refuse(i, "an entry not followed by a comma or by the end of the dictionary");
   }
-  const rest = src.slice(end + 3);
+  if (!closed) refuse(start, "an ENGINE_NOTE declaration whose brace never closes");
+  if (src[i] !== ";") refuse(i, "an ENGINE_NOTE declaration that does not end at a semicolon");
+  const rest = src.slice(i + 1);
   if (!/RAIL_NOTES = DEPLOYED_ENGINE_LABELS\.map\(\(name\) => ENGINE_NOTE\[name\]\)/.test(rest)) {
     throw new Error(
       "landingHonesty: ENGINE_NOTE is exempt from the typed-literal scan ONLY "
@@ -96,51 +220,40 @@ function withoutEngineNoteDictionary(src, labels) {
         + "That filter is gone, so the exemption now hides a renderable literal."
     );
   }
-  // True when the next non-blank line BEGINS an entry, because the line before
-  // it either opened the object or ended the previous entry. A value that
-  // wrapped onto its own line is therefore never mistaken for a key.
-  let atEntryStart = false;
-  const scoped = src
-    .slice(start, end + 3)
-    .split("\n")
-    .map((line) => {
-      let kept = line;
-      if (atEntryStart) {
-        for (const label of labels) {
-          // The key AS WRITTEN, walked character by character: the indent, an
-          // optional quote, the label, the SAME quote again, then the colon.
-          // Requiring the closing quote is what rejects a VALUE like
-          // "'ChatGPT: an AI Overview answer...'" — it opens with a label and
-          // a colon, but the quote never closes before the colon, so it is not
-          // this line's key and goes back whole.
-          const quotes = ["'", '"', "`"];
-          let i = line.length - line.trimStart().length;
-          const quote = quotes.includes(line[i]) ? line[i] : "";
-          if (quote) i += 1;
-          if (!line.startsWith(label, i)) continue;
-          i += label.length;
-          if (quote) {
-            if (line[i] !== quote) continue;
-            i += 1;
-          }
-          while (line[i] === " " || line[i] === "\t") i += 1;
-          if (line[i] !== ":") continue;
-          // Cut the key token and nothing more. What follows is value text and
-          // stays in the scanned string, minus this entry's OWN label, which
-          // its own prose may name: labels.filter((l) => l !== label) is what
-          // the rest of the line is effectively scanned for.
-          kept = line.slice(i + 1).split(label).join("");
-          break;
-        }
+  if (entries.length === 0) {
+    throw new Error(
+      "landingHonesty: ENGINE_NOTE is empty, so this exemption read zero entries and "
+        + "the engine rail renders no note at all. A scan that covered nothing must "
+        + "say so rather than report itself clean."
+    );
+  }
+  const scanned = entries
+    .map(({ key, value, at }) => {
+      if (!labels.includes(key)) {
+        throw new Error(
+          'landingHonesty: ENGINE_NOTE is keyed "' + key + '" at page.js line ' + lineOf(at)
+            + ", which is not a known engine label. RAIL_NOTES looks these entries up BY "
+            + "LABEL, so a key that is not one is either a note that can never render or "
+            + "a place to keep an engine name out of this scan."
+        );
       }
-      // Matching no key is the SAFE direction and is not silent: the line goes
-      // back whole, so any engine label on it fails the scan that called this.
-      const trimmed = line.trim();
-      if (trimmed) atEntryStart = /[{,]$/.test(trimmed);
-      return kept;
+      // The one allowance: this entry's OWN label, inside its own prose. Then
+      // defang the two comment openers, because the caller strips comments with
+      // a regex AFTER this runs and a "/* ChatGPT */" inside a note is text the
+      // page renders, not a comment. Labels hold no slashes, so this can
+      // neither destroy a label nor spell one.
+      return value
+        .split(key)
+        .join(" [own engine label] ")
+        .split("/*")
+        .join("/ *")
+        .split("*/")
+        .join("* /")
+        .split("//")
+        .join("/ /");
     })
     .join("\n");
-  return src.slice(0, start) + scoped + rest;
+  return src.slice(0, start) + scanned + rest;
 }
 
 /**
@@ -180,9 +293,20 @@ function sampleReadingUnder(engines) {
     const allLabels = Object.values(eng.ENGINE_LABELS);
     const deployedLabels = eng.deployedEngineLabels();
     // Only page.js gets the ENGINE_NOTE cut; every other file is scanned whole.
+    //
+    // The cut runs FIRST, on the raw file. withoutComments is a regex and a
+    // note VALUE is a string, so stripping first deletes a "/* ... */" written
+    // INSIDE a note out of the scanned text while the browser still renders it
+    // verbatim — proven: a value reading
+    //   'An AI Overview answer/* ChatGPT: ... */ is what your buyer reads.'
+    // put ChatGPT into the rail of an aio-only build with every test green.
+    // The parser reads the value before any of that, and hands it back with its
+    // comment openers defanged so this stripper cannot reach into it either.
     const sourceOf = (rel, abs) => {
-      const stripped = withoutComments(readFileSync(abs, "utf8"));
-      return rel === "src/app/page.js" ? withoutEngineNoteDictionary(stripped, allLabels) : stripped;
+      const raw = readFileSync(abs, "utf8");
+      return rel === "src/app/page.js"
+        ? withoutComments(withoutEngineNoteDictionary(raw, allLabels))
+        : withoutComments(raw);
     };
     const typed = {};
     for (const [rel, abs] of ${JSON.stringify(LITERAL_SCAN_FILES)}) {
@@ -563,32 +687,51 @@ test("GUARD — the sample report FOLLOWS the deployed engine list", () => {
 });
 
 /**
- * R2.10.6, second pass — the ENGINE_NOTE exemption itself, exercised directly.
+ * R2.10.6, third pass — the ENGINE_NOTE exemption itself, exercised directly.
  *
  * The scan above reads the page.js on disk, so it can only ever pin the
  * dictionary as it is written TODAY. This pins the EXEMPTION, against the
- * shapes a future edit can produce, and it is not hypothetical: the wrapped
- * case below is exactly what got past the first version of this guard. That
- * note rendered "ChatGPT: an AI Overview answer..." into the engine rail of an
- * aio-only build while all sixteen tests here reported clean. A Prettier wrap
- * of one long note is all it takes.
+ * shapes a future edit can produce, and none of them are hypothetical. Two
+ * shipped versions of this guard were evaded by a note VALUE that a line
+ * heuristic read as a key:
+ *   - a value Prettier-wrapped onto its own line beginning "ChatGPT: ...";
+ *   - and, once the cut was narrowed to the key token, a TEMPLATE LITERAL whose
+ *     first line ended in a comma, so its continuation line looked like the
+ *     start of an entry. That one rendered "ChatGPT: and the click that never
+ *     happens is what it costs you." into the engine rail of a
+ *     NEXT_PUBLIC_ENGINES=aio build with all 17 tests here green.
+ * So the exemption now PARSES, and refuses every shape it cannot parse. Both
+ * halves are pinned below: what is scanned, and what is refused.
  *
- * Same function, same inputs the child process gives it: the source with
- * comments already stripped, and the full label list.
+ * Same function, same input the child process gives it: the RAW source and the
+ * full label list, with comments stripped from what the parser hands back
+ * rather than from what it reads.
  */
-test("GUARD — the ENGINE_NOTE exemption cuts the key token, never a value", () => {
+test("GUARD — the ENGINE_NOTE exemption parses the dictionary, and refuses what it cannot parse", () => {
   const labels = Object.values(ENGINE_LABELS);
   const deployedUnderAio = deployedEngineLabels({ ENGINES: "aio" });
 
   const RAIL = "const RAIL_NOTES = DEPLOYED_ENGINE_LABELS.map((name) => ENGINE_NOTE[name]).filter(Boolean);\n";
   const pageShaped = (entries) => `const ENGINE_NOTE = {\n${entries}\n};\n\n${RAIL}`;
 
-  // The two clauses the child asserts, over a page.js-shaped source.
+  // The two clauses the child asserts, in the order the child runs them: the
+  // dictionary is parsed out of the RAW source, and only then are comments
+  // stripped from what is left.
   const scan = (entries) => {
-    const src = withoutEngineNoteDictionary(withoutComments(pageShaped(entries)), labels);
+    const src = withoutComments(withoutEngineNoteDictionary(pageShaped(entries), labels));
     const typed = labels.filter((l) => src.includes(l));
     return { typed, offDeployment: typed.filter((l) => !deployedUnderAio.includes(l)) };
   };
+  const refuses = (entries, why) => assert.throws(() => scan(entries), /refuses to scan/, why);
+
+  // The real file must survive the parser, or this guard is strict about a
+  // shape nobody ships.
+  const realPage = withoutComments(withoutEngineNoteDictionary(readFileSync(PAGE_PATH, "utf8"), labels));
+  assert.deepEqual(
+    labels.filter((l) => realPage.includes(l)),
+    [],
+    "page.js as written must parse, and leave no engine label in the scanned text"
+  );
 
   // Today's shape: the keys are exempt, and a note may name its OWN engine in
   // its own prose. That allowance is the whole exemption, stated.
@@ -602,9 +745,65 @@ test("GUARD — the ENGINE_NOTE exemption cuts the key token, never a value", ()
     "an entry's own key, and its own label inside its own note, are what this exemption is for"
   );
 
-  // THE REGRESSION. The value wrapped onto its own line, opening with a label
-  // and a colon. The old key-cut was line-based, so it read that as the line's
-  // key and deleted it whole.
+  // THE ROUND-3 EVASION, and the nine shapes around it. A template literal
+  // wrapped after a comma made its own continuation line read as an entry
+  // start, because /[{,]$/ cannot tell a comma inside a string from structure.
+  // A parser does not have to: none of these is a single-line quoted string, so
+  // every one of them is refused by name.
+  const OPEN = "`"; // written out so this test's own prose cannot be the fixture
+  refuses(
+    "  'Google AI Overview': " + OPEN + "An AI Overview answer is the one your buyer reads,\n"
+      + "ChatGPT: and the click that never happens is what it costs you." + OPEN + ",",
+    "the template wrapped after a comma is the shape that rendered ChatGPT on an aio-only build"
+  );
+  refuses(
+    "  'Google AI Overview': " + OPEN + "An AI Overview answer is the one your buyer reads,\n"
+      + "    ChatGPT: and the click that never happens." + OPEN + ",",
+    "the same wrap, indented"
+  );
+  refuses(
+    "  'Google AI Overview': " + OPEN + "An AI Overview answer is the one your buyer reads,\n"
+      + "\tChatGPT: and the click that never happens." + OPEN + ",",
+    "the same wrap, tab-indented"
+  );
+  refuses(
+    "  'Google AI Overview': " + OPEN + "An AI Overview answer is the one your buyer reads,\n"
+      + "  ChatGPT : and the click that never happens." + OPEN + ",",
+    "a space before the colon does not make a continuation line anything else"
+  );
+  refuses(
+    "  'Google AI Overview': " + OPEN + "An AI Overview answer is what a buyer reads {\n"
+      + "  ChatGPT: and the click that never happens." + OPEN + ",",
+    "nor does a brace at the end of the first line"
+  );
+  refuses(
+    "  'Google AI Overview': " + OPEN + "An AI Overview answer is the one your buyer reads,\n"
+      + "  // ChatGPT: and the click that never happens.\n"
+      + "  still rendered." + OPEN + ",",
+    "a comment line INSIDE a template is prose the page renders, and the template is refused"
+  );
+  refuses(
+    "  'Google AI Overview': " + OPEN + "An AI Overview answer,\n"
+      + "  /* ChatGPT: and the click that never happens. */\n"
+      + "  still rendered." + OPEN + ",",
+    "and so is a block comment inside a template"
+  );
+  refuses(
+    "  'Google AI Overview': {\n    ChatGPT: 'and the click that never happens.',\n  },",
+    "a nested object's key line is not an ENGINE_NOTE key line"
+  );
+  refuses(
+    "  'Google AI Overview': fmt({\n    ChatGPT: 'and the click that never happens.',\n  }),",
+    "nor is one inside a call argument"
+  );
+  refuses(
+    "  'Google AI Overview': " + OPEN + "ChatGPT: an AI Overview answer." + OPEN + ",",
+    "a single-line template is refused too: this exemption reads quoted strings only"
+  );
+
+  // WHAT IS STILL SCANNED, rather than refused. A quoted single-line value is a
+  // shape the parser understands, wherever it sits, so its prose is scanned
+  // whole and only the key token is dropped.
   const wrapped = scan(
     "  'Google AI Overview':\n"
       + "    'ChatGPT: an AI Overview answer is the one your buyer reads without clicking anything.',"
@@ -612,52 +811,96 @@ test("GUARD — the ENGINE_NOTE exemption cuts the key token, never a value", ()
   assert.deepEqual(
     wrapped.typed,
     ["ChatGPT"],
-    "a wrapped note VALUE must be scanned, never mistaken for the line's key"
+    "a value Prettier-wrapped onto its own line is a VALUE, and is scanned"
   );
   assert.deepEqual(
     wrapped.offDeployment,
     ["ChatGPT"],
     "and under ENGINES=aio that note RENDERS, so it must fail as an engine this deployment does not probe"
   );
-
-  // The same note on one line was caught before this fix, and still is.
   assert.deepEqual(
     scan("  'Google AI Overview': 'ChatGPT: an AI Overview answer is the one your buyer reads.',").typed,
     ["ChatGPT"],
-    "the single-line form must not regress while the wrapped one is closed"
+    "the single-line form must not regress"
   );
-
-  // Another engine's name anywhere in a value, however the value is written.
+  assert.deepEqual(
+    scan("  'Google AI Overview':\n    'an AI Overview answer is not what ChatGPT would write.',").typed,
+    ["ChatGPT"],
+    "a label mid-sentence on a wrapped value is scanned like any other word of it"
+  );
   assert.deepEqual(
     scan("  ChatGPT: 'Perplexity cites its sources, ChatGPT does not.',").typed,
     ["Perplexity"],
     "only the entry's OWN label is allowed inside its value"
   );
   assert.deepEqual(
-    scan("  'Google AI Overview': `an AI Overview answer\nChatGPT: and what it costs you`,").typed,
-    ["ChatGPT"],
-    "a template literal's continuation line is not a key line either"
+    scan('  ChatGPT: "Perplexity cites its sources, ChatGPT does not.",').typed,
+    ["Perplexity"],
+    "and the quote style does not change what is scanned"
   );
-  // Here the previous line DOES end in a comma, so only the second half of the
-  // key test — the quote that must close before the colon — rejects this.
+  // A "comment" written INSIDE a note is prose the page renders. withoutComments
+  // is a regex and used to run first, so it deleted the engine name out of the
+  // scanned text while the aio-only build printed it into the rail. The parser
+  // reads the raw value before the stripper can, and defangs the openers on the
+  // way out so it cannot reach in afterwards.
   assert.deepEqual(
-    scan("  'Google AI Overview': ['an AI Overview answer',\n    'ChatGPT: and what it costs you'],").typed,
+    scan(
+      "  'Google AI Overview': 'An AI Overview answer/* ChatGPT: and the click that "
+        + "never happens */ is what your buyer reads.',"
+    ).typed,
     ["ChatGPT"],
-    "a quoted value opening with a label and a colon is a value, not a key"
+    "a block comment inside a note VALUE renders, so it must be scanned"
   );
-
-  // Only the KEY TOKEN is cut, not every occurrence of the label on the line.
-  // Two entries on one line is not a shape this exemption claims to
-  // understand, so the second one is scanned rather than guessed at — the
-  // fail-loud direction.
+  assert.deepEqual(
+    scan("  'Google AI Overview': 'An AI Overview answer // ChatGPT: and what it costs you.',").typed,
+    ["ChatGPT"],
+    "and so does a pair of slashes inside one"
+  );
+  assert.deepEqual(
+    scan("  'Google AI Overview': 'an answer\\'s first line, and what ChatGPT costs you.',").typed,
+    ["ChatGPT"],
+    "an escaped quote inside a value is content, not the end of the value"
+  );
+  refuses(
+    "  // ChatGPT: a note about the notes\n  'Google AI Overview': 'an AI Overview answer.',",
+    "a REAL comment inside the declaration is read raw now, and is a shape this parser refuses"
+  );
+  // Two entries on one line is STRUCTURE, not a guess: the parser reads two
+  // keys and two values, both keys are real ENGINE_NOTE keys, and both are
+  // reached only through the DEPLOYED_ENGINE_LABELS filter.
   assert.deepEqual(
     scan("  'Google AI Overview': 'one', ChatGPT: 'two',").typed,
-    ["ChatGPT"],
-    "the cut is the key token at the start of an entry line, and nothing else"
+    [],
+    "a second entry on the same line is an entry, and its key is exempt like any other"
+  );
+  assert.deepEqual(
+    scan("  'Google AI Overview': 'one', ChatGPT: 'two names Perplexity',").typed,
+    ["Perplexity"],
+    "while its VALUE is scanned like any other"
   );
 
-  // And the shape guards still throw rather than exempting what they cannot
-  // reason about.
+  // Shapes that are not one quoted string, or not an entry at all: refused,
+  // where the previous versions scanned them and happened to catch them.
+  refuses(
+    "  'Google AI Overview': 'an AI Overview answer '\n    + 'ChatGPT: and what it costs you '\n    + 'in clicks.',",
+    "a concatenated value is not one quoted string"
+  );
+  refuses(
+    "  'Google AI Overview': ['an AI Overview answer',\n    'ChatGPT: and what it costs you'],",
+    "nor is an array of them"
+  );
+  refuses(
+    "  'Google AI Overview': 'an AI Overview answer', // ChatGPT: and what it costs you\n  Perplexity: 'x',",
+    "nor is a trailing comment on a key line, which withoutComments never removed either"
+  );
+  refuses(
+    "  'Google AI Overview': 'an AI Overview answer \\\n  ChatGPT: and what it costs you',",
+    "a backslash-continued value spans two lines"
+  );
+
+  // And the shape guards throw rather than exempting what they cannot reason
+  // about. Each of these is a way the dictionary could stop being the safe
+  // thing this exemption assumes it is.
   assert.throws(
     () => withoutEngineNoteDictionary("const SOMETHING_ELSE = {};\n", labels),
     /no longer declares ENGINE_NOTE/,
@@ -671,6 +914,26 @@ test("GUARD — the ENGINE_NOTE exemption cuts the key token, never a value", ()
   assert.throws(
     () => withoutEngineNoteDictionary(pageShaped("  ChatGPT: 'a',"), []),
     /needs the label list to scope itself/
+  );
+  assert.throws(
+    () => withoutEngineNoteDictionary(pageShaped(""), labels),
+    /read zero entries/,
+    "an emptied dictionary is a scan that covered nothing, and must say so"
+  );
+  assert.throws(
+    () => withoutEngineNoteDictionary(pageShaped("  Gemini: 'a note for an engine this file does not know',"), labels),
+    /not a known engine label/,
+    "a key that is not a label is either dead or a hiding place"
+  );
+  assert.throws(
+    () => withoutEngineNoteDictionary(`const ENGINE_NOTE = {\n  ChatGPT: 'a',\n}\n\n${RAIL}`, labels),
+    /does not end at a semicolon/,
+    "the declaration must end where this parser thinks it ends"
+  );
+  assert.throws(
+    () => withoutEngineNoteDictionary(pageShaped("  ChatGPT: 'a',"), ["ChatGPT", "GPT"]),
+    /overlap/,
+    "the own-label allowance is a text replacement, and must refuse labels that could overlap"
   );
 });
 
