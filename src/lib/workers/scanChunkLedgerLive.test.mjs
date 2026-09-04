@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
 import { liveDbGate, notRunBanner } from "../liveDbGate.js";
+import { installLiveWriteGuard } from "../liveWriteGuard.js";
 import { runScanChunk } from "./scanWorker.js";
 import { supabase } from "../db.js";
 
@@ -50,6 +51,23 @@ if (!GATE.enabled) {
 
 const opts = GATE.enabled ? {} : { skip: GATE.reason };
 
+/**
+ * R3.2.4 — the write guard, installed before a single case runs.
+ *
+ * The prose above says "scan_runs and nothing else". This is the sentence being
+ * enforced rather than asserted: every write this process attempts, over
+ * PostgREST or over a pg socket, is checked against that one table, and
+ * anything else is refused before it leaves the process. The assert.fail stubs
+ * below are still here and still the first line of defence, but they are now a
+ * belt over braces: if a future edit adds a dep this file forgot to name, or a
+ * code path that reaches the shared Supabase client directly and never looks at
+ * deps at all, the guard refuses the write instead of production accepting it.
+ */
+const WRITE_GUARD = await installLiveWriteGuard({
+  label: "src/lib/workers/scanChunkLedgerLive.test.mjs",
+  allow: ["scan_runs"],
+});
+
 /** The connection string, built exactly as src/lib/scanRunsLive.test.mjs builds it. */
 function connectionString(env = process.env) {
   if (env.DATABASE_URL) return env.DATABASE_URL;
@@ -94,6 +112,10 @@ function requireAppClient() {
  * brand_metrics_daily rows. They were deleted, but a test that can do that once
  * can do it again, so every write this file must not perform is now a stub that
  * fails loudly instead of a default that reaches the database.
+ *
+ * R3.2.4 made that a property rather than a habit: WRITE_GUARD above refuses
+ * any write to any table but `scan_runs`, so a name missing from this list is
+ * no longer the difference between a stub and a production row.
  */
 function fakeJobDeps(job) {
   const forbidden = (name) => async () => {
@@ -333,4 +355,18 @@ test("CLEANUP — this file leaves scan_runs exactly as it found it", opts, asyn
   } finally {
     await db.end();
   }
+});
+
+test("GUARD — the write guard was live for this run, and refused nothing", opts, () => {
+  // Both halves matter. "Refused nothing" alone is what an uninstalled guard
+  // also reports, so the coverage flags are asserted first: a guard that failed
+  // to patch anything must not read as a clean run.
+  assert.equal(WRITE_GUARD.covers.supabase, true, "the shared Supabase client was never patched");
+  assert.equal(WRITE_GUARD.covers.pg, true, "the pg driver was never patched");
+  assert.deepEqual(WRITE_GUARD.allowed, ["scan_runs"], "one table, declared out loud");
+  WRITE_GUARD.assertClean();
+  assert.ok(
+    WRITE_GUARD.writes.some((w) => w.table === "scan_runs"),
+    "the guard saw no scan_runs write at all, which means these cases proved nothing"
+  );
 });

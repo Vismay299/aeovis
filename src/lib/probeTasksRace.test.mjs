@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
 import { liveDbGate, notRunBanner } from "./liveDbGate.js";
+import { installLiveWriteGuard } from "./liveWriteGuard.js";
 
 /**
  * R1.2.2 — the claim race, against a REAL Postgres.
@@ -100,6 +101,16 @@ const claim = (client, owner, batchId, { limit = 5, leaseMs = 180000 } = {}) =>
     .then((res) => res.rows[0].r);
 
 const opts = GATE.enabled ? {} : { skip: GATE.reason };
+
+/**
+ * R3.2.4 — "only probe_tasks" enforced rather than promised. Every write this
+ * process attempts is checked against that one table and refused otherwise,
+ * across both transports, and a refusal fails the run even if it is caught.
+ */
+const WRITE_GUARD = await installLiveWriteGuard({
+  label: "src/lib/probeTasksRace.test.mjs",
+  allow: ["probe_tasks"],
+});
 
 test("the fixture table exists and is the one migration 010 created", opts, async () => {
   const [c] = await connect(1);
@@ -385,4 +396,15 @@ test("REFUSALS — the claim will not hand out an unownable lease", opts, async 
     await c.query(`DELETE FROM probe_tasks WHERE engine = $1`, [TEST_ENGINE]).catch(() => {});
     await c.end();
   }
+});
+
+test("GUARD — the write guard was live for this run, and refused nothing", opts, () => {
+  assert.equal(WRITE_GUARD.covers.pg, true, "the pg driver was never patched, so nothing was guarded");
+  assert.equal(WRITE_GUARD.covers.supabase, true, "the Supabase client prototype was never patched");
+  assert.deepEqual(WRITE_GUARD.allowed, ["probe_tasks"]);
+  WRITE_GUARD.assertClean();
+  assert.ok(
+    WRITE_GUARD.writes.some((w) => w.table === "probe_tasks"),
+    "no probe_tasks write was seen at all, so the race cases proved nothing"
+  );
 });

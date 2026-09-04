@@ -13,6 +13,14 @@
  * nobody checked. This returns the REASON, and the caller is expected to print
  * it where a passing run cannot hide it. Standing rule 1: a skip is not a
  * success.
+ *
+ * THIS GATE DECIDES WHETHER A LIVE TEST RUNS. IT DOES NOT DECIDE WHAT IT MAY
+ * WRITE. Opening the gate points a test at production, and an earlier draft of
+ * R3.2.1's live test walked through an open gate into a real `insertScan`,
+ * writing two rows into `scans` and two into `brand_metrics_daily`. Pair this
+ * with `src/lib/liveWriteGuard.js`, which is default-deny: a live test declares
+ * the tables it may write and every other write is refused before it leaves the
+ * process.
  */
 
 /**

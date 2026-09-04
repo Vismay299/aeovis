@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
 import { liveDbGate, notRunBanner } from "./liveDbGate.js";
+import { installLiveWriteGuard } from "./liveWriteGuard.js";
 
 /**
  * R1.2.3 — the scan_runs ledger against a REAL Postgres.
@@ -82,6 +83,22 @@ async function cleanup(client) {
 }
 
 const opts = GATE.enabled ? {} : { skip: GATE.reason };
+
+/**
+ * R3.2.4 — "only scan_runs" enforced, not merely promised.
+ *
+ * The header above claims this file writes one table. The guard makes that
+ * claim checkable: every write in this process, whether it goes over a pg
+ * socket or through a Supabase client (including the one built by hand for the
+ * fleet cases below — the patch is on the client prototype, so it covers
+ * clients this file creates for itself), is checked against `scan_runs` and
+ * refused otherwise. A refused write is recorded and fails the run even if the
+ * caller catches it.
+ */
+const WRITE_GUARD = await installLiveWriteGuard({
+  label: "src/lib/scanRunsLive.test.mjs",
+  allow: ["scan_runs"],
+});
 
 // ---------------------------------------------------------------------------
 // The migration is IN the database
@@ -468,4 +485,18 @@ test("the fleet's heartbeat really moves heartbeat_at on the live row", fleetOpt
     await cleanup(pgc);
     await pgc.end();
   }
+});
+
+test("GUARD — the write guard was live for this run, and refused nothing", opts, () => {
+  // The coverage flags come first: "refused nothing" is also what a guard that
+  // patched nothing would report, and an unarmed guard reading as a clean run
+  // is the exact false success this whole mechanism exists to prevent.
+  assert.equal(WRITE_GUARD.covers.pg, true, "the pg driver was never patched");
+  assert.equal(WRITE_GUARD.covers.supabase, true, "the Supabase client prototype was never patched");
+  assert.deepEqual(WRITE_GUARD.allowed, ["scan_runs"]);
+  WRITE_GUARD.assertClean();
+  assert.ok(
+    WRITE_GUARD.writes.some((w) => w.table === "scan_runs"),
+    "no scan_runs write was seen at all, so these cases proved nothing about the ledger"
+  );
 });
