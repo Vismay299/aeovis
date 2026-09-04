@@ -97,7 +97,8 @@ than an estimate. The request field is sent only when the provider is
 `openrouter` **and** the model is not `:free`.
 
 - `src/lib/openrouter.js:56-61` — the request side.
-- `src/lib/openrouter.js:106-108` — the response side.
+- `src/lib/openrouter.js:119-125` — the response side, which now hands the
+  `usage` block to `resolveCost` rather than coercing a missing field to 0.
 
 The `HTTP-Referer` / `X-Title` attribution headers are the same story:
 OpenRouter-only, `src/lib/openrouter.js:82`.
@@ -126,10 +127,20 @@ Consequences that are already wired:
   is *configured*, never the result of a live call, so polling health never
   spends vendor budget (`src/lib/health.js:1-13`). "Configured" and "works" are
   different questions and the two surfaces answer one each.
-- **A `:free` suffix is a pricing claim, not decoration.** Cost is taken as 0
-  only for an id ending in `:free` (`src/lib/openrouter.js:108`); a paid id on a
-  gateway that does not report `usage.cost` is a known gap, tracked separately —
-  do not treat the 0 it produces as a measurement.
+- **A `:free` suffix is a pricing claim, not decoration.** Cost now comes from
+  exactly one of three named sources and carries that name back to the caller as
+  `cost_source` — `gateway` (real spend echoed by OpenRouter), `free_tier` (the
+  `:free` suffix), or `price_table` (tokens × a rate). See
+  [`src/lib/llmPricing.js`](../../src/lib/llmPricing.js).
+- **A paid id on a gateway that does not report `usage.cost` is no longer a
+  silent $0** — that was the gap this file used to warn readers about, and
+  R3.6.1 closed it. `assertModelPriceable` refuses such an id **before** the
+  request is sent, throwing `UnpricedModelError` and logging
+  `[llm-price] UNPRICED MODEL`. **This means MiMo needs a declared rate.** No
+  built-in rate claims to know MiMo's prices, so running the content pipeline
+  (or any non-`:free` id) against `api.xiaomimimo.com` requires
+  `LLM_MODEL_PRICES={"<model id>":{"input":n,"output":n}}` in USD per 1M
+  tokens. Utility scoring is unaffected while `LLM_MODEL` stays a `:free` id.
 
 ## Switching gateway — the checklist
 

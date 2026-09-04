@@ -4,6 +4,7 @@ import { robustJsonParse, generateContent, getLlmModel } from "./openrouter.js";
 import { getLlmBaseUrl, getLlmProvider, resetLlmConfigWarnings } from "./llmConfig.js";
 import { llmJson } from "./llm.js";
 import { isLlmUnavailable } from "./llmErrors.js";
+import { isUnpricedModel, resetUnpricedAlerts } from "./llmPricing.js";
 
 test("robustJsonParse - clean JSON array", () => {
   const result = robustJsonParse('[{"text":"a"},{"text":"b"}]');
@@ -85,6 +86,9 @@ const KEYED = {
   OPENROUTER_API_KEY: undefined,
   LLM_BASE_URL: undefined,
   OPENROUTER_BASE_URL: undefined,
+  // R3.6.1: cleared so an operator's real price declarations in the ambient
+  // environment cannot make an unpriced-model test pass by accident.
+  LLM_MODEL_PRICES: undefined,
 };
 
 test("generateContent - missing key throws LlmUnavailableError, never { text: '' }", async () => {
@@ -253,7 +257,16 @@ test("provider is derived from the base URL, not from a vendor-named variable", 
 test("MiMo keeps max_completion_tokens, thinking-disable, and NO usage.include", async () => {
   resetLlmConfigWarnings();
   const { body, url } = await captureRequest(
-    { LLM_BASE_URL: "https://api.xiaomimimo.com/v1", LLM_MODEL: "MiMo-VL-7B-RL" },
+    {
+      LLM_BASE_URL: "https://api.xiaomimimo.com/v1",
+      LLM_MODEL: "MiMo-VL-7B-RL",
+      // R3.6.1: MiMo does not echo usage.cost and no built-in rate claims to
+      // know its price, so the pre-flight gate refuses the id outright. This
+      // test is about request SHAPE, so it declares a rate to get past the
+      // gate — see "an unpriced model id is refused BEFORE the request" below
+      // for the refusal itself.
+      LLM_MODEL_PRICES: '{"MiMo-VL-7B-RL":{"input":0.3,"output":1.2}}',
+    },
     { max_tokens: 128 }
   );
   assert.equal(url, "https://api.xiaomimimo.com/v1/chat/completions");
@@ -265,7 +278,15 @@ test("MiMo keeps max_completion_tokens, thinking-disable, and NO usage.include",
 
 test("OpenRouter keeps max_tokens and asks for real cost on a PAID model only", async () => {
   const paid = await captureRequest(
-    { LLM_BASE_URL: "https://openrouter.ai/api/v1", LLM_MODEL: "z-ai/glm-5.2" },
+    {
+      LLM_BASE_URL: "https://openrouter.ai/api/v1",
+      LLM_MODEL: "z-ai/glm-5.2",
+      // R3.6.1: this stub gateway asks for usage.include and then answers
+      // without a `cost` field, which is now a loud refusal rather than a
+      // silent $0. Declared here so the request-SHAPE assertions below are
+      // still reachable; the refusal has its own test further down.
+      LLM_MODEL_PRICES: '{"z-ai/glm-5.2":1.19}',
+    },
     { max_tokens: 128 }
   );
   assert.equal(paid.body.max_tokens, 128);
@@ -282,10 +303,211 @@ test("OpenRouter keeps max_tokens and asks for real cost on a PAID model only", 
 
 test("an unknown OpenAI-compatible gateway gets the portable request shape only", async () => {
   const { body } = await captureRequest(
-    { LLM_BASE_URL: "https://some-gateway.example/v1", LLM_MODEL: "some/model" },
+    {
+      LLM_BASE_URL: "https://some-gateway.example/v1",
+      LLM_MODEL: "some/model",
+      // As above: a `custom` gateway reports no cost either, so the id needs a
+      // declared rate before the request-shape assertions can be reached.
+      LLM_MODEL_PRICES: '{"some/model":1}',
+    },
     { max_tokens: 64 }
   );
   assert.equal(body.max_tokens, 64);
   assert.equal(body.thinking, undefined);
   assert.equal(body.usage, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// R3.6.1 (findings C4/S18) — the price table fails loud on an unknown model id.
+//
+// The line these replace was:
+//     const cost = model.endsWith(":free") ? 0 : Number(data?.usage?.cost) || 0;
+// `Number(undefined) || 0` is 0, and only OpenRouter echoes usage.cost. Every
+// paid completion on MiMo — the gateway this deployment actually talks to —
+// was therefore recorded as free, and the content pipeline's per-item cost cap
+// was comparing a budget against a constant zero. Standing rule 3: an unpriced
+// model id fails loud, never $0.
+// ---------------------------------------------------------------------------
+
+/** Runs generateContent against a gateway stub returning `payload`. */
+async function priced(envVars, payload, options = {}, retries = 0) {
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return Response.json(payload);
+  };
+  try {
+    const out = await withEnvs({ ...KEYED, ...envVars }, () =>
+      generateContent("hello", options, retries).catch((e) => e)
+    );
+    return { out, calls };
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+const OPENROUTER = { LLM_BASE_URL: "https://openrouter.ai/api/v1" };
+const MIMO = { LLM_BASE_URL: "https://api.xiaomimimo.com/v1" };
+const OK = (usage) => ({ choices: [{ message: { content: "ok" } }], usage });
+
+test("pricing - an unpriced model id is refused BEFORE the request is sent, and alerts", async () => {
+  resetUnpricedAlerts();
+  const errors = [];
+  const realError = console.error;
+  console.error = (...args) => errors.push(args.join(" "));
+  let res;
+  try {
+    res = await priced({ ...MIMO, LLM_MODEL: "MiMo-VL-7B-RL" }, OK({ total_tokens: 10 }));
+  } finally {
+    console.error = realError;
+  }
+  assert.ok(isUnpricedModel(res.out), `expected UnpricedModelError, got ${res.out}`);
+  assert.equal(res.out.reason, "unpriced_model");
+  assert.equal(res.out.model, "MiMo-VL-7B-RL");
+  assert.equal(res.out.provider, "mimo");
+  // The point of the pre-flight gate: no tokens were spent on a call whose
+  // cost could never have been recorded.
+  assert.equal(res.calls, 0, "the request must not be sent at all");
+  // "throws AND alerts" — a monitor keys on this string.
+  assert.equal(errors.length, 1, `expected one alert, got ${errors.length}`);
+  assert.match(errors[0], /\[llm-price\] UNPRICED MODEL/);
+  assert.match(errors[0], /MiMo-VL-7B-RL/);
+  assert.match(errors[0], /LLM_MODEL_PRICES/, "the alert must name the remedy");
+});
+
+test("pricing - the refusal is never laundered into $0, an empty answer, or an outage", async () => {
+  resetUnpricedAlerts();
+  const realError = console.error;
+  console.error = () => {};
+  let res;
+  try {
+    // retries=2: a pricing refusal must not be retried and relabelled
+    // "exhausted_retries", which is how it would lose its cause.
+    res = await priced({ ...MIMO, LLM_MODEL: "MiMo-VL-7B-RL" }, OK({ total_tokens: 10 }), {}, 2);
+  } finally {
+    console.error = realError;
+  }
+  assert.ok(isUnpricedModel(res.out));
+  assert.equal(isLlmUnavailable(res.out), false, "a pricing refusal is not a transport outage");
+  assert.equal(res.out.cost, undefined, "the old contract resolved with a number here");
+  assert.equal(res.out.text, undefined);
+  assert.equal(res.calls, 0, "and it is not retried");
+});
+
+test("pricing - a known model prices from tokens when the gateway echoes no cost", async () => {
+  // $3/M in, $15/M out on a gateway that reports no cost at all:
+  // 1M in + 1M out = $18, where the old code recorded $0.
+  const stats = { cost: 0, tokens: 0 };
+  const { out } = await priced(
+    { ...MIMO, LLM_MODEL_PRICES: '{"anthropic/claude-sonnet-4.5":{"input":3,"output":15}}' },
+    OK({ prompt_tokens: 1000000, completion_tokens: 1000000, total_tokens: 2000000 }),
+    { model: "anthropic/claude-sonnet-4.5", stats }
+  );
+  assert.equal(out.cost, 18);
+  assert.equal(out.cost_source, "price_table");
+  assert.equal(stats.cost, 18, "the cost cap reads options.stats, so the number must land there");
+});
+
+test("pricing - the built-in table alone prices the default paid CONTENT_MODEL", async () => {
+  // No LLM_MODEL_PRICES at all: the id ships priced, because it is the one
+  // model this repo pays for by default (src/lib/llm.js getContentModel).
+  const { out } = await priced(
+    MIMO,
+    OK({ prompt_tokens: 200000, completion_tokens: 100000, total_tokens: 300000 }),
+    { model: "anthropic/claude-sonnet-4.5" }
+  );
+  assert.equal(out.cost_source, "price_table");
+  assert.equal(Number(out.cost.toFixed(6)), 2.1); // 0.2*3 + 0.1*15
+});
+
+test("pricing - real spend echoed by OpenRouter wins over the table, labelled 'gateway'", async () => {
+  const { out } = await priced(
+    { ...OPENROUTER, LLM_MODEL_PRICES: '{"anthropic/claude-sonnet-4.5":{"input":3,"output":15}}' },
+    OK({ prompt_tokens: 1000000, completion_tokens: 1000000, cost: 0.42 }),
+    { model: "anthropic/claude-sonnet-4.5" }
+  );
+  assert.equal(out.cost, 0.42, "actual spend beats an estimate");
+  assert.equal(out.cost_source, "gateway");
+});
+
+test("pricing - a gateway-reported 0.0 is a MEASUREMENT, not an absent field", async () => {
+  // `Number(0) || 0` and `Number(undefined) || 0` were the same value; they are
+  // no longer the same claim. This one is a real zero (promo credit, cached
+  // prompt) and keeps the authoritative source.
+  const { out } = await priced(OPENROUTER, OK({ prompt_tokens: 10, completion_tokens: 10, cost: 0 }), {
+    model: "z-ai/glm-5.2",
+  });
+  assert.equal(out.cost, 0);
+  assert.equal(out.cost_source, "gateway");
+});
+
+test("pricing - OpenRouter promising cost and not delivering it throws, never $0", async () => {
+  // The pre-flight gate lets an unknown OpenRouter id through because
+  // usage.include is supposed to answer for it. When the echo does not arrive,
+  // the refusal happens after the fact rather than inventing a zero.
+  resetUnpricedAlerts();
+  const realError = console.error;
+  console.error = () => {};
+  let res;
+  try {
+    res = await priced(
+      OPENROUTER,
+      OK({ prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 }),
+      { model: "z-ai/glm-5.2" },
+      2
+    );
+  } finally {
+    console.error = realError;
+  }
+  assert.ok(isUnpricedModel(res.out), `expected UnpricedModelError, got ${res.out}`);
+  assert.equal(res.out.provider, "openrouter");
+  assert.equal(res.calls, 1, "a pricing refusal is not retried");
+});
+
+test("pricing - zero and absent usage on a PRICED model are measured zeros, not unknowns", async () => {
+  // The distinction this whole task rests on. A model we can price that
+  // consumed nothing costs 0 — and must resolve, with a named source, rather
+  // than be mistaken for a model nothing can price.
+  const zero = await priced(
+    MIMO,
+    OK({ prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }),
+    { model: "anthropic/claude-sonnet-4.5" }
+  );
+  assert.equal(isUnpricedModel(zero.out), false, `zero usage must not throw, got ${zero.out}`);
+  assert.equal(zero.out.cost, 0);
+  assert.equal(zero.out.cost_source, "price_table");
+
+  const absent = await priced(MIMO, { choices: [{ message: { content: "ok" } }] }, {
+    model: "anthropic/claude-sonnet-4.5",
+  });
+  assert.equal(isUnpricedModel(absent.out), false, `absent usage must not throw, got ${absent.out}`);
+  assert.equal(absent.out.cost, 0);
+  assert.equal(absent.out.cost_source, "price_table");
+});
+
+test("pricing - a ':free' id resolves as free_tier, distinguishably from a priced zero", async () => {
+  const { out } = await priced(
+    { ...MIMO, LLM_MODEL: "google/gemma-4-31b-it:free" },
+    OK({ prompt_tokens: 500, completion_tokens: 500, total_tokens: 1000 })
+  );
+  assert.equal(out.model_used, "google/gemma-4-31b-it:free");
+  assert.equal(out.cost, 0);
+  assert.equal(out.cost_source, "free_tier", "free is a priced 0, not an unpriced one");
+});
+
+test("pricing - the alert does not flood, but the throw happens every time", async () => {
+  resetUnpricedAlerts();
+  const errors = [];
+  const realError = console.error;
+  console.error = (...args) => errors.push(args.join(" "));
+  try {
+    for (let i = 0; i < 3; i++) {
+      const res = await priced({ ...MIMO, LLM_MODEL: "MiMo-VL-7B-RL" }, OK({}));
+      assert.ok(isUnpricedModel(res.out), `call ${i} must still throw`);
+    }
+  } finally {
+    console.error = realError;
+  }
+  assert.equal(errors.length, 1, "three refusals, one alert line — the throw is the per-call signal");
 });

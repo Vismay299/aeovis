@@ -1,5 +1,6 @@
 import { LlmUnavailableError } from "./llmErrors.js";
 import { LLM_ENV, getLlmApiKey, getLlmBaseUrl, getLlmModel, getLlmProvider } from "./llmConfig.js";
+import { assertModelPriceable, isFreeModelId, isUnpricedModel, resolveCost } from "./llmPricing.js";
 
 export { getLlmModel };
 
@@ -31,6 +32,13 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   }
 
   const model = options.model || getLlmModel();
+  // Refuse to spend on a model nothing can price (R3.6.1, finding C4). This is
+  // deliberately BEFORE the request: an unpriced id is a configuration error,
+  // and failing here costs no tokens and no half-finished scan, where the same
+  // throw after the completion would discard an answer already paid for.
+  // See src/lib/llmPricing.js for the three named cost sources.
+  assertModelPriceable(model, provider);
+
   const url = `${baseUrl}/chat/completions`;
   const isOpenRouter = provider === "openrouter";
   const isMimo = provider === "mimo";
@@ -55,7 +63,7 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   }
   // Paid models: ask OpenRouter to include the real cost in `usage` so the
   // content pipeline's per-item cost cap works off actual spend, not guesses.
-  const isPaidModel = !model.endsWith(":free");
+  const isPaidModel = !isFreeModelId(model);
   if (isOpenRouter && isPaidModel) {
     body.usage = { include: true };
   }
@@ -103,18 +111,34 @@ export async function generateContent(prompt, options = {}, retries = 2) {
       const promptTokens = data?.usage?.prompt_tokens || 0;
       const completionTokens = data?.usage?.completion_tokens || 0;
       const tokens = data?.usage?.total_tokens || promptTokens + completionTokens;
-      // Free models cost 0; paid models report real USD cost when
-      // `usage.include` was requested (OpenRouter only).
-      const cost = model.endsWith(":free") ? 0 : Number(data?.usage?.cost) || 0;
+      // Cost comes from exactly one named source — real spend echoed by the
+      // gateway, the `:free` suffix, or the price table — and throws when none
+      // of them applies. It used to be `Number(data?.usage?.cost) || 0`, which
+      // turned every paid completion on a gateway that does not echo cost
+      // (MiMo, and any `custom` one) into a free one. Standing rule 3.
+      const { cost, cost_source } = resolveCost({
+        model,
+        provider,
+        usage: data?.usage,
+        promptTokens,
+        completionTokens,
+      });
 
       if (options.stats) {
         options.stats.tokens = (options.stats.tokens || 0) + tokens;
         options.stats.cost = (options.stats.cost || 0) + cost;
       }
 
-      return { text, model_used: model, tokens, cost };
+      // cost_source travels with the number so a $0 that was measured never
+      // reads the same as a $0 that was assumed (standing rule 1).
+      return { text, model_used: model, tokens, cost, cost_source };
     } catch (e) {
       clearTimeout(timeoutId);
+      // A pricing refusal is not a transport failure. Retrying it would spend
+      // three times over and then relabel it "exhausted_retries", burying the
+      // actual cause — the whole point of R3.6.1 is that this one stays
+      // legible. Out, immediately, with its own type.
+      if (isUnpricedModel(e)) throw e;
       lastErr = e;
       const isAbort = e.name === "AbortError" || /abort/i.test(e.message || "");
       if (isAbort && attempt < retries) {

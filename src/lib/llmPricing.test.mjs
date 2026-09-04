@@ -1,0 +1,232 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  BUILT_IN_MODEL_PRICES,
+  MODEL_PRICES_ENV,
+  UnpricedModelError,
+  assertModelPriceable,
+  gatewayReportsCost,
+  isFreeModelId,
+  isUnpricedModel,
+  lookupModelPrice,
+  readDeclaredPrices,
+  resetUnpricedAlerts,
+  resolveCost,
+} from "./llmPricing.js";
+
+/**
+ * R3.6.1 (findings C4/S18) — unit-level cover for the price table itself.
+ * The integration side (that generateContent refuses before spending, and that
+ * cost_source travels with the number) lives in openrouter.test.mjs.
+ */
+
+/** Every call in here is env-explicit, so nothing reads the ambient process. */
+const NO_ENV = {};
+const declaring = (json) => ({ [MODEL_PRICES_ENV]: json });
+
+const silenced = (fn) => {
+  const real = console.error;
+  console.error = () => {};
+  try {
+    return fn();
+  } finally {
+    console.error = real;
+  }
+};
+
+test("isFreeModelId - the ':free' suffix is the whole claim", () => {
+  assert.equal(isFreeModelId("google/gemma-4-31b-it:free"), true);
+  // The near-miss from docs/vendors/gateway-catalog.md: z-ai/glm-5.2 without
+  // the suffix is billed at $1.19/M and used to be recorded as free.
+  assert.equal(isFreeModelId("z-ai/glm-5.2"), false);
+  assert.equal(isFreeModelId(":free-ish"), false);
+  assert.equal(isFreeModelId(""), false);
+  assert.equal(isFreeModelId(undefined), false);
+});
+
+test("gatewayReportsCost - only OpenRouter echoes real spend", () => {
+  assert.equal(gatewayReportsCost("openrouter"), true);
+  assert.equal(gatewayReportsCost("mimo"), false);
+  assert.equal(gatewayReportsCost("custom"), false);
+  assert.equal(gatewayReportsCost(undefined), false);
+});
+
+test("the built-in table prices the one model this repo pays for by default", () => {
+  const rate = lookupModelPrice("anthropic/claude-sonnet-4.5", NO_ENV);
+  assert.deepEqual(
+    { input: rate.input, output: rate.output, declared: rate.declared },
+    { input: 3, output: 15, declared: false }
+  );
+  assert.equal(lookupModelPrice("some/model-nobody-priced", NO_ENV), null);
+  assert.ok(Object.isFrozen(BUILT_IN_MODEL_PRICES), "the table must not be mutable at runtime");
+});
+
+test("an operator declaration overrides a stale built-in rate", () => {
+  const rate = lookupModelPrice(
+    "anthropic/claude-sonnet-4.5",
+    declaring('{"anthropic/claude-sonnet-4.5":{"input":9,"output":99}}')
+  );
+  assert.deepEqual({ input: rate.input, output: rate.output, declared: rate.declared }, {
+    input: 9,
+    output: 99,
+    declared: true,
+  });
+});
+
+test("a bare number declares the same rate both ways", () => {
+  assert.deepEqual(readDeclaredPrices(declaring('{"some/model":2}')), {
+    "some/model": { input: 2, output: 2 },
+  });
+  assert.deepEqual(readDeclaredPrices(declaring('{"free/thing":0}')), {
+    "free/thing": { input: 0, output: 0 },
+  });
+});
+
+test("an absent declaration is empty, not an error", () => {
+  assert.deepEqual(readDeclaredPrices(NO_ENV), {});
+  assert.deepEqual(readDeclaredPrices({ [MODEL_PRICES_ENV]: "   " }), {});
+});
+
+test("a MALFORMED declaration throws rather than being quietly skipped", () => {
+  // Standing rule 1: skipping it would drop straight back to "unpriced" and
+  // blame the model for the operator's typo.
+  for (const bad of ["{not json", "[]", '"a string"', '{"m":"free"}', '{"m":{"input":1}}', '{"m":-2}']) {
+    const caught = (() => {
+      try {
+        readDeclaredPrices(declaring(bad));
+        return null;
+      } catch (e) {
+        return e;
+      }
+    })();
+    assert.ok(isUnpricedModel(caught), `${bad} must be refused, got ${caught}`);
+    assert.equal(caught.reason, "malformed_declaration");
+    assert.match(caught.message, new RegExp(MODEL_PRICES_ENV));
+  }
+});
+
+test("assertModelPriceable - names the source it will price from", () => {
+  assert.equal(assertModelPriceable("x/y:free", "mimo", NO_ENV), "free_tier");
+  assert.equal(assertModelPriceable("anthropic/claude-sonnet-4.5", "mimo", NO_ENV), "price_table");
+  assert.equal(assertModelPriceable("m", "custom", declaring('{"m":1}')), "price_table");
+  // Unknown on OpenRouter is still priceable: usage.include answers for it.
+  assert.equal(assertModelPriceable("z-ai/glm-5.2", "openrouter", NO_ENV), "gateway");
+});
+
+test("assertModelPriceable - an unknown id on a silent gateway throws with the remedy", () => {
+  resetUnpricedAlerts();
+  const caught = silenced(() => {
+    try {
+      assertModelPriceable("MiMo-VL-7B-RL", "mimo", NO_ENV);
+      return null;
+    } catch (e) {
+      return e;
+    }
+  });
+  assert.ok(caught instanceof UnpricedModelError);
+  assert.equal(caught.reason, "unpriced_model");
+  assert.equal(caught.model, "MiMo-VL-7B-RL");
+  assert.equal(caught.provider, "mimo");
+  assert.match(caught.message, new RegExp(MODEL_PRICES_ENV), "the error must name the fix");
+  assert.match(caught.message, /not an option/);
+});
+
+test("isUnpricedModel matches by name too, across duplicated module instances", () => {
+  // Next.js can load a module twice (server bundle + route bundle), which makes
+  // `instanceof` alone unreliable — the same reason isLlmUnavailable does this.
+  assert.equal(isUnpricedModel({ name: "UnpricedModelError" }), true);
+  assert.equal(isUnpricedModel(new Error("nope")), false);
+  assert.equal(isUnpricedModel(null), false);
+});
+
+test("resolveCost - the three named sources, and nothing else", () => {
+  assert.deepEqual(
+    resolveCost({ model: "z-ai/glm-5.2", provider: "openrouter", usage: { cost: 1.5 }, env: NO_ENV }),
+    { cost: 1.5, cost_source: "gateway" }
+  );
+  assert.deepEqual(resolveCost({ model: "a:free", provider: "mimo", env: NO_ENV }), {
+    cost: 0,
+    cost_source: "free_tier",
+  });
+  assert.deepEqual(
+    resolveCost({
+      model: "anthropic/claude-sonnet-4.5",
+      provider: "mimo",
+      promptTokens: 1000000,
+      completionTokens: 0,
+      env: NO_ENV,
+    }),
+    { cost: 3, cost_source: "price_table" }
+  );
+});
+
+test("resolveCost - a nonsense usage.cost falls through instead of poisoning the number", () => {
+  // NaN or a negative is not a measurement. Falling through to the table beats
+  // recording NaN, and beats recording 0 twice over.
+  for (const cost of [NaN, -1, "free", null, undefined]) {
+    const out = resolveCost({
+      model: "anthropic/claude-sonnet-4.5",
+      provider: "openrouter",
+      usage: { cost, prompt_tokens: 1000000, completion_tokens: 0 },
+      env: NO_ENV,
+    });
+    assert.deepEqual(out, { cost: 3, cost_source: "price_table" }, `usage.cost=${cost}`);
+  }
+});
+
+test("resolveCost - usage token fields are used when the caller passes none", () => {
+  assert.deepEqual(
+    resolveCost({
+      model: "anthropic/claude-sonnet-4.5",
+      provider: "mimo",
+      usage: { prompt_tokens: 2000000, completion_tokens: 1000000 },
+      env: NO_ENV,
+    }),
+    { cost: 21, cost_source: "price_table" } // 2*3 + 1*15
+  );
+});
+
+test("resolveCost - a priced model with no tokens is a MEASURED zero", () => {
+  const out = resolveCost({
+    model: "anthropic/claude-sonnet-4.5",
+    provider: "mimo",
+    usage: { prompt_tokens: 0, completion_tokens: 0 },
+    env: NO_ENV,
+  });
+  assert.deepEqual(out, { cost: 0, cost_source: "price_table" });
+  // And it is NOT the same claim as a free model's zero, nor an unpriced one.
+  assert.notEqual(out.cost_source, "free_tier");
+});
+
+test("resolveCost - an unpriced id throws, and there is no branch that returns 0 for it", () => {
+  resetUnpricedAlerts();
+  for (const provider of ["mimo", "custom", "openrouter"]) {
+    const caught = silenced(() => {
+      try {
+        return resolveCost({
+          model: "nobody/prices-this",
+          provider,
+          usage: { prompt_tokens: 10, completion_tokens: 10 },
+          env: NO_ENV,
+        });
+      } catch (e) {
+        return e;
+      }
+    });
+    assert.ok(isUnpricedModel(caught), `${provider} must refuse, got ${JSON.stringify(caught)}`);
+    assert.equal(caught.provider, provider);
+  }
+});
+
+test("resolveCost - OpenRouter's missing echo is named as such in the message", () => {
+  resetUnpricedAlerts();
+  const caught = silenced(() => {
+    try {
+      resolveCost({ model: "nobody/prices-this", provider: "openrouter", env: NO_ENV });
+      return null;
+    } catch (e) {
+      return e;
+    }
+  });
+  assert.match(caught.message, /asked for usage\.cost and did not return it/);
+});
