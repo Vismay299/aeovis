@@ -130,7 +130,7 @@ test("GUARD — the ADR does not assert cost or coverage it never measured", asy
     path.join(REPO, "docs/decisions/2026-08-29-serp-provider-bright-data.md"),
     "utf8"
   );
-  assert.match(adr, /NOT verified here/);
+  assert.match(adr, /^## What is NOT verified$/m, "the ADR must carry an explicit not-verified section");
   assert.match(adr, /Cost per query, coverage rate, and latency/);
 });
 
