@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**51 / 165 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**52 / 169 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -119,7 +119,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `10/34`
+## R2 — Scoring truth  `11/35`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -136,7 +136,8 @@ Baseline commit: `5111219`
 - [ ] **R2.2.3** upsertPrompts throws; audit all write helpers for the return-{error} idiom
 - [ ] **R2.2.4** Remove insertScan's silent 3-tier column-drop cascade
 - [x] **R2.2.5** dataSourceIssue still assumes text engines always answer — closed at `src/lib/scoring/enginePipeline.js:35`, `src/lib/scoring/enginePipeline.js:416`, `src/lib/scoring/enginePipeline.js:441`, `src/lib/scoring/enginePipeline.test.mjs:507`, `src/lib/scoring/aioConstants.js:4`
-- [~] **R2.2.6** The scan-level data_source_issue banner is derived from aio alone — submitted `src/lib/scoring/enginePipeline.js:606`, `src/lib/scoring/enginePipeline.js:910`, `src/lib/scoring/enginePipeline.js:56`, `src/components/dashboard/DashboardShell.jsx:369`, `src/components/dashboard/DashboardShell.jsx:383`, `src/components/dashboard/DashboardShell.jsx:704`, `src/components/dashboard/DashboardShell.jsx:823`, `src/lib/scoring/enginePipeline.test.mjs:637`, `src/components/dashboard/degradedEngineBanner.test.mjs:54`
+- [x] **R2.2.6** The scan-level data_source_issue banner is derived from aio alone — closed at `src/lib/scoring/enginePipeline.js:606`, `src/lib/scoring/enginePipeline.js:910`, `src/lib/scoring/enginePipeline.js:56`, `src/components/dashboard/DashboardShell.jsx:369`, `src/components/dashboard/DashboardShell.jsx:383`, `src/components/dashboard/DashboardShell.jsx:704`, `src/components/dashboard/DashboardShell.jsx:823`, `src/lib/scoring/enginePipeline.test.mjs:637`, `src/components/dashboard/degradedEngineBanner.test.mjs:54`
+- [ ] **R2.2.7** The degraded-banner guard proves a declaration, not a gate
 ### R2.3
 
 - [x] **R2.3.1** Two-pass finalize: discovered roster feeds the headline — closed at `src/lib/workers/scanWorker.js:757`, `src/lib/workers/scanWorker.js:781`, `src/lib/workers/scanWorker.js:798`, `src/lib/workers/twoPassFinalize.test.mjs`
@@ -178,7 +179,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
 - [~] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — submitted `src/lib/landingHonesty.test.mjs:47`, `src/lib/landingHonesty.test.mjs:102`, `src/lib/landingHonesty.test.mjs:110`, `src/lib/landingHonesty.test.mjs:132`, `src/lib/landingHonesty.test.mjs:139`, `src/lib/landingHonesty.test.mjs:579`, `src/lib/landingHonesty.test.mjs:608`, `src/app/page.js:76`, `src/app/page.js:308`
 
-## R3 — Durable backend  `2/25`
+## R3 — Durable backend  `2/28`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -186,7 +187,8 @@ Baseline commit: `5111219`
 
 - [ ] **R3.1.1** Scan worker cron every 10 minutes `needs-vercel`
 - [ ] **R3.1.2** Add the missing ?batch=1 cron entry `needs-vercel` `needs-llm`
-- [~] **R3.1.3** The scan worker route reports processed:1 for a request that failed
+- [~] **R3.1.3** The scan worker route reports processed:1 for a request that failed — submitted `src/app/api/scan/worker/route.js:79`, `src/app/api/scan/worker/route.js:104`, `src/app/api/scan/worker/route.js:138`, `src/app/api/scan/worker/route.js:160`, `src/app/api/scan/worker/route.js:187`, `src/app/api/scan/worker/route.js:249`, `src/lib/scanWorkerRoute.route.test.mjs:101`, `src/lib/scanWorkerRoute.route.test.mjs:119`, `src/lib/scanWorkerRoute.route.test.mjs:203`
+- [ ] **R3.1.4** The content worker sweep counts dispatched as done, and an in-memory scan leaves no ledger row
 ### R3.2
 
 - [x] **R3.2.1** One scan_runs row per chunk execution — closed at `src/lib/workers/scanWorker.js:1540`, `src/lib/workers/scanWorker.js:1555`, `src/lib/workers/scanWorker.js:321`, `src/lib/workers/scanWorker.js:854`, `src/lib/workers/scanWorker.js:203`, `src/lib/workers/scanWorker.js:270`, `src/lib/workers/scanChunkLedger.test.mjs:327`, `src/lib/workers/scanChunkLedgerLive.test.mjs:176`
@@ -219,8 +221,10 @@ Baseline commit: `5111219`
 
 - [x] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability — closed at `src/lib/ssrfGuard.js:366`, `src/lib/ssrfGuard.js:482`, `src/lib/ssrfGuard.js:552`, `src/lib/firecrawl.js:45`, `src/lib/firecrawl.js:115`, `src/lib/ssrfGuard.test.mjs:1`, `src/lib/firecrawl.test.mjs:1`
 - [ ] **R3.7.2** Firecrawl degrade becomes a recorded state
-- [ ] **R3.7.4** Apply the SSRF guard to the crawlability route
+- [~] **R3.7.4** Apply the SSRF guard to the crawlability route — submitted `src/app/api/brands/[brand]/crawlability/route.js:243`, `src/app/api/brands/[brand]/crawlability/route.js:105`, `src/app/api/brands/[brand]/crawlability/route.js:312`, `src/app/api/brands/[brand]/crawlability/route.js:376`, `src/app/api/brands/[brand]/crawlability/route.js:412`, `src/app/api/brands/[brand]/crawlability/route.js:131`, `src/app/api/brands/[brand]/crawlability/route.js:345`, `src/app/api/brands/[brand]/crawlability/route.js:76`, `src/app/api/knowledge/route.js:114`, `src/app/api/knowledge/route.js:71`, `src/lib/scoring/promptGen.js:176`, `src/lib/crawlabilitySsrf.route.test.mjs:112`, `src/lib/crawlabilitySsrf.route.test.mjs:293`, `src/lib/crawlabilitySsrf.route.test.mjs:487`, `src/lib/ssrfRefusalSurfacing.test.mjs:60`, `src/lib/ssrfRefusalSurfacing.test.mjs:140`
 - [ ] **R3.7.5** Seven IPv6 ranges classifyAddress still allows
+- [ ] **R3.7.6** promptGen leaks an uncleared 10-second timer per seed term
+- [ ] **R3.7.7** The crawlability UI shows a refused rival as unreachable
 
 ## R4 — Ground truth & analytics completion  `0/6`
 
@@ -288,7 +292,7 @@ Baseline commit: `5111219`
 ### R6.3
 
 - [x] **R6.3.1** Vendor contract docs — closed at `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
-- [~] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current — submitted `docs/vendors/gemini.md:9`, `docs/vendors/gemini.md:47`, `docs/vendors/gemini.md:88`, `docs/vendors/gemini.md:205`, `docs/vendors/gemini.md:232`, `docs/vendors/gemini.md:253`, `docs/vendors/gemini.md:264`, `docs/vendors/gemini.md:290`, `docs/vendors/README.md:41`, `docs/vendors/README.md:94`, `docs/vendors/README.md:127`, `docs/vendors/README.md:167`, `src/lib/gemini.js:55`, `src/lib/gemini.js:85`, `src/lib/gemini.js:92`, `src/lib/docStatus.test.mjs:19`, `node_modules/@google/generative-ai/dist/index.mjs:444`
+- [~] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current — submitted `src/lib/workers/scanWorker.js:1506`
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker
