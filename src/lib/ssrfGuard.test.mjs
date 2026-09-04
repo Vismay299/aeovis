@@ -5,6 +5,7 @@ import {
   SsrfBlockedError,
   assertPublicUrl,
   classifyAddress,
+  isPolicyRefusal,
   normalizeTargetUrl,
   parseIpv4Literal,
   parseIpv6Literal,
@@ -103,6 +104,15 @@ const BLOCKED_LITERALS = [
   ["2002:7f00:1::", "6to4_loopback", "6to4 wrapping 127.0.0.1"],
   ["2002:a9fe:a9fe::", "6to4_link_local", "6to4 wrapping the metadata address"],
   ["64:ff9b::a9fe:a9fe", "nat64_link_local", "NAT64 wrapping the metadata address"],
+
+  // --- R3.7.5 / finding C12: the seven ranges the shipped classifier passed --
+  ["fec0::1", "site_local", "deprecated IPv6 site-local"],
+  ["64:ff9b:1::1", "nat64_local_use", "local-use NAT64 prefix"],
+  ["::ffff:8.8.8.8", "ipv4_mapped", "IPv4-mapped wrapping a PUBLIC address"],
+  ["2001:2::1", "benchmark", "BMWG IPv6 benchmarking"],
+  ["3fff::1", "documentation", "RFC 9637 documentation"],
+  ["5f00::1", "segment_routing", "RFC 9602 SRv6 SIDs"],
+  ["2001:10::1", "orchid", "deprecated ORCHID"],
 ];
 
 for (const [host, expectedReason, notation] of BLOCKED_LITERALS) {
@@ -171,6 +181,130 @@ for (const [host, why] of ALLOWED_LITERALS) {
     assert.equal(verdict.blocked, false, `${host} must NOT be blocked (${verdict.reason})`);
   });
 }
+
+// ---------------------------------------------------------------------------
+// 2b. R3.7.5 / finding C12 — the seven IPv6 ranges classifyAddress used to pass
+//
+// The R3.7.1 verifier enumerated the IPv6 space against the shipped classifier
+// and found seven ranges that returned blocked:false. None was a metadata,
+// RFC1918 or ULA range, so none was a live SSRF — but none is a public unicast
+// address either, and this module claims to answer that question completely.
+// The acceptance criterion for R3.7.5 offers a choice: refuse them, or list
+// each with the reason it is deliberately allowed. The choice made is REFUSE
+// all seven, and these tests pin it so the next reader is not left guessing.
+//
+// Every range gets a floor, a ceiling, and at least one neighbour that must
+// STILL BE ALLOWED, so the fix cannot decay into a blanket IPv6 deny.
+// ---------------------------------------------------------------------------
+
+/** [host, expected reason, expected range, what it is] */
+const C12_RANGES = [
+  ["fec0::", "site_local", "fec0::/10", "deprecated site-local, floor"],
+  ["feff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", "site_local", "fec0::/10", "site-local ceiling"],
+  ["64:ff9b:1::", "nat64_local_use", "64:ff9b:1::/48", "local-use NAT64, floor"],
+  ["64:ff9b:1:ffff::1", "nat64_local_use", "64:ff9b:1::/48", "local-use NAT64, inside the /48"],
+  ["::ffff:0:0", "ipv4_mapped_this_network", null, "IPv4-mapped floor unwraps to 0.0.0.0/8"],
+  ["::ffff:8.8.8.8", "ipv4_mapped", "::ffff:0:0/96", "IPv4-mapped wrapping a public address"],
+  ["::ffff:255.255.255.254", "ipv4_mapped_reserved", null, "IPv4-mapped, unwraps to 240/4"],
+  ["2001:2::", "benchmark", "2001:2::/48", "BMWG benchmarking, floor"],
+  ["2001:2:0:ffff::1", "benchmark", "2001:2::/48", "BMWG benchmarking, inside the /48"],
+  ["3fff::", "documentation", "3fff::/20", "RFC 9637 documentation, floor"],
+  ["3fff:0fff:ffff:ffff:ffff:ffff:ffff:ffff", "documentation", "3fff::/20", "RFC 9637 ceiling"],
+  ["5f00::", "segment_routing", "5f00::/16", "SRv6 SIDs, floor"],
+  ["5f00:ffff::1", "segment_routing", "5f00::/16", "SRv6 SIDs, ceiling"],
+  ["2001:10::", "orchid", "2001:10::/28", "deprecated ORCHID, floor"],
+  ["2001:1f:ffff::1", "orchid", "2001:10::/28", "deprecated ORCHID, ceiling"],
+];
+
+test("C12 — all seven ranges are refused, with the CIDR that caught them", () => {
+  const distinctRanges = new Set(
+    C12_RANGES.map(([, reason, range]) => range ?? `unwrapped:${reason}`)
+  );
+  // Seven CIDRs, plus the two IPv4-mapped rows that unwrap to an IPv4 verdict.
+  assert.equal(
+    [...distinctRanges].filter((r) => !r.startsWith("unwrapped:")).length,
+    7,
+    "the finding names seven ranges; the table must cover exactly seven"
+  );
+
+  for (const [host, reason, range, what] of C12_RANGES) {
+    const verdict = classifyAddress(host);
+    assert.equal(verdict.ip, true, `${host} (${what}) must parse as an IP literal`);
+    assert.equal(verdict.blocked, true, `${host} (${what}) must be blocked`);
+    assert.equal(verdict.reason, reason, `${host} (${what}) reason`);
+    if (range) assert.equal(verdict.range, range, `${host} (${what}) range`);
+  }
+});
+
+test("C12 — every refusal is a policy refusal, never 'unusable input'", async () => {
+  for (const [host, reason, , what] of C12_RANGES) {
+    await assert.rejects(
+      () => assertPublicUrl(`http://[${host}]/`, { lookup: noLookup }),
+      (err) => {
+        assert.ok(err instanceof SsrfBlockedError, `${host} (${what})`);
+        assert.equal(err.code, reason, `${host} (${what}) code`);
+        assert.equal(isPolicyRefusal(err), true, `${host} (${what}) must surface as a block`);
+        return true;
+      },
+      `${host} (${what}) was not refused end to end`
+    );
+  }
+});
+
+test("C12 — a hostname resolving into one of the seven is refused too", async () => {
+  await assert.rejects(
+    () => assertPublicUrl("https://rebind.example/", { lookup: async () => ["3fff::1"] }),
+    (err) => {
+      assert.equal(err.code, "documentation");
+      assert.match(err.message, /3fff::\/20/);
+      return true;
+    }
+  );
+});
+
+/**
+ * The other half of the contract: closing these ranges must not close their
+ * neighbours. Each row is an address that is adjacent to, or a documented
+ * globally-reachable carve-out inside, one of the seven.
+ */
+const C12_STILL_ALLOWED = [
+  ["febf:ffff::1", "still fe80::/10 territory — blocked, but as link_local; see below"],
+  ["fe00::1", "fe00::/9 is unallocated, not site-local — must not be swept up by fec0::/10"],
+  ["fe7f:ffff::1", "the address immediately below fe80::/10"],
+  ["64:ff9b:2::1", "outside the 64:ff9b:1::/48 local-use prefix"],
+  ["64:ff9b::8.8.8.8", "the well-known NAT64 prefix wrapping a PUBLIC address"],
+  ["8.8.8.8", "the bare IPv4 that ::ffff:8.8.8.8 wraps — the wrapper is the problem"],
+  ["2001:1::3", "DNS-SD registration anycast, globally reachable per IANA"],
+  ["2001:3::1", "AMT, globally reachable per IANA"],
+  ["2001:4:112::1", "AS112-v6, globally reachable per IANA"],
+  ["2001:20::1", "ORCHIDv2 — globally reachable, unlike the deprecated 2001:10::/28"],
+  ["2001:30::1", "Drone Remote ID, globally reachable per IANA"],
+  ["3ffe::1", "one group below 3fff::/20 (the old 6bone space)"],
+  ["3fff:1000::1", "past the 20-bit prefix of 3fff::/20"],
+  ["5eff:ffff::1", "one group below 5f00::/16"],
+  ["5f01::1", "one group past 5f00::/16"],
+  ["2606:4700:4700::1111", "an ordinary public resolver, the control case"],
+];
+
+for (const [host, why] of C12_STILL_ALLOWED) {
+  // febf::1 is genuinely blocked (link-local); it is in the table to document
+  // the boundary between fe80::/10 and fec0::/10, not as an allow case.
+  if (host.startsWith("febf")) continue;
+  test(`C12 — ${host} is still allowed (${why})`, () => {
+    const verdict = classifyAddress(host);
+    assert.equal(verdict.ip, true, `${host} should parse as an IP literal`);
+    assert.equal(verdict.blocked, false, `${host} must NOT be blocked (got ${verdict.reason})`);
+  });
+}
+
+test("C12 — the fe80::/10 and fec0::/10 boundary is exact, not a single fe00::/8 sweep", () => {
+  assert.equal(classifyAddress("fe7f:ffff::1").blocked, false, "fe7f is below fe80::/10");
+  assert.equal(classifyAddress("fe80::1").reason, "link_local");
+  assert.equal(classifyAddress("febf:ffff::1").reason, "link_local", "febf is the fe80::/10 ceiling");
+  assert.equal(classifyAddress("fec0::1").reason, "site_local", "fec0 starts the deprecated /10");
+  assert.equal(classifyAddress("feff:ffff::1").reason, "site_local", "feff is the fec0::/10 ceiling");
+  assert.equal(classifyAddress("ff00::1").reason, "multicast", "ff00 hands off to multicast");
+});
 
 test("a legitimate customer URL passes the guard untouched", async () => {
   const result = await assertPublicUrl("https://acme-analytics.co.in/pricing?ref=1", {

@@ -302,6 +302,70 @@ export function classifyIpv4(value) {
   return { blocked: false, reason: null, range: null };
 }
 
+/**
+ * Non-public IPv6 prefixes — R3.7.5, finding C12.
+ *
+ * Drawn from the IANA IPv6 Special-Purpose Address Registry (every entry whose
+ * "Globally Reachable" column is False), plus the two deprecated allocations
+ * that are not in that registry but are equally not internet addresses:
+ * fec0::/10 (site-local, deprecated by RFC 3879) and 2001:10::/28 (ORCHID,
+ * deprecated by RFC 4843/7343). None of these is a cloud-metadata or RFC1918
+ * equivalent, so a host resolving into one is more likely broken than hostile —
+ * but it is not a public unicast address either, and this module claims to
+ * decide that question completely. Refusing is the honest answer.
+ *
+ * WHAT IS DELIBERATELY *NOT* HERE, and why
+ * ----------------------------------------
+ *   - 2002::/16 (6to4) and 64:ff9b::/96 (the NAT64 well-known prefix) are
+ *     globally reachable per IANA and carry a real IPv4 destination inside
+ *     them. They are handled above by unwrapping that IPv4 and classifying it,
+ *     so 2002:a9fe:a9fe:: is refused while 2002:0808:0808:: is allowed. A flat
+ *     block here would be both wrong and weaker.
+ *   - The globally-reachable carve-outs inside 2001::/23 stay allowed on
+ *     purpose: 2001:1::1/128 and 2001:1::2/128 (PCP/TURN anycast),
+ *     2001:1::3/128 (DNS-SD registration anycast), 2001:3::/32 (AMT),
+ *     2001:4:112::/48 (AS112-v6), 2001:20::/28 (ORCHIDv2) and 2001:30::/28
+ *     (Drone Remote ID). We block the four sub-blocks of 2001::/23 that IANA
+ *     marks unreachable rather than the whole /23.
+ *   - 2001:678::/29 and the rest of ordinary global unicast is, correctly,
+ *     nobody's business here.
+ *
+ * Order does not matter: no two prefixes below overlap.
+ */
+const IPV6_BLOCKED = [
+  { cidr: "::/128", reason: "unspecified" },
+  { cidr: "::1/128", reason: "loopback" },
+  { cidr: "64:ff9b:1::/48", reason: "nat64_local_use" }, // RFC 8215 local-use translation
+  { cidr: "100::/64", reason: "discard" },
+  { cidr: "2001::/32", reason: "teredo" },
+  { cidr: "2001:2::/48", reason: "benchmark" }, // RFC 5180 BMWG
+  { cidr: "2001:10::/28", reason: "orchid" }, // deprecated ORCHID
+  { cidr: "2001:db8::/32", reason: "documentation" },
+  { cidr: "3fff::/20", reason: "documentation" }, // RFC 9637
+  { cidr: "5f00::/16", reason: "segment_routing" }, // RFC 9602 SRv6 SIDs
+  { cidr: "fc00::/7", reason: "unique_local" },
+  { cidr: "fe80::/10", reason: "link_local" },
+  { cidr: "fec0::/10", reason: "site_local" }, // deprecated by RFC 3879
+  { cidr: "ff00::/8", reason: "multicast" },
+].map(({ cidr, reason }) => {
+  const [base, bitsText] = cidr.split("/");
+  const groups = parseIpv6Literal(base);
+  if (!groups) throw new Error(`IPV6_BLOCKED: "${cidr}" is not a parseable IPv6 prefix`);
+  return { cidr, reason, base: groups, bits: Number(bitsText) };
+});
+
+/** True when `groups` falls inside the prefix `block.base`/`block.bits`. */
+function ipv6InPrefix(groups, block) {
+  let remaining = block.bits;
+  for (let i = 0; i < 8 && remaining > 0; i += 1) {
+    const width = Math.min(16, remaining);
+    const mask = width === 0 ? 0 : (0xffff << (16 - width)) & 0xffff;
+    if ((groups[i] & mask) !== (block.base[i] & mask)) return false;
+    remaining -= width;
+  }
+  return true;
+}
+
 /** Classifies 8 IPv6 groups, unwrapping the embedded-IPv4 forms first. */
 export function classifyIpv6(groups) {
   const isZeroPrefix = groups.slice(0, 5).every((g) => g === 0);
@@ -311,9 +375,14 @@ export function classifyIpv6(groups) {
   if (isZeroPrefix && groups[5] === 0xffff) {
     const v4 = (groups[6] * 65536 + groups[7]) >>> 0;
     const inner = classifyIpv4(v4);
-    return inner.blocked
-      ? { ...inner, reason: `ipv4_mapped_${inner.reason}` }
-      : { blocked: false, reason: null, range: null };
+    if (inner.blocked) return { ...inner, reason: `ipv4_mapped_${inner.reason}` };
+    // The wrapped IPv4 is public, but ::ffff:0:0/96 is still not a destination:
+    // IANA marks it not-globally-reachable, and nothing this module calls can
+    // legitimately produce one (defaultLookup never passes AI_V4MAPPED, so the
+    // resolver returns 8.8.8.8, not ::ffff:8.8.8.8). An answer in this range is
+    // a misconfigured resolver or a probe, and either way the caller asked for
+    // a website, not for us to guess which address family it meant.
+    return { blocked: true, reason: "ipv4_mapped", range: "::ffff:0:0/96" };
   }
   // ::a.b.c.d — deprecated IPv4-compatible form, same reasoning.
   if (isZeroPrefix && groups[5] === 0 && !(groups[6] === 0 && groups[7] <= 1)) {
@@ -337,22 +406,13 @@ export function classifyIpv6(groups) {
     return { blocked: false, reason: null, range: null };
   }
 
-  const allZero = groups.every((g) => g === 0);
-  if (allZero) return { blocked: true, reason: "unspecified", range: "::/128" };
-  if (isZeroPrefix && groups[5] === 0 && groups[6] === 0 && groups[7] === 1) {
-    return { blocked: true, reason: "loopback", range: "::1/128" };
-  }
-  if ((groups[0] & 0xfe00) === 0xfc00) return { blocked: true, reason: "unique_local", range: "fc00::/7" };
-  if ((groups[0] & 0xffc0) === 0xfe80) return { blocked: true, reason: "link_local", range: "fe80::/10" };
-  if ((groups[0] & 0xff00) === 0xff00) return { blocked: true, reason: "multicast", range: "ff00::/8" };
-  if (groups[0] === 0x0100 && groups[1] === 0 && groups[2] === 0 && groups[3] === 0) {
-    return { blocked: true, reason: "discard", range: "100::/64" };
-  }
-  if (groups[0] === 0x2001 && groups[1] === 0x0db8) {
-    return { blocked: true, reason: "documentation", range: "2001:db8::/32" };
-  }
-  if (groups[0] === 0x2001 && groups[1] === 0x0000) {
-    return { blocked: true, reason: "teredo", range: "2001::/32" };
+  // Everything else is a plain prefix match against the table above. `::` and
+  // `::1` reach here rather than the ::/96 branch because that branch excludes
+  // them explicitly.
+  for (const block of IPV6_BLOCKED) {
+    if (ipv6InPrefix(groups, block)) {
+      return { blocked: true, reason: block.reason, range: block.cidr };
+    }
   }
   return { blocked: false, reason: null, range: null };
 }
