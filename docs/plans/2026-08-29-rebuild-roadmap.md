@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**50 / 164 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**51 / 165 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -178,7 +178,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
 - [~] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — submitted `src/lib/landingHonesty.test.mjs:47`, `src/lib/landingHonesty.test.mjs:102`, `src/lib/landingHonesty.test.mjs:110`, `src/lib/landingHonesty.test.mjs:132`, `src/lib/landingHonesty.test.mjs:139`, `src/lib/landingHonesty.test.mjs:579`, `src/lib/landingHonesty.test.mjs:608`, `src/app/page.js:76`, `src/app/page.js:308`
 
-## R3 — Durable backend  `1/24`
+## R3 — Durable backend  `2/25`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -186,13 +186,13 @@ Baseline commit: `5111219`
 
 - [ ] **R3.1.1** Scan worker cron every 10 minutes `needs-vercel`
 - [ ] **R3.1.2** Add the missing ?batch=1 cron entry `needs-vercel` `needs-llm`
-- [ ] **R3.1.3** The scan worker route reports processed:1 for a request that failed
+- [~] **R3.1.3** The scan worker route reports processed:1 for a request that failed
 ### R3.2
 
 - [x] **R3.2.1** One scan_runs row per chunk execution — closed at `src/lib/workers/scanWorker.js:1540`, `src/lib/workers/scanWorker.js:1555`, `src/lib/workers/scanWorker.js:321`, `src/lib/workers/scanWorker.js:854`, `src/lib/workers/scanWorker.js:203`, `src/lib/workers/scanWorker.js:270`, `src/lib/workers/scanChunkLedger.test.mjs:327`, `src/lib/workers/scanChunkLedgerLive.test.mjs:176`
-- [ ] **R3.2.2** Every discarded skip reason becomes a ledger row
+- [~] **R3.2.2** Every discarded skip reason becomes a ledger row
 - [ ] **R3.2.3** Status route and dashboard read run history
-- [ ] **R3.2.4** A live test wrote to production because only its reads were stubbed
+- [~] **R3.2.4** A live test wrote to production because only its reads were stubbed
 ### R3.3
 
 - [ ] **R3.3.1** attempts column with a cap of 3
@@ -217,9 +217,10 @@ Baseline commit: `5111219`
 - [ ] **R3.6.4** The Bright Data per-query price is hardcoded in three places
 ### R3.7
 
-- [~] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability — submitted `src/lib/ssrfGuard.js:366`, `src/lib/ssrfGuard.js:482`, `src/lib/ssrfGuard.js:552`, `src/lib/firecrawl.js:45`, `src/lib/firecrawl.js:115`, `src/lib/ssrfGuard.test.mjs:1`, `src/lib/firecrawl.test.mjs:1`
+- [x] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability — closed at `src/lib/ssrfGuard.js:366`, `src/lib/ssrfGuard.js:482`, `src/lib/ssrfGuard.js:552`, `src/lib/firecrawl.js:45`, `src/lib/firecrawl.js:115`, `src/lib/ssrfGuard.test.mjs:1`, `src/lib/firecrawl.test.mjs:1`
 - [ ] **R3.7.2** Firecrawl degrade becomes a recorded state
 - [ ] **R3.7.4** Apply the SSRF guard to the crawlability route
+- [ ] **R3.7.5** Seven IPv6 ranges classifyAddress still allows
 
 ## R4 — Ground truth & analytics completion  `0/6`
 

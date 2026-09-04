@@ -3903,14 +3903,19 @@
       ],
       "phase": "R3",
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-03T12:31:30.112Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-04T03:43:25.368Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -3987,10 +3992,16 @@
         "src/lib/scoring/enginePipeline.js:502-506"
       ],
       "phase": "R3",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-04T03:43:48.152Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -4037,14 +4048,19 @@
       ],
       "phase": "R3",
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-03T12:31:10.280Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-04T03:43:05.150Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -4422,7 +4438,7 @@
         "src/lib/crawlers/"
       ],
       "phase": "R3",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/ssrfGuard.js:366",
@@ -4445,7 +4461,11 @@
           "text": "New src/lib/ssrfGuard.js; wired into the Firecrawl fallback. ENTRY POINTS TRACED to a server-side fetch of a user-controlled URL: (1) POST /api/scan [ANONYMOUS, operatorPerimeter PUBLIC_EXACT] -> createScanJob({url}) -> runScanChunk -> scanWorker.js:381 job.url -> sourceUnbrandedQueries -> promptGen.js:127 scrapeForSummary -> firecrawl.js raw fetch; (2) POST /api/knowledge:51 (operator-gated); (3) content/steps/research.js:24 (operator-gated); (4) GET /api/brands/[brand]/crawlability -> fetchRobotsTxt/checkLlmsTxt (operator-gated) -- NOT FIXED, see gaps. REPRO (stubbed fetch, nothing left the machine, no metadata endpoint contacted): 6/6 of 169.254.169.254, 127.0.0.1:5432, [::1], 2130706433, 0x7f000001, file:// reached fetch() and the body was RETURNED to the caller. After the guard: 6/6 refused with SsrfBlockedError, 0 fetches; a legitimate https URL still fetched and scraped. COVERAGE: scheme allow-list (file/gopher/data/ftp/javascript/jar/ws/httpx refused); credentials in URL; length caps; full inet_aton IPv4 parsing (dotted/decimal/octal/hex/mixed/short/zero-padded); 15 IPv4 non-public CIDRs incl 169.254/16, 0/8, 100.64/10, 224/4, 240/4; IPv6 ::1, ::, fc00::/7, fe80::/10, ff00::/8, 2001:db8::/32, 2001::/32, 100::/64; IPv4-mapped ::ffff:, IPv4-compat, 6to4 2002::, NAT64 64:ff9b:: all unwrapped to the IPv4 rules; DNS resolution with EVERY returned address checked (rebinding); redirects followed manually with redirect:'manual' and each hop re-validated. 154 new tests, table-driven (68 blocked literals x notation, 21 public boundary addresses that must still pass). TEETH PROVEN 3x against pristine copies kept outside git (diffs shown): remove guard from firecrawl.js -> 24/28 fail; neuter classifyIpv4 -> 68 fail; redirect:'follow' instead of manual -> 9 fail; restored byte-identical (sha256 verified). NOT CLOSED, deliberately: (a) TOCTOU -- assertPublicUrl resolves, then fetch resolves again; a 0-TTL rebinding attacker can still win the second lookup. NARROWED, not closed. Closing it needs address pinning at connect time (undici Dispatcher connect.lookup, or node:http with lookup+servername); undici is not a declared dep and Next's global fetch is not swappable per-call, so I did not fake it. Documented at ssrfGuard.js:28-49. (b) THE CRAWLABILITY ROUTE IS STILL VULNERABLE. The crawlability fetch does not live in src/lib/crawlers/ (that dir is pure parsing, no fetch) -- it lives in src/app/api/brands/[brand]/crawlability/route.js, which my task's file boundary told me to read and report rather than edit. I RAN its isSafeDomain() verbatim: it ALLOWS 169.254.169.254, 127.0.0.2, 127.1, 0177.0.0.1, 100.64.0.1, 198.18.0.1, 224.0.0.1 (7 of 11 adversarial hosts) and its fetches use redirect:'follow'. Needs a follow-up task to swap isSafeDomain for classifyAddress and fetchRobotsTxt/checkLlmsTxt for safeFetch. The accept criterion is therefore met for the Firecrawl path and NOT for the crawlability path. (c) ports and response size are not restricted. CALLER CONTRACT: a policy refusal (address/scheme/credentials) THROWS SsrfBlockedError and logs [ssrf-guard] refused; merely-unusable input (typo, NXDOMAIN) still returns 'No website content available.' with a distinct [ssrf-guard] unusable log line, so a customer typo does not turn a 422 into a 500 -- no fetch happens in either case. Note promptGen.js swallows the throw and continues with an empty snippet (pre-existing rule-1 gap, not mine to fix). SUITE: npm run test:scoring = 1263 pass / 0 fail / 19 skipped / 1282 total, vs baseline 1109/0/19/1128. +154 all mine, no regressions. Did not commit; did not touch scanWorker/scanRuns, enginePipeline/DashboardShell, check-secrets/brightdata.md."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-04T03:44:13.067Z",
+        "note": "VERIFIED. THE SCOPING QUESTION RESOLVED ON THE ANCHORS, checked rather than accepted. The anchors are src/lib/firecrawl.js and src/lib/crawlers/. That directory holds only bots.js, a static user-agent table, and robots.js, whose header reads \"Pure, dependency-free, deterministic. No fetch, no DOM\" — grepped for fetch, node:http, net and dns, and every hit is the word inside a comment or a bot name. THERE IS NO NETWORK EGRESS IN THE crawlers/ ANCHOR AT ALL. So the implementer guarded 100 percent of the fetches inside their assigned boundary, and the crawlability fetch genuinely lives outside it.\n\nSEVERITY DECIDED IT, and the verifier traced the perimeter itself: isPublicRoute(\"POST\",\"/api/scan\") is TRUE, isPublicRoute(\"GET\",\"/api/brands/acme/crawlability\") is FALSE. The path this task closes was an ANONYMOUS, READ-CAPABLE SSRF; the residual is operator-token-gated. The worst exposure is fully closed and the remainder is R3.7.4, in flight. The accept states a property, not a deployment across every call site, and within the boundary that property holds under adversarial testing. The title is broader than the anchors, but I own that as the brief author — and the implementer did the one thing that makes a scoping error recoverable: they ran the out-of-scope route's guard themselves, reported the exact result, and wrote that the accept was met for one path and NOT the other. Failing that would punish accurate disclosure and generate no work that does not already exist.\n\nThe verifier also enumerated every server-side fetch in the tree: the complete attack surface for user-controlled targets is exactly two paths, Firecrawl and crawlability. Everything else targets a fixed vendor endpoint.\n\nREPRODUCED, fetch stubbed, no metadata address ever contacted: against fe74219~1 all six payloads — 169.254.169.254, 127.0.0.1:5432, [::1], 2130706433, 0x7f000001, file:// — reached fetch AND RETURNED THE BODY. Read SSRF confirmed, not blind. Post-fix: 6 of 6 refused, zero fetch calls, zero bodies leaked.\n\nSIXTY BYPASSES ATTEMPTED, NONE SUCCEEDED: 0x7f.1, 127.000.000.1, 0X7F000001, 0177.0.0.1, an absurdly zero-padded octal, 127.1, decimal/hex/mixed-radix metadata, IP trailing dot, userinfo forms safe.com@169.254.169.254 and a:b@127.0.0.1, [::ffff:a9fe:a9fe], [::FFFF:7F00:1], [::a9fe:a9fe], 6to4, NAT64, [::], bare 0, fe80::1, fd00::1, CGNAT, benchmark, multicast, broadcast, FULLWIDTH-DIGIT IDN, Cyrillic homograph, CRLF and tab smuggling, an over-long host, and a hostname where only ONE of two resolved addresses is private. Zero over-blocks across 17 public and boundary cases. All five real cloud metadata endpoints blocked including AWS IPv6 fd00:ec2::254.\n\nREDIRECTS: every internal redirect refused AT THE HOP with the internal address never fetched; redirect:\"manual\" confirmed on every call and placed after ...init so a caller cannot override it; A-to-B-to-A and self-loops terminate at redirect_loop after 6 requests; a Location-less 302 refused; legitimate relative redirects still resolve.\n\nTEETH each applied, proven and restored byte-identical by sha256 against copies outside git: guard removed from firecrawl 24 of 28 as claimed; classifyIpv4 neutered 68 as claimed; redirects delegated to fetch 9 for the faithful regression. AND THE TESTS ARE HONEST: with globalThis.fetch rigged to throw, all 154 still pass, so no test performs real network I/O.\n\nFOUR CORRECTIONS, none disqualifying. The note says \"did not commit\" but the work IS committed at fe74219, six below HEAD. \"9 fail\" for redirects is loose: flipping the string to redirect:\"follow\" fails only 1; the 9 requires deleting the manual hop loop, which the verifier ran and which does fail exactly 9 — and only one assertion pins the redirect mode, correct but thinner than implied. \"68 blocked literals, 21 public boundary\" is actually 61 and 20 on two independent parses, with 68 conflated from the sabotage count. And a prose citation to scanWorker.js:381 should be :456. All five evidence citations resolve exactly.\n\nTwo flagged patterns judged benign: ssrfGuard.js:419's parameterless catch immediately throws a typed error, and the ?? 0 at :561 makes an unknown status NOT a redirect, which cannot cause an unvalidated fetch. Declining to fake undici was right and the TOCTOU limitation is stated at ssrfGuard.js:28-49, at the top of the module a reader opens first.\n\nFOLLOW-UPS: classifyAddress allows fec0::/10, 64:ff9b:1::/48, ::ffff:0:0/96, 2001:2::/48, 3fff::/20, 5f00::/16 and 2001:10::/28 — all deprecated or unroutable, none a live metadata or RFC1918/ULA range. And isSafeDomain's own comment calls itself an SSRF guard while allowing 169.254.169.254; R3.7.4 must delete the comment, not just the function."
+      }
     },
     {
       "id": "R3.7.2",
@@ -4498,6 +4518,37 @@
       "notes": [
         {
           "at": "2026-09-03T12:32:03.701Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.7.5",
+      "subphase": "R3.7",
+      "lane": "backend",
+      "title": "Seven IPv6 ranges classifyAddress still allows",
+      "detail": "R3.7.1 verifier enumerated the IPv6 space against the shipped classifier and found seven ranges that pass: fec0::/10 (deprecated site-local), 64:ff9b:1::/48 (local-use NAT64), ::ffff:0:0/96, 2001:2::/48 (BMWG benchmarking), 3fff::/20, 5f00::/16, and 2001:10::/28 (deprecated ORCHID). All are deprecated or unroutable and none is a live cloud-metadata, RFC1918 or ULA range, which is why it was not grounds to reject — the guard blocks all five real metadata endpoints including AWS IPv6 fd00:ec2::254, and 60 adversarial bypasses all failed. But a host resolving into one of these is not a public internet address either, and the module presents itself as a complete classifier. Cheap to close since the CIDR table already exists.",
+      "accept": "classifyAddress refuses all seven ranges, or each is listed in the module with the reason it is deliberately allowed; a test pins whichever choice is made so the next reader is not left guessing.",
+      "deps": [
+        "R3.7.1"
+      ],
+      "anchors": [
+        "src/lib/ssrfGuard.js:306",
+        "src/lib/ssrfGuard.js:366"
+      ],
+      "findings": [
+        "C12"
+      ],
+      "phase": "R3",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-04T03:44:35.238Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
