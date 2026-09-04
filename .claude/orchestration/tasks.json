@@ -3619,6 +3619,37 @@
       "verification": null
     },
     {
+      "id": "R2.8.6",
+      "subphase": "R2.8",
+      "lane": "backend",
+      "title": "insertScan fail-softs on a missing client and returns undefined",
+      "detail": "src/lib/db.js:60-63: insertScan warns and returns when there is no Supabase client, handing back undefined where every caller expects rows. Standing rule 2 says never fail-soft a create call and preserve the error envelope; this is a create that reports nothing at all. Found by the R3.2.4 author while building the live write guard, who identified it as the mechanism behind R0.1.4 being saved by luck rather than design: that task's negative control returned 201 and started an in-memory scan, and nothing was billed only because no credentials load under node --test. It is the same shape R2.8.4 closed on the read side, where getScansForBrand returned an empty array on error so an outage rendered as no scans yet. The write side still has it. R2.8.5 already covers the three remaining fail-quiet READS; this is the create.",
+      "accept": "insertScan throws or returns a discriminated failure when it cannot write, and no caller can mistake a missing client for a successful insert; a test drives it with no client and fails if it returns undefined quietly.",
+      "deps": [
+        "R2.8.4"
+      ],
+      "anchors": [
+        "src/lib/db.js:60",
+        "src/lib/db.js:187"
+      ],
+      "findings": [
+        "A1"
+      ],
+      "phase": "R2",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-04T04:12:00.047Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R2.9.1",
       "subphase": "R2.9",
       "lane": "frontend",
@@ -4095,14 +4126,28 @@
         "src/lib/scoring/enginePipeline.js:502-506"
       ],
       "phase": "R3",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/workers/scanWorker.js:1891",
+        "src/lib/workers/scanWorker.js:1951",
+        "src/lib/workers/scanWorker.js:948",
+        "src/lib/workers/scanWorker.js:1008",
+        "src/lib/workers/scanWorker.js:228",
+        "src/lib/workers/scanWorker.js:432",
+        "src/lib/workers/scanChunkLedger.test.mjs:936",
+        "src/lib/scanRuns.js:28"
+      ],
       "notes": [
         {
           "at": "2026-09-04T03:43:48.152Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-04T04:04:36.149Z",
+          "by": "rebuild-implementer",
+          "text": "Four skip classes ledgered. NO MIGRATION TAKEN (012 is still free): scan_runs.detail is already jsonb and close_scan_run merges p_detail, and runner/phase were deliberately left open vocabularies by 011 — so no new object exists. Therefore NO hand-off is needed for scripts/setup-supabase.mjs EXPECTED_OBJECTS or README.md; neither file was touched and neither needs a row. TWO LEVELS, deliberately: (1) SCHEDULER skips get rows of their own (runner 'scheduler', phase 'schedule', outcome skipped, reason cadence_off | brand_already_active, brand-only subject, scan_job_id NULL) because no chunk ran to hang them on — exactly the case migration 011's header cites as the reason scan_job_id has no FK; plus ONE row per tick (phase 'tick') so noop/no_schedules_due, noop/all_due_skipped and succeeded are three different rows. (2) IN-CHUNK skips ride on R3.2.1's single row via detail.skips, aggregated by reason with an exact count and a sample capped at 5 that sets sample_truncated when it drops subjects: engine_not_registered (a checkpoint-frozen engine that no longer resolves — previously ZERO logging, the scan just shrank), engine_set_fallback, probe_error, prompt_persist_failed, rejudge_failed, roster_judge_failed, citation_enrich_failed. Arming discipline extended: tally.skips starts null (NOT MEASURED); sourcing/probing/finalize each arm it, so [] + skips_total 0 is 'looked and found none' and null is 'never looked'. Tick detail.due is null when listDueSchedules threw. R3.2.1 INVARIANTS RE-PROVED: one row per chunk execution and sum(probes_attempted)===queries.length across a rescue, both as explicit tests; no bare return introduced in chunkBody; chunkRunOutcome's source guard untouched and still passing (I used constants, never a bare reason: literal, in the region it scans) and a NEW guard fails if a declared skip reason is never recorded. EXERCISED: 17 sabotages applied against a pristine copy kept outside git, all 17 caught. AND run against LIVE production nggyizuwqepxaqnpcqqj through the real open_scan_run/close_scan_run RPCs with installLiveWriteGuard allow:[scan_runs] and assert.fail stubs on every finalize/sourcing writer: 6 test scan_runs rows written and deleted; all four classes verified from the real rows (scheduler skip counters land as NULL not DEFAULT 0; detail.skips round-trips through real jsonb). Row counts identical before and after: scan_runs 0/0, scans 60/60, scan_jobs 80/80, prompt_results 1070/1070, brand_metrics_daily 46/46, citations 6631/6631, result_brands 2822/2822, scan_schedules 0/0. Suite: 1453 tests, 1427 pass, 0 fail, 26 skipped (the branch has moved past the 1330/1307/23 baseline; other lanes added tests and 26 skips). Files touched: src/lib/workers/scanWorker.js, src/lib/workers/scanChunkLedger.test.mjs, src/lib/scanRuns.js (stale 'NOT YET WIRED' comment only). NOT touched: scanChunkLedgerLive.test.mjs and liveDbGate.js (another lane is editing them right now), the worker route, migrations, setup-supabase.mjs, README.md."
         }
       ],
       "verification": null
@@ -4151,9 +4196,22 @@
       ],
       "phase": "R3",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/liveWriteGuard.js:303",
+        "src/lib/liveWriteGuard.js:353",
+        "src/lib/liveWriteGuard.js:448",
+        "src/lib/liveWriteGuard.js:72",
+        "src/lib/liveWriteGuard.js:81",
+        "src/lib/liveWriteGuard.js:193",
+        "src/lib/liveWriteGuard.js:240",
+        "src/lib/liveWriteGuard.test.mjs:61",
+        "src/lib/liveDbGate.js:21",
+        "src/lib/scanRunsLive.test.mjs:98",
+        "src/lib/probeTasksRace.test.mjs:110",
+        "src/lib/workers/scanChunkLedgerLive.test.mjs:66"
+      ],
       "notes": [
         {
           "at": "2026-09-03T12:31:10.280Z",
@@ -4164,6 +4222,108 @@
           "at": "2026-09-04T03:43:05.150Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-04T04:01:56.676Z",
+          "by": "rebuild-implementer",
+          "text": "New harness module src/lib/liveWriteGuard.js: default-deny write guard for live-DB tests, opt-in per table. Two choke points, both patched at the PROTOTYPE so they cover clients created before and after install: (1) SupabaseClient.prototype.from/rpc/schema, which sits BELOW the deps layer and therefore catches a module that imports src/lib/db.js's shared client directly and never looks at deps; (2) pg.Client/Pool.prototype.query, with an SQL classifier (classifyStatement, exported and unit-tested) that separates reads, writes, control statements, DDL and the unclassifiable, refusing the last two outright. allow: [] is the default, so a table nobody named is refused. scan_runs and probe_tasks are the only tables openable at all (WRITABLE_BY_OPT_IN); scans, brand_metrics_daily and 18 other customer tables are in NEVER_WRITABLE and throw at install even if a test names them. An unknown .rpc() name is refused rather than assumed to be a reader. A refusal is recorded, printed to stderr and sets process.exitCode=1 with an exit-time summary, so insertScan's catch-and-cascade cannot swallow it into a green run. PROVEN AS THE ACCEPT ASKS: I wrote src/lib/workers/r324OmittedStubProof.test.mjs, a live test that declares scan_runs and then calls the real insertScan and the real upsertBrandMetricsDaily with NO stubs (the exact two writers that put 2 rows in scans and 2 in brand_metrics_daily during R3.2.1), plus a raw INSERT INTO scans. Run against production with --env-file=.env.local: 4 tests, 0 pass, 4 FAIL, 5 writes refused (insert() scans x3 - insertScan's three cascades - upsert() brand_metrics_daily, sql write scans via pg.Client), 0 permitted writes, and the exit banner 'LIVE WRITE GUARD REFUSED 5 WRITE(S)'. Nothing reached the database. That file has been DELETED. Production row counts before and after the whole session are identical: scans 60, brand_metrics_daily 46, scan_jobs 80, prompt_results 1070, citations 6631, result_brands 2822, scan_runs 0, probe_tasks 0, newest scan 2026-07-30T17:29:14.475Z. All three existing live suites still pass against production with the guard armed: scanRunsLive 11/11 (was 10, +1 guard case), probeTasksRace 10/10 (was 9), scanChunkLedgerLive 5/5 (was 4). Each added case asserts covers.supabase and covers.pg are true BEFORE asserting nothing was refused, because a guard that failed to arm would otherwise read as a clean run. Hermetic self-test src/lib/liveWriteGuard.test.mjs is 13/13. Full suite: 1452 tests, 1426 pass, 0 fail, 26 skipped (baseline 1330/1307/0/23; other lanes landed tests concurrently, my delta is +16 tests and +3 skips, which are the three new live guard cases skipping without a DB). NOT COVERED, stated in the module header: a live test that never installs the guard at all; supabase.storage/functions/realtime (unused here); a SELECT that calls a writing SQL function absent from WRITING_FUNCTIONS; a raw fetch to PostgREST; writes from outside this process. I deliberately did NOT re-drive runScanChunk to finalize against production to reproduce the incident end to end - that IS the incident, and the direct-writer proof exercises the identical supabase.from('scans').insert call at db.js:187."
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.2.5",
+      "subphase": "R3.2",
+      "lane": "backend",
+      "title": "A frozen engine that stops resolving silently shrinks the headline",
+      "detail": "Found by the R3.2.2 implementer, who ledgered it and then said plainly that the logging gap was not the real defect. scanWorker.js:948: when a checkpoint-frozen engine stops being registered mid-scan, the scan finalizes with the headline blended over FEWER engines and scans.engines_counted quietly drops. Before R3.2.2 there was no log at all. R3.2.2 now records it in scan_runs.detail.skips, so an operator reading the ledger can see it — but NOTHING MAKES THE SCAN ITSELF SAY SO. The score moves and the record carries no reason, which is the same class R2.2.6 just closed for a degraded engine: there, a text engine dropping out raises a scan-level flag and the dashboard names it; here, an engine vanishing entirely is silent on the scan record. The sibling at scanWorker.js:964 is the same shape one step worse: when no frozen engine resolves, the scan falls back to today's engine set, silently changing what the scan is comparable to, which breaks the frozen-prompt-set contract's whole reason for existing.",
+      "accept": "A scan whose engine set shrank or was refrozen mid-run says so on the scan record, not only in the run ledger, and the dashboard can tell a user why engines_counted fell; a test drives a frozen engine out mid-scan and fails if the record is silent.",
+      "deps": [
+        "R3.2.2",
+        "R2.2.6"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js:948",
+        "src/lib/workers/scanWorker.js:964",
+        "src/lib/scoring/enginePipeline.js:910"
+      ],
+      "findings": [
+        "B3"
+      ],
+      "phase": "R3",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-04T04:11:37.288Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.2.6",
+      "subphase": "R3.2",
+      "lane": "backend",
+      "title": "The cron reports a scheduler tick that declined every brand as a clean empty tick",
+      "detail": "R3.2.2 made runSchedulerTick return skipped alongside started, and write a scan_runs row per declined brand, so the ledger now distinguishes an idle cron from a starved one. src/app/api/scan/worker/route.js:234 still reads only tickResult.started, so on the wire a tick that declined every due brand is byte-identical to a tick with nothing due. That is the same defect R3.1.3 just fixed one branch over in the same file, where dispatched stopped being reported as done — the vocabulary now exists (processed, skipped, failed, with the ledger reason travelling on the wire) and the scheduler branch has not adopted it. R3.2.2 could not fix it because another lane owned that route file at the time. Standing rule 1: a skip is not a success, and an empty state is not a clean one.",
+      "accept": "The sweep response distinguishes a tick that had nothing due from one that declined brands, and names the decline reasons; a test drives a tick where every due brand is skipped and fails if the response is indistinguishable from idle.",
+      "deps": [
+        "R3.2.2",
+        "R3.1.3"
+      ],
+      "anchors": [
+        "src/app/api/scan/worker/route.js:234",
+        "src/lib/workers/scanWorker.js:1943"
+      ],
+      "findings": [
+        "A1"
+      ],
+      "phase": "R3",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-04T04:11:37.755Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.2.7",
+      "subphase": "R3.2",
+      "lane": "test",
+      "title": "The live write guard cannot force its own adoption",
+      "detail": "R3.2.4 built a default-deny write guard that stops a live test reaching a production write by omission, and proved it by writing the omitted-stub test and watching five writes refused. Its author then named the gap it cannot close: a live test that never calls installLiveWriteGuard is unprotected, and nothing makes a new file call it. A meta-test asserting every live-DB test file installs the guard would close it, but the repo has no naming convention to key on — probeTasksRace.test.mjs is a live file with no Live in its name. Two related items from the same author, worth the same pass. covers.supabase and covers.pg are the only thing standing between armed and theatre: if the dynamic import of pg or supabase-js failed the guard would look installed and refuse nothing. It warns loudly and leaves the flag false, and every live file asserts both — but that assertion is itself a convention a new file could omit, the same gap one level up. And the SQL classifier is a regex rather than a parser; one real hole was found and fixed mid-build, an UPDATE with a table alias read as a SELECT, and there may be others. The supabase-js path has no such weakness since it reads the table name directly.",
+      "accept": "A live-DB test that does not install the guard fails a meta-test rather than running unprotected, and the covers assertion is enforced rather than conventional; both proven by adding a file that omits each and watching it fail.",
+      "deps": [
+        "R3.2.4"
+      ],
+      "anchors": [
+        "src/lib/liveWriteGuard.js:353",
+        "src/lib/liveWriteGuard.js:240",
+        "src/lib/probeTasksRace.test.mjs"
+      ],
+      "findings": [
+        "S29"
+      ],
+      "phase": "R3",
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-04T04:11:59.616Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
         }
       ],
       "verification": null

@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**52 / 169 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**52 / 173 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -119,7 +119,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `11/35`
+## R2 — Scoring truth  `11/36`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -168,6 +168,7 @@ Baseline commit: `5111219`
 - [x] **R2.8.3** Unknown status renders 'reconnecting', never rewinds to 0 percent — closed at `src/lib/scanProgress.js:50`, `src/lib/scanProgress.js:74`, `src/lib/scanProgress.js:92`, `src/app/scan/page.js:134`, `src/app/scan/page.js:341`, `src/services/api.js:805`, `src/app/api/scan/[job_id]/status/route.js:37`, `src/lib/scanProgress.test.mjs:40`, `src/lib/scanStatusTransient.route.test.mjs:99`
 - [x] **R2.8.4** DB-down state distinct from 'no scans yet' — closed at `src/lib/db.js:241`, `src/lib/db.js:255`, `src/lib/db.js:204`, `src/app/api/scans/[brand]/latest/route.js:27`, `src/lib/latestScanRoute.route.test.mjs:209`, `src/lib/latestScanRoute.route.test.mjs:245`, `src/app/api/content/worker/route.js:141`, `src/lib/content/dailyBatch.js:70`, `src/lib/content/weeklyReport.js:109`, `src/lib/content/contentWorker.js:226`
 - [ ] **R2.8.5** The remaining fail-quiet DB reads, same class as R2.8.4
+- [ ] **R2.8.6** insertScan fail-softs on a missing client and returns undefined
 ### R2.9
 
 - [ ] **R2.9.1** Provenance strip under the hero
@@ -179,7 +180,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
 - [~] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — submitted `src/lib/landingHonesty.test.mjs:47`, `src/lib/landingHonesty.test.mjs:102`, `src/lib/landingHonesty.test.mjs:110`, `src/lib/landingHonesty.test.mjs:132`, `src/lib/landingHonesty.test.mjs:139`, `src/lib/landingHonesty.test.mjs:579`, `src/lib/landingHonesty.test.mjs:608`, `src/app/page.js:76`, `src/app/page.js:308`
 
-## R3 — Durable backend  `2/28`
+## R3 — Durable backend  `2/31`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -192,9 +193,12 @@ Baseline commit: `5111219`
 ### R3.2
 
 - [x] **R3.2.1** One scan_runs row per chunk execution — closed at `src/lib/workers/scanWorker.js:1540`, `src/lib/workers/scanWorker.js:1555`, `src/lib/workers/scanWorker.js:321`, `src/lib/workers/scanWorker.js:854`, `src/lib/workers/scanWorker.js:203`, `src/lib/workers/scanWorker.js:270`, `src/lib/workers/scanChunkLedger.test.mjs:327`, `src/lib/workers/scanChunkLedgerLive.test.mjs:176`
-- [~] **R3.2.2** Every discarded skip reason becomes a ledger row
+- [~] **R3.2.2** Every discarded skip reason becomes a ledger row — submitted `src/lib/workers/scanWorker.js:1891`, `src/lib/workers/scanWorker.js:1951`, `src/lib/workers/scanWorker.js:948`, `src/lib/workers/scanWorker.js:1008`, `src/lib/workers/scanWorker.js:228`, `src/lib/workers/scanWorker.js:432`, `src/lib/workers/scanChunkLedger.test.mjs:936`, `src/lib/scanRuns.js:28`
 - [ ] **R3.2.3** Status route and dashboard read run history
-- [~] **R3.2.4** A live test wrote to production because only its reads were stubbed
+- [~] **R3.2.4** A live test wrote to production because only its reads were stubbed — submitted `src/lib/liveWriteGuard.js:303`, `src/lib/liveWriteGuard.js:353`, `src/lib/liveWriteGuard.js:448`, `src/lib/liveWriteGuard.js:72`, `src/lib/liveWriteGuard.js:81`, `src/lib/liveWriteGuard.js:193`, `src/lib/liveWriteGuard.js:240`, `src/lib/liveWriteGuard.test.mjs:61`, `src/lib/liveDbGate.js:21`, `src/lib/scanRunsLive.test.mjs:98`, `src/lib/probeTasksRace.test.mjs:110`, `src/lib/workers/scanChunkLedgerLive.test.mjs:66`
+- [ ] **R3.2.5** A frozen engine that stops resolving silently shrinks the headline
+- [ ] **R3.2.6** The cron reports a scheduler tick that declined every brand as a clean empty tick
+- [ ] **R3.2.7** The live write guard cannot force its own adoption
 ### R3.3
 
 - [ ] **R3.3.1** attempts column with a cap of 3
