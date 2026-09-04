@@ -26,6 +26,9 @@ import {
   upsertScanSchedule,
 } from "../db/analytics.js";
 import { generateUnbrandedPrompts } from "../scoring/promptGen.js";
+// R3.7.2 — the vocabulary the scrape state is written in. Imported rather than
+// retyped as "ok" so this file and firecrawl.js cannot drift apart silently.
+import { SCRAPE_STATE } from "../firecrawl.js";
 import { extractCompetitors } from "../scoring/competitorExtract.js";
 import { resolveCompetitorRoster } from "../scoring/rosterContinuity.js";
 import {
@@ -202,6 +205,15 @@ export const CHUNK_SKIP_REASONS = Object.freeze({
   ROSTER_JUDGE_FAILED: "roster_judge_failed",
   /** Citations were inserted unclassified because enrichment threw. */
   CITATION_ENRICH_FAILED: "citation_enrich_failed",
+  /**
+   * The brand's own website was not read as Firecrawl content, so the prompt
+   * set was grounded on less than it looks like (R3.7.2, finding B7).
+   *
+   * `degraded` (a crude HTML strip stood in for the vendor) and `unavailable`
+   * (there was no content at all) both land here — the two are told apart by
+   * the `state:state_reason` the sample carries, not by a second reason code.
+   */
+  WEBSITE_SCRAPE_DEGRADED: "website_scrape_degraded",
 
   // The three below happen INSIDE resolveEnabledEngines, one layer earlier than
   // ENGINE_NOT_REGISTERED and before the checkpoint freeze. Their strings are
@@ -1080,6 +1092,44 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     static_pack_prompts: staticPackPrompts,
   } = await sourceQueries(brand, url, industry, stats, brandAliases, deps);
 
+  // R3.7.2 (finding B7) — THE WEBSITE SCRAPE THAT DEGRADED AND SAID SO ONLY IN A LOG.
+  //
+  // promptGen/prompts write the scrape's state onto `stats` (the mutable
+  // accumulator this phase already threads through the call for cost/tokens).
+  // Until this block existed the worker copied only { cost, tokens } out of that
+  // object, so `website_scrape` died in this stack frame and the sole surviving
+  // trace of "we never actually read the brand's site" was a console.warn — the
+  // exact defect B7 names. Recorded here, it rides the chunk's single scan_runs
+  // row in `detail.skips` like every other skip; no migration, no new column.
+  //
+  // ABSENT IS NOT DEGRADED. `stats.website_scrape` is undefined when no scrape
+  // was ever attempted — the reuse path in sourceUnbrandedQueries returns a
+  // full tracked pool without calling generation at all. Recording a degrade
+  // there would assert a measurement that never happened, which is the same
+  // class of lie in the opposite direction (standing rule 1). That case stays
+  // silent here and is already named by `prompt_source` on the scan.
+  const websiteScrape = stats.website_scrape;
+  if (websiteScrape && websiteScrape.state !== SCRAPE_STATE.OK) {
+    // NOT `?? 0`. summarizeScrape returns content_chars: null when there was no
+    // result to measure, and 0 when we fetched and the page was genuinely
+    // empty. Those are different facts and the ledger has to keep them apart
+    // (standing rule 5), so the unmeasured case says so in words.
+    const chars = Number.isFinite(websiteScrape.content_chars)
+      ? websiteScrape.content_chars
+      : "not_measured";
+    recordSkip(
+      tally,
+      CHUNK_SKIP_REASONS.WEBSITE_SCRAPE_DEGRADED,
+      `${websiteScrape.state}:${websiteScrape.state_reason || "unspecified"} chars=${chars}`
+    );
+    console.warn(
+      `[scan-chunk] "${brand}" website scrape is ${websiteScrape.state} ` +
+        `(${websiteScrape.state_reason || "unspecified"}) with ${chars} chars of site content — ` +
+        `these prompts are grounded on the brand name and industry alone. ` +
+        `Recorded on the run as ${CHUNK_SKIP_REASONS.WEBSITE_SCRAPE_DEGRADED}.`
+    );
+  }
+
   if (staticPackPrompts > 0) {
     console.warn(
       `[scan-chunk] "${brand}" prompt set includes ${staticPackPrompts}/${unbrandedQueries.length} ` +
@@ -1154,7 +1204,17 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     queries,
     unbranded_texts: unbrandedQueries.map((q) => q.text.toLowerCase().trim()),
     engines: enabledEngineNames,
-    stats: { cost: stats.cost || 0, tokens: stats.tokens || 0 },
+    // R3.7.2 — `website_scrape` rides the checkpoint alongside cost/tokens so a
+    // chunk that resumes into probing or finalize can still see that this
+    // scan's prompts were built without the site. `?? null` is not a metric
+    // being defaulted: null here means "sourcing recorded no scrape state",
+    // which is a fact, and the field's own content_chars keeps its own
+    // null-vs-zero distinction untouched.
+    stats: {
+      cost: stats.cost || 0,
+      tokens: stats.tokens || 0,
+      website_scrape: stats.website_scrape ?? null,
+    },
     sourced_at: new Date().toISOString(),
   };
 }
@@ -1317,7 +1377,19 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       // Heartbeat + progress + checkpoint after EVERY batch — this is what
       // keeps the job "alive" (isJobAlive) across a chunk that may itself
       // run for minutes, not the overall chunk time budget.
-      workingCheckpoint = { ...workingCheckpoint, stats: { cost: stats.cost || 0, tokens: stats.tokens || 0 } };
+      // R3.7.2 — this rebuild used to be a fresh { cost, tokens } literal, which
+      // ERASED the sourcing phase's `website_scrape` from the checkpoint on the
+      // first persisted batch. Carried forward explicitly; the local `stats`
+      // here only ever accumulates probe cost, so the value has to come from the
+      // checkpoint it was frozen onto.
+      workingCheckpoint = {
+        ...workingCheckpoint,
+        stats: {
+          cost: stats.cost || 0,
+          tokens: stats.tokens || 0,
+          website_scrape: workingCheckpoint.stats?.website_scrape ?? null,
+        },
+      };
       // R3.3.1 — `attempts: 0` rides on the same UPDATE as the batch that just
       // landed, so the attempt cap counts CONSECUTIVE resumes that achieved
       // nothing rather than the number of slices a big scan legitimately takes.

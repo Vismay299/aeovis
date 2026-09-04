@@ -252,12 +252,14 @@ export async function generateUnbrandedPrompts(
   // and it is the only channel that crosses back into the sourcing phase
   // without changing a signature the chunk worker owns.
   //
-  // KNOWN GAP, stated rather than hidden: runSourcingPhase in
-  // src/lib/workers/scanWorker.js currently copies only { cost, tokens } out of
-  // this object into the checkpoint, so `website_scrape` stops there and never
-  // reaches scan_runs.detail. Closing that is a three-line change in a file
-  // this task is not permitted to touch — see the submit note for R3.7.2.
-  // Until then the warning below is the durable trace.
+  // THIS FIELD HAS A PRODUCTION READER, and the warning below is not the only
+  // trace. runSourcingPhase in src/lib/workers/scanWorker.js reads
+  // `stats.website_scrape` immediately after sourceUnbrandedQueries returns and,
+  // when the state is not `ok`, calls recordSkip with
+  // CHUNK_SKIP_REASONS.WEBSITE_SCRAPE_DEGRADED — so the degrade lands in the
+  // chunk's scan_runs row under `detail.skips`, durably, and rides the
+  // checkpoint's `stats` so it survives a resume. Renaming or dropping this
+  // field silently un-records the degrade; scanChunkLedger.test.mjs holds it.
   if (stats && typeof stats === "object") {
     stats.website_scrape = scrapeState;
   }

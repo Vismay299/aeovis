@@ -1908,6 +1908,286 @@ test("recordSkip — REFUSES a skip with no reason; it does not file an anonymou
   assert.equal(tally.skips, null, "and a refused skip must not arm the watch as a side effect");
 });
 
+// ===========================================================================
+// CLASS 5 — R3.7.2: the website scrape that degraded and told only the log
+// ===========================================================================
+//
+// Finding B7. The brand's own site is what grounds the unbranded prompt set. If
+// Firecrawl is out of balance, or the site refuses the connection, the scrape
+// degrades to a crude HTML strip or produces nothing at all — and the scan runs
+// on, generates prompts from the brand name and industry alone, and finalizes
+// with a headline that looks exactly like a scan that read the whole site.
+//
+// R3.7.2's first half stopped the sentinel string reaching a prompt and gave the
+// scrape a state. Its second half is these tests: that state has to land ON THE
+// SCAN. A console.warn was the ORIGINAL defect, so a differently-worded
+// console.warn would have changed the wording of the failure and not the
+// failure. The durable trace is `detail.skips` on the chunk's scan_runs row.
+//
+// Three cases have to stay apart, and every assertion below exists to hold one
+// pair of them open:
+//   * degraded/unavailable  — we looked at the site and did not get it;
+//   * ok                    — we looked and got it (records NOTHING, so the
+//                             reason cannot become always-on wallpaper);
+//   * no scrape at all      — the tracked pool was reused, generation never ran,
+//                             so there is no measurement to report either way.
+// And inside the first: content_chars 0 ("we fetched, the page was blank") is
+// not content_chars null ("we were handed no result to measure").
+
+import { SCRAPE_STATE } from "../firecrawl.js";
+
+/** What promptGen writes onto `stats` when the vendor 402s and the strip stands in. */
+const DEGRADED_SCRAPE = Object.freeze({
+  state: SCRAPE_STATE.DEGRADED,
+  state_reason: "firecrawl_http_error",
+  reasons: ["firecrawl_http_error"],
+  detail: "402",
+  source: "fallback_fetch",
+  content_chars: 812,
+});
+
+/**
+ * Sourcing deps whose GENERATION step writes `websiteScrape` onto the stats
+ * accumulator — which is exactly, and only, what promptGen does with the object
+ * it is handed. Pass `undefined` for "generation never touched it".
+ */
+function scrapingSourcingDeps(queries, websiteScrape) {
+  return {
+    ...sourcingDeps(queries),
+    resolveEnabledEngines: () => [{ name: "aio" }],
+    generateUnbrandedPrompts: async (brand, url, industry, stats) => {
+      if (websiteScrape !== undefined) stats.website_scrape = websiteScrape;
+      return queries.map((q) => ({ ...q, weight: 1, enabled: true }));
+    },
+  };
+}
+
+/** runSourcingPhase with console.warn muted, returning [checkpoint, tally]. */
+async function sourceQuietly(deps) {
+  const tally = createChunkTally();
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const checkpoint = await runSourcingPhase(
+      { brand: "Acme", url: "acme.com", industry: "saas", competitors: "" },
+      deps,
+      tally
+    );
+    return [checkpoint, tally];
+  } finally {
+    console.warn = warn;
+  }
+}
+
+test("runSourcingPhase — a degraded website scrape is RECORDED, not only warned about", async () => {
+  const queries = makeQueries(2);
+  const [checkpoint, tally] = await sourceQuietly(scrapingSourcingDeps(queries, DEGRADED_SCRAPE));
+
+  const skip = tally.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.WEBSITE_SCRAPE_DEGRADED);
+  assert.ok(
+    skip,
+    "the site was never read and the prompt set says otherwise — a console line is not a record of that"
+  );
+  assert.equal(skip.count, 1);
+  assert.ok(
+    skip.sample[0].includes("firecrawl_http_error"),
+    `the row must carry the state_reason, not just "something degraded"; got ${JSON.stringify(skip.sample)}`
+  );
+  assert.ok(
+    skip.sample[0].includes(SCRAPE_STATE.DEGRADED),
+    "…and the state, because degraded and unavailable are different outcomes"
+  );
+  assert.ok(skip.sample[0].includes("812"), "…and how much content we actually had");
+
+  // The scan is otherwise entirely normal. That is precisely why this was
+  // invisible: nothing else about the chunk looks different.
+  assert.equal(checkpoint.queries.length, 2);
+});
+
+test("runSourcingPhase — a healthy scrape records NOTHING, so the reason is not always-on", async () => {
+  const queries = makeQueries(2);
+  const [, tally] = await sourceQuietly(
+    scrapingSourcingDeps(queries, {
+      state: SCRAPE_STATE.OK,
+      state_reason: null,
+      reasons: [],
+      detail: null,
+      source: "firecrawl",
+      content_chars: 41230,
+    })
+  );
+
+  assert.deepEqual(
+    tally.skips,
+    [],
+    "a reason recorded on every scan is a reason nobody reads — MEASURED zero, and empty"
+  );
+  assert.equal(summarizeSkips(tally).skips_total, 0);
+});
+
+test("runSourcingPhase — a scan that never scraped is NOT reported as a degrade", async () => {
+  // sourceUnbrandedQueries returns straight out of the tracked pool when it is
+  // already at target, so generation — and therefore the scrape — never runs.
+  // `stats.website_scrape` is then absent, and a bare `state !== "ok"` test
+  // would file a degrade for a measurement that was never taken: the same lie
+  // as reporting 0 for something nobody counted, pointing the other way.
+  const queries = makeQueries(2);
+  const [, tally] = await sourceQuietly(scrapingSourcingDeps(queries, undefined));
+
+  assert.deepEqual(
+    tally.skips,
+    [],
+    "no scrape was attempted; claiming one degraded would invent a measurement"
+  );
+});
+
+test("runSourcingPhase — a measured-zero scrape and an UNMEASURED one read differently", async () => {
+  const base = { state: SCRAPE_STATE.UNAVAILABLE, reasons: [], detail: null, source: null };
+
+  const [, measured] = await sourceQuietly(
+    scrapingSourcingDeps(makeQueries(1), {
+      ...base,
+      state_reason: "fallback_empty_body",
+      content_chars: 0, // we fetched the page and it was blank
+    })
+  );
+  const [, unmeasured] = await sourceQuietly(
+    scrapingSourcingDeps(makeQueries(1), {
+      ...base,
+      state_reason: "no_scrape_result",
+      content_chars: null, // there was no result to measure at all
+    })
+  );
+
+  const zero = measured.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.WEBSITE_SCRAPE_DEGRADED).sample[0];
+  const none = unmeasured.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.WEBSITE_SCRAPE_DEGRADED).sample[0];
+
+  assert.ok(zero.includes("chars=0"), `a blank page is a measured zero; got ${zero}`);
+  assert.ok(
+    none.includes("not_measured"),
+    `an unmeasured scrape must not be written down as 0 chars (standing rule 5); got ${none}`
+  );
+  assert.notEqual(zero, none, "collapsing these two is exactly the `?? 0` this rule forbids");
+});
+
+test("runScanChunk — the degrade is on the CLOSED scan_runs row, under a SUCCEEDED outcome", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const queries = makeQueries(2);
+  const job = backend.seed({ id: "70707070-7070-4070-8070-707070707070", status: "pending" });
+
+  const warn = console.warn;
+  console.warn = () => {};
+  let result;
+  try {
+    result = await runScanChunk(job.id, {
+      ...backend.deps,
+      ...ledger.deps,
+      ...scrapingSourcingDeps(queries, DEGRADED_SCRAPE),
+      resolveEnabledEngines: () => [
+        { name: "aio", concurrency: 2, probe: async (q) => probeResult("aio", q) },
+      ],
+      extractCompetitors: async () => [],
+    });
+  } finally {
+    console.warn = warn;
+  }
+
+  assert.equal(result.reason, "complete", "the scan finishes clean — that is why this needed a row");
+  const row = soleRow(ledger);
+  assert.equal(row.outcome, RUN_OUTCOMES.SUCCEEDED, "and it SUCCEEDS; the row must still say what it lost");
+
+  const skip = skipEntry(row, CHUNK_SKIP_REASONS.WEBSITE_SCRAPE_DEGRADED);
+  assert.ok(
+    skip,
+    `no website_scrape_degraded on the closed row; got ${JSON.stringify(row.detail && row.detail.skips)}`
+  );
+  assert.equal(skip.count, 1);
+  assert.ok(
+    skip.sample[0].includes("firecrawl_http_error"),
+    `the durable row must carry the state_reason; got ${JSON.stringify(skip.sample)}`
+  );
+  assert.ok(row.detail.skips_total >= 1);
+});
+
+test("runScanChunk — a chunk whose scrape was healthy closes with no degrade on the row", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const queries = makeQueries(2);
+  const job = backend.seed({ id: "80808080-8080-4080-8080-808080808080", status: "pending" });
+
+  await runScanChunk(job.id, {
+    ...backend.deps,
+    ...ledger.deps,
+    ...scrapingSourcingDeps(queries, {
+      state: SCRAPE_STATE.OK,
+      state_reason: null,
+      reasons: [],
+      detail: null,
+      source: "firecrawl",
+      content_chars: 41230,
+    }),
+    resolveEnabledEngines: () => [
+      { name: "aio", concurrency: 2, probe: async (q) => probeResult("aio", q) },
+    ],
+    extractCompetitors: async () => [],
+  });
+
+  const row = soleRow(ledger);
+  assert.equal(
+    skipEntry(row, CHUNK_SKIP_REASONS.WEBSITE_SCRAPE_DEGRADED),
+    undefined,
+    "a healthy read must leave the row clean, or the reason means nothing when it appears"
+  );
+  assert.deepEqual(row.detail.skips, [], "…and it is a MEASURED empty, not a null");
+});
+
+test("runSourcingPhase — the scrape state is frozen onto the checkpoint, so a resume can still see it", async () => {
+  const [checkpoint] = await sourceQuietly(scrapingSourcingDeps(makeQueries(2), DEGRADED_SCRAPE));
+  assert.deepEqual(
+    checkpoint.stats.website_scrape,
+    DEGRADED_SCRAPE,
+    "the checkpoint used to keep only { cost, tokens }, which dropped this on the floor"
+  );
+  assert.equal(checkpoint.stats.cost, 0, "and cost/tokens are unchanged alongside it");
+});
+
+test("runProbingPhase — the per-batch checkpoint rebuild does not ERASE the scrape state", async () => {
+  // The rebuild after every persisted batch was a fresh { cost, tokens }
+  // literal. It therefore deleted the sourcing phase's website_scrape from the
+  // checkpoint on the first batch — so the fact survived sourcing and died at
+  // the first resume boundary, which is the only boundary that matters.
+  const backend = makeBackend();
+  const queries = makeQueries(2);
+  const jobId = "90909090-9090-4090-8090-909090909090";
+  backend.seed({ id: jobId, status: "probing" });
+
+  const checkpoint = {
+    ...makeCheckpoint(queries),
+    stats: { cost: 0, tokens: 0, website_scrape: DEGRADED_SCRAPE },
+  };
+
+  const outcome = await runProbingPhase(
+    jobId,
+    checkpoint,
+    {
+      ...backend.deps,
+      resolveEnabledEngines: () => [
+        { name: "aio", concurrency: 2, probe: async (q) => probeResult("aio", q) },
+      ],
+    },
+    Date.now(),
+    createChunkTally()
+  );
+
+  assert.deepEqual(outcome.checkpoint.stats.website_scrape, DEGRADED_SCRAPE);
+  assert.deepEqual(
+    backend.jobs.get(jobId).checkpoint.stats.website_scrape,
+    DEGRADED_SCRAPE,
+    "and the checkpoint actually PERSISTED to scan_jobs keeps it, which is what a resume reads"
+  );
+});
+
 // ---------------------------------------------------------------------------
 // GUARD — a reason constant nobody records is a site that went unledgered
 // ---------------------------------------------------------------------------
