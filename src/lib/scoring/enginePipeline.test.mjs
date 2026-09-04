@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { summarizeEngineResults, summarizeEngineSlice, resolveEnabledEngines, buildTrackedBrandRoster } from "./enginePipeline.js";
+import {
+  summarizeEngineResults,
+  summarizeEngineSlice,
+  resolveEnabledEngines,
+  buildTrackedBrandRoster,
+  ENGINE_RESOLUTION_SKIPS,
+} from "./enginePipeline.js";
 import { getBrandAliases } from "./aliases.js";
 import { TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE } from "./enginePipeline.js";
 import {
@@ -205,6 +211,88 @@ test("resolveEnabledEngines parses comma-separated list", () => {
   assert.equal(engines[0].name, "aio");
 
   if (oldEngines) process.env.ENGINES = oldEngines;
+});
+
+// ---------------------------------------------------------------------------
+// R3.2.2 — the skip set escapes resolveEnabledEngines instead of dying in it
+// ---------------------------------------------------------------------------
+
+/** Swap ENGINES and the two text-engine keys, run fn, put everything back. */
+function withEngineEnv({ engines, openaiKey, perplexityKey }, fn) {
+  const saved = {
+    ENGINES: process.env.ENGINES,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    PERPLEXITY_API_KEY: process.env.PERPLEXITY_API_KEY,
+  };
+  const apply = (key, value) => {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  };
+  apply("ENGINES", engines);
+  apply("OPENAI_API_KEY", openaiKey);
+  apply("PERPLEXITY_API_KEY", perplexityKey);
+  try {
+    return fn();
+  } finally {
+    for (const [key, value] of Object.entries(saved)) apply(key, value);
+  }
+}
+
+test("resolveEnabledEngines reports an unknown engine and a keyless engine as DIFFERENT reasons", () => {
+  const seen = [];
+  const engines = withEngineEnv(
+    { engines: "aio,chatgpt,notanengine", openaiKey: undefined },
+    () => resolveEnabledEngines({ onSkip: (kind, subject) => seen.push([kind, subject]) })
+  );
+
+  assert.deepEqual(engines.map((e) => e.name), ["aio"], "only aio survives this ENGINES set");
+  // The whole point of the two codes: a typo and a missing key are different
+  // operator actions, so they must not arrive as one "engine dropped".
+  assert.deepEqual(
+    seen.sort(),
+    [
+      [ENGINE_RESOLUTION_SKIPS.NOT_CONFIGURED, "chatgpt"],
+      [ENGINE_RESOLUTION_SKIPS.UNKNOWN, "notanengine"],
+    ].sort(),
+    "both drops must surface, each under its own reason, named by engine"
+  );
+});
+
+test("resolveEnabledEngines announces the default-to-aio substitution as its own reason", () => {
+  const seen = [];
+  const engines = withEngineEnv(
+    { engines: "chatgpt,perplexity", openaiKey: undefined, perplexityKey: undefined },
+    () => resolveEnabledEngines({ onSkip: (kind, subject) => seen.push([kind, subject]) })
+  );
+
+  // The scan still runs — on an engine set nobody asked for. That substitution
+  // is the fact that used to live only in a console.warn.
+  assert.deepEqual(engines.map((e) => e.name), ["aio"]);
+  const defaulted = seen.filter(([kind]) => kind === ENGINE_RESOLUTION_SKIPS.SET_DEFAULTED);
+  assert.equal(defaulted.length, 1, "the substitution is announced exactly once");
+  assert.equal(defaulted[0][1], "chatgpt,perplexity", "and it names the set that was asked for");
+  assert.equal(
+    seen.filter(([kind]) => kind === ENGINE_RESOLUTION_SKIPS.NOT_CONFIGURED).length,
+    2,
+    "the per-engine drops that caused it are still reported individually"
+  );
+});
+
+test("resolveEnabledEngines reports nothing when nothing was dropped", () => {
+  const seen = [];
+  const engines = withEngineEnv({ engines: "aio" }, () =>
+    resolveEnabledEngines({ onSkip: (kind, subject) => seen.push([kind, subject]) })
+  );
+  assert.deepEqual(engines.map((e) => e.name), ["aio"]);
+  assert.deepEqual(seen, [], "a clean resolve must not manufacture skips");
+});
+
+test("resolveEnabledEngines still returns a plain array for callers that pass no recorder", () => {
+  // ~50 existing call sites destructure the return as an array of engine defs.
+  // The recorder is additive; it must never change the shape.
+  const engines = withEngineEnv({ engines: "aio,notanengine" }, () => resolveEnabledEngines());
+  assert.ok(Array.isArray(engines));
+  assert.deepEqual(engines.map((e) => e.name), ["aio"]);
 });
 
 // Reuse summarize logic inline for testing

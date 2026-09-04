@@ -774,30 +774,76 @@ const ENGINE_REGISTRY = [
   },
 ];
 
-export function resolveEnabledEngines() {
+/**
+ * The ways `ENGINES` can ask for an engine and not get one (R3.2.2).
+ *
+ * These are the reasons `resolveEnabledEngines` used to compute, log to the
+ * console and then discard: it pushed them onto a local `skipped` array that no
+ * caller ever read. A scan that was asked for three engines and probed one
+ * finalized as 'succeeded' with a headline blended over the survivors, and the
+ * only trace was a console line nobody joins to a scan.
+ *
+ * They stay TWO reasons rather than one on purpose. `engine_unknown` is a typo
+ * in `ENGINES` (or an engine that was deleted from the registry); the operator
+ * fixes it by editing the variable. `engine_not_configured` is a real engine
+ * whose API key is missing; the operator fixes it by setting the key. Collapsing
+ * them into "engine dropped" loses exactly the part that says what to do.
+ *
+ * The strings are canonical here, at the layer that discovers the drop, and are
+ * re-exported through scanWorker's CHUNK_SKIP_REASONS so `detail.skips` and this
+ * vocabulary can never drift apart.
+ */
+export const ENGINE_RESOLUTION_SKIPS = Object.freeze({
+  /** `ENGINES` named something that is not in the registry at all. */
+  UNKNOWN: "engine_unknown",
+  /** A real engine whose `isConfigured()` says its key is missing. */
+  NOT_CONFIGURED: "engine_not_configured",
+  /** EVERY requested engine was dropped, so the whole set became the aio default. */
+  SET_DEFAULTED: "engine_set_defaulted",
+});
+
+/**
+ * Which engines this process will actually probe, and what it refused to.
+ *
+ * @param {object} [options]
+ * @param {(kind: string, subject: string) => void} [options.onSkip]
+ *   Called once per discarded engine, with a value from ENGINE_RESOLUTION_SKIPS
+ *   and the engine name (or, for SET_DEFAULTED, the whole requested set). This
+ *   is how the skip set escapes the function instead of dying in a local array;
+ *   the return value stays a plain engine array so every existing caller is
+ *   unaffected. A caller that passes no recorder gets the old behaviour — the
+ *   console warnings — which is deliberate: only the chunk worker has a ledger
+ *   row to hang these on.
+ */
+export function resolveEnabledEngines(options = {}) {
+  const onSkip = typeof options.onSkip === "function" ? options.onSkip : null;
   const envVal = (process.env.ENGINES || "aio").trim();
   const requested = envVal.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
   const enabled = [];
-  const skipped = [];
 
   for (const name of requested) {
     const def = ENGINE_REGISTRY.find((e) => e.name === name);
     if (!def) {
       console.warn(`[engine-pipeline] Unknown engine "${name}" — skipping`);
-      skipped.push(name);
+      if (onSkip) onSkip(ENGINE_RESOLUTION_SKIPS.UNKNOWN, name);
       continue;
     }
     if (!def.isConfigured()) {
       console.warn(`[engine-pipeline] Engine "${name}" not configured (missing API key) — skipping`);
-      skipped.push(name);
+      if (onSkip) onSkip(ENGINE_RESOLUTION_SKIPS.NOT_CONFIGURED, name);
       continue;
     }
     enabled.push(def);
   }
 
   if (enabled.length === 0) {
+    // Substituting a DIFFERENT engine set than the one that was asked for. The
+    // scan still runs, so nothing downstream fails — which is precisely why this
+    // needs a reason of its own rather than a bare warning. It is the same class
+    // as the checkpoint-level ENGINE_SET_FALLBACK, one layer earlier.
     console.warn("[engine-pipeline] No engines enabled! Defaulting to aio.");
+    if (onSkip) onSkip(ENGINE_RESOLUTION_SKIPS.SET_DEFAULTED, requested.join(",") || "(empty ENGINES)");
     const aioDef = ENGINE_REGISTRY.find((e) => e.name === "aio");
     return [aioDef];
   }

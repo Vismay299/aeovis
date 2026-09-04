@@ -125,7 +125,14 @@ function fakeJobDeps(job) {
     );
   };
   return {
-    getScanJob: async () => job,
+    // R3.3.1 — a job with no `heartbeat_at` reads as one whose worker died, and
+    // runScanChunk charges those an attempt through claim_scan_job_attempt
+    // against the REAL database (the guard would refuse it — scan_jobs is
+    // NEVER_WRITABLE — but the chunk under test would then be measuring the
+    // refusal rather than the ledger). These fixtures are direct invocations of
+    // a live chunk, not rescues of a dead one, so they say so. `job` may still
+    // override it.
+    getScanJob: async () => ({ heartbeat_at: new Date().toISOString(), ...job }),
     updateScanJob: async (_id, updates) => Object.assign(job, updates),
     claimJobStatus: async () => job,
     getCompletedPairsForJob: async () => new Set(),

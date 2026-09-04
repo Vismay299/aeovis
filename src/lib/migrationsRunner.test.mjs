@@ -153,6 +153,7 @@ const FULL_CATALOG = [
   "claim_probe_tasks", "complete_probe_tasks", "renew_probe_lease", "release_probe_tasks",
   "scan_runs", "scan_runs_job_idx", "scan_runs_batch_idx", "scan_runs_open_idx", "scan_runs_runner_idx",
   "open_scan_run", "heartbeat_scan_run", "close_scan_run",
+  "scan_jobs_attempts_idx", "claim_scan_job_attempt",
 ];
 
 function withRegister(dir) {

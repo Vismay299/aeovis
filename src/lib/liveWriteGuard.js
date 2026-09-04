@@ -115,6 +115,10 @@ export const WRITING_FUNCTIONS = Object.freeze({
   renew_probe_lease: ["probe_tasks"],
   release_probe_tasks: ["probe_tasks"],
   increment_scan_rate_limit: ["scan_rate_limits"],
+  // R3.3.1. It writes scan_jobs, which is NEVER_WRITABLE, so this entry does
+  // not permit anything — it makes the refusal name the table instead of
+  // reporting an unrecognised function, which is a different bug to chase.
+  claim_scan_job_attempt: ["scan_jobs"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */

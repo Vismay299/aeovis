@@ -37,6 +37,7 @@ import { summarizeAioResults, aggregateAioTopDomains } from "../scoring/aioPipel
 import {
   summarizeEngineResults,
   resolveEnabledEngines,
+  ENGINE_RESOLUTION_SKIPS,
   computeHeadline,
   summarizeEngineSlice,
   domainMatches,
@@ -201,6 +202,19 @@ export const CHUNK_SKIP_REASONS = Object.freeze({
   ROSTER_JUDGE_FAILED: "roster_judge_failed",
   /** Citations were inserted unclassified because enrichment threw. */
   CITATION_ENRICH_FAILED: "citation_enrich_failed",
+
+  // The three below happen INSIDE resolveEnabledEngines, one layer earlier than
+  // ENGINE_NOT_REGISTERED and before the checkpoint freeze. Their strings are
+  // owned by enginePipeline (ENGINE_RESOLUTION_SKIPS) and aliased here rather
+  // than retyped, so the resolver's vocabulary and `detail.skips` cannot drift.
+  /** `ENGINES` named an engine that is not in the registry at all — a typo, or a removal. */
+  ENGINE_UNKNOWN: ENGINE_RESOLUTION_SKIPS.UNKNOWN,
+  /** A registered engine dropped because its API key is not set. */
+  ENGINE_NOT_CONFIGURED: ENGINE_RESOLUTION_SKIPS.NOT_CONFIGURED,
+  /** EVERY engine `ENGINES` asked for was dropped, so the set became the aio default. */
+  ENGINE_SET_DEFAULTED: ENGINE_RESOLUTION_SKIPS.SET_DEFAULTED,
+  /** A resolver drop this file has no reason for — recorded anyway, never discarded. */
+  ENGINE_SKIP_UNMAPPED: "engine_skip_unmapped",
 });
 
 /**
@@ -244,6 +258,47 @@ export function recordSkip(tally, reason, subject = null) {
     if (entry.sample.length < SKIP_SAMPLE_MAX) entry.sample.push(text);
     else entry.sample_truncated = true;
   }
+}
+
+/**
+ * Turn one of resolveEnabledEngines' discards into a chunk skip reason (R3.2.2).
+ *
+ * The resolver reports what it dropped in its OWN vocabulary
+ * (ENGINE_RESOLUTION_SKIPS); this is the only place that translates it. The
+ * mapping is written out one branch per kind rather than passed through, for two
+ * reasons: the guard test can walk it, and a pass-through would let a drop site
+ * added to enginePipeline tomorrow land in `detail.skips` under a reason nobody
+ * ever declared here.
+ *
+ * `engine_unknown` and `engine_not_configured` stay separate on purpose. Both
+ * mean "this engine will not be probed and the headline is blended over the
+ * rest", but the first is fixed by editing `ENGINES` and the second by setting a
+ * key — and a single "engine dropped" reason tells an operator that something
+ * went missing while withholding the only part that says what to do about it.
+ *
+ * An UNRECOGNISED kind is still recorded, under ENGINE_SKIP_UNMAPPED and with a
+ * console.error. Refusing to record a skip because this file has no name for it
+ * would be the exact failure R3.2.2 exists to end, wearing a guard clause.
+ */
+export function recordEngineResolutionSkip(tally, kind, engineName) {
+  if (kind === ENGINE_RESOLUTION_SKIPS.UNKNOWN) {
+    recordSkip(tally, CHUNK_SKIP_REASONS.ENGINE_UNKNOWN, engineName);
+    return;
+  }
+  if (kind === ENGINE_RESOLUTION_SKIPS.NOT_CONFIGURED) {
+    recordSkip(tally, CHUNK_SKIP_REASONS.ENGINE_NOT_CONFIGURED, engineName);
+    return;
+  }
+  if (kind === ENGINE_RESOLUTION_SKIPS.SET_DEFAULTED) {
+    recordSkip(tally, CHUNK_SKIP_REASONS.ENGINE_SET_DEFAULTED, engineName);
+    return;
+  }
+  console.error(
+    `[scan-chunk] resolveEnabledEngines reported an engine skip of kind "${kind}" that this file has ` +
+      `no reason for — recording it as ${CHUNK_SKIP_REASONS.ENGINE_SKIP_UNMAPPED} so it is at least on ` +
+      `the row. Give it a CHUNK_SKIP_REASONS entry.`
+  );
+  recordSkip(tally, CHUNK_SKIP_REASONS.ENGINE_SKIP_UNMAPPED, `${kind}: ${engineName}`);
 }
 
 /**
@@ -478,6 +533,32 @@ export function chunkRunOutcome(result, tally = {}) {
         ...counts,
         detail: { ...detail, job_status: result.status ?? null },
       };
+
+    // R3.3.1 — the job has been resumed MAX_JOB_ATTEMPTS times without ever
+    // finishing and has just been made terminal. 'failed', never 'skipped': the
+    // chunk declined, but what it declined was a customer's scan, and a bucket
+    // that reads as a normal decline is how an abandoned scan disappears
+    // quietly. The counts go in the detail so the ledger says WHICH attempt was
+    // the last one, and `error` carries the message the job now shows.
+    case "max_attempts":
+      return {
+        outcome: RUN_OUTCOMES.FAILED,
+        reason: "max_attempts",
+        error: result.error ?? null,
+        ...counts,
+        detail: {
+          ...detail,
+          // Never `?? 0` here: a claim that did not report its count is unknown,
+          // and "abandoned on attempt 0" would be a lie about the cap.
+          attempts: Number.isInteger(result.attempts) ? result.attempts : null,
+          max_attempts: Number.isInteger(result.max_attempts) ? result.max_attempts : null,
+        },
+      };
+
+    // The attempt claim itself failed, so the chunk refused to run rather than
+    // running uncounted. It ran and did not finish: 'failed'.
+    case "attempt_claim_failed":
+      return { outcome: RUN_OUTCOMES.FAILED, reason, error: result.error ?? null, ...counts, detail };
 
     // Could not even read the job. It ran and did not finish: 'failed'.
     case "read_failed":
@@ -753,6 +834,169 @@ export function shouldRescueJob(job, nowMs = Date.now()) {
   return !isJobAlive(job, nowMs);
 }
 
+// ---------------------------------------------------------------------------
+// R3.3.1 — the attempt cap (finding S12)
+// ---------------------------------------------------------------------------
+//
+// The sweep in /api/scan/worker re-dispatches every non-terminal job whose
+// heartbeat has gone stale, and nothing counted how often it had already done
+// so. A job whose worker dies at the same point every time — a finalize that
+// outruns maxDuration, a container killed mid-probe — was therefore resumed
+// forever, every cron tick, every day, spending real vendor budget on an
+// execution that has never once finished, while the row sat in 'probing'
+// looking like work in progress.
+//
+// The chunk's own catch already fails a job when the failure is an exception it
+// survives to handle. This is for the other kind: the process that never comes
+// back to write anything, so the record of that attempt has to be made when the
+// NEXT attempt starts.
+//
+// WHAT IS COUNTED. Resumes of a job whose previous executor went away — NOT
+// chunks. A scan is deliberately many chunks (CHUNK_TIME_BUDGET_MS makes a long
+// probe set yield and self-continue), so counting every chunk would cap the SIZE
+// of a scan at three slices and kill healthy scans. runScanChunk asks for an
+// attempt only when shouldRescueJob(job) is true at entry, which is exactly "the
+// last executor stopped saying it was alive"; a clean hand-off arrives on a
+// heartbeat seconds old and costs nothing.
+//
+// AND IT IS RESET BY PROGRESS. runProbingPhase writes attempts = 0 in the same
+// UPDATE that persists a batch of probe results, so the cap counts CONSECUTIVE
+// resumes that achieved nothing. That does not restore the infinite retry:
+// progress is monotone and bounded (each (engine, query) pair is probed at most
+// once per job), so a job can only reset the counter as many times as it has
+// pairs left and must then either finalize or hit the cap.
+//
+// Migration 012 owns the column, the cap and the terminal write.
+
+/**
+ * How many consecutive resumes a job gets before it is abandoned.
+ *
+ * Must equal `p_max_attempts`'s DEFAULT in supabase/migrations/012_scan_job_attempts.sql;
+ * a guard test in scanJobAttempts.test.mjs reads the migration and asserts it.
+ */
+export const MAX_JOB_ATTEMPTS = 3;
+
+/**
+ * The marker every abandonment message starts with, in SQL and in JS alike, so
+ * "why did this scan stop" is greppable in one query and one log search rather
+ * than being inferred from a status of 'failed' and no explanation.
+ */
+export const MAX_ATTEMPTS_MARKER = "max_attempts:";
+
+/**
+ * The cap decision, as a pure function. Mirrors the two IFs in
+ * claim_scan_job_attempt; exported so the policy is testable without a database.
+ *
+ * A missing/NaN `attempts` counts as 0 — a job that predates the column has
+ * genuinely not been resumed since the cap existed, and reading it as "unknown,
+ * therefore refuse" would abandon every in-flight scan the moment 012 lands.
+ */
+export function attemptVerdict(job, maxAttempts = MAX_JOB_ATTEMPTS) {
+  const cap = Number.isInteger(maxAttempts) && maxAttempts >= 1 ? maxAttempts : MAX_JOB_ATTEMPTS;
+  const prior = Number.isInteger(job && job.attempts) && job.attempts > 0 ? job.attempts : 0;
+  if (prior >= cap) {
+    return { granted: false, verdict: "max_attempts", attempts: prior, maxAttempts: cap };
+  }
+  return { granted: true, verdict: "granted", attempts: prior + 1, maxAttempts: cap };
+}
+
+/**
+ * The sentence an abandoned job carries in `error_message`, for the in-memory
+ * path. The SQL builds its own (it knows `now()` and the row it locked); both
+ * start with MAX_ATTEMPTS_MARKER and both name the count and the cap, because
+ * this string is what /api/scan/[job_id]/status hands the customer's browser.
+ */
+export function maxAttemptsMessage(job, verdict, nowIso = new Date().toISOString()) {
+  const last = String((job && job.error_message) || "").trim();
+  return (
+    `${MAX_ATTEMPTS_MARKER} abandoned at ${nowIso} after ${verdict.attempts} resume attempt(s) ` +
+    `without finishing (cap ${verdict.maxAttempts}). It was last seen in status ` +
+    `"${(job && job.status) || "unknown"}" with heartbeat ${(job && job.heartbeat_at) || "never"}.` +
+    (last ? ` Last recorded error: ${last}` : "")
+  );
+}
+
+/** `deps.client` is test-only injection, matching db.js, jobLease.js and scanRuns.js. */
+function resolveAttemptClient(deps) {
+  return deps && Object.prototype.hasOwnProperty.call(deps, "client") ? deps.client : supabase;
+}
+
+/**
+ * Take one attempt on `job`, or be refused.
+ *
+ * WITH A DATABASE this is migration 012's claim_scan_job_attempt: the read, the
+ * increment, the cap and the terminal write happen inside one transaction under
+ * one row lock, so two rescues racing each other cannot both spend the same
+ * attempt and a job can never be both refused and left running.
+ *
+ * WITHOUT ONE (local dev, `npm run test:scoring` — db.js runs the whole
+ * persistence layer out of global.memoryJobs) the same policy runs against the
+ * job we already read. That path is read-then-write and therefore not atomic;
+ * it is also single-process by construction, which is the same trade jobLease.js
+ * and claimJobStatus already make for memory mode.
+ *
+ * NEVER FAIL-SOFT (standing rule 2). A database error propagates and a verdict
+ * that does not say `granted` is refused rather than assumed: the caller must
+ * not run a chunk on the strength of a claim that did not answer.
+ */
+async function claimJobAttempt(jobId, job, deps = {}) {
+  const maxAttempts = Number.isInteger(deps.maxJobAttempts) ? deps.maxJobAttempts : MAX_JOB_ATTEMPTS;
+  const client = resolveAttemptClient(deps);
+
+  if (client) {
+    const { data, error } = await client.rpc("claim_scan_job_attempt", {
+      p_job_id: jobId,
+      p_max_attempts: maxAttempts,
+    });
+    if (error) {
+      // The envelope survives the rethrow (standing rule 2): a caller debugging
+      // "column attempts does not exist" needs the code, not a flattened string.
+      const err = new Error(
+        `claim_scan_job_attempt: ${error.message || "database error"}` +
+          (error.code ? ` [${error.code}]` : "") +
+          (error.details ? ` — ${error.details}` : "") +
+          (error.hint ? ` (hint: ${error.hint})` : "") +
+          ` — if the function or the scan_jobs.attempts column is missing, ` +
+          `supabase/migrations/012_scan_job_attempts.sql has not been applied to this database`
+      );
+      err.code = error.code;
+      err.details = error.details;
+      err.hint = error.hint;
+      err.cause = error;
+      throw err;
+    }
+    if (!data || typeof data.granted !== "boolean") {
+      throw new Error(
+        `claim_scan_job_attempt returned no verdict for job ${jobId} (${JSON.stringify(data ?? null)}). ` +
+          `Refusing to treat an unanswered claim as a granted attempt — that is how a job with no ` +
+          `attempts left gets resumed anyway.`
+      );
+    }
+    return {
+      granted: data.granted,
+      verdict: data.verdict || (data.granted ? "granted" : "refused"),
+      // null, not 0: an attempt count the claim did not report is unknown.
+      attempts: Number.isInteger(data.attempts) ? data.attempts : null,
+      maxAttempts: Number.isInteger(data.max_attempts) ? data.max_attempts : maxAttempts,
+      status: data.status || null,
+      errorMessage: data.error_message || null,
+    };
+  }
+
+  const updateJob = deps.updateScanJob || updateScanJob;
+  const verdict = attemptVerdict(job, maxAttempts);
+  if (!verdict.granted) {
+    const message = maxAttemptsMessage(job, verdict);
+    await updateJob(jobId, { status: "failed", progress_pct: 100, error_message: message });
+    return { ...verdict, status: "failed", errorMessage: message };
+  }
+  // updateScanJob stamps heartbeat_at on every call, which is what stops a
+  // browser polling the status route every two seconds from being handed three
+  // attempts in six seconds. The SQL path stamps it for the same reason.
+  await updateJob(jobId, { attempts: verdict.attempts });
+  return { ...verdict, status: (job && job.status) || null, errorMessage: null };
+}
+
 /**
  * Best-effort URL for a chunk to fire-and-forget-fetch itself onward after
  * checkpointing (plan.md P0.2 point 2: "the fire-and-forget self-fetch ...
@@ -880,7 +1124,23 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
       `(${unbrandedQueries.length} unbranded, ${brandedQueries.length} brand-presence)`
   );
 
-  const enabledEngineNames = resolveEngines().map((e) => e.name);
+  // R3.2.2 — THE ENGINE SKIP THAT HAPPENS BEFORE THE FREEZE.
+  //
+  // `engines` on the checkpoint below is the POST-drop list, and it is what
+  // every later phase reads. So an engine `ENGINES` asked for and did not get —
+  // a name with a typo in it, a key that was never set — is invisible from the
+  // instant this line returns: absent from the checkpoint, absent from the probe
+  // loop, absent from the finalize slice, and absent from the scan's own
+  // engines_counted. runProbingPhase's ENGINE_NOT_REGISTERED check cannot see it
+  // either; that check compares the FROZEN names against the registry, and these
+  // names never made it into the frozen list.
+  //
+  // resolveEnabledEngines used to compute exactly this set and push it onto a
+  // local array no caller read. It surrenders it now, and here — before the
+  // freeze — is the last moment at which recording it is possible at all.
+  const enabledEngineNames = resolveEngines({
+    onSkip: (kind, engineName) => recordEngineResolutionSkip(tally, kind, engineName),
+  }).map((e) => e.name);
 
   return {
     brand,
@@ -1058,7 +1318,15 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       // keeps the job "alive" (isJobAlive) across a chunk that may itself
       // run for minutes, not the overall chunk time budget.
       workingCheckpoint = { ...workingCheckpoint, stats: { cost: stats.cost || 0, tokens: stats.tokens || 0 } };
-      await updateJob(jobId, { progress_pct: progressPct, checkpoint: workingCheckpoint });
+      // R3.3.1 — `attempts: 0` rides on the same UPDATE as the batch that just
+      // landed, so the attempt cap counts CONSECUTIVE resumes that achieved
+      // nothing rather than the number of slices a big scan legitimately takes.
+      // It is written here and nowhere else: this is the one place in the job's
+      // life where forward progress is DURABLE (the pairs above are persisted
+      // and getCompletedPairsForJob will never probe them again), and a reset
+      // written anywhere that had not yet persisted anything would hand a poison
+      // job an unlimited supply of attempts.
+      await updateJob(jobId, { progress_pct: progressPct, checkpoint: workingCheckpoint, attempts: 0 });
 
       if (doneCount >= totalPairs) {
         return { budgetHit: false, checkpoint: workingCheckpoint, progressPct };
@@ -1730,6 +1998,70 @@ export async function runScanChunk(jobId, deps = {}) {
     return finish({ ok: true, reason: "already_finished", status: job.status });
   }
 
+  // R3.3.1 — this chunk is a RESUME of a job whose last executor stopped saying
+  // it was alive, so it costs an attempt. A clean hand-off (the self-continue
+  // fetch after a checkpoint) arrives on a fresh heartbeat and is free; see the
+  // MAX_JOB_ATTEMPTS block above for why counting every chunk would instead cap
+  // the size of a scan.
+  //
+  // shouldRescueJob is called with the WALL CLOCK, deliberately not `nowFn`:
+  // deps.now is the chunk's soft TIME BUDGET clock and tests run it at fake
+  // epochs, and comparing a fake epoch against a real heartbeat decides a job's
+  // liveness by accident.
+  if (shouldRescueJob(job)) {
+    let attempt;
+    try {
+      attempt = await claimJobAttempt(jobId, job, deps);
+    } catch (err) {
+      // The claim is the thing that keeps a poison job from running forever, so
+      // a claim that could not be made is a chunk that does not run. Recorded as
+      // a failure with the error attached, never waved through.
+      console.error(`[scan-chunk] Could not claim an attempt on job ${jobId}:`, err.message);
+      return finish({ ok: false, reason: "attempt_claim_failed", error: err.message });
+    }
+
+    if (attempt.verdict === "max_attempts") {
+      // The claim already wrote the terminal state (status failed, progress 100,
+      // error_message starting with MAX_ATTEMPTS_MARKER). Nothing here is
+      // allowed to be quiet about it: an abandoned scan that logged nothing is
+      // the same silence the cap exists to end.
+      console.error(
+        `[scan-chunk] Job ${jobId} ABANDONED after ${attempt.attempts ?? "?"} resume attempt(s) ` +
+          `(cap ${attempt.maxAttempts}); it is now terminal and will not be resumed again. ` +
+          `${attempt.errorMessage || ""}`
+      );
+      return finish({
+        ok: false,
+        reason: "max_attempts",
+        attempts: attempt.attempts,
+        max_attempts: attempt.maxAttempts,
+        error: attempt.errorMessage,
+      });
+    }
+
+    // The row moved between our read and our claim. Both of these are already
+    // this function's own vocabulary, so they close the ledger row the same way
+    // the equivalent races above it do.
+    if (attempt.verdict === "not_found") {
+      return finish({ ok: false, reason: "not_found" });
+    }
+    if (attempt.verdict === "already_finished") {
+      return finish({ ok: true, reason: "already_finished", status: attempt.status || job.status });
+    }
+    if (!attempt.granted) {
+      // A refusal this file does not recognise. Filed as a claim failure with
+      // the verdict named, never rounded down to "nothing to do" — that is the
+      // same shrug chunkRunOutcome's default branch refuses to make.
+      return finish({
+        ok: false,
+        reason: "attempt_claim_failed",
+        error:
+          `claim_scan_job_attempt refused job ${jobId} with a verdict this chunk has no case for ` +
+          `(${JSON.stringify(attempt.verdict)}). Refusing to read it as "nothing to do".`,
+      });
+    }
+  }
+
   const chunkStartMs = nowFn();
   // From here on the chunk is working, so the run says so until it stops.
   const stopHeartbeat = startChunkHeartbeat(ledger, run, deps);
@@ -1889,9 +2221,16 @@ const SCHEDULER_LOG = { label: "scheduler", what: "scheduler decision", noun: "s
  * function exists to end.
  */
 async function recordSchedulerSkip(ledger, { workerId, brand, reason, detail }) {
+  // The reason goes onto the OPEN detail, not only onto the close. closeChunkRun
+  // is deliberately fail-soft — a failed close leaves the row open for the
+  // reaper rather than killing the tick — and while `reason` was passed only to
+  // the close, that surviving row named the brand it declined and nothing about
+  // why. An unexplained skip is precisely what this task abolishes, so the
+  // reason has to be durable from the first write.
+  const openDetail = { ...(detail || {}), reason };
   const run = await openChunkRun(
     ledger,
-    { runner: RUNNERS.SCHEDULER, phase: SCHEDULER_PHASES.SCHEDULE, workerId, brand, detail },
+    { runner: RUNNERS.SCHEDULER, phase: SCHEDULER_PHASES.SCHEDULE, workerId, brand, detail: openDetail },
     { ...SCHEDULER_LOG, subject: `brand ${brand}` }
   );
   console.warn(
@@ -1900,7 +2239,12 @@ async function recordSchedulerSkip(ledger, { workerId, brand, reason, detail }) 
   );
   // Counters stay NULL on purpose: a decision not to scan measured no probes,
   // and 0 here would claim it looked for some.
-  await closeChunkRun(ledger, run, { outcome: RUN_OUTCOMES.SKIPPED, reason, detail }, SCHEDULER_LOG);
+  await closeChunkRun(
+    ledger,
+    run,
+    { outcome: RUN_OUTCOMES.SKIPPED, reason, detail: openDetail },
+    SCHEDULER_LOG
+  );
 }
 
 export async function runSchedulerTick(nowIso, deps = {}) {

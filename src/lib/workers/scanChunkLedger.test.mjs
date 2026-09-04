@@ -954,6 +954,7 @@ import {
   runSchedulerTick,
   runFinalizePhase,
   recordSkip,
+  recordEngineResolutionSkip,
   summarizeSkips,
   CHUNK_SKIP_REASONS,
   SCHEDULER_PHASES,
@@ -961,6 +962,7 @@ import {
   SCHEDULER_TICK_REASONS,
   SKIP_SAMPLE_MAX,
 } from "./scanWorker.js";
+import { ENGINE_RESOLUTION_SKIPS } from "../scoring/enginePipeline.js";
 
 /** The one skip entry for `reason` on a closed row, or undefined. */
 function skipEntry(row, reason) {
@@ -1081,6 +1083,33 @@ test("runSchedulerTick — a brand with a scan already running writes SKIPPED/br
     row.reason,
     SCHEDULER_SKIP_REASONS.CADENCE_OFF,
     "'nobody wants this scanned' and 'it is already being scanned' are different facts"
+  );
+});
+
+test("runSchedulerTick — a skip row names its reason at OPEN, so a failed close still explains it", async () => {
+  // The close is deliberately fail-soft (closeChunkRun warns rather than
+  // throws), which used to leave a durable row saying WHICH brand was declined
+  // and nothing about WHY: `reason` was only ever passed to the close. An
+  // unexplained skip is the exact thing R3.2.2 abolishes, so the reason goes on
+  // the open detail too.
+  const ledger = makeLedger({ failClose: true });
+  const backend = makeSchedulerBackend({ due: [schedule("off-co.com", "off", "Off Co")] });
+
+  const err = console.error;
+  console.error = () => {};
+  try {
+    await runSchedulerTick("2026-09-04T00:00:00.000Z", { ...backend.deps, ...ledger.deps });
+  } finally {
+    console.error = err;
+  }
+
+  const [row] = rowsInPhase(ledger, SCHEDULER_PHASES.SCHEDULE);
+  assert.equal(row.ended_at, null, "the close really did fail; the row is the open one");
+  assert.equal(row.reason, null, "…so the reason column is empty — that is the gap");
+  assert.equal(
+    row.detail.reason,
+    SCHEDULER_SKIP_REASONS.CADENCE_OFF,
+    "an open skip row must still say why the brand was declined, not only which brand"
   );
 });
 
@@ -1323,6 +1352,191 @@ test("runScanChunk — when NO frozen engine resolves, the silent substitution i
     skipEntry(row, CHUNK_SKIP_REASONS.ENGINE_NOT_REGISTERED).count,
     2,
     "…and each individual engine that went missing is still counted"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// CLASS 2b — engine skips that happen INSIDE resolveEnabledEngines
+// ---------------------------------------------------------------------------
+//
+// The two tests above cover the engine that was frozen into a checkpoint and is
+// gone today. They cannot cover the EARLIER drop, and that is exactly why it
+// stayed invisible: `checkpoint.engines` is built from resolveEnabledEngines'
+// return value, i.e. the POST-drop list, so by the time anything downstream can
+// look, the engines that `ENGINES` asked for and did not get are no longer
+// mentioned anywhere. resolveEnabledEngines pushed them onto a local array that
+// no caller read.
+//
+// These tests therefore use the REAL resolveEnabledEngines (no dep stub) driven
+// by the real `ENGINES` variable, because a stubbed resolver cannot drop
+// anything and would prove nothing.
+
+/** Swap ENGINES and the two text-engine keys, run fn, put everything back. */
+async function withEngineEnv({ engines, openaiKey, perplexityKey }, fn) {
+  const saved = {
+    ENGINES: process.env.ENGINES,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    PERPLEXITY_API_KEY: process.env.PERPLEXITY_API_KEY,
+  };
+  const apply = (key, value) => {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  };
+  const warn = console.warn;
+  apply("ENGINES", engines);
+  apply("OPENAI_API_KEY", openaiKey);
+  apply("PERPLEXITY_API_KEY", perplexityKey);
+  console.warn = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.warn = warn;
+    for (const [key, value] of Object.entries(saved)) apply(key, value);
+  }
+}
+
+/** Sourcing deps that generate `count` fixed queries and persist nothing. */
+function sourcingDeps(queries) {
+  return {
+    promptTarget: queries.length,
+    getPromptsForBrand: async () => [],
+    generateUnbrandedPrompts: async () => queries.map((q) => ({ ...q, weight: 1, enabled: true })),
+    upsertPrompts: async () => queries,
+    buildBrandedQueries: () => [],
+  };
+}
+
+test("runSourcingPhase — a typo in ENGINES and a missing API key are DIFFERENT recorded reasons", async () => {
+  const queries = makeQueries(2);
+  const tally = createChunkTally();
+
+  const checkpoint = await withEngineEnv(
+    // "notanengine" is a typo; "chatgpt" is real but has no key.
+    { engines: "aio,chatgpt,notanengine", openaiKey: undefined },
+    () =>
+      runSourcingPhase(
+        { brand: "Acme", url: "acme.com", industry: "saas", competitors: "" },
+        sourcingDeps(queries), // deliberately NO resolveEnabledEngines stub
+        tally
+      )
+  );
+
+  const unknown = tally.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.ENGINE_UNKNOWN);
+  assert.ok(unknown, "an engine ENGINES named that does not exist must not vanish into a console line");
+  assert.deepEqual(unknown.sample, ["notanengine"], "and the row must name it");
+
+  const unconfigured = tally.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.ENGINE_NOT_CONFIGURED);
+  assert.ok(unconfigured, "an engine dropped for a missing key must not vanish either");
+  assert.deepEqual(unconfigured.sample, ["chatgpt"]);
+
+  // The whole reason these are two codes: the operator fixes a typo by editing
+  // ENGINES and a missing key by setting the key. One "engine dropped" reason
+  // would tell them a drop happened and nothing about which to do.
+  assert.notEqual(
+    CHUNK_SKIP_REASONS.ENGINE_UNKNOWN,
+    CHUNK_SKIP_REASONS.ENGINE_NOT_CONFIGURED,
+    "collapsing these two loses the only actionable part of the record"
+  );
+
+  // …and this is why the recording has to happen HERE. The checkpoint keeps only
+  // the survivors, so after this line the dropped names exist nowhere.
+  assert.deepEqual(checkpoint.engines, ["aio"], "the frozen set cannot reveal what was dropped");
+  assert.equal(summarizeSkips(tally).skips_total, 2);
+});
+
+test("runSourcingPhase — the default-to-aio substitution is a decision, with its own reason", async () => {
+  const queries = makeQueries(1);
+  const tally = createChunkTally();
+
+  const checkpoint = await withEngineEnv(
+    { engines: "chatgpt,perplexity", openaiKey: undefined, perplexityKey: undefined },
+    () =>
+      runSourcingPhase(
+        { brand: "Acme", url: "acme.com", industry: "saas", competitors: "" },
+        sourcingDeps(queries),
+        tally
+      )
+  );
+
+  // Nobody asked for aio. The scan runs on it anyway and finalizes clean, which
+  // is precisely why a bare console.warn was not enough.
+  assert.deepEqual(checkpoint.engines, ["aio"]);
+  const defaulted = tally.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.ENGINE_SET_DEFAULTED);
+  assert.ok(defaulted, "answering a scan with an engine set nobody requested is a recordable decision");
+  assert.equal(defaulted.count, 1, "announced once, not once per dropped engine");
+  assert.deepEqual(defaulted.sample, ["chatgpt,perplexity"], "and it names the set that was asked for");
+
+  // Distinct from the checkpoint-level fallback, which is a different failure at
+  // a different time: that one substitutes for a FROZEN set mid-scan.
+  assert.notEqual(CHUNK_SKIP_REASONS.ENGINE_SET_DEFAULTED, CHUNK_SKIP_REASONS.ENGINE_SET_FALLBACK);
+  assert.equal(tally.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.ENGINE_NOT_CONFIGURED).count, 2);
+});
+
+test("runSourcingPhase — a clean ENGINES set records no engine skips at all", async () => {
+  const queries = makeQueries(1);
+  const tally = createChunkTally();
+
+  await withEngineEnv({ engines: "aio" }, () =>
+    runSourcingPhase(
+      { brand: "Acme", url: "acme.com", industry: "saas", competitors: "" },
+      sourcingDeps(queries),
+      tally
+    )
+  );
+
+  // MEASURED zero, not silence: sourcing arms the watch, so [] here means "it
+  // looked and every requested engine resolved".
+  assert.deepEqual(tally.skips, [], "a clean resolve must not manufacture skips");
+  assert.equal(summarizeSkips(tally).skips_total, 0);
+});
+
+test("runScanChunk — the engines ENGINES asked for and did not get are on the CLOSED row", async () => {
+  const ledger = makeLedger();
+  const backend = makeBackend();
+  const queries = makeQueries(2);
+  const job = backend.seed({ id: "40404040-4040-4040-8040-404040404040", status: "pending" });
+
+  // Every (aio, query) pair is already persisted, so probing has nothing to do
+  // and the REAL aio probe — which would reach the network — is never called.
+  queries.forEach((q) =>
+    backend.promptResults.push({
+      job_id: job.id,
+      engine: "aio",
+      query: q.text,
+      created_at: new Date().toISOString(),
+      raw: probeResult("aio", q),
+    })
+  );
+
+  const result = await withEngineEnv({ engines: "aio,chatgpt,notanengine", openaiKey: undefined }, () =>
+    runScanChunk(job.id, {
+      ...backend.deps,
+      ...ledger.deps,
+      ...sourcingDeps(queries),
+      extractCompetitors: async () => [],
+      // NOTE: no resolveEnabledEngines stub — this chunk resolves for real.
+    })
+  );
+
+  assert.equal(result.reason, "complete", "the scan still finishes — that is why this was invisible");
+  const row = soleRow(ledger);
+  assert.equal(row.outcome, RUN_OUTCOMES.SUCCEEDED, "and it still succeeds; the row must say what it lost");
+
+  const unknown = skipEntry(row, CHUNK_SKIP_REASONS.ENGINE_UNKNOWN);
+  assert.ok(unknown, `no engine_unknown on the closed row; got ${JSON.stringify(row.detail.skips)}`);
+  assert.equal(unknown.count, 1);
+  assert.deepEqual(unknown.sample, ["notanengine"]);
+
+  const unconfigured = skipEntry(row, CHUNK_SKIP_REASONS.ENGINE_NOT_CONFIGURED);
+  assert.ok(unconfigured, `no engine_not_configured on the closed row; got ${JSON.stringify(row.detail.skips)}`);
+  assert.equal(unconfigured.count, 1);
+  assert.deepEqual(unconfigured.sample, ["chatgpt"]);
+
+  assert.ok(row.detail.skips_total >= 2, "the count is exact and includes both");
+  assert.deepEqual(
+    backend.jobs.get(job.id).checkpoint.engines,
+    ["aio"],
+    "sanity: the scan really did run on one engine after being asked for three"
   );
 });
 
@@ -1721,4 +1935,37 @@ test("GUARD — every declared skip reason is actually recorded somewhere in sca
       `SCHEDULER_SKIP_REASONS.${key} ("${value}") is declared but never used to close a run`
     );
   }
+});
+
+test("GUARD — every way resolveEnabledEngines can drop an engine has a reason of its own", async () => {
+  // The loop above proves each DECLARED reason is recorded. This proves the
+  // other direction for the engine layer: each way the resolver can discard an
+  // engine has a distinct chunk reason mapped to it. Without this, a fourth drop
+  // site could be added to enginePipeline and arrive at the ledger under
+  // ENGINE_SKIP_UNMAPPED — recorded, but not named.
+  const kinds = Object.values(ENGINE_RESOLUTION_SKIPS);
+  assert.ok(kinds.length >= 3, "the resolver has three discard sites: unknown, keyless, whole-set default");
+
+  const mapped = new Set();
+  for (const kind of kinds) {
+    const tally = createChunkTally();
+    recordEngineResolutionSkip(tally, kind, "somengine");
+    assert.equal(tally.skips.length, 1, `kind "${kind}" recorded nothing`);
+    const reason = tally.skips[0].reason;
+    assert.notEqual(
+      reason,
+      CHUNK_SKIP_REASONS.ENGINE_SKIP_UNMAPPED,
+      `resolveEnabledEngines can emit "${kind}" and scanWorker has no reason for it — ` +
+        `add one to CHUNK_SKIP_REASONS rather than letting it land as unmapped`
+    );
+    assert.ok(!mapped.has(reason), `two resolver kinds share the reason "${reason}" — that collapses a distinction`);
+    mapped.add(reason);
+    assert.deepEqual(tally.skips[0].sample, ["somengine"], "the subject must be the engine name");
+  }
+
+  // And the catch-all itself still records rather than dropping, so an unmapped
+  // kind is visible in the ledger instead of silently discarded.
+  const stray = createChunkTally();
+  recordEngineResolutionSkip(stray, "a_kind_from_the_future", "somengine");
+  assert.equal(stray.skips[0].reason, CHUNK_SKIP_REASONS.ENGINE_SKIP_UNMAPPED);
 });

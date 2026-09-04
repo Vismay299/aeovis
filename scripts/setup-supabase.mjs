@@ -120,6 +120,15 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "heartbeat_scan_run" },
     { kind: "function", name: "close_scan_run" },
   ],
+  // R3.3.1. The catalog probe below can see tables, indexes and functions —
+  // not columns — and `scan_jobs.attempts` is the point of this migration. The
+  // index is what makes it checkable: an index ON the column cannot exist
+  // unless the column does. Verifying only the function would not do it, since
+  // a plpgsql body does not resolve its column references until it runs.
+  "012_scan_job_attempts.sql": [
+    { kind: "index", name: "scan_jobs_attempts_idx" },
+    { kind: "function", name: "claim_scan_job_attempt" },
+  ],
 };
 
 /**

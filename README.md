@@ -156,6 +156,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `009_scan_rate_limit` | `scan_rate_limits` + the atomic `increment_scan_rate_limit()` behind the free-scan per-IP cap |
 | `010_probe_tasks` | `probe_tasks` — the probe fleet's queue — and `claim_probe_tasks()`, the `FOR UPDATE SKIP LOCKED` claim two workers cannot both win |
 | `011_scan_runs` | `scan_runs` — one row per execution, fleet or web worker — and `open_scan_run()` / `heartbeat_scan_run()` / `close_scan_run()`, so a measured-zero pass and a never-ran pass leave different evidence |
+| `012_scan_job_attempts` | `scan_jobs.attempts` and `claim_scan_job_attempt()` — a job resumed three times without finishing becomes terminal with `max_attempts:` in `error_message`, instead of being re-dispatched by the cron sweep forever |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.
