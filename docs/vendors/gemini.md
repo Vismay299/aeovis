@@ -6,8 +6,9 @@
 > `@google/generative-ai` SDK (`^0.24.1`, `package.json:20`; the installed
 > build identifies itself on the wire as `x-goog-api-client: genai-js/0.24.1`).
 
-**Date:** 2026-09-03 · **Task:** R6.3.2, revising R6.3.1 · **Verified at:**
-`18fa380`, re-asserted at `ef9909b` and `86c1f07`
+**Date:** 2026-09-04 · **Task:** R6.3.2, revising R6.3.1 · **Verified at:**
+`b35e387`, having been asserted at `18fa380`, `ef9909b` and `86c1f07` in the
+previous revision
 
 > **How to tell whether this file has gone stale**, without needing to trust the
 > commit above. Every line citation here points into one of **ten** tracked
@@ -21,10 +22,15 @@
 >   src/components/dashboard/OpportunitiesPanel.jsx
 > ```
 >
+> That command names **eleven** paths for ten cited files on purpose: it also
+> covers `src/lib/geminiAbort.test.mjs`, which this file makes claims about
+> (its test count, and what it pins) without citing a line in it.
+>
 > Empty output means every line number below is still the one that was read.
 > Non-empty means **re-derive before trusting this file** — that is the whole
 > lesson of the drift described in
 > [the README](./README.md#the-r656-drift-and-the-guard-that-was-not-built).
+> It was empty when checked at `b35e387`.
 >
 > The one set of citations that command does **not** cover is
 > `node_modules/@google/generative-ai/dist/index.mjs`, which git does not track:
@@ -32,20 +38,32 @@
 > in `node_modules`) and must be re-derived on any version bump.
 > `package.json:20` is the tripwire for that one.
 >
-> HEAD moved twice while this revision was being written; all 43 line citations
-> were re-asserted against the committed blob at each of the three commits, and
-> zero failed at any of them. Every executed measurement below was produced
-> against `src/lib/gemini.js` as of `ee5504e`, which is byte-identical at all
-> three.
+> All 61 named `file:line` citations below were resolved against the committed
+> blob at `b35e387`, and zero failed. That is 61 *occurrences* over 46 distinct
+> targets — the missing-key block is cited three times. There are a further 32
+> bare `` `:N` ``-style citations that take their file from the surrounding
+> prose. The previous revision reported 43 where the same count over its own
+> text was 44; both numbers here were produced by a script rather than by hand,
+> and occurrences and targets are stated separately because they are two
+> different numbers and the earlier revision named neither. Every executed
+> measurement below was produced against `src/lib/gemini.js` as of `ee5504e`,
+> which is byte-identical at every commit since.
 
 > **What changed in this revision.** R6.3.1's quirk 3 said the SDK never
 > receives the abort signal. **That was fixed in `ee5504e` (R6.5.6)** and this
 > file asserted it as current for one commit. Quirk 3 below is rewritten as
-> fixed, and every `gemini.js` line number in this file moved and was
-> re-derived. See
+> fixed, and thirteen `gemini.js` line numbers moved and were re-derived — the
+> list is in the closing note, and it is a list rather than a rule. See
 > ["The R6.5.6 drift"](./README.md#the-r656-drift-and-the-guard-that-was-not-built)
 > in this directory's README for why no test caught it and what was decided
 > about that.
+>
+> **The revision after that** — this one — corrected a claim about
+> `finishReason` that was composed from two true citations into a false
+> conclusion, and reachable only by executing the client rather than reading it.
+> The correction is
+> ["We do not read `finishReason`"](#we-do-not-read-finishreason-the-sdk-does-and-it-throws)
+> and the fourth condition added to quirk 2.
 
 ## Where it actually runs — and where it does not
 
@@ -125,8 +143,9 @@ to `0.1`, which an explicit `options.temperature` then overrides
 
 ## Response shape
 
-The client never touches the raw JSON. It reads three things off the SDK's
-response object (`gemini.js:65-81`):
+The client never touches the raw JSON. It reads **two** things off the SDK's
+response object (`gemini.js:65-81`). The third row of the table is not a third
+read — it is what the client does **not** read:
 
 | Read | Source on the wire |
 |---|---|
@@ -134,8 +153,72 @@ response object (`gemini.js:65-81`):
 | `response.usageMetadata.promptTokenCount` / `.candidatesTokenCount` / `.totalTokenCount` | `usageMetadata` (`gemini.js:69-73`) |
 | — | everything else, including `finishReason` and `safetyRatings`, is **not read** |
 
-A response blocked by a safety filter, or truncated by `finishReason: "MAX_TOKENS"`,
-therefore arrives as ordinary short text with no marker.
+### We do not read `finishReason`. The SDK does, and it throws.
+
+**`response.text()` is not a field accessor. It is a helper the SDK installs,
+and on three finish reasons it throws.** An earlier revision of this file
+reasoned from a true premise — `gemini.js:65-81` genuinely never mentions
+`finishReason` or `safetyRatings`, and the table above is correct — to the
+conclusion that *"a response blocked by a safety filter, or truncated by
+`finishReason: "MAX_TOKENS"`, therefore arrives as ordinary short text with no
+marker."* The premise resolves; the inference does not, because the read
+happens one layer down, in code this repo did not write. It was caught by
+executing the client, not by re-checking either citation.
+
+In `@google/generative-ai@0.24.1` the list has exactly three entries
+(`node_modules/@google/generative-ai/dist/index.mjs:585-589`, copied verbatim):
+
+```js
+const badFinishReasons = [
+    FinishReason.RECITATION,
+    FinishReason.SAFETY,
+    FinishReason.LANGUAGE,
+];
+```
+
+`addHelpers` installs `response.text()` at `index.mjs:476-493`; it tests that
+list against the first candidate and throws `GoogleGenerativeAIResponseError`
+**before** it would return any text (`index.mjs:484-486`), and throws a
+different message when there are no candidates but a `promptFeedback`
+(`index.mjs:489-491`). `gemini.js:81` calls `text()` *inside* the `try`, so the
+throw lands in the inner `catch` at `gemini.js:82-84`, which swallows it and
+advances the ladder.
+
+Re-derived by executing the shipped client against a stubbed `fetch`, in the
+**most generous** case — a blocked candidate that still carries
+`parts[0].text: "the answer"`, with `usageMetadata` present:
+
+| Stubbed `finishReason` | `retries` | fetches | returned | `lastErr` printed by `gemini.js:106` |
+|---|---|---|---|---|
+| `SAFETY` | `0` | **5** | `{"text":"","model_used":""}` | `Error: [GoogleGenerativeAI Error]: Candidate was blocked due to SAFETY` |
+| `SAFETY` | `2` (the default) | **15** | `{"text":"","model_used":""}` | the same, after ~3 s of backoff |
+| `RECITATION` | `0` | 5 | `{"text":"","model_used":""}` | `…: Candidate was blocked due to RECITATION` |
+| `LANGUAGE` | `0` | 5 | `{"text":"","model_used":""}` | `…: Candidate was blocked due to LANGUAGE` |
+| `MAX_TOKENS` | `0` | **1** | `{"text":"the answer","model_used":"gemini-2.5-flash-lite","tokens":46,"cost":0.000011099999999999999}` | — |
+| `PROHIBITED_CONTENT`, `SPII`, `BLOCKLIST`, `OTHER`, `MALFORMED_FUNCTION_CALL`, `FINISH_REASON_UNSPECIFIED`, `STOP` | `0` | 1 each | byte-identical to the `MAX_TOKENS` row | — |
+
+The two halves of the old sentence have opposite answers:
+
+- **`MAX_TOKENS` is the true half.** Truncated output arrives as ordinary short
+  text, on the first rung, and nothing marks it. So does **every finish reason
+  absent from the SDK's three-entry list.** `0.24.1`'s own `FinishReason` enum
+  (`index.mjs:157-181`) declares **eleven** values, of which the SDK treats
+  only three as blocks; the six neither-block-nor-`STOP`-nor-`MAX_TOKENS`
+  values — `PROHIBITED_CONTENT`, `SPII`, `BLOCKLIST`,
+  `MALFORMED_FUNCTION_CALL`, `OTHER`, `FINISH_REASON_UNSPECIFIED` — were each
+  stubbed and each returned text on the first rung. Whatever Google means by
+  them, this client cannot tell them apart from a clean answer, and neither
+  does the SDK.
+- **The safety half is false.** A `SAFETY`, `RECITATION` or `LANGUAGE` block
+  does not arrive as text at all. It burns every rung — **15** upstream
+  requests and ~3 s at the default `retries = 2` — and then returns the same
+  `{ text: "", model_used: "" }` that a missing credential returns.
+
+A **prompt-level** block reaches the same place by the other branch: with
+`promptFeedback.blockReason` set and no candidates, `text()` throws at
+`index.mjs:489-491`. Executed at `retries = 0`: 5 fetches,
+`{"text":"","model_used":""}`, and `lastErr`
+`Error: [GoogleGenerativeAI Error]: Text not available. Response was blocked due to SAFETY`.
 
 What the caller gets:
 
@@ -206,11 +289,32 @@ if (!apiKey) {
 It does not throw. Verified by execution with the variable deleted: the call
 resolves to `{"text":"","model_used":""}` and writes one line to stderr.
 
-**A caller cannot distinguish this from a genuine empty answer.** Nor from total
-vendor failure: `gemini.js:106-107` returns the *identical* object after all five
-models fail on all three attempts. Three different conditions — no credential,
-vendor outage, model said nothing — collapse into one indistinguishable value.
-This is the exact class of silent degradation the rebuild exists to close.
+**Three conditions return this exact object**, because `gemini.js:106-107`
+returns one identical to `:7` after all five models fail on all three attempts:
+
+1. **No credential** — the block above, `gemini.js:4-8`.
+2. **Total vendor failure** — every rung threw, `gemini.js:106-107`.
+3. **A `SAFETY`, `RECITATION` or `LANGUAGE` block on every rung** — the fourth
+   condition this file used to deny. It arrives here rather than as text
+   because `response.text()` throws, the inner `catch` at `gemini.js:82-84`
+   swallows the throw, and the ladder runs out. See
+   ["We do not read `finishReason`"](#we-do-not-read-finishreason-the-sdk-does-and-it-throws)
+   above for the transcript. From the caller's side it is indistinguishable
+   from condition 2, and it costs the same 15 upstream requests.
+
+**A genuinely empty answer is the one that is *not* identical — and the
+discriminator is thrown away.** A model finishing with `STOP` and an empty
+`parts` array returns from `gemini.js:81`, not `:106-107`, so it always carries
+four keys with `model_used` set: measured
+`{"text":"","model_used":"gemini-2.5-flash-lite","tokens":46,"cost":0.000011099999999999999}`
+with `usageMetadata` present, and
+`{"text":"","model_used":"gemini-2.5-flash-lite","tokens":0,"cost":0}` without
+it. A non-empty `model_used` is the only signal in the return value that
+separates "the model answered, with nothing" from the three failures above —
+and **the one live caller discards it**, since `route.js:27` destructures
+`text` alone. On the shipped path all four conditions do collapse into one
+indistinguishable value. This is the exact class of silent degradation the
+rebuild exists to close.
 
 The contrast with the utility LLM client is deliberate and instructive:
 `src/lib/openrouter.js` throws `LlmUnavailableError` for a missing key and for
@@ -258,7 +362,8 @@ Re-derived at `18fa380` by executing the shipped module against a stubbed
 | the SDK's fetch init carries a signal | init keys are `["body","headers","method","signal"]`, and `init.signal instanceof AbortSignal` is `true` |
 | the second argument is flat, and carries only the signal | its own keys are exactly `["signal"]`; `arg.requestOptions` is `undefined`; `arg.timeout` is `undefined` |
 | aborting cancels rather than abandons | on every rung the stub's `abort` listener fired exactly once and the stubbed request rejected with `AbortError` |
-| what the caller sees on timeout now | `GoogleGenerativeAIAbortError: [GoogleGenerativeAI Error]: Request aborted when fetching …` — **not** the old `Error: Gemini timeout` |
+| what the caller sees on timeout now | an error whose `constructor.name` is `GoogleGenerativeAIAbortError` — **not** the old `Error: Gemini timeout` |
+| …but not under that name in any log | the SDK sets no `name` on its error classes (`index.mjs:246-248` is the only `super()` that rewrites the message, and nothing assigns `this.name`), so `e.name` is plain `"Error"`. `gemini.js:106` interpolates the error, and the line it actually prints is `[scan] all models failed after 0 retries: Error: [GoogleGenerativeAI Error]: Request aborted when fetching https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent: This operation was aborted`. **Grepping logs for `GoogleGenerativeAIAbortError` finds nothing**; test for it with `instanceof` or `constructor.name` |
 | nothing outlives the call | `retries = 2` → 15 requests, **15 torn down, 0 still live** |
 | the timers go too | after a 5-rung failure against a `fetch` that rejects instantly, the delta in `process.getActiveResourcesInfo()` `Timeout` entries is **0** |
 
@@ -337,14 +442,19 @@ literal `JSON.stringify` capture; the value above is the transcript.
 
 ---
 
-*All 43 `file:line` citations above were checked against the **committed blob**
-— `git show HEAD:<file>`, not the working tree, which concurrent tasks had
-dirty throughout — first at `18fa380` and again at `ef9909b` after HEAD moved.
-Zero failed at either commit. Every
-`src/lib/gemini.js` citation in R6.3.1 below the ladder had drifted when the
-R6.5.6 fix added 30 lines, and was re-derived rather than nudged — thirteen of
-them: `:40`, `:44`, `:44-46`, `:46`, `:48-51`, `:53`, `:54-70`, `:62`,
-`:64-67`, `:70`, `:71-74`, `:78-82`, `:85-86`.*
+*All 61 named `file:line` citations above were checked against the **committed
+blob** — `git show HEAD:<file>`, not the working tree, which concurrent tasks
+had dirty throughout — at `18fa380`, `ef9909b` and `86c1f07` in the previous
+revision and again at `b35e387` in this one. Zero failed at any of the four.
+Thirteen
+`src/lib/gemini.js` citations in R6.3.1 had drifted when the R6.5.6 fix added
+30 lines, and each was re-derived rather than nudged: `:40`, `:44`, `:44-46`,
+`:46`, `:48-51`, `:53`, `:54-70`, `:62`, `:64-67`, `:70`, `:71-74`, `:78-82`,
+`:85-86`. **That is the list, not a rule.** An earlier revision generalised it
+to "every `gemini.js` citation below the ladder section", which is false in
+both directions: `:4-8` and `:12-18` sit below that heading and did not move,
+while `:40`, `:54-70`, `:70`, `:78-82` and `:85-86` appear above it and did.
+Drift follows the edit, not the section.*
 
 *Four files are cited by greppable anchor rather than by line, for the reason
 given in [the note in `README.md`](./README.md#a-note-on-citing-check-secretsmjs):
@@ -358,8 +468,15 @@ body, the ladder order, the request counts at `retries = 0` and `retries = 2`,
 the missing-key return and its key set, the all-fail return, the cost
 arithmetic, the presence of `signal` on the fetch init, the abort teardown of
 all 15 rungs, the zero-pending-timer measurement, the
-`GoogleGenerativeAIAbortError` class name, the SDK's uncleared `setTimeout`, and
-the pre-fix `{ requestOptions }` reproduction were each produced by executing
-the shipped module (or the SDK directly) against a stubbed `fetch` — not
-transcribed from vendor documentation, and not copied from the task brief. No
-live `GEMINI_API_KEY` was used and no network call was made.*
+`GoogleGenerativeAIAbortError` class name **and the fact that it never appears
+in a rendered string**, the SDK's uncleared `setTimeout`, the pre-fix
+`{ requestOptions }` reproduction, and every row of the `finishReason` table —
+**all eleven** values of `0.24.1`'s `FinishReason` enum were stubbed, one at a
+time, as were the prompt-level block and the four-key shape of a genuinely
+empty answer — were produced by executing the shipped module (or
+the SDK directly) against a stubbed `fetch`, not transcribed from vendor
+documentation and not copied from the task brief. No live `GEMINI_API_KEY` was
+used and no network call was made. The `badFinishReasons` list was read out of
+the installed `node_modules` build, not from Google's documentation, which is
+the only way to see that it is three entries where the API's own `FinishReason`
+enum has eleven.*
