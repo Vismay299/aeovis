@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**52 / 175 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**60 / 175 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -53,7 +53,7 @@ Baseline commit: `5111219`
 
 - [x] **R0.2.1** Create docs/BUILD_JOURNAL.md seeded with the 37 findings — closed at `docs/BUILD_JOURNAL.md:123`, `docs/BUILD_JOURNAL.md:124`, `docs/BUILD_JOURNAL.md:127`, `src/lib/scoring/enginePipeline.js:510`, `src/lib/scoring/enginePipeline.js:450`, `src/lib/scoring/enginePipeline.js:98`, `src/lib/workers/scanWorker.js:472`, `src/lib/workers/scanWorker.js:436`, `src/lib/db.js:11`, `src/lib/db.js:298`, `src/lib/db.js:62`, `src/app/api/scan/route.js:62`, `src/app/api/scan/worker/route.js:60`, `src/lib/buildJournal.test.mjs:62`
 - [x] **R0.2.2** Tracker rule in force; status headers on all plans — closed at `docs/plans/2026-08-29-rebuild-roadmap.md:25`, `docs/plans/README.md:36`, `DESIGN.md:4`, `src/lib/docStatus.test.mjs:32`
-- [ ] **R0.2.3** Supersede the SerpAPI ADR with a dated Bright Data ADR
+- [~] **R0.2.3** Supersede the SerpAPI ADR with a dated Bright Data ADR — submitted `docs/decisions/2026-08-29-serp-provider-bright-data.md:182`, `.env.example:75`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:411`, `docs/decisions/serp-provider.md:31`, `docs/decisions/serp-provider.md:42`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:454`, `docs/decisions/serp-provider.md:29`, `docs/decisions/serp-provider.md:33`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:566`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:12`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:646`
 - [x] **R0.2.4** Correct the false evidence claims in the Bright Data ADR — closed at `docs/decisions/2026-08-29-serp-provider-bright-data.md:79`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:96`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:113`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:131`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:153`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:183`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:208`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:306`, `docs/decisions/2026-08-29-serp-provider-bright-data.md:384`, `src/lib/engines/adapter.js:3`, `src/lib/engines/openai.js:8`, `src/lib/scoring/probe.js:1`, `src/lib/scoring/probe.js:70`, `src/lib/engines/types.js:32`, `src/lib/engines/types.test.mjs:90`, `src/lib/engines/serp.js:157`, `src/lib/engines/serp.js:335`, `src/lib/scoring/promptGen.js:127`, `src/lib/workers/scanWorker.js:1088`, `src/lib/scoring/enginePipeline.js:488`, `src/lib/scoring/enginePipeline.js:52`, `src/lib/scoring/enginePipeline.js:62`, `src/lib/scoring/aioPipeline.js:171`
 ### R0.3
 
@@ -67,13 +67,13 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `5/33`
+## R1 — Real-surface probe fleet  `6/33`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
 ### R1.1
 
-- [ ] **R1.1.1** Probe Result Contract v2
+- [~] **R1.1.1** Probe Result Contract v2 — submitted `docs/contracts/probe-result.md:179`, `docs/contracts/probe-result.md:250`, `docs/contracts/probe-result.md:346`, `docs/contracts/probe-result.md:370`, `docs/contracts/probe-result.md:389`, `docs/contracts/probe-result.md:429`, `docs/contracts/probe-result.md:609`, `docs/contracts/probe-result.md:662`, `worker/src/lib/probe.js:15`, `worker/src/lib/probe.js:26`, `supabase/migrations/010_probe_tasks.sql:57`, `supabase/migrations/011_scan_runs.sql:110`, `src/lib/scoring/enginePipeline.js:78`, `src/lib/scoring/enginePipeline.js:90`, `src/lib/scoring/enginePipeline.js:176`, `src/lib/scoring/enginePipeline.js:188`, `src/lib/scoring/enginePipeline.js:234`, `src/lib/scoring/enginePipeline.js:243`, `src/lib/scoring/enginePipeline.js:331`, `src/lib/scoring/enginePipeline.js:386`, `src/lib/scoring/enginePipeline.js:393`, `src/lib/scoring/enginePipeline.js:427`, `src/lib/scoring/enginePipeline.js:466`, `src/lib/scoring/enginePipeline.js:735`, `src/lib/workers/scanWorker.js:189`, `src/lib/workers/scanWorker.js:228`, `src/lib/workers/scanWorker.js:987`, `src/lib/workers/scanWorker.js:1039`, `src/lib/engines/perplexity.js:67`, `src/lib/engines/perplexity.js:121`, `src/lib/engines/perplexity.js:174`, `src/lib/engines/gemini.js:15`, `src/lib/engines/serp.js:162`, `src/lib/engines/serpGeo.js:25`, `src/lib/engines/deployedEngines.js:21`
 - [ ] **R1.1.2** ADR + 2-day spike: browser infrastructure `needs-secrets` `needs-decision`
 - [ ] **R1.1.3** ADR: worker host `needs-decision`
 - [ ] **R1.1.4** Engine surface matrix
@@ -88,7 +88,7 @@ Baseline commit: `5111219`
 - [ ] **R1.2.6** Fleet config validated at boot
 - [x] **R1.2.7** The Bright Data zone cache never invalidates — closed at `src/lib/engines/brightdata.js:81`, `src/lib/engines/brightdata.js:91`, `src/lib/engines/brightdata.js:116`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:291`, `src/lib/engines/brightdata.js:313`, `src/lib/engines/brightdata.js:398`, `src/lib/engines/brightdata.js:478`, `src/lib/engines/brightdataZone.test.mjs:101`, `src/lib/engines/brightdataZone.test.mjs:167`, `src/lib/engines/brightdataZone.test.mjs:249`
 - [ ] **R1.2.8** The six-way race tests pass with SKIP LOCKED removed
-- [~] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced — submitted `docs/vendors/brightdata.md:113`, `docs/vendors/brightdata.md:150`, `docs/vendors/brightdata.md:217`, `docs/vendors/brightdata.md:253`, `docs/vendors/brightdata.md:314`, `src/lib/engines/serp.js:5`, `src/lib/engines/serp.js:14`, `src/lib/engines/serp.js:286`, `src/lib/engines/serp.js:325`, `src/lib/engines/serp.js:352-354`, `src/lib/scoring/promptGen.js:129`, `src/lib/scoring/promptGen.js:212`, `src/lib/scoring/promptGen.js:222-224`, `src/lib/scoring/promptGen.js:266-268`, `src/lib/scoring/aioPipeline.js:99`, `src/lib/scoring/enginePipeline.js:101`, `src/lib/engines/brightdata.js:69`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:192`, `src/lib/checkSecretsBrightdataNoZone.test.mjs:21`, `src/lib/engines/brightdataZone.test.mjs:206`, `src/app/api/scan/route.js:62`, `src/app/api/scan/worker/route.js:138`
+- [x] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced — closed at `docs/vendors/brightdata.md:113`, `docs/vendors/brightdata.md:150`, `docs/vendors/brightdata.md:217`, `docs/vendors/brightdata.md:253`, `docs/vendors/brightdata.md:314`, `src/lib/engines/serp.js:5`, `src/lib/engines/serp.js:14`, `src/lib/engines/serp.js:286`, `src/lib/engines/serp.js:325`, `src/lib/engines/serp.js:352-354`, `src/lib/scoring/promptGen.js:129`, `src/lib/scoring/promptGen.js:212`, `src/lib/scoring/promptGen.js:222-224`, `src/lib/scoring/promptGen.js:266-268`, `src/lib/scoring/aioPipeline.js:99`, `src/lib/scoring/enginePipeline.js:101`, `src/lib/engines/brightdata.js:69`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:192`, `src/lib/checkSecretsBrightdataNoZone.test.mjs:21`, `src/lib/engines/brightdataZone.test.mjs:206`, `src/app/api/scan/route.js:62`, `src/app/api/scan/worker/route.js:138`
 - [ ] **R1.2.10** The Bright Data 200-envelope zone rejection has no test
 ### R1.3
 
@@ -119,7 +119,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `11/37`
+## R2 — Scoring truth  `12/37`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -179,9 +179,9 @@ Baseline commit: `5111219`
 - [ ] **R2.10.2** Probe counter backed by a real count query
 - [ ] **R2.10.4** ENGINE_REGISTRY says aio is always configured
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
-- [~] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — submitted `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
+- [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 
-## R3 — Durable backend  `2/31`
+## R3 — Durable backend  `7/31`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -189,12 +189,12 @@ Baseline commit: `5111219`
 
 - [ ] **R3.1.1** Scan worker cron every 10 minutes `needs-vercel`
 - [ ] **R3.1.2** Add the missing ?batch=1 cron entry `needs-vercel` `needs-llm`
-- [~] **R3.1.3** The scan worker route reports processed:1 for a request that failed — submitted `src/app/api/scan/worker/route.js:79`, `src/app/api/scan/worker/route.js:104`, `src/app/api/scan/worker/route.js:138`, `src/app/api/scan/worker/route.js:160`, `src/app/api/scan/worker/route.js:187`, `src/app/api/scan/worker/route.js:249`, `src/lib/scanWorkerRoute.route.test.mjs:101`, `src/lib/scanWorkerRoute.route.test.mjs:119`, `src/lib/scanWorkerRoute.route.test.mjs:203`
+- [x] **R3.1.3** The scan worker route reports processed:1 for a request that failed — closed at `src/app/api/scan/worker/route.js:79`, `src/app/api/scan/worker/route.js:104`, `src/app/api/scan/worker/route.js:138`, `src/app/api/scan/worker/route.js:160`, `src/app/api/scan/worker/route.js:187`, `src/app/api/scan/worker/route.js:249`, `src/lib/scanWorkerRoute.route.test.mjs:101`, `src/lib/scanWorkerRoute.route.test.mjs:119`, `src/lib/scanWorkerRoute.route.test.mjs:203`
 - [ ] **R3.1.4** The content worker sweep counts dispatched as done, and an in-memory scan leaves no ledger row
 ### R3.2
 
 - [x] **R3.2.1** One scan_runs row per chunk execution — closed at `src/lib/workers/scanWorker.js:1540`, `src/lib/workers/scanWorker.js:1555`, `src/lib/workers/scanWorker.js:321`, `src/lib/workers/scanWorker.js:854`, `src/lib/workers/scanWorker.js:203`, `src/lib/workers/scanWorker.js:270`, `src/lib/workers/scanChunkLedger.test.mjs:327`, `src/lib/workers/scanChunkLedgerLive.test.mjs:176`
-- [~] **R3.2.2** Every discarded skip reason becomes a ledger row — submitted `src/lib/workers/scanWorker.js:1891`, `src/lib/workers/scanWorker.js:1951`, `src/lib/workers/scanWorker.js:948`, `src/lib/workers/scanWorker.js:1008`, `src/lib/workers/scanWorker.js:228`, `src/lib/workers/scanWorker.js:432`, `src/lib/workers/scanChunkLedger.test.mjs:936`, `src/lib/scanRuns.js:28`
+- [x] **R3.2.2** Every discarded skip reason becomes a ledger row — closed at `src/lib/scoring/enginePipeline.js:829`, `src/lib/scoring/enginePipeline.js:834`, `src/lib/scoring/enginePipeline.js:846`, `src/lib/scoring/enginePipeline.js:796`, `src/lib/workers/scanWorker.js:283`, `src/lib/workers/scanWorker.js:211`, `src/lib/workers/scanWorker.js:1142`, `src/lib/workers/scanWorker.js:2230`, `src/lib/workers/scanChunkLedger.test.mjs:1409`, `src/lib/workers/scanChunkLedger.test.mjs:1493`, `src/lib/workers/scanChunkLedger.test.mjs:1940`, `src/lib/workers/scanChunkLedger.test.mjs:1089`, `src/lib/scoring/enginePipeline.test.mjs:241`
 - [ ] **R3.2.3** Status route and dashboard read run history
 - [~] **R3.2.4** A live test wrote to production because only its reads were stubbed — submitted `src/lib/liveWriteGuard.js:303`, `src/lib/liveWriteGuard.js:353`, `src/lib/liveWriteGuard.js:448`, `src/lib/liveWriteGuard.js:72`, `src/lib/liveWriteGuard.js:81`, `src/lib/liveWriteGuard.js:193`, `src/lib/liveWriteGuard.js:240`, `src/lib/liveWriteGuard.test.mjs:61`, `src/lib/liveDbGate.js:21`, `src/lib/scanRunsLive.test.mjs:98`, `src/lib/probeTasksRace.test.mjs:110`, `src/lib/workers/scanChunkLedgerLive.test.mjs:66`
 - [ ] **R3.2.5** A frozen engine that stops resolving silently shrinks the headline
@@ -202,7 +202,7 @@ Baseline commit: `5111219`
 - [ ] **R3.2.7** The live write guard cannot force its own adoption
 ### R3.3
 
-- [ ] **R3.3.1** attempts column with a cap of 3
+- [~] **R3.3.1** attempts column with a cap of 3 — submitted `supabase/migrations/012_scan_job_attempts.sql:81`, `src/lib/workers/scanWorker.js:1940`, `src/lib/workers/scanJobAttempts.test.mjs:279`
 - [ ] **R3.3.2** Sweep reaps heartbeat-stale runs
 - [ ] **R3.3.3** Content cost accumulates across rescues
 ### R3.4
@@ -218,17 +218,17 @@ Baseline commit: `5111219`
 - [ ] **R3.5.3** Stage transitions warn-to-throw after a quiet telemetry week `needs-soak`
 ### R3.6
 
-- [ ] **R3.6.1** Price table that fails loud on an unknown model id
+- [~] **R3.6.1** Price table that fails loud on an unknown model id — submitted `docs/vendors/mimo.md:47`, `docs/vendors/mimo.md:54`, `docs/vendors/mimo.md:68`, `docs/vendors/mimo.md:84`, `docs/vendors/mimo.md:99`, `docs/vendors/mimo.md:107`, `docs/vendors/mimo.md:172`, `src/lib/llmPricing.js:244`, `src/lib/llmPricing.js:267`, `src/lib/llmPricing.js:355`, `src/lib/openrouter.js:111`, `src/lib/openrouter.test.mjs:504`, `src/lib/llmPricing.test.mjs:221`
 - [ ] **R3.6.2** Per-scan and per-day spend caps enforced from the ledger
 - [ ] **R3.6.3** Weekly report metered per brand per day
 - [ ] **R3.6.4** The Bright Data per-query price is hardcoded in three places
 ### R3.7
 
 - [x] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability — closed at `src/lib/ssrfGuard.js:366`, `src/lib/ssrfGuard.js:482`, `src/lib/ssrfGuard.js:552`, `src/lib/firecrawl.js:45`, `src/lib/firecrawl.js:115`, `src/lib/ssrfGuard.test.mjs:1`, `src/lib/firecrawl.test.mjs:1`
-- [ ] **R3.7.2** Firecrawl degrade becomes a recorded state
-- [~] **R3.7.4** Apply the SSRF guard to the crawlability route — submitted `src/app/api/brands/[brand]/crawlability/route.js:243`, `src/app/api/brands/[brand]/crawlability/route.js:105`, `src/app/api/brands/[brand]/crawlability/route.js:312`, `src/app/api/brands/[brand]/crawlability/route.js:376`, `src/app/api/brands/[brand]/crawlability/route.js:412`, `src/app/api/brands/[brand]/crawlability/route.js:131`, `src/app/api/brands/[brand]/crawlability/route.js:345`, `src/app/api/brands/[brand]/crawlability/route.js:76`, `src/app/api/knowledge/route.js:114`, `src/app/api/knowledge/route.js:71`, `src/lib/scoring/promptGen.js:176`, `src/lib/crawlabilitySsrf.route.test.mjs:112`, `src/lib/crawlabilitySsrf.route.test.mjs:293`, `src/lib/crawlabilitySsrf.route.test.mjs:487`, `src/lib/ssrfRefusalSurfacing.test.mjs:60`, `src/lib/ssrfRefusalSurfacing.test.mjs:140`
-- [ ] **R3.7.5** Seven IPv6 ranges classifyAddress still allows
-- [ ] **R3.7.6** promptGen leaks an uncleared 10-second timer per seed term
+- [~] **R3.7.2** Firecrawl degrade becomes a recorded state — submitted `src/lib/workers/scanWorker.js:216`, `src/lib/workers/scanWorker.js:1112`, `src/lib/workers/scanWorker.js:1216`, `src/lib/workers/scanWorker.js:1390`, `src/lib/workers/scanChunkLedger.test.mjs:1982`, `src/lib/workers/scanChunkLedger.test.mjs:2073`, `src/lib/workers/scanChunkLedger.test.mjs:2155`, `src/lib/scoring/promptGen.js:255`, `src/lib/workers/scanChunk.test.mjs:496`, `docs/vendors/firecrawl.md:65`, `docs/vendors/firecrawl.md:96`
+- [x] **R3.7.4** Apply the SSRF guard to the crawlability route — closed at `src/app/api/brands/[brand]/crawlability/route.js:243`, `src/app/api/brands/[brand]/crawlability/route.js:105`, `src/app/api/brands/[brand]/crawlability/route.js:312`, `src/app/api/brands/[brand]/crawlability/route.js:376`, `src/app/api/brands/[brand]/crawlability/route.js:412`, `src/app/api/brands/[brand]/crawlability/route.js:131`, `src/app/api/brands/[brand]/crawlability/route.js:345`, `src/app/api/brands/[brand]/crawlability/route.js:76`, `src/app/api/knowledge/route.js:114`, `src/app/api/knowledge/route.js:71`, `src/lib/scoring/promptGen.js:176`, `src/lib/crawlabilitySsrf.route.test.mjs:112`, `src/lib/crawlabilitySsrf.route.test.mjs:293`, `src/lib/crawlabilitySsrf.route.test.mjs:487`, `src/lib/ssrfRefusalSurfacing.test.mjs:60`, `src/lib/ssrfRefusalSurfacing.test.mjs:140`
+- [x] **R3.7.5** Seven IPv6 ranges classifyAddress still allows — closed at `src/lib/ssrfGuard.js:335`, `src/lib/ssrfGuard.js:358`, `src/lib/ssrfGuard.js:385`, `src/lib/ssrfGuard.js:412`, `src/lib/ssrfGuard.test.mjs:108`, `src/lib/ssrfGuard.test.mjs:201`, `src/lib/ssrfGuard.test.mjs:270`
+- [x] **R3.7.6** promptGen leaks an uncleared 10-second timer per seed term — closed at `src/lib/scoring/promptGen.js:346`, `src/lib/scoring/promptGen.js:318`, `src/lib/scoring/promptGen.js:342`, `src/lib/scoring/promptGen.js:355`, `src/lib/scoring/promptGen.js:25`, `src/lib/scoring/promptGenSeedTimer.test.mjs:195`, `src/lib/scoring/promptGenSeedTimer.test.mjs:108`, `src/lib/scoring/promptGenSeedTimer.test.mjs:137`
 - [ ] **R3.7.7** The crawlability UI shows a refused rival as unreachable
 
 ## R4 — Ground truth & analytics completion  `0/6`
@@ -277,7 +277,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `11/26`
+## R6 — Apparatus & guards  `12/26`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -297,7 +297,7 @@ Baseline commit: `5111219`
 ### R6.3
 
 - [x] **R6.3.1** Vendor contract docs — closed at `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
-- [~] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current — submitted `src/lib/workers/scanWorker.js:1506`
+- [x] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current — closed at `src/lib/workers/scanWorker.js:1506`
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker
