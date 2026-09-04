@@ -218,6 +218,71 @@ test("resolveCost - an unpriced id throws, and there is no branch that returns 0
   }
 });
 
+test("resolveCost - a priced model with UNREPORTED tokens throws instead of pricing 0 x rate", () => {
+  // The sibling of the usage.cost bug, one field over: `Number(promptTokens ??
+  // usage?.prompt_tokens ?? 0) || 0` made every one of these look identical to
+  // the measured zero above. Each case is a gateway that told us nothing.
+  const unmeasured = [
+    undefined,
+    {},
+    { total_tokens: 40 }, // a total with no breakdown is not a breakdown
+    { prompt_tokens: null, completion_tokens: null },
+    { prompt_tokens: "", completion_tokens: "" },
+    { prompt_tokens: "abc", completion_tokens: {} },
+    { prompt_tokens: NaN, completion_tokens: -1 },
+  ];
+  for (const usage of unmeasured) {
+    resetUnpricedAlerts();
+    const caught = silenced(() => {
+      try {
+        return resolveCost({
+          model: "anthropic/claude-sonnet-4.5",
+          provider: "mimo",
+          usage,
+          env: NO_ENV,
+        });
+      } catch (e) {
+        return e;
+      }
+    });
+    assert.ok(isUnpricedModel(caught), `usage=${JSON.stringify(usage)} must refuse, got ${JSON.stringify(caught)}`);
+    assert.equal(caught.reason, "unmeasured_tokens", `usage=${JSON.stringify(usage)}`);
+    assert.match(caught.message, /reported no token counts/);
+  }
+});
+
+test("resolveCost - a reported count on either side is still a measurement", () => {
+  // Strictly one side missing must NOT throw: the half we were given is real,
+  // and refusing it would turn a partial meter into an outage.
+  const inOnly = resolveCost({
+    model: "anthropic/claude-sonnet-4.5",
+    provider: "mimo",
+    usage: { prompt_tokens: 1000000 },
+    env: NO_ENV,
+  });
+  assert.deepEqual(inOnly, { cost: 3, cost_source: "price_table" });
+
+  // Numeric strings count as reported — some gateways stringify usage.
+  const stringy = resolveCost({
+    model: "anthropic/claude-sonnet-4.5",
+    provider: "mimo",
+    usage: { prompt_tokens: "0", completion_tokens: "1000000" },
+    env: NO_ENV,
+  });
+  assert.deepEqual(stringy, { cost: 15, cost_source: "price_table" });
+
+  // A gateway-echoed cost still wins outright, tokens or no tokens.
+  assert.deepEqual(
+    resolveCost({ model: "anthropic/claude-sonnet-4.5", provider: "openrouter", usage: { cost: 0 }, env: NO_ENV }),
+    { cost: 0, cost_source: "gateway" }
+  );
+  // As does a :free suffix — an unmetered free call is not an unpriced one.
+  assert.deepEqual(resolveCost({ model: "a:free", provider: "mimo", usage: undefined, env: NO_ENV }), {
+    cost: 0,
+    cost_source: "free_tier",
+  });
+});
+
 test("resolveCost - OpenRouter's missing echo is named as such in the message", () => {
   resetUnpricedAlerts();
   const caught = silenced(() => {

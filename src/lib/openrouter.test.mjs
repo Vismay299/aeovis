@@ -182,7 +182,16 @@ async function captureRequest(envVars, options = {}) {
   globalThis.fetch = async (u, init) => {
     url = u;
     captured = JSON.parse(init.body);
-    return Response.json({ choices: [{ message: { content: "ok" } }], usage: { total_tokens: 1 } });
+    // A realistic OpenAI-compatible usage block, with the prompt/completion
+    // breakdown. `{ total_tokens: 1 }` alone is NOT a breakdown — input and
+    // output bill at different rates, so splitting a bare total would be a
+    // guess — and R3.6.1 makes a priced model with no reported breakdown a
+    // loud refusal, which would fail these request-SHAPE tests for the wrong
+    // reason. The refusal has its own tests below.
+    return Response.json({
+      choices: [{ message: { content: "ok" } }],
+      usage: { prompt_tokens: 1, completion_tokens: 0, total_tokens: 1 },
+    });
   };
   try {
     await withEnvs({ ...KEYED, ...envVars }, () => generateContent("hello", options, 0));
@@ -465,7 +474,7 @@ test("pricing - OpenRouter promising cost and not delivering it throws, never $0
   assert.equal(res.calls, 1, "a pricing refusal is not retried");
 });
 
-test("pricing - zero and absent usage on a PRICED model are measured zeros, not unknowns", async () => {
+test("pricing - a REPORTED zero on a priced model is a measured zero, not an unknown", async () => {
   // The distinction this whole task rests on. A model we can price that
   // consumed nothing costs 0 — and must resolve, with a named source, rather
   // than be mistaken for a model nothing can price.
@@ -478,12 +487,44 @@ test("pricing - zero and absent usage on a PRICED model are measured zeros, not 
   assert.equal(zero.out.cost, 0);
   assert.equal(zero.out.cost_source, "price_table");
 
-  const absent = await priced(MIMO, { choices: [{ message: { content: "ok" } }] }, {
+  // One side reported is still a measurement: 1M prompt tokens x $3, and a
+  // completion side the gateway explicitly called 0.
+  const half = await priced(MIMO, OK({ prompt_tokens: 1000000, completion_tokens: 0 }), {
     model: "anthropic/claude-sonnet-4.5",
   });
-  assert.equal(isUnpricedModel(absent.out), false, `absent usage must not throw, got ${absent.out}`);
-  assert.equal(absent.out.cost, 0);
-  assert.equal(absent.out.cost_source, "price_table");
+  assert.equal(isUnpricedModel(half.out), false, `a reported 0 must not throw, got ${half.out}`);
+  assert.equal(half.out.cost, 3);
+  assert.equal(half.out.cost_source, "price_table");
+});
+
+test("pricing - a priced model whose gateway reported NO tokens throws, never a $0", async () => {
+  // The verifier's real input: LLM_MODEL=anthropic/claude-sonnet-4.5 on MiMo,
+  // a 1250-char draft, and no `usage` block at all. This used to resolve to
+  // {cost: 0, cost_source: "price_table"} and accumulate a fabricated zero
+  // into stats.cost. "Consumed nothing" and "measured nothing" are different
+  // facts, so the second one is refused (standing rule 1).
+  resetUnpricedAlerts();
+  const realError = console.error;
+  console.error = () => {};
+  const stats = { tokens: 0, cost: 0 };
+  let absent;
+  try {
+    absent = await priced(MIMO, { choices: [{ message: { content: "x".repeat(1250) } }] }, {
+      model: "anthropic/claude-sonnet-4.5",
+      stats,
+    });
+  } finally {
+    console.error = realError;
+  }
+  assert.ok(isUnpricedModel(absent.out), `expected UnpricedModelError, got ${absent.out}`);
+  assert.equal(absent.out.reason, "unmeasured_tokens", "distinct from an unpriced id");
+  assert.equal(absent.out.model, "anthropic/claude-sonnet-4.5");
+  assert.equal(absent.out.provider, "mimo");
+  // The request DID go out — this one is only knowable after the completion,
+  // unlike an unpriced id, which never leaves the process.
+  assert.equal(absent.calls, 1, "not retried, and not relabelled exhausted_retries");
+  assert.equal(stats.cost, 0, "no fabricated cost was accumulated");
+  assert.equal(stats.tokens, 0, "and no fabricated token count either");
 });
 
 test("pricing - a ':free' id resolves as free_tier, distinguishably from a priced zero", async () => {

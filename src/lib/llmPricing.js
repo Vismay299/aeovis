@@ -36,6 +36,12 @@
  * `UnpricedModelError` — and throws BEFORE the request is sent whenever that
  * is knowable (see `assertModelPriceable`), so an unpriced deployment fails on
  * its first call instead of halfway through a scan it already paid for.
+ *
+ * `price_table` additionally requires the gateway to have REPORTED token
+ * counts. A priced model that genuinely consumed nothing is a measured $0; a
+ * gateway that returned no `usage` block measured nothing at all, and the two
+ * must not render as the same number (standing rule 1). The second throws
+ * `UnpricedModelError` with reason `unmeasured_tokens`.
  */
 
 /** USD-per-million-token rates, keyed by exact model id. */
@@ -73,7 +79,7 @@ export const MODEL_PRICES_ENV = "LLM_MODEL_PRICES";
 export class UnpricedModelError extends Error {
   /**
    * @param {string} message
-   * @param {{reason?: "unpriced_model"|"gateway_reported_no_cost"|"malformed_declaration",
+   * @param {{reason?: "unpriced_model"|"unmeasured_tokens"|"malformed_declaration",
    *          model?: string, provider?: string, cause?: unknown}} [meta]
    */
   constructor(message, meta = {}) {
@@ -204,13 +210,18 @@ export function resetUnpricedAlerts() {
  * but a caller that retries must not turn one misconfiguration into a log
  * flood that buries it.
  */
-function alertUnpriced(model, provider, env) {
+function alertUnpriced(
+  model,
+  provider,
+  env,
+  remedy = `Declare a rate in ${MODEL_PRICES_ENV}, or use a ":free" model id.`
+) {
   const key = `${provider}::${model}`;
   if (alerted.has(key)) return;
   alerted.add(key);
   console.error(
     `[llm-price] UNPRICED MODEL "${model}" on gateway "${provider}" — refusing to record $0 for ` +
-      `paid inference. Declare a rate in ${MODEL_PRICES_ENV}, or use a ":free" model id. ` +
+      `paid inference. ${remedy} ` +
       `Priced ids: ${priceableIds(env).join(", ") || "(none)"}.`
   );
 }
@@ -223,6 +234,47 @@ function throwUnpriced(model, provider, env, extra) {
       `LLM_MODEL at a ":free" id. Recording $0 for paid inference is not an option.`,
     { reason: "unpriced_model", model, provider }
   );
+}
+
+/**
+ * The rate is known but the meter is missing: a priced model whose completion
+ * came back with no usable token counts at all. `tokens x rate` has no tokens,
+ * so there is no cost to report — only a fabricated one.
+ */
+function throwUnmeasured(model, provider, env) {
+  const remedy =
+    `The gateway returned no usable token counts, so tokens x rate cannot be computed. ` +
+    `Use a ":free" id, or a gateway that returns a "usage" block.`;
+  alertUnpriced(model, provider, env, remedy);
+  throw new UnpricedModelError(
+    `Model "${model}" has a rate, but gateway "${provider}" reported no token counts for this ` +
+      `completion (no usable usage.prompt_tokens or usage.completion_tokens), so its cost cannot ` +
+      `be computed. ${remedy} Recording $0 for paid inference is not an option: a priced model ` +
+      `that consumed nothing and a gateway that measured nothing are different facts.`,
+    { reason: "unmeasured_tokens", model, provider }
+  );
+}
+
+/**
+ * A token count the gateway actually REPORTED, or null when it did not.
+ *
+ * Deliberately not `Number(x) || 0`: `undefined`, `null`, `""`, `"abc"` and
+ * `NaN` all coerce to a 0 indistinguishable from a real zero. That is the same
+ * trap as `Number(data?.usage?.cost) || 0`, one field over, and it is how a
+ * completion with no `usage` block at all came to be billed as a price-table
+ * $0. Numeric strings are accepted because some gateways stringify counts.
+ */
+function reportedTokens(...candidates) {
+  for (const candidate of candidates) {
+    if (typeof candidate === "number" && Number.isFinite(candidate) && candidate >= 0) {
+      return candidate;
+    }
+    if (typeof candidate === "string" && candidate.trim() !== "") {
+      const n = Number(candidate);
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+  }
+  return null;
 }
 
 /**
@@ -282,14 +334,28 @@ export function resolveCost({
   // 2. A free id costs nothing, by definition of the suffix.
   if (isFreeModelId(model)) return { cost: 0, cost_source: "free_tier" };
 
-  // 3. Tokens x rate. Zero or absent token counts give a real 0 from a real
-  //    rate — a priced model that used no tokens is measured, not unknown, and
-  //    must not be confused with an id nothing can price.
+  // 3. Tokens x rate — and only when the tokens were actually REPORTED.
+  //
+  //    This used to read `Number(promptTokens ?? usage?.prompt_tokens ?? 0)
+  //    || 0`, which is the coerce-then-default shape condemned above for
+  //    `usage.cost`, one field over. It made a completion with no `usage`
+  //    block at all — the shape MiMo returns on some paths — resolve to the
+  //    same `{cost: 0, cost_source: "price_table"}` as a genuine zero-token
+  //    call, and `stats.cost` then accumulated a fabricated zero for paid
+  //    inference. "This priced model consumed nothing" and "this gateway never
+  //    said what it consumed" are different facts (standing rule 1), so the
+  //    second one throws instead of being priced.
+  //
+  //    A reported 0 on either side is still a measurement and still prices; it
+  //    takes BOTH sides being unreported to be unmeasured, because OpenAI-
+  //    compatible gateways emit `prompt_tokens` and `completion_tokens`
+  //    together or not at all.
   const price = lookupModelPrice(model, env);
   if (price) {
-    const inTok = Number(promptTokens ?? usage?.prompt_tokens ?? 0) || 0;
-    const outTok = Number(completionTokens ?? usage?.completion_tokens ?? 0) || 0;
-    const cost = (inTok / 1e6) * price.input + (outTok / 1e6) * price.output;
+    const inTok = reportedTokens(promptTokens, usage?.prompt_tokens);
+    const outTok = reportedTokens(completionTokens, usage?.completion_tokens);
+    if (inTok === null && outTok === null) return throwUnmeasured(model, provider, env);
+    const cost = ((inTok ?? 0) / 1e6) * price.input + ((outTok ?? 0) / 1e6) * price.output;
     return { cost, cost_source: "price_table" };
   }
 

@@ -9,14 +9,14 @@ was taken; see *Context*.
 **Supersedes:** [`docs/decisions/serp-provider.md`](./serp-provider.md) (SerpAPI vs DataForSEO)
 **Status:** accepted, and already shipped — this ADR is being written *after* the
 fact, which is the reason it exists.
-**Revised:** 2026-09-05, task **R0.2.3**, third round. Every `file:line` below was
-re-derived at `8502166` via `git show HEAD:<file>` — not from the working tree,
-which several concurrent tasks had dirty. Four files are cited by greppable
-anchor instead of by line, per
-[the anchor rule](../vendors/README.md#a-note-on-citing-check-secretsmjs).
-The decision itself is unchanged and has not been in question in any round; the
-*evidence* has been wrong twice and stale once. See *[Correction
-log](#correction-log)*.
+**Revised:** 2026-09-05, task **R0.2.3**, fourth round. Every `file:line` below
+was re-derived at `25e7727` via `git show <ref>:<file>`, not from the working
+tree, and this revision **edits no file other than this one**, so nothing cited
+below moves underneath it — the check the third round skipped, and the reason
+its stamp was false. Four files are cited by greppable anchor rather than by
+line, per [the anchor rule](../vendors/README.md#a-note-on-citing-check-secretsmjs).
+The decision itself is unchanged and has never been in question; the *evidence*
+has been wrong twice and stale twice. See *[Correction log](#correction-log)*.
 
 ---
 
@@ -124,7 +124,7 @@ lifetime": that was true of the old code, it is false of what ships, and two
 documents that still said it were corrected under R1.2.9 — one of them the
 `check:secrets` operator string itself.
 
-Behavioural pins, all resolving at `8502166`, in
+Behavioural pins, all resolving at `25e7727`, in
 `src/lib/engines/brightdataZone.test.mjs`: `:66` (configured zone
 short-circuits), `:84` (fallback to the first active zone), `:101` (cached within
 the TTL, re-checked once it expires), `:167` (the TTL as a wall clock, not just
@@ -142,7 +142,7 @@ client does** — it calls `resolveBrightDataSerpZone` itself — and then asser
 because this file is on the anchor list: `no SERP zone could be resolved`,
 `does not exist on this account`, `not an active serp zone`, and a `PASS` naming
 the auto-discovered zone (grep `AUTO-DISCOVERED`). Each string was grepped at
-`8502166` and returns exactly one hit in `scripts/check-secrets.mjs`.
+`25e7727` and returns exactly one hit in `scripts/check-secrets.mjs`.
 
 The `PASS` line names the **variable** `BRIGHTDATA_ZONE_TTL_MS` rather than the
 resolved number, on purpose: `brightDataZoneTtlMs()` throws on a malformed value,
@@ -179,10 +179,10 @@ Both directions. An ADR that lists only benefits is not an ADR.
   state. Behaviour now depends on process age, which it did not with SerpAPI, and
   tests that touch zone resolution have to manage that state
   (`brightdataZone.test.mjs` does).
-- **Two undeclared environment variables.** `.env.example:64` lists
+- **Two undeclared environment variables.** `.env.example:75` lists
   `BRIGHTDATA_API_KEY` and nothing else; `README.md:93` documents
   `BRIGHTDATA_SERP_ZONE`; and **`BRIGHTDATA_ZONE_TTL_MS` appears in neither** —
-  at `8502166` it exists only in `scripts/check-secrets.mjs`,
+  at `25e7727` it exists only in `scripts/check-secrets.mjs`,
   `src/lib/engines/brightdata.js` and `src/lib/engines/brightdataZone.test.mjs`.
   An operator can change how long a dead zone is reused, using a variable no
   operator-facing surface names.
@@ -208,7 +208,7 @@ Both directions. An ADR that lists only benefits is not an ADR.
 - **The TTL constant is a correctness parameter, not a tuning knob.** It is the
   upper bound on how long a suspended zone keeps being used by a process that
   never calls the invalidator. Every process that runs today is such a process:
-  at `8502166` the exported `invalidateBrightDataZoneCache` has **no consumer
+  at `25e7727` the exported `invalidateBrightDataZoneCache` has **no consumer
   outside `brightdata.js` itself** — the only external call sites are in
   `src/lib/engines/brightdataZone.test.mjs` (`:206`, `:218`, `:223`, `:253`), and
   the two other files that name the symbol
@@ -246,14 +246,14 @@ the three entries in the correction log.
 - `src/lib/engines/serp.js:165-166` — `probeGoogleAiOverview` returns
   `probeGoogleAiOverviewBrightData(...)` as soon as the provider is `brightdata`.
   True of the function's contents; **not** the route a scan takes —
-  `probeGoogleAiOverview` has no non-test caller at `8502166` (§3b).
+  `probeGoogleAiOverview` has no non-test caller at `25e7727` (§3b).
 - `src/lib/engines/serp.js:324-327` — the People-Also-Ask path takes the Bright
   Data branch and `continue`s, never reaching `serpFetch`. This branch **is**
   live (§3a).
 - `src/lib/engines/types.js:47` — `getEnabledEngines()` enables
   `google_ai_overview` on `BRIGHTDATA_API_KEY` alone, with a comment at `:43-46`
   naming this ADR. It has **no caller at all** outside its own tests at
-  `8502166` (§3b); live engine selection is a different function reading a
+  `25e7727` (§3b); live engine selection is a different function reading a
   different variable, `resolveEnabledEngines()` on `ENGINES` in
   `enginePipeline.js`.
 
@@ -294,7 +294,7 @@ the three `serpFetch` call sites, one has a live caller and two do not.
   `promptGen` on the scan path (§3a). A `SERPAPI_KEY`-only deployment is charged
   for this one today.
 - **Dormant.** `serp.js:190` and `:225`, and the `$0.01` charges at `:213` and
-  `:231`, are inside `probeGoogleAiOverview` (`:158`), which at `8502166` has
+  `:231`, are inside `probeGoogleAiOverview` (`:158`), which at `25e7727` has
   **no non-test caller anywhere in the tree**. Its former caller,
   `src/lib/engines/adapter.js`, was deleted with `src/lib/scoring/probe.js` by
   R6.5.3 (commit `75e9ca5`); neither file exists at HEAD. Sweeping
@@ -341,7 +341,7 @@ records that the branch was left alone deliberately: an operator naming an engin
 is a different claim from a key being present.
 
 *Nothing consumes it.* `getEnabledEngines()` (`types.js:28`) has **zero** callers
-outside `src/lib/engines/types.test.mjs` at `8502166`. Its last non-test caller
+outside `src/lib/engines/types.test.mjs` at `25e7727`. Its last non-test caller
 was `src/lib/scoring/probe.js`, deleted by R6.5.3 at `75e9ca5`. Live engine
 selection is `resolveEnabledEngines()` in `enginePipeline.js`, reading `ENGINES`,
 which never consults `ENGINES_ENABLED`. **Setting `ENGINES_ENABLED` changes
@@ -369,7 +369,7 @@ sequencing warning the second round attached to R1.7.3 no longer applies.
   **spend path** in §2 is unchanged by it. Do not read "types.js is fixed" as
   "SerpAPI is gone".
 
-### 5. Where `SERPAPI_KEY` appears at `8502166`
+### 5. Where `SERPAPI_KEY` appears at `25e7727`
 
 `git grep -c SERPAPI_KEY HEAD -- src scripts worker supabase .env.example README.md`
 returns seven files, in four groups.
@@ -408,7 +408,7 @@ operator-facing surface while still being honoured by code.
 - **Cost per query, coverage rate, and latency against SerpAPI.** No comparison
   was ever run, and none is available in the repository. The superseded ADR's
   `$0.01/query` and `$0.15/scan` figures
-  ([`serp-provider.md:25`](./serp-provider.md), `:36`) describe SerpAPI and must
+  ([`serp-provider.md:31`](./serp-provider.md), `:42`) describe SerpAPI and must
   not be read across.
 - **The Bright Data per-query cost the product reports is an assumption, not a
   measurement.** `0.0015` is hard-coded twice — grep `result.cost = 0.0015`, one
@@ -451,7 +451,7 @@ previous revision:**
 | Option | Why not |
 |---|---|
 | **SerpAPI** | The prior choice. Demoted in *preference order*, not removed: `serp.js:14-15` still falls through to it when no Bright Data key is present, so it remains reachable and billable (§2). The reasons for the switch were not recorded at the time and are not reconstructible from the repository. State that plainly rather than invent a rationale. |
-| **DataForSEO** | Assessed in the superseded ADR and rejected there for task post-and-get complexity and weaker citation link maps ([`serp-provider.md:23`](./serp-provider.md), `:27`). Nothing has changed that assessment. |
+| **DataForSEO** | Assessed in the superseded ADR and rejected there for task post-and-get complexity and weaker citation link maps ([`serp-provider.md:29`](./serp-provider.md), `:33`). Nothing has changed that assessment. |
 | **Keep the bare-string zone cache** | Rejected under R1.2.7. Nearly free in a Vercel function that reloads every few minutes; unacceptable in a container that runs for days, where a zone suspended at 09:00 was still being sent to `/request` at 17:00. |
 | **Re-list zones before every probe** | Rejected: ~30 extra control-plane calls per scan, and a Bright Data API blip would then take out probes a cached name would have served. Probe-time rejection is what makes a five-minute TTL safe. |
 | **A grace window on a failed re-check** | Rejected explicitly in the source comment at `brightdata.js:161-167`: it would keep serving a stale name for as long as the control plane stayed unreachable, which is the fail-soft this design removes. |
@@ -563,11 +563,14 @@ with `ENGINES_ENABLED=google_ai_overview` set, in the default `hybrid` mode:
 
 and §3 was headed "Two distinct paths still reach that code at HEAD".
 
-> **Those four citations are quoted, not asserted.** `src/lib/scoring/probe.js`
-> and `src/lib/engines/adapter.js` were deleted by R6.5.3 at `75e9ca5` and do not
-> exist at `8502166`; the `probe.js` in the tree today is `worker/src/lib/probe.js`,
-> an unrelated 32-line stub. Nothing above this line should be resolved against
-> HEAD.
+**Editorial note, outside the quotation on purpose — the three `file:line`
+citations *inside* it are quoted, not asserted.** `src/lib/scoring/probe.js` and
+`src/lib/engines/adapter.js` were deleted by R6.5.3 at `75e9ca5` and do not exist
+at `25e7727`; the `probe.js` in the tree today is `worker/src/lib/probe.js`, an
+unrelated 31-line stub. So `probe.js:99-101`, `probe.js:30` and `adapter.js:24`
+**must not be resolved against HEAD** — and that exemption covers those three and
+nothing else. Every other `file:line` in this document, above and below, is meant
+to be resolved against HEAD and was.
 
 Every `file:line` in that chain was correct. The chain could not execute:
 `adapter.js` imported a name `openai.js` does not export, so both `adapter.js`
@@ -637,3 +640,59 @@ were corrected under R1.2.9. This revision adds *[What was actually
 built](#what-was-actually-built)* and a *[Consequences](#consequences)* section,
 because an ADR that records only the upside of a provider switch is a marketing
 page.
+
+---
+
+**2026-09-05, fourth round — task R0.2.3.** The third round claimed "58 distinct
+citations all resolve." That claim was false, and it was false by the exact
+mechanism the entry above congratulates itself for catching: **the line resolves,
+the content is wrong.** Five citations landed on the wrong text. An independent
+verifier opened 105 lookups, found 100 correct, and failed the document on the
+other five.
+
+*Four of the five were self-inflicted, and that is the lesson.* The third round
+stamped the header "re-derived at `8502166`" and, **in that same commit**, added
+the six-line `SUPERSEDED-BY` header to `docs/decisions/serp-provider.md` — a file
+this ADR cites four times. Every one of those four citations shifted by exactly
+six lines: `:23`→`:29`, `:25`→`:31`, `:27`→`:33`, `:36`→`:42`. Two of them are
+load-bearing. `:31` and `:42` are the *sole* evidence for the *[What is NOT
+verified](#what-is-not-verified)* claim that the superseded `$0.01/query` and
+`$0.15/scan` figures describe SerpAPI only; at the stale numbers they landed on a
+section heading and a blank line. This was not drift caused by someone else's
+commit. It was a failure to re-derive after the document's own edit.
+
+*The fifth was ordinary drift, and is recorded to keep the two apart.*
+`.env.example:64` was correct at `8502166` and was displaced to `:75` by sibling
+commit `a36edcd`. Nothing the author did caused it; only re-deriving at the
+landing commit catches it.
+
+**The rule this adds, stated so it can be executed.** A derivation stamp is a
+claim about a commit, so it must be re-derived *after the last edit in that
+commit* — including edits to files this document itself cites. The cheapest way
+to keep the claim true is to make the correcting commit touch no cited file, and
+this revision does that: it edits this file only. That property is checkable with
+`git show --stat` on the commit this revision lands in, and it should be checked
+rather than believed.
+
+*Also corrected, both found while fixing the paragraph they sit in.* The
+editorial note under the second-round quotation said "four citations" where the
+quotation contains three (`probe.js:99-101`, `probe.js:30`, `adapter.js:24`), and
+called `worker/src/lib/probe.js` a "32-line stub" where it is 31 lines. Its last
+sentence read "Nothing above this line should be resolved against HEAD," which is
+unbounded enough to exempt the entire document from its own evidence standard; it
+now names the three exempt citations and says everything else must resolve. It
+has also been moved out of the `>` block, because editorial commentary formatted
+as a quotation reads as part of the material being quoted.
+
+*Re-verified at `25e7727`, not merely re-pointed.* Every `file:line` in this
+document was opened and its content compared with what the document says of it.
+The greppable anchors were re-run and still return their claimed hit counts —
+`probe: probeAio` one hit, `brightDataSearch(query.text` two, `result.cost =
+0.0015` two, `deps.fetchPeopleAlsoAsk` one, `deps.sourceUnbrandedQueries` one —
+which matters here because `25e7727` changed both `enginePipeline.js` and
+`scanWorker.js`, the two files the third round moved to anchors for this reason.
+The count claims were re-run too: `SERPAPI_KEY` in seven files with none in
+`.env.example` or `README.md`, `BRIGHTDATA_ZONE_TTL_MS` in three,
+`getEnabledEngines()` with no caller outside its own tests, and
+`probeGoogleAiOverview` sweeping to `serp.js`, `serp.test.mjs` and
+`serpGeo.test.mjs` and nothing else.

@@ -108,9 +108,14 @@ export async function generateContent(prompt, options = {}, retries = 2) {
 
       const data = await res.json();
       const text = data?.choices?.[0]?.message?.content || "";
-      const promptTokens = data?.usage?.prompt_tokens || 0;
-      const completionTokens = data?.usage?.completion_tokens || 0;
-      const tokens = data?.usage?.total_tokens || promptTokens + completionTokens;
+      // Raw and uncoerced on purpose. `|| 0` here would destroy the only
+      // evidence resolveCost has that the gateway reported nothing at all,
+      // and a priced model with no usage block would price as $0 (R3.6.1).
+      const usage = data?.usage;
+      const promptTokens = usage?.prompt_tokens;
+      const completionTokens = usage?.completion_tokens;
+      const tokens =
+        Number(usage?.total_tokens) || (Number(promptTokens) || 0) + (Number(completionTokens) || 0);
       // Cost comes from exactly one named source — real spend echoed by the
       // gateway, the `:free` suffix, or the price table — and throws when none
       // of them applies. It used to be `Number(data?.usage?.cost) || 0`, which
@@ -119,7 +124,7 @@ export async function generateContent(prompt, options = {}, retries = 2) {
       const { cost, cost_source } = resolveCost({
         model,
         provider,
-        usage: data?.usage,
+        usage,
         promptTokens,
         completionTokens,
       });

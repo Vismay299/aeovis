@@ -44,14 +44,14 @@ gateway reads. The client has branched on this since the MiMo cutover and the
 branch is preserved verbatim: `max_completion_tokens` when the provider is
 `mimo`, `max_tokens` everywhere else.
 
-- `src/lib/openrouter.js:48-52` — the branch.
+- `src/lib/openrouter.js:56-60` — the branch.
 - `scripts/check-secrets.mjs`, the `llm` entry — grep `const cap =` — makes the
   same choice in the liveness probe, so a 1-token check does not report `FAIL`
   for a working deployment merely by spelling the cap the other way.
 
 **Symptom if this regresses:** the cap is rejected or silently ignored. A
 rejection surfaces as a gateway HTTP error, which `generateContent` turns into
-`LlmUnavailableError` (`src/lib/openrouter.js:134-137`) — an outage, correctly,
+`LlmUnavailableError` (`src/lib/openrouter.js:163-166`) — an outage, correctly,
 rather than an empty answer. Being ignored is the worse case: unbounded
 completions, and cost only OpenRouter would have reported.
 
@@ -65,7 +65,7 @@ the answer in `message.content`, and the trace is prose, so the JSON the caller
 asked for arrives wrapped in something no parser should have to guess at. The
 client sends `thinking: { type: "disabled" }` for MiMo only.
 
-- `src/lib/openrouter.js:62-67` — the branch and the reason.
+- `src/lib/openrouter.js:70-75` — the branch and the reason.
 
 **Symptom if this regresses:** `robustJsonParse` returns `null` far more often,
 `llmJson` exhausts its JSON retries and returns `null`, and prompt generation
@@ -81,8 +81,8 @@ Asked for "a JSON array of objects", MiMo routinely answers with one top-level
 every top-level object and returns them as an array when it finds more than
 one.
 
-- `src/lib/openrouter.js:169-190` — the JSON-Lines recovery.
-- `src/lib/openrouter.js:196-222` — `scanBalanced`, which respects quoted
+- `src/lib/openrouter.js:198-219` — the JSON-Lines recovery.
+- `src/lib/openrouter.js:225-251` — `scanBalanced`, which respects quoted
   strings and escapes so a `}` inside a string does not end the object early.
 
 This one is **provider-agnostic on purpose**: it runs for every gateway,
@@ -96,12 +96,15 @@ pipeline's per-item cost cap depends on that number being actual spend rather
 than an estimate. The request field is sent only when the provider is
 `openrouter` **and** the model is not `:free`.
 
-- `src/lib/openrouter.js:56-61` — the request side.
-- `src/lib/openrouter.js:119-125` — the response side, which now hands the
+- `src/lib/openrouter.js:64-69` — the request side.
+- `src/lib/openrouter.js:124-130` — the response side, which now hands the
   `usage` block to `resolveCost` rather than coercing a missing field to 0.
+  The token counts at `src/lib/openrouter.js:111-118` are passed **raw**, not
+  `|| 0`, so `resolveCost` can still tell "the gateway said 0" from "the
+  gateway said nothing".
 
 The `HTTP-Referer` / `X-Title` attribution headers are the same story:
-OpenRouter-only, `src/lib/openrouter.js:82`.
+OpenRouter-only, `src/lib/openrouter.js:90`.
 
 ---
 
@@ -141,6 +144,16 @@ Consequences that are already wired:
   (or any non-`:free` id) against `api.xiaomimimo.com` requires
   `LLM_MODEL_PRICES={"<model id>":{"input":n,"output":n}}` in USD per 1M
   tokens. Utility scoring is unaffected while `LLM_MODEL` stays a `:free` id.
+- **A declared rate still needs a `usage` block to multiply.** If MiMo answers a
+  paid completion with no `usage.prompt_tokens` / `usage.completion_tokens` at
+  all, `resolveCost` throws `UnpricedModelError` with reason
+  `unmeasured_tokens` rather than pricing it at `0 × rate`. A priced model that
+  consumed nothing and a gateway that measured nothing are different facts and
+  must not accumulate the same number into `stats.cost` (standing rule 1). A
+  *reported* `0` on either side is a measurement and still prices normally.
+  **If a live MiMo response turns out to omit `usage` routinely, this is the
+  line that will fail the content pipeline** — that is deliberate, and the fix
+  is a gateway that meters, not a fabricated zero.
 
 ## Switching gateway — the checklist
 
@@ -155,6 +168,14 @@ Consequences that are already wired:
    both are present the canonical one wins and the legacy one is dead weight.
 
 ---
+
+*Citation maintenance, 2026-09-05, R3.6.1: the pricing commit inserted lines
+into `openrouter.js` and displaced all seven `openrouter.js` citations in this
+file without repointing them. They were re-read against the current source and
+corrected: `:48-52`→`:56-60`, `:56-61`→`:64-69`, `:62-67`→`:70-75`, `:82`→`:90`,
+`:134-137`→`:163-166`, `:169-190`→`:198-219`, `:196-222`→`:225-251`. The
+`llmConfig.js` (`:53-70`, `:99`, `:100-103`) and `health.js` (`:1-13`) citations
+were re-read in the same pass and are correct.*
 
 *Citation maintenance, 2026-09-03, R6.3.1: the two `check-secrets.mjs`
 citations in this file had drifted onto unrelated code — `:104-106` had become
