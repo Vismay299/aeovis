@@ -6,7 +6,7 @@
 > parser fixtures in
 > [`src/lib/engines/brightdataParser.test.mjs`](../../src/lib/engines/brightdataParser.test.mjs).
 
-**Date:** 2026-09-03 · **Task:** R1.2.9 (the zone cache), R6.3.1 (the rest) · **Verified at:** `967bda6`
+**Date:** 2026-09-04 · **Task:** R1.2.9 (the zone cache), R6.3.1 (the rest) · **Verified at:** `bf332fe`
 **Applies to:** the Google AI Overview engine (`aio`) — the only paid engine on
 the live scan path.
 
@@ -110,6 +110,16 @@ guard: R1.2.7's implementer listed both this file and the `check:secrets` wordin
 in the ledger note on their own task, as work they were not allowed to do, which
 is why R1.2.9 exists at all.
 
+**This section was itself rejected once, on 2026-09-04, and corrected.** Every
+individual `file:line` in it resolved and landed on the code described; what was
+false was a claim *composed* from two true ones — that `aioPipeline.js:99` was
+"the other" importer of `brightDataSearch`, when there is a third and it is live.
+The correction is in
+["The three non-test importers"](#the-three-non-test-importers-of-brightdatasearch)
+below. It is left visible rather than quietly overwritten, because a section that
+bolds *"existence is not liveness in either direction"* and then under-counts the
+live consumers is the most useful worked example this file has.
+
 The citation is worth dwelling on, because it is the argument in
 ["The R6.5.6 drift"](./README.md#the-r656-drift-and-the-guard-that-was-not-built)
 made concrete rather than measured on a prototype. `:71-82` still **resolves** —
@@ -137,7 +147,17 @@ stated in the source at `brightdata.js:37-72`.
 - The default TTL is **five minutes** — `DEFAULT_BRIGHTDATA_ZONE_TTL_MS`
   (`brightdata.js:72`) — overridable with `BRIGHTDATA_ZONE_TTL_MS`
   (`brightDataZoneTtlMs`, `:91-103`).
-- **`0` means never cache.** A **malformed value throws** a `BrightDataZoneError`
+- **`0` means "re-check on every resolve"** — the source's own wording
+  (`brightdata.js:69-70`), and **not** the same as "never cache", which is what an
+  earlier revision of this line said after dropping the parenthetical. The entry
+  is still **written**: `brightdata.js:192` assigns `cachedZone` unconditionally,
+  and what `0` changes is only the freshness test at `:145`, which can then never
+  pass. Executed with `BRIGHTDATA_ZONE_TTL_MS=0` and a stubbed `fetch`:
+  `peekBrightDataZoneCache()` returns `{ name: "serp_api1", ageMs: 0 }`
+  immediately after a resolve, and two resolves make two `get_all_zones` calls.
+  The distinction matters to anyone reading `peek` for diagnostics — under TTL 0
+  a live entry is exactly what they will see.
+- A **malformed TTL throws** a `BrightDataZoneError`
   with `reason: "bad_ttl_config"` rather than falling back to the default,
   because a silent fallback would tell an operator who wrote `30s` that they had
   a 30-second re-check while a dead zone lived on for five minutes.
@@ -167,7 +187,7 @@ stated in the source at `brightdata.js:37-72`.
 
 ### Executed, not read
 
-Driven at `967bda6` against a stubbed `fetch`. **No live vendor call was made.**
+Driven against a stubbed `fetch`. **No live vendor call was made.**
 
 | Scenario | Result |
 |---|---|
@@ -182,7 +202,7 @@ Driven at `967bda6` against a stubbed `fetch`. **No live vendor call was made.**
 | TTL `40`, a real 60 ms wait, then `get_all_zones` returns HTTP 503 | throws `lookup_failed`; the entry **survives** at `ageMs 71`; the very next resolve re-lists immediately rather than buying another TTL |
 | a stale entry, then `resolveBrightDataSerpZone(null)` | entry invalidated, `null` returned |
 
-The suite's own pins, all of which resolve at `967bda6`:
+The suite's own pins, all of which resolve at `bf332fe`:
 `brightdataZone.test.mjs:101-165` (cached within the TTL, re-checked once it
 expires — the old assertions kept verbatim as the within-TTL half rather than
 deleted), `:167-196` (the TTL as a wall clock, not just the `0` special case),
@@ -194,11 +214,18 @@ text mentions a 5xx), `:334-378` (a rejected probe is an **error row**, never a
 
 ### Two things this does not yet prove
 
-1. **`invalidateBrightDataZoneCache()` has no production consumer.** Swept at
-   `967bda6` for the symbol across `src`, `scripts`, `worker` and `supabase`:
-   outside `brightdata.js` itself the only callers are
-   `src/lib/engines/brightdataZone.test.mjs` and
-   `src/lib/checkSecretsBrightdataNoZone.test.mjs` — both tests. The fleet that
+1. **`invalidateBrightDataZoneCache()` has no production consumer.** Swept for
+   the symbol across `src`, `scripts`, `worker` and `supabase`. Outside
+   `brightdata.js` itself it appears in three files, and **exactly one of them
+   calls it**: `src/lib/engines/brightdataZone.test.mjs` (`:206`, `:218`, `:223`,
+   `:253`), a test. The other two only *mention* it in prose —
+   `src/lib/checkSecretsBrightdataNoZone.test.mjs:21`, in the file comment
+   explaining why that file stays split from `checkSecretsBrightdata.test.mjs`,
+   and `scripts/check-secrets.mjs`, in the comment above the `PASS` string.
+   An earlier revision of this list counted the first of those as a caller:
+   grepping a symbol finds mentions, and **a mention is not a call site**. The
+   conclusion is unaffected and the correction narrows it — no production
+   consumer, and one test consumer rather than two. The fleet that
    would call it once per poll cycle is not built: `probeBatch` in
    `worker/src/lib/probe.js:28` still throws "no adapter is built yet (R1.3)",
    and `R1.3.1` through `R1.3.5` are all `todo`. **The TTL, not the invalidator,
@@ -216,28 +243,121 @@ text mentions a 5xx), `:334-378` (a rejected probe is an **error row**, never a
 fails any relative import that climbs out of `worker/` — and a sweep of
 `worker/src` for `brightdata` and `engines/` returns nothing.
 
-The live holder is the Next.js process. `POST /api/scan`
+The live holder is the Next.js process, and **two phases of a scan can touch this
+cache**: prompt sourcing (conditionally — see below), and then probing, on every
+scan. `POST /api/scan`
 (`src/app/api/scan/route.js:62`) and the daily cron `/api/scan/worker`
-(`vercel.json:4`, route at `src/app/api/scan/worker/route.js:60,94`) both call
-`runScanChunk`, which resolves engines through `enginePipeline.js` (grep
-`resolveEnabledEngines`), whose `aio` entry (grep `probe: probeAio`, which matches
-only that file) calls `brightDataSearch` (grep `brightDataSearch(query.text` — two
-hits, this one and `aioPipeline.js`'s dead probe path, below) and therefore
-`resolveBrightDataSerpZone`. `ENGINES` defaults to `"aio"` and that engine's
-`isConfigured` is `() => true`, so this is the default path, not an opt-in one.
+(`vercel.json:4`; that route is cited by anchor, grep `runScanChunk(directJobId)`
+and `[cron-worker] Error resuming job`, one hit each) both call `runScanChunk`.
 
-**`src/lib/scoring/aioPipeline.js:99` is the other importer of `brightDataSearch`,
-and it is dead.** Its only caller is `probeQueryOnce` (`:73`), whose only caller is
-`runAioScan` (`:171`), which nothing under `src`, `scripts` or `worker` calls. What
+#### The three non-test importers of `brightDataSearch`
+
+Swept across `src`, `scripts`, `worker` and `supabase` for files that **import**
+the symbol, not merely mention it. There are five importers besides
+`brightdata.js` itself; **three are non-test**, and the other two are
+`brightdataZone.test.mjs:6` and `serpGeo.test.mjs:5`.
+
+| Importer | Call site | Live? |
+|---|---|---|
+| `src/lib/scoring/enginePipeline.js:1` | in `probeAio` — grep `brightDataSearch(query.text` | **live** — the probing phase, every scan |
+| `src/lib/engines/serp.js:5` | `:325`, in `fetchPeopleAlsoAsk` | **live** — the sourcing phase, conditionally |
+| ” | `:286`, in `probeGoogleAiOverviewBrightData` | dead |
+| `src/lib/scoring/aioPipeline.js:1` | `:99`, in `probeQueryOnce` | dead |
+
+**Probing — live.** `runScanChunk` resolves engines through `enginePipeline.js`
+(grep `resolveEnabledEngines`), whose `aio` entry (grep `probe: probeAio`, one hit
+repo-wide) calls `brightDataSearch` (grep `brightDataSearch(query.text` — two
+hits, this one inside `probeAio` and `aioPipeline.js:99`'s dead path) and
+therefore `resolveBrightDataSerpZone`, via `getBrightDataConfig`
+(`brightdata.js:356` → `:209`). `ENGINES` defaults to `"aio"` and that engine's
+`isConfigured` is `() => true`, so this is the default path, not an opt-in one.
+(`enginePipeline.js` is cited by anchor, not by line: it moved during this
+revision.)
+
+**Sourcing — also live, and an earlier revision of this section missed it.** That
+revision called `aioPipeline.js:99` "*the other* importer of `brightDataSearch`".
+Both of its endpoints were individually true; the exhaustiveness gate in "the
+other" was false. The chain, with the volatile file cited by anchor:
+
+    api/scan/route.js:62 → runScanChunk → runSourcingPhase → sourceUnbrandedQueries
+      (all three in scanWorker.js — grep `deps.sourceUnbrandedQueries`,
+       `deps.generateUnbrandedPrompts`)
+      → generateUnbrandedPrompts → promptGen.js:129 `paaFn`
+      → serp.js:312 fetchPeopleAlsoAsk → :325 brightDataSearch
+      → getBrightDataConfig → resolveBrightDataSerpZone
+
+`serp.js:14` makes `brightdata` the SERP provider whenever `BRIGHTDATA_API_KEY` is
+set, with no `SERP_PROVIDER` needed — the same default-path argument made for
+`aio` just above.
+
+**But not on every scan.** A draft of this correction said "every scan"; that is
+also wrong. `sourceUnbrandedQueries` returns early when the stored prompt pool
+already meets the target (grep `if (existing.length >= target)`), so a repeat scan
+of a brand whose frozen set is full never reaches `paaFn` and never touches this
+cache. Sourcing touches it on the **first** scan for a brand key, and on any later
+scan whose pool is short of the target.
+
+**Within `serp.js`, one of the two call sites is dead.** `:286` sits in
+`probeGoogleAiOverviewBrightData`, which is reachable only from
+`probeGoogleAiOverview` (declared `:158`, dispatching at `:166`) — and
+`probeGoogleAiOverview` has **no non-test caller**: outside `serp.js` the only
+hits are `serp.test.mjs` and `serpGeo.test.mjs`. `:325` is the live one.
+
+**`aioPipeline.js:99` is dead**, as previously stated. Its only caller is
+`probeQueryOnce` (`:73`), whose only caller is `runAioScan` (declared `:171`,
+calling at `:177`), which nothing under `src`, `scripts` or `worker` calls. What
 is live in that module is its pure summarizers, `summarizeAioResults` and
-`aggregateAioTopDomains`. Existence is not liveness in either direction — Rule 2
-of [`README.md`](./README.md).
+`aggregateAioTopDomains`, imported by `scanWorker.js` (grep
+`from "../scoring/aioPipeline.js"`). Existence is not liveness in either
+direction — Rule 2 of [`README.md`](./README.md).
+
+#### The sourcing path swallows a `zone_rejected` — twice
+
+This is why the omission above mattered rather than being bookkeeping: **of the
+three importers, the one that was missed is the one that fail-softs.** Probing
+turns a rejected zone into a counted error row — `brightdataZone.test.mjs:334-378`
+holds it at `errored_queries: 1`, `error_rate_pct: 100`. Sourcing turns it into
+nothing.
+
+Executed against a stubbed `fetch`, with the zone refused by an HTTP 200 envelope.
+**No live vendor call was made.**
+
+| Driven | Result |
+|---|---|
+| `brightDataSearch` directly | throws `BrightDataZoneError`, `reason: "zone_rejected"`; cache dropped to `null` |
+| `fetchPeopleAlsoAsk` around it | **returns `[]` and does not throw**; 1 SERP call; cache still `null`; one `console.warn` is the only trace from `serp.js` |
+| `generateUnbrandedPrompts` around that | **no throw**; a full 30-prompt set; two `[serp] PAA fetch failed` warns |
+| same, but with the typed error reaching `promptGen` itself | **no throw, and no log line at all** |
+
+Two catches do this, and the outer one is the worse of them:
+
+- `serp.js:352-354` catches per seed term and logs `[serp] PAA fetch failed for
+  term "…"`. A typed `BrightDataZoneError` is not distinguished from a timeout.
+- `promptGen.js:222-224` is a **bare `catch {}`** — comment `// best-effort per
+  term` — around the `paaFn(term)` / `autoFn(term)` race at `:212`. It emits
+  nothing, which is why the last row above is silent. The `console.warn` at
+  `promptGen.js:266-268` belongs to the *conditional* realism-blend call at
+  `:264`, which runs only when the LLM came up short of `count` (`:259`). In both
+  runs above the LLM met the count, so that warn never fired.
+
+So a dead or suspended zone during sourcing degrades to "PAA found nothing". The
+prompt set is still produced — from the LLM alone, with its Google grounding
+silently missing — the scan reports success, and nothing in the scan record says
+the seeding was refused. The engine's own `[brightdata] SERP zone cache
+invalidated` line (`brightdata.js:120-122`) is the only evidence, and a log line
+is not a counted failure.
+
+**This is recorded, not fixed.** The fail-soft is pre-existing — it predates
+R1.2.7 and is not a consequence of the zone cache — and `serp.js` and
+`promptGen.js` are outside R1.2.9's file boundary. It is filed as its own task.
+What R1.2.9 owed here was an accurate enumeration, and the table above is the
+correction.
 
 ### What `check:secrets` now tells the operator
 
 `npm run check:secrets` used to end its Bright Data `PASS` line with "and will
-cache it for the process lifetime". Corrected under R1.2.9. Executed at `967bda6`
-with a stubbed `fetch` and a one-zone account, the line now reads:
+cache it for the process lifetime". Corrected under R1.2.9. Executed with a
+stubbed `fetch` and a one-zone account, the line now reads:
 
     1 active serp zone(s); no BRIGHTDATA_SERP_ZONE set, so probes AUTO-DISCOVERED "serp_api1" and will cache it for BRIGHTDATA_ZONE_TTL_MS (default 5 min) before re-checking it
 
@@ -251,28 +371,48 @@ omitted for this file on purpose; see
 
 ---
 
-*Revised 2026-09-03 under R1.2.9, over the R6.3.1 revision of the same date. Every
-`file:line` above was re-derived at `967bda6` from `git show HEAD:<file>` rather
-than from the working tree, which several concurrent tasks had dirty — Rule 4 of
-[`README.md`](./README.md). The behaviour in "Executed, not read" was produced by
-driving `resolveBrightDataSerpZone`, `brightDataZoneTtlMs` and `brightDataSearch`
+*Revised 2026-09-04 under R1.2.9 (second round), over its own 2026-09-03 revision
+and the R6.3.1 revision before that. Every `file:line` above was re-derived from
+`git show HEAD:<file>` rather than from the working tree, which several concurrent
+tasks had dirty — Rule 4 of [`README.md`](./README.md). The behaviour in "Executed,
+not read" and in the fail-soft table was produced by driving
+`resolveBrightDataSerpZone`, `brightDataZoneTtlMs`, `brightDataSearch`,
+`peekBrightDataZoneCache`, `fetchPeopleAlsoAsk` and `generateUnbrandedPrompts`
 against a stubbed `fetch`, and the `check:secrets` line by calling that vendor
 entry's own `check()` the same way. The scripts were throwaway and were not kept,
 for the reason given at the end of `README.md`.*
 
-*`scripts/check-secrets.mjs`, `src/lib/workers/scanWorker.js` and
-`src/lib/scoring/enginePipeline.js` are cited by name and greppable string rather
-than by line, because concurrent tasks are editing all three as this is written —
-see [the note in `README.md`](./README.md#a-note-on-citing-check-secretsmjs). Every
-other file cited here is pinned by line and was read at `967bda6`.*
+*`HEAD` moved twice during this revision (`d845e97` → `bf332fe`), which is why the
+stamp above is a commit and not a date alone. Between the first revision's
+`967bda6` and `bf332fe`, every file cited here **by line** is byte-identical
+except `src/lib/scoring/promptGen.js`, which is newly cited in this round and was
+read at `bf332fe`; the rest carry forward by blob identity, checked with
+`git rev-parse <commit>:<file>` rather than assumed.*
+
+*One citation did drift and is repaired here. The first revision cited the cron
+route at `src/app/api/scan/worker/route.js:60,94`; R3.1.3 rewrote that file, and
+at `bf332fe` those lines are a doc comment and an unrelated helper while the two
+`runScanChunk` calls have moved to `:138` and `:215`. The stale citation still
+**resolved** — the file is long enough that `:60` and `:94` both exist — it just
+no longer pointed at anything relevant, which is Rule 2's point exactly. The route
+is cited by anchor from here on.
+`scripts/check-secrets.mjs`, `src/lib/workers/scanWorker.js` (which moved again
+mid-revision), `src/lib/scoring/enginePipeline.js` and that cron route are all
+cited by name and greppable string rather than by line; each anchor was grepped at
+`bf332fe` and its hit count checked — see
+[the note in `README.md`](./README.md#a-note-on-citing-check-secretsmjs).*
 
 *[`README.md`](./README.md) cites this file at `brightdata.md:62`,
-`brightdata.md:63-64`, `brightdata.md:65`, `brightdata.md:97` and
-`brightdata.md:101`. All five still resolve, and were re-read after the last edit
-here. That was a constraint on this revision, not a coincidence: every correction
+`brightdata.md:63-64`, `brightdata.md:65`, `brightdata.md:91-95`, `brightdata.md:97`
+and `brightdata.md:101`. All still resolve, and were re-read after the last edit
+here. That was a constraint on both revisions, not a coincidence: every correction
 above line 72 was made **in place**, at identical line counts, the quirk list was
-rewritten at its original length, and every new section was appended after
-`brightdata.md:101`. The constraint was accepted deliberately — R1.2.9 may not
-edit `README.md`, and moving a citation it is not allowed to repair would be the
-same defect this revision exists to remove. **If a later task rewrites this file
-without that constraint, those five citations in `README.md` must move with it.***
+rewritten at its original length, and **every edit in this second round is below
+`brightdata.md:101`**, so none of those citations moved. The constraint was
+accepted deliberately — R1.2.9 may not edit `README.md`, and moving a citation it
+is not allowed to repair would be the same defect this revision exists to remove.
+**If a later task rewrites this file without that constraint, those citations in
+`README.md` must move with it.** (`README.md:32` lists `:91-95` while
+`README.md:523-525` records that same range as a wrong citation from an earlier
+revision. That inconsistency is inside `README.md` and is not R1.2.9's to fix; it
+is noted here so the next editor of `README.md` sees it.)*
