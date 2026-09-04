@@ -1,4 +1,5 @@
 import { scrapeForSummary } from "../firecrawl.js";
+import { isPolicyRefusal } from "../ssrfGuard.js";
 import { fetchPeopleAlsoAsk, fetchAutocomplete } from "../engines/serp.js";
 import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery } from "./aioQueryClassify.js";
@@ -160,8 +161,20 @@ export async function generateUnbrandedPrompts(
   let websiteSnippet = "";
   try {
     websiteSnippet = (await scrapeFn(website)) || "";
-  } catch {
-    // best-effort; prompt gen still works with an empty snippet
+  } catch (err) {
+    // R3.7.4 / rule 1: an SSRF POLICY refusal is not "the page had no content".
+    // This catch used to swallow it, so a scan whose website URL we refused to
+    // fetch went on to produce 30 prompts that merely LOOK thin — a silent skip
+    // dressed as a success, with one log line as the only trace. Rethrow: the
+    // scan fails loudly and the refusal reaches whoever submitted the URL.
+    //
+    // Everything else stays best-effort on purpose. scrapeForSummary already
+    // returns its no-content string for an unusable target (a typo, an
+    // NXDOMAIN) and for an unreachable site, so what reaches this catch is a
+    // genuine defect, and a brand's site being momentarily down is not a
+    // reason to refuse to generate prompts for it.
+    if (isPolicyRefusal(err)) throw err;
+    console.warn(`[promptGen] website scrape failed for "${website}":`, err?.message || err);
   }
 
   const industryPack = resolveIndustryPack(industry);
