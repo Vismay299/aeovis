@@ -315,6 +315,149 @@ function findCompetitorsCited(references, competitors) {
 }
 
 /**
+ * What a per-engine slice's score actually IS (R2.1.1, findings A1/S1).
+ *
+ * `share_of_ai_pct` used to be a number on every path: an engine that errored
+ * on every probe, an engine whose answers named no vendor at all, and an engine
+ * that was measured and genuinely never named the brand all reported 0. Three
+ * different facts, one indistinguishable number, and the dashboard drew the
+ * same 0% bar for all of them. Standing rule 1: a measured zero must look
+ * different from never-ran.
+ *
+ * So the number is now null in every state that is not a measurement, and this
+ * enum is what says which state that was. Four, not two, because the operator
+ * action differs in each case: re-run (failed), fix the prompt set
+ * (not_assessed), or do the actual GEO work (measured_zero).
+ *
+ *   measured      — a real number over a real eliciting pool. `share_of_ai_pct`
+ *                   is a number > 0.
+ *   measured_zero — a real number, and it is 0. The pool existed, the answers
+ *                   named vendors, none of them was us. `share_of_ai_pct` is 0.
+ *   not_assessed  — nothing to measure: no rows, no non-branded prompts, or no
+ *                   answer that named ANY vendor. There is no number.
+ *                   `share_of_ai_pct` is null. (A slice that answered NOTHING
+ *                   is `failed`, not this — see ENGINE_STATE_REASONS.)
+ *   failed        — the slice ran and is not trustworthy (the same condition as
+ *                   `data_source_issue`). Whatever ratio the surviving rows
+ *                   imply is a measurement of a broken read, so it is not
+ *                   reported. `share_of_ai_pct` is null.
+ *
+ * The strings `measured` / `not_assessed` are deliberately the same tokens
+ * SHARE_STATE already uses in src/components/perceev/charts/shareOfVoice.js, so
+ * a surface that renders one state chip vocabulary does not need two.
+ */
+export const ENGINE_MEASUREMENT_STATE = Object.freeze({
+  MEASURED: "measured",
+  MEASURED_ZERO: "measured_zero",
+  NOT_ASSESSED: "not_assessed",
+  FAILED: "failed",
+});
+
+/**
+ * WHY a slice is in the state it is in. Machine tokens, one per distinguishable
+ * cause, in the shape SCRAPE_REASON established: `state` says whether there is
+ * a number, `state_reason` says what to do about it.
+ *
+ * `measured` carries a null reason — nothing needs explaining. Every other
+ * state carries exactly one of these, never null.
+ */
+export const ENGINE_STATE_REASONS = Object.freeze({
+  /** No rows at all for this engine. It never ran. */
+  NO_RESULTS: "no_results",
+  /** Rows exist, but every one is a branded seed — nothing scoreable was probed. */
+  NO_NON_BRANDED_PROMPTS: "no_non_branded_prompts",
+  //
+  // There is deliberately NO "no_answers" reason. A slice with non-branded
+  // prompts and zero answers has coverage 0, which is below every engine
+  // class's minNonBrandedCoverage (0.15 aio / 0.9 text), so it is already
+  // `failed` / `low_coverage` — the truthier reading, because an engine that
+  // answered nothing broke rather than merely measured nothing. A reason no
+  // input can reach is a lie about the state space; the test file asserts that
+  // case lands on low_coverage so this stays true if a gate ever moves.
+  //
+  /**
+   * Answers came back and NONE of them named a single roster vendor, so the
+   * denominator is empty. This is a property of the prompt set, not the brand:
+   * scoring 0 here would blame a brand for questions that could never mention
+   * anybody. See the eliciting-pool comment above.
+   */
+  EMPTY_ELICITING_POOL: "empty_eliciting_pool",
+  /** `data_source_issue`, error-rate arm: the engine errored past its gate. */
+  HIGH_ERROR_RATE: "high_error_rate",
+  /** `data_source_issue`, coverage arm: too few non-branded prompts answered. */
+  LOW_COVERAGE: "low_coverage",
+  /** measured_zero: the pool named vendors on every count, and never us. */
+  BRAND_NOT_VISIBLE: "brand_not_visible",
+});
+
+/** The two states in which `share_of_ai_pct` is a number rather than null. */
+const MEASURED_STATES = new Set([
+  ENGINE_MEASUREMENT_STATE.MEASURED,
+  ENGINE_MEASUREMENT_STATE.MEASURED_ZERO,
+]);
+
+/**
+ * True when a per-engine summary carries a real measurement — i.e. its
+ * `share_of_ai_pct` may be read as a number. Exported so a consumer asks this
+ * question once rather than each re-deriving "is 0 real here".
+ *
+ * Slices written before R2.1.1 carry no `state` at all. They are treated as
+ * measured when the number is finite, which is what they meant: the pre-R2.1.1
+ * writer had no way to say anything else.
+ */
+export function isMeasuredEngineSlice(summary) {
+  if (!summary || typeof summary !== "object") return false;
+  if (summary.state == null) return Number.isFinite(summary.share_of_ai_pct);
+  return MEASURED_STATES.has(summary.state) && Number.isFinite(summary.share_of_ai_pct);
+}
+
+/**
+ * Which of the four states this slice is in, and why.
+ *
+ * ORDER MATTERS and it is not arbitrary. `failed` is tested first: a slice that
+ * errored past its gate may ALSO have an empty eliciting pool, and "the engine
+ * broke" is the cause the operator acts on — reporting it as "your prompts
+ * elicited nothing" would send them to rewrite a prompt set that was fine. The
+ * not_assessed reasons then run outermost-first (no rows, no prompts, no
+ * vendors named), so the reason names the FIRST thing that was missing rather
+ * than the last.
+ */
+function resolveEngineMeasurementState({
+  total,
+  nonBrandedCount,
+  elicitingCount,
+  visibleNonBranded,
+  dataSourceIssue,
+  errorRatePct,
+  gates,
+}) {
+  const { MEASURED, MEASURED_ZERO, NOT_ASSESSED, FAILED } = ENGINE_MEASUREMENT_STATE;
+
+  if (dataSourceIssue) {
+    return {
+      state: FAILED,
+      state_reason:
+        errorRatePct > gates.errorRateLimitPct
+          ? ENGINE_STATE_REASONS.HIGH_ERROR_RATE
+          : ENGINE_STATE_REASONS.LOW_COVERAGE,
+    };
+  }
+  if (total === 0) {
+    return { state: NOT_ASSESSED, state_reason: ENGINE_STATE_REASONS.NO_RESULTS };
+  }
+  if (nonBrandedCount === 0) {
+    return { state: NOT_ASSESSED, state_reason: ENGINE_STATE_REASONS.NO_NON_BRANDED_PROMPTS };
+  }
+  if (elicitingCount === 0) {
+    return { state: NOT_ASSESSED, state_reason: ENGINE_STATE_REASONS.EMPTY_ELICITING_POOL };
+  }
+  if (visibleNonBranded === 0) {
+    return { state: MEASURED_ZERO, state_reason: ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE };
+  }
+  return { state: MEASURED, state_reason: null };
+}
+
+/**
  * Engine-aware summary over a slice of results from one engine.
  * Mirrors summarizeAioResults logic exactly to keep denominators consistent.
  *
@@ -477,6 +620,22 @@ export function summarizeEngineSlice(results, engineName) {
       ? elicitingPool.length < AIO_MIN_NON_BRANDED_WITH_AIO
       : elicitingPool.length < 5;
 
+  // R2.1.1 — say which of the four states this slice is in, and stop reporting
+  // a number in the two states where there isn't one. visibilityPct is 0 by
+  // construction on an empty denominator (0/0 is guarded above), and that 0 was
+  // indistinguishable from a brand genuinely never named. See
+  // ENGINE_MEASUREMENT_STATE.
+  const { state, state_reason } = resolveEngineMeasurementState({
+    total,
+    nonBrandedCount: nonBranded.length,
+    elicitingCount: elicitingPool.length,
+    visibleNonBranded,
+    dataSourceIssue,
+    errorRatePct,
+    gates,
+  });
+  const reportedVisibilityPct = MEASURED_STATES.has(state) ? visibilityPct : null;
+
   return {
     engine: engineName,
     total_queries: total,
@@ -502,8 +661,13 @@ export function summarizeEngineSlice(results, engineName) {
     rank_not_cited_count,
     coverage_pct: coveragePct,
     error_rate_pct: errorRatePct,
-    share_of_ai_pct: visibilityPct,
-    visibility_pct: visibilityPct,
+    // Null in every non-measured state — NEVER 0 (standing rule 5). The pair
+    // below is what tells the reader which state that is; a surface renders the
+    // em dash plus the state chip, not `?? 0`.
+    share_of_ai_pct: reportedVisibilityPct,
+    visibility_pct: reportedVisibilityPct,
+    state,
+    state_reason,
     presence_rate_pct: presenceRatePct,
     data_source_issue: dataSourceIssue,
     insufficient_sample: insufficientSample,
@@ -537,7 +701,16 @@ export const HEADLINE_MIN_NON_BRANDED_ANSWERS = 5;
  */
 export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS) {
   const eligible = engineSummaries.filter(
-    (s) => !s.data_source_issue && s.non_branded_with_answer >= HEADLINE_MIN_NON_BRANDED_ANSWERS
+    (s) =>
+      !s.data_source_issue &&
+      s.non_branded_with_answer >= HEADLINE_MIN_NON_BRANDED_ANSWERS &&
+      // R2.1.1 — a slice with no measurement is not blended. Without this the
+      // null a not_assessed slice now reports would go through `null * weight`
+      // as 0 and drag the index down on behalf of an engine that measured
+      // nothing: the false zero this task exists to remove, re-entering one
+      // layer up. `data_source_issue` does not cover it — a slice can answer 30
+      // prompts cleanly and still elicit no vendor at all.
+      isMeasuredEngineSlice(s)
   );
   if (eligible.length === 0) {
     return { visibility_index_pct: null, engines_counted: 0 };
@@ -642,7 +815,14 @@ export function describeScanDataSourceIssue(engineSummaries, options = {}) {
   const counted = ran.filter(
     (slice) =>
       !slice.data_source_issue &&
-      Number(slice.non_branded_with_answer) >= HEADLINE_MIN_NON_BRANDED_ANSWERS
+      Number(slice.non_branded_with_answer) >= HEADLINE_MIN_NON_BRANDED_ANSWERS &&
+      // Kept in lockstep with computeHeadline's filter (R2.1.1). The docstring
+      // above promises this reproduces the headline's own eligibility test, so
+      // the "1 of 2 engines" in the banner is derived from the same rows as the
+      // index it explains. Omitting the measured check here would make the
+      // banner claim an engine the index did not blend, the instant a
+      // not_assessed slice appeared alongside a degraded one.
+      isMeasuredEngineSlice(slice)
   );
   const enginesCounted = counted.length;
   const countedEngines = counted.map((slice) => ({
@@ -1099,6 +1279,13 @@ export function summarizeEngineResults(scanOutput) {
       cited_non_branded: aioSummary.cited_non_branded || 0,
       aio_coverage_pct: aioSummary.coverage_pct || 0,
       error_rate_pct: aioSummary.error_rate_pct || 0,
+      // KNOWN GAP, deliberately left for its own task (R2.1.1 scope was the
+      // per-engine slices). These two are the legacy scan-level mirrors of the
+      // aio slice and they still launder a null back into 0, so a not_assessed
+      // aio slice writes scans.visibility_pct = 0 exactly as it did before.
+      // Behaviour is unchanged — that path never had a null to preserve — but
+      // it is the same false-zero class and needs the scan-level state field
+      // before the `|| 0` can go. Read `engines.aio.state` for the truth.
       visibility_pct: aioSummary.visibility_pct || 0,
       share_of_ai_pct: aioSummary.share_of_ai_pct || 0,
       presence_rate_pct: aioSummary.presence_rate_pct || 0,

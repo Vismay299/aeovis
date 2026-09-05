@@ -78,6 +78,15 @@
  *     is outside both mechanisms. `liveWriteGuard.test.mjs` asserts over the
  *     whole tree that every importer of the gate arms the guard; it cannot
  *     assert anything about a file that avoids the gate entirely.
+ *     A file that ASKS the gate used to be able to escape the same way, which
+ *     is not what this bullet said: until R3.2.10 both halves keyed on
+ *     `env === process.env`, so `liveDbGate({ ...process.env })` handed over a
+ *     copy, failed the identity check, opened the gate on an unguarded process
+ *     and wrote. That form is now flagged statically by the tree walk and
+ *     refused at runtime by comparing the gate-opening credentials by value —
+ *     but the runtime check knows only the three variables the gate opens on,
+ *     so a future credential must be added to `GATE_CREDENTIALS` in
+ *     `src/lib/liveDbGate.js` in the same commit as the gate rule that reads it.
  *   - `supabase.storage`, `supabase.functions.invoke`, and realtime. None of
  *     them is used by this codebase; if that changes, extend this file.
  *   - A `SELECT` that calls a writing SQL function this file has never heard of.

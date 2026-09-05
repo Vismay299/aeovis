@@ -485,6 +485,94 @@ test("THE DOCUMENTED COMMAND IS THE GUARDED ONE — liveDbGate cannot teach the 
   );
 });
 
+/**
+ * The static half of the rule "asking the gate about the real environment means
+ * arming the guard", applied to one file's source text.
+ *
+ * It used to be the single regex `/\bliveDbGate\s*\(\s*(?:process\.env\s*)?\)/`
+ * — an EMPTY argument or a literal `process.env`, and nothing else. R3.2.10:
+ * `liveDbGate({ ...process.env })` matched neither, so an offender that spread
+ * the real environment into the gate sat in the tree with this suite green
+ * while its write reached a real server. Any argument text that MENTIONS
+ * `process.env` is now flagged, however it is wrapped — spread, `Object.assign`,
+ * `structuredClone`, or one hand-picked key.
+ *
+ * A mention is not enough on its own, because the copy can be built on an
+ * earlier line — `const env = { ...process.env }; liveDbGate(env)` — and the
+ * call then names nothing. So the rule is inverted: the ONLY exempt argument is
+ * an object LITERAL that does not mention `process.env`. A bare call, a
+ * variable, a function call, a clone: all flagged. That is deliberately
+ * conservative, and a file that means it can inline the literal or (better) use
+ * `armedLiveDbGate`, which arms the guard and needs no exemption at all.
+ *
+ * What text cannot see at all: a literal built from real values by hand, e.g.
+ * `{ DATABASE_URL: url }` where `url` came from the environment three lines up.
+ * That is why this is not the last line of defence — `liveDbGate` compares the
+ * gate-opening credentials at runtime against the database they name (host and
+ * path, so a changed query string or user does not buy an exemption), and a
+ * copy that carries them is refused whatever its source text looks like. Text
+ * and value each catch what the other misses. What defeats both is a literal
+ * built from a variable that spells the same host differently; that is the
+ * documented residual, and `armedLiveDbGate` — which arms the guard first — is
+ * the reason no live file has to come near it.
+ *
+ * @param {string} src a file's source text
+ * @returns {string|null} the offending call, or null
+ */
+function gateCallOnRealEnv(src) {
+  for (const m of src.matchAll(/\bliveDbGate\s*\(([^)]*)/g)) {
+    const arg = m[1].trim();
+    const isOwnLiteral = arg.startsWith("{") && !/\bprocess\.env\b/.test(arg);
+    if (!isOwnLiteral) return `liveDbGate(${arg})`;
+  }
+  return null;
+}
+
+test("THE STATIC RULE CATCHES A COPY OF THE REAL ENVIRONMENT — planted offenders, not just live ones", () => {
+  // R3.2.10 was proven by planting a file that spread `process.env` into the
+  // gate and watching this suite stay 21/21 green while the write landed. The
+  // offenders are planted here as source text so the rule is exercised on every
+  // run, instead of once by the person who found it.
+  const OFFENDERS = [
+    "const GATE = liveDbGate();",
+    "const GATE = liveDbGate(process.env);",
+    "const GATE = liveDbGate({ ...process.env });",
+    "const GATE = liveDbGate({...process.env, DATABASE_URL: process.env.DATABASE_URL});",
+    "const GATE = liveDbGate(Object.assign({}, process.env));",
+    "const GATE = liveDbGate(structuredClone(process.env));",
+    "const GATE = liveDbGate({ DATABASE_URL: process.env.DATABASE_URL });",
+    // The two-step copy, which mentions nothing at the call site. Flagged
+    // because the only exempt argument is an object literal of your own values.
+    "const env = { ...process.env };\nconst GATE = liveDbGate(env);",
+    "const GATE = liveDbGate(env);",
+    "const GATE = liveDbGate(readEnv());",
+  ];
+  for (const offender of OFFENDERS) {
+    assert.ok(
+      gateCallOnRealEnv(offender),
+      `the rule must flag \`${offender}\` — it hands the gate the real credentials, and a live test that ` +
+        `forgets one stub then writes to production`
+    );
+  }
+
+  // …and the escape hatch survives: an env object of the caller's OWN values
+  // opens no database, and src/lib/probeQueue.test.mjs plus this file depend on
+  // being able to ask the question that way.
+  const EXEMPT = [
+    "assert.equal(liveDbGate({}).enabled, false);",
+    'liveDbGate({ DATABASE_URL: "postgres://x" });',
+    'liveDbGate({ SUPABASE_DB_PASSWORD: "p", NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co" });',
+  ];
+  for (const fine of EXEMPT) {
+    assert.equal(
+      gateCallOnRealEnv(fine),
+      null,
+      `the rule must not flag \`${fine}\`: it names no real credential, so it opens nothing`
+    );
+  }
+
+});
+
 test("META — every file that imports the live gate arms the write guard", async () => {
   // The analogue of the assertion at src/lib/scanRuns.test.mjs:658, which
   // enforces "a live test must use the SHARED gate". Nothing enforced "…and it
@@ -495,8 +583,10 @@ test("META — every file that imports the live gate arms the write guard", asyn
   // The rule: importing the gate module and asking it about the REAL
   // environment means you are about to run against a real database, and that
   // is only allowed through `armedLiveDbGate`, which installs the default-deny
-  // guard before it answers. Asking about an explicit env object (as the gate's
-  // own unit test does) is exempt, because it opens nothing.
+  // guard before it answers. Asking about an explicit env object of your own
+  // values (as the gate's own unit test does) is exempt, because it opens
+  // nothing — but a COPY of the real environment is not an explicit env object,
+  // it is the real one with a different identity, and it is flagged (R3.2.10).
   const { readFile, readdir } = await import("node:fs/promises");
   const path = await import("node:path");
   const { fileURLToPath } = await import("node:url");
@@ -539,8 +629,9 @@ test("META — every file that imports the live gate arms the write guard", asyn
   const armed = [];
   for (const { rel, src } of importers) {
     const usesArmedGate = /\barmedLiveDbGate\s*\(/.test(src);
-    // `liveDbGate()` / `liveDbGate(process.env)` — the real environment.
-    const asksTheRealEnv = /\bliveDbGate\s*\(\s*(?:process\.env\s*)?\)/.test(src);
+    // `liveDbGate()`, `liveDbGate(process.env)`, or any copy of it — see
+    // gateCallOnRealEnv above for why the copy forms count (R3.2.10).
+    const asksTheRealEnv = gateCallOnRealEnv(src);
 
     if (usesArmedGate) {
       if (!EXERCISES_THE_GATE_ITSELF.has(rel)) armed.push(rel);
@@ -548,7 +639,7 @@ test("META — every file that imports the live gate arms the write guard", asyn
     }
     assert.ok(
       !asksTheRealEnv,
-      `${rel} calls liveDbGate() on the real environment without arming the write guard. ` +
+      `${rel} calls ${asksTheRealEnv} on the real environment without arming the write guard. ` +
         `A live test that forgets one stub writes to production — use ` +
         `armedLiveDbGate({ label: "${rel}", allow: [...] }), which installs the default-deny guard ` +
         `before it tells you whether the gate is open.`
@@ -600,6 +691,84 @@ test("THE GATE REFUSES TO OPEN UNGUARDED — a live database with no guard armed
     `an unguarded process with DATABASE_URL set must refuse to report an open gate; got: ${out.trim()}`
   );
   assert.doesNotMatch(out, /OPENED-UNGUARDED/);
+});
+
+test("THE GATE REFUSES A COPY OF THE REAL ENVIRONMENT — the spread that defeated the identity check", async () => {
+  // R3.2.10. The check above was `env === process.env`, and the R3.2.4 verifier
+  // defeated it by writing `liveDbGate({ ...process.env })`: a copy fails the
+  // identity test, the gate opened on an unguarded process, and the write
+  // reached a real server, exit 0, green. Measured then, and re-measured before
+  // this fix: the bare/literal/alias forms threw, while spread, Object.assign,
+  // a two-step copy and a hand-picked DATABASE_URL all OPENED.
+  //
+  // Same child-process shape as the case above, for the same reason: this
+  // process is guarded, and the property is about one that is not.
+  const { execFileSync } = await import("node:child_process");
+  const path = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
+  const FORMS = {
+    spread: "liveDbGate({ ...process.env })",
+    assign: "liveDbGate(Object.assign({}, process.env))",
+    clone: "liveDbGate(structuredClone(process.env))",
+    "two-step": "(() => { const env = { ...process.env }; return liveDbGate(env); })()",
+    "hand-picked": "liveDbGate({ DATABASE_URL: process.env.DATABASE_URL })",
+    alias: "(() => { const env = process.env; return liveDbGate(env); })()",
+    // The two that defeated the first cut of this fix, which compared strings:
+    // a decorated URL and a different login are a different string and the same
+    // production database, so the comparison is on host and path.
+    mutated: "liveDbGate({ DATABASE_URL: process.env.DATABASE_URL + '?application_name=x' })",
+    "same host, other login": "liveDbGate({ DATABASE_URL: 'postgresql://other:other@127.0.0.1:1/postgres' })",
+  };
+
+  for (const [name, call] of Object.entries(FORMS)) {
+    const script =
+      'const { liveDbGate } = await import("./src/lib/liveDbGate.js");' +
+      `try { ${call}; console.log('OPENED-UNGUARDED'); }` +
+      " catch (e) { console.log('THREW: ' + e.message.split('.')[0]); }";
+
+    const out = execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      env: {
+        ...process.env,
+        DATABASE_URL: "postgresql://nobody:nobody@127.0.0.1:1/postgres",
+        NODE_OPTIONS: "",
+      },
+    });
+
+    assert.match(
+      out,
+      /THREW: liveDbGate: a live database is configured and NO live-write guard is armed/,
+      `the ${name} form of the real environment must be refused like the real environment; got: ${out.trim()}`
+    );
+    assert.doesNotMatch(out, /OPENED-UNGUARDED/, `the ${name} form opened the gate on an unguarded process`);
+  }
+
+  // The escape hatch still works, or probeQueue.test.mjs and this file's own
+  // self-tests could not ask the gate anything: an env of the caller's OWN
+  // values names no live credential and opens no database.
+  const hatch =
+    'const { liveDbGate } = await import("./src/lib/liveDbGate.js");' +
+    "const g = liveDbGate({ DATABASE_URL: 'postgres://someone-elses-value' });" +
+    "console.log('EXEMPT enabled=' + g.enabled);";
+  const hatchOut = execFileSync(process.execPath, ["--input-type=module", "-e", hatch], {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    env: {
+      ...process.env,
+      DATABASE_URL: "postgresql://nobody:nobody@127.0.0.1:1/postgres",
+      NODE_OPTIONS: "",
+    },
+  });
+  assert.match(
+    hatchOut,
+    /EXEMPT enabled=true/,
+    `an explicit env object of the caller's own values must still answer the question without arming: ${hatchOut.trim()}`
+  );
 });
 
 test("armedLiveDbGate ARMS BEFORE IT ANSWERS, and declares nothing by default", async () => {

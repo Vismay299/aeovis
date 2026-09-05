@@ -35,8 +35,9 @@
  *      by this module and not be guarded. It also refuses to report an open
  *      gate when the guard could not actually patch a transport: armed-and-
  *      blind must not read the same as armed.
- *   2. `liveDbGate()` itself throws if it is asked about the REAL environment,
- *      finds a live database configured, and no guard is armed. That is the
+ *   2. `liveDbGate()` itself throws if it is asked about the REAL environment —
+ *      or any copy of it that carries the same credentials (R3.2.10) — when it
+ *      finds a live database configured and no guard is armed. That is the
  *      tripwire for the author who copies the old pattern instead of using
  *      `armedLiveDbGate`. It cannot fire in CI (no `DATABASE_URL`, gate shut)
  *      and it cannot fire under the npm scripts (the preload armed it), so the
@@ -60,14 +61,74 @@ export const LIVE_TEST_COMMAND_RAW =
  * @returns {{enabled: boolean, reason: string|null}} `reason` is non-null
  * exactly when the gate is closed, and says what is missing and how to supply it.
  *
- * THROWS when the gate is open on the real `process.env` and no write guard is
- * armed. Pass an explicit env object (as the gate's own unit tests do) to ask
- * the question without claiming you are about to run against that database.
+ * THROWS when the gate is open on the real environment and no write guard is
+ * armed. Pass an explicit env object of your own values (as the gate's own unit
+ * tests do) to ask the question without claiming you are about to run against
+ * that database.
+ *
+ * A COPY OF THE REAL ENVIRONMENT IS THE REAL ENVIRONMENT (R3.2.10). This used
+ * to test `env === process.env`, and identity is defeated by a spread:
+ * `liveDbGate({ ...process.env })` — also `Object.assign({}, process.env)`, a
+ * `structuredClone`, or a hand-picked `{ DATABASE_URL: process.env.DATABASE_URL }`
+ * — got a copy, failed the identity check, and opened the gate unguarded on a
+ * process that could write to production. Measured, not theorised: all four
+ * forms opened while the alias form threw. So the check is now on the VALUES.
+ * An env whose gate-opening credential names the same database as the real one
+ * — compared by host and path, not by string, see `isRealEnvironment` — is
+ * treated as the real environment however it was constructed, because it
+ * reaches the same database. The escape hatch survives: an env carrying values that are
+ * not the live credentials (`{ DATABASE_URL: "postgres://x" }`) opens nothing
+ * and is exempt, which is what `src/lib/probeQueue.test.mjs` and the guard's
+ * own self-test rely on. `src/lib/liveWriteGuard.test.mjs` enforces the static
+ * half of the same rule over the whole tree.
  */
 export function liveDbGate(env = process.env) {
   const gate = decide(env);
-  if (gate.enabled && env === process.env) requireArmedGuard();
+  if (gate.enabled && isRealEnvironment(env)) requireArmedGuard();
   return gate;
+}
+
+/** The variables `decide` opens the gate on — the ones worth impersonating. */
+const GATE_CREDENTIALS = ["DATABASE_URL", "SUPABASE_DB_PASSWORD", "NEXT_PUBLIC_SUPABASE_URL"];
+
+/**
+ * `process.env` itself, or anything carrying one of its live credentials by
+ * value. Copies are the whole point: see the note on `liveDbGate` above.
+ *
+ * The comparison is on the DATABASE the value names, not the string, because
+ * `process.env.DATABASE_URL + "?application_name=x"` is a different string and
+ * the same production database — that form opened the gate against an earlier
+ * cut of this fix. A URL matches when its host and path match, so changing the
+ * user, the password or the query does not buy an exemption. What it still
+ * cannot see is a different spelling of the same host (an IP for a DNS name);
+ * the static rule in `src/lib/liveWriteGuard.test.mjs` is what stands behind
+ * this, and `armedLiveDbGate` needs neither.
+ */
+function isRealEnvironment(env) {
+  if (env === process.env) return true;
+  if (!env || typeof env !== "object") return false;
+  return GATE_CREDENTIALS.some((key) => {
+    const real = process.env[key];
+    if (typeof real !== "string" || real === "") return false;
+    return namesSameTarget(env[key], real);
+  });
+}
+
+function namesSameTarget(value, real) {
+  if (value === real) return true;
+  if (typeof value !== "string" || value === "") return false;
+  const a = dbTarget(value);
+  return a !== null && a === dbTarget(real);
+}
+
+/** `host` + database path, or null for a value that is not a URL (a password). */
+function dbTarget(value) {
+  try {
+    const u = new URL(value);
+    return `${u.host.toLowerCase()}${u.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return null;
+  }
 }
 
 function decide(env) {
@@ -94,7 +155,9 @@ function requireArmedGuard() {
         "An unguarded live test that forgets to stub one writer writes to production — that is R3.2.4, " +
         "and it cost two rows in `scans` and two in `brand_metrics_daily`. " +
         "Use `armedLiveDbGate({ label, allow })` from src/lib/liveDbGate.js instead of `liveDbGate()`, " +
-        `or run the file with the guard preloaded: ${LIVE_TEST_COMMAND}  (or: ${LIVE_TEST_COMMAND_RAW})`
+        `or run the file with the guard preloaded: ${LIVE_TEST_COMMAND}  (or: ${LIVE_TEST_COMMAND_RAW}). ` +
+        "Handing the gate a COPY of the real environment (`{ ...process.env }`) is not an exemption: it is " +
+        "the same credentials and the same database, so it is refused the same way."
     );
   }
   const covers = liveWriteGuardCoverage();
