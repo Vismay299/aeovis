@@ -8,12 +8,13 @@
     "start": "next start",
     "lint": "next lint",
     "test:prompts": "node --env-file=.env.local scripts/test-dynamic-prompts.mjs",
-    "test:scoring": "node --test \"src/**/*.test.mjs\"",
+    "test:scoring": "node --import ./src/lib/liveWriteGuardAuto.mjs --test \"src/**/*.test.mjs\"",
+    "test:live": "node --import ./src/lib/liveWriteGuardAuto.mjs --env-file=.env.local --test",
     "test:calibration": "node src/lib/scoring/test_calibration.js",
     "test:gsc": "node --env-file=.env.local scripts/test-gsc.mjs",
     "setup:db": "node --env-file=.env.local scripts/setup-supabase.mjs",
     "check:secrets": "node --env-file-if-exists=.env.local scripts/check-secrets.mjs",
-    "test": "node --test \"src/**/*.test.mjs\"",
+    "test": "node --import ./src/lib/liveWriteGuardAuto.mjs --test \"src/**/*.test.mjs\"",
     "baseline:archive": "node --env-file-if-exists=.env.local scripts/archive-reference-scan.mjs"
   },
   "dependencies": {

@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
-import { liveDbGate, notRunBanner } from "../liveDbGate.js";
-import { installLiveWriteGuard } from "../liveWriteGuard.js";
+import { armedLiveDbGate, notRunBanner } from "../liveDbGate.js";
 import { runScanChunk } from "./scanWorker.js";
 import { supabase } from "../db.js";
 
@@ -35,7 +34,26 @@ import { supabase } from "../db.js";
  */
 
 const TEST_WORKER_PREFIX = "test-r321";
-const GATE = liveDbGate();
+/**
+ * R3.2.4 — the write guard, armed by the gate itself.
+ *
+ * The prose above says "scan_runs and nothing else". This is the sentence being
+ * enforced rather than asserted: every write this process attempts, over
+ * PostgREST or over a pg socket, is checked against that one table, and
+ * anything else is refused before it leaves the process. The assert.fail stubs
+ * below are still here and still the first line of defence, but they are now a
+ * belt over braces: if a future edit adds a dep this file forgot to name, or a
+ * code path that reaches the shared Supabase client directly and never looks at
+ * deps at all, the guard refuses the write instead of production accepting it.
+ *
+ * The arming is not a separate line an author has to remember — asking whether
+ * a live database is configured is what installs it.
+ */
+const GATE = await armedLiveDbGate({
+  label: "src/lib/workers/scanChunkLedgerLive.test.mjs",
+  allow: ["scan_runs"],
+});
+const WRITE_GUARD = GATE.guard;
 
 if (!GATE.enabled) {
   console.error(
@@ -50,23 +68,6 @@ if (!GATE.enabled) {
 }
 
 const opts = GATE.enabled ? {} : { skip: GATE.reason };
-
-/**
- * R3.2.4 — the write guard, installed before a single case runs.
- *
- * The prose above says "scan_runs and nothing else". This is the sentence being
- * enforced rather than asserted: every write this process attempts, over
- * PostgREST or over a pg socket, is checked against that one table, and
- * anything else is refused before it leaves the process. The assert.fail stubs
- * below are still here and still the first line of defence, but they are now a
- * belt over braces: if a future edit adds a dep this file forgot to name, or a
- * code path that reaches the shared Supabase client directly and never looks at
- * deps at all, the guard refuses the write instead of production accepting it.
- */
-const WRITE_GUARD = await installLiveWriteGuard({
-  label: "src/lib/workers/scanChunkLedgerLive.test.mjs",
-  allow: ["scan_runs"],
-});
 
 /** The connection string, built exactly as src/lib/scanRunsLive.test.mjs builds it. */
 function connectionString(env = process.env) {

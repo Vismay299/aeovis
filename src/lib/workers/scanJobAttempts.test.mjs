@@ -3,7 +3,25 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
+/**
+ * R3.2.4 — this suite's claim to be hermetic is now enforced, not asserted.
+ *
+ * The header below used to say "no fetch, no client, no env", and it was only
+ * true while NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY were unset in the shell. With
+ * credentials loaded — which src/lib/liveDbGate.js tells live-test authors to
+ * do — the eleven cases that call runScanChunk without ledger deps opened REAL
+ * scan_runs rows and one charged a REAL attempt through claim_scan_job_attempt
+ * against production scan_jobs.
+ *
+ * Clearing the credentials before the module graph is evaluated makes db.js's
+ * client null however this suite is invoked. The imports have to be dynamic:
+ * static ones are hoisted above these two deletes, and scanWorker.js's import
+ * of db.js would capture the credentials first.
+ */
+delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const {
   runScanChunk,
   chunkRunOutcome,
   createChunkTally,
@@ -12,9 +30,16 @@ import {
   MAX_JOB_ATTEMPTS,
   MAX_ATTEMPTS_MARKER,
   CHUNK_PHASES,
-} from "./scanWorker.js";
-import { RUN_OUTCOMES, RUNNERS } from "../scanRuns.js";
-import { HEARTBEAT_STALE_MS } from "../db.js";
+} = await import("./scanWorker.js");
+const { RUN_OUTCOMES, RUNNERS } = await import("../scanRuns.js");
+const { HEARTBEAT_STALE_MS, supabase } = await import("../db.js");
+
+assert.equal(
+  supabase,
+  null,
+  "db.js still has a client: the credential clearing above did not take effect, and the cases " +
+    "below would open real scan_runs rows and charge real scan_jobs attempts"
+);
 
 /**
  * R3.3.1 — scan_jobs.attempts and the cap of 3 (finding S12).
@@ -25,8 +50,8 @@ import { HEARTBEAT_STALE_MS } from "../db.js";
  * time was resumed forever — every cron tick, every day, on real vendor budget.
  *
  * Everything here runs against in-memory fakes. There is NO Supabase client in
- * this suite (npm run test:scoring passes no env file), so scanWorker's own
- * `supabase` is null and the memory path is the one that executes; the RPC path
+ * this suite (R3.2.4 clears the credentials above, whatever the shell holds),
+ * so scanWorker's own `supabase` is null and the memory path executes; the RPC path
  * is exercised through an injected `deps.client` whose `rpc` is a local
  * function. Nothing in this file can read or write a live backend: no fetch, no
  * client, no env.

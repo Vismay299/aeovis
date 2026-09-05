@@ -1,13 +1,45 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startContentJob, reviseContentItem } from "./contentWorker.js";
-import { isLegalTransition } from "./stages.js";
 
 /**
  * End-to-end pipeline tests against a scripted fake LLM — zero live calls.
  * Verifies the plan's guardrails: revision-loop caps, YMYL routing,
  * lessons injection, cost cap, and the awaiting_approval terminal state.
+ *
+ * R3.2.4 — "zero live calls" now includes the database, and by construction.
+ *
+ * `makeDeps` below stubs `updateContentJob`, but `startContentJob` also takes a
+ * lease (`acquireLease("content_jobs", ...)`), renews it on EVERY job update
+ * (`renewLease`), releases it at the end, and opens a row in `content_runs` per
+ * block (`insertContentRun`). None of those four resolves a client from the
+ * deps this file passes; they use db.js's module-level one, built at import
+ * time from NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY. With credentials loaded —
+ * which is what src/lib/liveDbGate.js tells live-test authors to do — this
+ * file issued 16 real `UPDATE content_jobs` and 2 real `INSERT INTO
+ * content_runs` against production, on job ids that exist only here, and said
+ * nothing about it: the lease renew is fire-and-forget with a `.catch`, and
+ * db/content.js's ledger writes are fail-soft on purpose. It stayed green
+ * either way, which is precisely the failure R3.2.4 exists for.
+ *
+ * Clearing the credentials before the module graph is evaluated makes db.js's
+ * client null however the suite is invoked, so the memory lease this file
+ * actually means to exercise is the one it gets. The imports must be dynamic:
+ * static imports are hoisted above these two `delete`s and db.js would capture
+ * the credentials first.
  */
+delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const { startContentJob, reviseContentItem } = await import("./contentWorker.js");
+const { isLegalTransition } = await import("./stages.js");
+const { supabase } = await import("../db.js");
+
+assert.equal(
+  supabase,
+  null,
+  "db.js still has a client: the credential clearing above did not take effect, and this file's " +
+    "lease and content_runs writes would land on production"
+);
 
 // --- fixtures --------------------------------------------------------------
 

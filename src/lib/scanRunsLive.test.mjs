@@ -3,8 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
-import { liveDbGate, notRunBanner } from "./liveDbGate.js";
-import { installLiveWriteGuard } from "./liveWriteGuard.js";
+import { armedLiveDbGate, notRunBanner } from "./liveDbGate.js";
 
 /**
  * R1.2.3 — the scan_runs ledger against a REAL Postgres.
@@ -35,14 +34,31 @@ import { installLiveWriteGuard } from "./liveWriteGuard.js";
  * is the LEDGER calls that are real.
  */
 
+/**
+ * R3.2.4 — "only scan_runs" enforced, not merely promised, and armed BEFORE the
+ * worker modules below are even loaded.
+ *
+ * `armedLiveDbGate` installs the default-deny write guard and only then reports
+ * whether the gate is open, so there is no order in which this file can be
+ * pointed at a real database and not be guarded. Every write in this process,
+ * whether it goes over a pg socket or through a Supabase client (including the
+ * one built by hand for the fleet cases below — the patch is on the client
+ * prototype, so it covers clients this file creates for itself), is checked
+ * against `scan_runs` and refused otherwise. A refused write is recorded and
+ * fails the run even if the caller catches it.
+ */
+const GATE = await armedLiveDbGate({
+  label: "src/lib/scanRunsLive.test.mjs",
+  allow: ["scan_runs"],
+});
+const WRITE_GUARD = GATE.guard;
+
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const workerIndex = await import(pathToFileURL(path.join(REPO, "worker/src/index.js")).href);
 const runLedger = await import(pathToFileURL(path.join(REPO, "worker/src/lib/runLedger.js")).href);
 
 const TEST_RUNNER = "test-r123-ledger";
 const TEST_WORKER_PREFIX = "test-r123";
-
-const GATE = liveDbGate();
 
 if (!GATE.enabled) {
   // Loud, on stderr, before any test result is printed. A green suite must not
@@ -83,22 +99,6 @@ async function cleanup(client) {
 }
 
 const opts = GATE.enabled ? {} : { skip: GATE.reason };
-
-/**
- * R3.2.4 — "only scan_runs" enforced, not merely promised.
- *
- * The header above claims this file writes one table. The guard makes that
- * claim checkable: every write in this process, whether it goes over a pg
- * socket or through a Supabase client (including the one built by hand for the
- * fleet cases below — the patch is on the client prototype, so it covers
- * clients this file creates for itself), is checked against `scan_runs` and
- * refused otherwise. A refused write is recorded and fails the run even if the
- * caller catches it.
- */
-const WRITE_GUARD = await installLiveWriteGuard({
-  label: "src/lib/scanRunsLive.test.mjs",
-  allow: ["scan_runs"],
-});
 
 // ---------------------------------------------------------------------------
 // The migration is IN the database

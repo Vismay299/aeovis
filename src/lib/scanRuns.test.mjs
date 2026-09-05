@@ -655,7 +655,24 @@ test("GUARD — the open/closed pairing is enforced by the database, not by call
 
 test("GUARD — the live ledger test announces itself when it does NOT run", async () => {
   const src = await readFile(path.join(REPO, "src/lib/scanRunsLive.test.mjs"), "utf8");
-  assert.match(src, /liveDbGate/, "it must use the shared gate, not a second one");
+  assert.match(src, /liveDbGate\.js/, "it must use the shared gate, not a second one");
   assert.match(src, /notRunBanner/, "a silent skip would turn a green suite into a claim nobody checked");
   assert.match(src, /skip: GATE\.reason/, "every gated case must carry its reason");
+  // R3.2.4: using the shared gate is not enough — it has to be the ARMED one.
+  // This file used to enforce only the first half, and the live files were
+  // guarded solely because their authors also remembered to install the write
+  // guard by hand. src/lib/liveWriteGuard.test.mjs enforces this over the whole
+  // tree; the assertion is repeated here because THIS is the file that says
+  // what the live ledger test must look like.
+  assert.match(
+    src,
+    /\barmedLiveDbGate\s*\(/,
+    "it must open the gate through armedLiveDbGate, which installs the default-deny write guard before " +
+      "it reports the gate open — an unguarded live test that forgets one stub writes to production"
+  );
+  assert.doesNotMatch(
+    src,
+    /\bliveDbGate\s*\(\s*(?:process\.env\s*)?\)/,
+    "the bare gate reads the real environment without arming anything"
+  );
 });

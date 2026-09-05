@@ -38,10 +38,46 @@
  *      Patching the prototype covers clients that already exist, so a test does
  *      not have to route its connections through a helper to be guarded.
  *
+ * HOW IT IS ADOPTED — every test file, not the ones that remembered
+ * The first cut of this module was installed by hand at module scope in the
+ * three live-DB test files. That made "refuses writes by default" true only of
+ * the files that opted in, which is the same luck-not-design the incident was
+ * about: six other suites were attempting real production writes and were
+ * saved only by `NEXT_PUBLIC_SUPABASE_*` happening to be unset in the shell.
+ * So the guard is now armed from TWO directions, and a live test is covered by
+ * both:
+ *
+ *   - `src/lib/liveWriteGuardAuto.mjs`, preloaded with `node --import` in the
+ *     `test`, `test:scoring` and `test:live` scripts, arms EVERY test process.
+ *     The default policy it installs allows nothing at all.
+ *   - `armedLiveDbGate()` in `src/lib/liveDbGate.js` arms it from inside the
+ *     gate. That is what closes the hole the preload could not: a live test run
+ *     as a bare `node --env-file=.env.local --test <file>` gets no preload, and
+ *     that was the only command the gate used to print. Asking the gate whether
+ *     a live database is configured is now the same act as arming the guard,
+ *     and the bare `liveDbGate()` throws if it finds a database and no guard.
+ *
+ * A test that needs to write a disposable table names it — via
+ * `armedLiveDbGate({ allow: [...] })`, or by installing its own guard ON TOP of
+ * the preload's (see the stack below).
+ *
+ * INSTALLS STACK, THEY DO NOT RE-PATCH. The prototypes are patched exactly
+ * once, on the first install; every later install pushes a POLICY and the
+ * patch consults the innermost one. That is what makes the automatic install
+ * idempotent: a live file can widen its own allow-list without its writes
+ * being checked twice — once against its own list and once against the
+ * preload's empty one — which is what stacked prototype wrappers would do.
+ *
  * WHAT IT DOES NOT COVER — read this before trusting it
- *   - A test that never installs the guard. Nothing here can reach out and
- *     protect a file that did not opt in; that is why the three live files each
- *     install it at module scope, so the copy-paste template carries it.
+ *   - A test run by something other than the `test` / `test:scoring` /
+ *     `test:live` scripts, e.g. a bare `node --test path/to/file.mjs` without
+ *     the `--import`, IF it never touches `src/lib/liveDbGate.js`. A file that
+ *     goes through the gate is covered however it is invoked, because the gate
+ *     arms the guard itself; a file that reaches a database without asking the
+ *     gate — by reading `DATABASE_URL` or `NEXT_PUBLIC_SUPABASE_URL` by hand —
+ *     is outside both mechanisms. `liveWriteGuard.test.mjs` asserts over the
+ *     whole tree that every importer of the gate arms the guard; it cannot
+ *     assert anything about a file that avoids the gate entirely.
  *   - `supabase.storage`, `supabase.functions.invoke`, and realtime. None of
  *     them is used by this codebase; if that changes, extend this file.
  *   - A `SELECT` that calls a writing SQL function this file has never heard of.
@@ -291,12 +327,313 @@ export function classifyStatement(sql) {
   return { kind: "unknown", tables: [], why: `unrecognised statement head "${head}"` };
 }
 
+
 // ---------------------------------------------------------------------------
 // The guard
 // ---------------------------------------------------------------------------
 
 /**
+ * The stack of installed policies, innermost (most recently installed) last.
+ * The prototype patches consult only the innermost one, so the automatic
+ * install from `liveWriteGuardAuto.mjs` (which allows nothing) sits harmlessly
+ * underneath a live file's own narrower install instead of double-checking
+ * every write against two different allow-lists.
+ */
+const POLICIES = [];
+
+/**
+ * The single set of prototype patches, or null when nothing is installed.
+ * Patching is done once and torn down once, however many policies stack on it.
+ */
+let PATCH = null;
+
+function activePolicy() {
+  return POLICIES.length > 0 ? POLICIES[POLICIES.length - 1] : null;
+}
+
+/** How many guards are currently installed. 0 means the prototypes are clean. */
+export function liveWriteGuardDepth() {
+  return POLICIES.length;
+}
+
+/** The label of the guard whose allow-list is currently in force, or null. */
+export function activeLiveWriteGuardLabel() {
+  return activePolicy()?.label ?? null;
+}
+
+/**
+ * Which transports the installed patch actually covers. Both false when nothing
+ * is installed. A caller about to point a test at a real database uses this to
+ * tell "armed" from "armed and blind" — the two must never read the same
+ * (standing rule 1).
+ */
+export function liveWriteGuardCoverage() {
+  return PATCH ? { ...PATCH.covers } : { supabase: false, pg: false };
+}
+
+function policyHint(policy) {
+  const declared = policy && policy.allowed.size ? [...policy.allowed].join(", ") : "(nothing)";
+  return (
+    `Declared writable here: ${declared}. ` +
+    `If this write is intended and the table is disposable, pass it in ` +
+    `installLiveWriteGuard({ allow: [...] }); if it is not intended, the test is missing a stub. ` +
+    `The guard is armed for every test process by src/lib/liveWriteGuardAuto.mjs.`
+  );
+}
+
+let orphanWarned = false;
+
+/**
+ * Refuse on behalf of whichever policy is in force. Returns the error so the
+ * caller can throw it; the record and the non-zero exit code have already
+ * happened, so catching the throw does not un-fail the run.
+ */
+function refuseHere({ operation, table, transport, hint }) {
+  const policy = activePolicy();
+  return refuse({
+    label: policy?.label ?? "(no live write guard active)",
+    operation,
+    table,
+    transport,
+    hint: hint ?? policyHint(policy),
+  });
+}
+
+/**
+ * The one decision point for a write that names a table.
+ *
+ * Returns true when the write may proceed. A refusal is thrown, never returned:
+ * "we could not tell" and "nobody said yes" both end here.
+ */
+function checkWrite(operation, table, transport) {
+  const policy = activePolicy();
+  if (!policy) {
+    // Can't happen through the prototypes — they are unpatched the moment the
+    // last policy is removed — but a stale reference to a patched function
+    // could still land here. Say so rather than silently permitting.
+    if (!orphanWarned) {
+      orphanWarned = true;
+      process.stderr.write(
+        `\n LIVE WRITE GUARD: ${operation} on ${table ?? "(unknown table)"} reached a patch with no policy ` +
+          `installed; it was NOT checked. This is a bug in liveWriteGuard.js.\n\n`
+      );
+    }
+    return true;
+  }
+  const name = table == null ? null : String(table).toLowerCase();
+  if (name && policy.allowed.has(name)) {
+    policy.writes.push({ operation, table: name, transport });
+    return true;
+  }
+  throw refuseHere({ operation, table: name, transport });
+}
+
+/**
+ * Patch `owner[key]`, remembering what was there. Re-patches if something has
+ * since replaced our function on the prototype: a guard that was displaced and
+ * quietly stopped guarding is the worst outcome this file has.
+ */
+function patchOnce(record, owner, key, make) {
+  const current = owner[key];
+  if (record && record.patched === current) return record;
+  const original = current;
+  const patched = make(original);
+  owner[key] = patched;
+  return { owner, key, original, patched };
+}
+
+async function ensurePatched() {
+  if (!PATCH) PATCH = { covers: { supabase: false, pg: false }, records: new Map() };
+  const covers = PATCH.covers;
+  const records = PATCH.records;
+
+  // --- 1. PostgREST, at the SupabaseClient prototype -----------------------
+  try {
+    const mod = await import("@supabase/supabase-js");
+    const proto = mod.SupabaseClient?.prototype;
+    if (proto) {
+      records.set(
+        "supabase.from",
+        patchOnce(records.get("supabase.from"), proto, "from", (origFrom) =>
+          function guardedFrom(table) {
+            const builder = origFrom.call(this, table);
+            return new Proxy(builder, {
+              get(target, prop) {
+                // Read off the target, not the proxy: these builders use private
+                // fields, and a receiver-swapped get would break their brand check.
+                const value = target[prop];
+                if (typeof prop === "string" && MUTATING_BUILDER_METHODS.includes(prop) && typeof value === "function") {
+                  return (...args) => {
+                    checkWrite(`${prop}()`, table, "supabase-js");
+                    return value.apply(target, args);
+                  };
+                }
+                return typeof value === "function" ? value.bind(target) : value;
+              },
+            });
+          }
+        )
+      );
+
+      records.set(
+        "supabase.rpc",
+        patchOnce(records.get("supabase.rpc"), proto, "rpc", (origRpc) =>
+          function guardedRpc(fn, args, opts) {
+            const targets = WRITING_FUNCTIONS[fn];
+            if (!targets) {
+              // Not "probably a reader". The guard has no way to know, and an
+              // unknown function is exactly how a new writer would arrive.
+              throw refuseHere({
+                operation: `rpc ${fn}()`,
+                table: null,
+                transport: "supabase-js",
+                hint:
+                  `${fn} is not listed in WRITING_FUNCTIONS in src/lib/liveWriteGuard.js, so the guard ` +
+                  `cannot tell whether it writes. Add it (with the tables it touches) in the same commit. ` +
+                  policyHint(activePolicy()),
+              });
+            }
+            // Every target checked before any is recorded, so a function that
+            // touches an allowed table and a forbidden one is refused entire.
+            const allowed = activePolicy()?.allowed ?? new Set();
+            const forbidden = targets.filter((t) => !allowed.has(t));
+            if (forbidden.length > 0) {
+              throw refuseHere({
+                operation: `rpc ${fn}()`,
+                table: forbidden.join(", "),
+                transport: "supabase-js",
+              });
+            }
+            for (const t of targets) checkWrite(`rpc ${fn}()`, t, "supabase-js");
+            return origRpc.call(this, fn, args, opts);
+          }
+        )
+      );
+
+      if (typeof proto.schema === "function") {
+        records.set(
+          "supabase.schema",
+          patchOnce(records.get("supabase.schema"), proto, "schema", () =>
+            function guardedSchema(name) {
+              throw refuseHere({
+                operation: `schema("${name}")`,
+                table: null,
+                transport: "supabase-js",
+                hint:
+                  "The guard cannot see through .schema(): it hands back a client whose builders it never " +
+                  "patched. Use from()/rpc(), or extend the guard before using it. " +
+                  policyHint(activePolicy()),
+              });
+            }
+          )
+        );
+      }
+      covers.supabase = true;
+    } else {
+      covers.supabaseWhy = "@supabase/supabase-js exports no SupabaseClient class to patch";
+      process.stderr.write(`\n LIVE WRITE GUARD: ${covers.supabaseWhy}. PostgREST writes are UNGUARDED.\n\n`);
+    }
+  } catch (err) {
+    if (err instanceof LiveWriteRefused) throw err;
+    // A guard that failed to arm is the worst outcome of all: it looks
+    // installed and refuses nothing. Say so, loudly, and leave covers.supabase
+    // false so the caller's own assertion can fail on it.
+    covers.supabaseWhy = String(err?.message || err);
+    process.stderr.write(
+      `\n LIVE WRITE GUARD: could NOT patch @supabase/supabase-js — ${covers.supabaseWhy}.\n` +
+        ` PostgREST writes in this run are UNGUARDED.\n\n`
+    );
+  }
+
+  // --- 2. Raw SQL, at the pg Client/Pool prototype -------------------------
+  try {
+    const { default: pg } = await import("pg");
+    for (const ctorName of ["Client", "Pool"]) {
+      const proto = pg[ctorName]?.prototype;
+      if (!proto || typeof proto.query !== "function") continue;
+      records.set(
+        `pg.${ctorName}.query`,
+        patchOnce(records.get(`pg.${ctorName}.query`), proto, "query", (orig) =>
+          function guardedQuery(config, values, callback) {
+            const sql =
+              typeof config === "string" ? config : config && typeof config.text === "string" ? config.text : null;
+            let error = null;
+            if (sql == null) {
+              error = refuseHere({
+                operation: "query(<no statement text>)",
+                table: null,
+                transport: `pg.${ctorName}`,
+                hint: "The guard could not read the SQL, so it could not classify it. " + policyHint(activePolicy()),
+              });
+            } else {
+              const verdict = classifyStatement(sql);
+              if (verdict.kind === "ddl" || verdict.kind === "unknown") {
+                error = refuseHere({
+                  operation: `${verdict.kind}: ${verdict.why}`,
+                  table: null,
+                  transport: `pg.${ctorName}`,
+                });
+              } else if (verdict.kind === "write") {
+                // Decide over the WHOLE statement before recording anything: a
+                // statement that writes an allowed table and a forbidden one in
+                // the same breath is refused entire, and must not leave a record
+                // saying the allowed half happened.
+                const allowed = activePolicy()?.allowed ?? new Set();
+                const forbidden = verdict.tables.filter((t) => !allowed.has(t));
+                if (forbidden.length > 0) {
+                  error = refuseHere({
+                    operation: "sql write",
+                    table: forbidden.join(", "),
+                    transport: `pg.${ctorName}`,
+                  });
+                } else {
+                  for (const t of verdict.tables) checkWrite("sql", t, `pg.${ctorName}`);
+                }
+              }
+            }
+            if (error) {
+              // A rejected promise rather than a synchronous throw, so a caller
+              // doing `.catch(() => {})` still behaves. The refusal is already
+              // recorded and the exit code already non-zero, so the catch cannot
+              // hide it.
+              const cb = typeof values === "function" ? values : callback;
+              if (typeof cb === "function") return cb(error);
+              return Promise.reject(error);
+            }
+            return orig.call(this, config, values, callback);
+          }
+        )
+      );
+      covers.pg = true;
+    }
+  } catch (err) {
+    if (err instanceof LiveWriteRefused) throw err;
+    covers.pgWhy = String(err?.message || err);
+    process.stderr.write(
+      `\n LIVE WRITE GUARD: could NOT patch pg — ${covers.pgWhy}.\n Raw SQL in this run is UNGUARDED.\n\n`
+    );
+  }
+
+  return PATCH;
+}
+
+function teardownPatch() {
+  if (!PATCH) return;
+  for (const record of PATCH.records.values()) {
+    // Only restore what is still ours; if something replaced our patch we would
+    // otherwise clobber it.
+    if (record.owner[record.key] === record.patched) record.owner[record.key] = record.original;
+  }
+  PATCH = null;
+}
+
+/**
  * Install the guard for one live test file.
+ *
+ * Safe to call when a guard is already installed — the outer one keeps its own
+ * allow-list, this one's is in force until it is uninstalled. That is how a
+ * live file widens the default-deny policy that `liveWriteGuardAuto.mjs`
+ * installs into every test process.
  *
  * @param {object} options
  * @param {string} options.label   which test file this is, named in every refusal.
@@ -327,207 +664,31 @@ export async function installLiveWriteGuard({ label, allow = [] } = {}) {
     allowed.add(name);
   }
 
-  const writes = [];
-  const restores = [];
-  const covers = { supabase: false, pg: false };
+  const policy = { label, allowed, writes: [] };
+  POLICIES.push(policy);
 
-  const hint =
-    `Declared writable here: ${allowed.size ? [...allowed].join(", ") : "(nothing)"}. ` +
-    `If this write is intended and the table is disposable, pass it in ` +
-    `installLiveWriteGuard({ allow: [...] }); if it is not intended, the test is missing a stub.`;
-
-  const check = (operation, table, transport) => {
-    const name = table == null ? null : String(table).toLowerCase();
-    if (name && allowed.has(name)) {
-      writes.push({ operation, table: name, transport });
-      return;
-    }
-    throw refuse({ label, operation, table: name, transport, hint });
-  };
-
-  // --- 1. PostgREST, at the SupabaseClient prototype -----------------------
+  let patch;
   try {
-    const mod = await import("@supabase/supabase-js");
-    const proto = mod.SupabaseClient?.prototype;
-    if (proto) {
-      const origFrom = proto.from;
-      const origRpc = proto.rpc;
-      const origSchema = proto.schema;
-
-      proto.from = function guardedFrom(table) {
-        const builder = origFrom.call(this, table);
-        return new Proxy(builder, {
-          get(target, prop) {
-            // Read off the target, not the proxy: these builders use private
-            // fields, and a receiver-swapped get would break their brand check.
-            const value = target[prop];
-            if (typeof prop === "string" && MUTATING_BUILDER_METHODS.includes(prop) && typeof value === "function") {
-              return (...args) => {
-                check(`${prop}()`, table, "supabase-js");
-                return value.apply(target, args);
-              };
-            }
-            return typeof value === "function" ? value.bind(target) : value;
-          },
-        });
-      };
-
-      proto.rpc = function guardedRpc(fn, args, opts) {
-        const targets = WRITING_FUNCTIONS[fn];
-        if (!targets) {
-          // Not "probably a reader". The guard has no way to know, and an
-          // unknown function is exactly how a new writer would arrive.
-          throw refuse({
-            label,
-            operation: `rpc ${fn}()`,
-            table: null,
-            transport: "supabase-js",
-            hint:
-              `${fn} is not listed in WRITING_FUNCTIONS in src/lib/liveWriteGuard.js, so the guard ` +
-              `cannot tell whether it writes. Add it (with the tables it touches) in the same commit. ` +
-              hint,
-          });
-        }
-        // Every target checked before any is recorded, so a function that
-        // touches an allowed table and a forbidden one is refused entire.
-        const forbidden = targets.filter((t) => !allowed.has(t));
-        if (forbidden.length > 0) {
-          throw refuse({
-            label,
-            operation: `rpc ${fn}()`,
-            table: forbidden.join(", "),
-            transport: "supabase-js",
-            hint,
-          });
-        }
-        for (const t of targets) check(`rpc ${fn}()`, t, "supabase-js");
-        return origRpc.call(this, fn, args, opts);
-      };
-
-      if (typeof origSchema === "function") {
-        proto.schema = function guardedSchema(name) {
-          throw refuse({
-            label,
-            operation: `schema("${name}")`,
-            table: null,
-            transport: "supabase-js",
-            hint:
-              "The guard cannot see through .schema(): it hands back a client whose builders it never " +
-              "patched. Use from()/rpc(), or extend the guard before using it. " + hint,
-          });
-        };
-      }
-
-      restores.push(() => {
-        proto.from = origFrom;
-        proto.rpc = origRpc;
-        if (typeof origSchema === "function") proto.schema = origSchema;
-      });
-      covers.supabase = true;
-    } else {
-      covers.supabaseWhy = "@supabase/supabase-js exports no SupabaseClient class to patch";
-      process.stderr.write(
-        `\n LIVE WRITE GUARD (${label}): ${covers.supabaseWhy}. PostgREST writes are UNGUARDED.\n\n`
-      );
-    }
+    patch = await ensurePatched();
   } catch (err) {
-    if (err instanceof LiveWriteRefused) throw err;
-    // A guard that failed to arm is the worst outcome of all: it looks
-    // installed and refuses nothing. Say so, loudly, and leave covers.supabase
-    // false so the caller's own assertion can fail on it.
-    covers.supabaseWhy = String(err?.message || err);
-    process.stderr.write(
-      `\n LIVE WRITE GUARD (${label}): could NOT patch @supabase/supabase-js — ${covers.supabaseWhy}.\n` +
-        ` PostgREST writes in this run are UNGUARDED.\n\n`
-    );
-  }
-
-  // --- 2. Raw SQL, at the pg Client/Pool prototype -------------------------
-  try {
-    const { default: pg } = await import("pg");
-    for (const ctorName of ["Client", "Pool"]) {
-      const proto = pg[ctorName]?.prototype;
-      if (!proto || typeof proto.query !== "function") continue;
-      const orig = proto.query;
-      proto.query = function guardedQuery(config, values, callback) {
-        const sql = typeof config === "string" ? config : config && typeof config.text === "string" ? config.text : null;
-        let error = null;
-        if (sql == null) {
-          error = refuse({
-            label,
-            operation: "query(<no statement text>)",
-            table: null,
-            transport: `pg.${ctorName}`,
-            hint: "The guard could not read the SQL, so it could not classify it. " + hint,
-          });
-        } else {
-          const verdict = classifyStatement(sql);
-          if (verdict.kind === "ddl" || verdict.kind === "unknown") {
-            error = refuse({
-              label,
-              operation: `${verdict.kind}: ${verdict.why}`,
-              table: null,
-              transport: `pg.${ctorName}`,
-              hint: hint,
-            });
-          } else if (verdict.kind === "write") {
-            // Decide over the WHOLE statement before recording anything: a
-            // statement that writes an allowed table and a forbidden one in the
-            // same breath is refused entire, and must not leave a record saying
-            // the allowed half happened.
-            const forbidden = verdict.tables.filter((t) => !allowed.has(t));
-            if (forbidden.length > 0) {
-              error = refuse({
-                label,
-                operation: "sql write",
-                table: forbidden.join(", "),
-                transport: `pg.${ctorName}`,
-                hint,
-              });
-            } else {
-              for (const t of verdict.tables) {
-                writes.push({ operation: "sql", table: t, transport: `pg.${ctorName}` });
-              }
-            }
-          }
-        }
-        if (error) {
-          // A rejected promise rather than a synchronous throw, so a caller
-          // doing `.catch(() => {})` still behaves. The refusal is already
-          // recorded and the exit code already non-zero, so the catch cannot
-          // hide it.
-          const cb = typeof values === "function" ? values : callback;
-          if (typeof cb === "function") return cb(error);
-          return Promise.reject(error);
-        }
-        return orig.call(this, config, values, callback);
-      };
-      restores.push(() => {
-        proto.query = orig;
-      });
-      covers.pg = true;
-    }
-  } catch (err) {
-    if (err instanceof LiveWriteRefused) throw err;
-    covers.pgWhy = String(err?.message || err);
-    process.stderr.write(
-      `\n LIVE WRITE GUARD (${label}): could NOT patch pg — ${covers.pgWhy}.\n` +
-        ` Raw SQL in this run is UNGUARDED.\n\n`
-    );
+    POLICIES.splice(POLICIES.indexOf(policy), 1);
+    if (POLICIES.length === 0) teardownPatch();
+    throw err;
   }
 
   return {
     label,
     allowed: [...allowed],
-    covers,
+    covers: patch.covers,
     /**
-     * Every write the guard PERMITTED, in order. It records the attempt at the
-     * moment it was allowed through, not the row count that came back, so it
-     * answers "was this guard ever asked to do anything" — which is how a live
-     * file tells a clean run from a guard that was never exercised at all.
+     * Every write the guard PERMITTED under this policy, in order. It records
+     * the attempt at the moment it was allowed through, not the row count that
+     * came back, so it answers "was this guard ever asked to do anything" —
+     * which is how a live file tells a clean run from a guard that was never
+     * exercised at all.
      */
     get writes() {
-      return writes.map((w) => ({ ...w }));
+      return policy.writes.map((w) => ({ ...w }));
     },
     get refusals() {
       return REFUSALS.filter((r) => r.label === label).map((r) => ({ ...r }));
@@ -542,8 +703,17 @@ export async function installLiveWriteGuard({ label, allow = [] } = {}) {
         );
       }
     },
+    /**
+     * Remove this policy. The prototypes are only restored when the LAST policy
+     * goes: under the automatic install there is always one underneath, so an
+     * inner uninstall narrows the allow-list back to nothing rather than
+     * disarming the process.
+     */
     uninstall() {
-      while (restores.length) restores.pop()();
+      const at = POLICIES.indexOf(policy);
+      if (at === -1) return;
+      POLICIES.splice(at, 1);
+      if (POLICIES.length === 0) teardownPatch();
     },
   };
 }

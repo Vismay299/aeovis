@@ -9,11 +9,17 @@ was taken; see *Context*.
 **Supersedes:** [`docs/decisions/serp-provider.md`](./serp-provider.md) (SerpAPI vs DataForSEO)
 **Status:** accepted, and already shipped — this ADR is being written *after* the
 fact, which is the reason it exists.
-**Revised:** 2026-09-05, task **R0.2.3**, fourth round. Every `file:line` below
-was re-derived at `25e7727` via `git show <ref>:<file>`, not from the working
-tree, and this revision **edits no file other than this one**, so nothing cited
-below moves underneath it — the check the third round skipped, and the reason
-its stamp was false. Four files are cited by greppable anchor rather than by
+**Revised:** 2026-09-05, task **R0.2.3**, fifth round. Every `file:line` below was
+re-derived against the tree at `49fe39e` via `git show <ref>:<file>`, never from
+the working tree. **That is the whole of the stamp's claim, and a stamp cannot
+honestly make a larger one** — the author of a document does not choose which
+files share its commit, so the fourth round's promise that this revision "edits no
+file other than this one" was not the author's to make, and it was false. Whether
+the citations still hold at *your* HEAD is therefore handed to you as a check
+rather than asserted: run `git diff 49fe39e HEAD --stat` and cross-reference it
+against the fifteen files this document cites by line. The recipe, the list, and
+the last time it was run are in the *[Correction log](#correction-log)*. Four
+files are cited by greppable anchor rather than by
 line, per [the anchor rule](../vendors/README.md#a-note-on-citing-check-secretsmjs).
 The decision itself is unchanged and has never been in question; the *evidence*
 has been wrong twice and stale twice. See *[Correction log](#correction-log)*.
@@ -124,7 +130,7 @@ lifetime": that was true of the old code, it is false of what ships, and two
 documents that still said it were corrected under R1.2.9 — one of them the
 `check:secrets` operator string itself.
 
-Behavioural pins, all resolving at `25e7727`, in
+Behavioural pins, all resolving at `49fe39e`, in
 `src/lib/engines/brightdataZone.test.mjs`: `:66` (configured zone
 short-circuits), `:84` (fallback to the first active zone), `:101` (cached within
 the TTL, re-checked once it expires), `:167` (the TTL as a wall clock, not just
@@ -142,7 +148,7 @@ client does** — it calls `resolveBrightDataSerpZone` itself — and then asser
 because this file is on the anchor list: `no SERP zone could be resolved`,
 `does not exist on this account`, `not an active serp zone`, and a `PASS` naming
 the auto-discovered zone (grep `AUTO-DISCOVERED`). Each string was grepped at
-`25e7727` and returns exactly one hit in `scripts/check-secrets.mjs`.
+`49fe39e` and returns exactly one hit in `scripts/check-secrets.mjs`.
 
 The `PASS` line names the **variable** `BRIGHTDATA_ZONE_TTL_MS` rather than the
 resolved number, on purpose: `brightDataZoneTtlMs()` throws on a malformed value,
@@ -182,7 +188,7 @@ Both directions. An ADR that lists only benefits is not an ADR.
 - **Two undeclared environment variables.** `.env.example:75` lists
   `BRIGHTDATA_API_KEY` and nothing else; `README.md:93` documents
   `BRIGHTDATA_SERP_ZONE`; and **`BRIGHTDATA_ZONE_TTL_MS` appears in neither** —
-  at `25e7727` it exists only in `scripts/check-secrets.mjs`,
+  at `49fe39e` it exists only in `scripts/check-secrets.mjs`,
   `src/lib/engines/brightdata.js` and `src/lib/engines/brightdataZone.test.mjs`.
   An operator can change how long a dead zone is reused, using a variable no
   operator-facing surface names.
@@ -208,7 +214,7 @@ Both directions. An ADR that lists only benefits is not an ADR.
 - **The TTL constant is a correctness parameter, not a tuning knob.** It is the
   upper bound on how long a suspended zone keeps being used by a process that
   never calls the invalidator. Every process that runs today is such a process:
-  at `25e7727` the exported `invalidateBrightDataZoneCache` has **no consumer
+  at `49fe39e` the exported `invalidateBrightDataZoneCache` has **no consumer
   outside `brightdata.js` itself** — the only external call sites are in
   `src/lib/engines/brightdataZone.test.mjs` (`:206`, `:218`, `:223`, `:253`), and
   the two other files that name the symbol
@@ -246,14 +252,14 @@ the three entries in the correction log.
 - `src/lib/engines/serp.js:165-166` — `probeGoogleAiOverview` returns
   `probeGoogleAiOverviewBrightData(...)` as soon as the provider is `brightdata`.
   True of the function's contents; **not** the route a scan takes —
-  `probeGoogleAiOverview` has no non-test caller at `25e7727` (§3b).
+  `probeGoogleAiOverview` has no non-test caller at `49fe39e` (§3b).
 - `src/lib/engines/serp.js:324-327` — the People-Also-Ask path takes the Bright
   Data branch and `continue`s, never reaching `serpFetch`. This branch **is**
   live (§3a).
 - `src/lib/engines/types.js:47` — `getEnabledEngines()` enables
   `google_ai_overview` on `BRIGHTDATA_API_KEY` alone, with a comment at `:43-46`
   naming this ADR. It has **no caller at all** outside its own tests at
-  `25e7727` (§3b); live engine selection is a different function reading a
+  `49fe39e` (§3b); live engine selection is a different function reading a
   different variable, `resolveEnabledEngines()` on `ENGINES` in
   `enginePipeline.js`.
 
@@ -294,7 +300,7 @@ the three `serpFetch` call sites, one has a live caller and two do not.
   `promptGen` on the scan path (§3a). A `SERPAPI_KEY`-only deployment is charged
   for this one today.
 - **Dormant.** `serp.js:190` and `:225`, and the `$0.01` charges at `:213` and
-  `:231`, are inside `probeGoogleAiOverview` (`:158`), which at `25e7727` has
+  `:231`, are inside `probeGoogleAiOverview` (`:158`), which at `49fe39e` has
   **no non-test caller anywhere in the tree**. Its former caller,
   `src/lib/engines/adapter.js`, was deleted with `src/lib/scoring/probe.js` by
   R6.5.3 (commit `75e9ca5`); neither file exists at HEAD. Sweeping
@@ -341,7 +347,7 @@ records that the branch was left alone deliberately: an operator naming an engin
 is a different claim from a key being present.
 
 *Nothing consumes it.* `getEnabledEngines()` (`types.js:28`) has **zero** callers
-outside `src/lib/engines/types.test.mjs` at `25e7727`. Its last non-test caller
+outside `src/lib/engines/types.test.mjs` at `49fe39e`. Its last non-test caller
 was `src/lib/scoring/probe.js`, deleted by R6.5.3 at `75e9ca5`. Live engine
 selection is `resolveEnabledEngines()` in `enginePipeline.js`, reading `ENGINES`,
 which never consults `ENGINES_ENABLED`. **Setting `ENGINES_ENABLED` changes
@@ -369,7 +375,7 @@ sequencing warning the second round attached to R1.7.3 no longer applies.
   **spend path** in §2 is unchanged by it. Do not read "types.js is fixed" as
   "SerpAPI is gone".
 
-### 5. Where `SERPAPI_KEY` appears at `25e7727`
+### 5. Where `SERPAPI_KEY` appears at `49fe39e`
 
 `git grep -c SERPAPI_KEY HEAD -- src scripts worker supabase .env.example README.md`
 returns seven files, in four groups.
@@ -566,7 +572,7 @@ and §3 was headed "Two distinct paths still reach that code at HEAD".
 **Editorial note, outside the quotation on purpose — the three `file:line`
 citations *inside* it are quoted, not asserted.** `src/lib/scoring/probe.js` and
 `src/lib/engines/adapter.js` were deleted by R6.5.3 at `75e9ca5` and do not exist
-at `25e7727`; the `probe.js` in the tree today is `worker/src/lib/probe.js`, an
+at `49fe39e`; the `probe.js` in the tree today is `worker/src/lib/probe.js`, an
 unrelated 31-line stub. So `probe.js:99-101`, `probe.js:30` and `adapter.js:24`
 **must not be resolved against HEAD** — and that exemption covers those three and
 nothing else. Every other `file:line` in this document, above and below, is meant
@@ -668,11 +674,12 @@ landing commit catches it.
 
 **The rule this adds, stated so it can be executed.** A derivation stamp is a
 claim about a commit, so it must be re-derived *after the last edit in that
-commit* — including edits to files this document itself cites. The cheapest way
-to keep the claim true is to make the correcting commit touch no cited file, and
-this revision does that: it edits this file only. That property is checkable with
-`git show --stat` on the commit this revision lands in, and it should be checked
-rather than believed.
+commit* — including edits to files this document itself cites. That rule is sound
+and still stands. The *mechanism* this round proposed for keeping it — "make the
+correcting commit touch no cited file, and this revision does that: it edits this
+file only," checkable with `git show --stat` on the landing commit — was not the
+author's to promise, and it was false in the event. The fifth-round entry at the
+end of this log records what it cost and what replaces it.
 
 *Also corrected, both found while fixing the paragraph they sit in.* The
 editorial note under the second-round quotation said "four citations" where the
@@ -696,3 +703,103 @@ The count claims were re-run too: `SERPAPI_KEY` in seven files with none in
 `getEnabledEngines()` with no caller outside its own tests, and
 `probeGoogleAiOverview` sweeping to `serp.js`, `serp.test.mjs` and
 `serpGeo.test.mjs` and nothing else.
+
+---
+
+**2026-09-05, fifth round — task R0.2.3.** No claim about Bright Data changed.
+One sentence about *this document* was false, and it was precisely the sentence
+the document told the reader to check.
+
+*What was checked, and what it returned.* The fourth-round header promised the
+revision "edits no file other than this one, so nothing cited below moves
+underneath it," and this log told the reader to confirm it with `git show --stat`
+on the landing commit. A verifier ran it. The revision landed in `0b2e68b`, which
+touches **seven** files: this ADR, `docs/contracts/probe-result.md`,
+`docs/vendors/mimo.md`, `src/lib/llmPricing.js`, `src/lib/llmPricing.test.mjs`,
+`src/lib/openrouter.js` and `src/lib/openrouter.test.mjs`. The prescribed check
+returns 7, not 1. The stamp also read `25e7727` while the revision landed one
+commit later at `0b2e68b` — the same stamp/landing mismatch that failed the third
+round, repeated by the very rule written to prevent it.
+
+*It was harmless by luck, not by construction, and that is the finding.* None of
+the other six files is cited here, so no citation actually moved. The property a
+reader cares about held; the property the document asserted did not. Those are
+different things, and the gap between them is the whole subject of this log. A
+document that is right by accident teaches its next reader nothing, and the
+reader who runs the check and gets `7` has no way to tell which of the other 100
+claims are also true by accident.
+
+*Why the claim was unkeepable, which matters more than the fix.* "This commit
+touches only this file" asserts control the author does not have. In this tree a
+scribe writes a file and a controller decides which files share a commit, batching
+by session rather than by document; several agents are editing at once. The fourth
+round could have re-derived flawlessly and still shipped a false sentence — which
+is what happened. So the replacement is deliberately *not* another promise about
+the future.
+
+**What replaces it, stated so it can be executed.** The stamp now claims only what
+the author actually did: every `file:line` was re-derived against the tree at
+`49fe39e`. The property a reader wants — that nothing cited has moved since — is
+handed over as a check:
+
+```sh
+git diff 49fe39e HEAD --stat
+```
+
+Cross-reference the output against the fifteen files this document cites **by
+line**: `src/lib/engines/serp.js`, `src/lib/engines/brightdata.js`,
+`src/lib/engines/types.js`, `src/lib/engines/types.test.mjs`,
+`src/lib/engines/serp.test.mjs`, `src/lib/engines/brightdataZone.test.mjs`,
+`src/lib/checkSecretsBrightdataNoZone.test.mjs`, `src/lib/health.js`,
+`src/lib/scoring/aioPipeline.js`, `scripts/check-secrets.mjs`, `package.json`,
+`README.md`, `.env.example`, `docs/decisions/serp-provider.md` and
+`docs/BUILD_JOURNAL.md`. If none of the fifteen appears, every line citation above
+still points where it did. If one appears, treat *every* citation into that file as
+suspect until re-derived — a file can change anywhere above a cited line.
+
+Three limits on that check, stated so it is not over-trusted. It does not cover the
+four files on the anchor list — `src/lib/scoring/enginePipeline.js`,
+`src/lib/workers/scanWorker.js`, `src/lib/scoring/promptGen.js` and
+`scripts/check-secrets.mjs` — which are exempt by design and must be re-grepped
+instead. (`check-secrets.mjs` is on both lists: anchor-cited for its four verdict
+strings, and line-cited once at `:178`.) It catches *movement*, not an in-place
+rewrite that leaves line numbers intact — the failure this log records at
+`serp.js:335`. And it reads commits, not
+the working tree: at the time of writing, `.env.example`,
+`src/lib/scoring/enginePipeline.js` and `src/lib/workers/scanWorker.js` were dirty
+with other agents' uncommitted work, and this stamp deliberately describes
+`49fe39e` rather than what was on disk.
+
+*The check, actually run against the round it replaces.* `git diff 25e7727 49fe39e
+--stat` lists fourteen files. Exactly two are cited by this ADR as evidence —
+`src/lib/scoring/promptGen.js` and `src/lib/workers/scanWorker.js` — and both are
+cited **by anchor rather than by line**, precisely because the third round watched
+them move by hundreds of lines. Both anchors still return one hit at `49fe39e`.
+None of the fifteen line-cited files appears in the diff. So the fourth round's
+citations did survive four commits of drift — but by the anchor rule, not by the
+sentence that took credit for it.
+
+*Re-derived at `49fe39e`, not assumed.* Every `file:line` above was re-opened with
+`git show 49fe39e:<file>` and its content compared with what this document says of
+it; none had drifted. The five anchors were re-run: `probe: probeAio` one hit in
+`enginePipeline.js`; `brightDataSearch(query.text` two, `enginePipeline.js` (live)
+and `aioPipeline.js` (dead); `result.cost = 0.0015` two, the same pair;
+`deps.fetchPeopleAlsoAsk` one in `promptGen.js`; `deps.sourceUnbrandedQueries` one
+in `scanWorker.js`. The count claims were re-run: `SERPAPI_KEY` in seven source
+files with none in `.env.example` or `README.md`; `BRIGHTDATA_ZONE_TTL_MS` in
+three; `getEnabledEngines()` with no caller outside its own tests; and
+`probeGoogleAiOverview` in `serp.js`, `serp.test.mjs` and `serpGeo.test.mjs` and
+nothing else. `.env.example:75` was **not** opened — the file is absent from `git
+diff 25e7727 49fe39e --stat`, and that absence is the whole of the evidence
+offered for that one citation. It is recorded here rather than glossed.
+
+*Ten stamps inside the body were moved too, and only after re-running what they
+claim.* §5's heading, the `brightdataZone.test.mjs` behavioural pins, the four
+`check:secrets` verdict strings, the `BRIGHTDATA_ZONE_TTL_MS` three-file sweep, the
+`invalidateBrightDataZoneCache` call-site list, the two `probeGoogleAiOverview`
+no-caller claims, the `getEnabledEngines()` no-caller claim and the note that
+`adapter.js`/`src/lib/scoring/probe.js` do not exist all read "at `25e7727`" and now
+read "at `49fe39e`". Each was re-executed at `49fe39e` first and each reproduced
+unchanged; the `worker/src/lib/probe.js` stub is still 31 lines. A body stamp left
+behind a header stamp is the same defect as a header stamp left behind its commit,
+one scope smaller.

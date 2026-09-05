@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
-import { liveDbGate, notRunBanner } from "./liveDbGate.js";
-import { installLiveWriteGuard } from "./liveWriteGuard.js";
+import { armedLiveDbGate, notRunBanner } from "./liveDbGate.js";
 
 /**
  * R1.2.2 — the claim race, against a REAL Postgres.
@@ -31,7 +30,19 @@ import { installLiveWriteGuard } from "./liveWriteGuard.js";
 const TEST_ENGINE = "test-r122-race";
 const NOT_PROBED = "R1.2.2 RACE FIXTURE — never probed, deleted after the run";
 
-const GATE = liveDbGate();
+/**
+ * R3.2.4 — "only probe_tasks" enforced rather than promised, and armed BEFORE
+ * the gate is even reported open. Every write this process attempts is checked
+ * against that one table and refused otherwise, across both transports, and a
+ * refusal fails the run even if it is caught. `armedLiveDbGate` is the only way
+ * this file learns whether a database is configured, so there is no ordering in
+ * which it can be pointed at one unguarded.
+ */
+const GATE = await armedLiveDbGate({
+  label: "src/lib/probeTasksRace.test.mjs",
+  allow: ["probe_tasks"],
+});
+const WRITE_GUARD = GATE.guard;
 
 if (!GATE.enabled) {
   // Loud, on stderr, before any test result is printed. A suite that goes green
@@ -101,16 +112,6 @@ const claim = (client, owner, batchId, { limit = 5, leaseMs = 180000 } = {}) =>
     .then((res) => res.rows[0].r);
 
 const opts = GATE.enabled ? {} : { skip: GATE.reason };
-
-/**
- * R3.2.4 — "only probe_tasks" enforced rather than promised. Every write this
- * process attempts is checked against that one table and refused otherwise,
- * across both transports, and a refusal fails the run even if it is caught.
- */
-const WRITE_GUARD = await installLiveWriteGuard({
-  label: "src/lib/probeTasksRace.test.mjs",
-  allow: ["probe_tasks"],
-});
 
 test("the fixture table exists and is the one migration 010 created", opts, async () => {
   const [c] = await connect(1);

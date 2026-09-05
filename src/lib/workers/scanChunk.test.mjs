@@ -42,6 +42,7 @@ function makeFakeBackend() {
   const resultBrands = [];
   const scans = [];
   const brandMetrics = [];
+  const scanRuns = [];
   const schedules = new Map();
   const calls = { updateScanJob: [], insertScan: [], selfContinue: [], claimJobStatus: [] };
   let idCounter = 0;
@@ -202,9 +203,36 @@ function makeFakeBackend() {
     selfContinue: (jobId) => {
       calls.selfContinue.push(jobId);
     },
+
+    // R3.2.4 — the scan_runs ledger, faked in memory like everything else here.
+    // Without these three, `resolveChunkLedger` falls back to db.js's shared
+    // client and every `runScanChunk` in this file called the REAL
+    // `open_scan_run()` RPC against whatever database the shell happened to be
+    // pointing at. It wrote nothing only because `NEXT_PUBLIC_SUPABASE_*` is
+    // normally unset; with `--env-file=.env.local` (which src/lib/liveDbGate.js
+    // tells authors to use) those eight calls went to production. The file's
+    // own header promises "never a real Supabase client" — these keep that
+    // promise instead of relying on the ambient environment to keep it.
+    openScanRun: async (fields) => {
+      const row = { id: nextId("run"), ...fields, beats: 0, closed: null };
+      scanRuns.push(row);
+      return { ...row, open: true };
+    },
+    heartbeatScanRun: async ({ runId }) => {
+      const row = scanRuns.find((r) => r.id === runId);
+      if (!row) throw new Error(`heartbeatScanRun: no run ${runId}`);
+      row.beats++;
+      return { runId, heartbeatAt: new Date().toISOString() };
+    },
+    closeScanRun: async ({ runId, ...fields }) => {
+      const row = scanRuns.find((r) => r.id === runId);
+      if (!row) throw new Error(`closeScanRun: no run ${runId}`);
+      row.closed = fields;
+      return { ...row, ...fields, id: runId, open: false, endedAt: new Date().toISOString() };
+    },
   };
 
-  return { jobs, promptResults, citations, resultBrands, scans, brandMetrics, schedules, calls, deps };
+  return { jobs, promptResults, citations, resultBrands, scans, brandMetrics, schedules, scanRuns, calls, deps };
 }
 
 function makeQueries(n) {
@@ -1490,7 +1518,12 @@ test("runScanChunk — unknown job id returns not_found without throwing", async
 });
 
 test("runScanChunk — a getScanJob read failure is reported, not thrown, and never marks the job failed", async () => {
+  // R3.2.4: the fake backend first, so the scan_runs ledger is the in-memory
+  // one. A bare `{ getScanJob }` here left `resolveChunkLedger` to fall through
+  // to db.js's shared client, and this case opened a real run.
+  const backend = makeFakeBackend();
   const result = await runScanChunk("job-x", {
+    ...backend.deps,
     getScanJob: async () => {
       throw new Error("connection refused");
     },

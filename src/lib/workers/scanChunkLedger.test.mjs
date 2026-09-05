@@ -1,6 +1,27 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
+
+/**
+ * R3.2.4 — the two "no ledger client" cases below MAKE that condition instead
+ * of hoping for it.
+ *
+ * `resolveChunkLedger` disables the ledger when no ledger dep is injected AND
+ * db.js has no client. There is no "client: off" dep to pass, so both cases
+ * used to state their dependency on an unset NEXT_PUBLIC_SUPABASE_* in a
+ * comment and trust the shell. With credentials loaded — which
+ * src/lib/liveDbGate.js tells live-test authors to do — the ledger was ENABLED
+ * and those two cases opened REAL `scan_runs` rows on production instead of
+ * exercising the disabled branch at all.
+ *
+ * Clearing the credentials before the module graph is evaluated makes db.js's
+ * client null however this suite is invoked. The imports must be dynamic:
+ * static ones are hoisted above these two `delete`s, and scanWorker.js's
+ * import of db.js would capture the credentials first.
+ */
+delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const {
   runScanChunk,
   runSourcingPhase,
   runProbingPhase,
@@ -10,8 +31,24 @@ import {
   CHUNK_PHASES,
   CHUNK_RUN_HEARTBEAT_MS,
   CHUNK_TIME_BUDGET_MS,
-} from "./scanWorker.js";
-import { RUN_OUTCOMES, RUNNERS } from "../scanRuns.js";
+} = await import("./scanWorker.js");
+const { RUN_OUTCOMES, RUNNERS } = await import("../scanRuns.js");
+const { supabase } = await import("../db.js");
+
+/**
+ * Asserts the mechanism above worked, not the environment. If this ever fires,
+ * the case that calls it would have written a real scan_runs row — so it fires
+ * BEFORE the call, and nothing reaches the database.
+ */
+function requireNoDbClient(what) {
+  assert.equal(
+    supabase,
+    null,
+    `${what} is about the path taken when db.js has NO Supabase client, and db.js HAS one: the ` +
+      `credential clearing at the top of this file did not take effect. With a client, ` +
+      `resolveChunkLedger enables the ledger and this case would write a real scan_runs row.`
+  );
+}
 
 /**
  * R3.2.1 — one scan_runs row per CHUNK EXECUTION, from the web worker's side.
@@ -191,6 +228,16 @@ function makeBackend() {
   let n = 0;
 
   const deps = {
+    // R3.2.4 — `client: null` is scanWorker.js's test-only injection
+    // (resolveAttemptClient) and it is what makes this backend hermetic. Without
+    // it, `claimJobAttempt` falls through to db.js's shared client and calls the
+    // REAL `claim_scan_job_attempt()` RPC, which writes `scan_jobs.attempts` on
+    // whatever database the shell is pointed at: 24 such calls in this file
+    // reached production the moment `--env-file=.env.local` was used, which is
+    // exactly what src/lib/liveDbGate.js tells live-test authors to do. Passing
+    // null is a declaration, not a coincidence: this file exercises the
+    // in-memory attempt policy on purpose.
+    client: null,
     getScanJob: async (id) => jobs.get(id) || null,
     updateScanJob: async (id, updates) => {
       const job = jobs.get(id) || { id };
@@ -854,6 +901,7 @@ test("runScanChunk — with no ledger client the chunk still runs, and SAYS what
   // `npm run test:scoring` has no Supabase credentials, so db.js's client is
   // null and this is the path every other test in the suite takes. A silent
   // pass here would be a suite that reports green on a ledger nobody wrote.
+  requireNoDbClient("this case");
   const backend = makeBackend();
   const job = backend.seed({ id: "ffffffff-ffff-4fff-8fff-ffffffffffff", status: "complete" });
 
@@ -950,7 +998,10 @@ test("runSourcingPhase — a swallowed prompt-persist failure is COUNTED, not on
 // chunk never watched for any, `skips: []` with `skips_total: 0` means it
 // watched and found none. Those are different rows.
 
-import {
+// R3.2.4: dynamic, like the imports at the top of this file. A static import
+// anywhere in the file is hoisted above the credential clearing there, which
+// would let scanWorker.js -> db.js capture a live client after all.
+const {
   runSchedulerTick,
   runFinalizePhase,
   recordSkip,
@@ -961,8 +1012,8 @@ import {
   SCHEDULER_SKIP_REASONS,
   SCHEDULER_TICK_REASONS,
   SKIP_SAMPLE_MAX,
-} from "./scanWorker.js";
-import { ENGINE_RESOLUTION_SKIPS } from "../scoring/enginePipeline.js";
+} = await import("./scanWorker.js");
+const { ENGINE_RESOLUTION_SKIPS } = await import("../scoring/enginePipeline.js");
 
 /** The one skip entry for `reason` on a closed row, or undefined. */
 function skipEntry(row, reason) {
@@ -1255,6 +1306,7 @@ test("runSchedulerTick — a tick that died inside listDueSchedules reports due 
 test("runSchedulerTick — with no ledger client, the declined brand is still ANNOUNCED", async () => {
   // The suite has no Supabase credentials, so this is the path production takes
   // when the client is missing. A silent decline here is the original bug.
+  requireNoDbClient("this case");
   const backend = makeSchedulerBackend({ due: [schedule("off.com", "off", "Off Co")] });
   const warnings = [];
   const realWarn = console.warn;
@@ -1934,7 +1986,8 @@ test("recordSkip — REFUSES a skip with no reason; it does not file an anonymou
 // And inside the first: content_chars 0 ("we fetched, the page was blank") is
 // not content_chars null ("we were handed no result to measure").
 
-import { SCRAPE_STATE } from "../firecrawl.js";
+// R3.2.4: dynamic for the same reason as the imports above.
+const { SCRAPE_STATE } = await import("../firecrawl.js");
 
 /** What promptGen writes onto `stats` when the vendor 402s and the strip stands in. */
 const DEGRADED_SCRAPE = Object.freeze({

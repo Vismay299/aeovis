@@ -109,13 +109,19 @@ export class ScanWriteError extends Error {
  * `supabase`), matching every other function in this file, so the no-client
  * branch is reachable from a test without unsetting env for the whole process.
  *
- * KNOWN ADJACENT DEFECT, NOT FIXED HERE (reported as its own finding):
- * cascade 3 below inserts without `.select()`, so PostgREST resolves it with
- * `data: null` on SUCCESS. This function then returns null for a row that was
- * genuinely written, and runFinalizePhase reports "Failed to save scan
- * results" — after which a re-finalize has no stamped scan_id and inserts a
- * duplicate. That is the mirror of this task (a success read as a failure) and
- * changing the wire shape of a live insert is out of R2.8.6's scope.
+ * R2.8.7 closes the mirror of that defect, which R2.8.6 flagged here and left:
+ * cascade 3 used to insert WITHOUT `.select()`. `.select()` is the only thing
+ * postgrest-js appends `Prefer: return=representation` for
+ * (postgrest-js/dist/index.mjs:614), and without it PostgREST answers 201 with
+ * an EMPTY BODY, which `processResponse` (:378-385) turns into
+ * `{ data: null, error: null }` — a row that WAS written, reported as nothing.
+ * runFinalizePhase reads `savedScan?.[0]?.id`, gets undefined, throws "Failed
+ * to save scan results", and the job is marked failed: the `scans` row is
+ * ORPHANED (no prompt_results.scan_id, no citations, no result_brands, no
+ * brand_metrics_daily) while the customer is shown a failure for a scan that
+ * actually succeeded. Cascade 3 now selects like the other two, and
+ * `confirmScanWritten` below makes the remaining "no representation came back"
+ * case a DIFFERENT, named failure instead of a silent null.
  */
 export async function insertScan(scanRecord, deps = {}) {
   const client = resolveClient(deps);
@@ -244,13 +250,29 @@ export async function insertScan(scanRecord, deps = {}) {
     } catch (err2) {
       console.warn("Inserting with scoring_version failed, retrying baseRecord only:", err2.message || err2);
       // Cascade 3: try base record only (Legacy schema)
+      //
+      // `.select()` — no argument, so the request is `select=*` and NAMES NO
+      // COLUMN. That is what makes it safe on the older schema this cascade
+      // exists to serve: a column list could reference something the legacy
+      // deployment lacks and turn a working insert into a 42703, whereas `*`
+      // returns whatever that deployment happens to have. Read access is the
+      // same grant the other two cascades already rely on — migration
+      // 001_initial_schema.sql:118 is `FOR ALL TO anon USING (true) WITH CHECK
+      // (true)`, one policy covering INSERT and SELECT — so if
+      // `return=representation` were refused here, cascades 1 and 2 (and
+      // getScansForBrand's `select("*")`) would already be failing.
       try {
         const { data, error } = await client
           .from("scans")
-          .insert([baseRecord]);
+          .insert([baseRecord])
+          .select();
         if (error) throw error;
-        return data;
+        return confirmScanWritten(data, scanRecord);
       } catch (fallbackErr) {
+        // A write we could not CONFIRM is not a write we know failed, and it
+        // must not be relabelled as one on the way out: `db_write_failed` tells
+        // an operator nothing was stored, which would be the opposite of true.
+        if (fallbackErr instanceof ScanWriteError) throw fallbackErr;
         console.error("Fallback insert failed:", fallbackErr);
         // All three cascades are exhausted: the scan is NOT saved. Wrap rather
         // than rethrow so the failure carries a code the caller can branch on
@@ -265,6 +287,41 @@ export async function insertScan(scanRecord, deps = {}) {
       }
     }
   }
+}
+
+/**
+ * The last line of insertScan's cascade 3: an insert that PostgREST accepted
+ * must come back with the row it wrote.
+ *
+ * With `.select()` in place this is expected to be unreachable — PostgREST
+ * answers `return=representation` with the inserted rows. It exists because
+ * the failure it catches is invisible: a 201 whose representation went missing
+ * (a proxy that drops `Prefer`, a gateway that rewrites the body, a future
+ * client change) resolves as `{ data: null, error: null }`, and the caller
+ * downstream reads `savedScan?.[0]?.id` and concludes NOTHING WAS WRITTEN.
+ * That conclusion is wrong in the most expensive direction: the row exists,
+ * nothing points at it, and a re-dispatched finalize writes a second one.
+ *
+ * So the unconfirmed case gets its OWN code. "db_write_unconfirmed" is not
+ * "db_write_failed": one means the database refused the row, the other means
+ * the database took it and would not say so, and the operator's next action is
+ * different in each case — the second one has to go LOOK before re-running.
+ *
+ * @param {unknown} data   whatever the insert resolved `data` to
+ * @param {object} scanRecord  only for the message
+ * @returns {unknown} `data`, unchanged, when it genuinely carries a written row
+ */
+function confirmScanWritten(data, scanRecord) {
+  const rows = Array.isArray(data) ? data : [];
+  if (rows.length > 0 && rows[0] && rows[0].id) return data;
+
+  throw new ScanWriteError(
+    `The scan for "${scanRecord?.brand ?? "unknown brand"}" was accepted by the ` +
+      "database but came back without the inserted row, so it CANNOT be confirmed " +
+      "written. A `scans` row may already exist for this scan: check before " +
+      "re-running, or the retry will duplicate it.",
+    { code: "db_write_unconfirmed" }
+  );
 }
 
 /**
