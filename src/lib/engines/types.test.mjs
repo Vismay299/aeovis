@@ -115,6 +115,11 @@ test("GUARD — no SERP capability check reads SERPAPI_KEY as a credential", asy
     "src/lib/engines/types.js",
     "src/lib/health.js",
     "scripts/check-secrets.mjs",
+    // R0.1.16 — /api/health and check:secrets stopped keeping their own env-var
+    // lists and now share this one. Without it here the two entries above would
+    // still be scanned but no longer contain the names, and this guard would
+    // pass by having nothing left to look at.
+    "src/lib/vendorRegistry.js",
   ];
   const offenders = [];
   for (const rel of sources) {

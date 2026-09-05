@@ -18,7 +18,7 @@ import { VENDORS } from "../../scripts/check-secrets.mjs";
  * and can only ever be tested this way.
  */
 
-const vendor = VENDORS.find((v) => v.name === "brightdata");
+const vendor = VENDORS.find((v) => v.key === "brightdata");
 
 const ENV = ["BRIGHTDATA_API_KEY", "BRIGHTDATA_SERP_ZONE"];
 
@@ -81,7 +81,10 @@ const ACTIVE = { name: "serp_live", type: "serp", status: "active" };
 test("the vendor entry exists and is required", () => {
   assert.ok(vendor, "the brightdata vendor must be in VENDORS");
   assert.equal(vendor.required, true);
-  assert.deepEqual(vendor.keys, ["BRIGHTDATA_API_KEY"]);
+  // `env` and `required` come from src/lib/vendorRegistry.js, `check` from
+  // scripts/check-secrets.mjs; VENDORS is the join (R0.1.16).
+  assert.deepEqual(vendor.env, ["BRIGHTDATA_API_KEY"]);
+  assert.equal(typeof vendor.check, "function");
 });
 
 test("a configured zone that does not exist on the account FAILS", async (t) => {

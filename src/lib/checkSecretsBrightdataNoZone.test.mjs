@@ -24,7 +24,7 @@ import { VENDORS } from "../../scripts/check-secrets.mjs";
  * call in a `beforeEach` is one edit away from being dropped.
  */
 
-const vendor = VENDORS.find((v) => v.name === "brightdata");
+const vendor = VENDORS.find((v) => v.key === "brightdata");
 
 const ENV = ["BRIGHTDATA_API_KEY", "BRIGHTDATA_SERP_ZONE"];
 
