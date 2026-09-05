@@ -2481,7 +2481,7 @@
       ],
       "phase": "R1",
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-test-author",
       "evidence": [
         "src/lib/engines/brightdata.js:299"
@@ -2501,6 +2501,39 @@
           "at": "2026-09-05T06:42:03.914Z",
           "by": "rebuild-test-author",
           "text": "Finding reproduces. Five tests appended to brightdataZone.test.mjs (:412 error-envelope form, :472 status:error/message form, :504 probe-row end to end, :538 snake_case states, :577 recorded rate-limit asymmetry). TEETH CONFIRMED BOTH WAYS: commenting out the 200-envelope branch (brightdata.js:443-445) fails 4 of the 5 new tests while all 10 pre-existing tests stay green -- reproducing the exact gap filed; restored and all 15 pass. MINIMAL SOURCE FIX (brightdata.js:299, +11/-2, regex only): the snake_case test proved a real defect -- zone_suspended/zone_disabled/zone_expired/zone_deleted/suspended_zone/zone_not_active all fell through to a plain Error, so the cache survived a dead zone for a full TTL. Two patterns changed \\b -> (?:\\b|_) and \\s+ -> [\\s_-]+, plus not[ _-]?active; 8 negative cases still do not match. Rate-limit precedence asymmetry left as-is and DOCUMENTED with its reason and its cost in both directions at :577 (accept's second option) -- changing it alters live retry semantics, a source decision. Full suite: 1733 tests, 1707 pass, 0 fail, 26 skipped."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-05T06:54:48.671Z",
+        "note": "Fresh verifier in isolated worktree reproduced the filed gap exactly: commenting out the 200-envelope branch turns the 4 new tests red while ALL 10 pre-existing tests stay green, and in the full suite every one of the 5 failures is in brightdataZone.test.mjs - no other file notices the branch is gone. Reproduced the source defect independently: pre-fix, a 200 body of an error envelope threw an untyped Error and the zone cache SURVIVED (up to 5 min of dead probes); post-fix the cache is invalidated and peekBrightDataZoneCache() is null, asserted at :412. Ran 22 of its own regex negatives through the real code path plus 21 more old-vs-new: the three over-matches it found are byte-for-byte identical before and after this diff, so pre-existing and not chargeable here. Rate-limit asymmetry: confirmed by execution that NEITHER ordering can produce a false success - both terminate in a thrown error and the probe row is counted as errored, never a cost-zero skip. Suite 1731/1705/0/26."
+      }
+    },
+    {
+      "id": "R1.2.11",
+      "subphase": "R1.2",
+      "lane": "test",
+      "phase": "R1",
+      "title": "The widened zone-rejection regex has no committed negative-case test",
+      "detail": "Raised by the R1.2.10 verifier. R1.2.10 widened two zone-rejection patterns so underscore forms classify, and both the implementer and the verifier checked negatives by hand - but the check left NO ARTIFACT, so the boundary is pinned in only one direction. The verifier found three over-matches that are byte-for-byte identical before and after the diff, so pre-existing and not chargeable to R1.2.10, plus eight strings the widening newly matches beyond the six intended. None is a plausible transient Bright Data failure and the worst case is bounded at one lost retry, but a regex whose only negative evidence is a transcript will drift.",
+      "accept": "A committed test asserts a list of transient and unrelated zone-mentioning messages do NOT classify as a permanent zone rejection, including the three known pre-existing over-matches as explicitly documented exceptions with their reason.",
+      "deps": [
+        "R1.2.10"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/engines/brightdata.js",
+        "src/lib/engines/brightdataZone.test.mjs"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T06:55:01.317Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
         }
       ],
       "verification": null
@@ -5586,7 +5619,7 @@
         "src/lib/workers/scanWorker.js"
       ],
       "phase": "R3",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/workers/scanWorker.js:1245",
@@ -5608,7 +5641,11 @@
           "text": "Finished the interrupted run. (a) The dead binding is gone: scanWorker.js:1245 now writes ensureScanScheduleRow's outcome to tally.scheduleRow, createChunkTally seeds it null (:188 = NOT MEASURED, i.e. this chunk never sourced), and chunkRunOutcome puts it on the chunk's single scan_runs row as detail.schedule_row (:530) so created/existing/failed/never-ran are four distinguishable rows. Deliberately NOT on the checkpoint (sourcing runs once per job; a later chunk could only carry a stale copy) - doc comment at :1084 updated to say so instead of 'checkpoint'. Unrecognised state strings pass through verbatim rather than being nulled. (b) New test src/lib/workers/scanSchedule.test.mjs, 8 tests, all through the REAL runSourcingPhase with injected deps (not the helper in isolation): first scan creates the row on the resolveBrandKey key with enabled explicitly present and false (hasOwnProperty asserted, since the column default is true) and next_run_at explicitly null; an existing row gets zero writes and is JSON-identical before/after; getScanSchedule throwing and upsertScanSchedule throwing each still return a full 11-query checkpoint while landing schedule_ensure_failed on the tally + bumping errorsRecovered + closing 'succeeded' with detail.schedule_row='failed'; plus keyless-brand and never-sourced/unknown-state cases. (c) Key-shape check requested: NO disagreement. scanWorker.js:667 promptKey = resolveBrandKey(brand,url); runSchedulerTick feeds schedule.brand back in as  so resolveBrandKey re-derives it; /api/brands/[brand]/schedule uses the path param verbatim as an already-resolved key; migration 005:85 says the same. No migration needed - display_name/enabled/next_run_at/last_run_at all exist on scan_schedules. (d) Full suite run: 1727 tests, 2 fail, both in src/lib/insertScanWriteFailure.test.mjs and src/lib/collectionWindowPersist.test.mjs (insertScan cascade work by a concurrent agent, not mine). Every worker test file re-run individually: scanChunk 45/45, scanChunkLedger 67/67, promptSourcing 11/11, engineSetChange 10/10, scanJobAttempts 25/25, twoPassFinalize 5/5, scanWorkerRoute 15/15, db/promptWriteFailure 10/10, scanSchedule 8/8 - all pass. (e) Be suspicious of: no test drives runScanChunk end-to-end to prove detail.schedule_row reaches a real scan_runs row - I verified the wiring by reading (one tally created at :2263, passed to runSourcingPhase at :2416, read by chunkRunOutcome at :2298) and covered both ends separately, matching how R3.2.2's skips are already tested. Also worth a look: the created row takes the DB column default for cadence, which is '72h' in Postgres but undefined in the no-client memory path (dev/test only)."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-05T06:54:48.886Z",
+        "note": "Fresh verifier in isolated worktree reproduced the OLD failure by execution rather than reading: driving HEAD~1's runSourcingPhase with the same first-scan input gives zero reads and zero writes; at HEAD it gives exactly one write. Four teeth checks all bit, including that enabled:undefined is caught by the assert.equal where hasOwnProperty alone would not. Verified the opt-in claim from schema independently: migration 005 defaults enabled to true and isDueSchedule treats a null next_run_at as immediately due, so omitting the field would fire every free-scan brand on the next cron tick. Crucially it BUILT the end-to-end test the implementer admitted was missing: a throwaway runScanChunk harness through the real entry point, three cases - first scan gives detail.schedule_row created with the write keyed on resolveBrandKey; a resuming chunk makes zero schedule calls and reports null (not a fabricated 'existing'); a throwing upsert still completes with schedule_row failed, errors_recovered 1 and the named skip. Suite 1731/1705/0/26."
+      }
     },
     {
       "id": "R3.4.2",
@@ -5684,6 +5721,35 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.4.5",
+      "subphase": "R3.4",
+      "lane": "backend",
+      "phase": "R3",
+      "title": "The first-scan schedule registration is a non-atomic get-then-upsert, and its wiring is untested",
+      "detail": "Two follow-ups from the R3.4.1 verifier, neither of which held that task. (1) ensureScanScheduleRow reads then writes. If an operator PUTs enabled true in the window between getSchedule returning null and the create write, the create clobbers it back to enabled false with next_run_at null. The window is sub-second and needs a manual edit for a brand whose very first scan is mid-sourcing, and it is strictly safer than the prior state of no row at all - but an insert with an onConflict do-nothing removes it entirely. (2) R3.4.1 shipped with no runScanChunk-level test; the verifier built one itself and confirmed the wiring is unconditional, but that harness was throwaway. One runScanChunk case folded into scanSchedule.test.mjs would stop a future refactor silently severing the call. Also noted and judged benign: the memory-path cadence is undefined where Postgres would default to 72h, but computeNextRunAt and applyNextRunAt both fall back to 72h, so it cannot produce a wrong scheduling decision - it is cosmetic.",
+      "accept": "The registration is a single atomic write that cannot clobber a concurrent operator edit, and scanSchedule.test.mjs contains at least one case driving the real runScanChunk entry point.",
+      "deps": [
+        "R3.4.1"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/workers/scanWorker.js",
+        "src/lib/workers/scanSchedule.test.mjs"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T06:55:22.309Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
       "verification": null
     },
     {
