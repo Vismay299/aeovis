@@ -1237,6 +1237,36 @@
       "verification": null
     },
     {
+      "id": "R0.1.23",
+      "subphase": "R0.1",
+      "lane": "docs",
+      "phase": "R0",
+      "title": ".env.example still tells the operator the Vercel forwarded-for header is trusted",
+      "detail": "Reported by the R0.1.20 implementer, outside its file set. .env.example around line 77 reads that on Vercel you do not need the trusted-header variable because x-vercel-forwarded-for is trusted when VERCEL is set. R0.1.20 withdrew exactly that trust label, so the sentence is now false - and this is the operator-facing documentation for that precise knob, which makes it the most likely place for the withdrawn assumption to be silently reinstated. It needs a one-line correction pointing at the greppable RESTORE-TRUST-R0.1.20 marker. docs/OPERATOR_LEDGER.md carries the same now-stale claim around line 410.",
+      "accept": ".env.example and the operator ledger describe the header as untrusted-pending-proof and point at the restore marker. No file tells an operator the platform header is trusted.",
+      "deps": [
+        "R0.1.20"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        ".env.example:77",
+        "docs/OPERATOR_LEDGER.md:410",
+        "src/lib/rateLimit.js:121"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T07:24:44.594Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R0.2.1",
       "subphase": "R0.2",
       "lane": "docs",
@@ -4765,6 +4795,37 @@
       "verification": null
     },
     {
+      "id": "R2.8.13",
+      "subphase": "R2.8",
+      "lane": "backend",
+      "phase": "R2",
+      "title": "Four more fail-quiet reads, including the other half of the endpoint R2.8.5 just fixed",
+      "detail": "Enumerated by the R2.8.5 implementer while fixing its own four anchors, and deliberately left rather than widening the diff. (1) src/lib/db/content.js listResumableContentJobs catches and returns an empty array - it is read by the very content-worker route R2.8.5 just made loud, so an outage still yields a green cron report saying resumed 0. That is the highest-value of the four: half the endpoint now tells the truth and half still lies. (2) src/lib/db.js listRecentScans returns an empty array both with no client AND on any error, so the homepage workspace renders no scans yet during an outage. (3) src/lib/db/content.js listContentRunsForJob, same catch-to-empty. (4) src/lib/db.js returns an empty array when there is no host, answering an unaskable question with a measured empty. The implementer judged src/lib/db/prompts.js NOT a finding: its non-strict empty return is deliberate and documented, and a strict mode exists which the scan worker uses.",
+      "accept": "Each of the four refuses rather than returning an empty array when it could not ask, in the shape R2.8.4 and R2.8.5 established. The content-worker cron report cannot say resumed 0 when the resume list could not be read. Tests cover each.",
+      "deps": [
+        "R2.8.5"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/db/content.js:289",
+        "src/lib/db/content.js:410",
+        "src/lib/db.js:513",
+        "src/lib/db.js:479"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T07:24:43.129Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R2.9.1",
       "subphase": "R2.9",
       "lane": "frontend",
@@ -6821,6 +6882,35 @@
       "verification": null
     },
     {
+      "id": "R4.3.4",
+      "subphase": "R4.3",
+      "lane": "frontend",
+      "phase": "R4",
+      "title": "The metrics endpoint drops the new SOV state, so the client still gets a bare null",
+      "detail": "Reported by the R4.3.2 implementer. GET /api/brands/[brand]/metrics maps series fields explicitly, so sov_state and sov_state_reason never reach the client. The durable row now tells the truth - self_only_roster gives null with a reason, brand_not_visible gives a measured zero - and the endpoint still hands over a bare sov_pct null with no reason, so the consumer cannot render the em-dash-plus-state-chip that standing rule 5 requires. Same shape as R2.1.2 one layer down. Also in scope, from the same report: src/lib/workers/scanWorker.js around :1855 still carries a comment reading that fullRoster is self alone and sov_pct is a real 100 percent because nobody else was co-mentioned - that is precisely the belief R4.3.2 deleted, and leaving it invites the next reader to restore the bug.",
+      "accept": "The metrics endpoint passes sov_state and sov_state_reason through, and a consumer renders an em dash plus a state chip rather than a bare null. The stale scanWorker comment is corrected.",
+      "deps": [
+        "R4.3.2"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/app/api/brands/[brand]/metrics/route.js:76",
+        "src/lib/workers/scanWorker.js:1855"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T07:24:43.664Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R4.4.1",
       "subphase": "R4.4",
       "lane": "backend",
@@ -7716,6 +7806,34 @@
       "notes": [
         {
           "at": "2026-09-05T06:51:44.001Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.1.12",
+      "subphase": "R6.1",
+      "lane": "infra",
+      "phase": "R6",
+      "title": "The migration runner cannot verify a column, so column-only migrations are checked by proxy",
+      "detail": "Reported independently by the R4.3.2 implementer and consistent with what the R6.1.2 verifier found. objectExists in scripts/setup-supabase.mjs handles kinds table, index and function only. Both migration 012 and the new 013 are column-only migrations, so each is verified through a PROXY INDEX rather than the column it exists to add - a database with the index and without the column passes npm run setup:db. docs/PROD_MIGRATIONS.md already supplies the correct catalog query for a column kind against pg_attribute; the runner should use the same one. The R6.1.2 verifier separately confirmed the adjacent weakness that the runner checks functions by NAME only, so a CREATE OR REPLACE that changed a signature and created an overload reads as present.",
+      "accept": "objectExists supports a column kind via pg_attribute and a function kind that matches on signature, not name. 012 and 013 verify their actual columns. A test drives a catalog missing the column but carrying the proxy index and asserts the runner refuses.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "scripts/setup-supabase.mjs",
+        "docs/PROD_MIGRATIONS.md",
+        "src/lib/migrationsRunner.test.mjs"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T07:24:44.116Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
