@@ -55,9 +55,19 @@ register("./cronAuth.route.hooks.mjs", import.meta.url);
 let importError = null;
 let GET = null;
 let chunkRunOutcome = null;
+let classifySchedulerTick = null;
+let schedulerTickThrew = null;
+let buildSweepResponse = null;
+let runSchedulerTick = null;
+let SCHEDULER_SKIP_REASONS = null;
+let SCHEDULER_TICK_REASONS = null;
 try {
-  ({ GET } = await import("../app/api/scan/worker/route.js"));
-  ({ chunkRunOutcome } = await import("./workers/scanWorker.js"));
+  ({ GET, classifySchedulerTick, schedulerTickThrew, buildSweepResponse } = await import(
+    "../app/api/scan/worker/route.js"
+  ));
+  ({ chunkRunOutcome, runSchedulerTick, SCHEDULER_SKIP_REASONS, SCHEDULER_TICK_REASONS } = await import(
+    "./workers/scanWorker.js"
+  ));
 } catch (error) {
   importError = error;
 }
@@ -270,5 +280,240 @@ test("GUARD — the route counts only a succeeded chunk as processed", async () 
     src,
     /\{\s*processed:\s*1\s*,/,
     "an unconditional processed:1 is the R3.1.3 defect — the counter must be derived from the result"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R3.2.6 — the SWEEP branch's scheduler report.
+//
+// THE FINDING. R3.2.2 taught runSchedulerTick to return `{started, skipped}`
+// and to file a scan_runs row per declined brand. The route then did
+// `scheduled = tickResult.started` and dropped `skipped` on the floor, so a
+// tick that found brands due and declined every one of them went onto the wire
+// as `scheduled: []` — byte-identical to a tick with nothing due. An operator
+// watching the daily cron could not tell a starved scheduler from an idle one.
+//
+// HOW THIS IS DRIVEN, and what it cannot reach. The sweep branch of GET is
+// behind `if (!supabase) return`, and this suite has no Supabase on purpose
+// (see the file header: it is what guarantees no scan is ever started and
+// nothing is written to a database). So these tests do not go through the HTTP
+// handler. They drive the REAL runSchedulerTick — unmodified, with its backend
+// injected through the deps it already accepts, exactly as
+// scanChunkLedger.test.mjs drives it — and hand its REAL return value to the
+// REAL functions the route builds its response body from. What is asserted is
+// the object the route passes to NextResponse.json, plus a source guard
+// pinning that the route actually routes the whole tick result through them.
+// ---------------------------------------------------------------------------
+
+/** A scheduler backend that cannot create a job unless the tick asks it to. */
+function schedulerBackend({ due = [], active = new Set() } = {}) {
+  const jobs = [];
+  let n = 0;
+  return {
+    jobs,
+    deps: {
+      listDueSchedules: async () => due,
+      hasActiveScanForBrand: async (brand) => active.has(brand),
+      createScanJob: async (fields) => {
+        const job = { id: `r326-job-${n++}`, ...fields };
+        jobs.push(job);
+        return job;
+      },
+      upsertScanSchedule: async () => ({}),
+      // Fire-and-forget kick, stubbed to a no-op: a real one would start a scan,
+      // which this suite must never do.
+      runScanChunk: async () => {},
+      schedulerId: "scheduler-r326",
+    },
+  };
+}
+
+function dueSchedule(brand, cadence = "daily", displayName = null) {
+  return { brand, display_name: displayName, cadence, enabled: true, next_run_at: null };
+}
+
+const TICK_NOW = "2026-09-04T00:00:00.000Z";
+
+/** Run the real tick quietly (its ledger-disabled warnings are not the subject). */
+async function tick(backend) {
+  const warn = console.warn;
+  const error = console.error;
+  console.warn = () => {};
+  console.error = () => {};
+  try {
+    return await runSchedulerTick(TICK_NOW, backend.deps);
+  } finally {
+    console.warn = warn;
+    console.error = error;
+  }
+}
+
+/** The exact body the sweep branch hands to NextResponse.json. */
+function sweepBody(scheduler, scheduled) {
+  return buildSweepResponse({ activeCount: 0, resumedIds: [], scheduled, scheduler });
+}
+
+test("R3.2.6 — a tick that declined EVERY due brand is not reported as an idle tick", async () => {
+  handler();
+
+  // Two brands were due. One had its cadence flipped to 'off', one already has
+  // a scan running. Neither was scanned, and no job was created.
+  const starved = schedulerBackend({
+    due: [dueSchedule("off-co.com", "off", "Off Co"), dueSchedule("busy.com", "daily", "Busy Co")],
+    active: new Set(["Busy Co"]),
+  });
+  const starvedTick = await tick(starved);
+  assert.equal(starved.jobs.length, 0, "the tick really did decline both — nothing was scanned");
+  assert.deepEqual(starvedTick.started, [], "…so `started` is empty, which is what used to hide this");
+
+  const quiet = schedulerBackend({ due: [] });
+  const quietTick = await tick(quiet);
+  assert.deepEqual(quietTick.started, []);
+
+  const starvedBody = sweepBody(classifySchedulerTick(starvedTick), starvedTick.started);
+  const quietBody = sweepBody(classifySchedulerTick(quietTick), quietTick.started);
+
+  // THE CRITERION, stated the way the wire states it. Before R3.2.6 both of
+  // these serialized to the same bytes; if they ever do again, this fails.
+  assert.notEqual(
+    JSON.stringify(starvedBody),
+    JSON.stringify(quietBody),
+    "a tick that declined every due brand serializes identically to an idle tick — " +
+      "this is the R3.2.6 finding, back on the wire"
+  );
+
+  assert.equal(starvedBody.scheduler.outcome, "skipped");
+  assert.equal(quietBody.scheduler.outcome, "idle");
+  assert.notEqual(
+    starvedBody.scheduler.outcome,
+    quietBody.scheduler.outcome,
+    "a starved scheduler and an idle one must not share an outcome"
+  );
+
+  // …and the reasons, which is the other half of the accept.
+  assert.equal(starvedBody.scheduler.reason, SCHEDULER_TICK_REASONS.ALL_DUE_SKIPPED);
+  assert.equal(quietBody.scheduler.reason, SCHEDULER_TICK_REASONS.NO_SCHEDULES_DUE);
+
+  assert.equal(starvedBody.scheduler.due, 2, "two brands were due — the wire says so");
+  assert.equal(starvedBody.scheduler.started, 0);
+  assert.equal(starvedBody.scheduler.skipped, 2);
+  assert.equal(quietBody.scheduler.due, 0, "an idle tick reports a measured zero, not an absent field");
+
+  // Which brands, and why — verbatim from the ledger's own skip vocabulary.
+  assert.deepEqual(starvedBody.scheduler.skips, [
+    { brand: "Off Co", reason: SCHEDULER_SKIP_REASONS.CADENCE_OFF },
+    { brand: "Busy Co", reason: SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE },
+  ]);
+  assert.deepEqual(starvedBody.scheduler.skip_reasons, {
+    [SCHEDULER_SKIP_REASONS.CADENCE_OFF]: 1,
+    [SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE]: 1,
+  });
+  assert.deepEqual(quietBody.scheduler.skips, [], "nothing was declined, so nothing is named");
+
+  // Still a 200-shaped success: the tick itself did not fail, it declined.
+  assert.equal(starvedBody.scheduler_ok, true);
+  assert.equal(starvedBody.scheduler_error, null);
+  // And the pre-existing field keeps its old meaning for anything reading it.
+  assert.deepEqual(starvedBody.scheduled, []);
+});
+
+test("R3.2.6 — a tick that started a brand reads as started, and still names the ones it declined", async () => {
+  handler();
+  const backend = schedulerBackend({
+    due: [dueSchedule("go.com", "daily", "Go Co"), dueSchedule("off-co.com", "off", "Off Co")],
+  });
+  const result = await tick(backend);
+  assert.equal(backend.jobs.length, 1, "exactly the one due, enabled brand was scanned");
+
+  const body = sweepBody(classifySchedulerTick(result), result.started);
+  assert.equal(body.scheduler.outcome, "started");
+  assert.equal(body.scheduler.reason, null, "it started work; there is no decline reason for the tick");
+  assert.equal(body.scheduler.due, 2);
+  assert.equal(body.scheduler.started, 1);
+  assert.equal(
+    body.scheduler.skipped,
+    1,
+    "one brand went unscanned — a partially starved tick must not round up to a clean success"
+  );
+  assert.deepEqual(body.scheduler.skips, [
+    { brand: "Off Co", reason: SCHEDULER_SKIP_REASONS.CADENCE_OFF },
+  ]);
+  assert.equal(body.scheduled[0].brand, "Go Co");
+});
+
+test("R3.2.6 — the three tick states are three different bodies", async () => {
+  handler();
+  const backends = [
+    schedulerBackend({ due: [] }),
+    schedulerBackend({ due: [dueSchedule("off-co.com", "off", "Off Co")] }),
+    schedulerBackend({ due: [dueSchedule("go.com", "daily", "Go Co")] }),
+  ];
+  const bodies = [];
+  for (const backend of backends) {
+    const result = await tick(backend);
+    bodies.push(sweepBody(classifySchedulerTick(result), result.started));
+  }
+
+  const outcomes = bodies.map((b) => b.scheduler.outcome);
+  assert.deepEqual(outcomes, ["idle", "skipped", "started"]);
+  assert.equal(new Set(outcomes).size, 3, "nothing due / all declined / started must be three answers");
+});
+
+test("R3.2.6 — a tick that threw reports null counts, never a clean zero", () => {
+  handler();
+  const verdict = schedulerTickThrew(new Error("listDueSchedules exploded"));
+
+  assert.equal(verdict.outcome, "failed");
+  assert.equal(verdict.reason, SCHEDULER_TICK_REASONS.TICK_FAILED);
+  for (const field of ["due", "started", "skipped", "skips", "skip_reasons"]) {
+    assert.equal(
+      verdict[field],
+      null,
+      `${field}: a tick that died mid-list never finished counting — 0 would be a count it never took`
+    );
+  }
+
+  const body = sweepBody(verdict, null);
+  assert.equal(body.scheduler_ok, false);
+  assert.equal(body.scheduler_error, "listDueSchedules exploded", "the error still reaches the wire");
+  assert.equal(body.scheduled, null, "never `?? []` a measurement that did not happen");
+});
+
+test("R3.2.6 — a tick result missing `skipped` fails loud instead of reading as idle", () => {
+  handler();
+  // The pre-R3.2.2 shape. If runSchedulerTick's contract ever regresses, the
+  // route must not quietly report the resulting `{started: []}` as an idle
+  // scheduler — that is the exact lie this task removes, one layer down.
+  const verdict = classifySchedulerTick({ started: [] });
+
+  assert.equal(verdict.outcome, "failed");
+  assert.notEqual(verdict.outcome, "idle");
+  assert.match(verdict.reason, /^scheduler_contract_broken:/);
+  assert.equal(verdict.skipped, null, "unmeasured, not zero");
+  assert.equal(sweepBody(verdict, []).scheduler_ok, false);
+});
+
+test("GUARD — the sweep route hands the WHOLE tick result to the classifier", async () => {
+  const src = await readFile(new URL("../app/api/scan/worker/route.js", import.meta.url), "utf8");
+
+  // Anchored on the ASSIGNMENT, not the bare call: `classifySchedulerTick(`
+  // alone also matches this module's own `export function` line, so a route
+  // that reverted to passing `{started: tickResult.started}` — the exact
+  // R3.2.6 defect, one call frame later — would slip through.
+  assert.match(
+    src,
+    /scheduler\s*=\s*classifySchedulerTick\(tickResult\)\s*;/,
+    "the sweep branch must classify the WHOLE tick result, not a field or two picked off it — " +
+      "picking `started` out of it is the R3.2.6 defect wearing the new function's name"
+  );
+  assert.match(
+    src,
+    /NextResponse\.json\(\s*buildSweepResponse\(/,
+    "the sweep response must be the tested builder's output, not an inline object literal"
+  );
+  assert.doesNotMatch(
+    src,
+    /scheduled\s*=\s*tickResult\.started\s*;/,
+    "reading only `tickResult.started` is the R3.2.6 defect — `skipped` must not be dropped"
   );
 });

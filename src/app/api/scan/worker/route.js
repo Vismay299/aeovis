@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/cronAuth";
 import { recordCronTick } from "@/lib/db/analytics";
 import { supabase } from "@/lib/db";
-import { chunkRunOutcome, runScanChunk, runSchedulerTick, shouldRescueJob } from "@/lib/workers/scanWorker";
+import {
+  SCHEDULER_TICK_REASONS,
+  chunkRunOutcome,
+  runScanChunk,
+  runSchedulerTick,
+  shouldRescueJob,
+} from "@/lib/workers/scanWorker";
 import { RUN_OUTCOMES } from "@/lib/scanRuns";
 
 // This route has side effects (it resumes real scans and, via the scheduler
@@ -111,6 +117,153 @@ function chunkResponseBody(jobId, verdict) {
     processed: verdict.outcome === "processed" ? 1 : 0,
     skipped: verdict.outcome === "skipped" ? 1 : 0,
     failed: verdict.outcome === "failed" ? 1 : 0,
+  };
+}
+
+/**
+ * R3.2.6 — the scheduler branch of the sweep, in the same three words.
+ *
+ * THE FINDING. R3.2.2 taught `runSchedulerTick` to return `{started, skipped}`
+ * and to write a scan_runs row per declined brand, so the LEDGER can tell an
+ * idle cron from a starved one. This route then did `scheduled =
+ * tickResult.started` and threw `skipped` away, so on the wire a tick that
+ * found four due brands and declined every one of them was byte-identical to a
+ * tick with nothing due: `scheduled: []` either way. Standing rule 1 — a skip
+ * is not a success, and an empty state is not a clean one.
+ *
+ * The distinction the wire has to carry is THREE-way, not two:
+ *   started — at least one due brand got a job. (ledger: succeeded)
+ *   skipped — brands were due and every one was declined. (ledger: noop /
+ *             all_due_skipped) This is the starved scheduler, and it is the
+ *             state that used to be invisible.
+ *   idle    — the tick looked and nothing was due. (ledger: noop /
+ *             no_schedules_due) A measured zero, not a silence.
+ * plus `failed` when the tick threw, which already had `scheduler_ok: false`.
+ *
+ * As in classifyChunkResult above, the reasons are NOT re-invented here: they
+ * are `SCHEDULER_TICK_REASONS`, the exact strings runSchedulerTick closes its
+ * own tick row with, so the wire and the ledger cannot disagree about the same
+ * pass. The per-brand decline reasons (`cadence_off`, `brand_already_active`)
+ * travel verbatim from the ledger rows, named per brand in `skips` and tallied
+ * in `skip_reasons` — an operator reading the cron response can see WHICH
+ * brands are starving and WHY without opening the database.
+ */
+export const SCHEDULER_OUTCOMES = Object.freeze({
+  STARTED: "started",
+  ALL_DUE_SKIPPED: "skipped",
+  IDLE: "idle",
+  FAILED: "failed",
+});
+
+/** `{cadence_off: 2, brand_already_active: 1}` from the skip list. */
+function tallySkipReasons(skips) {
+  const tally = {};
+  for (const skip of skips) {
+    // A skip that arrived without a reason is exactly the unexplained skip
+    // R3.2.2 abolished. It gets a visible bucket rather than being dropped.
+    const reason = String(skip?.reason ?? "").trim() || "unnamed_skip_reason";
+    tally[reason] = (tally[reason] || 0) + 1;
+  }
+  return tally;
+}
+
+/**
+ * Turn a runSchedulerTick result into the wire's scheduler verdict.
+ *
+ * `due` is derived, not guessed: runSchedulerTick puts every schedule it
+ * listed into exactly one of `started` or `skipped` before it returns, so the
+ * sum IS the due count. If the tick throws it never returns here at all — that
+ * path is schedulerTickThrew() below, where every count is null because a tick
+ * that died mid-list never finished counting.
+ */
+export function classifySchedulerTick(tickResult) {
+  const started = tickResult?.started;
+  const skipped = tickResult?.skipped;
+
+  // Never round a missing measurement down to a clean zero. If runSchedulerTick
+  // ever stops returning both arrays, that is a broken contract and it says so
+  // loudly instead of reporting an idle scheduler (rule 1, and the reason
+  // R3.2.2's `skipped` exists at all).
+  if (!Array.isArray(started) || !Array.isArray(skipped)) {
+    return {
+      outcome: SCHEDULER_OUTCOMES.FAILED,
+      reason: `scheduler_contract_broken:started=${typeof started},skipped=${typeof skipped}`,
+      ledger_outcome: RUN_OUTCOMES.FAILED,
+      due: null,
+      started: null,
+      skipped: null,
+      skips: null,
+      skip_reasons: null,
+    };
+  }
+
+  let outcome;
+  let reason;
+  let ledgerOutcome;
+  if (started.length > 0) {
+    // Started something. `skips` is still reported: a tick that started one
+    // brand and declined nine is not a healthy tick, and rounding it to
+    // "started" with no detail would hide nine starving brands.
+    outcome = SCHEDULER_OUTCOMES.STARTED;
+    reason = null;
+    ledgerOutcome = RUN_OUTCOMES.SUCCEEDED;
+  } else if (skipped.length > 0) {
+    outcome = SCHEDULER_OUTCOMES.ALL_DUE_SKIPPED;
+    reason = SCHEDULER_TICK_REASONS.ALL_DUE_SKIPPED;
+    ledgerOutcome = RUN_OUTCOMES.NOOP;
+  } else {
+    outcome = SCHEDULER_OUTCOMES.IDLE;
+    reason = SCHEDULER_TICK_REASONS.NO_SCHEDULES_DUE;
+    ledgerOutcome = RUN_OUTCOMES.NOOP;
+  }
+
+  return {
+    outcome,
+    reason,
+    ledger_outcome: ledgerOutcome,
+    due: started.length + skipped.length,
+    started: started.length,
+    skipped: skipped.length,
+    skips: skipped.map((skip) => ({
+      brand: skip?.brand ?? null,
+      reason: skip?.reason ?? null,
+    })),
+    skip_reasons: tallySkipReasons(skipped),
+  };
+}
+
+/** The verdict for a tick that threw: nothing was measured, so nothing is 0. */
+export function schedulerTickThrew(error) {
+  return {
+    outcome: SCHEDULER_OUTCOMES.FAILED,
+    reason: SCHEDULER_TICK_REASONS.TICK_FAILED,
+    ledger_outcome: RUN_OUTCOMES.FAILED,
+    due: null,
+    started: null,
+    skipped: null,
+    skips: null,
+    skip_reasons: null,
+    error: error?.message || String(error),
+  };
+}
+
+/**
+ * The whole sweep body, in one place so the response the cron actually reads
+ * can be driven by a test. The sweep branch cannot be reached through the HTTP
+ * handler in a test (it requires a live Supabase, and this suite deliberately
+ * has none — see the header of scanWorkerRoute.route.test.mjs), so the body is
+ * built here rather than inline in GET and asserted directly.
+ */
+export function buildSweepResponse({ activeCount, resumedIds, scheduled, scheduler }) {
+  return {
+    mode: "sweep",
+    dispatched: resumedIds.length,
+    job_ids: resumedIds,
+    active: activeCount,
+    scheduled,
+    scheduler_ok: scheduler.outcome !== SCHEDULER_OUTCOMES.FAILED,
+    scheduler_error: scheduler.outcome === SCHEDULER_OUTCOMES.FAILED ? scheduler.error ?? scheduler.reason : null,
+    scheduler,
   };
 }
 
@@ -226,17 +379,28 @@ export async function GET(request) {
     // about. `scheduled: null` plus `scheduler_ok: false` keeps the two apart
     // (rule 1, and never `?? 0` on a measurement that did not happen). Still
     // 200: the sweep above is the cron's actual job and it succeeded.
+    //
+    // R3.2.6: `tickResult.skipped` is no longer dropped on the floor. The whole
+    // result goes to classifySchedulerTick, so "nothing was due" and "every due
+    // brand was declined" stop being the same `scheduled: []` on the wire.
     let scheduled = [];
-    let schedulerOk = true;
-    let schedulerError = null;
+    let scheduler;
     try {
       const tickResult = await runSchedulerTick(new Date().toISOString());
-      scheduled = tickResult.started;
+      scheduler = classifySchedulerTick(tickResult);
+      scheduled = Array.isArray(tickResult?.started) ? tickResult.started : null;
+      if (scheduler.outcome === SCHEDULER_OUTCOMES.ALL_DUE_SKIPPED) {
+        console.warn(
+          `[worker] Scheduler tick declined every one of ${scheduler.due} due brand(s): ` +
+            `${JSON.stringify(scheduler.skip_reasons)}. This is a STARVED scheduler, not an idle one.`
+        );
+      } else if (scheduler.outcome === SCHEDULER_OUTCOMES.FAILED) {
+        console.error(`[worker] Scheduler tick returned an unusable result: ${scheduler.reason}`);
+      }
     } catch (err) {
       console.error("[worker] Scheduler tick failed:", err);
       scheduled = null;
-      schedulerOk = false;
-      schedulerError = err?.message || String(err);
+      scheduler = schedulerTickThrew(err);
     }
 
     // The sweep DISPATCHES chunks (fire-and-forget, above) and never awaits
@@ -245,15 +409,14 @@ export async function GET(request) {
     // what this response knows. `active` makes an idle tick legible: 0 active
     // jobs and 0 dispatched is a healthy quiet day, and it no longer looks the
     // same as 20 active jobs none of which we managed to kick.
-    return NextResponse.json({
-      mode: "sweep",
-      dispatched: resumedIds.length,
-      job_ids: resumedIds,
-      active: (activeJobs || []).length,
-      scheduled,
-      scheduler_ok: schedulerOk,
-      scheduler_error: schedulerError,
-    });
+    return NextResponse.json(
+      buildSweepResponse({
+        activeCount: (activeJobs || []).length,
+        resumedIds,
+        scheduled,
+        scheduler,
+      })
+    );
   } catch (error) {
     console.error("Cron worker route error:", error);
     return NextResponse.json({ detail: "Internal Server Error" }, { status: 500 });

@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**67 / 193 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**71 / 195 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -24,7 +24,7 @@ Baseline commit: `5111219`
 10. Trace a call site to an HTTP route or a cron entry before describing it as live. A correct file:line proves a line exists, not that anything reaches it.
 11. Close an item only when, in the same commit, its box is ticked, the commit body cites the file:line where the change lives, and the acceptance criterion was exercised — run, not read and not reasoned about. If it could not be exercised here, the item is blocked with the reason, never closed.
 
-## R0 — Ground zero  `23/32`
+## R0 — Ground zero  `24/32`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -47,7 +47,7 @@ Baseline commit: `5111219`
 - [-] **R0.1.15** ROTATE the GSC service-account key — leaked into an agent transcript `needs-secrets` — blocked: needs-secrets
 - [x] **R0.1.16** health.js keeps a second vendor list and claims it is shared — closed at `src/lib/vendorRegistry.js:49`, `src/lib/vendorRegistry.js:92`, `src/lib/health.js:28`, `src/lib/health.js:15`, `scripts/check-secrets.mjs:43`, `scripts/check-secrets.mjs:96`, `scripts/check-secrets.mjs:380`, `scripts/check-secrets.mjs:526`, `src/lib/vendorRegistry.test.mjs:46`, `src/lib/vendorRegistry.test.mjs:61`, `src/lib/engines/types.test.mjs:122`
 - [ ] **R0.1.17** Nothing detects a NODE_ENV that lies
-- [~] **R0.1.18** Three footguns in the rate-limit trust knob — submitted `src/lib/rateLimit.test.mjs:327`, `src/lib/rateLimit.test.mjs:46`, `src/lib/rateLimit.test.mjs:456`, `src/lib/rateLimit.test.mjs:476`, `src/lib/rateLimit.js:196`, `src/lib/rateLimit.js:231`, `src/lib/rateLimit.js:240`, `src/lib/rateLimit.js:110`, `src/lib/rateLimit.js:145`, `.env.example:60`
+- [x] **R0.1.18** Three footguns in the rate-limit trust knob — closed at `src/lib/rateLimit.test.mjs:327`, `src/lib/rateLimit.test.mjs:46`, `src/lib/rateLimit.test.mjs:456`, `src/lib/rateLimit.test.mjs:476`, `src/lib/rateLimit.js:196`, `src/lib/rateLimit.js:231`, `src/lib/rateLimit.js:240`, `src/lib/rateLimit.js:110`, `src/lib/rateLimit.js:145`, `.env.example:60`
 - [ ] **R0.1.19** The perimeter warn-once guard is evadable in one added line
 - [ ] **R0.1.20** Nothing proves Vercel strips an inbound x-vercel-forwarded-for `needs-vercel`
 - [ ] **R0.1.21** POST /api/scan returns 201 off a job that only exists in memory `needs-decision`
@@ -69,13 +69,13 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `6/33`
+## R1 — Real-surface probe fleet  `7/33`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
 ### R1.1
 
-- [~] **R1.1.1** Probe Result Contract v2 — submitted `docs/contracts/probe-result.md:15`, `docs/contracts/probe-result.md:74`, `docs/contracts/probe-result.md:304`, `docs/contracts/probe-result.md:647`, `docs/contracts/probe-result.md:694`, `docs/contracts/probe-result.md:952`, `docs/contracts/probe-result.md:981`, `docs/contracts/probe-result.md:1049`, `docs/contracts/probe-result.md:1106`, `docs/contracts/probe-result.md:1145`, `src/lib/scoring/enginePipeline.js:331`, `src/lib/scoring/enginePipeline.js:386`, `src/lib/scoring/enginePipeline.js:466`, `src/lib/scoring/enginePipeline.js:480`, `src/lib/scoring/enginePipeline.js:735`, `src/lib/scoring/enginePipeline.js:818`, `src/lib/scoring/enginePipeline.js:939`, `src/lib/workers/scanWorker.js:1227`, `src/lib/workers/scanWorker.js:1307`, `src/lib/workers/scanWorker.js:1769`, `src/lib/workers/scanWorker.js:2181`, `src/lib/db.js:123`, `src/lib/db.js:147`, `src/lib/content/weeklyReport.js:24`, `src/lib/llmPricing.js:79`, `src/lib/llmPricing.js:229`, `src/lib/llmPricing.js:335`, `src/lib/engines/deployedEngines.js:21`, `worker/src/lib/queue.js:207`, `worker/src/index.js:174`, `worker/src/index.js:211`
+- [x] **R1.1.1** Probe Result Contract v2 — closed at `docs/contracts/probe-result.md:15`, `docs/contracts/probe-result.md:74`, `docs/contracts/probe-result.md:304`, `docs/contracts/probe-result.md:647`, `docs/contracts/probe-result.md:694`, `docs/contracts/probe-result.md:952`, `docs/contracts/probe-result.md:981`, `docs/contracts/probe-result.md:1049`, `docs/contracts/probe-result.md:1106`, `docs/contracts/probe-result.md:1145`, `src/lib/scoring/enginePipeline.js:331`, `src/lib/scoring/enginePipeline.js:386`, `src/lib/scoring/enginePipeline.js:466`, `src/lib/scoring/enginePipeline.js:480`, `src/lib/scoring/enginePipeline.js:735`, `src/lib/scoring/enginePipeline.js:818`, `src/lib/scoring/enginePipeline.js:939`, `src/lib/workers/scanWorker.js:1227`, `src/lib/workers/scanWorker.js:1307`, `src/lib/workers/scanWorker.js:1769`, `src/lib/workers/scanWorker.js:2181`, `src/lib/db.js:123`, `src/lib/db.js:147`, `src/lib/content/weeklyReport.js:24`, `src/lib/llmPricing.js:79`, `src/lib/llmPricing.js:229`, `src/lib/llmPricing.js:335`, `src/lib/engines/deployedEngines.js:21`, `worker/src/lib/queue.js:207`, `worker/src/index.js:174`, `worker/src/index.js:211`
 - [ ] **R1.1.2** ADR + 2-day spike: browser infrastructure `needs-secrets` `needs-decision`
 - [ ] **R1.1.3** ADR: worker host `needs-decision`
 - [ ] **R1.1.4** Engine surface matrix
@@ -121,7 +121,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `14/42`
+## R2 — Scoring truth  `14/43`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -167,6 +167,7 @@ Baseline commit: `5111219`
 - [ ] **R2.7.5** share_of_voice_pct exists only per engine; the scan-level field is never written
 - [ ] **R2.7.6** ScoreBreakdown prints a confident 0% for a share of voice nobody computed
 - [ ] **R2.7.7** The demo data does not carry the fields a real scan carries, so the sample report reads as broken
+- [ ] **R2.7.8** ScoreBand hardcodes a percent sign, so no engine chip can carry a non-numeric state
 ### R2.8
 
 - [ ] **R2.8.1** Gate Studio and Opportunities on data quality
@@ -188,7 +189,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 
-## R3 — Durable backend  `11/34`
+## R3 — Durable backend  `12/34`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -204,8 +205,8 @@ Baseline commit: `5111219`
 - [x] **R3.2.2** Every discarded skip reason becomes a ledger row — closed at `src/lib/scoring/enginePipeline.js:829`, `src/lib/scoring/enginePipeline.js:834`, `src/lib/scoring/enginePipeline.js:846`, `src/lib/scoring/enginePipeline.js:796`, `src/lib/workers/scanWorker.js:283`, `src/lib/workers/scanWorker.js:211`, `src/lib/workers/scanWorker.js:1142`, `src/lib/workers/scanWorker.js:2230`, `src/lib/workers/scanChunkLedger.test.mjs:1409`, `src/lib/workers/scanChunkLedger.test.mjs:1493`, `src/lib/workers/scanChunkLedger.test.mjs:1940`, `src/lib/workers/scanChunkLedger.test.mjs:1089`, `src/lib/scoring/enginePipeline.test.mjs:241`
 - [ ] **R3.2.3** Status route and dashboard read run history
 - [~] **R3.2.4** A live test wrote to production because only its reads were stubbed — submitted `src/lib/liveWriteGuardAuto.mjs:64`, `package.json:11`, `package.json:16`, `src/lib/liveWriteGuard.js:326`, `src/lib/liveWriteGuard.js:410`, `src/lib/liveWriteGuard.js:594`, `src/lib/liveWriteGuard.js:686`, `src/lib/liveWriteGuard.test.mjs:338`, `src/lib/liveWriteGuard.test.mjs:413`, `src/lib/workers/scanChunk.test.mjs:216`, `src/lib/workers/scanChunkLedger.test.mjs:21`, `src/lib/workers/scanChunkLedger.test.mjs:240`, `src/lib/workers/scanJobAttempts.test.mjs:21`, `src/lib/content/contentWorker.test.mjs:30`, `src/lib/content/crewCanvas.test.mjs:24`, `src/lib/scoring/contentLift.test.mjs:24`, `src/lib/scoring/asyncJob.test.mjs:17`
-- [~] **R3.2.5** A frozen engine that stops resolving silently shrinks the headline — submitted `src/lib/scoring/enginePipeline.js:770`, `src/lib/scoring/enginePipeline.js:693`, `src/lib/scoring/enginePipeline.js:801`, `src/lib/workers/scanWorker.js:1860`, `src/lib/workers/scanWorker.js:1595`, `src/lib/workers/scanWorker.js:1313`, `src/lib/workers/scanWorker.js:1338`, `src/lib/workers/engineSetChange.test.mjs:199`, `src/lib/workers/engineSetChange.test.mjs:236`, `src/lib/workers/engineSetChange.test.mjs:277`, `src/lib/workers/engineSetChange.test.mjs:343`
-- [~] **R3.2.6** The cron reports a scheduler tick that declined every brand as a clean empty tick — submitted `src/app/api/scan/worker/route.js:390`, `src/app/api/scan/worker/route.js:179`, `src/app/api/scan/worker/route.js:257`, `src/app/api/scan/worker/route.js:236`, `src/lib/scanWorkerRoute.route.test.mjs:356`, `src/lib/scanWorkerRoute.route.test.mjs:496`
+- [~] **R3.2.5** A frozen engine that stops resolving silently shrinks the headline — submitted `src/services/api.js:598`, `src/components/dashboard/DashboardShell.jsx:394`, `src/components/dashboard/DashboardShell.jsx:802`, `src/components/dashboard/DashboardShell.jsx:812`, `src/components/dashboard/engineSetChangeSurface.test.mjs:136`, `src/components/dashboard/engineSetChangeSurface.test.mjs:361`, `src/components/dashboard/engineSetChangeSurface.test.mjs:394`, `src/components/dashboard/engineSetChangeSurface.test.mjs:322`
+- [x] **R3.2.6** The cron reports a scheduler tick that declined every brand as a clean empty tick — closed at `src/app/api/scan/worker/route.js:390`, `src/app/api/scan/worker/route.js:179`, `src/app/api/scan/worker/route.js:257`, `src/app/api/scan/worker/route.js:236`, `src/lib/scanWorkerRoute.route.test.mjs:356`, `src/lib/scanWorkerRoute.route.test.mjs:496`
 - [ ] **R3.2.7** The live write guard cannot force its own adoption
 - [ ] **R3.2.9** On a refrozen scan, finalize summarizes engines that produced nothing and ignores the rows that exist
 ### R3.3
@@ -288,7 +289,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `12/33`
+## R6 — Apparatus & guards  `13/34`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -297,12 +298,13 @@ Baseline commit: `5111219`
 - [x] **R6.1.1** Migrations ledger and transaction per file — closed at `scripts/setup-supabase.mjs:28`, `scripts/setup-supabase.mjs:192`, `scripts/setup-supabase.mjs:215`, `scripts/setup-supabase.mjs:250`, `scripts/setup-supabase.mjs:255`, `scripts/setup-supabase.mjs:200`, `src/lib/migrationsRunner.test.mjs:277`, `src/lib/migrationsLedger.test.mjs:98`
 - [ ] **R6.1.2** docs/PROD_MIGRATIONS.md with per-migration verification queries
 - [x] **R6.1.3** Track the orchestration tooling change made outside the ledger — closed at `.claude/orchestration/orchestrate.mjs:436`, `docs/BUILD_JOURNAL.md`
-- [~] **R6.1.4** Agents grep secrets into transcripts; the exclusion must be in the brief, not the discipline — submitted `.claude/agents/rebuild-verifier.md:25`, `.claude/agents/rebuild-surveyor.md:35`, `.claude/agents/rebuild-scribe.md:40`, `.claude/agents/rebuild-test-author.md:45`, `.claude/agents/rebuild-implementer.md:50`, `.claude/agents/rebuild-controller.md:100`, `src/lib/agentSecretsGuard.test.mjs:62`, `src/lib/agentSecretsGuard.test.mjs:87`, `src/lib/agentSecretsGuard.test.mjs:115`
+- [x] **R6.1.4** Agents grep secrets into transcripts; the exclusion must be in the brief, not the discipline — closed at `.claude/agents/rebuild-verifier.md:25`, `.claude/agents/rebuild-surveyor.md:35`, `.claude/agents/rebuild-scribe.md:40`, `.claude/agents/rebuild-test-author.md:45`, `.claude/agents/rebuild-implementer.md:50`, `.claude/agents/rebuild-controller.md:100`, `src/lib/agentSecretsGuard.test.mjs:62`, `src/lib/agentSecretsGuard.test.mjs:87`, `src/lib/agentSecretsGuard.test.mjs:115`
 - [x] **R6.1.5** The checksum drift warning asserts a schema mismatch that may not exist — closed at `scripts/setup-supabase.mjs:48`, `scripts/setup-supabase.mjs:166`, `scripts/setup-supabase.mjs:296`, `scripts/setup-supabase.mjs:335`, `scripts/setup-supabase.mjs:353`, `scripts/setup-supabase.mjs:448`, `scripts/setup-supabase.mjs:497`, `src/lib/migrationsRunner.test.mjs:480`, `src/lib/migrationsRunner.test.mjs:614`
 - [x] **R6.1.6** The migrations ordering guard measures from the first anchor, not the last — closed at `src/lib/migrationsRunner.test.mjs:318`, `src/lib/migrationsRunner.test.mjs:323`, `src/lib/migrationsRunner.test.mjs:347`, `src/lib/migrationsRunner.test.mjs:395`
 - [ ] **R6.1.7** The ordering guard trusts the runner self-report as the stage marker
 - [ ] **R6.1.8** orchestrate.mjs silently swallows a long submit note
 - [ ] **R6.1.9** The secrets rule binds six rebuild agents; every other agent this project spawns is uncovered `needs-decision`
+- [ ] **R6.1.10** The ledger validates a citation by checking the file exists, never the line
 ### R6.2
 
 - [ ] **R6.2.1** docs/OPERATOR_LEDGER.md

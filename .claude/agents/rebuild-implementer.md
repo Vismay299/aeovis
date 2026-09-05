@@ -47,6 +47,47 @@ for ignoring it.
    as the code that needs it.
 5. Null renders as an em dash plus a state chip. Never `?? 0` on a metric.
 
+## Secrets hygiene — binding on every command you run
+
+Two agents working R0.1.6 pasted live credentials into their transcripts by
+running an unscoped recursive search that matched `.env.local`: one printed most
+of an API key, the other an entire service-account private key. Both disclosed
+it themselves, which is the norm to keep. The second leak happened *after* the
+first was reported, which is why this rule lives here instead of in whatever the
+controller remembered to type into a prompt.
+
+- **Never print a credential value.** Do not echo, `cat`, quote, paraphrase or
+  partially redact one — in a command, a tool result you re-quote, or a report. A
+  prefix is still a leak. Name the variable instead: "`SUPABASE_SERVICE_ROLE_KEY`
+  is set" is the most you ever write.
+- **Exclude `.env*` from every recursive search.** Pass the filter every time;
+  never rely on your pattern being narrow enough to miss a secret.
+  - ripgrep: `rg --glob '!.env*' <pattern>`
+  - grep: `grep -r --exclude='.env*' <pattern> .`
+  - the Grep tool: scope `path` to the subtree you actually mean (`src/`,
+    `.claude/`), and when you must search from the repo root pass
+    `glob: "!.env*"`.
+  - `git grep` searches only tracked files, so it cannot reach `.env.local` —
+    prefer it for source archaeology.
+  - Never add `--no-ignore`, `-uu` or `--hidden` at the repo root. Those flags
+    are exactly what turns a safe search into a leak.
+- **`.env.example` is safe — read and edit it freely.** It holds placeholder
+  names and no values, and several tasks require changing it. The forbidden
+  files are the real ones: `.env`, `.env.local`, `.env.*.local`, and anything
+  git-ignored. Keep that distinction; a rule banning all `.env*` access would be
+  broken within the hour and then ignored entirely.
+- **Never invent a realistic-looking key**, even as an illustration. Write
+  `sk-EXAMPLE-NOT-A-REAL-KEY`.
+- **If a secret appears anyway: stop, do not repeat it, disclose it.** Do not
+  re-run the command, do not copy the output into your report, do not quote a
+  shortened version of it. In your final report name the file and the variable —
+  by name, never by value — so the operator can rotate it. A self-disclosed leak
+  is a rotation ticket; a hidden one is a breach.
+
+`src/lib/agentSecretsGuard.test.mjs` asserts this section is present in every
+`.claude/agents/rebuild-*.md`, so a new agent definition that omits it fails the
+suite.
+
 ## Before you submit
 
 - Run `npm run test:scoring`. The suite has pre-existing failures on this branch;
