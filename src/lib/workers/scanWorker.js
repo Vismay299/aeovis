@@ -1810,6 +1810,17 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     // this job's own scan on a crash-recovery re-finalize — never carry a
     // roster forward from ourselves.
     loadPreviousRoster: async () => {
+      // R2.8.5 — this read may now THROW, and that is the point. It only runs
+      // when rival extraction was already unavailable, i.e. when the carried
+      // -forward roster is the only honest one left. getScansByDomain used to
+      // swallow a postgrest error and hand back [], so an unreadable database
+      // arrived here as "this brand has never been scanned": the carry-forward
+      // was skipped and the scan was stamped roster_source=unavailable, a
+      // label that claims we looked for a previous roster and found none.
+      // A throw propagates through resolveCompetitorRoster (which deliberately
+      // does not catch DB failures — see its docstring) to runScanChunk's
+      // catch, which marks the job failed with the message. The probe rows are
+      // already persisted, so a resume re-finalizes rather than re-probing.
       const priorScans = await getScansByDomainFn(url || promptKey);
       const previous = (priorScans || []).find(
         (row) => row?.id && row.id !== alreadyStamped?.scan_id

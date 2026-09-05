@@ -24,6 +24,14 @@ time of writing (other tasks in flight): `src/lib/db.js`,
 never by line**, because a line number read out of a tree nobody has committed
 is a number that is wrong by the time you read it.
 
+**`013_brand_metrics_sov_state.sql` was appended after `1a5ed81`** (R4.3.2), so
+the paragraph above does not cover it and `git log 1a5ed81..HEAD -- supabase/migrations`
+is now non-empty by construction. Its rows below are therefore cited by
+migration name and object name only — no `file:line` — and its own header
+carries the catalog query for it. Nothing else in this file was re-derived when
+it was added; treat the pre-013 line numbers with the same suspicion the check
+below asks for.
+
 To find out whether the migration citations have gone stale:
 
 ```bash
@@ -133,6 +141,7 @@ migrations did not, this is where you look to predict the symptom.**
 | `010` | `src/lib/probeQueue.js` and the fleet's copy `worker/src/lib/queue.js` | **nothing deployed** — see below | No observable symptom today |
 | `011` | `openScanRun`/`closeScanRun`, `src/lib/scanRuns.js:223`/`:280`, imported by `src/lib/workers/scanWorker.js`; `RUN_OUTCOMES` at `src/app/api/scan/worker/route.js:12` | `POST /api/scan`, `/api/scan/[job_id]/status`, cron `/api/scan/worker` | The chunk worker's ledger writes fail; a measured-zero pass and a never-ran pass become indistinguishable again |
 | `012` | `claim_scan_job_attempt` RPC, called from `src/lib/workers/scanWorker.js` (grep `claimJobAttempt`) | same three entry points as 011 | A poison job is resumed forever by the cron sweep, spending real vendor budget every tick |
+| `013` | `sov_state`/`sov_state_reason` on every row `buildMetricsRows` produces (`src/lib/analytics/rollup.js`), written verbatim by `upsertBrandMetricsDaily` (`src/lib/db/analytics.js`) | scan finalize (cron `/api/scan/worker`), `scripts/backfill-analytics.mjs`, read by `GET /api/brands/[brand]/metrics` | **Every scan finalize fails its `brand_metrics_daily` upsert with PostgREST `PGRST204` ("column sov_state ... does not exist")** — the upsert passes the row object through unfiltered, so this is a hard failure, not a dropped field |
 
 **Two honest gaps in that table.**
 
@@ -283,7 +292,14 @@ WITH expected(migration, kind, name) AS (
     ('012_scan_job_attempts', 'column',     'scan_jobs.attempts'),
     ('012_scan_job_attempts', 'constraint', 'scan_jobs_attempts_chk'),
     ('012_scan_job_attempts', 'index',      'scan_jobs_attempts_idx'),
-    ('012_scan_job_attempts', 'function',   'claim_scan_job_attempt')
+    ('012_scan_job_attempts', 'function',   'claim_scan_job_attempt'),
+    -- 013_brand_metrics_sov_state.sql
+    ('013_brand_metrics_sov_state', 'column',     'brand_metrics_daily.sov_state'),
+    ('013_brand_metrics_sov_state', 'column',     'brand_metrics_daily.sov_state_reason'),
+    ('013_brand_metrics_sov_state', 'constraint', 'brand_metrics_daily_sov_state_check'),
+    ('013_brand_metrics_sov_state', 'constraint', 'brand_metrics_daily_sov_state_reason_check'),
+    ('013_brand_metrics_sov_state', 'constraint', 'brand_metrics_daily_sov_state_pct_agreement_check'),
+    ('013_brand_metrics_sov_state', 'index',      'brand_metrics_daily_sov_unverified_idx')
 ),
 checked AS (
   SELECT e.migration, e.kind, e.name,

@@ -129,6 +129,18 @@ const EXPECTED_OBJECTS = {
     { kind: "index", name: "scan_jobs_attempts_idx" },
     { kind: "function", name: "claim_scan_job_attempt" },
   ],
+  // R4.3.2. Same column-invisibility problem as 012, same answer: the probe
+  // cannot see `brand_metrics_daily.sov_state` / `.sov_state_reason`, but it can
+  // see a partial index whose predicate references them, and that index cannot
+  // exist unless they do. Both columns come from one ALTER inside this
+  // migration's own transaction, so the index proves the pair.
+  //
+  // This one matters more than a schema tick: without these columns every scan
+  // finalize fails its brand_metrics_daily upsert (PGRST204), because
+  // upsertBrandMetricsDaily sends the rollup row through verbatim.
+  "013_brand_metrics_sov_state.sql": [
+    { kind: "index", name: "brand_metrics_daily_sov_unverified_idx" },
+  ],
 };
 
 /**

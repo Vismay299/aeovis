@@ -1,4 +1,5 @@
 import { describeRosterState } from "../../../lib/scoring/rosterContinuity.js";
+import { formatPercent } from "./chartMath.js";
 
 /**
  * Share of Voice, as the BACKEND measured it (R2.7.1, finding A8).
@@ -52,6 +53,14 @@ export const SHARE_STATE = Object.freeze({
 
 /** The words a null share renders as. One string, so every surface agrees. */
 export const NOT_AVAILABLE_LABEL = "Share of voice not available";
+
+/**
+ * The words a MEASURED zero renders as. Standing rule 1: a measured zero and a
+ * never-computed share must not look the same, and "0.0%" alone cannot carry
+ * that difference — a reader has no way to tell whether the pipeline counted
+ * the mentions and found none of them ours, or nobody counted at all.
+ */
+export const MEASURED_ZERO_LABEL = "Measured — no brand mentions were yours";
 
 const isNum = (v) => typeof v === "number" && Number.isFinite(v);
 const round1 = (v) => Math.round(v * 10) / 10;
@@ -255,5 +264,84 @@ export function resolveShareOfVoice(result) {
     reason: null,
     engines: engineNames,
     composition,
+  };
+}
+
+/**
+ * How a resolved share READS, for any surface that has to print one. R2.7.6.
+ *
+ * resolveShareOfVoice() decides whether a number exists. This decides what a
+ * reader sees, and it exists because the second question kept being answered
+ * separately on every surface: the donut (Donut.jsx) grew its own em-dash /
+ * state-chip branch, and ScoreBreakdown.jsx answered it with `?? 0` — printing
+ * a confident "0%" share for EVERY scan, since no pipeline stage persists a
+ * scan-level `shareOfVoicePct` at all (R2.7.5). Two surfaces on one page
+ * disagreeing about one field is what one home for the decision prevents.
+ *
+ * Same shape as ScoreBand's describeEngineChip (R2.7.8): pure, exported, and
+ * the FORMAT is decided here rather than at the call site, so the percent sign
+ * cannot be attached to something that never earned one. Unlike that function
+ * the value alone is not enough — a caller could hand over `{state:
+ * "not_assessed", pct: 0}` — so a number is printed only when the resolver also
+ * says it was MEASURED.
+ *
+ * On states this build does not know: the chip shows human words and the raw
+ * token travels in `rawState` (for a data attribute) and is named in `detail`.
+ * Neither swallowed nor dumped on a customer as a bare machine token — the
+ * mistake filed against ScoreBand's allowlist as R2.1.2.
+ *
+ * @param {ShareOfVoice|null|undefined} share output of resolveShareOfVoice()
+ * @returns {{measured: boolean, measuredZero: boolean, value: string,
+ *   state: string|null, detail: string|null, reason: string|null,
+ *   progress: number|null, rawState: string}}
+ */
+export function describeShareMetric(share) {
+  const rawState =
+    typeof share?.state === "string" && share.state.trim() !== ""
+      ? share.state.trim()
+      : SHARE_STATE.UNAVAILABLE;
+
+  const known =
+    rawState === SHARE_STATE.MEASURED ||
+    rawState === SHARE_STATE.NOT_ASSESSED ||
+    rawState === SHARE_STATE.UNAVAILABLE;
+
+  const pct = share?.pct;
+  const measured = rawState === SHARE_STATE.MEASURED && isNum(pct);
+  const measuredZero = measured && pct === 0;
+
+  const label =
+    typeof share?.label === "string" && share.label.trim() !== "" ? share.label.trim() : null;
+  const detail =
+    typeof share?.detail === "string" && share.detail.trim() !== "" ? share.detail.trim() : null;
+
+  return {
+    measured,
+    measuredZero,
+    /* The only place a share of voice acquires a percent sign, and
+       formatPercent() returns an em dash for anything non-finite. */
+    value: measured ? formatPercent(pct) : "—",
+    /* A measured non-zero share is the only case that needs no state at all.
+       Everything else — including a real 0 — says which it is. */
+    state: measured ? (measuredZero ? MEASURED_ZERO_LABEL : null) : label || NOT_AVAILABLE_LABEL,
+    detail: measured
+      ? null
+      : known
+        ? detail
+        : detail ||
+          `This scan reported a share-of-voice state this build does not recognise ` +
+            `("${rawState}"), so no percentage is shown for it.`,
+    reason:
+      typeof share?.reason === "string" && share.reason.trim() !== ""
+        ? share.reason.trim()
+        : measured
+          ? null
+          : known
+            ? null
+            : "unrecognised_state",
+    /* null means "draw no bar". A measured 0 draws an empty bar on purpose —
+       it is a quantity — and is told apart from the absent case by the chip. */
+    progress: measured ? Math.max(0, Math.min(100, pct)) : null,
+    rawState,
   };
 }

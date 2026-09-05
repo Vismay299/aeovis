@@ -133,6 +133,37 @@ test("computeVisibilitySummary — null visibility_pct on either point makes del
   assert.equal(previousNull.delta_visibility_pct, null);
 });
 
+test("computeVisibilitySummary — a REAL null-interleaved series never yields NaN or a 0 delta (R2.1.1/R4.3.2 null-series check)", () => {
+  // R2.1.1 made rollup.js write brand_metrics_daily.visibility_pct = null for a
+  // not_assessed/failed engine where it previously wrote 0, and R4.3.2 does the
+  // same to sov_pct for a self-only roster. Neither had been exercised against
+  // a series that actually contains nulls, and a null reaching the subtraction
+  // below would produce either NaN (null - 40) or, worse, a plausible-looking
+  // number (40 - null === 40). This is the guard for that: no arithmetic runs
+  // unless BOTH points are real, so a gap reads as "no delta", never as a move.
+  const series = [
+    { date: "2026-07-01", visibility_pct: 40 },
+    { date: "2026-07-02", visibility_pct: null }, // engine failed that day
+    { date: "2026-07-03", visibility_pct: null }, // and again
+    { date: "2026-07-04", visibility_pct: 0 }, // measured_zero -- a real number
+  ];
+  const out = computeVisibilitySummary(series);
+  assert.equal(out.latest_visibility_pct, 0, "a measured zero is still a number and still the latest point");
+  assert.equal(out.previous_visibility_pct, null);
+  assert.equal(out.delta_visibility_pct, null, "no delta across a gap -- never NaN, never a fabricated move");
+  assert.ok(!Number.isNaN(out.delta_visibility_pct));
+
+  // And the all-null series: latest is null, nothing is invented for it.
+  const allNull = computeVisibilitySummary([
+    { date: "2026-07-01", visibility_pct: null },
+    { date: "2026-07-02", visibility_pct: null },
+    { date: "2026-07-03", visibility_pct: null },
+  ]);
+  assert.equal(allNull.latest_visibility_pct, null);
+  assert.equal(allNull.delta_visibility_pct, null);
+  assert.notEqual(allNull.delta_visibility_pct, 0, "an unmeasured stretch is not a flat line");
+});
+
 // ---------------------------------------------------------------------------
 // computeNextRunAt
 // ---------------------------------------------------------------------------

@@ -985,7 +985,7 @@ test("runFinalizePhase — writes one result_brands row per (non-branded result,
   );
 });
 
-test("runFinalizePhase — no competitors at all (none user-supplied, none discovered): roster is self-only, one result_brands row per result, sov_pct legitimately 100% (empty-competitor degradation, not a bug)", async () => {
+test("runFinalizePhase — no competitors at all (none user-supplied, none discovered): roster is self-only, one result_brands row per result, and sov_pct is NOT the old 100% (R4.3.2)", async () => {
   const backend = makeFakeBackend();
   const jobId = "job-p12-empty-roster";
   const queries = makeQueries(2);
@@ -1007,8 +1007,18 @@ test("runFinalizePhase — no competitors at all (none user-supplied, none disco
   assert.equal(backend.resultBrands.length, 2, "one row per non-branded result -- self only, no rivals to track");
   assert.ok(backend.resultBrands.every((r) => r.is_self && r.name === "Acme" && r.mentioned === true));
 
+  // R4.3.2 -- this assertion used to read `sov_pct === 100`, described as
+  // "legitimate when zero rivals were ever tracked, not a bug". It was the bug.
+  // self / self is 1 by construction, so the stored daily metric reported a
+  // confident 100% share of voice for a brand measured against nobody -- while
+  // the dashboard donut (fixed by R2.7.1) said "not available" for the same
+  // scan. The durable row was the worse of the two lies: it is what a trend
+  // chart and any export read.
   const allRow = backend.brandMetrics.find((m) => m.scan_id === finalJob.result_id && m.engine === "all");
-  assert.equal(allRow.sov_pct, 100, "self / self = 100% -- legitimate when zero rivals were ever tracked, not a bug");
+  assert.notEqual(allRow.sov_pct, 100, "a self-only roster must never store a 100% share");
+  assert.equal(allRow.sov_pct, null, "share of voice is UNDEFINED without rivals -- not 0 and not 100");
+  assert.equal(allRow.sov_state, "not_assessed");
+  assert.equal(allRow.sov_state_reason, "self_only_roster", "and the row says WHY there is no number");
 });
 
 test("runFinalizePhase — re-finalize (crash recovery) deletes-then-reinserts result_brands, never duplicates them (P1.2 idempotency, full-roster judging)", async () => {

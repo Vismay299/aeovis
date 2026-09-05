@@ -442,9 +442,32 @@ export async function getScansForBrand(brand) {
  * Matching is done on the scan's own `url` host, in JS rather than SQL, so
  * "https://www.x.com/path", "x.com" and "X.COM" all resolve to one brand.
  * Full rows (raw_results included) — callers need the per-prompt payload.
+ *
+ * CONTRACT (R2.8.5): same as getScansForBrand above. The returned array means
+ * "the database answered"; [] means this domain genuinely has no scans. A read
+ * that could not be performed THROWS ScansUnavailableError.
+ *
+ * This used to `catch` every failure, console.warn it and return [], so a
+ * postgrest error (which is how a refused connection or a 5xx arrives — the
+ * client is built without `throwOnError`) was reported to callers as "this
+ * domain has never been scanned". Two callers read that lie: the coverage
+ * route, whose own catch was dead code for this mode, and — worse —
+ * scanWorker's loadPreviousRoster (workers/scanWorker.js), which carries a
+ * previous scan's rival roster forward when the LLM extractor is offline. An
+ * unreadable DB there silently became "this brand has no history", downgrading
+ * a carry-forward into roster_source=unavailable with no trace of why.
+ * rosterContinuity.js already documents that a DB failure loading the previous
+ * roster must NOT be swallowed; the swallow here is what made that dead code.
+ *
+ * @throws {ScansUnavailableError} db_read_failed
  */
 export async function getScansByDomain(domain, deps = {}) {
   const client = resolveClient(deps);
+  // NOT FIXED HERE, DELIBERATELY: the no-client branch is R2.8.12's, filed
+  // separately and owned by another change. It is the same fail-quiet shape
+  // (an unconfigured deploy reads as "never scanned") and should become a
+  // `db_not_configured` throw exactly like getScansForBrand's — do not treat
+  // its survival below as a considered exception.
   if (!client) return [];
 
   const host = String(domain || "")
@@ -455,27 +478,31 @@ export async function getScansByDomain(domain, deps = {}) {
     .split("/")[0];
   if (!host) return [];
 
-  try {
-    const { data, error } = await client
-      .from("scans")
-      .select("*")
-      .order("scanned_at", { ascending: false })
-      .limit(200);
-    if (error) throw error;
+  const { data, error } = await client
+    .from("scans")
+    .select("*")
+    .order("scanned_at", { ascending: false })
+    .limit(200);
 
-    return (data || []).filter((s) => {
-      const scanHost = String(s.url || "")
-        .trim()
-        .toLowerCase()
-        .replace(/^https?:\/\//, "")
-        .replace(/^www\./, "")
-        .split("/")[0];
-      return scanHost === host;
-    });
-  } catch (err) {
-    console.warn("[db] getScansByDomain failed:", err.message);
-    return [];
+  if (error) {
+    console.error("[db] getScansByDomain failed:", error);
+    throw new ScansUnavailableError(
+      `Could not read scans for domain "${host}": ${error.message || error.code || "unknown database error"}`,
+      { cause: error, code: "db_read_failed" }
+    );
   }
+
+  // No error means the DB answered; an empty match below is a real, measured
+  // "this domain has no scans".
+  return (data || []).filter((s) => {
+    const scanHost = String(s.url || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .split("/")[0];
+    return scanHost === host;
+  });
 }
 
 /**

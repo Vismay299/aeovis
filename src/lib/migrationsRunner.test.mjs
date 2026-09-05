@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -35,6 +36,23 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 function makeSandbox({ catalog, failOn = null, recorded = [] }) {
   const dir = mkdtempSync(path.join(tmpdir(), "migrunner-"));
 
+  // R6.1.7 — the probe sentinel, and why it is a random nonce.
+  //
+  // The ordering guard below needs a point in the transcript that means "the
+  // database has now actually been asked a question". Every string the RUNNER
+  // prints is a self-report: it can be moved, reworded, or printed early, which
+  // is precisely the evasion this task exists to close. The sentinel is written
+  // by the STUB CLIENT, inside `query()`, at the moment a catalog probe arrives
+  // — so its position in stdout is an event the runner cannot relocate without
+  // actually issuing the probe.
+  //
+  // The token is generated per sandbox and never leaves this temp directory, so
+  // a sabotaged runner cannot print a convincing sentinel either: it does not
+  // know the nonce. (This is a probe marker, not a credential — it authenticates
+  // nothing and reaches no network.)
+  const probeTokenValue = randomBytes(9).toString("hex");
+  writeFileSync(path.join(dir, "probe-token.txt"), probeTokenValue);
+
   // A loader that maps the "pg" specifier to our stub.
   writeFileSync(
     path.join(dir, "loader.mjs"),
@@ -55,6 +73,7 @@ export function resolve(specifier, context, next) {
     `
 const CATALOG = ${JSON.stringify(catalog)};
 const FAIL_ON = ${JSON.stringify(failOn)};
+const PROBE_TOKEN = ${JSON.stringify(probeTokenValue)};
 // Rows the ledger already holds. Fixing these is how the drift path gets
 // exercised without editing a migration on disk under five concurrent agents.
 const RECORDED = ${JSON.stringify(recorded)};
@@ -81,15 +100,19 @@ class Client {
       return { rows: [] };
     }
 
-    // Catalog probes.
+    // Catalog probes. The sentinel goes out on stdout IN LINE with the runner's
+    // own output — same process, same stream — so the transcript records when
+    // the database was really consulted relative to what the runner claimed.
     if (/to_regclass/.test(sql)) {
       const name = String((params && params[0]) || "").replace("public.", "");
       log.push({ txn, sql: "PROBE", name });
+      process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
       return { rows: [{ regclass: CATALOG.includes(name) ? name : null }] };
     }
     if (/pg_proc/.test(sql)) {
       const name = (params && params[0]) || "";
       log.push({ txn, sql: "PROBE", name });
+      process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
       return { rows: CATALOG.includes(name) ? [{ "?column?": 1 }] : [] };
     }
 
@@ -110,15 +133,30 @@ process.on("exit", () => {
   return dir;
 }
 
-/** Run the real runner against the sandbox; return exit code and stdout. */
-function runRunner(dir) {
+const REAL_RUNNER = path.join(REPO, "scripts/setup-supabase.mjs");
+
+/** The nonce this sandbox's stub stamps on every catalog probe. */
+function probeToken(dir) {
+  return readFileSync(path.join(dir, "probe-token.txt"), "utf8").trim();
+}
+
+/**
+ * Run a runner against the sandbox; return exit code and stdout.
+ *
+ * `script` defaults to the real runner. R6.1.7 passes a deliberately sabotaged
+ * COPY of it, to prove the ordering guard below has teeth against a runner that
+ * lies about which stage it has reached.
+ */
+function runRunner(dir, script = REAL_RUNNER) {
   const res = spawnSync(
     process.execPath,
-    ["--import", pathToFileUrlString(path.join(dir, "register.mjs")), path.join(REPO, "scripts/setup-supabase.mjs")],
+    ["--import", pathToFileUrlString(path.join(dir, "register.mjs")), script],
     {
       encoding: "utf8",
       env: {
         ...process.env,
+        // Not a credential and not reachable: no host, no password, nothing to
+        // rotate. The stub intercepts `pg` long before anything is dialled.
         DATABASE_URL: "postgresql://stub/stub",
         NODE_NO_WARNINGS: "1",
       },
@@ -139,7 +177,7 @@ function pathToFileUrlString(p) {
   return new URL(`file://${p.replace(/\\/g, "/").replace(/^([A-Za-z]:)/, "/$1")}`).href;
 }
 
-/** Everything 001-011 must leave behind, per the runner's own expectations. */
+/** Everything 001-013 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
   "scans", "brand_prompts", "scan_jobs", "content_events",
   "content_jobs", "content_items", "content_feedback", "brand_briefs", "content_lessons",
@@ -154,6 +192,9 @@ const FULL_CATALOG = [
   "scan_runs", "scan_runs_job_idx", "scan_runs_batch_idx", "scan_runs_open_idx", "scan_runs_runner_idx",
   "open_scan_run", "heartbeat_scan_run", "close_scan_run",
   "scan_jobs_attempts_idx", "claim_scan_job_attempt",
+  // 013 (R4.3.2). A partial index standing in for two columns the catalog
+  // probe cannot see -- brand_metrics_daily.sov_state / .sov_state_reason.
+  "brand_metrics_daily_sov_unverified_idx",
 ];
 
 function withRegister(dir) {
@@ -331,6 +372,79 @@ function auditOrdering(stdout) {
   return { occurrences: at.length, anchor, before, violations };
 }
 
+/**
+ * R6.1.7 — THE ANCHOR THE RUNNER CANNOT MOVE.
+ *
+ * `auditOrdering` above keys on a sentence the runner prints about itself. The
+ * R6.1.6 verifier showed what that is worth: two evasions survive it, both
+ * reproduced against HEAD, both exit 0 with the whole suite green.
+ *
+ *   RELOCATED — move the sole "Verifying schema against the catalog" line up to
+ *     the connect stage, let the real verify stage announce itself in different
+ *     words, and print "Migrations applied successfully." before a single
+ *     migration has run. The anchor still appears exactly once, so `occurrences`
+ *     is satisfied; the window ends two lines in, so the verdict falls outside
+ *     it. Green, over a database nothing has looked at.
+ *
+ *   STRADDLED — leave the anchor exactly where it is and print the verdict on
+ *     the very next line, still before any object is probed. The window ends at
+ *     the anchor, so again the verdict is "after the check". Green.
+ *
+ * The common cause is not `indexOf` versus `lastIndexOf` — it is that the marker
+ * for "the database has been consulted" is a string the runner chooses to print.
+ * A guard built on that proves the runner is consistent with itself.
+ *
+ * So this measures from the FIRST CATALOG PROBE THAT ACTUALLY REACHED THE
+ * CLIENT: the stub writes `__PROBE <nonce> <name>` from inside `query()`, in the
+ * same process and on the same stream, at the moment the probe arrives. To move
+ * that marker earlier the runner must genuinely probe the catalog earlier, which
+ * is not an evasion — it is the behaviour being asked for.
+ *
+ * NO PROBE AT ALL IS THE LOUDEST CASE, not a pass: `anchor === -1` leaves the
+ * whole transcript inside the window, and callers must additionally assert
+ * `probes.length > 0`. A runner that reports 42 objects present without asking
+ * the database is the purest form of the self-report defect.
+ *
+ * The nonce also settles the "verify via the catalog, never a head-probe" rule
+ * from docs/PROD_MIGRATIONS.md in the observable direction: these sentinels are
+ * emitted ONLY by the `to_regclass` and `pg_proc` branches of the stub. A runner
+ * that "verified" 006 by selecting from `content_runs` would produce no sentinel
+ * and fail here, and it never calls any of the nine functions the migrations
+ * create — one of which, `claim_scan_job_attempt` in 012, marks a scan job
+ * failed.
+ */
+function auditByProbe(stdout, token) {
+  const probes = [];
+  const re = new RegExp(`__PROBE ${token} (\\S+)`, "g");
+  for (let m = re.exec(stdout); m; m = re.exec(stdout)) {
+    probes.push({ at: m.index, name: m[1] });
+  }
+  const anchor = probes.length > 0 ? probes[0].at : -1;
+  const before = anchor === -1 ? stdout : stdout.slice(0, anchor);
+  const violations = [];
+  for (const phrase of VERDICT_PHRASES) {
+    const hit = before.match(phrase);
+    if (hit) violations.push(hit[0]);
+  }
+  return { probes, anchor, before, violations };
+}
+
+/**
+ * Every per-object verdict line the runner printed, with its offset.
+ *
+ * Same principle one level down: a tick is a claim about one object, and the
+ * claim is only worth anything if a probe for THAT NAME reached the client
+ * before it was printed.
+ */
+function reportedObjects(stdout) {
+  const out = [];
+  const re = /^ +(✓|✗) (table|index|function) (\S+)$/gm;
+  for (let m = re.exec(stdout); m; m = re.exec(stdout)) {
+    out.push({ at: m.index, mark: m[1], kind: m[2], name: m[3] });
+  }
+  return out;
+}
+
 for (const scenario of [
   { name: "a complete database", omit: null, status: 0 },
   { name: "a database missing 006", omit: "content_jobs_heartbeat_idx", status: 1 },
@@ -342,8 +456,31 @@ for (const scenario of [
       const { status, stdout, stderr } = runRunner(dir);
       assert.equal(status, scenario.status, `exit ${status}:\n${stdout}${stderr}`);
 
+      // R6.1.7 — the load-bearing window, measured from the first probe that
+      // actually reached the client. This is the assertion that survives a
+      // relocated or straddled banner; everything below about the banner is a
+      // secondary, cheaper tooth kept because it localises a failure.
+      const byProbe = auditByProbe(stdout, probeToken(dir));
+      assert.ok(
+        byProbe.probes.length > 0,
+        `the runner never probed the catalog at all. Whatever it printed about the database is ` +
+          `unbacked:\n${stdout}`
+      );
+      assert.deepEqual(
+        byProbe.violations,
+        [],
+        `${JSON.stringify(byProbe.violations)} was printed before the FIRST CATALOG PROBE reached the ` +
+          `database. Moving or rewording the verify banner does not change this, which is the point:\n` +
+          `${byProbe.before}`
+      );
+
       const audit = auditOrdering(stdout);
       assert.ok(audit.anchor > 0, `the verification must announce itself on stdout:\n${stdout}`);
+      assert.ok(
+        audit.anchor < byProbe.anchor,
+        `the verify banner must precede the first real probe, not trail it. Banner at ${audit.anchor}, ` +
+          `first probe at ${byProbe.anchor}:\n${stdout}`
+      );
       assert.equal(
         audit.occurrences,
         1,
@@ -370,6 +507,13 @@ for (const scenario of [
           stdout.indexOf("All expected objects present") > audit.anchor,
           "the one real success sentence must follow the verification"
         );
+        // R6.1.7: and after the LAST probe, not merely after the banner. A
+        // success sentence printed while probes are still arriving is a verdict
+        // on a database that has not finished being read.
+        assert.ok(
+          stdout.indexOf("All expected objects present") > byProbe.probes[byProbe.probes.length - 1].at,
+          "the success sentence must follow the last catalog probe, not sit among them"
+        );
       } else {
         assert.ok(
           !/All expected objects present/.test(stdout),
@@ -381,6 +525,230 @@ for (const scenario of [
     }
   });
 }
+
+test("R6.1.7 — every ✓ the runner prints is backed by a probe of THAT object, printed earlier", () => {
+  const dir = withRegister(makeSandbox({ catalog: FULL_CATALOG }));
+  try {
+    const { status, stdout } = runRunner(dir);
+    assert.equal(status, 0, stdout);
+
+    const reported = reportedObjects(stdout);
+    const { probes } = auditByProbe(stdout, probeToken(dir));
+
+    // Counted from the runner's own expectation list rather than hard-coded, so
+    // a migration added without expectations does not quietly shrink this test.
+    assert.ok(reported.length >= 40, `expected the full object report, got ${reported.length}:\n${stdout}`);
+    assert.equal(
+      probes.length,
+      reported.length,
+      `${reported.length} objects were reported on but ${probes.length} probes reached the database. ` +
+        `A verdict per object requires a question per object.`
+    );
+
+    const unbacked = reported.filter(
+      (r) => !probes.some((p) => p.name === r.name && p.at < r.at)
+    );
+    assert.deepEqual(
+      unbacked.map((r) => `${r.kind} ${r.name}`),
+      [],
+      `these objects were pronounced on without the database being asked about them first:\n${stdout}`
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * R6.1.7 — the sabotage harness.
+ *
+ * Writes a COPY of the real runner with a named patch applied, next to a copy of
+ * the migration set so its own `join(__dirname, "../supabase/migrations")` still
+ * resolves, and under the same basename so its entrypoint guard still recognises
+ * itself. Nothing in `scripts/` is touched.
+ *
+ * The `includes` assertion is the important one: a sabotage whose anchor has
+ * drifted out of the source silently becomes a no-op, and a teeth test that
+ * sabotages nothing passes against the bug it exists to catch.
+ */
+function sabotagedRunner(dir, patches) {
+  const src = readFileSync(REAL_RUNNER, "utf8");
+  let out = src;
+  for (const [find, replace] of patches) {
+    assert.ok(
+      out.includes(find),
+      `this sabotage no longer applies: ${JSON.stringify(find)} is not in scripts/setup-supabase.mjs. ` +
+        `Re-derive it from the current source — do not delete the test, an inapplicable sabotage is a ` +
+        `test that proves nothing.`
+    );
+    out = out.replace(find, () => replace);
+  }
+  assert.notEqual(out, src, "the sabotage must actually change the runner");
+
+  mkdirSync(path.join(dir, "scripts"), { recursive: true });
+  const migs = path.join(dir, "supabase", "migrations");
+  mkdirSync(migs, { recursive: true });
+  for (const f of readdirSync(path.join(REPO, "supabase/migrations")).filter((n) => n.endsWith(".sql"))) {
+    writeFileSync(path.join(migs, f), readFileSync(path.join(REPO, "supabase/migrations", f)));
+  }
+  const script = path.join(dir, "scripts", "setup-supabase.mjs");
+  writeFileSync(script, out);
+  return script;
+}
+
+const CONNECT_LINE = 'console.log("Connecting to Supabase Postgres...");';
+const VERIFY_BANNER_LINE = 'console.log("Verifying schema against the catalog:\\n");';
+const PROBE_CALL_LINE = "const exists = await objectExists(client, obj);";
+const EARLY_VERDICT = 'process.stdout.write("Migrations applied successfully.\\n");';
+
+/**
+ * R6.1.7 — EVASION ONE, executed. The banner moves; the verdict comes first.
+ *
+ * This is the R6.1.6 verifier's finding as a spawned process rather than a
+ * transcript: the sole occurrence of the verify anchor is relocated to the
+ * connect stage, the real verify stage announces itself in different words, and
+ * "Migrations applied successfully." goes out before `client.connect()`.
+ *
+ * The assertions come in two halves and BOTH are load-bearing. The banner half
+ * asserts the OLD guard is fooled — if that ever stops being true the finding
+ * has been fixed elsewhere and this test should be re-derived, not relaxed. The
+ * probe half is the new guard, and it must be red.
+ */
+test("R6.1.7 TEETH — a RELOCATED verify banner fools the banner anchor and not the probe anchor", () => {
+  const dir = withRegister(makeSandbox({ catalog: FULL_CATALOG }));
+  try {
+    const script = sabotagedRunner(dir, [
+      [
+        CONNECT_LINE,
+        CONNECT_LINE +
+          '\n  console.log("  step 1/3: Verifying schema against the catalog is deferred until connect completes");' +
+          `\n  ${EARLY_VERDICT}`,
+      ],
+      [VERIFY_BANNER_LINE, 'console.log("Checking each object now:\\n");'],
+    ]);
+    const { status, stdout } = runRunner(dir, script);
+
+    // The shape of the lie: a clean exit over a verdict nothing backs.
+    assert.equal(status, 0, `the sabotage must be a FALSE SUCCESS to be worth testing:\n${stdout}`);
+    assert.ok(stdout.includes("Migrations applied successfully."), stdout);
+
+    // Half one — the self-report anchor is fooled. Exactly one anchor, and the
+    // verdict sits after it, so the R6.1.6 guard reports a clean run.
+    const banner = auditOrdering(stdout);
+    assert.equal(banner.occurrences, 1, "the relocated anchor still appears exactly once");
+    assert.deepEqual(
+      banner.violations,
+      [],
+      "if the banner guard caught this, the premise of R6.1.7 has changed; re-derive, do not relax"
+    );
+
+    // Half two — the probe anchor cannot be moved by rewording anything.
+    const byProbe = auditByProbe(stdout, probeToken(dir));
+    assert.ok(byProbe.probes.length > 0, "the sabotaged runner still probes, just far too late");
+    assert.ok(
+      byProbe.violations.some((v) => /successfully/i.test(v)),
+      `the early verdict must be caught by the probe anchor; got ${JSON.stringify(byProbe.violations)}`
+    );
+    assert.ok(
+      stdout.indexOf("Migrations applied successfully.") < byProbe.anchor,
+      "and it must be caught BECAUSE it was printed before the first probe, not by coincidence"
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * R6.1.7 — EVASION TWO, executed. The banner stays; the verdict straddles it.
+ *
+ * Nothing is relocated. The verdict is printed on the line after the anchor and
+ * before a single object has been probed, so the banner window ends before it
+ * and the run reads as verified. The database has still not been asked anything.
+ */
+test("R6.1.7 TEETH — a verdict STRADDLING the banner and the first probe is caught", () => {
+  const dir = withRegister(makeSandbox({ catalog: FULL_CATALOG }));
+  try {
+    const script = sabotagedRunner(dir, [[VERIFY_BANNER_LINE, `${VERIFY_BANNER_LINE}\n    ${EARLY_VERDICT}`]]);
+    const { status, stdout } = runRunner(dir, script);
+
+    assert.equal(status, 0, `the sabotage must be a FALSE SUCCESS to be worth testing:\n${stdout}`);
+    assert.ok(stdout.includes("Migrations applied successfully."), stdout);
+
+    const banner = auditOrdering(stdout);
+    assert.equal(banner.occurrences, 1, "the anchor was never touched");
+    assert.deepEqual(
+      banner.violations,
+      [],
+      "if the banner guard caught this, the premise of R6.1.7 has changed; re-derive, do not relax"
+    );
+
+    const byProbe = auditByProbe(stdout, probeToken(dir));
+    assert.ok(byProbe.probes.length > 0);
+    assert.ok(
+      byProbe.violations.some((v) => /successfully/i.test(v)),
+      `a verdict between the banner and the first probe must be caught; got ` +
+        `${JSON.stringify(byProbe.violations)}`
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * R6.1.7 — the self-report defect in its purest form: a runner that reports on
+ * 42 objects without asking the database about any of them.
+ *
+ * Every string in the transcript is exactly what a healthy run prints, in the
+ * right order, and the exit code is 0. The banner guard has nothing to object
+ * to, because nothing about the TEXT is wrong. What is wrong is that no question
+ * was ever asked, and the only way to see that is to key on the question.
+ */
+test("R6.1.7 TEETH — a runner that ticks every object without probing anything is caught", () => {
+  const dir = withRegister(makeSandbox({ catalog: FULL_CATALOG }));
+  try {
+    const script = sabotagedRunner(dir, [[PROBE_CALL_LINE, "const exists = true;"]]);
+    const { status, stdout } = runRunner(dir, script);
+
+    assert.equal(status, 0, `the sabotage must be a FALSE SUCCESS to be worth testing:\n${stdout}`);
+    assert.ok(stdout.includes("All expected objects present."), stdout);
+
+    // The banner guard is entirely satisfied: one anchor, no early verdict, the
+    // success sentence in its proper place.
+    const banner = auditOrdering(stdout);
+    assert.equal(banner.occurrences, 1);
+    assert.deepEqual(banner.violations, []);
+    assert.ok(stdout.indexOf("All expected objects present") > banner.anchor);
+
+    // The probe guard is not.
+    const byProbe = auditByProbe(stdout, probeToken(dir));
+    assert.equal(
+      byProbe.probes.length,
+      0,
+      "the sabotage is supposed to remove every catalog probe; if probes survive it is not testing this"
+    );
+
+    // THE CONTROL, and it is not optional. "Zero probes" is also what a harness
+    // that stopped emitting sentinels would report, and that harness would
+    // certify this test green while proving nothing. So: the same sandbox shape,
+    // the REAL runner, must produce probes.
+    const controlDir = withRegister(makeSandbox({ catalog: FULL_CATALOG }));
+    try {
+      const control = runRunner(controlDir);
+      assert.ok(
+        auditByProbe(control.stdout, probeToken(controlDir)).probes.length > 0,
+        "the harness itself must be able to observe a probe, or the assertion above is vacuous"
+      );
+    } finally {
+      rmSync(controlDir, { recursive: true, force: true });
+    }
+
+    const reported = reportedObjects(stdout);
+    assert.ok(reported.length >= 40, `it still claims to have checked everything: ${reported.length}`);
+    const backed = reported.filter((r) => byProbe.probes.some((p) => p.name === r.name && p.at < r.at));
+    assert.deepEqual(backed, [], "not one of those ticks is backed by a question to the database");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 /**
  * R6.1.6 — the duplicated-anchor evasion, as a transcript.

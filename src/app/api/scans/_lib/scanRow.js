@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/db";
+import { supabase, ScansUnavailableError } from "@/lib/db";
 
 // Private helper module (the `_lib` prefix opts it out of Next.js route
 // resolution) shared by the two new P0.3 single-scan endpoints:
@@ -15,15 +15,29 @@ export function isValidScanId(id) {
  * rethrown, so a DB outage reaches the route's catch as a 500 rather than a
  * 404 — the distinction R2.8.4 is about.
  *
- * NOT the same convention as getScansForBrand: that function used to return []
- * when `!supabase`, and R2.8.4 changed it to throw ScansUnavailableError
- * because "no client" is not a measurement. This one still returns null in
- * that case, so an unconfigured dev environment reads as a 404. Do not copy
- * that branch forward as a pattern — it is a narrower fail-quiet awaiting its
- * own task, not the house style.
+ * NOW THE SAME CONVENTION AS getScansForBrand (R2.8.5). This used to `return
+ * null` when `!supabase`, which the by-id route turns into 404 "Scan not
+ * found." — so a deploy with no Supabase credentials told every visitor of
+ * /dashboard/[brand]/[scanId] that their scan did not exist, when the truth is
+ * that nothing was ever asked. There is no memory fallback for scans
+ * (insertScan refuses without a client), so no scan could exist to find:
+ * `null` there was a statement about the environment dressed up as a statement
+ * about the row. It throws ScansUnavailableError with code `db_not_configured`
+ * instead, and the route's existing catch returns a 500.
+ *
+ * `null` now has exactly one meaning left: the database answered and holds no
+ * row with this id — a genuine 404.
+ *
+ * @throws {ScansUnavailableError} db_not_configured
+ * @throws {object} the raw postgrest error envelope, when the DB answered with one
  */
 export async function getScanById(scanId) {
-  if (!supabase) return null;
+  if (!supabase) {
+    throw new ScansUnavailableError(
+      "Supabase is not configured — this scan cannot be read.",
+      { code: "db_not_configured" }
+    );
+  }
 
   const { data, error } = await supabase
     .from("scans")

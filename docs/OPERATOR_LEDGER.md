@@ -6,7 +6,23 @@
 > here is automatable and merely un-automated, that is a bug in this file; say so
 > and move it.
 
-**Date:** 2026-09-05 · **Task:** R6.2.1 (finding S27) · **Verified at:** `1a5ed81`
+**Date:** 2026-09-05 · **Task:** R6.2.1 (finding S27) · **Verified at:** `04e80db`
+
+> **Citation anchoring — read before following a line number.** Every `file:line`
+> in this document was re-resolved against commit `04e80db` on 2026-09-05: **17
+> citation sites across 9 files, of which 14 held and 3 did not.** All three
+> failures were in one sentence — the previous revision cited `createScanJob` at
+> `src/lib/db.js:577` with its fallback at `:600-602`, and `POST /api/scan`
+> returning 201 off it at `src/app/api/scan/route.js:57-70`. `createScanJob` has
+> never been on line 577: it was at `:542` at `1a5ed81`, the commit that revision
+> declared, where `:577` and `:600-602` are the migration-007 reclaim path. That
+> entry is rewritten in § E, R0.1.21, anchored on the symbol — and its behaviour
+> has since changed as well.
+>
+> `src/lib/db.js` moved in four of the last twelve commits and will move again.
+> So where a symbol name exists, this file names the symbol and describes the
+> mechanism in words. Treat a line number here as a hint about *which file*;
+> `git grep -n` is the lookup that survives.
 
 ---
 
@@ -92,16 +108,27 @@ Standing rule 3 applies: **set** and **works** are different claims, and
 
 There is an ordering constraint here that will take a dashboard down if it is
 missed. `src/middleware.js` — the operator perimeter — **does not exist on
-`main`**; it is on the rebuild branch, 120 commits ahead. It reads
-`process.env.OPERATOR_TOKEN` (`src/middleware.js:36`) and, in production with the
-variable unset, **refuses every operator route** and logs
+`main`**; it exists only on the rebuild branch, well over a hundred commits
+ahead. (Confirm both facts rather than trusting a number that rots:
+`git cat-file -e main:src/middleware.js` fails, and `git rev-list --count
+main..HEAD` gives today's distance.) It reads `process.env.OPERATOR_TOKEN`
+(`src/middleware.js:36`) and, in production with the variable unset, **refuses
+every operator route** with `401` and logs
 `[perimeter] REFUSING ... OPERATOR_TOKEN is not set in production.`
 (`src/middleware.js:66`). So:
 
 > **Set `OPERATOR_TOKEN` in Vercel BEFORE PR #1 merges, not after.** It fails
 > closed by design. The anonymous free-scan flow, `/api/industries` and
 > `/api/health` stay open, so a smoke test of the landing page will look fine
-> while every operator screen 401s.
+> while every operator **API** 401s.
+
+Read that last word exactly. The matcher is `matcher: ["/api/:path*"]`
+(`src/middleware.js:83`) — API routes only. Page routes never reach the
+middleware, so an operator screen still **renders**; what fails is each data
+fetch it makes. Smoke-testing by loading a dashboard and seeing a page is
+therefore not evidence the perimeter is off, and an empty-looking dashboard with
+no error banner is the expected shape of a missing `OPERATOR_TOKEN`. Test with a
+request to an operator API, not with a browser tab.
 
 Acceptance, against the **deployed** instance and with **freshly rotated** values:
 
@@ -189,12 +216,12 @@ disagree about what "configured" means. The credential table is
 | `supabase` | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes |
 | `llm` | `LLM_API_KEY` (deprecated alias `OPENROUTER_API_KEY` still satisfies it) | yes |
 | `brightdata` | `BRIGHTDATA_API_KEY` | yes |
-| `cron` | `CRON_SECRET` | yes |
 | `firecrawl` | `FIRECRAWL_API_KEY` | no |
 | `perplexity` | `PERPLEXITY_API_KEY` | no |
 | `openai` | `OPENAI_API_KEY` | no |
 | `gemini` | `GEMINI_API_KEY` | no |
 | `gsc` | `GSC_SERVICE_ACCOUNT_KEY` | no |
+| `cron` | `CRON_SECRET` | yes |
 
 Set in `.env.local` for local work and in the Vercel project for the deployment.
 `.env.example` documents every one with its shape and its consequences; read it
@@ -246,9 +273,15 @@ the Postgres catalog:
 - `012_scan_job_attempts.sql`: **applied state unverified from this environment.**
   Do not assume. Check the catalog before relying on it.
 
-Per-migration verification queries are being written under **R6.1.2** into
-`docs/PROD_MIGRATIONS.md`; that file does not exist yet at `1a5ed81`. Until it
-lands, the operator rule is the one R0.1.11 established the hard way:
+**The per-migration verification queries now exist.** `docs/PROD_MIGRATIONS.md`
+landed under R6.1.2 in commit `156c21b` — it did not exist when this section was
+first written, and the earlier revision of this file said so. Go there for the
+catalog query that settles each file, including the `012` question above: it
+lists `012`'s four objects (`scan_jobs.attempts`, `scan_jobs_attempts_chk`,
+`scan_jobs_attempts_idx`, `claim_scan_job_attempt`) as the things to look for.
+That document is itself `in_verification` at the time of writing, so treat its
+queries as reviewed-by-one, not settled. The operator rule behind it is the one
+R0.1.11 established the hard way:
 
 > **Verify schema state from the Postgres catalog, never from a head-probe.**
 > Query `to_regclass` for tables and indexes and `pg_proc` for functions. An
@@ -345,10 +378,60 @@ supplies. Re-check status with `orchestrate.mjs show <id>` — these move.
 
 | Task | The judgement call |
 | --- | --- |
-| R0.1.21 | `createScanJob` fail-softs to an in-memory map when there is no Supabase client (`src/lib/db.js:577`, fallback at `:600-602`), and `src/app/api/scan/route.js:57-70` returns `201 Created` off that job. On a deploy with no credentials, an anonymous request gets a job id for a scan that was never persisted — and the scan proceeds to spend vendor budget with nowhere to land the results. The memory store is load-bearing for the whole test suite, so removing it needs a decision about whether it is dev-only *by assertion* or dev-only *by accident*. |
+| R0.1.21 | **Decided and shipped — read this for the consequence, not the ask.** See below the table; the judgement call it used to describe no longer reproduces. |
 | R1.1.3 | Name the worker host (long-lived container), and rule out Vercel functions for this workload **in writing**. |
 | R4.5.1 | Decide-or-delete, per item, on the schema-only subsystems: `topics`, `content_feedback` reads, the phantom `analyzing` status. Wire with a test, or delete with the schema. |
 | R6.1.9 | Where the secrets-hygiene rule lives for agents outside the `rebuild-*` family. The guard covers six agent definitions; roughly forty other tracked instruction files under `.claude/` carry nothing. Both leaks came from agents running unscoped searches, and nothing about that failure mode is specific to `rebuild-*`. Copying the rule into forty files multiplies the thing that drifts; the alternative is `CLAUDE.md`, which every session loads by construction. |
+
+#### R0.1.21 — the unpersisted-scan 201 no longer reproduces
+
+The earlier revision of this file listed R0.1.21 as an open judgement call, cited
+`src/lib/db.js:577` for `createScanJob` with the fallback at `:600-602`, and
+`src/app/api/scan/route.js:57-70` for the `201 Created` built on it. **All three
+were wrong** — `createScanJob` has never been on line 577 in that file's history;
+at `1a5ed81`, the commit the earlier revision declared, it was at `:542` and
+`:577`/`:600-602` are the migration-007 duplicate-reclaim path. Worse, that
+citation was presented as a *correction* of a stale roadmap anchor. Correcting it
+is the reason this revision exists; the entry is rewritten rather than
+renumbered, because the substance moved too.
+
+**What is true at `04e80db`.** Anchor on the symbol:
+`git grep -n 'export async function createScanJob' src/lib/db.js`. It still
+fail-softs — the `if (!hasDb)` branch immediately after the job object is built
+writes it into `global.memoryJobs` and returns it, shaped exactly like a
+persisted row. What changed is the route. `POST /api/scan` now imports the
+module-level `supabase` client and returns **503** `{ code:
+"scan_store_unavailable" }` when it is null — `src/app/api/scan/route.js:105`,
+calling `scanStoreUnavailable` — *before* `createScanJob` runs, so no job is
+created and `runScanChunk` never fires. A second, currently unreachable guard at
+`:119` refuses the same way if a returned job turns up in `global.memoryJobs`
+anyway, so a future divergence in `db.js`'s fallback condition fails loud instead
+of quietly restoring the 201. It shipped in commit `156c21b` with its test
+(`src/lib/scanRoute.unpersisted.route.test.mjs`) and its decision record,
+`docs/decisions/2026-09-05-unpersisted-scan-jobs.md`. The ledger task is
+`in_verification`, not closed.
+
+**What the operator still needs to know.**
+
+1. **`npm run dev` with no Supabase can no longer start a scan over HTTP.** It
+   returns 503 by design. That is the recorded cost of the fix, not a
+   regression; the ADR names it. Set the Supabase variables locally, or drive
+   `src/lib/db.js` directly as the test suite does.
+2. **`src/lib/db.js` was deliberately not touched.** The memory store is still a
+   legitimate in-process fallback — the test suite runs with the Supabase vars
+   unset and dozens of suites depend on it. The decision drawn was that the map
+   is a valid *library* fallback and an invalid *response*, enforced at the route
+   rather than by an assertion inside `db.js`. So the perimeter here is one
+   guard on one route, not a property of the store.
+3. **There is a second live caller of `createScanJob`, and it is not behind that
+   guard:** `runSchedulerTick` (`src/lib/workers/scanWorker.js`, `const createJob
+   = deps.createScanJob || createScanJob`), reached from `GET /api/scan/worker`
+   — the cron route in `vercel.json`. It is cron-authenticated, so it is not the
+   anonymous spend path R0.1.21 closed. On an unconfigured instance it also
+   appears unreachable, because `listDueSchedules` reads `global.memoryScanSchedules`,
+   which is empty in a cold process. **That reachability argument is reasoned,
+   not exercised** — no test drives it. Anyone adding a third caller should
+   assume the guard does not cover them.
 
 ### Needs an LLM key (`needs-llm`)
 
@@ -386,6 +469,9 @@ sees three clean days and flips the flag on day four.
 - Whether `CRON_SECRET` and `OPERATOR_TOKEN` are set on the deployment is
   **unconfirmed** (R0.1.12).
 - Migration `012`'s applied state in production is **unverified** (§ C).
-- The rebuild branch is 120 commits ahead of `main` and PR #1 is unmerged. Which
-  commit the Vercel deployment actually serves is **not established by anything
-  in this repository**; check the Vercel dashboard rather than inferring it.
+- The rebuild branch is many commits ahead of `main` and PR #1 is unmerged —
+  `git rev-list --count main..HEAD` for the number, which changes hourly and is
+  therefore not written down here. (It was 120 at `1a5ed81` and 123 at `04e80db`,
+  in one working session; that rate is the reason.) Which commit the Vercel
+  deployment actually serves is **not established by anything in this
+  repository**; check the Vercel dashboard rather than inferring it.

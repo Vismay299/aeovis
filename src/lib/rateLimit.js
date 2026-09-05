@@ -15,16 +15,29 @@ import crypto from "crypto";
  * than implying precision it does not have.
  */
 
-/** Warn-once latch for an untrusted address source (see checkScanRateLimit). */
-let warnedUntrustedSource = false;
+/**
+ * Warn-once latches for an untrusted address source (see checkScanRateLimit),
+ * keyed by WHY the address is untrusted rather than one boolean for all of
+ * them (R0.1.20).
+ *
+ * The single boolean was correct while only one thing could be wrong. Now that
+ * the platform header is untrusted too (see PLATFORM_IP_HEADER), a Vercel
+ * process would spend the one latch on "we do not vouch for the platform
+ * header" and then go SILENT if a later request in the same process arrived
+ * with no platform header at all and fell back to `x-real-ip` — a strictly
+ * worse state, hidden by the warning for a better one. One latch per basis
+ * bounds the log at one line per distinct state per process, which is the same
+ * property the boolean had, without the swallowing.
+ */
+const warnedUntrustedBases = new Set();
 /** Warn-once latch for a misconfigured trust knob (R0.1.18). Separate from the
- * one above on purpose: a bad declaration must never be swallowed by the latch
+ * ones above on purpose: a bad declaration must never be swallowed by the latch
  * that a plain untrusted request would have tripped anyway. */
 let warnedTrustConfig = false;
 
-/** Test seam: re-arm both warn-once latches. */
+/** Test seam: re-arm every warn-once latch. */
 export function resetUntrustedSourceWarning() {
-  warnedUntrustedSource = false;
+  warnedUntrustedBases.clear();
   warnedTrustConfig = false;
 }
 
@@ -56,14 +69,20 @@ export function resolveRateLimit(env = process.env) {
  * trust ordering below existed, 25 requests carrying a rotating `x-real-ip`
  * were allowed 25 times under a limit of 5.
  *
- * TRUSTED (`x-vercel-forwarded-for`, and only when `VERCEL` is set): Vercel
- * strips inbound `x-vercel-*` headers and writes this one itself, so a caller
- * cannot forge it. Off Vercel the same header IS forgeable, which is why the
- * env gate is not decoration.
+ * PREFERRED BUT NOT VOUCHED FOR (`x-vercel-forwarded-for`, and only when
+ * `VERCEL` is set): Vercel is DOCUMENTED to strip inbound `x-vercel-*` headers
+ * and write this one itself. It is still read first, because it is the best
+ * address available on that platform and demoting it would hand the bucket to
+ * a header the caller definitely writes. It is reported `trusted: false`
+ * (R0.1.20) because nobody here has proved the strip — see
+ * TRUST_RESTORE_CHECK. Off Vercel the header is not read at all, which is why
+ * the env gate is not decoration.
  *
  * TRUSTED (`SCAN_RATE_LIMIT_IP_HEADER`): an operator running behind some other
  * proxy names the single header that proxy OVERWRITES. This has to be declared
- * because nothing in the request can tell us it was.
+ * because nothing in the request can tell us it was. This one keeps
+ * `trusted: true`: it is a human assertion made out of band, not an assumption
+ * this module invented about someone else's edge.
  *
  * UNTRUSTED (`x-real-ip`, then the leftmost `x-forwarded-for` entry): the
  * conventional pair, used only as a fallback, and reported as untrusted rather
@@ -73,18 +92,53 @@ export function resolveRateLimit(env = process.env) {
  * caller's words. "Leftmost" is likewise a convention, not a derivation: with
  * no known proxy depth there is no correct element of the chain to pick.
  */
-export const TRUSTED_IP_HEADER = "x-vercel-forwarded-for";
+// Named for what it IS — the header the platform is supposed to control — and
+// no longer TRUSTED_IP_HEADER, which was a promise this module cannot keep.
+export const PLATFORM_IP_HEADER = "x-vercel-forwarded-for";
 
 /**
- * NOT VERIFIED HERE: that Vercel really does strip inbound `x-vercel-*`. The
- * claim above is the platform's documented behaviour, and nothing inside a
- * request handler can corroborate it — a request carrying that header looks
- * identical whether the edge wrote it or the caller did. Proving it needs an
- * external probe (send a forged `x-vercel-forwarded-for` at the deployed URL
- * and compare the bucket it lands in), which belongs to a deploy-time check,
- * not to this module. Recorded as an assumption rather than dressed up as a
- * fact, because if it is ever false this file reports `trusted: true`.
+ * R0.1.20 — the `trusted: true` label is WITHDRAWN from PLATFORM_IP_HEADER.
+ *
+ * What was never verified: that Vercel really does strip inbound `x-vercel-*`.
+ * That is the platform's documented behaviour and nothing inside a request
+ * handler can corroborate it — a request carrying that header looks identical
+ * whether the edge wrote it or the caller did. If the documentation is ever
+ * wrong, or an edge config changes, an anonymous caller forges the header,
+ * lands in a bucket of their choosing, and the old envelope asserted
+ * `trusted: true` about it while the warn-once (which only fired for UNTRUSTED
+ * sources) stayed silent. A spoofable identity carrying a confidence label is
+ * worse than no label.
+ *
+ * So the label is withheld until it is earned, and the request is warned about
+ * like any other unvouched-for source. What is NOT changed: the header is still
+ * read first on Vercel and the bucket key is byte-identical, so the limit is
+ * exactly as strong as it was. Only the claim about it is weaker — which is the
+ * direction that fails safe.
+ *
+ * This is a DEFERRAL, not a verdict on the platform. Grep RESTORE-TRUST-R0.1.20
+ * for everything that has to change to take the label back.
  */
+export const TRUST_RESTORE_CHECK =
+  "RESTORE-TRUST-R0.1.20: a deploy-time check that forges x-vercel-forwarded-for " +
+  "against the deployed origin and asserts the rate-limit bucket does not move, " +
+  "run where an operator sees the result";
+
+/**
+ * WHY an address is or is not vouched for. `trusted: false` on its own cannot
+ * tell an operator whether the address came from the platform header we merely
+ * have not PROVED or from a header the caller types, and those two are not the
+ * same incident.
+ */
+export const TRUST_BASIS = Object.freeze({
+  /** SCAN_RATE_LIMIT_IP_HEADER: an operator declared the header their proxy overwrites. */
+  DECLARED: "operator-declared",
+  /** PLATFORM_IP_HEADER on Vercel: best available, unproven, RESTORE-TRUST-R0.1.20. */
+  PLATFORM_UNPROVEN: "platform-unproven",
+  /** x-real-ip / x-forwarded-for: whatever the caller typed. */
+  CALLER_SETTABLE: "caller-settable",
+  /** No address header at all: one shared bucket. */
+  ABSENT: "no-address-header",
+});
 
 /** Values an operator writes to mean yes / no in a boolean env var. */
 const TRUTHY_ENV = new Set(["1", "true", "yes", "on"]);
@@ -101,7 +155,9 @@ const FALSY_ENV = new Set(["", "0", "false", "no", "off"]);
  * An unrecognised value (anything outside the yes/no vocabularies) is treated
  * as NOT on Vercel and warned about: closed is the safe direction, and the
  * operator typed something we cannot honour, so they are told rather than
- * guessed at.
+ * guessed at. "Closed" here means the platform header is not READ at all — it
+ * has not been a trusted source since R0.1.20, but off Vercel it is not even an
+ * address.
  *
  * `VERCEL_URL` is a hostname, not a flag, so any non-empty value counts —
  * except the yes/no "no" words, which are never a hostname and are far more
@@ -114,7 +170,7 @@ export function resolveVercelRuntime(env = process.env) {
     !byFlag && raw && !FALSY_ENV.has(raw)
       ? `[rate-limit] VERCEL is set to "${String(env.VERCEL)}", which is neither ` +
         `1/true/yes/on nor 0/false/no/off. Treating it as NOT running on Vercel, so ` +
-        `${TRUSTED_IP_HEADER} is NOT trusted.`
+        `${PLATFORM_IP_HEADER} is NOT trusted and is not read as the client address at all.`
       : null;
 
   const url = env.VERCEL_URL == null ? "" : String(env.VERCEL_URL).trim().toLowerCase();
@@ -148,7 +204,9 @@ export const REFUSED_IP_HEADERS = Object.freeze({
   "x-forwarded-for": "a chain the caller can prepend to, and the leftmost entry is the caller's word",
   "x-forwarded-host": "a hostname, not a client address, and the caller can set it",
   forwarded: "RFC 7239 syntax this module does not parse, and the caller can set it",
-  [TRUSTED_IP_HEADER]: "on Vercel it is already trusted without a declaration; off Vercel nothing strips it",
+  [PLATFORM_IP_HEADER]:
+    "on Vercel this module already reads it without a declaration (and withholds trust from it " +
+    "pending RESTORE-TRUST-R0.1.20); off Vercel nothing strips it",
 });
 
 /** RFC 7230 token: what a header name may legally contain. */
@@ -251,33 +309,71 @@ export function resolveClientIp({ header, env = process.env }) {
   // Carried in the envelope so the caller can shout about a misconfiguration
   // that would otherwise only be visible as a quietly weaker limit.
   const configWarning = [runtime.warning, declaration.warning].filter(Boolean).join(" ") || null;
-  const out = (ip, source, trusted) => ({ ip, source, trusted, configWarning });
+  const out = (ip, source, trusted, trustBasis) => ({ ip, source, trusted, trustBasis, configWarning });
 
   // Either marker, because the cost of getting this wrong is asymmetric: a
-  // false negative silently demotes the trusted header back to the spoofable
-  // fallback and the limit quietly stops being per-IP. `VERCEL` is the
-  // documented one; `VERCEL_URL` is the one scanWorker.js already depends on
-  // being present in this deployment, so it is checked as corroboration.
+  // false negative demotes the best address this platform has back to the
+  // spoofable fallback and the limit quietly stops being per-IP. `VERCEL` is
+  // the documented one; `VERCEL_URL` is the one scanWorker.js already depends
+  // on being present in this deployment, so it is checked as corroboration.
+  //
+  // Read FIRST but labelled `trusted: false` (R0.1.20). Order and label are
+  // separate decisions: the ordering picks the address least under the caller's
+  // control, the label says whether anyone has PROVED that. Nobody has —
+  // RESTORE-TRUST-R0.1.20.
   if (runtime.onVercel) {
-    const platform = read(TRUSTED_IP_HEADER);
-    if (platform) return out(platform, TRUSTED_IP_HEADER, true);
+    const platform = read(PLATFORM_IP_HEADER);
+    if (platform) return out(platform, PLATFORM_IP_HEADER, false, TRUST_BASIS.PLATFORM_UNPROVEN);
   }
 
   if (declaration.header) {
     const value = read(declaration.header);
-    if (value) return out(value, declaration.header, true);
+    if (value) return out(value, declaration.header, true, TRUST_BASIS.DECLARED);
   }
 
   const realIp = read("x-real-ip");
-  if (realIp) return out(realIp, "x-real-ip", false);
+  if (realIp) return out(realIp, "x-real-ip", false, TRUST_BASIS.CALLER_SETTABLE);
 
   const forwarded = read("x-forwarded-for");
-  if (forwarded) return out(forwarded, "x-forwarded-for", false);
+  if (forwarded) return out(forwarded, "x-forwarded-for", false, TRUST_BASIS.CALLER_SETTABLE);
 
   // No identifiable client at all: bucket every such request together rather
   // than letting them all through unlimited. A shared bucket throttles; no
   // bucket does nothing.
-  return out(null, "none", false);
+  return out(null, "none", false, TRUST_BASIS.ABSENT);
+}
+
+/**
+ * What to say about an address nobody vouches for. One sentence per BASIS,
+ * because "the caller typed this" and "the platform probably wrote this but we
+ * never checked" call for different operator action and must not be reported
+ * with one message.
+ */
+export function untrustedSourceWarning(identity) {
+  const declare =
+    ` Set SCAN_RATE_LIMIT_IP_HEADER to the single header your proxy OVERWRITES on every inbound request.`;
+
+  if (identity.trustBasis === TRUST_BASIS.PLATFORM_UNPROVEN) {
+    return (
+      `[rate-limit] client address taken from ${PLATFORM_IP_HEADER} on a Vercel deployment. ` +
+      `The limit IS applied to that address and the bucket is unchanged, but this build does NOT ` +
+      `vouch for it: nothing has proved the edge overwrites an inbound copy of that header, so if ` +
+      `it does not, a forged one puts the caller in a bucket of their choosing. Reported ` +
+      `trusted:false until ${TRUST_RESTORE_CHECK}.`
+    );
+  }
+
+  if (identity.trustBasis === TRUST_BASIS.ABSENT) {
+    return (
+      `[rate-limit] no client address header on this request: every such caller shares ONE bucket, ` +
+      `so the limit is real but not per-IP.` + declare
+    );
+  }
+
+  return (
+    `[rate-limit] client address taken from ${identity.source}, which the caller can set: ` +
+    `the per-IP limit is bypassable by rotating that header.` + declare
+  );
 }
 
 /**
@@ -350,21 +446,18 @@ export async function checkScanRateLimit({
     logger.warn(identity.configWarning);
   }
 
-  // A limit keyed on a header the caller writes is not a limit. Say so — once
-  // per process, so it lands on every cold start without drowning the log —
-  // and carry `trusted` out in the envelope so the decision is never read as
-  // "this address has had 5 scans" when it only means "this claim has".
-  if (!identity.trusted && !warnedUntrustedSource) {
-    warnedUntrustedSource = true;
-    logger.warn(
-      (identity.source === "none"
-        ? `[rate-limit] no client address header on this request: every such caller shares ONE bucket, ` +
-          `so the limit is real but not per-IP.`
-        : `[rate-limit] client address taken from ${identity.source}, which the caller can set: ` +
-          `the per-IP limit is bypassable by rotating that header.`) +
-        ` Set SCAN_RATE_LIMIT_IP_HEADER to the header your proxy OVERWRITES, or deploy behind Vercel ` +
-        `where ${TRUSTED_IP_HEADER} is trusted.`
-    );
+  // An address nobody vouches for is announced — once per process PER BASIS,
+  // so it lands on every cold start without drowning the log and without one
+  // state's warning silencing a different one — and `trusted` is carried out in
+  // the envelope so the decision is never read as "this address has had 5
+  // scans" when it only means "this claim has".
+  //
+  // On Vercel this now fires for the platform header too (R0.1.20): one line
+  // per process saying the label was withheld, rather than a silent
+  // `trusted: true` that nothing has earned.
+  if (!identity.trusted && !warnedUntrustedBases.has(identity.trustBasis)) {
+    warnedUntrustedBases.add(identity.trustBasis);
+    logger.warn(untrustedSourceWarning(identity));
   }
 
   let hits;
@@ -384,6 +477,7 @@ export async function checkScanRateLimit({
       bucketKey,
       source: identity.source,
       trusted: identity.trusted,
+      trustBasis: identity.trustBasis,
     };
   }
 
@@ -398,6 +492,7 @@ export async function checkScanRateLimit({
       bucketKey,
       source: identity.source,
       trusted: identity.trusted,
+      trustBasis: identity.trustBasis,
     };
   }
 
@@ -407,5 +502,6 @@ export async function checkScanRateLimit({
     bucketKey,
     source: identity.source,
     trusted: identity.trusted,
+    trustBasis: identity.trustBasis,
   };
 }

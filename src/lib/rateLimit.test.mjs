@@ -11,10 +11,13 @@ import {
   resolveDeclaredIpHeader,
   resolveRateLimit,
   resolveVercelRuntime,
+  untrustedSourceWarning,
   windowStart,
   DEFAULTS,
   REFUSED_IP_HEADERS,
-  TRUSTED_IP_HEADER,
+  PLATFORM_IP_HEADER,
+  TRUST_BASIS,
+  TRUST_RESTORE_CHECK,
 } from "./rateLimit.js";
 
 const HOUR = 60 * 60 * 1000;
@@ -39,12 +42,12 @@ function counter() {
 // fail. Every constant this file leans on is therefore pinned to a literal
 // once, here, and used symbolically everywhere else. Both of these were
 // measured to survive mutation before this test existed: retargeting
-// TRUSTED_IP_HEADER to "x-acme-ip" left the suite 28/28 green even though the
-// module would then be extending trust to a header nobody vetted, and cutting
-// DEFAULTS.windowMs to five minutes left it green too, under a test whose own
-// name promises "in an hour".
+// PLATFORM_IP_HEADER to "x-acme-ip" left the suite 28/28 green even though the
+// module would then be reading its identity out of a header nobody vetted, and
+// cutting DEFAULTS.windowMs to five minutes left it green too, under a test
+// whose own name promises "in an hour".
 test("GUARD — the constants this suite asserts against are pinned, not read back", () => {
-  assert.equal(TRUSTED_IP_HEADER, "x-vercel-forwarded-for");
+  assert.equal(PLATFORM_IP_HEADER, "x-vercel-forwarded-for");
   assert.deepEqual({ ...DEFAULTS }, { limit: 5, windowMs: HOUR });
 });
 
@@ -154,7 +157,7 @@ test("THE BYPASS — rotating a client-settable header no longer buys fresh buck
   for (let i = 0; i < 25; i++) {
     const verdict = await checkScanRateLimit({
       // One real client per Vercel; twenty-five different stories from the caller.
-      header: headers({ [TRUSTED_IP_HEADER]: "203.0.113.9", "x-real-ip": `192.0.2.${i + 20}` }),
+      header: headers({ [PLATFORM_IP_HEADER]: "203.0.113.9", "x-real-ip": `192.0.2.${i + 20}` }),
       increment,
       env,
       now: T0,
@@ -165,25 +168,28 @@ test("THE BYPASS — rotating a client-settable header no longer buys fresh buck
   assert.equal(allowed, 5, "the spoofer must get the same five scans as an honest caller, not 25");
 });
 
-test("resolveClientIp - the platform header is trusted ONLY when running on Vercel", () => {
-  const header = headers({ [TRUSTED_IP_HEADER]: "203.0.113.9" });
+test("resolveClientIp - the platform header is READ only when running on Vercel", () => {
+  const header = headers({ [PLATFORM_IP_HEADER]: "203.0.113.9" });
 
   const onVercel = resolveClientIp({ header, env: { VERCEL: "1" } });
   assert.equal(onVercel.ip, "203.0.113.9");
-  assert.equal(onVercel.source, TRUSTED_IP_HEADER);
-  assert.equal(onVercel.trusted, true);
+  assert.equal(onVercel.source, PLATFORM_IP_HEADER);
+  // R0.1.20: read, and still the highest-precedence source, but NOT vouched for.
+  assert.equal(onVercel.trusted, false);
+  assert.equal(onVercel.trustBasis, TRUST_BASIS.PLATFORM_UNPROVEN);
 
   // Off Vercel nothing strips inbound x-vercel-*, so the same header is just
   // another claim — and is ignored rather than quietly promoted.
   const offVercel = resolveClientIp({ header, env: {} });
   assert.equal(offVercel.ip, null, "an unenforced x-vercel-* header must not become an identity");
   assert.equal(offVercel.trusted, false);
+  assert.equal(offVercel.trustBasis, TRUST_BASIS.ABSENT, "off Vercel it is not an address at all");
 });
 
-test("resolveClientIp - the trusted header outranks both headers a caller can set", () => {
+test("resolveClientIp - the platform header outranks both headers a caller can set", () => {
   const out = resolveClientIp({
     header: headers({
-      [TRUSTED_IP_HEADER]: "203.0.113.9",
+      [PLATFORM_IP_HEADER]: "203.0.113.9",
       "x-real-ip": "192.0.2.1",
       "x-forwarded-for": "198.51.100.1, 10.0.0.1",
     }),
@@ -199,7 +205,8 @@ test("resolveClientIp - an operator can declare the header their own proxy overw
   });
   assert.equal(out.ip, "203.0.113.9");
   assert.equal(out.source, "cf-connecting-ip");
-  assert.equal(out.trusted, true);
+  assert.equal(out.trusted, true, "an out-of-band human assertion is the one thing still vouched for");
+  assert.equal(out.trustBasis, TRUST_BASIS.DECLARED);
 });
 
 test("resolveClientIp - the conventional fallbacks still work, and admit they are guesses", () => {
@@ -243,17 +250,20 @@ test("an untrusted address source is announced, not assumed away", async () => {
 });
 
 test("a trusted address source warns about nothing and says so in the envelope", async () => {
+  // The DECLARED header is now the only trusted source (R0.1.20), so it is the
+  // only one that may pass in silence.
   resetUntrustedSourceWarning();
   let warned = "";
   const out = await checkScanRateLimit({
-    header: headers({ [TRUSTED_IP_HEADER]: "203.0.113.9" }),
+    header: headers({ "cf-connecting-ip": "203.0.113.9" }),
     increment: counter(),
-    env: { VERCEL: "1" },
+    env: { SCAN_RATE_LIMIT_IP_HEADER: "cf-connecting-ip" },
     now: T0,
     logger: { warn: (m) => (warned = m) },
   });
   assert.equal(out.trusted, true);
-  assert.equal(out.source, TRUSTED_IP_HEADER);
+  assert.equal(out.trustBasis, TRUST_BASIS.DECLARED);
+  assert.equal(out.source, "cf-connecting-ip");
   assert.equal(warned, "");
 });
 
@@ -398,19 +408,21 @@ test("BAD DECLARATION — is LOUDER than no declaration, never quieter", async (
 });
 
 test("VERCEL=0 — the platform gate is judged by value, not by presence", () => {
-  const header = headers({ [TRUSTED_IP_HEADER]: "203.0.113.9" });
+  const header = headers({ [PLATFORM_IP_HEADER]: "203.0.113.9" });
 
   for (const value of ["0", "false", "no", "off", "", " 0 ", "FALSE"]) {
     const out = resolveClientIp({ header, env: { VERCEL: value } });
-    assert.equal(out.trusted, false, `VERCEL=${JSON.stringify(value)} must not open the trust gate`);
+    assert.equal(out.trusted, false, `VERCEL=${JSON.stringify(value)} must not open the gate`);
     assert.equal(out.ip, null, "off Vercel the x-vercel-* header is nobody's address");
   }
+  // Since R0.1.20 the gate decides whether the header is READ, not whether it
+  // is trusted — nothing opens the trust gate for this header any more.
   for (const value of ["1", "true", "TRUE", "yes", "on", " 1 "]) {
-    assert.equal(
-      resolveClientIp({ header, env: { VERCEL: value } }).trusted,
-      true,
-      `VERCEL=${JSON.stringify(value)} must open it`
-    );
+    const out = resolveClientIp({ header, env: { VERCEL: value } });
+    assert.equal(out.ip, "203.0.113.9", `VERCEL=${JSON.stringify(value)} must open it`);
+    assert.equal(out.source, PLATFORM_IP_HEADER);
+    assert.equal(out.trusted, false, "read is not the same as vouched for");
+    assert.equal(out.trustBasis, TRUST_BASIS.PLATFORM_UNPROVEN);
   }
 });
 
@@ -423,7 +435,7 @@ test("VERCEL=<unrecognised> fails closed AND says what it did with the value", a
   resetUntrustedSourceWarning();
   const said = [];
   const out = await checkScanRateLimit({
-    header: headers({ [TRUSTED_IP_HEADER]: "203.0.113.9", "x-real-ip": "192.0.2.1" }),
+    header: headers({ [PLATFORM_IP_HEADER]: "203.0.113.9", "x-real-ip": "192.0.2.1" }),
     increment: counter(),
     env: { VERCEL: "maybe" },
     now: T0,
@@ -486,6 +498,182 @@ test("BAD DECLARATION — an Object.prototype name is refused, and the refusal s
     assert.match(out.warning, /Object\.prototype/, "the reason must be a sentence, not an inherited value");
     assert.doesNotMatch(out.warning, /native code|\[object Object\]/, `${name} interpolated an inherited value into the operator's warning`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// R0.1.20 — the trusted:true label is WITHDRAWN from x-vercel-forwarded-for.
+//
+// Nothing inside a request handler can tell whether Vercel's edge wrote that
+// header or the caller forged it, so the old `trusted: true` was an assumption
+// wearing a fact's clothes — and because the warn-once fired only for UNTRUSTED
+// sources, a spoofed identity would have travelled with a confidence label and
+// no log line at all. The label is withheld until the deploy-time forgery check
+// named in TRUST_RESTORE_CHECK exists and runs. The limit itself is untouched:
+// the header is still read FIRST and the bucket key is byte-identical.
+// ---------------------------------------------------------------------------
+
+test("WITHDRAWN — the platform header is never trusted:true, in EVERY envelope shape", async () => {
+  const header = headers({ [PLATFORM_IP_HEADER]: "203.0.113.9" });
+  const env = { VERCEL: "1" };
+  const shapes = {
+    normal: counter(),
+    thrown: async () => {
+      throw new Error("supabase unreachable");
+    },
+    nonNumeric: async () => null,
+  };
+
+  for (const [name, increment] of Object.entries(shapes)) {
+    resetUntrustedSourceWarning();
+    const out = await checkScanRateLimit({ header, increment, env, now: T0, logger: silent });
+    assert.equal(out.source, PLATFORM_IP_HEADER, `${name}: the header is still the address we read`);
+    assert.equal(out.trusted, false, `${name}: an unproven label must not travel with the verdict`);
+    assert.equal(out.trustBasis, TRUST_BASIS.PLATFORM_UNPROVEN, `${name}: and it must say WHY`);
+  }
+});
+
+test("WITHDRAWN — the downgrade is announced, and names what would restore it", async () => {
+  resetUntrustedSourceWarning();
+  const said = [];
+  await checkScanRateLimit({
+    header: headers({ [PLATFORM_IP_HEADER]: "203.0.113.9" }),
+    increment: counter(),
+    env: { VERCEL: "1" },
+    now: T0,
+    logger: { warn: (m) => said.push(m) },
+  });
+  const log = said.join("\n");
+  assert.match(log, /does NOT\s+vouch for it/, "a withheld label that says nothing is the defect, not the fix");
+  assert.match(log, /RESTORE-TRUST-R0\.1\.20/, "the deferral must be greppable from the log line");
+  assert.match(log, /forges x-vercel-forwarded-for/, "the operator must learn what check earns it back");
+  assert.match(log, /limit IS applied/, "and must not read as 'the limit is off'");
+  assert.doesNotMatch(
+    log,
+    /bypassable by rotating/,
+    "this is not the caller-settable incident and must not be reported as one"
+  );
+
+  // Once per process, like every other warning here.
+  const repeat = [];
+  await checkScanRateLimit({
+    header: headers({ [PLATFORM_IP_HEADER]: "203.0.113.9" }),
+    increment: counter(),
+    env: { VERCEL: "1" },
+    now: T0,
+    logger: { warn: (m) => repeat.push(m) },
+  });
+  assert.deepEqual(repeat, [], "one line per cold start, not one per request");
+});
+
+test("WITHDRAWN — the platform warning does not swallow a WORSE state later in the process", async () => {
+  // The single boolean latch would have: the platform line is spent first, and
+  // a later request that fell all the way back to x-real-ip — strictly worse —
+  // would have passed in silence.
+  resetUntrustedSourceWarning();
+  const env = { VERCEL: "1" };
+  const first = [];
+  await checkScanRateLimit({
+    header: headers({ [PLATFORM_IP_HEADER]: "203.0.113.9" }),
+    increment: counter(),
+    env,
+    now: T0,
+    logger: { warn: (m) => first.push(m) },
+  });
+  assert.match(first.join("\n"), /RESTORE-TRUST-R0\.1\.20/);
+
+  const second = [];
+  await checkScanRateLimit({
+    header: headers({ "x-real-ip": "192.0.2.5" }),
+    increment: counter(),
+    env,
+    now: T0,
+    logger: { warn: (m) => second.push(m) },
+  });
+  assert.match(
+    second.join("\n"),
+    /bypassable by rotating/,
+    "a caller-settable address must still be announced after a platform-unproven one"
+  );
+
+  const third = [];
+  await checkScanRateLimit({
+    header: headers({}),
+    increment: counter(),
+    env,
+    now: T0,
+    logger: { warn: (m) => third.push(m) },
+  });
+  assert.match(third.join("\n"), /shares ONE bucket/, "so must the no-header state");
+
+  // Still bounded: one line per distinct basis, not one per request.
+  const fourth = [];
+  for (const h of [{ [PLATFORM_IP_HEADER]: "203.0.113.9" }, { "x-real-ip": "192.0.2.5" }, {}]) {
+    await checkScanRateLimit({
+      header: headers(h),
+      increment: counter(),
+      env,
+      now: T0,
+      logger: { warn: (m) => fourth.push(m) },
+    });
+  }
+  assert.deepEqual(fourth, [], "three bases warned, three lines, and then quiet");
+});
+
+test("WITHDRAWN — withdrawing the label does not move the bucket or weaken the limit", async () => {
+  // The dangerous way to "withdraw trust" is to stop reading the header, which
+  // hands the bucket to x-real-ip — a header the caller definitely writes. The
+  // key is pinned to a literal so that regression cannot pass quietly: it is
+  // sha256("s:203.0.113.9") truncated to 32 hex chars, the same value the
+  // pre-withdrawal module produced.
+  const salt = "s";
+  const key = clientBucketKey({
+    header: headers({ [PLATFORM_IP_HEADER]: "203.0.113.9", "x-real-ip": "192.0.2.9" }),
+    salt,
+    env: { VERCEL: "1" },
+  });
+  assert.equal(key, "958b1683863195837a4ec6c8ad4cb824", "the bucket must be the platform address, unchanged");
+
+  // And the limit still bites on that address.
+  const increment = counter();
+  const env = { VERCEL: "1", SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: salt };
+  const verdicts = [];
+  for (let i = 0; i < 6; i++) {
+    verdicts.push(
+      await checkScanRateLimit({
+        header: headers({ [PLATFORM_IP_HEADER]: "203.0.113.9" }),
+        increment,
+        env,
+        now: T0 + i * 1000,
+        logger: silent,
+      })
+    );
+  }
+  assert.deepEqual(
+    verdicts.map((v) => v.allowed),
+    [true, true, true, true, true, false],
+    "an untrusted-but-limited address is the goal; an unlimited one would be a worse bug"
+  );
+});
+
+test("GUARD — the restore condition is a named, greppable constant, not a comment", async () => {
+  assert.match(TRUST_RESTORE_CHECK, /^RESTORE-TRUST-R0\.1\.20:/);
+  assert.match(TRUST_RESTORE_CHECK, /deployed origin/);
+  assert.match(TRUST_RESTORE_CHECK, /bucket does not move/);
+  assert.equal(TRUST_BASIS.PLATFORM_UNPROVEN, "platform-unproven");
+
+  // untrustedSourceWarning is the operator's copy of all this; a basis it does
+  // not recognise must never fall through to the platform sentence.
+  const generic = untrustedSourceWarning({ source: "x-real-ip", trustBasis: TRUST_BASIS.CALLER_SETTABLE });
+  assert.doesNotMatch(generic, /RESTORE-TRUST/);
+
+  // The withdrawal is recorded where a reader of the module will find it.
+  const src = await readFile(new URL("./rateLimit.js", import.meta.url), "utf8");
+  assert.match(src, /RESTORE-TRUST-R0\.1\.20/);
+  assert.doesNotMatch(
+    src,
+    /export const TRUSTED_IP_HEADER/,
+    "the constant naming this header must not promise trust the module does not extend"
+  );
 });
 
 test("GUARD — .env.example documents the trust knob and what it must name", async () => {

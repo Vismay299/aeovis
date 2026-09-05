@@ -7,7 +7,9 @@ import {
   computeBrandRollups,
   summaryToMetricsRow,
   buildMetricsRows,
+  SOV_STATE_REASONS,
 } from "./rollup.js";
+import { ENGINE_MEASUREMENT_STATE, ENGINE_STATE_REASONS } from "../scoring/enginePipeline.js";
 
 /**
  * Coverage for the single source of truth behind brand_metrics_daily rows —
@@ -151,9 +153,18 @@ test("computeBrandRollups — engine filter scopes to one engine; omitting it bl
   assert.equal(blended.sentiment_avg, 50, "mean of [100, 0] across both engines");
 });
 
-test("computeBrandRollups — returns all-null when there are no rows (historical/backfill path, no per-brand source)", () => {
-  assert.deepEqual(computeBrandRollups([]), { sov_pct: null, sentiment_avg: null, position_avg: null });
-  assert.deepEqual(computeBrandRollups(undefined), { sov_pct: null, sentiment_avg: null, position_avg: null });
+test("computeBrandRollups — returns all-null when there are no rows (historical/backfill path, no per-brand source), and SAYS it was not assessed", () => {
+  const expected = {
+    sov_pct: null,
+    // R4.3.2: an empty result is not a clean one. "No judgment rows at all" is
+    // never-ran, and the row has to carry that rather than a bare null.
+    sov_state: ENGINE_MEASUREMENT_STATE.NOT_ASSESSED,
+    sov_state_reason: SOV_STATE_REASONS.NO_RESULTS,
+    sentiment_avg: null,
+    position_avg: null,
+  };
+  assert.deepEqual(computeBrandRollups([]), expected);
+  assert.deepEqual(computeBrandRollups(undefined), expected);
 });
 
 test("computeBrandRollups — sov_pct is null when nobody (self or rival) was ever mentioned, never a divide-by-zero", () => {
@@ -163,6 +174,135 @@ test("computeBrandRollups — sov_pct is null when nobody (self or rival) was ev
   ];
   const result = computeBrandRollups(rows);
   assert.equal(result.sov_pct, null);
+  // The roster was fine; it is the answers that named nobody. That is a
+  // prompt-set problem, and the reason has to point at the prompt set.
+  assert.equal(result.sov_state, ENGINE_MEASUREMENT_STATE.NOT_ASSESSED);
+  assert.equal(result.sov_state_reason, SOV_STATE_REASONS.EMPTY_ELICITING_POOL);
+});
+
+// ---------------------------------------------------------------------------
+// R4.3.2 — a self-only roster is a tautology, not a 100% share of voice.
+//
+// This is the canonical false success of this codebase and it survived two
+// earlier fixes: enginePipeline.js stopped emitting a self-only
+// share_of_voice_pct, and R2.7.1 stopped the dashboard donut rendering one,
+// but neither touched THIS producer, which is the one that writes the durable
+// brand_metrics_daily row a trend chart and any export will read.
+// ---------------------------------------------------------------------------
+
+test("computeBrandRollups — a self-only roster yields NO share, not 100 (R4.3.2, the tautology)", () => {
+  const rows = [
+    brandRow({ name: "Acme", is_self: true, mentioned: true }),
+    brandRow({ name: "Acme", is_self: true, mentioned: true }),
+    brandRow({ name: "Acme", is_self: true, mentioned: false }),
+  ];
+  const result = computeBrandRollups(rows);
+  assert.notEqual(
+    result.sov_pct,
+    100,
+    "self / self is 1 by construction -- storing it as 100% is a lie about a measurement that never happened"
+  );
+  assert.equal(result.sov_pct, null, "undefined, and therefore null -- not 0 and not 100");
+  assert.equal(result.sov_state, ENGINE_MEASUREMENT_STATE.NOT_ASSESSED);
+  assert.equal(
+    result.sov_state_reason,
+    SOV_STATE_REASONS.SELF_ONLY_ROSTER,
+    "the reason must name the ROSTER -- sending the operator to rewrite their prompt set would be the wrong instruction"
+  );
+});
+
+test("computeBrandRollups — self-only AND nobody mentioned: the reason still names the roster, the outer failure", () => {
+  const rows = [brandRow({ is_self: true, mentioned: false }), brandRow({ is_self: true, mentioned: false })];
+  const result = computeBrandRollups(rows);
+  assert.equal(result.sov_pct, null);
+  assert.equal(result.sov_state_reason, SOV_STATE_REASONS.SELF_ONLY_ROSTER);
+});
+
+test("computeBrandRollups — a rival that was TRACKED but never mentioned still makes 100 an honest measurement", () => {
+  // The distinction the fix turns on: a rival in the roster contributes a real
+  // 0 to the denominator, so "every mention was ours" is a finding. A rival
+  // that was never tracked contributes nothing, so it is not.
+  const rows = [
+    brandRow({ name: "Acme", is_self: true, mentioned: true }),
+    brandRow({ name: "RivalCo", is_self: false, mentioned: false }),
+  ];
+  const result = computeBrandRollups(rows);
+  assert.equal(result.sov_pct, 100);
+  assert.equal(result.sov_state, ENGINE_MEASUREMENT_STATE.MEASURED);
+  assert.equal(result.sov_state_reason, null, "measured carries no reason -- nothing needs explaining");
+});
+
+test("computeBrandRollups — rivals named and we never were is measured_zero with a real 0, never null (standing rule 1)", () => {
+  const rows = [
+    brandRow({ name: "Acme", is_self: true, mentioned: false }),
+    brandRow({ name: "RivalCo", is_self: false, mentioned: true }),
+    brandRow({ name: "OtherCo", is_self: false, mentioned: true }),
+  ];
+  const result = computeBrandRollups(rows);
+  assert.equal(result.sov_pct, 0, "a measured zero is a finding and must stay a number");
+  assert.equal(result.sov_state, ENGINE_MEASUREMENT_STATE.MEASURED_ZERO);
+  assert.equal(result.sov_state_reason, SOV_STATE_REASONS.BRAND_NOT_VISIBLE);
+  assert.notEqual(
+    result.sov_state,
+    ENGINE_MEASUREMENT_STATE.NOT_ASSESSED,
+    "measured-zero must not collapse into not-assessed -- that is the distinction the whole vocabulary exists for"
+  );
+});
+
+test("computeBrandRollups — the roster is judged PER ENGINE, so one engine's missing rivals cannot borrow another's", () => {
+  const rows = [
+    // aio was judged against a rival; chatgpt's slice carries only us.
+    brandRow({ engine: "aio", name: "Acme", is_self: true, mentioned: true }),
+    brandRow({ engine: "aio", name: "RivalCo", is_self: false, mentioned: true }),
+    brandRow({ engine: "chatgpt", name: "Acme", is_self: true, mentioned: true }),
+  ];
+  assert.equal(computeBrandRollups(rows, { engine: "aio" }).sov_pct, 50);
+  const chatgpt = computeBrandRollups(rows, { engine: "chatgpt" });
+  assert.equal(chatgpt.sov_pct, null);
+  assert.equal(chatgpt.sov_state_reason, SOV_STATE_REASONS.SELF_ONLY_ROSTER);
+  // The blend sees the rival, so it is measurable even though one slice was not.
+  assert.equal(computeBrandRollups(rows).sov_pct, Math.round((2 / 3) * 1000) / 10);
+});
+
+test("computeBrandRollups — a self-only roster does NOT suppress sentiment_avg/position_avg (they need no rival)", () => {
+  // Scope guard: SOV is undefined without rivals; the self brand's own
+  // sentiment and position are not, and blanking them would be a second bug.
+  const rows = [
+    brandRow({ is_self: true, mentioned: true, position: 2, sentiment: 100 }),
+    brandRow({ is_self: true, mentioned: true, position: 4, sentiment: 50 }),
+  ];
+  const result = computeBrandRollups(rows);
+  assert.equal(result.sov_pct, null);
+  assert.equal(result.sentiment_avg, 75);
+  assert.equal(result.position_avg, 3);
+});
+
+test("computeBrandRollups — the state vocabulary is R2.1.1's, not a third one invented here", () => {
+  // If someone adds a fifth state token, this fails before it reaches a chart.
+  const reachable = [
+    computeBrandRollups([]),
+    computeBrandRollups([brandRow({ is_self: true, mentioned: true })]),
+    computeBrandRollups([brandRow({ is_self: true, mentioned: true }), brandRow({ name: "R", is_self: false, mentioned: true })]),
+    computeBrandRollups([brandRow({ is_self: true, mentioned: false }), brandRow({ name: "R", is_self: false, mentioned: true })]),
+    computeBrandRollups([brandRow({ is_self: true, mentioned: false }), brandRow({ name: "R", is_self: false, mentioned: false })]),
+  ];
+  const known = new Set(Object.values(ENGINE_MEASUREMENT_STATE));
+  const knownReasons = new Set(Object.values(SOV_STATE_REASONS));
+  for (const r of reachable) {
+    assert.ok(known.has(r.sov_state), `${r.sov_state} is not an ENGINE_MEASUREMENT_STATE`);
+    assert.ok(
+      r.sov_state_reason === null || knownReasons.has(r.sov_state_reason),
+      `${r.sov_state_reason} is not a SOV_STATE_REASONS token`
+    );
+    // Standing rule 5, at the producer: a number exists in exactly the two
+    // measured states and in neither of the others.
+    const isMeasured = r.sov_state === ENGINE_MEASUREMENT_STATE.MEASURED || r.sov_state === ENGINE_MEASUREMENT_STATE.MEASURED_ZERO;
+    assert.equal(Number.isFinite(r.sov_pct), isMeasured, `${r.sov_state} must ${isMeasured ? "" : "not "}carry a number`);
+  }
+  // And SOV_STATE_REASONS really is ENGINE_STATE_REASONS plus one, not a fork.
+  for (const [key, value] of Object.entries(ENGINE_STATE_REASONS)) {
+    assert.equal(SOV_STATE_REASONS[key], value, `SOV_STATE_REASONS.${key} diverged from ENGINE_STATE_REASONS`);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -589,4 +729,164 @@ test("buildMetricsRows — single-engine (v8.1 vintage) with brandJudgmentRows o
     assert.equal(r.position_avg, null);
   });
   assert.equal(rows.find((r) => r.engine === "aio").visibility_pct, 50);
+});
+
+// ---------------------------------------------------------------------------
+// R4.3.2 — the state has to survive onto the DURABLE ROW, not just the rollup.
+// brand_metrics_daily is what a trend chart and any export read, and
+// upsertBrandMetricsDaily passes these objects to the DB verbatim.
+// ---------------------------------------------------------------------------
+
+test("summaryToMetricsRow — brandRollup omitted (the backfill's contract) stamps not_assessed/no_results, never an absent state", () => {
+  const row = summaryToMetricsRow({
+    brand: "acme.com",
+    date: "2026-07-24",
+    engine: "aio",
+    scanId: "scan-1",
+    promptSetId: null,
+    summary: { non_branded_with_answer: 3 },
+    answeredKey: "non_branded_with_answer",
+  });
+  assert.equal(row.sov_pct, null);
+  assert.equal(row.sov_state, ENGINE_MEASUREMENT_STATE.NOT_ASSESSED);
+  assert.equal(row.sov_state_reason, SOV_STATE_REASONS.NO_RESULTS);
+});
+
+test("summaryToMetricsRow — a self-only-roster rollup writes a null sov_pct and the roster reason onto the row", () => {
+  const row = summaryToMetricsRow({
+    brand: "acme.com",
+    date: "2026-07-24",
+    engine: "aio",
+    scanId: "scan-1",
+    promptSetId: null,
+    summary: { non_branded_with_answer: 3 },
+    answeredKey: "non_branded_with_answer",
+    brandRollup: computeBrandRollups(
+      [{ engine: "aio", is_branded_query: false, name: "Acme", is_self: true, mentioned: true }],
+      { engine: "aio" }
+    ),
+  });
+  assert.equal(row.sov_pct, null, "a durable 100 here is the worst version of the lie");
+  assert.equal(row.sov_state, ENGINE_MEASUREMENT_STATE.NOT_ASSESSED);
+  assert.equal(row.sov_state_reason, SOV_STATE_REASONS.SELF_ONLY_ROSTER);
+});
+
+test("summaryToMetricsRow — a pre-R4.3.2 rollup object (number, no state) is read as measured, not as not_assessed", () => {
+  // Compatibility with an in-process object only. Historical DB rows are NOT
+  // read this way -- migration 013 re-derives those, because a stored 100 may
+  // be the tautology.
+  const measured = summaryToMetricsRow({
+    brand: "acme.com", date: "2026-07-24", engine: "aio", scanId: "s", promptSetId: null,
+    summary: { non_branded_with_answer: 3 }, answeredKey: "non_branded_with_answer",
+    brandRollup: { sov_pct: 66.7, sentiment_avg: 75, position_avg: 1.5 },
+  });
+  assert.equal(measured.sov_pct, 66.7);
+  assert.equal(measured.sov_state, ENGINE_MEASUREMENT_STATE.MEASURED);
+  assert.equal(measured.sov_state_reason, null);
+
+  const zero = summaryToMetricsRow({
+    brand: "acme.com", date: "2026-07-24", engine: "aio", scanId: "s", promptSetId: null,
+    summary: { non_branded_with_answer: 3 }, answeredKey: "non_branded_with_answer",
+    brandRollup: { sov_pct: 0, sentiment_avg: null, position_avg: null },
+  });
+  assert.equal(zero.sov_state, ENGINE_MEASUREMENT_STATE.MEASURED_ZERO, "a legacy 0 is a measurement, exactly as it always was");
+  assert.equal(zero.sov_pct, 0);
+});
+
+test("buildMetricsRows — a self-only roster writes NO 100 on any row, per-engine or blended (R4.3.2 acceptance)", () => {
+  const engineSummaries = {
+    aio: { non_branded_queries: 10, non_branded_with_answer: 8, citation_denominator: 8, mentioned_non_branded: 4, cited_non_branded: 2, visibility_pct: 50 },
+    chatgpt: { non_branded_queries: 10, non_branded_with_answer: 9, citation_denominator: 9, mentioned_non_branded: 3, cited_non_branded: 1, visibility_pct: 33.3 },
+  };
+  // Exactly the shape a live scan produces when nobody supplied a competitor
+  // and extractCompetitors returned nothing (or was down): every judged row is
+  // the brand itself.
+  const brandJudgmentRows = [
+    { engine: "aio", is_branded_query: false, name: "acme.com", is_self: true, mentioned: true, position: 1, sentiment: 100 },
+    { engine: "aio", is_branded_query: false, name: "acme.com", is_self: true, mentioned: true, position: 2, sentiment: 50 },
+    { engine: "chatgpt", is_branded_query: false, name: "acme.com", is_self: true, mentioned: true, position: 1, sentiment: 100 },
+  ];
+
+  const rows = buildMetricsRows({
+    isMultiEngine: true,
+    brandKey: "acme.com",
+    dateOnly: "2026-07-24",
+    scanId: "scan-self-only",
+    promptSetId: "abc123",
+    summary: {},
+    engineSummaries,
+    headline: { visibility_index_pct: 41.7 },
+    promptResultRows: [],
+    brandJudgmentRows,
+  });
+
+  assert.equal(rows.length, 3, "aio, chatgpt, all");
+  for (const r of rows) {
+    assert.notEqual(r.sov_pct, 100, `${r.engine} row still stores the self-only 100%`);
+    assert.equal(r.sov_pct, null, `${r.engine} row must store no share at all`);
+    assert.equal(r.sov_state, ENGINE_MEASUREMENT_STATE.NOT_ASSESSED, `${r.engine} row`);
+    assert.equal(r.sov_state_reason, SOV_STATE_REASONS.SELF_ONLY_ROSTER, `${r.engine} row`);
+  }
+  // Everything else on the row is untouched -- visibility is a different
+  // measurement with a different denominator and this fix does not reach it.
+  assert.equal(rows.find((r) => r.engine === "aio").visibility_pct, 50);
+  assert.equal(rows.find((r) => r.engine === "all").visibility_pct, 41.7);
+  assert.equal(rows.find((r) => r.engine === "aio").sentiment_avg, 75);
+});
+
+test("buildMetricsRows — a roster WITH a rival still writes real numbers and marks them measured", () => {
+  const engineSummaries = {
+    aio: { non_branded_queries: 10, non_branded_with_answer: 8, citation_denominator: 8, mentioned_non_branded: 4, cited_non_branded: 2, visibility_pct: 50 },
+  };
+  const rows = buildMetricsRows({
+    isMultiEngine: true,
+    brandKey: "acme.com",
+    dateOnly: "2026-07-24",
+    scanId: "scan-with-rival",
+    promptSetId: "abc123",
+    summary: {},
+    engineSummaries,
+    headline: { visibility_index_pct: 50 },
+    promptResultRows: [],
+    brandJudgmentRows: [
+      { engine: "aio", is_branded_query: false, name: "acme.com", is_self: true, mentioned: true, position: 1, sentiment: 100 },
+      { engine: "aio", is_branded_query: false, name: "RivalCo", is_self: false, mentioned: true, position: 2, sentiment: 50 },
+    ],
+  });
+  for (const r of rows) {
+    assert.equal(r.sov_pct, 50, `${r.engine} row`);
+    assert.equal(r.sov_state, ENGINE_MEASUREMENT_STATE.MEASURED, `${r.engine} row`);
+    assert.equal(r.sov_state_reason, null, `${r.engine} row`);
+  }
+});
+
+test("buildMetricsRows — every row carries a state, so nothing lands in brand_metrics_daily with a silent null share", () => {
+  // The DB CHECK in supabase/migrations/013_brand_metrics_sov_state.sql
+  // enforces the same agreement; this asserts the producer never has to rely
+  // on it. Both call shapes -- multi-engine and the single-engine v8.1 one.
+  const shapes = [
+    buildMetricsRows({
+      isMultiEngine: true, brandKey: "acme.com", dateOnly: "2026-07-24", scanId: "s1", promptSetId: null,
+      summary: {},
+      engineSummaries: { aio: { non_branded_queries: 4, non_branded_with_answer: 4, citation_denominator: 4 } },
+      headline: null, promptResultRows: [],
+    }),
+    buildMetricsRows({
+      isMultiEngine: false, brandKey: "acme.com", dateOnly: "2026-07-24", scanId: "s2", promptSetId: null,
+      summary: { non_branded_queries: 4, non_branded_with_aio: 4 },
+      engineSummaries: null, headline: null, promptResultRows: [],
+      brandJudgmentRows: [{ engine: "aio", is_branded_query: false, name: "Acme", is_self: true, mentioned: true }],
+    }),
+  ].flat();
+  for (const r of shapes) {
+    assert.ok(r.sov_state != null, `${r.engine} row has no sov_state`);
+    const isMeasured =
+      r.sov_state === ENGINE_MEASUREMENT_STATE.MEASURED || r.sov_state === ENGINE_MEASUREMENT_STATE.MEASURED_ZERO;
+    assert.equal(Number.isFinite(r.sov_pct), isMeasured, `${r.engine}: sov_pct and sov_state disagree`);
+    assert.equal(
+      r.sov_state_reason == null,
+      r.sov_state === ENGINE_MEASUREMENT_STATE.MEASURED,
+      `${r.engine}: only 'measured' may carry a null reason`
+    );
+  }
 });

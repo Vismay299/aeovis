@@ -70,6 +70,82 @@ async function dispatchWithLease(jobId, label) {
 }
 
 /**
+ * The daily batch's brand list, decided from the RAW postgrest envelope.
+ *
+ * R2.8.5, the same class of read R2.8.4 removed from getScansForBrand. The
+ * caller below used to destructure only `data` and drop `error` on the floor.
+ * The Supabase client is built without `throwOnError`, so a refused connection,
+ * a DNS failure or a 5xx all arrive as `{ data: null, error }` — `rows || []`
+ * then made the brand list empty, the per-brand loop never ran, the per-brand
+ * catch (and the `batch_failed` counter it feeds, added by R2.8.4) never fired,
+ * and the route answered HTTP 200 with a fully green report. A total outage was
+ * indistinguishable from "every brand is already up to date": a dead batch that
+ * reports itself healthy, which is what standing rule 1 forbids.
+ *
+ * Unlike ONE brand's failure — kept as degradation at the call site, since one
+ * brand must not abort the whole pass — an unreadable brand list means the batch
+ * stage did nothing for ANY brand, so it becomes a 5xx (see contentCronReport).
+ *
+ * Exported because the handler itself cannot be driven in-process with a live
+ * client attached: its first act is `recordCronTick`, a WRITE, and the
+ * live-write guard (src/lib/liveWriteGuard.js) refuses every write in a test
+ * process. This is the real decision, not a copy of it — the handler has no
+ * other version of these lines. See src/lib/dbReadOutage.route.test.mjs.
+ *
+ * @param {{data: Array|null, error: object|null}} envelope postgrest's own reply
+ * @returns {{brands: string[], unavailable: {reason: string, detail: string}|null}}
+ */
+export function brandsForDailyBatch({ data, error } = {}) {
+  if (error) {
+    return {
+      brands: [],
+      unavailable: {
+        reason: error.code || "db_read_failed",
+        detail: "Could not read the brand list — the daily batch did not run for ANY brand.",
+      },
+    };
+  }
+  return {
+    brands: Array.from(new Set((data || []).map((r) => r && r.brand).filter(Boolean))),
+    unavailable: null,
+  };
+}
+
+/**
+ * The cron's report of its own pass, and the status that carries it.
+ *
+ * `batch_unavailable` is ALWAYS present so `batch_created: 0` can be read at
+ * all: null means the brand list was read and there was nothing to create (a
+ * measured zero), an object means it could not be read (never ran). The status
+ * is 5xx in the second case — a cron whose batch stage did nothing must not
+ * answer 200, or the platform's own failure alerting never sees it.
+ *
+ * The resume counts survive either way: they really did happen, and an operator
+ * needs to see which half of the pass worked.
+ */
+export function contentCronReport({
+  startedIds = [],
+  skippedIds = [],
+  batchCreated = [],
+  batchFailed = [],
+  batchUnavailable = null,
+} = {}) {
+  return {
+    status: batchUnavailable ? 500 : 200,
+    body: {
+      resumed: startedIds.length,
+      resumed_ids: startedIds,
+      skipped_leased: skippedIds.length,
+      batch_created: batchCreated.length,
+      batch_ids: batchCreated,
+      batch_failed: batchFailed.length,
+      batch_failed_brands: batchFailed,
+      batch_unavailable: batchUnavailable,
+    },
+  };
+}
+
+/**
  * GET /api/content/worker — cron for the content pipeline. Two jobs:
  *   1. Rescue content jobs whose worker died (heartbeat stale + lease free).
  *   2. If CONTENT_DAILY_BATCH>0 and ?batch=1 (daily cadence), enqueue up to
@@ -120,15 +196,24 @@ export async function GET(request) {
     // look", which is the same collapse this task exists to remove. The
     // failures are counted and named in the response.
     const batchFailed = [];
+    // R2.8.5: null until the brand enumeration below fails — see
+    // brandsForDailyBatch, which owns that decision.
+    let batchUnavailable = null;
     if (runBatch && getDailyBatchSize() > 0) {
-      const { data: brandsRows } = await supabase
+      const envelope = await supabase
         .from("scans")
         .select("brand")
         .order("scanned_at", { ascending: false })
         .limit(200);
-      const brands = Array.from(
-        new Set((brandsRows || []).map((r) => r.brand).filter(Boolean))
-      );
+
+      const { brands, unavailable } = brandsForDailyBatch(envelope);
+      batchUnavailable = unavailable;
+      if (unavailable) {
+        console.error(
+          "[content-cron] could not read the brand list for the daily batch:",
+          envelope.error?.message || envelope.error
+        );
+      }
       for (const brand of brands) {
         try {
           const created = await createDailyBatchJobs(brand);
@@ -143,15 +228,14 @@ export async function GET(request) {
       }
     }
 
-    return NextResponse.json({
-      resumed: startedIds.length,
-      resumed_ids: startedIds,
-      skipped_leased: skippedIds.length,
-      batch_created: batchCreated.length,
-      batch_ids: batchCreated,
-      batch_failed: batchFailed.length,
-      batch_failed_brands: batchFailed,
+    const { status, body } = contentCronReport({
+      startedIds,
+      skippedIds,
+      batchCreated,
+      batchFailed,
+      batchUnavailable,
     });
+    return NextResponse.json(body, { status });
   } catch (error) {
     console.error("Content cron worker error:", error);
     return NextResponse.json({ detail: "Internal Server Error" }, { status: 500 });

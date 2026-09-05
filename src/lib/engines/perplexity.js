@@ -51,9 +51,17 @@ const MAX_DETAIL_CHARS = 200;
  *
  * Deliberately a POSITIVE test for the unverified state rather than a
  * "is it measured?" predicate with a default. Rows from single-leg engines
- * (AIO, ChatGPT) carry no `citations_state` at all, and a default would have to
- * guess which way to read their absence; asking "was this explicitly marked
- * unverified?" needs no guess and can never quietly exclude a real measurement.
+ * carry no unverified marker — `citations_state` is null on a ChatGPT row and
+ * absent entirely on an AIO one, since those engines return their citations on
+ * the same call as their answer and have no separate leg to lose — and a
+ * default would have to guess which way to read that. Asking "was this
+ * explicitly marked unverified?" needs no guess and can never quietly exclude a
+ * real measurement.
+ *
+ * THE CALLER THAT MATTERS is summarizeEngineSlice in
+ * src/lib/scoring/enginePipeline.js, which builds the citation-share pool with
+ * it. R2.2.2 was rejected once for having this predicate with no production
+ * caller and no field on the row for it to read.
  *
  * @param {{citations_state?: string}|null|undefined} row a probe result or a
  *        persisted result row.

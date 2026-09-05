@@ -1129,9 +1129,18 @@
       "tags": [
         "needs-vercel"
       ],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/rateLimit.js:326",
+        "src/lib/rateLimit.js:121",
+        "src/lib/rateLimit.js:352",
+        "src/lib/rateLimit.js:458",
+        "src/lib/rateLimit.test.mjs:515",
+        "src/lib/rateLimit.test.mjs:535",
+        "src/lib/rateLimit.test.mjs:622",
+        "docs/decisions/2026-09-05-withhold-vercel-forwarded-for-trust.md:1"
+      ],
       "notes": [
         {
           "at": "2026-09-05T01:49:15.848Z",
@@ -1142,6 +1151,11 @@
           "at": "2026-09-05T07:03:19.634Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T07:13:43.606Z",
+          "by": "rebuild-implementer",
+          "text": "Second branch of the accept, deliberately: no Vercel access, no deploy, no request to any live origin was made. WITHDRAWN the trusted:true label from x-vercel-forwarded-for. rateLimit.js:326 returns trusted:false with trustBasis:'platform-unproven'; TRUST_RESTORE_CHECK (:121) is the greppable marker RESTORE-TRUST-R0.1.20 naming the deploy-time forgery check that would earn it back, and it is interpolated into the operator log line. Ordering is UNCHANGED: the header is still read first on Vercel and the bucket key is byte-identical (test :622 pins the key to a literal, and still proves the 6th scan from that address is refused) - withdrawing by demotion would have handed the bucket to x-real-ip and made the limit certainly bypassable instead of maybe. Only reader of the flag was this module's own warn-once; route.js never read it and is untouched. Consequence handled: the platform source now trips that warn, so the single boolean latch was widened to one latch PER TRUST BASIS (:458) - otherwise a Vercel process would spend its one line on the platform warning and go silent when a later request fell back to x-real-ip, a strictly worse state. Bounded at 3 lines per process; test :595 proves it. trustBasis is carried in all three envelope shapes incl. both degraded ones. TRUSTED_IP_HEADER renamed PLATFORM_IP_HEADER (importers: this module + its test only). ADR records the withdrawal and the exact restore condition. Exercised in-process: forged header on VERCEL=1 yields {source:x-vercel-forwarded-for, trusted:false, trustBasis:platform-unproven}, 6th request refused, one warning line. Mutation-checked both ways: restoring trusted:true fails 5 tests, not reading the header fails 8. rateLimit + all scan-route suites 79/79. FULL SUITE CAVEAT: baseline at claim was tests 1764/fail 2 (rollup + twoPassFinalize); it is now 1831/fail 8, all 8 in migrationsRunner/setup-supabase verify tests that another agent is editing in this tree - none touch rateLimit. NOT DONE (out of my file set, needs its own task): .env.example:77 still tells operators 'x-vercel-forwarded-for is trusted when VERCEL...', which this change makes false."
         }
       ],
       "verification": null
@@ -1165,7 +1179,7 @@
       "tags": [
         "needs-decision"
       ],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/app/api/scan/route.js:105",
@@ -1189,7 +1203,11 @@
           "text": "Route-side refusal, db.js untouched. POST /api/scan now imports the module-level supabase client from @/lib/db and returns 503 {code:'scan_store_unavailable'} when it is null (route.js:105) - the exact condition createScanJob's global.memoryJobs fallback tests (resolveClient with no deps), checked immediately BEFORE createScanJob so no job is created and runScanChunk is never triggered. A second, currently-unreachable check after createScanJob (route.js:119) refuses the same way if the returned job turns up in global.memoryJobs anyway, so a future divergence in db.js's fallback condition fails loud instead of restoring the 201. console.error names NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY (names only, no values); the wire body names no vendor (R6.4.3). Guard sits after validation and rate limit deliberately - both are free and must keep their 400/429, and the two existing route suites depend on that ordering. New suite src/lib/scanRoute.unpersisted.route.test.mjs drives the REAL POST handler via the cronAuth.route.hooks.mjs loader (nothing stubbed) with NODE_ENV=production and the Supabase vars deleted: asserts not-201, 503, code, no job_id, and that global.memoryJobs did not grow; plus a PREMISE test that db.js built no client and two controls pinning 400 and 429. Teeth proven by disabling both guards and observing 'the route issued 201 Created for a scan job that was never persisted', then restoring (verified restored, 7/7 pass). ADR at docs/decisions/2026-09-05-unpersisted-scan-jobs.md with doc-status LIVE header (docStatus.test.mjs 10/10). npm run test:scoring: 1760 tests, 1734 pass, 0 fail, 26 skipped (baseline 1694/1668/0/26; the growth is other agents' suites plus my 7). Known consequence recorded in the ADR: npm run dev with no Supabase can no longer start a scan via HTTP."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-05T07:11:18.676Z",
+        "note": "Fresh verifier reproduced the vendor-spend path by instrumenting runScanChunk's FIRST LINE, not by inference: with both guards neutralised, STATUS 201, a job_id, RUNSCANCHUNK_ENTERED true, MEMORYJOBS 1. Guards restored: 503, no job, worker never entered. It then enumerated all six createScanJob failure modes against the REAL handler - the partial-fix I asked it to hunt for does not exist: no client gives 503, a broken-but-present client (loopback:1, placeholder key) gives 500 with RUNSCANCHUNK_ENTERED false, the three duplicate paths give 409, an empty insert gives 500. None yields a 201. Confirmed no second anonymous path: the only other createScanJob caller is runSchedulerTick, behind cron auth AND its own no-db guard. Import-failure sabotage fails 7/7 and never skips. Guard position accepted after checking nothing upstream of it spends money. The unreachable post-check kept as a fail-loud tripwire. ADR names the accepted dev regression honestly. Suite 1755/1729/0/26."
+      }
     },
     {
       "id": "R0.1.22",
@@ -2014,10 +2032,30 @@
         "docs/decisions/"
       ],
       "phase": "R1",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "rebuild-scribe",
+      "evidence": [
+        "docs/decisions/2026-09-05-worker-host.md:60",
+        "docs/decisions/2026-09-05-worker-host.md:93",
+        "docs/decisions/2026-09-05-worker-host.md:224",
+        "docs/decisions/2026-09-05-worker-host.md:266",
+        "docs/decisions/2026-09-05-worker-host.md:306",
+        "docs/decisions/2026-09-05-worker-host.md:374",
+        "docs/decisions/2026-09-05-worker-host.md:422",
+        "docs/decisions/2026-09-05-worker-host.md:578"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-05T07:03:40.355Z",
+          "by": "rebuild-scribe",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T07:11:52.326Z",
+          "by": "rebuild-scribe",
+          "text": "ADR written at docs/decisions/2026-09-05-worker-host.md, citation baseline 95b190d. TWO of three accept parts satisfied, ONE needs the operator. (1) Vercel ruled out in writing, argued only from this repo: ten pieces of machinery that exist because a function is request-scoped -- CHUNK_TIME_BUDGET_MS sized under maxDuration=300, budgetHit->checkpoint->defaultSelfContinue HTTP self-call the code itself calls 'an optimization only', HEARTBEAT_STALE_MS/isJobAlive liveness-by-timestamp, poll-driven rescue from the status route (status/route.js:56) making a browser tab part of the execution guarantee, vercel.json's two DAILY crons + MAX_CONCURRENT_RESUMES=3, MAX_JOB_ATTEMPTS whose own comment names 'a finalize that outruns maxDuration', the scan_runs ledger, global.memoryJobs, and NO waitUntil anywhere (git grep returns nothing, @vercel/functions is not a dependency) so scan/route.js:128's post-response continuation is unprotected today. (2) Dev-mode story written from worker/ as it actually is: --selftest that refuses to pass on a pass that did nothing, probeBatch throwing at probe.js:27, isolation enforced by workerIsolation.test.mjs in the MAIN suite. The live-write boundary is described with its exact edge: liveWriteGuardAuto.mjs's own docstring says it is 'Not wired into next dev, next build or the workers', and probe_tasks/scan_runs are precisely WRITABLE_BY_OPT_IN, so a laptop fleet is NOT covered by that guard; config.js:33/:35 fall back to NEXT_PUBLIC_* which is the trap, and neither SUPABASE_SERVICE_ROLE_KEY nor any FLEET_* var is in .env.example (grep -c returns 0). Stated as a CONVENTION, with R1.2.6 named as the task that would make it a guard. (3) NOT SETTLED, deliberately: the vendor. Section 5 gives criteria derived from the workload, a comparison table, a provisional recommendation of Railway with three grounds and four named reversal conditions, and is marked PENDING OPERATOR RATIFICATION in the status header itself so nothing can cite this ADR as having chosen a host. It also names the real R1.1.2<->R1.1.3 cycle (R1.1.2 needs a host to site the spike; the spike's IN-egress block rate is what makes C2 decisive) rather than papering over it, and records that C6/migrations does not discriminate at all -- setup:db runs from an operator machine against managed Supabase with no deploy hook anywhere. BLOCK THIS ON THE VENDOR RATIFICATION; that is the expected outcome. Verification: all 21 line citations re-read and confirmed to still DESCRIBE their claim, not merely resolve; all 16 greppable anchors grepped (one, probe.js's message, is assembled from two literals so the doc now tells the reader to grep the second half). Four files dirty in the tree (scanWorker.js, db.js, enginePipeline.js, content/worker/route.js) are cited by symbol only, never by line. node --test src/lib/docStatus.test.mjs: all four status-header guards PASS including the new doc; the ONE failure is pre-existing and not mine -- an untracked supabase/migrations/013_brand_metrics_sov_state.sql from a concurrent agent is missing its row in the migrations README table. No source file touched, no other doc touched, nothing committed."
+        }
+      ],
       "verification": null
     },
     {
@@ -2036,7 +2074,7 @@
         "docs/contracts/"
       ],
       "phase": "R1",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-scribe",
       "evidence": [
         "docs/contracts/engine-surface-matrix.md:81"
@@ -2053,7 +2091,11 @@
           "text": "Engine surface matrix committed at docs/contracts/engine-surface-matrix.md, baselined 1a5ed81, symbol-cited throughout (zero line citations, per R6.3.3). Ten rows: aio/chatgpt/perplexity (registered), perplexity.ai + chatgpt.com logged-out UI (R1.3/R1.4, not built), AI Mode (stretch, two named preconditions), gemini/SerpAPI-AIO (dead code, traced), Copilot/Grok (deferred with reopen conditions), gsc (in engines/ but not an engine). Every deferral carries its reason. Does NOT repeat the registry's aio-always-configured claim: section 5.1 records R2.10.4, that check-secrets deliberately mirrors the blind spot, and that vendorRegistry required:true is a deploy-time-only mitigation. Section 5.2 records fabricated costs per engine, naming R3.6.4 (aio 0.0015 x3) and R3.6.5 (gemini/perplexity), and adds one class NEITHER owns: openai.js hardcodes a 0.01 web-search fee plus literal gpt-4o-mini rates while OPENAI_MODEL is env-overridable. Section 5.3 records a second unfiled item: on a perplexity answer-leg failure, probeTextEngine early-returns before assigning citations, so REAL measured citations from the surviving /search leg are persisted as []. Neither is filed by this doc. Liveness traced by symbol, not assumed: registry -> runProbingPhase -> runScanChunk -> three API routes -> vercel cron; runAioScan and probeGemini have zero importers; probeGoogleAiOverview is test-only but serp.js itself is live via fetchPeopleAlsoAsk. UNPROVEN and stated as such in section 8: no UI surface has ever been probed, nothing in this repo deploys worker/, chatgpt login-wall frequency and browser block rates are unmeasured, row 2's 'runs today: no' is second-hand from docs/vendors/chatgpt.md (env values not read here), and the approve-to-publish-to-lift loop has never run end to end. Knock-on disclosed in the doc: probe-result.md's Baseline says it 'is the only document in docs/contracts/', which this file makes false; not edited because another agent owns it. docStatus.test.mjs passes 10/10. No source files touched."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-05T07:11:18.034Z",
+        "note": "Fresh verifier re-derived all four liveness claims independently with scoped git grep: runAioScan ZERO importers, probeGemini ZERO importers, probeGoogleAiOverview test-only, serp.js live via fetchPeopleAlsoAsk into promptGen.js into scanWorker.js. Rebuilt the ENGINE_REGISTRY to vercel.json cron chain hop by hop. Confirmed NO affirmative cell lacks code - it resolved every yes, including the brd_json/brd_ai_overview params, the three-key citation merge, the cost-after-await placement, and the check-secrets ENGINE_API_KEY aio:null mirror. Nothing recorded dead ships; nothing recorded live is stubbed. Independently verified the two findings this doc surfaced, on which the controller had already filed tasks: R3.6.6 confirmed by reading openai.js, and R2.2.9 REPRODUCED LIVE with a stubbed fetch - adapter measured 2 citations, row persisted 0. Zero line citations; every symbol resolved to exactly one definition. docStatus 10/10 and proven to bite by mutating the header. No credential value in the document. Three imprecisions found, all under-claiming. Suite 1755/1729/0/26."
+      }
     },
     {
       "id": "R1.1.5",
@@ -2544,6 +2586,35 @@
       "notes": [
         {
           "at": "2026-09-05T06:55:01.317Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R1.2.12",
+      "subphase": "R1.2",
+      "lane": "infra",
+      "phase": "R1",
+      "title": "A laptop fleet worker inherits production credentials and the write guard cannot see it",
+      "detail": "Found by the R1.1.3 scribe while writing the dev-mode half of the worker-host ADR, and it is the sharpest thing in that document. Two facts combine badly. First, src/lib/liveWriteGuardAuto.mjs says in its own docstring that it is NOT wired into next dev, next build or the workers - it is a test-only preload - and its WRITABLE_BY_OPT_IN list is exactly scan_runs and probe_tasks, which is precisely what a fleet pass writes. Second, worker/src/config.js falls back from SUPABASE_URL to NEXT_PUBLIC_SUPABASE_URL and from SUPABASE_SERVICE_ROLE_KEY to NEXT_PUBLIC_SUPABASE_ANON_KEY. So a laptop fleet started in a shell that carries the app-s production values silently inherits production, and nothing stops it writing there. Neither SUPABASE_SERVICE_ROLE_KEY nor any FLEET_ variable appears in .env.example, so an operator has nowhere to put the fleet-s own credentials and the path of least resistance is exactly the dangerous one. The ADR wrote the separation down as a CONVENTION, which is not a guard.",
+      "accept": "A worker process refuses to start against the production database unless explicitly armed, in the same shape liveDbGate uses for tests. The fleet-s own credential variables exist in .env.example so the operator has a correct place to put them. A test drives a worker boot with app production values present and asserts it refuses.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "worker/src/config.js:33",
+        "src/lib/liveWriteGuardAuto.mjs",
+        "src/lib/liveDbGate.js",
+        ".env.example"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T07:13:25.497Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -3045,7 +3116,7 @@
         "src/lib/scoring/enginePipeline.js:298-308"
       ],
       "phase": "R2",
-      "status": "in_verification",
+      "status": "in_progress",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/scoring/enginePipeline.js:349",
@@ -3066,9 +3137,18 @@
           "at": "2026-09-05T06:44:00.522Z",
           "by": "rebuild-implementer",
           "text": "Anchor was stale: the finding lives at enginePipeline.js:660-672 (return block), not 298-308, but it REPRODUCES exactly as described — share_of_ai_pct was visibilityPct, which is 0 by construction on an empty eliciting pool, so never-ran / errored / no-vendor-named / genuinely-absent all rendered 0. Added frozen ENGINE_MEASUREMENT_STATE (measured|measured_zero|not_assessed|failed) + ENGINE_STATE_REASONS; reused the exact tokens SHARE_STATE already uses rather than inventing a parallel vocabulary. summarizeEngineSlice now emits state + state_reason and reports share_of_ai_pct/visibility_pct as null in the two non-measured states, 0 only for a real measured_zero. Guarded both places the null could be laundered back into a 0: computeHeadline (null*weight === 0) and describeScanDataSourceIssue's counted filter, which the docstring promises reproduces the headline's eligibility test. No 'no_answers' reason: coverage 0 is below every gate so that case is already failed/low_coverage; a test asserts it. Exercised the accept criterion: 30 answered prompts naming no vendor -> state not_assessed, state_reason empty_eliciting_pool, share_of_ai_pct strictly null (engineMeasurementState.test.mjs:124); all four states covered, 15 tests. npm run test:scoring: 1755 tests / 1729 pass / 0 fail / 26 skipped (baseline 1694/1668/0/26; +15 mine, rest from other agents in-tree). Did NOT touch scanWorker/db/components. Follow-ups in report."
+        },
+        {
+          "at": "2026-09-05T07:11:46.914Z",
+          "by": "verifier",
+          "text": "rejected: FAIL, narrowly - the per-engine work is strong and must be KEPT WHOLESALE; the defect is one function and one comment. Verifier reproduced the four-way collapse by execution: pre-fix all four inputs give share=0 state=undefined (1 distinct tuple of 4); post-fix they are 4-of-4 distinguishable. Seven SEPARATE property sabotages each caught by the right tests, including the halved index proved by execution (sabotaged headline 20 with engines_counted 2 vs fixed 40 with 1) and the meta-test biting on an unreachable reason. Traced every reader of the null: no null reaches arithmetic - brandAnalyticsApi delta is null-safe on three real null series. BUT: enginePipeline.js:1289-1290 in summarizeEngineResults still does aioSummary.visibility_pct || 0, and the comment this diff ADDED above it says 'Behaviour is unchanged - that path never had a null to preserve'. That is FALSE and the verifier disproved it by execution: a degraded aio slice published share 100 pre-fix and 0 post-fix, straight into the persisted scans row via scanWorker. scans.visibility_pct is nullable, so nothing forced the || 0. This diff turned a dormant || 0 into a live laundering path and shipped a false claim in its own documentation. Fix: delete the false sentence, emit ?? null, carry state up, guard Sidebar.jsx:142 (bare visibility_pct percent) and DashboardShell.jsx:978 (null minus x gives a wrong delta, not NaN), add two tests. Verifier argued the legacy tolerance is the RIGHT call and I agree - do not change it."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "fail",
+        "at": "2026-09-05T07:11:46.914Z",
+        "note": "FAIL, narrowly - the per-engine work is strong and must be KEPT WHOLESALE; the defect is one function and one comment. Verifier reproduced the four-way collapse by execution: pre-fix all four inputs give share=0 state=undefined (1 distinct tuple of 4); post-fix they are 4-of-4 distinguishable. Seven SEPARATE property sabotages each caught by the right tests, including the halved index proved by execution (sabotaged headline 20 with engines_counted 2 vs fixed 40 with 1) and the meta-test biting on an unreachable reason. Traced every reader of the null: no null reaches arithmetic - brandAnalyticsApi delta is null-safe on three real null series. BUT: enginePipeline.js:1289-1290 in summarizeEngineResults still does aioSummary.visibility_pct || 0, and the comment this diff ADDED above it says 'Behaviour is unchanged - that path never had a null to preserve'. That is FALSE and the verifier disproved it by execution: a degraded aio slice published share 100 pre-fix and 0 post-fix, straight into the persisted scans row via scanWorker. scans.visibility_pct is nullable, so nothing forced the || 0. This diff turned a dormant || 0 into a live laundering path and shipped a false claim in its own documentation. Fix: delete the false sentence, emit ?? null, carry state up, guard Sidebar.jsx:142 (bare visibility_pct percent) and DashboardShell.jsx:978 (null minus x gives a wrong delta, not NaN), add two tests. Verifier argued the legacy tolerance is the RIGHT call and I agree - do not change it."
+      }
     },
     {
       "id": "R2.1.2",
@@ -3211,15 +3291,20 @@
         "src/lib/engines/perplexity.js:147-160"
       ],
       "phase": "R2",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
       "evidence": [
-        "src/lib/engines/perplexity.js:32",
-        "src/lib/engines/perplexity.js:61",
-        "src/lib/engines/perplexity.js:232",
-        "src/lib/engines/perplexity.test.mjs:81",
-        "src/lib/engines/perplexity.test.mjs:121",
-        "src/lib/engines/perplexity.test.mjs:162"
+        "src/lib/scoring/enginePipeline.js:227",
+        "src/lib/scoring/enginePipeline.js:573",
+        "src/lib/scoring/enginePipeline.js:732",
+        "src/lib/scoring/enginePipeline.js:1353",
+        "src/lib/analytics/rollup.js:270",
+        "src/lib/analytics/rollup.js:328",
+        "src/lib/analytics/rollup.js:417",
+        "src/lib/scoring/citationDenominator.test.mjs:137",
+        "src/lib/scoring/citationDenominator.test.mjs:173",
+        "src/lib/scoring/citationDenominator.test.mjs:276",
+        "src/lib/engines/perplexity.js:61"
       ],
       "notes": [
         {
@@ -3236,6 +3321,11 @@
           "at": "2026-09-05T06:53:07.399Z",
           "by": "verifier",
           "text": "rejected: FAIL. Fresh verifier drove the real production path (resolveEnabledEngines with ENGINES=perplexity, chat 200 + search 503, via the registry probe) and dumped the row: citations_state undefined, citations [], error null, hasUnverifiedCitations false. That is byte-identical to the pre-fix envelope in B2 - NEITHER conjunct of the accept holds at the ROW level, not just the denominator half. probeTextEngine builds a fixed literal copying only text/citations/references/cost, so all three fields are dropped one hop after being set; probePerplexity has exactly one consumer and it is that dropper, so the vocabulary is 100 percent inert in production. citedNonBranded at enginePipeline.js:379 is untouched and rollup.js divides cited by non_branded_answered independently. Teeth on perplexity.test.mjs:121 ARE real (both polarity mutants go red) and the log-line correction is right - the fix is good as far as it goes, it just never reaches a row."
+        },
+        {
+          "at": "2026-09-05T07:12:30.054Z",
+          "by": "rebuild-implementer",
+          "text": "Refix after REJECT. The rejection was right: probePerplexity set the state, probeTextEngine dropped it. enginePipeline.js:227 now copies citations_state/_reason/_detail off the probe ONCE, immediately after the await and BEFORE any of the three return paths (probe error / EMPTY_ANSWER / success), so a fourth return cannot reintroduce the drop; the result literal declares the three fields (null = single-leg engine, no citation leg to lose). enginePipeline.js:573 builds citationPool = answered non-branded rows MINUS hasUnverifiedCitations(r), and BOTH sides of the ratio are taken over it; a console.warn names the count and the shrunken denominator so the exclusion is auditable. :732 emits citation_denominator + citations_unverified_count on every slice (0 is a measurement, always present). :1353 fixes the scan-level backward-compat mirror, which is a real perplexity path (aioSummary falls back to the first engine on a perplexity-only scan). rollup.js:270 citationDenominatorOf prefers the new field and THROWS for a perplexity slice that lacks it with answered>0 — no ?? 0, no ?? answered; used at :328 (per-engine row) and :417 (blended 'all' row, which summed answered counts before). REPRODUCED THE VERIFIER'S OWN CHECK: resolveEnabledEngines with ENGINES=perplexity, /chat/completions 200 + /search 503, registry probe -> citations_state=unverified, reason=search_leg_failed, error=null, answer_present=true, hasUnverifiedCitations=true, slice citation_denominator 0 vs non_branded_with_answer 1. New test citationDenominator.test.mjs drives that same live path (only fetch mocked, never a row literal) over a mixed 4-prompt scan: 2 verified / 2 dead-search -> denominator 2 not 4, citation_share 100 not 50, through summaryToMetricsRow AND the blended row; plus the both-legs-dead and EMPTY_ANSWER returns, plus the fail-loud, plus an aio/chatgpt no-regression guard. TEETH: deleting the :227 copy reds 10 of 12; neutering the :573 filter reds 5 of 12. FLAGGED: rollup.js was edited (3 spots, minimal) because it divides cited by answered independently and would have re-inflated the outage; consequence is that scripts/backfill-analytics.mjs will now THROW rather than emit a wrong number when replaying a pre-R2.2.2 multi-engine scan carrying a perplexity slice — deserves its own task. No migration: the new fields live in existing JSONB (summary_stats, prompt_results.raw). npm run test:scoring: 1831 tests, 2 fail, both 'GUARD - README migration table' / 'every migration on disk is covered by the verify list' from another agent's untracked supabase/migrations/013_brand_metrics_sov_state.sql; my baseline before starting was 1760/0 fail and every suite touching my change (analytics, engines, scoring, scanChunk, dashboard: 516 tests) is green."
         }
       ],
       "verification": {
@@ -4069,9 +4159,13 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/components/dashboard/ScoreBreakdown.jsx:86",
+        "src/components/perceev/charts/shareOfVoice.js:298",
+        "src/components/dashboard/scoreBreakdownShare.test.mjs:176"
+      ],
       "notes": [
         {
           "at": "2026-09-05T01:51:53.583Z",
@@ -4082,6 +4176,11 @@
           "at": "2026-09-05T07:03:16.382Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T07:09:50.838Z",
+          "by": "rebuild-implementer",
+          "text": "ScoreBreakdown.jsx:86 now resolves share of voice through the SAME functions the Overview donut uses - resolveShareOfVoice() then a new pure describeShareMetric() (shareOfVoice.js:298), so the wording decision has one home rather than one per surface (the shape R2.7.8 established for describeEngineChip). The '?? 0' is gone from the whole file, not just line 10: every metric now goes through a describe* helper that decides format from the value alone, so a percent sign cannot be stapled to a number that does not exist. Unmeasured = em dash + state chip + a sentence saying why; a MEASURED zero = '0.0%' + a 'Measured - no brand mentions were yours' chip (standing rule 1: measured zero must not look like never-ran). Unrecognised states are neither swallowed nor dumped raw on the customer: human words on the chip, the token in data-share-state and named in the detail sentence (the R2.1.2 mistake, avoided). SCOPE NOTE, declared not hidden: accept names share of voice, but I also removed the identical '?? 0' from visibilityScore / mentionRatePct / brandCitationSharePct / scoreCiLow / scoreCiHigh in the same file - 'Likely Visibility Range: 0%-0%' was the same lie. TEST: scoreBreakdownShare.test.mjs mounts the REAL component with sucrase + react-dom/server and asserts on rendered markup, with NO '@/components/**' catch-all (that catch-all would have stubbed shareOfVoice.js and made every assertion vacuous). 20/20 pass. I exercised the accept criterion by mutation: reinstating 'result.shareOfVoicePct ?? 0' turns 8 of the 20 red, including both ACCEPT tests. BASELINE: I measured 1760 tests / 1734 pass / 0 fail / 26 skipped before touching anything. After: fail count is nonzero but every failure is in migrationsRunner / rateLimit / scanChunk, all files other agents are editing in this same tree right now (git status confirms them modified, not by me). The two directories my change can reach - src/components/perceev/charts and src/components/dashboard - are 137/137 green. NOT DONE: ScoreBreakdown is currently imported by NOTHING (git grep finds only its own definition; production-plan E2.4 lists it as orphaned), so this makes the component honest when mounted, not a change a user sees today - the finding's 'two surfaces disagree on the same page' is one surface early. Stated in the test header rather than assumed. I did not touch Donut.jsx, ScoreBand.jsx or any file outside my set."
         }
       ],
       "verification": null
@@ -4378,9 +4477,21 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/db.js:489",
+        "src/app/api/scans/_lib/scanRow.js:36",
+        "src/app/api/content/worker/route.js:98",
+        "src/app/api/content/worker/route.js:126",
+        "src/app/api/content/worker/route.js:209",
+        "src/app/api/content/worker/route.js:238",
+        "src/lib/workers/scanWorker.js:1813",
+        "src/lib/dbReadOutage.route.test.mjs:170",
+        "src/lib/dbReadOutage.route.test.mjs:312",
+        "src/lib/dbReadOutage.route.test.mjs:422",
+        "src/lib/scanByIdUnconfigured.route.test.mjs:103"
+      ],
       "notes": [
         {
           "at": "2026-09-03T02:22:25.483Z",
@@ -4391,6 +4502,11 @@
           "at": "2026-09-05T07:00:19.109Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T07:17:34.576Z",
+          "by": "rebuild-implementer",
+          "text": "ALL FOUR ANCHORS RE-VERIFIED AGAINST CURRENT SOURCE; every line number in the ledger had drifted, and all four findings REPRODUCE. db.js:230 -> getScansByDomain is now at :446 (the catch-and-return-[] was at :475-478). scanRow.js:20 -> the `if (!supabase) return null` was at :26, and the misleading comment the finding names really was at :13-24. scanWorker.js:728 -> that line is now unrelated prompt-migration code; the getScansByDomain consumer (loadPreviousRoster) is at :1813. content/worker/route.js:117 -> the error-dropping destructure was at :124.\n\nTHREE SITES FIXED, EACH IN THE SHAPE R2.8.4 ESTABLISHED (throw, do not return a discriminated union: nine existing call sites already treat these as arrays/rows and a union one of them forgot to unwrap would land back on the same lie).\n1. db.js:487-493 — getScansByDomain no longer wraps the query in try/catch; a postgrest error throws ScansUnavailableError{code:'db_read_failed', cause: envelope}. Its measured-empty path (:496-505) is unchanged.\n2. scanRow.js:35-40 — getScanById throws ScansUnavailableError{code:'db_not_configured'} instead of returning null with no client; the by-id route's existing catch (route.js:27-33) turns it into a 500. The comment that cited the old getScansForBrand convention as house style is rewritten so nobody copies it forward.\n3. content/worker/route.js — the brand-list read now goes through the exported brandsForDailyBatch(:98), which reads `error`; contentCronReport(:126) always emits `batch_unavailable` (null vs an object) and returns status 500 when the batch stage never ran. The resume counts survive either way, so an operator sees which half of the pass worked.\n4. scanWorker.js:1813 needed NO code change and got a comment recording why: rosterContinuity.js:62-65 already contracts that a DB failure loading the previous roster propagates (its own test at rosterContinuity.test.mjs:102 asserts it), and runScanChunk:2447-2457 marks the job failed with the message. The swallow in db.js was what made that contract dead code. Probe rows are already persisted, so a resume re-finalizes rather than re-probing.\n\nLEFT ALONE ON INSTRUCTION: getScansByDomain's `if (!client) return []` (db.js:471) is R2.8.12's, filed separately. A comment at :467-471 says so in as many words so its survival is not read as a considered exception. That does mean this function is half-fixed until R2.8.12 lands — flagging it rather than letting a verifier find it.\n\nTESTS: 16 new, in 2 files (two processes are needed: db.js decides `supabase` at import time, so 'a client whose socket is refused' and 'no client at all' cannot coexist in one process).\n- src/lib/dbReadOutage.route.test.mjs, 13 tests. Nothing is stubbed except globalThis.fetch, standing in for the socket: real db.js, real scanRow.js, real by-id route handler, real runFinalizePhase + rosterContinuity, real @supabase/supabase-js. Each site gets BOTH halves — outage throws/5xx, AND a DB that answers [] still produces the genuine empty/404/200. :312 drives the actual finalize with the actual db.getScansByDomain and asserts the chunk sees ScansUnavailableError and stamps no scan; its sibling proves a readable DB now yields carried_forward vs unavailable as two distinct states.\n- src/lib/scanByIdUnconfigured.route.test.mjs, 3 tests, Supabase env cleared: the real route answers 5xx, never 404 'Scan not found.', body names no infrastructure, and no fetch is attempted. A malformed id is still a 400.\n\nFOUR SABOTAGES, each proven applied and reverted by sha256 (never via git checkout/restore/stash): revert getScansByDomain to return [] -> 3 fail INCLUDING the scanWorker one; revert getScanById to return null -> 2 fail; drop the brand-list error again -> 1 fail; keep the report but answer 200 anyway -> 2 fail. Restored files diffed byte-for-byte against pre-sabotage copies.\n\nCLAUSE I RAN HONESTLY, AND THE ONE I COULD NOT. npm run test:scoring: baseline measured by me before any edit at 04e80db was 1760/1734 pass/0 fail/26 skipped; after, 1831/1805/0 fail/26 skipped (+16 mine, the rest from concurrent agents in this tree). npx next build succeeds and every affected route prints f (Dynamic), so the new db_not_configured throw cannot fire during prerender. WHAT I COULD NOT DRIVE, stated rather than implied: GET /api/content/worker cannot be called in-process with a live client attached, because its first act is recordCronTick — a WRITE to system_heartbeats, which liveWriteGuard refuses in every test process (system_heartbeats is NEVER_WRITABLE, so no allow-list can open it). So the two decisions the finding is about are exported from the route and driven with the REAL postgrest envelope from the REAL query against a refused connection; the handler holds no other copy of those lines, and a source assertion (:493) pins that it routes through them and sends the status. That last assertion is worth what a source assertion is worth and the file says so. The 5xx itself is not observed over HTTP — a verifier with a dev server should check GET /api/content/worker?batch=1 under an unresolvable Supabase host answers 5xx with batch_unavailable, not 200.\n\nOUT OF SCOPE, FOUND WHILE SWEEPING, NOT FIXED (candidates for the controller): (a) db/content.js:289-302 listResumableContentJobs catches and returns [] — read by the very route I fixed, so an outage there still yields resumed:0 in an otherwise-green report; same class, other half of the same cron; (b) db.js:513-556 listRecentScans returns [] both with no client and on any error, so the homepage workspace renders 'no scans yet' during an outage; (c) db/content.js:410-422 listContentRunsForJob, same catch->[] ; (d) db.js:479 `if (!host) return []` answers an unaskable question with a measured empty. db/prompts.js's non-strict [] is deliberate and documented (strict mode exists and the worker uses it) — I judge it NOT a finding."
         }
       ],
       "verification": null
@@ -4752,7 +4868,7 @@
         "src/app/page.js"
       ],
       "phase": "R2",
-      "status": "in_verification",
+      "status": "in_progress",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/app/page.js:55",
@@ -4771,9 +4887,18 @@
           "at": "2026-09-05T06:58:30.419Z",
           "by": "rebuild-implementer",
           "text": "DOES NOT REPRODUCE AS WRITTEN, and I did not build a replacement. The simulated counter was src/components/landing/ProbeCounter.jsx: BASE = 37720, plus Math.floor(random*3)+1 every 2200ms, rendered as a ProbeCounter element under the label \"Probes run\" in a stats strip (page.js at ca1d000:120). git show 5111219 --stat confirms that file was DELETED on 2026-08-16 in the design-system port, together with the whole strip; git grep finds no \"Probes run\", no \"lp-stat\", no Math.random, no setInterval and no toLocaleString anywhere in src/app/page.js or src/components/landing/.\n\nCORROBORATED AT THE RENDERED LAYER, not only in source: the prerendered .next/server/app/index.html contains no 37720 and no comma-grouped number at all; every numeral it renders is 30 (DEFAULT_UNBRANDED_TARGET), the sample donut 13/10/5/2, the guarded 64/6, and prose figures like 200-bed. So accept clause 2 (the simulation is deleted) already holds, and clause 1 (the counter reads a real count) is moot because there is no counter and nothing aggregate to count: there is no lifetime probe/scan count query in the db layer, the landing page is a statically prerendered use-client route, and adding a public count surface would be a feature the accept does not ask for and that I could not exercise here (no live DB in this environment). Per the brief's second branch: with genuinely nothing to count, display no fabricated number.\n\nWHAT I SHIPPED. (1) src/app/page.js:55 - a 16-line comment where the counter's number used to live, recording what it was, the commit that deleted it, that PRODUCT.md's flag is stale, and the contract if one ever returns: a real count query, and an em dash plus a state chip when it cannot answer, never a zero and never a seed. Comment-only; no rendered output changes. (2) src/lib/landingProbeCounter.test.mjs - a new guard, 5 tests, so the number cannot come back the way it left. It does not forbid a counter; it forbids a MANUFACTURED number on the landing surface: Math.random, setInterval, a self-incrementing state updater, a five-or-more-digit literal, and comma-grouped digits (the toLocaleString shape, 37,720). Files are DISCOVERED by readdir over src/components/landing plus page.js, not typed, so a new component is scanned automatically. Rules run over code with comments and string contents removed by a quote-aware walk that keeps template interpolations as code and REFUSES (throws) any file whose walk ends inside a string or comment, plus a per-file desync check that the stripped text still contains \"export\".\n\nTEETH PROVEN BY SABOTAGE, twice, each applied on disk and then restored (page.js verified clean by git diff, no stray files left): (a) restoring the real deleted ProbeCounter.jsx into the landing directory and rendering it from page.js - 2 of 5 tests fail, the scan naming all four rules and the component-name check firing; (b) the static version of the same lie, a 37,720 div beside a \"Probes run\" div typed into the hero - the grouped-total rule and the \"Probes run\" check both fail. Each rule is also proven to fire ALONE on a minimal snippet, and the fixture test feeds the verbatim deleted module in, so the rules cannot rot into decoration.\n\nSTATED LIMITS, written in the file header rather than implied: it reads source, not DOM (no browser, jsdom or JSX transform exists in this tree); it scans page.js plus src/components/landing only, so a counter smuggled in from another directory is caught only by the component-name check, which is evadable by renaming; and a SMALL typed total (a \"412 probes this week\") trips nothing.\n\nNOT DONE, DELIBERATELY. PRODUCT.md:75 still reads \"Probe counter on the landing page is simulated. [flagged: replace with real telemetry]\" - now false in both halves and it should be struck, but PRODUCT.md is outside the file set I was given, so I left it and am reporting it for its own task. I also did not touch src/components/landing/EngineRail.jsx:17 (const perEngine = total ?? (engines[0]?.asked ?? 0)), a metric falling back to 0 - standing rule 5, pre-existing, outside this task; my guard deliberately has no \"?? 0\" rule so it does not fail on it.\n\nSUITE: npm run test:scoring - 1760 tests, 1734 pass, 0 fail, 26 skipped (baseline 1694/1668/0; the extra tests are other agents' work plus my 5). next lint clean on both files.\n\nSUSPECT FIRST: whether a comment-only page.js change plus a guard is an acceptable answer to \"the counter reads a real count\". That is the judgement call in this submission; the alternative I rejected was inventing a landing-page count surface I could not exercise.\n"
+        },
+        {
+          "at": "2026-09-05T07:11:47.708Z",
+          "by": "verifier",
+          "text": "rejected: FAIL on the guard, NOT on the non-reproduction - the verifier confirms that fully and independently, including building the app itself and finding zero occurrences of the counter in the rendered index.html. It also agrees comment-plus-guard is the right shape for this accept, and that building a count surface would have been a fabrication of a different kind. Both teeth claims reproduced verbatim, and the guard fails loudly on an empty or missing directory. The defect: landingProbeCounter.test.mjs claims in its own header that it REFUSES what it cannot parse, and that is false. Two apostrophes in ordinary JSX marketing copy (It doesn't lie ... That's the promise) are read as a string pair, everything between them is deleted, and a live Math.random() between them VANISHES - the guard reports 5 pass / 0 fail on a file containing the exact thing it exists to catch. Even quote parity means the throw never fires and the export desync smoke test does not trip. That is the guard's failure path fabricating a clean state, the standing class this rebuild exists to close, against an explicit written promise that it cannot happen. Verifier canary-swept all 8 live files: today's green IS genuine, every blind span sits inside a block comment - so this is one contraction in landing copy away from silent blindness. Fix: in codeOnly's quoted mode, throw on a newline (a JS string cannot contain an unescaped one, so this is language semantics not a heuristic - verifier implemented it and all 8 files still parse). Also widen timer to setTimeout and self-increment to block bodies: a recursive setTimeout counter is the historical bug respelled and slips through today. Also correct the header's STATED LIMITS."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "fail",
+        "at": "2026-09-05T07:11:47.707Z",
+        "note": "FAIL on the guard, NOT on the non-reproduction - the verifier confirms that fully and independently, including building the app itself and finding zero occurrences of the counter in the rendered index.html. It also agrees comment-plus-guard is the right shape for this accept, and that building a count surface would have been a fabrication of a different kind. Both teeth claims reproduced verbatim, and the guard fails loudly on an empty or missing directory. The defect: landingProbeCounter.test.mjs claims in its own header that it REFUSES what it cannot parse, and that is false. Two apostrophes in ordinary JSX marketing copy (It doesn't lie ... That's the promise) are read as a string pair, everything between them is deleted, and a live Math.random() between them VANISHES - the guard reports 5 pass / 0 fail on a file containing the exact thing it exists to catch. Even quote parity means the throw never fires and the export desync smoke test does not trip. That is the guard's failure path fabricating a clean state, the standing class this rebuild exists to close, against an explicit written promise that it cannot happen. Verifier canary-swept all 8 live files: today's green IS genuine, every blind span sits inside a block comment - so this is one contraction in landing copy away from silent blindness. Fix: in codeOnly's quoted mode, throw on a newline (a JS string cannot contain an unescaped one, so this is language semantics not a heuristic - verifier implemented it and all 8 files still parse). Also widen timer to setTimeout and self-increment to block bodies: a recursive setTimeout counter is the historical bug respelled and slips through today. Also correct the header's STATED LIMITS."
+      }
     },
     {
       "id": "R2.10.4",
@@ -5077,6 +5202,37 @@
       "notes": [
         {
           "at": "2026-09-04T03:59:34.636Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.1.5",
+      "subphase": "R3.1",
+      "lane": "backend",
+      "phase": "R3",
+      "title": "The post-response scan trigger has no keepalive, and three compensations hide it",
+      "detail": "Found by the R1.1.3 scribe. git grep waitUntil over src/ and package.json returns NOTHING, and @vercel/functions is not a dependency. So the fire-and-forget runScanChunk(job.id).catch(...) in src/app/api/scan/route.js runs after the response with no platform mechanism keeping the function alive - it can be frozen mid-scan at any point. The system stays upright only on three independent compensations: HEARTBEAT_STALE_MS staleness inference, the poll-driven rescue in GET /api/scan/[job_id]/status (which makes an open browser tab part of the execution guarantee), and the daily vercel.json crons. docs/plans/production-plan.md section C1 prescribed the waitUntil fix and it was never applied. This is the root cause R3.1.1 and R3.3.2 are each treating a symptom of.",
+      "accept": "The post-response work is either kept alive by the platform mechanism or moved to a worker that owns its own lifetime; the ADR-s chosen answer is recorded. The three compensations remain but are no longer the only thing standing between a scan and silent abandonment.",
+      "deps": [],
+      "tags": [
+        "needs-vercel"
+      ],
+      "findings": [],
+      "anchors": [
+        "src/app/api/scan/route.js:128",
+        "src/app/api/scan/[job_id]/status/route.js:56",
+        "vercel.json",
+        "docs/plans/production-plan.md"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T07:13:25.906Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -5515,7 +5671,7 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/liveDbGate.js:87",
@@ -5542,7 +5698,11 @@
           "text": "REPRODUCED FIRST (anchors were stale: the identity check is now liveDbGate.js:69 pre-fix, not :63; the doc block at :63-65 and META at liveWriteGuard.test.mjs:543 inside the test at :488 were as described). In an unguarded child with DATABASE_URL set, bare/literal-process.env/alias all THREW, while spread, Object.assign, a two-step copy and a hand-picked {DATABASE_URL: process.env.DATABASE_URL} all OPENED the gate. RUNTIME FIX liveDbGate.js:87,92,107-133: 'env === process.env' becomes isRealEnvironment(env), which also treats any env whose gate-opening credential (DATABASE_URL / SUPABASE_DB_PASSWORD / NEXT_PUBLIC_SUPABASE_URL) names the SAME DATABASE as the real one as the real environment. Compared by URL host+path, not string, because process.env.DATABASE_URL+'?application_name=x' defeated an exact-string first cut of this fix while still pointing at production. STATIC FIX liveWriteGuard.test.mjs:522 gateCallOnRealEnv(): the META rule is inverted - the ONLY exempt argument is an object literal that does not mention process.env, so a bare call, a variable, a clone or a function call are all flagged; the tree walk at :634 now uses it and names the offending call in the failure. NEW TESTS: :531 plants ten offender source strings (spread, assign, structuredClone, two-step, hand-picked, alias-by-variable) and three exempt literals; :696 runs eight call forms in unguarded child processes with DATABASE_URL set and asserts every one THROWS, plus asserts the escape hatch still answers for an env of the caller's own values. DOC: liveDbGate.js:38-40 and :63-82 say a copy of the real environment is the real environment and why identity was not enough; the refusal message at :154-158 says a copy is not an exemption; liveWriteGuard.js:81-89 corrects the 'WHAT IT DOES NOT COVER' bullet that said only a file AVOIDING the gate escapes. PROVEN AS THE ACCEPT ASKS: planted src/lib/__r3210Offender.tmp.mjs calling liveDbGate({...process.env}) - self-test went 22/1 RED naming the file and the call; the two-step variant (const env={...process.env}) also RED; file deleted, tree clean. The OLD regex returns false for both, verified. ADVERSARIAL: 12 bypass forms tried (spread, assign, clone, JSON round-trip, Proxy over process.env, null-prototype copy, lazy getter, alias, two-step, hand-picked, mutated query string, same host with a different login) - all refused. Documented residual, stated in both files: a literal built from a variable that spells the same host differently (IP for DNS) defeats the value check and the text check; armedLiveDbGate is unaffected by all of it. TESTS: guard self-test 23/23 pass; probeQueue 25/25 and scanRuns 31/31 pass, probeQueue re-run with a live-looking DATABASE_URL + NEXT_PUBLIC_SUPABASE_URL + SUPABASE_DB_PASSWORD set to confirm the escape hatch survives a configured environment. npm run test:scoring: 1755 tests / 0 fail after my last code change; a later run shows 1 unrelated failure, docStatus.test.mjs 'GUARD - every governed doc carries a status header' for docs/decisions/2026-09-05-unpersisted-scan-jobs.md, a sibling agent's doc added mid-run - I touched no docs. No live database was contacted: every measurement used a fake 127.0.0.1:1 DATABASE_URL."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-05T07:11:17.780Z",
+        "note": "Fresh verifier in isolated worktree extracted the PRE-FIX gate and drove 30 call forms through unguarded child processes with a fabricated 127.0.0.1:1 connection string. Pre-fix: bare/direct/alias threw, and 26 other forms - spread, Object.assign, two-step, hand-picked, structuredClone, JSON round-trip, Proxy, null-prototype, Object.create, Reflect, lazy getter, mutated query - ALL returned enabled:true. Post-fix all 26 refuse. It then attacked with eleven forms the implementer had not listed; the static rule missed four (computed callee, aliased import, a close-paren before the mention, Reflect getter) but the RUNTIME check caught every one. Four forms defeat both layers: a TOCTOU two-faced getter, a boxed String credential, and same-authority URL respellings (explicit :5432, trailing-dot DNS, percent-encoded path). All require an author to construct an evasion; the idiomatic spread a well-meaning test author writes is closed, and the accept permits documented bypasses. Zero false positives across all five gate importers; no offline lockout (probeQueue 25/25 with a fully configured fabricated env). Planted offender went 22/1 red naming the file AND the reconstructed call. Suite 1755/1729/0/26."
+      }
     },
     {
       "id": "R3.3.1",
@@ -6599,9 +6759,19 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/analytics/rollup.js:172",
+        "src/lib/analytics/rollup.js:339",
+        "supabase/migrations/013_brand_metrics_sov_state.sql:120",
+        "src/lib/analytics/rollup.test.mjs:193",
+        "src/lib/analytics/rollup.test.mjs:796",
+        "src/lib/workers/scanChunk.test.mjs:1021",
+        "scripts/setup-supabase.mjs:131",
+        "docs/PROD_MIGRATIONS.md:139",
+        "README.md:160"
+      ],
       "notes": [
         {
           "at": "2026-09-05T01:51:55.947Z",
@@ -6612,6 +6782,40 @@
           "at": "2026-09-05T07:00:41.958Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T07:14:57.580Z",
+          "by": "rebuild-implementer",
+          "text": "computeBrandRollups no longer returns a real 100 for a self-only roster. Finding REPRODUCED at the anchor (rollup.js:88 pre-change, sov_pct = selfMentioned/allMentioned with no roster check). rollup.js:172 adds hasRivalRoster (any non-self judged row in the slice, mirroring computeEngineSummary's hasRivalRoster) and returns sov_pct null + sov_state 'not_assessed' + sov_state_reason 'self_only_roster'. The measured/measured-zero distinction is preserved exactly as the scoring path makes it: rivals named and we were not still yields sov_pct 0 with measured_zero/brand_not_visible, never null. VOCABULARY: reuses R2.1.1's ENGINE_MEASUREMENT_STATE and ENGINE_STATE_REASONS by IMPORT from enginePipeline.js (not edited); SOV_STATE_REASONS is that frozen object spread plus one token, self_only_roster, because computeEngineSummary handles that condition with a bare null and no name, and its own test asserts every reason it declares is reachable there. No third state enum. MIGRATION SHIPS WITH THE CODE (rule 4): 013_brand_metrics_sov_state.sql adds sov_state/sov_state_reason, 3 CHECKs (vocabulary x2, plus a state/number agreement CHECK that makes a not_assessed row carrying a number impossible at the storage layer), a partial index that both proves the columns to the catalog probe and enumerates unverifiable rows, a backfill that NULLs proven tautologies and stamps proven measurements, and a RAISE NOTICE that reports the unverifiable remainder rather than passing over it. NOT RUN against any database - I made no DB connection; the migration is unexecuted SQL reviewed by eye only, and the catalog-verification query is in its header. Historical rows that cannot be re-derived (no scan_id, or no surviving result_brands) keep sov_state NULL, documented as UNRELIABLE in COMMENT ON COLUMN + docs/PROD_MIGRATIONS.md - the accept criterion's 'explicitly documented as unreliable' branch. NULL-SERIES CHECK: computeVisibilitySummary already guards both operands, so brandAnalyticsApi.js needed NO production change; added a test driving a real null-interleaved series (null gap, then a measured 0) asserting no NaN and no fabricated 0 delta. Suite: baseline 1760 tests/1734 pass/0 fail/26 skipped -> 1831/1805/0/26 (other agents added tests concurrently). Two migration guards fired on the new file and are now satisfied (setup-supabase EXPECTED_OBJECTS, README table); a third fixture, migrationsRunner.test.mjs FULL_CATALOG, needed the index name. OUT OF SCOPE, flagged: GET /api/brands/[brand]/metrics maps series fields explicitly so it still drops sov_state (route.js not in my file set); scanWorker.js:1855 still comments that a self-only sov_pct is 'a real 100%' and is now wrong (file owned by another agent)."
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R4.3.3",
+      "subphase": "R4.3",
+      "lane": "data",
+      "phase": "R4",
+      "title": "The analytics backfill cannot re-derive a citation denominator for historical rows",
+      "detail": "Reported by the R2.2.2 implementer as the blast radius of its own fix, honestly and before being asked. rollup.js citationDenominatorOf now THROWS for a perplexity slice with answered greater than zero and no citation_denominator field, rather than defaulting to a wrong number. That is the right call - loud over a defaulted lie - but it means scripts/backfill-analytics.mjs will throw when it replays any pre-R2.2.2 multi-engine scan carrying a perplexity slice. Going forward prompt_results.raw carries citations_state, but rows written before that commit do not, so the denominator for those scans is genuinely unknowable rather than merely unread.",
+      "accept": "The backfill either re-derives the denominator from prompt_results.raw where the data exists, or takes an explicit historical-unknowable path that records WHY the number is absent rather than throwing or inventing one. A test drives a pre-R2.2.2 slice through the backfill.",
+      "deps": [
+        "R2.2.2"
+      ],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "scripts/backfill-analytics.mjs",
+        "src/lib/analytics/rollup.js:270"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T07:13:26.203Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
         }
       ],
       "verification": null
@@ -7108,7 +7312,7 @@
         "docs/"
       ],
       "phase": "R6",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-scribe",
       "evidence": [
         "docs/PROD_MIGRATIONS.md:42",
@@ -7146,7 +7350,11 @@
           "text": "Re-submitted to correct the evidence list: the CLI's --evidence takes ONE comma-separated flag, and my first submit passed it repeatedly, so only the last citation survived and the doc itself was missing from its own evidence. The engineering note above stands unchanged; this note exists only so the record shows why there are two claims. Citation map: PROD_MIGRATIONS.md:42 = rule 1 (catalog, never head-probe); :84 = rule 2 (never verify a function by calling it); :112 = standing rule 4 + the per-migration feature-dependency table; :180 = the whole-schema catalog query; :426 = start of the twelve per-migration sections; :676 = 007, the only migration that can fail on live data, with its pre-flight; :1038 = what this doc cannot tell you, including that no query here has ever been run against production. setup-supabase.mjs:57 = the to_regclass/pg_proc reason rule 1 quotes; :85 = the one-object EXPECTED_OBJECTS entry for 006; :382 = the name-only function check. scanRunsLive.test.mjs:110 = the head-probe ban asserted in a test. 012:189 = the UPDATE that flips a live job to failed, which is why rule 2 exists."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-05T07:11:18.414Z",
+        "note": "Fresh verifier checked 50 claims: 48 held, 2 cosmetic (a line number attributed to a commit it was never at, and 'three partial indexes' where one of the three has no WHERE clause) - neither can lead an operator to a wrong action. It DERIVED the expected object counts from the DDL independently for all twelve migrations and every one matched, counting both sides separately. Independently confirmed the sharpest operational claim: claim_scan_job_attempt at 012:189-194 really does UPDATE a capped job to status failed / progress_pct 100, and below the cap still writes attempts+1 - so a curious SELECT against an in-flight customer scan kills it. Traced that RPC to three live routes including the cron target. Verified all nine functions write. Structurally checked all 20 SQL blocks: catalog relations and columns exist, joins sane, signatures real, parentheses balanced, ZERO write verbs. Confirmed the information_schema-is-a-head-probe-in-catalog-clothing reasoning is correct. Honesty section present and not contradicted elsewhere. Governance proven live by breaking and restoring the header. No credential value; the only supabase.co strings are the .env.example placeholder."
+      }
     },
     {
       "id": "R6.1.3",
@@ -7367,9 +7575,15 @@
       ],
       "phase": "R6",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-test-author",
-      "evidence": [],
+      "evidence": [
+        "src/lib/migrationsRunner.test.mjs:413",
+        "src/lib/migrationsRunner.test.mjs:613",
+        "src/lib/migrationsRunner.test.mjs:664",
+        "src/lib/migrationsRunner.test.mjs:702",
+        "src/lib/migrationsRunner.test.mjs:526"
+      ],
       "notes": [
         {
           "at": "2026-09-03T11:32:58.666Z",
@@ -7380,6 +7594,11 @@
           "at": "2026-09-05T07:00:25.789Z",
           "by": "rebuild-test-author",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T07:09:45.380Z",
+          "by": "rebuild-test-author",
+          "text": "Finding reproduces. The ordering guard anchored on the runner's own banner ('Verifying schema against the catalog'), a self-report. Replaced the measurement point with an event the runner cannot fake: the pg stub now writes '__PROBE <per-sandbox nonce> <name>' to stdout from inside query(), at the moment a to_regclass/pg_proc probe actually arrives, in the same process and on the same stream. auditByProbe() (line 413) measures the verdict window from the FIRST such probe; no probe at all leaves the whole transcript in the window and callers must assert probes.length>0. Three teeth tests spawn a genuinely SABOTAGED COPY of the real runner (written to a temp dir with a copy of the migration set, so scripts/ is untouched): (1) RELOCATED banner moved to the connect stage with the real verify stage reworded and 'Migrations applied successfully.' printed before connect; (2) STRADDLED verdict printed after the banner and before any probe; (3) objectExists() replaced by 'const exists = true', which ticks 42 objects at exit 0 without asking the database anything. All three exit 0 and all three pass the banner guard (asserted explicitly, so the premise is checked, not assumed); all three fail the probe guard. Also added a per-object backing test: every printed tick must have a probe of THAT name earlier in the transcript. Teeth proven by breaking the fix twice: reverting the anchor to lastIndexOf(VERIFY_ANCHOR) turns 4 tests red; deleting the stub sentinel turns 6 red. No change to scripts/setup-supabase.mjs was needed — the real runner probes before it pronounces. Suite 16 -> 20 tests, all green."
         }
       ],
       "verification": null
@@ -7521,10 +7740,11 @@
         "docs/"
       ],
       "phase": "R6",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-scribe",
       "evidence": [
-        "docs/OPERATOR_LEDGER.md:378"
+        "docs/OPERATOR_LEDGER.md:11",
+        "docs/OPERATOR_LEDGER.md:386"
       ],
       "notes": [
         {
@@ -7541,6 +7761,11 @@
           "at": "2026-09-05T06:58:57.657Z",
           "by": "verifier",
           "text": "rejected: FAIL, narrowly, on evidence integrity - not prose. Verifier checked 48 claims: 46 held, 2 did not. docs/OPERATOR_LEDGER.md:348 cites src/lib/db.js:577 and :600-602 as createScanJob and its memory fallback. It traced createScanJob across the last 12 commits (412, 485, 542, 580) and it has NEVER been at 577; at both the doc's declared Verified-at commit and the commit it ships in, those lines resolve to unrelated code (isJobAlive, and the 409 reclaim path). The substance is right, the pointer sends the reader to the wrong mechanism - and this was presented as a CORRECTION of a stale roadmap citation. This ledger already rejected R3.3.1 on exactly this ground, so the standard is established, not invented. The load-bearing claim HELD and was exercised, not read: the verifier ran authorizeOperatorRequest directly and confirmed four operator routes DENY on deny_no_token_configured while /api/industries, /api/health and POST /api/scan stay public, and that OPERATOR_TOKEN appears zero times in check-secrets.mjs. Document confirmed to contain NO credential value by pattern scan. Suite 1731/1705/0/26."
+        },
+        {
+          "at": "2026-09-05T07:05:36.046Z",
+          "by": "rebuild-scribe",
+          "text": "REFIX of the rejected citation, plus a full citation sweep. The two failures are fixed and one of them turned out to be stale in substance as well as in pointer.\n\n(1) THE DISQUALIFYING ONE. The old line 348 cited src/lib/db.js:577 for createScanJob with the fallback at :600-602 and src/app/api/scan/route.js:57-70 for the 201. Confirmed the verifier: createScanJob was at :542 at 1a5ed81 (the commit the old header declared) and is at :580 at 04e80db; :577/:600-602 at 1a5ed81 are the migration-007 duplicate-reclaim path, and at 04e80db :577 is inside isJobAlive. Rewritten as a prose subsection (:386) anchored on the SYMBOL per the R6.3.3 rule - 'git grep -n \"export async function createScanJob\" src/lib/db.js', with the if (!hasDb) global.memoryJobs branch described in words and no line pair. db.js is dirty in the worktree right now, which is the argument for the anchor.\n\n(2) THE SUBSTANCE HAD ALSO MOVED, and the old entry would have sent an operator hunting a fixed bug. R0.1.21 shipped in 156c21b (ancestor of HEAD): POST /api/scan imports the module-level supabase client and returns 503 {code:'scan_store_unavailable'} at src/app/api/scan/route.js:105 BEFORE createScanJob runs, with a second unreachable guard at :119; test src/lib/scanRoute.unpersisted.route.test.mjs and ADR docs/decisions/2026-09-05-unpersisted-scan-jobs.md both exist at HEAD; task is in_verification, not closed. Entry now states the fix, the commit, and three things the operator still needs: dev with no Supabase can no longer start a scan over HTTP (the ADR's own recorded cost), db.js was deliberately untouched so the guard is one route not a property of the store, and - found by tracing importers rather than reading - a SECOND live caller of createScanJob that is not behind that guard: runSchedulerTick in src/lib/workers/scanWorker.js, reached from GET /api/scan/worker (the vercel.json cron) at worker/route.js:389. It is cron-authenticated so it is not the anonymous spend path; on an unconfigured instance listDueSchedules reads the empty global.memoryScanSchedules so it also looks unreachable - and I labelled that reachability argument REASONED, NOT EXERCISED because no test drives it.\n\n(3) COSMETIC FIX at :125. 'every operator screen 401s' now reads 'every operator API 401s', with a clause: matcher is [\"/api/:path*\"] (src/middleware.js:83), so page routes never reach the middleware and an operator screen still RENDERS - what fails is its data fetches. Names the trap: an empty dashboard with no error banner is the expected shape of a missing OPERATOR_TOKEN, so do not smoke-test the perimeter with a browser tab. Also added that the refusal status is 401 (src/middleware.js:70-77).\n\n(4) HEADER RE-STAMPED to 04e80db, and the rotting number removed. 'is 120 commits ahead' is gone; :472 now says re-derive with git rev-list --count main..HEAD and records that it was 120 at 1a5ed81 and 123 at 04e80db in one session, which is the reason. Same treatment at :102: git cat-file -e main:src/middleware.js is the check, not a count.\n\n(5) FULL SWEEP, the tally: 17 pre-existing file:line citation sites across 9 files, re-resolved against COMMIT 04e80db via git show (never the worktree - 10 source files are dirty from other agents). 14 HELD, 3 FAILED, all three in the one rejected sentence. Held and re-read: gsc.js:17 (webmasters.readonly), middleware.js:36 and :66, vendorRegistry.js:51-67 (exact span, supabase..cron), calibrationFixture.js:84 and :123, setup-supabase.mjs:473/:502/:510 (all three inside the try at :472), decision/route.js:19/:26/:93-98, rateLimit.js:76 and :79. The sweep also caught a non-line staleness: SS C said docs/PROD_MIGRATIONS.md 'does not exist yet' - it landed under R6.1.2 in 156c21b, so :276 now points there for the 012 question, names 012's four catalog objects, and flags that it is itself in_verification so treat it as reviewed-by-one. One fidelity nit fixed: the SS B table now lists cron last, matching the source order of VENDORS. Re-confirmed unchanged: vercel.json both crons daily with no ?batch=1, OPERATOR_TOKEN appears 0 times in check-secrets.mjs, migrations 001-012 on disk, no *.labels.json in test_reports/baseline-2026-08/, and the four SS A tasks all still blocked.\n\nnode --test src/lib/docStatus.test.mjs: 10/10 pass, 0 fail. Only docs/OPERATOR_LEDGER.md modified; no source file touched, nothing outside the owned set. SECRETS HYGIENE: no credential value read, printed or paraphrased anywhere; every search was git grep or path-scoped, no .env file of any kind was opened, no --no-ignore/-uu/--hidden used."
         }
       ],
       "verification": {
@@ -7770,7 +7995,7 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_verification",
+      "status": "in_progress",
       "owner": "rebuild-scribe",
       "evidence": [
         "docs/HANDOFF-2026-08-30.md:9",
@@ -7804,9 +8029,18 @@
           "at": "2026-09-05T06:50:28.538Z",
           "by": "controller",
           "text": "amended: EVIDENCE CORRECTION (rebuild-scribe, before verification). Two of the ten evidence citations in the submit above point at source that has already moved: src/lib/db.js:126 and src/lib/workers/scanWorker.js:1284 are exact at 1a5ed81, the commit this task declared and verified against, but stale in the working tree right now (insertScan is :126 at 1a5ed81 and :152 in the tree, having moved twice during this task, from concurrent uncommitted work on db.js by another agent). A verifier should resolve those two against 1a5ed81, not the worktree, or ignore them - the load-bearing evidence is the eight docs/ citations, which are in files this task owns and did not move. That this happened inside a task about stale citations is not incidental: it is the finding, and it is why both documents now declare a commit and anchor on symbols. Additional doc anchors: docs/BUILD_JOURNAL.md:149 (B8 row), :153 (B12 row), :279 (Since on B8), :340 (the 'at HEAD' correction in Gaps), and docs/HANDOFF-2026-08-30.md:308 (R3.6.4, liveness left unverified rather than restated)."
+        },
+        {
+          "at": "2026-09-05T07:11:47.360Z",
+          "by": "verifier",
+          "text": "rejected: FAIL on one claim, and it is the ironic one. Verifier independently reproduced the census EXACTLY - 111/8 citations, 113 resolving, 6 missing files, same split - and matched the scribe's classification on 42 of 42 sampled. Both inline corrections verified exact at 3c9d3f2. B9 and B12 mechanism claims verified, including the trap that git grep still hits 'Skipping database insert' in a PAST-TENSE contract comment. BUT the third mechanism claim is FALSE. The doc says runScanChunk GAINED a third entry point and that the liveness paragraph 'was not wrong when written and is wrong now'. git log -S shows GET /api/scan/[job_id]/status has dispatched runScanChunk since 9580782 on 2026-07-24 - it was present and live at 5d51aa3, the very commit the paragraph declares as its snapshot. So 'two entry points' was WRONG AT ITS OWN DECLARED COMMIT. This matters three ways: it conceals that the original standing-rule-10 liveness trace was incomplete when made; it breaks the 'wrong at the authoring commit' list, which is presented as exhaustive at two items and is really three; and it hands R6.4.8 a FALSE input, because the doc's central recommendation is declared-commit-plus-symbol anchoring and that scheme would NOT have caught this one. The most valuable thing the sweep found is currently written up as its opposite. Six precise corrections in the verifier report, incl. moving the Status-column caveat into the banner above the tables where a reader will see it."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "fail",
+        "at": "2026-09-05T07:11:47.359Z",
+        "note": "FAIL on one claim, and it is the ironic one. Verifier independently reproduced the census EXACTLY - 111/8 citations, 113 resolving, 6 missing files, same split - and matched the scribe's classification on 42 of 42 sampled. Both inline corrections verified exact at 3c9d3f2. B9 and B12 mechanism claims verified, including the trap that git grep still hits 'Skipping database insert' in a PAST-TENSE contract comment. BUT the third mechanism claim is FALSE. The doc says runScanChunk GAINED a third entry point and that the liveness paragraph 'was not wrong when written and is wrong now'. git log -S shows GET /api/scan/[job_id]/status has dispatched runScanChunk since 9580782 on 2026-07-24 - it was present and live at 5d51aa3, the very commit the paragraph declares as its snapshot. So 'two entry points' was WRONG AT ITS OWN DECLARED COMMIT. This matters three ways: it conceals that the original standing-rule-10 liveness trace was incomplete when made; it breaks the 'wrong at the authoring commit' list, which is presented as exhaustive at two items and is really three; and it hands R6.4.8 a FALSE input, because the doc's central recommendation is declared-commit-plus-symbol anchoring and that scheme would NOT have caught this one. The most valuable thing the sweep found is currently written up as its opposite. Six precise corrections in the verifier report, incl. moving the Status-column caveat into the banner above the tables where a reader will see it."
+      }
     },
     {
       "id": "R6.3.4",

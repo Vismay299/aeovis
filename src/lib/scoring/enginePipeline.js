@@ -1,6 +1,6 @@
 import { brightDataSearch, extractBrightDataAiOverview, extractBrightDataOrganic } from "../engines/brightdata.js";
 import { probeChatGpt, isChatGptConfigured } from "../engines/openai.js";
-import { probePerplexity, isPerplexityConfigured } from "../engines/perplexity.js";
+import { probePerplexity, isPerplexityConfigured, hasUnverifiedCitations } from "../engines/perplexity.js";
 import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
 import { detectMention, judgeBrandsSymmetric } from "./judge.js";
@@ -193,9 +193,40 @@ async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, 
     brands: [], // P1.2 — see probeAio's field of the same name
     error: null,
     cost: 0,
+    // R2.2.2 — whether `citations` above is a MEASUREMENT or the absence of
+    // one. Distinct from `error`, which speaks only for the ANSWER. A multi-leg
+    // engine (Perplexity: /chat/completions for the answer, /search for the
+    // citations) can lose one leg and keep the other, and `citations: []` then
+    // means "we could not look", not "we looked and found none".
+    //
+    // null means this engine has no separate citation leg to lose — a ChatGPT
+    // row's citations come back on the same call as its answer, so `error`
+    // already speaks for both. The real values are copied off the probe below.
+    // See CITATIONS_STATE in src/lib/engines/perplexity.js.
+    citations_state: null,
+    citations_state_reason: null,
+    citations_state_detail: null,
   };
 
   const probeResult = await probeFn(query.text, { stats });
+
+  // Copied ONCE, here, before the first return can skip it.
+  //
+  // The first cut of R2.2.2 was rejected because this function copies fields
+  // onto a fixed literal — text/citations/references/cost and nothing else — so
+  // probePerplexity setting citations_state on every one of ITS return paths
+  // bought nothing: all three fields died on this hop, and a search-leg outage
+  // still reached the citation-share denominator as a confirmed "not cited".
+  // probePerplexity has exactly one consumer and it is this function.
+  //
+  // The copy is deliberately BEFORE the branch rather than repeated in each of
+  // the three returns below (probe error, EMPTY_ANSWER, success): a fourth
+  // return path added later cannot reintroduce the drop by forgetting a line.
+  // The error path matters as much as the success one — both legs dead is also
+  // an unobserved citation list, not an empty one.
+  result.citations_state = probeResult.citations_state ?? null;
+  result.citations_state_reason = probeResult.citations_state_reason ?? null;
+  result.citations_state_detail = probeResult.citations_state_detail ?? null;
 
   if (probeResult.error) {
     result.error = probeResult.error;
@@ -519,7 +550,41 @@ export function summarizeEngineSlice(results, engineName) {
   const visibleBranded = brandedWithAnswer.filter((r) => r.visible).length;
 
   const mentionedNonBranded = nonBrandedWithAnswer.filter((r) => r.brand_mentioned_in_text).length;
-  const citedNonBranded = nonBrandedWithAnswer.filter((r) => r.brand_cited).length;
+
+  // --- The citation pool: answered rows whose citation list was OBSERVED ----
+  //
+  // R2.2.2 (finding B2). Perplexity's citations come from a second call
+  // (/search) that fails independently of the answer leg. A row whose /search
+  // died carries `citations: []` and `error: null` — before the citations_state
+  // vocabulary, byte-identical to a healthy /search that genuinely found nothing
+  // to cite. Dividing by every answered row therefore scores an OUTAGE as a
+  // confirmed "the brand was not cited here", which is a claim the engine never
+  // made. Standing rule 1: an unmeasured zero must not look like a measured one.
+  //
+  // Both sides of the ratio are taken over this pool. The numerator barely
+  // changes today — a row with no citations cannot have brand_cited true — but
+  // computing them over two different pools is how a future citation source
+  // (say, in-answer link annotations surviving a dead /search) would silently
+  // produce a share above 100%.
+  //
+  // hasUnverifiedCitations is a POSITIVE test for the unverified marker, so a
+  // single-leg engine (aio, chatgpt) whose rows carry `citations_state: null`
+  // or no marker at all is never quietly dropped from its own denominator.
+  const citationPool = nonBrandedWithAnswer.filter((r) => !hasUnverifiedCitations(r));
+  const citationsUnverifiedCount = nonBrandedWithAnswer.length - citationPool.length;
+  const citedNonBranded = citationPool.filter((r) => r.brand_cited).length;
+
+  // An exclusion nobody can see is an exclusion nobody can audit. Says how many
+  // rows dropped out and what the denominator became, so a shrunken citation
+  // share has a reason in the log next to the numbers that caused it.
+  if (citationsUnverifiedCount > 0) {
+    console.warn(
+      `[${engineName}] ${citationsUnverifiedCount} of ${nonBrandedWithAnswer.length} answered non-branded rows ` +
+        `carry an unverified citation list (the citation leg failed). Excluded from the citation-share ` +
+        `denominator, which is ${citationPool.length}, not ${nonBrandedWithAnswer.length}. They are not counted ` +
+        `as uncited.`
+    );
+  }
 
   const rankNotCited = nonBrandedWithAnswer.filter(
     (r) => r.brand_organic_position && r.brand_organic_position <= 10 && !r.visible
@@ -658,6 +723,18 @@ export function summarizeEngineSlice(results, engineName) {
     visible_branded: visibleBranded,
     mentioned_non_branded: mentionedNonBranded,
     cited_non_branded: citedNonBranded,
+    // R2.2.2 — the denominator `cited_non_branded` was ACTUALLY counted over,
+    // emitted rather than left to be re-derived. It is NOT
+    // `non_branded_with_answer` whenever a citation leg failed, and
+    // src/lib/analytics/rollup.js divides cited by answered independently: with
+    // only the numerator filtered, that second division would put the outage
+    // straight back into citation_share_pct. A consumer must divide by this.
+    citation_denominator: citationPool.length,
+    // How many answered non-branded rows were excluded for an unobserved
+    // citation list. 0 here is a measurement — "every citation list was
+    // observed" — and is why the field is always present rather than only when
+    // something went wrong.
+    citations_unverified_count: citationsUnverifiedCount,
     rank_not_cited_count,
     coverage_pct: coveragePct,
     error_rate_pct: errorRatePct,
@@ -1262,6 +1339,21 @@ export function summarizeEngineResults(scanOutput) {
     enginesCounted: headline ? headline.engines_counted : null,
   });
 
+  // R2.2.2 — this legacy mirror is a REAL perplexity path: `aioSummary` falls
+  // back to the first engine, so a perplexity-only scan computes its
+  // scan-level citation_share_pct right here. Divide by the pool whose
+  // citations were observed (see citation_denominator in summarizeEngineSlice),
+  // never by every answered row.
+  //
+  // The fallback is for slices written before R2.2.2 only: those were counted
+  // over `non_branded_with_answer` and had no concept of an unverified list, so
+  // it is what their numerator really was. Every slice this function is called
+  // with in the live pipeline comes from summarizeEngineSlice in the same
+  // process and always carries the field.
+  const citationDenominator = Number.isFinite(aioSummary.citation_denominator)
+    ? aioSummary.citation_denominator
+    : aioSummary.non_branded_with_answer;
+
   return {
     results: scanOutput.results,
     summary: {
@@ -1295,9 +1387,15 @@ export function summarizeEngineResults(scanOutput) {
       mention_rate_pct: aioSummary.non_branded_with_answer > 0
         ? Math.round((aioSummary.mentioned_non_branded / aioSummary.non_branded_with_answer) * 1000) / 10
         : 0,
-      citation_share_pct: aioSummary.non_branded_with_answer > 0
-        ? Math.round((aioSummary.cited_non_branded / aioSummary.non_branded_with_answer) * 1000) / 10
+      // Denominator is the observed-citation pool (see above), not every
+      // answered row.
+      citation_share_pct: citationDenominator > 0
+        ? Math.round((aioSummary.cited_non_branded / citationDenominator) * 1000) / 10
         : 0,
+      citation_denominator: citationDenominator,
+      // null, never 0, when the slice predates R2.2.2: "no row was excluded"
+      // and "this slice could not tell" are different facts (standing rule 5).
+      citations_unverified_count: aioSummary.citations_unverified_count ?? null,
       // R2.2.6: the scan-level flag is every engine's business, not aio's.
       // Reading it off aioSummary alone let a text-only degradation drop the
       // headline from two engines to one with no banner to explain it.
