@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**83 / 210 closed** · 4 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**84 / 212 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -49,7 +49,7 @@ Baseline commit: `5111219`
 - [ ] **R0.1.17** Nothing detects a NODE_ENV that lies
 - [x] **R0.1.18** Three footguns in the rate-limit trust knob — closed at `src/lib/rateLimit.test.mjs:327`, `src/lib/rateLimit.test.mjs:46`, `src/lib/rateLimit.test.mjs:456`, `src/lib/rateLimit.test.mjs:476`, `src/lib/rateLimit.js:196`, `src/lib/rateLimit.js:231`, `src/lib/rateLimit.js:240`, `src/lib/rateLimit.js:110`, `src/lib/rateLimit.js:145`, `.env.example:60`
 - [x] **R0.1.19** The perimeter warn-once guard is evadable in one added line — closed at `src/lib/operatorPerimeter.middleware.test.mjs:131`, `src/lib/operatorPerimeter.test.mjs:454`
-- [ ] **R0.1.20** Nothing proves Vercel strips an inbound x-vercel-forwarded-for `needs-vercel`
+- [~] **R0.1.20** Nothing proves Vercel strips an inbound x-vercel-forwarded-for `needs-vercel`
 - [~] **R0.1.21** POST /api/scan returns 201 off a job that only exists in memory `needs-decision` — submitted `src/app/api/scan/route.js:105`, `src/lib/scanRoute.unpersisted.route.test.mjs:122`, `docs/decisions/2026-09-05-unpersisted-scan-jobs.md:55`
 - [ ] **R0.1.22** The rate limiter warns and continues on a caller-settable client address when off Vercel
 ### R0.2
@@ -77,7 +77,7 @@ Baseline commit: `5111219`
 ### R1.1
 
 - [x] **R1.1.1** Probe Result Contract v2 — closed at `docs/contracts/probe-result.md:15`, `docs/contracts/probe-result.md:74`, `docs/contracts/probe-result.md:304`, `docs/contracts/probe-result.md:647`, `docs/contracts/probe-result.md:694`, `docs/contracts/probe-result.md:952`, `docs/contracts/probe-result.md:981`, `docs/contracts/probe-result.md:1049`, `docs/contracts/probe-result.md:1106`, `docs/contracts/probe-result.md:1145`, `src/lib/scoring/enginePipeline.js:331`, `src/lib/scoring/enginePipeline.js:386`, `src/lib/scoring/enginePipeline.js:466`, `src/lib/scoring/enginePipeline.js:480`, `src/lib/scoring/enginePipeline.js:735`, `src/lib/scoring/enginePipeline.js:818`, `src/lib/scoring/enginePipeline.js:939`, `src/lib/workers/scanWorker.js:1227`, `src/lib/workers/scanWorker.js:1307`, `src/lib/workers/scanWorker.js:1769`, `src/lib/workers/scanWorker.js:2181`, `src/lib/db.js:123`, `src/lib/db.js:147`, `src/lib/content/weeklyReport.js:24`, `src/lib/llmPricing.js:79`, `src/lib/llmPricing.js:229`, `src/lib/llmPricing.js:335`, `src/lib/engines/deployedEngines.js:21`, `worker/src/lib/queue.js:207`, `worker/src/index.js:174`, `worker/src/index.js:211`
-- [ ] **R1.1.2** ADR + 2-day spike: browser infrastructure `needs-secrets` `needs-decision`
+- [-] **R1.1.2** ADR + 2-day spike: browser infrastructure `needs-secrets` `needs-decision` — blocked: needs-secrets
 - [ ] **R1.1.3** ADR: worker host `needs-decision`
 - [~] **R1.1.4** Engine surface matrix — submitted `docs/contracts/engine-surface-matrix.md:81`
 - [ ] **R1.1.5** Politeness & risk budget
@@ -109,7 +109,7 @@ Baseline commit: `5111219`
 - [ ] **R1.4.4** Fallback policy: UI blocked records blocked
 ### R1.5
 
-- [ ] **R1.5.1** Storage bucket probe-evidence `needs-secrets`
+- [-] **R1.5.1** Storage bucket probe-evidence `needs-secrets` — blocked: needs-secrets
 - [ ] **R1.5.2** prompt_results evidence-id columns
 - [ ] **R1.5.3** AnswersView 'View evidence' -> signed-URL screenshot
 ### R1.6
@@ -123,7 +123,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `19/48`
+## R2 — Scoring truth  `19/49`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -169,16 +169,17 @@ Baseline commit: `5111219`
 - [x] **R2.7.3** Delete the new Date() timestamp fallback — closed at `src/services/api.js:568`, `src/utils/format.js:34`, `src/utils/format.js:55`, `src/components/dashboard/DashboardShell.jsx:439`, `src/components/dashboard/DashboardShell.jsx:29`, `src/components/home/HomeDashboard.jsx:26`, `src/utils/format.test.mjs:63`, `src/services/api.test.mjs:493`
 - [x] **R2.7.4** Persist and render the collection window — closed at `src/lib/db.js:97`, `src/lib/db.js:98`, `src/components/dashboard/DashboardShell.jsx:431`, `src/components/dashboard/DashboardShell.jsx:503`, `src/lib/collectionWindowPersist.test.mjs:393`, `src/lib/collectionWindowPersist.test.mjs:336`, `src/lib/collectionWindowPersist.test.mjs:185`, `src/lib/collectionWindowPersist.test.mjs:471`
 - [ ] **R2.7.5** share_of_voice_pct exists only per engine; the scan-level field is never written
-- [ ] **R2.7.6** ScoreBreakdown prints a confident 0% for a share of voice nobody computed
+- [~] **R2.7.6** ScoreBreakdown prints a confident 0% for a share of voice nobody computed
 - [ ] **R2.7.7** The demo data does not carry the fields a real scan carries, so the sample report reads as broken
 - [x] **R2.7.8** ScoreBand hardcodes a percent sign, so no engine chip can carry a non-numeric state — closed at `src/components/dashboard/ScoreBand.jsx:42`, `src/components/dashboard/ScoreBand.jsx:104`, `src/components/dashboard/DashboardShell.jsx:441`, `src/components/dashboard/DashboardShell.jsx:465`, `src/components/dashboard/DashboardShell.jsx:482`, `src/components/dashboard/scoreBandEngineChips.test.mjs:430`
+- [ ] **R2.7.9** EngineRail renders a metric as 0 when there is nothing behind it
 ### R2.8
 
 - [ ] **R2.8.1** Gate Studio and Opportunities on data quality
 - [ ] **R2.8.2** Engine gauges: a zero-row engine says 'no data'
 - [x] **R2.8.3** Unknown status renders 'reconnecting', never rewinds to 0 percent — closed at `src/lib/scanProgress.js:50`, `src/lib/scanProgress.js:74`, `src/lib/scanProgress.js:92`, `src/app/scan/page.js:134`, `src/app/scan/page.js:341`, `src/services/api.js:805`, `src/app/api/scan/[job_id]/status/route.js:37`, `src/lib/scanProgress.test.mjs:40`, `src/lib/scanStatusTransient.route.test.mjs:99`
 - [x] **R2.8.4** DB-down state distinct from 'no scans yet' — closed at `src/lib/db.js:241`, `src/lib/db.js:255`, `src/lib/db.js:204`, `src/app/api/scans/[brand]/latest/route.js:27`, `src/lib/latestScanRoute.route.test.mjs:209`, `src/lib/latestScanRoute.route.test.mjs:245`, `src/app/api/content/worker/route.js:141`, `src/lib/content/dailyBatch.js:70`, `src/lib/content/weeklyReport.js:109`, `src/lib/content/contentWorker.js:226`
-- [ ] **R2.8.5** The remaining fail-quiet DB reads, same class as R2.8.4
+- [~] **R2.8.5** The remaining fail-quiet DB reads, same class as R2.8.4
 - [x] **R2.8.6** insertScan fail-softs on a missing client and returns undefined — closed at `src/lib/db.js:120`, `src/lib/db.js:122`, `src/lib/db.js:126`, `src/lib/db.js:75`, `src/lib/db.js:255`, `src/lib/db.js:263`, `src/lib/insertScanWriteFailure.test.mjs:67`, `src/lib/insertScanWriteFailure.test.mjs:124`, `src/lib/insertScanWriteFailure.test.mjs:166`
 - [x] **R2.8.7** insertScan cascade 3 writes the row and reports failure, so a re-finalize inserts a duplicate — closed at `src/lib/db.js:268`, `src/lib/db.js:270`, `src/lib/db.js:275`, `src/lib/db.js:314`, `src/lib/insertScanCascade3.test.mjs:243`, `src/lib/insertScanCascade3.test.mjs:473`, `src/lib/insertScanCascade3.test.mjs:524`
 - [ ] **R2.8.8** The content event and lease writers take no deps and swallow their own errors
@@ -191,12 +192,12 @@ Baseline commit: `5111219`
 ### R2.10
 
 - [x] **R2.10.1** De-fake the landing page — closed at `src/data/mockData.js:51`, `src/data/mockData.js:106`, `src/data/mockData.js:123`, `src/app/page.js:70`, `src/app/page.js:80`, `src/app/scan/page.js:50`, `src/lib/landingHonesty.test.mjs:111`, `src/lib/landingHonesty.test.mjs:291`, `scripts/check-secrets.mjs:320`, `src/lib/engines/deployedEngines.js:75`
-- [~] **R2.10.2** Probe counter backed by a real count query
+- [~] **R2.10.2** Probe counter backed by a real count query — submitted `src/app/page.js:55`, `src/lib/landingProbeCounter.test.mjs:222`, `src/lib/landingProbeCounter.test.mjs:251`, `src/lib/landingProbeCounter.test.mjs:300`, `src/lib/landingProbeCounter.test.mjs:145`
 - [ ] **R2.10.4** ENGINE_REGISTRY says aio is always configured
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 
-## R3 — Durable backend  `15/37`
+## R3 — Durable backend  `16/37`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -250,7 +251,7 @@ Baseline commit: `5111219`
 - [x] **R3.7.5** Seven IPv6 ranges classifyAddress still allows — closed at `src/lib/ssrfGuard.js:335`, `src/lib/ssrfGuard.js:358`, `src/lib/ssrfGuard.js:385`, `src/lib/ssrfGuard.js:412`, `src/lib/ssrfGuard.test.mjs:108`, `src/lib/ssrfGuard.test.mjs:201`, `src/lib/ssrfGuard.test.mjs:270`
 - [x] **R3.7.6** promptGen leaks an uncleared 10-second timer per seed term — closed at `src/lib/scoring/promptGen.js:346`, `src/lib/scoring/promptGen.js:318`, `src/lib/scoring/promptGen.js:342`, `src/lib/scoring/promptGen.js:355`, `src/lib/scoring/promptGen.js:25`, `src/lib/scoring/promptGenSeedTimer.test.mjs:195`, `src/lib/scoring/promptGenSeedTimer.test.mjs:108`, `src/lib/scoring/promptGenSeedTimer.test.mjs:137`
 - [x] **R3.7.7** The crawlability UI shows a refused rival as unreachable — closed at `src/components/dashboard/CrawlabilityView.jsx:641`, `src/components/dashboard/CrawlabilityView.jsx:593`, `src/components/dashboard/CrawlabilityView.jsx:546`, `src/lib/crawlabilityOutcome.js:86`, `src/lib/crawlabilityOutcome.js:146`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:202`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:292`
-- [~] **R3.7.8** The primary-domain crawlability banner conflates a customer typo with a network problem — submitted `src/lib/crawlabilityOutcome.js:181`, `src/components/dashboard/CrawlabilityView.jsx:310`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:502`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:616`
+- [x] **R3.7.8** The primary-domain crawlability banner conflates a customer typo with a network problem — closed at `src/lib/crawlabilityOutcome.js:181`, `src/components/dashboard/CrawlabilityView.jsx:310`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:502`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:616`
 
 ## R4 — Ground truth & analytics completion  `0/7`
 
@@ -266,7 +267,7 @@ Baseline commit: `5111219`
 ### R4.3
 
 - [ ] **R4.3.1** crawlability_audits history and change detection
-- [ ] **R4.3.2** computeBrandRollups still yields a real 100% for a self-only roster
+- [~] **R4.3.2** computeBrandRollups still yields a real 100% for a self-only roster
 ### R4.4
 
 - [ ] **R4.4.1** AI-referral capture `needs-secrets`
@@ -281,7 +282,7 @@ Baseline commit: `5111219`
 ### R5.1
 
 - [x] **R5.1.1** Provider-neutral LLM config — closed at `src/lib/llmConfig.js:53`, `src/lib/llmConfig.js:99`, `src/lib/openrouter.js:20`, `src/lib/openrouter.js:48`, `src/lib/health.js:25`, `scripts/check-secrets.mjs:95`, `src/lib/scoring/promptGen.js:275`, `.env.example:11`, `docs/vendors/mimo.md:40`, `src/lib/openrouter.test.mjs:191`
-- [ ] **R5.1.2** Key re-enable checklist `needs-llm` `needs-secrets`
+- [-] **R5.1.2** Key re-enable checklist `needs-llm` `needs-secrets` — blocked: needs-llm
 - [-] **R5.1.3** The LLM gateway is MiMo while every var is named OPENROUTER_* `needs-llm` — blocked: needs-llm
 ### R5.2
 
@@ -299,7 +300,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `14/39`
+## R6 — Apparatus & guards  `14/40`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -311,9 +312,9 @@ Baseline commit: `5111219`
 - [x] **R6.1.4** Agents grep secrets into transcripts; the exclusion must be in the brief, not the discipline — closed at `.claude/agents/rebuild-verifier.md:25`, `.claude/agents/rebuild-surveyor.md:35`, `.claude/agents/rebuild-scribe.md:40`, `.claude/agents/rebuild-test-author.md:45`, `.claude/agents/rebuild-implementer.md:50`, `.claude/agents/rebuild-controller.md:100`, `src/lib/agentSecretsGuard.test.mjs:62`, `src/lib/agentSecretsGuard.test.mjs:87`, `src/lib/agentSecretsGuard.test.mjs:115`
 - [x] **R6.1.5** The checksum drift warning asserts a schema mismatch that may not exist — closed at `scripts/setup-supabase.mjs:48`, `scripts/setup-supabase.mjs:166`, `scripts/setup-supabase.mjs:296`, `scripts/setup-supabase.mjs:335`, `scripts/setup-supabase.mjs:353`, `scripts/setup-supabase.mjs:448`, `scripts/setup-supabase.mjs:497`, `src/lib/migrationsRunner.test.mjs:480`, `src/lib/migrationsRunner.test.mjs:614`
 - [x] **R6.1.6** The migrations ordering guard measures from the first anchor, not the last — closed at `src/lib/migrationsRunner.test.mjs:318`, `src/lib/migrationsRunner.test.mjs:323`, `src/lib/migrationsRunner.test.mjs:347`, `src/lib/migrationsRunner.test.mjs:395`
-- [ ] **R6.1.7** The ordering guard trusts the runner self-report as the stage marker
+- [~] **R6.1.7** The ordering guard trusts the runner self-report as the stage marker
 - [ ] **R6.1.8** orchestrate.mjs silently swallows a long submit note
-- [ ] **R6.1.9** The secrets rule binds six rebuild agents; every other agent this project spawns is uncovered `needs-decision`
+- [-] **R6.1.9** The secrets rule binds six rebuild agents; every other agent this project spawns is uncovered `needs-decision` — blocked: needs-decision
 - [ ] **R6.1.10** The ledger validates a citation by checking the file exists, never the line
 - [ ] **R6.1.11** submit silently keeps only the last of repeated --evidence flags
 ### R6.2
@@ -326,6 +327,7 @@ Baseline commit: `5111219`
 - [x] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current — closed at `src/lib/workers/scanWorker.js:1506`
 - [~] **R6.3.3** Two dated handoff and journal docs cite line numbers that resolve to unrelated code — submitted `docs/HANDOFF-2026-08-30.md:9`, `docs/HANDOFF-2026-08-30.md:278`, `docs/HANDOFF-2026-08-30.md:294`, `docs/BUILD_JOURNAL.md:72`, `docs/BUILD_JOURNAL.md:150`, `docs/BUILD_JOURNAL.md:228`, `docs/BUILD_JOURNAL.md:255`, `docs/BUILD_JOURNAL.md:461`, `src/lib/db.js:126`, `src/lib/workers/scanWorker.js:1284`
 - [ ] **R6.3.4** Stale cross-references to a cascade that no longer exists, and a contracts doc that claims to be alone
+- [ ] **R6.3.5** PRODUCT.md flags a simulated probe counter that no longer exists
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker

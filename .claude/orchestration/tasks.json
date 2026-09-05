@@ -1129,14 +1129,19 @@
       "tags": [
         "needs-vercel"
       ],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-05T01:49:15.848Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T07:03:19.634Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -1978,11 +1983,18 @@
         "docs/decisions/"
       ],
       "phase": "R1",
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-09-05T07:02:42.241Z",
+          "by": "controller",
+          "text": "blocked (needs-secrets): Blocked on the operator, not on effort. The accept demands a dated ADR recording MEASURED block rate and cost per probe from IN egress for each of Bright Data Scraping Browser, self-hosted Playwright plus residential proxies, and Browserless. Those are measurements, not judgements: they need live Bright Data credentials, a funded account, an Indian egress path and a two-day spike. Writing an ADR that reasons about the three options without the numbers would be exactly the vibes-based decision the task text forbids in its own words, and would then be cited by R1.3 as settled. Unblock when the operator provides Bright Data credentials with balance and confirms an IN egress route. Also depends on R1.1.3 being settled first, since the worker host determines where the spike runs."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-secrets"
     },
     {
       "id": "R1.1.3",
@@ -2770,11 +2782,18 @@
         "supabase/"
       ],
       "phase": "R1",
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-09-05T07:02:42.640Z",
+          "by": "controller",
+          "text": "blocked (needs-secrets): Blocked on the operator. The accept is that the probe-evidence storage bucket EXISTS with a retention policy - that is a live Supabase provisioning action against project nggyizuwqepxaqnpcqqj, requiring the service-role key and a decision on storage spend. The size budget can be written down without credentials, but the accept is a conjunction and the bucket half cannot be honestly claimed from here. Provisioning it and calling the task done because a doc says 90 days would be the exact false success this rebuild exists to kill. Unblock when the operator creates the bucket or grants provisioning access."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-secrets"
     },
     {
       "id": "R1.5.2",
@@ -4050,14 +4069,19 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-05T01:51:53.583Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T07:03:16.382Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -6716,7 +6740,7 @@
         "docs/"
       ],
       "phase": "R5",
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
       "notes": [
@@ -6724,9 +6748,15 @@
           "at": "2026-08-30T08:34:27.622Z",
           "by": "controller",
           "text": "amended: Input from R5.1.3 (2026-08-30): the gateway is now OpenRouter and the model is z-ai/glm-5.2:free. This sharpens the open question about the middle gate. OpenRouter's public catalogue reports this id at prompt 0 and completion 0 — a price the vendor STATES, not a price we failed to look up. So the gate's real requirement is not 'cost must be non-zero' but 'the price must be known', and a free-tier branch can pass honestly by asserting the id resolves in the catalogue with an explicit zero, while an id ABSENT from the catalogue still fails loud. That keeps standing rule 5 intact — an unpriced model id fails loud, never $0 — without needing a paid call purely to prove the meter works."
+        },
+        {
+          "at": "2026-09-05T07:02:43.083Z",
+          "by": "controller",
+          "text": "blocked (needs-llm): Blocked on the operator. Three gates, and the middle one cannot be run from here: check:secrets passes, then ONE METERED CALL proves cost lands non-zero in the price table, then SOV surfaces exit 'not assessed'. Gate two needs a funded OpenRouter key, which is R5.1.3's blocker. R5.1.3's own input sharpens gate two rather than removing it: the gateway is now OpenRouter on z-ai/glm-5.2:free, and OpenRouter's public catalogue reports that id at prompt 0 and completion 0 - a price the vendor STATES rather than one we failed to look up. So the honest requirement is 'the price must be KNOWN', not 'must be non-zero': a free-tier branch passes by asserting the id resolves in the catalogue with an explicit zero, while an id ABSENT from the catalogue still fails loud. That refinement should be written into the checklist when it is unblocked. Nothing else in R5 starts before this. Unblock with an OpenRouter key."
         }
       ],
-      "verification": null
+      "verification": null,
+      "blocked_reason": "needs-llm"
     },
     {
       "id": "R5.1.3",
@@ -7402,7 +7432,7 @@
       "tags": [
         "needs-decision"
       ],
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
       "notes": [
@@ -7410,9 +7440,15 @@
           "at": "2026-09-05T02:16:22.338Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T07:02:43.426Z",
+          "by": "controller",
+          "text": "blocked (needs-decision): Blocked on the operator, deliberately, because the controller must not make this call unilaterally. The accept offers two implementations and both are problematic from here. Option A moves the secrets rule into CLAUDE.md and reduces the six rebuild-*.md copies to a pointer - CLAUDE.md is the user's own project-instruction file, and no agent instruction is consent to rewrite the user's configuration. Option B copies the rule into roughly forty .claude/skills/impeccable/** files plus .claude/settings.json and widens the guard, which the finding itself argues is the wrong remedy because it multiplies the thing that must stay in sync. The finding is real and unarguable: the two live credential leaks this session came from agents running unscoped recursive greps, and nothing about that failure mode is specific to the rebuild-* family - every non-rebuild agent this project spawns is still uncovered. Recommended for the operator: option A, because CLAUDE.md is auto-loaded and therefore actually satisfies the accept clause that a fresh agent can quote the rule back without being told it, which a pointer in a file nobody opens cannot. Unblock with the operator's approval to edit CLAUDE.md."
         }
       ],
-      "verification": null
+      "verification": null,
+      "blocked_reason": "needs-decision"
     },
     {
       "id": "R6.1.10",
