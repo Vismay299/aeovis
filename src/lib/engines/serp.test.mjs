@@ -1,5 +1,8 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { probeGoogleAiOverview, extractTextFromBlocks, fetchPeopleAlsoAsk, fetchAutocomplete } from './serp.js';
 
 /**
@@ -21,10 +24,11 @@ const SERP_ENV = [
 
 /**
  * Captured at module load, before any test touches the environment: exactly what
- * this process inherited. The end-state guard at the bottom of this file asserts
- * every var is back to this on the way out. Without it, "restores them" has no
- * teeth: a file that leaves a sentinel standing where a real credential was has
- * restored nothing, and every later test in the run measures the sentinel.
+ * this process inherited. The file-scoped after() hook below asserts every var
+ * is back to this on the way out — after every test in the file, wherever the
+ * hook itself sits (R6.5.5). Without it, "restores them" has no teeth: a file
+ * that leaves a sentinel standing where a real credential was has restored
+ * nothing, and every later test in the run measures the sentinel.
  */
 const PROCESS_START_ENV = Object.fromEntries(SERP_ENV.map((k) => [k, process.env[k]]));
 
@@ -243,27 +247,92 @@ test('fetchAutocomplete - mock suggestions', async () => {
   globalThis.fetch = originalFetch;
 });
 
-test("GUARD — every provider var is restored to what the process started with", (t) => {
-  // Registered last, so it runs last: node:test runs top-level tests in
-  // registration order, and a test's t.after hooks have all run before the next
-  // test starts. This is the only thing that measures the END state of the file.
-  //
-  // It was written because the guard above used to register its restore BEFORE
-  // calling useSerpEnv, and t.after hooks run in registration order too — so
-  // useSerpEnv's hook ran last and put the sentinel "bd-ambient" back over the
-  // real ambient key, leaving a fabricated credential standing for the rest of
-  // the run. Do not reorder the two calls in that test without re-reading this.
-  t.diagnostic(
-    `ambient at start — ` +
-      SERP_ENV.map((k) => `${k}: ${describeEnv(PROCESS_START_ENV[k])}`).join(", ")
-  );
+/**
+ * GUARD — every provider var is restored to what the process started with.
+ *
+ * This is a FILE-SCOPED after() hook, not a top-level test(), and that is the
+ * whole point. node:test runs a file-scoped after hook once, after EVERY test
+ * in the file has finished, no matter where in the file the hook is registered.
+ *
+ * R6.5.5 — the first version of this was a top-level test() sitting last in the
+ * file. It worked, and it could not lie, but it could stop looking: appending a
+ * test BELOW it left the file green (measured: 8 pass / 0 fail) while
+ * SERPAPI_KEY leaked out of the file to every suite that ran after it. A guard
+ * whose coverage depends on staying the last line in the file has an expiry
+ * date that nobody can see in a diff. As a hook it has no position to lose —
+ * move this block to the top of the file and it still guards the bottom.
+ *
+ * It exists because the ambient-key guard above used to register its restore
+ * BEFORE calling useSerpEnv, and t.after hooks run in registration order — so
+ * useSerpEnv's hook ran last and put the sentinel "bd-ambient" back over the
+ * real ambient key, leaving a fabricated credential standing for the rest of
+ * the run. Do not reorder the two calls in that test without re-reading this.
+ *
+ * A throwing after hook is reported by node:test as a file-level failure with a
+ * nonzero exit code, so this cannot be a silent diagnostic.
+ */
+after(() => {
+  const started = SERP_ENV.map((k) => `${k}: ${describeEnv(PROCESS_START_ENV[k])}`).join(", ");
   for (const k of SERP_ENV) {
     const before = PROCESS_START_ENV[k];
-    const after = process.env[k];
+    const ended = process.env[k];
     assert.ok(
-      after === before,
-      `${k} was not restored: started ${describeEnv(before)}, ended ${describeEnv(after)}` +
-        (describeEnv(before) === describeEnv(after) ? " holding a different value" : "")
+      ended === before,
+      `${k} was not restored: started ${describeEnv(before)}, ended ${describeEnv(ended)}` +
+        (describeEnv(before) === describeEnv(ended) ? " holding a different value" : "") +
+        `\n  ambient at process start — ${started}` +
+        `\n  every test in this file must restore the provider vars it sets;` +
+        ` useSerpEnv(t, {...}) does that for you.`
     );
   }
+});
+
+/**
+ * GUARD — the end-state check above stays position-independent.
+ *
+ * Reading a test file's own source is unusual, so: the failure this pins is a
+ * refactor that turns the after() hook back into a top-level test(). That form
+ * passes every existing assertion, looks tidier in the reporter output, and
+ * silently reintroduces R6.5.5 — coverage that decays the next time someone
+ * appends a test. Nothing at runtime can notice that, because the positional
+ * guard still tells the truth about everything it looks at; it just stops
+ * looking. Only the source can tell you.
+ *
+ * ALLOWLIST — files that mutate process.env for engine credentials and must
+ * therefore own a file-scoped end-state hook. Both are engine suites that scrub
+ * and reset provider vars in a shared process (types.test.mjs says so in its own
+ * header: serp.test.mjs sets SERPAPI_KEY in this same process). Adding a third
+ * such suite? Add it here. Removing one? Only because it stopped touching
+ * process.env — not because this guard was inconvenient.
+ */
+const END_STATE_HOOK_FILES = [
+  "src/lib/engines/serp.test.mjs",
+  "src/lib/engines/types.test.mjs",
+];
+
+test("GUARD — env end-state checks are file-scoped hooks, not positional tests", async () => {
+  const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+  const offenders = [];
+  for (const rel of END_STATE_HOOK_FILES) {
+    const src = await readFile(path.join(repo, rel), "utf8");
+    // `after` must be imported from node:test — the bare identifier could
+    // otherwise be a local helper that never runs.
+    const importsAfter = /import\s+[^;]*\bafter\b[^;]*from\s+["']node:test["']/.test(src);
+    // ...and invoked at top level (column 0), not nested inside a test body,
+    // where it would degrade back into a per-test hook.
+    const registersHook = /^after\(/m.test(src);
+    if (!importsAfter || !registersHook) {
+      offenders.push(
+        `${rel}: ${importsAfter ? "" : "does not import after from node:test; "}` +
+          `${registersHook ? "" : "has no top-level after(...) registration"}`
+      );
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "these suites mutate engine credential vars but have no file-scoped end-state guard, " +
+      "so a test appended below their last assertion is unguarded:\n  " +
+      offenders.join("\n  ")
+  );
 });

@@ -1081,14 +1081,27 @@
       ],
       "phase": "R0",
       "tags": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "rebuild-test-author",
+      "evidence": [
+        "src/lib/operatorPerimeter.middleware.test.mjs:131",
+        "src/lib/operatorPerimeter.test.mjs:454"
+      ],
       "notes": [
         {
           "at": "2026-09-03T12:04:13.628Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T03:04:18.259Z",
+          "by": "rebuild-test-author",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:40:44.105Z",
+          "by": "rebuild-test-author",
+          "text": "Behavioural once-ness test (operatorPerimeter.middleware.test.mjs, kept from the interrupted author: real middleware via the unmodified cronAuth.route.hooks.mjs + real next/server, 11 dev-open requests, exactly 1 warning, plus tail-silence and a public-route control). Removed the two source-guard assertions the finding names: the module-scope regex (/^const (\\w+) = { value: false };/m) and the 'warned: <name>' call-site substring. Renamed the guard to 'GUARD — middleware.js still calls the dev-open disclosure at all'; it now keeps only the warnDevPerimeterOpen( existence check (which no behavioural test can cover, since a deleted call warns zero times) and the cronAuth alignment check, with a comment recording both evasions and the false positive. Proved with sabotage of src/middleware.js, restored byte-identical (md5 31728cb5b7bcefe2ac7fe9615dfd5928, git diff empty): A shadowing const inside middleware() -> FAIL (2 tests); B warnedDevOpen.value = false above the call -> FAIL (2 tests); C rename to warned + ES2015 shorthand -> PASS 29/29. Also D: deleting the call -> FAIL, so the retained source assertion has teeth. Pre-fix, C failed the old guard while A and B left it green, reproducing the finding exactly. Pair suite 29/29. Full test:scoring is unstable from concurrent sibling edits (brightdataZone.js, db.js, CrawlabilityView, insertScan cascades all mid-flight); no failure is in my files."
         }
       ],
       "verification": null
@@ -1143,14 +1156,19 @@
       "tags": [
         "needs-decision"
       ],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-05T02:14:44.057Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T06:38:50.079Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -1966,10 +1984,16 @@
         "docs/contracts/"
       ],
       "phase": "R1",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-scribe",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-05T06:39:07.408Z",
+          "by": "rebuild-scribe",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -2399,21 +2423,37 @@
       "anchors": [
         "src/lib/engines/brightdata.js:445",
         "src/lib/engines/brightdata.js:291",
-        "src/lib/engines/brightdataZone.test.mjs"
+        "src/lib/engines/brightdataZone.test.mjs",
+        "src/lib/engines/brightdataZone.test.mjs:412",
+        "src/lib/engines/brightdataZone.test.mjs:538",
+        "src/lib/engines/brightdataZone.test.mjs:577",
+        "src/lib/engines/brightdata.js:299"
       ],
       "findings": [
         "C4"
       ],
       "phase": "R1",
       "tags": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "rebuild-test-author",
+      "evidence": [
+        "src/lib/engines/brightdata.js:299"
+      ],
       "notes": [
         {
           "at": "2026-09-03T12:04:14.162Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T06:36:05.836Z",
+          "by": "rebuild-test-author",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:42:03.914Z",
+          "by": "rebuild-test-author",
+          "text": "Finding reproduces. Five tests appended to brightdataZone.test.mjs (:412 error-envelope form, :472 status:error/message form, :504 probe-row end to end, :538 snake_case states, :577 recorded rate-limit asymmetry). TEETH CONFIRMED BOTH WAYS: commenting out the 200-envelope branch (brightdata.js:443-445) fails 4 of the 5 new tests while all 10 pre-existing tests stay green -- reproducing the exact gap filed; restored and all 15 pass. MINIMAL SOURCE FIX (brightdata.js:299, +11/-2, regex only): the snake_case test proved a real defect -- zone_suspended/zone_disabled/zone_expired/zone_deleted/suspended_zone/zone_not_active all fell through to a plain Error, so the cache survived a dead zone for a full TTL. Two patterns changed \\b -> (?:\\b|_) and \\s+ -> [\\s_-]+, plus not[ _-]?active; 8 negative cases still do not match. Rate-limit precedence asymmetry left as-is and DOCUMENTED with its reason and its cost in both directions at :577 (accept's second option) -- changing it alters live retry semantics, a source decision. Full suite: 1733 tests, 1707 pass, 0 fail, 26 skipped."
         }
       ],
       "verification": null
@@ -2906,10 +2946,29 @@
         "src/lib/scoring/enginePipeline.js:298-308"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/scoring/enginePipeline.js:349",
+        "src/lib/scoring/enginePipeline.js:364",
+        "src/lib/scoring/enginePipeline.js:425",
+        "src/lib/scoring/enginePipeline.js:667",
+        "src/lib/scoring/enginePipeline.js:713",
+        "src/lib/scoring/enginePipeline.js:825",
+        "src/lib/scoring/engineMeasurementState.test.mjs:124"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-05T06:35:12.928Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:44:00.522Z",
+          "by": "rebuild-implementer",
+          "text": "Anchor was stale: the finding lives at enginePipeline.js:660-672 (return block), not 298-308, but it REPRODUCES exactly as described — share_of_ai_pct was visibilityPct, which is 0 by construction on an empty eliciting pool, so never-ran / errored / no-vendor-named / genuinely-absent all rendered 0. Added frozen ENGINE_MEASUREMENT_STATE (measured|measured_zero|not_assessed|failed) + ENGINE_STATE_REASONS; reused the exact tokens SHARE_STATE already uses rather than inventing a parallel vocabulary. summarizeEngineSlice now emits state + state_reason and reports share_of_ai_pct/visibility_pct as null in the two non-measured states, 0 only for a real measured_zero. Guarded both places the null could be laundered back into a 0: computeHeadline (null*weight === 0) and describeScanDataSourceIssue's counted filter, which the docstring promises reproduces the headline's eligibility test. No 'no_answers' reason: coverage 0 is below every gate so that case is already failed/low_coverage; a test asserts it. Exercised the accept criterion: 30 answered prompts naming no vendor -> state not_assessed, state_reason empty_eliciting_pool, share_of_ai_pct strictly null (engineMeasurementState.test.mjs:124); all four states covered, 15 tests. npm run test:scoring: 1755 tests / 1729 pass / 0 fail / 26 skipped (baseline 1694/1668/0/26; +15 mine, rest from other agents in-tree). Did NOT touch scanWorker/db/components. Follow-ups in report."
+        }
+      ],
       "verification": null
     },
     {
@@ -3046,10 +3105,28 @@
         "src/lib/engines/perplexity.js:147-160"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/engines/perplexity.js:32",
+        "src/lib/engines/perplexity.js:61",
+        "src/lib/engines/perplexity.js:232",
+        "src/lib/engines/perplexity.test.mjs:81",
+        "src/lib/engines/perplexity.test.mjs:121",
+        "src/lib/engines/perplexity.test.mjs:162"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-05T06:36:57.218Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:40:41.574Z",
+          "by": "rebuild-implementer",
+          "text": "Finding B2 reproduces at head (anchor moved: the branch is probePerplexity's tail, old lines 145-181). probePerplexity now returns a frozen citations_state/citations_state_reason/citations_state_detail triple on EVERY return path: VERIFIED when the /search leg answered (including a genuine empty result set), UNVERIFIED+search_leg_failed when it did not, UNVERIFIED+perplexity_not_configured when no key. error still carries only the ANSWER leg's failure, so an answer-ok/search-failed row survives and is scored for mentions while its citation list is explicitly not a zero. Exported hasUnverifiedCitations(row) is the denominator filter — a positive test for the unverified state, no default on absent fields, so single-leg engines (aio/chatgpt) are never silently dropped. Also corrected a log line that claimed 'Both answer and search failed' whenever the answer leg died, even when /search had returned citations. Exercised: node --test src/lib/engines/perplexity.test.mjs -> 12/12 pass, including an A/B test asserting measured-zero and unverifiable-zero are different values. NOT DONE, needs its own task: probeTextEngine in src/lib/scoring/enginePipeline.js:186-215 builds a fixed result object and drops unknown fields, so citations_state does not yet reach the row or the citedNonBranded denominator at enginePipeline.js:379 — that file is owned by R2.1.1 this round and I did not touch it. npm run test:scoring: 1709 tests, 5 fail, all in collectionWindowPersist.test.mjs:185 and insertScanWriteFailure.test.mjs:124, both against another agent's in-flight src/lib/db.js edit; perplexity and enginePipeline suites are green."
+        }
+      ],
       "verification": null
     },
     {
@@ -3123,10 +3200,29 @@
         "src/lib/db.js:122-167"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/db.js:264",
+        "src/lib/db.js:300",
+        "src/lib/db.js:320",
+        "src/lib/insertScanCascade3.test.mjs:624",
+        "src/lib/insertScanCascade3.test.mjs:721",
+        "src/lib/insertScanWriteFailure.test.mjs:155",
+        "src/lib/collectionWindowPersist.test.mjs:185"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-05T06:35:00.168Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:42:56.673Z",
+          "by": "rebuild-implementer",
+          "text": "The 3-tier cascade is deleted. insertScan now performs ONE insert with the full column set (db.js:245-264) and has exactly three outcomes: the row is returned, the write is refused (throws, PostgREST envelope preserved on cause), or the write cannot be confirmed (db_write_unconfirmed, unchanged from R2.8.7). A schema mismatch (PGRST204/42703, db.js:320) throws db_schema_mismatch with a message naming the missing column and stating NOTHING was stored; no column is ever dropped. The cascade was compensating for drift that no longer exists: all five columns are in 001_initial_schema.sql:20-24, asserted by a test that reads the migration. Exercised locally: 4 new tests in insertScanCascade3.test.mjs (mismatch throws + nothing written + one attempt; the five columns are actually named on the wire; migration 001 declares them; finalize over a mismatched DB fails loudly, stamps nothing, leaves result_id null). Existing cascade-shaped tests updated to the new contract in the same three files (attempt counts 3 -> 1; the R2.8.7 success/unconfirmed cases moved onto the modern schema, which is where the single insert now runs). npm run test:scoring: 1754 tests, 1728 pass, 0 fail, 26 skipped, exit 0 (baseline 1694/1668/0/26; the growth is other agents' tests plus mine). Side effect for the controller: removing the cascade also removes R2.8.9's duplicate-write hazard structurally - there is no next cascade to fall through to, and confirmScanWritten now guards the only insert, so an unconfirmable write aborts instead of inserting a second row. R2.8.9 should be re-scoped or closed rather than dispatched."
+        }
+      ],
       "verification": null
     },
     {
@@ -3847,7 +3943,7 @@
       "lane": "frontend",
       "phase": "R2",
       "title": "ScoreBand hardcodes a percent sign, so no engine chip can carry a non-numeric state",
-      "detail": "Found by the R3.2.5 implementer while wiring the engine-set-change banner, and left unfixed because the file was outside its ownership. src/components/dashboard/ScoreBand.jsx:35 renders each engine chip as label plus value plus an UNCONDITIONAL percent sign. That means a chip can only ever carry a number: an engine that was frozen into the scan but never probed would render as 'Perplexity (not probed) —%', so it cannot be shown at all. The consequence is that the score band's chip row - the headline surface, the thing a user actually reads - lists only the engines that produced slices, with no marker that the set was smaller than the scan promised. R3.2.5 works around it by naming the dropped and substituted engines as chips INSIDE its banner, which is honest but puts the correction in prose below the number rather than on the number itself. This is the same shape as the share-of-voice fix: a component whose rendering shape can only express a measurement will always render an absence as a measurement or drop it silently.",
+      "detail": "Found by the R3.2.5 implementer while wiring the engine-set-change banner, and left unfixed because the file was outside its ownership. src/components/dashboard/ScoreBand.jsx:35 renders each engine chip as label plus value plus an UNCONDITIONAL percent sign. That means a chip can only ever carry a number: an engine that was frozen into the scan but never probed would render as 'Perplexity (not probed) —%', so it cannot be shown at all. The consequence is that the score band's chip row - the headline surface, the thing a user actually reads - lists only the engines that produced slices, with no marker that the set was smaller than the scan promised. R3.2.5 works around it by naming the dropped and substituted engines as chips INSIDE its banner, which is honest but puts the correction in prose below the number rather than on the number itself. This is the same shape as the share-of-voice fix: a component whose rendering shape can only express a measurement will always render an absence as a measurement or drop it silently. Note correction: one word was eaten by shell backtick expansion in the submit note above. The sentence should read \"the % now exists in exactly one place, behind the measured flag.\" No other text was affected.",
       "accept": "An engine chip can carry a non-numeric state, so an engine that was frozen but never probed appears in the score band marked as such rather than being omitted. A test renders a scan whose engine set shrank and fails if the chip row is indistinguishable from a scan where every frozen engine answered.",
       "deps": [
         "R3.2.5"
@@ -3858,14 +3954,36 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/components/dashboard/ScoreBand.jsx:42",
+        "src/components/dashboard/ScoreBand.jsx:104",
+        "src/components/dashboard/DashboardShell.jsx:441",
+        "src/components/dashboard/DashboardShell.jsx:465",
+        "src/components/dashboard/DashboardShell.jsx:482",
+        "src/components/dashboard/scoreBandEngineChips.test.mjs:430"
+      ],
       "notes": [
         {
           "at": "2026-09-05T02:31:41.923Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T06:35:32.240Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:42:57.785Z",
+          "by": "rebuild-implementer",
+          "text": "Finding reproduces exactly. Pre-fix behaviour proven by rendering the old code path in a scratch harness (since deleted): a shrank scan's chip row read 'AI Overview 50%' with Perplexity absent entirely, and a slice with share_of_ai_pct:null rendered 'Perplexity —%'. Fix: ScoreBand.jsx:42 adds a pure exported describeEngineChip(chip) that decides format from the VALUE alone — a finite number gets the percent sign, anything else becomes an em dash plus a state chip; the '%' now exists in exactly one place, behind . ScoreBand.jsx:104 renders it with chip--warn, data-engine-measured and data-engine-chip-state so an unmeasured chip is machine-distinguishable. state/stateReason are OPTIONAL and unrecognised values are printed verbatim, so this is correct before and after R2.1.1 lands (enginePipeline.js not touched). DashboardShell.jsx:441/465/482 build the row from measured slices PLUS engine_set_change.dropped_engines, passing value:null (not '—') so the component decides what an absence looks like; the row is now shown whenever an engine went missing, not only when isMultiEngine. Tested: src/components/dashboard/scoreBandEngineChips.test.mjs, 10 tests. It renders the REAL DashboardShell with the REAL ScoreBand (sucrase + react-dom/server, same pattern as engineSetChangeSurface.test.mjs, which stubs ScoreBand out) and the ACCEPT test asserts the shrank row is notDeepEqual to the both-answered row, then that Perplexity is present and marked 'not probed'. npm run test:scoring: 1754 tests, 1728 pass, 0 fail, 26 skipped (baseline 1694/1668/0/26; the delta is other agents' concurrent files). Cannot prove: no browser/CSS, so this shows the words and attributes reach the DOM, not that chip--warn is legible or the row wraps (R6.4.11). One transient full-suite failure in src/lib/collectionWindowPersist.test.mjs was another agent mid-edit on db.js; it passes alone and the suite is green on re-run."
+        },
+        {
+          "at": "2026-09-05T06:43:12.110Z",
+          "by": "controller",
+          "text": "amended: Note correction: one word was eaten by shell backtick expansion in the submit note above. The sentence should read \"the % now exists in exactly one place, behind the measured flag.\" No other text was affected."
         }
       ],
       "verification": null
@@ -4376,10 +4494,16 @@
         "src/app/page.js"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-05T06:37:38.822Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -5122,14 +5246,19 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-05T03:01:22.483Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T06:35:55.994Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -5276,10 +5405,28 @@
         "src/lib/workers/scanWorker.js"
       ],
       "phase": "R3",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/workers/scanWorker.js:1245",
+        "src/lib/workers/scanWorker.js:530",
+        "src/lib/workers/scanWorker.js:1146",
+        "src/lib/workers/scanSchedule.test.mjs:74",
+        "src/lib/workers/scanSchedule.test.mjs:154",
+        "src/lib/workers/scanSchedule.test.mjs:223"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-05T03:03:41.404Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:42:01.991Z",
+          "by": "rebuild-implementer",
+          "text": "Finished the interrupted run. (a) The dead binding is gone: scanWorker.js:1245 now writes ensureScanScheduleRow's outcome to tally.scheduleRow, createChunkTally seeds it null (:188 = NOT MEASURED, i.e. this chunk never sourced), and chunkRunOutcome puts it on the chunk's single scan_runs row as detail.schedule_row (:530) so created/existing/failed/never-ran are four distinguishable rows. Deliberately NOT on the checkpoint (sourcing runs once per job; a later chunk could only carry a stale copy) - doc comment at :1084 updated to say so instead of 'checkpoint'. Unrecognised state strings pass through verbatim rather than being nulled. (b) New test src/lib/workers/scanSchedule.test.mjs, 8 tests, all through the REAL runSourcingPhase with injected deps (not the helper in isolation): first scan creates the row on the resolveBrandKey key with enabled explicitly present and false (hasOwnProperty asserted, since the column default is true) and next_run_at explicitly null; an existing row gets zero writes and is JSON-identical before/after; getScanSchedule throwing and upsertScanSchedule throwing each still return a full 11-query checkpoint while landing schedule_ensure_failed on the tally + bumping errorsRecovered + closing 'succeeded' with detail.schedule_row='failed'; plus keyless-brand and never-sourced/unknown-state cases. (c) Key-shape check requested: NO disagreement. scanWorker.js:667 promptKey = resolveBrandKey(brand,url); runSchedulerTick feeds schedule.brand back in as  so resolveBrandKey re-derives it; /api/brands/[brand]/schedule uses the path param verbatim as an already-resolved key; migration 005:85 says the same. No migration needed - display_name/enabled/next_run_at/last_run_at all exist on scan_schedules. (d) Full suite run: 1727 tests, 2 fail, both in src/lib/insertScanWriteFailure.test.mjs and src/lib/collectionWindowPersist.test.mjs (insertScan cascade work by a concurrent agent, not mine). Every worker test file re-run individually: scanChunk 45/45, scanChunkLedger 67/67, promptSourcing 11/11, engineSetChange 10/10, scanJobAttempts 25/25, twoPassFinalize 5/5, scanWorkerRoute 15/15, db/promptWriteFailure 10/10, scanSchedule 8/8 - all pass. (e) Be suspicious of: no test drives runScanChunk end-to-end to prove detail.schedule_row reaches a real scan_runs row - I verified the wiring by reading (one tally created at :2263, passed to runSourcingPhase at :2416, read by chunkRunOutcome at :2298) and covered both ends separately, matching how R3.2.2's skips are already tested. Also worth a look: the created row takes the DB column default for cadence, which is '72h' in Postgres but undefined in the no-client memory path (dev/test only)."
+        }
+      ],
       "verification": null
     },
     {
@@ -5964,14 +6111,29 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/crawlabilityOutcome.js:181",
+        "src/components/dashboard/CrawlabilityView.jsx:310",
+        "src/components/dashboard/crawlabilityRivalOutcome.test.mjs:502",
+        "src/components/dashboard/crawlabilityRivalOutcome.test.mjs:616"
+      ],
       "notes": [
         {
           "at": "2026-09-05T01:49:14.953Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T06:35:40.576Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:42:24.825Z",
+          "by": "rebuild-implementer",
+          "text": "Finding reproduces (banner had moved to CrawlabilityView.jsx:297-306, not :279). Added describePrimaryCrawlOutcome() + UNVERIFIED_NOTE to src/lib/crawlabilityOutcome.js:140,181 — a second derivation rather than reusing describeRivalCrawlOutcome because the primary 200 body carries no 'blocked' field (a refused brand domain is a 400 at route.js:131-133) and the audience/consequence differ. Five outcomes with written copy and their own tone: unresolved (crit, actionable 'you', leads with 'check the spelling', never says unreachable/down), http_<status> (warn, 'you'), timeout and network_error (warn, 'us', both say the name resolved so the customer is not sent to proofread a working domain), and unknown_error for a failure the route reported without a reason (says outright that we cannot attribute it, instead of guessing network or typo). A defensive 'refused' branch keeps the copy rules if a blocked primary ever reaches a 200. Every failure detail carries UNVERIFIED_NOTE so the default-open bot table below is still declared an assumption. Component now renders the derivation at CrawlabilityView.jsx:310-330 with data-outcome/data-actionable and an Alert variant derived from tone; the slug-formatting fetch_error.replace(/_/g,' ') and the bare !data.fetched_ok gate are gone. Testid renamed crawlability-unreachable -> crawlability-primary-outcome (it named one state, not the surface); git grep shows no consumer outside the component and its test. 6 new tests drive the REAL route for four primary failure shapes and assert kind/label/detail pairwise distinct, plus a source guard; I verified all six guard assertions fail against the old banner text (checked by running the regexes over the pre-change JSX). Also relaxed the R3.7.7 import guard from one exact line to an import-block read because the import gained a third name — teeth unchanged. npm run test:scoring: 1733 tests, 1707 pass, 0 fail, 26 skipped (baseline 1694/1668/0/26; other agents added tests concurrently). eslint clean on both source files. No component-render harness exists in this repo, so React mounting is not exercised — the guard proves the JSX defers to the tested derivation, not that it renders."
         }
       ],
       "verification": null
@@ -6590,10 +6752,16 @@
         "docs/"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-scribe",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-05T06:37:10.491Z",
+          "by": "rebuild-scribe",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -6932,10 +7100,23 @@
         "docs/"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "rebuild-scribe",
+      "evidence": [
+        "docs/OPERATOR_LEDGER.md:378"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-05T06:37:27.514Z",
+          "by": "rebuild-scribe",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:43:20.178Z",
+          "by": "rebuild-scribe",
+          "text": "docs/OPERATOR_LEDGER.md created, 391 lines, house doc-status header (LIVE) + Date/Task/Verified-at 1a5ed81; node --test src/lib/docStatus.test.mjs 10/10 green. Covers the four accept areas: SECRETS (:180 - the vendorRegistry.js:51-67 credential table reproduced with required/optional, plus the three things check:secrets does NOT tell you, chief of which is that OPERATOR_TOKEN is not in that table at all, so a fully green run says nothing about whether the perimeter is armed); MIGRATIONS (:231 - what is catalog-verified applied vs what is NOT, 012's applied state written down as unverified rather than assumed, the catalog-not-head-probe rule, and the R0.1.11 44-stranded-row reconcile as the reusable shape); KEY ROTATION (:47 - the GSC leak as item 1, revoke-then-reissue, with the mitigating zero-property fact stated and explicitly not treated as an excuse; R0.1.12 carries the second rotation, both values pasted into a transcript); CONTENT APPROVAL (:277 - the decision route as the standing human gate, and the two things about it that are not true yet). Not softened, per instruction: :298 states plainly that approve-to-publish-to-lift has never run end to end, sourced to R5.4.3's own detail, and :378 is a Known-open section repeating that plus five other unproven claims. Derived from the repo, not a template: every gated task is listed BY ID with the specific operator action, grouped by tag (needs-secrets/vercel/decision/llm/soak), and the file states no task totals because they go stale - it tells the reader to re-derive with orchestrate.mjs status. Citations verified at HEAD, and two roadmap-supplied ones were found STALE and corrected rather than copied: R0.1.20 cites rateLimit.js:74 but the 'NOT VERIFIED HERE' comment is at :79 (TRUSTED_IP_HEADER at :76), and R0.1.21 cites db.js:508-510 but createScanJob is at :577 with the memoryJobs fallback at :600-602 (:508 is brand aggregation). Verified fresh: vendorRegistry.js:51-67, gsc.js:17 (webmasters.readonly), decision/route.js:19/:26/:93-98 (the synthesized studio.perceev.app URL feeding real lift attribution), calibrationFixture.js:84/:123, setup-supabase.mjs:473/:502/:510, middleware.js:36/:66, vercel.json (both crons daily, no ?batch=1). One live-vs-dead check that changed the doc: src/middleware.js does NOT exist on main (git cat-file), only on this branch 120 commits ahead - so the ledger states the ordering constraint that OPERATOR_TOKEN must be set in Vercel BEFORE PR #1 merges, because it fails closed and the landing page will still look fine. NO INDEX LINE ADDED: there is no docs/README.md; docs/plans/README.md and docs/vendors/README.md are directory-scoped, so house style requires none for a docs/ top-level file (BUILD_JOURNAL.md is likewise unindexed). SECRETS HYGIENE: no credential value read, printed or paraphrased; .env.example only, never .env.local; all searches git grep or path-scoped."
+        }
+      ],
       "verification": null
     },
     {
@@ -7159,14 +7340,19 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-scribe",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-05T02:16:21.197Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T06:36:53.808Z",
+          "by": "rebuild-scribe",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -7698,14 +7884,26 @@
       ],
       "phase": "R6",
       "tags": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "rebuild-test-author",
+      "evidence": [
+        "src/lib/engines/types.test.mjs:167"
+      ],
       "notes": [
         {
           "at": "2026-09-03T02:35:42.094Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T06:36:14.487Z",
+          "by": "rebuild-test-author",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:43:08.324Z",
+          "by": "rebuild-test-author",
+          "text": "Finding reproduced first: appended a leaking test below the positional guard at serp.test.mjs:246 -> file stayed 8 pass / 0 fail while SERPAPI_KEY leaked out. Fix: the end-state check is now a file-scoped after() imported from node:test (serp.test.mjs:273), which runs after EVERY test in the file regardless of where it is registered. With the same sabotage still appended the file went RED: 8 pass / 1 fail, exit 1, reported as a file-level failure 'SERPAPI_KEY was not restored: started unset, ended set (len 22)'. Removed the sabotage -> 7/7 green. Position independence measured separately (scratch file): an after() registered at the very top, before any test(), still runs after both tests. Same treatment applied to types.test.mjs:167 (anchor types.test.mjs:40, the withEnv idiom), which had no end-state guard at all. Added a structural guard at serp.test.mjs:312 with an explicit commented allowlist so the hook cannot be refactored back into positional test() form; proved its teeth by regressing each of the two files in turn to positional form and watching it fail, then reverting. Assertion output names variables and value SHAPE only (describeEnv -> 'set (len N)'), never a value. Suite: 1755 tests / 1729 pass / 0 fail / 26 skipped, exit 0."
         }
       ],
       "verification": null

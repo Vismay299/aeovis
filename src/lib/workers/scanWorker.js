@@ -23,6 +23,7 @@ import {
   getResultBrandsForScan,
   upsertBrandMetricsDaily,
   listDueSchedules,
+  getScanSchedule,
   upsertScanSchedule,
 } from "../db/analytics.js";
 import { generateUnbrandedPrompts } from "../scoring/promptGen.js";
@@ -172,7 +173,20 @@ export function createChunkTally() {
   // `skips` is null for the same reason the counters are: NOT MEASURED. A phase
   // that watches for discarded skips arms it to [], and only then does an empty
   // list mean "it looked and there were none". See armSkips/recordSkip.
-  return { probesAttempted: null, probesSucceeded: null, errorsRecovered: null, phases: [], skips: null };
+  //
+  // `scheduleRow` (R3.4.1) is null for the same reason again, and it is a THIRD
+  // kind of null: only the sourcing phase registers a brand with the scheduler,
+  // so a chunk that resumed straight into probing or finalize never touched
+  // `scan_schedules` and must not claim an outcome for it. Once sourcing runs it
+  // is one of SCHEDULE_ROW_STATES, never a boolean.
+  return {
+    probesAttempted: null,
+    probesSucceeded: null,
+    errorsRecovered: null,
+    phases: [],
+    skips: null,
+    scheduleRow: null,
+  };
 }
 
 /**
@@ -215,6 +229,13 @@ export const CHUNK_SKIP_REASONS = Object.freeze({
    * the `state:state_reason` the sample carries, not by a second reason code.
    */
   WEBSITE_SCRAPE_DEGRADED: "website_scrape_degraded",
+  /**
+   * The brand was scanned but its `scan_schedules` row could not be written
+   * (R3.4.1, finding S14). The scan itself is unaffected; what is lost is the
+   * brand's only registration with the scheduler, so without this reason the
+   * brand goes back to being one that can never become due and nothing says so.
+   */
+  SCHEDULE_ENSURE_FAILED: "schedule_ensure_failed",
 
   // The three below happen INSIDE resolveEnabledEngines, one layer earlier than
   // ENGINE_NOT_REGISTERED and before the checkpoint freeze. Their strings are
@@ -498,6 +519,15 @@ export function chunkRunOutcome(result, tally = {}) {
     // skips_total 0 when a phase looked and found none. Never `?? 0` here: a
     // chunk that never watched for skips must not report zero of them.
     ...summarizeSkips(tally),
+    // R3.4.1 — what happened to this brand's `scan_schedules` row, in the one
+    // place an operator already reads per chunk. 'created' / 'existing' /
+    // 'failed' are three different facts (SCHEDULE_ROW_STATES) and null is a
+    // fourth: this chunk never sourced, so it registered nothing and says so
+    // rather than reporting a state it never reached. An unrecognised string
+    // passes through VERBATIM instead of being nulled — a state this file has
+    // no name for is still a state that happened, and rounding it to "not
+    // measured" is the erasure standing rule 1 exists to stop.
+    schedule_row: typeof tally.scheduleRow === "string" && tally.scheduleRow ? tally.scheduleRow : null,
   };
   const reason = result && result.reason ? String(result.reason) : null;
 
@@ -1052,6 +1082,111 @@ function defaultSelfContinue(jobId) {
 // ---------------------------------------------------------------------------
 
 /**
+ * What `ensureScanScheduleRow` did. Three OUTCOMES, never a boolean: "the row
+ * was already there" and "we wrote it" and "we could not write it" are three
+ * different facts about a brand's registration with the scheduler, and the
+ * chunk's ledger row has to keep them apart (standing rule 1).
+ *
+ * The outcome rides the tally as `scheduleRow` and lands on the chunk's single
+ * `scan_runs` row as `detail.schedule_row` (chunkRunOutcome). NOT on the
+ * checkpoint: the checkpoint is what a RESUMING chunk reads to redo nothing,
+ * and sourcing — the only phase that registers a brand — runs exactly once per
+ * job, so a later chunk has no use for this and would only be able to repeat
+ * it. `detail.schedule_row: null` on a probing-only chunk is therefore honest
+ * ("never sourced"), where a checkpoint field would have to be carried forward
+ * as a stale copy of the first chunk's answer.
+ */
+export const SCHEDULE_ROW_STATES = Object.freeze({
+  /** No row existed; this scan wrote the brand's first one. */
+  CREATED: "created",
+  /** A row was already there and was left EXACTLY as the operator left it. */
+  EXISTING: "existing",
+  /** The read or the write threw. Counted and named on the run, never silent. */
+  FAILED: "failed",
+});
+
+/**
+ * R3.4.1 (finding S14) — THE BRAND THAT COULD NEVER BECOME DUE.
+ *
+ * `POST /api/scan` (src/app/api/scan/route.js) is the only path that creates a
+ * brand's FIRST scan, and it wrote no `scan_schedules` row. `upsertScanSchedule`
+ * was called from exactly two places — `runSchedulerTick` (which only ever sees
+ * schedules `listDueSchedules` already returned, i.e. rows that exist) and the
+ * manual `PUT /api/brands/[brand]/schedule`. So a brand nobody had hand-edited a
+ * schedule for had no row at all, `listDueSchedules` could never return it, and
+ * it could never be rescanned. This is the registration.
+ *
+ * OPT-IN, NOT OPT-OUT. `enabled` is written EXPLICITLY false. The DB column
+ * default is `true` (supabase/migrations/005_analytics_platform.sql:88) but the
+ * PRODUCT default is false — see the GET fallback in
+ * src/app/api/brands/[brand]/schedule/route.js's `defaultSchedule` and the
+ * `applyInsertDefaults` guard in src/lib/brandAnalyticsApi.js, which exists for
+ * this exact reason on the PUT path. Taking the column default here would
+ * auto-enrol every brand that ever ran one free scan into recurring paid
+ * rescans, and — with `next_run_at` NULL reading as immediately due
+ * (`isDueSchedule`) — would fire them on the very next cron tick. Registering a
+ * brand is not the same as consenting to rescan it.
+ *
+ * AN EXISTING ROW IS NEVER TOUCHED. Not `enabled`, not `cadence`, not
+ * `next_run_at`, not even `last_run_at`: that row is operator-owned state, and a
+ * manual scan silently sliding someone's cadence forward is a worse bug than the
+ * one this fixes. Only the scheduler's own run bumps the clock fields
+ * (`runSchedulerTick`, below).
+ *
+ * A FAILURE IS ABSORBED BUT NOT HIDDEN. The scan's own results are already paid
+ * for and still worth finishing, so a schedule write that throws does not kill
+ * the job — but it is counted (`errors_recovered`) AND named
+ * (`SCHEDULE_ENSURE_FAILED`) on the chunk's `scan_runs` row, the same treatment
+ * the prompt-persist failure below gets. A brand that quietly failed to register
+ * is precisely the state S14 describes, so it must never be indistinguishable
+ * from one that registered.
+ *
+ * @param {string} promptKey resolveBrandKey() output — `scan_schedules.brand`
+ *   IS this key, not a display name (see runSchedulerTick's note).
+ * @returns {Promise<string>} one of SCHEDULE_ROW_STATES.
+ */
+export async function ensureScanScheduleRow(promptKey, displayName, deps = {}, tally = {}, nowIso = new Date().toISOString()) {
+  const getSchedule = deps.getScanSchedule || getScanSchedule;
+  const upsertSchedule = deps.upsertScanSchedule || upsertScanSchedule;
+
+  if (!promptKey) {
+    bumpCount(tally, "errorsRecovered");
+    recordSkip(tally, CHUNK_SKIP_REASONS.SCHEDULE_ENSURE_FAILED, "no brand key to register under");
+    console.warn("[scan-chunk] No brand key available — this scan registered no scan_schedules row.");
+    return SCHEDULE_ROW_STATES.FAILED;
+  }
+
+  try {
+    const existing = await getSchedule(promptKey);
+    if (existing) return SCHEDULE_ROW_STATES.EXISTING;
+
+    await upsertSchedule(promptKey, {
+      display_name: displayName || promptKey,
+      // Explicit. See the opt-in note above; this must not fall through to the
+      // column default.
+      enabled: false,
+      // Explicit for the same reason: an unscheduled row must not inherit
+      // anything that reads as "due".
+      next_run_at: null,
+      last_run_at: nowIso,
+    });
+    console.log(
+      `[scan-chunk] Registered scan_schedules row for "${promptKey}" (enabled: false — scheduling is opt-in).`
+    );
+    return SCHEDULE_ROW_STATES.CREATED;
+  } catch (err) {
+    bumpCount(tally, "errorsRecovered");
+    recordSkip(tally, CHUNK_SKIP_REASONS.SCHEDULE_ENSURE_FAILED, `${promptKey}: ${err.message}`);
+    console.warn(
+      `[scan-chunk] Could not register a scan_schedules row for "${promptKey}" (${err.message}) — ` +
+        `the scan continues, but this brand is still invisible to the scheduler. ` +
+        `Recorded on the run as ${CHUNK_SKIP_REASONS.SCHEDULE_ENSURE_FAILED}.`
+    );
+    return SCHEDULE_ROW_STATES.FAILED;
+  }
+}
+
+/**
  * Resolves the prompt set + branded seeds EXACTLY as the pre-P0.2
  * `startScanJob` did (steps 1 & 1b), then freezes everything a later chunk
  * needs into a checkpoint so resumes never regenerate prompts (prompt-set
@@ -1092,6 +1227,22 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     prompt_source: promptSource,
     static_pack_prompts: staticPackPrompts,
   } = await sourceQueries(brand, url, industry, stats, brandAliases, deps);
+
+  // R3.4.1 — register the brand with the scheduler. Here and not in
+  // POST /api/scan because this is the one place per job where the canonical
+  // schedule key already exists: `promptKey` is the resolveBrandKey() output
+  // that IS `scan_schedules.brand` (see runSchedulerTick), and it is resolved
+  // once, on the first chunk, whatever kicked the job off.
+  //
+  // The outcome is PUT ON THE TALLY, not dropped. A local `const` nobody read
+  // would have made "this brand registered for the first time", "it was already
+  // registered" and "we failed to register it" all look identical from outside
+  // this stack frame — the same disappearance S14 is about, one level up.
+  // chunkRunOutcome writes it to `detail.schedule_row` on this chunk's
+  // scan_runs row. The FAILED case is additionally a named skip + an
+  // errors_recovered bump (inside the helper), because that one is not merely
+  // information: it is work this chunk decided to carry on without.
+  tally.scheduleRow = await ensureScanScheduleRow(promptKey, brand, deps, tally);
 
   // R3.7.2 (finding B7) — THE WEBSITE SCRAPE THAT DEGRADED AND SAID SO ONLY IN A LOG.
   //

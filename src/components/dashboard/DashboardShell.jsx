@@ -417,6 +417,74 @@ export default function DashboardShell({ scan, scanId, error = null }) {
     : [];
 
   /**
+   * R2.7.8 (finding from R3.2.5) — the chip row on the headline.
+   *
+   * Two kinds of chip, and the difference is the whole point:
+   *
+   *   MEASURED — an engine with a slice. Carries its share as a number, and
+   *     ScoreBand puts the percent sign on it.
+   *   UNMEASURED — an engine the scan was frozen with that produced no slice.
+   *     It appears in `engine_set_change.dropped_engines` and NOWHERE ELSE on
+   *     this screen except R3.2.5's banner, so before this it was absent from
+   *     the row: the reader saw the engines that answered and had no way to
+   *     tell the set was smaller than the scan promised. It carries `value:
+   *     null` and a state, and ScoreBand renders it as an em dash plus that
+   *     state — never a 0, never a bare "—%".
+   *
+   * `value` is null rather than "—" on purpose: this component says WHETHER
+   * there is a measurement, ScoreBand says what an absent one looks like.
+   *
+   * `state` / `state_reason` are read off the slice IF the pipeline put them
+   * there (R2.1.1 is adding them) and simply absent otherwise. Nothing here
+   * requires that shape to have landed.
+   */
+  const measuredEngineChips =
+    result.perEngineSummaries &&
+    typeof result.perEngineSummaries === "object" &&
+    !Array.isArray(result.perEngineSummaries)
+      ? Object.keys(result.perEngineSummaries).map((key) => {
+          const summary = result.perEngineSummaries[key] || {};
+          const share = summary.share_of_ai_pct;
+          const measured = typeof share === "number" && Number.isFinite(share);
+          return {
+            key: `engine-${key}`,
+            // A degraded engine's share is a real measurement of an
+            // incomplete read, so it is still shown — but never bare.
+            // Unmarked, it looked exactly like the engines the index
+            // was actually blended from.
+            label: degradedEngineKeys.has(key)
+              ? `${engineLabel(key)} (degraded)`
+              : engineLabel(key),
+            value: measured ? share : null,
+            state: summary.state ?? (measured ? null : "no share recorded"),
+            stateReason: summary.state_reason ?? null,
+          };
+        })
+      : [];
+
+  const droppedEngineChips = engineSetDropped.map((e, i) => ({
+    key: `dropped-${(typeof e === "string" ? e : e?.engine) ?? i}`,
+    label: engineSetRefLabel(e),
+    value: null,
+    state: "not probed",
+    stateReason:
+      engineSetChange?.title ||
+      "This engine was frozen into the scan but produced no answer, so it is not in the index.",
+  }));
+
+  /**
+   * The row is shown when the scan blended more than one engine, and ALSO
+   * whenever an engine went missing — a two-engine scan that fell back to one
+   * is exactly the case where `isMultiEngine` can stop being the interesting
+   * question, and suppressing the row there would hide the omission this task
+   * exists to end.
+   */
+  const engineChips =
+    (result.isMultiEngine && measuredEngineChips.length > 0) || droppedEngineChips.length > 0
+      ? [...measuredEngineChips, ...droppedEngineChips]
+      : null;
+
+  /**
    * "There is no trustworthy slice left" — the state that suppresses the score
    * and replaces the views with the placeholder. It is deliberately NOT "any
    * engine degraded": a scan whose perplexity slice collapsed while aio answered
@@ -953,19 +1021,7 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                 trend={scoreTrend}
                 promptSetChanged={!deltaSamePromptSet && !!previousScan}
                 scoreLabel={result.isMultiEngine ? "AI Visibility Index" : null}
-                engineChips={result.isMultiEngine && result.perEngineSummaries
-                  ? Object.keys(result.perEngineSummaries).map((key) => ({
-                      // A degraded engine's share is a real measurement of an
-                      // incomplete read, so it is still shown — but never bare.
-                      // Unmarked, it looked exactly like the engines the index
-                      // was actually blended from.
-                      label: degradedEngineKeys.has(key)
-                        ? `${engineLabel(key)} (degraded)`
-                        : engineLabel(key),
-                      value: result.perEngineSummaries[key].share_of_ai_pct ?? "—",
-                    }))
-                  : null
-                }
+                engineChips={engineChips}
                 stats={[
                   {
                     value: `${result.visibleNonBranded ?? 0}/${result.nonBrandedWithAio ?? 0}`,

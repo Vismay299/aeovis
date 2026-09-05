@@ -42,7 +42,9 @@ import { register } from "node:module";
 
 import {
   MAX_COMPARE_DOMAINS,
+  UNVERIFIED_NOTE,
   describeCompareBudget,
+  describePrimaryCrawlOutcome,
   describeRivalCrawlOutcome,
 } from "../../lib/crawlabilityOutcome.js";
 
@@ -397,11 +399,14 @@ test("R3.7.7 GUARD — the client's copy of MAX_COMPARE_DOMAINS matches the rout
 // ---------------------------------------------------------------------------
 
 test("R3.7.7 GUARD — CrawlabilityView defers to describeRivalCrawlOutcome", () => {
-  assert.match(
-    VIEW,
-    /import \{ describeCompareBudget, describeRivalCrawlOutcome \} from "@\/lib\/crawlabilityOutcome"/,
-    "the component must import the one derivation, not reimplement it"
-  );
+  // R3.7.8 added a third name to this import and wrapped it across lines, so the
+  // guard now reads the import STATEMENT rather than one exact line of
+  // formatting. The teeth are unchanged: the symbol must come from the shared
+  // module, so a component that re-typed the copy locally still fails.
+  const importBlock = /import \{([^}]*)\} from "@\/lib\/crawlabilityOutcome"/.exec(VIEW);
+  assert.ok(importBlock, "the component must import the one derivation, not reimplement it");
+  assert.match(importBlock[1], /\bdescribeRivalCrawlOutcome\b/, "...including the rival-row wording");
+  assert.match(importBlock[1], /\bdescribeCompareBudget\b/, "...and the compare-budget explanation");
   assert.match(
     VIEW,
     /const outcome = describeRivalCrawlOutcome\(row\)/,
@@ -435,6 +440,215 @@ test("R3.7.7 GUARD — CrawlabilityView defers to describeRivalCrawlOutcome", ()
   assert.ok(
     !/Perceev only audits rivals/.test(VIEW),
     "the refusal copy belongs in crawlabilityOutcome.js where the suite can execute it"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 4. R3.7.8 — the SAME distinction for the brand's own domain.
+//
+// The banner over the customer's own audit said one thing for every failure:
+// "Couldn't reach {domain}/robots.txt ({fetch_error with underscores swapped
+// for spaces})". So a customer who mistyped their own domain was told their
+// server was unreachable — sent to debug a network they do not have a problem
+// with — and the reason they were shown was a machine slug.
+//
+// Same two-part proof as section 1: the payloads come out of the real route,
+// and the words are executed.
+// ---------------------------------------------------------------------------
+
+/** Drives the route with the PRIMARY brand failing in one specific way. */
+function timeoutThrow() {
+  const err = new Error("The operation was aborted due to timeout");
+  err.name = "TimeoutError";
+  throw err;
+}
+
+async function realPrimaryPayloads() {
+  const [unresolved, timedOut, httpError, networkError] = await Promise.all([
+    // DNS answers with nothing for the brand's own name: the customer's typo.
+    auditBody({ lookup: lookupExcept([BRAND]), fetchImpl: fetchExcept() }),
+    auditBody({ lookup: lookupExcept(), fetchImpl: fetchExcept({ [BRAND]: timeoutThrow }) }),
+    auditBody({ lookup: lookupExcept(), fetchImpl: fetchExcept({ [BRAND]: () => textResponse("", 503) }) }),
+    auditBody({
+      lookup: lookupExcept(),
+      fetchImpl: fetchExcept({
+        [BRAND]: () => {
+          throw new Error("socket hang up");
+        },
+      }),
+    }),
+  ]);
+  return { unresolved, timedOut, httpError, networkError };
+}
+
+test("R3.7.8 — the route emits four different primary failure shapes, and no `blocked`", async () => {
+  const bodies = await realPrimaryPayloads();
+
+  for (const [name, body] of Object.entries(bodies)) {
+    assert.equal(body.fetched_ok, false, `${name}: robots.txt was not read`);
+    assert.equal(body.domain, BRAND, `${name}: the banner needs the domain to name`);
+    // A refused BRAND domain is a 400, never a 200 row (route.js:131-133), which
+    // is why the primary body has no `blocked` field and why the primary needs
+    // its own derivation instead of borrowing the rival row's.
+    assert.equal(body.blocked, undefined, `${name}: the primary payload carries no blocked flag`);
+  }
+
+  assert.equal(bodies.unresolved.fetch_error, "unresolved", "DNS returned nothing — the customer's typo");
+  assert.equal(bodies.timedOut.fetch_error, "timeout", "ours, not theirs");
+  assert.equal(bodies.httpError.fetch_error, "http_503", "we reached the server; it answered an error");
+  assert.equal(bodies.networkError.fetch_error, "network_error", "ours, not theirs");
+});
+
+test("R3.7.8 — a typo and a network problem no longer render as the same banner", async () => {
+  const bodies = await realPrimaryPayloads();
+  const rendered = Object.fromEntries(
+    Object.entries(bodies).map(([name, body]) => [name, describePrimaryCrawlOutcome(body)])
+  );
+
+  assert.equal(rendered.unresolved.kind, "unresolved");
+  assert.equal(rendered.timedOut.kind, "timeout");
+  assert.equal(rendered.httpError.kind, "http_error");
+  assert.equal(rendered.networkError.kind, "network_error");
+
+  // TEETH: the finding is that all four read identically. Every visible field
+  // must differ pairwise — not merely "the old sentence is gone".
+  const all = Object.values(rendered);
+  for (const field of ["kind", "label", "detail"]) {
+    const values = all.map((r) => r[field]);
+    assert.equal(new Set(values).size, all.length, `two primary outcomes share a ${field}: ${JSON.stringify(values)}`);
+  }
+
+  // The fact the task is actually about, as data rather than prose: whose
+  // problem is this? A typo is the customer's; a timeout and a dead connection
+  // are ours and must never be handed to them.
+  assert.equal(rendered.unresolved.actionable, "you");
+  assert.equal(rendered.httpError.actionable, "you", "their server answered — it is their server");
+  assert.equal(rendered.timedOut.actionable, "us");
+  assert.equal(rendered.networkError.actionable, "us");
+
+  // ...and the severity differs too, so the two are not one glance apart.
+  assert.equal(rendered.unresolved.tone, "crit", "a domain that does not exist makes the whole page fiction");
+  assert.equal(rendered.timedOut.tone, "warn");
+
+  // A read that succeeded raises no banner at all.
+  const ok = await auditBody({ lookup: lookupExcept(), fetchImpl: fetchExcept() });
+  assert.equal(ok.fetched_ok, true, "the control fixture really did read robots.txt");
+  assert.equal(describePrimaryCrawlOutcome(ok), null, "nothing degraded, nothing to say");
+});
+
+test("R3.7.8 — an unresolved brand domain says check the spelling, never 'your server is down'", async () => {
+  const { unresolved, timedOut, networkError } = await realPrimaryPayloads();
+  const typo = describePrimaryCrawlOutcome(unresolved);
+  const typoLine = `${typo.label} ${typo.detail}`.toLowerCase();
+
+  assert.match(typo.label, /spelling/i, "the headline names the thing the customer can actually fix");
+  // The exact conflation: never tell someone whose domain does not exist that we
+  // could not reach their server or that it is down.
+  for (const forbidden of ["couldn't reach", "could not reach", "unreachable", "timed out", "is down", "offline"]) {
+    assert.ok(!typoLine.includes(forbidden), `a name that does not resolve is not an outage ("${forbidden}")`);
+  }
+  // Nor a security event — same rule the rival copy follows.
+  assert.ok(!/refus|blocked|not allowed/i.test(typoLine), "a typo must not be dressed as a refusal");
+
+  // The mirror image: the two failures WE own must not send the customer off to
+  // proofread a domain that resolved perfectly well.
+  for (const [name, body] of [
+    ["timeout", timedOut],
+    ["network_error", networkError],
+  ]) {
+    const outcome = describePrimaryCrawlOutcome(body);
+    assert.doesNotMatch(
+      outcome.label,
+      /spelling|typo/i,
+      `${name}: the name resolved, so do not lead with a spelling problem`
+    );
+    assert.match(outcome.detail, /resolved/i, `${name}: say plainly that the domain itself was fine`);
+  }
+});
+
+test("R3.7.8 — the banner uses written copy, never the fetch_error slug", async () => {
+  const bodies = await realPrimaryPayloads();
+
+  for (const [name, body] of Object.entries(bodies)) {
+    const outcome = describePrimaryCrawlOutcome(body);
+    const line = `${outcome.label} ${outcome.detail}`;
+    assert.ok(
+      !line.includes(body.fetch_error),
+      `${name}: the raw slug "${body.fetch_error}" is showing through the copy: ${line}`
+    );
+    assert.ok(!/[a-z]_[a-z]/i.test(line), `${name}: a machine identifier leaked into prose: ${line}`);
+
+    // Standing rule 1: robots.txt was never read, yet the table below still
+    // lists every crawler as open. That is an assumption and the banner has to
+    // say so — the old line did, and losing it while fixing the wording would
+    // trade one silent-degradation bug for another.
+    assert.ok(line.includes(UNVERIFIED_NOTE), `${name}: the unverified default-open caveat must survive`);
+  }
+});
+
+test("R3.7.8 — an unexplained failure admits it instead of guessing", () => {
+  // route.js:439 always supplies a reason, so this shape should be impossible.
+  // If it ever happens, the banner must not invent one: guessing "network"
+  // re-creates the finding, and guessing "typo" sends the customer after a
+  // problem we never saw.
+  const unknown = describePrimaryCrawlOutcome({ domain: BRAND, fetched_ok: false, fetch_error: null });
+  assert.equal(unknown.kind, "unknown_error");
+  assert.equal(unknown.actionable, "us", "we cannot pin it on the customer without evidence");
+  assert.match(unknown.detail, /can't tell you|cannot tell you/i, "it says outright that the reason is missing");
+  assert.doesNotMatch(unknown.label, /spelling/i);
+
+  // Defence in depth: a refused primary is a 400 today, but if one ever reaches
+  // the banner it must read as OUR decision — not as an outage, and not as a
+  // typo — and must say nothing about why (the route keeps one message for
+  // every refusal for exactly this reason).
+  const refused = describePrimaryCrawlOutcome({ domain: BRAND, fetched_ok: false, blocked: true });
+  assert.equal(refused.kind, "refused");
+  const refusedLine = `${refused.label} ${refused.detail}`.toLowerCase();
+  assert.ok(!refusedLine.includes("spelling"), "a refusal is not a typo");
+  for (const leak of ["private", "internal", "localhost", "loopback", "link-local", "metadata", "169.254"]) {
+    assert.ok(!refusedLine.includes(leak), `refusal copy must not leak network detail ("${leak}")`);
+  }
+
+  // Junk in, no banner out — the fatal-error path owns that case.
+  assert.equal(describePrimaryCrawlOutcome(null), null);
+});
+
+test("R3.7.8 GUARD — CrawlabilityView renders the derived primary outcome", () => {
+  const importBlock = /import \{([^}]*)\} from "@\/lib\/crawlabilityOutcome"/.exec(VIEW);
+  assert.ok(importBlock, "the component imports the shared derivation");
+  assert.match(importBlock[1], /\bdescribePrimaryCrawlOutcome\b/, "including the primary banner's wording");
+
+  assert.match(
+    VIEW,
+    /describePrimaryCrawlOutcome\(data\)/,
+    "the banner reads the whole payload — fetch_error is what tells the outcomes apart"
+  );
+  assert.match(VIEW, /\{primaryOutcome\.label\}/, "the written headline is rendered");
+  assert.match(VIEW, /\{primaryOutcome\.detail\}/, "and the explanation under it");
+  assert.match(
+    VIEW,
+    /data-outcome=\{primaryOutcome\.kind\}/,
+    "the kind is on the banner so QA can tell a typo from a network fault without reading prose"
+  );
+  assert.match(VIEW, /data-actionable=\{primaryOutcome\.actionable\}/, "and whose problem it is");
+  assert.match(
+    VIEW,
+    /variant=\{primaryOutcome\.tone === "crit" \? "crit" : "warn"\}/,
+    "the alert's severity follows the derived tone rather than being fixed at warn for everything"
+  );
+
+  // TEETH: the exact line the finding names must stay gone, in both its parts.
+  assert.ok(
+    !/Couldn&apos;t reach \{data\.domain\}\/robots\.txt/.test(VIEW),
+    "the one-size banner that called every failure a network problem must not come back"
+  );
+  assert.ok(
+    !/fetch_error\.replace\(/.test(VIEW),
+    "a slug with its underscores swapped for spaces is not written copy"
+  );
+  assert.ok(
+    !/!data\.fetched_ok &&/.test(VIEW),
+    "the banner is decided by the derivation, not by a second bare reading of fetched_ok"
   );
 });
 

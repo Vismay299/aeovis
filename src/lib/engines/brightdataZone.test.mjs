@@ -384,3 +384,280 @@ test("getBrightDataConfig returns null without a key — never a half-config", a
   useEnv(t, {});
   assert.equal(await getBrightDataConfig(), null);
 });
+
+/* ===========================================================================
+ * R1.2.10 — THE 200 ENVELOPE.
+ *
+ * Every zone-rejection test above this line answers the probe with `ok: false`.
+ * That is the easy half: an HTTP 4xx is already a failure, and any reader
+ * looking at brightDataSearch expects the not-ok branch to do something.
+ *
+ * Bright Data also refuses a zone with HTTP **200** and an error envelope in the
+ * body — `{"error": "zone not found: X"}` or `{"status":"error","message":...}`.
+ * That is the case a naive reader does not expect and a status-code-only check
+ * reads as success. brightdata.js handles it (the `data.error || data.status ===
+ * "error"` branch re-runs zoneRejectionDetail on the envelope message), but when
+ * this task was filed you could DELETE that branch and the whole suite stayed
+ * green: nothing pinned it. Deleting it degrades a one-probe recovery into a
+ * five-minute TTL of probes against a zone the account has already refused, and
+ * strips the zone name and the consequence out of the operator-facing message.
+ *
+ * The three tests below are the teeth. Each was confirmed to FAIL with the
+ * envelope branch commented out and to pass with it restored.
+ *
+ * These tests share the module zone cache with everything above (see the file
+ * header). Each one states what it does to the cache before it starts.
+ * ======================================================================== */
+
+test("R1.2.10 — a zone refusal inside an HTTP 200 envelope is a zone rejection, not a success", async (t) => {
+  // Form one: `{"error": ...}` on a 200, on the auto-discovery path the live
+  // deployment actually runs. The full recovery loop is asserted, because the
+  // point of typing this failure is that the NEXT probe works.
+  useEnv(t, { BRIGHTDATA_API_KEY: "bd-key" });
+  invalidateBrightDataZoneCache("test setup");
+
+  let account = [{ name: "zone_alpha", type: "serp", status: "active" }];
+  let serpCalls = 0;
+  mockFetch(t, async (url, init) => {
+    if (String(url).includes("get_all_zones")) {
+      return { ok: true, status: 200, json: async () => account };
+    }
+    serpCalls++;
+    const zone = JSON.parse(init.body).zone;
+    if (!account.some((z) => z.name === zone && z.status === "active")) {
+      // THE FIXTURE THAT MATTERS: HTTP 200, `ok: true`, and a refusal in the
+      // body. Observed shape for Bright Data /request zone faults — the
+      // transport succeeded, the request did not.
+      return { ok: true, status: 200, text: async () => JSON.stringify({ error: `zone not found: ${zone}` }) };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ body: JSON.stringify({ general: { query: "x" } }) }) };
+  });
+
+  assert.equal(await resolveBrightDataSerpZone("bd-key"), "zone_alpha");
+
+  // The account retires zone_alpha behind this process's back.
+  account = [
+    { name: "zone_alpha", type: "serp", status: "suspended" },
+    { name: "zone_beta", type: "serp", status: "active" },
+  ];
+
+  await assert.rejects(
+    () => brightDataSearch("best vitrified tiles", { attempts: 2, backoffMs: 1, timeout: 500 }),
+    (err) => {
+      assert.ok(
+        isBrightDataZoneError(err),
+        `a 200 with an error envelope must still type as a zone fault, got ${err?.name}: ${err?.message}`
+      );
+      assert.equal(err.reason, "zone_rejected", "machine-readable, so callers do not parse the message");
+      assert.equal(err.zone, "zone_alpha");
+      assert.match(err.message, /rejected SERP zone "zone_alpha"/, "the operator must be told WHICH zone");
+      return true;
+    },
+    "an HTTP 200 carrying a zone refusal must not be read as a successful response"
+  );
+
+  assert.equal(serpCalls, 1, "a refusal the account already issued is not retried, envelope or not");
+  assert.equal(
+    peekBrightDataZoneCache(),
+    null,
+    "the envelope rejection must drop the cache too — otherwise recovery waits out the TTL"
+  );
+  assert.equal(
+    await resolveBrightDataSerpZone("bd-key"),
+    "zone_beta",
+    "and the next resolve follows the account: recovery after ONE bad probe"
+  );
+});
+
+test("R1.2.10 — the envelope's other form: status:\"error\" with the cause in `message`", async (t) => {
+  // Form two. Bright Data does not commit to one envelope shape, and the branch
+  // reads `data.error || data.message` for exactly that reason. With the zone
+  // PINNED there is no cache to drop, so the message must say so rather than
+  // promise a self-heal that cannot happen.
+  useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "envelope_zone" });
+  let serpCalls = 0;
+  mockFetch(t, async (url) => {
+    if (String(url).includes("get_all_zones")) {
+      return { ok: true, status: 200, json: async () => [] };
+    }
+    serpCalls++;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ status: "error", message: "no such zone: envelope_zone" }),
+    };
+  });
+
+  await assert.rejects(
+    () => brightDataSearch("best vitrified tiles", { attempts: 2, backoffMs: 1, timeout: 500 }),
+    (err) => {
+      assert.ok(isBrightDataZoneError(err), `expected a typed zone error, got ${err?.name}: ${err?.message}`);
+      assert.equal(err.reason, "zone_rejected");
+      assert.equal(err.zone, "envelope_zone");
+      assert.match(err.message, /cannot self-heal/, "a pinned zone needs a human, and the row must say so");
+      return true;
+    }
+  );
+  assert.equal(serpCalls, 1);
+});
+
+test("R1.2.10 — a 200-envelope refusal reaches the caller as an ERROR row, not an answered non-mention", async (t) => {
+  // The end-to-end shape of the finding: an HTTP 200 is the single most likely
+  // thing to be mistaken for a clean result. Pinned at the probe boundary, where
+  // a false success would actually be scored.
+  useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "envelope_zone", ENGINES: "aio" });
+  mockFetch(t, async (url) => {
+    if (String(url).includes("get_all_zones")) {
+      return { ok: true, status: 200, json: async () => [] };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ error: "zone not found: envelope_zone" }) };
+  });
+
+  const aio = resolveEnabledEngines().find((e) => e.name === "aio");
+  assert.ok(aio, "aio must resolve — it is the engine under test");
+  const row = await aio.probe(
+    { text: "best vitrified tiles", topic: "General", source: "test" },
+    "Italica",
+    ["Italica"],
+    "italicatiles.com",
+    [],
+    null
+  );
+
+  assert.ok(row.error, `a 200 that refused the zone must still produce an error row, got ${JSON.stringify(row.error)}`);
+  assert.match(row.error, /rejected SERP zone "envelope_zone"/, "typed, and naming the zone — not a bare envelope message");
+  assert.equal(row.answer_present, false, "a refused probe never counts as answered");
+  assert.equal(row.visible, false);
+  assert.equal(row.cost, 0, "a refused probe bought nothing");
+
+  const summary = summarizeEngineSlice([row], "aio");
+  assert.equal(summary.errored_queries, 1, "counted, never skipped");
+  assert.equal(summary.error_rate_pct, 100);
+});
+
+test("R1.2.10 — snake_case zone states are zone rejections too (zone_suspended, zone_disabled, zone_expired)", async (t) => {
+  // Bright Data returns machine-readable error CODES as well as prose, and
+  // zoneRejectionDetail already anticipates that: its first pattern is
+  // /zone[ _-]?not[ _-]?found/, written to catch `zone_not_found`. The two
+  // patterns covering the zone-STATE wordings were not, because they lean on \b
+  // and an underscore is a word character — so `zone_suspended` produced a plain
+  // Error, the cache survived, and the process kept probing a dead zone for a
+  // full TTL. That is the C4 finding, arriving through a different door.
+  //
+  // Verified against the shipped patterns before the fix: all four wordings
+  // below fell through to a plain Error.
+  useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "state_zone" });
+
+  let wording = "";
+  mockFetch(t, async (url) => {
+    if (String(url).includes("get_all_zones")) {
+      return { ok: true, status: 200, json: async () => [] };
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ error: wording }) };
+  });
+
+  for (const w of ["zone_suspended", "zone_disabled", "zone_expired", "zone_deleted", "suspended_zone", "zone_not_active"]) {
+    wording = w;
+    await assert.rejects(
+      () => brightDataSearch("best vitrified tiles", { attempts: 2, backoffMs: 1, timeout: 500 }),
+      (err) => {
+        assert.ok(
+          isBrightDataZoneError(err),
+          `"${w}" is a zone state Bright Data can return; it must type as a zone fault, got ${err?.name}: ${err?.message}`
+        );
+        assert.equal(err.reason, "zone_rejected", `"${w}" must carry the machine-readable reason`);
+        assert.equal(err.zone, "state_zone");
+        return true;
+      },
+      `"${w}" fell through to a generic error — the cache would survive a dead zone`
+    );
+  }
+});
+
+test("R1.2.10 — RECORDED ASYMMETRY: rate-limit precedence differs between the 200 and not-ok paths", async (t) => {
+  // This test does not claim the current ordering is the only right one. It
+  // records it, with its cost, so that changing it is a decision rather than an
+  // accident — which is what the accept asks for ("or the difference is
+  // documented with its reason").
+  //
+  // THE INPUT IS GENUINELY AMBIGUOUS: Bright Data telling you, in one string,
+  // both "you are over quota" and "this zone is off". The two paths break the
+  // tie in opposite directions:
+  //
+  //   200 path      isRateLimitResponse runs FIRST, so rate limit wins.
+  //   not-ok path   zoneRejectionDetail runs FIRST, so the zone fault wins.
+  //
+  // Neither produces a false success — both are errors, both are counted, and
+  // both name a cause. Each degrades in a bounded way, in opposite directions:
+  //   - 200 path: the cache is NOT dropped, so a genuinely dead zone keeps being
+  //     probed until the TTL expires (<= 5 minutes), instead of one probe.
+  //   - not-ok path: an HTTP 429 is typed as a configuration fault and NOT
+  //     retried, spending one recoverable throttle, and costing one extra
+  //     get_all_zones when the cache is dropped for a zone that was fine.
+  //
+  // Making them consistent means choosing which of those costs to always pay,
+  // and it changes retry semantics on the live probe path — a source decision,
+  // not a test-author one. Left as-is deliberately; revisit if the fleet logs
+  // show either collision actually occurring.
+  useEnv(t, { BRIGHTDATA_API_KEY: "bd-key" });
+  invalidateBrightDataZoneCache("test setup");
+
+  // HALF ONE — the 200 path. Rate limit wins, and the cache survives.
+  let serpCalls = 0;
+  mockFetch(t, async (url) => {
+    if (String(url).includes("get_all_zones")) {
+      return { ok: true, status: 200, json: async () => [{ name: "zone_gamma", type: "serp", status: "active" }] };
+    }
+    serpCalls++;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ error: "rate limit exceeded: zone_suspended until quota resets" }),
+    };
+  });
+
+  assert.equal(await resolveBrightDataSerpZone("bd-key"), "zone_gamma");
+  await assert.rejects(
+    () => brightDataSearch("best vitrified tiles", { attempts: 2, backoffMs: 1, timeout: 500 }),
+    (err) => {
+      assert.equal(isBrightDataZoneError(err), false, "on the 200 path the rate-limit read wins the ambiguous body");
+      assert.match(err.message, /rate limit \/ quota exhausted/);
+      return true;
+    }
+  );
+  assert.equal(serpCalls, 1, "a rate limit is not retried either");
+  assert.equal(
+    peekBrightDataZoneCache()?.name,
+    "zone_gamma",
+    "THE COST of this ordering: the zone stays cached, so a real suspension waits out the TTL"
+  );
+
+  // HALF TWO — the not-ok path, same ambiguity, opposite winner.
+  process.env.BRIGHTDATA_SERP_ZONE = "quota_zone";
+  let notOkCalls = 0;
+  mockFetch(t, async (url) => {
+    if (String(url).includes("get_all_zones")) {
+      return { ok: true, status: 200, json: async () => [] };
+    }
+    notOkCalls++;
+    return {
+      ok: false,
+      status: 429,
+      text: async () => JSON.stringify({ error: "zone temporarily disabled: rate limit exceeded" }),
+    };
+  });
+
+  await assert.rejects(
+    () => brightDataSearch("best vitrified tiles", { attempts: 2, backoffMs: 1, timeout: 500 }),
+    (err) => {
+      assert.ok(isBrightDataZoneError(err), "on the not-ok path the zone read wins — the documented asymmetry");
+      assert.equal(err.reason, "zone_rejected");
+      return true;
+    }
+  );
+  assert.equal(
+    notOkCalls,
+    1,
+    "THE COST of this ordering: an HTTP 429 typed as a zone fault is not retried, though 429 is retryable"
+  );
+});

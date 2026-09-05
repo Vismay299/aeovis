@@ -34,9 +34,10 @@ const RECORD = Object.freeze({
 
 /**
  * Minimal PostgREST-shaped builder. `.insert(...).select()` awaits to whatever
- * `resolve` returns, so a test can make all three of insertScan's schema
- * cascades answer with an error the way a live client does — postgrest-js does
- * not reject on a failed statement, it resolves `{ data: null, error }`.
+ * `resolve` returns, so a test can make insertScan's write answer with an error
+ * the way a live client does — postgrest-js does not reject on a failed
+ * statement, it resolves `{ data: null, error }`. `calls` also counts the
+ * ATTEMPTS, which R2.2.4 pinned at exactly one.
  */
 function clientThatAnswers(resolve) {
   const calls = [];
@@ -121,7 +122,7 @@ test("insertScan — an undefined deps.client is still a refusal, not the ambien
 // 2. The client is there but the write fails: a different code, same contract.
 // ---------------------------------------------------------------------------
 
-test("insertScan — all cascades failing throws db_write_failed and preserves the error envelope", async () => {
+test("insertScan — a failed write throws db_write_failed and preserves the error envelope", async () => {
   const pgError = {
     message: 'null value in column "brand" violates not-null constraint',
     code: "23502",
@@ -145,16 +146,23 @@ test("insertScan — all cascades failing throws db_write_failed and preserves t
     }
   );
 
-  assert.equal(client.calls.length, 3, "all three schema cascades should have been attempted");
+  // R2.2.4: one attempt, not three. A refused insert used to be answered with
+  // two progressively thinner rows, the last of which could SUCCEED and be
+  // reported as an unqualified write.
+  assert.equal(
+    client.calls.length,
+    1,
+    "a refused insert must not be retried with fewer columns — that is the column-drop cascade"
+  );
 });
 
-test("insertScan — a cascade that succeeds returns the inserted rows, unchanged", async () => {
-  // The success path must not have been collateral damage: cascade 1 answering
-  // normally still resolves with the rows PostgREST returned.
+test("insertScan — a successful write returns the inserted rows, unchanged", async () => {
+  // The success path must not have been collateral damage: a normal answer
+  // still resolves with the rows PostgREST returned.
   const client = clientThatAnswers(() => ({ data: [{ id: "scan-1" }], error: null }));
   const rows = await insertScan(RECORD, { client });
   assert.deepEqual(rows, [{ id: "scan-1" }]);
-  assert.equal(client.calls.length, 1, "cascade 1 succeeded; no retry should have run");
+  assert.equal(client.calls.length, 1, "the write succeeded; nothing should have run twice");
 });
 
 // ---------------------------------------------------------------------------

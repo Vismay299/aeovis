@@ -182,18 +182,20 @@ test("insertScan — an unknown window persists as an EXPLICIT null, not an abse
   }
 });
 
-test("SCHEMA CASCADE — the window survives the legacy-schema fallback, because it rides in raw_results", async () => {
+test("SCHEMA MISMATCH — the window is never persisted by a quieter retry; the write fails loud", async () => {
   requireModules();
-  // Why JSONB and not two new timestamptz columns. insertScan retries three
-  // times against progressively older schemas, and cascades 2 and 3 drop the
-  // newer columns behind a console.warn — so a deployment where a migration
-  // had not landed would lose a COLUMN-borne window in silence, which is the
-  // same class of failure this task exists to remove. raw_results is part of
-  // buildScanBaseRecord, which every cascade sends, so the window is carried
-  // by all three. Cascade 1 is failed here the way a missing column fails it.
+  // Why JSONB and not two new timestamptz columns, restated for R2.2.4. The
+  // original reason was that insertScan retried against progressively older
+  // schemas and dropped the newer COLUMNS behind a console.warn, so a
+  // column-borne window would have gone missing in silence on a deployment
+  // where the migration had not landed. That cascade is gone: a `scans` table
+  // that cannot take the row now refuses the write outright. The JSONB choice
+  // stands for the other half of the reason — `scans` has no
+  // collected_from/collected_to column at all — and this test now pins the
+  // property that replaced the fallback: ONE attempt, and a refusal that is
+  // reported as a refusal rather than answered with a thinner row.
   const captured = [];
   const original = db.supabase.from;
-  let attempt = 0;
   db.supabase.from = (table) => {
     const builder = {
       insert(rows) {
@@ -204,17 +206,13 @@ test("SCHEMA CASCADE — the window survives the legacy-schema fallback, because
         return builder;
       },
       then(resolve) {
-        attempt++;
-        resolve(
-          attempt < 3
-            ? { data: null, error: new Error("PGRST204: column does not exist") }
-            : { data: [{ id: "scan-legacy-schema" }], error: null }
-        );
+        resolve({ data: null, error: new Error("PGRST204: column does not exist") });
       },
     };
     return builder;
   };
 
+  let threw = null;
   try {
     await db.insertScan({
       brand: "Acme",
@@ -225,14 +223,20 @@ test("SCHEMA CASCADE — the window survives the legacy-schema fallback, because
       collected_from: FROM,
       collected_to: TO,
     });
+  } catch (err) {
+    threw = err;
   } finally {
     db.supabase.from = original;
   }
 
-  assert.equal(captured.length, 3, "all three cascades must have been attempted");
-  const legacyRow = captured[2].rows[0];
-  assert.equal(legacyRow.raw_results.collected_from, FROM);
-  assert.equal(legacyRow.raw_results.collected_to, TO);
+  assert.ok(threw, "a schema the row does not fit must be a refusal, not a narrower success");
+  assert.equal(threw.code, "db_schema_mismatch");
+  assert.equal(captured.length, 1, "exactly one insert must have been attempted");
+  // And the window was in the row that was offered — it rides in raw_results,
+  // which is why it never depended on the fallback in the first place.
+  const offered = captured[0].rows[0];
+  assert.equal(offered.raw_results.collected_from, FROM);
+  assert.equal(offered.raw_results.collected_to, TO);
 });
 // ---------------------------------------------------------------------------
 // 2. Finalize -> the real insertScan: the window computed from the probe

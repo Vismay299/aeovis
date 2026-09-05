@@ -131,6 +131,148 @@ export function describeRivalCrawlOutcome(row) {
 }
 
 /**
+ * Appended to every primary failure detail. When robots.txt was not read, the
+ * bot table below is still fully populated — from the default-open assumption,
+ * not from anything measured. A degraded read that does not say it is degraded
+ * is the empty state dressed as a clean one, so this sentence is part of the
+ * derivation and not something the JSX can forget to render.
+ */
+export const UNVERIFIED_NOTE =
+  "Every crawler listed below is shown as default-open because your robots.txt was never read — those statuses are assumptions, not measurements.";
+
+/**
+ * R3.7.8 — the same distinction, one level up: the banner for the customer's OWN
+ * domain.
+ *
+ * The compare rows learned to tell a refusal, a dead name, a timeout, a network
+ * fault and a non-2xx robots.txt apart in R3.7.7. The primary banner did not: it
+ * rendered one line — "Couldn't reach {domain}/robots.txt ({fetch_error with
+ * underscores swapped for spaces})" — for every one of them. Two problems, and
+ * the second is the one that costs the customer an afternoon:
+ *
+ *   1. The parenthetical was a machine slug leaking into written copy.
+ *   2. "Couldn't reach" is a claim about the NETWORK. When the real fact is
+ *      "DNS has no address for that name", it sends a customer who mistyped
+ *      their own domain to go and check their server, their firewall and their
+ *      CDN — all of which are fine. A typo is theirs to fix; a timeout or a
+ *      blocked egress is OURS, and telling them apart is the whole point.
+ *
+ * WHY THIS IS A SECOND FUNCTION AND NOT describeRivalCrawlOutcome():
+ *   - The payloads differ. The primary body has no `blocked` field at all
+ *     (route.js:179-194) because a refused brand domain never reaches a 200 —
+ *     it is a 400 (route.js:131-133) — whereas a refused RIVAL is a row.
+ *   - The audience differs. A rival that does not resolve is "check the spelling
+ *     on this competitor"; the customer's own domain not resolving means every
+ *     number on the page is about a site that does not exist.
+ *   - The consequence differs, and it has to be said out loud: when robots.txt
+ *     was never read, the bot table below still lists every crawler as open.
+ *     That is an assumption, not a measurement (standing rule 1), so
+ *     UNVERIFIED_NOTE is appended to every failure detail rather than left to
+ *     whoever writes the JSX.
+ *
+ * `actionable` is the fact the finding is actually about, exposed as data so QA
+ * and the suite can read it without parsing prose: "you" = the customer can fix
+ * this, "us" = they cannot and must not be sent looking.
+ *
+ * @param {{ domain?: string, fetched_ok?: boolean, blocked?: boolean, fetch_error?: string|null }} payload
+ * @returns {{ kind: string, label: string, detail: string, tone: "crit"|"warn", actionable: "you"|"us" }|null}
+ *          null when robots.txt really was read — there is nothing to warn about.
+ */
+export function describePrimaryCrawlOutcome(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  if (payload.fetched_ok === true) return null;
+
+  const site = typeof payload.domain === "string" && payload.domain.trim() ? payload.domain.trim() : "your domain";
+  const fetchError = typeof payload.fetch_error === "string" ? payload.fetch_error : null;
+
+  // Defence in depth: the route turns a refused brand domain into a 400 before
+  // any of this renders (route.js:131-133), so this branch should be dead. It
+  // exists because the alternative — falling through — would tell a customer
+  // whose domain WE declined to fetch that their server is unreachable, which is
+  // the exact lie this function was written to delete. Copy rules from the
+  // header apply: our decision, and no reason given.
+  if (payload.blocked === true || fetchError === "blocked") {
+    return {
+      kind: "refused",
+      label: `We didn't fetch ${site}`,
+      detail:
+        `Perceev only audits domains that resolve to a valid public address, so ${site} was never requested. ` +
+        `That is our decision, not a fault with the site. ${UNVERIFIED_NOTE}`,
+      tone: "crit",
+      actionable: "us",
+    };
+  }
+
+  if (fetchError === "unresolved") {
+    return {
+      kind: "unresolved",
+      // Deliberately never "couldn't reach": nothing was reached for, because
+      // there was no address to reach.
+      label: `${site} doesn't resolve — check the spelling`,
+      detail:
+        `DNS returned no address for this name, so there was no server to ask. This is usually a typo in the domain ` +
+        `on file, or a name that is not registered or whose DNS has not been published yet — not an outage, and ` +
+        `nothing to debug on your server. ${UNVERIFIED_NOTE}`,
+      tone: "crit",
+      actionable: "you",
+    };
+  }
+
+  const httpStatus = fetchError && /^http_(\d{3})$/.exec(fetchError);
+  if (httpStatus) {
+    return {
+      kind: "http_error",
+      label: `${site} answered ${httpStatus[1]} for /robots.txt`,
+      detail:
+        `The name resolved and your server replied, so the domain is right — it returned an error status instead of ` +
+        `a robots.txt file. ${UNVERIFIED_NOTE}`,
+      tone: "warn",
+      actionable: "you",
+    };
+  }
+
+  if (fetchError === "timeout") {
+    return {
+      kind: "timeout",
+      label: `${site} didn't answer in time`,
+      detail:
+        `The name resolved, so the domain is spelled right — the request for robots.txt ran out of time before a ` +
+        `reply came back. Retry; nothing on your side needs changing to make this audit work. ${UNVERIFIED_NOTE}`,
+      tone: "warn",
+      actionable: "us",
+    };
+  }
+
+  if (fetchError === "network_error") {
+    return {
+      kind: "network_error",
+      label: `We couldn't reach ${site}`,
+      detail:
+        `The name resolved, so the domain is spelled right — the connection to it failed before any reply came ` +
+        `back. That is a network fault between us and the server, not something to fix by editing your site. ` +
+        `${UNVERIFIED_NOTE}`,
+      tone: "warn",
+      actionable: "us",
+    };
+  }
+
+  // fetched_ok is not true and the route named no reason. route.js:439 always
+  // supplies one, so this shape should be unreachable — which is exactly why it
+  // must not be dressed as a known cause. Guessing "network error" here would
+  // re-create the finding in a smaller font, and guessing "typo" would send the
+  // customer after a problem we never observed. Say we do not know.
+  return {
+    kind: "unknown_error",
+    label: `We couldn't read robots.txt on ${site}`,
+    detail:
+      `This audit reported a failure without a reason, so we can't tell you whether the domain is wrong or the ` +
+      `request failed. Retry, and report it if it keeps happening. ${UNVERIFIED_NOTE}`,
+    tone: "warn",
+    actionable: "us",
+  };
+}
+
+/**
  * Explains rivals the caller asked about that came back with no row at all.
  *
  * R3.7.4 made a refused rival CONSUME one of MAX_COMPARE_DOMAINS instead of

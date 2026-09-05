@@ -425,24 +425,41 @@ test("R0.1.14 — the warning must not change who gets in", () => {
   );
 });
 
-test("GUARD — middleware.js actually calls the disclosure, with a module-level once-flag", async () => {
+/**
+ * R0.1.19 / S17 — this guard used to also assert, by regex over the source,
+ * that the once-flag was declared at module scope and passed as
+ * `warned: <thatName>`. Both assertions were removed because they claimed
+ * something text cannot establish, and R0.1.14's verifier proved it in both
+ * directions:
+ *
+ *   - FALSE NEGATIVE. Leaving the module-level declaration in place as a DECOY
+ *     and ADDING `const warnedDevOpen = { value: false };` as the first line of
+ *     middleware() still matched both regexes, so the guard stayed green while
+ *     the flag was reborn per request and the perimeter warned on every one.
+ *     Inserting `warnedDevOpen.value = false;` above the call did the same.
+ *   - FALSE POSITIVE. Renaming the flag to `warned` and using ES2015 property
+ *     shorthand (`warned,`) is correct, unchanged behaviour, and the second
+ *     assertion FAILED on it — a rename turned the suite red.
+ *
+ * Once-ness is a runtime property, not a spelling, so it is asserted where it
+ * is observable: operatorPerimeter.middleware.test.mjs imports the REAL
+ * middleware and counts one warning across eleven dev-open requests. That test
+ * fails on both evasions above and passes on the rename.
+ *
+ * What survives here is the one thing a behavioural test cannot see, because a
+ * middleware with the call deleted warns zero times and "zero" is not
+ * distinguishable from "already disclosed once" without reading the source:
+ * that the CALL still exists at all.
+ */
+test("GUARD — middleware.js still calls the dev-open disclosure at all", async () => {
   const src = await readFile(path.join(REPO, "src/middleware.js"), "utf8");
   const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   assert.match(
     code,
     /warnDevPerimeterOpen\(/,
     "middleware.js must disclose the dev-open perimeter (R0.1.14). The unit tests above pin the " +
-      "helper; only this guard stops the CALL being deleted and the perimeter going quiet again."
-  );
-  const flagDecl = code.match(/^const\s+(\w+)\s*=\s*\{\s*value:\s*false\s*\}\s*;/m);
-  assert.ok(
-    flagDecl,
-    "the once-flag must live at MODULE scope, or the warning fires on every request"
-  );
-  const normalised = code.replace(/\s+/g, " ");
-  assert.ok(
-    normalised.includes("warned: " + flagDecl[1]),
-    "the call site must pass the module-level flag, not a per-request object literal"
+      "helper and operatorPerimeter.middleware.test.mjs pins the once-ness; only this guard stops " +
+      "the CALL being deleted outright and the perimeter going quiet again."
   );
   // cronAuth is the reference implementation; the two gates must stay aligned.
   const cron = await readFile(path.join(REPO, "src/lib/cronAuth.js"), "utf8");

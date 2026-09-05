@@ -1,4 +1,4 @@
-import test from "node:test";
+import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -32,6 +32,18 @@ const ENGINE_ENV = [
   "BRIGHTDATA_API_KEY",
   "SERPAPI_KEY",
 ];
+
+/**
+ * Captured at module load, before any test touches the environment: exactly what
+ * this process inherited. The file-scoped after() hook at the bottom asserts
+ * every var is back to this on the way out.
+ */
+const PROCESS_START_ENV = Object.fromEntries(ENGINE_ENV.map((k) => [k, process.env[k]]));
+
+/** Shape of a value, never the value: assertion output must not leak a real key. */
+function describeEnv(v) {
+  return v === undefined ? "unset" : `set (len ${v.length})`;
+}
 
 /**
  * Run `fn` with exactly `env` set for the engine vars and every other engine
@@ -136,4 +148,34 @@ test("GUARD — no SERP capability check reads SERPAPI_KEY as a credential", asy
     [],
     `SERPAPI_KEY is superseded by BRIGHTDATA_API_KEY; these treat it as live config:\n  ${offenders.join("\n  ")}`
   );
+});
+
+/**
+ * GUARD — every engine var is restored to what the process started with.
+ *
+ * R6.5.5 — file-scoped after(), not a top-level test(), so it runs after EVERY
+ * test in this file including ones appended later, regardless of where this
+ * block sits. The positional form of this guard in serp.test.mjs was measured
+ * leaving the file 8 pass / 0 fail while a test appended below it leaked
+ * SERPAPI_KEY into the rest of the run.
+ *
+ * withEnv() restores in a finally, so it is already exception-safe; this pins
+ * the OTHER failure — a test that sets an engine var directly, or a future
+ * helper that forgets the finally. types.test.mjs and serp.test.mjs share one
+ * process and both scrub these vars, so a leak here is measured over there.
+ */
+after(() => {
+  const started = ENGINE_ENV.map((k) => `${k}: ${describeEnv(PROCESS_START_ENV[k])}`).join(", ");
+  for (const k of ENGINE_ENV) {
+    const before = PROCESS_START_ENV[k];
+    const ended = process.env[k];
+    assert.ok(
+      ended === before,
+      `${k} was not restored: started ${describeEnv(before)}, ended ${describeEnv(ended)}` +
+        (describeEnv(before) === describeEnv(ended) ? " holding a different value" : "") +
+        `\n  ambient at process start — ${started}` +
+        `\n  every test in this file must restore the engine vars it sets;` +
+        ` withEnv({...}, fn) does that for you.`
+    );
+  }
 });

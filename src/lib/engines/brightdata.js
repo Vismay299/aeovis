@@ -296,8 +296,17 @@ function zoneRejectionDetail(text) {
     /no such zone/i,
     /unknown zone/i,
     /invalid zone/i,
-    /zone[^.,;]{0,40}\b(suspend|disabl|deactivat|expir|delet|not active)/i,
-    /\b(suspend|disabl|deactivat|expir|delet)\w*\s+zone\b/i,
+    // R1.2.10: the separator classes here are load-bearing. Bright Data returns
+    // machine-readable error CODES as well as prose, which the first pattern
+    // already anticipates (`zone_not_found`) -- but these two leaned on `\b`,
+    // and an underscore is a word character, so `_suspended` offers no boundary
+    // to match. `zone_suspended` therefore fell through to a plain Error: the
+    // cache survived and the process kept probing a dead zone for a full TTL,
+    // which is the C4 finding arriving through a different door. `(?:\b|_)`
+    // keeps the boundary requirement (the state word must still start a token)
+    // while accepting the snake_case form.
+    /zone[^.,;]{0,40}(?:\b|_)(suspend|disabl|deactivat|expir|delet|not[ _-]?active)/i,
+    /\b(suspend|disabl|deactivat|expir|delet)\w*[\s_-]+zone\b/i,
   ];
   return patterns.some((re) => re.test(s)) ? s.slice(0, 200) : null;
 }

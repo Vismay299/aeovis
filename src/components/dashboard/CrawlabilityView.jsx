@@ -9,7 +9,11 @@ import { Skeleton } from "@/components/perceev/Skeleton";
 import { KpiCard } from "@/components/perceev/KpiCard";
 import { SectionStrap } from "./SectionStrap";
 import { extractBrandDomain } from "@/lib/scoring/citations";
-import { describeCompareBudget, describeRivalCrawlOutcome } from "@/lib/crawlabilityOutcome";
+import {
+  describeCompareBudget,
+  describePrimaryCrawlOutcome,
+  describeRivalCrawlOutcome,
+} from "@/lib/crawlabilityOutcome";
 
 const STATUS_META = {
   open: { label: "Open", badgeVariant: "strong" },
@@ -155,6 +159,13 @@ export const CrawlabilityView = ({ brand, competitors }) => {
     [data, rivalDomains, brand]
   );
 
+  // R3.7.8: the reason the brand's OWN robots.txt was not read. A typo in their
+  // domain and a network fault we own are different facts and must not share a
+  // banner; the words live in describePrimaryCrawlOutcome so the suite can run
+  // them. Returns null when the fetch succeeded, so the banner's existence is
+  // decided by the derivation rather than by a second reading of fetched_ok.
+  const primaryOutcome = useMemo(() => (data ? describePrimaryCrawlOutcome(data) : null), [data]);
+
   return (
     <div data-testid="crawlability-view" style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
       <SectionStrap testId="crawlability-strap">Crawlability</SectionStrap>
@@ -294,13 +305,27 @@ export const CrawlabilityView = ({ brand, competitors }) => {
           </div>
 
           {/* Reliability banners — never silently hide a degraded read */}
-          {!data.fetched_ok && (
-            <Alert variant="warn" data-testid="crawlability-unreachable">
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                <ShieldQuestion size={16} />
-                Couldn&apos;t reach {data.domain}/robots.txt
-                {data.fetch_error ? ` (${data.fetch_error.replace(/_/g, " ")})` : ""} — showing every crawler as
-                default-open, unverified.
+          {/* The testid names the SURFACE, not one of its states: the old
+              "crawlability-unreachable" asserted a network problem on a banner
+              that now also carries "your domain does not resolve". Nothing
+              outside this component selected it. */}
+          {primaryOutcome && (
+            <Alert
+              variant={primaryOutcome.tone === "crit" ? "crit" : "warn"}
+              data-testid="crawlability-primary-outcome"
+              data-outcome={primaryOutcome.kind}
+              data-actionable={primaryOutcome.actionable}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-2)" }}>
+                {primaryOutcome.actionable === "you" ? (
+                  <ShieldAlert size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
+                ) : (
+                  <ShieldQuestion size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
+                )}
+                <span>
+                  <strong style={{ fontWeight: 600 }}>{primaryOutcome.label}</strong>
+                  <span style={{ color: "var(--text-3)" }}>. {primaryOutcome.detail}</span>
+                </span>
               </div>
             </Alert>
           )}

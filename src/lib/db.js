@@ -14,7 +14,10 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 // Avoid throwing if env vars are missing during build phase, but we'll need them at runtime
 export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-// Migration SQL:
+// Migration SQL. HISTORICAL: these five ALTERs were folded into
+// supabase/migrations/001_initial_schema.sql (:20-24) long ago, so they are the
+// baseline `scans` shape and not optional extras — insertScan writes them
+// unconditionally and a database that lacks them fails the write (R2.2.4).
 // ALTER TABLE scans ADD COLUMN scoring_version text;
 // ALTER TABLE scans ADD COLUMN score_ci_low numeric;
 // ALTER TABLE scans ADD COLUMN score_ci_high numeric;
@@ -109,19 +112,42 @@ export class ScanWriteError extends Error {
  * `supabase`), matching every other function in this file, so the no-client
  * branch is reachable from a test without unsetting env for the whole process.
  *
- * R2.8.7 closes the mirror of that defect, which R2.8.6 flagged here and left:
- * cascade 3 used to insert WITHOUT `.select()`. `.select()` is the only thing
- * postgrest-js appends `Prefer: return=representation` for
+ * R2.8.7 closed the mirror of that defect inside the old fallback cascade, and
+ * `confirmScanWritten` below is what survives of it: `.select()` is the only
+ * thing postgrest-js appends `Prefer: return=representation` for
  * (postgrest-js/dist/index.mjs:614), and without it PostgREST answers 201 with
  * an EMPTY BODY, which `processResponse` (:378-385) turns into
  * `{ data: null, error: null }` — a row that WAS written, reported as nothing.
- * runFinalizePhase reads `savedScan?.[0]?.id`, gets undefined, throws "Failed
- * to save scan results", and the job is marked failed: the `scans` row is
- * ORPHANED (no prompt_results.scan_id, no citations, no result_brands, no
- * brand_metrics_daily) while the customer is shown a failure for a scan that
- * actually succeeded. Cascade 3 now selects like the other two, and
- * `confirmScanWritten` below makes the remaining "no representation came back"
- * case a DIFFERENT, named failure instead of a silent null.
+ *
+ * R2.2.4 / finding B10 — THE COLUMN-DROP CASCADE IS GONE. This used to be
+ * three chained try/catches: insert with every column; on ANY failure warn to
+ * the console and retry with `scoring_version` only; on any failure warn again
+ * and retry with `buildScanBaseRecord`'s columns alone. The retries were not
+ * narrower QUERIES, they were narrower ROWS — a deployment that rejected
+ * `mention_rate_pct` got a scan row with score_ci_low, score_ci_high,
+ * stability, mention_rate_pct and scoring_version silently NULL, and insertScan
+ * returned it as an unqualified success. Every downstream reader (the CI band,
+ * the stability chip, the mention-rate metric) then rendered a measured value's
+ * absence as if it had been measured. Standing rule 1: a write that stores less
+ * than it was asked to store must say so; a console.warn on a server nobody
+ * tails is not saying so.
+ *
+ * It was also compensating for a schema drift that does not exist any more.
+ * All five "new" columns are in `supabase/migrations/001_initial_schema.sql`
+ * (:20-24) — the baseline every deployment starts from — so cascades 2 and 3
+ * can only fire on a database that is BEHIND ITS OWN FIRST MIGRATION. That is
+ * an operator emergency, not a shape to quietly accommodate: standing rule 4
+ * says the SQL ships with the code that needs it, and the honest response to
+ * "the column is missing" is to fail with the Postgres error naming it.
+ *
+ * So there is now exactly ONE insert, with the full column set, and three
+ * outcomes: the row comes back (returned), the database refuses it (throws,
+ * with the PostgREST envelope intact on `cause`), or the database takes it and
+ * will not show it (throws `db_write_unconfirmed`). No fourth outcome writes a
+ * thinner row and calls it success.
+ *
+ * @throws {ScanWriteError} db_not_configured | db_schema_mismatch |
+ *   db_write_failed | db_write_unconfirmed
  */
 export async function insertScan(scanRecord, deps = {}) {
   const client = resolveClient(deps);
@@ -150,9 +176,11 @@ export async function insertScan(scanRecord, deps = {}) {
     // last probe write, computed by collectionWindow() in scanWorker.js and
     // spread onto the scan record there. Like roster_source above it rides in
     // this JSONB payload rather than in its own column: `scans` has no
-    // collected_from/collected_to (no migration 001-009 adds them), and a new
-    // column would be dropped in silence by the cascade-2/3 retries below on
-    // any deployment where the migration had not landed yet.
+    // collected_from/collected_to (no migration 001-012 adds them), so a
+    // column-borne window would need a migration to exist at all. (Before
+    // R2.2.4 it would additionally have been dropped IN SILENCE by the
+    // column-narrowing retries that used to live below; that cascade is gone —
+    // a column the database lacks now fails the write loudly.)
     //
     // THIS ALLOWLIST IS THE ONLY WAY IN. insertScan is not a pass-through, so
     // a field the worker computes and this object never names is discarded
@@ -215,83 +243,93 @@ export async function insertScan(scanRecord, deps = {}) {
 
   const baseRecord = buildScanBaseRecord({ ...scanRecord, raw_results: rawPayload });
 
-  // Cascade 1: try to insert with all new columns
+  // The row the caller asked for, in full. Every column here is in migration
+  // 001 (:12-24); nothing in it is optional-on-some-deployments.
+  const scanRow = {
+    ...baseRecord,
+    scoring_version: scanRecord.scoring_version,
+    score_ci_low: scanRecord.score_ci_low,
+    score_ci_high: scanRecord.score_ci_high,
+    stability: scanRecord.stability,
+    mention_rate_pct: scanRecord.mention_rate_pct,
+  };
+
+  // ONE insert. `.select()` with no argument is `select=*`, which names no
+  // column (so it cannot itself 42703) and is what makes PostgREST return the
+  // written row — the same grant the insert already needs: migration
+  // 001_initial_schema.sql:118 is `FOR ALL TO anon USING (true) WITH CHECK
+  // (true)`, one policy covering INSERT and SELECT.
+  let result;
   try {
-    const { data, error } = await client
-      .from("scans")
-      .insert([
-        {
-          ...baseRecord,
-          scoring_version: scanRecord.scoring_version,
-          score_ci_low: scanRecord.score_ci_low,
-          score_ci_high: scanRecord.score_ci_high,
-          stability: scanRecord.stability,
-          mention_rate_pct: scanRecord.mention_rate_pct,
-        }
-      ])
-      .select();
-    if (error) throw error;
-    return data;
-  } catch (err) {
-    console.warn("Inserting with all columns failed, retrying with only scoring_version:", err.message || err);
-    // Cascade 2: try to insert with scoring_version only (Phase 1 schema)
-    try {
-      const { data, error } = await client
-        .from("scans")
-        .insert([
-          {
-            ...baseRecord,
-            scoring_version: scanRecord.scoring_version,
-          }
-        ])
-        .select();
-      if (error) throw error;
-      return data;
-    } catch (err2) {
-      console.warn("Inserting with scoring_version failed, retrying baseRecord only:", err2.message || err2);
-      // Cascade 3: try base record only (Legacy schema)
-      //
-      // `.select()` — no argument, so the request is `select=*` and NAMES NO
-      // COLUMN. That is what makes it safe on the older schema this cascade
-      // exists to serve: a column list could reference something the legacy
-      // deployment lacks and turn a working insert into a 42703, whereas `*`
-      // returns whatever that deployment happens to have. Read access is the
-      // same grant the other two cascades already rely on — migration
-      // 001_initial_schema.sql:118 is `FOR ALL TO anon USING (true) WITH CHECK
-      // (true)`, one policy covering INSERT and SELECT — so if
-      // `return=representation` were refused here, cascades 1 and 2 (and
-      // getScansForBrand's `select("*")`) would already be failing.
-      try {
-        const { data, error } = await client
-          .from("scans")
-          .insert([baseRecord])
-          .select();
-        if (error) throw error;
-        return confirmScanWritten(data, scanRecord);
-      } catch (fallbackErr) {
-        // A write we could not CONFIRM is not a write we know failed, and it
-        // must not be relabelled as one on the way out: `db_write_failed` tells
-        // an operator nothing was stored, which would be the opposite of true.
-        if (fallbackErr instanceof ScanWriteError) throw fallbackErr;
-        console.error("Fallback insert failed:", fallbackErr);
-        // All three cascades are exhausted: the scan is NOT saved. Wrap rather
-        // than rethrow so the failure carries a code the caller can branch on
-        // and a message that names the write, while `cause` preserves the
-        // original error envelope (PostgREST code/details/hint) intact.
-        throw new ScanWriteError(
-          `Could not write the scan for "${scanRecord?.brand ?? "unknown brand"}": ${
-            fallbackErr?.message || fallbackErr?.code || "unknown database error"
-          }`,
-          { cause: fallbackErr, code: "db_write_failed" }
-        );
-      }
-    }
+    result = await client.from("scans").insert([scanRow]).select();
+  } catch (transportErr) {
+    // postgrest-js resolves statement errors rather than throwing, so reaching
+    // here means the request never completed (DNS, socket, an injected client
+    // that threw). Nothing was written, and the envelope is preserved on
+    // `cause` rather than flattened into the message.
+    throw new ScanWriteError(
+      `Could not write the scan for "${scanRecord?.brand ?? "unknown brand"}": ${
+        transportErr?.message || transportErr?.code || "the database could not be reached"
+      }`,
+      { cause: transportErr, code: "db_write_failed" }
+    );
   }
+
+  const { data, error } = result || {};
+
+  if (error) {
+    // A missing column gets its OWN code. "db_write_failed" sends an operator
+    // to look at the row; a schema mismatch means the DATABASE is behind the
+    // code and the fix is a migration, not a retry — and it is the exact case
+    // the deleted cascade used to answer by writing a thinner row and
+    // reporting success. Both codes mean the same thing about the data
+    // (nothing was stored), so no caller has to learn the new one to stay
+    // correct; it only makes the message actionable.
+    const mismatch = isSchemaMismatch(error);
+    throw new ScanWriteError(
+      `Could not write the scan for "${scanRecord?.brand ?? "unknown brand"}": ${
+        error.message || error.code || "unknown database error"
+      }${
+        mismatch
+          ? ". The `scans` table is missing a column this build writes — apply the " +
+            "pending migrations (all of scoring_version, score_ci_low, score_ci_high, " +
+            "stability and mention_rate_pct are in 001_initial_schema.sql). NOTHING was " +
+            "stored: no partial row was written in its place."
+          : ""
+      }`,
+      { cause: error, code: mismatch ? "db_schema_mismatch" : "db_write_failed" }
+    );
+  }
+
+  return confirmScanWritten(data, scanRecord);
 }
 
 /**
- * The last line of insertScan's cascade 3: an insert that PostgREST accepted
- * must come back with the row it wrote.
+ * Does this PostgREST/Postgres error mean "that column is not in the table"?
+ *
+ * PGRST204 is PostgREST's schema-cache miss ("Could not find the 'x' column of
+ * 'scans' in the schema cache"); 42703 is Postgres' own undefined_column, which
+ * is what arrives when the statement reaches the database. The message sniff is
+ * a third line for clients that surface neither code — deliberately last, and
+ * deliberately conservative: mislabelling a genuine refusal as a schema
+ * mismatch only changes the operator's first hypothesis, never whether the
+ * write is reported as failed.
+ *
+ * @param {{code?: string, message?: string}} error
+ */
+function isSchemaMismatch(error) {
+  const code = String(error?.code ?? "");
+  if (code === "PGRST204" || code === "42703") return true;
+  const message = String(error?.message ?? "");
+  if (/PGRST204|42703/.test(message)) return true;
+  return /column\b[^]*\b(does not exist|not found|schema cache)/i.test(message);
+}
+
+/**
+ * The last line of insertScan: an insert that PostgREST accepted must come back
+ * with the row it wrote. (Until R2.2.4 this guarded only the third cascade;
+ * with the cascade gone it guards the one and only insert, which is where it
+ * always belonged — R2.8.9 filed the gap on cascades 1 and 2.)
  *
  * With `.select()` in place this is expected to be unreachable — PostgREST
  * answers `return=representation` with the inserted rows. It exists because
