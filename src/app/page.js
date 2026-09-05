@@ -52,6 +52,22 @@ import { SAMPLE_DESTINATIONS, SAMPLE_RESULT } from '@/data/mockData';
 // worker uses.
 const TRACKED = DEFAULT_UNBRANDED_TARGET;
 
+/* R2.10.2 — THE PROBE COUNTER, AND WHY THERE ISN'T ONE.
+   This page used to carry a stats strip whose first figure was "Probes run":
+   src/components/landing/ProbeCounter.jsx started at a typed 37720 and added a
+   random 1 to 3 to itself every 2.2 seconds. It measured nothing — two tabs open
+   side by side disagreed about how much work the product had ever done — and
+   PRODUCT.md's "Evidence on Hand" still flags it as simulated. That module and
+   the strip around it were deleted on 2026-08-16 in 5111219, the design-system
+   port, so the flag is stale: this page has made no lifetime claim since, and
+   nothing here counts anything but the tracked set and the sample report.
+   Nothing is put back in its place either. There is no aggregate probe count in
+   this deployment worth quoting, and a plausible number is worse than no number
+   because it cannot be checked. If one ever returns it reads a real count query,
+   and when that query cannot answer it renders an em dash and a state chip —
+   never a zero, which is a reading, and never a seed, which is a lie.
+   src/lib/landingProbeCounter.test.mjs holds that line. */
+
 // R2.10.1 — the engines this deployment actually probes, not a hardcoded three.
 // The hero used to name Google AI Overview, ChatGPT and Perplexity while the
 // deployment ran ENGINES=aio,perplexity with no OPENAI_API_KEY at all, so

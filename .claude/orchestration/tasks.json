@@ -4148,6 +4148,33 @@
       }
     },
     {
+      "id": "R2.7.9",
+      "subphase": "R2.7",
+      "lane": "frontend",
+      "phase": "R2",
+      "title": "EngineRail renders a metric as 0 when there is nothing behind it",
+      "detail": "Found by the R2.10.2 implementer while auditing the landing surface, pre-existing and deliberately untouched. src/components/landing/EngineRail.jsx does const perEngine = total ?? (engines[0]?.asked ?? 0), so a missing per-engine figure renders a confident 0 on the LANDING page - the surface a prospect sees before they trust us with anything. Standing rule 5: null renders as an em dash plus a state chip, never a zero. Note R2.10.2 built a landing guard that deliberately has NO rule for the ?? 0 shape, so nothing currently catches this class on that surface.",
+      "accept": "EngineRail renders an em dash plus a state rather than 0 when the figure is absent, and the landing guard gains a rule for the ?? 0 shape so the class cannot return.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/components/landing/EngineRail.jsx:17",
+        "src/lib/landingProbeCounter.test.mjs"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T07:01:19.765Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R2.8.1",
       "subphase": "R2.8",
       "lane": "frontend",
@@ -4327,14 +4354,19 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-03T02:22:25.483Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T07:00:19.109Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -4696,14 +4728,25 @@
         "src/app/page.js"
       ],
       "phase": "R2",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/app/page.js:55",
+        "src/lib/landingProbeCounter.test.mjs:222",
+        "src/lib/landingProbeCounter.test.mjs:251",
+        "src/lib/landingProbeCounter.test.mjs:300",
+        "src/lib/landingProbeCounter.test.mjs:145"
+      ],
       "notes": [
         {
           "at": "2026-09-05T06:37:38.822Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T06:58:30.419Z",
+          "by": "rebuild-implementer",
+          "text": "DOES NOT REPRODUCE AS WRITTEN, and I did not build a replacement. The simulated counter was src/components/landing/ProbeCounter.jsx: BASE = 37720, plus Math.floor(random*3)+1 every 2200ms, rendered as a ProbeCounter element under the label \"Probes run\" in a stats strip (page.js at ca1d000:120). git show 5111219 --stat confirms that file was DELETED on 2026-08-16 in the design-system port, together with the whole strip; git grep finds no \"Probes run\", no \"lp-stat\", no Math.random, no setInterval and no toLocaleString anywhere in src/app/page.js or src/components/landing/.\n\nCORROBORATED AT THE RENDERED LAYER, not only in source: the prerendered .next/server/app/index.html contains no 37720 and no comma-grouped number at all; every numeral it renders is 30 (DEFAULT_UNBRANDED_TARGET), the sample donut 13/10/5/2, the guarded 64/6, and prose figures like 200-bed. So accept clause 2 (the simulation is deleted) already holds, and clause 1 (the counter reads a real count) is moot because there is no counter and nothing aggregate to count: there is no lifetime probe/scan count query in the db layer, the landing page is a statically prerendered use-client route, and adding a public count surface would be a feature the accept does not ask for and that I could not exercise here (no live DB in this environment). Per the brief's second branch: with genuinely nothing to count, display no fabricated number.\n\nWHAT I SHIPPED. (1) src/app/page.js:55 - a 16-line comment where the counter's number used to live, recording what it was, the commit that deleted it, that PRODUCT.md's flag is stale, and the contract if one ever returns: a real count query, and an em dash plus a state chip when it cannot answer, never a zero and never a seed. Comment-only; no rendered output changes. (2) src/lib/landingProbeCounter.test.mjs - a new guard, 5 tests, so the number cannot come back the way it left. It does not forbid a counter; it forbids a MANUFACTURED number on the landing surface: Math.random, setInterval, a self-incrementing state updater, a five-or-more-digit literal, and comma-grouped digits (the toLocaleString shape, 37,720). Files are DISCOVERED by readdir over src/components/landing plus page.js, not typed, so a new component is scanned automatically. Rules run over code with comments and string contents removed by a quote-aware walk that keeps template interpolations as code and REFUSES (throws) any file whose walk ends inside a string or comment, plus a per-file desync check that the stripped text still contains \"export\".\n\nTEETH PROVEN BY SABOTAGE, twice, each applied on disk and then restored (page.js verified clean by git diff, no stray files left): (a) restoring the real deleted ProbeCounter.jsx into the landing directory and rendering it from page.js - 2 of 5 tests fail, the scan naming all four rules and the component-name check firing; (b) the static version of the same lie, a 37,720 div beside a \"Probes run\" div typed into the hero - the grouped-total rule and the \"Probes run\" check both fail. Each rule is also proven to fire ALONE on a minimal snippet, and the fixture test feeds the verbatim deleted module in, so the rules cannot rot into decoration.\n\nSTATED LIMITS, written in the file header rather than implied: it reads source, not DOM (no browser, jsdom or JSX transform exists in this tree); it scans page.js plus src/components/landing only, so a counter smuggled in from another directory is caught only by the component-name check, which is evadable by renaming; and a SMALL typed total (a \"412 probes this week\") trips nothing.\n\nNOT DONE, DELIBERATELY. PRODUCT.md:75 still reads \"Probe counter on the landing page is simulated. [flagged: replace with real telemetry]\" - now false in both halves and it should be struck, but PRODUCT.md is outside the file set I was given, so I left it and am reporting it for its own task. I also did not touch src/components/landing/EngineRail.jsx:17 (const perEngine = total ?? (engines[0]?.asked ?? 0)), a metric falling back to 0 - standing rule 5, pre-existing, outside this task; my guard deliberately has no \"?? 0\" rule so it does not fail on it.\n\nSUITE: npm run test:scoring - 1760 tests, 1734 pass, 0 fail, 26 skipped (baseline 1694/1668/0; the extra tests are other agents' work plus my 5). next lint clean on both files.\n\nSUSPECT FIRST: whether a comment-only page.js change plus a guard is an acceptable answer to \"the counter reads a real count\". That is the judgement call in this submission; the alternative I rejected was inventing a landing-page count surface I could not exercise.\n"
         }
       ],
       "verification": null
@@ -6385,7 +6428,7 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/crawlabilityOutcome.js:181",
@@ -6410,7 +6453,11 @@
           "text": "Finding reproduces (banner had moved to CrawlabilityView.jsx:297-306, not :279). Added describePrimaryCrawlOutcome() + UNVERIFIED_NOTE to src/lib/crawlabilityOutcome.js:140,181 — a second derivation rather than reusing describeRivalCrawlOutcome because the primary 200 body carries no 'blocked' field (a refused brand domain is a 400 at route.js:131-133) and the audience/consequence differ. Five outcomes with written copy and their own tone: unresolved (crit, actionable 'you', leads with 'check the spelling', never says unreachable/down), http_<status> (warn, 'you'), timeout and network_error (warn, 'us', both say the name resolved so the customer is not sent to proofread a working domain), and unknown_error for a failure the route reported without a reason (says outright that we cannot attribute it, instead of guessing network or typo). A defensive 'refused' branch keeps the copy rules if a blocked primary ever reaches a 200. Every failure detail carries UNVERIFIED_NOTE so the default-open bot table below is still declared an assumption. Component now renders the derivation at CrawlabilityView.jsx:310-330 with data-outcome/data-actionable and an Alert variant derived from tone; the slug-formatting fetch_error.replace(/_/g,' ') and the bare !data.fetched_ok gate are gone. Testid renamed crawlability-unreachable -> crawlability-primary-outcome (it named one state, not the surface); git grep shows no consumer outside the component and its test. 6 new tests drive the REAL route for four primary failure shapes and assert kind/label/detail pairwise distinct, plus a source guard; I verified all six guard assertions fail against the old banner text (checked by running the regexes over the pre-change JSX). Also relaxed the R3.7.7 import guard from one exact line to an import-block read because the import gained a third name — teeth unchanged. npm run test:scoring: 1733 tests, 1707 pass, 0 fail, 26 skipped (baseline 1694/1668/0/26; other agents added tests concurrently). eslint clean on both source files. No component-render harness exists in this repo, so React mounting is not exercised — the guard proves the JSX defers to the tested derivation, not that it renders."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-05T06:56:08.151Z",
+        "note": "Fresh verifier in isolated worktree did the real revert the implementer could not, and went further: it BUILT a render harness (sucrase + react-dom/server, useState persisted so the async fetchAudit effect settles) and mounted the real CrawlabilityView through the real Alert. Old JSX, four failure payloads, rendered ONE IDENTICAL LINE each - 'Couldn't reach acme.com/robots.txt (unresolved)/(timeout)/(network error)/(http 503)'. The finding reproduces at the rendered DOM, not just in source text. New JSX gives four distinct banners with data-outcome and data-actionable reaching the DOM, and no banner at all on fetched_ok true. All ten assertions of the guard run individually against the real HEAD~1 file fail. R3.7.7's relaxed import guard retested: aliasing the import to another module still fails it, in both import orderings; the one newly opened hole (alias-to-discard plus a local reimplementation) is adversarial-author evasion, not drift. Verified from ssrfGuard.js that the 'the name resolved' claim in the network_error copy is factually true. Suite 1731/1705/0/26."
+      }
     },
     {
       "id": "R4.1.1",
@@ -6528,14 +6575,19 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-05T01:51:55.947Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T07:00:41.958Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -7285,14 +7337,19 @@
       ],
       "phase": "R6",
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-test-author",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-03T11:32:58.666Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T07:00:25.789Z",
+          "by": "rebuild-test-author",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -7428,7 +7485,7 @@
         "docs/"
       ],
       "phase": "R6",
-      "status": "in_verification",
+      "status": "in_progress",
       "owner": "rebuild-scribe",
       "evidence": [
         "docs/OPERATOR_LEDGER.md:378"
@@ -7443,9 +7500,18 @@
           "at": "2026-09-05T06:43:20.178Z",
           "by": "rebuild-scribe",
           "text": "docs/OPERATOR_LEDGER.md created, 391 lines, house doc-status header (LIVE) + Date/Task/Verified-at 1a5ed81; node --test src/lib/docStatus.test.mjs 10/10 green. Covers the four accept areas: SECRETS (:180 - the vendorRegistry.js:51-67 credential table reproduced with required/optional, plus the three things check:secrets does NOT tell you, chief of which is that OPERATOR_TOKEN is not in that table at all, so a fully green run says nothing about whether the perimeter is armed); MIGRATIONS (:231 - what is catalog-verified applied vs what is NOT, 012's applied state written down as unverified rather than assumed, the catalog-not-head-probe rule, and the R0.1.11 44-stranded-row reconcile as the reusable shape); KEY ROTATION (:47 - the GSC leak as item 1, revoke-then-reissue, with the mitigating zero-property fact stated and explicitly not treated as an excuse; R0.1.12 carries the second rotation, both values pasted into a transcript); CONTENT APPROVAL (:277 - the decision route as the standing human gate, and the two things about it that are not true yet). Not softened, per instruction: :298 states plainly that approve-to-publish-to-lift has never run end to end, sourced to R5.4.3's own detail, and :378 is a Known-open section repeating that plus five other unproven claims. Derived from the repo, not a template: every gated task is listed BY ID with the specific operator action, grouped by tag (needs-secrets/vercel/decision/llm/soak), and the file states no task totals because they go stale - it tells the reader to re-derive with orchestrate.mjs status. Citations verified at HEAD, and two roadmap-supplied ones were found STALE and corrected rather than copied: R0.1.20 cites rateLimit.js:74 but the 'NOT VERIFIED HERE' comment is at :79 (TRUSTED_IP_HEADER at :76), and R0.1.21 cites db.js:508-510 but createScanJob is at :577 with the memoryJobs fallback at :600-602 (:508 is brand aggregation). Verified fresh: vendorRegistry.js:51-67, gsc.js:17 (webmasters.readonly), decision/route.js:19/:26/:93-98 (the synthesized studio.perceev.app URL feeding real lift attribution), calibrationFixture.js:84/:123, setup-supabase.mjs:473/:502/:510, middleware.js:36/:66, vercel.json (both crons daily, no ?batch=1). One live-vs-dead check that changed the doc: src/middleware.js does NOT exist on main (git cat-file), only on this branch 120 commits ahead - so the ledger states the ordering constraint that OPERATOR_TOKEN must be set in Vercel BEFORE PR #1 merges, because it fails closed and the landing page will still look fine. NO INDEX LINE ADDED: there is no docs/README.md; docs/plans/README.md and docs/vendors/README.md are directory-scoped, so house style requires none for a docs/ top-level file (BUILD_JOURNAL.md is likewise unindexed). SECRETS HYGIENE: no credential value read, printed or paraphrased; .env.example only, never .env.local; all searches git grep or path-scoped."
+        },
+        {
+          "at": "2026-09-05T06:58:57.657Z",
+          "by": "verifier",
+          "text": "rejected: FAIL, narrowly, on evidence integrity - not prose. Verifier checked 48 claims: 46 held, 2 did not. docs/OPERATOR_LEDGER.md:348 cites src/lib/db.js:577 and :600-602 as createScanJob and its memory fallback. It traced createScanJob across the last 12 commits (412, 485, 542, 580) and it has NEVER been at 577; at both the doc's declared Verified-at commit and the commit it ships in, those lines resolve to unrelated code (isJobAlive, and the 409 reclaim path). The substance is right, the pointer sends the reader to the wrong mechanism - and this was presented as a CORRECTION of a stale roadmap citation. This ledger already rejected R3.3.1 on exactly this ground, so the standard is established, not invented. The load-bearing claim HELD and was exercised, not read: the verifier ran authorizeOperatorRequest directly and confirmed four operator routes DENY on deny_no_token_configured while /api/industries, /api/health and POST /api/scan stay public, and that OPERATOR_TOKEN appears zero times in check-secrets.mjs. Document confirmed to contain NO credential value by pattern scan. Suite 1731/1705/0/26."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "fail",
+        "at": "2026-09-05T06:58:57.656Z",
+        "note": "FAIL, narrowly, on evidence integrity - not prose. Verifier checked 48 claims: 46 held, 2 did not. docs/OPERATOR_LEDGER.md:348 cites src/lib/db.js:577 and :600-602 as createScanJob and its memory fallback. It traced createScanJob across the last 12 commits (412, 485, 542, 580) and it has NEVER been at 577; at both the doc's declared Verified-at commit and the commit it ships in, those lines resolve to unrelated code (isJobAlive, and the 409 reclaim path). The substance is right, the pointer sends the reader to the wrong mechanism - and this was presented as a CORRECTION of a stale roadmap citation. This ledger already rejected R3.3.1 on exactly this ground, so the standard is established, not invented. The load-bearing claim HELD and was exercised, not read: the verifier ran authorizeOperatorRequest directly and confirmed four operator routes DENY on deny_no_token_configured while /api/industries, /api/health and POST /api/scan stay public, and that OPERATOR_TOKEN appears zero times in check-secrets.mjs. Document confirmed to contain NO credential value by pattern scan. Suite 1731/1705/0/26."
+      }
     },
     {
       "id": "R6.2.2",
@@ -7732,6 +7798,32 @@
       "notes": [
         {
           "at": "2026-09-05T06:52:50.362Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.3.5",
+      "subphase": "R6.3",
+      "lane": "docs",
+      "phase": "R6",
+      "title": "PRODUCT.md flags a simulated probe counter that no longer exists",
+      "detail": "Found by the R2.10.2 implementer. PRODUCT.md around line 75 reads that the probe counter on the landing page is simulated and is flagged for replacement with real telemetry. Both halves are now false: the ProbeCounter component was DELETED on 2026-08-16 in the design-system port (commit 5111219), and there is no counter on the landing page at all. A flag pointing at work that no longer needs doing is the same class as a stale line citation - it costs a future reader a wasted investigation, and it makes the honest flags around it less credible.",
+      "accept": "PRODUCT.md describes the landing surface as it is. If the intent to ship a real counter survives, it is stated as an intent with no claim that a simulated one is live.",
+      "deps": [],
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "PRODUCT.md:75"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T07:01:20.208Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -8052,14 +8144,15 @@
       "lane": "test",
       "phase": "R6",
       "title": "No component-render harness, so every UI guard is a text scan that can pass while the component is broken",
-      "detail": "Established by two independent verifiers this session, working on different tasks. There is no jsdom, testing-library, react-test-renderer, happy-dom or vitest in package.json or node_modules, and no test file in src imports a .jsx. Every UI guard in the repo is therefore a readFileSync text scan - the pattern in degradedEngineBanner.test.mjs and landingHonesty.test.mjs. The R3.7.7 verifier demonstrated the cost concretely: it inverted a single ternary in CrawlabilityView.jsx so that a refused rival rendered the all-open meter and a healthy rival rendered the refusal copy, and ALL EIGHT TESTS STILL PASSED. The guard checked the import, the const, the rendered label, the rendered detail, data-outcome and the whole-row prop, and an inverted ternary preserves every one of them. The important correction to the received wisdom: no-harness-is-possible is false. Both verifiers built one ad hoc in roughly 40 lines from dependencies ALREADY PRESENT - next/dist/build/swc or sucrase to transform the JSX, then react-dom/server renderToStaticMarkup - and used it to render the shipped components and observe the bug failing and fixed. The accurate framing is that none exists, not that none is possible.",
+      "detail": "Established by two independent verifiers this session, working on different tasks. There is no jsdom, testing-library, react-test-renderer, happy-dom or vitest in package.json or node_modules, and no test file in src imports a .jsx. Every UI guard in the repo is therefore a readFileSync text scan - the pattern in degradedEngineBanner.test.mjs and landingHonesty.test.mjs. The R3.7.7 verifier demonstrated the cost concretely: it inverted a single ternary in CrawlabilityView.jsx so that a refused rival rendered the all-open meter and a healthy rival rendered the refusal copy, and ALL EIGHT TESTS STILL PASSED. The guard checked the import, the const, the rendered label, the rendered detail, data-outcome and the whole-row prop, and an inverted ternary preserves every one of them. The important correction to the received wisdom: no-harness-is-possible is false. Both verifiers built one ad hoc in roughly 40 lines from dependencies ALREADY PRESENT - next/dist/build/swc or sucrase to transform the JSX, then react-dom/server renderToStaticMarkup - and used it to render the shipped components and observe the bug failing and fixed. The accurate framing is that none exists, not that none is possible. Two verifiers this round (R2.7.8, R3.7.8) independently established that a component-render harness ALREADY EXISTS in this repo: src/components/dashboard/engineSetChangeSurface.test.mjs builds one inline with sucrase + react-dom/server, landed in 3e37c92. R3.7.8's verifier reused the pattern to mount the real CrawlabilityView through the real Alert and reproduce the bug at the rendered DOM; R2.7.8's implementer reused it to render the real DashboardShell with the real ScoreBand. So this task is NOT 'no harness exists' - it is 'the harness is copy-pasted per test file, and its default @/components catch-all stub silently renders nothing, which is exactly how a UI guard passes while the component is broken'. Re-scope to extracting the harness into one shared module whose stubbing is explicit and whose default is to FAIL rather than stub. Note also that the false claim 'this repo has no render harness' has now propagated into two task notes.",
       "accept": "A shared render harness exists that any test can import to render a component to static markup using dependencies already in package.json, with no new runtime dependency. At least one existing text-scan guard is converted to use it and is shown to catch a mutation that the text scan misses - the inverted ternary in CrawlabilityView.jsx is the worked example and should be the proof.",
       "deps": [
         "R3.7.7"
       ],
       "anchors": [
         "src/components/dashboard/crawlabilityRivalOutcome.test.mjs",
-        "package.json"
+        "package.json",
+        "src/components/dashboard/engineSetChangeSurface.test.mjs"
       ],
       "findings": [],
       "tags": [],
@@ -8071,6 +8164,11 @@
           "at": "2026-09-05T02:15:43.818Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T06:56:13.383Z",
+          "by": "controller",
+          "text": "amended: Two verifiers this round (R2.7.8, R3.7.8) independently established that a component-render harness ALREADY EXISTS in this repo: src/components/dashboard/engineSetChangeSurface.test.mjs builds one inline with sucrase + react-dom/server, landed in 3e37c92. R3.7.8's verifier reused the pattern to mount the real CrawlabilityView through the real Alert and reproduce the bug at the rendered DOM; R2.7.8's implementer reused it to render the real DashboardShell with the real ScoreBand. So this task is NOT 'no harness exists' - it is 'the harness is copy-pasted per test file, and its default @/components catch-all stub silently renders nothing, which is exactly how a UI guard passes while the component is broken'. Re-scope to extracting the harness into one shared module whose stubbing is explicit and whose default is to FAIL rather than stub. Note also that the false claim 'this repo has no render harness' has now propagated into two task notes."
         }
       ],
       "verification": null
