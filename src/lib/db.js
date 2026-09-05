@@ -58,10 +58,73 @@ export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, s
 // );
 // CREATE UNIQUE INDEX content_events_brand_url_idx ON content_events (brand, url);
 
-export async function insertScan(scanRecord) {
-  if (!supabase) {
-    console.warn("Supabase credentials missing. Skipping database insert.");
-    return;
+/**
+ * Raised when a scan row could not be WRITTEN. Carries a `code` so a caller —
+ * or the operator reading the failed job's error_message — can tell a
+ * misconfigured deployment ("db_not_configured") from a database that rejected
+ * or could not receive the insert ("db_write_failed").
+ *
+ * Deliberately the same shape and the same two code strings as
+ * ScansUnavailableError below (R2.8.4, the read side of this bug): one
+ * vocabulary for "the database did not do the thing", not two. A separate class
+ * rather than a reused one because `instanceof ScansUnavailableError` on a
+ * write failure would be a lie — the two are caught in different places and a
+ * read-error handler that also swallowed write errors is the next version of
+ * this finding.
+ */
+export class ScanWriteError extends Error {
+  constructor(message, { cause, code = "scan_write_failed" } = {}) {
+    super(message);
+    this.name = "ScanWriteError";
+    this.code = code;
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
+/**
+ * Writes the finished scan to `scans` and returns the inserted row(s).
+ *
+ * CONTRACT (R2.8.6 / finding A1): this function either RETURNS what the
+ * database gave back for a write it actually performed, or it THROWS a
+ * ScanWriteError. It never resolves with `undefined` to mean "I did nothing".
+ *
+ * It used to do exactly that: with no Supabase client it logged
+ * "Skipping database insert." and returned, handing `undefined` to a caller
+ * whose next line reads `savedScan?.[0]?.id`. Standing rule 2 — never fail-soft
+ * a create call — and standing rule 1: a skip is not a success. The one
+ * production caller (runFinalizePhase in workers/scanWorker.js) happened to
+ * check for a falsy id and throw, so the outcome was already a failed job, but
+ * it failed with the generic "insertScan did not return a saved record id" for
+ * BOTH a missing client and an empty insert result. An operator could not tell
+ * a deploy with no credentials from a database that rejected the row. Any
+ * future caller that trusted the resolve — the shape R2.8.4 removed from
+ * getScansForBrand on the read side — got a silent no-op.
+ *
+ * Throwing rather than returning a discriminated union, for the same reason
+ * getScansForBrand throws: a union that a caller forgot to unwrap lands on
+ * `savedScan?.[0]?.id === undefined`, which is byte-for-byte the failure this
+ * change exists to remove. A throw cannot be silently mis-handled.
+ *
+ * `deps.client` is test-only injection (defaults to the module-level
+ * `supabase`), matching every other function in this file, so the no-client
+ * branch is reachable from a test without unsetting env for the whole process.
+ *
+ * KNOWN ADJACENT DEFECT, NOT FIXED HERE (reported as its own finding):
+ * cascade 3 below inserts without `.select()`, so PostgREST resolves it with
+ * `data: null` on SUCCESS. This function then returns null for a row that was
+ * genuinely written, and runFinalizePhase reports "Failed to save scan
+ * results" — after which a re-finalize has no stamped scan_id and inserts a
+ * duplicate. That is the mirror of this task (a success read as a failure) and
+ * changing the wire shape of a live insert is out of R2.8.6's scope.
+ */
+export async function insertScan(scanRecord, deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) {
+    throw new ScanWriteError(
+      "Supabase is not configured — the scan could not be saved. " +
+        "Nothing was written; this is a refusal, not an empty result.",
+      { code: "db_not_configured" }
+    );
   }
 
   // Persist rich scan data in raw_results JSONB for history / normalizeResult
@@ -148,7 +211,7 @@ export async function insertScan(scanRecord) {
 
   // Cascade 1: try to insert with all new columns
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from("scans")
       .insert([
         {
@@ -167,7 +230,7 @@ export async function insertScan(scanRecord) {
     console.warn("Inserting with all columns failed, retrying with only scoring_version:", err.message || err);
     // Cascade 2: try to insert with scoring_version only (Phase 1 schema)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await client
         .from("scans")
         .insert([
           {
@@ -182,14 +245,23 @@ export async function insertScan(scanRecord) {
       console.warn("Inserting with scoring_version failed, retrying baseRecord only:", err2.message || err2);
       // Cascade 3: try base record only (Legacy schema)
       try {
-        const { data, error } = await supabase
+        const { data, error } = await client
           .from("scans")
           .insert([baseRecord]);
         if (error) throw error;
         return data;
       } catch (fallbackErr) {
         console.error("Fallback insert failed:", fallbackErr);
-        throw fallbackErr;
+        // All three cascades are exhausted: the scan is NOT saved. Wrap rather
+        // than rethrow so the failure carries a code the caller can branch on
+        // and a message that names the write, while `cause` preserves the
+        // original error envelope (PostgREST code/details/hint) intact.
+        throw new ScanWriteError(
+          `Could not write the scan for "${scanRecord?.brand ?? "unknown brand"}": ${
+            fallbackErr?.message || fallbackErr?.code || "unknown database error"
+          }`,
+          { cause: fallbackErr, code: "db_write_failed" }
+        );
       }
     }
   }
@@ -236,8 +308,9 @@ export class ScansUnavailableError extends Error {
  */
 export async function getScansForBrand(brand) {
   if (!supabase) {
-    // No memory fallback exists for scans (insertScan is a no-op without a
-    // client), so [] here could only ever have been a fabricated measurement.
+    // No memory fallback exists for scans (insertScan refuses without a
+    // client — R2.8.6), so [] here could only ever have been a fabricated
+    // measurement.
     throw new ScansUnavailableError(
       "Supabase is not configured — scan history cannot be read.",
       { code: "db_not_configured" }

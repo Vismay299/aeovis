@@ -1125,6 +1125,37 @@
       "verification": null
     },
     {
+      "id": "R0.1.21",
+      "subphase": "R0.1",
+      "lane": "backend",
+      "phase": "R0",
+      "title": "POST /api/scan returns 201 off a job that only exists in memory",
+      "detail": "Identified by the R2.8.6 implementer as the ACTUAL mechanism behind R0.1.4, which the ledger had attributed to insertScan. src/lib/db.js:508-510: createScanJob fail-softs to global.memoryJobs when there is no Supabase client. src/app/api/scan/route.js:57-70 then returns 201 off that in-memory job. So on a deploy with no credentials - or with credentials that stop working - an anonymous request gets a 201 Created and a job id for a scan that was never persisted, and the scan proceeds to spend money on vendor calls whose results have nowhere to land. R0.1.4's negative control hit exactly this: it returned 201 and started an in-memory scan, and nothing was billed only because no credentials load under node --test, which its own author called luck rather than design. R2.8.6 closed the results write; this is the job create, one step earlier, and it never reaches insertScan at all. The memory store is not simply a bug: it is load-bearing for the entire test suite, so removing it needs a decision about whether it is dev-only by assertion rather than dev-only by accident.",
+      "accept": "A request cannot receive a 201 for a scan job that was not persisted. Either the route refuses when there is no client, or the memory store is gated behind an explicit development assertion that production cannot satisfy - and the choice is recorded as a decision. A test drives the no-client path against the real route and fails if it returns 201.",
+      "deps": [
+        "R2.8.6"
+      ],
+      "anchors": [
+        "src/lib/db.js:508",
+        "src/app/api/scan/route.js:57"
+      ],
+      "findings": [],
+      "tags": [
+        "needs-decision"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T02:14:44.057Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R0.2.1",
       "subphase": "R0.2",
       "lane": "docs",
@@ -3983,7 +4014,7 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/db.js:120",
@@ -4011,6 +4042,73 @@
           "at": "2026-09-05T02:02:30.415Z",
           "by": "rebuild-implementer",
           "text": "Finding REPRODUCED at src/lib/db.js:61-65 (old numbering). insertScan now takes deps like every other function in the file, resolves the client via resolveClient, and THROWS ScanWriteError instead of returning undefined: code db_not_configured for no client (db.js:122-127), code db_write_failed wrapping the exhausted 3-cascade failure with the PostgREST envelope preserved on .cause (db.js:255-264). Same class shape and same two code strings as R2.8.4's ScansUnavailableError; a separate class because a read-error handler must not catch a write failure. Throw, not a union, for R2.8.4's stated reason: an unwrapped union lands on savedScan?.[0]?.id === undefined, which is the exact bug. ONE production caller repo-wide: runFinalizePhase, scanWorker.js:1879-1896. It does NOT swallow - it catches into insertErr, throws 'Failed to save scan results: <cause>', and runScanChunk's outer catch (scanWorker.js:2296-2307) writes that to scan_jobs.error_message and closes the scan_run FAILED. Behaviour change at the caller: the message now names WHY (was the generic 'insertScan did not return a saved record id' for both a missing client and an empty result). scripts/backfill-analytics.mjs only mentions insertScan in a comment; no other caller exists. TESTS: 6 in src/lib/insertScanWriteFailure.test.mjs, all with an injected null/fake client - NO database touched, no env file, guard preloaded. Proof against old code: I temporarily restored the fail-soft return + raw rethrow in a scratch copy and reran - 5 of 6 FAILED ('insertScan must refuse ... It resolved instead, with undefined', 'expected ScanWriteError, got undefined', and at the caller 'Got: Failed to save scan results: insertScan did not return a saved record id.'); the 6th is the success-path no-collateral-damage guard and passes both ways. db.js restored (md5 verified) before the suite run. SUITE: npm run test:scoring = 1647 tests / 1621 pass / 0 fail / 26 skipped. INCOMPLETE, REPORTED NOT FIXED: (a) POST /api/scan can STILL 201 with nothing persisted - that path never reaches insertScan; createScanJob fail-softs to global.memoryJobs at db.js:508-510 and the route 201s off it (src/app/api/scan/route.js:57-70). R0.1.4's mechanism is createScanJob, not insertScan. (b) cascade 3 (db.js:249-251) inserts without .select(), so PostgREST resolves data:null on SUCCESS; insertScan returns null for a row that WAS written, finalize reports failure, and a re-finalize has no stamped scan_id and duplicates the row. Both flagged in the db.js doc comment and left for their own tasks."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-05T02:17:20.259Z",
+        "note": "Independent verifier, isolated worktree at bebc5e6 with only this task's diff plus its new test. IMPORTANT BASELINE CORRECTION FOR THE CONTROLLER: bebc5e6 measures 1615 tests / 1589 pass / 0 fail / 26 skipped, NOT the 1577/1551 that was being quoted - that figure predates the last commit. With the patch: 1621/1595/0/26, exactly +6/+6, zero new failures. SABOTAGE: restoring the original console.warn-and-return and the raw throw fallbackErr made 5 of 6 tests fail with the exact claimed messages, including 'insertScan must refuse when there is no client. It resolved instead, with undefined'. That doubles as the reproduction of the original bug. The 6th passed both ways by design - the no-collateral-damage guard. db.js md5-verified identical after restore. CALLER LIST ENUMERATED INDEPENDENTLY, including a sweep for namespace imports, re-exports and dynamic import(): EXACTLY ONE production caller. scanWorker.js:5 imports it, :1450 resolves deps.insertScan || insertScan, called at :1791 inside runFinalizePhase. Everything else is a comment or a test that injects via deps. NOTHING SWALLOWS: scanWorker.js:1791-1803 binds the catch to insertErr and immediately rethrows naming the cause; runScanChunk's outer catch at :2205-2216 writes it to scan_jobs.error_message, sets status failed, returns ok:false, and its inner catch only logs a secondary failure without rescuing the result; finish() closes the scan_runs row via chunkRunOutcome. LIVENESS TRACED HOP BY HOP: vercel.json cron to POST /api/scan/worker to route.js:138 and :215 to runScanChunk to scanWorker.js:2192 runFinalizePhase to :1791 the real insertScan; also reachable from POST /api/scan:62. THE CASCADE-3 BUG IS REAL, confirmed at the library level and empirically - and the verifier corrected the framing in two ways the controller must record. postgrest-js dist/index.mjs:614 shows .select() is the ONLY thing that appends Prefer: return=representation, and :378-385 shows processResponse initialises data null and on a 201 with an empty body hits an EMPTY BLOCK, leaving data null and error null. db.js:247-252: cascades 1 and 2 call .select(), cascade 3 does not. Driven with a stub: 3 cascade attempts, insertScan returned null, caller reads null - a row that WAS written comes back as null. CORRECTION 1: this diff does NOT make it more reachable. The change touches cascade 3 only to swap supabase for client and to wrap the ERROR path; the cascade-3 SUCCESS path is byte-for-byte identical before and after. CORRECTION 2: the duplicate-row consequence is narrower than filed. runScanChunk at :2069 returns already_finished for a job whose status is complete or failed, and shouldRescueJob at :845 returns false for failed, so the cron sweep will NOT re-finalize. A duplicate needs the outer catch's own updateJob to also fail, or a manual re-dispatch. THE ROUTINE OUTCOME IS AN ORPHANED scans ROW PLUS A JOB THAT LIES ABOUT FAILING - no prompt_results.scan_id, no citations, no result_brands, no brand_metrics_daily rollup. Filed as R2.8.7; its detail should be amended with these two corrections. THE 201-WITH-NOTHING-PERSISTED PATH IS createScanJob, confirmed: scan/route.js:57 calls it, :67-71 returns 201 off job.id, insertScan is nowhere on that path, and db.js:485-511 puts a fully-formed pending job into global.memoryJobs when there is no client. Filed as R0.1.21. SUSPICIOUS POINTS RESOLVED: resolveClient at :459 is a hoisted function declaration so the below-use placement is fine, and its hasOwnProperty('client') check means an explicit {client: undefined} is a refusal that cannot fall through to the ambient client - that is what keeps the suite off a real database. collectionWindowPersist.test.mjs's one-argument call still works via the module-level binding it monkeypatches. The separate ScanWriteError class is judged acceptable though prophylactic: no production code does instanceof ScansUnavailableError. NOTED, NOT A FAIL: the caller flattens ScanWriteError into a plain Error, so .code and .cause do not survive past runFinalizePhase - only the message does, and the accept is about a caller not mistaking refusal for success, which holds. The db_not_configured caveat is confirmed: updateScanJob also has no client so error_message lands in memoryJobs, but console.error fires and the status route reads the same map, so the user sees a FAILED job rather than a fabricated success. All nine citations open and confirm."
+      }
+    },
+    {
+      "id": "R2.8.7",
+      "subphase": "R2.8",
+      "lane": "backend",
+      "phase": "R2",
+      "title": "insertScan cascade 3 writes the row and reports failure, so a re-finalize inserts a duplicate",
+      "detail": "Found by the R2.8.6 implementer while making insertScan fail loud, and flagged in a doc comment rather than silently fixed because it changes the wire shape. src/lib/db.js:249-251, the third and last cascade, performs its insert WITHOUT a .select(). PostgREST resolves data: null on SUCCESS in that case. So insertScan returns null for a row that WAS written. runFinalizePhase then reports 'Failed to save scan results', the job is marked failed, and no scan_id is stamped on the checkpoint. A re-finalize therefore finds no stamped scan_id and inserts a SECOND scans row for the same scan. This is the exact mirror of the finding R2.8.6 closes: that one was a create that reported nothing on failure, this one is a create that reports failure on success, and the consequence is worse because it is silent duplication of customer rows rather than a loud refusal. It also interacts badly with R2.8.6's new throw: the throw makes the failure path more reachable, so the duplicate-row path becomes more reachable too, not less. TWO CORRECTIONS from the R2.8.6 verifier, which confirmed the bug at the library level and empirically. CONFIRMED: postgrest-js dist/index.mjs:614 shows .select() is the ONLY thing that appends Prefer: return=representation, and :378-385 shows processResponse initialises data to null and, on a 201 with an empty body, hits an EMPTY BLOCK - so data stays null and error stays null. db.js:247-252: cascades 1 and 2 call .select(), cascade 3 does not. Driven with a stub forcing cascades 1 and 2 to error: 3 attempts, insertScan returned null, caller read null, for a row that WAS written. CORRECTION 1 - R2.8.6 did NOT make this more reachable. Its diff touches cascade 3 only to swap the module binding for the resolved client and to wrap the ERROR path; the cascade-3 SUCCESS path is byte-for-byte identical before and after. CORRECTION 2 - the duplicate-row consequence is NARROWER than filed. runScanChunk at scanWorker.js:2069 returns already_finished for a job whose status is complete or failed, and shouldRescueJob at :845 returns false for failed, so the cron resume sweep will not re-finalize a falsely-failed job. A duplicate requires the outer catch's own updateScanJob to ALSO fail (leaving the job in scoring with a stale heartbeat, then rescued) or a manual re-dispatch. THE ROUTINE OUTCOME, which is what this task should be scoped to fix, is an ORPHANED scans ROW PLUS A JOB THAT LIES ABOUT FAILING: no prompt_results.scan_id, no citations, no result_brands, no brand_metrics_daily rollup, and a failed job the customer sees for a scan that actually succeeded. The minimal remedy is to add .select() to cascade 3 so a successful legacy-schema insert returns its row.",
+      "accept": "The third cascade reports its success truthfully - either it selects the inserted row like the earlier cascades, or a null result from a succeeding insert is distinguished from a null result from a failing one, so no caller can read a written row as a failed write. A test drives cascade 3 to success and fails if insertScan reports failure; a second test drives a re-finalize after a cascade-3 success and fails if a duplicate scans row is inserted.",
+      "deps": [
+        "R2.8.6"
+      ],
+      "anchors": [
+        "src/lib/db.js:249",
+        "src/lib/workers/scanWorker.js:1879"
+      ],
+      "findings": [],
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T02:14:42.979Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-05T02:17:32.111Z",
+          "by": "controller",
+          "text": "amended: TWO CORRECTIONS from the R2.8.6 verifier, which confirmed the bug at the library level and empirically. CONFIRMED: postgrest-js dist/index.mjs:614 shows .select() is the ONLY thing that appends Prefer: return=representation, and :378-385 shows processResponse initialises data to null and, on a 201 with an empty body, hits an EMPTY BLOCK - so data stays null and error stays null. db.js:247-252: cascades 1 and 2 call .select(), cascade 3 does not. Driven with a stub forcing cascades 1 and 2 to error: 3 attempts, insertScan returned null, caller read null, for a row that WAS written. CORRECTION 1 - R2.8.6 did NOT make this more reachable. Its diff touches cascade 3 only to swap the module binding for the resolved client and to wrap the ERROR path; the cascade-3 SUCCESS path is byte-for-byte identical before and after. CORRECTION 2 - the duplicate-row consequence is NARROWER than filed. runScanChunk at scanWorker.js:2069 returns already_finished for a job whose status is complete or failed, and shouldRescueJob at :845 returns false for failed, so the cron resume sweep will not re-finalize a falsely-failed job. A duplicate requires the outer catch's own updateScanJob to ALSO fail (leaving the job in scoring with a stale heartbeat, then rescued) or a manual re-dispatch. THE ROUTINE OUTCOME, which is what this task should be scoped to fix, is an ORPHANED scans ROW PLUS A JOB THAT LIES ABOUT FAILING: no prompt_results.scan_id, no citations, no result_brands, no brand_metrics_daily rollup, and a failed job the customer sees for a scan that actually succeeded. The minimal remedy is to add .select() to cascade 3 so a successful legacy-schema insert returns its row."
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R2.8.8",
+      "subphase": "R2.8",
+      "lane": "backend",
+      "phase": "R2",
+      "title": "The content event and lease writers take no deps and swallow their own errors",
+      "detail": "Found by the R3.2.4 author while closing the live-write adoption gap, and stated as the reason two of the seven offender test files could not simply be fixed by injection. src/lib/db.js:668 - insertContentEvent catches its own error and falls back to memory, and getContentEvents is the same shape; neither takes a deps argument, so a test cannot inject a client and is forced to manipulate ambient environment instead. src/lib/content/contentWorker.js passes no deps to acquireLease, renewLease or releaseLease for the same reason. The consequence the live write guard exposed: contentLift.test.mjs called the real insertContentEvent, the guard REFUSED the production write, and the test still passed - because the function swallowed the refusal and fell back to memory. Which means the symmetric case is also true and is the real finding: without the guard, a SUCCESSFUL production write from a test would have been equally invisible. A create that swallows its own failure cannot tell anyone whether it wrote, and that is the same class as R2.8.4 on the read side and R2.8.6 on the scans create.",
+      "accept": "insertContentEvent, getContentEvents and the three lease functions accept injectable deps and report a write failure rather than swallowing it into a memory fallback; a test can drive them with a fake client and no ambient environment. A test fails if a refused or failed write is reported as success.",
+      "deps": [
+        "R3.2.4"
+      ],
+      "anchors": [
+        "src/lib/db.js:668",
+        "src/lib/content/contentWorker.js"
+      ],
+      "findings": [],
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T02:16:00.166Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
         }
       ],
       "verification": null
@@ -4837,7 +4935,7 @@
       "subphase": "R3.3",
       "lane": "backend",
       "title": "attempts column with a cap of 3",
-      "detail": "Beyond the cap the job is terminal: failed with reason 'max_attempts'. No more infinite daily retries. IMPLEMENTER NOTE (the CLI in this environment could not accept a long --note; the full note is in the agent report). Evidence beyond the 3 cited: migration 012_scan_job_attempts.sql:81 column, :104 index, :124 claim_scan_job_attempt, :190 terminal write, :209 increment+heartbeat; scanWorker.js:822 MAX_JOB_ATTEMPTS, :839 attemptVerdict, :887 claimJobAttempt, :1940 the claim site, :1258 the reset-on-progress, :488/:505 the two ledger mappings; scanJobAttempts.test.mjs:279/:314/:338/:361/:473; setup-supabase.mjs:128 catalog; liveWriteGuard.js:121; scanChunkLedgerLive.test.mjs:129. KEY DECISIONS: attempts counts RESUMES OF A DEAD EXECUTOR (shouldRescueJob at entry), not chunks, or a long scan would die at three slices; it is RESET by the UPDATE that persists a probe batch, so the cap counts consecutive resumes that achieved nothing, and progress is bounded so retries still terminate; beyond the cap the SQL writes failed/100/error_message starting 'max_attempts:' in the SAME transaction as the refusal. SQL NOT EXECUTED: no local Postgres; applying 012 is an operator action.",
+      "detail": "Beyond the cap the job is terminal: failed with reason 'max_attempts'. No more infinite daily retries. IMPLEMENTER NOTE (the CLI in this environment could not accept a long --note; the full note is in the agent report). Evidence beyond the 3 cited: migration 012_scan_job_attempts.sql:81 column, :104 index, :124 claim_scan_job_attempt, :190 terminal write, :209 increment+heartbeat; scanWorker.js:822 MAX_JOB_ATTEMPTS, :839 attemptVerdict, :887 claimJobAttempt, :1940 the claim site, :1258 the reset-on-progress, :488/:505 the two ledger mappings; scanJobAttempts.test.mjs:279/:314/:338/:361/:473; setup-supabase.mjs:128 catalog; liveWriteGuard.js:121; scanChunkLedgerLive.test.mjs:129. KEY DECISIONS: attempts counts RESUMES OF A DEAD EXECUTOR (shouldRescueJob at entry), not chunks, or a long scan would die at three slices; it is RESET by the UPDATE that persists a probe batch, so the cap counts consecutive resumes that achieved nothing, and progress is bounded so retries still terminate; beyond the cap the SQL writes failed/100/error_message starting 'max_attempts:' in the SAME transaction as the refusal. SQL NOT EXECUTED: no local Postgres; applying 012 is an operator action. EVIDENCE CORRECTION, supersedes the six wrong scanWorker.js numbers stated earlier in this detail. The correct lines, verified independently by the re-verifier at 49fe39e and equally true at bebc5e6: MAX_JOB_ATTEMPTS 889 (was cited 822); attemptVerdict 906 (was 839); claimJobAttempt 954 (was 887); THE CLAIM SITE 2086 (was 1940 - the old number landed on a blank line inside runFinalizePhase, sending an auditor into finalize instead of dispatch); reset-on-progress 1401 (was 1258); ledger mappings 555 and 572 (were 488/505, both bare closing braces). Enclosing-function derivation done independently: the last column-0 declaration before 2086 is runScanChunk at :2006, with no column-0 closing brace between them; runFinalizePhase opens at :1446 and closes at :1971, thirty-five lines before runScanChunk opens. The claim site is in dispatch. STALENESS WARNING: 13 of the 19 citations are already stale in the working tree from sibling edits - scanWorker.js shifts to 556/573/890/907/955/1444/2177, liveWriteGuard.js:121 is ALREADY broken and now reads a different table entry with claim_scan_job_attempt at :141, and the five scanJobAttempts.test.mjs numbers all shift by +25 so :279 lands on a comment ruler. Read this evidence at bebc5e6.",
       "accept": "A job that fails three times is terminal and stops being retried; a test covers the cap.",
       "deps": [
         "R3.2.1"
@@ -4853,7 +4951,7 @@
         "src/lib/workers/scanJobAttempts.test.mjs"
       ],
       "phase": "R3",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "supabase/migrations/012_scan_job_attempts.sql:81",
@@ -4895,12 +4993,17 @@
           "at": "2026-09-05T01:58:14.530Z",
           "by": "rebuild-implementer",
           "text": "EVIDENCE CORRECTION ONLY, no source file edited. All numbers re-derived from COMMITTED content via git show, true at commit 49fe39e. scanWorker.js corrected: 822->889 MAX_JOB_ATTEMPTS const; 839->906 attemptVerdict decl; 887->954 claimJobAttempt decl; 1940->2086 the claim site, enclosing fn confirmed runScanChunk (:2006) not runFinalizePhase (:1446); 1258->1401 the attempts:0 reset-on-progress updateJob; 488->555 case max_attempts and 505->572 case attempt_claim_failed, the two ledger mappings. Re-confirmed unchanged: 012 sql :81 :104 :124 :190 :209; scanJobAttempts.test.mjs :279 :314 :338 :361 :473; setup-supabase.mjs:128; liveWriteGuard.js:121; scanChunkLedgerLive.test.mjs:129. All seven of the verifier's replacements were correct; none needed further correction. CARRY FORWARD 1, DEPLOY ORDERING HAZARD: once this ships every rescue calls claim_scan_job_attempt; if 012 is not applied the RPC errors, runScanChunk returns attempt_claim_failed, and NO stale job is rescued. 012 must be applied BEFORE this code reaches production, same as the 006 ordering. CARRY FORWARD 2, THE SQL WAS NEVER EXECUTED: no local Postgres. attemptVerdict/claimJobAttempt JS policy is proven by execution; claim_scan_job_attempt plpgsql is proven only by text-matching guard tests and production uses the SQL. First application of 012 must be watched by an operator. test:scoring 1635/1609 pass/0 fail/26 skipped."
+        },
+        {
+          "at": "2026-09-05T02:16:36.785Z",
+          "by": "controller",
+          "text": "amended: EVIDENCE CORRECTION, supersedes the six wrong scanWorker.js numbers stated earlier in this detail. The correct lines, verified independently by the re-verifier at 49fe39e and equally true at bebc5e6: MAX_JOB_ATTEMPTS 889 (was cited 822); attemptVerdict 906 (was 839); claimJobAttempt 954 (was 887); THE CLAIM SITE 2086 (was 1940 - the old number landed on a blank line inside runFinalizePhase, sending an auditor into finalize instead of dispatch); reset-on-progress 1401 (was 1258); ledger mappings 555 and 572 (were 488/505, both bare closing braces). Enclosing-function derivation done independently: the last column-0 declaration before 2086 is runScanChunk at :2006, with no column-0 closing brace between them; runFinalizePhase opens at :1446 and closes at :1971, thirty-five lines before runScanChunk opens. The claim site is in dispatch. STALENESS WARNING: 13 of the 19 citations are already stale in the working tree from sibling edits - scanWorker.js shifts to 556/573/890/907/955/1444/2177, liveWriteGuard.js:121 is ALREADY broken and now reads a different table entry with claim_scan_job_attempt at :141, and the five scanJobAttempts.test.mjs numbers all shift by +25 so :279 lands on a comment ruler. Read this evidence at bebc5e6."
         }
       ],
       "verification": {
-        "verdict": "fail",
-        "at": "2026-09-05T01:44:46.963Z",
-        "note": "Independent verifier, isolated worktree at 49fe39e. FAIL ON EVIDENCE HONESTY ONLY - the implementation is sound and every substantive check passed. Six of seven scanWorker.js line references, INCLUDING one of the three primary evidence entries, point at unrelated code, and they did not resolve at the implementing commit 25e7727 either, so they were never verified by their author. Cited vs actual @49fe39e (and @25e7727): :1940 -> 2086 (2014) - this is the primary 'claim site' evidence and the cited line is a BLANK LINE inside runFinalizePhase's brand-judging loop, so an auditor following it is sent into finalize instead of dispatch; :822 MAX_JOB_ATTEMPTS -> 889 (inside unionCompetitorNames); :839 attemptVerdict -> 906 (a comment banner); :887 claimJobAttempt -> 954 (a JSDoc line); :1258 reset-on-progress -> 1401 (a probes_attempted comment); :488/:505 ledger mappings -> 555/572 (both land on a bare '};'). Everything else resolved exactly: migration 012 at :81 :104 :124 :190 :209, scanJobAttempts.test.mjs :279 :314 :338 :361 :473, setup-supabase.mjs:128, liveWriteGuard.js:121, scanChunkLedgerLive.test.mjs:129. REMEDY - NO CODE CHANGE REQUIRED: amend evidence to supabase/migrations/012_scan_job_attempts.sql:81, src/lib/workers/scanWorker.js:2086, src/lib/workers/scanJobAttempts.test.mjs:279, and correct the six numbers in the note to 889/906/954/2086/1401/555/572, then re-submit. WHAT ALREADY PASSED, RECORD IT SO THE NEXT CYCLE DOES NOT REDO IT: old failure reproduced with a 10-tick stale-heartbeat harness at 25e7727^ (all 10 ticks noop, no attempts column) vs 49fe39e (tick 1/2/3 attempts=1/2/3 all allowed, tick 4 max_attempts ok=false status=failed progress 100 with a full error_message, ticks 5-10 already_finished with attempts frozen and zero writes). Boundaries exactly as accept implies: 2 granted, 3 granted, 4 refused and terminal. ENFORCED AT DISPATCH NOT DISPLAY, NO BYPASS: claimJobAttempt is called inside runScanChunk before any phase runs; all four dispatch paths funnel through it - /api/scan/route.js:62 start, /api/scan/worker/route.js:138 direct job_id, :215 cron sweep, /api/scan/[job_id]/status/route.js:57 poll rescue. Post-cap the sweep query and shouldRescueJob both exclude the row, so it stops being selected at all. THE RESET IS NOT A HOLE: attempts:0 rides only the updateJob following upsertResults of a persisted batch (scanWorker.js:1401); completed (engine,query) pairs are never re-probed so resets are bounded by pair count and retries terminate. MIGRATION IDEMPOTENT: ADD COLUMN IF NOT EXISTS NOT NULL DEFAULT 0, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, CHECK wrapped in a pg_constraint existence test; createScanJob omits attempts so the DB default applies, updateScanJob passes fields unfiltered so attempts:0 reaches the column. FOUR SABOTAGES, FOUR TARGETED FAILURES: prior>=cap to prior>cap -> 6 fail incl. all three CAP tests; delete the attempts updateJob -> 2 fail; SQL p_max_attempts DEFAULT 3 to 5 -> 1 fail on the cap-parity guard; drop IF NOT EXISTS/NOT NULL/DEFAULT from the column -> 1 fail on the idempotency guard. Suite 1577/1551/0 fail/26 skipped. TWO THINGS TO CARRY FORWARD REGARDLESS: (1) DEPLOY ORDERING HAZARD - once this code ships every rescue calls claim_scan_job_attempt; if migration 012 is not applied the RPC errors, runScanChunk returns attempt_claim_failed, and NO stale job is rescued at all. Fail-loud and correct, but 012 must be applied BEFORE this code reaches production, same as the 006 ordering already in the ledger. (2) THE SQL WAS NEVER EXECUTED - the implementer says so plainly. attemptVerdict/claimJobAttempt's JS policy is proven by execution; claim_scan_job_attempt's plpgsql body is proven only by text-matching guard tests, and production uses the SQL. First application of 012 should be watched by an operator."
+        "verdict": "pass",
+        "at": "2026-09-05T02:16:53.907Z",
+        "note": "Independent re-verifier, citations-only scope; this task's diff is empty so the substantive verification from the prior round stands and was not repeated. ALL NINETEEN CITATIONS RESOLVED AT 49fe39e BY THE VERIFIER ITSELF, from git show into scratch copies, never the working tree: 19/19 exact, zero further corrections needed. The seven corrected scanWorker.js numbers land on MAX_JOB_ATTEMPTS 889, attemptVerdict 906, claimJobAttempt 954, the claim site 2086, reset-on-progress 1401, and the two ledger cases 555 and 572. THE CLAIM-SITE CHECK, derived independently rather than taken from the implementer: listing column-0 function declarations before 2086, the last is runScanChunk at :2006, and there is NO column-0 closing brace anywhere between 2006 and 2086, so 2086 is inside it. runFinalizePhase opens at :1446 and its column-0 brace closes at :1971 - it has ended thirty-five lines before runScanChunk even opens. The immediately preceding statement is 'if (shouldRescueJob(job)) {' at :2083. The claim site is in dispatch, not finalize; the original failure is gone. ATTRIBUTION CONFIRMED rather than assumed: scanJobAttempts.test.mjs (+31/-6) is R3.2.4's edit - self-labelling, converts static imports to dynamic behind env deletion, adds a supabase===null tripwire, and touches R3.3.1's block only to reword one comment about why there is no client. scanWorker.js (+93/-2) is a sibling's, with hunks at one import, runProbingPhase and runFinalizePhase, and 'git diff | grep -i attempts' on that file returns nothing. STALENESS, WORSE THAN THE IMPLEMENTER FLAGGED: git diff 49fe39e bebc5e6 across all six cited files is EMPTY, so all nineteen are equally true at HEAD bebc5e6 - read them there. But in the current WORKING TREE 13 of 19 have already gone stale, not 7: the seven scanWorker.js lines shift to 556/573/890/907/955/1444/2177; liveWriteGuard.js:121 is ALREADY BROKEN, now reading a content_lessons entry with claim_scan_job_attempt moved to :141; and all five scanJobAttempts.test.mjs numbers shift +25, so the primary :279 lands on a comment ruler. Only the five migration lines and setup-supabase.mjs:128 are stable. THE VERIFIER'S DURABLE RECOMMENDATION: pin the commit in evidence strings for files under concurrent edit - bare line numbers against a file three tasks are editing are a renewable source of this defect, and this is the third time it has bitten this task. CONDITION SATISFIED BEFORE CLOSE: the task detail still carried all six wrong numbers verbatim, which would have sent a detail-reading auditor into runFinalizePhase; the controller has amended detail to carry 889/906/954/2086/1401/555/572 plus the staleness warning. Both deploy hazards confirmed carried in the submit note: migration 012 must be applied BEFORE this code ships or every rescue returns attempt_claim_failed and no stale job is rescued at all; and the plpgsql body of claim_scan_job_attempt is proven only by text-matching guard tests while production uses the SQL, so its first application must be operator-watched."
       }
     },
     {
@@ -6517,6 +6620,66 @@
       "verification": null
     },
     {
+      "id": "R6.1.8",
+      "subphase": "R6.1",
+      "lane": "infra",
+      "phase": "R6",
+      "title": "orchestrate.mjs silently swallows a long submit note",
+      "detail": "Reproduced independently by the R3.3.1 implementer and hit by the controller and by two other agents this session. A --note longer than roughly 2000-2900 characters causes the orchestrate.mjs invocation to hang past a 120s timeout and write NOTHING; a shorter note succeeds instantly. It is NOT lock contention - withLock at .claude/orchestration/orchestrate.mjs:50 has a 15s deadline and would die loudly, and no tasks.json.lock exists during the hang. It hangs in argument passing before Node runs, i.e. in the command line itself. The failure mode is the dangerous kind: the command appears to run, the caller sees no error, and the ledger is simply never written. This has already cost real evidence - one task's substantive note ended up only in an agent report while the ledger got a truncated one, and a verification verdict had to be re-issued because the first attempt left the task in in_verification with a recorded verdict and no status transition. Separately, backticks in a note are eaten by shell expansion before the CLI ever sees them, which has mangled at least two submit notes into nonsense.",
+      "accept": "A note of any length reaches the ledger or fails loudly. Accept --note-file <path>, or read the note from stdin, so neither length nor shell metacharacters can truncate or eat it; and the command exits non-zero rather than hanging when it cannot write. Proven by submitting a note of several thousand characters containing backticks and dollar signs and reading it back intact from tasks.json.",
+      "deps": [],
+      "anchors": [
+        ".claude/orchestration/orchestrate.mjs:50",
+        ".claude/orchestration/orchestrate.mjs:311"
+      ],
+      "findings": [],
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T02:14:45.169Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.1.9",
+      "subphase": "R6.1",
+      "lane": "infra",
+      "phase": "R6",
+      "title": "The secrets rule binds six rebuild agents; every other agent this project spawns is uncovered",
+      "detail": "Raised by the R6.1.4 implementer as a decision it declined to make unilaterally, and it is the right call. R6.1.4 put the never-print-a-credential rule and the env-exclusion idiom into all six .claude/agents/rebuild-*.md definitions, and a guard fails if a new rebuild-* definition omits it. But .claude/skills/impeccable/** ships roughly forty tracked instruction files, and .claude/settings.json configures sessions that also run recursive searches, and none of them carries the rule. The two real leaks this session came from agents running unscoped greps; nothing about that failure mode is specific to the rebuild-* family. Copying the rule into forty more files is the wrong remedy - it multiplies the thing that drifts. The durable place for a project-wide rule is CLAUDE.md, which every session loads by construction, with the agent definitions keeping only what is specific to them. That is a decision about where project policy lives, not an implementation detail, which is why it is filed rather than done.",
+      "accept": "A decision is recorded about where the secrets-hygiene rule lives for agents outside the rebuild-* family, and it is implemented: either the rule moves to CLAUDE.md with the rebuild-* copies reduced to a pointer, or every agent-instruction surface in .claude/ carries it and a guard covers all of them rather than just rebuild-*. A fresh agent spawned from a non-rebuild definition can quote the rule back without being told it.",
+      "deps": [
+        "R6.1.4"
+      ],
+      "anchors": [
+        "CLAUDE.md",
+        ".claude/skills/",
+        ".claude/agents/",
+        "src/lib/agentSecretsGuard.test.mjs"
+      ],
+      "findings": [],
+      "tags": [
+        "needs-decision"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T02:16:22.338Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R6.2.1",
       "subphase": "R6.2",
       "lane": "docs",
@@ -6745,6 +6908,33 @@
         "at": "2026-09-04T21:09:55.904Z",
         "note": "Independent verifier. Its assigned worktree was stale at 5111219, so it verified read-only against the shared object DB and the branch tip 8502166, resolving every citation against 8502166 blobs - the work was done at the right commit. PASS. Old failure reproduced at 7408331~1: gemini.md:175 read 'The SDK never receives the timeout or the abort signal', :57 said the timeout is enforced by a Promise.race only, :208 called it 'a one-line change to gemini.js:46; it is named here rather than fixed', and it claimed clearTimeout runs only on the success path. All four are gone. At HEAD :337 reads 'FIXED in ee5504e (R6.5.6) - the abort signal now reaches the SDK's fetch' and :129 says the timeout is enforced twice over. Grep for hedges (may still|might still|appears to|probably|race only|never receives|one-line change) returns zero hits, so the definiteness clause holds. Claims exercised, not read: the verifier wrote its own harness with no key and a stubbed globalThis.fetch and reproduced every measured claim in the doc - init keys ['body','headers','method','signal'] with signal instanceof AbortSignal, 15 requests and 15 torn down at retries=2 with every rung's signal aborted, Timeout delta 0, the full eleven-value finishReason transcript matching the :191-198 table byte-for-byte including cost 0.000011099999999999999, the prompt-level block, the four-key empty-answer object, and the exact wire headers and body. Citations mechanically resolved: 61 named occurrences over 46 normalised distinct targets plus 32 bare line refs, matching the doc's own stated counts, with ZERO failures - including node_modules/@google/generative-ai/dist/index.mjs at the installed 0.24.1 (the FinishReason enum counted at eleven values, badFinishReasons at three, buildFetchOptions and the uncleared setTimeout). Both docs' own staleness commands run clean at 8502166. Liveness rebuilt hop by hop: POST /api/opportunities reaches generateContent; middleware matches /api/:path*; the route is in neither operatorPerimeter list; probeGemini, judgeWithLLM, prompts.js and dashboard/OpportunitiesPanel.jsx all confirmed dead. Scope clean - both commits touch exactly two markdown files, no source or test change. Its own tests 18/18. The suite in the shared tree read red at 49 failures, but the verifier traced every one to two root causes in OTHER lanes' uncommitted work (the working-tree firecrawl.js no longer exports scrapeForSummary, and src/lib/llmPricing.js does not exist at 8502166 at all); a two-markdown-file diff cannot produce them, so none is attributable here. LEDGER HYGIENE TO FIX: this task's anchors array carries nine superseded entries (gemini.md:111,:233,:265,:277 and README.md:41,:97,:124,:158,:180) that were exactly right at 7408331 and went stale when d845e97 inserted ~100 lines above them; the second amendment's re-derived set was appended rather than replacing the first, so both live in the array with nothing marking which is current. Also: R6.4.8's anchor docs/vendors/README.md:97 is itself now stale and its next claimant will trip on it, and README.md:345 cites brightdata.md's Verified-at as 967bda6 where HEAD is bf332fe - the tripwire's own thesis demonstrated a third time."
       }
+    },
+    {
+      "id": "R6.3.3",
+      "subphase": "R6.3",
+      "lane": "docs",
+      "phase": "R6",
+      "title": "Two dated handoff and journal docs cite line numbers that resolve to unrelated code",
+      "detail": "Found by the R0.2.3 and R2.8.6 workers while re-deriving their own citations, and left unfixed because both files were outside their ownership. These are the exact hazard the doc-to-source staleness tripwire R6.4.8 exists for, and are worth fixing as its first real test cases. In docs/HANDOFF-2026-08-30.md, verified at 49fe39e: line 252 cites promptGen.js:198 for R1.7.4, but :198 is a lowercase key assignment inside a dedupe loop and the deps.fetchPeopleAlsoAsk line is at :185; line 254 cites promptGen.js:250 as a conditional top-up, but :250 is a comment; line 248 cites brightdata.js:10 as short-circuiting on the zone env var, but :10 is a JSDoc line and the real short-circuit is at :141-142; line 250 cites enginePipeline.js:98-101 for the zero-cost swallow, and that range has moved. In docs/BUILD_JOURNAL.md, entry B12 at line 127 describes behaviour that no longer exists - it says insertScan logs a skipping-database-insert message and returns, which R2.8.6 replaced with a throw - and its :62-65 anchor is also stale. Every one of these RESOLVES to a real line, which is what makes them dangerous: a reader following the citation lands on plausible neighbouring code and has no signal that they are in the wrong place.",
+      "accept": "Both documents cite what they claim at a declared commit, or convert the fragile citations to anchors the way the Bright Data ADR did for the two files that kept drifting. B12 either describes current behaviour or is marked as a historical record of behaviour that has since changed. Verified by resolving each citation and reading the content, not by confirming a line exists.",
+      "deps": [],
+      "anchors": [
+        "docs/HANDOFF-2026-08-30.md:248",
+        "docs/BUILD_JOURNAL.md:127"
+      ],
+      "findings": [],
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T02:16:21.197Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R6.4.1",
@@ -7055,6 +7245,35 @@
       "verification": null
     },
     {
+      "id": "R6.4.11",
+      "subphase": "R6.4",
+      "lane": "test",
+      "phase": "R6",
+      "title": "No component-render harness, so every UI guard is a text scan that can pass while the component is broken",
+      "detail": "Established by two independent verifiers this session, working on different tasks. There is no jsdom, testing-library, react-test-renderer, happy-dom or vitest in package.json or node_modules, and no test file in src imports a .jsx. Every UI guard in the repo is therefore a readFileSync text scan - the pattern in degradedEngineBanner.test.mjs and landingHonesty.test.mjs. The R3.7.7 verifier demonstrated the cost concretely: it inverted a single ternary in CrawlabilityView.jsx so that a refused rival rendered the all-open meter and a healthy rival rendered the refusal copy, and ALL EIGHT TESTS STILL PASSED. The guard checked the import, the const, the rendered label, the rendered detail, data-outcome and the whole-row prop, and an inverted ternary preserves every one of them. The important correction to the received wisdom: no-harness-is-possible is false. Both verifiers built one ad hoc in roughly 40 lines from dependencies ALREADY PRESENT - next/dist/build/swc or sucrase to transform the JSX, then react-dom/server renderToStaticMarkup - and used it to render the shipped components and observe the bug failing and fixed. The accurate framing is that none exists, not that none is possible.",
+      "accept": "A shared render harness exists that any test can import to render a component to static markup using dependencies already in package.json, with no new runtime dependency. At least one existing text-scan guard is converted to use it and is shown to catch a mutation that the text scan misses - the inverted ternary in CrawlabilityView.jsx is the worked example and should be the proof.",
+      "deps": [
+        "R3.7.7"
+      ],
+      "anchors": [
+        "src/components/dashboard/crawlabilityRivalOutcome.test.mjs",
+        "package.json"
+      ],
+      "findings": [],
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T02:15:43.818Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R6.5.1",
       "subphase": "R6.5",
       "lane": "test",
@@ -7332,6 +7551,36 @@
       "notes": [
         {
           "at": "2026-09-05T01:49:14.036Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.5.8",
+      "subphase": "R6.5",
+      "lane": "test",
+      "phase": "R6",
+      "title": "The sweep branch of the scan worker route cannot be reached by any test",
+      "detail": "Reported by the R3.2.6 implementer, who had to refactor around it to make its own acceptance criterion exercisable at all. The sweep branch of GET /api/scan/worker sits behind a guard that returns early when there is no supabase client, and the route imports supabase as a MODULE BINDING, so there is no seam to inject a fake. The test suite deliberately has no Supabase - which is what guarantees no scan is started and nothing is written to a database - so the branch is never entered. Every assertion about that branch, R3.2.6 and any future one, is necessarily one call frame short of the wire: R3.2.6 had to move the sweep body construction into an exported buildSweepResponse and pin the call with a source guard. That guard is itself instructive about the risk: its first version did not catch the defect, because the regex matched the module own function declaration rather than the call site. This is the cron entry point - the branch that decides which brands get scanned and what an operator sees when a tick declines every one of them - and it is the least testable code in the repository.",
+      "accept": "The sweep branch is reachable by a test that observes a real Response, via an injectable client seam or a _lib module following the existing scanRow.js precedent. A test drives the branch end to end and fails on a response-shape regression, without any test being able to reach a real database.",
+      "deps": [
+        "R3.2.6"
+      ],
+      "anchors": [
+        "src/app/api/scan/worker/route.js:390",
+        "src/app/api/scans/_lib/scanRow.js",
+        "src/lib/scanWorkerRoute.route.test.mjs"
+      ],
+      "findings": [],
+      "tags": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-05T02:15:59.423Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
