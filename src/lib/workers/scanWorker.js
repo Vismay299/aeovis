@@ -40,6 +40,7 @@ import { summarizeAioResults, aggregateAioTopDomains } from "../scoring/aioPipel
 import {
   summarizeEngineResults,
   resolveEnabledEngines,
+  describeEngineSetChange,
   ENGINE_RESOLUTION_SKIPS,
   computeHeadline,
   summarizeEngineSlice,
@@ -1289,12 +1290,54 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
     );
   }
 
+  // R3.2.5 — THE SAME TWO EVENTS, ON THE CHECKPOINT, SO THE SCAN CAN SAY SO.
+  //
+  // Everything above records these two drops in the run ledger, which is where
+  // R3.2.2 left them: an operator reading scan_runs can see them, and the scan
+  // record itself still carries nothing. So the headline moved (blended over
+  // fewer engines, or over a set the scan was never frozen with),
+  // scans.engines_counted fell, and the reason lived in a table no dashboard
+  // reads.
+  //
+  // Recorded HERE and not only at finalize because the event is a MID-RUN one
+  // and a chunked scan can outlive it: an engine that vanished during chunk 2
+  // and came back by chunk 5 really did stop being probed for chunk 2's pairs,
+  // and a finalize-time registry check would find nothing and report a clean
+  // scan. Riding the checkpoint makes it sticky across chunks — `priorDropped`
+  // below is what an earlier chunk already saw — and the checkpoint is
+  // persisted with every probe batch and handed to finalize in-process, so it
+  // survives both a resume and a chunk that had no batches left to write.
+  //
+  // The happy path stays clean: describeEngineSetChange returns null when every
+  // frozen engine still resolves, and a null adds NO key to the checkpoint.
+  const engineSetChange = describeEngineSetChange({
+    frozen: frozenNames,
+    registered: allEngineDefs.map((e) => e.name),
+    // Probing does not know which rows are persisted; finalize does and passes
+    // them. `probed` is deliberately omitted rather than guessed at.
+    priorDropped: (checkpoint.engine_set_change?.dropped_engines || []).map((e) => e.engine),
+    priorSubstituted: [
+      ...(checkpoint.engine_set_change?.substituted_engines || []).map((e) => e.engine),
+      // The fallback above IS the substitution: this chunk is about to probe
+      // today's set in place of the frozen one.
+      ...(frozenNames && filtered.length === 0 ? allEngineDefs.map((e) => e.name) : []),
+    ],
+  });
+  if (engineSetChange) {
+    console.warn(
+      `[scan-chunk] Job ${jobId}: engine set ${engineSetChange.state} — ${engineSetChange.title}. ` +
+        `Carried on the checkpoint so the finalized scan record says so, not just the run ledger.`
+    );
+  }
+
   const completed = await getCompletedPairs(jobId);
   const totalPairs = Math.max(queries.length * engineDefs.length, 1);
   let doneCount = completed.size;
 
   const stats = { cost: checkpoint.stats?.cost || 0, tokens: checkpoint.stats?.tokens || 0 };
-  let workingCheckpoint = checkpoint;
+  let workingCheckpoint = engineSetChange
+    ? { ...checkpoint, engine_set_change: engineSetChange }
+    : checkpoint;
   let progressPct = Math.min(85, 25 + Math.round((doneCount / totalPairs) * 60));
 
   for (const engine of engineDefs) {
@@ -1533,6 +1576,36 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   const engineNames = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : allEngineDefs.map((e) => e.name);
   const isMultiEngine = engineNames.length > 1;
 
+  // R3.2.5 — the engine-set verdict this scan is finalized under, recomputed
+  // from EVIDENCE rather than trusted from the checkpoint alone.
+  //
+  // Three inputs, because each catches something the others cannot:
+  //   * `frozen` is checkpoint.engines and NOT `engineNames` above — engineNames
+  //     falls back to today's registry when nothing was frozen, and a scan that
+  //     never froze a set cannot have changed away from one. Passing the
+  //     fallback would report every unfrozen scan as refrozen.
+  //   * `registered` is the live registry now: a frozen engine still missing at
+  //     finalize is the drop that shrank this headline.
+  //   * `probed` is the engines that actually produced persisted rows. Rows from
+  //     an engine that was never frozen prove a refreeze even if the registry
+  //     has since recovered and the checkpoint stamp was lost.
+  // Plus what earlier chunks already saw, so a drop that healed before finalize
+  // is still on the record.
+  const probedEngines = allRows.map((r) => (r && (r.engine || r.raw?.engine)) || null).filter(Boolean);
+  const engineSetChange = describeEngineSetChange({
+    frozen: checkpoint.engines,
+    registered: allEngineDefs.map((e) => e.name),
+    probed: probedEngines,
+    priorDropped: (checkpoint.engine_set_change?.dropped_engines || []).map((e) => e.engine),
+    priorSubstituted: (checkpoint.engine_set_change?.substituted_engines || []).map((e) => e.engine),
+  });
+  if (engineSetChange) {
+    console.warn(
+      `[scan-chunk] Job ${jobId}: finalizing a scan whose engine set ${engineSetChange.state}. ` +
+        `${engineSetChange.title} — ${engineSetChange.detail}`
+    );
+  }
+
   const scannedAt = new Date().toISOString();
 
   // Same shape-normalization the pre-P0.2 code used, unchanged: both pipeline
@@ -1766,7 +1839,25 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     query_source: "openrouter_unbranded",
     data_source_issue: summary.data_source_issue,
     insufficient_sample: summary.insufficient_sample,
-    summary_stats: summary,
+    // R3.2.5 — why engines_counted fell, ON THE SCAN, not only in the ledger.
+    //
+    // IT RIDES INSIDE summary_stats DELIBERATELY, and this is not tidiness.
+    // insertScan is not a pass-through: db.js's raw_results payload is a fixed
+    // allowlist, and a new top-level field on this record would be dropped
+    // before the write with nothing logged (see the comment on that allowlist —
+    // that is exactly how R2.7.4's collection window was computed correctly and
+    // persisted as nothing). `summary_stats` is already on the allowlist and
+    // already survives the round trip: db.js stores it, both
+    // /api/scans/[brand]/route.js and api/scans/_lib/scanRow.js hand it back to
+    // the client verbatim as `scan.summary_stats`. So a UI reads
+    // `summary_stats.engine_set_change.state` ("shrank" or "refrozen") and
+    // renders `.title` / `.detail`.
+    //
+    // A spread, not a mutation: `summary` is also the object buildMetricsRows
+    // reads below, and a scan-shape field has no business in a metrics row.
+    // Omitted entirely when nothing changed, so the key's PRESENCE is the
+    // signal and a clean scan carries no marker.
+    summary_stats: engineSetChange ? { ...summary, engine_set_change: engineSetChange } : summary,
   };
 
   if (isMultiEngine) {

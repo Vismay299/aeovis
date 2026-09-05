@@ -686,6 +686,167 @@ function engineDisplayLabel(name) {
 }
 
 /**
+ * The two ways a scan's FROZEN engine set can stop being the set it was frozen
+ * with. Named, because they are not the same event and the record must say
+ * which one happened (R3.2.5, finding B3).
+ */
+export const ENGINE_SET_STATES = Object.freeze({
+  /**
+   * Some frozen engines still resolve, fewer than were frozen. The index is
+   * real; it is blended over fewer engines than the scan was started with,
+   * which is why `engines_counted` fell.
+   */
+  SHRANK: "shrank",
+  /**
+   * NO frozen engine resolved (or rows exist from engines that were never
+   * frozen), so the scan was answered by a DIFFERENT set than the one it was
+   * frozen with. Strictly worse than SHRANK: a frozen engine set is the whole
+   * reason two scans of one brand are comparable, and this one is not.
+   */
+  REFROZEN: "refrozen",
+});
+
+/** Trimmed, de-duplicated, empties dropped. Never invents a name. */
+function engineNameList(value) {
+  return Array.from(
+    new Set(
+      (Array.isArray(value) ? value : [])
+        .map((n) => String(n ?? "").trim())
+        .filter(Boolean)
+    )
+  );
+}
+
+/** `["aio"]` -> `[{ engine: "aio", label: "Google AI Overview" }]`, for a UI that renders names. */
+function asEngineRefs(names) {
+  return names.map((engine) => ({ engine, label: engineDisplayLabel(engine) }));
+}
+
+/**
+ * Did this scan's engine set stop being the set it was frozen with, and how?
+ *
+ * R3.2.5 (finding B3). `checkpoint.engines` is frozen at sourcing time so a
+ * mid-scan env change cannot re-pick a running scan's engines. R3.2.2 made the
+ * two ways that promise gets broken VISIBLE TO AN OPERATOR — they land in
+ * `scan_runs.detail.skips` as `engine_not_registered` and
+ * `engine_set_fallback`. Nothing made them visible to the SCAN. The headline
+ * was blended over fewer engines, `scans.engines_counted` dropped, and the scan
+ * record carried no reason for either: the number moved and the explanation
+ * existed only in a ledger nobody rendering a dashboard reads. That is the same
+ * class R2.2.6 closed for a degraded engine, one step earlier — there the
+ * engine answered badly, here it is gone.
+ *
+ * TWO STATES, KEPT APART ON PURPOSE. "Fewer engines than I promised" and "a
+ * different set than I promised" cost the reader different things, and
+ * collapsing them would tell someone whose scan is no longer comparable to its
+ * own history that it merely counts one engine fewer.
+ *
+ * NULL ON THE HAPPY PATH. A scan where every frozen engine still resolved
+ * carries no marker at all, so the presence of this object is itself the
+ * signal and an unchanged scan is not annotated with an "everything is fine"
+ * record nobody would read.
+ *
+ * A SCAN WITH NO FROZEN SET RETURNS NULL TOO, and that is not a swallowed
+ * skip: an engine set that was never frozen has nothing to have changed FROM.
+ * Every scan since P0.2 freezes one at sourcing; a checkpoint without one
+ * predates the freeze, and inventing a baseline for it would report a change
+ * that was never promised.
+ *
+ * @param {object} args
+ * @param {string[]|null} args.frozen  the engine names frozen onto the checkpoint.
+ * @param {string[]} args.registered   the engine names the live registry resolves NOW.
+ * @param {string[]|null} [args.probed]  distinct engine names that actually produced
+ *   persisted rows, when the caller has them (finalize does, probing does not).
+ *   Evidence, not configuration: rows from an engine that was never frozen prove
+ *   a refreeze even if the registry has since recovered. `null` means "I did not
+ *   look", which is different from `[]` ("I looked and nothing was probed") and
+ *   neither one is allowed to invent a substitution.
+ * @param {string[]} [args.priorDropped]  frozen engines an EARLIER chunk already
+ *   saw drop. The event is sticky across chunks: an engine that vanished for two
+ *   chunks and came back really did stop being probed for those pairs.
+ * @param {string[]} [args.priorSubstituted]  the set an earlier chunk fell back to.
+ * @returns {null|object} null when nothing changed, else the record the scan carries.
+ */
+export function describeEngineSetChange({
+  frozen,
+  registered,
+  probed = null,
+  priorDropped = [],
+  priorSubstituted = [],
+} = {}) {
+  const frozenNames = engineNameList(frozen);
+  if (frozenNames.length === 0) return null;
+
+  const frozenSet = new Set(frozenNames);
+  const registeredSet = new Set(engineNameList(registered));
+
+  // Dropped = frozen but not registered now, UNION whatever an earlier chunk
+  // already recorded. `priorDropped` is filtered back through the frozen set so
+  // a malformed checkpoint cannot add an engine this scan never froze.
+  const dropped = engineNameList([
+    ...frozenNames.filter((name) => !registeredSet.has(name)),
+    ...engineNameList(priorDropped).filter((name) => frozenSet.has(name)),
+  ]);
+  const droppedSet = new Set(dropped);
+  const resolved = frozenNames.filter((name) => !droppedSet.has(name));
+
+  const probedNames = probed === null || probed === undefined ? null : engineNameList(probed);
+  const substituted = engineNameList([
+    ...(probedNames ? probedNames.filter((name) => !frozenSet.has(name)) : []),
+    ...engineNameList(priorSubstituted).filter((name) => !frozenSet.has(name)),
+  ]);
+
+  let state;
+  if (resolved.length === 0 || substituted.length > 0) {
+    state = ENGINE_SET_STATES.REFROZEN;
+  } else if (dropped.length > 0) {
+    state = ENGINE_SET_STATES.SHRANK;
+  } else {
+    return null;
+  }
+
+  const frozenLabels = formatEngineList(frozenNames.map(engineDisplayLabel));
+  const droppedLabels = formatEngineList(dropped.map(engineDisplayLabel));
+  const resolvedLabels = formatEngineList(resolved.map(engineDisplayLabel));
+  const substitutedLabels = substituted.length
+    ? formatEngineList(substituted.map(engineDisplayLabel))
+    : null;
+  const one = dropped.length === 1;
+
+  const title =
+    state === ENGINE_SET_STATES.SHRANK
+      ? `Engine set shrank mid-scan — ${droppedLabels} stopped resolving`
+      : `Engine set was refrozen mid-scan — this scan is not comparable to this brand's earlier scans`;
+
+  const detail =
+    state === ENGINE_SET_STATES.SHRANK
+      ? `This scan was frozen onto ${frozenLabels} when it started. ${droppedLabels} stopped being ` +
+        `registered before it finished, so ${one ? "it was" : "they were"} never probed and ` +
+        `${one ? "is" : "are"} not in the AI Visibility Index. The index is blended over ` +
+        `${resolved.length} of the ${frozenNames.length} engines this scan was frozen with ` +
+        `(${resolvedLabels}), which is why the engines counted fell. Re-run the scan to bring ` +
+        `${droppedLabels} back.`
+      : `This scan was frozen onto ${frozenLabels} when it started, and ` +
+        `${resolved.length === 0 ? "none of those engines still resolved" : `${droppedLabels} stopped resolving`} ` +
+        `before it finished. It was answered by ` +
+        `${substitutedLabels || "the engine set configured when it finished"} instead. A frozen ` +
+        `engine set is what makes two scans of the same brand comparable, so this reading cannot ` +
+        `be compared to this brand's history. Re-run the scan for a comparable reading.`;
+
+  return {
+    state,
+    frozen_engines: asEngineRefs(frozenNames),
+    resolved_engines: asEngineRefs(resolved),
+    dropped_engines: asEngineRefs(dropped),
+    substituted_engines: asEngineRefs(substituted),
+    engines_frozen: frozenNames.length,
+    engines_resolved: resolved.length,
+    title,
+    detail,
+  };
+}
+
+/**
  * Restates one degraded slice in the numbers that condemned it, read from the
  * same engineHealthThresholds the gate used so the banner cannot quote an aio
  * threshold at a text engine.

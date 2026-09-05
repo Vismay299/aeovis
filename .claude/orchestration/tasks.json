@@ -1298,12 +1298,12 @@
         "README.md"
       ],
       "phase": "R0",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-scribe",
       "evidence": [
         "docs/decisions/2026-08-29-serp-provider-bright-data.md:12",
         "docs/decisions/2026-08-29-serp-provider-bright-data.md:19",
-        "docs/decisions/2026-08-29-serp-provider-bright-data.md:674",
+        "docs/decisions/2026-08-29-serp-provider-bright-data.md:675",
         "docs/decisions/2026-08-29-serp-provider-bright-data.md:709",
         "docs/decisions/2026-08-29-serp-provider-bright-data.md:746",
         "docs/decisions/2026-08-29-serp-provider-bright-data.md:749",
@@ -1314,7 +1314,7 @@
         "src/lib/engines/serp.js:342",
         "src/lib/scoring/aioPipeline.js:110",
         "src/lib/scoring/promptGen.js:185",
-        "src/lib/workers/scanWorker.js:1",
+        "src/lib/workers/scanWorker.js",
         "src/lib/docStatus.test.mjs:130"
       ],
       "notes": [
@@ -1352,6 +1352,11 @@
           "at": "2026-09-05T02:31:18.515Z",
           "by": "verifier",
           "text": "rejected: EVIDENCE-LIST REPAIR ONLY. THE VERIFICATION PASSED. An independent verifier at bebc5e6 judged the document CORRECT on the axis it kept failing, and this fail exists solely because the CLI freezes the evidence array once a task is in_verification and two of its fifteen citations point at the wrong content. Re-submit with those two fixed and the pass stands; do not rework the document. THE TWO FIXES: replace docs/decisions/2026-08-29-serp-provider-bright-data.md:674 (a BLANK LINE) with :675, the head of the corrected fourth-round paragraph; and replace src/lib/workers/scanWorker.js:1 (an unrelated import) with the BARE PATH src/lib/workers/scanWorker.js and no line at all - the CLI's evidence regex permits a bare file, and the ADR's own anchor rule requires it for this file precisely because it drifts. The other thirteen resolve correctly and need no change. WHAT THE VERIFIER ESTABLISHED, so none of it is redone. The new self-claim IS keepable: all four of its clauses are about the past and about the author's own act, and the verifier looked specifically for a smuggled future assertion and found none. The two likeliest hiding places are clean - the conditional at :756-758 is logically sound because a byte-identical file cannot have shifted lines, and :765-767 UNDERSTATES the check's power, which is an error in the safe direction. Zero stale stamps remain; the surviving 25e7727 strings are historical record or the diff range. THE PRESCRIBED CHECK WAS RUN AT bebc5e6 AND IT FIRES AS A TRUE POSITIVE WITH TEETH: git diff 49fe39e bebc5e6 --stat gives 16 files, four of them line-cited, and re-deriving each showed THREE GENUINE DRIFTS - health.js:19-33 was the frozen VENDORS array at 49fe39e and is now a JSDoc block plus the vendorRegistry import after R0.1.16 moved it out; check-secrets.mjs:178 was the invalidator comment and is now a bare closing brace; types.test.mjs:113-134 shifted - plus ONE FALSE ALARM, checkSecretsBrightdataNoZone.test.mjs:21, whose content held. That is exactly the semantic the document states, treat as suspect until re-derived. This is the decisive result: round four's assertion that nothing cited moves underneath it would be FALSE at today's HEAD, and round five declines to assert it and hands over a check that returns the correct non-trivial answer instead. The retrospective check also reproduces - git diff 25e7727 49fe39e --stat gives 14 files with an EMPTY intersection against the fifteen line-cited files, and promptGen.js and scanWorker.js are cited by anchor only, each returning exactly one hit at 49fe39e. SIX in-body stamps spot-checked at 49fe39e (four were asked for): the ten brightdataZone.test.mjs pins, the four check-secrets verdict strings at exactly one hit each, BRIGHTDATA_ZONE_TTL_MS in exactly three files, the invalidator's four external call sites with two prose-only mentions, getEnabledEngines with zero callers outside types.test.mjs, SERPAPI_KEY in seven files with none in .env.example or README.md, and worker/src/lib/probe.js at exactly 31 lines. All ten stamps moved; none reproduced differently. THE ACCEPT WAS EXERCISED, NOT READ: serp-provider.md:4 carries Status SUPERSEDED-BY linking the new ADR, README.md:148-159 lists migrations 001 through 012, and the verifier proved teeth by demoting the header to LIVE and deleting the 012 row, watching exactly the two corresponding docStatus guards fail, then restoring. docStatus.test.mjs 10/10; suite 1615/1589/0 fail/26. The round-four entry kept and corrected in place at :675-682 is judged HONEST rather than self-serving - it quotes the false mechanism verbatim, says flatly it was not the author's to promise and was false in the event, retains the sound half of the rule, and the :709 entry names the seven files of 0b2e68b individually and calls the outcome harmless by luck not by construction. ONE IMPRECISION to fold into the same edit if cheap, not grounds for another round: :773-774 says 'exactly two are referenced by this ADR at all', which read literally is false since six of the fourteen are mentioned elsewhere; the operative sentence four lines later - none of the fifteen LINE-CITED files appears in the diff - is exactly true. Narrow 'referenced' to 'cited by this ADR as evidence'. The verifier did not open .env.example or any real .env file. SYSTEMIC FINDING FILED SEPARATELY: orchestrate.mjs validates evidence with existsSync on the FILE ONLY, so a citation to a blank line or to line 1 of a 1200-line file passes unread - which is how this evidence list got through."
+        },
+        {
+          "at": "2026-09-05T02:35:46.975Z",
+          "by": "rebuild-scribe",
+          "text": "Bookkeeping repair only; document unchanged except one clause. Two citations repointed as directed, both confirmed by me, not taken on trust. ADR:674 is blank; :675 is the head of the corrected fourth-round paragraph, beginning The rule this adds, stated so it can be executed - which keeps the sound half of round four (a stamp must be re-derived after the last edit in its commit) and retires the false mechanism. scanWorker.js:1 was an unrelated promptSetSize import; now cited as a bare path with no line, which the CLI regex permits and the ADR's own anchor rule requires for this file. That rule earned itself again here: the anchor grep deps.sourceUnbrandedQueries returns exactly one hit, at :1070 committed and already :1071 in the working tree under another agent's uncommitted edits, so any line number would have been stale on arrival. All fifteen re-resolved by content at 9bece67; the ADR's own round-five revision is still uncommitted, so its eight lines were read from the working tree and every other citation from git show. serp.js:342 is the serpFetch call the ADR quotes verbatim at :293; aioPipeline.js:110 is the live 0.0015; serp-provider.md:31 and :42 carry the SerpAPI-only pricing. Optional clause edit made: :774 now reads cited by this ADR as evidence rather than referenced by this ADR at all. Verified true - of the fourteen files in git diff 25e7727 49fe39e --stat, only promptGen.js and scanWorker.js are among the nineteen this ADR cites (fifteen by line, four by anchor). One line changed, line count still 805, all eight ADR citations unmoved. docStatus 10/10. No source file or tasks.json edited; no .env file opened."
         }
       ],
       "verification": {
@@ -3066,10 +3071,34 @@
         "src/lib/workers/scanWorker.js:388-390"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/db/prompts.js:18",
+        "src/lib/db/prompts.js:140",
+        "src/lib/db/prompts.js:158",
+        "src/lib/db/prompts.js:204",
+        "src/lib/db/prompts.js:208",
+        "src/lib/db/prompts.js:230",
+        "src/lib/db/prompts.js:237",
+        "src/lib/db/prompts.js:251",
+        "src/lib/db/promptWriteFailure.test.mjs:126",
+        "src/lib/db/promptWriteFailure.test.mjs:193",
+        "src/lib/db/promptWriteFailure.test.mjs:280",
+        "src/lib/db/promptWriteRoute.route.test.mjs:99"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-05T02:35:42.605Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T02:44:47.313Z",
+          "by": "rebuild-implementer",
+          "text": "Finding B5 REPRODUCED. Anchor drifted: the worker call sites are scanWorker.js:688 and :1152, not :388-390. upsertPrompts now throws PromptWriteError (codes db_not_configured / db_write_failed, cause preserved), same shape and vocabulary as R2.8.4 ScansUnavailableError and R2.8.6 ScanWriteError, plus deps.client injection. Its preload read is now strict: fail-quiet there returned [] and the upsert then rewrote every row with caller defaults, silently re-enabling user-disabled prompts. Also fixed updatePromptStatus: false used to mean no-client OR db-error OR row-absent, and its route maps false to 404, so an outage told the user the prompt did not exist. false now means only absent. AUDIT of all 35 write helpers under src/lib/db plus scanRuns.js and probeQueue.js is in my report to the controller. Result: upsertPrompts was the ONLY return-error-object helper in the whole db surface. analytics.js, scanRuns.js and probeQueue.js all throw with the envelope. content.js and knowledge.js have 11 catch-and-write-to-memory helpers, the R2.8.8 shape; flagged, not touched. Zero files edited outside src/lib/db/prompts.js. insertScan untouched. No route edited: both callers already 500 on a throw, proven by driving the REAL handlers. TESTS 13 new, all pass. Sabotage: restoring the old bodies fails 9 of 10 in promptWriteFailure and 1 of 3 in the route suite, including the worker catch must fire on a real write failure. It did not: skips are [] and an unwritable database is not a missing prompt. My measured baseline with my two files removed and prompts.js at HEAD: 1677 tests 1649 pass 2 fail 26 skipped. With my change: 1690 1664 0 fail 26 skipped. Both pre-existing failures were fixed by another agent mid-session; neither was ever mine. No production DB touched."
+        }
+      ],
       "verification": null
     },
     {
@@ -4101,9 +4130,17 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/lib/db.js:268",
+        "src/lib/db.js:270",
+        "src/lib/db.js:275",
+        "src/lib/db.js:314",
+        "src/lib/insertScanCascade3.test.mjs:243",
+        "src/lib/insertScanCascade3.test.mjs:473",
+        "src/lib/insertScanCascade3.test.mjs:524"
+      ],
       "notes": [
         {
           "at": "2026-09-05T02:14:42.979Z",
@@ -4114,6 +4151,16 @@
           "at": "2026-09-05T02:17:32.111Z",
           "by": "controller",
           "text": "amended: TWO CORRECTIONS from the R2.8.6 verifier, which confirmed the bug at the library level and empirically. CONFIRMED: postgrest-js dist/index.mjs:614 shows .select() is the ONLY thing that appends Prefer: return=representation, and :378-385 shows processResponse initialises data to null and, on a 201 with an empty body, hits an EMPTY BLOCK - so data stays null and error stays null. db.js:247-252: cascades 1 and 2 call .select(), cascade 3 does not. Driven with a stub forcing cascades 1 and 2 to error: 3 attempts, insertScan returned null, caller read null, for a row that WAS written. CORRECTION 1 - R2.8.6 did NOT make this more reachable. Its diff touches cascade 3 only to swap the module binding for the resolved client and to wrap the ERROR path; the cascade-3 SUCCESS path is byte-for-byte identical before and after. CORRECTION 2 - the duplicate-row consequence is NARROWER than filed. runScanChunk at scanWorker.js:2069 returns already_finished for a job whose status is complete or failed, and shouldRescueJob at :845 returns false for failed, so the cron resume sweep will not re-finalize a falsely-failed job. A duplicate requires the outer catch's own updateScanJob to ALSO fail (leaving the job in scoring with a stale heartbeat, then rescued) or a manual re-dispatch. THE ROUTINE OUTCOME, which is what this task should be scoped to fix, is an ORPHANED scans ROW PLUS A JOB THAT LIES ABOUT FAILING: no prompt_results.scan_id, no citations, no result_brands, no brand_metrics_daily rollup, and a failed job the customer sees for a scan that actually succeeded. The minimal remedy is to add .select() to cascade 3 so a successful legacy-schema insert returns its row."
+        },
+        {
+          "at": "2026-09-05T02:44:11.857Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-05T02:44:23.329Z",
+          "by": "rebuild-implementer",
+          "text": "Reproduced first: postgrest-js select() at dist/index.mjs:614 is the only place Prefer return=representation is appended, and processResponse :378-385 has the empty-body no-op. Drove the REAL PostgrestClient with a fake fetch: no select -> 201 empty body -> data null, error null. Fix: cascade 3 now calls .select() (db.js:268) and confirmScanWritten (db.js:314) turns an unconfirmable 201 into code db_write_unconfirmed, never db_write_failed; db.js:275 stops the catch relabelling it. .select() with NO argument means select=* and names no column, so it cannot 42703 on the older schema cascade 3 serves; SELECT is the same anon grant cascades 1-2 and getScansForBrand already use (migration 001:118, FOR ALL). Tests use the real postgrest client over an in-process fetch that emulates a legacy-schema PostgREST. No DB touched, no ambient client. Second accept test RE-SCOPED per the verifier: the routine outcome is an ORPHANED scans row plus a job that lies about failing, so :473 tests that; :524 still tests the duplicate but only on an explicit re-dispatch, which is the narrow path that actually produces it. Pre-fix, 4 of 7 fail, including 2 stored rows on :524. Suite: 1690 tests, 0 fail, 26 skipped; baseline with my two files removed was 2 pre-existing failures in liveWriteGuard/probeQueue (other agents in-flight), none in db.js."
         }
       ],
       "verification": null
@@ -4811,7 +4858,7 @@
       ],
       "phase": "R3",
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/services/api.js:598",
@@ -4856,9 +4903,9 @@
         }
       ],
       "verification": {
-        "verdict": "fail",
-        "at": "2026-09-05T02:08:36.866Z",
-        "note": "Independent verifier, isolated worktree at 49fe39e + this task's diff only. FAIL NARROWLY, on the SECOND CONJUNCT of the accept only. The backend half is genuinely good and needs no rewriting - DO NOT let the next implementer touch enginePipeline.js or scanWorker.js; both were verified BY EXECUTION end to end, including the persistence hop the author could not run. WHAT HOLDS: old failure reproduced on pristine 49fe39e with the verifier's own harness (two real runProbingPhase chunks with the registry changing between them, then runFinalizePhase) - engines_counted 1 of 2 frozen, engine_set_change null everywhere. Patched: same counts plus a full record naming Perplexity. THE PERSISTENCE HOP IS PROVEN, not read: the verifier intercepted @supabase/supabase-js with a registerHooks loader returning an in-memory fake, hard-failed globalThis.fetch, resolved the @/ alias, and ran the REAL insertScan and the REAL enrichScanForClient - row raw_results.summary_stats.engine_set_change.state = shrank, and client scan.summary_stats.engine_set_change.state = shrank. No production DB touched, no network call possible. THE ALLOWLIST ARGUMENT IS TRUE AND LOAD-BEARING: handing insertScan a record with a top-level engine_set_change plus a made-up field showed BOTH dropped, along with raw_results.engine_set_change, with ZERO warnings emitted - so a top-level field really would have vanished in silence, and summary_stats was the correct placement. The sibling's in-flight db.js edit keeps summary_stats on the allowlist (now db.js:186), so the carrier survives that change. REFROZEN-BEATS-SHRANK ORDERING HOLDS: three cases constructed satisfying both predicates simultaneously all report refrozen, and reversing the branches fails 3 tests, so it is pinned not incidental. HAPPY PATH STAYS CLEAN: five-scenario matrix, checkpoint stamp vs finalize recompute NEVER disagreed, drop-then-heal is recorded, and the no-change case carries no key at all. Five sabotages (three claimed plus two of the verifier's own) all bite: revert scanWorker.js:1860 -> 4 fail; revert the checkpoint stamp at :1338 -> 2 fail; collapse both states -> 4 fail; never return null on no-change -> 4 fail; delete the finalize recompute -> 1 fail. Suite isolated: baseline 1577/1551/0/26, with the task 1587/1561/0/26, exactly +10, zero failures - the liveWriteGuard failure is not this task's. All 11 citations resolve. WHY IT FAILS: the accept says 'and the dashboard can tell a user why engines_counted fell.' Traced hop by hop, that clause dies. src/services/api.js:361 reads 'const summary = data.summary_stats || raw.summary_stats || null' into a LOCAL and never puts it on the returned normalized record; only three references to summary_stats exist in that file and none is in the return object. grep engine_set_change across src/ outside the worker and pipeline returns NOTHING - zero readers, zero renderers. Unlike its stated precedent the reason is NOT derivable client-side: DashboardShell.jsx:369 recomputes R2.2.6's banner from result.perEngineSummaries, which the normalizer does expose; there is no equivalent here, and the client cannot know the frozen set or the registry, cannot distinguish 'dropped from the registry' from 'every probe errored', and cannot see a refreeze at all because the substituted engines are absent from the slices. THE MISSING HOP IS ONE LINE IN src/services/api.js, which is the client DATA LAYER, not src/components/ - the out-of-ownership defence covers the banner component but not the normalizer. So the field is written durably and served honestly over HTTP, but the dashboard cannot reach it: the same 'computed correctly and read by nobody' class this task exists to close, relocated one hop later. REMEDY: (1) api.js normalizeResult already computes summary at :361 - add e.g. engineSetChange: summary?.engine_set_change ?? null, mirroring how dataSourceIssue is exposed at api.js:581. (2) A DashboardShell banner near the existing dataSourceIssue block at :622, READING .state/.title/.detail/.dropped_engines - it must be read, not recomputed. (3) One test that fails if a refrozen or shrank scan reaches a rendered surface with no reason. THE DISCLOSED FOLLOW-UP IS REAL, PRE-EXISTING, AND DOES NOT MAKE THIS FIX MISLEADING: on a refrozen scan, persisted rows {aio:2, chatgpt:4} while slices are [aio, perplexity], so chatgpt's 4 rows are summarized by nobody and engines_counted is 0. The verifier ran the identical case on pristine 49fe39e and got byte-identical output apart from the new field - pre-existing, untouched. It does not fabricate a clean state: engines_counted 0, visibility_index_pct null, insufficient_sample true, and the record now says the reading cannot be compared to history. Strictly better than the prior silence. Filed as R3.2.9."
+        "verdict": "pass",
+        "at": "2026-09-05T02:46:01.160Z",
+        "note": "Independent verifier, isolated worktree at 9bece67 with this diff only. Baseline measured HERE, since quoted numbers keep going stale: pristine 9bece67 is 1639/1613/0 fail/26; with the task 1662/1636/0/26, exactly +23 (10 worker + 13 surface), zero regressions. NOTHING IS RECOMPUTED CLIENT-SIDE, PROVEN BY CONTRADICTION - the verifier fed the banner a record that CONTRADICTS the scan it rides on (engines_frozen 9, engines_resolved 7, dropped Gemini) on a scan whose only slice is aio with enginesCounted 1, and the rendered markup carried '7 of 9', 'Gemini - not probed', 'ChatGPT - answered instead' and the record's own title and detail. Every word is off the record; nothing is derived from perEngineSummaries, enginesCounted or the registry. That is the required property, because the client cannot derive the frozen set or tell a de-registered engine from one whose probes all errored. LIVENESS REBUILT HOP BY HOP: dashboard/[brand]/page.js:88 renders DashboardShell from /api/scans/[brand]/latest, that route calls enrichScanForClient, scanRow.js:52 passes raw.summary_stats VERBATIM (the synthesized fallback only fires when it is absent) and :80 puts it on the response, DashboardShell.jsx:135 calls the real normalizeResult, api.js:598, then :394 reads and :802 renders. Three route files import DashboardShell; all three reach the banner. THE EFFECT SHIM WAS ATTACKED HARDEST AND HOLDS. It is not vacuous: replacing it with a no-op (exactly what react-dom/server does) fails EIGHT tests including 'renders the real dashboard, not a loading skeleton' AND 'a healthy scan renders no engine-set banner at all' - that second one matters most, because the NEGATIVE assertion carries its own liveness check, so a broken shim cannot make 'no banner' pass by rendering nothing. The skeleton branch contains no 'Acme', so the self-check's includes('Acme') is a real probe, not a tautology. It does not swallow errors: injecting a throwing useEffect propagated out of renderToStaticMarkup and surfaced in the output, 8 tests failing with the message visible. React is not objecting: dev warnings were confirmed live in the harness with a deliberate missing-key render, then the suite ran with console.error and console.warn intercepted and emitted ZERO React warnings, so the render-phase update is legitimate rather than tolerated. No network is possible: with globalThis.fetch hard-throwing, 13/13 still pass and nothing was attempted, and requireShim throws loudly on an unmapped import rather than resolving to an empty object. FOUR SABOTAGES REPRODUCED, TWO BITING HARDER THAN CLAIMED: deleting api.js:598 gives 10 fail (claimed 9); the banner switched off gives 6 (claimed 5); INVERTING THE REFROZEN/SHRANK TERNARY gives exactly 2, both ACCEPT tests - the same mutation that defeated a sibling task's source-text guard is caught here by assertions on rendered markup; disabling the shim gives 8. The over-counts are understatements, not inflation. FAIL-CLOSED DEGRADATION TESTED BY RENDERING six malformed records (a string, a number, an empty object, null state, a non-array dropped_engines, undefined counts): no crash in any case, banner always rendered, and 0 NEVER fabricated for an unknown count. Unknown state prints verbatim; missing title/detail produce a stated gap; a malformed engine ref renders 'an engine this record did not name'. The em-dash assertion is LOAD-BEARING, not incidental - changing it to '0 of 0' in the component fails that test, so no other em dash on the page satisfies it - and engines_resolved 0 correctly renders '0 of 2', a known zero rather than an em dash. THE DROPPED FALLBACK WAS RIGHT: the allowlist re-verified at db.js:130-208, summary_stats present at :186, no engine_set_change key anywhere, and the worker writes it ONLY inside summary_stats on every path including sessionStorage, so raw.engine_set_change is unreachable and the fallback would have implied a persistence path that does not exist. THE BANNER'S INDEPENDENCE FROM dataSourceIssue AND scanHealth IS CORRECT: it sits directly in viewpad as a sibling of both banners with no view gate, so it survives a view switch; a scan tripping data_source_issue, insufficient_sample AND a degraded slice rendered both banners. Scope: three hunks, ZERO deletions in the two client files, no refactors, no bare catch, no ?? 0, no || 0. The ScoreBand decline is a real constraint, not a dodge - ScoreBand.jsx:35 is literally an unconditional percent sign, so a not-probed chip would render as '-%'; filed as R2.7.8, and the banner already names every dropped and substituted engine so the accept is met without it. ONE MINOR OBSERVATION, not a blocker: a non-array dropped_engines renders no chips at all, silently, though the headline, sentence and N-of-M still render and the only producer always emits arrays."
       }
     },
     {

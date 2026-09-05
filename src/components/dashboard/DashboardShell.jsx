@@ -373,6 +373,50 @@ export default function DashboardShell({ scan, scanId, error = null }) {
   const degradedEngineKeys = new Set(scanHealth.degradedEngines.map((e) => e.engine));
 
   /**
+   * R3.2.5 (finding B3). The one thing on this screen that is READ, never
+   * recomputed.
+   *
+   * `result.engineSetChange` is `summary_stats.engine_set_change`, written by
+   * the worker when a checkpoint-frozen engine stopped resolving mid-scan
+   * (`shrank`) or when the scan ended up answered by a different set than it
+   * was frozen with (`refrozen`). Before it existed the headline was blended
+   * over fewer engines, `engines_counted` fell, and this screen said nothing.
+   *
+   * IT CANNOT BE DERIVED HERE, which is why it is not, unlike `scanHealth`
+   * above. The client does not know the set the scan was frozen onto or which
+   * engines the registry resolves now; it cannot tell an engine that was
+   * de-registered from one whose every probe errored; and it cannot see a
+   * refreeze at all, because the substituted engines never appear in
+   * `perEngineSummaries`. A missing key means the frozen set held — the worker
+   * writes nothing on the happy path — so `null` here is "nothing changed",
+   * not "we did not look".
+   */
+  const engineSetChange = result.engineSetChange || null;
+  const engineSetRefrozen = engineSetChange?.state === "refrozen";
+  const engineSetShrank = engineSetChange?.state === "shrank";
+  /**
+   * A record that arrived with a state this build does not know is still shown,
+   * with the state printed verbatim. Rendering nothing because the vocabulary
+   * grew would put us straight back in the silence this banner exists to end.
+   */
+  const engineSetUnknownState =
+    !!engineSetChange && !engineSetRefrozen && !engineSetShrank;
+  /**
+   * The record names engines as `{ engine, label }`. A malformed one must still
+   * produce a NAME — an unlabelled chip reading " — not probed" would be an
+   * empty state dressed as an explanation.
+   */
+  const engineSetRefLabel = (e) =>
+    (typeof e === "string" ? engineLabel(e) : e?.label || engineLabel(e?.engine)) ||
+    "an engine this record did not name";
+  const engineSetDropped = Array.isArray(engineSetChange?.dropped_engines)
+    ? engineSetChange.dropped_engines
+    : [];
+  const engineSetSubstituted = Array.isArray(engineSetChange?.substituted_engines)
+    ? engineSetChange.substituted_engines
+    : [];
+
+  /**
    * "There is no trustworthy slice left" — the state that suppresses the score
    * and replaces the views with the placeholder. It is deliberately NOT "any
    * engine degraded": a scan whose perplexity slice collapsed while aio answered
@@ -736,6 +780,101 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/*
+            R3.2.5 (finding B3) — why the engines counted fell.
+
+            Rendered whenever the record carries the key, INDEPENDENT of
+            `dataSourceIssue` and of `scanHealth.severity`: an engine that
+            vanished from the registry is a different event from an engine that
+            answered badly, both can happen to one scan, and suppressing this
+            one behind the other would restore exactly the silence the finding
+            is about. Every word below is read off the record — this component
+            decides nothing about what changed or how to say it.
+          */}
+          {engineSetChange && (
+            <div
+              className="panel"
+              data-testid="engine-set-change-banner"
+              data-engine-set-state={engineSetChange.state ?? "unknown"}
+              style={{
+                marginBottom: 16,
+                borderColor: engineSetRefrozen ? "var(--crit)" : "var(--warn)",
+              }}
+            >
+              <div className="panel__h">
+                <span className={engineSetRefrozen ? "chip chip--crit" : "chip chip--warn"}>
+                  <ShieldAlert size={11} aria-hidden="true" />{" "}
+                  {engineSetRefrozen
+                    ? "Not comparable"
+                    : engineSetShrank
+                      ? "Fewer engines"
+                      : `Engine set changed (${engineSetChange.state ?? "unrecognised"})`}
+                </span>
+                <b>
+                  {engineSetChange.title ||
+                    "The engine set this scan was frozen with changed while it ran, and the record did not say how."}
+                </b>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm"
+                  style={{ marginLeft: "auto" }}
+                  onClick={handleRerun}
+                  disabled={isScanning}
+                >
+                  <RefreshCw size={14} aria-hidden="true" />
+                  Re-run scan
+                </button>
+              </div>
+              <div className="panel__b">
+                <p style={{ fontSize: 14, color: "var(--ink-3)", marginBottom: 12 }}>
+                  {engineSetChange.detail ||
+                    "This scan recorded an engine-set change but carried no explanation with it. Re-run the scan for a reading blended over the set it was frozen with."}
+                </p>
+                {engineSetUnknownState && (
+                  <p style={{ fontSize: 13, color: "var(--ink-3)", marginBottom: 12 }}>
+                    This build does not recognise the state “{String(engineSetChange.state ?? "—")}”,
+                    so it is shown as the scan recorded it.
+                  </p>
+                )}
+                {/* The engines themselves, named. A dropped engine has no slice
+                    and no chip anywhere else on this screen, so this is the only
+                    place a user can see which one stopped being probed. */}
+                {engineSetDropped.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                    {engineSetDropped.map((e, i) => (
+                      <span key={`dropped-${e?.engine ?? i}`} className="chip chip--crit">
+                        {engineSetRefLabel(e)} — not probed
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {engineSetSubstituted.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                    {engineSetSubstituted.map((e, i) => (
+                      <span key={`substituted-${e?.engine ?? i}`} className="chip chip--warn">
+                        {engineSetRefLabel(e)} — answered instead, not in the frozen set
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="rows">
+                  <div className="row">
+                    <span className="row__n">
+                      Engines the index was blended over
+                      <span className="dim">(frozen when the scan started)</span>
+                    </span>
+                    <span className="row__v">
+                      {engineSetChange.engines_resolved == null ||
+                      engineSetChange.engines_frozen == null
+                        ? "—"
+                        : `${engineSetChange.engines_resolved} of ${engineSetChange.engines_frozen}`}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

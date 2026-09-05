@@ -579,6 +579,23 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     tokensUsed: data.tokens_used ?? 0,
     costTotal: data.cost_total ?? raw.cost_total ?? 0,
     dataSourceIssue,
+    /**
+     * R3.2.5 (finding B3) — why `enginesCounted` fell, READ off the record.
+     *
+     * `summary_stats.engine_set_change` is written by the worker when a
+     * checkpoint-frozen engine stopped resolving mid-scan (`shrank`) or when the
+     * scan was answered by a different set than it was frozen with (`refrozen`).
+     * Absent on every scan where the frozen set held, so `null` here means
+     * "nothing changed", not "we did not look".
+     *
+     * It is exposed rather than recomputed because the client CANNOT derive it:
+     * it does not know the frozen set or the live engine registry, cannot tell a
+     * de-registered engine from one whose every probe errored, and cannot see a
+     * refreeze at all — the substituted engines are absent from
+     * `perEngineSummaries` entirely. That is the difference from
+     * `dataSourceIssue`, which DashboardShell re-derives from the slices.
+     */
+    engineSetChange: summary?.engine_set_change ?? null,
     insufficientSample,
     // For legacy dashboard components that key off `qualityGateFailed`
     qualityGateFailed: dataSourceIssue,
