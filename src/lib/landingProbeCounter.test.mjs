@@ -36,6 +36,30 @@
  *     Typed totals are caught two ways only: five digits or more, or digits
  *     grouped by commas the way a total is written for a reader. That is a
  *     floor, not a proof.
+ *   - It is a quote-aware character walk, NOT a parser, and it does NOT refuse
+ *     everything it cannot parse. An earlier version of this header claimed it
+ *     did. That claim was false, and this bullet is long because of it. The one
+ *     shape the walk cannot tell apart from a string is an APOSTROPHE IN JSX
+ *     TEXT: `doesn't` opens what looks like a string, it runs to the next
+ *     apostrophe, and any code between the two is deleted unread — which is a
+ *     scan reporting green over the very thing it exists to catch. Where that
+ *     span crosses a line break the walk now THROWS, because a JavaScript
+ *     single- or double-quoted string cannot hold an unescaped newline; that is
+ *     language semantics, not a heuristic, and it covers the multi-line JSX case
+ *     that made this guard blind in review. It does NOT cover two apostrophes on
+ *     ONE line: code between those is still swallowed silently, and the
+ *     "returned no code to scan" smoke test below will not notice, because the
+ *     rest of the file survives. So: write a contraction in landing copy as
+ *     &rsquo; or inside a template literal, never as a bare `'`.
+ *   - The self-increment rule reads a bounded, brace-balanced window of a block
+ *     body, so a body nested more than one level deep can hide the `+` from it.
+ *   - The timer rule takes a bare `setInterval`, but a `setTimeout` only when it
+ *     is PAIRED with a self-incrementing state updater — because a rescheduling
+ *     `setTimeout` on its own is how AnswerSheet.jsx types out a fixed passage,
+ *     and that number is an index into prose, not a claim. The gap that leaves:
+ *     a counter that grows a plain local (`n += 1; setWritten(n)`) on a
+ *     `setTimeout` is not the pair and is not caught, though a five-digit seed
+ *     or a comma-grouped render of it still is.
  *
  * If a real counter is ever wanted here it reads a count query, and when that
  * query cannot answer, the surface renders an em dash and a state chip — never a
@@ -60,16 +84,28 @@ const PAGE = "src/app/page.js";
  * line — an under-scan, the one direction a guard must never fail in. Template
  * literals keep their `${...}` expressions, because that is code that renders.
  *
- * It REFUSES what it cannot parse rather than guessing: if the walk ends inside
- * a string or a comment the file is rejected, which is how a regex literal
- * holding an odd quote (the shape that would desynchronise this) surfaces as a
- * failure instead of as silence.
+ * WHAT IT REFUSES, exactly — it does not refuse everything it cannot parse, and
+ * saying otherwise is how this file failed review once already:
+ *   1. The walk reaching end of file still inside a string, template or comment.
+ *      A regex literal holding an odd quote desynchronises the walk this way and
+ *      surfaces as a failure instead of as silence.
+ *   2. An unescaped newline while inside a '…' or "…" string. A JavaScript
+ *      quoted string literal cannot contain one, so the opening quote was not a
+ *      string quote — in this directory it is an apostrophe in JSX prose, and
+ *      everything after it up to the next apostrophe would have been deleted
+ *      unread. (A `\` line continuation is escaped and still legal, and template
+ *      literals span lines legitimately, so neither is refused.)
+ * Two apostrophes on the SAME line are NOT refused and still hide the code
+ * between them. That is the residual blind spot; see the header.
  */
 export function codeOnly(src, label = "source") {
   let out = "";
   let i = 0;
   let mode = "code";
   let quote = "";
+  // Where the current quote opened, so the refusal can name the line.
+  let quoteAt = 0;
+  const lineOf = (idx) => src.slice(0, idx).split("\n").length;
   // Depth of `${` interpolations, so a template inside a template is tracked.
   const templates = [];
 
@@ -80,7 +116,14 @@ export function codeOnly(src, label = "source") {
     if (mode === "code") {
       if (ch === "/" && next === "/") { mode = "line"; i += 2; continue; }
       if (ch === "/" && next === "*") { mode = "block"; i += 2; continue; }
-      if (ch === '"' || ch === "'") { mode = "quoted"; quote = ch; out += " "; i += 1; continue; }
+      if (ch === '"' || ch === "'") {
+        mode = "quoted";
+        quote = ch;
+        quoteAt = i;
+        out += " ";
+        i += 1;
+        continue;
+      }
       if (ch === "`") { mode = "template"; templates.push(0); out += " "; i += 1; continue; }
       if (ch === "}" && templates.length > 0 && templates[templates.length - 1] > 0) {
         templates[templates.length - 1] -= 1;
@@ -107,7 +150,21 @@ export function codeOnly(src, label = "source") {
     }
 
     if (mode === "quoted") {
+      // A `\` escapes the next character, including a legal line continuation.
       if (ch === "\\") { i += 2; continue; }
+      if (ch === "\n") {
+        // Language semantics, not a heuristic: a JS single- or double-quoted
+        // string cannot contain an unescaped newline. So this quote never opened
+        // a string, and everything since it has been swallowed unread.
+        throw new Error(
+          `landingProbeCounter: could not read ${label} — the ${quote} on line `
+          + `${lineOf(quoteAt)} was read as a string quote, but the line ended before it `
+          + `closed (line ${lineOf(i)}). A JavaScript string cannot span a line unescaped, `
+          + "so that quote is prose — an apostrophe in JSX copy is the usual cause — and "
+          + "every character after it would have been deleted before the rules ran. "
+          + "Write it as &rsquo; or in a template literal; do not let this scan go quiet.",
+        );
+      }
       if (ch === quote) { mode = "code"; quote = ""; }
       i += 1;
       continue;
@@ -138,9 +195,20 @@ export function codeOnly(src, label = "source") {
 }
 
 /**
- * The four shapes a manufactured number arrives in. Every one of them fires on
+ * `setCount((c) => c + inc)`, and the same lie with a block body,
+ * `setCount((c) => { ... c + 1 ... })`. The block alternative walks a
+ * brace-balanced body (one level of nesting deep) looking for the updater's own
+ * parameter being added to, so it cannot run past the arrow's closing brace and
+ * accuse an unrelated `c +` further down the file. Named because the timer rule
+ * reads it too.
+ */
+const SELF_INCREMENT =
+  /set(?!Timeout\b|Interval\b)[A-Z]\w*\s*\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*(?:\{(?:[^{}]|\{[^{}]*\})*?)?\b\1\s*[+-]/;
+
+/**
+ * The five shapes a manufactured number arrives in. The first four all fire on
  * the module this task is named after; each is proven load-bearing on its own
- * below, so a rule cannot rot into decoration behind the other three.
+ * below, so a rule cannot rot into decoration behind the others.
  */
 const RULES = [
   {
@@ -150,12 +218,31 @@ const RULES = [
   },
   {
     id: "timer",
-    re: /setInterval\s*\(/,
+    /*
+     * TWO SHAPES, because setInterval is not the only spelling.
+     *
+     * A bare `setInterval` on this surface is enough on its own: it is a clock
+     * that keeps firing forever, which is what the deleted ProbeCounter used and
+     * what nothing here has any honest use for.
+     *
+     * A `setTimeout` is NOT enough on its own, and widening the rule to a bare
+     * `setTimeout(` was tried and rejected in R2.10.2's second round: it accuses
+     * src/components/landing/AnswerSheet.jsx, whose typewriter reveal reschedules
+     * itself to type out a FIXED passage. That timer's number is an index bounded
+     * by the length of prose already on the page and is never rendered as a
+     * figure, so it manufactures nothing — the rule would have been wrong, not
+     * the file. What makes a `setTimeout` the historical bug respelled is the
+     * PAIR: a rescheduling timer plus state that adds to itself, which is a total
+     * with no source. Both halves in one file, and this fires.
+     */
+    test: (code) =>
+      /setInterval\s*\(/.test(code)
+      || (/setTimeout\s*\(/.test(code) && SELF_INCREMENT.test(code)),
     why: "a number that grows on a clock is counting seconds, not probes",
   },
   {
     id: "self-increment",
-    re: /set(?!Timeout\b|Interval\b)[A-Z]\w*\s*\(\s*\(?\s*\w+\s*\)?\s*=>\s*\w+\s*[+-]/,
+    re: SELF_INCREMENT,
     why: "state that adds to itself is a number inventing its own history",
   },
   {
@@ -176,9 +263,12 @@ const RULES = [
   },
 ];
 
+/** A rule is a regex or, where one pattern is not enough, a predicate. */
+const fires = (rule, code) => (rule.test ? rule.test(code) : rule.re.test(code));
+
 function fabrications(src, label = "source") {
   const code = codeOnly(src, label);
-  return RULES.filter((rule) => rule.re.test(code)).map((rule) => rule.id);
+  return RULES.filter((rule) => fires(rule, code)).map((rule) => rule.id);
 }
 
 /** page.js plus every component the landing directory holds, discovered, not typed. */
@@ -262,12 +352,72 @@ test("each rule is load-bearing on its own", () => {
     ["const jitter = Math.random() * 3;\nexport default jitter;", "random"],
     ["export const t = setInterval(tick, 1000);", "timer"],
     ["export function f() { setCount((c) => c + inc); }", "self-increment"],
+    // Block body, not just the concise arrow: same lie, one pair of braces on.
+    [
+      "export function f() { setCount((c) => { const n = c + inc; return n; }); }",
+      "self-increment",
+    ],
     ["export const BASE = 37720;", "seed"],
     ["export const Strip = () => <p>37,720 probes run</p>;", "grouped-total"],
   ];
   for (const [snippet, id] of cases) {
     assert.deepEqual(fabrications(snippet, id), [id], `rule "${id}" did not fire alone`);
   }
+});
+
+test("the timer rule's setTimeout half fires on the pair, and only on the pair", () => {
+  // A rescheduling timer with nothing growing behind it is an animation, which
+  // is what AnswerSheet.jsx does; it manufactures no number and must stay clean.
+  assert.deepEqual(
+    fabrications("export const t = setTimeout(step, 2200);", "timeout alone"),
+    [],
+    "a bare setTimeout must not be an accusation on its own — see the rule's note",
+  );
+  // Add the self-increment and it is the deleted counter with different words.
+  assert.deepEqual(
+    fabrications(
+      "export function f() { setCount((c) => c + 1); setTimeout(f, 2200); }",
+      "timeout pair",
+    ),
+    ["timer", "self-increment"],
+    "a rescheduling timer plus state that adds to itself is a total with no source",
+  );
+});
+
+/**
+ * The deleted module respelled as a self-rescheduling setTimeout, which is how
+ * the same lie comes back once `setInterval` is the only word anyone greps for.
+ * It has no seed and no comma grouping, so it leans entirely on the two rules
+ * widened in R2.10.2's second round.
+ */
+const RESPELLED_PROBE_COUNTER = [
+  '"use client";',
+  "",
+  'import { useEffect, useState } from "react";',
+  "",
+  "export const ProbesRun = () => {",
+  "  const [count, setCount] = useState(9000);",
+  "",
+  "  useEffect(() => {",
+  "    let timer;",
+  "    const tick = () => {",
+  "      setCount((c) => { return c + 1; });",
+  "      timer = setTimeout(tick, 2200);",
+  "    };",
+  "    tick();",
+  "    return () => clearTimeout(timer);",
+  "  }, []);",
+  "",
+  "  return <div>{count}</div>;",
+  "};",
+].join("\n");
+
+test("GUARD — the counter respelled on setTimeout with a block body still trips", () => {
+  assert.deepEqual(
+    fabrications(RESPELLED_PROBE_COUNTER, "respelled fixture").sort(),
+    ["self-increment", "timer"],
+    "a recursive setTimeout counter is the deleted module with different words",
+  );
 });
 
 test("the scanner reads code, not prose — and a comment cannot hide one either", () => {
@@ -295,6 +445,74 @@ test("the scanner reads code, not prose — and a comment cannot hide one either
     () => codeOnly('const broken = "unterminated;', "broken.js"),
     /could not read broken\.js/,
   );
+});
+
+/**
+ * THE REFUSAL HAS ITS OWN TEETH.
+ *
+ * This is the defect that failed R2.10.2's first round, kept as a test so it
+ * cannot come back. Two ordinary contractions in JSX marketing copy read as a
+ * quote pair; the walk deleted everything between them, a live Math.random()
+ * inside that span vanished, and the guard reported all green on a file holding
+ * the exact thing it exists to catch. Apostrophe parity was even, so neither the
+ * end-of-walk refusal nor the "returned no code to scan" smoke test fired.
+ *
+ * A JS quoted string cannot hold an unescaped newline, so the span crossing a
+ * line break is proof the quote was prose. That is now a refusal.
+ */
+const APOSTROPHE_HAZARD = [
+  "export const Hero = () => (",
+  "  <section>",
+  "    <p>It doesn't lie about what it measured.</p>",
+  "    <span>{Math.floor(Math.random() * 3) + 1}</span>",
+  "    <p>That's the promise.</p>",
+  "  </section>",
+  ");",
+].join("\n");
+
+test("REFUSAL — an apostrophe pair in JSX copy is rejected, never scanned quietly", () => {
+  assert.throws(
+    () => codeOnly(APOSTROPHE_HAZARD, "Hero.jsx"),
+    (err) => {
+      assert.match(err.message, /could not read Hero\.jsx/);
+      // It must name the line the bad quote opened on, or the refusal is a
+      // shrug rather than a bug report.
+      assert.match(err.message, /line 3\b/);
+      return true;
+    },
+  );
+
+  // And the refusal must reach the caller the guard actually uses, rather than
+  // being swallowed into a clean-looking empty list.
+  assert.throws(() => fabrications(APOSTROPHE_HAZARD, "Hero.jsx"), /could not read Hero\.jsx/);
+
+  // The proof that this is the failure it looks like: with the newline refusal
+  // removed, the swallowed span takes Math.random with it and the file scans
+  // green. This is that same walk minus rule 2 of the refusal contract.
+  const withoutTheRefusal = APOSTROPHE_HAZARD.replace(/\n/g, " ");
+  assert.doesNotMatch(
+    codeOnly(withoutTheRefusal, "one-line"),
+    /Math\s*\.\s*random/,
+    "if this ever finds Math.random the demonstration has rotted and this test proves nothing",
+  );
+  assert.deepEqual(
+    fabrications(withoutTheRefusal, "one-line"),
+    [],
+    "the same-line apostrophe pair is the documented residual blind spot; if it "
+      + "ever starts firing, delete that bullet from the header",
+  );
+});
+
+test("REFUSAL — the things that legitimately span lines are not refused", () => {
+  // Template literals may hold newlines, and their interpolations stay code.
+  assert.deepEqual(
+    fabrications("export const s = `probes:\n  ${Math.random()}`;", "template"),
+    ["random"],
+  );
+  // A backslash line continuation inside a quoted string is legal JS.
+  assert.deepEqual(fabrications('export const s = "one \\\n two";', "continuation"), []);
+  // A double-quoted string holding an apostrophe is a string, not a hazard.
+  assert.deepEqual(fabrications("export const s = \"it doesn't lie\";\n", "quoted"), []);
 });
 
 test("GUARD — the landing page renders no counter component, and the simulated one is gone", () => {

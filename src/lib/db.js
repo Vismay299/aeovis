@@ -459,16 +459,28 @@ export async function getScansForBrand(brand) {
  * rosterContinuity.js already documents that a DB failure loading the previous
  * roster must NOT be swallowed; the swallow here is what made that dead code.
  *
- * @throws {ScansUnavailableError} db_read_failed
+ * R2.8.12 closed the last fail-quiet branch here: `if (!client) return []`,
+ * which R2.8.5 left behind and flagged in place. An unconfigured deploy — no
+ * NEXT_PUBLIC_SUPABASE_URL/ANON_KEY, so db.js's module-level `supabase` is
+ * null — answered every caller with "this domain has never been scanned",
+ * a factual claim about the customer's data derived entirely from our own
+ * missing environment. It could never have been a defensible degradation:
+ * insertScan refuses without a client (R2.8.6) and there is no memory fallback
+ * for scans, so nothing could ever be there to find. It now throws the same
+ * ScansUnavailableError with the same `db_not_configured` code getScansForBrand
+ * uses, so a caller has one vocabulary to branch on and not two.
+ *
+ * @throws {ScansUnavailableError} db_not_configured | db_read_failed
  */
 export async function getScansByDomain(domain, deps = {}) {
   const client = resolveClient(deps);
-  // NOT FIXED HERE, DELIBERATELY: the no-client branch is R2.8.12's, filed
-  // separately and owned by another change. It is the same fail-quiet shape
-  // (an unconfigured deploy reads as "never scanned") and should become a
-  // `db_not_configured` throw exactly like getScansForBrand's — do not treat
-  // its survival below as a considered exception.
-  if (!client) return [];
+  if (!client) {
+    throw new ScansUnavailableError(
+      "Supabase is not configured — scan history cannot be read by domain. " +
+        "This is a refusal to look, not a domain with no scans.",
+      { code: "db_not_configured" }
+    );
+  }
 
   const host = String(domain || "")
     .trim()
@@ -476,6 +488,11 @@ export async function getScansByDomain(domain, deps = {}) {
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
     .split("/")[0];
+  // A DIFFERENT SHAPE, LEFT AS IS DELIBERATELY: this [] is not a fabricated
+  // measurement about the database, it is a caller that asked about no domain
+  // at all. It is still arguably too quiet (R2.8.12 names it as a follow-up),
+  // but conflating it with db_not_configured would tell an operator the deploy
+  // is broken when the argument was.
   if (!host) return [];
 
   const { data, error } = await client

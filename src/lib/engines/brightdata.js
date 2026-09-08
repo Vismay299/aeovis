@@ -287,6 +287,16 @@ function isRateLimitResponse(data) {
  *
  * Returns the matched detail (trimmed) or null. Null is not "fine": it only
  * means this particular failure was not about the zone.
+ *
+ * BOTH SIDES OF THIS BOUNDARY ARE PINNED (R1.2.11). R1.2.10 widened the last
+ * two patterns with only positive-case tests, which makes a guard that cannot
+ * fail: any further widening would have stayed green. The negative corpus --
+ * transient and unrelated messages that mention "zone" and must NOT become a
+ * permanent zone rejection -- lives in brightdataZone.test.mjs under the
+ * R1.2.11 banner, together with the three known over-match MECHANISMS recorded
+ * there as tolerated exceptions rather than silently inherited. Narrow or widen
+ * anything below and read that block before you decide the failure is the
+ * test's fault.
  */
 function zoneRejectionDetail(text) {
   const s = String(text || "").trim();

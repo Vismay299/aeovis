@@ -661,3 +661,331 @@ test("R1.2.10 — RECORDED ASYMMETRY: rate-limit precedence differs between the 
     "THE COST of this ordering: an HTTP 429 typed as a zone fault is not retried, though 429 is retryable"
   );
 });
+
+/* ===========================================================================
+ * R1.2.11 — THE NEGATIVE SIDE OF THE ZONE-REJECTION BOUNDARY.
+ *
+ * WHY THIS BLOCK EXISTS. R1.2.10 widened the last two patterns in
+ * `zoneRejectionDetail` (brightdata.js) so snake_case forms classify. Every
+ * test it left behind asserts that something DOES classify. A classifier with
+ * only positive-case tests is a guard that cannot fail: replace the whole list
+ * with `[/zone/i]` and the suite above this line stays green, because nothing
+ * committed says what must be REFUSED. Both the R1.2.10 implementer and its
+ * verifier checked negatives by hand and neither check left an artifact, so the
+ * boundary was pinned in exactly one direction.
+ *
+ * WHAT A WRONG CLASSIFICATION COSTS, in both directions:
+ *   - FALSE NEGATIVE (a real zone fault read as generic): the cache survives, so
+ *     the process keeps probing a dead zone for up to a full TTL. That is the C4
+ *     finding, and it is what R1.2.10 fixed. Pinned by the positive test below.
+ *   - FALSE POSITIVE (a transient failure read as a permanent zone rejection):
+ *     the attempt budget is cut short -- `brightDataSearch`'s catch refuses to
+ *     retry a typed zone error -- and on the auto-discovery path a healthy
+ *     cached zone is dropped, costing one extra `get_all_zones`. Bounded at one
+ *     lost retry per probe. Not free, and nothing but this block detects it.
+ *
+ * Neither direction can produce a false SUCCESS: every case below still throws,
+ * is still counted as an errored probe, and never becomes a cost-0.0 skip. What
+ * is at stake here is the error's TYPE and the process's next move.
+ *
+ * THE TRANSPORT IS CHOSEN, NOT INCIDENTAL. These tests answer the probe with
+ * `ok: false`, because on the not-ok path `zoneRejectionDetail` runs FIRST --
+ * before the 429/5xx retry branch (brightdata.js, the `httpZoneErr` check ahead
+ * of `isRetryableHttpStatus`) -- so that is the path on which an over-wide
+ * pattern has the most reach. The response text is returned VERBATIM rather than
+ * wrapped in an envelope, so the string asserted here is exactly the string the
+ * classifier sees; no JSON punctuation sneaks into the corpus.
+ *
+ * CACHE HYGIENE. All three tests pin BRIGHTDATA_SERP_ZONE, which short-circuits
+ * the resolver, so they neither read nor write the module cache this file
+ * shares. Each asserts that at the end rather than trusting it.
+ * ======================================================================== */
+
+/**
+ * Run one body string through the REAL classifier and report which way it went.
+ *
+ * `attempts: 1` on purpose: a body such as "Bright Data HTTP 502: bad gateway"
+ * trips the retry classifier in the catch block, and a retry would make the call
+ * count depend on the corpus entry rather than on the classification. One
+ * attempt makes every row cost exactly one call, which is also what lets the
+ * call count be asserted at all.
+ */
+function makeZoneClassifier(t) {
+  let body = "";
+  let serpCalls = 0;
+  mockFetch(t, async (url) => {
+    if (String(url).includes("get_all_zones")) {
+      return { ok: true, status: 200, json: async () => [] };
+    }
+    serpCalls++;
+    return { ok: false, status: 400, text: async () => body };
+  });
+  return {
+    calls: () => serpCalls,
+    async classify(text) {
+      body = text;
+      try {
+        await brightDataSearch("best vitrified tiles", { attempts: 1, timeout: 500 });
+      } catch (err) {
+        return {
+          kind: isBrightDataZoneError(err) ? "zone_rejected" : "generic",
+          err,
+        };
+      }
+      throw new Error(
+        `${JSON.stringify(text)} produced a RESOLVED response from an HTTP 400 -- ` +
+          `the fixture is broken, and a broken fixture proves nothing in either direction`
+      );
+    },
+  };
+}
+
+/**
+ * Strings that mention a zone, or a zone state word, and are NOT a permanent
+ * zone rejection. Each carries the reason it belongs here, because a corpus
+ * without reasons is a list the next editor deletes.
+ */
+const NOT_A_ZONE_REJECTION = [
+  // --- the empty and blank boundary. An error body that says nothing is not
+  // evidence the zone is gone; it is evidence of nothing (standing rule 1).
+  ["", "an empty error body carries no evidence about the zone"],
+  ["   ", "whitespace-only is the empty case wearing a costume"],
+  ["\n\t ", "so is a body of newlines"],
+
+  // --- documented transient Bright Data failures, from docs/vendors/brightdata.md.
+  ["no_ready_cookies", "proxy session-pool exhaustion; the vendor note calls it retryable"],
+  ["Bright Data proxy session error: no_ready_cookies", "the same fault as this client words it"],
+  ["no ready cookies for zone serp_api1", "session-pool exhaustion that happens to name the zone"],
+  ["x-brd-error: no_peer_available for zone serp_api1", "no free peer right now, not a dead zone"],
+  ["proxy status 502", "an upstream hiccup"],
+  ["Bright Data HTTP 502: bad gateway", "a 5xx is retryable and must stay retryable"],
+  ["Bright Data returned a truncated/empty AIO response", "a cut stream, retried by design"],
+  ["target_blocked: google.com blocked the peer used by zone serp_api1", "the TARGET blocked a peer"],
+  ["connection reset by peer (zone serp_api1)", "a transport reset"],
+  ["socket hang up", "a transport reset with no zone in it at all"],
+  ["request to zone serp_api1 timed out after 60000ms", "a timeout is the retry loop's business"],
+  ["the request through zone serp_api1 was aborted after 60s", "an abort, likewise"],
+  ["zone serp_api1 is busy, try again", "the vendor is explicitly asking for a retry"],
+  ["zone serp_api1 temporarily unavailable, retry in 5s", "'temporarily' is the opposite of permanent"],
+  ["all peers for zone serp_api1 are exhausted", "peer supply, not zone status"],
+  ["zone serp_api1 has no available peers right now", "same, and 'right now' says so"],
+
+  // --- throttling and money. Real problems, but not "this zone does not exist",
+  // and typing them as zone rejections burns a recoverable retry (see :577).
+  ["rate limit exceeded for zone serp_api1", "throttling recovers on its own; a dead zone does not"],
+  ["quota exceeded on zone serp_api1", "same"],
+  ["Bright Data HTTP 429: too many requests for zone serp_api1", "same, in HTTP clothes"],
+  ["zone bandwidth limit reached", "a limit, not a state change"],
+  ["insufficient funds on zone serp_api1", "a billing problem the operator fixes without touching the zone"],
+
+  // --- results-shaped failures that mention a zone.
+  ["zone serp_api1 returned 0 organic results", "an empty SERP is a scoring problem, not a config one"],
+  ["zone serp_api1: page not found (404)", "the TARGET page is missing; 'not found' is about google.com"],
+  ["search results not found for the query", "no zone in it at all"],
+  ["unknown parameter brd_ai_overview", "'unknown' about a query parameter, not a zone"],
+  ["invalid country code", "'invalid' about the geo, not a zone"],
+
+  // --- state words about something that is not the zone.
+  ["account suspended", "the ACCOUNT, and no zone is named"],
+  ["user account is disabled", "same"],
+  ["customer account deactivated", "same"],
+  ["auth token expired", "the credential, not the zone"],
+  ["session expired; re-authenticate", "the session, and the ';' closes the proximity window"],
+  ["your subscription has expired", "the subscription"],
+  ["billing expired for the account behind zone serp_api1", "the state word precedes the zone by more than a separator"],
+  ["cache entry deleted for zone serp_api1", "a local cache entry"],
+  ["browser session deleted before the page loaded", "a browser session"],
+
+  // --- near-misses: one character away from a real rejection on either side.
+  ["zonesuspended", "no separator at all: the state word must start a token"],
+  ["suspendedzone", "the mirror case"],
+  ["notactive zone", "'not active' before 'zone' is not one of the two shapes matched"],
+  ["not_active zone", "same, underscored"],
+  ["deleted zones", "plural: 'zone\\b' must not match inside 'zones'"],
+  ["expired_zones table row", "an internal table name, plural again"],
+  ["suspend_zone_request queued", "a REQUEST to suspend, not a suspension"],
+  ["user_disabled_zone_map", "an identifier that happens to contain both words"],
+  ["suspended zoneinfo", "'zoneinfo' is not a zone"],
+  ["zoneless", "'zone' as a prefix of an unrelated word"],
+  ["zone", "the bare word is not a verdict"],
+  ["zones", "nor its plural"],
+  ["zone_", "nor a dangling separator"],
+  ["Ozone layer report unavailable", "'zone' inside 'Ozone'"],
+  ["horizon deleted", "'zon' is not 'zone'"],
+  ["amazon events", "nor is 'zon' followed by 'e' in another word"],
+  ["The timezone was not found for this locale", "'was' is wider than the one-character separator the pattern allows"],
+];
+
+test("R1.2.11 — transient and unrelated zone-mentioning failures are NOT permanent zone rejections", async (t) => {
+  useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "pinned_zone" });
+  const cacheBefore = peekBrightDataZoneCache()?.name ?? null;
+  const zc = makeZoneClassifier(t);
+
+  for (const [text, why] of NOT_A_ZONE_REJECTION) {
+    const { kind, err } = await zc.classify(text);
+    assert.equal(
+      kind,
+      "generic",
+      `${JSON.stringify(text)} was typed as a PERMANENT zone rejection -- ${why}. ` +
+        `Cost: the retry is refused and, on the auto-discovery path, a healthy cached zone is dropped.`
+    );
+    // Not classifying must never mean not failing. A body this client could not
+    // make sense of is still a failed probe with a message an operator can read.
+    assert.ok(
+      err instanceof Error && !isBrightDataZoneError(err),
+      `${JSON.stringify(text)} must still produce a plain Error, got ${err?.name}`
+    );
+    assert.match(
+      err.message,
+      /^Bright Data HTTP 400/,
+      `${JSON.stringify(text)} must still surface the transport failure verbatim, got ${JSON.stringify(err.message)}`
+    );
+  }
+
+  assert.equal(
+    zc.calls(),
+    NOT_A_ZONE_REJECTION.length,
+    "one probe per corpus entry -- a row that silently made no call would prove nothing"
+  );
+  assert.equal(
+    peekBrightDataZoneCache()?.name ?? null,
+    cacheBefore,
+    "with the zone pinned this test must not touch the shared module cache"
+  );
+});
+
+/**
+ * The other side of the same boundary: strings that MUST classify.
+ *
+ * Without this, the negative corpus above could be satisfied by deleting the
+ * patterns entirely. The six wordings R1.2.10 set out to fix are already pinned
+ * at :538 through the 200-envelope path; what is added here is the shapes the
+ * widening reaches BEYOND those six -- separator, case and whitespace variants
+ * that a narrowing would quietly drop.
+ */
+const IS_A_ZONE_REJECTION = [
+  ["zone not found: pinned_zone", "the canonical prose form"],
+  ["zone_not_found", "and its machine-readable code"],
+  ["zone-not-found", "hyphenated codes exist too"],
+  ["ZONE NOT FOUND", "the classifier is case-insensitive and must stay so"],
+  ["no such zone: pinned_zone", "second prose form"],
+  ["unknown zone: pinned_zone", "third"],
+  ["invalid zone: pinned_zone", "fourth"],
+  ["Zone \"pinned_zone\" has been suspended", "prose state form, quoted zone name"],
+  ["zone is deactivated", "prose state form"],
+  ["disabled zone", "state word first"],
+  ["deleted zone pinned_zone", "state word first, zone named"],
+  // The R1.2.10 widening, in the forms the six named cases do not cover.
+  ["Zone_Suspended", "snake_case is not always lower case"],
+  ["ZONE_DISABLED", "nor always mixed"],
+  ["  zone_expired  ", "the classifier trims before it decides"],
+  ["zone__suspended", "a doubled separator is still a separator"],
+  ["zone_suspend", "the stem matches; vendors truncate"],
+  ["deleted-zone", "hyphen before 'zone' -- the [\\s_-]+ half of the widening"],
+  ["suspend_zone", "underscore before 'zone' -- same half"],
+  ["suspended  zone", "and plain whitespace still works"],
+  ["zone-not-active", "the not[ _-]?active alternative, hyphenated"],
+  ["zone not_active", "and mixed"],
+  ["zone_notactive", "and run together"],
+];
+
+test("R1.2.11 — the positive side, so a NARROWING is caught here and not in production", async (t) => {
+  useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "pinned_zone" });
+  const cacheBefore = peekBrightDataZoneCache()?.name ?? null;
+  const zc = makeZoneClassifier(t);
+
+  for (const [text, why] of IS_A_ZONE_REJECTION) {
+    const { kind, err } = await zc.classify(text);
+    assert.equal(
+      kind,
+      "zone_rejected",
+      `${JSON.stringify(text)} fell through to a generic error -- ${why}. ` +
+        `Cost: the cache survives and the process keeps probing a dead zone for a full TTL (the C4 finding).`
+    );
+    assert.equal(err.reason, "zone_rejected", "machine-readable, so callers never parse the message");
+    assert.equal(err.zone, "pinned_zone", "and it names the zone the operator has to fix");
+  }
+
+  assert.equal(
+    peekBrightDataZoneCache()?.name ?? null,
+    cacheBefore,
+    "with the zone pinned this test must not touch the shared module cache"
+  );
+});
+
+/**
+ * KNOWN OVER-MATCHES — recorded, not fixed.
+ *
+ * PROVENANCE, stated plainly: R1.2.10's verifier reported three pre-existing
+ * over-matches and did not record WHICH, which is the whole reason this task
+ * exists. The list below was re-derived from scratch against the shipped
+ * patterns, so it is not necessarily byte-identical to theirs. It is organised
+ * by MECHANISM, and there are exactly three mechanisms; every over-match found
+ * is an instance of one of them.
+ *
+ * All three predate R1.2.10: they live in patterns that diff produced no change
+ * to. Confirmed by running the pre-R1.2.10 patterns (40d203f) over the same
+ * corpus -- identical verdicts on every string here.
+ *
+ * They are NOT fixed here because tightening them is a source decision with a
+ * failure mode in the expensive direction. `zone[^.,;]{0,40}` is deliberately
+ * loose so that vendor prose nobody has read yet still classifies; narrowing it
+ * to buy back these strings trades a bounded cost (one lost retry) for the
+ * unbounded one (a dead zone probed for a full TTL, which is the finding this
+ * whole chain descends from). None of the strings below is a wording Bright Data
+ * has been observed to emit. If the fleet logs ever show one, that is the
+ * evidence to reopen it with -- and this block is where the next editor will
+ * find out the trade was made on purpose.
+ */
+const TOLERATED_OVER_MATCHES = [
+  // MECHANISM 1 — `zone` has no LEFT boundary, so it matches inside a longer
+  // word. Cost if it ever fires: a timezone lookup failure kills one retry.
+  ["timezone not found", "M1: matches inside 'timezone' via /zone[ _-]?not[ _-]?found/"],
+  ["timezone_not_found", "M1: same, snake_case"],
+
+  // MECHANISM 2 — `zone` has no RIGHT boundary in the three literal prose
+  // patterns, so it matches the head of a longer word.
+  ["invalid zonefile", "M2: /invalid zone/ has no trailing \\b"],
+  ["unknown zonefile format", "M2: /unknown zone/, same gap"],
+  ["no such zonefile", "M2: /no such zone/, same gap"],
+
+  // MECHANISM 3 — the 40-character proximity window attributes ANY state word
+  // near the token 'zone' to the zone itself. This is the widest of the three
+  // and the only one that catches plausible English.
+  ["your session for zone serp_api1 has expired, please retry", "M3: the SESSION expired, and the text even asks for the retry this refuses"],
+  ["the zone's proxy peer connection expired", "M3: a peer connection expired"],
+  ["the cached DNS entry for the zone endpoint expired", "M3: a DNS entry expired"],
+  ["certificate for the zone gateway expired", "M3: a TLS certificate expired"],
+  ["the cookie jar for zone serp_api1 expired", "M3: a cookie jar expired"],
+  ["the temporary file for the zone response was deleted", "M3: a temp file was deleted"],
+  ["zone serp_api1 quota will be deleted at end of billing cycle", "M3: a FUTURE deletion of a quota, not a current zone state"],
+  // Judged correct rather than tolerated, and kept here because it reads like an
+  // over-match and is not: a suspended owning account makes the zone genuinely
+  // unusable, so refusing the retry and dropping the cache is the right move.
+  ["the account that owns this zone was suspended", "M3 mechanically, but the classification is CORRECT: the zone really is unusable"],
+];
+
+test("R1.2.11 — the three over-match MECHANISMS, pinned as tolerated exceptions with their reason", async (t) => {
+  useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "pinned_zone" });
+  const cacheBefore = peekBrightDataZoneCache()?.name ?? null;
+  const zc = makeZoneClassifier(t);
+
+  for (const [text, why] of TOLERATED_OVER_MATCHES) {
+    const { kind } = await zc.classify(text);
+    assert.equal(
+      kind,
+      "zone_rejected",
+      `${JSON.stringify(text)} no longer classifies. ${why}. ` +
+        `This assertion pins CURRENT behaviour, not desired behaviour: if you tightened the patterns ` +
+        `on purpose, move this row into NOT_A_ZONE_REJECTION and say so in the block comment above. ` +
+        `If you did not, you have narrowed the classifier by accident and a real zone fault may now ` +
+        `survive as a plain Error.`
+    );
+  }
+
+  assert.equal(
+    peekBrightDataZoneCache()?.name ?? null,
+    cacheBefore,
+    "with the zone pinned this test must not touch the shared module cache"
+  );
+});

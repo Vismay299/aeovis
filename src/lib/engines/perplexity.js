@@ -5,6 +5,86 @@ const PERPLEXITY_SEARCH_URL = "https://api.perplexity.ai/search";
 const PERPLEXITY_MODEL = process.env.PERPLEXITY_MODEL || "sonar";
 const MAX_RETRIES = 2;
 const TIMEOUT_MS = 45000;
+const RETRY_BASE_DELAY_MS = 1000;
+
+/**
+ * Whether a failed Perplexity call is worth trying again (R2.2.10).
+ *
+ * Both legs used to guard the retry with `if (status === 429 || status >= 500)`
+ * and then `throw` the error for every other status — inside a `try` whose own
+ * `catch` retried unconditionally. The guard was dead: the throw landed in the
+ * catch, which backed off and went round again. A 401 from a revoked key cost
+ * three calls and three seconds before surfacing, and the one failure an
+ * operator can actually fix looked exactly like vendor flakiness.
+ *
+ *   transient — rate limit, upstream fault, timeout, severed connection. The
+ *               same request may well succeed in a second. Retry it.
+ *   permanent — the vendor understood the request and refused it: bad or
+ *               revoked key (401), forbidden (403), malformed request (400,
+ *               404, 422). No amount of backoff changes the answer. Fail on
+ *               the FIRST response and say why.
+ *
+ * Kept as an exported classification rather than an inline condition so the
+ * policy is testable on its own and so both legs cannot drift apart.
+ */
+export const FAILURE_KIND = Object.freeze({
+  TRANSIENT: "transient",
+  PERMANENT: "permanent",
+});
+
+/** Statuses below 500 that are still worth another attempt. */
+const TRANSIENT_STATUSES = new Set([
+  408, // Request Timeout
+  425, // Too Early
+  429, // Too Many Requests
+]);
+
+/**
+ * Classify an HTTP status from either leg.
+ *
+ * The default for something we cannot read as a status is TRANSIENT, not
+ * PERMANENT: giving up early on a failure we do not understand throws away a
+ * measurement, which is the more expensive mistake. We stop retrying only when
+ * we can positively identify a refusal.
+ *
+ * @param {number} status
+ * @returns {"transient"|"permanent"}
+ */
+export function classifyHttpStatus(status) {
+  const code = Number(status);
+  if (!Number.isFinite(code)) return FAILURE_KIND.TRANSIENT;
+  if (code >= 500) return FAILURE_KIND.TRANSIENT;
+  if (TRANSIENT_STATUSES.has(code)) return FAILURE_KIND.TRANSIENT;
+  if (code >= 400) return FAILURE_KIND.PERMANENT;
+  return FAILURE_KIND.TRANSIENT;
+}
+
+/**
+ * The kind of a thrown failure. Only errors this module tagged carry a verdict;
+ * anything else (AbortError from the timeout, a socket reset, a truncated body
+ * that fails JSON.parse) is transport noise and therefore transient.
+ *
+ * @param {unknown} error
+ * @returns {"transient"|"permanent"}
+ */
+export function failureKindOf(error) {
+  const kind = error?.failureKind;
+  return kind === FAILURE_KIND.PERMANENT || kind === FAILURE_KIND.TRANSIENT
+    ? kind
+    : FAILURE_KIND.TRANSIENT;
+}
+
+/** @param {unknown} error @returns {boolean} */
+export function isRetryableFailure(error) {
+  return failureKindOf(error) === FAILURE_KIND.TRANSIENT;
+}
+
+function httpError(leg, status, bodyText) {
+  const err = new Error(`Perplexity ${leg} HTTP ${status}: ${bodyText}`);
+  err.status = status;
+  err.failureKind = classifyHttpStatus(status);
+  return err;
+}
 
 /**
  * Whether this probe's `citations` array is a MEASUREMENT or an absence of one
@@ -38,6 +118,16 @@ export const CITATIONS_STATE = Object.freeze({
 export const CITATIONS_STATE_REASON = Object.freeze({
   /** /search errored or timed out through every retry. The answer leg may be fine. */
   SEARCH_LEG_FAILED: "search_leg_failed",
+  /**
+   * /search was REFUSED — 401/403/4xx — so it was not retried (R2.2.10).
+   *
+   * Same `unverified` state as SEARCH_LEG_FAILED, because in both cases the
+   * citation list was not observed and must stay out of a citation-share
+   * denominator. Split from it because the operator response differs: this one
+   * is a configuration fault that will repeat on every prompt of every scan
+   * until a human fixes the key, not a vendor blip that may clear on its own.
+   */
+  SEARCH_LEG_REJECTED: "search_leg_rejected",
   /** No PERPLEXITY_API_KEY, so neither leg was attempted at all. */
   NOT_CONFIGURED: "perplexity_not_configured",
 });
@@ -103,11 +193,41 @@ async function perplexityFetch(url, body, apiKey) {
   }
 }
 
-async function probeAnswer(query, apiKey) {
+/**
+ * Run one leg with the retry POLICY applied, not a retry reflex (R2.2.10).
+ *
+ * The classification decides; there is no status test inline here and none in
+ * either caller. A permanent failure leaves the loop on the first response, so
+ * the call count for a 401 is 1 and not 3. Whatever finally failed is rethrown
+ * with its `failureKind` intact so the caller can report the KIND, not just the
+ * message.
+ *
+ * @param {string} leg "answer" | "search", for the failure message.
+ * @param {() => Promise<any>} run one attempt.
+ */
+async function withRetry(leg, run) {
   let lastErr = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
+      return await run();
+    } catch (e) {
+      lastErr = e;
+      // Permanent: the vendor already answered the question. Stop here rather
+      // than spend two more calls and three seconds to be refused twice more.
+      if (!isRetryableFailure(e)) break;
+      if (attempt < MAX_RETRIES) {
+        await delay(RETRY_BASE_DELAY_MS * Math.pow(2, attempt));
+      }
+    }
+  }
+
+  throw lastErr ?? new Error(`Perplexity ${leg} probe failed`);
+}
+
+async function probeAnswer(query, apiKey) {
+  try {
+    return await withRetry("answer", async () => {
       const res = await perplexityFetch(
         PERPLEXITY_CHAT_URL,
         {
@@ -120,43 +240,35 @@ async function probeAnswer(query, apiKey) {
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
-        const err = new Error(`Perplexity answer HTTP ${res.status}: ${errText}`);
-        if (res.status === 429 || res.status >= 500) {
-          lastErr = err;
-          if (attempt < MAX_RETRIES) {
-            await delay(1000 * Math.pow(2, attempt));
-            continue;
-          }
-        }
-        throw err;
+        throw httpError("answer", res.status, errText);
       }
 
       const resJson = await res.json();
       const text = resJson.choices?.[0]?.message?.content || "";
       const cost = resJson.usage?.cost?.total_cost ?? resJson.usage?.total_cost ?? 0.005;
 
-      return { text: text.trim(), cost, error: null, usage: resJson.usage || null };
-    } catch (e) {
-      lastErr = e;
-      if (attempt < MAX_RETRIES) {
-        await delay(1000 * Math.pow(2, attempt));
-      }
-    }
+      return {
+        text: text.trim(),
+        cost,
+        error: null,
+        error_kind: null,
+        usage: resJson.usage || null,
+      };
+    });
+  } catch (e) {
+    return {
+      text: "",
+      cost: 0,
+      error: e?.message || "Perplexity answer probe failed",
+      error_kind: failureKindOf(e),
+      usage: null,
+    };
   }
-
-  return {
-    text: "",
-    cost: 0,
-    error: lastErr?.message || "Perplexity answer probe failed",
-    usage: null,
-  };
 }
 
 async function probeSearch(query, apiKey) {
-  let lastErr = null;
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
+  try {
+    return await withRetry("search", async () => {
       const res = await perplexityFetch(
         PERPLEXITY_SEARCH_URL,
         { query, max_results: 10 },
@@ -165,15 +277,7 @@ async function probeSearch(query, apiKey) {
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
-        const err = new Error(`Perplexity search HTTP ${res.status}: ${errText}`);
-        if (res.status === 429 || res.status >= 500) {
-          lastErr = err;
-          if (attempt < MAX_RETRIES) {
-            await delay(1000 * Math.pow(2, attempt));
-            continue;
-          }
-        }
-        throw err;
+        throw httpError("search", res.status, errText);
       }
 
       const resJson = await res.json();
@@ -187,21 +291,17 @@ async function probeSearch(query, apiKey) {
 
       const citations = [...new Set(references.map((r) => normalizeUrl(r.href)).filter(Boolean))];
 
-      return { references, citations, cost: 0.005, error: null };
-    } catch (e) {
-      lastErr = e;
-      if (attempt < MAX_RETRIES) {
-        await delay(1000 * Math.pow(2, attempt));
-      }
-    }
+      return { references, citations, cost: 0.005, error: null, error_kind: null };
+    });
+  } catch (e) {
+    return {
+      references: [],
+      citations: [],
+      cost: 0,
+      error: e?.message || "Perplexity search probe failed",
+      error_kind: failureKindOf(e),
+    };
   }
-
-  return {
-    references: [],
-    citations: [],
-    cost: 0,
-    error: lastErr?.message || "Perplexity search probe failed",
-  };
 }
 
 /**
@@ -213,9 +313,22 @@ async function probeSearch(query, apiKey) {
  * measurement. What a dead /search does invalidate is the citation list, and
  * that is what `citations_state` says (R2.2.2, finding B2).
  *
+ * `error_kind` (R2.2.10) says whether that `error` is worth retrying at a higher
+ * level or is a configuration fault that will repeat identically on every
+ * remaining prompt. It is null exactly when `error` is null.
+ *
+ * HONEST LIMIT of `error_kind`: probeTextEngine in enginePipeline.js copies a
+ * fixed list of fields off this envelope, and `error_kind` is not yet on that
+ * list, so today it reaches this module's own log line and any direct caller,
+ * not the persisted row. Carrying it onto the row is a follow-up on that file
+ * (owned elsewhere while R2.2.10 was built). The one failure-kind signal that
+ * DOES survive the hop is `citations_state_reason`, which is already copied —
+ * hence SEARCH_LEG_REJECTED below.
+ *
  * @returns {Promise<{text: string, citations: string[], references: object[],
- *          cost: number, error: string|null, citations_state: string,
- *          citations_state_reason: string|null, citations_state_detail: string|null}>}
+ *          cost: number, error: string|null, error_kind: string|null,
+ *          citations_state: string, citations_state_reason: string|null,
+ *          citations_state_detail: string|null}>}
  */
 export async function probePerplexity(query, options = {}) {
   const apiKey = process.env.PERPLEXITY_API_KEY;
@@ -227,6 +340,9 @@ export async function probePerplexity(query, options = {}) {
       references: [],
       cost: 0,
       error: "PERPLEXITY_API_KEY not set",
+      // A missing key is a config fault, not a blip: nothing will change until
+      // a human sets it.
+      error_kind: FAILURE_KIND.PERMANENT,
       // Nothing was asked, so the empty citation list is not a finding of
       // "no citations" either.
       citations_state: CITATIONS_STATE.UNVERIFIED,
@@ -243,7 +359,11 @@ export async function probePerplexity(query, options = {}) {
   const citationsState = search.error
     ? {
         citations_state: CITATIONS_STATE.UNVERIFIED,
-        citations_state_reason: CITATIONS_STATE_REASON.SEARCH_LEG_FAILED,
+        // Refused vs. died: same unverified list, different operator action.
+        citations_state_reason:
+          search.error_kind === FAILURE_KIND.PERMANENT
+            ? CITATIONS_STATE_REASON.SEARCH_LEG_REJECTED
+            : CITATIONS_STATE_REASON.SEARCH_LEG_FAILED,
         citations_state_detail: detailOf(search.error),
       }
     : {
@@ -258,6 +378,11 @@ export async function probePerplexity(query, options = {}) {
     // Say which one actually died: /search may well have returned citations.
     console.error(
       `[perplexity] Answer leg failed for query: "${query}" — ${answer.error} ` +
+        `[${answer.error_kind}${
+          answer.error_kind === FAILURE_KIND.PERMANENT
+            ? ", not retried — check PERPLEXITY_API_KEY / request shape"
+            : `, retried ${MAX_RETRIES + 1}x`
+        }] ` +
         `(citations ${citationsState.citations_state}` +
         `${citationsState.citations_state_reason ? `: ${citationsState.citations_state_reason}` : ""})`
     );
@@ -267,6 +392,7 @@ export async function probePerplexity(query, options = {}) {
       references: search.references,
       cost: answer.cost + search.cost,
       error: answer.error,
+      error_kind: answer.error_kind,
       ...citationsState,
     };
   }
@@ -276,9 +402,10 @@ export async function probePerplexity(query, options = {}) {
     // citation list is NOT a zero — say so here rather than let a silent []
     // reach a denominator.
     console.warn(
-      `[perplexity] Citation leg failed for query: "${query}" — ${search.error}. ` +
+      `[perplexity] Citation leg failed for query: "${query}" — ${search.error} ` +
+        `[${search.error_kind}]. ` +
         `Answer kept; citations marked ${CITATIONS_STATE.UNVERIFIED} ` +
-        `(${CITATIONS_STATE_REASON.SEARCH_LEG_FAILED}), not zero.`
+        `(${citationsState.citations_state_reason}), not zero.`
     );
   }
 
@@ -300,6 +427,7 @@ export async function probePerplexity(query, options = {}) {
     references: search.references,
     cost: totalCost,
     error: null,
+    error_kind: null,
     ...citationsState,
   };
 }

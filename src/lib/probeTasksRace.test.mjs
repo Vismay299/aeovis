@@ -25,6 +25,24 @@ import { armedLiveDbGate, notRunBanner } from "./liveDbGate.js";
  * WHAT IT WRITES. Only `probe_tasks`, a table created by migration 010 that has
  * never held customer data. Every row it inserts carries engine
  * `test-r122-race` and a per-run batch id, and is deleted afterwards.
+ *
+ * R1.2.8 (finding S29) — WHICH CASE IS THE ATOMICITY PROOF.
+ * R1.2.2's verifier stripped `FOR UPDATE SKIP LOCKED` out of the claim function
+ * and BOTH six-worker cases still passed. That is not a fluke: six connections
+ * through a small local pool tend to serialize, so each racer arrives after the
+ * previous one has committed, correctly sees the row as leased, and reports
+ * zero — which looks exactly like the lock working. They are SMOKE coverage,
+ * renamed below to say so. The proof is the deterministic case, "SKIP LOCKED —
+ * a claim held in an open transaction is not handed to a second worker": it
+ * holds A's transaction open from a third connection, so the lock is provably
+ * held while B tries, and it fails both ways the clause can be broken (a bare
+ * FOR UPDATE makes B block; no clause at all lets B steal the row).
+ *
+ * And because everything here is skipped without a database, the clause is
+ * additionally asserted as SQL TEXT, hermetically, in
+ * `src/lib/probeClaimLock.test.mjs`. That file states plainly that it tests the
+ * migration's text and not Postgres's behaviour. It is the weaker claim; it is
+ * the one that can run in CI. Neither substitutes for the other.
  */
 
 const TEST_ENGINE = "test-r122-race";
@@ -133,7 +151,15 @@ test("the fixture table exists and is the one migration 010 created", opts, asyn
   }
 });
 
-test("RACE — six workers, one task, exactly one claim", opts, async () => {
+test("SMOKE (NOT the atomicity proof) — six workers, one task, exactly one claim", opts, async () => {
+  // R1.2.8. Renamed from "RACE — ...". This case does NOT prove the claim is
+  // atomic and must not be cited as if it did: with FOR UPDATE SKIP LOCKED
+  // stripped from migration 010 it still passes, because the six connections
+  // serialize and each racer legitimately finds the row already leased. What it
+  // does prove is worth keeping — the report shape under real concurrency, and
+  // that a loser says "busy" rather than "empty". For the atomicity guarantee
+  // see "SKIP LOCKED — a claim held in an open transaction ..." below, and
+  // src/lib/probeClaimLock.test.mjs for the hermetic text-level guard.
   const RACERS = 6;
   const clients = await connect(RACERS + 1);
   const seeder = clients[RACERS];
@@ -141,8 +167,10 @@ test("RACE — six workers, one task, exactly one claim", opts, async () => {
   try {
     batchId = await seed(seeder, 1);
 
-    // Genuinely concurrent: six independent connections, all fired before any
-    // of them is awaited. No sequencing, no shared process state.
+    // Concurrent as far as this process can make it: six independent
+    // connections, all fired before any is awaited. No sequencing, no shared
+    // process state. Whether the SERVER interleaves them is not ours to force,
+    // which is precisely why this case is smoke and not proof.
     const reports = await Promise.all(
       clients.slice(0, RACERS).map((c, i) => claim(c, `race-worker-${i}`, batchId))
     );
@@ -180,7 +208,11 @@ test("RACE — six workers, one task, exactly one claim", opts, async () => {
   }
 });
 
-test("RACE — six workers, six tasks: every task claimed exactly once, no double-hand-out", opts, async () => {
+test("SMOKE (NOT the atomicity proof) — six workers, six tasks, no double-hand-out", opts, async () => {
+  // R1.2.8. Same caveat as the case above: this passed with SKIP LOCKED removed
+  // when R1.2.2's verifier tried it. Serialized racers each take a different
+  // head of the queue whether or not a lock is held, so "no id was handed out
+  // twice" holds either way. Kept as smoke; the proof is two cases down.
   const RACERS = 6;
   const clients = await connect(RACERS + 1);
   const seeder = clients[RACERS];
@@ -209,20 +241,46 @@ test("RACE — six workers, six tasks: every task claimed exactly once, no doubl
   }
 });
 
-test("SKIP LOCKED — a claim held in an open transaction is not handed to a second worker", opts, async () => {
+test("SKIP LOCKED (THE ATOMICITY PROOF) — a claim held in an open transaction is not handed to a second worker", opts, async () => {
   // Deterministic, not probabilistic: worker A claims inside a transaction and
-  // does NOT commit, so the row lock is provably held while B tries.
+  // does NOT commit, so the row lock is provably held while B tries. This is
+  // the case that breaks when the clause does — B steals the row without any
+  // lock, and blocks forever on a bare FOR UPDATE.
   const [a, b, seeder] = await connect(3);
   let batchId;
   try {
     batchId = await seed(seeder, 1);
 
+    // R1.2.8. Without this, the FOR-UPDATE-without-SKIP-LOCKED regression does
+    // not fail the suite — it HANGS it: B waits on A's uncommitted lock until
+    // the whole run is killed, which reads as an infrastructure flake rather
+    // than the regression it is. A bounded timeout turns that hang into a named
+    // red. Five seconds is far longer than any claim here takes (the queries
+    // below are single-row and local) and far shorter than the 3-minute lease.
+    await b.query("SET statement_timeout = 5000");
+
     await a.query("BEGIN");
     const aReport = await claim(a, "holder-A", batchId);
     assert.equal(aReport.claimed_count, 1, "A must win the uncontended claim");
 
-    const bReport = await claim(b, "starved-B", batchId);
-    assert.equal(bReport.claimed_count, 0, "B must not get a row A has locked");
+    const bReport = await claim(b, "starved-B", batchId).catch((err) => {
+      // Distinguish the two ways the clause can be wrong, in the message.
+      if (/statement timeout/i.test(String(err && err.message))) {
+        throw new Error(
+          "B BLOCKED on the row A holds instead of skipping past it. That is " +
+            "FOR UPDATE without SKIP LOCKED in claim_probe_tasks: a contended " +
+            "queue stalls the whole fleet behind its slowest holder. " +
+            "See supabase/migrations/010_probe_tasks.sql, the candidate CTE."
+        );
+      }
+      throw err;
+    });
+    assert.equal(
+      bReport.claimed_count,
+      0,
+      "B must not get a row A has locked — a non-zero count here means the " +
+        "candidate SELECT takes no row lock at all and the claim can be stolen"
+    );
     assert.equal(bReport.tasks.length, 0);
     // B still sees the work: "busy" not "empty".
     assert.ok(bReport.outstanding >= 1, "B must see the task as outstanding, not gone");
