@@ -3450,7 +3450,7 @@
         "src/lib/engines/perplexity.js:147-160"
       ],
       "phase": "R2",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/scoring/enginePipeline.js:227",
@@ -3488,9 +3488,9 @@
         }
       ],
       "verification": {
-        "verdict": "fail",
-        "at": "2026-09-05T06:53:07.398Z",
-        "note": "FAIL. Fresh verifier drove the real production path (resolveEnabledEngines with ENGINES=perplexity, chat 200 + search 503, via the registry probe) and dumped the row: citations_state undefined, citations [], error null, hasUnverifiedCitations false. That is byte-identical to the pre-fix envelope in B2 - NEITHER conjunct of the accept holds at the ROW level, not just the denominator half. probeTextEngine builds a fixed literal copying only text/citations/references/cost, so all three fields are dropped one hop after being set; probePerplexity has exactly one consumer and it is that dropper, so the vocabulary is 100 percent inert in production. citedNonBranded at enginePipeline.js:379 is untouched and rollup.js divides cited by non_branded_answered independently. Teeth on perplexity.test.mjs:121 ARE real (both polarity mutants go red) and the log-line correction is right - the fix is good as far as it goes, it just never reaches a row."
+        "verdict": "pass",
+        "at": "2026-09-08T11:25:33.383Z",
+        "note": "PASS, on the strongest verification of the session. The verifier wrote its OWN harness rather than running the implementer tests, driving runMultiEngineScan -> resolveEnabledEngines -> the live registry -> probeTextEngine -> probePerplexity with only globalThis.fetch mocked. Pre-fix, by reverting the three sources: an outage row is byte-identical to a genuine found-nothing (err null, cit []) and the vendor outage is reported as a confident 50 percent share. Post-fix the same input carries citations_state unverified, reason search_leg_failed, and the detail. THE A/B THAT DECIDES THE FINDING: with /search returning 200 and an EMPTY results array - a genuine measured zero - the visible row shape is identical, but state is verified, denominator 4, share 50; while the unverifiable zero gives denominator 2, share 100. Two different states AND two different numbers from two row shapes that look the same. That is exactly the claim the task exists to establish, and it also proves the fix did not simply exclude all zeros. Liveness traced hop by hop rather than accepted: scanWorker.js:1564 persists the whole probe object as raw, upsertPromptResults does no field stripping, finalize reconstructs at :1723, and the verifier pushed its real probe rows through a JSONB round-trip and that exact reconstruction to confirm the states survive to durable rows. Every read-back path chains ?? null with no ?? 0. SEVEN MUTANTS, each applied and reverted alone: M1 (the previously-rejected defect, dropping the :227 state copy) reds 10 tests; M5, M6 and M9 each red EXACTLY their own assertion, which proves the assertions are individually load-bearing rather than incidentally coupled; M9 in particular flips the predicate to over-exclude single-leg rows and is caught by the aio/chatgpt no-regression test. No mutant passed. Suite identical before and after: 1831/1805/0. One evidence citation is 8 lines off - perplexity.js:61 is the docblock whose function body is at :69-71 - which points at the right construct's documentation and is what the note was citing. FOLLOW-UPS, none failing this accept: filed as R2.2.11 (the legacy mirror at enginePipeline.js:1392 emits citation_share_pct 0 rather than null on an empty denominator - pre-existing, no regression, but a standing-rule-5 gap) plus three latent ones recorded in the note: services/api.js recomputeFromResults divides with no state filter but is unreachable while summary_stats is always written; ENGINES=perplexity alone reads 0 on every metric but raises data_source_issue so it is not a silent false success; and backfill-analytics throwing on a pre-R2.2.2 multi-engine perplexity scan is the correct fail-loud call."
       }
     },
     {
@@ -3878,6 +3878,35 @@
           "at": "2026-09-08T11:16:50.621Z",
           "by": "controller",
           "text": "amended: TEETH PROVEN (the previous note lost a shell-mangled fragment): the line I temporarily deleted on disk is the early-exit guard inside withRetry at src/lib/engines/perplexity.js:218, which breaks the retry loop when isRetryableFailure(e) is false. With it deleted, perplexity.test.mjs:395, :427 and :459 failed with actual 3 / expected 1 and their durations went from ~2ms to ~3020ms; the file was then restored byte-identical from a scratchpad copy (diff -q clean) before submit."
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R2.2.11",
+      "subphase": "R2.2",
+      "lane": "backend",
+      "title": "The legacy scan-level mirror emits citation_share_pct 0 on an empty denominator instead of null",
+      "detail": "Found by the R2.2.2 verifier BY EXECUTION, not by reading: with every citation leg dead, the slice reports denominator 0 and 2 unverified rows, and the mirror at src/lib/scoring/enginePipeline.js:1392 emits citation_share_pct 0. src/lib/analytics/rollup.js gets the same case right and emits null. This did not fail R2.2.2 for three good reasons the verifier stated: the else-branch returning 0 is untouched pre-existing code, the pre-fix value for the same scenario was also 0 so there is no regression, and it is reachable only when aioSummary falls back to a non-aio slice. It is nonetheless the same false-zero class the whole R2 phase exists to close - a confident 0 percent citation share published for a scan where nothing could be verified - and it now sits one branch away from code that handles it correctly, which is the worst place for it. Note the correct comparison idiom already used nearby: Number.isFinite at :1353 does not coerce, so an explicit null is properly rejected, matching typeof === number at rollup.js:274.",
+      "accept": "An empty citation denominator yields null, not 0, at the scan level as well as in the rollup. A test drives the every-leg-dead case through the mirror and fails if a 0 is published; a genuine measured 0 citation share still publishes 0.",
+      "deps": [
+        "R2.2.2"
+      ],
+      "anchors": [
+        "src/lib/scoring/enginePipeline.js:1392",
+        "src/lib/analytics/rollup.js:270"
+      ],
+      "tags": [],
+      "phase": "R2",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:25:59.040Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
         }
       ],
       "verification": null
@@ -6144,14 +6173,26 @@
         "src/lib/workers/scanWorker.js"
       ],
       "phase": "R3",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/workers/scanWorker.js:2878",
+        "src/lib/workers/scanWorker.js:3040",
+        "src/lib/workers/scanWorker.js:3177",
+        "src/lib/workers/scanWorker.js:2783",
+        "src/lib/workers/scanRunReaper.test.mjs:317",
+        "src/lib/workers/scanRunReaper.test.mjs:436"
+      ],
       "notes": [
         {
           "at": "2026-09-08T11:12:16.676Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-08T11:23:42.769Z",
+          "by": "rebuild-implementer",
+          "text": "reapStaleRuns closes every open scan_runs row whose heartbeat is older than 2 x TTL as outcome 'reaped' with reason 'reaped:heartbeat_stale'. THRESHOLD IS DERIVED NOT PICKED: TTL is IMPORTED from db.js HEARTBEAT_STALE_MS (180s), the same constant isJobAlive and jobLease LEASE_TTL_MS use, so there is no fourth notion of dead; N=2 gives 360s, which strictly EXCEEDS the 300s maxDuration ceiling on /api/scan and /api/scan/worker, so a row past the threshold cannot be a live web chunk whose beats are merely failing - its host is gone. At N=1 (180s) it still could be. 360s is also 12 missed 30s beats (CHUNK_RUN_HEARTBEAT_MS). Residual risk named in-file: the long-running probe fleet has no 300s ceiling, so a >6min DB partition can reap it alive - not silent, because heartbeat_scan_run RAISES on a closed run so the fleet learns on its next beat. IDEMPOTENT: close_scan_run updates WHERE ended_at IS NULL and raises on a second close, so two sweepers give one reap and one counted lost_race, never a double close; re-running the sweep is a no-op because what it closed is no longer a candidate. TRACE: each reaped row carries outcome+reason+an error sentence naming who/when/how stale/threshold+a detail block, and the PASS opens and closes a scan_runs row of its own (runner 'reaper', phase 'reap') with measured counts; a pass that found nothing closes noop/no_stale_runs (measured zero) while a pass with no client returns considered:null reaped:null and an error banner, never 0. Counters are omitted on the reap close so a dead writer's real measurements are not overwritten with 0. NOT WIRED TO THE CRON: /api/scan/worker is outside this task's file ownership, so nothing calls reapStaleRuns yet - a guard test asserts that and tells the next author to delete it when the wiring lands. TESTS: 28 in src/lib/workers/scanRunReaper.test.mjs, fake clock and injected ledger, NO database. Nine on-disk sabotages each went red on target incl. flipping the inequality (12 fail) and > to >= (2 fail); tree restored byte-identical. Baseline test:scoring 1870/1841 pass/3 fail; after 1973/1934/13 - the 13 are all src/lib/rateLimit.test.mjs + scanRateLimitUnverified.route.test.mjs from a sibling's in-flight rateLimit.js edit, and the 3 baseline failures were fixed by siblings mid-cycle. Neighbours green: reaper+scanChunk+scanChunkLedger+scanJobAttempts+scanRuns+scanWorkerRoute = 211/211. NO SQL RUN, no live DB touched."
         }
       ],
       "verification": null
@@ -6178,6 +6219,69 @@
       "owner": null,
       "evidence": [],
       "notes": [],
+      "verification": null
+    },
+    {
+      "id": "R3.3.4",
+      "subphase": "R3.3",
+      "lane": "backend",
+      "title": "Wire the stale-run reaper into the cron sweep; nothing calls it yet",
+      "detail": "R3.3.2 built reapStaleRuns in src/lib/workers/scanWorker.js with 28 tests, a fake clock and nine proven sabotages, and deliberately did not wire it: src/app/api/scan/worker/route.js was outside its file ownership. The implementer disclosed this as the first thing a verifier should be suspicious of, and left a GUARD test at the bottom of scanRunReaper.test.mjs asserting the route does NOT mention the reaper, with an instruction to delete that guard when wiring lands. So the reaper is correct and unreached: no stale run is actually reaped in production today. Wiring belongs in the GET handler alongside the scheduler tick, inside its OWN try/catch so a reap failure cannot fail the tick, reported on the wire as reaped {considered, reaped, lost_race, truncated}. Two smaller cleanups from the same submission belong here: add REAPER to the RUNNERS vocabulary in src/lib/scanRuns.js so the runner names live in one place (REAPER_RUNNER is currently local to scanWorker because scanRuns.js was out of scope), and move listStaleRunsFromDb into scanRuns.js, since it currently issues raw PostgREST against scan_runs while every other access to that table goes through that module.",
+      "accept": "The cron sweep calls reapStaleRuns, a reap failure cannot fail the scheduler tick, and the counters appear in the route response. The GUARD test asserting the reaper is unwired is deleted, and a test asserts the route DOES reach it. RUNNERS carries the reaper name and scanWorker imports it rather than declaring its own.",
+      "deps": [
+        "R3.3.2"
+      ],
+      "anchors": [
+        "src/app/api/scan/worker/route.js",
+        "src/lib/workers/scanWorker.js",
+        "src/lib/scanRuns.js",
+        "src/lib/workers/scanRunReaper.test.mjs"
+      ],
+      "tags": [],
+      "phase": "R3",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:25:59.783Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.3.5",
+      "subphase": "R3.3",
+      "lane": "test",
+      "title": "The reaper idempotence rests on plpgsql behaviour proven only by a fake that re-implements it",
+      "detail": "Disclosed by the R3.3.2 implementer as the thing a verifier should distrust. reapStaleRuns is idempotent by construction because close_scan_run has WHERE ended_at IS NULL and raises on a second close - but there is no Postgres in this environment, so that behaviour is exercised only by a JS fake that re-implements what the migration is believed to do. Worse, classifyReapCloseFailure sorts a close exception into lost_race, vanished or close_failed by TEXT-MATCHING the plpgsql RAISE strings (already closed, no run % exists). Two guard tests read migration 011 and fail if either sentence changes, which is a genuine mitigation, but a text match against an error message is brittle and the real SQL was never executed. This is the same class as R1.2.8: a concurrency guarantee asserted against SQL source rather than against a database. It should be gated the way scanChunkLedgerLive.test.mjs is, so it runs when a database is configured and skips LOUDLY and countably when not.",
+      "accept": "A live-gated test exercises close_scan_run twice against a real database and asserts the second call raises, and that classifyReapCloseFailure sorts the real error correctly. It skips loudly and countably with no database configured, never silently. If the text match cannot be made robust, the migration returns a structured code instead of relying on message text.",
+      "deps": [
+        "R3.3.2"
+      ],
+      "anchors": [
+        "src/lib/workers/scanRunReaper.test.mjs",
+        "supabase/migrations/011_scan_runs.sql",
+        "src/lib/workers/scanChunkLedgerLive.test.mjs"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "phase": "R3",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:26:00.545Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
       "verification": null
     },
     {
@@ -8302,11 +8406,23 @@
         "docs/"
       ],
       "phase": "R6",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-scribe",
       "evidence": [
-        "docs/OPERATOR_LEDGER.md:11",
-        "docs/OPERATOR_LEDGER.md:386"
+        "docs/OPERATOR_LEDGER.md:268",
+        "docs/OPERATOR_LEDGER.md:298",
+        "docs/OPERATOR_LEDGER.md:405",
+        "docs/OPERATOR_LEDGER.md:433",
+        "docs/OPERATOR_LEDGER.md:435",
+        "docs/OPERATOR_LEDGER.md:473",
+        "docs/OPERATOR_LEDGER.md:568",
+        "src/lib/docStatus.test.mjs:161",
+        "src/lib/rateLimit.js:128",
+        "scripts/setup-supabase.mjs:485",
+        "scripts/setup-supabase.mjs:522",
+        "src/lib/db/analytics.js:672",
+        "src/lib/workers/scanWorker.js:1643",
+        "docs/PROD_MIGRATIONS.md:144"
       ],
       "notes": [
         {
@@ -8333,6 +8449,11 @@
           "at": "2026-09-08T11:14:27.879Z",
           "by": "verifier",
           "text": "rejected: FAIL on content accuracy, not on existence or scope. The doc is 477 lines, covers all four accept topics, and its blocked-task coverage is COMPLETE — verifier enumerated all 8 blocked tasks and matched every one to a section, with no closed item wrongly listed as open. Secrets hygiene is CLEAN: pattern-scanned for key shapes, zero hits, GSC rotation steps name the variable without any value. All 14 env names match .env.example and the code. Many citations held. ROOT CAUSE of every defect: the doc's +112 lines landed in commit 220d93d, the SAME commit that rewrote rateLimit.js (192 lines), added migration 013 and 12 lines to setup-supabase.mjs. The submit note swept its citations against 04e80db, the PARENT — so the sweep was honest and the artifact was falsified by its own commit. Verify against the commit the doc ships IN, not its parent. DEFECTS: (1) DISQUALIFYING — :373 and :466-468 assert the OPPOSITE of live code. They tell the operator the limiter labels a spoofable source trusted:true and cite rateLimit.js:76/:79 for a 'NOT VERIFIED HERE' string that git grep now returns 0 hits for. R0.1.20 WITHDREW that label in the same commit; the constant is now PLATFORM_IP_HEADER (rateLimit.js:97) and :100 says so explicitly. Section F's stated job is 'known-open, stated without softening' and it is inverted. (2) Section C at :260 says migrations run 001-012; disk holds 013_brand_metrics_sov_state.sql, and PROD_MIGRATIONS.md:144 says that without 013 every scan finalize hard-fails with PGRST204. The migrations section named in the accept omits the migration with the worst production consequence. (3) :262-263's three transaction citations all resolve to unrelated text: BEGIN/INSERT/COMMIT are at setup-supabase.mjs :485/:514/:522, not :473/:502/:510. (4) R3.1.5 (todo, needs-vercel) is missing from the needs-vercel table that claims to be exhaustive. (5) :282 and :412 assert R0.1.21 and R6.1.2 are in_verification; both are done. Fix list is in the verifier note; item 6 is a recommended docStatus guard over section C mirroring the one at docStatus.test.mjs:137 that already pins the README migration table."
+        },
+        {
+          "at": "2026-09-08T11:26:12.373Z",
+          "by": "rebuild-scribe",
+          "text": "REFIX of the five FAIL defects. The verifier's root-cause diagnosis is accepted in full and is now written into the doc's own preamble (:11): the previous sweep against 04e80db was honest and the commit it shipped in, 220d93d, falsified it. A sweep against the parent proves nothing about the commit the doc ships in, and nobody can sweep against a commit that does not exist yet - so the only durable fix is to stop depending on line numbers. This round resolved every claim against BOTH ea165ed and the working tree (about twenty source files are dirty from concurrent agents, rateLimit.js among them) and states only what is true in both; where they disagree the doc gives a grep, not a number.\n\n(1) DISQUALIFYING, FIXED. The two places asserting the inverse of live code are rewritten, and the inversion is recorded rather than quietly deleted. Section E's R0.1.20 row (:432) now reads CLOSED-in-ledger-with-the-operator-action-unchanged, and a new subsection at :435 states what is true, anchored on git grep -n 'RESTORE-TRUST-R0.1.20' src/lib/rateLimit.js: the constant is PLATFORM_IP_HEADER, the old name is gone with the comment \"a promise this module cannot keep\" beside it, git grep -i \"not verified\" -- src/lib/rateLimit.js returns nothing, the source is reported trusted:false with trustBasis \"platform-unproven\" plus a warn line, the deferral is the exported TRUST_RESTORE_CHECK whose text IS the operator ask, and reading order on Vercel is unchanged so the bucket key and the strength of the limit are unchanged - only the claim moved. The operator ask (forge the header against the deployed origin, assert the bucket does not move) is stated as unchanged, still outstanding, and as exactly what would let the label be taken back. Section F's bullet (:568) is corrected in place and says in its own text that it asserted the opposite until 2026-09-08, because a known-open section that has drifted into describing a fixed state is the failure that section exists to catch. No line number and no quoted string survives in either place. Verified at HEAD (git show) AND in the worktree: the constants sit at different lines in the two, which is itself the argument for the anchor.\n\n(2) FIXED, and the enumeration is now machine-checked. Section C (:268) names all thirteen files individually instead of a range, and :298 adds 013_brand_metrics_sov_state.sql with applied state UNVERIFIED - explicitly \"nothing in this repository can read the production catalog, so no agent has confirmed it either way\". The PGRST204 consequence is stated and then CONFIRMED IN CODE rather than taken on PROD_MIGRATIONS.md's word: upsertBrandMetricsDaily (src/lib/db/analytics.js:652) passes rows to .upsert() verbatim and then does if (error) throw error at :674, so an unknown column is a hard throw and not a dropped field; its only non-test caller is runFinalizePhase (scanWorker.js:1643), i.e. the end of every scan. Traced one thing the PROD_MIGRATIONS table does not spell out: scripts/backfill-analytics.mjs imports buildMetricsRows from rollup.js (the function that emits sov_state) and upserts into the same table, so it is a SECOND writer that fails the same way, while GET /api/brands/[brand]/metrics only reads via getBrandMetricsSeries's select(\"*\") and merely degrades. Also corrected the R6.1.2 staleness in the same paragraph: it is done/verified-pass, its verifier derived object counts for the TWELVE migrations then on disk, and the 013 row was appended afterwards in 220d93d (git log -S), so that one row is reviewed-by-one while the twelve above it are settled.\n\n(6) THE RECOMMENDED GUARD IS IN, with no restructuring. src/lib/docStatus.test.mjs:161 mirrors the README guard at :137 but is SCOPED to the \"## C. Migrations\" slice, so a mention of a migration elsewhere in the document cannot satisfy it. Negative-tested: with 013 removed from that section the guard reports it missing. node --test src/lib/docStatus.test.mjs is 11/11 pass, 0 fail.\n\n(3) FIXED by re-anchoring, not by renumbering. The BEGIN / ledger INSERT / COMMIT trio is now found with git grep -n 'INSERT INTO schema_migrations' scripts/setup-supabase.mjs, and the doc states in-line why the numbers are withheld. I confirmed the true positions (485/514/522, all inside one per-file try) and deliberately did not write them down. The SAME defect class turned up in one place the verifier did not list, and is fixed too: the R0.1.21 subsection cited scan/route.js:105 and :119 for the two scanStoreUnavailable guards; they are at :117 and :130 today, so both are replaced by git grep -n 'scanStoreUnavailable' src/app/api/scan/route.js.\n\n(4) FIXED. R3.1.5 added to the needs-vercel table (:433) with its mechanism - git grep -n waitUntil -- src package.json returns nothing and @vercel/functions is not a dependency, both re-confirmed this round - the three compensations that hide it, and the note that R3.1.1 (the row above it) and R3.3.2 are each treating a symptom of it. Also added to Section F as a known-open, with the warning not to read \"scans complete\" as evidence against it.\n\n(5) FIXED. R6.1.2 and R0.1.21 are both stated as done, each scoped to a named verification rather than to a bare status word: R0.1.21 verified pass 2026-09-05 (the verifier reproduced the 201 by execution with both guards neutralised, then walked all six createScanJob failure modes and found no surviving path), R6.1.2 verified pass 2026-09-05. Item 3 of the R0.1.21 note is narrowed rather than dropped: the closing verifier independently reached the same two-caller census, so the CENSUS is settled, but the cold-process reachability argument for runSchedulerTick is still reasoned-not-exercised and the doc now says closing the task did not change that.\n\nLEDGER RE-DERIVED, not copied from the doc's own text. Read tasks.json directly for every needs-* tag and every blocked task. The five groupings now match: needs-secrets, 8 rows, all open; needs-vercel R0.1.12 / R3.1.1 / R3.1.2 / R3.1.5 open plus R0.1.20 labelled closed; needs-decision R1.1.3 (in_progress) / R4.5.1 / R6.1.9 open plus R0.1.21 labelled closed; needs-llm and needs-soak unchanged and still matching. Because two closed items are deliberately retained, Section E now opens with a paragraph (:405) naming exactly which two are closed and why they are kept, so no reader can miscount them as open. R6.1.9's row is rewritten from its NEW controller note of 2026-09-08: deliberately left blocked, option B rejected on the finding's own argument, option A correct but requiring operator standing to edit CLAUDE.md, and the whole ask is one sentence of approval.\n\nUNCHANGED AND RE-VERIFIED so the passing parts stay undisturbed: middleware.js:36 / :66 / :83, vendorRegistry.js:51-67, calibrationFixture.js:84 / :123, gsc.js:17, decision/route.js:19 / :26 / :93-98, and vercel.json (both crons daily, no ?batch=1) - all re-resolved this round against the worktree and all held. The approve-to-publish-to-lift admission in Section D is untouched and unsoftened. The doc is 594 lines, still LIVE, still covering the four accept topics.\n\nOnly docs/OPERATOR_LEDGER.md and src/lib/docStatus.test.mjs were edited; git diff --stat confirms it. No git checkout, stash, reset or commit was run, and other agents' dirty files were left alone. SECRETS HYGIENE: no credential value was read, printed or paraphrased; the GSC rotation entry still names GSC_SERVICE_ACCOUNT_KEY and nothing else; every search was git grep or path-scoped; no .env file of any kind was opened; no --no-ignore, -uu or --hidden was used."
         }
       ],
       "verification": {
@@ -8553,7 +8674,7 @@
       "lane": "docs",
       "phase": "R6",
       "title": "Two dated handoff and journal docs cite line numbers that resolve to unrelated code",
-      "detail": "Found by the R0.2.3 and R2.8.6 workers while re-deriving their own citations, and left unfixed because both files were outside their ownership. These are the exact hazard the doc-to-source staleness tripwire R6.4.8 exists for, and are worth fixing as its first real test cases. In docs/HANDOFF-2026-08-30.md, verified at 49fe39e: line 252 cites promptGen.js:198 for R1.7.4, but :198 is a lowercase key assignment inside a dedupe loop and the deps.fetchPeopleAlsoAsk line is at :185; line 254 cites promptGen.js:250 as a conditional top-up, but :250 is a comment; line 248 cites brightdata.js:10 as short-circuiting on the zone env var, but :10 is a JSDoc line and the real short-circuit is at :141-142; line 250 cites enginePipeline.js:98-101 for the zero-cost swallow, and that range has moved. In docs/BUILD_JOURNAL.md, entry B12 at line 127 describes behaviour that no longer exists - it says insertScan logs a skipping-database-insert message and returns, which R2.8.6 replaced with a throw - and its :62-65 anchor is also stale. Every one of these RESOLVES to a real line, which is what makes them dangerous: a reader following the citation lands on plausible neighbouring code and has no signal that they are in the wrong place. EVIDENCE CORRECTION (rebuild-scribe, before verification). Two of the ten evidence citations in the submit above point at source that has already moved: src/lib/db.js:126 and src/lib/workers/scanWorker.js:1284 are exact at 1a5ed81, the commit this task declared and verified against, but stale in the working tree right now (insertScan is :126 at 1a5ed81 and :152 in the tree, having moved twice during this task, from concurrent uncommitted work on db.js by another agent). A verifier should resolve those two against 1a5ed81, not the worktree, or ignore them - the load-bearing evidence is the eight docs/ citations, which are in files this task owns and did not move. That this happened inside a task about stale citations is not incidental: it is the finding, and it is why both documents now declare a commit and anchor on symbols. Additional doc anchors: docs/BUILD_JOURNAL.md:149 (B8 row), :153 (B12 row), :279 (Since on B8), :340 (the 'at HEAD' correction in Gaps), and docs/HANDOFF-2026-08-30.md:308 (R3.6.4, liveness left unverified rather than restated).",
+      "detail": "Found by the R0.2.3 and R2.8.6 workers while re-deriving their own citations, and left unfixed because both files were outside their ownership. These are the exact hazard the doc-to-source staleness tripwire R6.4.8 exists for, and are worth fixing as its first real test cases. In docs/HANDOFF-2026-08-30.md, verified at 49fe39e: line 252 cites promptGen.js:198 for R1.7.4, but :198 is a lowercase key assignment inside a dedupe loop and the deps.fetchPeopleAlsoAsk line is at :185; line 254 cites promptGen.js:250 as a conditional top-up, but :250 is a comment; line 248 cites brightdata.js:10 as short-circuiting on the zone env var, but :10 is a JSDoc line and the real short-circuit is at :141-142; line 250 cites enginePipeline.js:98-101 for the zero-cost swallow, and that range has moved. In docs/BUILD_JOURNAL.md, entry B12 at line 127 describes behaviour that no longer exists - it says insertScan logs a skipping-database-insert message and returns, which R2.8.6 replaced with a throw - and its :62-65 anchor is also stale. Every one of these RESOLVES to a real line, which is what makes them dangerous: a reader following the citation lands on plausible neighbouring code and has no signal that they are in the wrong place. EVIDENCE CORRECTION (rebuild-scribe, before verification). Two of the ten evidence citations in the submit above point at source that has already moved: src/lib/db.js:126 and src/lib/workers/scanWorker.js:1284 are exact at 1a5ed81, the commit this task declared and verified against, but stale in the working tree right now (insertScan is :126 at 1a5ed81 and :152 in the tree, having moved twice during this task, from concurrent uncommitted work on db.js by another agent). A verifier should resolve those two against 1a5ed81, not the worktree, or ignore them - the load-bearing evidence is the eight docs/ citations, which are in files this task owns and did not move. That this happened inside a task about stale citations is not incidental: it is the finding, and it is why both documents now declare a commit and anchor on symbols. Additional doc anchors: docs/BUILD_JOURNAL.md:149 (B8 row), :153 (B12 row), :279 (Since on B8), :340 (the 'at HEAD' correction in Gaps), and docs/HANDOFF-2026-08-30.md:308 (R3.6.4, liveness left unverified rather than restated). CITATION CORRECTION on my own submit, before verification: the evidence entry docs/BUILD_JOURNAL.md:614 is a blank line. The R6.4.8 banner it meant to point at starts at docs/BUILD_JOURNAL.md:615 and runs to :639. Off by one, self-caught by re-reading the line rather than trusting the grep offset I copied it from - which is the third instance in this task of the exact failure the task is about, and worth counting as such.",
       "accept": "Both documents cite what they claim at a declared commit, or convert the fragile citations to anchors the way the Bright Data ADR did for the two files that kept drifting. B12 either describes current behaviour or is marked as a historical record of behaviour that has since changed. Verified by resolving each citation and reading the content, not by confirming a line exists.",
       "deps": [],
       "anchors": [
@@ -8562,19 +8683,20 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-scribe",
       "evidence": [
-        "docs/HANDOFF-2026-08-30.md:9",
-        "docs/HANDOFF-2026-08-30.md:278",
-        "docs/HANDOFF-2026-08-30.md:294",
         "docs/BUILD_JOURNAL.md:72",
-        "docs/BUILD_JOURNAL.md:150",
-        "docs/BUILD_JOURNAL.md:228",
-        "docs/BUILD_JOURNAL.md:255",
-        "docs/BUILD_JOURNAL.md:461",
-        "src/lib/db.js:126",
-        "src/lib/workers/scanWorker.js:1284"
+        "docs/BUILD_JOURNAL.md:74",
+        "docs/BUILD_JOURNAL.md:170",
+        "docs/BUILD_JOURNAL.md:220",
+        "docs/BUILD_JOURNAL.md:397",
+        "docs/BUILD_JOURNAL.md:550",
+        "docs/BUILD_JOURNAL.md:561",
+        "docs/BUILD_JOURNAL.md:594",
+        "docs/BUILD_JOURNAL.md:614",
+        "docs/BUILD_JOURNAL.md:679",
+        "docs/HANDOFF-2026-08-30.md:248"
       ],
       "notes": [
         {
@@ -8601,6 +8723,16 @@
           "at": "2026-09-05T07:11:47.360Z",
           "by": "verifier",
           "text": "rejected: FAIL on one claim, and it is the ironic one. Verifier independently reproduced the census EXACTLY - 111/8 citations, 113 resolving, 6 missing files, same split - and matched the scribe's classification on 42 of 42 sampled. Both inline corrections verified exact at 3c9d3f2. B9 and B12 mechanism claims verified, including the trap that git grep still hits 'Skipping database insert' in a PAST-TENSE contract comment. BUT the third mechanism claim is FALSE. The doc says runScanChunk GAINED a third entry point and that the liveness paragraph 'was not wrong when written and is wrong now'. git log -S shows GET /api/scan/[job_id]/status has dispatched runScanChunk since 9580782 on 2026-07-24 - it was present and live at 5d51aa3, the very commit the paragraph declares as its snapshot. So 'two entry points' was WRONG AT ITS OWN DECLARED COMMIT. This matters three ways: it conceals that the original standing-rule-10 liveness trace was incomplete when made; it breaks the 'wrong at the authoring commit' list, which is presented as exhaustive at two items and is really three; and it hands R6.4.8 a FALSE input, because the doc's central recommendation is declared-commit-plus-symbol anchoring and that scheme would NOT have caught this one. The most valuable thing the sweep found is currently written up as its opposite. Six precise corrections in the verifier report, incl. moving the Status-column caveat into the banner above the tables where a reader will see it."
+        },
+        {
+          "at": "2026-09-08T11:23:44.311Z",
+          "by": "rebuild-scribe",
+          "text": "Fixed the one FAIL claim, kept everything the verifier reproduced. Re-derived from evidence before writing: git log -S runScanChunk -- 'src/app/api/scan/[job_id]/status/route.js' returns exactly 9580782 (2026-07-24), and git merge-base --is-ancestor 9580782 5d51aa3 confirms it predates the declared commit. At 5d51aa3 the route has the import on :3, 'export async function GET' on :8, runScanChunk(job.id) on :57, gated by shouldRescueJob (real logic, scanWorker.js:317-321, not a stub), on a route services/api.js:778 polls in a loop. All five verified with git show <sha>:path, never the worktree. (1) The 'gained a third entry point / not wrong when written' framing is retracted by name in both the liveness correction and Entry #5 item 3: the standing-rule-10 trace was INCOMPLETE WHEN MADE - it found two of three call sites and stopped, and the file wrote that up as a completed liveness check. Not filed as drift. (2) The 'Wrong at the authoring commit' list is now three, not two, with the count fixed in the heading and a note that it said two until today; the third bullet flags that this one is not a file:line citation at all - every number in that paragraph was exact at 5d51aa3 - because the defect is a MISSING citation. (3) R6.4.8 now leads with a banner saying its own headline recommendation would not have caught this: declared-commit-plus-symbol anchoring and change-based staleness both pass cleanly here, since nothing went stale and an omission has no line to check. It says R6.4.8 must record that its guard does not cover incomplete liveness traces, or a passing tripwire gets mistaken for a verified chain. (4) Status-column caveat moved out of Entry #5 and into the banner above the tables (:72-:81), with a pointer left behind. Also: HEAD moved from ea165ed to e2e46f4 mid-task from another agent's commit, and my first draft of the new 'tree kept moving' bullet said ScansUnavailableError count 11 while naming ea165ed - the count is 9 at ea165ed, 11 at e2e46f4. Measured right, attributed to the wrong commit. Caught by re-running with the sha spelled out, disclosed in the doc at :679 as a live specimen and an argument that a tripwire must pin HEAD to a sha once. Evidence is docs/ only this round; the two src/ citations in the previous submit are exactly what went stale. Verify source claims against 5d51aa3 with git show, not the tree. node --test src/lib/docStatus.test.mjs: 11/11 pass. Touched only the two owned files; docs/OPERATOR_LEDGER.md is another agent's edit, untouched."
+        },
+        {
+          "at": "2026-09-08T11:23:55.760Z",
+          "by": "controller",
+          "text": "amended: CITATION CORRECTION on my own submit, before verification: the evidence entry docs/BUILD_JOURNAL.md:614 is a blank line. The R6.4.8 banner it meant to point at starts at docs/BUILD_JOURNAL.md:615 and runs to :639. Off by one, self-caught by re-reading the line rather than trusting the grep offset I copied it from - which is the third instance in this task of the exact failure the task is about, and worth counting as such."
         }
       ],
       "verification": {

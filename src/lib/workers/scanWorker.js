@@ -8,6 +8,9 @@ import {
   createScanJob,
   hasActiveScanForBrand,
   isJobAlive,
+  // R3.3.2 — the reaper's TTL is IMPORTED, never retyped, so "how long without
+  // a heartbeat means dead" has exactly one definition in this codebase.
+  HEARTBEAT_STALE_MS,
   claimJobStatus,
   getScansByDomain,
 } from "../db.js";
@@ -2704,4 +2707,598 @@ export async function runSchedulerTick(nowIso, deps = {}) {
   // `skipped` is returned as well as ledgered so the cron route's response can
   // stop reporting an empty `started` as a clean tick (R3.2.3's read).
   return { started, skipped };
+}
+
+// ---------------------------------------------------------------------------
+// R3.3.2 — the reaper: open scan_runs rows whose writer never came back
+// ---------------------------------------------------------------------------
+//
+// THE FINDING (S12). Nothing ever closes an open run. `close_scan_run` is
+// called by the process that opened the row, so the one case it structurally
+// cannot cover is the process that stops existing: a container killed
+// mid-probe, an invocation cut off at `maxDuration`, an OOM. Migration 011 says
+// this in its own header — "A crashed writer therefore leaves an OPEN row with
+// a stale `heartbeat_at`, which is a visible, sweepable state (R3.3.2 closes it
+// as 'reaped')" — and then, under WHAT THIS MIGRATION DOES NOT DO, "No reaper.
+// `scan_runs_open_idx` makes the sweep cheap, but the policy ... is R3.3.2's".
+// This is that policy. Until it runs, `outcome IS NULL` means BOTH "running
+// right now" and "died in March", which is standing rule 1's failure in its
+// purest form: the wedged row is indistinguishable from live work forever.
+//
+// WHAT THIS DOES **NOT** TOUCH: scan_jobs. A job whose executor died is already
+// handled — the sweep re-dispatches it (shouldRescueJob) and R3.3.1's attempt
+// cap makes it terminal after MAX_JOB_ATTEMPTS fruitless resumes. Failing a job
+// here on first staleness would delete R3.3.1's retry policy and kill scans
+// that are one rescue away from finishing. The LEDGER row is the thing nothing
+// closes; that is what is reaped.
+//
+// ---------------------------------------------------------------------------
+// HOW THE THRESHOLD WAS CHOSEN (it is derived, not picked)
+// ---------------------------------------------------------------------------
+// Three numbers already exist in this codebase and the threshold is built out
+// of them rather than beside them:
+//
+//   30s   CHUNK_RUN_HEARTBEAT_MS — how often an in-flight chunk beats. The
+//         fleet's FALLBACK_HEARTBEAT_MS (worker/src/index.js) is the same 30s.
+//   180s  HEARTBEAT_STALE_MS (src/lib/db.js), imported above. Six consecutive
+//         missed beats. This is ALREADY this project's line for "dead": it is
+//         what isJobAlive uses, and jobLease.js's LEASE_TTL_MS is set equal to
+//         it precisely "so both notions of dead agree". A fourth notion of dead
+//         invented here is a fourth thing to drift.
+//   300s  maxDuration on /api/scan and /api/scan/worker. A web chunk cannot
+//         outlive it; the platform stops the invocation.
+//
+// The reaper waits REAP_TTL_MULTIPLE (2) x TTL = 360s. The argument for 2 and
+// not 1 is the 300s number: staleness is measured from the LAST BEAT, and while
+// a healthy chunk is at most ~30s stale, a chunk whose beats are all failing
+// (a database blip — startChunkHeartbeat deliberately logs and continues rather
+// than tearing down live work) accumulates staleness from the moment the blip
+// starts. That accumulation is bounded by the invocation's own lifetime, so a
+// live web chunk's heartbeat can never be more than 300s old. 360 > 300 means a
+// row over the threshold cannot be a live web chunk that is merely slow — its
+// host is gone. At 1 x TTL (180s) it could still be alive, and reaping it
+// destroys real work and hands its probes a run that says they never happened.
+//
+// THE RESIDUAL RISK, NAMED RATHER THAN WAVED AWAY. The probe fleet is a
+// long-running container with no 300s ceiling, so a fleet whose database
+// connection is partitioned for over 6 minutes CAN be reaped while alive. That
+// case is not silent: `heartbeat_scan_run` RAISES on a closed run, so the fleet
+// learns on its next successful beat that something ended its run (011: "The
+// writer needs to learn that something else has already closed its run"), and
+// its own close then fails loudly rather than overwriting the reap. Raising the
+// multiple would trade that for a longer wedge; 2 is the smallest value that is
+// provably safe for the serverless writers, which are the ones that die today.
+
+/**
+ * The heartbeat TTL a run is measured against. Aliased from db.js on purpose:
+ * a run, a job and a lease all mean the same thing by "dead", and the alias is
+ * here so a reader of this section does not have to guess which 3 minutes.
+ */
+export const RUN_HEARTBEAT_TTL_MS = HEARTBEAT_STALE_MS;
+
+/** The N in "staler than N x TTL". See the derivation above. */
+export const REAP_TTL_MULTIPLE = 2;
+
+/** 360s. A run whose last beat is older than this is presumed to have no writer. */
+export const REAP_STALE_AFTER_MS = RUN_HEARTBEAT_TTL_MS * REAP_TTL_MULTIPLE;
+
+/**
+ * Who ran the sweep. Migration 011 leaves `runner` an OPEN vocabulary
+ * ("deliberately NOT a closed CHECK vocabulary, unlike `outcome`") precisely so
+ * a pass like this can name itself without an ALTER on a live table. It is not
+ * in scanRuns.js's RUNNERS only because that file is owned by another task in
+ * this cycle; folding it in is the follow-up named in this task's submit note.
+ */
+export const REAPER_RUNNER = "reaper";
+
+/** What part ran. One pass over the open rows. */
+export const REAPER_PHASE = "reap";
+
+/**
+ * The outcome a reaped row carries. 'reaped' is migration 011's own word for
+ * exactly this state, and every reader already buckets it with failure —
+ * src/app/api/scan/worker/route.js's classifyChunkResult maps
+ * `reaped -> failed` with the comment "bucketed with failed so a future reap
+ * never reads as success". So the run closes as a failure, and it closes as a
+ * failure of a KNOWN KIND, which a bare 'failed' would have thrown away.
+ */
+export const REAP_OUTCOME = RUN_OUTCOMES.REAPED;
+
+/**
+ * The reason on every reaped row. Starts with the bare word so
+ * `reason LIKE 'reaped%'` finds every one of them in one query, and carries the
+ * cause after the colon — the same shape as MAX_ATTEMPTS_MARKER above.
+ */
+export const REAP_REASON = "reaped:heartbeat_stale";
+
+/**
+ * How many rows one pass will close. A bound, not a policy: the pass reports
+ * `truncated: true` when it hit the cap, so "I closed 100 and there are more"
+ * can never be read as "the ledger is clean now".
+ */
+export const REAP_MAX_PER_PASS = 100;
+
+/** Why the whole PASS closed the way it did. */
+export const REAP_PASS_REASONS = Object.freeze({
+  /** It looked and every open run was fresh. A MEASURED zero, not a silence. */
+  NO_STALE_RUNS: "no_stale_runs",
+  /** Stale rows were listed and none could be reaped (races, or fresh on re-check). */
+  NOTHING_REAPABLE: "nothing_reapable",
+  /** At least one close failed for a reason that is not a race. */
+  REAP_FAILED: "reap_failed",
+  /** No client and no injected ledger: the pass could not look at all. */
+  LEDGER_UNAVAILABLE: "ledger_unavailable",
+});
+
+/** What happened to one candidate row. Every candidate gets exactly one. */
+export const REAP_ROW_VERDICTS = Object.freeze({
+  /** Closed by this pass. */
+  REAPED: "reaped",
+  /** Someone else closed it first — the writer came back, or another sweeper won. */
+  LOST_RACE: "lost_race",
+  /** The row is gone (deleted between the list and the close). */
+  VANISHED: "vanished",
+  /** Listed as stale, but not stale on re-check against this pass's clock. NOT reaped. */
+  NOT_STALE: "not_stale",
+  /** heartbeat_at could not be parsed, so staleness is UNKNOWN. NOT reaped. */
+  UNREADABLE_HEARTBEAT: "unreadable_heartbeat",
+  /** The close failed for a reason that is not a race. Counted, never hidden. */
+  CLOSE_FAILED: "close_failed",
+});
+
+const REAPER_LOG = { label: "reaper", what: "reap pass", noun: "pass" };
+
+/**
+ * Is this run's heartbeat old enough to presume its writer is gone?
+ *
+ * PURE — no client, no clock of its own — so the one comparison the whole task
+ * turns on is testable without a database. Two refusals matter more than the
+ * happy path:
+ *   * an unparseable/absent heartbeat is UNKNOWN staleness, not infinite
+ *     staleness. It is reported (and counted by the caller), never reaped: a
+ *     row nobody can date is not evidence that its writer died.
+ *   * a heartbeat in the future (skew between the database's now() and the
+ *     app's) yields a negative staleness and is not stale. Skew must not become
+ *     a licence to close live work.
+ * The comparison is strictly `>`: exactly at the threshold is not yet stale.
+ */
+export function runStaleness(run, nowMs, staleAfterMs = REAP_STALE_AFTER_MS) {
+  const beat = run ? run.heartbeat_at ?? run.heartbeatAt ?? null : null;
+  const beatMs = beat === null || beat === undefined ? NaN : new Date(beat).getTime();
+  if (!Number.isFinite(beatMs)) {
+    return {
+      stale: false,
+      // null, never 0 and never Infinity: this is NOT MEASURED (rule 5).
+      staleMs: null,
+      verdict: REAP_ROW_VERDICTS.UNREADABLE_HEARTBEAT,
+      heartbeatAt: beat,
+    };
+  }
+  const staleMs = nowMs - beatMs;
+  const stale = staleMs > staleAfterMs;
+  return {
+    stale,
+    staleMs,
+    verdict: stale ? REAP_ROW_VERDICTS.REAPED : REAP_ROW_VERDICTS.NOT_STALE,
+    heartbeatAt: beat,
+  };
+}
+
+/**
+ * A failed close, sorted into "someone else got there first" and "this broke".
+ *
+ * IDEMPOTENCE LIVES HERE. `close_scan_run` updates `WHERE ended_at IS NULL` and
+ * RAISES if the row was already closed, so two sweepers racing the same row
+ * cannot both close it and cannot corrupt it: the database picks a winner and
+ * the loser is told which outcome beat it. That exception is a NORMAL outcome
+ * of a concurrent sweep, not a failure — but it must still be counted, or a
+ * pass that lost every race would report the same clean zero as a pass that
+ * found nothing to do.
+ *
+ * The two strings come from migration 011's own RAISE statements; a guard test
+ * in scanRunReaper.test.mjs reads the migration and fails if either sentence
+ * changes, because a silent drift here would reclassify every race as a hard
+ * failure (or worse, hide a real one).
+ */
+export function classifyReapCloseFailure(err) {
+  const msg = String((err && err.message) || "");
+  if (/already closed/i.test(msg)) return REAP_ROW_VERDICTS.LOST_RACE;
+  if (/no run .* exists/i.test(msg)) return REAP_ROW_VERDICTS.VANISHED;
+  return REAP_ROW_VERDICTS.CLOSE_FAILED;
+}
+
+/**
+ * The sentence a reaped row carries in `error`.
+ *
+ * An operator reading a reaped row must be able to tell it from a row the
+ * writer closed and from a row that never existed, without opening this file:
+ * who closed it, when, how stale it was, and what the threshold was.
+ */
+function reapErrorSentence(row, staleness, { reaperId, nowIso, staleAfterMs }) {
+  return (
+    `reaped by ${reaperId} at ${nowIso}: this run was opened at ${row.started_at ?? "unknown"} ` +
+    `and last heartbeat at ${staleness.heartbeatAt ?? "never"} — ${staleness.staleMs}ms ago, past the ` +
+    `${staleAfterMs}ms threshold (${REAP_TTL_MULTIPLE} x ${RUN_HEARTBEAT_TTL_MS}ms TTL). ` +
+    `Its writer never closed it, so this outcome was written by the sweep and NOT by the process ` +
+    `that did the work: read its counters as whatever that process managed to record before it ` +
+    `stopped, not as a final account.`
+  );
+}
+
+/**
+ * The default listing: open rows whose heartbeat predates the cutoff, oldest
+ * first. Served by migration 011's `scan_runs_open_idx`, which is partial on
+ * `ended_at IS NULL` for exactly this query.
+ *
+ * `limit + 1` is fetched so "there were more than one pass can take" is a
+ * measured fact rather than an inference from a full page.
+ *
+ * Standing rule 2: a failed read propagates with its envelope intact. There is
+ * no "could not list the open runs, report zero stale" path — that answer is
+ * indistinguishable from a healthy ledger.
+ */
+async function listStaleRunsFromDb(client, { cutoffIso, limit, excludeRunId }) {
+  let query = client
+    .from("scan_runs")
+    .select("id, runner, phase, worker_id, scan_job_id, batch_id, brand, outcome, started_at, heartbeat_at, ended_at")
+    .is("ended_at", null)
+    .lt("heartbeat_at", cutoffIso)
+    .order("heartbeat_at", { ascending: true })
+    .limit(limit + 1);
+  if (excludeRunId) query = query.neq("id", excludeRunId);
+
+  const { data, error } = await query;
+  if (error) {
+    const err = new Error(
+      `reapStaleRuns: could not list open scan_runs: ${error.message || "database error"}` +
+        (error.code ? ` [${error.code}]` : "") +
+        (error.details ? ` — ${error.details}` : "") +
+        (error.hint ? ` (hint: ${error.hint})` : "")
+    );
+    err.code = error.code;
+    err.details = error.details;
+    err.hint = error.hint;
+    err.cause = error;
+    throw err;
+  }
+  return data || [];
+}
+
+/** All counters NOT MEASURED. The shape a refusal returns, so no caller reads a zero. */
+function unmeasuredReapPass(fields) {
+  return {
+    ok: false,
+    outcome: null,
+    reason: null,
+    passRunId: null,
+    reaperId: null,
+    now: null,
+    cutoff: null,
+    staleAfterMs: null,
+    ttlMs: RUN_HEARTBEAT_TTL_MS,
+    ttlMultiple: REAP_TTL_MULTIPLE,
+    considered: null,
+    reaped: null,
+    lostRace: null,
+    vanished: null,
+    notStale: null,
+    unreadableHeartbeat: null,
+    closeFailed: null,
+    truncated: null,
+    runs: null,
+    ...fields,
+  };
+}
+
+/**
+ * One sentence for a log. A pass that looked and found nothing and a pass that
+ * could not look must not produce the same line — that sentence IS the false
+ * success.
+ */
+export function describeReapPass(pass) {
+  if (pass.considered === null) {
+    return `reap pass DID NOT RUN (${pass.reason}) — open runs were not counted; this is not "zero stale runs"`;
+  }
+  return (
+    `reap pass ${pass.outcome}${pass.reason ? ` (${pass.reason})` : ""} — ` +
+    `${pass.considered} stale candidate(s), ${pass.reaped} reaped, ${pass.lostRace} lost to a race, ` +
+    `${pass.vanished} vanished, ${pass.notStale} fresh on re-check, ` +
+    `${pass.unreadableHeartbeat} undateable, ${pass.closeFailed} failed to close` +
+    (pass.truncated ? ` — TRUNCATED, more stale runs remain open` : "")
+  );
+}
+
+/**
+ * Close every open run whose heartbeat has gone stale, as 'reaped'.
+ *
+ * THE FOUR THINGS A REAPER GETS WRONG, AND WHERE EACH IS HANDLED:
+ *  1. Reaping live-but-slow work. The threshold is derived above (2 x TTL =
+ *     360s > the 300s maximum life of a web invocation), the staleness is
+ *     RE-CHECKED in JS against this pass's clock rather than trusted from the
+ *     query's cutoff, and an undateable heartbeat is never reaped.
+ *  2. Failing to reap. That is the bug: one pass takes up to REAP_MAX_PER_PASS
+ *     rows, oldest heartbeat first, and says so when there are more.
+ *  3. Racing sweepers. The close is `WHERE ended_at IS NULL` in SQL and raises
+ *     on a second close, so exactly one pass wins each row; the loser records
+ *     `lost_race` and continues. Re-running this function is safe by
+ *     construction — nothing it has already closed is a candidate again.
+ *  4. Leaving no trace. Every reaped row gets an outcome, a reason, a sentence
+ *     in `error` and a detail block naming the sweep, and the PASS ITSELF opens
+ *     and closes a scan_runs row of its own with measured counts. A pass that
+ *     found nothing closes 'noop'/'no_stale_runs' — a measured zero, which is a
+ *     different row from a cron that never ran.
+ *
+ * Counters on the pass row: probes stay NULL because a sweep probes nothing
+ * (0 would claim it tried), and `errors_recovered` counts the exceptions it
+ * absorbed and continued past.
+ *
+ * NOT YET CALLED BY THE CRON. /api/scan/worker is owned by another task in this
+ * cycle, so wiring the sweep to this function is a named follow-up. Nothing
+ * here silently no-ops: it is a no-op only in the sense that nothing invokes it
+ * yet, which is stated here rather than left to be discovered.
+ */
+export async function reapStaleRuns(nowIso = new Date().toISOString(), deps = {}) {
+  const nowMs = new Date(nowIso).getTime();
+  if (!Number.isFinite(nowMs)) {
+    throw new Error(
+      `reapStaleRuns: "${nowIso}" is not a readable instant. A sweep that cannot say what time it ` +
+        `is cannot say what is stale, and guessing would close live runs.`
+    );
+  }
+  const staleAfterMs = Number.isFinite(deps.staleAfterMs) ? deps.staleAfterMs : REAP_STALE_AFTER_MS;
+  if (!(staleAfterMs > 0)) {
+    throw new Error(
+      `reapStaleRuns: staleAfterMs must be a positive number of milliseconds, got ` +
+        `${JSON.stringify(deps.staleAfterMs)} — a threshold of zero or less reaps every open run, ` +
+        `including the ones running right now.`
+    );
+  }
+  const limit = Number.isInteger(deps.maxPerPass) && deps.maxPerPass > 0 ? deps.maxPerPass : REAP_MAX_PER_PASS;
+  const reaperId = deps.reaperId || `reaper-${crypto.randomUUID()}`;
+  const cutoffIso = new Date(nowMs - staleAfterMs).toISOString();
+
+  const client = resolveAttemptClient(deps);
+  const listStale = deps.listStaleRuns || (client ? (args) => listStaleRunsFromDb(client, args) : null);
+  const ledger = resolveChunkLedger(deps);
+
+  if (!listStale || !ledger.enabled) {
+    // NOT a quiet zero. The whole point of the ledger is that absence and
+    // emptiness are different, and a reaper that could not look is the caller
+    // most likely to be misread as "nothing was wrong".
+    console.error(
+      `[reaper] REAP PASS DID NOT RUN — no Supabase client is configured, so open scan_runs rows ` +
+        `were neither listed nor closed. This is NOT "zero stale runs": any run whose writer died ` +
+        `is still open and still indistinguishable from live work. Nothing was measured.`
+    );
+    return unmeasuredReapPass({ reason: REAP_PASS_REASONS.LEDGER_UNAVAILABLE, reaperId, now: nowIso });
+  }
+
+  const passDetail = {
+    now: nowIso,
+    cutoff: cutoffIso,
+    stale_after_ms: staleAfterMs,
+    ttl_ms: RUN_HEARTBEAT_TTL_MS,
+    ttl_multiple: REAP_TTL_MULTIPLE,
+    max_per_pass: limit,
+  };
+
+  // Standing rule 2 on the OPEN: if the pass cannot be recorded the error
+  // propagates and nothing is reaped. A sweep that closes other people's rows
+  // while leaving no row of its own is the least auditable thing in the system.
+  const passRun = await openChunkRun(
+    ledger,
+    { runner: REAPER_RUNNER, phase: REAPER_PHASE, workerId: reaperId, detail: passDetail },
+    { ...REAPER_LOG, subject: `pass at ${nowIso}` }
+  );
+
+  const counts = {
+    [REAP_ROW_VERDICTS.REAPED]: 0,
+    [REAP_ROW_VERDICTS.LOST_RACE]: 0,
+    [REAP_ROW_VERDICTS.VANISHED]: 0,
+    [REAP_ROW_VERDICTS.NOT_STALE]: 0,
+    [REAP_ROW_VERDICTS.UNREADABLE_HEARTBEAT]: 0,
+    [REAP_ROW_VERDICTS.CLOSE_FAILED]: 0,
+  };
+  const reapedRuns = [];
+  // NOT MEASURED until the listing returns. A pass that died inside the query
+  // has no idea how many rows were stale, and `considered: 0` would be a count
+  // it never took.
+  let considered = null;
+  let truncated = null;
+
+  const summarize = () => ({
+    considered,
+    truncated,
+    reaped: counts[REAP_ROW_VERDICTS.REAPED],
+    lost_race: counts[REAP_ROW_VERDICTS.LOST_RACE],
+    vanished: counts[REAP_ROW_VERDICTS.VANISHED],
+    not_stale: counts[REAP_ROW_VERDICTS.NOT_STALE],
+    unreadable_heartbeat: counts[REAP_ROW_VERDICTS.UNREADABLE_HEARTBEAT],
+    close_failed: counts[REAP_ROW_VERDICTS.CLOSE_FAILED],
+    reaped_run_ids: reapedRuns.map((r) => r.id),
+  });
+  /** Exceptions absorbed and continued past — races included, since each was a throw. */
+  const absorbed = () =>
+    counts[REAP_ROW_VERDICTS.LOST_RACE] +
+    counts[REAP_ROW_VERDICTS.VANISHED] +
+    counts[REAP_ROW_VERDICTS.CLOSE_FAILED];
+
+  try {
+    const fetched = await listStale({
+      cutoffIso,
+      limit,
+      // Never reap yourself. The pass's own row is open and fresh, so the
+      // staleness re-check below would spare it anyway; excluding it in the
+      // query as well means that safety does not depend on a clock.
+      excludeRunId: passRun ? passRun.id : null,
+      nowIso,
+    });
+    const rows = Array.isArray(fetched) ? fetched : [];
+    truncated = rows.length > limit;
+    const candidates = rows.slice(0, limit);
+    considered = candidates.length;
+
+    for (const row of candidates) {
+      if (passRun && row.id === passRun.id) continue;
+
+      // Belt and braces on the listing: a row that is already closed is a race
+      // that was over before it started, not a reap.
+      if (row.ended_at != null || row.outcome != null) {
+        counts[REAP_ROW_VERDICTS.LOST_RACE] += 1;
+        continue;
+      }
+
+      const staleness = runStaleness(row, nowMs, staleAfterMs);
+      if (staleness.verdict === REAP_ROW_VERDICTS.UNREADABLE_HEARTBEAT) {
+        counts[REAP_ROW_VERDICTS.UNREADABLE_HEARTBEAT] += 1;
+        console.warn(
+          `[reaper] run ${row.id} is open with an UNREADABLE heartbeat ` +
+            `(${JSON.stringify(staleness.heartbeatAt)}) — staleness is unknown, so it is NOT reaped. ` +
+            `It stays open and is counted, not skipped in silence.`
+        );
+        continue;
+      }
+      if (!staleness.stale) {
+        // The query said stale, this pass's clock says otherwise. Trust the
+        // stricter answer and record the disagreement — it usually means skew
+        // between the database's now() and this process's.
+        counts[REAP_ROW_VERDICTS.NOT_STALE] += 1;
+        console.warn(
+          `[reaper] run ${row.id} was listed as stale but its heartbeat is only ${staleness.staleMs}ms ` +
+            `old against this pass's clock (threshold ${staleAfterMs}ms) — NOT reaped. Check clock skew ` +
+            `between the database and this process.`
+        );
+        continue;
+      }
+
+      try {
+        const closed = await ledger.close({
+          runId: row.id,
+          outcome: REAP_OUTCOME,
+          reason: REAP_REASON,
+          error: reapErrorSentence(row, staleness, { reaperId, nowIso, staleAfterMs }),
+          // Counters are deliberately omitted: NULL does not overwrite what the
+          // dead writer had already recorded (close_scan_run COALESCEs), and
+          // writing 0 here would replace real measurements with a confident
+          // nothing (rule 5).
+          detail: {
+            reaped: true,
+            reaped_at: nowIso,
+            reaped_by: reaperId,
+            reap_pass_run_id: passRun ? passRun.id : null,
+            last_heartbeat_at: staleness.heartbeatAt,
+            stale_ms: staleness.staleMs,
+            stale_after_ms: staleAfterMs,
+            ttl_ms: RUN_HEARTBEAT_TTL_MS,
+            ttl_multiple: REAP_TTL_MULTIPLE,
+            reaped_runner: row.runner ?? null,
+            reaped_phase: row.phase ?? null,
+            reaped_worker_id: row.worker_id ?? null,
+          },
+        });
+        counts[REAP_ROW_VERDICTS.REAPED] += 1;
+        reapedRuns.push({
+          id: row.id,
+          runner: row.runner ?? null,
+          phase: row.phase ?? null,
+          workerId: row.worker_id ?? null,
+          scanJobId: row.scan_job_id ?? null,
+          brand: row.brand ?? null,
+          staleMs: staleness.staleMs,
+          heartbeatAt: staleness.heartbeatAt,
+        });
+        console.warn(
+          `[reaper] REAPED run ${row.id} (${row.runner ?? "?"}/${row.phase ?? "?"}, worker ` +
+            `${row.worker_id ?? "unknown"}, job ${row.scan_job_id ?? "none"}): no heartbeat for ` +
+            `${staleness.staleMs}ms, past ${staleAfterMs}ms. Its writer never came back.` +
+            (closed && closed.outcome ? ` Ledger now reads: ${describeRun(closed)}.` : "")
+        );
+      } catch (err) {
+        const verdict = classifyReapCloseFailure(err);
+        counts[verdict] += 1;
+        if (verdict === REAP_ROW_VERDICTS.CLOSE_FAILED) {
+          console.error(
+            `[reaper] could not close run ${row.id}: ${err.message} — it stays OPEN and will be ` +
+              `retried on the next pass. Counted as a failure, not as a reap.`
+          );
+        } else {
+          console.warn(
+            `[reaper] run ${row.id} was ${verdict} before this pass could close it (${err.message}) — ` +
+              `another sweeper or its own writer got there first. Not an error; recorded so a pass that ` +
+              `lost every race does not read as a pass with nothing to do.`
+          );
+        }
+      }
+    }
+  } catch (err) {
+    // The pass's own row closes FAILED before the error leaves. A sweep that
+    // died halfway must not be indistinguishable from one that never ran.
+    await closeChunkRun(
+      ledger,
+      passRun,
+      {
+        outcome: RUN_OUTCOMES.FAILED,
+        reason: REAP_PASS_REASONS.REAP_FAILED,
+        error: err.message,
+        errorsRecovered: absorbed(),
+        detail: { ...passDetail, ...summarize() },
+      },
+      REAPER_LOG
+    );
+    throw err;
+  }
+
+  let verdict;
+  if (counts[REAP_ROW_VERDICTS.CLOSE_FAILED] > 0) {
+    verdict = { outcome: RUN_OUTCOMES.FAILED, reason: REAP_PASS_REASONS.REAP_FAILED };
+  } else if (considered === 0) {
+    // Looked, and every open run was fresh. A MEASURED zero.
+    verdict = { outcome: RUN_OUTCOMES.NOOP, reason: REAP_PASS_REASONS.NO_STALE_RUNS };
+  } else if (counts[REAP_ROW_VERDICTS.REAPED] === 0) {
+    verdict = { outcome: RUN_OUTCOMES.NOOP, reason: REAP_PASS_REASONS.NOTHING_REAPABLE };
+  } else {
+    verdict = { outcome: RUN_OUTCOMES.SUCCEEDED, reason: null };
+  }
+
+  await closeChunkRun(
+    ledger,
+    passRun,
+    {
+      ...verdict,
+      // Probes stay NULL: a sweep attempts none, and 0 would claim it tried.
+      errorsRecovered: absorbed(),
+      detail: { ...passDetail, ...summarize() },
+    },
+    REAPER_LOG
+  );
+
+  const pass = {
+    ok: counts[REAP_ROW_VERDICTS.CLOSE_FAILED] === 0,
+    outcome: verdict.outcome,
+    reason: verdict.reason,
+    passRunId: passRun ? passRun.id : null,
+    reaperId,
+    now: nowIso,
+    cutoff: cutoffIso,
+    staleAfterMs,
+    ttlMs: RUN_HEARTBEAT_TTL_MS,
+    ttlMultiple: REAP_TTL_MULTIPLE,
+    considered,
+    reaped: counts[REAP_ROW_VERDICTS.REAPED],
+    lostRace: counts[REAP_ROW_VERDICTS.LOST_RACE],
+    vanished: counts[REAP_ROW_VERDICTS.VANISHED],
+    notStale: counts[REAP_ROW_VERDICTS.NOT_STALE],
+    unreadableHeartbeat: counts[REAP_ROW_VERDICTS.UNREADABLE_HEARTBEAT],
+    closeFailed: counts[REAP_ROW_VERDICTS.CLOSE_FAILED],
+    truncated,
+    runs: reapedRuns,
+  };
+  console.log(`[reaper] ${describeReapPass(pass)}`);
+  if (truncated) {
+    console.warn(
+      `[reaper] this pass stopped at its cap of ${limit} rows and MORE stale runs remain open. ` +
+        `Do not read ${pass.reaped} reaped as "the ledger is clean now".`
+    );
+  }
+  return pass;
 }

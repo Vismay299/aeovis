@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**93 / 226 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**94 / 229 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -126,7 +126,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `21/52`
+## R2 — Scoring truth  `22/53`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -139,7 +139,7 @@ Baseline commit: `5111219`
 ### R2.2
 
 - [x] **R2.2.1** answer_present set only after the text check — closed at `src/lib/scoring/enginePipeline.js:177`, `src/lib/scoring/enginePipeline.js:180`, `src/lib/scoring/emptyAnswer.test.mjs`
-- [~] **R2.2.2** Perplexity citation-leg failure marks citations_state unverified — submitted `src/lib/scoring/enginePipeline.js:227`, `src/lib/scoring/enginePipeline.js:573`, `src/lib/scoring/enginePipeline.js:732`, `src/lib/scoring/enginePipeline.js:1353`, `src/lib/analytics/rollup.js:270`, `src/lib/analytics/rollup.js:328`, `src/lib/analytics/rollup.js:417`, `src/lib/scoring/citationDenominator.test.mjs:137`, `src/lib/scoring/citationDenominator.test.mjs:173`, `src/lib/scoring/citationDenominator.test.mjs:276`, `src/lib/engines/perplexity.js:61`
+- [x] **R2.2.2** Perplexity citation-leg failure marks citations_state unverified — closed at `src/lib/scoring/enginePipeline.js:227`, `src/lib/scoring/enginePipeline.js:573`, `src/lib/scoring/enginePipeline.js:732`, `src/lib/scoring/enginePipeline.js:1353`, `src/lib/analytics/rollup.js:270`, `src/lib/analytics/rollup.js:328`, `src/lib/analytics/rollup.js:417`, `src/lib/scoring/citationDenominator.test.mjs:137`, `src/lib/scoring/citationDenominator.test.mjs:173`, `src/lib/scoring/citationDenominator.test.mjs:276`, `src/lib/engines/perplexity.js:61`
 - [x] **R2.2.3** upsertPrompts throws; audit all write helpers for the return-{error} idiom — closed at `src/lib/db/prompts.js:18`, `src/lib/db/prompts.js:140`, `src/lib/db/prompts.js:158`, `src/lib/db/prompts.js:204`, `src/lib/db/prompts.js:208`, `src/lib/db/prompts.js:230`, `src/lib/db/prompts.js:237`, `src/lib/db/prompts.js:251`, `src/lib/db/promptWriteFailure.test.mjs:126`, `src/lib/db/promptWriteFailure.test.mjs:193`, `src/lib/db/promptWriteFailure.test.mjs:280`, `src/lib/db/promptWriteRoute.route.test.mjs:99`
 - [x] **R2.2.4** Remove insertScan's silent 3-tier column-drop cascade — closed at `src/lib/db.js:264`, `src/lib/db.js:300`, `src/lib/db.js:320`, `src/lib/insertScanCascade3.test.mjs:624`, `src/lib/insertScanCascade3.test.mjs:721`, `src/lib/insertScanWriteFailure.test.mjs:155`, `src/lib/collectionWindowPersist.test.mjs:185`
 - [x] **R2.2.5** dataSourceIssue still assumes text engines always answer — closed at `src/lib/scoring/enginePipeline.js:35`, `src/lib/scoring/enginePipeline.js:416`, `src/lib/scoring/enginePipeline.js:441`, `src/lib/scoring/enginePipeline.test.mjs:507`, `src/lib/scoring/aioConstants.js:4`
@@ -148,6 +148,7 @@ Baseline commit: `5111219`
 - [~] **R2.2.8** promptGen swallows a PAA failure with no log at all — submitted `src/lib/engines/serp.js:365`, `src/lib/engines/serp.js:406`, `src/lib/scoring/promptGen.js:42`, `src/lib/scoring/promptGen.js:330`, `src/lib/scoring/promptGen.js:423`, `src/lib/scoring/promptGen.js:428`, `src/lib/scoring/promptGen.js:501`, `src/lib/scoring/promptGen.js:508`, `src/lib/scoring/promptGen.js:561`, `src/lib/scoring/promptGen.js:576`, `src/lib/scoring/promptGenSeedProvenance.test.mjs:1`
 - [ ] **R2.2.9** probeTextEngine drops measured citations when the answer leg fails - the mirror of R2.2.2
 - [~] **R2.2.10** The perplexity retry guard is dead code, so a 401 costs three calls and three seconds — submitted `src/lib/engines/perplexity.js:53`, `src/lib/engines/perplexity.js:70`, `src/lib/engines/perplexity.js:208`, `src/lib/engines/perplexity.js:218`, `src/lib/engines/perplexity.js:230`, `src/lib/engines/perplexity.js:271`, `src/lib/engines/perplexity.js:130`, `src/lib/engines/perplexity.js:364`, `src/lib/engines/perplexity.test.mjs:395`, `src/lib/engines/perplexity.test.mjs:427`, `src/lib/engines/perplexity.test.mjs:441`, `src/lib/engines/perplexity.test.mjs:459`
+- [ ] **R2.2.11** The legacy scan-level mirror emits citation_share_pct 0 on an empty denominator instead of null
 ### R2.3
 
 - [x] **R2.3.1** Two-pass finalize: discovered roster feeds the headline — closed at `src/lib/workers/scanWorker.js:757`, `src/lib/workers/scanWorker.js:781`, `src/lib/workers/scanWorker.js:798`, `src/lib/workers/twoPassFinalize.test.mjs`
@@ -203,7 +204,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 
-## R3 — Durable backend  `17/39`
+## R3 — Durable backend  `17/41`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -228,8 +229,10 @@ Baseline commit: `5111219`
 ### R3.3
 
 - [x] **R3.3.1** attempts column with a cap of 3 — closed at `supabase/migrations/012_scan_job_attempts.sql:81`, `src/lib/workers/scanWorker.js:2086`, `src/lib/workers/scanJobAttempts.test.mjs:279`
-- [~] **R3.3.2** Sweep reaps heartbeat-stale runs
+- [~] **R3.3.2** Sweep reaps heartbeat-stale runs — submitted `src/lib/workers/scanWorker.js:2878`, `src/lib/workers/scanWorker.js:3040`, `src/lib/workers/scanWorker.js:3177`, `src/lib/workers/scanWorker.js:2783`, `src/lib/workers/scanRunReaper.test.mjs:317`, `src/lib/workers/scanRunReaper.test.mjs:436`
 - [ ] **R3.3.3** Content cost accumulates across rescues
+- [ ] **R3.3.4** Wire the stale-run reaper into the cron sweep; nothing calls it yet
+- [ ] **R3.3.5** The reaper idempotence rests on plpgsql behaviour proven only by a fake that re-implements it `needs-secrets`
 ### R3.4
 
 - [x] **R3.4.1** First scan of a brand upserts its schedule row — closed at `src/lib/workers/scanWorker.js:1245`, `src/lib/workers/scanWorker.js:530`, `src/lib/workers/scanWorker.js:1146`, `src/lib/workers/scanSchedule.test.mjs:74`, `src/lib/workers/scanSchedule.test.mjs:154`, `src/lib/workers/scanSchedule.test.mjs:223`
@@ -333,13 +336,13 @@ Baseline commit: `5111219`
 - [ ] **R6.1.14** The migration verify list checks object COUNT and presence but never that the names match the SQL, so a rename reports an applied migration as missing forever
 ### R6.2
 
-- [~] **R6.2.1** docs/OPERATOR_LEDGER.md — submitted `docs/OPERATOR_LEDGER.md:11`, `docs/OPERATOR_LEDGER.md:386`
+- [~] **R6.2.1** docs/OPERATOR_LEDGER.md — submitted `docs/OPERATOR_LEDGER.md:268`, `docs/OPERATOR_LEDGER.md:298`, `docs/OPERATOR_LEDGER.md:405`, `docs/OPERATOR_LEDGER.md:433`, `docs/OPERATOR_LEDGER.md:435`, `docs/OPERATOR_LEDGER.md:473`, `docs/OPERATOR_LEDGER.md:568`, `src/lib/docStatus.test.mjs:161`, `src/lib/rateLimit.js:128`, `scripts/setup-supabase.mjs:485`, `scripts/setup-supabase.mjs:522`, `src/lib/db/analytics.js:672`, `src/lib/workers/scanWorker.js:1643`, `docs/PROD_MIGRATIONS.md:144`
 - [ ] **R6.2.2** docs/RUNBOOK.md seeded with 10 symptom rows
 ### R6.3
 
 - [x] **R6.3.1** Vendor contract docs — closed at `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
 - [x] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current — closed at `src/lib/workers/scanWorker.js:1506`
-- [~] **R6.3.3** Two dated handoff and journal docs cite line numbers that resolve to unrelated code — submitted `docs/HANDOFF-2026-08-30.md:9`, `docs/HANDOFF-2026-08-30.md:278`, `docs/HANDOFF-2026-08-30.md:294`, `docs/BUILD_JOURNAL.md:72`, `docs/BUILD_JOURNAL.md:150`, `docs/BUILD_JOURNAL.md:228`, `docs/BUILD_JOURNAL.md:255`, `docs/BUILD_JOURNAL.md:461`, `src/lib/db.js:126`, `src/lib/workers/scanWorker.js:1284`
+- [~] **R6.3.3** Two dated handoff and journal docs cite line numbers that resolve to unrelated code — submitted `docs/BUILD_JOURNAL.md:72`, `docs/BUILD_JOURNAL.md:74`, `docs/BUILD_JOURNAL.md:170`, `docs/BUILD_JOURNAL.md:220`, `docs/BUILD_JOURNAL.md:397`, `docs/BUILD_JOURNAL.md:550`, `docs/BUILD_JOURNAL.md:561`, `docs/BUILD_JOURNAL.md:594`, `docs/BUILD_JOURNAL.md:614`, `docs/BUILD_JOURNAL.md:679`, `docs/HANDOFF-2026-08-30.md:248`
 - [ ] **R6.3.4** Stale cross-references to a cascade that no longer exists, and a contracts doc that claims to be alone
 - [ ] **R6.3.5** PRODUCT.md flags a simulated probe counter that no longer exists
 ### R6.4

@@ -69,7 +69,16 @@ pipeline produces something untrue), and **C** (operational and data-integrity).
 They are the source of the R0–R6 rebuild in
 `docs/plans/2026-08-29-rebuild-roadmap.md`.
 
-> ## The Anchor column below expired. Read this before following one.
+> ## The Anchor and Status columns below expired. Read this before following a row.
+>
+> **The Status column is stale on ten rows.** `A10`, `A11`, `A12`, `B1`, `B5`,
+> `C1`, `C2`, `C4`, `C10` and `C11` read `open — <task>` for a task the ledger
+> has since marked `done`. Those cells were deliberately **not** flipped: R6.3.3
+> verified citations, not fixes, and asserting a mechanism is gone because a
+> ledger row says `done` is exactly the transcription-over-verification failure
+> this file exists to catalogue. Trust `node
+> .claude/orchestration/orchestrate.mjs show <id>` for task status, and
+> re-derive the mechanism from source before writing `closed` into a row.
 >
 > **Declared commit: the anchors in this register describe the tree at
 > `b6e3610` (2026-08-29), and for `B8`/`B9`/`B12` at `5d51aa3` (2026-08-30).**
@@ -156,15 +165,44 @@ Status values: `open` · `closed <task>` · `does not reproduce`.
 **Liveness of B8 and B9 (standing rule 10).** *Line numbers in the next two
 paragraphs are a snapshot of `5d51aa3` (2026-08-30). Re-derived at `1a5ed81` on
 2026-09-05: of the seventeen, only three still land on what they name —
-`src/app/api/scan/route.js:13` and `:62`, and `src/lib/engines/types.js:47`.
-The chain still holds with one correction: `runScanChunk` now has **three**
-entry points, not two. `GET /api/scan/[job_id]/status` dispatches it as a
-poll-driven rescue (`src/app/api/scan/[job_id]/status/route.js:57` at
-`1a5ed81`), alongside `POST /api/scan` (`src/app/api/scan/route.js:62`) and
-`GET /api/scan/worker` (`src/app/api/scan/worker/route.js:291` and `:368`). So B8
-and B9 are, if anything, more live than this section says — an added route
-widened the surface and nothing re-checked the paragraph asserting the surface.
-Follow it by symbol, not by number: `resolveEnabledEngines` (four call sites:
+`src/app/api/scan/route.js:13` and `:62`, and `src/lib/engines/types.js:47`.*
+
+> **Correction — the liveness trace below was incomplete when it was made.**
+> *(2026-09-05, R6.3.3, after a verifier rejected the first version of this
+> correction.)*
+>
+> `runScanChunk` has **three** live entry points, not two — and it had three at
+> `5d51aa3`, the commit the paragraph below declares as its own snapshot. The
+> third is `GET /api/scan/[job_id]/status`, dispatching it as a poll-driven
+> rescue. Re-derived against the declared commit, not the worktree:
+> `git show 5d51aa3:'src/app/api/scan/[job_id]/status/route.js'` puts the
+> import on `:3` and `runScanChunk(job.id)` on `:57`, inside the exported `GET`
+> handler (`:8`), gated by `shouldRescueJob` — real logic at
+> `scanWorker.js:317-321` at that commit, not a stub — on a route the client
+> polls in a loop (`src/services/api.js:778` at `5d51aa3`). It has dispatched
+> `runScanChunk` since `9580782` (2026-07-24), which
+> `git merge-base --is-ancestor 9580782 5d51aa3` confirms is an ancestor of the
+> declared commit. Reproduce with
+> `git log -S runScanChunk --oneline -- 'src/app/api/scan/[job_id]/status/route.js'`,
+> which returns exactly that one commit.
+>
+> **The first version of this correction said the third entry point had been
+> *added* since, and that the paragraph "was not wrong when written and is
+> wrong now". That was false.** Nothing was added. The original
+> standing-rule-10 trace found two of the three call sites and stopped, and
+> this file then wrote the result up as a completed liveness check. So this is
+> not drift and must not be filed as drift: it is a claim that was **wrong at
+> its own declared commit**, and it is the third such claim in this document
+> set, not one of two — see *What was wrong when written* in Entry #5, and the
+> R6.4.8 bullet on why declared-commit-plus-symbol anchoring would not have
+> caught it.
+>
+> The error understates exposure: B8 and B9 were more live than this section
+> claimed, on 2026-08-30 as much as today. That direction is why it survived
+> the original write, a full re-derivation, and a first attempt at this very
+> correction.
+
+*Follow it by symbol, not by number: `resolveEnabledEngines` (four call sites:
 `runSourcingPhase`, `runProbingPhase`, `runFinalizePhase`, and the still-dead
 `runMultiEngineScan`) → `runScanChunk` → those three routes. In six days
 `enginePipeline.js` went from 625 lines to
@@ -179,10 +217,12 @@ but not by the route the file's own shape suggests. `resolveEnabledEngines`
 checkpoint at `:436`/`:449`), `:464` (probing) and `:579` (finalize) — and all
 three are reached through `runScanChunk` (`scanWorker.js:1028`, calling
 sourcing at `:1082` and probing at `:1088`), which is dispatched from **two**
-entry points: `POST /api/scan` (`src/app/api/scan/route.js:13`, firing at
+entry points — ***wrong at this paragraph's own commit; it was three. See the
+correction above*** — `POST /api/scan` (`src/app/api/scan/route.js:13`, firing at
 `:62`) and `GET /api/scan/worker` (`src/app/api/scan/worker/route.js:39`,
 firing at `:60` and `:94`), the latter being a cron entry in `vercel.json`
-(`/api/scan/worker`, `0 0 * * *`).
+(`/api/scan/worker`, `0 0 * * *`). The missing third is
+`GET /api/scan/[job_id]/status`, `:57` at `5d51aa3`.
 
 The fourth call site is **dead**: `runMultiEngineScan`
 (`enginePipeline.js:533`, resolving at `:534`) has no importer anywhere in
@@ -345,12 +385,20 @@ known.
 > code nor the new: it is a comment about heartbeat failure being tolerated. So
 > this paragraph, written to warn about a stale anchor, went stale in the same
 > way inside six days. **Never write "at HEAD" in a dated document — name the
-> commit.** That is the whole recommendation this file has to offer R6.4.8.
+> commit.** That was recorded on 2026-09-05 as the whole recommendation this
+> file had to offer R6.4.8. **It is no longer the main one**: a later pass the
+> same day found an error that a declared commit would not have caught, because
+> it was wrong at the declared commit. See *What this hands to R6.4.8* in Entry
+> #5.
 
 Both B8 and B9 were also traced to an entry point before being described as
 live, under standing rule 10 — see *Liveness of B8 and B9* above. This is not
 ceremony: the nearest plausible consumer of B8's code, `runMultiEngineScan`,
-is dead.
+is dead. **But that trace was incomplete**: it found two of `runScanChunk`'s
+three live entry points and stopped, and the omission stood in this file from
+`5d51aa3` until it was corrected under R6.3.3 on 2026-09-05. Following the rule
+proved these findings are live; it did not measure how live, and the file said
+nothing to flag the difference.
 
 **The renumbering trap is still live.** `docs/plans/production-plan.md`
 contains sections also labelled `B8` and `B9` ("Remaining input/output
@@ -499,7 +547,10 @@ Two categories, treated differently, because renumbering a dated document is
 itself a falsification — it re-points a historical record at code that did not
 exist when the record was made.
 
-**Wrong at the authoring commit** (corrected inline, correction labelled):
+**Wrong at the authoring commit** — **three**, corrected inline, each
+correction labelled. *This list said two until 2026-09-05; the third was found
+by the verifier who rejected the first version of this entry, and is by some
+distance the most important of them.*
 
 - `HANDOFF-2026-08-30.md`, `R0.1.10`: `check-secrets.mjs:79` never called
   `get_all_zones`. At `3c9d3f2` the call was `:76`; `:79` was
@@ -507,15 +558,29 @@ exist when the record was made.
 - `HANDOFF-2026-08-30.md`, `R1.7.4`: `:198` and `:250` were each one line high —
   the enclosing `Promise.race([` and `try {` rather than the `paaFn(` call that
   does the spending, which sat on `:199` and `:251`.
+- `BUILD_JOURNAL.md`, *Liveness of B8 and B9*: "`runScanChunk` … is dispatched
+  from **two** entry points". It was dispatched from three at `5d51aa3`, the
+  commit that paragraph declares. `GET /api/scan/[job_id]/status` has
+  dispatched it since `9580782` (2026-07-24). **This one is not a `file:line`
+  citation at all** — every number in that paragraph was exact at `5d51aa3`.
+  The defect is a *missing* citation: an entry point that was never looked for,
+  written up as a completed standing-rule-10 liveness trace. It is also the
+  only one of the three where the error understates risk rather than merely
+  mislocating it.
 
 **Right when written, then outlived** (given a declared commit and a symbol
-anchor, never renumbered): everything else, including the whole *Liveness of B8
-and B9* chain, whose seventeen citations are down to three survivors while the
-argument they support is still sound.
+anchor, never renumbered): everything else, including the seventeen line
+citations of the *Liveness of B8 and B9* chain, now down to three survivors.
+Note the split inside that one paragraph, because it is the cleanest example in
+the file: its **numbers** were all right when written and merely expired, while
+the **claim they were assembled into** — "two entry points" — was wrong on the
+day it was written. Accurate citations, wrong conclusion. Checking the numbers
+would have told you nothing.
 
-## Three things changed underneath the register without touching it
+## Three things the register did not know about itself
 
-None of these came from a task that knew it was touching this file. That is the
+Two of these are changes underneath the register; the third is not a change at
+all. None came from a task that knew it was touching this file, which is the
 part worth generalising.
 
 1. **B9 stopped reproducing.** `25e7727` (R3.2.2) and `3e37c92` (R3.2.5) made
@@ -523,25 +588,57 @@ part worth generalising.
    six days after it was fixed by two tasks aimed at something else.
 2. **Half of B12 stopped reproducing.** `6fc5b61` (R2.8.6) turned
    `insertScan`'s "Skipping database insert" into a throw. The row still
-   described the log line.
-3. **A live entry point was added.** `runScanChunk` is now dispatched from
-   `GET /api/scan/[job_id]/status` as well as `POST /api/scan` and
-   `GET /api/scan/worker`. The liveness paragraph asserting "**two** entry
-   points" was not wrong when written and is wrong now — the direction that
-   *understates* exposure, which is why nobody noticed.
+   described the log line. (Trap: `git grep` still finds "Skipping database
+   insert" in a **past-tense contract comment**, so a grep-based check reads as
+   if the behaviour survives.)
+3. **A liveness trace was incomplete from the start — nothing was added.**
+   `runScanChunk` is dispatched from `GET /api/scan/[job_id]/status` as well as
+   `POST /api/scan` and `GET /api/scan/worker`, and has been since `9580782`
+   (2026-07-24) — before `5d51aa3`, the commit the liveness paragraph declares.
+   The paragraph asserting "**two** entry points" was **wrong when written**.
+   The first version of this entry said the opposite — that a third entry point
+   had been added and the paragraph "was not wrong when written and is wrong
+   now" — and a verifier rejected it. Recording the mistake rather than just
+   the fix, because the mistake is the more useful artifact: the first
+   explanation reached for was the flattering one, in which the document was
+   right and the world moved. It was not. Nobody had finished looking.
 
-Ten register rows also read `open — <task>` for a task the ledger has since
-marked `done`: A10, A11, A12, B1, B5, C1, C2, C4, C10, C11. Those cells were
-**not** flipped here. This task verified citations, not fixes; asserting a
-mechanism is gone because a ledger row says `done` would be exactly the
-transcription-over-verification failure the handoff warns about. Trust
-`orchestrate.mjs show <id>` for status and re-derive the mechanism before
-writing `closed` into a row.
+The **Status** column is stale on ten rows as well. That caveat has been moved
+up into the banner above the tables, where a reader meets it before reading a
+row rather than after — see *The Anchor column below expired*.
 
 ## What this hands to R6.4.8
 
 The doc-to-source staleness tripwire is a separate task and is not built here.
-What this sweep establishes about its requirements:
+**It has never run.** What this sweep establishes about its requirements:
+
+> **Read this before the bullets: this sweep's own headline recommendation
+> would not have caught this sweep's most important finding.**
+>
+> Everything below argues for declared-commit-plus-symbol anchoring, and
+> R6.4.8's own spec proposes a *staleness* tripwire — fail when a cited source
+> file changes in a commit that does not touch the citing doc. Apply either one
+> to the "**two** entry points" claim and it passes, cleanly and with a green
+> tick. Every `file:line` in that paragraph was **exact at `5d51aa3`**, the
+> commit the paragraph declares; resolving them against that commit succeeds.
+> Nothing had gone stale. **The citation was wrong from birth, and the specific
+> shape of the error is an omission — a third live entry point that was never
+> cited because it was never found.**
+>
+> No citation checker detects a citation that is not there. Staleness detection
+> is defined over *change*, and there was no change; anchoring is defined over
+> *the citations present*, and the missing one is by construction absent. This
+> is a class of error the recommended fix does not address, and it happens to
+> be the class that understates risk — the direction that produces a document
+> claiming less exposure than exists.
+>
+> If R6.4.8 ships the tripwire and stops, this class stays invisible and now
+> carries a green tick, which is worse than the current state. Whatever else
+> R6.4.8 concludes, it must record that its guard is scoped to stale citations
+> and **does not** cover incomplete liveness traces, so the next reader does
+> not mistake a passing tripwire for a verified chain. Standing rule 10 is
+> still the only control that touches this class, and it demonstrably failed
+> here: it was followed, and it still produced two of three.
 
 - **Existence is not the check.** 113 of 119 citations resolve. A tripwire that
   only asserts "file exists, line ≤ line count" would have passed this document
@@ -568,3 +665,25 @@ What this sweep establishes about its requirements:
   `1a5ed81` and `:149` in the working tree, a 23-line divergence inside one
   session. The tripwire must resolve against a commit, never the worktree, or it
   will report failures that belong to somebody else's unfinished edit.
+- **It kept moving after the sweep, which is the argument for symbols, again.**
+  Between `1a5ed81` and `ea165ed`, `insertScan` moved `:126` → `:152` in
+  `src/lib/db.js`; R2.8.12 replaced `getScansByDomain`'s `if (!client) return []`
+  with a `ScansUnavailableError` throw (`git grep -c ScansUnavailableError
+  ea165ed -- src/lib/db.js` → 9); and R0.1.20 withdrew the `trusted: true`
+  label from the rate limiter, renaming `TRUSTED_IP_HEADER` to
+  `PLATFORM_IP_HEADER` (`git grep -l PLATFORM_IP_HEADER ea165ed -- src/` →
+  `src/lib/rateLimit.js`, `src/lib/rateLimit.test.mjs`). Neither document cites
+  those symbols, so nothing here broke — but note that a **rename** defeats
+  symbol anchoring exactly as a line move defeats numbers. The anchor is more
+  durable, not durable. Cite a symbol *and* the commit where it had that name.
+- **The bullet above was itself briefly wrong at the commit it names, and the
+  window was minutes.** Its first draft read `→ 11`, taken from a `git grep`
+  against the literal ref `HEAD`. Between reading `git rev-parse HEAD` and
+  running that grep, another agent committed `e2e46f4`, so `HEAD` had stopped
+  meaning `ea165ed`: the count is **9** at `ea165ed` and 11 at `e2e46f4`. The
+  number was measured correctly and attributed to the wrong commit — a
+  wrong-at-authoring citation, in a bullet arguing against wrong-at-authoring
+  citations, caught only because the command was re-run with the sha spelled
+  out. **A tripwire must resolve `HEAD` to a sha once and pin it**, and prose
+  must never carry the word `HEAD`, for the same reason: on a branch a dozen
+  agents are committing to, `HEAD` is not a citation, it is a race.
