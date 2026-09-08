@@ -7,6 +7,7 @@ import {
 } from "../firecrawl.js";
 import { isPolicyRefusal } from "../ssrfGuard.js";
 import { fetchPeopleAlsoAsk, fetchAutocomplete } from "../engines/serp.js";
+import { isBrightDataZoneError } from "../engines/brightdata.js";
 import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery } from "./aioQueryClassify.js";
 import { isEliciting, assessPromptSet, MIN_ELICITING_RATIO } from "./promptQuality.js";
@@ -23,6 +24,34 @@ const INTENT_TIERS = ["informational", "commercial", "comparison", "problem_awar
  * observe it elapsing.
  */
 export const SEED_FETCH_TIMEOUT_MS = 10000;
+
+/**
+ * State of a prompt set's PAA / autocomplete leg (R2.2.8, finding A1).
+ *
+ * The values deliberately match `SCRAPE_STATE` in src/lib/firecrawl.js. The two
+ * facts land side by side on the same `stats` accumulator — `website_scrape` and
+ * `prompt_seeding` — and an operator reading a scan_runs row should not have to
+ * learn two vocabularies for "this input to the prompt set was not there".
+ *
+ * NOT_ATTEMPTED is the fourth value and it is the whole point of the record:
+ * "we derived no seed terms, so we never called a SERP" and "we called and every
+ * term failed" and "we called and Google genuinely had nothing" all used to
+ * produce the same output — an ungrounded prompt set with `seedQueries = []`.
+ * Standing rule 1: measured zero must look different from never ran.
+ */
+export const SEED_STATE = Object.freeze({
+  /** The seed fetches ran. `seed_queries` says how many real queries came back. */
+  OK: "ok",
+  /** Some seed terms or blend topics failed; the set is partly grounded. */
+  DEGRADED: "degraded",
+  /** The SERP leg could not run at all — every term failed, or the zone is dead. */
+  UNAVAILABLE: "unavailable",
+  /** No seed term could be derived, so no SERP call was ever made. */
+  NOT_ATTEMPTED: "not_attempted",
+});
+
+/** Failure details are for an operator, not a payload: keep the list bounded. */
+const MAX_RECORDED_SEED_FAILURES = 10;
 
 /**
  * Small local industry-key resolver. Kept local so this module's only LLM
@@ -282,7 +311,52 @@ export async function generateUnbrandedPrompts(
 
   // 5b: PAA-seeding — derive seed terms and fetch real Google queries BEFORE
   // the LLM pass so the prompt is grounded in actual search behaviour.
+  //
+  // R2.2.8 / rule 1 — THE SEEDING OUTCOME IS RECORDED, NOT ONLY LOGGED.
+  //
+  // R3.7.6 made the two catches below say something; a log is still only a log.
+  // Nothing downstream could tell a prompt set grounded in 30 real Google
+  // queries from one grounded in zero because the Bright Data zone was dead:
+  // both returned `count` prompts with the same shape, and the scan published a
+  // score off the second as confidently as off the first.
+  //
+  // `seeding` is that missing fact, in the same vocabulary and on the same
+  // channel as `stats.website_scrape` (see the note on that assignment above).
+  // It is attached to `stats` BY REFERENCE immediately after this block, so the
+  // realism blend further down keeps mutating the object the caller already
+  // holds, and so an LLM pass that throws afterwards still leaves the seeding
+  // verdict behind rather than taking it down with the frame.
   let seedQueries = [];
+  const seeding = {
+    state: SEED_STATE.NOT_ATTEMPTED,
+    state_reason: "no_seed_terms",
+    detail: null,
+    terms_attempted: 0,
+    terms_failed: 0,
+    seed_queries: 0,
+    blend_topics_attempted: 0,
+    blend_fetches_failed: 0,
+    failures: [],
+  };
+  /**
+   * @param {"seed"|"blend"|"derivation"} stage which SERP leg failed
+   * @param {string|null} term the seed term / blend topic, when there is one
+   */
+  const recordSeedFailure = (stage, term, err) => {
+    seeding.terms_failed += stage === "seed" ? 1 : 0;
+    seeding.blend_fetches_failed += stage === "blend" ? 1 : 0;
+    if (seeding.failures.length >= MAX_RECORDED_SEED_FAILURES) return;
+    seeding.failures.push({
+      stage,
+      term: term ?? null,
+      // The typed name and `reason` are what let an operator (or check-secrets)
+      // act on this without regex-matching prose.
+      error: err?.name || "Error",
+      reason: err?.reason || null,
+      message: String(err?.message || err).slice(0, 200),
+    });
+  };
+
   try {
     const seedTerms = [];
     if (industryHint) {
@@ -307,6 +381,7 @@ export async function generateUnbrandedPrompts(
     const paaResults = [];
     for (const term of uniqueTerms) {
       if (paaResults.length >= 30) break;
+      seeding.terms_attempted += 1;
       // R3.7.6 (finding A1): the deadline is held in a variable and cleared in a
       // `finally`, not left to expire. The executor below runs synchronously
       // inside `new Promise`, so `seedTimeoutId` is always assigned before the
@@ -341,22 +416,101 @@ export async function generateUnbrandedPrompts(
         // seed term that timed out or threw produced zero queries, and the
         // sibling branches in the realism blend below already say so; this one
         // used to look identical to a term that legitimately had nothing.
+        //
+        // R2.2.8: the error object, not `err.message` — a typed zone failure
+        // carries `name` and `reason` and both are the operator's whole answer.
+        // And it is RECORDED, so the degrade outlives the log stream.
+        recordSeedFailure("seed", term, err);
         console.warn(
           `[promptGen] seed fetch failed for "${term}" — 0 seed queries from this term:`,
-          err?.message || err
+          err
         );
+        if (isBrightDataZoneError(err)) {
+          // R2.2.8: not a flaky term. The SERP provider itself is unusable, so
+          // every remaining term would burn a 10s deadline to reach the same
+          // failure. Stop, and say the whole leg is unavailable.
+          seeding.state = SEED_STATE.UNAVAILABLE;
+          seeding.state_reason = `serp_zone_${err.reason || "error"}`;
+          seeding.detail = String(err.message).slice(0, 200);
+          console.warn(
+            `[promptGen] ABANDONING PAA seeding for "${brand}" after seed term "${term}": ` +
+              `the SERP provider's zone is unusable (${err.reason}), so no seed term can succeed. ` +
+              `This prompt set will be generated with ${paaResults.length} real Google queries ` +
+              `instead of up to 30 — it is NOT grounded in observed search behaviour.`
+          );
+          break;
+        }
       } finally {
         if (seedTimeoutId !== null) clearTimeout(seedTimeoutId);
       }
     }
     seedQueries = paaResults;
+    seeding.seed_queries = paaResults.length;
+
+    // The verdict. Four outcomes that used to be one (`seedQueries = []`).
+    if (seeding.state !== SEED_STATE.UNAVAILABLE) {
+      if (seeding.terms_attempted === 0) {
+        seeding.state = SEED_STATE.NOT_ATTEMPTED;
+        seeding.state_reason = "no_seed_terms";
+        seeding.detail = "no industry label and no usable website title to derive a seed term from";
+      } else if (seeding.terms_failed >= seeding.terms_attempted) {
+        seeding.state = SEED_STATE.UNAVAILABLE;
+        seeding.state_reason = "all_seed_terms_failed";
+        seeding.detail = seeding.failures[0]?.message ?? null;
+      } else if (seeding.terms_failed > 0) {
+        seeding.state = SEED_STATE.DEGRADED;
+        seeding.state_reason = "some_seed_terms_failed";
+        seeding.detail = seeding.failures[0]?.message ?? null;
+      } else if (paaResults.length === 0) {
+        // Every fetch SUCCEEDED and Google had nothing. That is a real measured
+        // zero and it is not a failure — but it is also not a grounded prompt
+        // set, so it gets its own reason rather than passing as a clean seed.
+        seeding.state = SEED_STATE.OK;
+        seeding.state_reason = "no_seed_queries_returned";
+      } else {
+        seeding.state = SEED_STATE.OK;
+        seeding.state_reason = "seeded";
+      }
+    }
   } catch (err) {
     // R3.7.6 / rule 1: prompt generation genuinely does still work without
     // seeds, so this stays best-effort — but an ungrounded prompt set must not
-    // be indistinguishable from a seeded one in the log.
+    // be indistinguishable from a seeded one in the log, and (R2.2.8) must not
+    // be indistinguishable from a seeded one on the scan record either.
+    seeding.state = SEED_STATE.UNAVAILABLE;
+    seeding.state_reason = "seed_derivation_threw";
+    seeding.detail = String(err?.message || err).slice(0, 200);
+    recordSeedFailure("derivation", null, err);
     console.warn(
       `[promptGen] seed derivation failed for "${brand}" — generating prompts with no PAA seeding:`,
-      err?.message || err
+      err
+    );
+  }
+
+  // Attach BEFORE the LLM passes, by reference: the blend below keeps writing
+  // into this same object, and an LLM pass that throws must not erase the fact
+  // that the SERP leg was tried and failed.
+  //
+  // NO PRODUCTION READER YET — unlike its sibling `stats.website_scrape`, which
+  // runSourcingPhase reads and turns into a CHUNK_SKIP_REASONS skip, nothing
+  // reads `stats.prompt_seeding` and the checkpoint's `stats` allowlist in
+  // src/lib/workers/scanWorker.js does not carry it, so it does not yet survive
+  // a resume. That file is owned by another task in flight; wiring the reader
+  // and the checkpoint carry is filed as the follow-up to this one.
+  if (stats && typeof stats === "object") {
+    stats.prompt_seeding = seeding;
+  }
+
+  if (seeding.state !== SEED_STATE.OK || seeding.seed_queries === 0) {
+    // Same shape as the website-scrape degrade warning above, deliberately: a
+    // seeded prompt set and an ungrounded one must never look alike in a log.
+    console.warn(
+      `[promptGen] PAA/autocomplete seeding for "${brand}" is ${seeding.state} ` +
+        `(${seeding.state_reason}${seeding.detail ? `: ${seeding.detail}` : ""}) — ` +
+        `${seeding.seed_queries} real Google queries from ` +
+        `${seeding.terms_attempted - seeding.terms_failed}/${seeding.terms_attempted} seed terms ` +
+        `available to ground this prompt set. These prompts are not grounded in observed ` +
+        `search behaviour.`
     );
   }
 
@@ -390,21 +544,50 @@ export async function generateUnbrandedPrompts(
   // Realism blend (only if still short) — best-effort, may need a SERP key.
   if (collected.length < count) {
     const topTopics = [...new Set(collected.slice(0, 5).map((c) => c.topic))];
+    // R2.2.8: a zone failure here ends the blend for the same reason it ends
+    // seeding — every remaining topic hits the same dead zone.
+    let blendZoneDead = false;
     for (const topic of topTopics) {
       if (collected.length >= count) break;
+      seeding.blend_topics_attempted += 1;
       try {
         const paa = await paaFn(topic);
         (paa || []).forEach((text) => add({ text, topic, source: "paa" }));
       } catch (err) {
-        console.warn(`[promptGen] PAA fetch failed for "${topic}":`, err.message);
+        // R2.2.8: recorded as well as logged, and logged with the error rather
+        // than `err.message` alone. This leg is the same SERP dependency the
+        // seeding block used, so it lands in the same record under stage
+        // "blend" instead of inventing a second vocabulary for it.
+        recordSeedFailure("blend", topic, err);
+        console.warn(`[promptGen] PAA fetch failed for "${topic}":`, err);
+        if (isBrightDataZoneError(err)) blendZoneDead = true;
       }
+      if (blendZoneDead) break;
       if (collected.length >= count) break;
       try {
         const autos = await autoFn(topic);
         (autos || []).forEach((text) => add({ text, topic, source: "autocomplete" }));
       } catch (err) {
-        console.warn(`[promptGen] Autocomplete fetch failed for "${topic}":`, err.message);
+        recordSeedFailure("blend", topic, err);
+        console.warn(`[promptGen] Autocomplete fetch failed for "${topic}":`, err);
       }
+    }
+
+    if (seeding.blend_fetches_failed > 0) {
+      // A blend that failed cannot leave the leg reading "ok". UNAVAILABLE
+      // (every seed term already failed) is the stronger verdict and stands.
+      if (seeding.state === SEED_STATE.OK || seeding.state === SEED_STATE.NOT_ATTEMPTED) {
+        seeding.state = SEED_STATE.DEGRADED;
+        seeding.state_reason = blendZoneDead ? "blend_serp_zone_unusable" : "blend_fetch_failed";
+        seeding.detail =
+          seeding.failures.find((f) => f.stage === "blend")?.message ?? seeding.detail;
+      }
+      console.warn(
+        `[promptGen] realism blend for "${brand}" lost ${seeding.blend_fetches_failed} of ` +
+          `${seeding.blend_topics_attempted} topic fetches` +
+          (blendZoneDead ? " and stopped early: the SERP zone is unusable" : "") +
+          ` — the shortfall falls through to the static industry pack.`
+      );
     }
   }
 

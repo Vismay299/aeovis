@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**92 / 221 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**92 / 224 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -71,7 +71,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `9/35`
+## R1 — Real-surface probe fleet  `9/36`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -79,7 +79,7 @@ Baseline commit: `5111219`
 
 - [x] **R1.1.1** Probe Result Contract v2 — closed at `docs/contracts/probe-result.md:15`, `docs/contracts/probe-result.md:74`, `docs/contracts/probe-result.md:304`, `docs/contracts/probe-result.md:647`, `docs/contracts/probe-result.md:694`, `docs/contracts/probe-result.md:952`, `docs/contracts/probe-result.md:981`, `docs/contracts/probe-result.md:1049`, `docs/contracts/probe-result.md:1106`, `docs/contracts/probe-result.md:1145`, `src/lib/scoring/enginePipeline.js:331`, `src/lib/scoring/enginePipeline.js:386`, `src/lib/scoring/enginePipeline.js:466`, `src/lib/scoring/enginePipeline.js:480`, `src/lib/scoring/enginePipeline.js:735`, `src/lib/scoring/enginePipeline.js:818`, `src/lib/scoring/enginePipeline.js:939`, `src/lib/workers/scanWorker.js:1227`, `src/lib/workers/scanWorker.js:1307`, `src/lib/workers/scanWorker.js:1769`, `src/lib/workers/scanWorker.js:2181`, `src/lib/db.js:123`, `src/lib/db.js:147`, `src/lib/content/weeklyReport.js:24`, `src/lib/llmPricing.js:79`, `src/lib/llmPricing.js:229`, `src/lib/llmPricing.js:335`, `src/lib/engines/deployedEngines.js:21`, `worker/src/lib/queue.js:207`, `worker/src/index.js:174`, `worker/src/index.js:211`
 - [-] **R1.1.2** ADR + 2-day spike: browser infrastructure `needs-secrets` `needs-decision` — blocked: needs-secrets
-- [~] **R1.1.3** ADR: worker host `needs-decision` — submitted `docs/decisions/2026-09-05-worker-host.md:60`, `docs/decisions/2026-09-05-worker-host.md:93`, `docs/decisions/2026-09-05-worker-host.md:224`, `docs/decisions/2026-09-05-worker-host.md:266`, `docs/decisions/2026-09-05-worker-host.md:306`, `docs/decisions/2026-09-05-worker-host.md:374`, `docs/decisions/2026-09-05-worker-host.md:422`, `docs/decisions/2026-09-05-worker-host.md:578`
+- [~] **R1.1.3** ADR: worker host `needs-decision` — submitted `docs/decisions/2026-09-05-worker-host.md:430`, `docs/decisions/2026-09-05-worker-host.md:617`, `docs/decisions/2026-09-05-worker-host.md:325`, `docs/decisions/2026-09-05-worker-host.md:388`, `docs/decisions/2026-09-05-worker-host.md:628`, `src/lib/liveWriteGuard.js:126`, `worker/src/index.js:38`, `worker/src/index.js:270`
 - [x] **R1.1.4** Engine surface matrix — closed at `docs/contracts/engine-surface-matrix.md:81`
 - [ ] **R1.1.5** Politeness & risk budget
 ### R1.2
@@ -96,6 +96,7 @@ Baseline commit: `5111219`
 - [x] **R1.2.10** The Bright Data 200-envelope zone rejection has no test — closed at `src/lib/engines/brightdata.js:299`
 - [~] **R1.2.11** The widened zone-rejection regex has no committed negative-case test — submitted `src/lib/engines/brightdataZone.test.mjs:819`, `src/lib/engines/brightdataZone.test.mjs:748`, `src/lib/engines/brightdataZone.test.mjs:968`, `src/lib/engines/brightdataZone.test.mjs:940`, `src/lib/engines/brightdataZone.test.mjs:892`, `src/lib/engines/brightdataZone.test.mjs:713`, `src/lib/engines/brightdata.js:291`
 - [ ] **R1.2.12** A laptop fleet worker inherits production credentials and the write guard cannot see it
+- [ ] **R1.2.13** The SKIP LOCKED static guard matches prose comments, so the migration documentation certifies itself
 ### R1.3
 
 - [ ] **R1.3.1** Spike: Playwright against perplexity.ai `needs-secrets`
@@ -202,7 +203,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 
-## R3 — Durable backend  `17/38`
+## R3 — Durable backend  `17/39`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -249,6 +250,7 @@ Baseline commit: `5111219`
 - [ ] **R3.6.4** The Bright Data per-query price is hardcoded in three places
 - [ ] **R3.6.5** gemini and perplexity still fabricate costs; llmPricing does not reach them
 - [~] **R3.6.6** openai.js fabricates a cost from a hardcoded rate while the model id is env-overridable
+- [ ] **R3.6.7** openai.js has the identical dead retry guard perplexity just fixed, so a 401 costs three calls and three seconds
 ### R3.7
 
 - [x] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability — closed at `src/lib/ssrfGuard.js:366`, `src/lib/ssrfGuard.js:482`, `src/lib/ssrfGuard.js:552`, `src/lib/firecrawl.js:45`, `src/lib/firecrawl.js:115`, `src/lib/ssrfGuard.test.mjs:1`, `src/lib/firecrawl.test.mjs:1`
@@ -308,7 +310,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `16/41`
+## R6 — Apparatus & guards  `16/42`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -326,6 +328,7 @@ Baseline commit: `5111219`
 - [ ] **R6.1.10** The ledger validates a citation by checking the file exists, never the line
 - [ ] **R6.1.11** submit silently keeps only the last of repeated --evidence flags
 - [ ] **R6.1.12** The migration runner cannot verify a column, so column-only migrations are checked by proxy
+- [ ] **R6.1.13** orchestrate.mjs takes the submit note as a shell argument, so backticks in a note execute and write command output into the ledger
 ### R6.2
 
 - [~] **R6.2.1** docs/OPERATOR_LEDGER.md — submitted `docs/OPERATOR_LEDGER.md:11`, `docs/OPERATOR_LEDGER.md:386`

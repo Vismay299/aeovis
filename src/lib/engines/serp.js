@@ -5,6 +5,7 @@ import {
   brightDataSearch,
   extractBrightDataAiOverview,
   extractBrightDataPaa,
+  isBrightDataZoneError,
 } from "./brightdata.js";
 
 function getSerpProvider() {
@@ -350,7 +351,29 @@ export async function fetchPeopleAlsoAsk(seedTerms) {
         });
       }
     } catch (e) {
-      console.warn(`[serp] PAA fetch failed for term "${term}":`, e.message);
+      // R2.2.8 / rule 1: a typed zone failure is a CONFIGURATION defect, not a
+      // per-term miss, and it must not be flattened into an empty list. Caught
+      // here and swallowed, a dead Bright Data zone returned `[]` — which is
+      // byte-for-byte what "Google had no People-Also-Ask for this term" returns
+      // — so generateUnbrandedPrompts seeded the whole prompt set from nothing
+      // and emitted not one line about it. Every remaining term would fail
+      // identically against the same dead zone, so there is nothing to salvage
+      // by continuing: propagate, and let the caller record the degrade.
+      //
+      // Same rule brightDataSearch applies inside its own retry catch
+      // (src/lib/engines/brightdata.js: `if (isBrightDataZoneError(err)) throw err`).
+      if (isBrightDataZoneError(e)) {
+        console.warn(
+          `[serp] PAA fetch ABORTED at term "${term}" — the Bright Data SERP zone is unusable ` +
+            `(${e.reason}), so no term can succeed. Propagating instead of returning ` +
+            `${questions.size} questions as if the search had run:`,
+          e
+        );
+        throw e;
+      }
+      // The error object, not just its message: `reason`/`cause`/stack are what
+      // tell a transient 503 apart from a credential fault in a log.
+      console.warn(`[serp] PAA fetch failed for term "${term}":`, e);
     }
   }
   return Array.from(questions);
@@ -377,7 +400,10 @@ export async function fetchAutocomplete(seedTerms) {
         }
       }
     } catch (e) {
-      console.warn(`[serp] Autocomplete fetch failed for term "${term}":`, e.message);
+      // R2.2.8: the error object, not a bare message — same reason as the PAA
+      // catch above. No zone branch here: this endpoint is Google's own
+      // suggest service and never routes through a Bright Data zone.
+      console.warn(`[serp] Autocomplete fetch failed for term "${term}":`, e);
     }
   }
   return Array.from(suggestions);

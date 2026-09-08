@@ -2076,17 +2076,17 @@
         "docs/decisions/"
       ],
       "phase": "R1",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-scribe",
       "evidence": [
-        "docs/decisions/2026-09-05-worker-host.md:60",
-        "docs/decisions/2026-09-05-worker-host.md:93",
-        "docs/decisions/2026-09-05-worker-host.md:224",
-        "docs/decisions/2026-09-05-worker-host.md:266",
-        "docs/decisions/2026-09-05-worker-host.md:306",
-        "docs/decisions/2026-09-05-worker-host.md:374",
-        "docs/decisions/2026-09-05-worker-host.md:422",
-        "docs/decisions/2026-09-05-worker-host.md:578"
+        "docs/decisions/2026-09-05-worker-host.md:430",
+        "docs/decisions/2026-09-05-worker-host.md:617",
+        "docs/decisions/2026-09-05-worker-host.md:325",
+        "docs/decisions/2026-09-05-worker-host.md:388",
+        "docs/decisions/2026-09-05-worker-host.md:628",
+        "src/lib/liveWriteGuard.js:126",
+        "worker/src/index.js:38",
+        "worker/src/index.js:270"
       ],
       "notes": [
         {
@@ -2103,6 +2103,11 @@
           "at": "2026-09-08T11:15:27.890Z",
           "by": "verifier",
           "text": "rejected: FAIL, narrow and fixable, and then it belongs BLOCKED rather than passed. The ADR is unusually good: the verifier checked 40+ codebase claims and found 38 correct and verbatim, diffed every quoted source block against its file, re-ran all three negative-evidence greps, and confirmed the doc's own staleness protocol actually works (git log over the cited paths since its declared baseline returns only 220d93d, which touched one structurally-cited file). Section 2, ruling out Vercel functions, is the strongest part of the document and all ten sub-arguments checked out. THREE DEFECTS. D1, load-bearing: the vendor comparison table at :429-438 states Railway/Fly/Hetzner capability and pricing as flat fact, unsourced, undated, unmarked - and those cells are not decorative. 'Fly has a Mumbai region' is the entire fulcrum of recommendation ground 2 (:446-450) and reversal condition 1 (:458-461); 'cheapest per GB by a wide margin' is ground 3 (:451-454) and reversal condition 2; 'datacenter IPs' underwrites reversal condition 3. What makes this a fail rather than a nitpick is that the doc already knows how to do this and did it everywhere else - at :176-179 it stops mid-argument to name the Hobby cron cap as a Vercel billing fact repeated with its source named rather than asserted, at :401-407 it marks the monthly figures 'unverified by this ADR', and the What-is-unproven section at :578-604 lists six items. The one section where a vendor is actually being chosen is the only one that asserts vendor facts flatly. D2: :325-327 says NEVER_WRITABLE in liveWriteGuard.js:126 refuses 19 customer tables; the frozen list at :126-147 holds 20, counted programmatically at both ea165ed and the doc's own baseline 95b190d. D3: :387 says the fleet's per-pass narration is describeRun/describeClaim on stderr; worker/src/index.js:38 defines log as console.log (stdout) and all six call sites go through it - only the failed-pass line at :270 uses console.error. Wrong stream, stated flatly, inside the criteria table a vendor is to be judged against. FIX: three doc-only edits, no source file touched - mark the vendor table unverified using the sentence pattern already at :176-179 and add a seventh What-is-unproven bullet so the two sections agree; 19 -> 20; stderr -> stdout with the worker/src/index.js:38 anchor and the failed-pass exception. THEN BLOCK, do not pass: the accept's first clause is 'naming the host', and :422-428 deliberately leaves Railway vs Fly vs Hetzner open pending operator ratification, with the doc explicitly forbidding being cited as having chosen one. The implementer said so itself. Nothing in this environment can supply the vendor decision."
+        },
+        {
+          "at": "2026-09-08T11:19:48.934Z",
+          "by": "rebuild-scribe",
+          "text": "THREE surgical edits only; the ADR is otherwise untouched and no source file was modified (git diff --name-only shows exactly one file). Both defects I was asked to re-derive were re-derived from scratch before writing, against the doc's declared baseline 95b190d AND HEAD ea165ed via 'git show <sha>:path', never the working tree.\n\nD2 (19 -> 20), VERIFIED MYSELF: 'git show 95b190d:src/lib/liveWriteGuard.js' and the same at ea165ed both give NEVER_WRITABLE opening at :126 with 20 entries on :127-146 and the closing ']);' on :147 -- 'scans', 'brand_metrics_daily', 'scan_jobs', 'prompt_results', 'citations', 'result_brands', 'brand_prompts', 'brand_briefs', 'scan_schedules', 'scan_rate_limits', 'system_heartbeats', 'knowledge_blocks', 'topics', 'content_items', 'content_jobs', 'content_runs', 'content_agents', 'content_events', 'content_feedback', 'content_lessons'. Identical at both commits. :325-327 now says 20, names the list's full extent ':126-147' and its last element so the count is re-checkable without trusting the number.\n\nD3 (stderr -> stdout), VERIFIED MYSELF: worker/src/index.js:38 is 'const log = (msg) => console.log();' -- byte-identical at 95b190d and ea165ed, so the doc's baseline declaration stays true. 'git grep -n describeRun|describeClaim ea165ed -- worker/' returns FOUR call sites, not six: :88 log(describeRun(closed)), :121 log(describeClaim(result)), :144 log(describeRun(closed)), :242 log(describeRun(closed)); :24/:32 are imports and queue.js:157/runLedger.js:170 are the definitions. I wrote four, not the six in my instructions, because four is what the tree holds. Only console.error users are :270 (pass failed) and :367 (fatal). C8 at :388 now says stdout, cites index.js:38 with the actual expression, lists all four narration sites, and names :270 as the failed-pass exception on stderr.\n\nD1 (the load-bearing one): a parenthetical now precedes the vendor table at :430-439, in the same italic-aside pattern the doc already uses at :176-179 for the Hobby cron cap. It states that every cell below the C1 row is a vendor capability or pricing claim, that NONE of it is verified by this document, that it is undated recollection sourced to no vendor page and derived from nothing in this repository, and that no cell should be relied on until the operator confirms it against each vendor's current pricing page and region list AT RATIFICATION TIME. It then names the three specific cells that are load-bearing rather than decorative and what each one alone supports -- Mumbai region = ground 2 + reversal condition 1, cheapest-per-GB = ground 3 + reversal condition 2, datacenter IPs = reversal condition 3 -- and closes 'if a cell is wrong, the recommendation below moves.' A SEVENTH bullet at :617-624 makes 'What is unproven' agree with it (grep -c of '^- **' over that section returns 7, was 6); it repeats the three turning cells and states that confirming them is part of ratification, not a follow-up to it.\n\nENDING WRITTEN FOR A BLOCK, NOT A PASS. I did NOT invent a host. New closing section ':628 The one decision this document leaves open' states the open item in one line -- which of Railway, Fly.io or Hetzner runs the fleet -- says nothing in this repository can settle it, and makes ratification literally a one-sentence act: 'the fleet runs on <host>', recorded in docs/OPERATOR_LEDGER.md, after which the §5 follow-on work can be filed. It ends 'this ADR has not named a host, and no document may cite it as having named one,' consistent with the status header at :4-8, §5's own preamble at :424-428 and 'What this ADR does NOT decide' at :519. I used §§1-3 for the decided parts to match the doc's existing convention at :477 and the ':530 Reversal conditions for §§1-3' heading, and deliberately did NOT write '§§1-4 are argued only from repository files' because §4's C5 quotes HANDOFF cost figures that are not repo-derived.\n\nSTALENESS: I re-ran the doc's own protocol at :24. 95b190d..HEAD over the cited paths returns only 220d93d, which touched scripts/setup-supabase.mjs alone -- and that file is cited at :412 and :576 by command/symbol only, never by line, so nothing went stale. worker/ and src/lib/liveWriteGuard.js are both clean in the working tree, so my two source citations are stable at HEAD despite ~22 dirty entries from concurrent agents. node --test src/lib/docStatus.test.mjs: 10/10 pass, including the four status-header guards and the migrations-README guard that the previous implementer reported failing -- that failure was another agent's and has since been fixed.\n\nEXPECTED OUTCOME: BLOCK on the operator, per the verifier and my own reading of the accept's 'naming the host' clause. Nothing here can supply the vendor decision, and manufacturing one to satisfy the accept is the exact failure this rebuild exists to stop."
         }
       ],
       "verification": {
@@ -2706,6 +2711,36 @@
       "notes": [
         {
           "at": "2026-09-05T07:13:25.497Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R1.2.13",
+      "subphase": "R1.2",
+      "lane": "test",
+      "title": "The SKIP LOCKED static guard matches prose comments, so the migration documentation certifies itself",
+      "detail": "Found by the R1.2.8 implementer while building its own guard, and it is the same class of defect R1.2.8 exists to fix, one layer up. src/lib/probeQueue.test.mjs:459 asserts assert.match(sql, /FOR UPDATE SKIP LOCKED/) against the WHOLE migration file. Migration 010 mentions the clause in prose at lines 28 and 111, so the comments alone satisfy the regex. The implementer measured it: with the executable clause DELETED from the candidate CTE at 010_probe_tasks.sql:183, probeQueue.test.mjs stayed 25/25 green. The guard cannot fail for the reason it exists. R1.2.8 shipped a correct replacement in src/lib/probeClaimLock.test.mjs which strips SQL comments in a string-literal-aware way, scopes the match to the candidate CTE of claim_probe_tasks, walks every migration defining that function so a later CREATE OR REPLACE cannot quietly drop the clause, and rejects a bare FOR UPDATE with its own message because a blocking contender is a different bug. probeQueue.test.mjs was outside R1.2.8 file set, so its assertion still stands and still cannot fail. Either delete it or replace it with a call into the new guard - a false guard left beside a real one is worse than no guard, because the next reader sees two green checks and believes both.",
+      "accept": "The whole-file regex at probeQueue.test.mjs:459 no longer exists in a form that comments can satisfy. Deleting the executable FOR UPDATE SKIP LOCKED from the candidate CTE turns probeQueue.test.mjs red, proven by applying the sabotage and restoring it.",
+      "deps": [
+        "R1.2.8"
+      ],
+      "anchors": [
+        "src/lib/probeQueue.test.mjs:459",
+        "supabase/migrations/010_probe_tasks.sql:183",
+        "src/lib/probeClaimLock.test.mjs"
+      ],
+      "tags": [],
+      "phase": "R1",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:19:35.418Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -6552,6 +6587,36 @@
       "verification": null
     },
     {
+      "id": "R3.6.7",
+      "subphase": "R3.6",
+      "lane": "backend",
+      "title": "openai.js has the identical dead retry guard perplexity just fixed, so a 401 costs three calls and three seconds",
+      "detail": "Found by the R2.2.10 implementer after fixing the same bug in perplexity.js, and confirmed by execution there: a status-based retry guard sits above a throw whose enclosing catch backs off and loops regardless of status, so the guard is dead code. src/lib/engines/openai.js:59 and :124 have the same shape. R2.2.10 exported the fix as reusable units - classifyHttpStatus, failureKindOf and isRetryableFailure in perplexity.js - and noted that brightdata.js:408 already discriminates correctly and was the pattern it followed. The right move is to lift the classification into a shared module rather than copy it a third time. Note the deliberate asymmetry R2.2.10 chose and documented: an unreadable status defaults to TRANSIENT, because giving up early on a failure we cannot classify discards a measurement, which is the worse error. Keep that decision rather than re-litigating it. Test by counting invocations of an injected fetch stub, never by asserting on a log line, and never make a real API call.",
+      "accept": "A 401 from openai costs exactly one call; a 500 keeps the full retry budget; both proven by counting calls to an injected fetch stub. The classification is shared with perplexity rather than duplicated. Deleting the retryability check turns the call-count tests red.",
+      "deps": [
+        "R2.2.10"
+      ],
+      "anchors": [
+        "src/lib/engines/openai.js:59",
+        "src/lib/engines/openai.js:124",
+        "src/lib/engines/perplexity.js:78"
+      ],
+      "tags": [],
+      "phase": "R3",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:19:36.211Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R3.7.1",
       "subphase": "R3.7",
       "lane": "backend",
@@ -8071,6 +8136,33 @@
       "notes": [
         {
           "at": "2026-09-05T07:24:44.116Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.1.13",
+      "subphase": "R6.1",
+      "lane": "infra",
+      "title": "orchestrate.mjs takes the submit note as a shell argument, so backticks in a note execute and write command output into the ledger",
+      "detail": "Hit independently by TWO implementers in the same round (R2.8.12 and R2.10.2), which makes it systematic rather than careless. A submit note is free prose and will naturally contain backticks around identifiers and file paths. Passed as a double-quoted bash argument, the shell performs command substitution BEFORE orchestrate.mjs ever sees the string. R2.8.12 lost six code snippets. R2.10.2 lost three spans AND had `git status --porcelain -- src/` actually EXECUTE, injecting an unrelated list of other agents modified files into the middle of a sentence in the permanent ledger note. No credential was involved in either case, but nothing about the mechanism prevents one: any command an agent quotes in prose is run with the agent full shell privileges and its stdout is written verbatim into tasks.json. That is a ledger-integrity bug and a latent disclosure path, not a style nit. The R2.10.2 implementer also correctly identified why the obvious repair is wrong: amend appends its note text to the task detail field, which is the spec other agents read, so using amend to fix a mangled submit note pollutes the specification. The two defects compound.",
+      "accept": "A submit or amend note cannot be mangled or executed by the shell. Either the note is read from a file or stdin rather than argv, or the CLI documents and the agent definitions mandate a heredoc, with a guard that fails if an agent definition omits it. A test feeds a note containing backticks, a dollar-parenthesis substitution and a newline, and asserts the stored note is byte-identical to the input. Separately, amend gains a way to correct a note without appending to detail.",
+      "deps": [],
+      "anchors": [
+        ".claude/orchestration/orchestrate.mjs:311",
+        ".claude/orchestration/orchestrate.mjs"
+      ],
+      "tags": [],
+      "phase": "R6",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:19:34.623Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
