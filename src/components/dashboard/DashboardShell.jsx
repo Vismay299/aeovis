@@ -39,6 +39,81 @@ import {
  * in a bundle report.
  */
 import { describeScanDataSourceIssue } from "@/lib/scoring/enginePipeline";
+/**
+ * R2.1.1 — kept as a SECOND import from the same module rather than folded into
+ * the line above, deliberately: degradedEngineBanner.test.mjs guards that exact
+ * import statement by regex, and widening it would break a sibling task's proof
+ * that this component defers to the pipeline for its degradation wording.
+ */
+import { describeScanMeasurement } from "@/lib/scoring/enginePipeline";
+
+/**
+ * R2.1.1 — the hero trend, or NOTHING and why.
+ *
+ * The previous hero score was read as `... ?? prev.visibility_pct ?? 0`. With a
+ * nullable score that default is a claim: it says the last reading WAS zero, so
+ * the band reports a climb of the entire current score that never happened.
+ *
+ * Exported for src/components/dashboard/historyScoreSurface.test.mjs — this
+ * file is JSX and the test runner is bare `node --test`, so the logic that must
+ * be proven lives outside the markup.
+ */
+export function describeHeroTrend(currentHero, prev) {
+  // The previous HERO score, which for a multi-engine scan is the blended index
+  // in raw_results and otherwise the aio column. Note the missing `?? 0` — that
+  // default is the bug, and there is no honest number to put in its place.
+  //
+  // A finite check rather than describeScanMeasurement: `visibility_index_pct`
+  // is computeHeadline's output over the slices that WERE measured, so it has
+  // no per-engine state of its own to consult, and the `visibility_pct` arm is
+  // the same nullable column the history cards read. Absent is absent either way.
+  const prevHero = prev?.raw_results?.visibility_index_pct ?? prev?.visibility_pct ?? null;
+  if (!Number.isFinite(currentHero) || !Number.isFinite(prevHero)) {
+    return {
+      trend: null,
+      unavailable: Number.isFinite(currentHero)
+        ? "The previous reading has no score, so there is no change to show."
+        : "This reading has no score, so there is no change to show.",
+    };
+  }
+  return { trend: (currentHero - prevHero).toFixed(1), unavailable: null };
+}
+
+/**
+ * R2.1.1 — the delta between two stored readings, or NOTHING and why.
+ *
+ * This shipped as `(next.visibility_pct - (s.visibility_pct || 0)).toFixed(1)`.
+ * Now that an engine which measured nothing publishes null instead of 0, that
+ * expression is the worst kind of broken: `null - 40` is `-40` and `50 - null`
+ * is `50`, so it produces a confident, WRONG number rather than a NaN anybody
+ * would notice. The `|| 0` was the same lie one operator earlier — it turned a
+ * missing score into "you were at zero and you have climbed".
+ *
+ * A delta needs a real number on BOTH ends. When it does not have one there is
+ * no number to show and the card says so, because a silently missing delta and
+ * a genuinely flat one are different facts (standing rule 1).
+ */
+export function describeHistoryDelta(later, earlier) {
+  if (!later) {
+    // The newest card has nothing after it. Not a suppression: there is simply
+    // no later reading, which is why this reason is distinct from the one below.
+    return { value: null, delta: null, reason: "no_later_reading", detail: null };
+  }
+  const a = describeScanMeasurement(later);
+  const b = describeScanMeasurement(earlier);
+  if (!a.measured || !b.measured) {
+    return {
+      value: null,
+      delta: null,
+      reason: "unmeasured_endpoint",
+      detail: !b.measured
+        ? "No change shown — this reading has no score to compare."
+        : "No change shown — the reading after this one has no score to compare.",
+    };
+  }
+  const delta = a.pct - b.pct;
+  return { value: delta.toFixed(1), delta, reason: null, detail: null };
+}
 
 /**
  * R2.7.3 (finding C1) — two records match only when BOTH carry a real instant.
@@ -199,12 +274,17 @@ export default function DashboardShell({ scan, scanId, error = null }) {
     }
   };
 
-  const { scoreTrend, previousScan, sortedHistory, deltaSamePromptSet } = useMemo(() => {
+  const { scoreTrend, trendUnavailable, previousScan, sortedHistory, deltaSamePromptSet } = useMemo(() => {
     let scoreTrend = null;
+    // Why there is no trend, when the reason is a missing score rather than the
+    // ordinary "this is the first reading". Null when nothing was suppressed.
+    let trendUnavailable = null;
     let previousScan = null;
     let sortedHistory = [];
     let deltaSamePromptSet = true;
-    if (!result || !history?.length) return { scoreTrend, previousScan, sortedHistory, deltaSamePromptSet };
+    if (!result || !history?.length) {
+      return { scoreTrend, trendUnavailable, previousScan, sortedHistory, deltaSamePromptSet };
+    }
 
     sortedHistory = [...history].sort(
       (a, b) => new Date(b.scanned_at) - new Date(a.scanned_at)
@@ -248,14 +328,23 @@ export default function DashboardShell({ scan, scanId, error = null }) {
       const currentHero = result.isMultiEngine
         ? (result.visibilityIndexPct ?? result.visibilityScore)
         : result.visibilityScore;
-      const prevHero =
-        prev.raw_results?.visibility_index_pct ?? prev.visibility_pct ?? 0;
-      scoreTrend = (currentHero - prevHero).toFixed(1);
+      // R2.1.1 — the trailing `?? 0` on the previous hero was the same
+      // laundering as the history cards', one level up: a previous scan with no
+      // score became "you were at 0", and the hero then reported a triumphant
+      // climb that never happened. A trend needs a real number on both ends.
+      //
+      // ScoreBand renders nothing for a null trend, which is also what it does
+      // when there IS no previous scan — so the reason is surfaced separately
+      // (`trendUnavailable`, rendered under the band) rather than left as
+      // silence that two different facts share.
+      const hero = describeHeroTrend(currentHero, prev);
+      scoreTrend = hero.trend;
+      trendUnavailable = hero.unavailable;
     }
     if (prev) {
       previousScan = normalizeResult(prev, result.brand, result.website);
     }
-    return { scoreTrend, previousScan, sortedHistory, deltaSamePromptSet };
+    return { scoreTrend, trendUnavailable, previousScan, sortedHistory, deltaSamePromptSet };
   }, [result, history]);
 
   // ── error state ───────────────────────────────────────────────────
@@ -974,10 +1063,10 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                   {sortedHistory.map((s, i) => {
                     const isActive = sameInstant(s.scanned_at, result.scanTimestamp);
                     const next = sortedHistory[i - 1];
-                    const cardDelta = next
-                      ? (next.visibility_pct - (s.visibility_pct || 0)).toFixed(1)
-                      : null;
-                    const d = cardDelta === null ? null : parseFloat(cardDelta);
+                    const score = describeScanMeasurement(s);
+                    const trend = describeHistoryDelta(next, s);
+                    const cardDelta = trend.value;
+                    const d = trend.delta;
                     return (
                       <button
                         key={i}
@@ -991,13 +1080,49 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                         }}
                       >
                         <span className="stat__k">{formatTimestamp(s.scanned_at)}</span>
-                        <span className={`stat__v${isActive ? " is-you" : ""}`}>
-                          {s.visibility_pct}<small>%</small>
+                        <span
+                          className={`stat__v${isActive ? " is-you" : ""}`}
+                          data-testid="history-card-score"
+                          data-measured={score.measured ? "true" : "false"}
+                          data-state-reason={score.reason || undefined}
+                          title={score.detail || undefined}
+                        >
+                          {/* An unmeasured reading renders the dash WITHOUT the
+                              unit — "—%" would still be claiming a percentage. */}
+                          {score.measured ? (
+                            <>{score.pct}<small>%</small></>
+                          ) : (
+                            score.text
+                          )}
                         </span>
                         <span className="stat__d">
                           {d !== null && (
                             <span className={d > 0 ? "up" : d < 0 ? "dn" : "flat"}>
                               {d > 0 ? "+" : ""}{cardDelta}
+                            </span>
+                          )}
+                          {/* Why there is no delta, when the reason is a missing
+                              score rather than "this is the newest reading". */}
+                          {trend.reason === "unmeasured_endpoint" && score.measured && (
+                            <span
+                              className="dim"
+                              data-testid="history-card-delta-state"
+                              title={trend.detail}
+                            >
+                              No change shown
+                            </span>
+                          )}
+                          {/* `label` is set for BOTH absences and measured
+                              zeroes — a 0 that was really measured must not read
+                              as the same event as a missing one. */}
+                          {score.label && (
+                            <span
+                              className="dim"
+                              data-testid="history-card-state"
+                              data-measured={score.measured ? "true" : "false"}
+                              title={score.detail}
+                            >
+                              {score.label}
                             </span>
                           )}
                           <span className="dim">
@@ -1037,6 +1162,18 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                   },
                 ]}
               />
+              {/* A trend suppressed because a reading has no score is not the
+                  same as a first scan with nothing to compare to, and ScoreBand
+                  draws both as empty space. Say which one this is. */}
+              {trendUnavailable && (
+                <p
+                  className="dim"
+                  data-testid="trend-unavailable"
+                  style={{ marginTop: 8, fontSize: 13 }}
+                >
+                  {trendUnavailable}
+                </p>
+              )}
             </div>
           )}
 

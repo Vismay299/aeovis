@@ -42,6 +42,26 @@
  * gateway that returned no `usage` block measured nothing at all, and the two
  * must not render as the same number (standing rule 1). The second throws
  * `UnpricedModelError` with reason `unmeasured_tokens`.
+ *
+ * PER-CALL TOOL FEES (R3.6.6)
+ * ---------------------------
+ * Some calls are billed twice: once per token and once per built-in tool
+ * invocation. src/lib/engines/openai.js always attaches OpenAI's `web_search`
+ * tool, and that tool's flat fee DOMINATES the token cost by roughly two orders
+ * of magnitude on a short probe — it opened the file as
+ *
+ *     let cost = 0.01; // base web_search tool fee
+ *
+ * next to a hard-coded gpt-4o-mini per-token rate, while `OPENAI_MODEL` is
+ * env-overridable. Point the adapter at another model and every probe was still
+ * priced, and REPORTED AS SPEND, at gpt-4o-mini's rates and gpt-4o-mini's tool
+ * fee. That is worse than a $0: a wrong number survives inspection.
+ *
+ * So a tool fee is a fourth named source, `tool_price_table`, keyed by the same
+ * model id as the token rate and declarable in LLM_TOOL_FEES. An id with no fee
+ * for a tool it is about to call throws `UnpricedModelError` with reason
+ * `unpriced_tool`. Dropping the fee instead — pricing only the tokens — would
+ * be the same false success wearing a smaller number.
  */
 
 /** USD-per-million-token rates, keyed by exact model id. */
@@ -51,6 +71,13 @@ const PRICES_PER_MTOK = Object.freeze({
   // the one id in this repo that is paid by default and therefore the one that
   // was silently costing $0 on MiMo.
   "anthropic/claude-sonnet-4.5": Object.freeze({ input: 3, output: 15 }),
+
+  // R3.6.6. The DEFAULT_OPENAI_MODEL in src/lib/engines/openai.js, and the only
+  // id its hard-coded `(in * 0.15 + out * 0.60) / 1e6` was ever true for. The
+  // rate is carried over unchanged and merely moved behind the model id, so
+  // that an OPENAI_MODEL pointed anywhere else now MISSES the table and fails
+  // loud instead of quietly inheriting this row.
+  "gpt-4o-mini": Object.freeze({ input: 0.15, output: 0.6 }),
 });
 
 /**
@@ -70,6 +97,33 @@ export const BUILT_IN_MODEL_PRICES = PRICES_PER_MTOK;
 export const MODEL_PRICES_ENV = "LLM_MODEL_PRICES";
 
 /**
+ * USD per single invocation of a built-in provider tool, keyed by model id and
+ * then by tool name (R3.6.6).
+ *
+ * Per-CALL, not per-token: these two units must never share a table, because a
+ * number read out of the wrong one is off by six orders of magnitude and still
+ * looks like money.
+ */
+const TOOL_FEES_PER_CALL = Object.freeze({
+  // OpenAI's hosted `web_search` tool on gpt-4o-mini. $0.01 per call is the
+  // figure src/lib/engines/openai.js already used; R3.6.6 moved it here rather
+  // than restating or re-deriving it, so this row is the SAME claim the repo
+  // was making, now keyed by the model it was ever true for and overridable
+  // without a deploy. Verify against OpenAI's tool pricing page before trusting
+  // it for a bill; prefer LLM_TOOL_FEES to editing this.
+  "gpt-4o-mini": Object.freeze({ web_search: 0.01 }),
+});
+
+/** The built-in tool-fee table, exported for tests and error messages. */
+export const BUILT_IN_TOOL_FEES = TOOL_FEES_PER_CALL;
+
+/**
+ * Operator-declared per-call tool fees. JSON object of
+ * `{ "<model id>": { "<tool>": <usd per call> } }`.
+ */
+export const TOOL_FEES_ENV = "LLM_TOOL_FEES";
+
+/**
  * Typed pricing failure.
  *
  * Sibling of LlmUnavailableError in intent: the caller must be forced to see
@@ -79,8 +133,8 @@ export const MODEL_PRICES_ENV = "LLM_MODEL_PRICES";
 export class UnpricedModelError extends Error {
   /**
    * @param {string} message
-   * @param {{reason?: "unpriced_model"|"unmeasured_tokens"|"malformed_declaration",
-   *          model?: string, provider?: string, cause?: unknown}} [meta]
+   * @param {{reason?: "unpriced_model"|"unmeasured_tokens"|"unpriced_tool"|"malformed_declaration",
+   *          model?: string, provider?: string, tool?: string, cause?: unknown}} [meta]
    */
   constructor(message, meta = {}) {
     super(message);
@@ -88,6 +142,7 @@ export class UnpricedModelError extends Error {
     this.reason = meta.reason || "unpriced_model";
     this.model = meta.model || null;
     this.provider = meta.provider || null;
+    this.tool = meta.tool || null;
     if (meta.cause !== undefined) this.cause = meta.cause;
   }
 }
@@ -186,6 +241,119 @@ export function lookupModelPrice(model, env = process.env) {
   const builtIn = PRICES_PER_MTOK[id];
   if (builtIn) return { ...builtIn, declared: false };
   return null;
+}
+
+/**
+ * Parse LLM_TOOL_FEES. Malformed input throws for the same reason
+ * readDeclaredPrices does: a typo'd fee map that is silently skipped downgrades
+ * to "unpriced" and sends the operator hunting the wrong bug.
+ */
+export function readDeclaredToolFees(env = process.env) {
+  const raw = String(env?.[TOOL_FEES_ENV] ?? "").trim();
+  if (!raw) return {};
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new UnpricedModelError(
+      `${TOOL_FEES_ENV} is not valid JSON: ${e.message}. Expected ` +
+        `{"<model id>": {"<tool>": <usd per call>}}.`,
+      { reason: "malformed_declaration", cause: e }
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new UnpricedModelError(
+      `${TOOL_FEES_ENV} must be a JSON object keyed by model id, got ${Array.isArray(parsed) ? "an array" : typeof parsed}.`,
+      { reason: "malformed_declaration" }
+    );
+  }
+
+  const out = {};
+  for (const [id, tools] of Object.entries(parsed)) {
+    if (!tools || typeof tools !== "object" || Array.isArray(tools)) {
+      throw new UnpricedModelError(
+        `${TOOL_FEES_ENV} entry for "${id}" must be an object of {"<tool>": <usd per call>}.`,
+        { reason: "malformed_declaration", model: id }
+      );
+    }
+    const perTool = {};
+    for (const [tool, fee] of Object.entries(tools)) {
+      const n = typeof fee === "string" && fee.trim() !== "" ? Number(fee) : fee;
+      if (typeof n !== "number" || !Number.isFinite(n) || n < 0) {
+        throw new UnpricedModelError(
+          `${TOOL_FEES_ENV} fee for "${id}" tool "${tool}" is not a usable rate. ` +
+            `Give a non-negative number of USD per tool call.`,
+          { reason: "malformed_declaration", model: id, tool }
+        );
+      }
+      perTool[tool] = n;
+    }
+    out[id] = perTool;
+  }
+  return out;
+}
+
+/**
+ * The per-call fee for `tool` on `model`, or null when nothing prices it. An
+ * operator declaration wins over the built-in table, exactly as it does for
+ * token rates.
+ */
+export function lookupToolFee(model, tool, env = process.env) {
+  const id = String(model || "");
+  const name = String(tool || "");
+  if (!id || !name) return null;
+  const declared = readDeclaredToolFees(env)[id];
+  if (declared && Object.hasOwn(declared, name)) {
+    return { usd: declared[name], declared: true };
+  }
+  const builtIn = TOOL_FEES_PER_CALL[id];
+  if (builtIn && Object.hasOwn(builtIn, name)) {
+    return { usd: builtIn[name], declared: false };
+  }
+  return null;
+}
+
+/** Every `<model id>:<tool>` pair this process can price, for error messages. */
+function priceableTools(env) {
+  const pairs = [];
+  for (const [id, tools] of Object.entries(TOOL_FEES_PER_CALL)) {
+    for (const tool of Object.keys(tools)) pairs.push(`${id}:${tool}`);
+  }
+  for (const [id, tools] of Object.entries(readDeclaredToolFees(env))) {
+    for (const tool of Object.keys(tools)) pairs.push(`${id}:${tool}`);
+  }
+  return [...new Set(pairs)].sort();
+}
+
+/**
+ * The per-call fee for a tool this request is about to invoke, as a cost with a
+ * named source, or a loud throw.
+ *
+ * Deliberately NOT defaulting to 0 for an unknown pair. A tool fee that is
+ * silently dropped makes the reported cost smaller than the invoice by the
+ * largest term in it, and a smaller wrong number is still a wrong number
+ * (standing rule 3). Call it before the request goes out — nothing about the
+ * answer changes the fee, so failing here costs nothing.
+ *
+ * @param {{model: string, tool: string, provider: string, calls?: number, env?: object}} args
+ * @returns {{cost: number, cost_source: "tool_price_table"}}
+ */
+export function resolveToolFee({ model, tool, provider, calls = 1, env = process.env }) {
+  const fee = lookupToolFee(model, tool, env);
+  if (!fee) {
+    const remedy =
+      `Declare it in ${TOOL_FEES_ENV}, e.g. {"${model}": {"${tool}": 0.01}} in USD per call.`;
+    alertUnpriced(model, provider, env, remedy);
+    throw new UnpricedModelError(
+      `No per-call fee for tool "${tool}" on model "${model}" (gateway "${provider}"). ` +
+        `${remedy} Priced tools: ${priceableTools(env).join(", ") || "(none)"}. ` +
+        `Recording $0, or silently omitting the fee, for a billed tool call is not an option.`,
+      { reason: "unpriced_tool", model, provider, tool }
+    );
+  }
+  const n = Number.isFinite(calls) && calls >= 0 ? calls : 1;
+  return { cost: fee.usd * n, cost_source: "tool_price_table" };
 }
 
 /** Every id this process can price without help, for the error message. */

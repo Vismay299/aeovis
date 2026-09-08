@@ -322,9 +322,10 @@ exist because an earlier draft of R3.2.1's live test wrote two real rows into
   `liveDbGate({ ...process.env })` is refused the same way `liveDbGate()` is.
 - Armed-but-blind does not read as armed: both `requireArmedGuard` and
   `armedLiveDbGate` throw when `covers.supabase` or `covers.pg` is false.
-- `NEVER_WRITABLE` in `src/lib/liveWriteGuard.js:126` refuses 19 customer
-  tables — `scans`, `brand_metrics_daily`, `scan_jobs`, `prompt_results`,
-  `citations`, `result_brands` and the rest — *even when a test names them*.
+- `NEVER_WRITABLE` in `src/lib/liveWriteGuard.js:126` refuses 20 customer
+  tables — the frozen list runs `:126-147`, `scans` through `content_lessons`,
+  and includes `brand_metrics_daily`, `scan_jobs`, `prompt_results`,
+  `citations` and `result_brands` — *even when a test names them*.
 - `src/lib/liveWriteGuardAuto.mjs` preloads the guard into every process
   started by `npm test`, `npm run test:scoring` and `npm run test:live`.
 
@@ -384,7 +385,7 @@ Derived from this workload, not from a features matrix.
 | C5 | Cost at the expected probe volume | volume is itself unresolved — see below | **Yes, and the input is missing** |
 | C6 | How migrations get applied | — | **No — see C6 below** |
 | C7 | Secret handling for a service-role credential | the fleet needs `SUPABASE_SERVICE_ROLE_KEY`, the first component in the repo that does | Tie-breaker |
-| C8 | Log retention / observability | the fleet's per-pass narration is `describeRun` / `describeClaim` on stderr; the durable record is `scan_runs` in Postgres | Tie-breaker |
+| C8 | Log retention / observability | the fleet's per-pass narration is `describeRun` / `describeClaim` on **stdout** — `worker/src/index.js:38` defines `const log = (msg) => console.log(...)` and every narration call site (`:88`, `:121`, `:144`, `:242`) goes through it; the failed-pass line at `:270` is the exception and uses `console.error` (stderr). The durable record is `scan_runs` in Postgres | Tie-breaker |
 
 **C2 is conditional on R1.1.2, and R1.1.2 is blocked.** If R1.1.2 chooses the
 Bright Data Scraping Browser, the browsing egress is Bright Data's residential
@@ -425,6 +426,17 @@ chosen for its migration story.**
 commitment and belongs to the operator.** This section is a recommendation with
 its reasoning and its reversal conditions. It is *not* a decision, and no other
 document should cite this ADR as having made one.
+
+*(**Every cell below the C1 row is a vendor capability or pricing claim, and
+none of it is verified by this document.** It is undated recollection, not
+sourced to any vendor page, and it is not derived from anything in this
+repository — unlike §§1–3, which are argued from files here. No cell
+should be relied on until the operator has confirmed it against each vendor's
+current pricing page and region list at ratification time. This matters because
+these cells are load-bearing and not decorative: "Fly has a Mumbai region" is
+the whole of ground 2 and reversal condition 1, "cheapest per GB" is ground 3
+and reversal condition 2, and "datacenter IPs" underwrites reversal condition 3.
+If a cell is wrong, the recommendation below moves.)*
 
 | | Railway | Fly.io | Hetzner |
 |---|---|---|---|
@@ -602,3 +614,28 @@ in what it refuses to claim.
   `scan_runs` on production, and neither `liveWriteGuardAuto` nor
   `WRITABLE_BY_OPT_IN` would stop it. R1.2.6 is the task that would make this
   sentence obsolete; it is `todo`.
+- **Every cell of §5's vendor comparison table is unverified by this
+  document.** Railway's, Fly's and Hetzner's capabilities, regions and pricing
+  are undated recollection, sourced to no vendor page and to nothing in this
+  repository. The three cells the recommendation actually turns on — Fly's
+  Mumbai region, Hetzner's per-GB price, Hetzner's datacenter IPs — are exactly
+  the ones an operator must re-check, because each is the sole support for one
+  ground or one reversal condition. Confirming them against current vendor
+  pricing and region lists is part of ratification, not a follow-up to it.
+
+---
+
+## The one decision this document leaves open
+
+**Which of Railway, Fly.io or Hetzner runs the fleet.** Nothing in this
+repository can settle it: it is a spend-and-vendor commitment, and §5's
+comparison of the three is unverified recollection that the operator must
+confirm before it is leaned on.
+
+Ratification is one sentence — *"the fleet runs on ⟨host⟩"* — recorded in
+`docs/OPERATOR_LEDGER.md`, after which §5's provisional recommendation is
+either confirmed or replaced and the follow-on work named at the end of §5
+(image definition, `.env.example` variables, R1.2.5's runbook, R1.2.6's boot
+validation) can be filed against a real target. Until that sentence exists,
+**this ADR has not named a host, and no document may cite it as having named
+one.** §§1–3 are decided, stand on their own, and gate nothing.

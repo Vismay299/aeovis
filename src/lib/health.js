@@ -2,7 +2,9 @@
  * /api/health's payload, built as a pure function (R0.1.7, finding S20).
  *
  * There was no way to answer "is this deployment wired up?" without reading
- * source. This is that answer, and it is deliberately CHEAP: vendor entries
+ * source. This is that answer — including, since R0.1.17, whether the
+ * deployment is telling the truth about WHICH environment it is. It is
+ * deliberately CHEAP: vendor entries
  * report whether a credential is CONFIGURED, never the result of a live call,
  * so hitting /api/health cannot itself spend vendor budget. Whether a
  * configured key actually works is `npm run check:secrets` (R0.1.6), which is
@@ -26,6 +28,13 @@
  * it possible.
  */
 import { VENDORS, credentialStatus } from "./vendorRegistry.js";
+/**
+ * The environment cross-check is IMPORTED, not re-derived (R0.1.17, finding C9).
+ * operatorPerimeter.js owns the one definition of "is this production?" that
+ * both gates already obey; a second opinion computed here is how a health page
+ * comes to say "agreed" about an environment the perimeter is refusing.
+ */
+import { assessEnvTruth, ENV_TRUTH } from "./operatorPerimeter.js";
 
 export { VENDORS };
 
@@ -82,10 +91,39 @@ export function buildHealthPayload({ db, env = {}, ticks = [], now, staleTickMs 
     .filter(([, v]) => v.required && !v.configured)
     .map(([key]) => key);
 
+  // Does this deployment's NODE_ENV agree with the platform? (R0.1.17, C9.)
+  //
+  // A production deployment that claims NODE_ENV=development takes the dev
+  // branch of every gate that has one. The gates themselves now fail closed on
+  // it, but a control whose only trace is a refusal in a request log is a
+  // control nobody notices; this is the surface where the misconfiguration is
+  // visible without reading source or reproducing a 401.
+  //
+  // `agrees` is a tri-state on purpose. `false` is the lie, `true` is a real
+  // cross-check that passed, and `null` means no cross-check was possible —
+  // running anywhere but Vercel, VERCEL_ENV is simply absent. Collapsing null
+  // to true would advertise a check that never ran (standing rule 1).
+  const truth = assessEnvTruth(env);
+  const crossChecked = truth.verdict === ENV_TRUTH.AGREED || truth.disagrees;
+  const environment = {
+    node_env: truth.declaredNodeEnv,
+    vercel_env: truth.platformEnv,
+    effective: truth.effective,
+    agrees: crossChecked ? !truth.disagrees : null,
+    verdict: truth.verdict,
+    detail: truth.detail,
+  };
+
   // "degraded", not "ok", whenever something a scan needs is absent. An
   // endpoint that says ok while the LLM is unconfigured is the health-check
-  // equivalent of a 100% share of voice.
-  const status = !db?.ok ? "down" : missingRequired.length ? "degraded" : "ok";
+  // equivalent of a 100% share of voice. A production deployment lying about
+  // its NODE_ENV degrades for the same reason: the gates are holding, but the
+  // deployment is not the one the operator thinks they configured.
+  const status = !db?.ok
+    ? "down"
+    : missingRequired.length || truth.disagrees
+      ? "degraded"
+      : "ok";
 
   return {
     status,
@@ -97,6 +135,7 @@ export function buildHealthPayload({ db, env = {}, ticks = [], now, staleTickMs 
     },
     vendors,
     missing_required: missingRequired,
+    environment,
     cron,
   };
 }

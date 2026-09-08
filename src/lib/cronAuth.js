@@ -13,11 +13,16 @@
  * local dev and the self-continue fetch work out of the box) and warns; in
  * production a missing secret DENIES. Fail closed where it costs money.
  *
+ * "Production" is decided by BOTH NODE_ENV and VERCEL_ENV (R0.1.17). A
+ * deployment can claim NODE_ENV=development; it cannot claim its way out of
+ * VERCEL_ENV=production, which Vercel sets and a project env var cannot
+ * override. Whichever of the two is more dangerous wins.
+ *
  * Pure — no next/server import — so both routes share one implementation and
  * every branch is unit-testable without a running server.
  */
 
-import { resolveNodeEnv } from "./operatorPerimeter.js";
+import { assessEnvTruth, resolveNodeEnv } from "./operatorPerimeter.js";
 
 /** Why a request was allowed or refused. Returned, not just logged. */
 export const CRON_AUTH = Object.freeze({
@@ -31,11 +36,18 @@ export const CRON_AUTH = Object.freeze({
  * @param {object} args
  * @param {string|undefined} args.secret   process.env.CRON_SECRET
  * @param {string|undefined} args.nodeEnv  process.env.NODE_ENV
+ * @param {string|undefined} [args.vercelEnv] process.env.VERCEL_ENV
  * @param {(name: string) => string|null} args.header case-insensitive header getter
  * @param {string|null} [args.querySecret] the `?secret=` query parameter
  * @returns {{authorized: boolean, reason: string}}
  */
-export function authorizeCronRequest({ secret, nodeEnv, header, querySecret = null }) {
+export function authorizeCronRequest({
+  secret,
+  nodeEnv,
+  vercelEnv,
+  header,
+  querySecret = null,
+}) {
   const configured = String(secret || "").trim();
   // R0.1.13. This used to be `nodeEnv === "production"`, which meant a
   // deployment whose NODE_ENV was absent, blank or whitespace scored as NOT
@@ -50,9 +62,18 @@ export function authorizeCronRequest({ secret, nodeEnv, header, querySecret = nu
   // hardened the identical shape there, and a second local copy is precisely
   // how two gates drift into disagreeing about what "production" means. It
   // takes an env-shaped object while this gate is handed the bare string,
-  // hence the one-key wrapper. An environment that will not say what it is
+  // hence the two-key wrapper. An environment that will not say what it is
   // gets treated as the dangerous one.
-  const isProduction = resolveNodeEnv({ NODE_ENV: nodeEnv }) === "production";
+  //
+  // R0.1.17 adds VERCEL_ENV to that wrapper. R0.1.13 only closed the ABSENT
+  // NODE_ENV; a deployment with NODE_ENV explicitly set to "development" and no
+  // CRON_SECRET still fell through to OK_DEV_NO_SECRET, on real production
+  // infrastructure, disclosed by nothing louder than one console.warn. Vercel
+  // sets VERCEL_ENV on every deployment and a project env var cannot override
+  // it, so it is the signal that catches the lie. Dropping vercelEnv from this
+  // call reopens exactly that hole.
+  const isProduction =
+    resolveNodeEnv({ NODE_ENV: nodeEnv, VERCEL_ENV: vercelEnv }) === "production";
 
   if (!configured) {
     // THE FLIP (C9). This branch used to `return true` unconditionally.
@@ -83,6 +104,17 @@ export function authorizeCronRequest({ secret, nodeEnv, header, querySecret = nu
 }
 
 /**
+ * Say precisely HOW an environment declined to declare itself. "blank" for a
+ * value that is neither unset nor a real string would be its own small lie, and
+ * the operator reading this line is already looking for the wrong thing.
+ */
+function describeUndeclared(value) {
+  if (value === undefined) return "unset";
+  if (typeof value === "string") return "blank";
+  return `not a string (${value === null ? "null" : typeof value})`;
+}
+
+/**
  * Route-facing wrapper: reads env and the Request, and warns ONCE per process
  * on the dev no-secret path. `warned` is per-route so each route still gets
  * its own single warning, exactly as before.
@@ -97,6 +129,10 @@ export function isCronAuthorized(request, searchParams, ctx) {
   const { authorized, reason } = authorizeCronRequest({
     secret: env.CRON_SECRET,
     nodeEnv: env.NODE_ENV,
+    // Read off the same dynamic binding as NODE_ENV. Next only inlines the
+    // literal `process.env.NODE_ENV` and NEXT_PUBLIC_*, so this arrives from
+    // the runtime environment, which is the whole point of consulting it.
+    vercelEnv: env.VERCEL_ENV,
     header: (name) => request.headers.get(name),
     querySecret: searchParams.get("secret"),
   });
@@ -111,12 +147,16 @@ export function isCronAuthorized(request, searchParams, ctx) {
   if (reason === CRON_AUTH.DENY_NO_SECRET_IN_PRODUCTION) {
     // Name WHY this counted as production. With NODE_ENV absent or blank the
     // bare "in production" reads as a lie to an operator who never set
-    // NODE_ENV=production, and sends them hunting the wrong bug.
-    const declared = String(env.NODE_ENV || "").trim();
-    const because = declared
-      ? "in production"
-      : `because NODE_ENV is ${env.NODE_ENV === undefined ? "unset" : "blank"} and an ` +
-        `environment that will not say what it is is treated as production (R0.1.13)`;
+    // NODE_ENV=production, and sends them hunting the wrong bug. Same for the
+    // R0.1.17 case, where the operator DID set NODE_ENV=development and needs
+    // to be told that VERCEL_ENV, not NODE_ENV, decided this.
+    const truth = assessEnvTruth({ NODE_ENV: env.NODE_ENV, VERCEL_ENV: env.VERCEL_ENV });
+    const because = truth.disagrees
+      ? `— ${truth.detail}`
+      : truth.declaredNodeEnv
+        ? "in production"
+        : `because NODE_ENV is ${describeUndeclared(env.NODE_ENV)} and an ` +
+          `environment that will not say what it is is treated as production (R0.1.13)`;
     logger.error(
       `[${ctx.label}] REFUSING a worker request: CRON_SECRET is not set ${because}. ` +
         `Set it in the deployment's environment — this endpoint spends real vendor budget.`

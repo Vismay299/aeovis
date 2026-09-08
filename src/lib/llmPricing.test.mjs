@@ -2,16 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   BUILT_IN_MODEL_PRICES,
+  BUILT_IN_TOOL_FEES,
   MODEL_PRICES_ENV,
+  TOOL_FEES_ENV,
   UnpricedModelError,
   assertModelPriceable,
   gatewayReportsCost,
   isFreeModelId,
   isUnpricedModel,
   lookupModelPrice,
+  lookupToolFee,
   readDeclaredPrices,
+  readDeclaredToolFees,
   resetUnpricedAlerts,
   resolveCost,
+  resolveToolFee,
 } from "./llmPricing.js";
 
 /**
@@ -294,4 +299,93 @@ test("resolveCost - OpenRouter's missing echo is named as such in the message", 
     }
   });
   assert.match(caught.message, /asked for usage\.cost and did not return it/);
+});
+
+/**
+ * R3.6.6 — per-call tool fees.
+ *
+ * src/lib/engines/openai.js hard-coded `let cost = 0.01; // base web_search
+ * tool fee` beside a hard-coded gpt-4o-mini token rate, with an env-overridable
+ * model id. The fee is now a fourth named source keyed by the same model id, so
+ * an id nobody priced cannot inherit another model's fee — and cannot silently
+ * lose it either, which on a short probe is the LARGER of the two errors.
+ */
+
+const declaringTools = (json) => ({ [TOOL_FEES_ENV]: json });
+
+test("R3.6.6 lookupToolFee - keyed by model id, and an operator declaration wins", () => {
+  const builtIn = lookupToolFee("gpt-4o-mini", "web_search", NO_ENV);
+  assert.deepEqual(builtIn, { usd: 0.01, declared: false });
+
+  // The bug in one assertion: another model does NOT inherit gpt-4o-mini's fee.
+  assert.equal(lookupToolFee("acme/other", "web_search", NO_ENV), null);
+  // Nor does a tool the model has no fee for.
+  assert.equal(lookupToolFee("gpt-4o-mini", "code_interpreter", NO_ENV), null);
+
+  assert.deepEqual(
+    lookupToolFee("gpt-4o-mini", "web_search", declaringTools('{"gpt-4o-mini":{"web_search":0.03}}')),
+    { usd: 0.03, declared: true }
+  );
+  // A declared 0 is a real claim ("this tool is free here"), not a missing one.
+  assert.deepEqual(
+    lookupToolFee("acme/other", "web_search", declaringTools('{"acme/other":{"web_search":0}}')),
+    { usd: 0, declared: true }
+  );
+  assert.ok(Object.isFrozen(BUILT_IN_TOOL_FEES), "the fee table must not be mutable at runtime");
+});
+
+test("R3.6.6 resolveToolFee - a priced pair returns a named source; calls multiply", () => {
+  assert.deepEqual(resolveToolFee({ model: "gpt-4o-mini", tool: "web_search", provider: "openai", env: NO_ENV }), {
+    cost: 0.01,
+    cost_source: "tool_price_table",
+  });
+  assert.deepEqual(
+    resolveToolFee({ model: "gpt-4o-mini", tool: "web_search", provider: "openai", calls: 3, env: NO_ENV }),
+    { cost: 0.03, cost_source: "tool_price_table" }
+  );
+});
+
+test("R3.6.6 resolveToolFee - an unpriced tool throws loud, never $0 and never omitted", () => {
+  resetUnpricedAlerts();
+  const caught = silenced(() => {
+    try {
+      resolveToolFee({ model: "acme/other", tool: "web_search", provider: "openai", env: NO_ENV });
+      return null;
+    } catch (e) {
+      return e;
+    }
+  });
+  assert.ok(isUnpricedModel(caught), "must be a typed UnpricedModelError");
+  assert.equal(caught.reason, "unpriced_tool");
+  assert.equal(caught.model, "acme/other");
+  assert.equal(caught.tool, "web_search");
+  assert.match(caught.message, new RegExp(TOOL_FEES_ENV));
+  assert.match(caught.message, /not an option/);
+});
+
+test("R3.6.6 readDeclaredToolFees - a malformed declaration throws instead of degrading to unpriced", () => {
+  assert.deepEqual(readDeclaredToolFees(NO_ENV), {});
+  assert.deepEqual(readDeclaredToolFees(declaringTools("   ")), {});
+  assert.deepEqual(readDeclaredToolFees(declaringTools('{"m":{"web_search":"0.02"}}')), {
+    m: { web_search: 0.02 },
+  });
+
+  for (const bad of ["{oops", "[]", '{"m":5}', '{"m":{"web_search":"free"}}', '{"m":{"web_search":-1}}']) {
+    assert.throws(
+      () => readDeclaredToolFees(declaringTools(bad)),
+      (e) => isUnpricedModel(e) && e.reason === "malformed_declaration",
+      `expected ${bad} to be refused`
+    );
+  }
+});
+
+test("R3.6.6 - the built-in table prices the model the ChatGPT probe calls by default", () => {
+  const rate = lookupModelPrice("gpt-4o-mini", NO_ENV);
+  assert.deepEqual({ input: rate.input, output: rate.output, declared: rate.declared }, {
+    input: 0.15,
+    output: 0.6,
+    declared: false,
+  });
+  // And an env-overridden id is not quietly priced at that row.
+  assert.equal(lookupModelPrice("gpt-9-omni", NO_ENV), null);
 });

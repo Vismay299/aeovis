@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**92 / 224 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**93 / 226 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -46,7 +46,7 @@ Baseline commit: `5111219`
 - [x] **R0.1.14** The operator perimeter opens silently in a non-production NODE_ENV — closed at `src/lib/operatorPerimeter.js:180`, `src/lib/operatorPerimeter.js:189`, `src/middleware.js:24`, `src/middleware.js:54`, `src/lib/operatorPerimeter.test.mjs:308`, `src/lib/operatorPerimeter.test.mjs:428`
 - [-] **R0.1.15** ROTATE the GSC service-account key — leaked into an agent transcript `needs-secrets` — blocked: needs-secrets
 - [x] **R0.1.16** health.js keeps a second vendor list and claims it is shared — closed at `src/lib/vendorRegistry.js:49`, `src/lib/vendorRegistry.js:92`, `src/lib/health.js:28`, `src/lib/health.js:15`, `scripts/check-secrets.mjs:43`, `scripts/check-secrets.mjs:96`, `scripts/check-secrets.mjs:380`, `scripts/check-secrets.mjs:526`, `src/lib/vendorRegistry.test.mjs:46`, `src/lib/vendorRegistry.test.mjs:61`, `src/lib/engines/types.test.mjs:122`
-- [~] **R0.1.17** Nothing detects a NODE_ENV that lies
+- [~] **R0.1.17** Nothing detects a NODE_ENV that lies — submitted `src/lib/operatorPerimeter.js:206`, `src/lib/operatorPerimeter.js:161`, `src/lib/operatorPerimeter.js:133`, `src/lib/cronAuth.js:76`, `src/lib/cronAuth.js:135`, `src/lib/cronAuth.js:153`, `src/lib/health.js:106`, `src/lib/health.js:124`, `src/lib/envTruth.test.mjs:44`, `src/lib/envTruth.test.mjs:132`, `src/lib/envTruth.test.mjs:167`, `src/lib/envTruth.test.mjs:215`, `src/lib/cronAuth.test.mjs:324`
 - [x] **R0.1.18** Three footguns in the rate-limit trust knob — closed at `src/lib/rateLimit.test.mjs:327`, `src/lib/rateLimit.test.mjs:46`, `src/lib/rateLimit.test.mjs:456`, `src/lib/rateLimit.test.mjs:476`, `src/lib/rateLimit.js:196`, `src/lib/rateLimit.js:231`, `src/lib/rateLimit.js:240`, `src/lib/rateLimit.js:110`, `src/lib/rateLimit.js:145`, `.env.example:60`
 - [x] **R0.1.19** The perimeter warn-once guard is evadable in one added line — closed at `src/lib/operatorPerimeter.middleware.test.mjs:131`, `src/lib/operatorPerimeter.test.mjs:454`
 - [x] **R0.1.20** Nothing proves Vercel strips an inbound x-vercel-forwarded-for `needs-vercel` — closed at `src/lib/rateLimit.js:326`, `src/lib/rateLimit.js:121`, `src/lib/rateLimit.js:352`, `src/lib/rateLimit.js:458`, `src/lib/rateLimit.test.mjs:515`, `src/lib/rateLimit.test.mjs:535`, `src/lib/rateLimit.test.mjs:622`, `docs/decisions/2026-09-05-withhold-vercel-forwarded-for-trust.md:1`
@@ -132,7 +132,7 @@ Baseline commit: `5111219`
 
 ### R2.1
 
-- [~] **R2.1.1** Per-engine summaries emit state + state_reason — submitted `src/lib/scoring/enginePipeline.js:349`, `src/lib/scoring/enginePipeline.js:364`, `src/lib/scoring/enginePipeline.js:425`, `src/lib/scoring/enginePipeline.js:667`, `src/lib/scoring/enginePipeline.js:713`, `src/lib/scoring/enginePipeline.js:825`, `src/lib/scoring/engineMeasurementState.test.mjs:124`
+- [~] **R2.1.1** Per-engine summaries emit state + state_reason — submitted `src/lib/scoring/enginePipeline.js:541`, `src/lib/scoring/enginePipeline.js:493`, `src/lib/scoring/enginePipeline.js:1523`, `src/components/perceev/Sidebar.jsx:168`, `src/components/dashboard/DashboardShell.jsx:61`, `src/components/dashboard/DashboardShell.jsx:96`, `src/components/dashboard/DashboardShell.jsx:340`, `src/components/dashboard/DashboardShell.jsx:1085`, `src/components/dashboard/DashboardShell.jsx:1171`, `src/components/dashboard/historyScoreSurface.test.mjs:504`, `src/components/dashboard/historyScoreSurface.test.mjs:697`
 - [ ] **R2.1.2** Delete every ?? 0 null-coalescing metric in the normalize layer
 - [ ] **R2.1.3** UI chips for did-not-report / not-assessed / small-sample; render engines_counted
 - [ ] **R2.1.4** Tests: a fully-errored engine renders failed and contributes nothing
@@ -249,7 +249,7 @@ Baseline commit: `5111219`
 - [ ] **R3.6.3** Weekly report metered per brand per day
 - [ ] **R3.6.4** The Bright Data per-query price is hardcoded in three places
 - [ ] **R3.6.5** gemini and perplexity still fabricate costs; llmPricing does not reach them
-- [~] **R3.6.6** openai.js fabricates a cost from a hardcoded rate while the model id is env-overridable
+- [~] **R3.6.6** openai.js fabricates a cost from a hardcoded rate while the model id is env-overridable — submitted `src/lib/engines/openai.js:122`, `src/lib/engines/openai.js:221`, `src/lib/engines/openai.js:43`, `src/lib/engines/openai.js:30`, `src/lib/llmPricing.js:80`, `src/lib/llmPricing.js:107`, `src/lib/llmPricing.js:342`, `src/lib/llmPricing.js:251`, `src/lib/engines/openai.test.mjs:266`, `src/lib/engines/openai.test.mjs:296`, `src/lib/engines/openai.test.mjs:354`, `src/lib/llmPricing.test.mjs:348`
 - [ ] **R3.6.7** openai.js has the identical dead retry guard perplexity just fixed, so a 401 costs three calls and three seconds
 ### R3.7
 
@@ -261,7 +261,7 @@ Baseline commit: `5111219`
 - [x] **R3.7.7** The crawlability UI shows a refused rival as unreachable — closed at `src/components/dashboard/CrawlabilityView.jsx:641`, `src/components/dashboard/CrawlabilityView.jsx:593`, `src/components/dashboard/CrawlabilityView.jsx:546`, `src/lib/crawlabilityOutcome.js:86`, `src/lib/crawlabilityOutcome.js:146`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:202`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:292`
 - [x] **R3.7.8** The primary-domain crawlability banner conflates a customer typo with a network problem — closed at `src/lib/crawlabilityOutcome.js:181`, `src/components/dashboard/CrawlabilityView.jsx:310`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:502`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:616`
 
-## R4 — Ground truth & analytics completion  `0/9`
+## R4 — Ground truth & analytics completion  `1/10`
 
 *1 week.* Probe scores sitting next to Google-verified numbers, change detection, referral capture.
 
@@ -275,9 +275,10 @@ Baseline commit: `5111219`
 ### R4.3
 
 - [ ] **R4.3.1** crawlability_audits history and change detection
-- [~] **R4.3.2** computeBrandRollups still yields a real 100% for a self-only roster — submitted `src/lib/analytics/rollup.js:172`, `src/lib/analytics/rollup.js:339`, `supabase/migrations/013_brand_metrics_sov_state.sql:120`, `src/lib/analytics/rollup.test.mjs:193`, `src/lib/analytics/rollup.test.mjs:796`, `src/lib/workers/scanChunk.test.mjs:1021`, `scripts/setup-supabase.mjs:131`, `docs/PROD_MIGRATIONS.md:139`, `README.md:160`
+- [x] **R4.3.2** computeBrandRollups still yields a real 100% for a self-only roster — closed at `src/lib/analytics/rollup.js:172`, `src/lib/analytics/rollup.js:339`, `supabase/migrations/013_brand_metrics_sov_state.sql:120`, `src/lib/analytics/rollup.test.mjs:193`, `src/lib/analytics/rollup.test.mjs:796`, `src/lib/workers/scanChunk.test.mjs:1021`, `scripts/setup-supabase.mjs:131`, `docs/PROD_MIGRATIONS.md:139`, `README.md:160`
 - [ ] **R4.3.3** The analytics backfill cannot re-derive a citation denominator for historical rows
 - [ ] **R4.3.4** The metrics endpoint drops the new SOV state, so the client still gets a bare null
+- [ ] **R4.3.5** The new sov_state columns never reach the metrics API, and a scanWorker comment now states the opposite of what the code does
 ### R4.4
 
 - [ ] **R4.4.1** AI-referral capture `needs-secrets`
@@ -310,7 +311,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `16/42`
+## R6 — Apparatus & guards  `16/43`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -329,6 +330,7 @@ Baseline commit: `5111219`
 - [ ] **R6.1.11** submit silently keeps only the last of repeated --evidence flags
 - [ ] **R6.1.12** The migration runner cannot verify a column, so column-only migrations are checked by proxy
 - [ ] **R6.1.13** orchestrate.mjs takes the submit note as a shell argument, so backticks in a note execute and write command output into the ledger
+- [ ] **R6.1.14** The migration verify list checks object COUNT and presence but never that the names match the SQL, so a rename reports an applied migration as missing forever
 ### R6.2
 
 - [~] **R6.2.1** docs/OPERATOR_LEDGER.md — submitted `docs/OPERATOR_LEDGER.md:11`, `docs/OPERATOR_LEDGER.md:386`

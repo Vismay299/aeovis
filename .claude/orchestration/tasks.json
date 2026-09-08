@@ -982,9 +982,23 @@
       ],
       "phase": "R0",
       "tags": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/operatorPerimeter.js:206",
+        "src/lib/operatorPerimeter.js:161",
+        "src/lib/operatorPerimeter.js:133",
+        "src/lib/cronAuth.js:76",
+        "src/lib/cronAuth.js:135",
+        "src/lib/cronAuth.js:153",
+        "src/lib/health.js:106",
+        "src/lib/health.js:124",
+        "src/lib/envTruth.test.mjs:44",
+        "src/lib/envTruth.test.mjs:132",
+        "src/lib/envTruth.test.mjs:167",
+        "src/lib/envTruth.test.mjs:215",
+        "src/lib/cronAuth.test.mjs:324"
+      ],
       "notes": [
         {
           "at": "2026-09-03T11:32:59.006Z",
@@ -995,6 +1009,11 @@
           "at": "2026-09-08T11:07:26.670Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-08T11:20:07.281Z",
+          "by": "rebuild-implementer",
+          "text": "REPRODUCED, then fixed. Before the change 'VERCEL_ENV' appeared nowhere in src/ except VERCEL_URL in rateLimit/scanWorker; authorizeCronRequest({secret:undefined,nodeEnv:'development'}) returned {authorized:true, ok_dev_no_secret} and authorizeOperatorRequest with OPERATOR_TOKEN='' returned allow_dev_no_token, on a real Vercel production deployment whose only disclosure was one console.warn per process.\n\nFIX. operatorPerimeter.js:206 assessEnvTruth() cross-examines NODE_ENV against VERCEL_ENV and returns {declaredNodeEnv, platformEnv, effective, verdict, disagrees, detail}. resolveNodeEnv (:133) now returns assessEnvTruth(env).effective, so VERCEL_ENV=production forces effective='production' whatever NODE_ENV claims. That is deliberately where the fix lives: middleware.js already calls resolveNodeEnv(process.env) and passes the result to authorizeOperatorRequest, so the perimeter hardens WITHOUT editing middleware.js (which is outside my file list). cronAuth.js:76 passes VERCEL_ENV into the same resolver and :135 reads it off the runtime env binding; :153 makes the refusal log name VERCEL_ENV so the operator does not go hunting NODE_ENV. health.js:106 adds an 'environment' block {node_env, vercel_env, effective, agrees, verdict, detail} and :124 makes a disagreement DEGRADE the payload — refusal plus a surface, not warn-and-continue.\n\nEXERCISED THE ACCEPTANCE CRITERION FOR REAL. Drove the REAL src/middleware.js (imported via the existing cronAuth.route.hooks.mjs resolver, Next's own NextRequest/NextResponse, nothing stubbed) with NODE_ENV=development, VERCEL_ENV=production, OPERATOR_TOKEN unset: GET /api/knowledge returned HTTP 401 with 'operator routes are closed', and logged the perimeter refusal. Control, same script, VERCEL_ENV deleted (genuine local dev): 200 plus the usual once-per-isolate dev-open warning — so local dev and the worker self-continue are not locked out. That script was run from the scratchpad, not committed.\n\nTRUTHY-NON-STRING: FIXED, not documented away. readEnvString (operatorPerimeter.js:161) replaces String(x||'') with a typeof check, so NODE_ENV=5 / {} / [] / true / null all resolve to 'production' instead of coercing to a non-production string. Same for VERCEL_ENV, so a non-string cannot be coerced into 'production' either.\n\nDELIBERATE NON-CHOICE: VERCEL_ENV=preview with NODE_ENV=production is NOT flagged. That is what every Vercel preview deployment looks like (next build compiles production mode whatever the target); flagging it would mark every preview degraded and train operators to ignore the field, and it only makes the gates stricter anyway. Reasoned in the docblock at operatorPerimeter.js:186 and pinned by the 'preview builds are NOT flagged' test.\n\nTRI-STATE, standing rule 1: 'no VERCEL_ENV' is ENV_TRUTH.UNAUDITED with agrees:null, NOT AGREED/true — a cross-check that never ran must not render as one that passed. A VERCEL_ENV set to an unrecognised value is PLATFORM_UNRECOGNISED and says so rather than passing for agreement.\n\nTESTS: new src/lib/envTruth.test.mjs, 14 tests. Teeth proven by three sabotages, each reverted with a targeted string edit (never a checkout): dropping the platformIsProduction escalation -> 6 red; dropping VERCEL_ENV from cronAuth's resolver call -> 3 red; restoring String(raw||'') -> 1 red. The health assertions build on a FULL_ENV with every vendor credential present so 'degraded' is attributable to the environment block alone and not to missing_required.\n\nONE PRE-EXISTING TEST EDITED, cronAuth.test.mjs:324. R0.1.13's guard pinned the literal import line 'import { resolveNodeEnv } from ...'; cronAuth now also imports assessEnvTruth. Widened to a character class that still requires resolveNodeEnv to come FROM operatorPerimeter.js, and ADDED an assertion that cronAuth.js contains no local 'function resolveNodeEnv' — the guard is not weaker.\n\nNOT DONE, on purpose: middleware.js untouched (outside my file list), so its refusal line still reads 'OPERATOR_TOKEN is not set in production.' without naming VERCEL_ENV — accurate but less useful than cronAuth's. .env.example untouched (owned by another task); no new variable is needed, VERCEL_ENV is a Vercel system variable nobody sets by hand, but it may be worth documenting. authorizeOperatorRequest still compares nodeEnv === 'production' on its already-resolved input; unchanged contract.\n\nSUSPECT THIS MOST: (1) resolveNodeEnv is now a different function for the same name — every existing caller was checked (middleware.js, cronAuth.js, and the three test files) and the full suite is green. (2) /api/health is a PUBLIC route and now returns node_env/vercel_env; the detail string is deliberately worded to name the misconfiguration and nothing about which credentials are set, but that is a judgement call. (3) The disagreement now moves status to 'degraded' — I judged that necessary for fail-loud, but it is a behaviour change to an uptime-monitored field.\n\nSUITE: baseline before I started was 1835 tests / 1809 pass / 0 fail / 26 skipped. After: 1925 / 1899 / 0 fail / 26 skipped. Mid-run I observed transient failures in files I do not own (DashboardShell R2.2.6, brightdataZone R1.2.11, R6.1.5 migration drift, claim_probe_tasks SQL guards) from other agents mid-edit; all had cleared by the final run."
         }
       ],
       "verification": null
@@ -2063,7 +2082,7 @@
       "subphase": "R1.1",
       "lane": "docs",
       "title": "ADR: worker host",
-      "detail": "Long-lived container (Railway/Fly/Hetzner); laptop worker is dev mode from day one; Vercel functions ruled out in writing.",
+      "detail": "Long-lived container (Railway/Fly/Hetzner); laptop worker is dev mode from day one; Vercel functions ruled out in writing. CORRECTION to the rebuild-scribe submit note above, filed by the same agent. My submit note quoted worker/src/index.js:38 as \"const log = (msg) => console.log();\" -- that is WRONG AS RECORDED and is a shell artifact, not what I read. The backticks in the real template literal were eaten by bash command substitution when I passed the note (the shell also emitted \"[fleet]: command not found\"). The actual line 38, byte-identical at 95b190d and ea165ed, is a console.log of a template literal that prefixes the message with a bracketed \"fleet\" tag: const log = (msg) => console.log(TEMPLATE), where TEMPLATE is a backtick string containing [fleet] followed by the interpolated msg. Read it directly rather than trusting either rendering: git show ea165ed:worker/src/index.js then look at line 38. NOTHING ELSE in the submit note is affected -- the ADR file itself was written with the Edit tool and never passed through a shell, so docs/decisions/2026-09-05-worker-host.md:388 carries the expression correctly. The substantive finding stands unchanged: line 38 is console.log, i.e. STDOUT, not stderr; all four describeRun/describeClaim narration sites (:88, :121, :144, :242) route through it; only :270 (pass failed) and :367 (fatal) use console.error.",
       "accept": "Dated ADR naming the host, why Vercel functions cannot serve this workload, and the dev-mode story.",
       "deps": [
         "R1.1.1"
@@ -2108,6 +2127,11 @@
           "at": "2026-09-08T11:19:48.934Z",
           "by": "rebuild-scribe",
           "text": "THREE surgical edits only; the ADR is otherwise untouched and no source file was modified (git diff --name-only shows exactly one file). Both defects I was asked to re-derive were re-derived from scratch before writing, against the doc's declared baseline 95b190d AND HEAD ea165ed via 'git show <sha>:path', never the working tree.\n\nD2 (19 -> 20), VERIFIED MYSELF: 'git show 95b190d:src/lib/liveWriteGuard.js' and the same at ea165ed both give NEVER_WRITABLE opening at :126 with 20 entries on :127-146 and the closing ']);' on :147 -- 'scans', 'brand_metrics_daily', 'scan_jobs', 'prompt_results', 'citations', 'result_brands', 'brand_prompts', 'brand_briefs', 'scan_schedules', 'scan_rate_limits', 'system_heartbeats', 'knowledge_blocks', 'topics', 'content_items', 'content_jobs', 'content_runs', 'content_agents', 'content_events', 'content_feedback', 'content_lessons'. Identical at both commits. :325-327 now says 20, names the list's full extent ':126-147' and its last element so the count is re-checkable without trusting the number.\n\nD3 (stderr -> stdout), VERIFIED MYSELF: worker/src/index.js:38 is 'const log = (msg) => console.log();' -- byte-identical at 95b190d and ea165ed, so the doc's baseline declaration stays true. 'git grep -n describeRun|describeClaim ea165ed -- worker/' returns FOUR call sites, not six: :88 log(describeRun(closed)), :121 log(describeClaim(result)), :144 log(describeRun(closed)), :242 log(describeRun(closed)); :24/:32 are imports and queue.js:157/runLedger.js:170 are the definitions. I wrote four, not the six in my instructions, because four is what the tree holds. Only console.error users are :270 (pass failed) and :367 (fatal). C8 at :388 now says stdout, cites index.js:38 with the actual expression, lists all four narration sites, and names :270 as the failed-pass exception on stderr.\n\nD1 (the load-bearing one): a parenthetical now precedes the vendor table at :430-439, in the same italic-aside pattern the doc already uses at :176-179 for the Hobby cron cap. It states that every cell below the C1 row is a vendor capability or pricing claim, that NONE of it is verified by this document, that it is undated recollection sourced to no vendor page and derived from nothing in this repository, and that no cell should be relied on until the operator confirms it against each vendor's current pricing page and region list AT RATIFICATION TIME. It then names the three specific cells that are load-bearing rather than decorative and what each one alone supports -- Mumbai region = ground 2 + reversal condition 1, cheapest-per-GB = ground 3 + reversal condition 2, datacenter IPs = reversal condition 3 -- and closes 'if a cell is wrong, the recommendation below moves.' A SEVENTH bullet at :617-624 makes 'What is unproven' agree with it (grep -c of '^- **' over that section returns 7, was 6); it repeats the three turning cells and states that confirming them is part of ratification, not a follow-up to it.\n\nENDING WRITTEN FOR A BLOCK, NOT A PASS. I did NOT invent a host. New closing section ':628 The one decision this document leaves open' states the open item in one line -- which of Railway, Fly.io or Hetzner runs the fleet -- says nothing in this repository can settle it, and makes ratification literally a one-sentence act: 'the fleet runs on <host>', recorded in docs/OPERATOR_LEDGER.md, after which the §5 follow-on work can be filed. It ends 'this ADR has not named a host, and no document may cite it as having named one,' consistent with the status header at :4-8, §5's own preamble at :424-428 and 'What this ADR does NOT decide' at :519. I used §§1-3 for the decided parts to match the doc's existing convention at :477 and the ':530 Reversal conditions for §§1-3' heading, and deliberately did NOT write '§§1-4 are argued only from repository files' because §4's C5 quotes HANDOFF cost figures that are not repo-derived.\n\nSTALENESS: I re-ran the doc's own protocol at :24. 95b190d..HEAD over the cited paths returns only 220d93d, which touched scripts/setup-supabase.mjs alone -- and that file is cited at :412 and :576 by command/symbol only, never by line, so nothing went stale. worker/ and src/lib/liveWriteGuard.js are both clean in the working tree, so my two source citations are stable at HEAD despite ~22 dirty entries from concurrent agents. node --test src/lib/docStatus.test.mjs: 10/10 pass, including the four status-header guards and the migrations-README guard that the previous implementer reported failing -- that failure was another agent's and has since been fixed.\n\nEXPECTED OUTCOME: BLOCK on the operator, per the verifier and my own reading of the accept's 'naming the host' clause. Nothing here can supply the vendor decision, and manufacturing one to satisfy the accept is the exact failure this rebuild exists to stop."
+        },
+        {
+          "at": "2026-09-08T11:20:19.151Z",
+          "by": "controller",
+          "text": "amended: CORRECTION to the rebuild-scribe submit note above, filed by the same agent. My submit note quoted worker/src/index.js:38 as \"const log = (msg) => console.log();\" -- that is WRONG AS RECORDED and is a shell artifact, not what I read. The backticks in the real template literal were eaten by bash command substitution when I passed the note (the shell also emitted \"[fleet]: command not found\"). The actual line 38, byte-identical at 95b190d and ea165ed, is a console.log of a template literal that prefixes the message with a bracketed \"fleet\" tag: const log = (msg) => console.log(TEMPLATE), where TEMPLATE is a backtick string containing [fleet] followed by the interpolated msg. Read it directly rather than trusting either rendering: git show ea165ed:worker/src/index.js then look at line 38. NOTHING ELSE in the submit note is affected -- the ADR file itself was written with the Edit tool and never passed through a shell, so docs/decisions/2026-09-05-worker-host.md:388 carries the expression correctly. The substantive finding stands unchanged: line 38 is console.log, i.e. STDOUT, not stderr; all four describeRun/describeClaim narration sites (:88, :121, :144, :242) route through it; only :270 (pass failed) and :367 (fatal) use console.error."
         }
       ],
       "verification": {
@@ -3242,16 +3266,20 @@
         "src/lib/scoring/enginePipeline.js:298-308"
       ],
       "phase": "R2",
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
       "evidence": [
-        "src/lib/scoring/enginePipeline.js:349",
-        "src/lib/scoring/enginePipeline.js:364",
-        "src/lib/scoring/enginePipeline.js:425",
-        "src/lib/scoring/enginePipeline.js:667",
-        "src/lib/scoring/enginePipeline.js:713",
-        "src/lib/scoring/enginePipeline.js:825",
-        "src/lib/scoring/engineMeasurementState.test.mjs:124"
+        "src/lib/scoring/enginePipeline.js:541",
+        "src/lib/scoring/enginePipeline.js:493",
+        "src/lib/scoring/enginePipeline.js:1523",
+        "src/components/perceev/Sidebar.jsx:168",
+        "src/components/dashboard/DashboardShell.jsx:61",
+        "src/components/dashboard/DashboardShell.jsx:96",
+        "src/components/dashboard/DashboardShell.jsx:340",
+        "src/components/dashboard/DashboardShell.jsx:1085",
+        "src/components/dashboard/DashboardShell.jsx:1171",
+        "src/components/dashboard/historyScoreSurface.test.mjs:504",
+        "src/components/dashboard/historyScoreSurface.test.mjs:697"
       ],
       "notes": [
         {
@@ -3268,6 +3296,11 @@
           "at": "2026-09-05T07:11:46.914Z",
           "by": "verifier",
           "text": "rejected: FAIL, narrowly - the per-engine work is strong and must be KEPT WHOLESALE; the defect is one function and one comment. Verifier reproduced the four-way collapse by execution: pre-fix all four inputs give share=0 state=undefined (1 distinct tuple of 4); post-fix they are 4-of-4 distinguishable. Seven SEPARATE property sabotages each caught by the right tests, including the halved index proved by execution (sabotaged headline 20 with engines_counted 2 vs fixed 40 with 1) and the meta-test biting on an unreachable reason. Traced every reader of the null: no null reaches arithmetic - brandAnalyticsApi delta is null-safe on three real null series. BUT: enginePipeline.js:1289-1290 in summarizeEngineResults still does aioSummary.visibility_pct || 0, and the comment this diff ADDED above it says 'Behaviour is unchanged - that path never had a null to preserve'. That is FALSE and the verifier disproved it by execution: a degraded aio slice published share 100 pre-fix and 0 post-fix, straight into the persisted scans row via scanWorker. scans.visibility_pct is nullable, so nothing forced the || 0. This diff turned a dormant || 0 into a live laundering path and shipped a false claim in its own documentation. Fix: delete the false sentence, emit ?? null, carry state up, guard Sidebar.jsx:142 (bare visibility_pct percent) and DashboardShell.jsx:978 (null minus x gives a wrong delta, not NaN), add two tests. Verifier argued the legacy tolerance is the RIGHT call and I agree - do not change it."
+        },
+        {
+          "at": "2026-09-08T11:21:02.830Z",
+          "by": "rebuild-implementer",
+          "text": "ROUND 2 — the two outstanding read-side items only; the per-engine work and the scan-level mirror from round 1 are UNTOUCHED (enginePipeline.js summarizeEngineResults still emits ?? null + state/state_reason; the four scan-level mirror tests still pass), and isMeasuredEngineSlice's legacy tolerance is deliberately unchanged as the verifier ruled.\n\nONE SHARED READER, not two vocabularies. enginePipeline.js:541 describeScanMeasurement(row, {key}) is the single place that decides what a stored score MEANS, with ENGINE_READ_REASONS (:493) + ENGINE_STATE_REASON_DETAIL (:503) for the read-side-only cases. Rules: the number comes from the row's own column and is never reconstructed from summary_stats; a non-measured state beats a leftover number; a row with a number and NO state is measured (the legacy tolerance, same as isMeasuredEngineSlice); a measured 0 stays 0 and gets a 'Measured zero' chip. State/reason are read from summary_stats, which is where db.js's raw_results allowlist puts them and where /api/scans/[brand] hands them back verbatim — scans has no state column.\n\nITEM 1, Sidebar.jsx:168. <b>{scan.visibility_pct}%</b> now renders describeScanMeasurement's text, with data-measured, data-state-reason, title and aria-label carrying the reason. EXERCISED BY EXECUTION: I compiled the component twice from the same file, once with the old expression spliced back in, and rendered both — FIXED renders '—', SABOTAGED renders '%' (a unit with no quantity). The row is a fixed two-column button so the reason is a tooltip/aria-label rather than a visible chip; the visible words live on the dashboard's history cards. Said out loud in the code and in the test file rather than implied.\n\nITEM 2, DashboardShell.jsx. (a) :96 describeHistoryDelta replaces (next.visibility_pct - (s.visibility_pct || 0)).toFixed(1) at the old :978; a delta needs a finite number on BOTH ends or it is suppressed AND explained ('No change shown', :1113). The test runs the OLD expression on the same two rows and asserts it yields '-40.0' — not NaN — so the silent-wrong-number failure mode is on the record. (b) :1085 the card value renders the dash with no <small>%</small> after it, plus a state chip at :1121 for both absences and measured zeroes. (c) :61 describeHeroTrend replaces the '?? 0' at the old :252; ScoreBand draws a null trend as empty space and so does 'no previous scan', so the reason is rendered separately at :1171 (data-testid trend-unavailable). SABOTAGE-CHECKED by execution: restoring '?? 0' makes describeHeroTrend(40, not_assessed_row) return trend '40.0' instead of null, and removing the trend-unavailable path removes the paragraph from the rendered HTML.\n\nTESTS: src/components/dashboard/historyScoreSurface.test.mjs, 27 tests, all passing. It RENDERS both real components with react-dom/server + sucrase (the harness pattern scoreBreakdownShare/engineSetChangeSurface already use) and asserts on markup, not source text; every state fixture is built by the REAL summarizeEngineSlice/summarizeEngineResults so the read side cannot drift from the write side. Two documented harness deviations: effects run synchronously, and fetchScanHistory returns a synchronous thenable so the Previous readings panel is populated during render. STATED LIMIT, not hidden: ScoreBand is stubbed by the harness's catch-all, so no rendered assertion can see the trend NUMBER — that is why describeHeroTrend is exported and unit-tested directly, and the vacuous 'the band shows no +40.0' assertion was removed rather than left in.\n\nDELIBERATELY NOT DONE: nothing in scanWorker/db/api routes; no change to isMeasuredEngineSlice or to any round-1 code; no new leaf module to lift describeScanDataSourceIssue out of the client bundle (that debt is recorded at both import sites). Sidebar imports enginePipeline as a second import statement in DashboardShell rather than widening the existing one, because degradedEngineBanner.test.mjs guards that exact import line by regex.\n\nSUITE: npm run test:scoring 1925 tests / 1899 pass / 0 fail / 26 skipped. Baseline at the start of this round was 1835/1809/0/26; the growth is my 27 plus other agents working in the same tree. I did break degradedEngineBanner.test.mjs once (by widening that import) and fixed it in my own file.\n\nBE SUSPICIOUS OF: (1) the synchronous-thenable fetchScanHistory stub — if you think it makes the shell render something a browser would not, the describeHistoryDelta/describeHeroTrend unit tests stand on their own without it; (2) whether 'Measured zero' and 'Not measured' chips on the history cards are a design regression — they are new visible text and I could not check them in a browser; (3) describeHeroTrend uses a plain finite check rather than describeScanMeasurement, argued in a comment at :66."
         }
       ],
       "verification": {
@@ -6569,9 +6602,22 @@
         "src/lib/engines/openai.js",
         "src/lib/llmPricing.js"
       ],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/engines/openai.js:122",
+        "src/lib/engines/openai.js:221",
+        "src/lib/engines/openai.js:43",
+        "src/lib/engines/openai.js:30",
+        "src/lib/llmPricing.js:80",
+        "src/lib/llmPricing.js:107",
+        "src/lib/llmPricing.js:342",
+        "src/lib/llmPricing.js:251",
+        "src/lib/engines/openai.test.mjs:266",
+        "src/lib/engines/openai.test.mjs:296",
+        "src/lib/engines/openai.test.mjs:354",
+        "src/lib/llmPricing.test.mjs:348"
+      ],
       "notes": [
         {
           "at": "2026-09-05T06:52:23.966Z",
@@ -6582,6 +6628,11 @@
           "at": "2026-09-08T11:09:14.229Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-08T11:20:45.854Z",
+          "by": "rebuild-implementer",
+          "text": "FINDING REPRODUCED on current source: openai.js:96-101 was 'let cost = 0.01' + hardcoded (in*0.15+out*0.60)/1e6, and OPENAI_MODEL was snapshotted at module load (old line 4), so any override was priced and reported as spend at gpt-4o-mini's rates.\n\nWHAT CHANGED. (1) llmPricing.js:80 now carries the gpt-4o-mini token rate (0.15/0.60, moved verbatim, not re-derived) so it is keyed by model id. (2) llmPricing.js:107 adds a per-CALL tool-fee table (gpt-4o-mini:web_search = the same 0.01 the adapter used), declarable via the new LLM_TOOL_FEES env; llmPricing.js:342 resolveToolFee returns {cost, cost_source:'tool_price_table'} or throws UnpricedModelError reason 'unpriced_tool'. Dropping the fee instead of pricing it would have understated the probe ~16x, so it is refused, not omitted. Malformed LLM_TOOL_FEES throws (llmPricing.js:251), matching readDeclaredPrices. (3) openai.js:30 reads OPENAI_MODEL per call. openai.js:122 is a PRE-FLIGHT gate: assertModelPriceable + resolveToolFee run BEFORE fetch, so an unpriced id spends nothing and the probe returns cost:null, cost_state:'unpriced', a greppable '[llm-price] UNPRICED MODEL' line and '[chatgpt] REFUSING to probe'. Fail-closed by design: an unpriced deployment gets an engine of loud error rows, not a scan billed at some other model's prices. (4) openai.js:221 prices the completion via resolveCost keyed on the id actually sent (Responses API input_tokens/output_tokens passed explicitly) plus the tool fee. (5) COST_STATE at openai.js:43: every non-measured path returns cost:null, NEVER 0 - not_configured (no key), probe_failed (retries exhausted), unpriced, unmeasured_tokens (priced model, no usage block: the answer is kept, the price is not invented). stats.cost is left untouched in those cases and stats.cost_unmeasured_calls is incremented, so a run where nothing could be priced does not look like a free run.\n\nCAP CHECK (asked for explicitly). The ONLY cost cap in the repo is CONTENT_MAX_COST_PER_ITEM at src/lib/content/contentWorker.js:62-73, and it guards the content/openrouter path's own stats object - it never sees this probe's cost. scanWorker.js:1366/1582/1990 only RECORDS stats.cost as cost_total; no guard compares it to a budget. So a null cost cannot be read as 'free' by any budget gate today. Two follow-ups below cover the places where it could become one.\n\nTESTS. npm run test:scoring: 1925 tests, 0 fail. Baseline before I started was 2 pre-existing failures (R2.2.6 DashboardShell, R0.1.13 cronAuth) plus a flaky landingProbeCounter guard - all three were fixed by other agents mid-session; none were ever in my files. TEETH PROVEN: I restored the hardcoded 0.01 + gpt-4o-mini rate on disk and re-ran - 4 of the new tests went red (unpriced model, overridden model priced at its own rate, unpriced tool, no-usage-block), then restored the file and all 16 pass. No real OpenAI call is made anywhere; fetch is mocked and the refusal tests assert fetch is NEVER called.\n\nFOLLOW-UPS I did not do (not my files):\n1. src/lib/scoring/enginePipeline.js:233 and :238 do 'result.cost = probeResult.cost || 0' - that coerces my honest null back to a measured 0 on the per-query row, and probeTextEngine's fixed literal drops cost_state/cost_source entirely (the same drop R2.2.2 fixed for citations_state). Owned by R2.1.1; needs its own task.\n2. src/lib/content/contentWorker.js:67 assertUnderCostCap reads 'stats.cost || 0' and ignores stats.cost_unmeasured_calls, so if any path ever feeds it an unmeasured cost the cap passes silently. Not reachable today (generateContent throws instead of returning null) but it is the shape the task warned about.\n3. .env.example:120-123 documents OPENAI_MODEL without warning that overriding it now requires LLM_MODEL_PRICES + LLM_TOOL_FEES entries or the ChatGPT engine refuses to probe; LLM_TOOL_FEES is undocumented there. .env.example was outside my allowed file list.\n\nBE SUSPICIOUS OF: (a) the fail-closed choice - refusing to probe rather than probing and reporting a null cost; I judged spend-you-cannot-account-for the worse outcome, but it is a behaviour change for anyone running OPENAI_MODEL=gpt-4o today. (b) The 0.01 web_search fee is the repo's own prior claim carried forward, keyed to gpt-4o-mini and overridable - I did not verify it against OpenAI's current tool pricing and the comment says so. (c) openai.js:238 rethrows a non-UnpricedModelError out of the pricing block into the retry loop, which would re-issue the request; resolveCost only throws UnpricedModelError today, so it is unreachable."
         }
       ],
       "verification": null
@@ -7113,7 +7164,7 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/analytics/rollup.js:172",
@@ -7143,7 +7194,11 @@
           "text": "computeBrandRollups no longer returns a real 100 for a self-only roster. Finding REPRODUCED at the anchor (rollup.js:88 pre-change, sov_pct = selfMentioned/allMentioned with no roster check). rollup.js:172 adds hasRivalRoster (any non-self judged row in the slice, mirroring computeEngineSummary's hasRivalRoster) and returns sov_pct null + sov_state 'not_assessed' + sov_state_reason 'self_only_roster'. The measured/measured-zero distinction is preserved exactly as the scoring path makes it: rivals named and we were not still yields sov_pct 0 with measured_zero/brand_not_visible, never null. VOCABULARY: reuses R2.1.1's ENGINE_MEASUREMENT_STATE and ENGINE_STATE_REASONS by IMPORT from enginePipeline.js (not edited); SOV_STATE_REASONS is that frozen object spread plus one token, self_only_roster, because computeEngineSummary handles that condition with a bare null and no name, and its own test asserts every reason it declares is reachable there. No third state enum. MIGRATION SHIPS WITH THE CODE (rule 4): 013_brand_metrics_sov_state.sql adds sov_state/sov_state_reason, 3 CHECKs (vocabulary x2, plus a state/number agreement CHECK that makes a not_assessed row carrying a number impossible at the storage layer), a partial index that both proves the columns to the catalog probe and enumerates unverifiable rows, a backfill that NULLs proven tautologies and stamps proven measurements, and a RAISE NOTICE that reports the unverifiable remainder rather than passing over it. NOT RUN against any database - I made no DB connection; the migration is unexecuted SQL reviewed by eye only, and the catalog-verification query is in its header. Historical rows that cannot be re-derived (no scan_id, or no surviving result_brands) keep sov_state NULL, documented as UNRELIABLE in COMMENT ON COLUMN + docs/PROD_MIGRATIONS.md - the accept criterion's 'explicitly documented as unreliable' branch. NULL-SERIES CHECK: computeVisibilitySummary already guards both operands, so brandAnalyticsApi.js needed NO production change; added a test driving a real null-interleaved series (null gap, then a measured 0) asserting no NaN and no fabricated 0 delta. Suite: baseline 1760 tests/1734 pass/0 fail/26 skipped -> 1831/1805/0/26 (other agents added tests concurrently). Two migration guards fired on the new file and are now satisfied (setup-supabase EXPECTED_OBJECTS, README table); a third fixture, migrationsRunner.test.mjs FULL_CATALOG, needed the index name. OUT OF SCOPE, flagged: GET /api/brands/[brand]/metrics maps series fields explicitly so it still drops sov_state (route.js not in my file set); scanWorker.js:1855 still comments that a self-only sov_pct is 'a real 100%' and is now wrong (file owned by another agent)."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-08T11:21:52.945Z",
+        "note": "PASS. Verifier extracted the pre-fix computeBrandRollups from 220d93d^ and ran BOTH versions over the same seven rosters in one process. Self-only roster: 100 becomes null/not_assessed/self_only_roster. THE MIRROR CASE IS INTACT, which is what makes this a real fix rather than a blanket blanking: rivals tracked, never named, we were - still 100, still labelled measured, reason null. And a measured zero stays the number 0 with state measured_zero, not a null. No genuine 100 was blanked. buildMetricsRows checked end-to-end for a two-engine scan; the blended all row correctly re-derives from the cross-engine pool rather than unioning per-engine states, since the roster is a per-scan fact. Liveness traced hop by hop: scanWorker.js:2204 -> :2216 -> db/analytics.js:652, which passes rows to upsert VERBATIM with no column whitelist and throws on error, and the await sits BEFORE updateJob(status complete) with no try/catch, so a write failure cannot leave a job marked complete. Two sabotages, each hitting a different set of 7 tests. MIGRATION 013 checked on all four axes: no numbering collision; both columns nullable with no default, catalog-only lock; every statement re-runnable (ADD COLUMN IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, both backfills gated on sov_state IS NULL, all three ADD CONSTRAINTs wrapped in pg_constraint existence checks since Postgres has no ADD CONSTRAINT IF NOT EXISTS); constraints added AFTER the backfill so no pre-existing row can violate them. The SQL vocabulary was enumerated against the JS enums at RUNTIME and matches verbatim - 4 measurement-state tokens, 7 reason tokens. Deploy order safe in both directions and documented in three places: migration-first leaves old rows NULL and CHECK-exempt; code-first throws PGRST204 on every finalize and the job is NOT marked complete, which is a loud outage rather than a silent degrade. Registration double-guarded - deleting the EXPECTED_OBJECTS entry or the README row each turns a guard red. Nothing was run against a live database and the implementer did not imply otherwise. Suite 1831/1805/0 fail, identical before and after all five sabotages. EVIDENCE CORRECTION, verified wrong at 220d93d too so not drift: docs/PROD_MIGRATIONS.md:139 points at the 008 row - the 013 row is at :144; scripts/setup-supabase.mjs:131 points at the comma closing the 012 entry - the 013 block starts at :132 with its key at :141. Both artifacts exist and are correct; these are stale pointers, not fabricated evidence. Follow-ups filed as R4.3.5, R4.3.6 and R6.1.14."
+      }
     },
     {
       "id": "R4.3.3",
@@ -7197,6 +7252,36 @@
       "notes": [
         {
           "at": "2026-09-05T07:24:43.664Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R4.3.5",
+      "subphase": "R4.3",
+      "lane": "backend",
+      "title": "The new sov_state columns never reach the metrics API, and a scanWorker comment now states the opposite of what the code does",
+      "detail": "Both found by the R4.3.2 verifier while tracing liveness. (1) GET /api/brands/[brand]/metrics maps the series field-by-field at route.js:76-88 and never copies sov_state or sov_state_reason, so the API can only see sov_pct null versus 0 and cannot distinguish not_assessed from measured_zero. This is not a regression - the false 100 is genuinely gone - but the durable state R4.3.2 built and migrated does not reach any surface, which also makes PROD_MIGRATIONS.md:144 claim these columns are read by that route when they are not. (2) src/lib/workers/scanWorker.js:1867 still reads that when fullRoster is [self] alone, sov_pct is a real 100 percent because nobody else was co-mentioned. That is the exact site that builds the self-only roster and the value is now null/not_assessed. The R4.3.2 implementer disclosed this and could not fix it because the file was outside its set. A comment asserting the opposite of adjacent code is worse than no comment: it is the doc-to-source staleness hazard inside the source itself.",
+      "accept": "sov_state and sov_state_reason survive to the metrics API response, and a test drives a self-only-roster series through the route and asserts not_assessed is distinguishable from measured_zero. The scanWorker comment describes current behaviour. PROD_MIGRATIONS.md is true about which surfaces read the columns.",
+      "deps": [
+        "R4.3.2"
+      ],
+      "anchors": [
+        "src/app/api/brands/[brand]/metrics/route.js:76",
+        "src/lib/workers/scanWorker.js:1867",
+        "docs/PROD_MIGRATIONS.md:144"
+      ],
+      "tags": [],
+      "phase": "R4",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:22:09.663Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -8163,6 +8248,36 @@
       "notes": [
         {
           "at": "2026-09-08T11:19:34.623Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.1.14",
+      "subphase": "R6.1",
+      "lane": "test",
+      "title": "The migration verify list checks object COUNT and presence but never that the names match the SQL, so a rename reports an applied migration as missing forever",
+      "detail": "Found by the R4.3.2 verifier by execution: it renamed brand_metrics_daily_sov_unverified_idx inside 013_brand_metrics_sov_state.sql and the FULL suite stayed green, 0 failures. EXPECTED_OBJECTS in scripts/setup-supabase.mjs and FULL_CATALOG in src/lib/migrationsRunner.test.mjs would then permanently report a correctly-applied 013 as missing, and an operator would chase a migration that had in fact run. The gap is family-wide, not R4.3.2 specific - 012 has it too. There are already two guards that DO bite (deleting an EXPECTED_OBJECTS entry, or the README table row, each turns a test red), so the shape of the fix is established; what is missing is name agreement between the SQL text and the verify list. A second, smaller gap from the same verification: docs/PROD_MIGRATIONS.md has a dependency table with NO guard at all - deleting the whole 013 row leaves the suite green - while the README table and the verify list are both guarded.",
+      "accept": "Renaming an index, constraint or column inside a migration file turns a test red, proven by applying the rename and restoring it. Deleting a row from the PROD_MIGRATIONS dependency table also turns a test red. Both guards fail loudly on a migration directory that matches nothing rather than reporting green.",
+      "deps": [
+        "R4.3.2"
+      ],
+      "anchors": [
+        "scripts/setup-supabase.mjs:141",
+        "src/lib/migrationsRunner.test.mjs:197",
+        "docs/PROD_MIGRATIONS.md:144"
+      ],
+      "tags": [],
+      "phase": "R6",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:22:10.122Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }

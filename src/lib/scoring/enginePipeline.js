@@ -427,6 +427,9 @@ const MEASURED_STATES = new Set([
   ENGINE_MEASUREMENT_STATE.MEASURED_ZERO,
 ]);
 
+/** All four, for telling "a state I do not know" from "a state that is absent". */
+const KNOWN_MEASUREMENT_STATES = new Set(Object.values(ENGINE_MEASUREMENT_STATE));
+
 /**
  * True when a per-engine summary carries a real measurement — i.e. its
  * `share_of_ai_pct` may be read as a number. Exported so a consumer asks this
@@ -440,6 +443,150 @@ export function isMeasuredEngineSlice(summary) {
   if (!summary || typeof summary !== "object") return false;
   if (summary.state == null) return Number.isFinite(summary.share_of_ai_pct);
   return MEASURED_STATES.has(summary.state) && Number.isFinite(summary.share_of_ai_pct);
+}
+
+/**
+ * R2.1.1 (round 2) — THE READ SIDE OF THE NULL.
+ *
+ * Emitting null was half the job. The two surfaces that render a stored scan's
+ * score read the raw column and printed it: Sidebar.jsx printed
+ * `{scan.visibility_pct}%`, which with a null renders a bare "%" with nothing
+ * in front of it, and DashboardShell's history cards printed
+ * `{s.visibility_pct}<small>%</small>` and subtracted one from another. `null -
+ * 40` is `-40`, not NaN, so that arithmetic produced a WRONG delta silently
+ * rather than an obviously broken one — the worst failure mode available.
+ *
+ * One reader, used by both, so the two surfaces cannot drift and neither has to
+ * re-derive "is this 0 real". The rules are the same ones isMeasuredEngineSlice
+ * applies, restated for a stored scan row rather than a live slice:
+ *
+ *   - the number comes from the row's own column and nowhere else. No fallback
+ *     to another field: a score reconstructed from a different source is a
+ *     different measurement wearing this one's name.
+ *   - a state that is NOT a measured state wins over any number sitting beside
+ *     it. If the row says not_assessed, a leftover 0 is not promoted to a fact.
+ *   - a row with NO state at all and a finite number is measured. That is the
+ *     legacy tolerance: every scan written before R2.1.1 carries a number and no
+ *     state, and blanking those would erase real history to fix a new bug.
+ *   - a measured 0 is a measurement (standing rule 1) and renders as "0%", with
+ *     a chip that says it was measured so it cannot be read as "unknown".
+ */
+
+/** Where the state lives on a stored row, in the order a reader should try. */
+function readScanStateFields(row) {
+  const stats = row?.summary_stats || row?.raw_results?.summary_stats || null;
+  return {
+    // `row.state` first so a caller may pass a summary/slice object directly;
+    // the `scans` TABLE has no `state` column (supabase/migrations/001), so on a
+    // real row this is always undefined and `summary_stats` is what answers.
+    state: row?.state ?? stats?.state ?? null,
+    reason: row?.state_reason ?? stats?.state_reason ?? null,
+  };
+}
+
+/**
+ * Reasons a READER can find on a stored row that no slice can ever emit. Kept
+ * out of ENGINE_STATE_REASONS deliberately: that enum is the producer's, and
+ * engineMeasurementState.test.mjs asserts every token in it is reachable from
+ * summarizeEngineSlice. These three are unreachable there by construction.
+ */
+export const ENGINE_READ_REASONS = Object.freeze({
+  /** No number and no state: a row that never recorded why it has no score. */
+  NOT_RECORDED: "state_not_recorded",
+  /** A `state` token this build does not know. Named, never swallowed. */
+  UNRECOGNISED_STATE: "unrecognised_state",
+  /** The row claims a measurement and stored no number. A contradiction, shown. */
+  MEASURED_WITHOUT_NUMBER: "measured_state_without_number",
+});
+
+/** One human sentence per reason. Every token above and in ENGINE_STATE_REASONS. */
+export const ENGINE_STATE_REASON_DETAIL = Object.freeze({
+  [ENGINE_STATE_REASONS.NO_RESULTS]:
+    "This engine returned no rows for the scan, so there was nothing to score.",
+  [ENGINE_STATE_REASONS.NO_NON_BRANDED_PROMPTS]:
+    "Only branded prompts were probed, so no scoreable question was asked.",
+  [ENGINE_STATE_REASONS.EMPTY_ELICITING_POOL]:
+    "The answers came back and none of them named any vendor, so there was no share to take. This is not a 0% score.",
+  [ENGINE_STATE_REASONS.HIGH_ERROR_RATE]:
+    "The engine errored on too many prompts for this reading to be trusted.",
+  [ENGINE_STATE_REASONS.LOW_COVERAGE]:
+    "Too few of the tracked prompts came back answered for this reading to be trusted.",
+  [ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE]:
+    "Measured: the answers named vendors on every count, and never this brand.",
+  [ENGINE_READ_REASONS.NOT_RECORDED]:
+    "This reading carries no score, and the scan did not record why.",
+  [ENGINE_READ_REASONS.UNRECOGNISED_STATE]:
+    "This reading carries a measurement state this build does not recognise.",
+  [ENGINE_READ_REASONS.MEASURED_WITHOUT_NUMBER]:
+    "This reading says it was measured but stored no number.",
+});
+
+export const ENGINE_NOT_MEASURED_LABEL = "Not measured";
+export const ENGINE_MEASURED_ZERO_LABEL = "Measured zero";
+/** What a surface prints where a number would be. Standing rule 5. */
+export const NO_MEASUREMENT_TEXT = "—";
+
+/**
+ * Read one metric off a stored scan row (or a summary object) and say what it
+ * IS: a number, a measured zero, or an absence with a reason.
+ *
+ * @param {object|null} row  a `scans` row, an enriched row, or a summary object
+ * @param {string} key       the metric column, e.g. "visibility_pct"
+ * @returns {{
+ *   measured: boolean, measuredZero: boolean, pct: number|null, text: string,
+ *   state: string|null, reason: string|null, label: string|null,
+ *   detail: string|null
+ * }}
+ */
+export function describeScanMeasurement(row, { key = "visibility_pct" } = {}) {
+  const raw = row && typeof row === "object" ? row[key] : undefined;
+  const pct = Number.isFinite(raw) ? raw : null;
+  const { state, reason } = readScanStateFields(row);
+
+  const unmeasured = (r) => ({
+    measured: false,
+    measuredZero: false,
+    pct: null,
+    text: NO_MEASUREMENT_TEXT,
+    state: state ?? null,
+    reason: r,
+    label: ENGINE_NOT_MEASURED_LABEL,
+    detail: ENGINE_STATE_REASON_DETAIL[r] || ENGINE_STATE_REASON_DETAIL[ENGINE_READ_REASONS.NOT_RECORDED],
+  });
+
+  if (state != null && !KNOWN_MEASUREMENT_STATES.has(state)) {
+    // Named, not swallowed: the token itself rides in `reason` so an operator
+    // can grep for it rather than seeing a generic dash.
+    const view = unmeasured(ENGINE_READ_REASONS.UNRECOGNISED_STATE);
+    view.detail = `${view.detail} (${String(state)})`;
+    return view;
+  }
+  if (state != null && !MEASURED_STATES.has(state)) {
+    return unmeasured(reason || ENGINE_READ_REASONS.NOT_RECORDED);
+  }
+  if (pct === null) {
+    // Either a measured state with no number (a contradiction) or the legacy
+    // stateless row with nothing in the column. Different reasons, both absent.
+    return unmeasured(
+      state != null ? ENGINE_READ_REASONS.MEASURED_WITHOUT_NUMBER : ENGINE_READ_REASONS.NOT_RECORDED
+    );
+  }
+
+  const measuredZero = pct === 0;
+  return {
+    measured: true,
+    measuredZero,
+    pct,
+    text: `${pct}%`,
+    state: state ?? null,
+    reason: measuredZero ? reason || ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE : null,
+    // A real number needs no chip; a measured zero needs one, or it reads
+    // exactly like the absence it must not be confused with.
+    label: measuredZero ? ENGINE_MEASURED_ZERO_LABEL : null,
+    detail: measuredZero
+      ? ENGINE_STATE_REASON_DETAIL[ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE]
+      : null,
+  };
 }
 
 /**
@@ -1371,15 +1518,35 @@ export function summarizeEngineResults(scanOutput) {
       cited_non_branded: aioSummary.cited_non_branded || 0,
       aio_coverage_pct: aioSummary.coverage_pct || 0,
       error_rate_pct: aioSummary.error_rate_pct || 0,
-      // KNOWN GAP, deliberately left for its own task (R2.1.1 scope was the
-      // per-engine slices). These two are the legacy scan-level mirrors of the
-      // aio slice and they still launder a null back into 0, so a not_assessed
-      // aio slice writes scans.visibility_pct = 0 exactly as it did before.
-      // Behaviour is unchanged — that path never had a null to preserve — but
-      // it is the same false-zero class and needs the scan-level state field
-      // before the `|| 0` can go. Read `engines.aio.state` for the truth.
-      visibility_pct: aioSummary.visibility_pct || 0,
-      share_of_ai_pct: aioSummary.share_of_ai_pct || 0,
+      // R2.1.1 — THE SCAN-LEVEL MIRROR OF THE AIO SLICE, AND IT IS LIVE.
+      //
+      // This function is not a legacy shim. src/lib/workers/scanWorker.js binds
+      // it as `summarizeMulti` and writes these two straight onto the persisted
+      // `scans` row (scanWorker.js:1962-1963), so whatever they say is what
+      // every trend, delta and dashboard reads back forever.
+      //
+      // The `|| 0` that used to be here was not harmless. Before this task the
+      // slice never emitted null, so the operator was dormant — EXCEPT that a
+      // 0 published for a slice that measured nothing was already the false
+      // zero A1/S1 is about. Once the slice started emitting null it became
+      // actively destructive: a degraded aio slice whose survivors implied 100
+      // published 100 before and 0 after, i.e. this line CHANGED a persisted
+      // number rather than preserving one. Both readings are wrong; null is the
+      // only honest one, and `scans.visibility_pct` is `numeric` and nullable
+      // (supabase/migrations/001_initial_schema.sql:12), so nothing ever forced
+      // a number here.
+      //
+      // `??`, not `||`: a measured 0 is a real finding and must survive.
+      visibility_pct: aioSummary.visibility_pct ?? null,
+      share_of_ai_pct: aioSummary.share_of_ai_pct ?? null,
+      // ...and WHY there is no number, carried up from the slice so a scan-level
+      // reader can render the em dash plus a state chip without re-deriving it
+      // from `engines.aio`. Null (not "measured") on a slice written before
+      // R2.1.1: isMeasuredEngineSlice tolerates a stateless legacy number, but
+      // that tolerance is a read-side reading, not a fact to manufacture here.
+      // See ENGINE_MEASUREMENT_STATE / ENGINE_STATE_REASONS for the vocabulary.
+      state: aioSummary.state ?? null,
+      state_reason: aioSummary.state_reason ?? null,
       presence_rate_pct: aioSummary.presence_rate_pct || 0,
       branded_visibility_pct: aioSummary.branded_with_answer > 0
         ? Math.round((aioSummary.visible_branded / aioSummary.branded_with_answer) * 1000) / 10

@@ -6,6 +6,7 @@ import {
   ENGINE_MEASUREMENT_STATE,
   ENGINE_STATE_REASONS,
   isMeasuredEngineSlice,
+  summarizeEngineResults,
   summarizeEngineSlice,
 } from "./enginePipeline.js";
 
@@ -303,6 +304,103 @@ test("the banner's engine count stays in lockstep with the headline's", () => {
   assert.strictEqual(headline.visibility_index_pct, null);
   assert.equal(d.enginesCounted, 0, "the banner must not claim an engine the index did not blend");
   assert.equal(d.severity, "critical", "nothing measurable is left to score");
+});
+
+// --- the SCAN-LEVEL mirror must not launder the null either ---------------
+//
+// summarizeEngineResults is not a dead legacy shim. src/lib/workers/scanWorker.js
+// binds it as `summarizeMulti` (scanWorker.js:1652) and writes its
+// summary.visibility_pct / share_of_ai_pct straight onto the persisted `scans`
+// row (scanWorker.js:1962-1963). The first cut of R2.1.1 left `|| 0` here and
+// claimed in a comment that behaviour was unchanged. It was not: a degraded aio
+// slice used to publish its survivors' 100 to that row, and with the slice now
+// emitting null the `|| 0` turned it into a 0. That is the same false zero the
+// task exists to remove, one level up and persisted.
+
+test("scan-level mirror — a FAILED aio slice publishes null, not 0 and not the survivors' 100", () => {
+  // Six answered, all naming us; seven empty. Error rate 53.8% clears aio's 50%
+  // gate, so the slice is `failed` while its surviving rows imply a flattering
+  // 100% — the exact number the old code shipped to scans.visibility_pct.
+  const rows = [...times(6, (i) => answered(i, { visible: true })), ...times(7, (i) => emptyAnswer(100 + i))];
+  const aio = summarizeEngineSlice(rows, "aio");
+
+  assert.equal(aio.state, ENGINE_MEASUREMENT_STATE.FAILED, "premise");
+  assert.equal(aio.state_reason, ENGINE_STATE_REASONS.HIGH_ERROR_RATE, "premise");
+  assert.equal(aio.eliciting_queries, 6, "premise: the survivors are a real pool...");
+  assert.equal(aio.visible_non_branded, 6, "...and every one of them named us, so the raw ratio is 100");
+
+  const headline = computeHeadline([aio]);
+  const { summary } = summarizeEngineResults({ results: [], engines: { aio }, headline });
+
+  assert.strictEqual(summary.visibility_pct, null, "a broken read has no visibility number to publish");
+  assert.notStrictEqual(summary.visibility_pct, 0, "0 is the laundered lie this task removes");
+  assert.notStrictEqual(summary.visibility_pct, 100, "and 100 is the pre-R2.1.1 lie it replaced");
+  assert.strictEqual(summary.share_of_ai_pct, null);
+  // ...and the row can say WHY there is no number.
+  assert.equal(summary.state, ENGINE_MEASUREMENT_STATE.FAILED);
+  assert.equal(summary.state_reason, ENGINE_STATE_REASONS.HIGH_ERROR_RATE);
+});
+
+test("scan-level mirror — a NOT_ASSESSED aio slice publishes null, not 0", () => {
+  // Thirty answers naming nobody: the engine was fine, the prompt set elicited
+  // no vendor, and there is no denominator. This one always read 0 downstream,
+  // which is why it was invisible.
+  const aio = summarizeEngineSlice(times(30, (i) => answered(i, { named: false })), "aio");
+
+  assert.equal(aio.state, ENGINE_MEASUREMENT_STATE.NOT_ASSESSED, "premise");
+  assert.equal(aio.state_reason, ENGINE_STATE_REASONS.EMPTY_ELICITING_POOL, "premise");
+
+  const headline = computeHeadline([aio]);
+  const { summary } = summarizeEngineResults({ results: [], engines: { aio }, headline });
+
+  assert.strictEqual(summary.visibility_pct, null, "never 0 — the brand was never given a chance");
+  assert.strictEqual(summary.share_of_ai_pct, null);
+  assert.equal(summary.state, ENGINE_MEASUREMENT_STATE.NOT_ASSESSED);
+  assert.equal(summary.state_reason, ENGINE_STATE_REASONS.EMPTY_ELICITING_POOL);
+});
+
+test("scan-level mirror — a real measurement still publishes its number", () => {
+  // The other half of the contract: `?? null` must not blank a measured 0 or a
+  // measured 40. Without this, "emit null" is satisfiable by emitting null
+  // always, and every score on the product goes to an em dash.
+  const measured = summarizeEngineSlice(
+    [...times(4, (i) => answered(i, { visible: true })), ...times(6, (i) => answered(100 + i))],
+    "aio"
+  );
+  const zero = summarizeEngineSlice(times(10, (i) => answered(500 + i)), "aio");
+
+  const m = summarizeEngineResults({
+    results: [],
+    engines: { aio: measured },
+    headline: computeHeadline([measured]),
+  }).summary;
+  assert.strictEqual(m.visibility_pct, 40);
+  assert.strictEqual(m.share_of_ai_pct, 40);
+  assert.equal(m.state, ENGINE_MEASUREMENT_STATE.MEASURED);
+  assert.strictEqual(m.state_reason, null);
+
+  const z = summarizeEngineResults({
+    results: [],
+    engines: { aio: zero },
+    headline: computeHeadline([zero]),
+  }).summary;
+  assert.strictEqual(z.visibility_pct, 0, "a measured zero is a number and must survive the mirror");
+  assert.strictEqual(z.share_of_ai_pct, 0);
+  assert.equal(z.state, ENGINE_MEASUREMENT_STATE.MEASURED_ZERO);
+});
+
+test("scan-level mirror — a pre-R2.1.1 slice with no state carries a null state, never an invented one", () => {
+  // The legacy tolerance isMeasuredEngineSlice grants (a finite number with no
+  // state reads as measured) must not become a manufactured `state: "measured"`
+  // on the scan row. A stored scan that never knew its state must still say so.
+  const { summary } = summarizeEngineResults({
+    results: [],
+    engines: { aio: { engine: "aio", visibility_pct: 12.5, share_of_ai_pct: 12.5, non_branded_with_answer: 10 } },
+    headline: null,
+  });
+  assert.strictEqual(summary.visibility_pct, 12.5, "a legacy number is still published");
+  assert.strictEqual(summary.state, null);
+  assert.strictEqual(summary.state_reason, null);
 });
 
 test("isMeasuredEngineSlice — a pre-R2.1.1 summary with no state is read as measured", () => {

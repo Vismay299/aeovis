@@ -321,10 +321,20 @@ test("R0.1.13 — production is decided by the SHARED resolveNodeEnv, not a seco
   // perimeter's resolver; this pins the import and the agreement.
   const { readFile } = await import("node:fs/promises");
   const src = await readFile(new URL("./cronAuth.js", import.meta.url), "utf8");
+  // R0.1.17 widened this from the exact one-name import: cronAuth now also
+  // imports assessEnvTruth for its refusal message. What is being pinned is
+  // that resolveNodeEnv comes FROM operatorPerimeter.js and is not forked here,
+  // which the character class still enforces — a local
+  // `function resolveNodeEnv` would fail it.
   assert.match(
     src,
-    /import \{ resolveNodeEnv \} from "\.\/operatorPerimeter\.js"/,
+    /import \{[^}]*\bresolveNodeEnv\b[^}]*\} from "\.\/operatorPerimeter\.js"/,
     "cronAuth must reuse operatorPerimeter's resolveNodeEnv, not fork it"
+  );
+  assert.doesNotMatch(
+    src,
+    /^(export )?function resolveNodeEnv/m,
+    "a local copy of the resolver is the drift this guard exists to catch"
   );
   // Strip comments first — the fix DESCRIBES the old shape in a comment, and a
   // naive scan of the raw file would match that prose instead of live code.
