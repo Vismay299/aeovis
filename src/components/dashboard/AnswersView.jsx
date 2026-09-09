@@ -49,6 +49,42 @@ function VerdictChip({ visible, aioPresent, error, isBranded, engine }) {
   return <span className="chip">Rival held it</span>;
 }
 
+/**
+ * One row of filter pills. R6.4.12.
+ *
+ * There were two of these, written out twice with identical markup — the
+ * verdict filters and the engine filters — so a change to how a pill reads had
+ * two places to land and no guard that it reached both.
+ *
+ * NOT the same thing as ScoreBand's engine chips, and deliberately not sharing
+ * `describeEngineChip` with them. A pill's `count` is
+ * `prompts.filter(...).length`: it is ALWAYS a real integer derived from the
+ * rows in hand, and a count of 0 is a measured zero. ScoreBand's chip carries a
+ * `share_of_ai_pct` that can be genuinely absent, which is the entire reason
+ * R2.7.8 gave it an em-dash-plus-state rendering. Routing a count through that
+ * formatter would let an always-measured number render as "not measured" — it
+ * would manufacture the absence, which is the same lie pointed the other way.
+ * The guard in answersEngineFilters.test.mjs asserts this row stays a count row.
+ */
+function FilterRow({ chips, active, onPick, testid }) {
+  return (
+    <div className="filters" data-testid={testid}>
+      {chips.map((chip) => (
+        <button
+          key={chip.key}
+          type="button"
+          className={`filter${active === chip.key ? ' is-on' : ''}`}
+          onClick={() => onPick(chip.key)}
+          data-filter-key={chip.key}
+          data-filter-count={chip.count}
+        >
+          {chip.label} <span style={{ opacity: 0.6 }}>{chip.count}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function isGapRow(p) {
   return !p.isBrandedQuery
     && !p.error
@@ -216,8 +252,10 @@ export const AnswersView = ({
     { key: 'cited', label: 'Cited you', count: prompts.filter((p) => !!p.brandCited).length },
   ];
 
-  /* Engine pills come from what the scan reported, never a fixed list. */
-  const engineChips = useMemo(() => {
+  /* Engine pills come from what the scan reported, never a fixed list.
+     Named `engineFilters`, not `engineChips`: `engineChips` is ScoreBand's
+     measurement row and means something else entirely (see FilterRow). */
+  const engineFilters = useMemo(() => {
     if (!hasEngines) return null;
     const keys = [...new Set(prompts.map((p) => p.engine || 'aio'))];
     return [
@@ -248,31 +286,19 @@ export const AnswersView = ({
           {subtitle && (
             <p style={{ fontSize: 13.5, color: 'var(--ink-3)', marginBottom: 14 }}>{subtitle}</p>
           )}
-          <div className="filters">
-            {filterChips.map((chip) => (
-              <button
-                key={chip.key}
-                type="button"
-                className={`filter${filter === chip.key ? ' is-on' : ''}`}
-                onClick={() => { setFilter(chip.key); setSelected(0); }}
-              >
-                {chip.label} <span style={{ opacity: 0.6 }}>{chip.count}</span>
-              </button>
-            ))}
-          </div>
-          {engineChips && engineChips.length > 2 && (
-            <div className="filters">
-              {engineChips.map((chip) => (
-                <button
-                  key={chip.key}
-                  type="button"
-                  className={`filter${engineFilter === chip.key ? ' is-on' : ''}`}
-                  onClick={() => { setEngineFilter(chip.key); setSelected(0); }}
-                >
-                  {chip.label} <span style={{ opacity: 0.6 }}>{chip.count}</span>
-                </button>
-              ))}
-            </div>
+          <FilterRow
+            testid="answers-verdict-filters"
+            chips={filterChips}
+            active={filter}
+            onPick={(key) => { setFilter(key); setSelected(0); }}
+          />
+          {engineFilters && engineFilters.length > 2 && (
+            <FilterRow
+              testid="answers-engine-filters"
+              chips={engineFilters}
+              active={engineFilter}
+              onPick={(key) => { setEngineFilter(key); setSelected(0); }}
+            />
           )}
         </div>
 
