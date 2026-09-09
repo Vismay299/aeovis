@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**96 / 231 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**107 / 241 closed** · 9 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -24,7 +24,7 @@ Baseline commit: `5111219`
 10. Trace a call site to an HTTP route or a cron entry before describing it as live. A correct file:line proves a line exists, not that anything reaches it.
 11. Close an item only when, in the same commit, its box is ticked, the commit body cites the file:line where the change lives, and the acceptance criterion was exercised — run, not read and not reasoned about. If it could not be exercised here, the item is blocked with the reason, never closed.
 
-## R0 — Ground zero  `28/34`
+## R0 — Ground zero  `30/35`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -46,13 +46,14 @@ Baseline commit: `5111219`
 - [x] **R0.1.14** The operator perimeter opens silently in a non-production NODE_ENV — closed at `src/lib/operatorPerimeter.js:180`, `src/lib/operatorPerimeter.js:189`, `src/middleware.js:24`, `src/middleware.js:54`, `src/lib/operatorPerimeter.test.mjs:308`, `src/lib/operatorPerimeter.test.mjs:428`
 - [-] **R0.1.15** ROTATE the GSC service-account key — leaked into an agent transcript `needs-secrets` — blocked: needs-secrets
 - [x] **R0.1.16** health.js keeps a second vendor list and claims it is shared — closed at `src/lib/vendorRegistry.js:49`, `src/lib/vendorRegistry.js:92`, `src/lib/health.js:28`, `src/lib/health.js:15`, `scripts/check-secrets.mjs:43`, `scripts/check-secrets.mjs:96`, `scripts/check-secrets.mjs:380`, `scripts/check-secrets.mjs:526`, `src/lib/vendorRegistry.test.mjs:46`, `src/lib/vendorRegistry.test.mjs:61`, `src/lib/engines/types.test.mjs:122`
-- [~] **R0.1.17** Nothing detects a NODE_ENV that lies — submitted `src/lib/operatorPerimeter.js:206`, `src/lib/operatorPerimeter.js:161`, `src/lib/operatorPerimeter.js:133`, `src/lib/cronAuth.js:76`, `src/lib/cronAuth.js:135`, `src/lib/cronAuth.js:153`, `src/lib/health.js:106`, `src/lib/health.js:124`, `src/lib/envTruth.test.mjs:44`, `src/lib/envTruth.test.mjs:132`, `src/lib/envTruth.test.mjs:167`, `src/lib/envTruth.test.mjs:215`, `src/lib/cronAuth.test.mjs:324`
+- [x] **R0.1.17** Nothing detects a NODE_ENV that lies — closed at `src/lib/operatorPerimeter.js:206`, `src/lib/operatorPerimeter.js:161`, `src/lib/operatorPerimeter.js:133`, `src/lib/cronAuth.js:76`, `src/lib/cronAuth.js:135`, `src/lib/cronAuth.js:153`, `src/lib/health.js:106`, `src/lib/health.js:124`, `src/lib/envTruth.test.mjs:44`, `src/lib/envTruth.test.mjs:132`, `src/lib/envTruth.test.mjs:167`, `src/lib/envTruth.test.mjs:215`, `src/lib/cronAuth.test.mjs:324`
 - [x] **R0.1.18** Three footguns in the rate-limit trust knob — closed at `src/lib/rateLimit.test.mjs:327`, `src/lib/rateLimit.test.mjs:46`, `src/lib/rateLimit.test.mjs:456`, `src/lib/rateLimit.test.mjs:476`, `src/lib/rateLimit.js:196`, `src/lib/rateLimit.js:231`, `src/lib/rateLimit.js:240`, `src/lib/rateLimit.js:110`, `src/lib/rateLimit.js:145`, `.env.example:60`
 - [x] **R0.1.19** The perimeter warn-once guard is evadable in one added line — closed at `src/lib/operatorPerimeter.middleware.test.mjs:131`, `src/lib/operatorPerimeter.test.mjs:454`
 - [x] **R0.1.20** Nothing proves Vercel strips an inbound x-vercel-forwarded-for `needs-vercel` — closed at `src/lib/rateLimit.js:326`, `src/lib/rateLimit.js:121`, `src/lib/rateLimit.js:352`, `src/lib/rateLimit.js:458`, `src/lib/rateLimit.test.mjs:515`, `src/lib/rateLimit.test.mjs:535`, `src/lib/rateLimit.test.mjs:622`, `docs/decisions/2026-09-05-withhold-vercel-forwarded-for-trust.md:1`
 - [x] **R0.1.21** POST /api/scan returns 201 off a job that only exists in memory `needs-decision` — closed at `src/app/api/scan/route.js:105`, `src/lib/scanRoute.unpersisted.route.test.mjs:122`, `docs/decisions/2026-09-05-unpersisted-scan-jobs.md:55`
-- [~] **R0.1.22** The rate limiter warns and continues on a caller-settable client address when off Vercel — submitted `src/lib/rateLimit.js:187`, `src/lib/rateLimit.js:248`, `src/lib/rateLimit.js:257`, `src/lib/rateLimit.js:530`, `src/lib/rateLimit.js:677`, `src/lib/rateLimit.js:708`, `src/lib/rateLimit.js:718`, `src/lib/rateLimit.js:733`, `src/app/api/scan/route.js:84`, `src/lib/scanRateLimitUnverified.route.test.mjs:124`, `src/lib/rateLimit.test.mjs:750`, `src/lib/rateLimit.test.mjs:927`, `src/lib/rateLimit.test.mjs:1067`
+- [x] **R0.1.22** The rate limiter warns and continues on a caller-settable client address when off Vercel — closed at `src/lib/rateLimit.js:187`, `src/lib/rateLimit.js:248`, `src/lib/rateLimit.js:257`, `src/lib/rateLimit.js:530`, `src/lib/rateLimit.js:677`, `src/lib/rateLimit.js:708`, `src/lib/rateLimit.js:718`, `src/lib/rateLimit.js:733`, `src/app/api/scan/route.js:84`, `src/lib/scanRateLimitUnverified.route.test.mjs:124`, `src/lib/rateLimit.test.mjs:750`, `src/lib/rateLimit.test.mjs:927`, `src/lib/rateLimit.test.mjs:1067`
 - [ ] **R0.1.23** .env.example still tells the operator the Vercel forwarded-for header is trusted
+- [ ] **R0.1.24** The two ceiling-exempt trust bases are still an unbounded anonymous spend path
 ### R0.2
 
 - [x] **R0.2.1** Create docs/BUILD_JOURNAL.md seeded with the 37 findings — closed at `docs/BUILD_JOURNAL.md:123`, `docs/BUILD_JOURNAL.md:124`, `docs/BUILD_JOURNAL.md:127`, `src/lib/scoring/enginePipeline.js:510`, `src/lib/scoring/enginePipeline.js:450`, `src/lib/scoring/enginePipeline.js:98`, `src/lib/workers/scanWorker.js:472`, `src/lib/workers/scanWorker.js:436`, `src/lib/db.js:11`, `src/lib/db.js:298`, `src/lib/db.js:62`, `src/app/api/scan/route.js:62`, `src/app/api/scan/worker/route.js:60`, `src/lib/buildJournal.test.mjs:62`
@@ -71,7 +72,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `10/37`
+## R1 — Real-surface probe fleet  `11/38`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -79,7 +80,7 @@ Baseline commit: `5111219`
 
 - [x] **R1.1.1** Probe Result Contract v2 — closed at `docs/contracts/probe-result.md:15`, `docs/contracts/probe-result.md:74`, `docs/contracts/probe-result.md:304`, `docs/contracts/probe-result.md:647`, `docs/contracts/probe-result.md:694`, `docs/contracts/probe-result.md:952`, `docs/contracts/probe-result.md:981`, `docs/contracts/probe-result.md:1049`, `docs/contracts/probe-result.md:1106`, `docs/contracts/probe-result.md:1145`, `src/lib/scoring/enginePipeline.js:331`, `src/lib/scoring/enginePipeline.js:386`, `src/lib/scoring/enginePipeline.js:466`, `src/lib/scoring/enginePipeline.js:480`, `src/lib/scoring/enginePipeline.js:735`, `src/lib/scoring/enginePipeline.js:818`, `src/lib/scoring/enginePipeline.js:939`, `src/lib/workers/scanWorker.js:1227`, `src/lib/workers/scanWorker.js:1307`, `src/lib/workers/scanWorker.js:1769`, `src/lib/workers/scanWorker.js:2181`, `src/lib/db.js:123`, `src/lib/db.js:147`, `src/lib/content/weeklyReport.js:24`, `src/lib/llmPricing.js:79`, `src/lib/llmPricing.js:229`, `src/lib/llmPricing.js:335`, `src/lib/engines/deployedEngines.js:21`, `worker/src/lib/queue.js:207`, `worker/src/index.js:174`, `worker/src/index.js:211`
 - [-] **R1.1.2** ADR + 2-day spike: browser infrastructure `needs-secrets` `needs-decision` — blocked: needs-secrets
-- [~] **R1.1.3** ADR: worker host `needs-decision` — submitted `docs/decisions/2026-09-05-worker-host.md:430`, `docs/decisions/2026-09-05-worker-host.md:617`, `docs/decisions/2026-09-05-worker-host.md:325`, `docs/decisions/2026-09-05-worker-host.md:388`, `docs/decisions/2026-09-05-worker-host.md:628`, `src/lib/liveWriteGuard.js:126`, `worker/src/index.js:38`, `worker/src/index.js:270`
+- [-] **R1.1.3** ADR: worker host `needs-decision` — submitted `docs/decisions/2026-09-05-worker-host.md:430`, `docs/decisions/2026-09-05-worker-host.md:617`, `docs/decisions/2026-09-05-worker-host.md:325`, `docs/decisions/2026-09-05-worker-host.md:388`, `docs/decisions/2026-09-05-worker-host.md:628`, `src/lib/liveWriteGuard.js:126`, `worker/src/index.js:38`, `worker/src/index.js:270` — blocked: needs-decision
 - [x] **R1.1.4** Engine surface matrix — closed at `docs/contracts/engine-surface-matrix.md:81`
 - [ ] **R1.1.5** Politeness & risk budget
 ### R1.2
@@ -94,10 +95,11 @@ Baseline commit: `5111219`
 - [x] **R1.2.8** The six-way race tests pass with SKIP LOCKED removed — closed at `src/lib/probeClaimLock.test.mjs:207`, `src/lib/probeClaimLock.test.mjs:243`, `src/lib/probeClaimLock.test.mjs:263`, `src/lib/probeClaimLock.test.mjs:275`, `src/lib/probeTasksRace.test.mjs:154`, `src/lib/probeTasksRace.test.mjs:211`, `src/lib/probeTasksRace.test.mjs:244`, `src/lib/probeTasksRace.test.mjs:260`, `src/lib/probeQueue.test.mjs:459`
 - [x] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced — closed at `docs/vendors/brightdata.md:113`, `docs/vendors/brightdata.md:150`, `docs/vendors/brightdata.md:217`, `docs/vendors/brightdata.md:253`, `docs/vendors/brightdata.md:314`, `src/lib/engines/serp.js:5`, `src/lib/engines/serp.js:14`, `src/lib/engines/serp.js:286`, `src/lib/engines/serp.js:325`, `src/lib/engines/serp.js:352-354`, `src/lib/scoring/promptGen.js:129`, `src/lib/scoring/promptGen.js:212`, `src/lib/scoring/promptGen.js:222-224`, `src/lib/scoring/promptGen.js:266-268`, `src/lib/scoring/aioPipeline.js:99`, `src/lib/scoring/enginePipeline.js:101`, `src/lib/engines/brightdata.js:69`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:192`, `src/lib/checkSecretsBrightdataNoZone.test.mjs:21`, `src/lib/engines/brightdataZone.test.mjs:206`, `src/app/api/scan/route.js:62`, `src/app/api/scan/worker/route.js:138`
 - [x] **R1.2.10** The Bright Data 200-envelope zone rejection has no test — closed at `src/lib/engines/brightdata.js:299`
-- [~] **R1.2.11** The widened zone-rejection regex has no committed negative-case test — submitted `src/lib/engines/brightdataZone.test.mjs:819`, `src/lib/engines/brightdataZone.test.mjs:748`, `src/lib/engines/brightdataZone.test.mjs:968`, `src/lib/engines/brightdataZone.test.mjs:940`, `src/lib/engines/brightdataZone.test.mjs:892`, `src/lib/engines/brightdataZone.test.mjs:713`, `src/lib/engines/brightdata.js:291`
+- [x] **R1.2.11** The widened zone-rejection regex has no committed negative-case test — closed at `src/lib/engines/brightdataZone.test.mjs:819`, `src/lib/engines/brightdataZone.test.mjs:748`, `src/lib/engines/brightdataZone.test.mjs:968`, `src/lib/engines/brightdataZone.test.mjs:940`, `src/lib/engines/brightdataZone.test.mjs:892`, `src/lib/engines/brightdataZone.test.mjs:713`, `src/lib/engines/brightdata.js:291`
 - [ ] **R1.2.12** A laptop fleet worker inherits production credentials and the write guard cannot see it
-- [ ] **R1.2.13** The SKIP LOCKED static guard matches prose comments, so the migration documentation certifies itself
+- [~] **R1.2.13** The SKIP LOCKED static guard matches prose comments, so the migration documentation certifies itself — submitted `src/lib/probeQueue.test.mjs:463`, `src/lib/probeQueue.test.mjs:494`, `src/lib/probeQueue.test.mjs:505`, `src/lib/probeClaimLock.guard.mjs:134`, `src/lib/probeClaimLock.guard.mjs:172`, `src/lib/probeClaimLock.test.mjs:110`
 - [ ] **R1.2.15** The probe-claim guard CTE scoping has no fixture pinning it, so a refactor could retire it silently
+- [ ] **R1.2.16** The zone-corpus negative test passes vacuously on an empty corpus, and the submit note miscounts it
 ### R1.3
 
 - [ ] **R1.3.1** Spike: Playwright against perplexity.ai `needs-secrets`
@@ -127,16 +129,17 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `23/54`
+## R2 — Scoring truth  `27/58`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
 ### R2.1
 
-- [~] **R2.1.1** Per-engine summaries emit state + state_reason — submitted `src/lib/scoring/enginePipeline.js:541`, `src/lib/scoring/enginePipeline.js:493`, `src/lib/scoring/enginePipeline.js:1523`, `src/components/perceev/Sidebar.jsx:168`, `src/components/dashboard/DashboardShell.jsx:61`, `src/components/dashboard/DashboardShell.jsx:96`, `src/components/dashboard/DashboardShell.jsx:340`, `src/components/dashboard/DashboardShell.jsx:1085`, `src/components/dashboard/DashboardShell.jsx:1171`, `src/components/dashboard/historyScoreSurface.test.mjs:504`, `src/components/dashboard/historyScoreSurface.test.mjs:697`
+- [x] **R2.1.1** Per-engine summaries emit state + state_reason — closed at `src/lib/scoring/enginePipeline.js:541`, `src/lib/scoring/enginePipeline.js:493`, `src/lib/scoring/enginePipeline.js:1523`, `src/components/perceev/Sidebar.jsx:168`, `src/components/dashboard/DashboardShell.jsx:61`, `src/components/dashboard/DashboardShell.jsx:96`, `src/components/dashboard/DashboardShell.jsx:340`, `src/components/dashboard/DashboardShell.jsx:1085`, `src/components/dashboard/DashboardShell.jsx:1171`, `src/components/dashboard/historyScoreSurface.test.mjs:504`, `src/components/dashboard/historyScoreSurface.test.mjs:697`
 - [ ] **R2.1.2** Delete every ?? 0 null-coalescing metric in the normalize layer
 - [ ] **R2.1.3** UI chips for did-not-report / not-assessed / small-sample; render engines_counted
 - [ ] **R2.1.4** Tests: a fully-errored engine renders failed and contributes nothing
+- [ ] **R2.1.5** A legacy zero row is labelled Measured zero with a detail asserting a measurement that never happened
 ### R2.2
 
 - [x] **R2.2.1** answer_present set only after the text check — closed at `src/lib/scoring/enginePipeline.js:177`, `src/lib/scoring/enginePipeline.js:180`, `src/lib/scoring/emptyAnswer.test.mjs`
@@ -145,11 +148,13 @@ Baseline commit: `5111219`
 - [x] **R2.2.4** Remove insertScan's silent 3-tier column-drop cascade — closed at `src/lib/db.js:264`, `src/lib/db.js:300`, `src/lib/db.js:320`, `src/lib/insertScanCascade3.test.mjs:624`, `src/lib/insertScanCascade3.test.mjs:721`, `src/lib/insertScanWriteFailure.test.mjs:155`, `src/lib/collectionWindowPersist.test.mjs:185`
 - [x] **R2.2.5** dataSourceIssue still assumes text engines always answer — closed at `src/lib/scoring/enginePipeline.js:35`, `src/lib/scoring/enginePipeline.js:416`, `src/lib/scoring/enginePipeline.js:441`, `src/lib/scoring/enginePipeline.test.mjs:507`, `src/lib/scoring/aioConstants.js:4`
 - [x] **R2.2.6** The scan-level data_source_issue banner is derived from aio alone — closed at `src/lib/scoring/enginePipeline.js:606`, `src/lib/scoring/enginePipeline.js:910`, `src/lib/scoring/enginePipeline.js:56`, `src/components/dashboard/DashboardShell.jsx:369`, `src/components/dashboard/DashboardShell.jsx:383`, `src/components/dashboard/DashboardShell.jsx:704`, `src/components/dashboard/DashboardShell.jsx:823`, `src/lib/scoring/enginePipeline.test.mjs:637`, `src/components/dashboard/degradedEngineBanner.test.mjs:54`
-- [ ] **R2.2.7** The degraded-banner guard proves a declaration, not a gate
-- [~] **R2.2.8** promptGen swallows a PAA failure with no log at all — submitted `src/lib/engines/serp.js:365`, `src/lib/engines/serp.js:406`, `src/lib/scoring/promptGen.js:42`, `src/lib/scoring/promptGen.js:330`, `src/lib/scoring/promptGen.js:423`, `src/lib/scoring/promptGen.js:428`, `src/lib/scoring/promptGen.js:501`, `src/lib/scoring/promptGen.js:508`, `src/lib/scoring/promptGen.js:561`, `src/lib/scoring/promptGen.js:576`, `src/lib/scoring/promptGenSeedProvenance.test.mjs:1`
+- [~] **R2.2.7** The degraded-banner guard proves a declaration, not a gate — submitted `src/components/dashboard/degradedEngineBanner.test.mjs:297`, `src/components/dashboard/degradedEngineBanner.test.mjs:328`, `src/components/dashboard/degradedEngineBanner.test.mjs:345`, `src/components/dashboard/degradedEngineBanner.test.mjs:239`, `src/components/dashboard/degradedEngineBanner.test.mjs:77`, `src/components/dashboard/degradedEngineBanner.test.mjs:26`
+- [x] **R2.2.8** promptGen swallows a PAA failure with no log at all — closed at `src/lib/engines/serp.js:365`, `src/lib/engines/serp.js:406`, `src/lib/scoring/promptGen.js:42`, `src/lib/scoring/promptGen.js:330`, `src/lib/scoring/promptGen.js:423`, `src/lib/scoring/promptGen.js:428`, `src/lib/scoring/promptGen.js:501`, `src/lib/scoring/promptGen.js:508`, `src/lib/scoring/promptGen.js:561`, `src/lib/scoring/promptGen.js:576`, `src/lib/scoring/promptGenSeedProvenance.test.mjs:1`
 - [ ] **R2.2.9** probeTextEngine drops measured citations when the answer leg fails - the mirror of R2.2.2
-- [~] **R2.2.10** The perplexity retry guard is dead code, so a 401 costs three calls and three seconds — submitted `src/lib/engines/perplexity.js:53`, `src/lib/engines/perplexity.js:70`, `src/lib/engines/perplexity.js:208`, `src/lib/engines/perplexity.js:218`, `src/lib/engines/perplexity.js:230`, `src/lib/engines/perplexity.js:271`, `src/lib/engines/perplexity.js:130`, `src/lib/engines/perplexity.js:364`, `src/lib/engines/perplexity.test.mjs:395`, `src/lib/engines/perplexity.test.mjs:427`, `src/lib/engines/perplexity.test.mjs:441`, `src/lib/engines/perplexity.test.mjs:459`
-- [ ] **R2.2.11** The legacy scan-level mirror emits citation_share_pct 0 on an empty denominator instead of null
+- [x] **R2.2.10** The perplexity retry guard is dead code, so a 401 costs three calls and three seconds — closed at `src/lib/engines/perplexity.js:53`, `src/lib/engines/perplexity.js:70`, `src/lib/engines/perplexity.js:208`, `src/lib/engines/perplexity.js:218`, `src/lib/engines/perplexity.js:230`, `src/lib/engines/perplexity.js:271`, `src/lib/engines/perplexity.js:130`, `src/lib/engines/perplexity.js:364`, `src/lib/engines/perplexity.test.mjs:395`, `src/lib/engines/perplexity.test.mjs:427`, `src/lib/engines/perplexity.test.mjs:441`, `src/lib/engines/perplexity.test.mjs:459`
+- [~] **R2.2.11** The legacy scan-level mirror emits citation_share_pct 0 on an empty denominator instead of null — submitted `src/lib/scoring/enginePipeline.js:1583`, `src/lib/analytics/rollup.js:347`, `src/lib/scoring/citationShareEmptyDenominator.test.mjs:113`, `src/lib/scoring/citationShareEmptyDenominator.test.mjs:172`, `src/lib/scoring/citationShareEmptyDenominator.test.mjs:207`
+- [ ] **R2.2.12** The prompt-seeding verdict never leaves the process, and the zone abort also discards the autocomplete leg
+- [ ] **R2.2.13** openai.js carries the identical dead retry guard, so a 401 there still costs three calls
 ### R2.3
 
 - [x] **R2.3.1** Two-pass finalize: discovered roster feeds the headline — closed at `src/lib/workers/scanWorker.js:757`, `src/lib/workers/scanWorker.js:781`, `src/lib/workers/scanWorker.js:798`, `src/lib/workers/twoPassFinalize.test.mjs`
@@ -178,7 +183,7 @@ Baseline commit: `5111219`
 - [ ] **R2.7.7** The demo data does not carry the fields a real scan carries, so the sample report reads as broken
 - [x] **R2.7.8** ScoreBand hardcodes a percent sign, so no engine chip can carry a non-numeric state — closed at `src/components/dashboard/ScoreBand.jsx:42`, `src/components/dashboard/ScoreBand.jsx:104`, `src/components/dashboard/DashboardShell.jsx:441`, `src/components/dashboard/DashboardShell.jsx:465`, `src/components/dashboard/DashboardShell.jsx:482`, `src/components/dashboard/scoreBandEngineChips.test.mjs:430`
 - [ ] **R2.7.9** EngineRail renders a metric as 0 when there is nothing behind it
-- [ ] **R2.7.10** ScoreBreakdown is imported by nothing, so the honesty fixes in it reach no user
+- [~] **R2.7.10** ScoreBreakdown is imported by nothing, so the honesty fixes in it reach no user
 ### R2.8
 
 - [ ] **R2.8.1** Gate Studio and Opportunities on data quality
@@ -194,19 +199,20 @@ Baseline commit: `5111219`
 - [x] **R2.8.12** getScansByDomain fabricates never-scanned from a missing client — closed at `src/lib/db.js:477`, `src/lib/db.js:481`, `src/lib/db.js:491`, `src/lib/scansByDomainUnconfigured.test.mjs:81`, `src/lib/scansByDomainUnconfigured.test.mjs:117`, `src/lib/scansByDomainUnconfigured.test.mjs:140`, `src/lib/scansByDomainUnconfigured.test.mjs:158`, `src/lib/scansByDomainUnconfigured.test.mjs:197`
 - [ ] **R2.8.13** Four more fail-quiet reads, including the other half of the endpoint R2.8.5 just fixed
 - [ ] **R2.8.14** The content cron returns HTTP 200 with processed:0 when supabase is unset
-- [ ] **R2.8.15** A false history comment in the R2.8.12 guard, plus the last two fail-quiet reads in db.js
+- [~] **R2.8.15** A false history comment in the R2.8.12 guard, plus the last two fail-quiet reads in db.js — submitted `src/lib/scansByDomainUnconfigured.test.mjs:21`, `src/lib/scansByDomainUnconfigured.test.mjs:274`, `src/lib/scansByDomainUnconfigured.test.mjs:378`, `src/lib/db.js:513`, `src/lib/db.js:585`, `src/lib/coverageUnconfigured.route.test.mjs:113`
 ### R2.9
 
 - [ ] **R2.9.1** Provenance strip under the hero
 ### R2.10
 
 - [x] **R2.10.1** De-fake the landing page — closed at `src/data/mockData.js:51`, `src/data/mockData.js:106`, `src/data/mockData.js:123`, `src/app/page.js:70`, `src/app/page.js:80`, `src/app/scan/page.js:50`, `src/lib/landingHonesty.test.mjs:111`, `src/lib/landingHonesty.test.mjs:291`, `scripts/check-secrets.mjs:320`, `src/lib/engines/deployedEngines.js:75`
-- [~] **R2.10.2** Probe counter backed by a real count query — submitted `src/lib/landingProbeCounter.test.mjs:155`, `src/lib/landingProbeCounter.test.mjs:205`, `src/lib/landingProbeCounter.test.mjs:238`, `src/lib/landingProbeCounter.test.mjs:473`, `src/lib/landingProbeCounter.test.mjs:506`, `src/lib/landingProbeCounter.test.mjs:368`, `src/lib/landingProbeCounter.test.mjs:415`, `src/lib/landingProbeCounter.test.mjs:39`, `src/lib/landingProbeCounter.test.mjs:87`, `src/app/page.js:55`
+- [x] **R2.10.2** Probe counter backed by a real count query — closed at `src/lib/landingProbeCounter.test.mjs:155`, `src/lib/landingProbeCounter.test.mjs:205`, `src/lib/landingProbeCounter.test.mjs:238`, `src/lib/landingProbeCounter.test.mjs:473`, `src/lib/landingProbeCounter.test.mjs:506`, `src/lib/landingProbeCounter.test.mjs:368`, `src/lib/landingProbeCounter.test.mjs:415`, `src/lib/landingProbeCounter.test.mjs:39`, `src/lib/landingProbeCounter.test.mjs:87`, `src/app/page.js:55`
 - [ ] **R2.10.4** ENGINE_REGISTRY says aio is always configured
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
+- [ ] **R2.10.7** The landing-copy guard is blind to two apostrophes on one line
 
-## R3 — Durable backend  `17/41`
+## R3 — Durable backend  `19/43`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -221,7 +227,7 @@ Baseline commit: `5111219`
 
 - [x] **R3.2.1** One scan_runs row per chunk execution — closed at `src/lib/workers/scanWorker.js:1540`, `src/lib/workers/scanWorker.js:1555`, `src/lib/workers/scanWorker.js:321`, `src/lib/workers/scanWorker.js:854`, `src/lib/workers/scanWorker.js:203`, `src/lib/workers/scanWorker.js:270`, `src/lib/workers/scanChunkLedger.test.mjs:327`, `src/lib/workers/scanChunkLedgerLive.test.mjs:176`
 - [x] **R3.2.2** Every discarded skip reason becomes a ledger row — closed at `src/lib/scoring/enginePipeline.js:829`, `src/lib/scoring/enginePipeline.js:834`, `src/lib/scoring/enginePipeline.js:846`, `src/lib/scoring/enginePipeline.js:796`, `src/lib/workers/scanWorker.js:283`, `src/lib/workers/scanWorker.js:211`, `src/lib/workers/scanWorker.js:1142`, `src/lib/workers/scanWorker.js:2230`, `src/lib/workers/scanChunkLedger.test.mjs:1409`, `src/lib/workers/scanChunkLedger.test.mjs:1493`, `src/lib/workers/scanChunkLedger.test.mjs:1940`, `src/lib/workers/scanChunkLedger.test.mjs:1089`, `src/lib/scoring/enginePipeline.test.mjs:241`
-- [ ] **R3.2.3** Status route and dashboard read run history
+- [~] **R3.2.3** Status route and dashboard read run history
 - [x] **R3.2.4** A live test wrote to production because only its reads were stubbed — closed at `src/lib/liveDbGate.js:141`, `src/lib/liveDbGate.js:90`, `src/lib/liveDbGate.js:53`, `src/lib/liveWriteGuard.js:370`, `src/lib/liveWriteGuard.test.mjs:488`, `src/lib/liveWriteGuard.test.mjs:451`, `src/lib/liveWriteGuard.test.mjs:571`, `src/lib/liveWriteGuard.test.mjs:605`, `src/lib/liveWriteGuard.test.mjs:413`, `src/lib/scanRuns.test.mjs:669`, `package.json:12`, `src/lib/scanRunsLive.test.mjs:50`, `src/lib/probeTasksRace.test.mjs:41`, `src/lib/workers/scanChunkLedgerLive.test.mjs:52`, `src/lib/liveWriteGuardAuto.mjs:64`
 - [x] **R3.2.5** A frozen engine that stops resolving silently shrinks the headline — closed at `src/services/api.js:598`, `src/components/dashboard/DashboardShell.jsx:394`, `src/components/dashboard/DashboardShell.jsx:802`, `src/components/dashboard/DashboardShell.jsx:812`, `src/components/dashboard/engineSetChangeSurface.test.mjs:136`, `src/components/dashboard/engineSetChangeSurface.test.mjs:361`, `src/components/dashboard/engineSetChangeSurface.test.mjs:394`, `src/components/dashboard/engineSetChangeSurface.test.mjs:322`
 - [x] **R3.2.6** The cron reports a scheduler tick that declined every brand as a clean empty tick — closed at `src/app/api/scan/worker/route.js:390`, `src/app/api/scan/worker/route.js:179`, `src/app/api/scan/worker/route.js:257`, `src/app/api/scan/worker/route.js:236`, `src/lib/scanWorkerRoute.route.test.mjs:356`, `src/lib/scanWorkerRoute.route.test.mjs:496`
@@ -231,14 +237,15 @@ Baseline commit: `5111219`
 ### R3.3
 
 - [x] **R3.3.1** attempts column with a cap of 3 — closed at `supabase/migrations/012_scan_job_attempts.sql:81`, `src/lib/workers/scanWorker.js:2086`, `src/lib/workers/scanJobAttempts.test.mjs:279`
-- [~] **R3.3.2** Sweep reaps heartbeat-stale runs — submitted `src/lib/workers/scanWorker.js:2878`, `src/lib/workers/scanWorker.js:3040`, `src/lib/workers/scanWorker.js:3177`, `src/lib/workers/scanWorker.js:2783`, `src/lib/workers/scanRunReaper.test.mjs:317`, `src/lib/workers/scanRunReaper.test.mjs:436`
+- [x] **R3.3.2** Sweep reaps heartbeat-stale runs — closed at `src/lib/workers/scanWorker.js:2878`, `src/lib/workers/scanWorker.js:3040`, `src/lib/workers/scanWorker.js:3177`, `src/lib/workers/scanWorker.js:2783`, `src/lib/workers/scanRunReaper.test.mjs:317`, `src/lib/workers/scanRunReaper.test.mjs:436`
 - [ ] **R3.3.3** Content cost accumulates across rescues
 - [ ] **R3.3.4** Wire the stale-run reaper into the cron sweep; nothing calls it yet
 - [ ] **R3.3.5** The reaper idempotence rests on plpgsql behaviour proven only by a fake that re-implements it `needs-secrets`
+- [ ] **R3.3.6** The reaper SQL-side self-exclusion is untested and can be deleted with the suite still green
 ### R3.4
 
 - [x] **R3.4.1** First scan of a brand upserts its schedule row — closed at `src/lib/workers/scanWorker.js:1245`, `src/lib/workers/scanWorker.js:530`, `src/lib/workers/scanWorker.js:1146`, `src/lib/workers/scanSchedule.test.mjs:74`, `src/lib/workers/scanSchedule.test.mjs:154`, `src/lib/workers/scanSchedule.test.mjs:223`
-- [ ] **R3.4.2** Skips bump next_run_at and write a skip row
+- [~] **R3.4.2** Skips bump next_run_at and write a skip row — submitted `src/lib/workers/scanWorker.js:2671`, `src/lib/workers/scanWorker.js:2664`, `src/lib/workers/scanWorker.js:2581`, `src/lib/workers/scanWorker.js:2564`, `src/lib/workers/scanWorker.js:2734`, `src/lib/workers/scanWorker.js:2749`, `src/lib/workers/schedulerSkipBackoff.test.mjs:153`, `src/lib/workers/schedulerSkipBackoff.test.mjs:191`, `src/lib/workers/schedulerSkipBackoff.test.mjs:343`, `src/lib/workers/schedulerSkipBackoff.test.mjs:386`
 - [ ] **R3.4.3** display_name written so scheduled and manual scans share one identity
 - [ ] **R3.4.4** Worker honors per-brand prompt_target, engines and geo
 - [ ] **R3.4.5** The first-scan schedule registration is a non-atomic get-then-upsert, and its wiring is untested
@@ -253,9 +260,10 @@ Baseline commit: `5111219`
 - [ ] **R3.6.2** Per-scan and per-day spend caps enforced from the ledger
 - [ ] **R3.6.3** Weekly report metered per brand per day
 - [ ] **R3.6.4** The Bright Data per-query price is hardcoded in three places
-- [ ] **R3.6.5** gemini and perplexity still fabricate costs; llmPricing does not reach them
-- [~] **R3.6.6** openai.js fabricates a cost from a hardcoded rate while the model id is env-overridable — submitted `src/lib/engines/openai.js:122`, `src/lib/engines/openai.js:221`, `src/lib/engines/openai.js:43`, `src/lib/engines/openai.js:30`, `src/lib/llmPricing.js:80`, `src/lib/llmPricing.js:107`, `src/lib/llmPricing.js:342`, `src/lib/llmPricing.js:251`, `src/lib/engines/openai.test.mjs:266`, `src/lib/engines/openai.test.mjs:296`, `src/lib/engines/openai.test.mjs:354`, `src/lib/llmPricing.test.mjs:348`
+- [~] **R3.6.5** gemini and perplexity still fabricate costs; llmPricing does not reach them
+- [x] **R3.6.6** openai.js fabricates a cost from a hardcoded rate while the model id is env-overridable — closed at `src/lib/engines/openai.js:122`, `src/lib/engines/openai.js:221`, `src/lib/engines/openai.js:43`, `src/lib/engines/openai.js:30`, `src/lib/llmPricing.js:80`, `src/lib/llmPricing.js:107`, `src/lib/llmPricing.js:342`, `src/lib/llmPricing.js:251`, `src/lib/engines/openai.test.mjs:266`, `src/lib/engines/openai.test.mjs:296`, `src/lib/engines/openai.test.mjs:354`, `src/lib/llmPricing.test.mjs:348`
 - [ ] **R3.6.7** openai.js has the identical dead retry guard perplexity just fixed, so a 401 costs three calls and three seconds
+- [ ] **R3.6.8** cost_unmeasured_calls is write-only, an unmeasured-token row persists cost 0, and the new price rows are undated
 ### R3.7
 
 - [x] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability — closed at `src/lib/ssrfGuard.js:366`, `src/lib/ssrfGuard.js:482`, `src/lib/ssrfGuard.js:552`, `src/lib/firecrawl.js:45`, `src/lib/firecrawl.js:115`, `src/lib/ssrfGuard.test.mjs:1`, `src/lib/firecrawl.test.mjs:1`
@@ -316,7 +324,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `16/43`
+## R6 — Apparatus & guards  `18/45`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -338,15 +346,17 @@ Baseline commit: `5111219`
 - [ ] **R6.1.14** The migration verify list checks object COUNT and presence but never that the names match the SQL, so a rename reports an applied migration as missing forever
 ### R6.2
 
-- [~] **R6.2.1** docs/OPERATOR_LEDGER.md — submitted `docs/OPERATOR_LEDGER.md:268`, `docs/OPERATOR_LEDGER.md:298`, `docs/OPERATOR_LEDGER.md:405`, `docs/OPERATOR_LEDGER.md:433`, `docs/OPERATOR_LEDGER.md:435`, `docs/OPERATOR_LEDGER.md:473`, `docs/OPERATOR_LEDGER.md:568`, `src/lib/docStatus.test.mjs:161`, `src/lib/rateLimit.js:128`, `scripts/setup-supabase.mjs:485`, `scripts/setup-supabase.mjs:522`, `src/lib/db/analytics.js:672`, `src/lib/workers/scanWorker.js:1643`, `docs/PROD_MIGRATIONS.md:144`
+- [x] **R6.2.1** docs/OPERATOR_LEDGER.md — closed at `docs/OPERATOR_LEDGER.md:268`, `docs/OPERATOR_LEDGER.md:298`, `docs/OPERATOR_LEDGER.md:405`, `docs/OPERATOR_LEDGER.md:433`, `docs/OPERATOR_LEDGER.md:435`, `docs/OPERATOR_LEDGER.md:473`, `docs/OPERATOR_LEDGER.md:568`, `src/lib/docStatus.test.mjs:161`, `src/lib/rateLimit.js:128`, `scripts/setup-supabase.mjs:485`, `scripts/setup-supabase.mjs:522`, `src/lib/db/analytics.js:672`, `src/lib/workers/scanWorker.js:1643`, `docs/PROD_MIGRATIONS.md:144`
 - [ ] **R6.2.2** docs/RUNBOOK.md seeded with 10 symptom rows
+- [ ] **R6.2.4** SCAN_RATE_LIMIT_UNVERIFIED_CEILING is undocumented and unguarded, and section E of the operator ledger is not exhaustive
 ### R6.3
 
 - [x] **R6.3.1** Vendor contract docs — closed at `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
 - [x] **R6.3.2** gemini.md asserts a bug R6.5.6 just fixed as still current — closed at `src/lib/workers/scanWorker.js:1506`
-- [~] **R6.3.3** Two dated handoff and journal docs cite line numbers that resolve to unrelated code — submitted `docs/BUILD_JOURNAL.md:72`, `docs/BUILD_JOURNAL.md:74`, `docs/BUILD_JOURNAL.md:170`, `docs/BUILD_JOURNAL.md:220`, `docs/BUILD_JOURNAL.md:397`, `docs/BUILD_JOURNAL.md:550`, `docs/BUILD_JOURNAL.md:561`, `docs/BUILD_JOURNAL.md:594`, `docs/BUILD_JOURNAL.md:614`, `docs/BUILD_JOURNAL.md:679`, `docs/HANDOFF-2026-08-30.md:248`
+- [x] **R6.3.3** Two dated handoff and journal docs cite line numbers that resolve to unrelated code — closed at `docs/BUILD_JOURNAL.md:72`, `docs/BUILD_JOURNAL.md:74`, `docs/BUILD_JOURNAL.md:170`, `docs/BUILD_JOURNAL.md:220`, `docs/BUILD_JOURNAL.md:397`, `docs/BUILD_JOURNAL.md:550`, `docs/BUILD_JOURNAL.md:561`, `docs/BUILD_JOURNAL.md:594`, `docs/BUILD_JOURNAL.md:614`, `docs/BUILD_JOURNAL.md:679`, `docs/HANDOFF-2026-08-30.md:248`
 - [ ] **R6.3.4** Stale cross-references to a cascade that no longer exists, and a contracts doc that claims to be alone
 - [ ] **R6.3.5** PRODUCT.md flags a simulated probe counter that no longer exists
+- [ ] **R6.3.6** One journal citation has already rotted since it was written, and two more assertions are true only at an older commit
 ### R6.4
 
 - [ ] **R6.4.1** Guard: route-perimeter walker
