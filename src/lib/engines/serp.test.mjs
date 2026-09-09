@@ -78,10 +78,26 @@ test('GUARD — an ambient Bright Data key is scrubbed, not inherited', (t) => {
     else process.env.BRIGHTDATA_API_KEY = ambient;
   });
 
-  assert.equal(process.env.BRIGHTDATA_API_KEY, undefined,
-    'an ambient Bright Data key must be scrubbed — getSerpProvider prefers it over SERPAPI_KEY');
-  assert.equal(process.env.SERP_PROVIDER, undefined, 'an explicit provider override must be scrubbed too');
-  assert.equal(process.env.SERPAPI_KEY, 'mock-key');
+  // assert.ok, never assert.equal (R6.5.9). node:test dumps `actual` into the
+  // reporter on failure EVEN WITH a custom message — twice, in the diff and in
+  // the error's own `actual:` field — so an assert.equal whose left-hand side
+  // reads a credential var prints that credential into the CI log at the exact
+  // moment the scrub regressed. The `=== ` comparison collapses actual to
+  // `false` before the assertion ever sees it. Measured, with a sentinel:
+  // assert.equal printed the value; assert.ok printed `actual: false`.
+  //
+  // The sharpest case is the SERPAPI_KEY line: it is the one whose actual value
+  // is a genuinely ambient credential rather than this test's own 'bd-ambient'
+  // sentinel, and it is reached whenever useSerpEnv's apply step regresses.
+  // Its shape, never its value, goes in the message via describeEnv.
+  assert.ok(process.env.BRIGHTDATA_API_KEY === undefined,
+    'an ambient Bright Data key must be scrubbed — getSerpProvider prefers it over SERPAPI_KEY;' +
+      ` still ${describeEnv(process.env.BRIGHTDATA_API_KEY)}`);
+  assert.ok(process.env.SERP_PROVIDER === undefined,
+    `an explicit provider override must be scrubbed too; still ${describeEnv(process.env.SERP_PROVIDER)}`);
+  assert.ok(process.env.SERPAPI_KEY === 'mock-key',
+    `useSerpEnv must apply the mock key, so the SerpAPI mocks measure the mock and not an ambient` +
+      ` credential; SERPAPI_KEY is ${describeEnv(process.env.SERPAPI_KEY)} (the mock is len 8)`);
 });
 
 test('extractTextFromBlocks - nested list, snippets, tables, and expandable formats', () => {
