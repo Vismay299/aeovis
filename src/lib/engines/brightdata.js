@@ -49,7 +49,21 @@ function normalizeBrightDataResponse(data) {
 
   let payload = data;
   if (data.body !== undefined) {
-    payload = typeof data.body === "string" ? JSON.parse(data.body) : data.body;
+    if (typeof data.body === "string") {
+      const raw = data.body.trim();
+      if (!raw) return data;
+      try {
+        payload = JSON.parse(raw);
+      } catch {
+        // Bright Data occasionally returns HTML/text when SERP JSON fails.
+        // Surface as an error so scans count it as a SERP failure, not empty AIO.
+        throw new Error(
+          `Bright Data returned non-JSON SERP body (${raw.slice(0, 120).replace(/\s+/g, " ")}…)`
+        );
+      }
+    } else {
+      payload = data.body;
+    }
   }
 
   return payload || data;
