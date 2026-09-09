@@ -1556,9 +1556,31 @@ export function summarizeEngineResults(scanOutput) {
         : 0,
       // Denominator is the observed-citation pool (see above), not every
       // answered row.
+      //
+      // R2.2.11 — null, NOT 0, when that pool is empty. The else-branch used to
+      // publish 0, and scanWorker.js:2000 writes this straight onto
+      // `scans.brand_citation_share_pct`, so a scan whose every citation leg
+      // died — denominator 0, every answered row unverified — recorded "0% of
+      // your answers cite you" forever. That is a confident finding about
+      // something nobody could look at, the exact false-zero class R2 exists to
+      // close. summaryToMetricsRow in src/lib/analytics/rollup.js (:347) already
+      // returned null for the same shape; this branch sat one `?`/`:` away from
+      // code that got it right and disagreed with it.
+      //
+      // A GENUINE measured 0 is untouched and must stay so: denominator > 0
+      // with cited_non_branded 0 still yields the number 0, because "we read
+      // every citation list and you were in none of them" is a real result.
+      // Only the empty denominator becomes null. The comparison also rejects an
+      // absent denominator (undefined > 0 is false) rather than coercing it,
+      // matching the Number.isFinite idiom above.
+      //
+      // Nothing downstream demands a number: brand_citation_share_pct is read
+      // with `?? null` in api/scans/_lib/scanRow.js:98 and services/api.js:384,
+      // and ScoreBreakdown renders it through describeMetricValue, which is the
+      // em-dash-plus-state-chip path (standing rule 5).
       citation_share_pct: citationDenominator > 0
         ? Math.round((aioSummary.cited_non_branded / citationDenominator) * 1000) / 10
-        : 0,
+        : null,
       citation_denominator: citationDenominator,
       // null, never 0, when the slice predates R2.2.2: "no row was excluded"
       // and "this slice could not tell" are different facts (standing rule 5).

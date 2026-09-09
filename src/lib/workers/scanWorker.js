@@ -2504,6 +2504,15 @@ export async function runScanChunk(jobId, deps = {}) {
 // counters stay NULL because a decision not to scan measured no probes.
 // Cardinality is bounded by the number of due schedules per cron tick.
 //
+// R3.4.2 — AND THE CLOCK MOVES. The row above records the decision; it does not
+// undo it. A declined schedule kept `next_run_at <= now`, so listDueSchedules
+// re-returned it on the next tick and the one after that: the brand was
+// declined forever and the only difference the ledger made was that the silence
+// became a daily row saying the same thing. `declineSchedule` below advances
+// `next_run_at` by an explicit per-reason backoff BEFORE filing the row, so a
+// skip is a reschedule and not a permanent verdict. `last_run_at` stays put —
+// nothing ran.
+//
 // The tick itself also gets ONE row, phase 'tick', so a cron pass that looked
 // and found nothing due is a measured zero rather than a silence. Readers that
 // want executions filter `phase = 'tick'`; readers that want the skips filter
@@ -2527,6 +2536,64 @@ export const SCHEDULER_SKIP_REASONS = Object.freeze({
   /** a scan for this brand is already running — don't pile on. */
   BRAND_ALREADY_ACTIVE: "brand_already_active",
 });
+
+/**
+ * R3.4.2 (finding C5) — HOW FAR A DECLINED SCHEDULE'S CLOCK MOVES.
+ *
+ * A skip used to leave `next_run_at` exactly where it was, so the schedule was
+ * still `next_run_at <= now` on the following tick, and the one after that:
+ * `listDueSchedules` re-returned it forever and the scheduler re-declined it
+ * forever. The brand was never scanned again and the only outward sign was a
+ * skip row repeating verbatim once per cron pass.
+ *
+ * This is a per-reason table, NOT `computeNextRunAt(schedule.cadence, ...)`,
+ * for two reasons that are the same reason:
+ *   * `computeNextRunAt` falls back to 72h for any cadence it does not know,
+ *     and 'off' is precisely such a cadence. Bumping a cadence:'off' skip
+ *     through it would silently invent a 72h cadence for a schedule whose
+ *     stated cadence is "never" — a plausible-looking default standing in for
+ *     a value nobody supplied.
+ *   * 'already being scanned' and 'nobody wants this scanned' deserve
+ *     different clocks. The first should come back around soon (the in-flight
+ *     scan is somebody else's — a manual run — and this brand has NOT had its
+ *     scheduled scan); the second should come back around slowly, but must
+ *     still come back, because the enabled=true + cadence='off' contradiction
+ *     is an operator-visible defect and one skip row a day is how it stays
+ *     visible.
+ */
+export const SCHEDULER_SKIP_BACKOFF_MS = Object.freeze({
+  /** Contradictory row (enabled + cadence 'off'). Re-surface once a day. */
+  [SCHEDULER_SKIP_REASONS.CADENCE_OFF]: 24 * 60 * 60 * 1000,
+  /** Someone else's scan is in flight. Try again in an hour, not a cadence. */
+  [SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE]: 60 * 60 * 1000,
+});
+
+/**
+ * `next_run_at` for a schedule this tick declined.
+ *
+ * Throws on a reason with no backoff instead of falling back to a default. A
+ * reason added to SCHEDULER_SKIP_REASONS tomorrow without an entry here must
+ * NOT quietly inherit somebody else's clock — that is how the brand ends up on
+ * a cadence no one chose. The throw is caught by runSchedulerTick's own
+ * try/catch, which closes the tick FAILED and rethrows: loud, on the record,
+ * and impossible to mistake for a tick that had nothing to do.
+ */
+export function computeSkipNextRunAt(reason, fromIso) {
+  const ms = SCHEDULER_SKIP_BACKOFF_MS[reason];
+  if (!Number.isFinite(ms)) {
+    throw new Error(
+      `computeSkipNextRunAt: skip reason "${reason}" has no backoff in SCHEDULER_SKIP_BACKOFF_MS. ` +
+        `Refusing to guess one — an unbacked-off skip re-fires on every tick forever (R3.4.2). Add the case.`
+    );
+  }
+  const fromMs = new Date(fromIso || Date.now()).getTime();
+  if (!Number.isFinite(fromMs)) {
+    throw new Error(
+      `computeSkipNextRunAt: cannot advance a declined schedule from an unparseable time (${JSON.stringify(fromIso)}).`
+    );
+  }
+  return new Date(fromMs + ms).toISOString();
+}
 
 /** Why a whole tick closed the way it did. */
 export const SCHEDULER_TICK_REASONS = Object.freeze({
@@ -2575,6 +2642,51 @@ async function recordSchedulerSkip(ledger, { workerId, brand, reason, detail }) 
   );
 }
 
+/**
+ * Decline one due schedule: advance its clock, then file the row that says so.
+ *
+ * ONE function for both `continue` sites on purpose. The two used to be
+ * copy-pasted blocks, and a fix applied to one of them is the shape of bug this
+ * task is already cleaning up once.
+ *
+ * ORDER — bump, then record. The skip row's detail states the `next_run_at`
+ * that was actually written, so it can only ever be written after the write
+ * succeeded. If the bump throws, this throws: the tick's own catch closes the
+ * tick FAILED with this brand already in `detail.skips` (it is pushed before
+ * the bump) and rethrows. A schedule whose clock could not be advanced is a
+ * schedule that will be declined again on every tick forever — the finding —
+ * so it fails the tick rather than being absorbed.
+ *
+ * `last_run_at` is deliberately NOT touched: nothing ran. Stamping it would
+ * make a declined brand indistinguishable from a scanned one in every read
+ * that uses it as the freshness marker.
+ */
+async function declineSchedule({ ledger, upsertSchedule, schedule, brandLabel, reason, nowIso, workerId, skipped }) {
+  // Computed BEFORE anything is written: an unmapped reason must abort the
+  // decline rather than write half of it.
+  const nextRunAt = computeSkipNextRunAt(reason, nowIso);
+
+  skipped.push({ brand: brandLabel, reason });
+
+  await upsertSchedule(schedule.brand, { next_run_at: nextRunAt });
+
+  await recordSchedulerSkip(ledger, {
+    workerId,
+    brand: brandLabel,
+    reason,
+    detail: {
+      schedule_key: schedule.brand,
+      cadence: schedule.cadence ?? null,
+      now: nowIso,
+      // What the clock was, and what it is now. A reader comparing these two
+      // can tell a skip that rescheduled the brand from one that did not.
+      previous_next_run_at: schedule.next_run_at ?? null,
+      next_run_at: nextRunAt,
+      backoff_ms: SCHEDULER_SKIP_BACKOFF_MS[reason],
+    },
+  });
+}
+
 export async function runSchedulerTick(nowIso, deps = {}) {
   const listDue = deps.listDueSchedules || listDueSchedules;
   const hasActive = deps.hasActiveScanForBrand || hasActiveScanForBrand;
@@ -2619,24 +2731,30 @@ export async function runSchedulerTick(nowIso, deps = {}) {
       // says otherwise (the two fields are independent columns; the P0.4
       // schedule editor that keeps them in sync doesn't exist yet).
       if (schedule.cadence === "off") {
-        skipped.push({ brand: brandLabel, reason: SCHEDULER_SKIP_REASONS.CADENCE_OFF });
-        await recordSchedulerSkip(ledger, {
-          workerId: schedulerId,
-          brand: brandLabel,
+        await declineSchedule({
+          ledger,
+          upsertSchedule,
+          schedule,
+          brandLabel,
           reason: SCHEDULER_SKIP_REASONS.CADENCE_OFF,
-          detail: { schedule_key: schedule.brand, cadence: schedule.cadence ?? null, now: nowIso },
+          nowIso,
+          workerId: schedulerId,
+          skipped,
         });
         continue;
       }
 
       if (await hasActive(brandLabel)) {
         // already running — don't pile on
-        skipped.push({ brand: brandLabel, reason: SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE });
-        await recordSchedulerSkip(ledger, {
-          workerId: schedulerId,
-          brand: brandLabel,
+        await declineSchedule({
+          ledger,
+          upsertSchedule,
+          schedule,
+          brandLabel,
           reason: SCHEDULER_SKIP_REASONS.BRAND_ALREADY_ACTIVE,
-          detail: { schedule_key: schedule.brand, cadence: schedule.cadence ?? null, now: nowIso },
+          nowIso,
+          workerId: schedulerId,
+          skipped,
         });
         continue;
       }

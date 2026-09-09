@@ -15,6 +15,10 @@ import {
   normalizeClaim,
 } from "./probeQueue.js";
 import { LEASE_TTL_MS } from "./jobLease.js";
+// R1.2.13 — the shared claim-lock guard. Imported from the plain module, NOT
+// from src/lib/probeClaimLock.test.mjs: importing a test file registers its
+// tests inside this file's run, where node:test cancels them.
+import { assertLockedSelection, SABOTAGED_CLAIM_SQL } from "./probeClaimLock.guard.mjs";
 
 /**
  * R1.2.2 — the parts of the probe_tasks claim that can be proven WITHOUT a
@@ -458,11 +462,48 @@ test("GUARD — the fleet's outcome vocabulary, the app's, and the table's CHECK
 
 test("GUARD — the claim is settled by the database, not by JS being careful", async () => {
   const sql = await readFile(path.join(REPO, "supabase/migrations/010_probe_tasks.sql"), "utf8");
-  assert.match(
-    sql,
-    /FOR UPDATE SKIP LOCKED/,
-    "without SKIP LOCKED the selection and the claim are two steps, and two workers can both pass step one"
+
+  // R1.2.13 — this assertion used to be `assert.match(sql, /FOR UPDATE SKIP LOCKED/)`
+  // against the WHOLE file, and it could not fail for the reason it existed.
+  // Migration 010 names the clause in prose twice (its header, and the comment
+  // above claim_probe_tasks), so the COMMENTS ALONE satisfied that regex:
+  // deleting the executable clause from the candidate CTE left this file 25/25
+  // green. Documentation certifying itself.
+  //
+  // It is not deleted, because a reader auditing the queue lands HERE, and an
+  // absence invites the next person to re-add the same whole-file regex. It
+  // delegates instead to the single implementation in probeClaimLock.test.mjs,
+  // which strips SQL comments (string-literal aware) before matching, scopes the
+  // match to the candidate CTE of claim_probe_tasks, and reports a bare blocking
+  // `FOR UPDATE` as its own distinct failure. One implementation, so the two
+  // green checks cannot disagree.
+  //
+  // WHAT THIS PROVES: that the migration's executable SQL says
+  // `FOR UPDATE SKIP LOCKED` on the row-choosing SELECT.
+  // WHAT IT DOES NOT PROVE: that Postgres locks anything. This is a static
+  // assertion on SQL TEXT — there is no database in this environment, and a JS
+  // simulation of a lock manager would agree with a broken migration. The
+  // behavioural proof is `src/lib/probeTasksRace.test.mjs`, which needs a real
+  // database and skips LOUDLY and countably when it has none. That skip is an
+  // admission, never a pass — see the guard at the foot of this file.
+  //
+  // Proved not to be a no-op FIRST: if `assertLockedSelection` were ever stubbed
+  // out, delegating to it would be a second toothless guard wearing the first
+  // one's clothes. The fixture keeps both prose mentions and has lost only the
+  // executable clause, which is precisely the state that used to pass here.
+  assert.throws(
+    () => assertLockedSelection(SABOTAGED_CLAIM_SQL, "fixture"),
+    /does not take a row lock/,
+    "the delegated guard must reject a claim function that only TALKS about SKIP LOCKED"
   );
+  assert.match(
+    SABOTAGED_CLAIM_SQL,
+    /FOR UPDATE SKIP LOCKED/,
+    "and the fixture must still satisfy the OLD whole-file regex, or it is not reproducing the finding"
+  );
+
+  assertLockedSelection(sql, "supabase/migrations/010_probe_tasks.sql");
+
   assert.match(sql, /CREATE TABLE IF NOT EXISTS probe_tasks/);
   assert.match(sql, /lease_owner/);
   assert.match(sql, /lease_expires_at/);

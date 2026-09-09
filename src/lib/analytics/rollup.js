@@ -326,9 +326,27 @@ export function summaryToMetricsRow({ brand, date, engine, scanId, promptSetId, 
   const cited = summary.cited_non_branded ?? 0;
   const visibilityPct = summary.visibility_pct ?? summary.share_of_ai_pct ?? null;
   const citationDenominator = citationDenominatorOf({ engine, summary, answered: nonBrandedAnswered });
+  // R2.2.11 — the DENOMINATOR decides whether there is a share at all, and it
+  // decides FIRST. This used to read `summary.citation_share_pct ?? (computed)`,
+  // which is the same expression with the guard on the wrong side of the `??`:
+  // an upstream 0 published over an empty pool was preferred over this
+  // function's own, correct, null. `0 ?? x` is 0, so the pre-existing
+  // false-zero producers laundered straight through onto
+  // brand_metrics_daily.citation_share_pct — the scan-level mirror in
+  // enginePipeline.js (fixed in the same commit) and summarizeAioResults in
+  // scoring/aioPipeline.js:231, which still emits 0.0 for an empty
+  // non_branded_with_aio and is a v8.1 summary this function is fed directly by
+  // buildMetricsRows's single-engine branch and by scripts/backfill-analytics.mjs.
+  //
+  // With an empty denominator there is nothing any upstream could have divided,
+  // so a number claimed for it is not a measurement whoever computed it. With a
+  // non-empty one the preference is unchanged: a summary that already carries
+  // its own citation_share_pct (the v8.1 top-level shape) wins over recomputing
+  // it, exactly as before.
   const citationSharePct =
-    summary.citation_share_pct ??
-    (citationDenominator > 0 ? Math.round((cited / citationDenominator) * 1000) / 10 : null);
+    citationDenominator > 0
+      ? summary.citation_share_pct ?? Math.round((cited / citationDenominator) * 1000) / 10
+      : null;
   const rollup = brandRollup || {};
 
   return {

@@ -18,16 +18,42 @@
  * process in this state could not possibly have anything to find. The []
  * carried no information at all.
  *
- * WHO READ THE LIE. Two production callers, both of which now see the throw:
- *   - src/app/api/brands/[brand]/coverage/route.js:56, whose surrounding catch
- *     turns any read failure into HTTP 500 "Failed to load coverage data."
- *     Before this change an unconfigured deploy fell through to `scans?.[0]`
- *     being undefined and returned 404 "never been scanned".
- *   - src/lib/workers/scanWorker.js:1824 (loadPreviousRoster), which runs ONLY
- *     when rival extraction is already offline and the carried-forward roster
- *     is the last honest one available. A [] there silently downgraded the scan
- *     to roster_source=unavailable — a label that claims we looked for previous
+ * WHO READ THE LIE. Exactly ONE production caller did — corrected under R2.8.15,
+ * because the first version of this comment claimed a second one that provably
+ * did not, and a false history in a permanent artifact is the very thing this
+ * rebuild exists to remove.
+ *
+ *   - src/lib/workers/scanWorker.js:1827 (loadPreviousRoster) is the real
+ *     reader. It runs ONLY when rival extraction is already offline and the
+ *     carried-forward roster is the last honest one available, and it calls
+ *     getScansByDomain directly. A [] there silently downgraded the scan to
+ *     roster_source=unavailable — a label that claims we looked for previous
  *     rivals and found none.
+ *
+ *   - src/app/api/brands/[brand]/coverage/route.js:56 did NOT, and the original
+ *     version of this comment was wrong to say it "fell through to `scans?.[0]`
+ *     being undefined and returned 404 never been scanned". MEASURED, not
+ *     reasoned: the pre-fix tree (commit 220d93d, parent of the R2.8.12 commit
+ *     0c505a5) was checked out and GET was driven with the Supabase env cleared.
+ *     getScansForBrand at route.js:52 threw ScansUnavailableError/
+ *     db_not_configured FIRST — both functions gate on the same module-level
+ *     `supabase` (getScansByDomain via resolveClient, which falls back to it) —
+ *     so the route's own catch returned HTTP 500 "Failed to load coverage data."
+ *     and line 56 never executed. Observed: getScansForBrand threw
+ *     db_not_configured, getScansByDomain returned [] when called on its own,
+ *     route status 500, no network request made. The coverage route's behaviour
+ *     on an unconfigured deploy is therefore UNCHANGED by R2.8.12: 500 before,
+ *     500 after. The 404 story never happened. (The R2.8.12 submit note said
+ *     500; the file said 404; the file was the one that shipped, which is why
+ *     this correction matters more than the two db.js guards filed with it.)
+ *
+ *     WHERE THE 404 STORY CAME FROM, since a wrong claim usually has a true
+ *     ancestor: it describes the pre-R2.8.4 world, one fix earlier. Restoring
+ *     BOTH fail-quiets by mutation — getScansForBrand's `if (!supabase) return
+ *     []` (R2.8.4's) as well as getScansByDomain's (R2.8.12's) — does make the
+ *     route 404. Restoring only R2.8.12's leaves it at 500. So the comment was
+ *     true of a tree that stopped existing before the change it was written to
+ *     describe. coverageUnconfigured.route.test.mjs pins both halves.
  *
  * WHY THIS IS ITS OWN FILE. db.js decides `supabase` once, at import time, from
  * process.env — "no credentials" is a property of the whole process, not of one
@@ -50,9 +76,8 @@ delete process.env.NEXT_PUBLIC_SUPABASE_URL;
 delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const { getScansByDomain, getScansForBrand, ScansUnavailableError, supabase } = await import(
-  "./db.js"
-);
+const { getScansByDomain, getScansForBrand, listRecentScans, ScansUnavailableError, supabase } =
+  await import("./db.js");
 
 function requireUnconfigured() {
   assert.equal(
@@ -220,5 +245,188 @@ test("R2.8.12 — 'we could not look' and 'nothing is there' are distinguishable
     answered.kind,
     unavailable.kind,
     "if these collapsed, the dashboard would again invite a user to run their first scan during an outage"
+  );
+});
+
+/* -------------------------------------------------------------------------
+ * R2.8.15 — the two fail-quiet reads R2.8.12 left in db.js.
+ *
+ * (a) getScansByDomain's blank-`domain` guard. It returned [] and its own
+ *     comment conceded it was "arguably too quiet". It is reachable ONLY with a
+ *     live client (the !client refusal runs first), so it can never mask an
+ *     unreachable database — which is exactly why it is an ARGUMENT error and
+ *     needs its own code rather than db_not_configured. scanWorker's
+ *     loadPreviousRoster passes `url || promptKey`; a checkpoint carrying
+ *     neither reached it and got a silent no-history.
+ *
+ * (b) listRecentScans, which opened `if (!supabase) return []` — the homepage
+ *     workspace rendered an unconfigured deploy as "no brands yet". Same family
+ *     as R2.8.4/R2.8.5/R2.8.12 and the last one in db.js's `!client` line.
+ * ---------------------------------------------------------------------- */
+
+/** A client that answers, so the blank-domain branch is actually reachable. */
+const answeringClient = (rows = []) => ({
+  from: () => ({
+    select: () => ({ order: () => ({ limit: async () => ({ data: rows, error: null }) }) }),
+  }),
+});
+
+test("R2.8.15 — a blank domain is REFUSED as an argument error, not answered with []", async () => {
+  for (const blank of [undefined, null, "", "   ", "https://", "www.", "/"]) {
+    let returned = "did not return";
+    await assert.rejects(
+      async () => {
+        returned = await getScansByDomain(blank, { client: answeringClient([]) });
+      },
+      (err) => {
+        assert.ok(
+          err instanceof ScansUnavailableError,
+          `expected ScansUnavailableError for ${JSON.stringify(blank)}, got ${err?.name}`
+        );
+        assert.equal(
+          err.code,
+          "domain_required",
+          `a blank domain (${JSON.stringify(blank)}) is a bad ARGUMENT — it must not be reported ` +
+            "as db_not_configured (which blames the deploy) nor as a measured empty"
+        );
+        assert.match(
+          err.message,
+          /no domain was supplied/i,
+          "an operator reading a failed job's error_message must see WHICH argument was missing"
+        );
+        return true;
+      },
+      `getScansByDomain(${JSON.stringify(blank)}) must refuse, it must not answer "never scanned"`
+    );
+    assert.equal(
+      returned,
+      "did not return",
+      `returning ${JSON.stringify(returned)} for ${JSON.stringify(blank)} is the silent ` +
+        "no-history this test exists to forbid"
+    );
+  }
+});
+
+test("R2.8.15 — THREE outcomes stay distinguishable: bad argument / measured empty / no database", async () => {
+  requireUnconfigured();
+
+  const call = async (domain, deps) => {
+    try {
+      return { kind: "answered", scans: await getScansByDomain(domain, deps) };
+    } catch (error) {
+      return { kind: "refused", type: error.constructor.name, code: error.code };
+    }
+  };
+
+  const badArgument = await call("", { client: answeringClient([]) });
+  const measuredEmpty = await call("italicatiles.com", { client: answeringClient([]) });
+  const noDatabase = await call("italicatiles.com", undefined); // real unconfigured client
+
+  assert.deepEqual(badArgument, {
+    kind: "refused",
+    type: "ScansUnavailableError",
+    code: "domain_required",
+  });
+  assert.deepEqual(measuredEmpty, { kind: "answered", scans: [] });
+  assert.deepEqual(noDatabase, {
+    kind: "refused",
+    type: "ScansUnavailableError",
+    code: "db_not_configured",
+  });
+
+  // ONE vocabulary: both refusals are the same class, so a caller branches once
+  // on `instanceof` and only then reads `code`. No third error type was added.
+  assert.equal(
+    badArgument.type,
+    noDatabase.type,
+    "adding a second error class here would force every caller to grow a second catch arm"
+  );
+  assert.notEqual(
+    badArgument.code,
+    noDatabase.code,
+    "'you asked about no domain' and 'the deploy has no database' must not share a code — " +
+      "an operator would go and check the environment for a bug in the caller"
+  );
+  assert.notEqual(
+    badArgument.kind,
+    measuredEmpty.kind,
+    "a bad argument must not arrive looking like a domain that has genuinely never been scanned"
+  );
+});
+
+test("R2.8.15 — the blank-domain refusal happens BEFORE any query is issued", async () => {
+  let queried = false;
+  const spyClient = {
+    from: () => {
+      queried = true;
+      return {
+        select: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }),
+      };
+    },
+  };
+  await assert.rejects(
+    () => getScansByDomain("   ", { client: spyClient }),
+    (err) => err.code === "domain_required"
+  );
+  assert.equal(
+    queried,
+    false,
+    "refusing after spending a 200-row read would make the guard a lie about cost, not just about shape"
+  );
+});
+
+test("R2.8.15 — listRecentScans REFUSES on an unconfigured process, it never answers []", async () => {
+  requireUnconfigured();
+
+  let returned = "did not return";
+  await withNoNetwork(async () => {
+    await assert.rejects(
+      async () => {
+        returned = await listRecentScans(12);
+      },
+      (err) => {
+        assert.ok(
+          err instanceof ScansUnavailableError,
+          `expected ScansUnavailableError, got ${err?.name}: ${err?.message}`
+        );
+        assert.equal(
+          err.code,
+          "db_not_configured",
+          "the homepage workspace must be told the DEPLOY is unconfigured, not that it has no brands"
+        );
+        assert.match(err.message, /not configured/i);
+        return true;
+      },
+      "listRecentScans answering [] renders an unconfigured deploy as an empty workspace"
+    );
+  });
+
+  assert.equal(
+    returned,
+    "did not return",
+    "an empty array here is indistinguishable on screen from a real first-run workspace"
+  );
+});
+
+test("R2.8.15 — one vocabulary: listRecentScans refuses exactly like getScansForBrand", async () => {
+  requireUnconfigured();
+
+  const byBrand = await getScansForBrand("Italica").then(
+    (value) => ({ value }),
+    (error) => ({ error })
+  );
+  const recent = await listRecentScans(12).then(
+    (value) => ({ value }),
+    (error) => ({ error })
+  );
+
+  assert.ok(byBrand.error, "getScansForBrand already refuses without a client (R2.8.4)");
+  assert.ok(recent.error, "listRecentScans must refuse the same way (R2.8.15)");
+  assert.equal(recent.error.constructor, byBrand.error.constructor);
+  assert.equal(recent.error.name, "ScansUnavailableError");
+  assert.equal(
+    recent.error.code,
+    byBrand.error.code,
+    "a caller that already branches on db_not_configured must not need a third code for the homepage"
   );
 });

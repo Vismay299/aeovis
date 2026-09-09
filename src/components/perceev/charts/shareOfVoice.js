@@ -285,6 +285,23 @@ export function resolveShareOfVoice(result) {
  * "not_assessed", pct: 0}` — so a number is printed only when the resolver also
  * says it was MEASURED.
  *
+ * R2.7.10 — NO LIVE CALLER, SAID OUT LOUD. ScoreBreakdown.jsx was this
+ * function's only consumer, and R2.7.10 established that no route ever imported
+ * ScoreBreakdown: the component was reachable by its own test and by nothing
+ * else, so R2.7.6's fix reached no user. The component was retired (deleted);
+ * R2.7.6 is therefore closed against a file that no longer exists, and this
+ * paragraph is the record of what that close actually bought — this function,
+ * plus the rendered proof that the LIVE surface (RankAndSharePanel -> Donut,
+ * mounted on /dashboard/[brand]/[scanId]) already draws the same distinction:
+ * src/components/dashboard/liveShareOfVoiceSurface.test.mjs.
+ *
+ * This function is kept, exported, and unit-tested at
+ * ./shareOfVoiceMetric.test.mjs, and is currently called by nothing. Donut.jsx
+ * still answers the same question with its own inline branch — the duplication
+ * this exists to end. Folding Donut.jsx onto it was outside R2.7.10's file
+ * scope and is filed as follow-up work rather than done quietly here. Do not
+ * read the absence of callers as "safe to change freely": read it as a debt.
+ *
  * On states this build does not know: the chip shows human words and the raw
  * token travels in `rawState` (for a data attribute) and is named in `detail`.
  * Neither swallowed nor dumped on a customer as a bare machine token — the

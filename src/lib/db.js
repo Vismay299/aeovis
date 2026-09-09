@@ -470,7 +470,12 @@ export async function getScansForBrand(brand) {
  * ScansUnavailableError with the same `db_not_configured` code getScansForBrand
  * uses, so a caller has one vocabulary to branch on and not two.
  *
- * @throws {ScansUnavailableError} db_not_configured | db_read_failed
+ * R2.8.15 closed the one remaining silent []: a blank `domain`. See the comment
+ * at the guard below — it is an argument error, not a measurement, and it now
+ * refuses with `domain_required` on the same error class.
+ *
+ * @throws {ScansUnavailableError} db_not_configured | domain_required |
+ *   db_read_failed
  */
 export async function getScansByDomain(domain, deps = {}) {
   const client = resolveClient(deps);
@@ -488,12 +493,31 @@ export async function getScansByDomain(domain, deps = {}) {
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
     .split("/")[0];
-  // A DIFFERENT SHAPE, LEFT AS IS DELIBERATELY: this [] is not a fabricated
-  // measurement about the database, it is a caller that asked about no domain
-  // at all. It is still arguably too quiet (R2.8.12 names it as a follow-up),
-  // but conflating it with db_not_configured would tell an operator the deploy
-  // is broken when the argument was.
-  if (!host) return [];
+  // R2.8.15 — a blank domain is an ARGUMENT error, and it used to return [].
+  // This branch is only reachable with a live client (the !client refusal above
+  // runs first), so it can never mask an unreachable database — but it could
+  // and did mask a caller with nothing to ask about. scanWorker's
+  // loadPreviousRoster (workers/scanWorker.js:1827) passes `url || promptKey`;
+  // a checkpoint carrying neither would land here, and the [] then flowed on as
+  // "this brand has never been scanned" — the carry-forward skipped and the scan
+  // stamped roster_source=unavailable, with no trace of the real cause. (That
+  // reachability is read off the call site; no live job in that state has been
+  // observed. What WAS measured for R2.8.15 is the guard itself: undefined,
+  // null, "", "   ", "https://", "www." and "/" all returned [].)
+  //
+  // It refuses with the SAME ScansUnavailableError class as the two branches
+  // around it — a caller still branches once on `instanceof` — and is told apart
+  // by `code`. No third error type exists here on purpose: `domain_required`
+  // must not be conflated with db_not_configured (which would blame the deploy
+  // for a bad argument) nor with a measured [].
+  if (!host) {
+    throw new ScansUnavailableError(
+      `Cannot read scans by domain: no domain was supplied (received ${JSON.stringify(
+        domain ?? null
+      )}). This is a bad argument, not a domain with no scans.`,
+      { code: "domain_required" }
+    );
+  }
 
   const { data, error } = await client
     .from("scans")
@@ -526,9 +550,45 @@ export async function getScansByDomain(domain, deps = {}) {
  * Recent scans collapsed to the latest per brand, for the homepage workspace.
  * Returns lightweight rows (no full raw_results payload beyond what a card
  * needs) so the homepage stays fast.
+ *
+ * CONTRACT (R2.8.15, the last member of the R2.8.4/R2.8.5/R2.8.12 family in this
+ * file): the returned array means "the database answered". A deploy with no
+ * NEXT_PUBLIC_SUPABASE_URL/ANON_KEY used to open `if (!supabase) return []`, so
+ * the homepage workspace rendered an unconfigured process as a workspace with no
+ * brands in it — "you have never scanned anything", manufactured entirely from
+ * our own missing environment, and identical on screen to a real first-run. It
+ * could not even have been a degradation: insertScan refuses without a client
+ * (R2.8.6) and there is no memory fallback for scans, so nothing could be there
+ * to find. It now refuses with the SAME ScansUnavailableError and the SAME
+ * `db_not_configured` code getScansForBrand/getScansByDomain use — one
+ * vocabulary, one branch at the call site.
+ *
+ * STILL FAIL-QUIET BELOW, AND NOT FIXED HERE: the `catch` at the end of this
+ * function swallows a postgrest error (an unreachable DB, a 5xx) and returns [].
+ * That is the db_read_failed shape R2.8.5 fixed in the two functions above, it
+ * is a genuinely different branch from this one, and it is outside R2.8.15's
+ * accept, which names only the `!supabase` line. It was reported as a follow-up
+ * in R2.8.15's submit note; if no task id sits beside this paragraph, the
+ * follow-up was never filed and this is still open. Do NOT read its survival as
+ * a considered exception.
+ *
+ * GET /api/history has the same problem one level up, and this was measured, not
+ * assumed: with the env cleared, the route's own catch turns the refusal below
+ * into a 200 `{ scans: [], runs: [], activeJobs: [], counts: {} }`. So today the
+ * refusal reaches the server log and any direct caller, but the screen still
+ * shows an empty workspace. Fixing that route is also outside this task's file
+ * scope and is in the same follow-up.
+ *
+ * @throws {ScansUnavailableError} db_not_configured
  */
 export async function listRecentScans(limit = 12) {
-  if (!supabase) return [];
+  if (!supabase) {
+    throw new ScansUnavailableError(
+      "Supabase is not configured — recent scans cannot be read. " +
+        "This is a refusal to look, not a workspace with no brands in it.",
+      { code: "db_not_configured" }
+    );
+  }
   try {
     const { data, error } = await supabase
       .from("scans")
