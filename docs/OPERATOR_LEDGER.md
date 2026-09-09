@@ -6,23 +6,31 @@
 > here is automatable and merely un-automated, that is a bug in this file; say so
 > and move it.
 
-**Date:** 2026-09-05 · **Task:** R6.2.1 (finding S27) · **Verified at:** `04e80db`
+**Date:** 2026-09-08 · **Task:** R6.2.1 (finding S27) · **Verified at:** `ea165ed`
+**and the working tree on top of it** — see the next paragraph for why both.
 
-> **Citation anchoring — read before following a line number.** Every `file:line`
-> in this document was re-resolved against commit `04e80db` on 2026-09-05: **17
-> citation sites across 9 files, of which 14 held and 3 did not.** All three
-> failures were in one sentence — the previous revision cited `createScanJob` at
-> `src/lib/db.js:577` with its fallback at `:600-602`, and `POST /api/scan`
-> returning 201 off it at `src/app/api/scan/route.js:57-70`. `createScanJob` has
-> never been on line 577: it was at `:542` at `1a5ed81`, the commit that revision
-> declared, where `:577` and `:600-602` are the migration-007 reclaim path. That
-> entry is rewritten in § E, R0.1.21, anchored on the symbol — and its behaviour
-> has since changed as well.
+> **Citation anchoring — read before following a line number.** The previous
+> revision of this file swept all 17 of its citations against commit `04e80db`,
+> and every one of them held *there*. It then shipped in `220d93d` — the same
+> commit that rewrote `src/lib/rateLimit.js` (192 lines), added migration `013`,
+> and moved three cited statements in `scripts/setup-supabase.mjs`. Four claims
+> in this document were false the moment it landed, and one of them asserted the
+> **exact inverse** of the code it cited. The sweep was honest; the commit
+> falsified the artefact.
 >
-> `src/lib/db.js` moved in four of the last twelve commits and will move again.
-> So where a symbol name exists, this file names the symbol and describes the
-> mechanism in words. Treat a line number here as a hint about *which file*;
-> `git grep -n` is the lookup that survives.
+> The lesson, which applies to anything written here next: **a citation sweep
+> against the parent commit proves nothing about the commit the document ships
+> in** — and no author can sweep against a commit that does not exist yet. The
+> only durable fix is not to depend on line numbers. So where a symbol or a
+> grep-able marker exists, this file names *that* and describes the mechanism in
+> words. Treat a line number here as a hint about *which file*; the `git grep`
+> given beside each claim is the lookup that survives.
+>
+> This revision was resolved against `ea165ed` **and** against the working tree,
+> because roughly twenty source files are dirty from concurrent agents and the
+> next commit will contain their edits too. Where the two disagreed (they do for
+> `src/lib/rateLimit.js`, which has moved again), this file states only what is
+> true in both.
 
 ---
 
@@ -257,10 +265,25 @@ Also environment-shaped and easy to get silently wrong:
 
 ## C. Migrations
 
-`supabase/migrations/` currently holds `001` … `012`. `npm run setup:db` applies
-them in filename order, one transaction per file, recording each in the
-`schema_migrations` ledger — `scripts/setup-supabase.mjs:473` (`BEGIN`), `:502`
-(the ledger `INSERT`), `:510` (`COMMIT`), all three inside the same per-file try.
+`supabase/migrations/` holds thirteen files. They are named individually rather
+than as a range, and `src/lib/docStatus.test.mjs` fails this document if a file
+on disk is missing from the list — the previous revision wrote "`001` … `012`"
+in the same commit that added `013`, and nothing caught it:
+
+`001_initial_schema`, `002_content_os`, `003_content_agents`,
+`004_crew_canvas_knowledge`, `005_analytics_platform`, `006_agent_control_plane`,
+`007_scan_seal`, `008_system_heartbeats`, `009_scan_rate_limit`,
+`010_probe_tasks`, `011_scan_runs`, `012_scan_job_attempts`,
+`013_brand_metrics_sov_state`.
+
+`npm run setup:db` applies them in filename order, one transaction per file,
+recording each in the `schema_migrations` ledger. The `BEGIN`, the ledger
+`INSERT` and the `COMMIT` all sit inside a single per-file `try` in
+`scripts/setup-supabase.mjs`; find the block with
+`git grep -n 'INSERT INTO schema_migrations' scripts/setup-supabase.mjs` and read
+outwards from it. Line numbers are deliberately withheld here: this file cited
+`:473`/`:502`/`:510` for those three statements, an edit to the same function
+moved all three, and the stale numbers landed an operator on unrelated text.
 
 **Applied state — what is actually known, and what is not.** Verified against the
 live AEO project `nggyizuwqepxaqnpcqqj` by agents at the dates given, read out of
@@ -272,16 +295,42 @@ the Postgres catalog:
   present.
 - `012_scan_job_attempts.sql`: **applied state unverified from this environment.**
   Do not assume. Check the catalog before relying on it.
+- `013_brand_metrics_sov_state.sql`: **applied state unverified from this
+  environment, and this is the one to check first.** Nothing in this repository
+  can read the production catalog, so no agent has confirmed it either way. It is
+  the newest file on disk and it carries the worst consequence of the thirteen if
+  it is missing: per the `013` row of `docs/PROD_MIGRATIONS.md`
+  (`git grep -n 'PGRST204' docs/PROD_MIGRATIONS.md`), **every scan finalize
+  hard-fails its `brand_metrics_daily` upsert with PostgREST `PGRST204`
+  ("column sov_state ... does not exist")**. Confirmed in the code, not taken on
+  the other document's word: `git grep -n 'export async function
+  upsertBrandMetricsDaily' src/lib/db/analytics.js` — it passes `rows` to
+  `.upsert()` verbatim and then does `if (error) throw error`. So an unknown
+  column is a hard throw, not a dropped field: the finalize does not silently
+  lose a column, it fails. Its only non-test caller is `runFinalizePhase`
+  (`git grep -n 'export async function runFinalizePhase'
+  src/lib/workers/scanWorker.js`), i.e. the end of every scan. There is a second
+  writer on the same columns: `scripts/backfill-analytics.mjs` imports
+  `buildMetricsRows` from `src/lib/analytics/rollup.js` — the function that emits
+  `sov_state`/`sov_state_reason` — and upserts the result into
+  `brand_metrics_daily`, so a backfill against a pre-013 database fails the same
+  way. `GET /api/brands/[brand]/metrics` only reads the table (`select("*")`), so
+  it degrades rather than throwing.
 
 **The per-migration verification queries now exist.** `docs/PROD_MIGRATIONS.md`
 landed under R6.1.2 in commit `156c21b` — it did not exist when this section was
 first written, and the earlier revision of this file said so. Go there for the
-catalog query that settles each file, including the `012` question above: it
-lists `012`'s four objects (`scan_jobs.attempts`, `scan_jobs_attempts_chk`,
-`scan_jobs_attempts_idx`, `claim_scan_job_attempt`) as the things to look for.
-That document is itself `in_verification` at the time of writing, so treat its
-queries as reviewed-by-one, not settled. The operator rule behind it is the one
-R0.1.11 established the hard way:
+catalog query that settles each file, including the `012` and `013` questions
+above: it lists `012`'s four objects (`scan_jobs.attempts`,
+`scan_jobs_attempts_chk`, `scan_jobs_attempts_idx`, `claim_scan_job_attempt`) and
+`013`'s six (two columns, three constraints and
+`brand_metrics_daily_sov_unverified_idx`) as the things to look for. R6.1.2 was
+verified and closed on 2026-09-05; its verifier re-derived the expected object
+counts from the DDL independently for all **twelve** migrations then on disk and
+every one matched. `013`'s row was appended afterwards, in `220d93d`
+(`git log -S'013_brand_metrics_sov_state' -- docs/PROD_MIGRATIONS.md`), so treat
+that one row as reviewed-by-one and the twelve above it as settled. The operator
+rule behind all of them is the one R0.1.11 established the hard way:
 
 > **Verify schema state from the Postgres catalog, never from a head-probe.**
 > Query `to_regclass` for tables and indexes and `pg_proc` for functions. An
@@ -350,7 +399,15 @@ automatable and is exactly what R5.2.2 builds; the *decision to publish* is not.
 ## E. Standing gates by task id
 
 Everything below needs a human and is not in § A. Grouped by what the human
-supplies. Re-check status with `orchestrate.mjs show <id>` — these move.
+supplies. Re-check status with `orchestrate.mjs show <id>` — these move, and two
+of them moved while this file was being corrected.
+
+**Two entries here are CLOSED in the ledger and are kept deliberately**, each
+labelled as closed where it appears: R0.1.20, because closing it withdrew a false
+claim and left the operator's deploy-time check entirely undone, and R0.1.21,
+because what shipped changed how a developer's machine behaves. Nothing else in
+this section is closed. If you are counting open work, count from
+`orchestrate.mjs status`, not from this table.
 
 ### Needs a credential or a vendor account (`needs-secrets`)
 
@@ -370,18 +427,53 @@ supplies. Re-check status with `orchestrate.mjs show <id>` — these move.
 | Task | What the operator must do |
 | --- | --- |
 | R0.1.12 | See § A item 2. |
-| R0.1.20 | Curl the **deployed** `POST /api/scan` with a forged `x-vercel-forwarded-for` and assert the rate-limit bucket does not move. The `trusted:true` label on that source rests on an unproven assumption that Vercel's edge overwrites the inbound header; the code says so itself at `src/lib/rateLimit.js:79` ("NOT VERIFIED HERE"), just below `TRUSTED_IP_HEADER` at `:76`. Nothing inside a request handler can see the difference, so no unit test can settle it. Writing the script without running it is a partial result. |
-| R3.1.1 | `vercel.json` currently schedules `/api/scan/worker` at `0 0 * * *` — once a day. Rescue of a stalled job therefore depends on someone having a browser tab open. It needs a 10-minute schedule. |
+| R0.1.20 | **CLOSED in the ledger (verified pass, 2026-09-08) — the operator action is unchanged and still not done.** Curl the **deployed** `POST /api/scan` with a forged `x-vercel-forwarded-for` and assert the rate-limit bucket does not move. What closing the task changed is the *claim*, not the check: see below the table. |
+| R3.1.1 | `vercel.json` currently schedules `/api/scan/worker` at `0 0 * * *` — once a day. Rescue of a stalled job therefore depends on someone having a browser tab open. It needs a 10-minute schedule. It is a compensation, not the fix — see R3.1.5. |
 | R3.1.2 | `vercel.json` has no `?batch=1` entry, so the one automated scan-to-content chain is unreachable. Also `needs-llm`. |
+| R3.1.5 | Decide where the post-response scan work lives, and record it. `git grep -n waitUntil -- src package.json` returns nothing and `@vercel/functions` is not a dependency, so the fire-and-forget `runScanChunk(job.id).catch(...)` after the response in `src/app/api/scan/route.js` has **no platform mechanism keeping the function alive** and can be frozen mid-scan. Three independent compensations hide this: `HEARTBEAT_STALE_MS` staleness inference, the poll-driven rescue in `GET /api/scan/[job_id]/status` (which makes an open browser tab part of the execution guarantee), and the daily crons. This is the root cause R3.1.1 above and R3.3.2 are each treating a symptom of; fixing them does not fix it. Needs a Vercel-level answer (`waitUntil`, or a worker that owns its own lifetime) plus the ADR. |
+
+#### R0.1.20 — the label was withdrawn; the check that would earn it back is not run
+
+**Read this before quoting the rate limiter's trust label anywhere.** Until
+2026-09-08 this document told operators the limiter reports `trusted: true` for a
+source it cannot vouch for, and cited a `"NOT VERIFIED HERE"` comment for it.
+That was the **inverse** of the code by then, and it is recorded here rather than
+quietly deleted: R0.1.20 shipped in the same commit that this file's last
+revision shipped in, so the sweep that checked those citations against the parent
+commit could not have caught it.
+
+What is true now, anchored on a marker instead of a line number —
+`git grep -n 'RESTORE-TRUST-R0.1.20' src/lib/rateLimit.js`:
+
+- The constant is `PLATFORM_IP_HEADER` (`x-vercel-forwarded-for`). The old name
+  `TRUSTED_IP_HEADER` is gone, and the comment above the rename says why: it was
+  "a promise this module cannot keep". `git grep -i "not verified" --
+  src/lib/rateLimit.js` returns nothing.
+- On a Vercel runtime that header is still read **first**, so the bucket key and
+  the strength of the limit are byte-identical to before. Only the claim changed.
+- It is now reported `trusted: false` with `trustBasis: "platform-unproven"`, and
+  a warn line fires carrying the `RESTORE-TRUST-R0.1.20` marker. A spoofable
+  identity no longer carries a confidence label.
+- The deferral is written into the code as the exported string
+  `TRUST_RESTORE_CHECK`, whose text *is* the operator ask.
+
+**The operator ask is therefore unchanged and still outstanding:** a deploy-time
+check that forges `x-vercel-forwarded-for` against the **deployed** origin and
+asserts the rate-limit bucket does not move, run somewhere an operator sees the
+result. Nothing inside a request handler can distinguish a header the edge wrote
+from one the caller typed, so no unit test can settle it — the closing verifier
+proved the withdrawal is total over an eight-case battery, which is a different
+claim. Passing that check is exactly what would let `trusted: true` be taken
+back; writing the script without running it is a partial result.
 
 ### Needs a decision recorded (`needs-decision`)
 
 | Task | The judgement call |
 | --- | --- |
-| R0.1.21 | **Decided and shipped — read this for the consequence, not the ask.** See below the table; the judgement call it used to describe no longer reproduces. |
+| R0.1.21 | **CLOSED in the ledger (verified pass, 2026-09-05) — read the note below the table for the consequence, not for an ask.** The judgement call it used to describe no longer reproduces; what it shipped changed how a machine with no Supabase behaves. |
 | R1.1.3 | Name the worker host (long-lived container), and rule out Vercel functions for this workload **in writing**. |
 | R4.5.1 | Decide-or-delete, per item, on the schema-only subsystems: `topics`, `content_feedback` reads, the phantom `analyzing` status. Wire with a test, or delete with the schema. |
-| R6.1.9 | Where the secrets-hygiene rule lives for agents outside the `rebuild-*` family. The guard covers six agent definitions; roughly forty other tracked instruction files under `.claude/` carry nothing. Both leaks came from agents running unscoped searches, and nothing about that failure mode is specific to `rebuild-*`. Copying the rule into forty files multiplies the thing that drifts; the alternative is `CLAUDE.md`, which every session loads by construction. |
+| R6.1.9 | **One sentence of approval is the whole ask.** Where the secrets-hygiene rule lives for agents outside the `rebuild-*` family: the guard covers six agent definitions, roughly forty other tracked instruction files under `.claude/` carry nothing, and both credential leaks came from agents running unscoped searches — nothing about that failure mode is specific to `rebuild-*`. The controller re-examined this on 2026-09-08 and **deliberately left it blocked**: copying the rule into forty files multiplies the thing that drifts, and the correct answer — move it to `CLAUDE.md`, which every session loads by construction, and reduce the six copies to a pointer — means editing the operator's own project-instruction file, which no agent has standing to do on another agent's say-so. Approve option A and the change is about ten minutes' work. |
 
 #### R0.1.21 — the unpersisted-scan 201 no longer reproduces
 
@@ -395,21 +487,29 @@ citation was presented as a *correction* of a stale roadmap anchor. Correcting i
 is the reason this revision exists; the entry is rewritten rather than
 renumbered, because the substance moved too.
 
-**What is true at `04e80db`.** Anchor on the symbol:
+**What is true today.** Anchor on the symbol:
 `git grep -n 'export async function createScanJob' src/lib/db.js`. It still
 fail-softs — the `if (!hasDb)` branch immediately after the job object is built
 writes it into `global.memoryJobs` and returns it, shaped exactly like a
 persisted row. What changed is the route. `POST /api/scan` now imports the
 module-level `supabase` client and returns **503** `{ code:
-"scan_store_unavailable" }` when it is null — `src/app/api/scan/route.js:105`,
-calling `scanStoreUnavailable` — *before* `createScanJob` runs, so no job is
-created and `runScanChunk` never fires. A second, currently unreachable guard at
-`:119` refuses the same way if a returned job turns up in `global.memoryJobs`
+"scan_store_unavailable" }` when it is null, *before* `createScanJob` runs, so no
+job is created and `runScanChunk` never fires. A second, currently unreachable
+guard refuses the same way if a returned job turns up in `global.memoryJobs`
 anyway, so a future divergence in `db.js`'s fallback condition fails loud instead
-of quietly restoring the 201. It shipped in commit `156c21b` with its test
+of quietly restoring the 201. Both are found with
+`git grep -n 'scanStoreUnavailable' src/app/api/scan/route.js` — the earlier
+revision of this section gave them as `:105` and `:119`, and they are not there
+any more, which is the whole argument for the grep.
+
+It shipped in commit `156c21b` with its test
 (`src/lib/scanRoute.unpersisted.route.test.mjs`) and its decision record,
-`docs/decisions/2026-09-05-unpersisted-scan-jobs.md`. The ledger task is
-`in_verification`, not closed.
+`docs/decisions/2026-09-05-unpersisted-scan-jobs.md`. **The ledger task is
+`done`** — verified pass on 2026-09-05 by a verifier who reproduced the original
+defect by execution rather than by reading: with both guards neutralised the
+route returned 201 with a job id and `runScanChunk` entered; with them restored,
+503, no job, worker never entered. It then walked all six `createScanJob` failure
+modes against the real handler and found no path that still yields a 201.
 
 **What the operator still needs to know.**
 
@@ -427,11 +527,13 @@ of quietly restoring the 201. It shipped in commit `156c21b` with its test
    guard:** `runSchedulerTick` (`src/lib/workers/scanWorker.js`, `const createJob
    = deps.createScanJob || createScanJob`), reached from `GET /api/scan/worker`
    — the cron route in `vercel.json`. It is cron-authenticated, so it is not the
-   anonymous spend path R0.1.21 closed. On an unconfigured instance it also
-   appears unreachable, because `listDueSchedules` reads `global.memoryScanSchedules`,
-   which is empty in a cold process. **That reachability argument is reasoned,
-   not exercised** — no test drives it. Anyone adding a third caller should
-   assume the guard does not cover them.
+   anonymous spend path R0.1.21 closed; the closing verifier independently
+   enumerated the callers and reached the same two, which settles the *census*.
+   On an unconfigured instance it also appears unreachable, because
+   `listDueSchedules` reads `global.memoryScanSchedules`, which is empty in a
+   cold process — **that second argument is still reasoned, not exercised**, no
+   test drives it, and closing the task did not change that. Anyone adding a
+   third caller should assume the guard does not cover them.
 
 ### Needs an LLM key (`needs-llm`)
 
@@ -464,11 +566,26 @@ sees three clean days and flips the flag on day four.
 - No calibration label exists, so the judge's precision and recall are **unmeasured**
   (§ A item 4, R2.5.1).
 - Whether Vercel strips an inbound `x-vercel-forwarded-for` is **assumed, not
-  proven**, and the rate limiter reports `trusted:true` on that assumption
-  (R0.1.20).
+  proven**. Nothing in the repository can settle it and the deploy-time forge
+  check that would has **not been run** (§ E, R0.1.20). What the code says about
+  it is no longer an overclaim: since R0.1.20 that source is reported
+  `trusted: false` with `trustBasis: "platform-unproven"` and a warn line, so the
+  unproven thing is the platform behaviour, not the label.
+  *This bullet asserted the opposite until 2026-09-08* — it told operators the
+  limiter reports `trusted: true` — and it is corrected in place rather than
+  silently, because a known-open section that has drifted into describing a fixed
+  state is the exact failure this section exists to catch.
 - Whether `CRON_SECRET` and `OPERATOR_TOKEN` are set on the deployment is
   **unconfirmed** (R0.1.12).
-- Migration `012`'s applied state in production is **unverified** (§ C).
+- The scan work that runs **after** the HTTP response has **no platform
+  keepalive** — `git grep -n waitUntil -- src package.json` returns nothing and
+  `@vercel/functions` is not a dependency — so a scan can be frozen mid-run and
+  three compensations are all that stand between that and silent abandonment
+  (§ E, R3.1.5). Do not read "scans complete" as evidence against this; the
+  compensations are what make it look fine.
+- Migrations `012` **and `013`** have an **unverified** applied state in
+  production (§ C). `013` is the one to check first: without it every scan
+  finalize hard-fails with PostgREST `PGRST204`.
 - The rebuild branch is many commits ahead of `main` and PR #1 is unmerged —
   `git rev-list --count main..HEAD` for the number, which changes hourly and is
   therefore not written down here. (It was 120 at `1a5ed81` and 123 at `04e80db`,

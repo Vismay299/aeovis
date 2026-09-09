@@ -147,3 +147,33 @@ test("GUARD — the README migration table lists every migration on disk", async
     `these migrations exist but the README table does not list them: ${missing}`
   );
 });
+
+/**
+ * R6.2.1 — the same guard over the operator ledger's migrations section.
+ *
+ * The README guard above existed and passed while OPERATOR_LEDGER.md § C said
+ * "`001` … `012`" in the very commit that added `013` — the migration whose
+ * absence hard-fails every scan finalize with PostgREST PGRST204. A range in
+ * prose cannot be checked; an enumeration can, which is why § C names each file
+ * individually. Scoped to § C so that a passing mention of a migration anywhere
+ * else in the document cannot satisfy it.
+ */
+test("GUARD — OPERATOR_LEDGER § C lists every migration on disk", async () => {
+  const ledger = await readFile(path.join(REPO, "docs/OPERATOR_LEDGER.md"), "utf8");
+  const start = ledger.indexOf("\n## C. Migrations\n");
+  assert.notEqual(start, -1, "OPERATOR_LEDGER.md must still have a '## C. Migrations' section");
+  const rest = ledger.slice(start + 1);
+  const end = rest.indexOf("\n## ");
+  const section = end === -1 ? rest : rest.slice(0, end);
+
+  const onDisk = (await readdir(path.join(REPO, "supabase/migrations")))
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => f.replace(/\.sql$/, ""))
+    .sort();
+  const missing = onDisk.filter((m) => !section.includes("`" + m + "`"));
+  assert.deepEqual(
+    missing,
+    [],
+    `these migrations exist but OPERATOR_LEDGER.md § C does not name them: ${missing}`
+  );
+});
