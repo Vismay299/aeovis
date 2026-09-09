@@ -410,10 +410,18 @@ The prototype currently holds all of these. Keep them holding.
 - `DESIGN.md` and `PRODUCT.md` still describe the rejected world (see the warning at the top).
 - The landing page's "live" framing must not imply telemetry that does not exist yet — the existing
   probe counter is simulated and flagged in `PRODUCT.md` for replacement.
-  - **Resolved 2026-09-09 (R6.3.5), sentence kept for the trail.** Both facts it rests on expired on
-    2026-08-16: `src/components/landing/ProbeCounter.jsx` was deleted with its stats strip in
-    `5111219`, and `PRODUCT.md` no longer carries that flag. The landing page now makes no aggregate
-    claim at all, enforced by `src/lib/landingProbeCounter.test.mjs`. The rule in the first clause
-    still stands; only "the existing probe counter" and the `PRODUCT.md` cross-reference are stale.
+  - **Resolved 2026-09-09 (R6.3.5), sentence kept for the trail.** Both facts it rests on are gone,
+    and the first was never true. The `lp-stats` strip that rendered `<ProbeCounter />` under the
+    label "Probes run" left `src/app/page.js` on 2026-07-23 in `e70d21e` — compare
+    `git show e70d21e^:src/app/page.js` (the section, the element and the label at lines 116–121)
+    with `git show e70d21e:src/app/page.js` (no `ProbeCounter`, no `lp-stat`, no `Probes run`). That
+    is the same commit that wrote the `PRODUCT.md` flag this sentence cites, so "the existing probe
+    counter" named nothing rendered even on the day it was written here.
+    `src/components/landing/ProbeCounter.jsx` survived as orphaned source — its only caller,
+    `DossierLeftPanel.jsx`, was itself imported by nothing under `src/` — until `5111219`
+    (2026-08-16) deleted both. `PRODUCT.md` no longer carries the flag, and the landing page makes
+    no aggregate claim, held by the two named guards in `src/lib/landingProbeCounter.test.mjs`. The
+    rule in the first clause still stands; the counter, the cross-reference, and the implication
+    that either was ever live on this page are stale.
 - Studio's hero panel says "Live probe stream". It sits inside a product mock and the footer states
   the data is a demonstration, so it was kept — but re-check it once real telemetry exists.

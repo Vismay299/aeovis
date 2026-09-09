@@ -73,21 +73,56 @@ on the homepage with existing case history.
   synthetic, and must stay recognizably synthetic.
 - No real customer testimonials, logos, or case studies exist. Do not fabricate.
 - The landing page makes no aggregate claim about the product's lifetime work — no
-  probe total, no run count, no visitor tally. `src/lib/landingProbeCounter.test.mjs`
-  fails if any number on that surface is manufactured from a seed, a timer or
-  randomness (`GUARD — the landing page renders no counter component, and the
-  simulated one is gone`), and `src/lib/landingHonesty.test.mjs` ties the figures
-  that remain to the sample report rather than letting the page type its own.
+  probe total, no run count, no visitor tally. Two guards in
+  `src/lib/landingProbeCounter.test.mjs` hold that line, and neither is a proof of
+  honesty. Find them by name, not line number — both moved within a day of being
+  cited.
+  - `GUARD — the landing surface manufactures no number` scans `src/app/page.js`
+    and every component in `src/components/landing/`, and fails on the shapes a
+    fabricated total is built from: `Math.random`, a timer, a self-incrementing
+    state updater, and a typed total that is five digits or longer or grouped by
+    commas. Its own header states the floor rather than implying there is none — a
+    small typed figure ("412 probes this week") trips no rule, and it reads source,
+    never the rendered DOM.
+  - `GUARD — the landing page renders no counter component, and the simulated one
+    is gone` is the cheap hop that catches the exact historical shape:
+    `ProbeCounter.jsx` must not exist, the page must name no
+    `*Counter`/`*Ticker`/`*Tally`/`*Odometer`, and `Probes run` must not survive
+    comment-stripping. It is a name check, and a rename evades it.
+  `src/lib/landingHonesty.test.mjs` ties the figures that do remain to the sample
+  report rather than letting the page type its own.
   - **Correction, 2026-09-09 (R6.3.5).** From `e70d21e` (2026-07-23) until this
     edit, this bullet read *"Probe counter on the landing page is simulated.
-    [flagged: replace with real telemetry]"*. Both halves stopped being true on
-    2026-08-16: `src/components/landing/ProbeCounter.jsx` seeded a typed 37,720 and
-    added a random 1–3 to itself every 2.2 seconds, and it was deleted with its
-    whole stats strip in `5111219`, the design-system port. Nothing replaced it. The
-    line outlived the component by three weeks, so it both asserted a dishonest
-    surface that no longer exists and pointed readers at repair work already done by
-    deletion. Recorded rather than removed, because a flag that rotted silently is
-    the thing this section is supposed to catch.
+    [flagged: replace with real telemetry]"*. **It was born stale**, in the same
+    commit. `e70d21e` wrote the flag into this file and rewrote `src/app/page.js` in
+    one change, and that rewrite deleted the `lp-stats` strip the counter lived in:
+    `git show e70d21e^:src/app/page.js` holds the section, the `<ProbeCounter />`
+    element and the `Probes run` label at lines 116–121, and `git show
+    e70d21e:src/app/page.js` contains no `ProbeCounter`, no `lp-stat` and no
+    `Probes run` at all. "On the landing page" was false on the day it was written.
+  - The simulation itself was real, and outlived its render site as orphaned
+    source. `src/components/landing/ProbeCounter.jsx` (19 lines) seeded a typed
+    37,720 and added a random 1–3 to itself every 2.2 seconds. After `e70d21e` its
+    only caller was `DossierLeftPanel.jsx`, which nothing imported — `git grep -l
+    DossierLeftPanel 5111219^` returns that file's own definition and two plan docs,
+    and nothing else under `src/`. `5111219` (2026-08-16, the design-system port)
+    deleted both, 162 lines that no route rendered; the wrapper held a bare
+    `<ProbeCounter />` in a `div`, with no strip and no label. `5111219` did not
+    delete a stats strip. That had been gone three and a half weeks.
+  - So the flag outlived the rendered counter by seven weeks and the dead source by
+    three, and for its entire life it pointed readers at repair work that was either
+    already done by deletion or never needed. Recorded rather than removed, because
+    a flag that rotted silently is the thing this section exists to catch.
+  - **The source comments upstream of this correction carry the same error** and are
+    out of scope to edit here: the R2.10.2 note in `src/app/page.js` (`git grep -n
+    "THE PROBE COUNTER, AND WHY THERE ISN'T ONE" src/app/page.js`) says "that module
+    and the strip around it were deleted on 2026-08-16 in `5111219`", and the header
+    of `src/lib/landingProbeCounter.test.mjs` says the module went "along with the
+    whole stats strip". Only the module did. A first draft of this correction
+    repeated that claim because it was copied forward from those comments on trust
+    instead of re-derived from `git show` — which is precisely the failure this
+    bullet is here to stop. A follow-up should correct both comments; until then,
+    trust the two `git show` commands above over either.
   - No real counter is planned; there is no aggregate figure in this deployment
     worth quoting. The standing condition on one ever returning is written at the
     surface it governs — `git grep -n "THE PROBE COUNTER, AND WHY THERE ISN'T ONE"
