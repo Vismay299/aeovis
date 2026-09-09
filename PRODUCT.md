@@ -72,7 +72,28 @@ on the homepage with existing case history.
 - Live demo answer fragments use fictional brands (Brightwave, NorthPeak, Lumen IQ) —
   synthetic, and must stay recognizably synthetic.
 - No real customer testimonials, logos, or case studies exist. Do not fabricate.
-- Probe counter on the landing page is simulated. [flagged: replace with real telemetry]
+- The landing page makes no aggregate claim about the product's lifetime work — no
+  probe total, no run count, no visitor tally. `src/lib/landingProbeCounter.test.mjs`
+  fails if any number on that surface is manufactured from a seed, a timer or
+  randomness (`GUARD — the landing page renders no counter component, and the
+  simulated one is gone`), and `src/lib/landingHonesty.test.mjs` ties the figures
+  that remain to the sample report rather than letting the page type its own.
+  - **Correction, 2026-09-09 (R6.3.5).** From `e70d21e` (2026-07-23) until this
+    edit, this bullet read *"Probe counter on the landing page is simulated.
+    [flagged: replace with real telemetry]"*. Both halves stopped being true on
+    2026-08-16: `src/components/landing/ProbeCounter.jsx` seeded a typed 37,720 and
+    added a random 1–3 to itself every 2.2 seconds, and it was deleted with its
+    whole stats strip in `5111219`, the design-system port. Nothing replaced it. The
+    line outlived the component by three weeks, so it both asserted a dishonest
+    surface that no longer exists and pointed readers at repair work already done by
+    deletion. Recorded rather than removed, because a flag that rotted silently is
+    the thing this section is supposed to catch.
+  - No real counter is planned; there is no aggregate figure in this deployment
+    worth quoting. The standing condition on one ever returning is written at the
+    surface it governs — `git grep -n "THE PROBE COUNTER, AND WHY THERE ISN'T ONE"
+    src/app/page.js` — and is that it must read a real count query and render an em
+    dash with a state chip when that query cannot answer: never a zero, which is a
+    reading, and never a seed, which is a lie.
 
 ## Product Principles
 

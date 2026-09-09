@@ -410,5 +410,10 @@ The prototype currently holds all of these. Keep them holding.
 - `DESIGN.md` and `PRODUCT.md` still describe the rejected world (see the warning at the top).
 - The landing page's "live" framing must not imply telemetry that does not exist yet — the existing
   probe counter is simulated and flagged in `PRODUCT.md` for replacement.
+  - **Resolved 2026-09-09 (R6.3.5), sentence kept for the trail.** Both facts it rests on expired on
+    2026-08-16: `src/components/landing/ProbeCounter.jsx` was deleted with its stats strip in
+    `5111219`, and `PRODUCT.md` no longer carries that flag. The landing page now makes no aggregate
+    claim at all, enforced by `src/lib/landingProbeCounter.test.mjs`. The rule in the first clause
+    still stands; only "the existing probe counter" and the `PRODUCT.md` cross-reference are stale.
 - Studio's hero panel says "Live probe stream". It sits inside a product mock and the footer states
   the data is a demonstration, so it was kept — but re-check it once real telemetry exists.
