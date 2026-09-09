@@ -1252,9 +1252,23 @@
         "src/lib/rateLimit.js",
         "src/app/api/scan/route.js"
       ],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "src/lib/rateLimit.js:187",
+        "src/lib/rateLimit.js:248",
+        "src/lib/rateLimit.js:257",
+        "src/lib/rateLimit.js:530",
+        "src/lib/rateLimit.js:677",
+        "src/lib/rateLimit.js:708",
+        "src/lib/rateLimit.js:718",
+        "src/lib/rateLimit.js:733",
+        "src/app/api/scan/route.js:84",
+        "src/lib/scanRateLimitUnverified.route.test.mjs:124",
+        "src/lib/rateLimit.test.mjs:750",
+        "src/lib/rateLimit.test.mjs:927",
+        "src/lib/rateLimit.test.mjs:1067"
+      ],
       "notes": [
         {
           "at": "2026-09-05T06:52:25.212Z",
@@ -1265,6 +1279,11 @@
           "at": "2026-09-08T11:07:40.864Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-08T11:26:49.625Z",
+          "by": "rebuild-implementer",
+          "text": "CHOICE: the SECOND branch of the accept — a limit a caller-settable header cannot move — not fail-closed. Recorded in code at rateLimit.js:150-187 (UNVERIFIED_CEILING_DECISION) with the rejected option and why: 'no proxy header declared' is the DEFAULT state of a fresh self-hosted deploy, and a blanket 503 there turns a misconfiguration into a total outage, while a finite ceiling keeps the door open, bounds the money and names the env var that restores a real per-IP limit. TWO TIERS: the per-address bucket stays as a courtesy (explicitly not load-bearing), and a deployment-wide ceiling is enforced on a bucket keyed by a CONSTANT (unverifiedCeilingBucketKey, :530) that no request header addresses. Ceiling = SCAN_RATE_LIMIT_UNVERIFIED_CEILING, else SCAN_RATE_LIMIT x UNVERIFIED_CEILING_MULTIPLIER(5); garbage falls back to the derived value, never 0 or infinity. ceilingApplies (:248) is keyed on caller-SETTABILITY, not on trusted: operator-declared and Vercel-platform are exempt, x-real-ip / x-forwarded-for / no-header are not, and an UNKNOWN basis is not (fails closed). REPRODUCED FIRST at HEAD: 100 rotating x-real-ip under SCAN_RATE_LIMIT=5 were allowed 100 times through checkScanRateLimit, and 8 rotating requests through the REAL POST handler were never refused. Now 25 and 0. ROUTE (:84): a ceiling refusal no longer claims 'too many scans from this address' — that would be a lie about a shared bucket — and X-RateLimit-Limit/Remaining report the limit that actually refused. Only an explicit BUCKET_SCOPE.CLIENT gets the personal sentence; a missing scope gets the neutral one. R0.1.20 IS PRESERVED AND UNTOUCHED: the platform header is still read first, still trusted:false/platform-unproven, its bucket key is still byte-identical (their pinned-literal test :622 still passes) and it is NOT under the ceiling — putting it there would cap every Vercel deploy at 25/hr on the strength of a doubt R0.1.20 deliberately left open. TWO SELF-CAUGHT PROBLEMS FIXED before submitting: (1) a request the per-address tier already refused no longer spends the shared allowance (:677) — otherwise one caller hammering ONE address, who gets no scan after their 5th, could take the deployment down for everyone at zero vendor cost; rotation still cannot escape, because every forged address is a fresh bucket and therefore always client-allowed. (2) the ceiling's envelope is a four-state CEILING_STATE (not-applicable / counted / skipped-refused-earlier / unavailable) instead of two booleans, so 'did not apply', 'was not spent' and 'counter is broken' are three different things and remaining is a number in exactly one of them — never 0. Both degraded paths stay fail-open, loud, remaining:null. EXERCISED: in-process against the real POST /api/scan (scanRateLimitUnverified.route.test.mjs, VERCEL and SCAN_RATE_LIMIT_IP_HEADER unset): 8 rotated x-real-ip -> 8x429, each forged per-address bucket holds exactly 1 of a limit of 5 (so the per-address tier refused nothing), and the ceiling bucket took all 8 — that is the discriminating assertion, not a log string. Controls in the same file: under the ceiling the route still serves (503 from R0.1.21's store guard, no job created, memoryJobs asserted unchanged in every test), and a single over-quota honest caller still gets the personal sentence. MUTATION-CHECKED five ways, each restored with a targeted edit: ceilingApplies->false (13 red), ceiling key derived from the address (10 red), route always says 'from this address' (2 red), ceiling remaining 0 instead of null (1 red), counting refused requests against the ceiling (1 red). TESTS: my 5 suites 54/54 at claim -> 75/75 now. Full npm run test:scoring is 1975 tests / 0 fail at submit (the baseline I took at claim had pre-existing reds in landingProbeCounter, brightdataZone, DashboardShell and cronAuth; other agents fixed them in this shared tree during my run). NOT DONE, deliberately, outside my file set: (a) .env.example does not document the new SCAN_RATE_LIMIT_UNVERIFIED_CEILING (that file is owned by another task) — it is the only new env var; (b) no ADR under docs/decisions/ as R0.1.20 wrote, because docs/ was not in my permitted file set — the decision is recorded in the module instead and guarded by a test; (c) scan_rate_limits still has no retention policy, so a rotating caller mints a row per forged address even though they now get no scans — pre-existing since migration 009, not caused by this change, deserves its own task."
         }
       ],
       "verification": null
@@ -2419,10 +2438,16 @@
         "worker/"
       ],
       "phase": "R1",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:28:00.701Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -2501,7 +2526,7 @@
       ],
       "phase": "R1",
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-test-author",
       "evidence": [
         "src/lib/probeClaimLock.test.mjs:207",
@@ -2531,7 +2556,11 @@
           "text": "FINDING REPRODUCES, and worse than filed. New file src/lib/probeClaimLock.test.mjs (6 tests, hermetic). Both six-way cases in probeTasksRace.test.mjs relabelled 'SMOKE (NOT the atomicity proof)' with comments naming the deterministic case that is the proof; the deterministic case renamed 'SKIP LOCKED (THE ATOMICITY PROOF)'.\n\nCHOICE OF APPROACH: (b) static SQL-text assertion, stated as such in the new file's header. Justification: this environment has no Postgres, so option (a) alone cannot go red under sabotage -- every live case skips. Option (c) is unavailable on principle: a JS simulation of row locking has no lock manager and would pass whatever the SQL says. So (a) is PRESERVED (probeTasksRace.test.mjs still runs against real PG, loud stderr NOT RUN banner, 10 counted skips, never a silent pass) and (b) is ADDED to give CI teeth. The new file says out loud that it tests the migration's TEXT and not Postgres's BEHAVIOUR, and points at the live case for the behavioural proof.\n\nSABOTAGE APPLIED AND OBSERVED, twice, on disk in supabase/migrations/010_probe_tasks.sql:\n 1. FOR UPDATE SKIP LOCKED deleted from the candidate CTE (line 183) -> probeClaimLock.test.mjs 3 pass / 3 FAIL.\n 2. Replaced with a bare FOR UPDATE (the blocking variant) -> 3 pass / 3 FAIL, with the distinct message 'locks without SKIP LOCKED. A contending worker would block on the lock...'.\nMigration restored by targeted edit; git hash-object is a55f0fa2e1baa2e9e7877155ea8aae577cab977b before and after, and git diff --stat on that path is empty.\n\nNEW FINDING for the verifier -- the existing static guard is toothless and I could not fix it (not in my file list). src/lib/probeQueue.test.mjs:459 'GUARD - the claim is settled by the database' does assert.match(sql, /FOR UPDATE SKIP LOCKED/) against the WHOLE FILE. Migration 010 mentions the clause in PROSE at lines 28 and 111, so the comments satisfy it. Measured under sabotage 1: probeQueue.test.mjs stayed 25/25 GREEN with the executable clause deleted. That is the documentation certifying itself. The new guard strips SQL comments (string-literal aware) before matching, scopes the match to the candidate CTE of claim_probe_tasks, and walks EVERY migration defining the function so a later CREATE OR REPLACE cannot drop the clause. probeClaimLock.test.mjs:207 permanently reproduces the old regex passing the sabotaged text while the new guard rejects it, so the teeth cannot rot away.\n\nLIVE CASE HARDENED (probeTasksRace.test.mjs:260): SET statement_timeout = 5000 on worker B's connection. Without it the bare-FOR-UPDATE regression does not fail the live suite, it HANGS it -- B waits on A's uncommitted lock forever, which reads as an infra flake. Now it raises a named error naming the exact regression. Unverifiable here (no DB); flagged for whoever next runs npm run test:live.\n\nTESTS: baseline 1843 tests / 1815 pass / 2 fail / 26 skip. After: 1902 / 1856 / 20 fail / 26 skip. The delta is NOT mine -- the tree is being edited by ~12 concurrent agents. All 20 failures are in src/components/dashboard/degradedEngineBanner.test.mjs, src/components/dashboard/historyScoreSurface.test.mjs and src/lib/envTruth.test.mjs; none touch the probe queue. My two files are fully green in that run (probeClaimLock 6/6 pass, probeTasksRace 10/10 loudly skipped). Pre-existing failures I found and did not touch: cronAuth/envTruth R0.1.13 resolveNodeEnv, landingProbeCounter 'each rule is load-bearing on its own'."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-08T11:28:17.858Z",
+        "note": "PASS on the accept's SECOND branch, taken honestly. The first branch (make the six-way race tests fail without SKIP LOCKED) cannot be met with no Postgres here, and the implementer did not claim it was. Verifier reproduced the toothlessness: with the executable clause deleted from 010_probe_tasks.sql:183, probeQueue.test.mjs stays 25/25 GREEN while the new probeClaimLock guard goes 3 pass / 3 FAIL. A bare FOR UPDATE also gives 3/3 with a DISTINCT diagnosis naming the blocking-not-skipping behaviour, so the two bugs are told apart. SKIPS ARE LOUD AND COUNTABLE, which was the thing most likely to be fudged: the NOT RUN banner prints to stderr BEFORE any test result and ends 'The claim atomicity is therefore UNPROVEN in this run', the gate is wired through node:test's skip option so the tally reports 10 skipped with a reason on each line, and a skip cannot read as a pass. FOUR ATTACKS ON THE GUARD'S OWN ROBUSTNESS, all defeated: (1) a NEW 999_attack.sql with a lockless CREATE OR REPLACE goes red on the LOCK message naming that file, not merely on a filename tripwire, so the walk genuinely inspects new migrations; (2) the clause commented out goes red; (3) the clause relocated from the candidate CTE into the claimed CTE goes red on two tests; (4) the function renamed so ZERO definitions match goes red with 'no claim_probe_tasks definition found' - no vacuous pass on an empty match set. The permanent-teeth assertion at :207 cannot rot: weakening stripSqlComments to the identity function immediately reds the TEETH test itself. Migration byte-identical to HEAD, so this is test-only and touches no production behaviour. Suite +0 new failures. HONEST NON-TEST, stated plainly by both implementer and verifier: the SET statement_timeout = 5000 at probeTasksRace.test.mjs:260 needs a live Postgres and was executed by neither. The reasoning holds on inspection - statement_timeout does cover time waiting on a row lock, connect() builds a fresh unpooled client per test so the SET is session-scoped, and the /statement timeout/i matcher at :271 would catch the abort - but it remains unexecuted until someone runs test:live. FOLLOW-UP, redundancy not coverage: the CTE scoping works (attack 3 went red) but nothing pins it - replacing candidateCte's body with a passthrough leaves the guard 6/6 green, so a future refactor could quietly retire the scoping. Filed as R1.2.15."
+      }
     },
     {
       "id": "R1.2.9",
@@ -2765,6 +2794,36 @@
       "notes": [
         {
           "at": "2026-09-08T11:19:35.418Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R1.2.15",
+      "subphase": "R1.2",
+      "lane": "test",
+      "title": "The probe-claim guard CTE scoping has no fixture pinning it, so a refactor could retire it silently",
+      "detail": "Found by the R1.2.8 verifier as a redundancy gap, not a coverage gap, and correctly not charged against that task. probeClaimLock.test.mjs scopes its FOR UPDATE SKIP LOCKED match to the candidate CTE of claim_probe_tasks, and that scoping WORKS today - the verifier relocated the clause into the claimed CTE and the suite went red on two tests. But unlike the comment-stripping logic, which has its own fixture, the scoping itself is pinned by nothing: replacing candidateCte body with a passthrough that returns the whole body un-scoped leaves the guard 6/6 GREEN. So a future refactor can quietly un-scope the match and no test complains, at which point the clause could sit anywhere in the function and still satisfy the guard. The verifier also noted the counting guard at :263 is deliberately global rather than scoped, which is why it alone survived the relocation attack - there is no gap in coverage today, only in the guard defence of its own structure. The fix shape is established by the file itself: add a SABOTAGED_010 fixture with the clause parked in the claimed CTE and assert the guard throws on it, exactly as the existing TEETH assertion at :207 pins the comment-stripping by running the old whole-file regex and the new guard against the same sabotaged text.",
+      "accept": "Un-scoping candidateCte turns a test red. A committed fixture holds a migration with the clause in the wrong CTE and the guard is asserted to reject it.",
+      "deps": [
+        "R1.2.8"
+      ],
+      "anchors": [
+        "src/lib/probeClaimLock.test.mjs:207",
+        "src/lib/probeClaimLock.test.mjs:243",
+        "src/lib/probeClaimLock.test.mjs:263"
+      ],
+      "tags": [],
+      "phase": "R1",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:28:55.646Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -5033,7 +5092,7 @@
       "anchors": [
         "src/lib/db.js"
       ],
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/lib/db.js:477",
@@ -5067,7 +5126,11 @@
           "text": "amended: ADDENDUM BY THE IMPLEMENTER, NOT THE CONTROLLER (orchestrate amend hardcodes by:\"controller\"; this text is from rebuild-implementer, R2.8.12). My submit note above lost six backtick-quoted code snippets to shell interpretation. Restoring them here verbatim, in the order they were dropped; nothing else in that note changes.\n\n1. CALLERS TRACED item 2, scanWorker.js:1824 - the sentence should read: \"It does 'await getScansByDomainFn(url || promptKey)' with no catch\".\n2. TEST paragraph, first gap - \"the real module-level 'supabase === null'\".\n3. TEST paragraph, second gap - \"and the injected '{ client: null }' / '{ client: undefined }' deps seam\".\n4. TEETH PROVEN ON DISK - \"Restored 'if (!client) return [];' in src/lib/db.js and re-ran\".\n5. DELIBERATELY NOT DONE (a) - \"The 'if (!host) return []' at src/lib/db.js:492 still returns quietly\".\n6. FOLLOW-UPS (1) - \"scanWorker passes 'url || promptKey', so a job with neither produces a silent 'no history' with no trace\". FOLLOW-UPS (2) - \"listRecentScans at src/lib/db.js:524 still opens with 'if (!supabase) return [];'\".\n\nNo claim in the submit note depended on a dropped snippet; the gaps were quotations, not evidence."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-08T11:28:31.230Z",
+        "note": "PASS. Verifier judged the uncommitted working copy (branch tip did not yet carry it), diff 24/7 confined entirely to getScansByDomain with no other agent's work entangled. It REPRODUCED the fabrication rather than assuming it: against pre-fix db.js in a process with supabase null, a direct getScansByDomain returned [] while getScansForBrand THREW - byte-identical outputs from opposite causes, and two vocabularies for one condition. Post-fix all three no-client paths throw ScansUnavailableError/db_not_configured while the working-client paths still return an honest []. ONE VOCABULARY CONFIRMED, not a third: the class is defined once at db.js:371, getScansForBrand throws it with db_not_configured at :411, the new branch uses the same class and string at :481, and insertScan's ScanWriteError uses the same code on the write side. A caller branches ONCE. Test 2 pins constructor identity AND code equality, and caught the divergence under sabotage. Callers traced hop by hop: the coverage route's claim is CORRECT and verified - getScansForBrand runs first at :52 and already threw pre-fix, so :56 was unreachable and this task changes no user-visible behaviour there; scanWorker.js:1824 has no catch and rosterContinuity.js:80 calls loadPreviousRoster UNWRAPPED inside its catch, with a docstring saying a DB failure should still die, so the throw genuinely propagates. IMPORTANT CAVEAT THE VERIFIER ADDED: db.js:15 builds the only client in the codebase, so a worker in a process with supabase null could not have loaded a job and the coverage route 500s earlier - the branch is therefore not reachable in a live deploy today. This is a contract and defence-in-depth fix, correct in shape, not a behaviour change; the implementer disclosed this for the coverage route but slightly overstated the scanWorker half. The !host exception is SOUND and was confirmed by execution, not by accepting the argument: the client check runs first, so the surviving [] can only fire when a client exists and cannot mask an unreachable database. The verifier also tried to DEFEAT the unconfigured premise - test:scoring carries no --env-file and there is no dotenv, so supabase was already null before the file's delete statements; it removed those deletes and ran with a configured env, and 3 of 5 tests failed on the assert, proving requireUnconfigured is not vacuous. Three sabotages, each individually load-bearing. Clean isolated worktree measurement: +5 tests, +5 passes, ZERO new failures. DEFECT FOUND, filed rather than failed: scansByDomainUnconfigured.test.mjs:24-25 states in a permanent comment that an unconfigured deploy previously returned 404 never-been-scanned - that is FALSE, the route returned 500 because getScansForBrand threw first, and the implementer's own submit note says the opposite. In a rebuild whose subject is artifacts asserting things they did not verify, that comment must be corrected before it calcifies as history. Filed as R2.8.15 with the two corrected line numbers for the other follow-ups."
+      }
     },
     {
       "id": "R2.8.13",
@@ -5123,6 +5186,36 @@
       "notes": [
         {
           "at": "2026-09-08T11:15:35.047Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R2.8.15",
+      "subphase": "R2.8",
+      "lane": "backend",
+      "title": "A false history comment in the R2.8.12 guard, plus the last two fail-quiet reads in db.js",
+      "detail": "Three items, all found by the R2.8.12 VERIFIER with line numbers it re-derived itself. (1) THE COMMENT, and it is the one that matters. src/lib/scansByDomainUnconfigured.test.mjs:24-25 states in a permanent comment that before the change an unconfigured deploy fell through to scans[0] being undefined and returned 404 never-been-scanned. That is FALSE: getScansForBrand at coverage/route.js:52 threw first, so the route returned 500 and :56 was never reached. The implementer own submit note says the opposite and says it correctly - so the shipped file contradicts the shipped note. In a rebuild whose entire subject is artifacts asserting things nobody verified, this must be corrected before it calcifies into history that a later reader trusts. (2) src/lib/db.js:496 - the empty-host guard returns [] for a blank domain, and scanWorker passes url or promptKey, so a job with neither gets a silent no-history with no trace. The verifier confirmed this is a genuinely DIFFERENT shape from the db_not_configured case and correctly left out of R2.8.12, because the client check runs first: it can only fire when a client exists, so it cannot mask an unreachable database. It is argument validation and should refuse as such. (3) src/lib/db.js:530 listRecentScans still opens with if (!supabase) return [] at :531, so the homepage workspace renders an unconfigured deploy as an empty workspace. Same fail-quiet family as R2.8.4/R2.8.5/R2.8.12, and the last one in this file. Note both line numbers here are the verifier corrected ones; the submit note prose said :492 and :524.",
+      "accept": "The false history comment states what actually happened. A blank domain is refused as an argument error, distinguishable from both a measured empty and an unreachable database. listRecentScans refuses rather than answering [] with no client, reusing the existing ScansUnavailableError vocabulary and adding no third one. A test drives each, and restoring the fail-quiet turns it red.",
+      "deps": [
+        "R2.8.12"
+      ],
+      "anchors": [
+        "src/lib/scansByDomainUnconfigured.test.mjs:24",
+        "src/lib/db.js:496",
+        "src/lib/db.js:530"
+      ],
+      "tags": [],
+      "phase": "R2",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-08T11:28:55.120Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }

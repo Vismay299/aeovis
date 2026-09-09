@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**94 / 229 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**96 / 231 closed** · 8 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -51,7 +51,7 @@ Baseline commit: `5111219`
 - [x] **R0.1.19** The perimeter warn-once guard is evadable in one added line — closed at `src/lib/operatorPerimeter.middleware.test.mjs:131`, `src/lib/operatorPerimeter.test.mjs:454`
 - [x] **R0.1.20** Nothing proves Vercel strips an inbound x-vercel-forwarded-for `needs-vercel` — closed at `src/lib/rateLimit.js:326`, `src/lib/rateLimit.js:121`, `src/lib/rateLimit.js:352`, `src/lib/rateLimit.js:458`, `src/lib/rateLimit.test.mjs:515`, `src/lib/rateLimit.test.mjs:535`, `src/lib/rateLimit.test.mjs:622`, `docs/decisions/2026-09-05-withhold-vercel-forwarded-for-trust.md:1`
 - [x] **R0.1.21** POST /api/scan returns 201 off a job that only exists in memory `needs-decision` — closed at `src/app/api/scan/route.js:105`, `src/lib/scanRoute.unpersisted.route.test.mjs:122`, `docs/decisions/2026-09-05-unpersisted-scan-jobs.md:55`
-- [~] **R0.1.22** The rate limiter warns and continues on a caller-settable client address when off Vercel
+- [~] **R0.1.22** The rate limiter warns and continues on a caller-settable client address when off Vercel — submitted `src/lib/rateLimit.js:187`, `src/lib/rateLimit.js:248`, `src/lib/rateLimit.js:257`, `src/lib/rateLimit.js:530`, `src/lib/rateLimit.js:677`, `src/lib/rateLimit.js:708`, `src/lib/rateLimit.js:718`, `src/lib/rateLimit.js:733`, `src/app/api/scan/route.js:84`, `src/lib/scanRateLimitUnverified.route.test.mjs:124`, `src/lib/rateLimit.test.mjs:750`, `src/lib/rateLimit.test.mjs:927`, `src/lib/rateLimit.test.mjs:1067`
 - [ ] **R0.1.23** .env.example still tells the operator the Vercel forwarded-for header is trusted
 ### R0.2
 
@@ -71,7 +71,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `9/36`
+## R1 — Real-surface probe fleet  `10/37`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -89,14 +89,15 @@ Baseline commit: `5111219`
 - [x] **R1.2.3** Create the scan_runs ledger table — closed at `supabase/migrations/011_scan_runs.sql:78`, `scripts/setup-supabase.mjs:111`, `scripts/setup-supabase.mjs:493`, `src/lib/scanRunsLive.test.mjs:346`, `src/lib/scanRunsLive.test.mjs:44`, `worker/src/lib/probe.js:27`
 - [ ] **R1.2.4** Authenticated ingest POST /api/internal/probe-results
 - [ ] **R1.2.5** Dev runbook for the fleet
-- [ ] **R1.2.6** Fleet config validated at boot
+- [~] **R1.2.6** Fleet config validated at boot
 - [x] **R1.2.7** The Bright Data zone cache never invalidates — closed at `src/lib/engines/brightdata.js:81`, `src/lib/engines/brightdata.js:91`, `src/lib/engines/brightdata.js:116`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:291`, `src/lib/engines/brightdata.js:313`, `src/lib/engines/brightdata.js:398`, `src/lib/engines/brightdata.js:478`, `src/lib/engines/brightdataZone.test.mjs:101`, `src/lib/engines/brightdataZone.test.mjs:167`, `src/lib/engines/brightdataZone.test.mjs:249`
-- [~] **R1.2.8** The six-way race tests pass with SKIP LOCKED removed — submitted `src/lib/probeClaimLock.test.mjs:207`, `src/lib/probeClaimLock.test.mjs:243`, `src/lib/probeClaimLock.test.mjs:263`, `src/lib/probeClaimLock.test.mjs:275`, `src/lib/probeTasksRace.test.mjs:154`, `src/lib/probeTasksRace.test.mjs:211`, `src/lib/probeTasksRace.test.mjs:244`, `src/lib/probeTasksRace.test.mjs:260`, `src/lib/probeQueue.test.mjs:459`
+- [x] **R1.2.8** The six-way race tests pass with SKIP LOCKED removed — closed at `src/lib/probeClaimLock.test.mjs:207`, `src/lib/probeClaimLock.test.mjs:243`, `src/lib/probeClaimLock.test.mjs:263`, `src/lib/probeClaimLock.test.mjs:275`, `src/lib/probeTasksRace.test.mjs:154`, `src/lib/probeTasksRace.test.mjs:211`, `src/lib/probeTasksRace.test.mjs:244`, `src/lib/probeTasksRace.test.mjs:260`, `src/lib/probeQueue.test.mjs:459`
 - [x] **R1.2.9** Two records describe the zone cache R1.2.7 just replaced — closed at `docs/vendors/brightdata.md:113`, `docs/vendors/brightdata.md:150`, `docs/vendors/brightdata.md:217`, `docs/vendors/brightdata.md:253`, `docs/vendors/brightdata.md:314`, `src/lib/engines/serp.js:5`, `src/lib/engines/serp.js:14`, `src/lib/engines/serp.js:286`, `src/lib/engines/serp.js:325`, `src/lib/engines/serp.js:352-354`, `src/lib/scoring/promptGen.js:129`, `src/lib/scoring/promptGen.js:212`, `src/lib/scoring/promptGen.js:222-224`, `src/lib/scoring/promptGen.js:266-268`, `src/lib/scoring/aioPipeline.js:99`, `src/lib/scoring/enginePipeline.js:101`, `src/lib/engines/brightdata.js:69`, `src/lib/engines/brightdata.js:145`, `src/lib/engines/brightdata.js:192`, `src/lib/checkSecretsBrightdataNoZone.test.mjs:21`, `src/lib/engines/brightdataZone.test.mjs:206`, `src/app/api/scan/route.js:62`, `src/app/api/scan/worker/route.js:138`
 - [x] **R1.2.10** The Bright Data 200-envelope zone rejection has no test — closed at `src/lib/engines/brightdata.js:299`
 - [~] **R1.2.11** The widened zone-rejection regex has no committed negative-case test — submitted `src/lib/engines/brightdataZone.test.mjs:819`, `src/lib/engines/brightdataZone.test.mjs:748`, `src/lib/engines/brightdataZone.test.mjs:968`, `src/lib/engines/brightdataZone.test.mjs:940`, `src/lib/engines/brightdataZone.test.mjs:892`, `src/lib/engines/brightdataZone.test.mjs:713`, `src/lib/engines/brightdata.js:291`
 - [ ] **R1.2.12** A laptop fleet worker inherits production credentials and the write guard cannot see it
 - [ ] **R1.2.13** The SKIP LOCKED static guard matches prose comments, so the migration documentation certifies itself
+- [ ] **R1.2.15** The probe-claim guard CTE scoping has no fixture pinning it, so a refactor could retire it silently
 ### R1.3
 
 - [ ] **R1.3.1** Spike: Playwright against perplexity.ai `needs-secrets`
@@ -126,7 +127,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `22/53`
+## R2 — Scoring truth  `23/54`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -190,9 +191,10 @@ Baseline commit: `5111219`
 - [ ] **R2.8.8** The content event and lease writers take no deps and swallow their own errors
 - [x] **R2.8.9** insertScan cascades 1 and 2 can retry an already-written row into a duplicate — closed at `src/lib/db.js:264`, `src/lib/insertScanCascade3.test.mjs:339`
 - [ ] **R2.8.10** runFinalizePhase flattens the write-error code into prose, so an operator cannot branch on it
-- [~] **R2.8.12** getScansByDomain fabricates never-scanned from a missing client — submitted `src/lib/db.js:477`, `src/lib/db.js:481`, `src/lib/db.js:491`, `src/lib/scansByDomainUnconfigured.test.mjs:81`, `src/lib/scansByDomainUnconfigured.test.mjs:117`, `src/lib/scansByDomainUnconfigured.test.mjs:140`, `src/lib/scansByDomainUnconfigured.test.mjs:158`, `src/lib/scansByDomainUnconfigured.test.mjs:197`
+- [x] **R2.8.12** getScansByDomain fabricates never-scanned from a missing client — closed at `src/lib/db.js:477`, `src/lib/db.js:481`, `src/lib/db.js:491`, `src/lib/scansByDomainUnconfigured.test.mjs:81`, `src/lib/scansByDomainUnconfigured.test.mjs:117`, `src/lib/scansByDomainUnconfigured.test.mjs:140`, `src/lib/scansByDomainUnconfigured.test.mjs:158`, `src/lib/scansByDomainUnconfigured.test.mjs:197`
 - [ ] **R2.8.13** Four more fail-quiet reads, including the other half of the endpoint R2.8.5 just fixed
 - [ ] **R2.8.14** The content cron returns HTTP 200 with processed:0 when supabase is unset
+- [ ] **R2.8.15** A false history comment in the R2.8.12 guard, plus the last two fail-quiet reads in db.js
 ### R2.9
 
 - [ ] **R2.9.1** Provenance strip under the hero
