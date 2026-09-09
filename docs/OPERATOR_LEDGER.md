@@ -283,8 +283,9 @@ Also environment-shaped and easy to get silently wrong:
   so it falls back to the derived default instead. Raising it buys the same
   throughput for honest anonymous clients and for one rotating attacker. When it
   is exhausted the product is down for anonymous callers and the log says so once
-  per process — `git grep -n 'ceiling.*EXHAUSTED' src/lib/rateLimit.js`. The
-  answer to hitting it is a declared proxy header, not a bigger number.
+  per process — the latch is
+  `git grep -n 'warnedCeilingExhausted' src/lib/rateLimit.js`. The answer to
+  hitting it is a declared proxy header, not a bigger number.
   *This variable existed undocumented from R0.1.22 until 2026-09-09 (R6.2.4)* —
   in neither this file nor `.env.example`, while the guard that should have caught
   it asserted only the one knob it was written for. It is recorded rather than
