@@ -490,7 +490,22 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
   const visibleBranded = Number(visibleBrandPresence) || 0;
   visibilityPct = visibilityPct ?? 0;
   mentionRatePct = mentionRatePct ?? 0;
-  citationSharePct = citationSharePct ?? 0;
+  // R2.2.11 — NOT `?? 0`. This one line is where the citation-share fix died.
+  //
+  // enginePipeline's scan-level mirror and rollup.js now publish `null` when the
+  // citation denominator is empty (every answered non-branded row's citation
+  // list unobserved, so there is nothing to divide by), and scanWorker,
+  // api/scans/_lib/scanRow.js and the `?? null` chain at :383 above all carry
+  // that null intact — and then this line turned it back into a confident 0,
+  // three lines before the only consumer. `?? 0` on a metric is standing rule 5
+  // exactly. A measured 0 is unaffected: `0 ?? x` was already 0.
+  //
+  // Scoped deliberately to this one metric. `brandCitationSharePct` has exactly
+  // one consumer (SourcesView.jsx, which renders null as an em dash plus a
+  // "Not measured" chip and the reason); the sibling `?? 0` lines around it feed
+  // surfaces that have not been taught the em-dash state yet and are left for
+  // the tasks that own them.
+  citationSharePct = citationSharePct ?? null;
   brandedVisibilityPct = brandedVisibilityPct ?? 0;
   aioCoveragePct = aioCoveragePct ?? 0;
   aioErrorRatePct = aioErrorRatePct ?? 0;

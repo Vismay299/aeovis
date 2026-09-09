@@ -1574,10 +1574,42 @@ export function summarizeEngineResults(scanOutput) {
       // absent denominator (undefined > 0 is false) rather than coercing it,
       // matching the Number.isFinite idiom above.
       //
-      // Nothing downstream demands a number: brand_citation_share_pct is read
-      // with `?? null` in api/scans/_lib/scanRow.js:98 and services/api.js:384,
-      // and ScoreBreakdown renders it through describeMetricValue, which is the
-      // em-dash-plus-state-chip path (standing rule 5).
+      // THE CONSUMER TRACE, WALKED HOP BY HOP AND OPENED AT EVERY HOP. An
+      // earlier revision of this comment claimed "ScoreBreakdown renders it
+      // through describeMetricValue" — neither identifier exists anywhere in
+      // this repo, and the renderer that does exist was at that moment doing
+      // exactly what the comment said was not happening. It is recorded here
+      // because a false assurance in a source comment is the failure mode this
+      // whole phase is about; do not replace this trace with one you have not
+      // executed.
+      //
+      //   scanWorker.js binds this function as `summarizeMulti` and writes
+      //     summary.citation_share_pct onto scans.brand_citation_share_pct
+      //     (scanWorker.js:2000, via db.js:214) — a persisted value. NOTE: that
+      //     column is not declared in any file under supabase/migrations, so
+      //     its nullability is asserted nowhere in this repo and is NOT claimed
+      //     here. It is written unconditionally today, and was already written
+      //     null for other metrics, so a null is not a new shape for it.
+      //   api/scans/_lib/scanRow.js:97 reads it as
+      //     `raw.brand_citation_share_pct ?? summary_stats?.citation_share_pct
+      //      ?? null` — null preserved. api/scans/[brand]/route.js:49 is the
+      //     same shape.
+      //   services/api.js's normalizer keeps it through the `?? null` chain at
+      //     :383 and exposes it at :553 as `brandCitationSharePct`. It did NOT
+      //     always: until R2.2.11 it ended `citationSharePct ?? 0` three lines
+      //     before that, which killed this null on every scan. Fixed there in
+      //     the same commit; see the comment on that line.
+      //   components/dashboard/SourcesView.jsx is where it is SEEN, via
+      //     DashboardShell's `view === "sources"`. Its describeCitationShare()
+      //     renders a null as an em dash, a "Not measured" chip and the reason
+      //     — read off `citation_denominator` / `citations_unverified_count` on
+      //     the per-engine slices — and a measured number as that number.
+      //     Guarded by sourcesCitationShareSurface.test.mjs, which drives a
+      //     null through the real component and fails if a digit appears.
+      //
+      // `git grep brand_citation_share_pct -- src/ scripts/` enumerates every
+      // other reader, and each is a `?? null` passthrough (db.js:214 included).
+      // If you add one, it owns the em-dash state too.
       citation_share_pct: citationDenominator > 0
         ? Math.round((aioSummary.cited_non_branded / citationDenominator) * 1000) / 10
         : null,
