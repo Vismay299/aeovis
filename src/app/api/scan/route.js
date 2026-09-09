@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createScanJob, hasActiveScanForBrand, supabase } from "@/lib/db";
 import { DuplicateScanError } from "@/lib/duplicateScan";
-import { checkScanRateLimit } from "@/lib/rateLimit";
+import { BUCKET_SCOPE, checkScanRateLimit } from "@/lib/rateLimit";
 import { incrementScanRateLimit } from "@/lib/db/analytics";
 import { runScanChunk } from "@/lib/workers/scanWorker";
 
@@ -69,12 +69,23 @@ export async function POST(request) {
       increment: (args) => incrementScanRateLimit(args),
     });
     if (!rate.allowed) {
+      // R0.1.22. Off Vercel with no trusted address source, the limit that binds
+      // is a ceiling every unverified caller SHARES, so "too many scans from
+      // this address" would be a lie: the caller may be refused for someone
+      // else's traffic. Only an explicit client-scoped refusal gets the
+      // per-address sentence; anything else — including an envelope with no
+      // scope at all — gets the neutral one, because guessing wrong here means
+      // telling a stranger their own address is over quota when it is not.
+      // The neutral copy names no configuration for the same reason the 503
+      // below names no vendor (R6.4.3); the operator-facing detail is the
+      // warn-once inside rateLimit.js.
+      const minutes = Math.ceil(rate.retryAfterSec / 60);
+      const detail =
+        rate.limitScope === BUCKET_SCOPE.CLIENT
+          ? `Too many scans from this address. Try again in ${minutes} minute(s).`
+          : `Too many scans right now. Try again in ${minutes} minute(s).`;
       return NextResponse.json(
-        {
-          detail: `Too many scans from this address. Try again in ${Math.ceil(
-            rate.retryAfterSec / 60
-          )} minute(s).`,
-        },
+        { detail },
         {
           status: 429,
           headers: {

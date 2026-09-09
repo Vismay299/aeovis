@@ -34,11 +34,17 @@ const warnedUntrustedBases = new Set();
  * ones above on purpose: a bad declaration must never be swallowed by the latch
  * that a plain untrusted request would have tripped anyway. */
 let warnedTrustConfig = false;
+/** Warn-once latch for an EXHAUSTED deployment ceiling (R0.1.22). Its own latch
+ * for the same reason: "this deployment cannot tell its callers apart" and
+ * "...and it has now refused everybody" are different incidents, and the second
+ * one is the product being down. */
+let warnedCeilingExhausted = false;
 
 /** Test seam: re-arm every warn-once latch. */
 export function resetUntrustedSourceWarning() {
   warnedUntrustedBases.clear();
   warnedTrustConfig = false;
+  warnedCeilingExhausted = false;
 }
 
 export const DEFAULTS = Object.freeze({
@@ -139,6 +145,120 @@ export const TRUST_BASIS = Object.freeze({
   /** No address header at all: one shared bucket. */
   ABSENT: "no-address-header",
 });
+
+// ---------------------------------------------------------------------------
+// R0.1.22 — what an UNVERIFIED deployment is allowed to spend.
+// ---------------------------------------------------------------------------
+
+/**
+ * THE DECISION, recorded (R0.1.22).
+ *
+ * Off Vercel with no `SCAN_RATE_LIMIT_IP_HEADER` declared, every address this
+ * module can reach is one the caller types. Until now that state warned and
+ * proceeded: the warning was true — "the per-IP limit is bypassable by rotating
+ * that header" — and the module carried on applying a per-IP limit anyway. A
+ * warning is not a limit. An anonymous caller rotating one header got unlimited
+ * free scans, each spending Bright Data + Perplexity + LLM budget.
+ *
+ * Two honest options were on the table: refuse the scan outright, or apply a
+ * limit no header can move. This module takes the SECOND, in two tiers:
+ *
+ *   1. the per-address bucket stays, as a COURTESY. It is the only thing that
+ *      keeps one loud honest client from eating the whole allowance, and it
+ *      costs nothing to keep. It is not load-bearing and is not claimed to be.
+ *   2. a DEPLOYMENT-WIDE CEILING is enforced alongside it, on a bucket keyed by
+ *      a constant. No request header moves it, so rotation buys at most the
+ *      ceiling instead of an unbounded number of scans. This is the tier that
+ *      actually bounds the money.
+ *
+ * Why not refuse outright: an anonymous free scan is the product's entire front
+ * door, and "no proxy header declared" is the DEFAULT state of a fresh
+ * self-hosted deploy. A blanket 503 there turns a misconfiguration into a total
+ * outage with no partial credit, while a finite ceiling keeps the door open,
+ * bounds the spend, and names the env var that restores a real per-IP limit. The
+ * failure mode is honest in both directions: an abusive caller can exhaust the
+ * ceiling for everyone, and when they do, the refusal says so instead of
+ * claiming the caller's own address was over quota.
+ *
+ * What this deliberately does NOT touch: the Vercel platform header. It is
+ * `trusted: false` (RESTORE-TRUST-R0.1.20) but it is not CALLER-SETTABLE, which
+ * is the axis this ceiling is about, and R0.1.20 settled that case on purpose.
+ */
+export const UNVERIFIED_CEILING_DECISION =
+  "R0.1.22: where no client-address source exists that the caller cannot set, the per-address " +
+  "bucket is kept as a courtesy AND a deployment-wide ceiling is enforced on a bucket no request " +
+  "header can move. Rotating a header buys at most the ceiling, never an unbounded number of scans.";
+
+/**
+ * The ceiling, when the operator has not named one: a multiple of the per-client
+ * limit. Any number here is a policy choice rather than a derivation, so it is
+ * named and overridable rather than buried. Five means an unconfigured
+ * deployment still serves several distinct honest clients per window, while an
+ * attacker's rotation buys 5x the honest budget instead of infinity.
+ */
+export const UNVERIFIED_CEILING_MULTIPLIER = 5;
+
+/**
+ * The subject the ceiling bucket is hashed from.
+ *
+ * UPPERCASE on purpose, and that is load-bearing: `normaliseAddress` lowercases
+ * every address it returns, so no header value a caller can send will ever
+ * normalise to this string and collide with the ceiling bucket. A collision
+ * would let a caller burn the whole deployment's allowance faster than their own
+ * requests should.
+ */
+export const UNVERIFIED_CEILING_SUBJECT = "R0.1.22-DEPLOYMENT-UNVERIFIED-TOTAL";
+
+/** Which limit produced a verdict. Carried in the envelope so a refusal never
+ * has to guess whether it was about this caller or about everybody. */
+export const BUCKET_SCOPE = Object.freeze({
+  /** This address's own bucket. */
+  CLIENT: "client",
+  /** The ceiling every unverified caller shares. */
+  DEPLOYMENT: "deployment",
+});
+
+/**
+ * What the ceiling did on THIS request. Four states, not two booleans, because
+ * "this identity is not under a ceiling", "the ceiling was not spent because
+ * the caller was already refused" and "the ceiling counter is broken" are three
+ * different things and only one of them is a number. None of them is zero.
+ */
+export const CEILING_STATE = Object.freeze({
+  /** A source the caller cannot set: no ceiling, by decision. */
+  NOT_APPLICABLE: "not-applicable",
+  /** Read and counted; `remaining` is a measurement. */
+  COUNTED: "counted",
+  /** The per-address limit refused this request first, so the shared allowance
+   *  was not spent on a request that was never going to start a scan. */
+  SKIPPED_REFUSED_EARLIER: "skipped-refused-earlier",
+  /** The counter store did not answer. Not a count of zero. */
+  UNAVAILABLE: "unavailable",
+});
+
+/**
+ * The bases whose address the caller cannot choose: an operator-declared proxy
+ * header, and the platform header on Vercel. Everything else — `x-real-ip`,
+ * `x-forwarded-for`, and no header at all — is the caller's word, and an unknown
+ * basis counts as the caller's word too, because closed is the safe direction.
+ */
+const CALLER_CANNOT_SET = new Set([TRUST_BASIS.DECLARED, TRUST_BASIS.PLATFORM_UNPROVEN]);
+
+/** Does this identity have to answer to the deployment ceiling? */
+export function ceilingApplies(identity) {
+  return !CALLER_CANNOT_SET.has(identity?.trustBasis);
+}
+
+/**
+ * How many scans an unverified deployment gets per window, in total.
+ * `SCAN_RATE_LIMIT_UNVERIFIED_CEILING` overrides; garbage falls back to the
+ * derived value rather than to 0 (which would refuse everything) or to infinity.
+ */
+export function resolveUnverifiedCeiling(env = process.env, clientLimit = DEFAULTS.limit) {
+  const raw = Number(env.SCAN_RATE_LIMIT_UNVERIFIED_CEILING);
+  if (Number.isFinite(raw) && raw > 0) return { limit: Math.floor(raw), declared: true };
+  return { limit: clientLimit * UNVERIFIED_CEILING_MULTIPLIER, declared: false };
+}
 
 /** Values an operator writes to mean yes / no in a boolean env var. */
 const TRUTHY_ENV = new Set(["1", "true", "yes", "on"]);
@@ -349,9 +469,14 @@ export function resolveClientIp({ header, env = process.env }) {
  * never checked" call for different operator action and must not be reported
  * with one message.
  */
-export function untrustedSourceWarning(identity) {
+export function untrustedSourceWarning(identity, ceilingLimit = null) {
   const declare =
     ` Set SCAN_RATE_LIMIT_IP_HEADER to the single header your proxy OVERWRITES on every inbound request.`;
+  // Named when we know it. A message that says "a ceiling" when the number is
+  // right there would make an operator go looking for it.
+  const ceiling = Number.isFinite(ceilingLimit)
+    ? `${ceilingLimit} scans per window`
+    : `a fixed number of scans per window`;
 
   if (identity.trustBasis === TRUST_BASIS.PLATFORM_UNPROVEN) {
     return (
@@ -366,13 +491,17 @@ export function untrustedSourceWarning(identity) {
   if (identity.trustBasis === TRUST_BASIS.ABSENT) {
     return (
       `[rate-limit] no client address header on this request: every such caller shares ONE bucket, ` +
-      `so the limit is real but not per-IP.` + declare
+      `so the limit is real but not per-IP. This deployment is also under the R0.1.22 ceiling of ` +
+      `${ceiling} shared by every caller whose address it cannot verify.` + declare
     );
   }
 
   return (
-    `[rate-limit] client address taken from ${identity.source}, which the caller can set: ` +
-    `the per-IP limit is bypassable by rotating that header.` + declare
+    `[rate-limit] client address taken from ${identity.source}, which the caller can set: a limit ` +
+    `keyed on it alone is bypassable by rotating that header, so it is NOT the only limit applied ` +
+    `here. Every caller whose address this deployment cannot verify also answers to one shared ` +
+    `ceiling of ${ceiling} (R0.1.22) — real, and deployment-wide, so one abusive caller can ` +
+    `exhaust it for everyone.` + declare
   );
 }
 
@@ -385,7 +514,21 @@ export function untrustedSourceWarning(identity) {
  */
 export function clientBucketKey({ header, salt = "", env = process.env }) {
   const subject = resolveClientIp({ header, env }).ip || "unidentified";
+  return bucketKeyFor(subject, salt);
+}
+
+/** One hash, so the ceiling bucket and an address bucket cannot drift apart. */
+function bucketKeyFor(subject, salt) {
   return crypto.createHash("sha256").update(`${salt}:${subject}`).digest("hex").slice(0, 32);
+}
+
+/**
+ * The bucket every unverified caller shares (R0.1.22). Takes no header, on
+ * purpose: that is the whole property. Same salt as the address buckets, so it
+ * is still per-deployment, and the same counter table — this needs no migration.
+ */
+export function unverifiedCeilingBucketKey({ salt = "" } = {}) {
+  return bucketKeyFor(UNVERIFIED_CEILING_SUBJECT, salt);
 }
 
 /** Start of the fixed window containing `nowMs`, as an ISO string. */
@@ -424,6 +567,12 @@ export function evaluate({ hits, limit, windowMs, nowMs, windowStartMs }) {
  * the caller logs it. The duplicate-scan seal (R0.1.5) is what actually
  * bounds the damage in that window: one running scan per brand still holds,
  * because that one is enforced by the database.
+ *
+ * TWO counters when the address is one the caller could have typed (R0.1.22):
+ * this address's bucket, and the ceiling every unverified caller shares. The
+ * verdict is the more restrictive of the two, and `limitScope` says which one
+ * decided — a refusal that came from the shared ceiling must not be reported to
+ * the caller as "your address is over quota", because it is not about them.
  */
 export async function checkScanRateLimit({
   header,
@@ -434,8 +583,40 @@ export async function checkScanRateLimit({
 }) {
   const { limit, windowMs } = resolveRateLimit(env);
   const identity = resolveClientIp({ header, env });
-  const bucketKey = clientBucketKey({ header, salt: env.SCAN_RATE_LIMIT_SALT || "", env });
+  const salt = env.SCAN_RATE_LIMIT_SALT || "";
+  const bucketKey = clientBucketKey({ header, salt, env });
   const startedAt = windowStart(now, windowMs);
+
+  // Resolved even when it does not apply, so the ceiling's absence is a decision
+  // this function made about THIS identity rather than a value that happened not
+  // to exist.
+  const ceiling = ceilingApplies(identity) ? resolveUnverifiedCeiling(env, limit) : null;
+  const ceilingKey = ceiling ? unverifiedCeilingBucketKey({ salt }) : null;
+  /**
+   * The ceiling's side of the envelope. `remaining` is a number in exactly one
+   * state — the one where it was measured. Everywhere else it is null, because
+   * a ceiling that did not run has no remaining count and 0 would read as
+   * "exhausted".
+   */
+  const ceilingReport = (state, remaining = null) =>
+    ceiling
+      ? { state, limit: ceiling.limit, remaining, bucketKey: ceilingKey, declared: ceiling.declared }
+      : { state: CEILING_STATE.NOT_APPLICABLE, limit: null, remaining: null, bucketKey: null, declared: false };
+  const degradedEnvelope = (ceilingState) => ({
+    allowed: true,
+    degraded: true,
+    limit,
+    remaining: null,
+    retryAfterSec: 0,
+    limitScope: null,
+    bucketKey,
+    source: identity.source,
+    trusted: identity.trusted,
+    trustBasis: identity.trustBasis,
+    clientLimit: limit,
+    clientRemaining: null,
+    ceiling: ceilingState,
+  });
 
   // A trust knob that was set and could not be honoured is reported first and
   // separately (R0.1.18): the operator believes this limit is per-IP because
@@ -457,7 +638,7 @@ export async function checkScanRateLimit({
   // `trusted: true` that nothing has earned.
   if (!identity.trusted && !warnedUntrustedBases.has(identity.trustBasis)) {
     warnedUntrustedBases.add(identity.trustBasis);
-    logger.warn(untrustedSourceWarning(identity));
+    logger.warn(untrustedSourceWarning(identity, ceiling ? ceiling.limit : null));
   }
 
   let hits;
@@ -468,40 +649,97 @@ export async function checkScanRateLimit({
       `[rate-limit] counter unavailable (${err.message}) — allowing this scan. ` +
         `The one-running-scan-per-brand index still applies.`
     );
-    return {
-      allowed: true,
-      degraded: true,
-      limit,
-      remaining: null,
-      retryAfterSec: 0,
-      bucketKey,
-      source: identity.source,
-      trusted: identity.trusted,
-      trustBasis: identity.trustBasis,
-    };
+    // The ceiling shares that counter, so it did not run either. Reported
+    // UNAVAILABLE rather than not-applicable: this identity IS under a ceiling,
+    // and "we did not check" must not read as "there was nothing to check".
+    return degradedEnvelope(ceilingReport(CEILING_STATE.UNAVAILABLE));
   }
 
   if (!Number.isFinite(hits)) {
     logger.warn("[rate-limit] counter returned a non-numeric count — allowing this scan.");
-    return {
-      allowed: true,
-      degraded: true,
-      limit,
-      remaining: null,
-      retryAfterSec: 0,
-      bucketKey,
-      source: identity.source,
-      trusted: identity.trusted,
-      trustBasis: identity.trustBasis,
-    };
+    return degradedEnvelope(ceilingReport(CEILING_STATE.UNAVAILABLE));
+  }
+
+  const windowStartMs = Date.parse(startedAt);
+  const client = evaluate({ hits, limit, windowMs, nowMs: now, windowStartMs });
+
+  // The tier that actually bounds the money when the address is the caller's
+  // word.
+  //
+  // Counted only for a request the per-address tier ALLOWED, deliberately. The
+  // ceiling is a bound on scans this deployment would start, and a request its
+  // own bucket already refused starts nothing and spends nothing — charging the
+  // shared allowance for it would let one caller hammering ONE address take the
+  // deployment down for everybody without ever getting a scan. Rotation, which
+  // is the attack this ceiling exists for, always passes the per-address tier
+  // (every forged address is a fresh bucket), so nothing escapes by this door.
+  let deployment = null;
+  if (ceiling && client.allowed) {
+    let ceilingHits;
+    try {
+      ceilingHits = await increment({ bucketKey: ceilingKey, windowStart: startedAt });
+    } catch (err) {
+      logger.warn(
+        `[rate-limit] the R0.1.22 deployment ceiling counter is unavailable (${err.message}) — ` +
+          `allowing this scan. This address cannot be verified, so nothing but the ` +
+          `one-running-scan-per-brand index bounds an anonymous caller until the counter is back.`
+      );
+      return degradedEnvelope(ceilingReport(CEILING_STATE.UNAVAILABLE));
+    }
+    if (!Number.isFinite(ceilingHits)) {
+      logger.warn(
+        `[rate-limit] the R0.1.22 deployment ceiling counter returned a non-numeric count — ` +
+          `allowing this scan and reporting the ceiling as unmeasured, not as zero.`
+      );
+      return degradedEnvelope(ceilingReport(CEILING_STATE.UNAVAILABLE));
+    }
+    deployment = evaluate({
+      hits: ceilingHits,
+      limit: ceiling.limit,
+      windowMs,
+      nowMs: now,
+      windowStartMs,
+    });
+  }
+
+  // A refusal wins over a remaining count, and this address's own refusal is
+  // reported ahead of the shared one: if both are exhausted, "you are over quota"
+  // is the more actionable of the two true statements.
+  const bindingIsDeployment =
+    Boolean(deployment) &&
+    client.allowed &&
+    (!deployment.allowed || deployment.remaining < client.remaining);
+  const binding = bindingIsDeployment ? deployment : client;
+
+  // The product is down for every unverified caller. One line per process, on
+  // its own latch, because this is not the same incident as "we cannot verify
+  // addresses here" — that one is a configuration, this one is an outage.
+  if (deployment && !deployment.allowed && !warnedCeilingExhausted) {
+    warnedCeilingExhausted = true;
+    logger.warn(
+      `[rate-limit] the R0.1.22 deployment ceiling (${ceiling.limit} scans per window, shared by ` +
+        `every caller whose address this deployment cannot verify) is EXHAUSTED: anonymous scans ` +
+        `are refused until the window rolls. ${UNVERIFIED_CEILING_DECISION} ` +
+        `Set SCAN_RATE_LIMIT_IP_HEADER to the single header your proxy OVERWRITES to get a real ` +
+        `per-IP limit back, or raise SCAN_RATE_LIMIT_UNVERIFIED_CEILING knowing what it buys.`
+    );
   }
 
   return {
-    ...evaluate({ hits, limit, windowMs, nowMs: now, windowStartMs: Date.parse(startedAt) }),
+    allowed: binding.allowed,
+    limit: binding.limit,
+    remaining: binding.remaining,
+    retryAfterSec: binding.retryAfterSec,
+    limitScope: bindingIsDeployment ? BUCKET_SCOPE.DEPLOYMENT : BUCKET_SCOPE.CLIENT,
     degraded: false,
     bucketKey,
     source: identity.source,
     trusted: identity.trusted,
     trustBasis: identity.trustBasis,
+    clientLimit: limit,
+    clientRemaining: client.remaining,
+    ceiling: deployment
+      ? ceilingReport(CEILING_STATE.COUNTED, deployment.remaining)
+      : ceilingReport(CEILING_STATE.SKIPPED_REFUSED_EARLIER),
   };
 }

@@ -18,6 +18,14 @@ import {
   PLATFORM_IP_HEADER,
   TRUST_BASIS,
   TRUST_RESTORE_CHECK,
+  BUCKET_SCOPE,
+  CEILING_STATE,
+  UNVERIFIED_CEILING_DECISION,
+  UNVERIFIED_CEILING_MULTIPLIER,
+  UNVERIFIED_CEILING_SUBJECT,
+  ceilingApplies,
+  resolveUnverifiedCeiling,
+  unverifiedCeilingBucketKey,
 } from "./rateLimit.js";
 
 const HOUR = 60 * 60 * 1000;
@@ -49,6 +57,12 @@ function counter() {
 test("GUARD — the constants this suite asserts against are pinned, not read back", () => {
   assert.equal(PLATFORM_IP_HEADER, "x-vercel-forwarded-for");
   assert.deepEqual({ ...DEFAULTS }, { limit: 5, windowMs: HOUR });
+  // R0.1.22: the ceiling arithmetic below is written against these two literals.
+  // Measured: with the multiplier read back out of the module instead, cutting
+  // it to 1 left the ceiling suite green while the deployment's whole allowance
+  // silently became five scans an hour.
+  assert.equal(UNVERIFIED_CEILING_MULTIPLIER, 5);
+  assert.equal(UNVERIFIED_CEILING_SUBJECT, "R0.1.22-DEPLOYMENT-UNVERIFIED-TOTAL");
 });
 
 test("ACCEPT CRITERION — the 6th scan in an hour from one IP is refused", async () => {
@@ -705,4 +719,354 @@ test("GUARD — migration 009 increments atomically in one statement", async () 
     /ON CONFLICT \(bucket_key, window_start\)[\s\S]*RETURNING hits/,
     "read-then-write would reintroduce the TOCTOU migration 007 just closed"
   );
+});
+
+// ---------------------------------------------------------------------------
+// R0.1.22 — an unverified deployment stops warning and starts limiting.
+//
+// Reproduced against the module at HEAD before this block existed, driving it
+// with the real in-memory counter and env {} (off Vercel, no declared header):
+// 100 requests carrying a ROTATING x-real-ip were allowed 100 times under
+// SCAN_RATE_LIMIT=5. The module said so out loud — "the per-IP limit is
+// bypassable by rotating that header" — and then applied the bypassable limit
+// anyway. A warning is not a limit.
+//
+// The decision (recorded at UNVERIFIED_CEILING_DECISION): keep the per-address
+// bucket as a courtesy, and enforce a deployment-wide ceiling on a bucket keyed
+// by a constant, which no header moves.
+// ---------------------------------------------------------------------------
+
+/** Drive N requests with a DIFFERENT client-settable address each time. */
+async function rotate(count, { env, headerFor, increment = counter(), logger = silent }) {
+  const verdicts = [];
+  for (let i = 0; i < count; i++) {
+    verdicts.push(
+      await checkScanRateLimit({ header: headers(headerFor(i)), increment, env, now: T0, logger })
+    );
+  }
+  return verdicts;
+}
+
+test("THE ROTATION — 100 forged x-real-ip values buy the ceiling, not 100 scans", async () => {
+  resetUntrustedSourceWarning();
+  const env = { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: "s" };
+  const verdicts = await rotate(100, { env, headerFor: (i) => ({ "x-real-ip": `192.0.2.${i}` }) });
+
+  const allowed = verdicts.filter((v) => v.allowed).length;
+  assert.equal(allowed, 5 * UNVERIFIED_CEILING_MULTIPLIER, "the pre-fix module allowed all 100");
+
+  // The discriminating assertion: every one of those requests had a FRESH
+  // per-address bucket (its own count was 1 of 5), so the refusals cannot have
+  // come from the per-address limit. Only a bucket no header moves explains them.
+  for (const v of verdicts) {
+    assert.equal(v.clientRemaining, 4, "each rotated address really did open its own bucket");
+  }
+  const refused = verdicts.filter((v) => !v.allowed);
+  assert.equal(refused[0].limitScope, BUCKET_SCOPE.DEPLOYMENT, "and the refusal says which limit bound");
+  assert.equal(refused[0].remaining, 0);
+  assert.equal(refused[0].limit, 25, "the reported limit is the one that actually refused");
+  assert.ok(refused[0].retryAfterSec > 0, "a refusal must say when to come back");
+});
+
+test("THE ROTATION — x-forwarded-for and a mixed rotation are bounded by the same ceiling", async () => {
+  resetUntrustedSourceWarning();
+  const env = { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: "s" };
+  const increment = counter();
+  // Alternating the header the caller rotates must not buy two allowances: both
+  // land on the one ceiling bucket.
+  const verdicts = await rotate(60, {
+    env,
+    increment,
+    headerFor: (i) =>
+      i % 2 ? { "x-forwarded-for": `198.51.100.${i}, 10.0.0.1` } : { "x-real-ip": `192.0.2.${i}` },
+  });
+  assert.equal(verdicts.filter((v) => v.allowed).length, 25, "one ceiling, not one per header name");
+});
+
+test("the ceiling is a real bucket in the counter, and it is the one that moved", async () => {
+  const env = { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: "s" };
+  const increment = counter();
+  await rotate(10, { env, increment, headerFor: (i) => ({ "x-real-ip": `192.0.2.${i}` }) });
+
+  const ceilingKey = unverifiedCeilingBucketKey({ salt: "s" });
+  const started = windowStart(T0, HOUR);
+  assert.equal(increment.store.get(`${ceilingKey}|${started}`), 10, "every rotated request was counted here");
+
+  // ...and each forged address opened a bucket that only ever saw one request.
+  for (let i = 0; i < 10; i++) {
+    const key = clientBucketKey({ header: headers({ "x-real-ip": `192.0.2.${i}` }), salt: "s", env });
+    assert.equal(increment.store.get(`${key}|${started}`), 1);
+  }
+});
+
+test("the ceiling bucket is not reachable from any header a caller can send", () => {
+  // UPPERCASE by design: normaliseAddress lowercases every address it returns,
+  // so a caller who names the ceiling subject cannot collide with it and burn
+  // the deployment's allowance faster than their own requests should.
+  const salt = "s";
+  const ceilingKey = unverifiedCeilingBucketKey({ salt });
+  for (const value of [
+    UNVERIFIED_CEILING_SUBJECT,
+    UNVERIFIED_CEILING_SUBJECT.toLowerCase(),
+    `${UNVERIFIED_CEILING_SUBJECT}:443`,
+  ]) {
+    for (const name of ["x-real-ip", "x-forwarded-for", "cf-connecting-ip"]) {
+      const key = clientBucketKey({
+        header: headers({ [name]: value }),
+        salt,
+        env: { SCAN_RATE_LIMIT_IP_HEADER: "cf-connecting-ip" },
+      });
+      assert.notEqual(key, ceilingKey, `${name}: ${value} must not land in the ceiling bucket`);
+    }
+  }
+});
+
+test("a CONFIGURED deployment is not under the ceiling — the knob still buys a per-IP limit", async () => {
+  resetUntrustedSourceWarning();
+  const env = {
+    SCAN_RATE_LIMIT: "5",
+    SCAN_RATE_LIMIT_SALT: "s",
+    SCAN_RATE_LIMIT_IP_HEADER: "cf-connecting-ip",
+  };
+  const verdicts = await rotate(100, { env, headerFor: (i) => ({ "cf-connecting-ip": `192.0.2.${i}` }) });
+  assert.equal(
+    verdicts.filter((v) => v.allowed).length,
+    100,
+    "a header the operator declares their proxy OVERWRITES names 100 clients, not one spoofer"
+  );
+  assert.equal(verdicts[99].ceiling.state, CEILING_STATE.NOT_APPLICABLE, "no ceiling was applied...");
+  assert.equal(verdicts[99].ceiling.limit, null, "...and its absence is reported as absent, not as 0");
+  assert.equal(verdicts[99].limitScope, BUCKET_SCOPE.CLIENT);
+  assert.equal(ceilingApplies({ trustBasis: TRUST_BASIS.DECLARED }), false);
+});
+
+test("R0.1.20 IS PRESERVED — the Vercel platform header is not under the ceiling either", async () => {
+  // The axis here is caller-SETTABILITY, not proof. The platform header is
+  // unproven (trusted:false, RESTORE-TRUST-R0.1.20) but it is not a header this
+  // module treats as the caller's word, and R0.1.20 settled that case
+  // deliberately. Putting it under a deployment ceiling would cap every Vercel
+  // deployment at 25 scans an hour on the strength of a doubt.
+  resetUntrustedSourceWarning();
+  const env = { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: "s", VERCEL: "1" };
+  const verdicts = await rotate(100, { env, headerFor: (i) => ({ [PLATFORM_IP_HEADER]: `192.0.2.${i}` }) });
+  assert.equal(verdicts.filter((v) => v.allowed).length, 100);
+  assert.equal(verdicts[0].ceiling.state, CEILING_STATE.NOT_APPLICABLE);
+  assert.equal(ceilingApplies({ trustBasis: TRUST_BASIS.PLATFORM_UNPROVEN }), false);
+
+  // But OFF Vercel the same header is nobody's address at all: the caller lands
+  // in the shared no-address bucket, which the per-address limit of 5 closes
+  // long before the ceiling of 25 does. Rotation buys 5, not 100.
+  resetUntrustedSourceWarning();
+  const off = await rotate(30, {
+    env: { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: "s" },
+    headerFor: (i) => ({ [PLATFORM_IP_HEADER]: `192.0.2.${i}` }),
+  });
+  assert.equal(off.filter((v) => v.allowed).length, 5, "off Vercel that header buys nothing");
+  assert.equal(off[0].trustBasis, TRUST_BASIS.ABSENT, "it is not an address, so it is not a bucket");
+  assert.equal(off[0].ceiling.state, CEILING_STATE.COUNTED, "and the ceiling is watching that bucket too");
+});
+
+test("the no-header caller is under the ceiling too, and an unknown basis fails closed", () => {
+  assert.equal(ceilingApplies({ trustBasis: TRUST_BASIS.ABSENT }), true);
+  assert.equal(ceilingApplies({ trustBasis: TRUST_BASIS.CALLER_SETTABLE }), true);
+  assert.equal(ceilingApplies({}), true, "a basis nobody classified must not escape the ceiling");
+  assert.equal(ceilingApplies(undefined), true);
+});
+
+test("the ceiling is env-configurable, and garbage falls back to the derived value, never to 0", async () => {
+  assert.equal(resolveUnverifiedCeiling({}, 5).limit, 25);
+  assert.equal(resolveUnverifiedCeiling({}, 5).declared, false);
+  assert.equal(resolveUnverifiedCeiling({ SCAN_RATE_LIMIT_UNVERIFIED_CEILING: "3" }, 5).limit, 3);
+  assert.equal(resolveUnverifiedCeiling({ SCAN_RATE_LIMIT_UNVERIFIED_CEILING: "3" }, 5).declared, true);
+  for (const bad of ["0", "-1", "abc", ""]) {
+    assert.equal(
+      resolveUnverifiedCeiling({ SCAN_RATE_LIMIT_UNVERIFIED_CEILING: bad }, 5).limit,
+      25,
+      `SCAN_RATE_LIMIT_UNVERIFIED_CEILING=${JSON.stringify(bad)} must not refuse every scan`
+    );
+  }
+
+  resetUntrustedSourceWarning();
+  const verdicts = await rotate(10, {
+    env: { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_UNVERIFIED_CEILING: "3" },
+    headerFor: (i) => ({ "x-real-ip": `192.0.2.${i}` }),
+  });
+  assert.equal(verdicts.filter((v) => v.allowed).length, 3, "the declared ceiling is the one enforced");
+  assert.equal(verdicts[9].ceiling.declared, true);
+});
+
+test("the envelope reports the SMALLER of the two remainings, never the flattering one", async () => {
+  resetUntrustedSourceWarning();
+  const env = { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_UNVERIFIED_CEILING: "6", SCAN_RATE_LIMIT_SALT: "s" };
+  const increment = counter();
+  // One honest caller, five requests. Its own bucket allows five; the ceiling
+  // allows six. The fifth has 0 left of its own and 1 of the ceiling.
+  const header = headers({ "x-real-ip": "203.0.113.9" });
+  const v = [];
+  for (let i = 0; i < 5; i++) {
+    v.push(await checkScanRateLimit({ header, increment, env, now: T0, logger: silent }));
+  }
+  assert.equal(v[4].remaining, 0, "the address's own budget is the binding one here");
+  assert.equal(v[4].limitScope, BUCKET_SCOPE.CLIENT);
+  assert.equal(v[4].ceiling.remaining, 1, "and the ceiling's own count is still reported");
+  assert.equal(v[4].clientRemaining, 0);
+
+  // A second address exhausts what is left of the ceiling: this refusal is NOT
+  // about the caller's own address, and must not be reported as if it were.
+  const other = headers({ "x-real-ip": "203.0.113.10" });
+  const sixth = await checkScanRateLimit({ header: other, increment, env, now: T0, logger: silent });
+  assert.equal(sixth.allowed, true, "the sixth is the last one the ceiling permits");
+  const seventh = await checkScanRateLimit({ header: other, increment, env, now: T0, logger: silent });
+  assert.equal(seventh.allowed, false);
+  assert.equal(seventh.limitScope, BUCKET_SCOPE.DEPLOYMENT, "a shared refusal must say it is shared");
+  assert.equal(seventh.clientRemaining, 3, "this caller's own budget was nowhere near spent");
+  assert.equal(seventh.remaining, 0);
+  assert.equal(seventh.limit, 6);
+});
+
+test("a request the per-address limit already refused does not spend the shared allowance", async () => {
+  // Otherwise one caller hammering ONE address — who never gets a scan after
+  // their fifth — could burn the whole deployment's ceiling and take the
+  // product down for everybody else, at zero cost and with no vendor spend to
+  // show for it. The ceiling bounds scans this deployment would START.
+  resetUntrustedSourceWarning();
+  const env = { SCAN_RATE_LIMIT: "2", SCAN_RATE_LIMIT_UNVERIFIED_CEILING: "10", SCAN_RATE_LIMIT_SALT: "s" };
+  const increment = counter();
+  const header = headers({ "x-real-ip": "203.0.113.66" });
+  const verdicts = [];
+  for (let i = 0; i < 12; i++) {
+    verdicts.push(await checkScanRateLimit({ header, increment, env, now: T0, logger: silent }));
+  }
+  assert.equal(verdicts.filter((v) => v.allowed).length, 2, "their own bucket is what refuses them");
+
+  const started = windowStart(T0, HOUR);
+  assert.equal(
+    increment.store.get(`${unverifiedCeilingBucketKey({ salt: "s" })}|${started}`),
+    2,
+    "ten refused requests must not have been charged to the shared ceiling"
+  );
+  assert.equal(verdicts[11].ceiling.state, CEILING_STATE.SKIPPED_REFUSED_EARLIER);
+  assert.equal(verdicts[11].ceiling.remaining, null, "a ceiling that was not read has no remaining count");
+  assert.equal(verdicts[11].ceiling.limit, 10, "...but the ceiling it is under is still named");
+  assert.equal(verdicts[11].limitScope, BUCKET_SCOPE.CLIENT);
+
+  // The deployment is still open for everybody else, which is the whole point.
+  const other = await checkScanRateLimit({
+    header: headers({ "x-real-ip": "203.0.113.67" }),
+    increment,
+    env,
+    now: T0,
+    logger: silent,
+  });
+  assert.equal(other.allowed, true, "one abusive address must not close the door on the next caller");
+  assert.equal(other.ceiling.remaining, 7);
+});
+
+test("an EXHAUSTED ceiling is announced once, on its own latch, and names the way out", async () => {
+  resetUntrustedSourceWarning();
+  const said = [];
+  await rotate(4, {
+    env: { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_UNVERIFIED_CEILING: "2" },
+    headerFor: (i) => ({ "x-real-ip": `192.0.2.${i}` }),
+    logger: { warn: (m) => said.push(m) },
+  });
+  const log = said.join("\n");
+  assert.match(log, /ceiling \(2 scans per window/, "the operator must learn the number that refused");
+  assert.match(log, /EXHAUSTED/);
+  assert.match(log, /SCAN_RATE_LIMIT_IP_HEADER/, "and how to get a real per-IP limit back");
+  assert.match(log, /SCAN_RATE_LIMIT_UNVERIFIED_CEILING/, "and the knob that raises it");
+  assert.equal(
+    said.filter((m) => /EXHAUSTED/.test(m)).length,
+    1,
+    "one line per process, not one per refused request"
+  );
+
+  // It is its OWN latch: the caller-settable warning was spent on the first
+  // request and must not have silenced this one.
+  assert.match(log, /bypassable by rotating/);
+});
+
+test("a broken ceiling counter FAILS OPEN but says so, and reports UNMEASURED, not 0", async () => {
+  resetUntrustedSourceWarning();
+  const said = [];
+  const clientCounter = counter();
+  const out = await checkScanRateLimit({
+    header: headers({ "x-real-ip": "203.0.113.9" }),
+    increment: async ({ bucketKey, windowStart: ws }) =>
+      bucketKey === unverifiedCeilingBucketKey({ salt: "s" })
+        ? Promise.reject(new Error("supabase unreachable"))
+        : clientCounter({ bucketKey, windowStart: ws }),
+    env: { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: "s" },
+    now: T0,
+    logger: { warn: (m) => said.push(m) },
+  });
+  assert.equal(out.allowed, true, "a broken limiter must not take the product down");
+  assert.equal(out.degraded, true, "...but the degrade must be visible, not silent");
+  assert.equal(out.ceiling.state, CEILING_STATE.UNAVAILABLE, "it was supposed to run and did not — that is not a count of 0");
+  assert.equal(out.ceiling.limit, 25, "the ceiling it failed to enforce is still named");
+  assert.equal(out.ceiling.remaining, null, "never report a fabricated remaining count");
+  assert.match(said.join("\n"), /ceiling counter is unavailable/);
+  assert.match(said.join("\n"), /one-running-scan-per-brand/, "the log must name what still bounds the damage");
+
+  // A non-numeric count is the same incident, not a zero.
+  resetUntrustedSourceWarning();
+  const nonNumeric = await checkScanRateLimit({
+    header: headers({ "x-real-ip": "203.0.113.9" }),
+    increment: async ({ bucketKey }) =>
+      bucketKey === unverifiedCeilingBucketKey({ salt: "s" }) ? null : 1,
+    env: { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: "s" },
+    now: T0,
+    logger: silent,
+  });
+  assert.equal(nonNumeric.degraded, true);
+  assert.equal(nonNumeric.ceiling.state, CEILING_STATE.UNAVAILABLE);
+  assert.equal(nonNumeric.ceiling.remaining, null);
+});
+
+test("the unverified state is announced with the ceiling named, not as a bare complaint", async () => {
+  resetUntrustedSourceWarning();
+  const said = [];
+  await checkScanRateLimit({
+    header: headers({ "x-real-ip": "203.0.113.9" }),
+    increment: counter(),
+    env: { SCAN_RATE_LIMIT: "5" },
+    now: T0,
+    logger: { warn: (m) => said.push(m) },
+  });
+  assert.match(said.join("\n"), /ceiling of 25 scans per window/, "the warning must name the limit that binds");
+  assert.match(said.join("\n"), /exhaust it for everyone/, "and the cost of the choice");
+
+  // The no-address caller hears about it too — that bucket is shared as well.
+  resetUntrustedSourceWarning();
+  const none = [];
+  await checkScanRateLimit({
+    header: headers({}),
+    increment: counter(),
+    env: { SCAN_RATE_LIMIT: "5" },
+    now: T0,
+    logger: { warn: (m) => none.push(m) },
+  });
+  assert.match(none.join("\n"), /shares ONE bucket/);
+  assert.match(none.join("\n"), /ceiling of 25 scans per window/);
+
+  // Called without a ceiling to name, the sentence must not grow a hole.
+  const bare = untrustedSourceWarning({ source: "x-real-ip", trustBasis: TRUST_BASIS.CALLER_SETTABLE });
+  assert.doesNotMatch(bare, /undefined|null|NaN/, "a message with a hole in it is not a message");
+});
+
+test("GUARD — the R0.1.22 decision is recorded in the module, not only in a ledger", async () => {
+  assert.match(UNVERIFIED_CEILING_DECISION, /^R0\.1\.22:/);
+  assert.match(UNVERIFIED_CEILING_DECISION, /deployment-wide ceiling/);
+  assert.match(UNVERIFIED_CEILING_DECISION, /no request header can move/);
+
+  const src = await readFile(new URL("./rateLimit.js", import.meta.url), "utf8");
+  assert.match(src, /R0\.1\.22/);
+  assert.match(src, /Two honest options were on the table/, "the rejected option must be recorded too");
+});
+
+test("GUARD — POST /api/scan does not call a shared refusal an address's own", async () => {
+  const src = await readFile(new URL("../app/api/scan/route.js", import.meta.url), "utf8");
+  assert.match(src, /limitScope/, "the route must read which limit refused");
+  assert.match(src, /BUCKET_SCOPE\.CLIENT/, "and must key the per-address copy off the explicit scope");
+  assert.match(src, /Too many scans right now/, "a shared refusal needs its own sentence");
 });
