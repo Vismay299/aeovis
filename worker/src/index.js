@@ -20,7 +20,7 @@
  * returning plausible zero-valued rows.
  */
 
-import { resolveConfig } from "./config.js";
+import { resolveConfig, describeConfig, FleetConfigError } from "./config.js";
 import { claimBatch, reportBatch, releaseBatch, describeClaim, CLAIM_REASONS } from "./lib/queue.js";
 import { probeBatch } from "./lib/probe.js";
 import {
@@ -259,6 +259,11 @@ export async function start(config, deps = {}) {
   process.on("SIGINT", () => stop("SIGINT"));
 
   log(`starting as ${config.workerId}; engines=${config.engines.join(",") || "(none)"}`);
+  log(describeConfig(config));
+  // Anything the validator narrowed from a DEFAULT is announced here rather than
+  // applied invisibly (R1.2.6). A value the operator SET is never narrowed —
+  // resolveConfig refuses instead.
+  for (const note of config.adjustments || []) log(`NOTE: ${note}`);
 
   while (running) {
     let handled = 0;
@@ -281,8 +286,8 @@ export async function start(config, deps = {}) {
  * without needing a database, a browser, or any credential. It boots the real
  * config path, runs one pass against stubs, and exits 0.
  */
-async function selftest() {
-  const config = { ...resolveConfig(process.env, { strict: false }), once: true };
+async function selftest(resolved) {
+  const config = { ...(resolved || resolveConfig(process.env, { strict: false })), once: true };
   log("selftest: config resolved");
   if (config.missing.length) {
     log(`selftest: no ${config.missing.join("/")} in this environment — using stubs`);
@@ -360,9 +365,46 @@ async function selftest() {
 
 const isEntry = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/").split("/").pop());
 
+/**
+ * Boot, or refuse to (R1.2.6).
+ *
+ * `resolveConfig` throws SYNCHRONOUSLY, so before this it ran inside the
+ * expression that built the promise and escaped the `.catch` below entirely:
+ * the container died with an uncaught-exception stack trace. The exit code was
+ * already 1, but "exits non-zero with the missing names listed" is only half
+ * met by a message an operator has to dig a stack out of, and a validator that
+ * reports FIVE problems needs all five to survive the crash legibly.
+ *
+ * Exported so the boot path itself is testable without spawning a process.
+ */
+export function bootConfig(env, { strict = true } = {}) {
+  try {
+    return { config: resolveConfig(env, { strict }), errorText: null, exitCode: 0 };
+  } catch (err) {
+    if (err instanceof FleetConfigError) {
+      // Each problem on its own line, the missing names on their own, and no
+      // value of any variable marked secret — see config.js.
+      const lines = [
+        `[fleet] fatal: the fleet refuses to start — ${err.problems.length} configuration problem(s):`,
+        ...err.problems.map((p) => `[fleet]   - ${p.message}`),
+      ];
+      if (err.missing.length) {
+        lines.push(`[fleet] required variable(s) missing or blank: ${err.missing.join(", ")}`);
+      }
+      return { config: null, errorText: lines.join("\n"), exitCode: 1 };
+    }
+    return { config: null, errorText: `[fleet] fatal: ${err.message}`, exitCode: 1 };
+  }
+}
+
 if (isEntry) {
   const wantsSelftest = process.argv.includes("--selftest");
-  const run = wantsSelftest ? selftest() : start(resolveConfig(process.env));
+  const booted = bootConfig(process.env, { strict: !wantsSelftest });
+  if (!booted.config) {
+    console.error(booted.errorText);
+    process.exit(booted.exitCode);
+  }
+  const run = wantsSelftest ? selftest(booted.config) : start(booted.config);
   run.catch((err) => {
     console.error(`[fleet] fatal: ${err.message}`);
     process.exit(1);

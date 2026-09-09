@@ -42,19 +42,59 @@ acceptance criterion.
 
 ## Configuration
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `SUPABASE_URL` | — | **Required to start.** The queue to read. |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | **Required to start.** |
-| `FLEET_ENGINES` | `perplexity` | Which surfaces this container drives. |
-| `FLEET_BATCH_SIZE` | `5` | Tasks claimed per poll. |
-| `FLEET_LEASE_MS` | `300000` | How long a claim is held before it can be reaped. |
-| `FLEET_IDLE_POLL_MS` | `10000` | Gap between polls when the queue was empty. |
-| `FLEET_HEARTBEAT_MS` | `30000` | How often an in-flight run says it is alive. Clamped to half `FLEET_LEASE_MS`. |
-| `FLEET_WORKER_ID` | `worker-<pid>` | Identity on every claim and heartbeat. |
+| Variable | Required | Default | Range | Meaning |
+|---|---|---|---|---|
+| `SUPABASE_URL` | **yes** | — | http(s) URL | The queue to read. `NEXT_PUBLIC_SUPABASE_URL` also accepted. |
+| `SUPABASE_SERVICE_ROLE_KEY` | **yes** | — | — | Credentials for it. `NEXT_PUBLIC_SUPABASE_ANON_KEY` also accepted. |
+| `FLEET_ENGINES` | no | `perplexity` | `perplexity`, `chatgpt` | Which surfaces this container drives. |
+| `FLEET_BATCH_SIZE` | no | `5` | 1–50 | Tasks claimed per poll. |
+| `FLEET_LEASE_MS` | no | `300000` | 30000–3600000 | How long a claim is held before it can be reaped. |
+| `FLEET_IDLE_POLL_MS` | no | `10000` | 1000–300000 | Gap between polls when the queue was empty. |
+| `FLEET_HEARTBEAT_MS` | no | `30000` | 5000–600000, and ≤ half `FLEET_LEASE_MS` | How often an in-flight run says it is alive. |
+| `FLEET_WORKER_ID` | no | `worker-<pid>` | non-blank | Identity on every claim and heartbeat. |
 
 Starting without Supabase is fatal on purpose. A worker with no queue to read
 would poll nothing forever and report itself perfectly healthy.
+
+### The config is validated at boot, or the fleet does not boot (R1.2.6)
+
+`resolveConfig` refuses — non-zero exit, every problem named on its own line —
+when any variable is **absent and required**, **present but blank**,
+**unparseable**, **out of range**, or **names an engine that does not exist**.
+It reports *all* the problems at once, because a validator that stops at the
+first one makes an operator with five wrong values redeploy five times.
+
+**Optional does not mean lenient.** An *absent* optional variable takes the
+default in the table above — that is the deliberate choice this file documents.
+A *present* one is a value someone typed, so it is checked. The rejected
+alternative was the original behaviour: fall back on a parse failure and clamp
+on a range failure, which turned `FLEET_BATCH_SIZE=abc` into 5, `=9999` into 50
+and `=0` into 1. Each of those ran on a number nobody chose while the boot log
+read as healthy. `FLEET_ENGINES=,` was the worst of them: an empty engine list
+is read by `claim_probe_tasks` as *no filter*, so a container configured for one
+surface would claim every surface.
+
+**A misspelt engine is a dead surface.** `FLEET_ENGINES=gogle` claims nothing,
+forever, while every pass writes a perfectly honest `queue_empty` idle row — at
+which point an idle fleet and a misconfigured one are indistinguishable in the
+ledger. Boot is the last place they can still be told apart, so the engine
+vocabulary is closed and checked there.
+
+**Nothing narrows a value the operator set.** `FLEET_HEARTBEAT_MS` must still
+beat at least twice per lease (R3.3.2's stale sweep depends on it), but where
+the old code silently `Math.min`'d the two together, a heartbeat *you set* that
+conflicts with a lease *you set* is now a refusal naming both. Only the
+*default* heartbeat may be narrowed by a short lease, and that narrowing is
+printed at boot as a `NOTE:` line rather than happening invisibly.
+
+**No credential value is ever printed.** `SUPABASE_SERVICE_ROLE_KEY` is marked
+`secret` in the field table, so neither a validation error nor the boot's
+`config:` line can echo it — they say `set` or `MISSING`. Validation messages
+are the classic place a key leaks into a container log.
+
+`--selftest` relaxes **only** the two credentials. A malformed `FLEET_*` value
+still refuses there, so `npm run check` cannot go green on a config the real
+boot would reject.
 
 ## What is not built
 
