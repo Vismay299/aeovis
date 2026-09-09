@@ -44,18 +44,56 @@ import {
  *
  * Every source assertion runs against a COMMENT-STRIPPED copy of the file.
  * Evasion A was to keep `<b>{scanHealth.title}</b>` in a comment, satisfying a
- * count assertion, while rendering a generic literal. A comment renders nothing,
- * so it must not be able to satisfy a guard about what renders.
+ * count assertion, while rendering a generic literal.
+ *
+ * The claim that earns is NARROW, and the first R2.2.7 attempt overclaimed it.
+ * It said "a comment renders nothing, so it must not be able to satisfy a guard
+ * about what renders" — an aspiration written as a fact. What is actually proven
+ * is conditional: the assertions read comment-free text ONLY WHERE the stripper
+ * really stripped, and the stripper is a hand-rolled scanner, not a parser. So
+ * the first test in this file is the load-bearing one. It proves the stripper's
+ * state over the exact text the other tests read, three ways:
+ *
+ *   - the quote state is BALANCED AT EOF, which catches an unpaired delimiter
+ *     leaving a phantom string open for the rest of the file;
+ *   - no `"`-delimited span contains a raw newline, because a real double-quoted
+ *     JS string literal cannot — a span that does means the scanner is inside a
+ *     phantom string and has silently stopped stripping; and
+ *   - the stripped text of EACH GOVERNED BLOCK — the same extent, character for
+ *     character, that the per-block "contains" assertions read — holds no
+ *     surviving `/*` or `//`.
+ *
+ * That third check is the fix R2.2.7's own verifier extracted from a working
+ * bypass. The first attempt checked a FIXED 3000-character window from each
+ * testid, while the critical banner's block measures ~3,300 stripped characters
+ * — it only has to exceed 3000 for the hole to exist, and it does by ~300, so
+ * there was a blind spot INSIDE THE VERY BLOCK BEING GUARDED. The verifier
+ * parked the commented copies at testid + 3217 behind a parity-preserving
+ * `{'"'} … {'"'}` pair — idiomatic JSX for a literal quote, and a string opener
+ * to this scanner — gutted the real renders to a generic `<b>` and a hardcoded
+ * reason, and took the suite to 7 pass / 0 fail with the banner naming no engine
+ * and giving no reason. Note the parity: an EOF balance check ALONE would not
+ * have seen it. Both new checks exist because neither subsumes the other.
  *
  * A rename of `dataSourceIssue` or a re-wrap of a gate line WILL trip this file.
  * That is deliberate: the positive regexes failing loudly is the safe direction
  * for a guard whose whole job is that a silent swap stays visible.
  *
- * The remaining hole a text scan cannot close is a binding that is declared
- * correctly and then changed. The `const` pinned in test 3 is what shuts it:
- * with `const` the value cannot be reassigned, so the three gates below can only
- * ever see `severity === "critical"`. If that `const` is ever relaxed to `let`,
- * this file stops proving what it says it proves.
+ * WHAT REMAINS UNPROVEN. Said as limits, not as reassurance:
+ *
+ *   - Reassignment is NOT the open hole the first attempt named it. Test 3 pins
+ *     the `const` keyword itself, so `let` — with or without a later write —
+ *     fails there. Verified by mutation, both ways.
+ *   - A text scan cannot see SHADOWING: an inner-scope `dataSourceIssue` between
+ *     the declaration and a gate would satisfy every regex here while the gate
+ *     reads a different value. Nothing in this file would say so.
+ *   - The stripper has no regex-literal state (this component contains none) and
+ *     does not treat `'` as a delimiter (see its own docstring for why). The two
+ *     flip modes known to exist are now asserted directly; a third nobody has
+ *     thought of would still be silent, which is the residual to attack next.
+ *   - Nothing here proves React mounted the component, that either branch is
+ *     reachable, or that a mounted banner is visible. Only a render harness can,
+ *     and this repo has none.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -73,19 +111,39 @@ const SHELL_RAW = readFileSync(SHELL_PATH, "utf8");
  * string in this component is double-quoted, and if that ever stops being true
  * the failure is over-stripping, which shows up as a red positive assertion
  * rather than as a guard that quietly stopped guarding.
+ *
+ * That trade has a cost, and R2.2.7's verifier collected it: `{'"'}` is the
+ * idiomatic JSX for rendering one literal double-quote, and to this scanner it
+ * OPENS a string. A second `{'"'}` closes it, so an attacker can park a
+ * parity-preserving pair around a comment and have that comment copied through
+ * verbatim. Parity means an end-of-file balance check alone cannot see it. So
+ * this returns its scanner state as well as its output, and the self-test below
+ * checks BOTH: that the quote state is balanced at EOF (catches the unpaired
+ * apostrophe-class flip at its source) and that no `"`-delimited span contains a
+ * newline (catches the paired flip — a real double-quoted JS string literal
+ * cannot span lines, so a span that does means the scanner is in a phantom
+ * string and is no longer stripping anything).
  */
-function stripComments(source) {
+function scanSource(source) {
   let out = "";
   let quote = null;
+  let quoteOpenedAtLine = -1;
+  let spanningQuoteLine = -1; // first `"` span found to contain a raw newline
+  let line = 1;
   let i = 0;
   while (i < source.length) {
     const c = source[i];
     const next = source[i + 1];
+    if (c === "\n") line += 1;
     if (quote) {
       if (c === "\\") {
         out += c + (next ?? "");
+        if (next === "\n") line += 1;
         i += 2;
         continue;
+      }
+      if (c === "\n" && quote === '"' && spanningQuoteLine === -1) {
+        spanningQuoteLine = quoteOpenedAtLine;
       }
       if (c === quote) quote = null;
       out += c;
@@ -94,6 +152,7 @@ function stripComments(source) {
     }
     if (c === '"' || c === "`") {
       quote = c;
+      quoteOpenedAtLine = line;
       out += c;
       i += 1;
       continue;
@@ -101,6 +160,7 @@ function stripComments(source) {
     if (c === "/" && next === "*") {
       const end = source.indexOf("*/", i + 2);
       const body = source.slice(i, end === -1 ? source.length : end + 2);
+      line += (body.match(/\n/g) || []).length;
       out += body.replace(/[^\n]/g, ""); // keep the newlines, drop the words
       i = end === -1 ? source.length : end + 2;
       continue;
@@ -113,10 +173,13 @@ function stripComments(source) {
     out += c;
     i += 1;
   }
-  return out;
+  return { text: out, unterminatedQuote: quote, quoteOpenedAtLine, spanningQuoteLine };
 }
 
-const SHELL = stripComments(SHELL_RAW);
+const stripComments = (source) => scanSource(source).text;
+
+const SHELL_SCAN = scanSource(SHELL_RAW);
+const SHELL = SHELL_SCAN.text;
 
 /**
  * The JSX a gate governs: from the `(` the gate opens to its matching `)`.
@@ -182,21 +245,59 @@ test("R2.2.7 GUARD — the comment stripper keeps the code and drops the comment
   assert.ok(stripped.includes('"keep //this"'), "a // inside a string is not a comment");
   assert.equal(stripped.split("\n").length, raw.split("\n").length);
 
-  // No un-stripped comment marker anywhere near the two banners. This is the
-  // check that the scanner's quote state has not drifted by the time it reaches
-  // the part of the file the other tests read: if stripping quietly stopped
-  // working there, evasion A is open again and nothing else would say so.
-  // Deliberately keyed off the testids, not the gates, so that a broken GATE is
-  // reported by the gate test rather than showing up here as well.
-  for (const testid of [
-    'data-testid="data-source-issue-banner"',
-    'data-testid="engine-degraded-banner"',
+  // THE SCANNER STATE ITSELF. Two ways the quote state can flip into a phantom
+  // string where comments stop being stripped, both checked at the source rather
+  // than at one downstream symptom:
+  //
+  //   (a) an unpaired delimiter leaves a string open at EOF; and
+  //   (b) a PAIRED flip — `{'"'} … {'"'}`, JSX for a literal double-quote, which
+  //       balances and so survives (a). A real double-quoted JS string literal
+  //       cannot contain a raw newline, so a `"` span that does is not a string.
+  assert.equal(
+    SHELL_SCAN.unterminatedQuote,
+    null,
+    `the ${SHELL_SCAN.unterminatedQuote}-string still open at EOF began at DashboardShell.jsx:${SHELL_SCAN.quoteOpenedAtLine} — note the delimiter that BROKE PARITY is likely earlier than that line, since every opener after it has been mispaired; from wherever it is, the stripper copies comments verbatim`
+  );
+  assert.equal(
+    SHELL_SCAN.spanningQuoteLine,
+    -1,
+    `a "-delimited span opened at DashboardShell.jsx:${SHELL_SCAN.spanningQuoteLine} runs past the end of its line, so it is not a string literal — the stripper is in a phantom string and has stopped stripping`
+  );
+
+  // No un-stripped comment marker anywhere the "contains" assertions can read.
+  // This is the check that the scanner's quote state has not drifted by the time
+  // it reaches the part of the file the other tests read: if stripping quietly
+  // stopped working there, evasion A is open again and nothing else would say so.
+  //
+  // The window is the FULL EXTENT OF THE GOVERNED BLOCK, deliberately the exact
+  // same text `blockGovernedBy` hands the per-block assertions below. R2.2.7's
+  // first attempt used a fixed `slice(at, at + 3000)` from each testid; the
+  // critical banner's block measures ~3,300 stripped characters, so there was a
+  // ~300-character blind spot INSIDE THE VERY BLOCK BEING GUARDED — and note it
+  // grows every time the banner does. The verifier parked the commented
+  // copies at testid + 3217 behind a `{'"'}` pair and took the suite green with
+  // the banner naming no engine. Any window that is not the block's own extent
+  // has that hole; this one cannot, by construction.
+  //
+  // The cost of keying off the GATE rather than the testid — which is what the
+  // first attempt was avoiding — is that a broken gate now reds this test too,
+  // on top of the gate test that names it. Accepted deliberately: over-reporting
+  // is the safe direction, and the alternative is a window that is not the text
+  // the assertions read, which is the bug being fixed. Verified by mutation:
+  // re-pointing the critical gate goes 4/3 with both tests naming the gate.
+  for (const [name, gate, testid] of [
+    ["critical", CRITICAL_BANNER_GATE, 'data-testid="data-source-issue-banner"'],
+    ["partial", PARTIAL_BANNER_GATE, 'data-testid="engine-degraded-banner"'],
   ]) {
-    const at = SHELL.indexOf(testid);
-    assert.notEqual(at, -1, `${testid} is gone from the component`);
-    const around = SHELL.slice(at, at + 3000);
+    assert.notEqual(SHELL.indexOf(testid), -1, `${testid} is gone from the component`);
+    const block = blockGovernedBy(gate);
+    assert.ok(block, `the ${name} banner's gate \`${gate}\` did not resolve to a JSX block`);
     assert.ok(
-      !around.includes("/*") && !around.includes("//"),
+      block.includes(testid),
+      `the ${name} gate does not govern ${testid} — this comment check would be scanning the wrong text`
+    );
+    assert.ok(
+      !block.includes("/*") && !block.includes("//"),
       `a comment survived stripping around ${testid} — evasion A is open again`
     );
   }
