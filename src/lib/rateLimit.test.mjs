@@ -690,11 +690,101 @@ test("GUARD — the restore condition is a named, greppable constant, not a comm
   );
 });
 
-test("GUARD — .env.example documents the trust knob and what it must name", async () => {
+// ---------------------------------------------------------------------------
+// R6.2.4 — the documentation guard covers the knobs as a SET, not one by name.
+//
+// The previous version of this guard asserted that .env.example mentions
+// SCAN_RATE_LIMIT_IP_HEADER and nothing else. It was green for the whole life of
+// SCAN_RATE_LIMIT_UNVERIFIED_CEILING (R0.1.22), which appeared in neither
+// .env.example nor the operator ledger — the single lever over a ceiling that
+// can refuse every anonymous scan, and the guard could not see it, because a
+// guard that names one variable only ever protects that variable.
+//
+// So the list is DERIVED from the module's own source instead of typed here: any
+// new `env.SCAN_RATE_LIMIT_*` read joins the set the moment it is written, and
+// an undocumented knob cannot ship green.
+// ---------------------------------------------------------------------------
+
+/**
+ * Every rate-limit env var `rateLimit.js` actually READS, discovered from its
+ * text. Reads only — a name that appears solely in prose or in a log string is
+ * not a knob, and `env.NAME` also catches `process.env.NAME`.
+ */
+function rateLimitKnobsReadBy(src) {
+  const found = [...src.matchAll(/\benv\.(SCAN_RATE_LIMIT[A-Z0-9_]*)/g)].map((m) => m[1]);
+  return [...new Set(found)].sort();
+}
+
+/**
+ * Does `text` document exactly this name, rather than a longer one that merely
+ * starts with it? Load-bearing: without the right-hand boundary a file
+ * containing only `SCAN_RATE_LIMIT_SALT` would make `SCAN_RATE_LIMIT` look
+ * documented, and the shortest name in the set is a prefix of every other one.
+ */
+function documentsExactName(text, name) {
+  return new RegExp(`${name}(?![A-Z0-9_])`).test(text);
+}
+
+test("GUARD — every SCAN_RATE_LIMIT_* knob the module reads is documented for operators", async () => {
+  const src = await readFile(new URL("./rateLimit.js", import.meta.url), "utf8");
+  const knobs = rateLimitKnobsReadBy(src);
+
+  // Anti-vacuity, and not hypothetical: if the extractor matched nothing, every
+  // loop below would iterate zero times and this test would pass while the
+  // deployment documented no knob at all. An empty set is not a clean one.
+  assert.ok(
+    knobs.length >= 5,
+    `the knob extractor found ${knobs.length} (${knobs.join(", ") || "none"}); it read 5 when this ` +
+      `guard was written, so either the regex has stopped matching the module or a knob was removed ` +
+      `— lower this floor deliberately, never to make a red test green`
+  );
+  for (const required of [
+    "SCAN_RATE_LIMIT",
+    "SCAN_RATE_LIMIT_IP_HEADER",
+    "SCAN_RATE_LIMIT_UNVERIFIED_CEILING",
+  ]) {
+    assert.ok(
+      knobs.includes(required),
+      `${required} is read by rateLimit.js but the extractor did not find it — the derivation is ` +
+        `broken, and a broken derivation makes this whole guard vacuous`
+    );
+  }
+
   const example = await readFile(new URL("../../.env.example", import.meta.url), "utf8");
-  assert.match(example, /SCAN_RATE_LIMIT_IP_HEADER/, "a security-relevant knob documented only in a JSDoc is undocumented");
-  assert.match(example, /OVERWRITES/, "the whole point of the knob is a header the proxy overwrites");
+  assert.deepEqual(
+    knobs.filter((k) => !documentsExactName(example, k)),
+    [],
+    "a knob documented only in a JSDoc is undocumented: .env.example is where an operator looks"
+  );
+
+  // The same set, in the file an operator reads before touching a deployment.
+  const ledger = await readFile(new URL("../../docs/OPERATOR_LEDGER.md", import.meta.url), "utf8");
+  assert.deepEqual(
+    knobs.filter((k) => !documentsExactName(ledger, k)),
+    [],
+    "docs/OPERATOR_LEDGER.md § B lists what is environment-shaped and easy to get silently wrong; " +
+      "a lever over anonymous scan capacity belongs in it"
+  );
+});
+
+test("GUARD — .env.example says what each of the two dangerous knobs actually does", async () => {
+  const example = await readFile(new URL("../../.env.example", import.meta.url), "utf8");
+  // Naming a knob is not documenting it. These are the two facts an operator
+  // gets wrong: which header qualifies, and that the ceiling has no off switch.
+  assert.match(example, /OVERWRITES/, "the whole point of the trust knob is a header the proxy overwrites");
   assert.match(example, /REFUSED/, "the operator must learn that a forgeable name is rejected");
+  assert.match(
+    example,
+    /UNVERIFIED_CEILING_MULTIPLIER/,
+    "the ceiling's default is derived, not literal; name the symbol so the operator can grep for it"
+  );
+  // Tolerant of the comment wrapping, intolerant of the sentence disappearing.
+  assert.match(
+    example,
+    /0 does not mean(?:\s|#)+"off"/,
+    "SCAN_RATE_LIMIT_UNVERIFIED_CEILING=0 is ignored, not an off switch — an operator who believes " +
+      "otherwise thinks they disabled a limit that is still on"
+  );
 });
 
 test("GUARD — POST /api/scan counts the request and returns 429 with Retry-After", async () => {

@@ -9,6 +9,13 @@
 **Date:** 2026-09-08 · **Task:** R6.2.1 (finding S27) · **Verified at:** `ea165ed`
 **and the working tree on top of it** — see the next paragraph for why both.
 
+**Amended 2026-09-09 (R6.2.4), unverified against a commit.** Two additions, both
+labelled where they appear and neither re-checking the rest of the file: § B now
+documents `SCAN_RATE_LIMIT_UNVERIFIED_CEILING`, which had been live and
+undocumented since R0.1.22, and § E gained `R3.3.5` plus the guard that stops it
+going stale again. Everything else here still carries the R6.2.1 sweep's
+provenance and no more.
+
 > **Citation anchoring — read before following a line number.** The previous
 > revision of this file swept all 17 of its citations against commit `04e80db`,
 > and every one of them held *there*. It then shipped in `220d93d` — the same
@@ -253,9 +260,36 @@ Also environment-shaped and easy to get silently wrong:
   fails the run on a mismatch, and fails again when an advertised engine has no
   API key — otherwise the landing page names an engine that every scan silently
   skips.
+- **The free-scan rate limit is five variables, not one.** `SCAN_RATE_LIMIT`
+  (scans per window per client), `SCAN_RATE_LIMIT_WINDOW_MS` (the window),
+  `SCAN_RATE_LIMIT_SALT` (per-deployment salt for the hashed bucket key — the
+  table is a counter, not a visitor log), `SCAN_RATE_LIMIT_IP_HEADER` and
+  `SCAN_RATE_LIMIT_UNVERIFIED_CEILING`, the last two below. `.env.example` carries
+  the long form of each. Which knobs exist is not maintained by hand: a guard in
+  `src/lib/rateLimit.test.mjs` extracts every `env.SCAN_RATE_LIMIT_*` read out of
+  `src/lib/rateLimit.js` and fails if any of them is missing from `.env.example`
+  **or from this file** — find it with
+  `git grep -n 'rateLimitKnobsReadBy' src/lib`.
 - **`SCAN_RATE_LIMIT_IP_HEADER` should stay unset unless you know the answer.**
   It must name the one header your proxy *overwrites*, not appends. Known-forgeable
   names are refused outright. On Vercel you do not need it.
+- **`SCAN_RATE_LIMIT_UNVERIFIED_CEILING` is the only lever over the
+  deployment-wide ceiling, and it has no off switch.** Where no address source
+  exists that the caller cannot set — the knob above unset and not on Vercel — the
+  per-address limit is bypassable by rotating a header, so R0.1.22 added a second
+  bucket keyed by a constant that caps *the whole deployment* per window. Unset,
+  it derives as 5× `SCAN_RATE_LIMIT` (25/hour at the defaults). A non-numeric or
+  `<= 0` value is **ignored**, not honoured: `0` would refuse every anonymous scan,
+  so it falls back to the derived default instead. Raising it buys the same
+  throughput for honest anonymous clients and for one rotating attacker. When it
+  is exhausted the product is down for anonymous callers and the log says so once
+  per process — `git grep -n 'ceiling.*EXHAUSTED' src/lib/rateLimit.js`. The
+  answer to hitting it is a declared proxy header, not a bigger number.
+  *This variable existed undocumented from R0.1.22 until 2026-09-09 (R6.2.4)* —
+  in neither this file nor `.env.example`, while the guard that should have caught
+  it asserted only the one knob it was written for. It is recorded rather than
+  quietly added, because "the operator had no documented lever over a limit that
+  can refuse every scan" is the kind of gap this section exists to surface.
 - **`LLM_MODEL_PRICES`** — a paid model id that nothing can price is refused
   before the request is sent, because recording $0 for paid inference is how the
   content pipeline's `CONTENT_MAX_COST_PER_ITEM` cap became a cap that could
@@ -409,6 +443,19 @@ because what shipped changed how a developer's machine behaves. Nothing else in
 this section is closed. If you are counting open work, count from
 `orchestrate.mjs status`, not from this table.
 
+**Completeness is enforced, not promised (R6.2.4).** The previous revision of
+this section was missing `R3.3.5`, which was filed twelve seconds before that
+revision was submitted — nothing here was false, but a gated task was invisible
+in the operator's own list of gated tasks, and the next hand-maintained list
+would have rotted the same way within the hour. So it is no longer maintained by
+hand alone: `src/lib/operatorLedgerGates.test.mjs` reads
+`.claude/orchestration/tasks.json`, takes every task that is **not done** and
+carries one of the five gate tags, and fails if its id appears nowhere in this
+document. It also fails when a table row here is about a task the ledger records
+as `done` and the row does not say `CLOSED`. Find it with
+`git grep -n 'every OPEN gated task' src/lib`. What the guard cannot check is
+whether the sentence beside an id is *true*; that is still on the author.
+
 ### Needs a credential or a vendor account (`needs-secrets`)
 
 | Task | What the operator must supply |
@@ -419,6 +466,7 @@ this section is closed. If you are counting open work, count from
 | R1.6.1 | Verify Indian egress per engine — rupee pricing, Indian brands, `.in` citations. Needs the actual egress path, not a claim about it. |
 | R1.7.1 | Production data access to dual-run the reference corpus through the API and UI paths for `docs/PARITY.md`. |
 | R2.5.1 | Production `prompt_results` access, and the R0.4.2 labels, to point the calibration harness at the live judge. |
+| R3.3.5 | A reachable Postgres (the Supabase service-role credentials plus migration `011`) so the reaper's idempotence is exercised against the real `close_scan_run`, not against a JS fake that re-implements what the migration is *believed* to do. Today `classifyReapCloseFailure` sorts a close failure by text-matching the plpgsql `RAISE` strings and that SQL has never been executed here. The test must skip **loudly and countably** with no database, never silently. |
 | R4.1.1 | A Search Console property with the (rotated) service-account email added as a Restricted user. Today the account is on zero properties, which is why the GSC client is orphaned. |
 | R4.4.1 | GA4 read access or permission to place a first-party snippet, for AI-referral attribution. |
 
