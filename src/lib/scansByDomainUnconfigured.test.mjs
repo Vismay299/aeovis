@@ -33,8 +33,14 @@
  *   - src/app/api/brands/[brand]/coverage/route.js:56 did NOT, and the original
  *     version of this comment was wrong to say it "fell through to `scans?.[0]`
  *     being undefined and returned 404 never been scanned". MEASURED, not
- *     reasoned: the pre-fix tree (commit 220d93d, parent of the R2.8.12 commit
- *     0c505a5) was checked out and GET was driven with the Supabase env cleared.
+ *     reasoned: the pre-fix tree was checked out at commit 220d93d — the last
+ *     commit before the R2.8.12 commit 0c505a5 to touch src/. 0c505a5's actual
+ *     parent is ea165ed, which is ledger-only (tasks.json and docs/plans/), so
+ *     `git diff 220d93d 0c505a5^ -- src/` is empty and 220d93d is the same
+ *     source tree R2.8.12 was applied to. (220d93d is the GRANDparent, not the
+ *     parent; the first correction of this paragraph said "parent" and was
+ *     itself wrong. `git rev-list --parents -n 1 0c505a5` shows the one parent
+ *     ea165ed.) GET was driven there with the Supabase env cleared.
  *     getScansForBrand at route.js:52 threw ScansUnavailableError/
  *     db_not_configured FIRST — both functions gate on the same module-level
  *     `supabase` (getScansByDomain via resolveClient, which falls back to it) —

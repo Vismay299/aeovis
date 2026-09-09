@@ -9,9 +9,16 @@
  * note, and the file is what a later reader would have trusted.
  *
  * WHAT WAS ACTUALLY MEASURED (R2.8.15, not reasoned from the source): the
- * pre-fix tree was checked out at commit 220d93d — the parent of 0c505a5, the
- * commit that landed R2.8.12 — into a detached worktree, and GET was driven
- * with NEXT_PUBLIC_SUPABASE_URL/ANON_KEY/SUPABASE_SERVICE_ROLE_KEY deleted.
+ * pre-fix tree was checked out into a detached worktree at commit 220d93d, the
+ * last commit BEFORE 0c505a5 (the commit that landed R2.8.12) to touch src/.
+ * 0c505a5's actual parent is ea165ed, which is ledger-only — it changes just
+ * .claude/orchestration/tasks.json and docs/plans/ — so `git diff 220d93d
+ * 0c505a5^ -- src/` is empty and 220d93d carries the identical pre-fix source
+ * tree. (`git rev-list --parents -n 1 0c505a5` and `git rev-list -n 1 0c505a5^
+ * -- src/` are the two commands that establish this; an earlier version of this
+ * paragraph called 220d93d the parent, which it is not — it is the
+ * grandparent.) GET was then driven there with
+ * NEXT_PUBLIC_SUPABASE_URL/ANON_KEY/SUPABASE_SERVICE_ROLE_KEY deleted.
  * Observed there:
  *
  *   getScansForBrand("italicatiles.com")  -> threw ScansUnavailableError,
