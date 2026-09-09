@@ -206,7 +206,35 @@ const SELF_INCREMENT =
   /set(?!Timeout\b|Interval\b)[A-Z]\w*\s*\(\s*\(?\s*(\w+)\s*\)?\s*=>\s*(?:\{(?:[^{}]|\{[^{}]*\})*?)?\b\1\s*[+-]/;
 
 /**
- * The five shapes a manufactured number arrives in. The first four all fire on
+ * `x ?? 0`, `x || 0`, and the assigning forms. R2.7.9.
+ *
+ * The historical shapes above all MAKE UP a number out of nothing. This one is
+ * quieter and was found live on this surface: EngineRail.jsx read
+ * `const perEngine = total ?? (engines[0]?.asked ?? 0)` and rendered "The same 0
+ * questions go to each" whenever the figure was absent. It was masked, not
+ * harmless — page.js passes `total` on every render today, so the fabricated
+ * zero waited on one caller changing its mind. A zero is a reading; substituting
+ * one for a measurement nobody took is standing rule 5 broken on the first
+ * surface a prospect sees.
+ *
+ * The lookahead is what keeps `?? 0.5` and `?? 0.9` — real opacities and
+ * fractions — out of the accusation; only a bare zero is the lie.
+ *
+ * IT IS BLUNT ON PURPOSE. It cannot tell a rendered metric from an internal
+ * index, so a legitimate `?? 0` on this surface trips it too. That is the price
+ * of the rule and the escape is not an exemption list: write the branch out, and
+ * let the absent case say it is absent. Nothing on the landing surface needed
+ * the shape when this rule landed.
+ *
+ * What it does NOT catch, stated rather than implied: `x === undefined ? 0 : x`
+ * and `Number(x) || 0` spelled across two statements are the same lie in
+ * different words and pass this rule. Ternary-to-zero is deliberately excluded
+ * because src/app/page.js uses one as a guarded derivation, not as a fallback.
+ */
+const ZERO_FALLBACK = /(?:\?\?|\|\|)=?\s*-?0(?:\.0+)?(?![\d.])/;
+
+/**
+ * The six shapes a manufactured number arrives in. The first four all fire on
  * the module this task is named after; each is proven load-bearing on its own
  * below, so a rule cannot rot into decoration behind the others.
  */
@@ -260,6 +288,13 @@ const RULES = [
     id: "grouped-total",
     re: /\b\d{1,3}(?:,\d{3})+\b/,
     why: "a comma-grouped total typed into the page is a measurement nobody took",
+  },
+  {
+    id: "zero-fallback",
+    re: ZERO_FALLBACK,
+    why:
+      "?? 0 or || 0 substitutes a reading for a measurement nobody took; write the "
+      + "absent branch and render an em dash plus a state (standing rule 5)",
   },
 ];
 
@@ -359,6 +394,8 @@ test("each rule is load-bearing on its own", () => {
     ],
     ["export const BASE = 37720;", "seed"],
     ["export const Strip = () => <p>37,720 probes run</p>;", "grouped-total"],
+    ["export const n = total ?? 0;", "zero-fallback"],
+    ["export const n = total || 0;", "zero-fallback"],
   ];
   for (const [snippet, id] of cases) {
     assert.deepEqual(fabrications(snippet, id), [id], `rule "${id}" did not fire alone`);
@@ -417,6 +454,71 @@ test("GUARD — the counter respelled on setTimeout with a block body still trip
     fabrications(RESPELLED_PROBE_COUNTER, "respelled fixture").sort(),
     ["self-increment", "timer"],
     "a recursive setTimeout counter is the deleted module with different words",
+  );
+});
+
+/**
+ * The line as it actually stood in src/components/landing/EngineRail.jsx before
+ * R2.7.9, kept as a fixture so this rule is provably aimed at the shape it was
+ * written for. Rendering it with `total` absent put "The same 0 questions go to
+ * each" on the landing page.
+ */
+const FABRICATED_PER_ENGINE = [
+  "export function EngineRail({ engines, total }) {",
+  "  const perEngine = total ?? (engines[0]?.asked ?? 0);",
+  "  return <p>The same {perEngine} questions go to each.</p>;",
+  "}",
+].join("\n");
+
+test("GUARD — the zero fallback that shipped on this surface trips, and near misses do not", () => {
+  assert.deepEqual(
+    fabrications(FABRICATED_PER_ENGINE, "EngineRail fixture"),
+    ["zero-fallback"],
+    "the pre-R2.7.9 EngineRail line is the shape this rule exists for",
+  );
+
+  // Every spelling of the same substitution.
+  for (const snippet of [
+    "export const a = x ?? 0;",
+    "export const a = x || 0;",
+    "export const a = x??0;",
+    "export const a = x ?? -0;",
+    "export const a = x ?? 0.0;",
+    "export function f(o) { o.count ??= 0; }",
+    "export function f(o) { o.count ||= 0; }",
+  ]) {
+    assert.deepEqual(
+      fabrications(snippet, snippet),
+      ["zero-fallback"],
+      `the zero fallback must fire on: ${snippet}`,
+    );
+  }
+
+  // And the things that legitimately end in a digit after ?? or ||, which an
+  // over-eager version of this rule would accuse. A fraction is not a count.
+  for (const snippet of [
+    "export const o = opacity ?? 0.5;",
+    "export const o = opacity || 0.85;",
+    "export const n = count ?? 1;",
+    "export const s = label || 'none';",
+    "export const bits = flags | 0x0f;",
+  ]) {
+    assert.deepEqual(
+      fabrications(snippet, snippet),
+      [],
+      `the zero fallback must NOT fire on: ${snippet}`,
+    );
+  }
+
+  // Prose about the fixed bug is not the bug. EngineRail.jsx now documents the
+  // line it used to hold, and must not be read as still holding it.
+  assert.deepEqual(
+    fabrications(
+      "/* this was `const perEngine = total ?? 0` until R2.7.9 */\nexport const x = 1;",
+      "prose",
+    ),
+    [],
+    "a comment quoting the old line is documentation, not a fabrication",
   );
 });
 
