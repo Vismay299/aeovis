@@ -73,7 +73,15 @@ test("probePerplexity answer + search both OK", async () => {
   assert.ok(result.citations.includes("https://www.hubspot.com/crm"));
   assert.ok(result.citations.includes("https://www.zoho.com/crm"));
   assert.equal(result.references.length, 2);
-  assert.ok(result.cost >= 0.005);
+  // R3.6.5: this used to read `assert.ok(result.cost >= 0.005)` and passed only
+  // because the /search leg returned a hardcoded 0.005 on every success. With
+  // no LLM_TOOL_FEES declared that leg has no price, so the TOTAL is not a
+  // measurement — the answer leg's real 0.005 is reported in the detail rather
+  // than shipped as a total that understates the probe.
+  assert.equal(result.cost, null, "an unpriced /search leg means there is no honest total");
+  assert.equal(result.cost_state, "unpriced");
+  assert.match(result.cost_state_detail || "", /answer: measured 0\.005/);
+  assert.match(result.cost_state_detail || "", /search: unpriced/);
   assert.equal(result.error, null);
   assert.equal(result.citations_state, CITATIONS_STATE.VERIFIED);
   assert.equal(result.citations_state_reason, null);
@@ -250,7 +258,7 @@ test("probePerplexity answer fails but search survives → citations stay VERIFI
   delete process.env.PERPLEXITY_API_KEY;
 });
 
-test("probePerplexity tracks cost in options.stats", async () => {
+test("probePerplexity tracks tokens in options.stats, and refuses to track a cost it did not measure", async () => {
   const originalFetch = globalThis.fetch;
   process.env.PERPLEXITY_API_KEY = "pplx-test";
 
@@ -275,8 +283,16 @@ test("probePerplexity tracks cost in options.stats", async () => {
 
   const stats = { cost: 0, tokens: 0 };
   await probePerplexity("some query", { stats });
-  assert.ok(stats.cost > 0);
+  // R3.6.5: this used to read `assert.ok(stats.cost > 0)`. The vendor reported
+  // token counts and NO cost, and "sonar" has no declared rate here, so every
+  // dollar in that assertion came from the two hardcoded 0.005 literals. Tokens
+  // were genuinely measured and still accrue; the cost was not, so it does not —
+  // and the counter is what stops that reading as a free scan.
+  assert.equal(stats.cost, 0, "an unmeasured cost must not accrue as spend");
+  assert.equal(stats.cost_unmeasured_calls, 1, "it is counted instead, never silently dropped");
   assert.equal(stats.tokens, 15);
+  // See src/lib/engines/perplexityCost.test.mjs for the positive case: with
+  // LLM_MODEL_PRICES / LLM_TOOL_FEES declared, stats.cost does move.
 
   globalThis.fetch = originalFetch;
   delete process.env.PERPLEXITY_API_KEY;

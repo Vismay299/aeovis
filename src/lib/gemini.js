@@ -1,10 +1,86 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { isUnpricedModel, resolveCost, MODEL_PRICES_ENV } from "./llmPricing.js";
+
+/**
+ * Gateway name for llmPricing's error messages. Google does not echo USD spend
+ * on the generateContent response, so a cost here can only ever come from the
+ * price table — never from the gateway.
+ */
+export const GEMINI_PROVIDER = "google";
+
+/**
+ * Why `cost` is what it is — a MEASUREMENT or the absence of one (R3.6.5,
+ * standing rules 1 and 3). `cost` is a number ONLY in the `measured` state;
+ * every other state carries `cost: null`, never 0.
+ *
+ * THREE COPIES OF THIS VOCABULARY EXIST and they must not drift: here,
+ * src/lib/engines/openai.js (R3.6.6, the original) and
+ * src/lib/engines/perplexity.js (R3.6.5). They are duplicated rather than
+ * shared because the natural home is src/lib/llmPricing.js and that file was
+ * owned by another task while this one was built; hoisting it there is a
+ * follow-up. Until then src/lib/engines/costStateVocabulary.test.mjs asserts
+ * all three are deep-equal, so a divergent edit fails the suite.
+ */
+export const COST_STATE = Object.freeze({
+  /** Priced from llmPricing, keyed on the model id that actually answered. */
+  MEASURED: "measured",
+  /** No GEMINI_API_KEY: nothing was called, so nothing was spent OR measured. */
+  NOT_CONFIGURED: "not_configured",
+  /** No rung of the model ladder returned a completion, so nothing can be priced. */
+  PROBE_FAILED: "probe_failed",
+  /** The model that answered has no rate in the price table. */
+  UNPRICED: "unpriced",
+  /** The model has a rate, but Gemini returned no usable token counts. */
+  UNMEASURED_TOKENS: "unmeasured_tokens",
+});
+
+/**
+ * Record that this call produced no cost number.
+ *
+ * Leaving `stats.cost` untouched is correct — adding 0 would fabricate a
+ * measurement — but a run in which every call was unpriced would then be
+ * indistinguishable from a run that was genuinely free. This counter is the
+ * difference between a measured zero and a never-measured one (standing rule 1).
+ * Same field name as src/lib/engines/openai.js's, so one accumulator serves
+ * every engine.
+ */
+function noteUnmeasuredCost(stats) {
+  if (!stats) return;
+  stats.cost_unmeasured_calls = (stats.cost_unmeasured_calls || 0) + 1;
+}
+
+/**
+ * The shape returned when there is no completion to price: a missing key, or a
+ * ladder that failed on every rung.
+ *
+ * `cost: null`, never 0. Before R3.6.5 this returned the bare pair
+ * `{ text: "", model_used: "" }` and its one adapter turned the absent cost into
+ * `res.cost || 0.0` — so a Gemini outage and a free successful answer were the
+ * same two numbers. The state field is what makes them different facts.
+ */
+function noCompletion(stats, state, detail) {
+  noteUnmeasuredCost(stats);
+  return {
+    text: "",
+    model_used: "",
+    tokens: null,
+    cost: null,
+    cost_source: null,
+    cost_state: state,
+    cost_state_detail: detail,
+  };
+}
 
 export async function generateContent(prompt, options = {}, retries = 2) {
+  const stats = options.stats;
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error("GEMINI_API_KEY is not configured.");
-    return { text: "", model_used: "" };
+    return noCompletion(
+      stats,
+      COST_STATE.NOT_CONFIGURED,
+      "GEMINI_API_KEY is not set, so no request was made and no cost exists to report"
+    );
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -37,9 +113,9 @@ export async function generateContent(prompt, options = {}, retries = 2) {
       let raceTimeoutId = null;
 
       try {
-        const model = genAI.getGenerativeModel({ 
+        const model = genAI.getGenerativeModel({
           model: modelName,
-          ...modelConfig 
+          ...modelConfig
         });
 
         // R6.5.6 (finding A1): requestOptions is the SDK's SECOND ARGUMENT, not a
@@ -63,22 +139,87 @@ export async function generateContent(prompt, options = {}, retries = 2) {
         ]);
 
         const response = await result.response;
-        
-        let tokens = 0;
-        let cost = 0.0;
-        if (response.usageMetadata) {
-          const promptTokens = response.usageMetadata.promptTokenCount || 0;
-          const candidatesTokens = response.usageMetadata.candidatesTokenCount || 0;
-          tokens = response.usageMetadata.totalTokenCount || (promptTokens + candidatesTokens);
-          cost = (promptTokens * 0.075 / 1e6) + (candidatesTokens * 0.30 / 1e6);
-          
-          if (options.stats) {
-            options.stats.tokens = (options.stats.tokens || 0) + tokens;
-            options.stats.cost = (options.stats.cost || 0) + cost;
+
+        // PRICING (R3.6.5). What used to live here was:
+        //
+        //     let cost = 0.0;
+        //     if (response.usageMetadata) {
+        //       cost = (promptTokens * 0.075 / 1e6) + (candidatesTokens * 0.30 / 1e6);
+        //     }
+        //
+        // Two fabrications in four lines. First, those two rates are hard-coded
+        // and are not the list price of ANY id in MODEL_FALLBACKS — the ladder
+        // spans flash-lite and flash tiers, whose real rates differ several-fold,
+        // and whichever rung answered was billed at the same invented number.
+        // Second, a response with no `usageMetadata` at all kept `cost = 0.0` and
+        // returned it as if measured, so "Google did not say what this consumed"
+        // and "this consumed nothing" were the same value in `stats.cost`.
+        //
+        // Both go through resolveCost now, keyed on the rung that actually
+        // answered, which is the only id it could ever be true for. Nothing is
+        // priced in this file: with no rate declared the call still returns its
+        // text — the answer was paid for and discarding it to protect a number
+        // would be the worse trade — but its cost is null with a reason
+        // (standing rule 3: fails loud, never $0).
+        //
+        // Deliberately NOT a pre-flight refusal like src/lib/engines/openai.js's.
+        // That adapter knows its one model id before the request; this ladder does
+        // not know which of five rungs will answer until one does, so the only
+        // honest gate is after the fact.
+        let tokens = null;
+        let cost = null;
+        let costSource = null;
+        let costState = COST_STATE.MEASURED;
+        let costStateDetail = null;
+
+        const usage = response.usageMetadata;
+        if (usage) {
+          const promptTokens = usage.promptTokenCount || 0;
+          const candidatesTokens = usage.candidatesTokenCount || 0;
+          tokens = usage.totalTokenCount || (promptTokens + candidatesTokens);
+        }
+
+        try {
+          // `usage` absent means the counts were never REPORTED, so undefined is
+          // passed rather than 0 — resolveCost distinguishes the two and throws
+          // `unmeasured_tokens` for the first instead of pricing it as free.
+          const priced = resolveCost({
+            model: modelName,
+            provider: GEMINI_PROVIDER,
+            promptTokens: usage ? usage.promptTokenCount : undefined,
+            completionTokens: usage ? usage.candidatesTokenCount : undefined,
+          });
+          cost = priced.cost;
+          costSource = priced.cost_source;
+        } catch (e) {
+          if (!isUnpricedModel(e)) throw e;
+          costState =
+            e.reason === "unmeasured_tokens" ? COST_STATE.UNMEASURED_TOKENS : COST_STATE.UNPRICED;
+          costStateDetail = e.message;
+          console.error(
+            `[gemini] cost not measurable for model "${modelName}": ${e.message} ` +
+              `Declare a rate in ${MODEL_PRICES_ENV} to price this ladder.`
+          );
+        }
+
+        if (stats) {
+          if (tokens !== null) stats.tokens = (stats.tokens || 0) + tokens;
+          if (cost === null) {
+            noteUnmeasuredCost(stats);
+          } else {
+            stats.cost = (stats.cost || 0) + cost;
           }
         }
 
-        return { text: response.text(), model_used: modelName, tokens, cost };
+        return {
+          text: response.text(),
+          model_used: modelName,
+          tokens,
+          cost,
+          cost_source: costSource,
+          cost_state: costState,
+          cost_state_detail: costStateDetail,
+        };
       } catch (e) {
         lastErr = e;
         continue; // try next model
@@ -94,7 +235,7 @@ export async function generateContent(prompt, options = {}, retries = 2) {
         controller.abort();
       }
     }
-    
+
     // Backoff before retrying the full model cascade
     if (attempt < retries) {
       const delay = 1000 * Math.pow(2, attempt);
@@ -104,5 +245,10 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   }
 
   console.error(`[scan] all models failed after ${retries} retries: ${lastErr}`);
-  return { text: "", model_used: "" };
+  return noCompletion(
+    stats,
+    COST_STATE.PROBE_FAILED,
+    `no rung of the model ladder returned a completion after ${retries} retries ` +
+      `(last error: ${lastErr?.message || lastErr}), so nothing could be priced`
+  );
 }

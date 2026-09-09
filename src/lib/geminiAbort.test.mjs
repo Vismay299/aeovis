@@ -15,7 +15,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { generateContent } from "./gemini.js";
+import { generateContent, COST_STATE } from "./gemini.js";
+
+/**
+ * R3.6.5 widened the no-completion return from the bare pair
+ * `{ text: "", model_used: "" }` to one that also says a cost could not be
+ * measured. The two assertions below used to be `deepEqual` on that pair, which
+ * pinned an incidental shape; they now assert the same two fields plus the
+ * cost verdict, so they still fail if the ladder ever starts claiming a rung
+ * answered — and additionally fail if a dead ladder is ever priced at $0.
+ */
+function assertDeadLadder(out, message) {
+  assert.equal(out.text, "", message);
+  assert.equal(out.model_used, "", `${message}: no rung may be named`);
+  assert.equal(out.cost, null, `${message}: a dead ladder has no cost, not a $0 one`);
+  assert.equal(out.cost_state, COST_STATE.PROBE_FAILED, `${message}: and must say so`);
+}
 
 process.env.GEMINI_API_KEY = "test-key-never-sent-anywhere";
 
@@ -221,7 +236,7 @@ test("the fallback ladder leaves nothing in flight: every earlier attempt is tor
   const stub = installFetchStub();
   try {
     const out = await generateContent("hi", { timeout: 40 }, 0);
-    assert.deepEqual(out, { text: "", model_used: "" }, "all five rungs failed");
+    assertDeadLadder(out, "all five rungs failed");
 
     assert.equal(stub.calls.length, 5, "five models tried");
     const live = stub.calls.filter((c) => !c.settled);
@@ -262,7 +277,7 @@ test("a rung that fails fast leaves no timer behind — the 20s abort deadline i
   try {
     const before = countTimers();
     const out = await generateContent("hi", {}, 0); // default 20_000ms deadline
-    assert.deepEqual(out, { text: "", model_used: "" });
+    assertDeadLadder(out, "every rung refused the connection");
     assert.equal(calls, 5);
     assert.equal(
       countTimers() - before,
