@@ -1,5 +1,11 @@
 import { normalizeUrl } from "../scoring/citations.js";
 import {
+  FAILURE_KIND,
+  failureKindOf,
+  isRetryableFailure,
+  tagHttpFailure,
+} from "./httpFailureKind.js";
+import {
   assertModelPriceable,
   isUnpricedModel,
   resolveCost,
@@ -145,35 +151,53 @@ export async function probeChatGpt(query, options = {}) {
   };
 
   let lastErr = null;
+  // How many requests this probe actually SPENT. Reported below instead of the
+  // constant MAX_RETRIES, which the old failure line printed whether or not the
+  // retries happened (standing rule 1: a skip is not a success, and "after 2
+  // retries" on a call that was made once is a log that lies).
+  let attempts = 0;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      const res = await fetch(OPENAI_RESPONSES_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
+      attempts++;
+      let res;
+      try {
+        res = await fetch(OPENAI_RESPONSES_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        });
+      } finally {
+        // `finally`, not a bare call after the await: a rejected fetch used to
+        // leave a live 45s timer per attempt holding the event loop open.
+        clearTimeout(timeoutId);
+      }
 
       if (!res.ok) {
         const errorText = await res.text().catch(() => "");
-        const err = new Error(`OpenAI HTTP ${res.status}: ${errorText}`);
-        if (res.status === 429 || res.status >= 500) {
-          lastErr = err;
-          if (attempt < MAX_RETRIES) {
-            await delay(1000 * Math.pow(2, attempt));
-            continue;
-          }
-        }
-        throw err;
+        // R2.2.13. What stood here was
+        //
+        //     if (res.status === 429 || res.status >= 500) { ...retry... }
+        //     throw err;
+        //
+        // and the throw landed in this loop's own `catch`, which backed off and
+        // went round again regardless. The guard decided nothing: measured on
+        // this file, a 401 cost 3 calls and 3013ms — identical in count and
+        // timing to a genuine upstream outage, so the one failure an operator
+        // can fix was indistinguishable from vendor flakiness.
+        //
+        // The status is now classified ONCE, here, where the response is still
+        // in hand, and the verdict rides on the error for the catch to read.
+        // Shared with src/lib/engines/perplexity.js via httpFailureKind.js so
+        // the two adapters cannot disagree about whether a 403 is worth a retry.
+        throw tagHttpFailure(new Error(`OpenAI HTTP ${res.status}: ${errorText}`), res.status);
       }
 
       const resJson = await res.json();
@@ -268,20 +292,36 @@ export async function probeChatGpt(query, options = {}) {
       };
     } catch (e) {
       lastErr = e;
+      // Permanent: OpenAI understood the request and refused it. Leaving the
+      // loop on the first response is the whole fix — two more calls and three
+      // more seconds buy the same refusal, and the transport-noise default in
+      // failureKindOf keeps an unrecognisable failure retryable.
+      if (!isRetryableFailure(e)) break;
       if (attempt < MAX_RETRIES) {
         await delay(1000 * Math.pow(2, attempt));
       }
     }
   }
 
-  console.error(`[chatgpt] probe failed after ${MAX_RETRIES} retries: ${lastErr?.message || lastErr}`);
+  const kind = failureKindOf(lastErr);
+  // The attempt count is COUNTED, not inferred from MAX_RETRIES: "refused on
+  // the first call" and "retried to exhaustion" are different operator stories
+  // and must not print the same sentence.
+  const spent = `${attempts} call${attempts === 1 ? "" : "s"}`;
+  console.error(
+    `[chatgpt] probe failed after ${spent} [${kind}${
+      kind === FAILURE_KIND.PERMANENT
+        ? ", not retried — check OPENAI_API_KEY / request shape"
+        : ""
+    }]: ${lastErr?.message || lastErr}`
+  );
   // cost: null, not 0. A probe that never got a completion has no priced call
   // to report; OpenAI may still have billed the attempts, and claiming a
   // measured $0 for them is the fabrication this task exists to remove.
   return unpricedOutcome(
     stats,
     COST_STATE.PROBE_FAILED,
-    `no completion was returned after ${MAX_RETRIES} retries, so nothing could be priced`,
+    `no completion was returned after ${spent}, so nothing could be priced`,
     lastErr?.message || "ChatGPT probe failed"
   );
 }

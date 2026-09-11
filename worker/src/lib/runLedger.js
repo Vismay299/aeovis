@@ -56,11 +56,18 @@ export const RUN_OUTCOME_LIST = Object.freeze([
   RUN_OUTCOMES.NOOP,
 ]);
 
-/** Who ran. The fleet only ever writes RUNNERS.FLEET; the rest are R3.2's. */
+/**
+ * Who ran. The fleet only ever writes RUNNERS.FLEET; the rest are R3.2's and
+ * R3.3's. REAPER is here because src/lib/scanRuns.test.mjs asserts this list is
+ * byte-identical to the app's — the fleet never writes it, but it is the runner
+ * that CLOSES the fleet's rows when a container dies, so a reader of this file
+ * must be able to find the name.
+ */
 export const RUNNERS = Object.freeze({
   FLEET: "probe-fleet",
   SCAN_CHUNK: "scan-chunk",
   SCHEDULER: "scheduler",
+  REAPER: "reaper",
 });
 
 /** The two phases the fleet writes. */

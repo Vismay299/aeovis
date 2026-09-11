@@ -1,6 +1,12 @@
 import { LlmUnavailableError } from "./llmErrors.js";
 import { LLM_ENV, getLlmApiKey, getLlmBaseUrl, getLlmModel, getLlmProvider } from "./llmConfig.js";
 import { assertModelPriceable, isFreeModelId, isUnpricedModel, resolveCost } from "./llmPricing.js";
+import {
+  FAILURE_KIND,
+  failureKindOf,
+  isRetryableFailure,
+  tagHttpFailure,
+} from "./engines/httpFailureKind.js";
 
 export { getLlmModel };
 
@@ -75,6 +81,10 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   }
 
   let lastErr = null;
+  // COUNTED, not inferred from `retries`. "Refused on the first call" and
+  // "retried to exhaustion" are different operator stories and must not print
+  // the same sentence (R3.6.7); the old message always claimed retries + 1.
+  let attempts = 0;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     const timeoutMs = options.timeout || 30000;
@@ -82,6 +92,7 @@ export async function generateContent(prompt, options = {}, retries = 2) {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      attempts++;
       const res = await fetch(url, {
         method: "POST",
         headers: {
@@ -97,13 +108,27 @@ export async function generateContent(prompt, options = {}, retries = 2) {
 
       if (!res.ok) {
         const errText = await res.text();
-        const retryable = res.status === 429 || res.status >= 500;
-        if (retryable && attempt < retries) {
-          lastErr = new Error(`${provider} HTTP ${res.status}: ${errText}`);
-          await wait(1500 * Math.pow(2, attempt));
-          continue;
-        }
-        throw new Error(`${provider} HTTP ${res.status}: ${errText}`);
+        // R3.6.7. What stood here was
+        //
+        //     const retryable = res.status === 429 || res.status >= 500;
+        //     if (retryable && attempt < retries) { ...back off... continue; }
+        //     throw new Error(...);
+        //
+        // and that throw landed in this loop's own `catch`, which backed off
+        // and went round again for ANY status. The guard decided nothing:
+        // measured on this file, a 401 cost 3 calls and 4546ms and then threw
+        // LlmUnavailableError{reason:"exhausted_retries"} — so a revoked key,
+        // the one failure an operator can actually fix, arrived labelled as a
+        // vendor outage in the single field a caller branches on.
+        //
+        // The status is classified ONCE, here, where the response is still in
+        // hand, and the verdict rides on the error for the catch and the final
+        // throw to read. Same module as the engine adapters
+        // (src/lib/engines/httpFailureKind.js) so the gateway client and the
+        // probes cannot disagree about whether a 403 is worth another call.
+        // errText is the gateway's own body; the Authorization header is never
+        // echoed into it, so no credential reaches this message.
+        throw tagHttpFailure(new Error(`${provider} HTTP ${res.status}: ${errText}`), res.status);
       }
 
       const data = await res.json();
@@ -145,11 +170,13 @@ export async function generateContent(prompt, options = {}, retries = 2) {
       // legible. Out, immediately, with its own type.
       if (isUnpricedModel(e)) throw e;
       lastErr = e;
-      const isAbort = e.name === "AbortError" || /abort/i.test(e.message || "");
-      if (isAbort && attempt < retries) {
-        await wait(1500 * Math.pow(2, attempt));
-        continue;
-      }
+      // Permanent: the gateway understood the request and refused it (401, 403,
+      // 400, 404...). Leaving the loop on the first response is half the fix —
+      // the other half is the reason label below. An untagged failure (abort,
+      // socket reset, truncated body) has no verdict on it and stays retryable
+      // by failureKindOf's deliberate default, so a recoverable measurement is
+      // never discarded.
+      if (!isRetryableFailure(e)) break;
       if (attempt < retries) {
         await wait(1500 * Math.pow(2, attempt));
         continue;
@@ -157,11 +184,31 @@ export async function generateContent(prompt, options = {}, retries = 2) {
     }
   }
 
+  const spent = `${attempts} attempt${attempts === 1 ? "" : "s"}`;
+
+  // A permanent refusal is not an outage, and must not borrow an outage's
+  // label. `reason` is the one field callers branch on (it is propagated
+  // verbatim by src/lib/scoring/promptSource.js), so "exhausted_retries" on a
+  // revoked key sent an operator looking at the vendor's status page instead of
+  // at their own key. Standing rule 1: the two states must not read alike.
+  if (failureKindOf(lastErr) === FAILURE_KIND.PERMANENT) {
+    const status = lastErr?.status ?? null;
+    const reason = status === 401 || status === 403 ? "auth_failed" : "permanent_error";
+    const err = new LlmUnavailableError(
+      `LLM gateway ${baseUrl} refused the request with HTTP ${status} on the first call ` +
+        `(${spent}, not retried — a permanent refusal does not improve with backoff): ` +
+        `${lastErr?.message || lastErr}`,
+      { reason, provider, model, cause: lastErr }
+    );
+    err.status = status;
+    throw err;
+  }
+
   // Same rule as the missing key above: exhausted retries is an outage, not an
   // answer. Throw so the caller has to decide what an unmeasured value looks
   // like instead of silently inheriting an empty string.
   throw new LlmUnavailableError(
-    `LLM gateway ${baseUrl} failed after ${retries + 1} attempt(s): ${lastErr?.message || lastErr}`,
+    `LLM gateway ${baseUrl} failed after ${spent}: ${lastErr?.message || lastErr}`,
     { reason: "exhausted_retries", provider, model, cause: lastErr }
   );
 }

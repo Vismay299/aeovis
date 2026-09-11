@@ -876,6 +876,23 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                     ))}
                   </div>
                 ) : (
+                  /* R2.7.12 — the em dash, same as the per-engine rows above.
+                     This is the banner whose entire job is to say the reading
+                     is incomplete; printing "0%" for a coverage figure the
+                     record does not carry claims a measurement on the one
+                     screen that exists to deny one, and "0%" is also exactly
+                     what a genuinely empty scan looks like. The degradedEngines
+                     branch twenty lines up has always written `=== null ? "—"`;
+                     these two legacy rows now match it.
+                     CURRENTLY LATENT, SAY SO: services/api.js:510-511 ends
+                     normalizeResult() with `aioCoveragePct = aioCoveragePct ??
+                     0` and the same for the error rate, so a scan coming
+                     through the normalizer arrives here already coerced and
+                     this branch renders "0%" regardless. That file is owned by
+                     another task in flight and is not touched here. The fix is
+                     live only for a pre-normalized `result` that kept its null;
+                     until the upstream coercion dies this is the render edge
+                     being correct ahead of its input, not a visible change. */
                   <div className="rows">
                     <div className="row">
                       <span className="row__n">
@@ -884,14 +901,18 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                           (need ≥ {Math.round(AIO_MIN_NON_BRANDED_COVERAGE * 100)}%)
                         </span>
                       </span>
-                      <span className="row__v">{result.aioCoveragePct ?? 0}%</span>
+                      <span className="row__v">
+                        {result.aioCoveragePct == null ? "—" : `${result.aioCoveragePct}%`}
+                      </span>
                     </div>
                     <div className="row">
                       <span className="row__n">
                         SERP error rate
                         <span className="dim">(limit {AIO_ERROR_RATE_LIMIT_PCT}%)</span>
                       </span>
-                      <span className="row__v">{result.aioErrorRatePct ?? 0}%</span>
+                      <span className="row__v">
+                        {result.aioErrorRatePct == null ? "—" : `${result.aioErrorRatePct}%`}
+                      </span>
                     </div>
                   </div>
                 )}

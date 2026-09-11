@@ -553,7 +553,18 @@ test("runOnce — a heartbeat that fails is announced, and does not abort a live
 
 test("fleet config — heartbeatMs is clamped below the lease, so a probe cannot outlive its own liveness", () => {
   const fast = workerConfig.resolveConfig(
-    { SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "k", FLEET_LEASE_MS: "30000" },
+    {
+      SUPABASE_URL: "https://x.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "k",
+      FLEET_LEASE_MS: "30000",
+      // R1.1.5: a 30s lease cannot hold one probe at perplexity.ai's default
+      // 45s inter-probe delay plus the 60s probe timeout, so the politeness
+      // budget's lease check refuses the boot before the heartbeat rule is
+      // reached. Fast pacing keeps this a test about the HEARTBEAT.
+      FLEET_PROBE_DELAY_MIN_MS: "0",
+      FLEET_PROBE_DELAY_MAX_MS: "1000",
+      FLEET_PROBE_TIMEOUT_MS: "5000",
+    },
     { strict: false }
   );
   assert.ok(fast.heartbeatMs <= fast.leaseMs / 2, `${fast.heartbeatMs} must be at most half of ${fast.leaseMs}`);

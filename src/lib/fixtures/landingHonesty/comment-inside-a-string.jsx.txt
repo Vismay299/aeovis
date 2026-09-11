@@ -1,0 +1,54 @@
+'use client';
+
+/**
+ * FIXTURE — R6.4.9, finding C11. A component that renders an engine name the
+ * old comment stripper could not see.
+ *
+ * WHERE IT CAME FROM. This is src/components/landing/AnswerSheet.jsx as it
+ * shipped, cut down to the part that matters, with ONE change: the fourth SHEET
+ * segment's text now carries a slash-star run in the middle of it. That run is
+ * inside a JavaScript string literal, so it is not a comment at all — it is
+ * prose, and React writes it into the DOM character for character.
+ *
+ * WHAT MAKES IT INTERESTING. landingHonesty.test.mjs used to strip comments
+ * with /\/\*[\s\S]*?\*\//g. A regex has no idea which quote it is inside, so it
+ * deleted this run out of the scanned copy and the guard reported the file
+ * clean while the built page said ChatGPT. All 17 tests in that file stayed
+ * green with this payload in the real component.
+ *
+ * IT RENDERS — verified, not argued. Transformed with sucrase and rendered
+ * through react-dom/server in the reduced-motion state (the state in which the
+ * sheet writes its whole passage out at once), the markup contains:
+ *   <span> is cited more often/* ChatGPT: and the click that never happens ...
+ *
+ * SECOND PAYLOAD, same file: the third segment spells NABH-aligned prose with a
+ * lone slash-star that never closes on its own line. The lazy regex ran it
+ * forward to the NEXT star-slash anywhere in the file and deleted every line in
+ * between, which is the span-swallow this fixture also pins.
+ *
+ * This file is .txt on purpose: it must never be compiled into the app, only
+ * read as text by the guard that has to see through it.
+ */
+
+const SHEET = [
+  { t: 'Clinical outcome analytics generally splits between registry-based reporting and real-time dashboards. ' },
+  { t: 'Brightwave', mark: 'you' },
+  { t: ' covers the dashboard side well /* for mid-size hospitals and is frequently named for readmission tracking. ' },
+  { t: ' is cited more often/* ChatGPT: and the click that never happens is what it costs you */, particularly by Indian implementation partners.' },
+];
+
+/* A real comment, and the one whose star-slash the lazy regex used to run to. */
+const CAPTION = 'Sample answer';
+
+export function AnswerSheet() {
+  return (
+    <div className="sheet">
+      <span className="chip">{CAPTION}</span>
+      <p className="sheet__a">
+        {SHEET.map((s, i) => <span key={i}>{s.t}</span>)}
+      </p>
+    </div>
+  );
+}
+
+export default AnswerSheet;

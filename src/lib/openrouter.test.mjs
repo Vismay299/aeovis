@@ -552,3 +552,156 @@ test("pricing - the alert does not flood, but the throw happens every time", asy
   }
   assert.equal(errors.length, 1, "three refusals, one alert line — the throw is the per-call signal");
 });
+
+// ---------------------------------------------------------------------------
+// R3.6.7 — a permanent refusal costs one call and says what it was.
+//
+// The guard that stood at src/lib/openrouter.js:100 read
+//   `const retryable = res.status === 429 || res.status >= 500;`
+// and then threw for everything else — into this loop's own catch, which
+// backed off and went round again for any error at all. Measured before the
+// fix: a 401 cost 3 calls and 4546ms, and then surfaced as
+// LlmUnavailableError{reason:"exhausted_retries"}. Both halves were wrong, and
+// the second was worse: `reason` is the field callers branch on (promptSource
+// propagates it verbatim to the operator), so a revoked key read as a vendor
+// outage.
+//
+// Everything below counts calls to an injected fetch stub. No log strings, no
+// real network. The key is a placeholder — a 401 is produced by the stub, not
+// by sending a bad credential anywhere.
+// ---------------------------------------------------------------------------
+
+const PLACEHOLDER_KEY = { ...KEYED, LLM_API_KEY: "sk-EXAMPLE-NOT-A-REAL-KEY" };
+
+/**
+ * Run generateContent against a counting stub.
+ * @param {(n: number) => Response | Promise<Response>} respond called per attempt
+ */
+async function counted(respond, { retries = 0, envVars = {} } = {}) {
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return respond(calls);
+  };
+  const startedAt = Date.now();
+  try {
+    const out = await withEnvs({ ...PLACEHOLDER_KEY, ...envVars }, () =>
+      generateContent("hello", {}, retries).catch((e) => e)
+    );
+    return { out, calls, elapsedMs: Date.now() - startedAt };
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+const status = (code, body = "refused") => () => new Response(body, { status: code });
+
+test("retry - a 401 costs exactly ONE call, even with a retry budget of two", async () => {
+  const { out, calls, elapsedMs } = await counted(status(401, "No auth credentials found"), {
+    retries: 2,
+  });
+  // THE regression. This was 3 before R3.6.7.
+  assert.equal(calls, 1, "a revoked key does not become valid on the second try");
+  assert.ok(isLlmUnavailable(out), `expected LlmUnavailableError, got ${out}`);
+  // And it must not have spent the two backoffs (1500ms + 3000ms) getting there.
+  assert.ok(elapsedMs < 1000, `a refused call must not sleep; took ${elapsedMs}ms`);
+});
+
+test("retry - a 401 reports itself as an auth failure, NOT as exhausted_retries", async () => {
+  const { out } = await counted(status(401), { retries: 2 });
+  assert.equal(out.reason, "auth_failed", "the one field a caller branches on");
+  assert.notEqual(out.reason, "exhausted_retries", "a revoked key is not a vendor outage");
+  assert.equal(out.status, 401);
+  assert.equal(out.provider, "openrouter");
+  assert.match(out.message, /not retried/, "the message has to agree with the reason");
+  assert.doesNotMatch(out.message, /3 attempts/, "and must not claim calls it never made");
+});
+
+test("retry - a 403 is auth_failed too; other permanent 4xx are permanent_error", async () => {
+  const forbidden = await counted(status(403), { retries: 2 });
+  assert.equal(forbidden.calls, 1);
+  assert.equal(forbidden.out.reason, "auth_failed");
+
+  for (const code of [400, 404, 422]) {
+    const { out, calls } = await counted(status(code), { retries: 2 });
+    assert.equal(calls, 1, `HTTP ${code} is a refusal, not flakiness`);
+    assert.equal(out.reason, "permanent_error", `HTTP ${code}`);
+    assert.equal(out.status, code);
+  }
+});
+
+test("retry - a 429 still spends the whole budget and stays exhausted_retries", async () => {
+  const { out, calls } = await counted(status(429, "slow down"), { retries: 1 });
+  assert.equal(calls, 2, "a rate limit is exactly the case backoff exists for");
+  assert.equal(out.reason, "exhausted_retries");
+  assert.match(out.message, /2 attempts/);
+});
+
+test("retry - a 5xx still spends the whole budget", async () => {
+  const { out, calls } = await counted(status(503, "upstream exploded"), { retries: 1 });
+  assert.equal(calls, 2);
+  assert.equal(out.reason, "exhausted_retries");
+  assert.match(out.message, /503/);
+});
+
+test("retry - a transport failure has no status to read, so it stays retryable", async () => {
+  // The deliberate asymmetry inherited from httpFailureKind.js: a failure we
+  // cannot classify defaults to TRANSIENT, because giving up early throws away
+  // a measurement we might have got.
+  const { out, calls } = await counted(
+    () => {
+      throw Object.assign(new Error("fetch failed"), { name: "TypeError" });
+    },
+    { retries: 1 }
+  );
+  assert.equal(calls, 2, "an unclassifiable failure keeps its retries");
+  assert.equal(out.reason, "exhausted_retries");
+});
+
+test("retry - an AbortError (the request timeout) is still retried", async () => {
+  // The old code had a dedicated isAbort branch that waited and continued.
+  // It was byte-for-byte the generic retry beneath it, so it is gone — this
+  // pins that its behaviour did not go with it.
+  const { out, calls } = await counted(
+    () => {
+      throw Object.assign(new Error("The operation was aborted"), { name: "AbortError" });
+    },
+    { retries: 1 }
+  );
+  assert.equal(calls, 2, "a timeout is the canonical transient failure");
+  assert.equal(out.reason, "exhausted_retries");
+});
+
+test("retry - a first-call 401 after a transient 500 still stops immediately", async () => {
+  // Mixed sequence: the classification is per-response, not per-run. The 500
+  // buys a retry; the 401 that follows ends it on the spot.
+  const { out, calls } = await counted(
+    (n) => new Response("x", { status: n === 1 ? 500 : 401 }),
+    { retries: 2 }
+  );
+  assert.equal(calls, 2, "one retry earned by the 500, then stop — not 3");
+  assert.equal(out.reason, "auth_failed", "the LAST verdict decides the label");
+});
+
+test("retry - every permanent status obeys the SHARED classifier, one call each", async () => {
+  const { classifyHttpStatus, FAILURE_KIND } = await import("./engines/httpFailureKind.js");
+  for (const code of [400, 401, 402, 403, 404, 409, 422, 451]) {
+    assert.equal(classifyHttpStatus(code), FAILURE_KIND.PERMANENT, `fixture: ${code}`);
+    const { calls } = await counted(status(code), { retries: 2 });
+    assert.equal(calls, 1, `HTTP ${code} is classified permanent, so it must cost one call`);
+  }
+});
+
+test("retry - 408 and 425 are retried, which a private `429 || >=500` rule could not do", async () => {
+  // The decisive evidence that openrouter.js reads the shared vocabulary rather
+  // than a fourth private copy of it: the guard that used to live here would
+  // have called both of these permanent and stopped after one call.
+  const { classifyHttpStatus, FAILURE_KIND } = await import("./engines/httpFailureKind.js");
+  for (const code of [408, 425]) {
+    assert.equal(classifyHttpStatus(code), FAILURE_KIND.TRANSIENT, `fixture: ${code}`);
+    const { calls, out } = await counted(status(code), { retries: 1 });
+    assert.equal(calls, 2, `HTTP ${code} is classified transient, so it keeps its budget`);
+    assert.equal(out.reason, "exhausted_retries");
+  }
+});

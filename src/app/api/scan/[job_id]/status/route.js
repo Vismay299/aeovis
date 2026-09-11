@@ -69,6 +69,10 @@ export const revalidate = 0;
 // local dev session prints it once per tick. Repetition is the lesser evil: the
 // alternative is a degradation that announces itself once and then looks
 // exactly like health for the next twelve minutes.
+//
+// WHAT THE LEDGER MAY SAY OUT LOUD is a separate question from what it knows,
+// and this route answers it to ANONYMOUS callers. See "THE SERIALISATION
+// BOUNDARY" below before adding a field to the `execution` block.
 
 /**
  * How many recent runs the response carries. A bound, not a total: the query
@@ -126,6 +130,158 @@ export const RESCUE_REASONS = Object.freeze({
   NO_LIVE_EXECUTOR: "no_live_executor",
 });
 
+// ---------------------------------------------------------------------------
+// THE SERIALISATION BOUNDARY (R3.2.3, security re-work)
+//
+// This route is ANONYMOUSLY REACHABLE. `isPublicRoute` in
+// src/lib/operatorPerimeter.js matches `GET /api/scan/<id>/status` in
+// PUBLIC_PATTERNS, so no credential of any kind is required to read this body —
+// a job_id is an unguessable v4 uuid, but anyone may start a free scan and then
+// poll it. Everything below therefore treats `scan_runs` as an INTERNAL table
+// being published to the public: a row's columns are written by
+// `chunkRunOutcome` from provider errors, DB errors and thrown `Error.message`
+// text, none of which was ever written with an anonymous reader in mind.
+//
+// The rule is an ALLOWLIST, not a denylist, for the same reason the perimeter
+// itself is: a denylist of known-bad keys re-opens the moment a writer adds a
+// field, and `detail` is a jsonb column any future chunk can put anything in.
+//
+// Three channels are closed here, and each has a named replacement rather than
+// a silent deletion (standing rule 1):
+//   * `run.error`   -> `error_code`, a fixed vocabulary. The text itself stays
+//                      in `scan_runs.error` and in the chunk's own
+//                      `console.error`, where an operator with database or log
+//                      access reads it. WHY the run failed is already public
+//                      and machine-readable in `reason`.
+//   * `run.detail`  -> `RUN_DETAIL_PUBLIC_KEYS` only, with `skips` reduced to
+//                      `{reason, count}` (its `sample` strings are built from
+//                      provider names and raw provider/DB error text in
+//                      scanWorker.js) and a MEASURED count of what was withheld.
+//   * `unknown_detail` -> a fixed sentence, matching the sibling refusal in the
+//                      `getScanJob` catch below, which already declines to put
+//                      a database's own words on the wire and says why.
+// ---------------------------------------------------------------------------
+
+/**
+ * The `detail` keys an anonymous caller may see, and the ONLY ones.
+ *
+ * Every entry is a bounded vocabulary written by `chunkRunOutcome`
+ * (src/lib/workers/scanWorker.js): phase names, chunk reasons, a schedule-row
+ * state, integers. Nothing here is free text assembled from an exception.
+ *
+ * ADDING TO THIS LIST IS THE DANGEROUS EDIT IN THIS FILE. A key belongs here
+ * only if every value it can ever hold comes from a vocabulary this repo
+ * declares — not from `err.message`, not from a provider's response body, not
+ * from a URL or a host name. If in doubt leave it out: an omitted key is
+ * counted in `detail.withheld_keys`, so it is visible rather than lost.
+ */
+export const RUN_DETAIL_PUBLIC_KEYS = Object.freeze([
+  "phases_run",
+  "chunk_reason",
+  "skips_total",
+  "schedule_row",
+  "progress_pct",
+  "job_status",
+  "attempts",
+  "max_attempts",
+]);
+
+/**
+ * What the wire says about a run's `error` column, without saying what it says.
+ * Three answers, because "no error was recorded" and "an error was recorded and
+ * you are not being shown it" are different facts, and so is "the column held
+ * something this route cannot classify".
+ */
+export const RUN_ERROR_CODES = Object.freeze({
+  /** The column is NULL/empty: this run recorded no error text. A measured none. */
+  NONE: "none",
+  /** The run recorded error text. It is operator-only; `reason` says why it failed. */
+  RECORDED: "error_recorded",
+  /** The column held something that is not a string. Classified, not published. */
+  UNREADABLE: "error_unreadable",
+});
+
+/** JSON scalars are the only leaf values an allowlisted key may carry. */
+function isWireScalar(value) {
+  return (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  );
+}
+
+/** A scalar, or a flat array of them (`phases_run`). Anything deeper is withheld. */
+function isWirePublishable(value) {
+  if (isWireScalar(value)) return true;
+  return Array.isArray(value) && value.every(isWireScalar);
+}
+
+/**
+ * Classify a run's error column. Never returns the text.
+ *
+ * Exported so the classification is testable without a database, and so a guard
+ * can assert the vocabulary is closed.
+ */
+export function runErrorCode(error) {
+  if (error === null || error === undefined) return RUN_ERROR_CODES.NONE;
+  if (typeof error !== "string") return RUN_ERROR_CODES.UNREADABLE;
+  return error.trim() === "" ? RUN_ERROR_CODES.NONE : RUN_ERROR_CODES.RECORDED;
+}
+
+/**
+ * One run's `detail` jsonb, reduced to what an anonymous caller may see.
+ *
+ * The count of withheld keys rides along: a filtered object that looks complete
+ * is how a reader concludes a chunk recorded nothing when in fact it recorded
+ * something this boundary refused to publish. `withheld_keys: 0` is the
+ * measured claim "you are seeing all of it"; `null` is "I could not even count".
+ */
+export function publicRunDetail(detail) {
+  // The writer recorded no detail at all. Not the same as "recorded detail,
+  // all of it withheld" — that comes back as an object with a count.
+  if (detail === null || detail === undefined) return null;
+
+  // jsonb can hold a scalar or an array. Neither has keys to allow, and neither
+  // is a shape this route knows how to vet, so nothing of it is published and
+  // the count of what was dropped is honestly unmeasurable.
+  if (typeof detail !== "object" || Array.isArray(detail)) {
+    return { withheld_keys: null };
+  }
+
+  const wire = {};
+  let withheld = 0;
+  for (const [key, value] of Object.entries(detail)) {
+    if (key === "skips") {
+      // R3.2.2's skip entries are `{reason, count, sample[], sample_truncated}`.
+      // `reason` is a declared CHUNK_SKIP_REASONS value and `count` is an
+      // integer; `sample` is built from provider names and raw provider/DB
+      // error text (scanWorker.js recordSkip call sites) and never crosses.
+      if (value === null || value === undefined) {
+        // NOT MEASURED — no phase armed the list. Preserved as null, never [].
+        wire.skips = null;
+      } else if (Array.isArray(value)) {
+        wire.skips = value.map((entry) => ({
+          reason: entry && typeof entry.reason === "string" ? entry.reason : null,
+          // Never `?? 0`: a skip entry that did not carry a count is unknown,
+          // and "0 of them" would be a number nobody measured (rule 5).
+          count: entry && Number.isInteger(entry.count) ? entry.count : null,
+        }));
+      } else {
+        withheld += 1;
+      }
+      continue;
+    }
+    if (!RUN_DETAIL_PUBLIC_KEYS.includes(key) || !isWirePublishable(value)) {
+      withheld += 1;
+      continue;
+    }
+    wire[key] = Array.isArray(value) ? [...value] : value;
+  }
+  wire.withheld_keys = withheld;
+  return wire;
+}
+
 /** The columns the wire carries. `detail` is fetched but only rides on the two runs that explain the present. */
 const RUN_COLUMNS =
   "id,runner,phase,worker_id,scan_job_id,batch_id,brand,outcome,reason," +
@@ -155,7 +311,10 @@ function runSummary(run, { withDetail = false } = {}) {
     probes_attempted: run.probesAttempted,
     probes_succeeded: run.probesSucceeded,
     errors_recovered: run.errorsRecovered,
-    error: run.error,
+    // NOT the chunk's `err.message` (scanWorker.js's catch puts raw exception
+    // text in this column). A public body gets the classification; the text is
+    // operator-only. `reason` above already carries the machine-readable WHY.
+    error_code: runErrorCode(run.error),
     started_at: run.startedAt,
     heartbeat_at: run.heartbeatAt,
     ended_at: run.endedAt,
@@ -165,7 +324,10 @@ function runSummary(run, { withDetail = false } = {}) {
   // by RUN_HISTORY_LIMIT for facts about executions that already ended. The two
   // runs that explain the CURRENT state carry theirs (R3.2.2's skip reasons live
   // in there); the rest are summaries.
-  if (withDetail) wire.detail = run.detail;
+  // Allowlisted, never passed through whole: `detail` is an open jsonb column
+  // and anything a future writer puts in it would otherwise become public with
+  // no code change at all.
+  if (withDetail) wire.detail = publicRunDetail(run.detail);
   return wire;
 }
 
@@ -333,6 +495,13 @@ export function decideRescue({ job, summary, historyKnown, nowMs, staleAfterMs =
  * no position to assert when the SELECT threw. `[]` and `null` are two answers
  * here and must stay two answers all the way to the renderer.
  *
+ * `detail` IS PUBLIC TEXT. It is serialised to an anonymous caller as
+ * `execution.unknown_detail`, so it is a fixed sentence on every path and the
+ * database's own message is written to `console.error` instead. Redacting here
+ * rather than at the response keeps the raw string from existing in the
+ * returned object at all, so a future caller that forwards `history.detail`
+ * somewhere else cannot re-open the channel.
+ *
  * Exported for its own tests: GET re-applies the same `known` guard when it
  * builds the response, and a contract enforced twice is a contract that cannot
  * be observed being broken in one place. `deps.client` style injection is not
@@ -363,11 +532,17 @@ export async function readRunHistory(jobId, client) {
     if (error) throw error;
     rows = data || [];
   } catch (error) {
+    // The database's own words go to the LOG, where an operator reads them,
+    // and never into the returned `detail` — see the boundary note above and
+    // the identical refusal in GET's `getScanJob` catch. A PostgREST error
+    // message routinely names hosts, roles, schemas and policies.
     console.error(`[status] scan_runs read failed for job ${jobId}:`, error);
     return {
       known: false,
       reason: HISTORY_UNKNOWN_REASONS.READ_FAILED,
-      detail: `Could not read scan_runs: ${error?.message || "database error"}`,
+      detail:
+        "The run ledger could not be read on this poll, so this job's execution history is " +
+        "unknown — not empty. Retry on the next poll.",
       runs: null,
       truncated: null,
     };
@@ -382,11 +557,15 @@ export async function readRunHistory(jobId, client) {
     const runs = rows.slice(0, RUN_HISTORY_LIMIT).map((row) => normalizeRun(row));
     return { known: true, reason: null, detail: null, runs, truncated };
   } catch (error) {
+    // Same refusal, and not a theoretical one here: normalizeRun's half-closed
+    // message quotes the row's id, outcome and ended_at verbatim.
     console.error(`[status] scan_runs row unreadable for job ${jobId}:`, error);
     return {
       known: false,
       reason: HISTORY_UNKNOWN_REASONS.ROW_UNREADABLE,
-      detail: `A scan_runs row could not be read: ${error?.message || "malformed row"}`,
+      detail:
+        "A run ledger row could not be read, so this job's execution history is unknown — not " +
+        "empty. The row is on the server log.",
       runs: null,
       truncated: null,
     };
@@ -493,6 +672,8 @@ export async function GET(request, { params }) {
         execution: {
           history_known: history.known,
           unknown_reason: unknownReason,
+          // A FIXED sentence, never the database's message: this body is
+          // served to anonymous callers (see the serialisation boundary note).
           unknown_detail: history.known ? null : history.detail,
           executor,
           open_run_count: summary ? summary.openRunCount : null,

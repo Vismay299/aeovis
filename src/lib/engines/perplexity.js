@@ -1,4 +1,12 @@
 import { normalizeUrl } from "../scoring/citations.js";
+// `export ... from` below re-exports these for callers; this import is what
+// makes them usable INSIDE this module.
+import {
+  FAILURE_KIND,
+  failureKindOf,
+  isRetryableFailure,
+  tagHttpFailure,
+} from "./httpFailureKind.js";
 import {
   isUnpricedModel,
   resolveCost,
@@ -114,80 +122,23 @@ function reportedUsdCost(usage) {
 /**
  * Whether a failed Perplexity call is worth trying again (R2.2.10).
  *
- * Both legs used to guard the retry with `if (status === 429 || status >= 500)`
- * and then `throw` the error for every other status — inside a `try` whose own
- * `catch` retried unconditionally. The guard was dead: the throw landed in the
- * catch, which backed off and went round again. A 401 from a revoked key cost
- * three calls and three seconds before surfacing, and the one failure an
- * operator can actually fix looked exactly like vendor flakiness.
- *
- *   transient — rate limit, upstream fault, timeout, severed connection. The
- *               same request may well succeed in a second. Retry it.
- *   permanent — the vendor understood the request and refused it: bad or
- *               revoked key (401), forbidden (403), malformed request (400,
- *               404, 422). No amount of backoff changes the answer. Fail on
- *               the FIRST response and say why.
- *
- * Kept as an exported classification rather than an inline condition so the
- * policy is testable on its own and so both legs cannot drift apart.
+ * The classification itself moved to src/lib/engines/httpFailureKind.js in
+ * R2.2.13, when src/lib/engines/openai.js turned out to carry the identical
+ * dead guard and needed the identical verdict. Re-exported here, unchanged and
+ * by reference, so every existing importer of these names keeps working and
+ * there is still exactly ONE definition of "is a 403 worth retrying" in the
+ * codebase. Do not re-declare them here; see that module's header for the
+ * policy and why an unreadable status defaults to transient.
  */
-export const FAILURE_KIND = Object.freeze({
-  TRANSIENT: "transient",
-  PERMANENT: "permanent",
-});
-
-/** Statuses below 500 that are still worth another attempt. */
-const TRANSIENT_STATUSES = new Set([
-  408, // Request Timeout
-  425, // Too Early
-  429, // Too Many Requests
-]);
-
-/**
- * Classify an HTTP status from either leg.
- *
- * The default for something we cannot read as a status is TRANSIENT, not
- * PERMANENT: giving up early on a failure we do not understand throws away a
- * measurement, which is the more expensive mistake. We stop retrying only when
- * we can positively identify a refusal.
- *
- * @param {number} status
- * @returns {"transient"|"permanent"}
- */
-export function classifyHttpStatus(status) {
-  const code = Number(status);
-  if (!Number.isFinite(code)) return FAILURE_KIND.TRANSIENT;
-  if (code >= 500) return FAILURE_KIND.TRANSIENT;
-  if (TRANSIENT_STATUSES.has(code)) return FAILURE_KIND.TRANSIENT;
-  if (code >= 400) return FAILURE_KIND.PERMANENT;
-  return FAILURE_KIND.TRANSIENT;
-}
-
-/**
- * The kind of a thrown failure. Only errors this module tagged carry a verdict;
- * anything else (AbortError from the timeout, a socket reset, a truncated body
- * that fails JSON.parse) is transport noise and therefore transient.
- *
- * @param {unknown} error
- * @returns {"transient"|"permanent"}
- */
-export function failureKindOf(error) {
-  const kind = error?.failureKind;
-  return kind === FAILURE_KIND.PERMANENT || kind === FAILURE_KIND.TRANSIENT
-    ? kind
-    : FAILURE_KIND.TRANSIENT;
-}
-
-/** @param {unknown} error @returns {boolean} */
-export function isRetryableFailure(error) {
-  return failureKindOf(error) === FAILURE_KIND.TRANSIENT;
-}
+export {
+  FAILURE_KIND,
+  classifyHttpStatus,
+  failureKindOf,
+  isRetryableFailure,
+} from "./httpFailureKind.js";
 
 function httpError(leg, status, bodyText) {
-  const err = new Error(`Perplexity ${leg} HTTP ${status}: ${bodyText}`);
-  err.status = status;
-  err.failureKind = classifyHttpStatus(status);
-  return err;
+  return tagHttpFailure(new Error(`Perplexity ${leg} HTTP ${status}: ${bodyText}`), status);
 }
 
 /**

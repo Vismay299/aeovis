@@ -3,8 +3,10 @@ import { isCronAuthorized } from "@/lib/cronAuth";
 import { recordCronTick } from "@/lib/db/analytics";
 import { supabase } from "@/lib/db";
 import {
+  REAP_PASS_REASONS,
   SCHEDULER_TICK_REASONS,
   chunkRunOutcome,
+  reapStaleRuns,
   runScanChunk,
   runSchedulerTick,
   shouldRescueJob,
@@ -248,13 +250,109 @@ export function schedulerTickThrew(error) {
 }
 
 /**
+ * R3.3.4 — the stale-run reaper, on the wire.
+ *
+ * THE FINDING. R3.3.2 built `reapStaleRuns` — 28 tests, a fake clock, nine
+ * proven sabotages — and could not wire it, because this file belonged to
+ * another task that cycle. So every run whose writer died (a killed serverless
+ * invocation, a crashed fleet container) stayed OPEN forever: indistinguishable
+ * in the ledger from work still in flight, and never closed by anything. The
+ * reaper was correct and unreached, which is the most expensive kind of
+ * correct.
+ *
+ * `reap_not_run` exists for the same reason `scheduled: null` does. If the
+ * sweep ever stops handing a pass to buildSweepResponse, the wire says so with
+ * every counter null rather than dropping the key, because an absent `reaped`
+ * would read to an operator exactly like a clean sweep.
+ */
+export const REAP_WIRE_REASONS = Object.freeze({
+  /** buildSweepResponse was called without a pass at all. Not "nothing was stale". */
+  NOT_RUN: "reap_not_run",
+});
+
+/** A counter on its way out: unknown stays null. Never `?? 0` (rule 5). */
+function reapCount(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+/** The all-null reap report. Every refusal below returns this shape, filled in. */
+function unmeasuredReapWire(fields) {
+  return {
+    ok: false,
+    outcome: null,
+    reason: null,
+    error: null,
+    considered: null,
+    reaped: null,
+    lost_race: null,
+    vanished: null,
+    not_stale: null,
+    unreadable_heartbeat: null,
+    close_failed: null,
+    truncated: null,
+    pass_run_id: null,
+    ...fields,
+  };
+}
+
+/**
+ * Turn a reapStaleRuns pass into the wire's reap report.
+ *
+ * The counters are copied, never recomputed: `considered` is how many stale
+ * candidates the pass looked at and `reaped` is how many it actually closed,
+ * and those are different numbers on every pass that lost a race or found a
+ * row fresh on re-check. `truncated` is the one an operator must not miss — it
+ * means "I hit my cap and MORE stale runs are still open", so `reaped: 100`
+ * cannot be read as "the ledger is clean now".
+ *
+ * A pass that could not look (no Supabase client) arrives here with
+ * `considered: null` and leaves with it: that is NOT MEASURED, and rounding it
+ * to 0 would report a healthy ledger nobody inspected.
+ */
+export function reapCounters(pass) {
+  if (!pass || typeof pass !== "object") {
+    return unmeasuredReapWire({ reason: `reaper_contract_broken:${pass === null ? "null" : typeof pass}` });
+  }
+  return {
+    ok: pass.ok === true,
+    outcome: pass.outcome ?? null,
+    reason: pass.reason ?? null,
+    error: null,
+    considered: reapCount(pass.considered),
+    reaped: reapCount(pass.reaped),
+    lost_race: reapCount(pass.lostRace),
+    vanished: reapCount(pass.vanished),
+    not_stale: reapCount(pass.notStale),
+    unreadable_heartbeat: reapCount(pass.unreadableHeartbeat),
+    close_failed: reapCount(pass.closeFailed),
+    truncated: typeof pass.truncated === "boolean" ? pass.truncated : null,
+    pass_run_id: pass.passRunId ?? null,
+  };
+}
+
+/**
+ * The report for a reap that threw: nothing was measured, so nothing is 0.
+ *
+ * `reap_failed` is the pass's own vocabulary, not a word invented here —
+ * reapStaleRuns closes its pass row with exactly that reason before it
+ * rethrows, so the wire and the ledger name the same event the same way.
+ */
+export function reapPassThrew(error) {
+  return unmeasuredReapWire({
+    outcome: RUN_OUTCOMES.FAILED,
+    reason: REAP_PASS_REASONS.REAP_FAILED,
+    error: error?.message || String(error),
+  });
+}
+
+/**
  * The whole sweep body, in one place so the response the cron actually reads
  * can be driven by a test. The sweep branch cannot be reached through the HTTP
  * handler in a test (it requires a live Supabase, and this suite deliberately
  * has none — see the header of scanWorkerRoute.route.test.mjs), so the body is
  * built here rather than inline in GET and asserted directly.
  */
-export function buildSweepResponse({ activeCount, resumedIds, scheduled, scheduler }) {
+export function buildSweepResponse({ activeCount, resumedIds, scheduled, scheduler, reaped = null }) {
   return {
     mode: "sweep",
     dispatched: resumedIds.length,
@@ -264,7 +362,89 @@ export function buildSweepResponse({ activeCount, resumedIds, scheduled, schedul
     scheduler_ok: scheduler.outcome !== SCHEDULER_OUTCOMES.FAILED,
     scheduler_error: scheduler.outcome === SCHEDULER_OUTCOMES.FAILED ? scheduler.error ?? scheduler.reason : null,
     scheduler,
+    // An absent pass is reported as an unmeasured one, never omitted: a missing
+    // `reaped` key looks like a quiet success to everything downstream.
+    reaped: reaped || unmeasuredReapWire({ reason: REAP_WIRE_REASONS.NOT_RUN }),
   };
+}
+
+/**
+ * The two maintenance passes the cron sweep runs after it has dispatched its
+ * chunks: the scheduler tick, then the stale-run reap.
+ *
+ * WHY THIS IS A FUNCTION AND NOT INLINE IN GET. The sweep branch of GET is
+ * behind `if (!supabase)` and the route suite deliberately has no Supabase, so
+ * nothing inside that branch could ever be exercised by a test. Lifting the
+ * two passes here — unchanged — makes the isolation below a proven property
+ * rather than a comment: scanWorkerRoute.route.test.mjs drives this function
+ * with a reaper that throws and asserts the tick's result survives intact.
+ *
+ * TWO try/catch BLOCKS, IN SEQUENCE, ON PURPOSE:
+ *   * a tick that throws must not skip the reap — a scheduler broken by one bad
+ *     schedule row would otherwise wedge the ledger open indefinitely;
+ *   * a reap that throws must not fail the tick, must not lose the jobs the
+ *     sweep already dispatched, and must not turn a working cron into a 500.
+ *     The failure is REPORTED (`reaped.ok: false`, every counter null, the
+ *     message on the wire), never swallowed.
+ * The tick runs first because starting due scans is the cron's actual job; the
+ * reap is bookkeeping over rows that have already been stale for six minutes,
+ * and one more tick of latency on it costs nothing.
+ */
+export async function runSweepMaintenance(nowIso, deps = {}) {
+  const tick = deps.runSchedulerTick || runSchedulerTick;
+  const reap = deps.reapStaleRuns || reapStaleRuns;
+
+  // A failed tick used to leave `scheduled: []` — the same answer as "no
+  // brand was due", which is the daily-cron version of the bug this route is
+  // about. `scheduled: null` plus `scheduler_ok: false` keeps the two apart
+  // (rule 1, and never `?? 0` on a measurement that did not happen).
+  //
+  // R3.2.6: `tickResult.skipped` is no longer dropped on the floor. The whole
+  // result goes to classifySchedulerTick, so "nothing was due" and "every due
+  // brand was declined" stop being the same `scheduled: []` on the wire.
+  let scheduled = [];
+  let scheduler;
+  try {
+    const tickResult = await tick(nowIso);
+    scheduler = classifySchedulerTick(tickResult);
+    scheduled = Array.isArray(tickResult?.started) ? tickResult.started : null;
+    if (scheduler.outcome === SCHEDULER_OUTCOMES.ALL_DUE_SKIPPED) {
+      console.warn(
+        `[worker] Scheduler tick declined every one of ${scheduler.due} due brand(s): ` +
+          `${JSON.stringify(scheduler.skip_reasons)}. This is a STARVED scheduler, not an idle one.`
+      );
+    } else if (scheduler.outcome === SCHEDULER_OUTCOMES.FAILED) {
+      console.error(`[worker] Scheduler tick returned an unusable result: ${scheduler.reason}`);
+    }
+  } catch (err) {
+    console.error("[worker] Scheduler tick failed:", err);
+    scheduled = null;
+    scheduler = schedulerTickThrew(err);
+  }
+
+  let reaped;
+  try {
+    reaped = reapCounters(await reap(nowIso));
+    if (reaped.truncated) {
+      console.warn(
+        `[worker] The reap pass hit its cap after ${reaped.reaped} row(s) and MORE stale runs are ` +
+          `still open. Do not read this sweep as "the ledger is clean now".`
+      );
+    } else if (reaped.considered === null) {
+      console.error(
+        `[worker] The reap pass did not measure anything (${reaped.reason}). No open run was ` +
+          `inspected, which is NOT the same as no run being stale.`
+      );
+    }
+  } catch (err) {
+    // Isolated from the tick above and from the sweep's own try in GET: the
+    // chunks were already dispatched and the tick already ran, and losing that
+    // report to a bookkeeping failure would be a worse lie than the failure.
+    console.error("[worker] Stale-run reap failed:", err);
+    reaped = reapPassThrew(err);
+  }
+
+  return { scheduled, scheduler, reaped };
 }
 
 export async function GET(request) {
@@ -371,37 +551,13 @@ export async function GET(request) {
       resumedIds.push(job.id);
     }
 
-    // Scheduler tick: enqueue new scans for any brand whose cadence is due
-    // and isn't already running.
-    //
-    // A failed tick used to leave `scheduled: []` — the same answer as "no
-    // brand was due", which is the daily-cron version of the bug this task is
-    // about. `scheduled: null` plus `scheduler_ok: false` keeps the two apart
-    // (rule 1, and never `?? 0` on a measurement that did not happen). Still
-    // 200: the sweep above is the cron's actual job and it succeeded.
-    //
-    // R3.2.6: `tickResult.skipped` is no longer dropped on the floor. The whole
-    // result goes to classifySchedulerTick, so "nothing was due" and "every due
-    // brand was declined" stop being the same `scheduled: []` on the wire.
-    let scheduled = [];
-    let scheduler;
-    try {
-      const tickResult = await runSchedulerTick(new Date().toISOString());
-      scheduler = classifySchedulerTick(tickResult);
-      scheduled = Array.isArray(tickResult?.started) ? tickResult.started : null;
-      if (scheduler.outcome === SCHEDULER_OUTCOMES.ALL_DUE_SKIPPED) {
-        console.warn(
-          `[worker] Scheduler tick declined every one of ${scheduler.due} due brand(s): ` +
-            `${JSON.stringify(scheduler.skip_reasons)}. This is a STARVED scheduler, not an idle one.`
-        );
-      } else if (scheduler.outcome === SCHEDULER_OUTCOMES.FAILED) {
-        console.error(`[worker] Scheduler tick returned an unusable result: ${scheduler.reason}`);
-      }
-    } catch (err) {
-      console.error("[worker] Scheduler tick failed:", err);
-      scheduled = null;
-      scheduler = schedulerTickThrew(err);
-    }
+    // The two maintenance passes, each in its own try/catch inside
+    // runSweepMaintenance: the scheduler tick (enqueue new scans for any brand
+    // whose cadence is due and isn't already running) and then R3.3.4's
+    // stale-run reap. Neither can fail the other, and neither can fail this
+    // response: the sweep above is the cron's actual job and it succeeded, so
+    // this stays a 200 with both outcomes reported honestly in the body.
+    const { scheduled, scheduler, reaped } = await runSweepMaintenance(new Date().toISOString());
 
     // The sweep DISPATCHES chunks (fire-and-forget, above) and never awaits
     // them, so it cannot say processed/skipped/failed for any of them — each
@@ -415,6 +571,7 @@ export async function GET(request) {
         resumedIds,
         scheduled,
         scheduler,
+        reaped,
       })
     );
   } catch (error) {

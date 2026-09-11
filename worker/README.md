@@ -47,14 +47,59 @@ acceptance criterion.
 | `SUPABASE_URL` | **yes** | — | http(s) URL | The queue to read. `NEXT_PUBLIC_SUPABASE_URL` also accepted. |
 | `SUPABASE_SERVICE_ROLE_KEY` | **yes** | — | — | Credentials for it. `NEXT_PUBLIC_SUPABASE_ANON_KEY` also accepted. |
 | `FLEET_ENGINES` | no | `perplexity` | `perplexity`, `chatgpt` | Which surfaces this container drives. |
-| `FLEET_BATCH_SIZE` | no | `5` | 1–50 | Tasks claimed per poll. |
+| `FLEET_BATCH_SIZE` | no | `5`, narrowed to what one lease can pay for | 1–50 | Tasks claimed per poll. See *the lease arithmetic* below: on the shipped defaults it runs at **2**, announced at boot. |
 | `FLEET_LEASE_MS` | no | `300000` | 30000–3600000 | How long a claim is held before it can be reaped. |
 | `FLEET_IDLE_POLL_MS` | no | `10000` | 1000–300000 | Gap between polls when the queue was empty. |
 | `FLEET_HEARTBEAT_MS` | no | `30000` | 5000–600000, and ≤ half `FLEET_LEASE_MS` | How often an in-flight run says it is alive. |
 | `FLEET_WORKER_ID` | no | `worker-<pid>` | non-blank | Identity on every claim and heartbeat. |
+| `FLEET_MAX_CONCURRENCY` | no | per surface (**1** for both today) | 1–2, and never above the surface's own ceiling | In-flight probes of one surface, per egress IP. |
+| `FLEET_PROBE_DELAY_MIN_MS` | no | per surface (`perplexity.ai` 20000, `chatgpt.com` 30000) | 0–600000 | Lower bound of the random inter-probe delay. |
+| `FLEET_PROBE_DELAY_MAX_MS` | no | per surface (`perplexity.ai` 45000, `chatgpt.com` 90000) | 0–600000, and **strictly greater** than the minimum | Upper bound of that delay. |
+| `FLEET_DAILY_CAP` | no | per surface (`perplexity.ai` 400, `chatgpt.com` 200) | 1–100000 | Probe attempts against one surface per UTC day. **Not enforced** — see below. |
+| `FLEET_CANARY_INTERVAL_MS` | no | `3600000` | 300000–86400000 | Gap between canary probes of one surface. |
+| `FLEET_PROBE_TIMEOUT_MS` | no | `60000` | 5000–600000 | How long one probe may run before it is abandoned. |
 
 Starting without Supabase is fatal on purpose. A worker with no queue to read
 would poll nothing forever and report itself perfectly healthy.
+
+### The politeness budget (R1.1.5)
+
+The last six rows are `docs/contracts/politeness-budget.md` §3.2, made settable.
+The **per-surface defaults live in exactly one place** — `SURFACE_BUDGETS` in
+`worker/src/config.js`, keyed by engine id — and an unset variable means "each
+surface takes its own number", not zero. A variable that *is* set overrides
+every surface this container drives.
+
+**Read the boot log before believing any of it.** The numbers are resolved,
+range-checked and printed; **nothing paces a probe with them yet**, because
+`probeBatch` has no adapter until R1.3/R1.4. The `config:` block says
+`VALIDATED, NOT APPLIED` for exactly as long as that is true.
+
+**The daily cap is printed as `cap NOT ENFORCED`, and that is a fact about the
+schema, not a TODO.** §3.5's cap is *fleet-wide*; a per-container variable
+checked in-process gives N containers N × the cap, and no shared counter exists
+to check instead (§5.3 walks the two candidate tables and why neither answers).
+It is settable so the intended number is recorded and visible, never so a log
+line can imply a limit that is not there.
+
+**Two surface rules are refusals, not preferences.** `FLEET_MAX_CONCURRENCY=2`
+is inside its own 1–2 range and is still refused while the container drives a
+logged-out consumer UI: §3.3 caps those at 1, and that ceiling is held per
+surface in `SURFACE_BUDGETS` rather than as a second copy of the rule. A delay
+window whose maximum is not *strictly* above its minimum is refused too — equal
+bounds are a fixed delay, which is perfectly periodic and therefore a signature.
+
+**The lease arithmetic.** `FLEET_BATCH_SIZE × (delay max + FLEET_PROBE_TIMEOUT_MS)`
+must not exceed `FLEET_LEASE_MS`. A batch that outlives its lease has every
+result refused by `complete_probe_tasks` — the requests were made, the surface
+was bothered, and the work is thrown away (contract §6, V6). The shipped
+defaults do **not** satisfy it: 5 × (45s + 60s) is 525s against a 300s lease. So
+a `FLEET_BATCH_SIZE` **you set** that cannot fit is a refusal naming both
+variables, and the **default** 5 is narrowed to 2 with a `NOTE:` line — the same
+rule the heartbeat follows. The throughput term gives way and the politeness
+term never does: a delay narrowed to fit a lease is a budget that has quietly
+stopped being one. If a single probe cannot fit the lease at all, the boot is
+refused outright, because there is nothing left to narrow.
 
 ### The config is validated at boot, or the fleet does not boot (R1.2.6)
 

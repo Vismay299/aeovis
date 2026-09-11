@@ -32,8 +32,13 @@ import {
  *
  *   1. the import and the call to describeScanDataSourceIssue are still there;
  *   2. each banner element RENDERS {scanHealth.title} and {scanHealth.detail}
- *      inside its own JSX block — not merely that the tokens appear twice
- *      somewhere in the file, and not from inside a comment (see below);
+ *      inside its own JSX block, where RENDERS means the token stands in CHILD
+ *      POSITION — between a `>` and a `<` — in text whose comments are stripped
+ *      and whose quoted bodies (double, single, backtick) are blanked. Not
+ *      merely that the tokens appear twice somewhere in the file; not from
+ *      inside a comment; and not from inside an attribute, quoted or not (see
+ *      below). It is still source text, not a screen: see the limits at the
+ *      bottom;
  *   3. the score-suppression condition is still `severity === "critical"`; and
  *   4. THE THREE RENDER GATES READ THAT LOCAL BINDING. The declaration existing
  *      proves nothing on its own: leave it in place, point the gates at
@@ -42,9 +47,27 @@ import {
  *      read, both banners stacked) with every assertion still green. That was
  *      R2.2.6's verifier's evasion B and it is what test 4 below closes.
  *
- * Every source assertion runs against a COMMENT-STRIPPED copy of the file.
- * Evasion A was to keep `<b>{scanHealth.title}</b>` in a comment, satisfying a
- * count assertion, while rendering a generic literal.
+ * Every source assertion runs against a COMMENT-STRIPPED copy of the file, and
+ * the two render assertions read a copy of their block with every quoted BODY
+ * blanked on top of that. Both steps exist because a
+ * "the token is in there somewhere" assertion was satisfied, twice, by text
+ * that renders nothing:
+ *
+ *   - evasion A kept `<b>{scanHealth.title}</b>` in a COMMENT and rendered a
+ *     generic literal, satisfying a file-wide count; and
+ *   - R2.2.7's second verifier, against the fix for that, gutted both real
+ *     renders in the critical banner and parked the tokens in a QUOTED
+ *     ATTRIBUTE inside the guarded block —
+ *     `<span data-note="{scanHealth.title} {scanHealth.detail}" />`, no comment
+ *     marker anywhere — for 7 pass / 0 fail with the banner naming no engine
+ *     and giving no reason. Reproduced here before the fix, and the
+ *     single-quoted twin `title={'> {scanHealth.title} <'}` was green too until
+ *     this pass started treating `'` as a delimiter.
+ *
+ * "Not in a comment" was never the property; the second bypass is the proof.
+ * "In child position, in text that cannot be an attribute value or a string"
+ * is the property now asserted, and the limits at the bottom say where even
+ * that stops short of "a user saw it".
  *
  * The claim that earns is NARROW, and the first R2.2.7 attempt overclaimed it.
  * It said "a comment renders nothing, so it must not be able to satisfy a guard
@@ -77,13 +100,35 @@ import {
  *
  * A rename of `dataSourceIssue` or a re-wrap of a gate line WILL trip this file.
  * That is deliberate: the positive regexes failing loudly is the safe direction
- * for a guard whose whole job is that a silent swap stays visible.
+ * for a guard whose whole job is that a silent swap stays visible. So will new
+ * prose carrying an apostrophe inside either banner block, because the blanking
+ * pass treats `'` as a delimiter: measured, that reds with "an unpaired ' inside
+ * the critical block left the blanking pass inside a string", which names the
+ * cause. Write the prose with `&apos;` or lift it into the descriptor, where
+ * the words belong anyway.
  *
  * WHAT REMAINS UNPROVEN. Said as limits, not as reassurance:
  *
  *   - Reassignment is NOT the open hole the first attempt named it. Test 3 pins
  *     the `const` keyword itself, so `let` — with or without a later write —
  *     fails there. Verified by mutation, both ways.
+ *   - RENDERS, above, means "stands in child position in the source text". It
+ *     is NOT "appears on screen". A token in child position inside a subtree
+ *     that never renders — `{false && <b>{scanHealth.title}</b>}` parked in the
+ *     block — satisfies it, and so would a `<span hidden>`.
+ *   - AN ENCLOSING CONDITION CAN SUPPRESS A GATE WHOSE EXPRESSION IS UNTOUCHED.
+ *     Every gate assertion below reads the gate's own text, so wrapping one in
+ *     another condition is invisible here: R2.2.7's verifier wrapped
+ *     `{!scanHealth["dataSourceIssue"] && (<>…</>)}` around the ScoreBand gate,
+ *     which blanks the index on a partial degradation — the B3 regression this
+ *     whole file is named for — at 7 pass / 0 fail.
+ *   - THE BRACKET FORM DODGES THE DOTTED-STRING BAN. The teeth at the end of
+ *     the gate test ban the literal text `scanHealth.dataSourceIssue`;
+ *     `scanHealth["dataSourceIssue"]` reads the same any-engine bit and is not
+ *     banned, which is how the wrapper above gets its condition. Banning one
+ *     more spelling would not close the class — a string scan cannot enumerate
+ *     the ways an expression can be written — so it is recorded here rather
+ *     than patched over.
  *   - A text scan cannot see SHADOWING: an inner-scope `dataSourceIssue` between
  *     the declaration and a gate would satisfy every regex here while the gate
  *     reads a different value. Nothing in this file would say so.
@@ -124,7 +169,7 @@ const SHELL_RAW = readFileSync(SHELL_PATH, "utf8");
  * cannot span lines, so a span that does means the scanner is in a phantom
  * string and is no longer stripping anything).
  */
-function scanSource(source) {
+function scanSource(source, { blankQuotedBodies = false } = {}) {
   let out = "";
   let quote = null;
   let quoteOpenedAtLine = -1;
@@ -137,7 +182,8 @@ function scanSource(source) {
     if (c === "\n") line += 1;
     if (quote) {
       if (c === "\\") {
-        out += c + (next ?? "");
+        const pair = c + (next ?? "");
+        out += blankQuotedBodies ? pair.replace(/[^\n]/g, " ") : pair;
         if (next === "\n") line += 1;
         i += 2;
         continue;
@@ -145,12 +191,23 @@ function scanSource(source) {
       if (c === "\n" && quote === '"' && spanningQuoteLine === -1) {
         spanningQuoteLine = quoteOpenedAtLine;
       }
-      if (c === quote) quote = null;
-      out += c;
+      if (c === quote) {
+        quote = null;
+        out += c; // the delimiters stay put, so the markup still parses by eye
+        i += 1;
+        continue;
+      }
+      // Newlines are never blanked: line numbers and offsets have to survive.
+      out += blankQuotedBodies && c !== "\n" ? " " : c;
       i += 1;
       continue;
     }
-    if (c === '"' || c === "`") {
+    // `'` is a delimiter ONLY in blanking mode, and only because that mode runs
+    // over an already-comment-stripped block: there, a stray apostrophe can
+    // only make it blank too much, which reds a positive assertion. In the
+    // comment-stripping mode it would be the silent direction. See the two
+    // docstrings above.
+    if (c === '"' || c === "`" || (blankQuotedBodies && c === "'")) {
       quote = c;
       quoteOpenedAtLine = line;
       out += c;
@@ -177,6 +234,39 @@ function scanSource(source) {
 }
 
 const stripComments = (source) => scanSource(source).text;
+
+/**
+ * The same scan, one notch stricter: the BODY of every quoted span — double,
+ * single or backtick — is replaced by spaces, delimiters and newlines kept so
+ * offsets and line numbers do not move.
+ *
+ * Only the two "this banner renders the descriptor's words" assertions read
+ * this. A comment is not the only text that renders nothing, and R2.2.7's
+ * second verifier proved it: it gutted both real renders in the critical banner
+ * to generic literals and parked the tokens in
+ * `<span data-note="{scanHealth.title} {scanHealth.detail}" />` inside the very
+ * block being guarded, with no comment marker anywhere, and the file reported
+ * 7 pass / 0 fail while the banner named no engine and gave no reason. A quoted
+ * attribute value is data, not children; blanking it removes the vehicle.
+ *
+ * `'` IS a delimiter here, unlike in the comment-stripping pass, because
+ * `<span title={'> {scanHealth.title} <'} />` is the same bypass one character
+ * away and was measured green without it. The reason the stripper refuses `'`
+ * — an unpaired apostrophe in prose flips the scanner and comments silently
+ * stop being stripped — does not apply to this pass: it runs over text whose
+ * comments are already gone, so a flip here can only blank too much, and too
+ * much blanking reds a positive assertion. Loud, not silent. Neither banner
+ * block contains an apostrophe today; if prose adds one, the caller's
+ * unterminated-delimiter check below names it instead of leaving a puzzling red.
+ *
+ * Over-blanking is the SAFE failure direction — a positive assertion goes red.
+ * Under-blanking is the silent one, so the callers assert that the blanking
+ * actually ran over the exact text they read (the testid's own value is inside
+ * a double-quoted span, so it must be gone), and the self-test in the first
+ * test below pins both directions on a fixture.
+ */
+const renderedScanOf = (block) => scanSource(block, { blankQuotedBodies: true });
+const renderedTextOf = (block) => renderedScanOf(block).text;
 
 const SHELL_SCAN = scanSource(SHELL_RAW);
 const SHELL = SHELL_SCAN.text;
@@ -244,6 +334,40 @@ test("R2.2.7 GUARD — the comment stripper keeps the code and drops the comment
   assert.ok(!stripped.includes("{scanHealth.title}"), "a token in a comment must not survive");
   assert.ok(stripped.includes('"keep //this"'), "a // inside a string is not a comment");
   assert.equal(stripped.split("\n").length, raw.split("\n").length);
+
+  // ...and the blanking mode, which the two render assertions depend on, in
+  // both directions: it must empty a quoted body (or a token parked in an
+  // attribute value passes for a render) and must leave child text alone (or
+  // those same assertions go red for no reason and get weakened by the next
+  // reader).
+  const attrFixture =
+    '<span data-note="{scanHealth.title}" />\n' +
+    "<span title={'{scanHealth.title}'} />\n" +
+    "<span className={`{scanHealth.title}`} />\n" +
+    "<b>{scanHealth.title}</b>\n";
+  const blanked = renderedTextOf(attrFixture);
+  assert.ok(
+    !blanked.includes('data-note="{scanHealth.title}"'),
+    "a token parked in a double-quoted attribute value must not survive blanking"
+  );
+  assert.ok(
+    !blanked.includes("title={'{scanHealth.title}'}"),
+    "...nor in a single-quoted one, which is the same bypass one character away"
+  );
+  assert.ok(
+    !blanked.includes("className={`{scanHealth.title}`}"),
+    "...nor in a template literal, which would render the braces and not the value"
+  );
+  assert.equal(
+    (blanked.match(/\{scanHealth\.title\}/g) || []).length,
+    1,
+    "exactly the one child-text copy in the fixture may survive blanking"
+  );
+  assert.ok(
+    blanked.includes("<b>{scanHealth.title}</b>"),
+    "blanking must leave JSX child text alone"
+  );
+  assert.equal(blanked.length, attrFixture.length, "blanking must not move offsets");
 
   // THE SCANNER STATE ITSELF. Two ways the quote state can flip into a phantom
   // string where comments stop being stripped, both checked at the source rather
@@ -354,20 +478,59 @@ test("R2.2.6 GUARD — the banner renders the pipeline's words, not its own", ()
       !block.includes(otherTestid),
       `the ${name} block swallowed the other banner — this assertion cannot prove anything`
     );
-    assert.ok(
-      block.includes("{scanHealth.title}"),
-      `the ${name} banner must state which engine degraded, in its own markup`
+    // WHAT "RENDERS" MEANS HERE, MADE MECHANICAL. `block.includes(token)` was
+    // the first R2.2.7 attempt's version of this, and it is satisfied by text
+    // that renders nothing: the verifier gutted both real renders to generic
+    // literals and added, inside this same block and with no comment marker,
+    //   <span data-note="{scanHealth.title} {scanHealth.detail}" />
+    // for 7 pass / 0 fail. So the token must appear in JSX CHILD POSITION —
+    // between a `>` and a `<` — in text whose comments are stripped AND whose
+    // quoted bodies are blanked. Five non-rendering vehicles were measured red
+    // against this pair, each alone: the quoted attribute above; the same
+    // quoted value SHAPED as `"> {scanHealth.title} <"` to imitate child
+    // position, and its single-quoted twin `title={'> … <'}`, which was green
+    // until `'` became a delimiter in this pass (blanking kills those two, not
+    // the shape check); `aria-label={scanHealth.title}`, an unquoted attribute
+    // expression that puts no engine name in the headline (the shape check
+    // kills that one, not blanking); and a template literal, which renders the
+    // braces rather than the value. Neither half subsumes the other — each was
+    // sabotaged alone and the other half let the matching vehicle through.
+    const renderedScan = renderedScanOf(block);
+    const rendered = renderedScan.text;
+    // A delimiter left open means the blanking pass ran off the end of a span
+    // and blanked the rest of the block — the two assertions below would then
+    // go red for a reason that has nothing to do with the banner. Name it here.
+    assert.equal(
+      renderedScan.unterminatedQuote,
+      null,
+      `an unpaired ${renderedScan.unterminatedQuote} inside the ${name} block left the blanking pass inside a string — most likely an apostrophe in new prose, not a broken banner`
     );
+    // Under-blanking is the silent direction, so prove blanking ran over THIS
+    // text before trusting the two assertions that depend on it: the testid's
+    // own value lives inside a double-quoted span and must be gone.
+    const testidValue = testid.slice('data-testid="'.length, -1);
     assert.ok(
-      block.includes("{scanHealth.detail}"),
-      `the ${name} banner must carry the reason under the headline`
+      rendered.includes('data-testid="') && !rendered.includes(testidValue),
+      `quoted bodies were not blanked over the ${name} block — the two assertions after this one would accept a token parked in an attribute value`
+    );
+    assert.match(
+      rendered,
+      />\s*\{scanHealth\.title\}\s*</,
+      `the ${name} banner must RENDER {scanHealth.title} as its own child text — a comment, a quoted attribute value or an attribute expression names no engine on screen`
+    );
+    assert.match(
+      rendered,
+      />\s*\{scanHealth\.detail\}\s*</,
+      `the ${name} banner must RENDER {scanHealth.detail} as its own child text — the reason has to be on screen, not in an attribute`
     );
   }
-  // No third, dead copy elsewhere in the file to confuse the next reader.
+  // No third, dead copy elsewhere in the file to confuse the next reader. This
+  // one is a COUNT over the whole component: it proves the absence of extra
+  // copies, NOT that either copy renders. That is the per-block pair above.
   assert.equal(
     (SHELL.match(/\{scanHealth\.title\}/g) || []).length,
     2,
-    "exactly the two banners render the headline"
+    "the headline token must appear exactly twice — once per banner, with no third dead copy elsewhere"
   );
 
   // TEETH: the old fixed headline said nothing about which engine or why. If it

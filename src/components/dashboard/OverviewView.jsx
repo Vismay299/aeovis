@@ -11,8 +11,82 @@
 import { ArrowRight } from 'lucide-react';
 import { FlowDiagram, RIVAL_RAMP } from '@/components/charts/FlowDiagram';
 import { Gauge } from '@/components/charts/Gauge';
+import { describeRosterState } from '@/lib/scoring/rosterContinuity';
 import { buildInterlocking } from './interlocking';
 import { OverviewAnalytics } from './OverviewAnalytics';
+
+/**
+ * R2.7.12 — "Rivals holding answers", and when nobody counted, WHY.
+ *
+ * This KPI used to be `{competitorsFound ?? 0}` over the sentence
+ * `(competitorsFound ?? 0) === 0 ? 'None co-mentioned yet' : ...`. Both halves
+ * are standing rule 5 broken on a LIVE surface: page.js -> DashboardShell ->
+ * OverviewView. The zero is bad on its own; the zero plus "None co-mentioned
+ * yet" is worse, because it upgrades an absent measurement into a stated
+ * finding about the market.
+ *
+ * THERE ARE TWO WAYS THE COUNT IS UNMEASURED, and only one of them is the
+ * literal `?? 0`:
+ *
+ *   1. The prop is absent. `services/api.js` normalizeResult() always derives
+ *      `competitorsFound` through countCompetitorsFound(), so on the shipped
+ *      path a number always arrives — the `?? 0` was a guard against a caller
+ *      that has not been written. Left handled, because the fallback it
+ *      replaced was a confident 0 either way.
+ *   2. The count is a real `0` produced from an EMPTY ROSTER, and the roster is
+ *      empty because rival extraction never ran. countCompetitorsFound([]) is 0
+ *      whether the extractor read every answer and found nobody or never
+ *      opened its mouth. This is the case that actually reaches customers, and
+ *      no amount of nullish-checking finds it — the discriminator is
+ *      `roster_source`, which the scan already carries.
+ *
+ * `describeRosterState` (src/lib/scoring/rosterContinuity.js) is the repo's
+ * single predicate for case 2; RivalsView, Donut and VisibilityVerdictPanel all
+ * read it, and this surface now reads the same one rather than comparing
+ * `roster_source` strings of its own. `rosterSource == null` (a scan taken
+ * before R0.3.3) counts as assessable, so legacy scans keep printing numbers.
+ *
+ * THE INVERSE MATTERS AS MUCH: a MEASURED zero must still print "0" and still
+ * say "None co-mentioned yet". Blanking a real finding is the same crime in
+ * the other direction, so the numeric test is `Number.isFinite`, never
+ * truthiness.
+ *
+ * @param {number|string|null|undefined} competitorsFound
+ * @param {string|null|undefined} rosterSource the scan's `roster_source`
+ * @returns {{value: number|null, chip: string|null, note: string}}
+ */
+export function describeCompetitorCount(competitorsFound, rosterSource) {
+  const roster = describeRosterState(rosterSource);
+  if (!roster.assessable) {
+    // Word the reason with the shared helper's sentence, not a local paraphrase
+    // — three surfaces disagreeing about why a rival count is missing is
+    // exactly what that helper exists to prevent.
+    return { value: null, chip: 'Not measured', note: roster.detail };
+  }
+
+  const raw = competitorsFound;
+  const numeric =
+    typeof raw === 'number'
+      ? raw
+      : typeof raw === 'string' && raw.trim() !== ''
+        ? Number(raw)
+        : NaN;
+  if (!Number.isFinite(numeric)) {
+    return {
+      value: null,
+      chip: 'Not measured',
+      note:
+        'This reading carries no rival count, so how many brands hold answers ' +
+        'is unknown. This is not a finding that none do.',
+    };
+  }
+
+  return {
+    value: numeric,
+    chip: null,
+    note: numeric === 0 ? 'None co-mentioned yet' : 'Found in the answers themselves',
+  };
+}
 
 export const OverviewView = ({
   result,
@@ -53,10 +127,24 @@ export const OverviewView = ({
 
   const tierChip = { strong: 'chip chip--good', moderate: 'chip chip--warn', weak: 'chip chip--crit' };
   const lostCount = Math.max(0, (answered || 0) - (mentionedNonBrandedCount ?? 0));
+  const competitorCount = describeCompetitorCount(competitorsFound, result?.rosterSource ?? null);
 
   return (
     <div className="stack">
       {/* ── the four figures ─────────────────────────────────────── */}
+      {/* WHICH OF THESE IS SHIELDED, AND WHY IT IS NOT AN ACCIDENT (R2.7.12).
+          Answer coverage and Your presence below print an em dash when
+          `dataSourceIssue` is set, so their `?? 0` can only be reached on a
+          reading the shell has already declared adequate — and in fact cannot
+          be reached at all through the shipped route, because DashboardShell
+          swaps this whole view for `dashboard-unreliable-placeholder` when
+          `dataSourceIssue` is true. Their guard is kept (this component is
+          exported and a future caller may mount it without that swap) and
+          their fallbacks are deliberately left alone.
+          "Rivals holding answers" had NO such guard, and `dataSourceIssue`
+          would not have been the right one anyway: a scan with perfectly good
+          answer coverage can still have had rival extraction offline. It reads
+          `roster_source` instead — see describeCompetitorCount above. */}
       <div className="grid g4">
         <div className="stat" data-testid="kpi-aio-coverage">
           <span className="stat__k">Answer coverage</span>
@@ -86,12 +174,19 @@ export const OverviewView = ({
 
         <div className="stat" data-testid="kpi-competitors">
           <span className="stat__k">Rivals holding answers</span>
-          <span className="stat__v">{competitorsFound ?? 0}</span>
-          <span className="stat__d dim">
-            {(competitorsFound ?? 0) === 0
-              ? 'None co-mentioned yet'
-              : 'Found in the answers themselves'}
+          <span className="stat__v" data-state={competitorCount.value == null ? 'not-measured' : 'measured'}>
+            {competitorCount.value == null ? (
+              <>
+                —{' '}
+                <span className="chip chip--warn" title={competitorCount.note}>
+                  {competitorCount.chip}
+                </span>
+              </>
+            ) : (
+              competitorCount.value
+            )}
           </span>
+          <span className="stat__d dim">{competitorCount.note}</span>
         </div>
       </div>
 

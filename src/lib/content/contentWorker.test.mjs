@@ -650,3 +650,199 @@ test("ledger: a broken ledger never breaks the pipeline", async () => {
   assert.ok(item, "the job must still produce an item");
   assert.equal(items[0].status, "awaiting_approval");
 });
+
+// --- cost accumulates across attempts (R3.3.3) ------------------------------
+//
+// A content job can be EXECUTED more than once: the cron rescues a job whose
+// worker died and startContentJob re-runs the pipeline from the top, paying
+// for every block again. `stats` is per-execution, so writing
+// `cost_total: stats.cost` reported the last attempt and deleted the earlier
+// ones. These tests run two attempts against ONE row and assert the sum.
+
+const COST_PER_CALL = 0.01;
+
+/**
+ * An LLM that dies on its Nth call the way a killed worker does: the promise
+ * never settles, so the caller never resumes and never reaches a terminal
+ * write. The hanging call adds NO cost — it never returned.
+ */
+function makeDyingLlm(responses, { hangAtCall }) {
+  const queue = [...responses];
+  let calls = 0;
+  const llm = async (prompt, options = {}) => {
+    calls += 1;
+    if (calls === hangAtCall) return new Promise(() => {});
+    if (options.stats) options.stats.cost = (options.stats.cost || 0) + COST_PER_CALL;
+    if (queue.length === 0) throw new Error("fake llm exhausted — test script too short");
+    return queue.shift();
+  };
+  return { llm, callCount: () => calls };
+}
+
+/**
+ * One mutable content_jobs row plus deps that write to it, mirroring
+ * db/content.js's memory path (Object.assign onto the stored row). Both
+ * attempts read and write the SAME row, which is what makes this a rescue
+ * rather than two unrelated jobs.
+ */
+function makeRescueRow() {
+  const jobRow = {
+    id: "job-rescued",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "pending",
+    input: { type: "topic", topic: "home collection economics", brand_profile: "healthcare-cxo" },
+    cost_total: 0,
+  };
+  const jobUpdates = [];
+  const items = [];
+  const baseDeps = {
+    scrape: async () => "No website content available.",
+    // `leaseOwner` is how the cron's dispatchWithLease hands a won lease down
+    // (api/content/worker/route.js) — the real rescue path.
+    leaseOwner: "cron_test_owner",
+    updateContentJob: async (jobId, updates) => {
+      jobUpdates.push({ jobId, ...updates });
+      Object.assign(jobRow, updates);
+      return { ...jobRow };
+    },
+    insertContentItem: async (item) => {
+      const record = { id: `item-${items.length + 1}`, ...item };
+      items.push(record);
+      return record;
+    },
+    listLessons: async () => [],
+    getScansForBrand: async () => [],
+    getBrandBrief: async () => null,
+    upsertBrandBrief: async () => ({}),
+  };
+  return { jobRow, jobUpdates, items, baseDeps };
+}
+
+async function waitUntil(predicate, label) {
+  for (let i = 0; i < 500; i++) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.fail(`timed out waiting for: ${label}`);
+}
+
+test("rescue: cost_total is the SUM across attempts, not the last attempt", async () => {
+  const { jobRow, baseDeps, items } = makeRescueRow();
+
+  // Attempt 1 — dies inside the Writer (call 3: coordinate, research, draft;
+  // benchmark is static for linkedin_post). It never reaches a terminal write,
+  // exactly like a worker killed by the platform timeout.
+  const dying = makeDyingLlm([LI_WORK_ORDER, RESEARCH_PACK], { hangAtCall: 3 });
+  startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm: dying.llm });
+  await waitUntil(() => jobRow.status === "drafting", "attempt 1 to reach the Writer");
+  await waitUntil(() => dying.callCount() === 3, "attempt 1 to die mid-draft");
+
+  const spentByAttempt1 = jobRow.cost_total;
+  assert.equal(
+    spentByAttempt1,
+    2 * COST_PER_CALL,
+    "a killed attempt must leave its spend on the row — if this is 0 the spend " +
+      "was only written at the terminal write and died with the process"
+  );
+  assert.notEqual(jobRow.status, "failed", "a killed attempt writes no terminal status");
+
+  // Attempt 2 — the rescue. Fresh execution, fresh `stats`, same row.
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS], {
+    costPerCall: COST_PER_CALL,
+  });
+  const item = await startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm });
+
+  assert.ok(item, "the rescue completes the job");
+  assert.equal(items.length, 1);
+  assert.equal(jobRow.status, "awaiting_approval");
+
+  const spentByAttempt2 = 4 * COST_PER_CALL; // coordinate, research, draft, review
+  assert.equal(
+    jobRow.cost_total,
+    Math.round((spentByAttempt1 + spentByAttempt2) * 10000) / 10000,
+    "the job cost both attempts and the row must say so"
+  );
+  assert.notEqual(
+    jobRow.cost_total,
+    spentByAttempt2,
+    "cost_total is the last attempt's spend — the earlier attempt was overwritten"
+  );
+});
+
+test("rescue: a second attempt that FAILS still adds its spend to the total", async () => {
+  const { jobRow, baseDeps, jobUpdates } = makeRescueRow();
+
+  const dying = makeDyingLlm([LI_WORK_ORDER, RESEARCH_PACK], { hangAtCall: 3 });
+  startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm: dying.llm });
+  await waitUntil(() => jobRow.status === "drafting", "attempt 1 to reach the Writer");
+  await waitUntil(() => dying.callCount() === 3, "attempt 1 to die mid-draft");
+  const afterAttempt1 = jobRow.cost_total;
+  assert.equal(afterAttempt1, 2 * COST_PER_CALL);
+
+  // Attempt 2 burns two calls on an invalid work order, then fails loudly.
+  const { llm } = makeFakeLlm([{ angle: "" }, { angle: "" }], { costPerCall: COST_PER_CALL });
+  const item = await startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm });
+
+  assert.equal(item, null);
+  const final = jobUpdates[jobUpdates.length - 1];
+  assert.equal(final.status, "failed");
+  assert.equal(
+    jobRow.cost_total,
+    4 * COST_PER_CALL,
+    "a failed rescue spent real money — the failure write must add it, not replace the total"
+  );
+});
+
+test("one attempt writes cost_total many times and never double-counts itself", async () => {
+  const { jobRow, baseDeps, jobUpdates } = makeRescueRow();
+  jobRow.cost_total = 0.02; // an earlier attempt's recorded spend
+
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS], {
+    costPerCall: COST_PER_CALL,
+  });
+  await startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm });
+
+  // Every job write carries the running total (that is what survives a kill),
+  // so the value written must be ABSOLUTE — base + this attempt's spend — and
+  // never an increment applied once per write.
+  const written = jobUpdates.map((u) => u.cost_total);
+  assert.ok(written.length >= 6, "the pipeline writes the job row several times");
+  assert.ok(
+    written.every((c) => typeof c === "number"),
+    "every job write carries the total"
+  );
+  for (let i = 1; i < written.length; i++) {
+    assert.ok(written[i] >= written[i - 1], "the recorded total never goes backwards");
+  }
+  assert.equal(written[0], 0.02, "the first write preserves what earlier attempts recorded");
+  assert.equal(
+    jobRow.cost_total,
+    0.06,
+    "0.02 already recorded + 4 calls at 0.01 — anything higher is a double count"
+  );
+});
+
+test("a failure before the job row is read leaves cost_total alone, never 0", async () => {
+  const jobUpdates = [];
+  // No `deps.job`: getContentJob is not injectable, the memory store has no
+  // such row, so the worker throws "not found" before it can learn what the
+  // row already recorded. Writing 0 there would erase an earlier attempt.
+  const item = await startContentJob("job-that-does-not-exist", {
+    leaseOwner: "cron_test_owner",
+    llm: async () => assert.fail("no LLM call may happen before the job is read"),
+    updateContentJob: async (jobId, updates) => {
+      jobUpdates.push({ jobId, ...updates });
+      return { id: jobId, ...updates };
+    },
+  });
+
+  assert.equal(item, null);
+  const final = jobUpdates[jobUpdates.length - 1];
+  assert.equal(final.status, "failed");
+  assert.ok(final.error_message.includes("not found"));
+  assert.ok(
+    !("cost_total" in final),
+    "an unknown prior total must be omitted, not written as a measured 0"
+  );
+});

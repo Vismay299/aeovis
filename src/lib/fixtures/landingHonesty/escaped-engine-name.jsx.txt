@@ -1,0 +1,47 @@
+'use client';
+
+/**
+ * FIXTURE — R6.4.9, second half. A component that renders three engine names
+ * that no includes() in this repo could see before renderableText existed.
+ *
+ * WHERE IT CAME FROM. The same hero answer sheet, cut down, with the engine
+ * names respelled the four ways JavaScript and JSX allow. Every one of these
+ * reaches the reader's screen as the plain label:
+ *
+ *   '\x43hatGPT'          a hex escape in a string
+ *   '\u0043hatGPT'       a unicode escape in a string
+ *   '\u{50}erplexity'     a codepoint escape in a string
+ *   &#71;oogle AI ...     an HTML numeric entity in JSX text
+ *   &#x47;oogle AI ...    the hex form of the same
+ *   Google&nbsp;AI ...    a non-breaking space where the label has a space
+ *
+ * WHAT MAKES IT INTERESTING. The typed-literal clause of the sample-report
+ * guard is `allLabels.filter((l) => src.includes(l))`. A substring search sees
+ * the source bytes, and the source bytes here spell none of the three labels.
+ * The guard reported clean; the page named three engines, two of which this
+ * deployment has no API key for.
+ *
+ * IT RENDERS — verified with sucrase plus react-dom/server, not argued. The
+ * static markup contains ChatGPT, Perplexity and Google AI Overview.
+ *
+ * .txt on purpose: it must never be compiled into the app.
+ */
+
+const SHEET_ENGINE = '\x43hatGPT';
+const SECOND = '\u0043hatGPT';
+const THIRD = '\u{50}erplexity';
+
+export function AnswerSheet() {
+  return (
+    <div className="sheet">
+      <span className="chip">{SHEET_ENGINE}</span>
+      <span className="chip">{SECOND}</span>
+      <span className="chip">{THIRD}</span>
+      <p className="sheet__a">&#71;oogle AI Overview answered first.</p>
+      <p className="sheet__b">&#x47;oogle AI Overview answered first.</p>
+      <p className="sheet__c">Google&nbsp;AI&nbsp;Overview answered first.</p>
+    </div>
+  );
+}
+
+export default AnswerSheet;

@@ -3,10 +3,19 @@
 > <!-- doc-status -->
 > **Status: LIVE** as the normative budget the R1 probe fleet (`worker/`) must
 > run under, and as the honest record of what the tree throttles today.
-> It is **not** a description of numbers any code reads. §2 records what is
-> actually configured and hard-coded right now; §6 lists every place the tree
-> violates §3. **No number in §3 is enforced by anything at this commit**, and
-> §8 says which of them were measured (none) and which were chosen (all).
+> §2 records what was configured and hard-coded when this was written; §6 lists
+> every place the tree violates §3, and §8 says which numbers were measured
+> (none) and which were chosen (all).
+>
+> **What code reads, and what it does not.** §3.2's numbers for the two
+> surfaces the fleet drives are now real configuration — `SURFACE_BUDGETS` and
+> six `FLEET_*` fields in `worker/src/config.js`, refused at boot when out of
+> range, printed at start-up (§5.2). **No probe is paced by them**: `probeBatch`
+> has no adapter until R1.3/R1.4, so the values are resolved and logged rather
+> than applied, and the boot log says `VALIDATED, NOT APPLIED` for as long as
+> that is true. The one rule enforced today is §5.2's lease arithmetic, which
+> bounds `FLEET_BATCH_SIZE`. The scoring path in `src/` still hard-codes its
+> concurrency and reads none of this (§5.4).
 
 **Date:** 2026-09-09 · **Task:** R1.1.5 · **Consumes:** R1.1.4
 ([`engine-surface-matrix.md`](./engine-surface-matrix.md)), R1.1.1
@@ -203,6 +212,14 @@ That is not a politeness budget and must never be read as one:
   without passing through `checkScanRateLimit`.
 
 ### 2.5 The fleet's config has no politeness field
+
+> **Superseded for the fleet, and left standing as the baseline it was.**
+> Everything below was true at `9e85cfe` and is why §5.2 exists. `CONFIG_FIELDS`
+> now holds **fourteen** entries: the eight named here plus
+> `FLEET_MAX_CONCURRENCY`, `FLEET_PROBE_DELAY_MIN_MS`,
+> `FLEET_PROBE_DELAY_MAX_MS`, `FLEET_DAILY_CAP`, `FLEET_CANARY_INTERVAL_MS` and
+> `FLEET_PROBE_TIMEOUT_MS`, and `.env.example` now carries those six. The two
+> near-misses below are still near-misses and still mean what they say.
 
 `CONFIG_FIELDS` in `worker/src/config.js` is the complete list of variables the
 fleet reads. At `9e85cfe` it holds eight entries: `SUPABASE_URL`,
@@ -519,7 +536,16 @@ on, versus an explicit marker column, is a decision this document does not make.
 
 R1.1.5's acceptance criterion has two clauses. The numbers are §3. This section
 is the second clause — "the fleet reads them from config rather than
-hard-coding" — and it is **not satisfied at `9e85cfe`** (§6).
+hard-coding".
+
+> **This section changed state.** It was written at `9e85cfe` as a proposal and
+> recorded, in its own header and in §6, that **nothing** implemented it. The
+> fleet half of it now ships: §5.2's fields are real entries in `CONFIG_FIELDS`
+> in `worker/src/config.js`, the §3.2 numbers are one frozen `SURFACE_BUDGETS`
+> table in that same file, and both boot-time checks refuse. The **scoring**
+> path is unchanged and still hard-codes its concurrency — §5.4 states that gap
+> rather than letting §5's new tense imply it closed. Everything below is
+> present tense against the tree unless it says otherwise.
 
 ### 5.1 What "from config" is taken to mean
 
@@ -544,12 +570,19 @@ Points 3 and 4 are not aspirational: `resolveConfig` and `describeConfig` in
 `worker/README.md` already documents why clamping was rejected. This section asks
 for more rows in a table that works, not a new mechanism.
 
-By this test, today's three concurrency constants (§2.1) fail all four.
+By this test, today's three concurrency constants (§2.1) fail all four — and
+**the fleet's own six fields now pass all four**: `SURFACE_BUDGETS` owns the
+numbers, `CONFIG_FIELDS` names the variables and `worker/README.md` and
+`.env.example` list them, an out-of-range value exits non-zero without
+clamping, and `describeConfig` prints one resolved line per surface at boot.
 
-### 5.2 The field shape this requires
+### 5.2 The field shape this requires — **shipped**
 
-Stated concretely so it is implementable, and marked as a proposal because
-**this document does not write code**:
+Stated concretely so it is implementable. It was a proposal when written; the
+table below is now what `CONFIG_FIELDS` in `worker/src/config.js` actually
+holds. Four of the five have **no scalar default**: absent means "each surface
+takes its own §3.2 row", and a value that *is* set overrides every surface the
+container drives.
 
 | Variable | Kind | Range | Default | Meaning |
 |---|---|---|---|---|
@@ -558,17 +591,41 @@ Stated concretely so it is implementable, and marked as a proposal because
 | `FLEET_PROBE_DELAY_MAX_MS` | int | 0–600,000 | per surface, §3.2 | Upper bound. Must be **> min**, or boot refuses — the same shape as the existing `FLEET_HEARTBEAT_MS` ≤ ½ `FLEET_LEASE_MS` conflict check. |
 | `FLEET_DAILY_CAP` | int | 1–100,000 | per surface, §3.2 | Fleet-wide cap (§3.5). See §5.3 — an env var alone **cannot** enforce this. |
 | `FLEET_CANARY_INTERVAL_MS` | int | 300,000–86,400,000 | 3,600,000 | §4.3 cadence. |
+| `FLEET_PROBE_TIMEOUT_MS` | int | 5,000–600,000 | 60,000 | **Added by the implementation.** The check below needs "a probe's own timeout" and the tree had none — `probeBatch` throws before it can time out. A bare constant in `config.js` would have been the hard-coded term this whole section exists to remove, so it is a field like the rest. The value is **chosen, not measured** (§8). |
 
-The per-surface defaults belong in a frozen table in `worker/src/config.js`
-beside `FLEET_ENGINES`, keyed by surface, so that §3.2 has exactly one
-representation in code.
+The per-surface defaults are a frozen `SURFACE_BUDGETS` table in
+`worker/src/config.js` beside `FLEET_ENGINES`, keyed by engine id — which is
+what `FLEET_ENGINES` names and what `probe_tasks.engine` stores, so a claimed
+task indexes its budget directly.
 
-**The interaction that must be validated at boot**, by the same machinery that
-already refuses a heartbeat slower than half a lease:
+> **It holds two of §3.2's five rows, and that is deliberate.** The other three
+> (`api.perplexity.ai`, `api.openai.com`, Bright Data → Google SERP) are driven
+> by `src/`, not by the fleet, and their concurrency already has a code
+> representation. Copying those numbers into the fleet's table would give them
+> **two** representations that nothing keeps in step — the defect a single table
+> exists to prevent, not a fix for it. §5.4 records where they still live.
+
+**The interaction validated at boot**, by the same machinery that already
+refuses a heartbeat slower than half a lease:
 
 > `FLEET_BATCH_SIZE × (FLEET_PROBE_DELAY_MAX_MS + a probe's own timeout)` must
 > not exceed `FLEET_LEASE_MS`, or the batch outlives its lease and its results
 > are refused (§6, V6).
+
+Two consequences worth reading before deploying a container:
+
+- **The shipped defaults do not satisfy it.** 5 × (45,000 + 60,000) is 525,000
+  against a `FLEET_LEASE_MS` of 300,000. A `FLEET_BATCH_SIZE` *the operator set*
+  that cannot fit is a refusal naming both variables; the **default** 5 is
+  narrowed to 2 and announced as a `NOTE:` line, exactly as the default
+  heartbeat already is. **The throughput term gives way and the politeness term
+  never does** — a delay narrowed to fit a lease is a budget that has quietly
+  stopped being one. If not even one probe fits, the boot is refused outright.
+- **A `FLEET_MAX_CONCURRENCY` of 2 is refused today**, despite being inside its
+  own 1–2 range, because both surfaces the fleet drives are logged-out consumer
+  UIs and §3.3 caps those at **1**. That ceiling is held per surface in
+  `SURFACE_BUDGETS` rather than as a second copy of the rule, so the range
+  widens by itself the day the fleet drives a surface that is not a UI.
 
 ### 5.3 The one number an environment variable cannot hold
 
@@ -588,6 +645,47 @@ check moving inside `claim_probe_tasks`. **That is a migration and a decision,
 and neither exists.** Until one does, §3.5 is specified and unenforceable, and
 §8 says so.
 
+`FLEET_DAILY_CAP` therefore ships **settable and unenforced**, and the boot log
+types that rather than leaving a number to be read as a limit: `describeConfig`
+prints `dailyCap=400 (cap NOT ENFORCED: it is fleet-wide and no shared counter
+exists)`, and `resolveConfig` returns `dailyCapEnforced: false` on every surface
+so no caller can mistake the field for a guarantee. It is settable so the
+intended number is recorded and visible, never so a log line can imply a limit
+that is not there.
+
+### 5.4 What is still hard-coded — the scoring path
+
+**The fleet reads §3.2 from config. `src/` does not, and this section says so
+rather than letting §5's new tense imply otherwise.**
+
+The second accept clause names *the fleet*, and the fleet is `worker/`. The
+scoring pipeline is a separate probe path with a separate owner, and its
+concurrency constants are exactly where §2.1 and §6 V3 found them:
+
+| Constant | Value | Where |
+|---|---|---|
+| `AIO_CONCURRENCY` | 6 | `src/lib/scoring/aioConstants.js`, line 9 |
+| `CHATGPT_CONCURRENCY` | 4 | `src/lib/scoring/enginePipeline.js`, line 18 |
+| `PERPLEXITY_CONCURRENCY` | 4 | `src/lib/scoring/enginePipeline.js`, line 19 |
+
+Line numbers appear here against this document's own no-line-citations policy
+because a remaining gap must be findable by someone who is not looking for it.
+`enginePipeline.js` is under concurrent edit (see the working-tree disclosure in
+the header), so those two are the working tree's at the time of writing and the
+symbols are what to trust: re-derive with
+`git grep -n "_CONCURRENCY" -- src/lib/scoring/`. All three still
+fail every one of §5.1's four tests: none is readable from the environment, none
+is validated, none is printed at start-up, and two are module-private. The
+per-surface delay and cap have **no** representation in `src/` at all.
+
+Two of the three are the `aio` and API rows of §3.2, which §3.3 exempts from the
+1–2 rule anyway; the third pair drives `api.openai.com` and `api.perplexity.ai`
+at 4, which is **above** §3.2's 2 for those rows. **That is a live violation of
+§3.3, not a documentation gap**, and it is V3's, unowned and unfixed. Nothing in
+this commit changed it, and no claim anywhere in this document should be read as
+saying all of this repository's concurrency now comes from config. It does not —
+only the fleet's does.
+
 ---
 
 ## 6. Where the code violates this budget today
@@ -600,12 +698,12 @@ is said plainly.
 |---|---|---|---|
 | V1 | No inter-probe delay exists on any path. `runProbingPhase` runs `Promise.all` windows back to back; the fleet loop sleeps only when it claimed nothing. | `src/lib/workers/scanWorker.js` (`runProbingPhase`); `worker/src/index.js` (`start`) | **none — needs one** |
 | V2 | No jitter exists anywhere. All three retry backoffs are deterministic, and N concurrent probes therefore retry in lockstep after a shared 429 (§2.3). | `brightdata.js`, `openai.js`, `perplexity.js` | **none — needs one** |
-| V3 | Per-engine concurrency is three hard-coded constants in scoring modules, two of them module-private, none overridable, none validated, none logged. Fails all four tests in §5.1. | `AIO_CONCURRENCY` in `src/lib/scoring/aioConstants.js`; `CHATGPT_CONCURRENCY` / `PERPLEXITY_CONCURRENCY` in `src/lib/scoring/enginePipeline.js` | **none — needs one** |
-| V4 | No daily cap of any kind on outbound probes, and no schema that could hold one per surface (§5.3). | absence; `supabase/migrations/010_probe_tasks.sql`, `011_scan_runs.sql` | **none — needs one** |
+| V3 | **Narrowed, not closed.** The **fleet** now reads its concurrency, delays and cap from `CONFIG_FIELDS` + `SURFACE_BUDGETS` in `worker/src/config.js`, validated at boot and printed at start-up, so it passes all four of §5.1's tests. The **scoring path** is untouched: three hard-coded constants, two module-private, none overridable, none validated, none logged — and its 4 for the two API rows is itself above §3.2's 2. See §5.4. | `AIO_CONCURRENCY` in `src/lib/scoring/aioConstants.js`; `CHATGPT_CONCURRENCY` / `PERPLEXITY_CONCURRENCY` in `src/lib/scoring/enginePipeline.js` | **none — needs one** (the fleet half shipped under R1.1.5) |
+| V4 | No daily cap of any kind is **enforced** on outbound probes, and no schema could hold a fleet-wide one per surface (§5.3). `FLEET_DAILY_CAP` now carries the intended number and the boot log prints it as `cap NOT ENFORCED`, which makes the gap visible; it does not close it. | absence; `supabase/migrations/010_probe_tasks.sql`, `011_scan_runs.sql` | **none — needs one** |
 | V5 | No canary, and no definition of "quiet" for the gate that depends on one. R1.7.2 gates a production cutover on a condition nothing computes. | absence (§2.6) | R1.3.4, R1.4.3 (build one); the **definition** is unowned |
-| V6 | **Pacing creates this one.** `renewBatch` is exported and never called (§2.7), so a batch's lease is fixed at claim time. With `FLEET_BATCH_SIZE=5` and §3.2's `chatgpt.com` delays, a batch takes ~450 s against a `FLEET_LEASE_MS` default of 300,000 ms; the lease lapses mid-batch, `complete_probe_tasks` refuses the results because `t.lease_owner <> p_owner`, and the work is spent for nothing. | `worker/src/lib/queue.js` (`renewBatch`, uncalled); `worker/src/index.js` (import list); `FLEET_LEASE_MS` / `FLEET_BATCH_SIZE` defaults in `worker/src/config.js` | **none — needs one** |
+| V6 | **Pacing creates this one; the boot check is the remedy taken.** `renewBatch` is still exported and still never called (§2.7), so a batch's lease is still fixed at claim time. What changed is that the batch can no longer be larger than one lease pays for: §5.2's arithmetic runs at boot, refuses a `FLEET_BATCH_SIZE` the operator set that cannot fit, and narrows the **default** 5 to 2 with an announced `NOTE:`. The underlying defect — no lease renewal — is untouched, and becomes load-bearing again the moment a probe runs longer than its timeout. | `worker/src/lib/queue.js` (`renewBatch`, uncalled); `worker/src/index.js` (import list); the boot check in `resolveConfig`, `worker/src/config.js` | **none — needs one** for the renewal |
 | V7 | Retries are in-process loops underneath a single queued attempt, so `probe_tasks.max_attempts` (3) bounds up to nine real requests per query once an adapter exists (§3.6). | `MAX_RETRIES` in `openai.js` and `perplexity.js`; `options.attempts` in `brightdata.js`; `claim_probe_tasks` in migration 010 | **none — needs one** |
-| V8 | No `FLEET_*` variable appears in `.env.example`, so none of §5.2's proposed fields would be discoverable even once written. | `.env.example` | already recorded against R1.1.3 |
+| V8 | **Partly closed.** §5.2's six budget variables are now in `.env.example`, under a *Probe fleet* block, and a guard test in `src/lib/fleetConfig.test.mjs` fails if one is read at boot and absent there. The other six `FLEET_*` variables (engines, batch, lease, idle poll, heartbeat, worker id) are still absent from it. | `.env.example` | the remainder is still R1.1.3's |
 
 **V6 is the one to read twice.** Every other row is a thing the tree does not do.
 V6 is a latent defect that this contract's own §3.4 would *activate*: today
@@ -614,6 +712,11 @@ The first correct implementation of pacing is the commit that makes V6 bite. It
 must land with the lease renewal, or with a `FLEET_BATCH_SIZE` of 1 for paced
 surfaces, or with §5.2's boot-time arithmetic check — this document does not
 choose which, but it does forbid shipping the delays without one of them.
+
+**The third was taken.** The delay numbers reached `worker/src/config.js` in the
+same change as the boot-time check, so no configuration that would outlive its
+lease can start. The other two remain open and are still the better fixes:
+lease renewal buys back the throughput the check spends.
 
 ---
 
@@ -652,9 +755,13 @@ what it refuses to claim.
   and Bright Data's quota error shapes in `brightdata.md` — and **no published
   requests-per-minute figure for any surface**. §3.2's API rows are therefore
   bounded by nothing but judgement.
-- **Nothing enforces any rule in §3.** There is no concurrency limiter, no
-  delay, no jitter, no cap, no cooldown and no canary in the tree (§2). This
-  document is a specification; §6 is the distance to it.
+- **Nothing enforces any rule in §3 at probe time.** There is still no
+  concurrency limiter, no delay, no jitter, no cap, no cooldown and no canary in
+  the tree (§2). The fleet now *resolves, validates and logs* the numbers
+  (§5.2), which is a different thing and is labelled as such in every place it
+  appears: `budgetsEnforced` is `false`, the boot log says `VALIDATED, NOT
+  APPLIED`, and the daily cap prints as `NOT ENFORCED`. The single rule that
+  does bind is the boot-time lease arithmetic. §6 is still the distance.
 - **§2.3's thundering-herd claim is derived, not observed.** It follows from
   three deterministic backoff expressions and a concurrency of 4 or 6. It has not
   been reproduced against a live 429, and no test in the tree asserts it.
@@ -662,6 +769,11 @@ what it refuses to claim.
   ~30 s and ~55 s figures are assumptions carried through to show the caps and
   delays are mutually consistent; they are not measurements, and a UI probe that
   takes 90 s makes the caps unreachable rather than binding.
+- **`FLEET_PROBE_TIMEOUT_MS`'s 60,000 is chosen and was invented by the
+  implementation, not recovered from anywhere.** No probe has ever run, so no
+  probe has ever timed out. It exists because §5.2's boot check needs the term,
+  and it is a field rather than a constant so that the number is at least
+  visible and settable while it is unjustified.
 - **§4.4's definition of "quiet" is invented by this document.** Nothing
   previously defined it, and R1.7.2 gates a production cutover on it. The 90%
   figure is borrowed from R1.4.3's soak bar for consistency, not derived.

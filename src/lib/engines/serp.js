@@ -1,4 +1,5 @@
 import { normalizeUrl } from "../scoring/citations.js";
+import { resolveSerpQueryCost } from "../llmPricing.js";
 import { resolveSerpGeo } from "./serpGeo.js";
 import {
   getBrightDataApiKey,
@@ -167,9 +168,17 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
     return probeGoogleAiOverviewBrightData(prompt, options);
   }
 
+  // R3.6.4 — the per-query price comes from the price table in
+  // src/lib/llmPricing.js, and it is resolved HERE, before the retry loop.
+  // Inside that loop every throw is caught, retried, and finally turned into a
+  // `cost: 0.0` skip return, so a pricing refusal raised in there would be
+  // laundered into precisely the silent $0 the table exists to prevent
+  // (standing rules 1 and 2).
+  const perQueryCost = resolveSerpQueryCost({ provider: "serpapi" }).cost;
+
   const geo = resolveSerpGeo();
   const device = process.env.SERP_DEVICE || "desktop";
-  
+
   // hl=en is required for AI Overview support
   const searchParams = new URLSearchParams({
     q: prompt,
@@ -211,7 +220,7 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
         return { text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 };
       }
 
-      let cost = 0.01; // SerpAPI flat rate for search query
+      let cost = perQueryCost; // SerpAPI flat rate for one search query
 
       // Handle deferred loading using SGE token
       const pageToken = resJson.ai_overview?.page_token || 
@@ -229,7 +238,10 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
           if (followUpJson.ai_overview) {
             resJson.ai_overview = followUpJson.ai_overview;
           }
-          cost += 0.01; // Charge second SerpAPI query for deferred overview fetch
+          // The deferred overview fetch is a SECOND billed search at the same
+          // per-query rate, so the table value is added again rather than
+          // restated as a literal.
+          cost += perQueryCost;
         }
       }
       
@@ -283,10 +295,15 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
  * @returns {Promise<Array<string>>} List of question strings
  */
 async function probeGoogleAiOverviewBrightData(prompt, options = {}) {
+  // R3.6.4 — resolved before the try, and outside it, for the same reason as
+  // the SerpAPI branch above: the catch below converts any throw into a
+  // `cost: 0.0` skipped probe, which is the one shape a pricing refusal must
+  // never take. An unpriced provider therefore propagates to the caller.
+  const { cost } = resolveSerpQueryCost({ provider: "brightdata" });
+
   try {
     const data = await brightDataSearch(prompt, { ...options, aiOverview: true });
     const { text, citations } = extractBrightDataAiOverview(data);
-    const cost = 0.0015;
 
     if (options.stats) {
       options.stats.cost = (options.stats.cost || 0) + cost;

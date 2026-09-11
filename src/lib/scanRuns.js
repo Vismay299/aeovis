@@ -65,11 +65,22 @@ export const RUN_OUTCOME_LIST = Object.freeze([
   RUN_OUTCOMES.NOOP,
 ]);
 
-/** Who ran. Open in the schema (see 011's comment) but named here so the app spells them one way. */
+/**
+ * Who ran. Open in the schema (see 011's comment) but named here so the app
+ * spells them one way.
+ *
+ * REAPER joined the list in R3.3.4. It was declared locally in scanWorker.js by
+ * R3.3.2 (which could not edit this file), which meant the one runner name that
+ * appears on OTHER runners' rows — every reaped row records `reaped_by` — lived
+ * somewhere a reader of this vocabulary would not find it. `worker/src/lib/
+ * runLedger.js` carries the same four names and a guard test in
+ * src/lib/scanRuns.test.mjs fails if the two lists ever differ.
+ */
 export const RUNNERS = Object.freeze({
   FLEET: "probe-fleet",
   SCAN_CHUNK: "scan-chunk",
   SCHEDULER: "scheduler",
+  REAPER: "reaper",
 });
 
 function resolveClient(deps) {
@@ -317,4 +328,55 @@ export async function closeScanRun(
   });
   if (dbErr) throw throwDbError("closeScanRun", dbErr);
   return normalizeRun(data);
+}
+
+/**
+ * List open runs whose heartbeat predates `cutoffIso`, oldest first — the
+ * reaper's candidate query.
+ *
+ * MOVED HERE BY R3.3.4 from `listStaleRunsFromDb` in
+ * src/lib/workers/scanWorker.js, which issued this PostgREST select itself. It
+ * was the only read of `scan_runs` outside this module, so the table's column
+ * list and its predicates had two homes; a migration that renamed
+ * `heartbeat_at` would have had to find both. Served by migration 011's
+ * `scan_runs_open_idx`, which is partial on `ended_at IS NULL` for exactly this
+ * query.
+ *
+ * `limit + 1` rows are fetched so "there were more than one pass can take" is a
+ * measured fact rather than an inference from a full page. The caller slices
+ * back to `limit` and reports the overflow as `truncated`.
+ *
+ * `excludeRunId` keeps the sweep's own (open, fresh) row out of its own
+ * candidate list.
+ *
+ * Standing rule 2: a failed read propagates with its envelope intact. There is
+ * deliberately no "could not list the open runs, report zero stale" path —
+ * that answer is indistinguishable from a healthy ledger.
+ */
+export async function listStaleScanRuns({ cutoffIso, limit, excludeRunId = null }, deps = {}) {
+  const client = requireClient(resolveClient(deps), "listStaleScanRuns");
+  if (!cutoffIso || !Number.isFinite(Date.parse(cutoffIso))) {
+    throw new Error(
+      `listStaleScanRuns: cutoffIso must be a readable instant, got ${JSON.stringify(cutoffIso)} — ` +
+        `a listing with no cutoff would return every open run, including the ones running right now.`
+    );
+  }
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new Error(
+      `listStaleScanRuns: limit must be a positive integer, got ${JSON.stringify(limit)}`
+    );
+  }
+
+  let query = client
+    .from("scan_runs")
+    .select("id, runner, phase, worker_id, scan_job_id, batch_id, brand, outcome, started_at, heartbeat_at, ended_at")
+    .is("ended_at", null)
+    .lt("heartbeat_at", cutoffIso)
+    .order("heartbeat_at", { ascending: true })
+    .limit(limit + 1);
+  if (excludeRunId) query = query.neq("id", excludeRunId);
+
+  const { data, error } = await query;
+  if (error) throw throwDbError("listStaleScanRuns: could not list open scan_runs", error);
+  return data || [];
 }

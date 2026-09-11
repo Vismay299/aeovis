@@ -156,6 +156,50 @@ export async function startContentJob(jobId, deps = {}) {
 
   const update = deps.updateContentJob || updateContentJob;
 
+  // --- Cost across attempts (R3.3.3) --------------------------------------
+  // `stats` is THIS EXECUTION's spend. `cost_total` on the row is the JOB's
+  // spend, and a job can be executed more than once: the cron rescues a job
+  // whose worker died (db/content.js shouldRescueContentJob → the route's
+  // dispatchWithLease) and re-runs the pipeline from the top, paying for every
+  // block a second time. Writing `cost_total: stats.cost` reported the LAST
+  // attempt and deleted every earlier one, so a job that cost twice looked
+  // like it cost once.
+  //
+  // Two halves, and only both together make the row a sum:
+  //   (a) `costBase` — what the row already recorded before this execution
+  //       began. Every write below is base + this execution's spend, so a
+  //       rescue ADDS to the earlier attempts instead of replacing them. The
+  //       written value is absolute rather than a delta, so re-writing it
+  //       (every block boundary, plus the terminal write) cannot double-count.
+  //   (b) folding as we go — a killed attempt is exactly the case rescues
+  //       exist for, and it never reaches a terminal write. Spend recorded
+  //       only at the end therefore dies with the process and the "sum" is
+  //       short by a whole attempt. Every job write now carries the running
+  //       total, so a killed attempt leaves behind what it really spent. The
+  //       residual window is one block: spend between a block finishing and
+  //       the next status write, which is microseconds.
+  //
+  // NOT an atomic increment, because the storage layer does not offer one:
+  // supabase-js has no `cost_total = cost_total + $1` expression and there is
+  // no RPC for content_jobs (the repo's atomic writes — claim_scan_job_attempt,
+  // increment_scan_rate_limit — are all SQL functions this table has none of).
+  // This is a read-modify-write with the read at attempt start, so a second
+  // writer during the attempt would be clobbered. The job lease makes that
+  // structurally impossible for two executions of the same job, and
+  // reviseContentItem only folds into jobs that have reached
+  // awaiting_approval, which is not a rescuable status. A zombie that lost its
+  // lease and kept running is the one case that can still lose an update.
+  let costBase = null; // null = the row's recorded total is not known yet
+
+  /**
+   * The `cost_total` field for a job write: the row's prior total plus what
+   * this execution has spent so far. Before the job row is read we do not KNOW
+   * the prior total, and writing 0 there would erase the earlier attempts we
+   * exist to preserve — so the field is omitted entirely rather than guessed.
+   */
+  const costFields = () =>
+    costBase === null ? {} : { cost_total: round4(costBase + (stats.cost || 0)) };
+
   // --- Lease: structural single-flight (T1) -------------------------------
   // The cron may have already won the lease and hands its owner id down via
   // deps.leaseOwner; a direct dispatch (POST /api/content) acquires one here.
@@ -198,7 +242,10 @@ export async function startContentJob(jobId, deps = {}) {
       }
       lastStatus = fields.status;
     }
-    const result = await update(jobId, { ...fields, agent_trace: trace });
+    // costFields() rides on every job write, not just the terminal one — see
+    // (b) above: a worker that is killed mid-pipeline still leaves its spend
+    // on the row, which is what makes the rescued total a sum.
+    const result = await update(jobId, { ...fields, ...costFields(), agent_trace: trace });
     renewLease("content_jobs", jobId, leaseOwner).catch((err) =>
       console.warn(`[content-worker] lease renew failed for job ${jobId}:`, err.message)
     );
@@ -208,6 +255,19 @@ export async function startContentJob(jobId, deps = {}) {
   try {
     const job = deps.job || (await getContentJob(jobId));
     if (!job) throw new Error(`content job ${jobId} not found`);
+
+    // What earlier attempts already spent. From here on every job write adds
+    // this execution's spend to it instead of overwriting it.
+    const recordedCost = Number(job.cost_total);
+    if (job.cost_total != null && !Number.isFinite(recordedCost)) {
+      console.warn(
+        `[content-worker] job ${jobId}: cost_total is not a number ` +
+          `(${typeof job.cost_total}) — this attempt's spend is added to 0 and ` +
+          `whatever earlier attempts recorded is NOT represented in the total`
+      );
+    }
+    costBase = Number.isFinite(recordedCost) ? recordedCost : 0;
+
     const { brand, playbook, input } = job;
     const agent = resolveAgent(job);
     const pipeline = resolvePipeline(agent);
@@ -401,17 +461,20 @@ export async function startContentJob(jobId, deps = {}) {
       status: "awaiting_approval",
     });
 
+    // cost_total comes from costFields() inside writeJob: base + this
+    // execution's spend. Writing `stats.cost` here is what dropped every
+    // earlier attempt on the floor.
     await writeJob({
       status: "awaiting_approval",
       progress_pct: 100,
       item_id: item.id,
-      cost_total: Math.round((stats.cost || 0) * 10000) / 10000,
     });
 
     console.log(
       `[content-worker] Job ${jobId} queued for approval. verdict=${review.verdict}` +
         ` weighted=${review.weighted_total} ymyl=${review.ymyl_violation}` +
-        ` cycles=${cycles} cost=$${(stats.cost || 0).toFixed(4)}`
+        ` cycles=${cycles} cost=$${(stats.cost || 0).toFixed(4)}` +
+        ` job_total=$${round4(costBase + (stats.cost || 0)).toFixed(4)}`
     );
 
     return item;
@@ -420,11 +483,15 @@ export async function startContentJob(jobId, deps = {}) {
     // Mark whichever specialist was mid-flight as failed for the theater.
     const active = trace.find((t) => t.status === "working");
     if (active) markFailed(trace, active.step, error.message || "failed");
+    // costFields() is empty when the job row was never read (a failure before
+    // or at getContentJob): we do not know what the row already holds, and
+    // writing 0 would erase an earlier attempt's spend. Omitting the field
+    // leaves the recorded total untouched instead of silently zeroing it.
     await update(jobId, {
       status: "failed",
       progress_pct: 100,
       error_message: error.message || "Unexpected content pipeline error.",
-      cost_total: Math.round((stats.cost || 0) * 10000) / 10000,
+      ...costFields(),
       agent_trace: trace,
     });
     return null;

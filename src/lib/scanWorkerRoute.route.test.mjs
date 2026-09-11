@@ -58,16 +58,36 @@ let chunkRunOutcome = null;
 let classifySchedulerTick = null;
 let schedulerTickThrew = null;
 let buildSweepResponse = null;
+let runSweepMaintenance = null;
+let reapCounters = null;
+let reapPassThrew = null;
+let REAP_WIRE_REASONS = null;
 let runSchedulerTick = null;
+let reapStaleRuns = null;
 let SCHEDULER_SKIP_REASONS = null;
 let SCHEDULER_TICK_REASONS = null;
+let REAP_PASS_REASONS = null;
+let REAP_MAX_PER_PASS = null;
 try {
-  ({ GET, classifySchedulerTick, schedulerTickThrew, buildSweepResponse } = await import(
-    "../app/api/scan/worker/route.js"
-  ));
-  ({ chunkRunOutcome, runSchedulerTick, SCHEDULER_SKIP_REASONS, SCHEDULER_TICK_REASONS } = await import(
-    "./workers/scanWorker.js"
-  ));
+  ({
+    GET,
+    classifySchedulerTick,
+    schedulerTickThrew,
+    buildSweepResponse,
+    runSweepMaintenance,
+    reapCounters,
+    reapPassThrew,
+    REAP_WIRE_REASONS,
+  } = await import("../app/api/scan/worker/route.js"));
+  ({
+    chunkRunOutcome,
+    runSchedulerTick,
+    reapStaleRuns,
+    SCHEDULER_SKIP_REASONS,
+    SCHEDULER_TICK_REASONS,
+    REAP_PASS_REASONS,
+    REAP_MAX_PER_PASS,
+  } = await import("./workers/scanWorker.js"));
 } catch (error) {
   importError = error;
 }
@@ -491,6 +511,315 @@ test("R3.2.6 — a tick result missing `skipped` fails loud instead of reading a
   assert.match(verdict.reason, /^scheduler_contract_broken:/);
   assert.equal(verdict.skipped, null, "unmeasured, not zero");
   assert.equal(sweepBody(verdict, []).scheduler_ok, false);
+});
+
+// ---------------------------------------------------------------------------
+// R3.3.4 — the SWEEP branch's stale-run reap.
+//
+// THE FINDING. R3.3.2 built reapStaleRuns with 28 tests and could not wire it:
+// this route belonged to another task that cycle. So the reaper was correct and
+// unreached, and every run whose writer died stayed open forever, looking in
+// the ledger exactly like work still in flight.
+//
+// HOW THIS IS DRIVEN. Same constraint as R3.2.6 above: the sweep branch of GET
+// is behind `if (!supabase)` and this suite has no Supabase on purpose. So
+// these tests drive `runSweepMaintenance` — the real function GET calls, with
+// the real try/catch structure — and inject the two passes through the deps it
+// accepts. The REAL reapStaleRuns runs in the first test below, against a fake
+// ledger that enforces migration 011's close-once rule, so the counters
+// asserted here are counters the production function actually produced. The
+// call site itself is pinned by source guards, here and in
+// src/lib/workers/scanRunReaper.test.mjs.
+// ---------------------------------------------------------------------------
+
+const REAP_NOW = "2026-09-08T12:00:00.000Z";
+
+/** An open scan_runs row whose last beat was `ageMs` before REAP_NOW. */
+function staleRow(id, ageMs) {
+  const t0 = Date.parse(REAP_NOW);
+  return {
+    id,
+    runner: "scan-chunk",
+    phase: "probing",
+    worker_id: `worker-${id}`,
+    scan_job_id: `job-${id}`,
+    batch_id: null,
+    brand: "acme",
+    outcome: null,
+    started_at: new Date(t0 - ageMs - 1000).toISOString(),
+    heartbeat_at: new Date(t0 - ageMs).toISOString(),
+    ended_at: null,
+  };
+}
+
+/**
+ * A ledger the reaper can write to, enforcing the one invariant the sweep's
+ * counters depend on: a row closes exactly once, and a second close RAISES with
+ * migration 011's own sentence.
+ */
+function reapLedger() {
+  const closed = [];
+  const ended = new Set();
+  return {
+    closed,
+    deps: {
+      client: null,
+      openScanRun: async ({ runner, phase, workerId }) => ({
+        id: `pass-${runner}-${closed.length}`,
+        runner,
+        phase,
+        workerId,
+        outcome: null,
+        open: true,
+      }),
+      closeScanRun: async ({ runId, outcome, reason }) => {
+        if (ended.has(runId)) {
+          throw new Error(`close_scan_run: run ${runId} was already closed as "reaped"`);
+        }
+        ended.add(runId);
+        const row = {
+          id: runId,
+          runner: "scan-chunk",
+          phase: "probing",
+          outcome,
+          reason,
+          probesAttempted: null,
+          probesSucceeded: null,
+          errorsRecovered: null,
+          open: false,
+        };
+        closed.push(row);
+        return row;
+      },
+    },
+  };
+}
+
+/** Run something whose own logging is not the subject. */
+async function quietly(fn) {
+  const warn = console.warn;
+  const error = console.error;
+  const log = console.log;
+  console.warn = () => {};
+  console.error = () => {};
+  console.log = () => {};
+  try {
+    return await fn();
+  } finally {
+    console.warn = warn;
+    console.error = error;
+    console.log = log;
+  }
+}
+
+/** The sweep's two maintenance passes, driven exactly as GET drives them. */
+async function maintenance(deps) {
+  return await quietly(() => runSweepMaintenance(REAP_NOW, deps));
+}
+
+test("R3.3.4 — the sweep runs the REAL reaper and its counters reach the wire", async () => {
+  handler();
+  const ledger = reapLedger();
+  const rows = [staleRow("wedged-a", 900_000), staleRow("wedged-b", 600_000)];
+  const backend = schedulerBackend({ due: [] });
+
+  const { reaped, scheduler } = await maintenance({
+    runSchedulerTick: async (now) => await runSchedulerTick(now, backend.deps),
+    // The production function, unmodified — only its ledger and its listing are
+    // fakes, the same injection points its own 28 tests use.
+    reapStaleRuns: async (now) =>
+      await reapStaleRuns(now, { ...ledger.deps, listStaleRuns: async () => rows }),
+  });
+
+  assert.equal(reaped.ok, true, "the pass closed both rows without a hard failure");
+  assert.equal(reaped.considered, 2, "two stale candidates were looked at");
+  assert.equal(reaped.reaped, 2, "…and both were actually closed");
+  assert.equal(reaped.lost_race, 0, "a measured zero: nothing raced this pass");
+  assert.equal(reaped.truncated, false, "the cap was not reached, and the wire says so as a boolean");
+  assert.equal(reaped.outcome, "succeeded");
+  assert.ok(reaped.pass_run_id, "the pass files a run of its own and names it on the wire");
+
+  // The rows really closed as 'reaped', not as a bare failure.
+  const reapedRows = ledger.closed.filter((r) => r.outcome === "reaped");
+  assert.deepEqual(reapedRows.map((r) => r.id).sort(), ["wedged-a", "wedged-b"]);
+  assert.match(reapedRows[0].reason, /^reaped/);
+
+  // …and it is all on the body the cron reads.
+  const body = buildSweepResponse({ activeCount: 0, resumedIds: [], scheduled: [], scheduler, reaped });
+  for (const field of ["considered", "reaped", "lost_race", "truncated"]) {
+    assert.ok(field in body.reaped, `the wire must carry ${field}`);
+  }
+  assert.equal(body.reaped.reaped, 2);
+  assert.equal(body.scheduler.outcome, "idle", "the tick still reported for itself");
+});
+
+test("R3.3.4 — a reap that THROWS cannot fail the scheduler tick", async () => {
+  handler();
+  // A tick that really starts a brand, and a reaper that dies on its way to the
+  // database. Before the wiring existed this could not happen; once it exists,
+  // the failure mode to fear is a bookkeeping sweep taking down the cron's
+  // actual job — and the sweep's outer try in GET would have answered 500 and
+  // thrown away a tick that had already created the scan.
+  const backend = schedulerBackend({ due: [dueSchedule("go.com", "daily", "Go Co")] });
+  let threw = false;
+
+  const { scheduled, scheduler, reaped } = await maintenance({
+    runSchedulerTick: async (now) => await runSchedulerTick(now, backend.deps),
+    reapStaleRuns: async () => {
+      threw = true;
+      throw new Error("scan_runs listing exploded");
+    },
+  });
+
+  assert.equal(threw, true, "the reaper was genuinely reached — otherwise this proves nothing");
+  assert.equal(backend.jobs.length, 1, "the tick still created the job it was due to create");
+  assert.equal(scheduler.outcome, "started", "the tick still reports its OWN result");
+  assert.equal(scheduler.started, 1);
+  assert.equal(scheduled[0].brand, "Go Co");
+
+  const body = buildSweepResponse({ activeCount: 0, resumedIds: [], scheduled, scheduler, reaped });
+  assert.equal(body.scheduler_ok, true, "the scheduler did not fail, and must not be reported as failed");
+  assert.equal(body.scheduler_error, null);
+
+  // The reap failure is REPORTED, not swallowed: this is the difference between
+  // isolating a failure and hiding one.
+  assert.equal(body.reaped.ok, false);
+  assert.equal(body.reaped.outcome, "failed");
+  assert.equal(body.reaped.reason, REAP_PASS_REASONS.REAP_FAILED);
+  assert.equal(body.reaped.error, "scan_runs listing exploded", "the message reaches the wire");
+  for (const field of ["considered", "reaped", "lost_race", "truncated"]) {
+    assert.equal(
+      body.reaped[field],
+      null,
+      `${field}: a pass that died never finished counting — 0 would be a count it never took`
+    );
+  }
+});
+
+test("R3.3.4 — a scheduler tick that throws does not skip the reap", async () => {
+  handler();
+  // The other direction of the same isolation. A scheduler wedged by one bad
+  // schedule row must not leave stale runs open forever — that pairing is how a
+  // single fault becomes a permanently unreadable ledger.
+  const ledger = reapLedger();
+  const { scheduler, reaped } = await maintenance({
+    runSchedulerTick: async () => {
+      throw new Error("listDueSchedules exploded");
+    },
+    reapStaleRuns: async (now) =>
+      await reapStaleRuns(now, { ...ledger.deps, listStaleRuns: async () => [staleRow("orphan", 900_000)] }),
+  });
+
+  assert.equal(scheduler.outcome, "failed");
+  assert.equal(reaped.reaped, 1, "the reap ran anyway and closed the orphaned run");
+  assert.ok(
+    ledger.closed.some((r) => r.id === "orphan" && r.outcome === "reaped"),
+    "the row was really closed, not merely counted"
+  );
+});
+
+test("R3.3.4 — a truncated pass says MORE stale runs remain, never 'the ledger is clean'", async () => {
+  handler();
+  const ledger = reapLedger();
+  const rows = [staleRow("a", 900_000), staleRow("b", 800_000), staleRow("c", 700_000)];
+  const { reaped } = await maintenance({
+    runSchedulerTick: async () => ({ started: [], skipped: [] }),
+    reapStaleRuns: async (now) =>
+      await reapStaleRuns(now, {
+        ...ledger.deps,
+        listStaleRuns: async ({ limit }) => rows.slice(0, limit + 1),
+        maxPerPass: 2,
+      }),
+  });
+
+  assert.equal(reaped.reaped, 2);
+  assert.equal(reaped.considered, 2);
+  assert.equal(
+    reaped.truncated,
+    true,
+    "the cap was hit and a third row is still open — reporting only `reaped: 2` would read as done"
+  );
+});
+
+test("R3.3.4 — a reap that could not LOOK reports nulls, never a clean zero", () => {
+  handler();
+  // The shape reapStaleRuns returns when there is no client and no injected
+  // ledger: it could not list a single row. `considered: 0` here would tell an
+  // operator the ledger was inspected and found healthy.
+  const wire = reapCounters({
+    ok: false,
+    outcome: null,
+    reason: "ledger_unavailable",
+    considered: null,
+    reaped: null,
+    lostRace: null,
+    truncated: null,
+  });
+
+  assert.equal(wire.ok, false);
+  assert.equal(wire.reason, "ledger_unavailable");
+  for (const field of ["considered", "reaped", "lost_race", "truncated"]) {
+    assert.equal(wire[field], null, `${field} must stay NOT MEASURED`);
+  }
+
+  // And the measured-zero pass is a DIFFERENT body, which is the whole point.
+  const lookedAndFoundNothing = reapCounters({
+    ok: true,
+    outcome: "noop",
+    reason: "no_stale_runs",
+    considered: 0,
+    reaped: 0,
+    lostRace: 0,
+    vanished: 0,
+    notStale: 0,
+    unreadableHeartbeat: 0,
+    closeFailed: 0,
+    truncated: false,
+    passRunId: "pass-1",
+  });
+  assert.equal(lookedAndFoundNothing.considered, 0);
+  assert.notEqual(
+    JSON.stringify(wire),
+    JSON.stringify(lookedAndFoundNothing),
+    "a sweep that could not look and a sweep that found nothing must not serialize the same"
+  );
+});
+
+test("R3.3.4 — a sweep body built with no reap pass says so instead of omitting the key", () => {
+  handler();
+  const body = buildSweepResponse({
+    activeCount: 0,
+    resumedIds: [],
+    scheduled: [],
+    scheduler: classifySchedulerTick({ started: [], skipped: [] }),
+  });
+
+  assert.ok("reaped" in body, "an absent pass must still produce the key — a missing one reads as fine");
+  assert.equal(body.reaped.reason, REAP_WIRE_REASONS.NOT_RUN);
+  assert.equal(body.reaped.ok, false);
+  assert.equal(body.reaped.considered, null);
+});
+
+test("R3.3.4 — an unusable reap result fails loud instead of reading as a clean sweep", () => {
+  handler();
+  for (const broken of [undefined, null, "done"]) {
+    const wire = reapCounters(broken);
+    assert.equal(wire.ok, false, `${JSON.stringify(broken)} must not read as a successful pass`);
+    assert.match(wire.reason, /^reaper_contract_broken:/);
+    assert.equal(wire.reaped, null, "never `?? 0` a count that was never taken");
+  }
+  // A pass object missing its counters is the same class of defect.
+  const partial = reapCounters({ ok: true, outcome: "succeeded" });
+  assert.equal(partial.considered, null);
+  assert.equal(partial.truncated, null, "a non-boolean truncated is unknown, not false");
+});
+
+test("R3.3.4 — reapPassThrew keeps the pass vocabulary, not a word invented at the route", () => {
+  handler();
+  const wire = reapPassThrew(new Error("boom"));
+  assert.equal(wire.reason, REAP_PASS_REASONS.REAP_FAILED);
+  assert.equal(wire.error, "boom");
+  assert.ok(Number.isInteger(REAP_MAX_PER_PASS) && REAP_MAX_PER_PASS > 0, "the cap is a real bound");
 });
 
 test("GUARD — the sweep route hands the WHOLE tick result to the classifier", async () => {

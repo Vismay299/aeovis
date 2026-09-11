@@ -1,4 +1,5 @@
 import { brightDataSearch, extractBrightDataAiOverview, extractBrightDataOrganic } from "../engines/brightdata.js";
+import { resolveSerpQueryCost } from "../llmPricing.js";
 import { getBrandAliases } from "./aliases.js";
 import {
   AIO_CONCURRENCY,
@@ -91,6 +92,18 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
     cost: 0.0,
   };
 
+  // R3.6.4 — one Bright Data query costs whatever the price table in
+  // src/lib/llmPricing.js says it costs; this file used to restate the number
+  // itself, as did enginePipeline.js and serp.js, and three copies of a price
+  // drift independently.
+  //
+  // Resolved OUTSIDE the try on purpose. The catch below records a throw as a
+  // per-query error row and leaves `cost` at 0, so a pricing refusal raised in
+  // there would arrive downstream as a query that failed for free. The price
+  // is a configuration fact, identical for all 30 queries: if it cannot be
+  // established, the right blast radius is the scan, not one row.
+  const { cost: queryCost } = resolveSerpQueryCost({ provider: "brightdata" });
+
   try {
     // Bright Data SERP responses for AI Overview average ~45-50s; a 30s
     // timeout aborts the majority of otherwise-successful queries and inflates
@@ -107,7 +120,7 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
       );
       result.brand_organic_position = brandPos >= 0 ? brandPos + 1 : null;
     }
-    result.cost = 0.0015;
+    result.cost = queryCost;
     if (stats) stats.cost = (stats.cost || 0) + result.cost;
 
     const hasText = Boolean(text && text.trim());

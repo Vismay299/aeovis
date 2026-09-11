@@ -1,4 +1,5 @@
 import { brightDataSearch, extractBrightDataAiOverview, extractBrightDataOrganic } from "../engines/brightdata.js";
+import { resolveSerpQueryCost } from "../llmPricing.js";
 import { probeChatGpt, isChatGptConfigured } from "../engines/openai.js";
 import { probePerplexity, isPerplexityConfigured, hasUnverifiedCitations } from "../engines/perplexity.js";
 import { getBrandAliases } from "./aliases.js";
@@ -97,6 +98,15 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     cost: 0,
   };
 
+  // R3.6.4 — the per-query Bright Data price comes from the price table in
+  // src/lib/llmPricing.js, not from a literal restated here (it was one of
+  // three copies, alongside aioPipeline.js and serp.js).
+  //
+  // Resolved OUTSIDE the try for the same reason as aioPipeline's: the catch
+  // below turns a throw into an error row with `cost` left at 0, so a pricing
+  // refusal raised inside it would read as a query that failed for free.
+  const { cost: queryCost } = resolveSerpQueryCost({ provider: "brightdata" });
+
   try {
     const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true });
     const { text, citations, references } = extractBrightDataAiOverview(data);
@@ -108,7 +118,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
       );
       result.brand_organic_position = brandPos >= 0 ? brandPos + 1 : null;
     }
-    result.cost = 0.0015;
+    result.cost = queryCost;
     if (stats) stats.cost = (stats.cost || 0) + result.cost;
 
     const hasText = Boolean(text && text.trim());

@@ -37,8 +37,16 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const CONFIG_URL = pathToFileURL(path.join(REPO, "worker/src/config.js")).href;
 const INDEX_URL = pathToFileURL(path.join(REPO, "worker/src/index.js")).href;
 
-const { resolveConfig, describeConfig, isRequired, CONFIG_FIELDS, FLEET_ENGINES, FleetConfigError } =
-  await import(CONFIG_URL);
+const {
+  resolveConfig,
+  describeConfig,
+  isRequired,
+  CONFIG_FIELDS,
+  FLEET_ENGINES,
+  FleetConfigError,
+  SURFACE_BUDGETS,
+  surfaceBudgetCoverage,
+} = await import(CONFIG_URL);
 const { bootConfig } = await import(INDEX_URL);
 
 /** A minimal env that resolves cleanly, so each case varies exactly one thing. */
@@ -137,13 +145,25 @@ test("a required variable that is not a URL refuses", () => {
 test("absent optional variables take their documented defaults", () => {
   const config = resolveConfig({ ...OK });
   assert.deepEqual([...config.engines], ["perplexity"]);
-  assert.equal(config.batchSize, 5);
   assert.equal(config.leaseMs, 300_000);
   assert.equal(config.idlePollMs, 10_000);
   assert.equal(config.heartbeatMs, 30_000);
+  assert.equal(config.probeTimeoutMs, 60_000);
+  assert.equal(config.canaryIntervalMs, 3_600_000);
   assert.match(config.workerId, /^worker-\d+$/);
   assert.deepEqual(config.missing, []);
-  assert.deepEqual(config.adjustments, []);
+
+  // FLEET_BATCH_SIZE's documented default is 5 and it is NOT what the fleet
+  // runs on once the politeness budget exists: 5 × (45s max delay + 60s probe
+  // timeout) is 525s against a 300s lease, so the batch would outlive its lease
+  // and complete_probe_tasks would refuse every result (contract §6, V6). The
+  // default is narrowed to what one lease pays for, and the narrowing is
+  // announced — the same rule the heartbeat already follows. Nobody typed 5, so
+  // nothing an operator chose was discarded.
+  assert.equal(config.batchSize, 2);
+  assert.equal(config.adjustments.length, 1);
+  assert.match(config.adjustments[0], /FLEET_BATCH_SIZE was not set/);
+  assert.match(config.adjustments[0], /perplexity\.ai/);
 });
 
 test("required vs optional is data on the field, not a convention in the prose", () => {
@@ -156,6 +176,12 @@ test("required vs optional is data on the field, not a convention in the prose",
     "FLEET_IDLE_POLL_MS",
     "FLEET_HEARTBEAT_MS",
     "FLEET_WORKER_ID",
+    "FLEET_MAX_CONCURRENCY",
+    "FLEET_PROBE_DELAY_MIN_MS",
+    "FLEET_PROBE_DELAY_MAX_MS",
+    "FLEET_DAILY_CAP",
+    "FLEET_CANARY_INTERVAL_MS",
+    "FLEET_PROBE_TIMEOUT_MS",
   ]) {
     assert.equal(isRequired(name), false, `${name} must be optional`);
   }
@@ -271,7 +297,19 @@ test("an explicitly set heartbeat slower than half the lease refuses, naming bot
 });
 
 test("the DEFAULT heartbeat may be narrowed by a short lease, but the narrowing is announced", () => {
-  const config = resolveConfig({ ...OK, FLEET_LEASE_MS: "30000" });
+  // The pacing overrides are here so this stays a test about the HEARTBEAT. A
+  // 30s lease cannot hold one probe at perplexity.ai's default 45s delay plus
+  // the 60s probe timeout, so the budget's lease check would refuse the boot
+  // before the heartbeat rule was ever reached. Fast pacing keeps five probes
+  // inside the 30s lease and leaves the batch size alone.
+  const config = resolveConfig({
+    ...OK,
+    FLEET_LEASE_MS: "30000",
+    FLEET_PROBE_DELAY_MIN_MS: "0",
+    FLEET_PROBE_DELAY_MAX_MS: "1000",
+    FLEET_PROBE_TIMEOUT_MS: "5000",
+  });
+  assert.equal(config.batchSize, 5, "the batch must not be narrowed as well, or this proves two things");
   assert.equal(config.heartbeatMs, 15_000);
   assert.equal(config.adjustments.length, 1, "a silent narrowing is the thing this task removes");
   assert.match(config.adjustments[0], /FLEET_HEARTBEAT_MS was not set/);
@@ -342,6 +380,209 @@ test("strict:false is not validation:false — a malformed FLEET_* value still r
 });
 
 /* ------------------------------------------------------------------ *
+ * The politeness budget (R1.1.5, docs/contracts/politeness-budget.md §5.2).
+ *
+ * The accept's second clause is "the fleet reads them from config rather than
+ * hard-coding", and §5.1 makes that checkable with four tests: one module owns
+ * the number, a named variable overrides it, an out-of-range override refuses
+ * at boot, and the resolved value is printed at start-up. Each is below.
+ * ------------------------------------------------------------------ */
+
+test("§3.2's per-surface numbers have exactly ONE representation, and it is a frozen table", () => {
+  assert.ok(Object.isFrozen(SURFACE_BUDGETS));
+  for (const [engine, row] of Object.entries(SURFACE_BUDGETS)) {
+    assert.ok(Object.isFrozen(row), `${engine}'s budget row must be frozen`);
+  }
+  // The contract's numbers, asserted as the contract states them. A table that
+  // drifts from §3.2 is worse than no table.
+  assert.deepEqual(
+    { ...SURFACE_BUDGETS.perplexity, ceilingWhy: undefined },
+    {
+      surface: "perplexity.ai",
+      matrixRow: 4,
+      maxConcurrency: 1,
+      ceilingWhy: undefined,
+      probeDelayMinMs: 20_000,
+      probeDelayMaxMs: 45_000,
+      dailyCap: 400,
+    }
+  );
+  assert.deepEqual(
+    { ...SURFACE_BUDGETS.chatgpt, ceilingWhy: undefined },
+    {
+      surface: "chatgpt.com",
+      matrixRow: 5,
+      maxConcurrency: 1,
+      ceilingWhy: undefined,
+      probeDelayMinMs: 30_000,
+      probeDelayMaxMs: 90_000,
+      dailyCap: 200,
+    }
+  );
+});
+
+test("every engine the fleet may be pointed at has a budget row", () => {
+  // An engine in the vocabulary with no budget would be probed at whatever rate
+  // falls out of FLEET_BATCH_SIZE — throttling as an accident, which is the one
+  // thing the contract exists to replace.
+  assert.deepEqual(surfaceBudgetCoverage().uncovered, []);
+  assert.deepEqual(surfaceBudgetCoverage().covered.sort(), [...FLEET_ENGINES].sort());
+});
+
+test("with no override, each surface resolves its own §3.2 budget", () => {
+  const config = resolveConfig({ ...OK, FLEET_ENGINES: "perplexity,chatgpt" });
+  assert.deepEqual(Object.keys(config.budgets), ["perplexity", "chatgpt"]);
+  assert.equal(config.budgets.perplexity.probeDelayMinMs, 20_000);
+  assert.equal(config.budgets.perplexity.probeDelayMaxMs, 45_000);
+  assert.equal(config.budgets.perplexity.dailyCap, 400);
+  assert.equal(config.budgets.chatgpt.probeDelayMaxMs, 90_000);
+  assert.equal(config.budgets.chatgpt.dailyCap, 200);
+  assert.equal(config.budgets.chatgpt.maxConcurrency, 1);
+});
+
+test("a valid override replaces the table value for every surface this container drives", () => {
+  const config = resolveConfig({
+    ...OK,
+    FLEET_ENGINES: "perplexity,chatgpt",
+    FLEET_LEASE_MS: "600000",
+    FLEET_BATCH_SIZE: "1",
+    FLEET_PROBE_DELAY_MIN_MS: "5000",
+    FLEET_PROBE_DELAY_MAX_MS: "9000",
+    FLEET_DAILY_CAP: "50",
+    FLEET_MAX_CONCURRENCY: "1",
+    FLEET_CANARY_INTERVAL_MS: "1800000",
+    FLEET_PROBE_TIMEOUT_MS: "20000",
+  });
+  for (const engine of ["perplexity", "chatgpt"]) {
+    assert.equal(config.budgets[engine].probeDelayMinMs, 5_000);
+    assert.equal(config.budgets[engine].probeDelayMaxMs, 9_000);
+    assert.equal(config.budgets[engine].dailyCap, 50);
+  }
+  assert.equal(config.canaryIntervalMs, 1_800_000);
+  assert.equal(config.probeTimeoutMs, 20_000);
+  assert.deepEqual(config.adjustments, []);
+});
+
+for (const [name, raw, low, high] of [
+  ["FLEET_MAX_CONCURRENCY", "3", 1, 2],
+  ["FLEET_MAX_CONCURRENCY", "0", 1, 2],
+  ["FLEET_PROBE_DELAY_MIN_MS", "-1", 0, 600_000],
+  ["FLEET_PROBE_DELAY_MAX_MS", "600001", 0, 600_000],
+  ["FLEET_DAILY_CAP", "0", 1, 100_000],
+  ["FLEET_CANARY_INTERVAL_MS", "60000", 300_000, 86_400_000],
+  ["FLEET_PROBE_TIMEOUT_MS", "1000", 5_000, 600_000],
+]) {
+  test(`${name}=${raw} refuses at boot instead of being clamped into [${low}, ${high}]`, () => {
+    const err = refusal({ ...OK, [name]: raw });
+    assert.equal(err.problems[0].name, name);
+    assert.equal(err.problems[0].kind, "out_of_range");
+    assert.match(err.message, new RegExp(`between ${low} and ${high}`));
+  });
+}
+
+test("an unparseable budget value refuses rather than falling back to the surface default", () => {
+  const err = refusal({ ...OK, FLEET_DAILY_CAP: "lots" });
+  assert.equal(err.problems[0].kind, "unparseable");
+});
+
+test("a blank per-surface override says the default is per-surface, not 'null'", () => {
+  const err = refusal({ ...OK, FLEET_PROBE_DELAY_MAX_MS: "" });
+  assert.equal(err.problems[0].kind, "blank");
+  assert.match(err.message, /perplexity\.ai 45000/, "a default of 'null' is not an answer");
+});
+
+test("CONFLICT — a concurrency above a logged-out UI's ceiling refuses, naming the surface", () => {
+  // 2 is inside FLEET_MAX_CONCURRENCY's own 1–2 range, and still wrong here:
+  // §3.3 caps a logged-out consumer UI at 1, and that ceiling lives in the
+  // budget table rather than in a second copy of the rule.
+  const err = refusal({ ...OK, FLEET_MAX_CONCURRENCY: "2" });
+  assert.equal(err.problems[0].kind, "conflict");
+  assert.equal(err.problems[0].name, "FLEET_MAX_CONCURRENCY");
+  assert.match(err.message, /perplexity\.ai/);
+  assert.match(err.message, /FLEET_MAX_CONCURRENCY=2/);
+});
+
+test("CONFLICT — a delay window whose max is not above its min refuses", () => {
+  // Equal bounds are a FIXED delay, and a fixed delay is a signature: perfectly
+  // periodic, and it synchronises every container that started together (§3.4).
+  const err = refusal({ ...OK, FLEET_PROBE_DELAY_MIN_MS: "9000", FLEET_PROBE_DELAY_MAX_MS: "9000" });
+  assert.equal(err.problems[0].kind, "conflict");
+  assert.match(err.message, /strictly\s+greater/);
+
+  // Setting only the minimum, above the surface's own maximum, is the case an
+  // operator actually hits: one variable typed, one inherited from §3.2.
+  const inverted = refusal({ ...OK, FLEET_PROBE_DELAY_MIN_MS: "50000" });
+  assert.equal(inverted.problems[0].kind, "conflict");
+  // It must say which bound the operator set and which came from the table.
+  assert.match(inverted.message, /FLEET_PROBE_DELAY_MIN_MS/);
+  assert.match(inverted.message, /the perplexity\.ai default/);
+});
+
+test("CONFLICT — a batch the operator set that cannot fit one lease refuses, naming both", () => {
+  const err = refusal({ ...OK, FLEET_BATCH_SIZE: "5" });
+  assert.equal(err.problems[0].kind, "conflict");
+  assert.equal(err.problems[0].name, "FLEET_BATCH_SIZE");
+  assert.match(err.message, /FLEET_LEASE_MS=300000/);
+  assert.match(err.message, /at most 2/);
+  // Why it matters, not just that it is wrong: the requests get made and the
+  // results get refused.
+  assert.match(err.message, /complete_probe_tasks would refuse/);
+});
+
+test("CONFLICT — a lease too short for even ONE paced probe refuses outright", () => {
+  // Nothing to narrow here: batch size 1 already outlives the lease.
+  const err = refusal({ ...OK, FLEET_LEASE_MS: "30000", FLEET_BATCH_SIZE: "1" });
+  assert.equal(err.problems[0].kind, "conflict");
+  assert.equal(err.problems[0].name, "FLEET_LEASE_MS");
+  assert.match(err.message, /single perplexity\.ai probe/);
+});
+
+test("the slowest surface a container drives sets the batch ceiling", () => {
+  // chatgpt.com's 90s max delay binds before perplexity.ai's 45s does, and the
+  // message must name the one that actually bound.
+  const err = refusal({
+    ...OK,
+    FLEET_ENGINES: "perplexity,chatgpt",
+    FLEET_LEASE_MS: "600000",
+    FLEET_BATCH_SIZE: "5",
+  });
+  assert.equal(err.problems[0].kind, "conflict");
+  assert.match(err.message, /chatgpt\.com/);
+  assert.match(err.message, /at most 4/); // floor(600000 / (90000 + 60000))
+});
+
+test("all budget conflicts are reported in one refusal, not one redeploy at a time", () => {
+  const err = refusal({
+    ...OK,
+    FLEET_MAX_CONCURRENCY: "2",
+    FLEET_PROBE_DELAY_MIN_MS: "50000",
+    FLEET_PROBE_DELAY_MAX_MS: "50000",
+  });
+  assert.deepEqual(
+    err.problems.map((p) => p.name).sort(),
+    ["FLEET_MAX_CONCURRENCY", "FLEET_PROBE_DELAY_MAX_MS"]
+  );
+});
+
+test("the resolved budget is printed at start-up, and the cap says it is not enforced", () => {
+  const line = describeConfig(resolveConfig({ ...OK, FLEET_ENGINES: "perplexity,chatgpt" }));
+  assert.match(line, /budget perplexity \(perplexity\.ai\): concurrency=1 delay=20000-45000ms dailyCap=400/);
+  assert.match(line, /budget chatgpt \(chatgpt\.com\): concurrency=1 delay=30000-90000ms dailyCap=200/);
+  assert.match(line, /probeTimeoutMs=60000/);
+  assert.match(line, /canaryIntervalMs=3600000/);
+  // §3.5's cap is fleet-wide and no shared counter exists (§5.3). A number
+  // printed as though it were in force is the failure this repo keeps paying
+  // for, so the boot log types it.
+  assert.match(line, /cap NOT ENFORCED/);
+});
+
+test("a budget nothing applies must say so rather than read as a budget in force", () => {
+  const config = resolveConfig({ ...OK });
+  assert.equal(config.budgetsEnforced, false, "flip this only when probeBatch reads config.budgets");
+  assert.match(describeConfig(config), /VALIDATED, NOT APPLIED/);
+});
+
+/* ------------------------------------------------------------------ *
  * The documentation is part of the contract.
  * ------------------------------------------------------------------ */
 
@@ -356,5 +597,27 @@ test("GUARD — every configuration variable is documented in worker/README.md",
   }
   for (const engine of FLEET_ENGINES) {
     assert.match(readme, new RegExp(engine), `the engine vocabulary must name ${engine}`);
+  }
+});
+
+test("GUARD — every budget variable is discoverable in .env.example", async () => {
+  // §5.1's second test: a number an operator cannot find is not configuration.
+  // Scoped to the budget fields on purpose — the other six FLEET_* variables
+  // are absent from .env.example too, and that gap is recorded against R1.1.3
+  // rather than fixed here.
+  const example = await readFile(path.join(REPO, ".env.example"), "utf8");
+  for (const name of [
+    "FLEET_MAX_CONCURRENCY",
+    "FLEET_PROBE_DELAY_MIN_MS",
+    "FLEET_PROBE_DELAY_MAX_MS",
+    "FLEET_DAILY_CAP",
+    "FLEET_CANARY_INTERVAL_MS",
+    "FLEET_PROBE_TIMEOUT_MS",
+  ]) {
+    assert.ok(
+      CONFIG_FIELDS.some((f) => f.name === name),
+      `${name} is guarded here but is not a configuration field`
+    );
+    assert.match(example, new RegExp(name), `${name} is read at boot but absent from .env.example`);
   }
 });

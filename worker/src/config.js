@@ -45,6 +45,72 @@
 export const FLEET_ENGINES = Object.freeze(["perplexity", "chatgpt"]);
 
 /**
+ * §3.2 of `docs/contracts/politeness-budget.md`, as data — the ONE code
+ * representation of the per-surface politeness budget for the surfaces this
+ * fleet drives.
+ *
+ * Keyed by the fleet's own engine id, because that is what `FLEET_ENGINES`
+ * names and what `probe_tasks.engine` stores, so a claimed task indexes its
+ * budget directly. `surface` carries the contract row's name so the two can be
+ * matched by eye.
+ *
+ * WHY ONLY TWO OF §3.2's FIVE ROWS ARE HERE. The other three rows
+ * (`api.perplexity.ai`, `api.openai.com`, Bright Data → Google SERP) are driven
+ * by `src/`, not by this fleet, and their concurrency ALREADY has a code
+ * representation: `AIO_CONCURRENCY` in `src/lib/scoring/aioConstants.js` and
+ * `CHATGPT_CONCURRENCY` / `PERPLEXITY_CONCURRENCY` in
+ * `src/lib/scoring/enginePipeline.js`. Copying them here would give those
+ * numbers TWO representations that nothing keeps in step — which is the defect
+ * this table exists to prevent, not a fix for it. Those three constants are
+ * still hard-coded, still unreadable from the environment, and the contract's
+ * §5.4 and §6 V3 say so out loud. This table does not pretend otherwise.
+ *
+ * EVERY NUMBER HERE WAS CHOSEN, NOT MEASURED (contract §8). No block rate, no
+ * rate-limit threshold and no probe duration has been observed for either
+ * surface. They are a bound on our behaviour, not a model of the vendor's.
+ */
+export const SURFACE_BUDGETS = Object.freeze({
+  perplexity: Object.freeze({
+    surface: "perplexity.ai",
+    /** `engine-surface-matrix.md` row this came from. */
+    matrixRow: 4,
+    maxConcurrency: 1,
+    ceilingWhy:
+      "A logged-out consumer UI is a claim to be one person, and two simultaneous " +
+      "requests from one session is the cheapest possible contradiction of it (§3.3).",
+    probeDelayMinMs: 20_000,
+    probeDelayMaxMs: 45_000,
+    dailyCap: 400,
+  }),
+  chatgpt: Object.freeze({
+    surface: "chatgpt.com",
+    matrixRow: 5,
+    maxConcurrency: 1,
+    ceilingWhy:
+      "A logged-out consumer UI is a claim to be one person, and two simultaneous " +
+      "requests from one session is the cheapest possible contradiction of it (§3.3).",
+    probeDelayMinMs: 30_000,
+    probeDelayMaxMs: 90_000,
+    dailyCap: 200,
+  }),
+});
+
+/**
+ * Which engines in the vocabulary have a budget row and which do not.
+ *
+ * Exported so a test asserts the coverage rather than a comment claiming it: an
+ * engine added to {@link FLEET_ENGINES} without a §3.2 row would otherwise be
+ * probed at whatever rate falls out of `FLEET_BATCH_SIZE`, which is the
+ * accident the whole contract exists to replace with a decision.
+ */
+export function surfaceBudgetCoverage() {
+  return {
+    covered: FLEET_ENGINES.filter((e) => Boolean(SURFACE_BUDGETS[e])),
+    uncovered: FLEET_ENGINES.filter((e) => !SURFACE_BUDGETS[e]),
+  };
+}
+
+/**
  * Every variable the fleet reads, with `required` stated rather than implied.
  *
  * REQUIRED means the fleet cannot do its job without it and must refuse to
@@ -125,6 +191,85 @@ export const CONFIG_FIELDS = Object.freeze([
     kind: "text",
     fallback: null, // computed: worker-<pid>
     why: "identity written onto every claim and heartbeat",
+  }),
+
+  /* ------------------------------------------------------------------ *
+   * The politeness budget (R1.1.5 §5.2).
+   *
+   * Four of these have NO scalar default: absent means "each surface takes
+   * its own row in SURFACE_BUDGETS", and a value that IS set overrides every
+   * surface this container drives. `fallback: null` therefore means "no
+   * override", never "zero" — the resolved number is always a real one from
+   * the table, and `fallbackText` is what the blank-value message offers.
+   * ------------------------------------------------------------------ */
+  Object.freeze({
+    name: "FLEET_MAX_CONCURRENCY",
+    required: false,
+    kind: "int",
+    min: 1,
+    max: 2,
+    fallback: null,
+    fallbackText: "each surface's own ceiling (1 for both surfaces the fleet drives today)",
+    why: "in-flight probes of one surface, per egress IP",
+  }),
+  Object.freeze({
+    name: "FLEET_PROBE_DELAY_MIN_MS",
+    required: false,
+    kind: "int",
+    min: 0,
+    max: 600_000,
+    fallback: null,
+    fallbackText: "each surface's own window (perplexity.ai 20000, chatgpt.com 30000)",
+    why: "lower bound of the random inter-probe delay",
+  }),
+  Object.freeze({
+    name: "FLEET_PROBE_DELAY_MAX_MS",
+    required: false,
+    kind: "int",
+    min: 0,
+    max: 600_000,
+    fallback: null,
+    fallbackText: "each surface's own window (perplexity.ai 45000, chatgpt.com 90000)",
+    why: "upper bound of the random inter-probe delay; must exceed the lower bound",
+  }),
+  Object.freeze({
+    name: "FLEET_DAILY_CAP",
+    required: false,
+    kind: "int",
+    min: 1,
+    max: 100_000,
+    fallback: null,
+    fallbackText: "each surface's own cap (perplexity.ai 400, chatgpt.com 200)",
+    why: "probe attempts against one surface per UTC day",
+  }),
+  Object.freeze({
+    name: "FLEET_CANARY_INTERVAL_MS",
+    required: false,
+    kind: "int",
+    min: 300_000,
+    max: 86_400_000,
+    fallback: 3_600_000,
+    why: "gap between canary probes of one surface",
+  }),
+  /**
+   * §5.2's boot-time check is stated as
+   * `FLEET_BATCH_SIZE × (FLEET_PROBE_DELAY_MAX_MS + a probe's own timeout)`,
+   * and "a probe's own timeout" had NO representation anywhere in the tree:
+   * `probeBatch` throws before it can time out, so the fleet has never had one.
+   * The alternative was a bare constant in this file, which is the hard-coded
+   * term the second half of R1.1.5's accept exists to remove — so it is a
+   * field like the rest: operator-visible, range-checked, printed at boot.
+   * 60,000 ms is CHOSEN, not measured; §3.2's arithmetic assumes a UI probe
+   * takes ~30 s, and a timeout is a ceiling rather than a typical duration.
+   */
+  Object.freeze({
+    name: "FLEET_PROBE_TIMEOUT_MS",
+    required: false,
+    kind: "int",
+    min: 5_000,
+    max: 600_000,
+    fallback: 60_000,
+    why: "how long one probe may run before it is abandoned",
   }),
 ]);
 
@@ -327,6 +472,9 @@ function parseField(field, raw) {
 /** Human text for a field's default, used only in messages. */
 function describeFallback(field) {
   if (field.name === "FLEET_WORKER_ID") return "worker-<pid>";
+  // A per-surface field has no scalar default, and "null" is not an answer an
+  // operator can act on.
+  if (field.fallbackText) return field.fallbackText;
   if (Array.isArray(field.fallback)) return field.fallback.join(",");
   return String(field.fallback);
 }
@@ -417,13 +565,174 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
     }
   }
 
+  /* ------------------------------------------------------------------ *
+   * The politeness budget, resolved per surface (R1.1.5 §5.2).
+   *
+   * Every conflict found here is collected and thrown together, for the same
+   * reason parse problems are: an operator with two wrong values must not have
+   * to redeploy twice to find the second one.
+   * ------------------------------------------------------------------ */
+  const engines = values.FLEET_ENGINES;
+  const probeTimeoutMs = values.FLEET_PROBE_TIMEOUT_MS;
+  const conflicts = [];
+  const budgets = {};
+
+  /** Says whether a resolved number came from the operator or from §3.2. */
+  const origin = (name, surface) =>
+    values[name] === null || values[name] === undefined ? `the ${surface} default` : `${name}`;
+
+  /** The largest FLEET_BATCH_SIZE that still fits inside one lease, and who bounds it. */
+  let leaseCeiling = null;
+  let leaseCeilingSurface = null;
+  let leaseCeilingDelayMaxMs = null;
+
+  for (const engine of engines) {
+    const base = SURFACE_BUDGETS[engine];
+    if (!base) {
+      // Unreachable while FLEET_ENGINES and SURFACE_BUDGETS agree — asserted by
+      // surfaceBudgetCoverage() in the suite — and a refusal rather than a
+      // permissive default, because a surface with no budget would be probed at
+      // whatever rate falls out of FLEET_BATCH_SIZE. That is the accident §1 of
+      // the contract exists to replace with a decision.
+      conflicts.push({
+        name: "FLEET_ENGINES",
+        required: false,
+        kind: "conflict",
+        message:
+          `FLEET_ENGINES names "${engine}", which has no politeness budget in SURFACE_BUDGETS ` +
+          `(worker/src/config.js). A surface with no budget must not be probed: add its §3.2 ` +
+          `row to that table, or remove "${engine}" from FLEET_ENGINES.`,
+      });
+      continue;
+    }
+
+    // CONCURRENCY. The 1–2 range is the contract's; the per-surface ceiling is
+    // §3.3's normative rule held as data, so raising a UI surface to 2 is a
+    // conflict between two values the operator set, not a silent clamp.
+    const requestedConcurrency = values.FLEET_MAX_CONCURRENCY;
+    const maxConcurrency = requestedConcurrency ?? base.maxConcurrency;
+    if (requestedConcurrency != null && requestedConcurrency > base.maxConcurrency) {
+      conflicts.push({
+        name: "FLEET_MAX_CONCURRENCY",
+        required: false,
+        kind: "conflict",
+        message:
+          `FLEET_MAX_CONCURRENCY=${requestedConcurrency} exceeds the ceiling of ` +
+          `${base.maxConcurrency} for ${base.surface}, which FLEET_ENGINES also selects. ` +
+          `${base.ceilingWhy} Set FLEET_MAX_CONCURRENCY to ${base.maxConcurrency} or less, or ` +
+          `remove "${engine}" from FLEET_ENGINES.`,
+      });
+    }
+
+    // DELAY WINDOW. Strictly greater, because a zero-width window is a FIXED
+    // delay: perfectly periodic, trivially distinguishable from a human, and it
+    // synchronises every container that started at the same moment (§3.4).
+    const probeDelayMinMs = values.FLEET_PROBE_DELAY_MIN_MS ?? base.probeDelayMinMs;
+    const probeDelayMaxMs = values.FLEET_PROBE_DELAY_MAX_MS ?? base.probeDelayMaxMs;
+    const windowOk = probeDelayMaxMs > probeDelayMinMs;
+    if (!windowOk) {
+      conflicts.push({
+        name: "FLEET_PROBE_DELAY_MAX_MS",
+        required: false,
+        kind: "conflict",
+        message:
+          `the inter-probe delay window for ${base.surface} is ` +
+          `[${probeDelayMinMs}, ${probeDelayMaxMs}]ms, and the maximum must be strictly ` +
+          `greater than the minimum. Minimum from ${origin("FLEET_PROBE_DELAY_MIN_MS", base.surface)}, ` +
+          `maximum from ${origin("FLEET_PROBE_DELAY_MAX_MS", base.surface)}. A zero-width window ` +
+          `is a fixed delay, which is a signature rather than pacing.`,
+      });
+    }
+
+    budgets[engine] = Object.freeze({
+      surface: base.surface,
+      maxConcurrency,
+      probeDelayMinMs,
+      probeDelayMaxMs,
+      dailyCap: values.FLEET_DAILY_CAP ?? base.dailyCap,
+      /**
+       * FALSE, and it is a fact rather than a placeholder. §3.5's cap is
+       * fleet-wide; an environment variable checked in-process gives N
+       * containers N × the cap, and no shared counter exists to check instead
+       * (§5.3). Printed at boot so the number cannot be mistaken for a limit.
+       */
+      dailyCapEnforced: false,
+    });
+
+    // THE LEASE ARITHMETIC (§5.2). A batch that outlives its lease has its
+    // results refused by complete_probe_tasks, so the requests were made and
+    // the work is spent for nothing — contract §6, V6.
+    if (windowOk) {
+      const fits = Math.floor(leaseMs / (probeDelayMaxMs + probeTimeoutMs));
+      // On a tie the slower surface is named, because it is the one that binds
+      // first when the operator raises the lease.
+      const tighter =
+        leaseCeiling === null ||
+        fits < leaseCeiling ||
+        (fits === leaseCeiling && probeDelayMaxMs > leaseCeilingDelayMaxMs);
+      if (tighter) {
+        leaseCeiling = fits;
+        leaseCeilingSurface = base.surface;
+        leaseCeilingDelayMaxMs = probeDelayMaxMs;
+      }
+    }
+  }
+
+  let batchSize = values.FLEET_BATCH_SIZE;
+  if (leaseCeiling !== null && leaseCeiling < 1) {
+    // No batch size can fit, so there is nothing to narrow: one paced probe
+    // already outlives the lease.
+    conflicts.push({
+      name: "FLEET_LEASE_MS",
+      required: false,
+      kind: "conflict",
+      message:
+        `a single ${leaseCeilingSurface} probe can take up to ` +
+        `${leaseCeilingDelayMaxMs} + ${probeTimeoutMs}ms ` +
+        `(inter-probe delay + FLEET_PROBE_TIMEOUT_MS), which already exceeds ` +
+        `FLEET_LEASE_MS=${leaseMs}. The lease would lapse mid-batch and complete_probe_tasks ` +
+        `would refuse the results, so the probe would be made and thrown away. Raise ` +
+        `FLEET_LEASE_MS, or lower FLEET_PROBE_DELAY_MAX_MS / FLEET_PROBE_TIMEOUT_MS.`,
+    });
+  } else if (leaseCeiling !== null && batchSize > leaseCeiling) {
+    const arithmetic =
+      `FLEET_BATCH_SIZE × (delay max + FLEET_PROBE_TIMEOUT_MS) must not exceed ` +
+      `FLEET_LEASE_MS=${leaseMs}; ${leaseCeilingSurface} allows at most ${leaseCeiling}`;
+    if (defaulted.has("FLEET_BATCH_SIZE")) {
+      // Same rule as the heartbeat above: nobody chose 5, so narrowing it is
+      // legitimate — and it is the THROUGHPUT term that gives way, never the
+      // politeness term, because a delay narrowed to fit a lease is a budget
+      // that quietly stops being a budget.
+      adjustments.push(
+        `FLEET_BATCH_SIZE was not set; its default ${batchSize} does not fit one lease once ` +
+          `${leaseCeilingSurface}'s inter-probe delay is paid, so it is running at ` +
+          `${leaseCeiling} — ${arithmetic}. A batch that outlives its lease has its results ` +
+          `refused and its requests wasted (contract §6, V6).`
+      );
+      batchSize = leaseCeiling;
+    } else {
+      conflicts.push({
+        name: "FLEET_BATCH_SIZE",
+        required: false,
+        kind: "conflict",
+        message:
+          `FLEET_BATCH_SIZE=${batchSize} cannot be probed within FLEET_LEASE_MS=${leaseMs} at ` +
+          `${leaseCeilingSurface}'s pace: ${arithmetic}. The lease would lapse mid-batch and ` +
+          `complete_probe_tasks would refuse the results, so the requests would be made and ` +
+          `thrown away. Set FLEET_BATCH_SIZE to ${leaseCeiling} or less, or raise FLEET_LEASE_MS.`,
+      });
+    }
+  }
+
+  if (conflicts.length) throw new FleetConfigError(conflicts);
+
   return {
     supabaseUrl: values.SUPABASE_URL ?? null,
     supabaseKey: values.SUPABASE_SERVICE_ROLE_KEY ?? null,
     /** Which real surfaces this container drives. */
-    engines: values.FLEET_ENGINES,
-    /** Probe batch size per claim. */
-    batchSize: values.FLEET_BATCH_SIZE,
+    engines,
+    /** Probe batch size per claim, never larger than one lease can pay for. */
+    batchSize,
     /** How long a claimed batch stays leased before it can be reaped. */
     leaseMs,
     /** Gap between polls when the queue came back empty. */
@@ -432,6 +741,27 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
     heartbeatMs,
     /** Identity written onto every claim and heartbeat. */
     workerId: values.FLEET_WORKER_ID ?? `worker-${process.pid}`,
+    /**
+     * The politeness budget for each surface this container drives, keyed by
+     * engine id: `{ surface, maxConcurrency, probeDelayMinMs, probeDelayMaxMs,
+     * dailyCap, dailyCapEnforced }`. Frozen, and never empty — an engine with
+     * no budget refuses the boot above.
+     */
+    budgets: Object.freeze(budgets),
+    /** How long one probe may run before it is abandoned (a term in the lease check). */
+    probeTimeoutMs,
+    /** Gap between canary probes of one surface (contract §4.3). */
+    canaryIntervalMs: values.FLEET_CANARY_INTERVAL_MS,
+    /**
+     * FALSE, deliberately and visibly. The budget above is resolved, validated
+     * and logged, but NOTHING applies it to a probe yet: `probeBatch` has no
+     * adapter (R1.3/R1.4), so there is no loop to limit, no sleep to jitter and
+     * no counter to cap. The one part that IS enforced today is the boot-time
+     * lease arithmetic, which bounds `batchSize` above. Flip this when the
+     * probe loop reads `budgets`, and not before — a config that looks applied
+     * and is not is exactly the shape this contract was written against.
+     */
+    budgetsEnforced: false,
     /** Set by --selftest; the loop exits after one pass instead of running forever. */
     once: false,
     /** Absent required credentials, non-empty only when `strict:false`. */
@@ -457,6 +787,28 @@ export function describeConfig(config) {
     `idlePollMs=${config.idlePollMs}`,
     `heartbeatMs=${config.heartbeatMs}`,
     `workerId=${config.workerId}`,
+    `probeTimeoutMs=${config.probeTimeoutMs}`,
+    `canaryIntervalMs=${config.canaryIntervalMs}`,
   ];
-  return `config: ${lines.join(" ")}`;
+
+  // One line per surface, because a budget printed as a single number for a
+  // container that drives two surfaces is a budget nobody can check.
+  const budgetLines = Object.entries(config.budgets || {}).map(
+    ([engine, b]) =>
+      `config: budget ${engine} (${b.surface}): concurrency=${b.maxConcurrency} ` +
+      `delay=${b.probeDelayMinMs}-${b.probeDelayMaxMs}ms dailyCap=${b.dailyCap}` +
+      (b.dailyCapEnforced
+        ? ""
+        : " (cap NOT ENFORCED: it is fleet-wide and no shared counter exists)")
+  );
+
+  // A resolved number that nothing acts on must not read as a number in force.
+  const footer = config.budgetsEnforced
+    ? []
+    : [
+        `config: the budget above is VALIDATED, NOT APPLIED — no probe is paced by it yet ` +
+          `(probeBatch has no adapter). The lease arithmetic that bounds batchSize IS enforced.`,
+      ];
+
+  return [`config: ${lines.join(" ")}`, ...budgetLines, ...footer].join("\n");
 }

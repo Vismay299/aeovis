@@ -20,6 +20,16 @@
  * "stalled", "never ran" and "I could not tell" were one answer; test
  * "THE FINDING" below is the one that fails without the fix.
  *
+ * THE OTHER HALF OF THIS FILE. `GET /api/scan/<id>/status` is on the operator
+ * perimeter's PUBLIC allowlist, so the execution block this task added is
+ * served to callers holding no credential at all — while `scan_runs` is an
+ * internal table whose `error` column and `detail` jsonb are written from
+ * provider errors, PostgREST errors and raw `err.message` text. The SECURITY
+ * tests below hold the serialisation boundary: a key allowlist for `detail`, a
+ * classified code instead of error text, fixed sentences instead of the
+ * database's own words, and one whole-body marker scan that goes red for a
+ * channel nobody has thought of yet.
+ *
  * The module-resolution hooks (shared with cronAuth.route.test.mjs) only tell
  * Node which file `@/...` and `next/server` mean. No behaviour is substituted.
  *
@@ -259,7 +269,13 @@ test("THE FINDING — a dead executor and a live one no longer produce the same 
   assert.equal(dead.body.execution.executor, "idle");
   assert.equal(dead.body.execution.last_run.outcome, "failed");
   assert.equal(dead.body.execution.last_run.reason, "error");
-  assert.equal(dead.body.execution.last_run.error, "probe transport died");
+  // WHY it failed is public and machine-readable; the chunk's raw err.message
+  // is not (this route is anonymously reachable — see the SECURITY block).
+  assert.equal(dead.body.execution.last_run.error_code, "error_recorded");
+  assert.ok(
+    !JSON.stringify(dead.body).includes("probe transport died"),
+    "the chunk's raw error text must not reach an anonymous caller"
+  );
   assert.equal(dead.body.execution.last_run.probes_attempted, 12);
   assert.equal(dead.body.execution.last_run.probes_succeeded, 0);
   assert.equal(dead.body.execution.last_run.errors_recovered, 3);
@@ -423,8 +439,9 @@ test("ROUTE — zero rows is 'never_ran', an empty history that says it measured
 
 test("ROUTE — an unreadable ledger is UNKNOWN, never an empty history, and never a rescue", async () => {
   const measuredEmpty = await ask({ runs: [] });
+  const dbMessage = "canceling statement due to statement timeout";
   const { status, body } = await ask({
-    runsError: { message: "canceling statement due to statement timeout", code: "57014" },
+    runsError: { message: dbMessage, code: "57014" },
   });
 
   assert.notDeepEqual(
@@ -437,7 +454,19 @@ test("ROUTE — an unreadable ledger is UNKNOWN, never an empty history, and nev
   assert.equal(body.execution.history_known, false);
   assert.equal(body.execution.executor, "unknown");
   assert.equal(body.execution.unknown_reason, "read_failed");
-  assert.match(body.execution.unknown_detail, /statement timeout/, "the DB's own words survive");
+  // The ADMISSION survives; the database's own words do not. This body is
+  // served to anonymous callers, and a PostgREST message routinely names the
+  // host, role, schema or policy that refused — which is exactly why the
+  // getScanJob branch in the same handler answers a fixed sentence too.
+  assert.ok(
+    body.execution.unknown_detail && body.execution.unknown_detail.length > 0,
+    "an unknown history must still say so in words"
+  );
+  assert.match(body.execution.unknown_detail, /unknown/i, "…and say 'unknown', not 'empty'");
+  assert.ok(
+    !JSON.stringify(body).includes(dbMessage),
+    "the database's own message must not appear ANYWHERE in a body anonymous callers can read"
+  );
   assert.equal(body.execution.runs, null, "null, NOT [] — a failed SELECT is not evidence of no runs");
   assert.equal(body.execution.runs_returned, null, "and not 0 either");
   assert.equal(
@@ -548,6 +577,305 @@ test("ROUTE — NULL counters arrive as null, never as 0", async () => {
   });
   assert.equal(measured.body.execution.last_run.probes_attempted, 0);
   assert.notDeepEqual(measured.body.execution.last_run, run);
+});
+
+// ---------------------------------------------------------------------------
+// The serialisation boundary — this route is ANONYMOUSLY REACHABLE
+//
+// `isPublicRoute` (asserted below, not assumed) matches GET
+// /api/scan/<id>/status, so every string in this body reaches a caller holding
+// no credential at all. `scan_runs` is an INTERNAL table: `error` is the
+// chunk's raw `err.message`, and `detail.skips[].sample` is assembled from
+// provider names and raw provider/DB error text at scanWorker.js's recordSkip
+// call sites. These tests are the allowlist's teeth.
+//
+// Every marker below is obviously fake ON PURPOSE — a test that plants a
+// realistic-looking credential to prove it does not leak has already leaked it
+// into the repository.
+// ---------------------------------------------------------------------------
+
+const MARKERS = Object.freeze({
+  runError: "NOT-A-REAL-SECRET-run-error-marker-9f21",
+  detailRogueKey: "NOT-A-REAL-SECRET-detail-rogue-marker-9f22",
+  skipSample: "NOT-A-REAL-SECRET-skip-sample-marker-9f23",
+  detailNested: "NOT-A-REAL-SECRET-detail-nested-marker-9f24",
+  postgrest: "NOT-A-REAL-SECRET-postgrest-marker-9f25",
+});
+
+test("SECURITY — the perimeter really does let anonymous callers read this body", async () => {
+  const { isPublicRoute } = await import("./operatorPerimeter.js");
+  assert.equal(
+    isPublicRoute("GET", `/api/scan/${JOB_ID}/status`),
+    true,
+    "if this ever goes false the tests below are stricter than they need to be — which is fine — " +
+      "but while it is true, everything this route serialises is public"
+  );
+});
+
+test("SECURITY — a run's detail crosses the wire through a key allowlist, not whole", async () => {
+  const { RUN_DETAIL_PUBLIC_KEYS } = requireRoute();
+  const { body } = await ask({
+    runs: [
+      makeRun({
+        outcome: "failed",
+        reason: "chunk_failed",
+        ended_at: iso(10 * 1000),
+        heartbeat_at: iso(10 * 1000),
+        detail: {
+          // Everything chunkRunOutcome writes today, all of it allowlisted.
+          phases_run: ["sourcing", "probing"],
+          chunk_reason: "error",
+          skips_total: 3,
+          schedule_row: "created",
+          progress_pct: 62,
+          job_status: "probing",
+          attempts: 2,
+          max_attempts: 5,
+          // R3.2.2's skips: the reason and the count are the operator's facts;
+          // `sample` is raw provider/DB text and must not cross.
+          skips: [
+            {
+              reason: "probe_error",
+              count: 3,
+              sample: [`Bright Data 502 for ${MARKERS.skipSample}`],
+              sample_truncated: true,
+            },
+          ],
+          // Two shapes no allowlist entry covers. This is the open-endedness
+          // the finding named: before the allowlist, ANY key a future writer
+          // added became public with no code change at all.
+          internal_note: MARKERS.detailRogueKey,
+          upstream: { endpoint: MARKERS.detailNested },
+        },
+      }),
+    ],
+  });
+
+  const detail = body.execution.last_run.detail;
+  assert.deepEqual(
+    Object.keys(detail).sort(),
+    [...RUN_DETAIL_PUBLIC_KEYS, "skips", "withheld_keys"].sort(),
+    "exactly the allowlist, the reduced skips, and the count of what was withheld"
+  );
+
+  // The operator's facts survive — a boundary that empties the payload would
+  // pass every leak assertion in this file and be useless.
+  assert.deepEqual(detail.phases_run, ["sourcing", "probing"]);
+  assert.equal(detail.chunk_reason, "error");
+  assert.equal(detail.skips_total, 3);
+  assert.equal(detail.schedule_row, "created");
+  assert.equal(detail.attempts, 2);
+  assert.equal(detail.max_attempts, 5);
+  assert.deepEqual(
+    detail.skips,
+    [{ reason: "probe_error", count: 3 }],
+    "reason and an exact count, and nothing built from a provider's own words"
+  );
+
+  assert.equal(detail.withheld_keys, 2, "and it SAYS how much it kept back, rather than looking whole");
+
+  const text = JSON.stringify(body);
+  for (const [name, marker] of Object.entries(MARKERS)) {
+    assert.ok(!text.includes(marker), `${name} reached an anonymous caller through execution.*.detail`);
+  }
+});
+
+test("SECURITY — an allowlisted key carrying an unexpected shape is withheld and counted", async () => {
+  const { body } = await ask({
+    runs: [
+      makeRun({
+        detail: {
+          // The key is allowlisted; the VALUE is not a scalar or a flat list of
+          // them. An allowlist on keys alone would publish this whole object.
+          chunk_reason: { nested: MARKERS.detailNested },
+          phases_run: [{ phase: MARKERS.detailNested }],
+          skips_total: 0,
+        },
+      }),
+    ],
+  });
+  const detail = body.execution.last_run.detail;
+  assert.deepEqual(Object.keys(detail).sort(), ["skips_total", "withheld_keys"]);
+  assert.equal(detail.skips_total, 0, "a measured zero still crosses");
+  assert.equal(detail.withheld_keys, 2);
+  assert.ok(!JSON.stringify(body).includes(MARKERS.detailNested));
+});
+
+test("SECURITY — withheld_keys is a measurement: 0 when nothing was kept back, null when uncountable", async () => {
+  const clean = await ask({
+    runs: [makeRun({ detail: { phases_run: ["probing"], chunk_reason: "checkpointed" } })],
+  });
+  assert.equal(
+    clean.body.execution.last_run.detail.withheld_keys,
+    0,
+    "'you are seeing all of it' is a claim, and it must be measured rather than implied by absence"
+  );
+
+  const scalarDetail = await ask({ runs: [makeRun({ detail: "a bare jsonb string" })] });
+  assert.deepEqual(
+    scalarDetail.body.execution.last_run.detail,
+    { withheld_keys: null },
+    "a detail with no keys to allow publishes nothing, and cannot honestly count what it dropped"
+  );
+
+  const noDetail = await ask({ runs: [makeRun({ detail: null })] });
+  assert.equal(
+    noDetail.body.execution.last_run.detail,
+    null,
+    "no detail recorded stays null — different from 'recorded, all of it withheld'"
+  );
+});
+
+test("SECURITY — a run's error column is classified, never published", async () => {
+  const { runErrorCode, RUN_ERROR_CODES } = requireRoute();
+
+  // The classifier itself, without a database.
+  assert.equal(runErrorCode(null), RUN_ERROR_CODES.NONE);
+  assert.equal(runErrorCode(undefined), RUN_ERROR_CODES.NONE);
+  assert.equal(runErrorCode("   "), RUN_ERROR_CODES.NONE);
+  assert.equal(runErrorCode("connect ECONNREFUSED 10.0.0.4:5432"), RUN_ERROR_CODES.RECORDED);
+  assert.equal(runErrorCode(42), RUN_ERROR_CODES.UNREADABLE);
+  assert.equal(new Set(Object.values(RUN_ERROR_CODES)).size, 3, "a closed vocabulary");
+
+  const recorded = await ask({
+    runs: [makeRun({ outcome: "failed", reason: "chunk_failed", error: MARKERS.runError })],
+  });
+  assert.equal(recorded.body.execution.last_run.error_code, "error_recorded");
+  assert.equal(
+    recorded.body.execution.last_run.error,
+    undefined,
+    "the raw text field is gone, not merely nulled — a key that exists is a key someone refills"
+  );
+  assert.ok(!JSON.stringify(recorded.body).includes(MARKERS.runError));
+
+  const clean = await ask({ runs: [makeRun({ error: null })] });
+  assert.equal(
+    clean.body.execution.last_run.error_code,
+    "none",
+    "'this run recorded no error' is a measurement and must not look like 'an error we hid'"
+  );
+  assert.notEqual(recorded.body.execution.last_run.error_code, clean.body.execution.last_run.error_code);
+});
+
+test("SECURITY — REGRESSION GUARD: no planted internal string appears ANYWHERE in the anonymous body", async () => {
+  // A WHOLE-BODY scan, deliberately not a per-field assertion. Per-field
+  // assertions only cover the channels somebody already thought of; this one
+  // goes red for a channel that does not exist yet.
+  //
+  // OUT OF SCOPE, ON PURPOSE: `job.error_message` is the chunk's raw
+  // err.message too, and it was already served to anonymous callers by this
+  // route long before R3.2.3 (see the `error_message` field in the response).
+  // It is a real defect and it is NOT this task's — so no marker is planted in
+  // it here, rather than this guard quietly asserting a channel is closed that
+  // is wide open. It needs its own task.
+  const planted = [
+    {
+      what: "scan_runs.error, on the run that explains the present",
+      marker: MARKERS.runError,
+      ask: {
+        runs: [
+          makeRun({ outcome: "failed", reason: "chunk_failed", error: MARKERS.runError }),
+        ],
+      },
+      alsoAssert: (body) =>
+        assert.equal(body.execution.last_run.error_code, "error_recorded", "…and it still says one happened"),
+    },
+    {
+      what: "scan_runs.error on an OPEN run and on a run that is only in the history list",
+      marker: MARKERS.runError,
+      ask: {
+        runs: [
+          makeRun({
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            outcome: null,
+            reason: null,
+            ended_at: null,
+            heartbeat_at: iso(5000),
+            error: MARKERS.runError,
+          }),
+          makeRun({ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", error: MARKERS.runError }),
+        ],
+      },
+      alsoAssert: (body) => {
+        assert.equal(body.execution.executor, "running");
+        assert.equal(body.execution.runs.length, 2, "both runs are still reported");
+      },
+    },
+    {
+      what: "scan_runs.detail — an unmapped key, a nested object and a skip sample",
+      marker: MARKERS.detailRogueKey,
+      ask: {
+        runs: [
+          makeRun({
+            detail: {
+              chunk_reason: "checkpointed",
+              deploy: MARKERS.detailRogueKey,
+              upstream: { host: MARKERS.detailNested },
+              // An ALLOWLISTED key carrying an unexpected shape: the key alone
+              // is not enough, the value must be publishable too.
+              attempts: { raw: MARKERS.detailNested },
+              skips: [{ reason: "probe_error", count: 2, sample: [MARKERS.skipSample] }],
+            },
+          }),
+        ],
+      },
+      alsoAssert: (body) =>
+        assert.equal(body.execution.last_run.detail.chunk_reason, "checkpointed", "…and the useful keys survive"),
+    },
+    {
+      what: "scan_runs.detail holding a bare jsonb string instead of an object",
+      marker: MARKERS.detailRogueKey,
+      ask: { runs: [makeRun({ detail: MARKERS.detailRogueKey })] },
+      alsoAssert: (body) =>
+        assert.deepEqual(
+          body.execution.last_run.detail,
+          { withheld_keys: null },
+          "…and the fact that SOMETHING was there is not lost either"
+        ),
+    },
+    {
+      what: "the PostgREST error body the ledger read came back with",
+      marker: MARKERS.postgrest,
+      ask: {
+        runsError: {
+          message: `permission denied for relation scan_runs at ${MARKERS.postgrest}`,
+          details: `role ${MARKERS.postgrest} has no SELECT grant`,
+          hint: MARKERS.postgrest,
+          code: "42501",
+        },
+      },
+      alsoAssert: (body) =>
+        assert.equal(body.execution.unknown_reason, "read_failed", "…and the failure is still named"),
+    },
+    {
+      what: "normalizeRun's own refusal, which quotes the row back",
+      marker: MARKERS.detailRogueKey,
+      ask: {
+        runs: [
+          // Half-closed: normalizeRun throws, and its message quotes the row's
+          // id verbatim. No run is emitted on this path, so the id can only
+          // reach the wire by way of that exception text.
+          makeRun({ id: MARKERS.detailRogueKey, outcome: null, reason: null }),
+        ],
+      },
+      alsoAssert: (body) =>
+        assert.equal(body.execution.unknown_reason, "row_unreadable", "…and the refusal is still named"),
+    },
+  ];
+
+  for (const scenario of planted) {
+    const { body } = await ask(scenario.ask);
+    const text = JSON.stringify(body);
+    for (const [name, marker] of Object.entries(MARKERS)) {
+      assert.ok(
+        !text.includes(marker),
+        `LEAK via ${scenario.what}: the ${name} marker reached an anonymous caller.\n` +
+          `This route is public (no credential required). Body was: ${text}`
+      );
+    }
+    assert.ok(text.length > 0);
+    scenario.alsoAssert(body);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -789,10 +1117,12 @@ test("GUARD — the route no longer infers liveness from scan_jobs.heartbeat_at"
 test("GUARD — every declared reason and state is reachable from the code, not just declared", () => {
   const { EXECUTOR_STATES, RESCUE_REASONS, HISTORY_UNKNOWN_REASONS } = requireRoute();
   const source = readFileSync(ROUTE_PATH, "utf8");
+  const { RUN_ERROR_CODES } = requireRoute();
   for (const [group, table] of [
     ["EXECUTOR_STATES", EXECUTOR_STATES],
     ["RESCUE_REASONS", RESCUE_REASONS],
     ["HISTORY_UNKNOWN_REASONS", HISTORY_UNKNOWN_REASONS],
+    ["RUN_ERROR_CODES", RUN_ERROR_CODES],
   ]) {
     for (const key of Object.keys(table)) {
       const uses = source.split(`${group}.${key}`).length - 1;
@@ -805,4 +1135,31 @@ test("GUARD — every declared reason and state is reachable from the code, not 
   }
   const values = Object.values(RESCUE_REASONS);
   assert.equal(new Set(values).size, values.length, "two reasons sharing a string cannot be told apart");
+});
+
+test("GUARD — the public detail allowlist is pinned, so widening it cannot be a quiet edit", () => {
+  const { RUN_DETAIL_PUBLIC_KEYS } = requireRoute();
+  // Adding a key here is the dangerous edit in the route (see its comment): it
+  // publishes a jsonb field to anonymous callers. Pinning the list means that
+  // edit must be made TWICE, once in a file whose diff says "security".
+  assert.deepEqual(
+    [...RUN_DETAIL_PUBLIC_KEYS].sort(),
+    [
+      "attempts",
+      "chunk_reason",
+      "job_status",
+      "max_attempts",
+      "phases_run",
+      "progress_pct",
+      "schedule_row",
+      "skips_total",
+    ],
+    "every key here must carry a value from a vocabulary this repo declares — never err.message, " +
+      "never a provider's words, never a host or a URL"
+  );
+  assert.equal(
+    new Set(RUN_DETAIL_PUBLIC_KEYS).size,
+    RUN_DETAIL_PUBLIC_KEYS.length,
+    "a duplicated key hides how long the list really is"
+  );
 });

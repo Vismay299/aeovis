@@ -1,5 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { readFile, readdir } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import {
   installLiveWriteGuard,
@@ -44,6 +48,145 @@ async function quiet(fn) {
 
 function reset() {
   __clearRefusalsForGuardSelfTestOnly();
+}
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const THIS_FILE = "src/lib/liveWriteGuard.test.mjs";
+
+/**
+ * Set in every child this file spawns, and read by exactly one case — the one
+ * that re-runs this whole file — so the children do not spawn children forever.
+ * Nothing else may branch on it: a second reader would be a case that behaves
+ * differently in the comparison than in the run being compared, which is the
+ * ambient-dependence this task exists to remove.
+ */
+const RERUN_SENTINEL = "PERCEEV_GUARD_SELFTEST_RERUN";
+
+/**
+ * R6.5.7 — run node in a child process, with or without the preload that
+ * `npm run test:scoring` uses.
+ *
+ * WHY A CHILD, AND WHY BOTH INVOCATIONS. Most of what this file asserts is
+ * about the state of two PROTOTYPES, and this process's prototypes are already
+ * in whatever state its own invocation left them: under
+ * `npm run test:scoring` the `--import ./src/lib/liveWriteGuardAuto.mjs`
+ * preload has installed a policy before the first test runs, so
+ * `liveWriteGuardDepth()` starts at 1 and the patches are never torn down; run
+ * bare, it starts at 0. Two implementers reported this file as passing alone
+ * and failing in the full run, and diagnosed it as sibling test files sharing a
+ * worker. That was not the mechanism — `node --test` gives every file its own
+ * child process — the preload was. The first repair made the case BRANCH on
+ * `liveWriteGuardDepth()`, which turned the flake into something worse: under
+ * the invocation CI actually uses, the branch that checks the prototypes are
+ * restored never ran at all. Measured before this rework: with
+ * `teardownPatch()` in liveWriteGuard.js reduced to a no-op, this file was
+ * 23/23 green under `npm run test:scoring` and 3 red bare.
+ *
+ * So the ambient state stops being something to detect and becomes something to
+ * construct: each half of the property is asserted in a child whose invocation
+ * this file chose, and both halves therefore run on every invocation of the
+ * parent.
+ */
+function runNode(args, { preload = false } = {}) {
+  const argv = preload ? ["--import", "./src/lib/liveWriteGuardAuto.mjs", ...args] : args;
+  const childEnv = { ...process.env };
+  // NODE_OPTIONS can carry an `--import` of its own, which would make "run
+  // without the preload" a lie and quietly collapse the two halves of every
+  // comparison below into one. Clear it so each half is what it claims.
+  childEnv.NODE_OPTIONS = "";
+  // The runner sets NODE_TEST_CONTEXT in the process it spawns per test file,
+  // and a `node --test` that inherits it declines to run any file at all — it
+  // prints "run() is being called recursively" to stderr, collects nothing and
+  // still exits 0. That is a green run of an empty suite, so it must not be
+  // reachable: dropping the variable makes the child a top-level runner, and
+  // the "no test counts at all" assertion below catches it if this ever stops
+  // working.
+  delete childEnv.NODE_TEST_CONTEXT;
+  // EVERY child this file spawns carries the re-run sentinel, set here and
+  // nowhere else. One of the cases below re-runs this whole file in a child; if
+  // the child did not know it was a re-run it would spawn two more, and each of
+  // those two more. Setting it in the one place a child can be created is what
+  // makes that unreachable rather than merely unlikely, and the case that
+  // depends on it checks a child really sees it before it spawns anything big.
+  childEnv[RERUN_SENTINEL] = "1";
+  const res = spawnSync(process.execPath, argv, {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: childEnv,
+  });
+  if (res.error) throw res.error;
+  return { status: res.status, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
+}
+
+/**
+ * Install a guard, uninstall it, and report what happened to the prototypes and
+ * to the depth — as data, so the parent can assert an exact expected shape for
+ * each invocation instead of asking which one it is in.
+ *
+ * `patchedDuring*` is the anti-vacuity half: "the prototype is back to what it
+ * was" is also true of a guard that never patched anything, and that is the
+ * failure this whole module exists to prevent.
+ */
+const RESTORE_PROBE = `
+const pg = (await import("pg")).default;
+const { SupabaseClient, createClient } = await import("@supabase/supabase-js");
+const {
+  installLiveWriteGuard,
+  liveWriteGuardDepth,
+  LiveWriteRefused,
+  __clearRefusalsForGuardSelfTestOnly,
+} = await import("./src/lib/liveWriteGuard.js");
+
+const beforeFrom = SupabaseClient.prototype.from;
+const beforeQuery = pg.Client.prototype.query;
+const outer = liveWriteGuardDepth();
+
+const guard = await installLiveWriteGuard({ label: "child/restore", allow: ["scan_runs"] });
+const patchedDuringFrom = SupabaseClient.prototype.from !== beforeFrom;
+const patchedDuringQuery = pg.Client.prototype.query !== beforeQuery;
+const during = liveWriteGuardDepth();
+guard.uninstall();
+
+// Is the PROCESS still refusing writes now that this guard is gone? Under the
+// preload it must be (an outer policy remains); bare it must not be (nothing is
+// installed, and a guard that refuses after uninstall never really uninstalled).
+const supa = createClient("https://guard-self-test.invalid", "not-a-real-key", {
+  global: { fetch: async () => new Response("[]", { status: 200 }) },
+});
+let stillArmed = false;
+try {
+  supa.from("scan_runs").insert({ runner: "x" });
+} catch (err) {
+  stillArmed = err instanceof LiveWriteRefused;
+}
+__clearRefusalsForGuardSelfTestOnly();
+
+process.stdout.write(
+  "PROBE" +
+    JSON.stringify({
+      outer,
+      during,
+      after: liveWriteGuardDepth(),
+      patchedDuringFrom,
+      patchedDuringQuery,
+      fromRestored: SupabaseClient.prototype.from === beforeFrom,
+      queryRestored: pg.Client.prototype.query === beforeQuery,
+      stillArmed,
+    })
+);
+`;
+
+function restoreProbe({ preload }) {
+  const how = preload ? "with the test:scoring preload" : "bare, with no preload";
+  const res = runNode(["--input-type=module", "-e", RESTORE_PROBE], { preload });
+  assert.equal(
+    res.status,
+    0,
+    `the restore probe (${how}) must exit 0; got ${res.status}\n${res.stdout}\n${res.stderr}`
+  );
+  const m = res.stdout.match(/PROBE(\{.*\})/s);
+  assert.ok(m, `the restore probe (${how}) printed no result; stdout: ${res.stdout} stderr: ${res.stderr}`);
+  return JSON.parse(m[1]);
 }
 
 async function fakeSupabase() {
@@ -147,6 +290,142 @@ test("CUSTOMER TABLES CANNOT BE OPTED INTO — the allow list refuses them at in
   // And the two tables the incident actually hit are named in the list.
   assert.ok(NEVER_WRITABLE.includes("scans"));
   assert.ok(NEVER_WRITABLE.includes("brand_metrics_daily"));
+});
+
+test("EVERY NEVER_WRITABLE TABLE IS REFUSED — at install and at both transports, not just the four in the case above", async () => {
+  // R6.5.7. The case above names four tables; the list holds twenty. Measured
+  // before this case existed: deleting `content_lessons` from NEVER_WRITABLE
+  // left the whole suite 23/23 green, so sixteen of the twenty entries were
+  // load-bearing in production and asserted by nothing.
+  assert.equal(NEVER_WRITABLE.length, 20, "the roster changed size — see the classification walk below");
+  assert.equal(new Set(NEVER_WRITABLE).size, 20, "a duplicated entry hides a missing one");
+  assert.ok(Object.isFrozen(NEVER_WRITABLE), "the roster must not be mutable at runtime");
+  for (const t of WRITABLE_BY_OPT_IN) {
+    assert.ok(!NEVER_WRITABLE.includes(t), `${t} cannot be both writable by opt-in and never writable`);
+  }
+
+  const { default: pg } = await import("pg");
+  const supa = await fakeSupabase();
+  const realQuery = pg.Client.prototype.query;
+  pg.Client.prototype.query = function () {
+    assert.fail("a NEVER_WRITABLE statement reached the pg driver");
+  };
+  // The widest policy a test can legitimately hold: everything opt-in allows.
+  const guard = await installLiveWriteGuard({
+    label: "self-test/never-writable-roster",
+    allow: [...WRITABLE_BY_OPT_IN],
+  });
+  const client = new pg.Client({ connectionString: "postgres://unused" });
+  try {
+    for (const table of NEVER_WRITABLE) {
+      await assert.rejects(
+        () => installLiveWriteGuard({ label: "self-test/never-writable-roster", allow: [table] }),
+        /can never be opened for writing/,
+        `${table} is customer data: naming it in an allow-list must be refused at install`
+      );
+      await quiet(async () => {
+        assert.throws(
+          () => supa.from(table).insert({ x: 1 }),
+          LiveWriteRefused,
+          `a PostgREST insert into ${table} must be refused even under the widest legitimate allow-list`
+        );
+        await assert.rejects(
+          () => client.query(`INSERT INTO ${table} (x) VALUES ($1)`, ["x"]),
+          LiveWriteRefused,
+          `raw SQL writing ${table} must be refused too — the guard has two transports and a table is only ` +
+            `protected if both refuse it`
+        );
+      });
+    }
+    assert.equal(guard.writes.length, 0, "not one of the twenty may be recorded as permitted");
+    assert.equal(guard.refusals.length, NEVER_WRITABLE.length * 2, "every attempt is on the record, both transports");
+  } finally {
+    guard.uninstall();
+    pg.Client.prototype.query = realQuery;
+    reset();
+  }
+});
+
+test("GUARD — every table this repo creates or reads is classified, so a new one cannot arrive unlisted", async () => {
+  // R6.5.7. `NEVER_WRITABLE` is a hand-maintained list, and the failure it
+  // cannot survive is the quiet one: migration 014 adds `invoices`, nobody adds
+  // it here, and a year later someone puts it in WRITABLE_BY_OPT_IN because it
+  // is "not on the never list". So the list is checked against ground truth
+  // instead of against a copy of itself — the tables the migrations CREATE, and
+  // the tables the app actually names in a `.from("…")` call.
+  //
+  // Both directions are asserted. A migration table missing from the lists is
+  // an unclassified table; a listed name no migration creates is a typo, and a
+  // typo in this list protects nothing while looking like it protects
+  // something.
+  const MIGRATIONS = path.join(ROOT, "supabase/migrations");
+  const files = (await readdir(MIGRATIONS)).filter((f) => f.endsWith(".sql")).sort();
+  assert.ok(
+    files.length >= 13,
+    `expected the migration history to be here; found ${files.length} .sql files in supabase/migrations. ` +
+      `A walk over no files is not a clean result`
+  );
+
+  const created = new Set();
+  for (const f of files) {
+    const sql = await readFile(path.join(MIGRATIONS, f), "utf8");
+    for (const m of sql.matchAll(/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi)) {
+      created.add(m[1].toLowerCase());
+    }
+  }
+  assert.ok(created.size >= 22, `expected at least 22 tables in the migration history; found ${created.size}`);
+
+  // The second source: what the application code actually reaches for. A table
+  // created outside this repo's migrations — by hand in the dashboard, say —
+  // is invisible to the walk above but not to this one.
+  async function walk(dir) {
+    const out = [];
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) out.push(...(await walk(full)));
+      else if (/\.(mjs|js|jsx)$/.test(e.name) && !/\.test\.mjs$/.test(e.name)) out.push(full);
+    }
+    return out;
+  }
+  const sources = [...(await walk(path.join(ROOT, "src"))), ...(await walk(path.join(ROOT, "worker")))];
+  assert.ok(sources.length >= 50, `expected to walk the app's source; found ${sources.length} files`);
+
+  const named = new Set();
+  for (const file of sources) {
+    const src = await readFile(file, "utf8");
+    // `Array.from("…")` is not a table read; nothing else in this tree calls
+    // `.from()` with a bare lower-case string literal.
+    for (const m of src.matchAll(/(?<!Array)\.from\(\s*["'`]([a-z][a-z0-9_]*)["'`]\s*\)/g)) {
+      named.add(m[1]);
+    }
+  }
+  assert.ok(named.size >= 18, `expected the app to name at least 18 tables in .from() calls; found ${named.size}`);
+
+  const classified = new Set([...NEVER_WRITABLE, ...WRITABLE_BY_OPT_IN]);
+  const groundTruth = new Set([...created, ...named]);
+
+  const unclassified = [...groundTruth].filter((t) => !classified.has(t)).sort();
+  assert.deepEqual(
+    unclassified,
+    [],
+    `these tables exist in the schema or are read by the app and appear in neither list in ` +
+      `src/lib/liveWriteGuard.js. Until one of the lists names it, nothing stops a future test from adding ` +
+      `it to WRITABLE_BY_OPT_IN: ${unclassified.join(", ")}`
+  );
+
+  const phantom = [...classified].filter((t) => !groundTruth.has(t)).sort();
+  assert.deepEqual(
+    phantom,
+    [],
+    `these names are listed in src/lib/liveWriteGuard.js but no migration creates them and no source file ` +
+      `reads them. A misspelled table name protects nothing while reading as protection: ${phantom.join(", ")}`
+  );
+
+  // The two the incident actually hit, named explicitly so no amount of set
+  // arithmetic above can end with them unprotected.
+  for (const t of ["scans", "brand_metrics_daily"]) {
+    assert.ok(NEVER_WRITABLE.includes(t), `${t} is one of the two tables the original incident wrote`);
+  }
 });
 
 test("AN UNKNOWN TABLE CANNOT BE OPTED INTO EITHER — widening is a diff, not a call site", async () => {
@@ -289,50 +568,172 @@ test("pg — the prototype patch refuses an undeclared write and lets a declared
   }
 });
 
-test("uninstall restores both prototypes — once the LAST guard goes", async () => {
-  const { default: pg } = await import("pg");
-  const { createClient, SupabaseClient } = await import("@supabase/supabase-js");
-  const beforeFrom = SupabaseClient.prototype.from;
-  const beforeQuery = pg.Client.prototype.query;
-
-  // `npm run test:scoring` preloads liveWriteGuardAuto.mjs, so there is already
-  // a policy on the stack; run this file bare and there is not. Both are
-  // legitimate, and the assertion below is different in each, so measure rather
-  // than assume — an unconditional "the prototype is clean again" would be
-  // wrong under the preload and an unconditional "it is still patched" would be
-  // wrong without it.
+test("uninstall removes exactly one policy, whatever this process started with", async () => {
+  // The half of the property that is true under BOTH invocations, so it needs
+  // no branch. The prototype half is not: see the case below, which constructs
+  // each invocation rather than detecting the one it happens to be in.
   const outer = liveWriteGuardDepth();
-
   const guard = await installLiveWriteGuard({ label: "self-test/restore", allow: ["scan_runs"] });
   assert.equal(liveWriteGuardDepth(), outer + 1);
+  assert.equal(activeLiveWriteGuardLabel(), "self-test/restore");
   guard.uninstall();
   assert.equal(liveWriteGuardDepth(), outer, "uninstall removes exactly one policy");
+  assert.notEqual(activeLiveWriteGuardLabel(), "self-test/restore", "…and stands its policy down");
+  guard.uninstall();
+  assert.equal(liveWriteGuardDepth(), outer, "a second uninstall is a no-op, not a hole in the stack");
+});
 
-  if (outer === 0) {
-    assert.equal(SupabaseClient.prototype.from, beforeFrom, "the last uninstall restores from()");
-    assert.equal(pg.Client.prototype.query, beforeQuery, "…and query()");
-  } else {
-    // Still ARMED, which is the property that matters — not that the very same
-    // function object is back on the prototype. An install may legitimately
-    // have re-patched over something that displaced the guard, so identity is
-    // the wrong question here; behaviour is the right one.
-    const supa = await fakeSupabase();
-    await quiet(() => {
-      assert.throws(
-        () => supa.from("scan_runs").insert({ runner: "x" }),
-        LiveWriteRefused,
-        "an inner uninstall must not disarm the process while an outer guard is still installed"
-      );
-    });
-    reset();
-    assert.notEqual(
-      activeLiveWriteGuardLabel(),
-      "self-test/restore",
-      "and the enclosing guard's policy is in force again"
-    );
-    assert.ok(beforeFrom && beforeQuery, "both prototypes were patched before this case ran");
+test("THE LAST UNINSTALL RESTORES BOTH PROTOTYPES — proven in a child with no preload, on every run", () => {
+  // The case this replaces asked `liveWriteGuardDepth() === 0` and only checked
+  // restoration when the answer was yes. Under `npm run test:scoring` the
+  // answer is always no, so the check never ran where it matters: with
+  // `teardownPatch()` reduced to a no-op the file stayed 23/23 green under the
+  // npm script and went 3 red only when run bare. Constructing the bare
+  // invocation here makes the assertion run under both.
+  const bare = restoreProbe({ preload: false });
+
+  assert.equal(bare.outer, 0, "a child with no preload must start with no policy installed");
+  assert.equal(bare.during, 1, "installing one guard makes the depth one");
+  assert.equal(bare.after, 0, "…and uninstalling it takes the depth back to none");
+
+  // Anti-vacuity: "the prototype is back to what it was" is also true of a
+  // guard that never patched anything, which is precisely the outcome this
+  // module exists to prevent. So assert it WAS patched first.
+  assert.equal(bare.patchedDuringFrom, true, "the install must actually replace SupabaseClient.prototype.from");
+  assert.equal(bare.patchedDuringQuery, true, "…and pg.Client.prototype.query");
+
+  assert.equal(bare.fromRestored, true, "the last uninstall must put the original from() back");
+  assert.equal(bare.queryRestored, true, "…and the original query()");
+  assert.equal(
+    bare.stillArmed,
+    false,
+    "with no policy left the process is unguarded — a guard that still refuses after the last uninstall " +
+      "never really uninstalled, and the next test file would inherit it"
+  );
+});
+
+test("AN INNER UNINSTALL DOES NOT DISARM — proven in a child WITH the preload, on every run", () => {
+  // The other half, constructed the same way. This is the shape every file in
+  // `npm run test:scoring` actually runs in: liveWriteGuardAuto.mjs has a
+  // default-deny policy installed before the first test, and a live file's own
+  // guard sits on top of it. Uninstalling the inner one must narrow the
+  // allow-list back to nothing, never take the patches off the prototypes.
+  const preloaded = restoreProbe({ preload: true });
+
+  assert.equal(preloaded.outer, 1, "the preload must have installed exactly one policy before anything ran");
+  assert.equal(preloaded.during, 2, "a file's own guard stacks on top of it");
+  assert.equal(preloaded.after, 1, "…and uninstalling it leaves the preload's policy standing");
+
+  assert.equal(
+    preloaded.patchedDuringFrom,
+    false,
+    "installs stack, they do not re-patch: a second wrapper would check every write twice"
+  );
+  assert.equal(preloaded.patchedDuringQuery, false, "…same for pg");
+
+  assert.equal(
+    preloaded.stillArmed,
+    true,
+    "an inner uninstall must not disarm the process while an outer guard is still installed — this is the " +
+      "state a live test file leaves behind, and the next write after it must still be refused"
+  );
+});
+
+test("THE VERDICT DOES NOT DEPEND ON THE INVOCATION — this file is re-run both ways and must agree", (t) => {
+  // R6.5.7's acceptance, executed rather than remembered. The two reports that
+  // filed this task were "passes alone, fails in the full run"; the assertion
+  // that closes it is that the two runs produce the SAME numbers, so neither a
+  // future branch on ambient state nor a future dependence on the preload can
+  // go unnoticed by whichever way the author happened to run it.
+  //
+  // The children carry a sentinel so they skip THIS case and do not recurse.
+  // Two things keep that from becoming a hole: the pre-flight below refuses to
+  // spawn a re-run until a child has been seen to inherit the sentinel, and
+  // each re-run must report exactly ONE skipped case — a comparison of two runs
+  // that quietly stopped checking things would otherwise agree perfectly.
+  if (process.env[RERUN_SENTINEL]) {
+    t.skip(`re-run child (${RERUN_SENTINEL} set): the parent is comparing this run against the other invocation`);
+    return;
   }
-  assert.ok(typeof createClient === "function");
+
+  // Pre-flight: prove a child really sees the sentinel BEFORE spawning two
+  // full re-runs. If it did not, each re-run would spawn two more and this case
+  // would be a fork bomb rather than a comparison.
+  const probe = runNode([
+    "--input-type=module",
+    "-e",
+    `process.stdout.write("SENTINEL=" + (process.env[${JSON.stringify(RERUN_SENTINEL)}] ?? "unset"))`,
+  ]);
+  assert.equal(
+    probe.stdout.trim(),
+    "SENTINEL=1",
+    `a child process must inherit ${RERUN_SENTINEL}, or the re-runs below would recurse without end`
+  );
+
+  const args = ["--test", "--test-reporter=tap", THIS_FILE];
+  const runs = {
+    bare: runNode(args, { preload: false }),
+    preloaded: runNode(args, { preload: true }),
+  };
+
+  const counts = {};
+  for (const [how, res] of Object.entries(runs)) {
+    const tally = {};
+    for (const m of res.stdout.matchAll(/^# (tests|pass|fail|skipped) (\d+)$/gm)) tally[m[1]] = Number(m[2]);
+    assert.ok(
+      tally.tests > 0,
+      `the ${how} re-run reported no test counts at all, so there is nothing to compare; ` +
+        `exit ${res.status}\n${res.stdout.slice(-2000)}\n${res.stderr.slice(-2000)}`
+    );
+    assert.equal(tally.fail, 0, `the ${how} re-run failed ${tally.fail} test(s):\n${res.stdout.slice(-4000)}`);
+    assert.equal(res.status, 0, `the ${how} re-run exited ${res.status}\n${res.stderr.slice(-2000)}`);
+    assert.equal(
+      tally.skipped,
+      1,
+      `the ${how} re-run must skip exactly this case and nothing else; skipping more would mean the ` +
+        `comparison below is between two runs that quietly stopped checking things`
+    );
+    counts[how] = tally;
+  }
+
+  // A floor, so a run that collected almost nothing cannot read as agreement.
+  assert.ok(
+    counts.bare.pass >= 20,
+    `expected at least 20 passing cases in a re-run; got ${counts.bare.pass}. If cases were legitimately ` +
+      `removed, lower this floor deliberately — do not let it stay above a shrinking suite`
+  );
+  assert.deepEqual(
+    counts.bare,
+    counts.preloaded,
+    "the same file, run bare and run under the test:scoring preload, must reach the same verdict; a " +
+      "difference here is the R6.5.7 finding returning — an assertion whose answer depends on how the " +
+      "suite was started is not evidence about the guard"
+  );
+});
+
+test("NO TEST SCRIPT MAY TURN OFF PROCESS ISOLATION", async () => {
+  // The mechanism both reporters GUESSED at: several test files sharing one
+  // worker process, so a sibling that installs the guard and does not uninstall
+  // it changes what this file sees. It is not what happened — `node --test`
+  // gives each file its own child process by default — but it is one
+  // `--test-isolation=none` away from being true, of this file and of every
+  // other suite that touches module-level state.
+  //
+  // Asserting the ABSENCE of the opt-out rather than pinning the flag is
+  // deliberate: the flag is spelled `--experimental-test-isolation` on Node 22
+  // (which CI runs) and `--test-isolation` from Node 23, so pinning either name
+  // would break one of them, and `process` is already the default on both.
+  const pkg = JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8"));
+  for (const [name, cmd] of Object.entries(pkg.scripts)) {
+    if (!/--test\b/.test(cmd)) continue;
+    assert.doesNotMatch(
+      cmd,
+      /--(?:experimental-)?test-isolation[= ]none/,
+      `the "${name}" script runs every test file in one shared process. Module-level state then leaks ` +
+        `between files — including this module's patched prototypes, whose self-test would stop being ` +
+        `evidence about the guard and start being evidence about test ordering`
+    );
+  }
 });
 
 test("INSTALLS STACK — an inner guard widens, and uninstalling it narrows back, without double-patching", async () => {

@@ -47,11 +47,13 @@ const {
   REAP_MAX_PER_PASS,
   REAP_PASS_REASONS,
   REAP_ROW_VERDICTS,
-  REAPER_RUNNER,
   REAPER_PHASE,
   CHUNK_RUN_HEARTBEAT_MS,
 } = await import("./scanWorker.js");
-const { RUN_OUTCOMES } = await import("../scanRuns.js");
+// R3.3.4 folded the reaper's runner name into the shared vocabulary, so this
+// file reads it from the same place every other runner name comes from.
+const { RUN_OUTCOMES, RUNNERS } = await import("../scanRuns.js");
+const REAPER_RUNNER = RUNNERS.REAPER;
 const { HEARTBEAT_STALE_MS } = await import("../db.js");
 const { supabase } = await import("../db.js");
 
@@ -793,15 +795,57 @@ test("GUARD — 'reaped' is still in the schema's outcome vocabulary and the ope
   );
 });
 
-test("GUARD — the reaper is not yet wired to the cron sweep, and this test says so out loud", () => {
-  // R3.3.2 may not edit src/app/api/scan/worker/route.js (owned by another task
-  // this cycle). This guard exists so the gap is a recorded, failing-when-fixed
-  // fact rather than something a later reader has to notice: when the wiring
-  // lands, this test goes red and should be DELETED, not weakened.
+// R3.3.4 replaced the guard that used to live here. It asserted the OPPOSITE —
+// that src/app/api/scan/worker/route.js did not mention reapStaleRuns — because
+// R3.3.2 could not edit that file and wanted the gap recorded rather than
+// discovered. The wiring has landed, so the guard is inverted, not deleted: a
+// reaper nothing calls is exactly the state this pair of tests exists to catch,
+// in whichever direction it happens.
+//
+// The behaviour of the wiring (a reap that throws cannot fail the scheduler
+// tick; the counters reach the body) is asserted against the real functions in
+// src/lib/scanWorkerRoute.route.test.mjs. This one is a source check because
+// the call site itself — not its inputs — is what went missing before.
+test("WIRED — the cron sweep calls reapStaleRuns, and the counters reach the response", () => {
   const route = fs.readFileSync(path.join(process.cwd(), "src/app/api/scan/worker/route.js"), "utf8");
-  assert.ok(
-    !/reapStaleRuns/.test(route),
-    "reapStaleRuns is now called from the cron sweep — good. Delete this guard and assert the " +
-      "wiring instead (see R3.3.2's submit note, follow-up 1)."
+
+  assert.match(
+    route,
+    /import \{[\s\S]*?\breapStaleRuns\b[\s\S]*?\} from "@\/lib\/workers\/scanWorker"/,
+    "the route must import the real reaper, not re-implement a sweep of its own"
+  );
+  assert.match(
+    route,
+    /reapCounters\(await reap\(nowIso\)\)/,
+    "the sweep must actually await a reap pass. Between R3.3.2 and R3.3.4 this function was " +
+      "correct, tested and called by nothing, so no stale run was ever closed in production."
+  );
+  assert.match(
+    route,
+    /runSweepMaintenance\(new Date\(\)\.toISOString\(\)\)/,
+    "GET must reach the maintenance passes; a helper nobody calls is the same bug one layer up"
+  );
+  // Anchored on the CALL, not the declaration: `buildSweepResponse({… reaped …})`
+  // also matches the function's own parameter list, so a GET that stopped
+  // passing the pass would otherwise still look wired.
+  assert.match(
+    route,
+    /NextResponse\.json\(\s*buildSweepResponse\(\{[\s\S]{0,400}?\n\s*reaped,/,
+    "the pass's counters must be handed to the response builder by GET — reaping in silence " +
+      "would leave the operator reading the same body as a sweep that reaped nothing"
+  );
+
+  // The isolation, pinned at the source as well as behaviourally: the reap's
+  // catch must be its own, not shared with the tick's.
+  const maintenance = route.slice(route.indexOf("export async function runSweepMaintenance"));
+  // `(?!catch)` matters: without it the lazy scan happily starts at the
+  // SCHEDULER's `try {`, runs through the reap call and lands on the
+  // scheduler's catch — i.e. it would pass for a reap sharing the tick's
+  // try/catch, which is the exact arrangement this asserts against.
+  assert.match(
+    maintenance,
+    /try \{(?:(?!catch)[\s\S])*?reapCounters\(await reap\(nowIso\)\)[\s\S]*?\} catch \(err\) \{[\s\S]*?reapPassThrew\(err\)/,
+    "the reap call must sit in a try/catch that answers with reapPassThrew — an uncaught reap " +
+      "failure would 500 the whole sweep and throw away the tick that already succeeded"
   );
 });

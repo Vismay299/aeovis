@@ -175,23 +175,37 @@ export function isCompetitorsConfigured(competitors = [], competitorsRaw = "") {
  * (visibilityScore > 0, or at least one text mention or citation).
  */
 export function countCompetitorsFound(competitors = []) {
+  // R2.1.2 — the `?? 0` these three comparisons used to carry was a no-op:
+  // `null > 0` and `undefined > 0` are both false already. Dropping it changes
+  // nothing at runtime and stops the file reading as though an unmeasured rival
+  // had been measured at zero. The predicate is unchanged in every other way,
+  // including its tolerance of numeric strings.
   return competitors.filter(
-    (c) =>
-      (c.visibilityScore ?? 0) > 0 ||
-      (c.mentions ?? 0) > 0 ||
-      (c.citations ?? 0) > 0
+    (c) => c.visibilityScore > 0 || c.mentions > 0 || c.citations > 0
   ).length;
 }
 
+/**
+ * One competitor row in the shape the dashboard reads.
+ *
+ * R2.1.2 — the five metrics carry `null` when the record does not have them,
+ * never 0. Both producers (competitorExtract.js:173-184 and
+ * coMentions.js:428-439) always emit all five as numbers, so a missing field
+ * means the row predates them or was stored as a bare name string — i.e. the
+ * rival's share was never computed, which is not the same fact as "this rival
+ * appeared in nothing". Every current consumer (RivalsView.jsx:37/:77/:89,
+ * OverviewAnalytics.jsx:31/:36, interlocking.js:81 and countCompetitorsFound
+ * above) is already null-tolerant, so nothing downstream changes shape today.
+ */
 function mapCompetitorRow(c) {
   return {
     name: c.name ?? c,
-    mentions: c.mentions ?? 0,
-    citations: c.citations ?? 0,
-    prompts: c.prompts ?? c.mentions ?? 0,
+    mentions: c.mentions ?? null,
+    citations: c.citations ?? null,
+    prompts: c.prompts ?? c.mentions ?? null,
     userAbsent: !!c.userAbsent,
-    visibilityScore: c.visibilityScore ?? 0,
-    citationShare: c.citationShare ?? 0,
+    visibilityScore: c.visibilityScore ?? null,
+    citationShare: c.citationShare ?? null,
     source: c.source || (c.discovered ? "discovered" : "user"),
     tier: c.tier || null,
   };
@@ -268,7 +282,13 @@ function buildEngineScores(isMultiEngine, data, raw, fallbackScore) {
     const engines = data.engines || raw.engines || {};
     const scores = {};
     for (const [key, summary] of Object.entries(engines)) {
-      scores[key] = (summary && summary.share_of_ai_pct) || 0;
+      // R2.1.2 — `|| 0` here was the `?? 0` defect wearing a different operator,
+      // on the exact metric R2.1.1 made nullable: a slice with state
+      // not_assessed / failed publishes `share_of_ai_pct: null`, and this turned
+      // it into a per-engine score of 0. Nothing reads these values today
+      // (interlocking.js:97 reads only the keys), but a zero parked in a field
+      // called `engineScores` is a loaded gun.
+      scores[key] = summary?.share_of_ai_pct ?? null;
     }
     return scores;
   }
@@ -318,6 +338,11 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
       data.queriesTracked ??
       (Array.isArray(rawResults) && rawResults.length > 0
         ? rawResults.length
+        // R2.1.2 — this `?? 0` STAYS, and the guard test allows it by name.
+        // `promptsAnalyzed` is a count of questions asked, not a measurement,
+        // and the coalesce is a NaN guard: `undefined + brandedPromptsCount` is
+        // NaN, which would render as "NaN queries tracked". (`null + n === n`,
+        // so the null case was never the reason it is here.)
         : (data.promptsAnalyzed ?? 0) + brandedPromptsCount);
 
     return {
@@ -488,28 +513,52 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
   brandPresenceWithAio = Number(brandPresenceWithAio) || 0;
   visibleNonBranded = Number(visibleNonBranded) || 0;
   const visibleBranded = Number(visibleBrandPresence) || 0;
-  visibilityPct = visibilityPct ?? 0;
-  mentionRatePct = mentionRatePct ?? 0;
   // R2.2.11 — NOT `?? 0`. This one line is where the citation-share fix died.
   //
   // enginePipeline's scan-level mirror and rollup.js now publish `null` when the
   // citation denominator is empty (every answered non-branded row's citation
   // list unobserved, so there is nothing to divide by), and scanWorker,
-  // api/scans/_lib/scanRow.js and the `?? null` chain at :383 above all carry
+  // api/scans/_lib/scanRow.js and the `?? null` chain at :408 above all carry
   // that null intact — and then this line turned it back into a confident 0,
   // three lines before the only consumer. `?? 0` on a metric is standing rule 5
   // exactly. A measured 0 is unaffected: `0 ?? x` was already 0.
   //
-  // Scoped deliberately to this one metric. `brandCitationSharePct` has exactly
-  // one consumer (SourcesView.jsx, which renders null as an em dash plus a
-  // "Not measured" chip and the reason); the sibling `?? 0` lines around it feed
-  // surfaces that have not been taught the em-dash state yet and are left for
-  // the tasks that own them.
+  // R2.2.11 scoped itself to this one metric and left the siblings "to the tasks
+  // that own them". R2.1.2 below IS that task, so the sibling assignments are
+  // gone rather than converted; this statement survives only as the landmark
+  // R2.2.11's evidence cites (`x ?? null` is a self-assignment and does nothing).
   citationSharePct = citationSharePct ?? null;
-  brandedVisibilityPct = brandedVisibilityPct ?? 0;
-  aioCoveragePct = aioCoveragePct ?? 0;
-  aioErrorRatePct = aioErrorRatePct ?? 0;
-  presenceRatePct = presenceRatePct ?? 0;
+  /**
+   * R2.1.2 (finding S1) — NO `?? 0` ON A METRIC, HERE OR ANYWHERE BELOW.
+   *
+   * `visibilityPct`, `mentionRatePct`, `brandedVisibilityPct`, `aioCoveragePct`,
+   * `aioErrorRatePct` and `presenceRatePct` were each reassigned here as
+   * `x = x ?? 0`. R2.1.1 taught the producers to publish `null` for a reading
+   * that does not exist — a slice that never ran, an eliciting pool that named
+   * no vendor, a read too broken to trust — and the `?? null` chains at :400-433
+   * carry those nulls all the way down the function. These six statements were
+   * the last thing standing between an honest null and the returned object: one
+   * statement, and "the answers never named us" became "0% of answers named
+   * you". Standing rules 1 and 5.
+   *
+   * The assignments are DELETED rather than rewritten to `?? null`, because
+   * `x = x ?? null` is a self-assignment. A measured zero is untouched either
+   * way: `0 ?? anything` was already 0, so no real reading moves.
+   *
+   * `brandedVisibilityPct`'s coalesce was already DEAD when this ran: the
+   * `brandPresenceByPrompt` block twenty lines up reassigns it unconditionally,
+   * so it can never be nullish by the time it got here. It made the block look
+   * uniformly guarded when it was not.
+   *
+   * WHAT STILL PRINTS A ZERO, and whose job that is: OverviewView.jsx
+   * (`Math.round(aioCoverage ?? 0)`, `Math.round(presenceRate ?? 0)`) and
+   * DashboardShell.jsx (`${result.aioCoveragePct ?? 0}%`) apply their OWN
+   * coalesce on the way to the screen. The normalize layer no longer lies;
+   * those components still do, and R2.7.12 owns them — cited by expression
+   * rather than line because that task is in flight as this lands. Do not
+   * "fix" it by restoring a coalesce here: the guard test in
+   * servicesApiNullMetrics.test.mjs fails if you do.
+   */
   shareOfAiPct = shareOfAiPct ?? visibilityPct;
   const promptsTracked = data.prompts_tracked ?? raw.prompts_tracked ?? nonBranded.length;
   const dataSourceIssue = !!(
@@ -591,8 +640,11 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     seeds: data.seeds ?? raw.seeds ?? [],
     querySource: data.query_source ?? raw.query_source ?? "aio_paa_autocomplete",
     usedDynamicPrompts: !!(data.used_dynamic_prompts ?? raw.used_dynamic_prompts),
-    tokensUsed: data.tokens_used ?? 0,
-    costTotal: data.cost_total ?? raw.cost_total ?? 0,
+    // R2.1.2 — spend is a measurement too, and standing rule 3 says an unpriced
+    // run fails loud rather than reporting $0. A record that never stored a
+    // token count or a cost did not cost nothing; it did not say.
+    tokensUsed: data.tokens_used ?? null,
+    costTotal: data.cost_total ?? raw.cost_total ?? null,
     dataSourceIssue,
     /**
      * R3.2.5 (finding B3) — why `enginesCounted` fell, READ off the record.
@@ -624,6 +676,21 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     probeSources: buildProbeSources(isMultiEngine, data, raw),
     serpCoveragePct: aioCoveragePct,
     visibilityIndexPct: data.visibility_index_pct ?? raw.visibility_index_pct ?? null,
+    /**
+     * R2.1.2 — this `?? 0` STAYS, and the guard test allows it by name.
+     *
+     * It is an inventory count of engines, not a measurement of the brand, and
+     * it is load-bearing in a way the metric coalesces were not:
+     * enginePipeline.js's `describeScanDataSourceIssue` docstring ("A stored
+     * engines_counted is NOT used for that: normalizeResult defaults it to 0
+     * ... a defaulted 0 read as authoritative would declare an otherwise-healthy
+     * scan unscoreable") describes THIS line, and that function's
+     * `Number(options.enginesCounted)` treats `null` and `0` identically
+     * anyway, since `Number(null) === 0`. Changing it would falsify that
+     * docstring while changing no behaviour. The honest version needs
+     * enginePipeline to distinguish absent from zero — filed separately, not
+     * smuggled in here.
+     */
     enginesCounted: data.engines_counted ?? raw.engines_counted ?? 0,
     isMultiEngine,
     perEngineSummaries: (data.engines || raw.engines) || null,
@@ -725,6 +792,19 @@ function generateSummary(brand, score, coverage, dataSourceIssue, engineNames = 
     return `Not enough AI answers were returned for ${brand} to compute a reliable score. This usually means either the data source (Bright Data SERP) errored or Google did not surface an AIO for most tracked queries.`;
   }
   const b = brand || "Your brand";
+  /**
+   * R2.1.2 — a null score must not fall through to the prose ladder below.
+   *
+   * `null >= 50` and `null >= 20` are both false, so before this arm a scan
+   * with NO score reached the last line and told the customer it was "largely
+   * invisible across Google AI Overviews for its category" — a confident
+   * market verdict derived from a measurement that does not exist. That was
+   * unreachable while visibilityPct was coalesced to 0 three hundred lines up;
+   * deleting the coalesce makes it reachable, so it is closed in the same diff.
+   */
+  if (!Number.isFinite(score)) {
+    return `No AI share was recorded for ${b} on this scan, so there is nothing to read yet. This is not a score of 0 — the engines either did not answer, or answered without naming any vendor at all.`;
+  }
   if (score >= 50)
     return `${b} shows strong presence across ${surface} — appearing in the majority of relevant answers. Keep monitoring high-intent competitor queries to defend this position.`;
   if (score >= 20)

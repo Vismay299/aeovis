@@ -62,6 +62,23 @@
  * for a tool it is about to call throws `UnpricedModelError` with reason
  * `unpriced_tool`. Dropping the fee instead — pricing only the tokens — would
  * be the same false success wearing a smaller number.
+ *
+ * PER-QUERY SERP PRICES (R3.6.4)
+ * ------------------------------
+ * A SERP query is billed per REQUEST by the vendor and has no model id and no
+ * tokens at all, so it gets a third table and a fifth named source,
+ * `serp_price_table`. The three units must never share a table: a number read
+ * out of the wrong one is off by orders of magnitude and still looks like
+ * money.
+ *
+ * The rows are not new claims. `0.0015` was written out three times — once in
+ * src/lib/engines/serp.js and once next to each of the two pipelines'
+ * `brightDataSearch` calls (src/lib/scoring/aioPipeline.js,
+ * src/lib/scoring/enginePipeline.js) — and SerpAPI's `0.01` twice more in
+ * serp.js. Copies of a price drift independently and nothing notices, because
+ * a drifted cost is still a plausible cost. Same numbers, one home, and an
+ * unknown provider id throws `UnpricedModelError` with reason
+ * `unpriced_serp_query` rather than billing a scan at $0.
  */
 
 /** USD-per-million-token rates, keyed by exact model id. */
@@ -133,7 +150,8 @@ export const TOOL_FEES_ENV = "LLM_TOOL_FEES";
 export class UnpricedModelError extends Error {
   /**
    * @param {string} message
-   * @param {{reason?: "unpriced_model"|"unmeasured_tokens"|"unpriced_tool"|"malformed_declaration",
+   * @param {{reason?: "unpriced_model"|"unmeasured_tokens"|"unpriced_tool"|"unpriced_serp_query"
+   *                  |"malformed_declaration",
    *          model?: string, provider?: string, tool?: string, cause?: unknown}} [meta]
    */
   constructor(message, meta = {}) {
@@ -356,6 +374,140 @@ export function resolveToolFee({ model, tool, provider, calls = 1, env = process
   return { cost: fee.usd * n, cost_source: "tool_price_table" };
 }
 
+/**
+ * USD per single SERP query, keyed by SERP provider id (R3.6.4).
+ *
+ * Per-QUERY: a third unit, kept in a third table for the reason given at the
+ * top of this file. The keys are the ids `getSerpProvider()` returns in
+ * src/lib/engines/serp.js, so the provider that is called and the provider that
+ * is priced cannot drift apart.
+ */
+const SERP_QUERY_PRICES = Object.freeze({
+  // Bright Data SERP API, ~$1.50 per 1,000 requests. One `brightDataSearch`
+  // call is one billed query whether or not an AI Overview comes back with it,
+  // which is why an empty overview still costs this and must not report $0.
+  // Carried over unchanged from the three literals it replaces.
+  brightdata: 0.0015,
+  // SerpAPI's flat per-search rate, carried over from src/lib/engines/serp.js.
+  // A deferred AI Overview fetch is a SECOND search billed at the same rate, so
+  // that path pays this twice — see probeGoogleAiOverview.
+  serpapi: 0.01,
+});
+
+/** The built-in per-query SERP table, exported for tests and error messages. */
+export const BUILT_IN_SERP_QUERY_PRICES = SERP_QUERY_PRICES;
+
+/**
+ * Operator-declared per-query SERP prices, so a renegotiated vendor rate is an
+ * env change rather than a deploy. JSON object of
+ * `{ "<serp provider id>": <usd per query> }`.
+ */
+export const SERP_QUERY_PRICES_ENV = "SERP_QUERY_PRICES";
+
+/**
+ * Parse SERP_QUERY_PRICES. Malformed input throws, for the same reason
+ * readDeclaredPrices does: silently skipping a typo'd declaration downgrades
+ * the provider to "unpriced" and sends the operator hunting the wrong bug.
+ */
+export function readDeclaredSerpQueryPrices(env = process.env) {
+  const raw = String(env?.[SERP_QUERY_PRICES_ENV] ?? "").trim();
+  if (!raw) return {};
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    throw new UnpricedModelError(
+      `${SERP_QUERY_PRICES_ENV} is not valid JSON: ${e.message}. Expected ` +
+        `{"<serp provider id>": <usd per query>}.`,
+      { reason: "malformed_declaration", cause: e }
+    );
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new UnpricedModelError(
+      `${SERP_QUERY_PRICES_ENV} must be a JSON object keyed by SERP provider id, got ` +
+        `${Array.isArray(parsed) ? "an array" : typeof parsed}.`,
+      { reason: "malformed_declaration" }
+    );
+  }
+
+  const out = {};
+  for (const [id, price] of Object.entries(parsed)) {
+    const n = typeof price === "string" && price.trim() !== "" ? Number(price) : price;
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 0) {
+      throw new UnpricedModelError(
+        `${SERP_QUERY_PRICES_ENV} price for "${id}" is not a usable rate. ` +
+          `Give a non-negative number of USD per query.`,
+        { reason: "malformed_declaration", provider: id }
+      );
+    }
+    out[id] = n;
+  }
+  return out;
+}
+
+/**
+ * The per-query price for a SERP provider, or null when nothing prices it. An
+ * operator declaration wins over the built-in table, exactly as it does for
+ * token rates and tool fees.
+ */
+export function lookupSerpQueryPrice(provider, env = process.env) {
+  const id = String(provider || "");
+  if (!id) return null;
+  const declared = readDeclaredSerpQueryPrices(env);
+  if (Object.hasOwn(declared, id)) return { usd: declared[id], declared: true };
+  if (Object.hasOwn(SERP_QUERY_PRICES, id)) return { usd: SERP_QUERY_PRICES[id], declared: false };
+  return null;
+}
+
+/** Every SERP provider id this process can price, for error messages. */
+function priceableSerpProviders(env) {
+  return [
+    ...new Set([...Object.keys(SERP_QUERY_PRICES), ...Object.keys(readDeclaredSerpQueryPrices(env))]),
+  ].sort();
+}
+
+/**
+ * The cost of `queries` billed SERP queries on `provider`, as a cost with a
+ * named source, or a loud throw.
+ *
+ * Call it BEFORE the request goes out, and outside whatever try/catch wraps
+ * the probe. Both SERP call paths in this repo swallow throws into a
+ * `cost: 0.0` skip return or an error row, so a refusal raised inside one of
+ * them would be laundered into exactly the silent $0 this table exists to
+ * prevent (standing rules 1 and 2). Nothing about the answer changes the
+ * price, so resolving first costs nothing.
+ *
+ * @param {{provider: string, queries?: number, env?: object}} args
+ * @returns {{cost: number, cost_source: "serp_price_table"}}
+ */
+export function resolveSerpQueryCost({ provider, queries = 1, env = process.env }) {
+  // Deliberately NOT resolveToolFee's `Number.isFinite(calls) ? calls : 1`
+  // shape: a query count that arrived as undefined/NaN is a caller bug, and
+  // quietly pricing it as one query invents a number nobody measured.
+  if (typeof queries !== "number" || !Number.isFinite(queries) || queries < 0) {
+    throw new TypeError(
+      `resolveSerpQueryCost: "queries" must be a finite, non-negative number, got ` +
+        `${JSON.stringify(queries)}. Defaulting a bad count would fabricate a cost.`
+    );
+  }
+
+  const price = lookupSerpQueryPrice(provider, env);
+  if (!price) {
+    const remedy =
+      `Declare it in ${SERP_QUERY_PRICES_ENV}, e.g. {"${provider}": 0.002} — USD per query, ` +
+      `and that number is SHAPE, not a quote: read it off the vendor's price page.`;
+    alertUnpricedSerpProvider(provider, env, remedy);
+    throw new UnpricedModelError(
+      `No per-query price for SERP provider "${provider}". ${remedy} ` +
+        `Priced SERP providers: ${priceableSerpProviders(env).join(", ") || "(none)"}. ` +
+        `Recording $0 for a billed SERP query is not an option.`,
+      { reason: "unpriced_serp_query", provider }
+    );
+  }
+  return { cost: price.usd * queries, cost_source: "serp_price_table" };
+}
+
 /** Every id this process can price without help, for the error message. */
 function priceableIds(env) {
   return [...new Set([...Object.keys(PRICES_PER_MTOK), ...Object.keys(readDeclaredPrices(env))])].sort();
@@ -391,6 +543,26 @@ function alertUnpriced(
     `[llm-price] UNPRICED MODEL "${model}" on gateway "${provider}" — refusing to record $0 for ` +
       `paid inference. ${remedy} ` +
       `Priced ids: ${priceableIds(env).join(", ") || "(none)"}.`
+  );
+}
+
+/**
+ * The alert half of "throws and alerts" for a SERP provider (R3.6.4).
+ *
+ * Shares `alerted` with alertUnpriced so one misconfiguration is one line per
+ * process, and keeps the `[llm-price] UNPRICED` prefix a monitor can key on.
+ * It does NOT reuse alertUnpriced itself: that message names a model id and
+ * lists priced MODEL ids, and telling an operator whose SERP provider is
+ * unpriced that "gpt-4o-mini" is available would send them to the wrong table.
+ */
+function alertUnpricedSerpProvider(provider, env, remedy) {
+  const key = `serp::${provider}`;
+  if (alerted.has(key)) return;
+  alerted.add(key);
+  console.error(
+    `[llm-price] UNPRICED SERP PROVIDER "${provider}" — refusing to record $0 for a billed ` +
+      `SERP query. ${remedy} ` +
+      `Priced SERP providers: ${priceableSerpProviders(env).join(", ") || "(none)"}.`
   );
 }
 

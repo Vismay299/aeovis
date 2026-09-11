@@ -63,6 +63,7 @@ import {
   openScanRun,
   heartbeatScanRun,
   closeScanRun,
+  listStaleScanRuns,
   describeRun,
   RUN_OUTCOMES,
   RUNNERS,
@@ -2900,15 +2901,6 @@ export const REAP_TTL_MULTIPLE = 2;
 /** 360s. A run whose last beat is older than this is presumed to have no writer. */
 export const REAP_STALE_AFTER_MS = RUN_HEARTBEAT_TTL_MS * REAP_TTL_MULTIPLE;
 
-/**
- * Who ran the sweep. Migration 011 leaves `runner` an OPEN vocabulary
- * ("deliberately NOT a closed CHECK vocabulary, unlike `outcome`") precisely so
- * a pass like this can name itself without an ALTER on a live table. It is not
- * in scanRuns.js's RUNNERS only because that file is owned by another task in
- * this cycle; folding it in is the follow-up named in this task's submit note.
- */
-export const REAPER_RUNNER = "reaper";
-
 /** What part ran. One pass over the open rows. */
 export const REAPER_PHASE = "reap";
 
@@ -3043,45 +3035,6 @@ function reapErrorSentence(row, staleness, { reaperId, nowIso, staleAfterMs }) {
   );
 }
 
-/**
- * The default listing: open rows whose heartbeat predates the cutoff, oldest
- * first. Served by migration 011's `scan_runs_open_idx`, which is partial on
- * `ended_at IS NULL` for exactly this query.
- *
- * `limit + 1` is fetched so "there were more than one pass can take" is a
- * measured fact rather than an inference from a full page.
- *
- * Standing rule 2: a failed read propagates with its envelope intact. There is
- * no "could not list the open runs, report zero stale" path — that answer is
- * indistinguishable from a healthy ledger.
- */
-async function listStaleRunsFromDb(client, { cutoffIso, limit, excludeRunId }) {
-  let query = client
-    .from("scan_runs")
-    .select("id, runner, phase, worker_id, scan_job_id, batch_id, brand, outcome, started_at, heartbeat_at, ended_at")
-    .is("ended_at", null)
-    .lt("heartbeat_at", cutoffIso)
-    .order("heartbeat_at", { ascending: true })
-    .limit(limit + 1);
-  if (excludeRunId) query = query.neq("id", excludeRunId);
-
-  const { data, error } = await query;
-  if (error) {
-    const err = new Error(
-      `reapStaleRuns: could not list open scan_runs: ${error.message || "database error"}` +
-        (error.code ? ` [${error.code}]` : "") +
-        (error.details ? ` — ${error.details}` : "") +
-        (error.hint ? ` (hint: ${error.hint})` : "")
-    );
-    err.code = error.code;
-    err.details = error.details;
-    err.hint = error.hint;
-    err.cause = error;
-    throw err;
-  }
-  return data || [];
-}
-
 /** All counters NOT MEASURED. The shape a refusal returns, so no caller reads a zero. */
 function unmeasuredReapPass(fields) {
   return {
@@ -3150,10 +3103,12 @@ export function describeReapPass(pass) {
  * (0 would claim it tried), and `errors_recovered` counts the exceptions it
  * absorbed and continued past.
  *
- * NOT YET CALLED BY THE CRON. /api/scan/worker is owned by another task in this
- * cycle, so wiring the sweep to this function is a named follow-up. Nothing
- * here silently no-ops: it is a no-op only in the sense that nothing invokes it
- * yet, which is stated here rather than left to be discovered.
+ * WIRED BY R3.3.4: `runSweepMaintenance` in src/app/api/scan/worker/route.js
+ * calls this once per cron sweep, in a try/catch of its own so a reap that
+ * throws cannot take the scheduler tick (or the sweep's 200) down with it. The
+ * pass's counters go onto the wire under `reaped`. Between R3.3.2 and R3.3.4
+ * this function was correct and unreached, which is why the route's test suite
+ * now asserts the call site exists rather than trusting it.
  */
 export async function reapStaleRuns(nowIso = new Date().toISOString(), deps = {}) {
   const nowMs = new Date(nowIso).getTime();
@@ -3176,7 +3131,9 @@ export async function reapStaleRuns(nowIso = new Date().toISOString(), deps = {}
   const cutoffIso = new Date(nowMs - staleAfterMs).toISOString();
 
   const client = resolveAttemptClient(deps);
-  const listStale = deps.listStaleRuns || (client ? (args) => listStaleRunsFromDb(client, args) : null);
+  // The real listing lives in scanRuns.js with every other read of the table
+  // (R3.3.4). `deps.listStaleRuns` stays the injection point the 28 tests use.
+  const listStale = deps.listStaleRuns || (client ? (args) => listStaleScanRuns(args, { client }) : null);
   const ledger = resolveChunkLedger(deps);
 
   if (!listStale || !ledger.enabled) {
@@ -3205,7 +3162,7 @@ export async function reapStaleRuns(nowIso = new Date().toISOString(), deps = {}
   // while leaving no row of its own is the least auditable thing in the system.
   const passRun = await openChunkRun(
     ledger,
-    { runner: REAPER_RUNNER, phase: REAPER_PHASE, workerId: reaperId, detail: passDetail },
+    { runner: RUNNERS.REAPER, phase: REAPER_PHASE, workerId: reaperId, detail: passDetail },
     { ...REAPER_LOG, subject: `pass at ${nowIso}` }
   );
 

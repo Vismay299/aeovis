@@ -392,3 +392,182 @@ test("R3.6.6 — an unconfigured key is 'nothing ran', not a $0 probe", async ()
     assert.equal(stats.cost_unmeasured_calls, 1);
   });
 });
+
+/**
+ * R2.2.13 — the retry policy, counted in CALLS.
+ *
+ * This adapter carried the same dead guard R2.2.10 removed from
+ * perplexity.js: `if (status === 429 || status >= 500) { ...retry... }` and
+ * then `throw`, inside a try whose own catch retried unconditionally. Measured
+ * on this file before the fix: a 401 took 3 calls and 3013ms, identical in
+ * count and timing to a real outage.
+ *
+ * Every assertion below counts ACTUAL invocations of the injected fetch stub.
+ * A log line is not evidence that a call did not happen; a call count is.
+ * Restore the old `throw err` under a dead status check and the `= 1` counts
+ * go to 3 — the assertion that fails is on the number, not on any string.
+ */
+
+const MAX_ATTEMPTS = 3; // MAX_RETRIES(2) + the first try
+const ONE_BACKOFF_MS = 1000; // the first sleep the old code paid on a 401
+
+/**
+ * Replace fetch with a counter over a per-attempt responder.
+ *
+ * Restores the REAL fetch captured at import time rather than "whatever was
+ * installed a moment ago": a test that stubs twice would otherwise hand the
+ * next test a stale stub, and a leaked stub is exactly how a call-count
+ * assertion stops meaning anything.
+ */
+const REAL_FETCH = globalThis.fetch;
+
+function countingFetch(t, respond) {
+  const calls = { n: 0 };
+  globalThis.fetch = async () => {
+    calls.n++;
+    return respond(calls.n);
+  };
+  t.after(() => {
+    globalThis.fetch = REAL_FETCH;
+  });
+  return calls;
+}
+
+const httpFail = (status) => () => ({
+  ok: false,
+  status,
+  text: async () => `upstream said ${status}`,
+});
+
+const answerOk = () => ({
+  ok: true,
+  json: async () => ({
+    output: [
+      {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "An answer.", annotations: [] }],
+      },
+    ],
+    usage: { input_tokens: 10, output_tokens: 5 },
+  }),
+});
+
+/** The real key is never needed: every call below is stubbed. */
+function useKey(t) {
+  const old = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "sk-EXAMPLE-NOT-A-REAL-KEY";
+  t.after(() => {
+    if (old === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = old;
+  });
+}
+
+test("R2.2.13 — a 401 costs exactly ONE call and no backoff", async (t) => {
+  useKey(t);
+  const calls = countingFetch(t, httpFail(401));
+
+  const startedAt = Date.now();
+  const result = await probeChatGpt("best crm for small business");
+  const elapsed = Date.now() - startedAt;
+
+  assert.equal(calls.n, 1, "a revoked key is not a reason to ask twice more");
+  assert.ok(
+    elapsed < ONE_BACKOFF_MS,
+    `a permanent failure must not sleep; took ${elapsed}ms (old code: ~3013ms)`
+  );
+  // Failing fast is not failing quietly: the refusal still surfaces, typed.
+  assert.match(result.error || "", /401/);
+  assert.equal(result.cost, null);
+  assert.equal(result.cost_state, COST_STATE.PROBE_FAILED);
+  assert.equal(result.text, "");
+});
+
+test("R2.2.13 — 403 and the other 4xx refusals also stop on the first response", async (t) => {
+  useKey(t);
+  for (const status of [400, 403, 404, 422]) {
+    const calls = countingFetch(t, httpFail(status));
+    const result = await probeChatGpt("q");
+    assert.equal(calls.n, 1, `HTTP ${status} must not be retried`);
+    assert.match(result.error || "", new RegExp(String(status)));
+  }
+});
+
+test("R2.2.13 — 429, 5xx and transport failures still take the FULL budget", async (t) => {
+  useKey(t);
+  // Two statuses, not the whole transient list: each one costs a real ~3s of
+  // backoff here. The rest of the table is covered without sleeping by the
+  // classifier test at the bottom of this file.
+  for (const status of [429, 503]) {
+    const calls = countingFetch(t, httpFail(status));
+    await probeChatGpt("q");
+    assert.equal(calls.n, MAX_ATTEMPTS, `HTTP ${status} deserves the whole attempt budget`);
+  }
+
+  // Transport noise carries no status at all, and the default is to retry it:
+  // giving up on a failure we cannot read throws away a recoverable measurement.
+  const dropped = countingFetch(t, () => {
+    throw new TypeError("fetch failed");
+  });
+  const result = await probeChatGpt("q");
+  assert.equal(dropped.n, MAX_ATTEMPTS, "a severed connection is retried, not classified as refusal");
+  assert.match(result.error || "", /fetch failed/);
+});
+
+test("R2.2.13 — a transient failure that later succeeds still returns the answer", async (t) => {
+  useKey(t);
+  const calls = countingFetch(t, (n) => (n === 1 ? httpFail(503)() : answerOk()));
+
+  const result = await probeChatGpt("q");
+
+  assert.equal(calls.n, 2, "one retry was enough");
+  assert.equal(result.text, "An answer.");
+  assert.equal(result.error, null);
+});
+
+test("R2.2.13 — the failure line reports calls it COUNTED, not the retry constant", async (t) => {
+  useKey(t);
+  const realError = console.error;
+  const logged = [];
+  console.error = (...a) => logged.push(a.join(" "));
+  t.after(() => {
+    console.error = realError;
+  });
+
+  countingFetch(t, httpFail(401));
+  const refused = await probeChatGpt("q");
+  assert.match(logged.at(-1) || "", /after 1 call\b/);
+  assert.match(logged.at(-1) || "", /permanent/);
+  assert.match(refused.cost_state_detail || "", /after 1 call\b/);
+
+  logged.length = 0;
+  countingFetch(t, httpFail(500));
+  const exhausted = await probeChatGpt("q");
+  assert.match(logged.at(-1) || "", /after 3 calls\b/);
+  assert.match(exhausted.cost_state_detail || "", /after 3 calls\b/);
+});
+
+test("R2.2.13 — the classification is perplexity.js's, not a second copy", async () => {
+  const shared = await import("./httpFailureKind.js");
+  const perplexity = await import("./perplexity.js");
+
+  assert.equal(
+    perplexity.classifyHttpStatus,
+    shared.classifyHttpStatus,
+    "perplexity.js must re-export the shared classifier, not redeclare it"
+  );
+  assert.equal(perplexity.FAILURE_KIND, shared.FAILURE_KIND);
+  assert.equal(perplexity.failureKindOf, shared.failureKindOf);
+  assert.equal(perplexity.isRetryableFailure, shared.isRetryableFailure);
+
+  // And the policy itself, asserted here too so deleting perplexity.test.mjs
+  // cannot leave the OpenAI adapter's retry rule unspecified.
+  for (const status of [400, 401, 403, 404, 422]) {
+    assert.equal(shared.classifyHttpStatus(status), shared.FAILURE_KIND.PERMANENT);
+  }
+  for (const status of [408, 425, 429, 500, 502, 503, 504]) {
+    assert.equal(shared.classifyHttpStatus(status), shared.FAILURE_KIND.TRANSIENT);
+  }
+  assert.equal(shared.classifyHttpStatus(undefined), shared.FAILURE_KIND.TRANSIENT);
+  assert.equal(shared.classifyHttpStatus("nonsense"), shared.FAILURE_KIND.TRANSIENT);
+});
