@@ -1,0 +1,95 @@
+-- FIXTURE — R1.2.15. The lock's SEMANTICS downgraded: a bare, blocking
+-- `FOR UPDATE` where SKIP LOCKED belongs, on the full migration-010 shape.
+--
+-- R1215-EXPECT: reject /locks without SKIP LOCKED/
+-- R1215-DEFEATS: whole-file-regex
+-- R1215-DERIVED-FROM: base-as-in-migration-010.sql.txt
+--
+-- WHERE IT CAME FROM. base-as-in-migration-010.sql.txt with ONE change:
+--
+--     FOR UPDATE SKIP LOCKED   ->   FOR UPDATE
+--
+-- WHAT MAKES IT INTERESTING, AND WHY IT IS NOT A DUPLICATE. There is already an
+-- inline `BLOCKING_CLAIM_SQL` in probeClaimLock.guard.mjs, but it is a cut-down
+-- sketch of the function: a short candidate CTE, no lease predicate, no ORDER
+-- BY, a stub tail. It can prove the "locks without SKIP LOCKED" message fires;
+-- it cannot prove that message fires on SQL that is otherwise a faithful copy of
+-- what ships. A guard could reject the sketch for an unrelated reason and nobody
+-- would know. This file is the real shape with one word gone, so the rejection
+-- is attributable to that word.
+--
+-- It defeats ONLY the whole-file regex — and it does so on the strength of the
+-- prose above, which names the full clause twice. That is the finding R1.2.8
+-- opened, reproduced: /FOR UPDATE SKIP LOCKED/ over the raw file passes while
+-- the executable SQL has been downgraded. It does NOT defeat the
+-- comment-stripped regex or the one-executable-clause count, and the corpus
+-- walker in probeClaimLock.test.mjs asserts that it does not, so this file
+-- cannot be quietly edited into claiming a coverage it has not got.
+--
+-- WHY IT IS WRONG. `FOR UPDATE` without SKIP LOCKED does not skip a locked row
+-- — it WAITS for it. The second worker blocks until the first commits, then
+-- re-evaluates and finds the row leased. Under load the whole fleet queues
+-- behind one row instead of spreading across the queue: throughput collapses to
+-- serial, lease renewals fall behind, and the HTTP claim call times out while
+-- every individual probe still looks healthy. It is a different bug from a
+-- missing lock and it is diagnosed separately, which is why this fixture's
+-- expected rejection names the blocking message and not the absent-lock one.
+--
+-- This file is .txt on purpose: it must never be applied as a migration, and
+-- the migration walker in probeClaimLock.test.mjs must never find it.
+
+CREATE OR REPLACE FUNCTION claim_probe_tasks(
+  p_owner     text,
+  p_engines   text[]  DEFAULT NULL,
+  p_limit     integer DEFAULT 5,
+  p_lease_ms  integer DEFAULT 180000,
+  p_batch_id  uuid    DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+  v_now     timestamptz := now();
+  v_expires timestamptz;
+  v_claimed jsonb;
+  v_count   integer;
+BEGIN
+  v_expires := v_now + make_interval(secs => p_lease_ms / 1000.0);
+
+  WITH candidate AS (
+    SELECT t.id
+      FROM probe_tasks t
+     WHERE t.status IN ('pending', 'claimed')
+       AND (p_engines  IS NULL OR t.engine = ANY (p_engines))
+       AND (p_batch_id IS NULL OR t.batch_id = p_batch_id)
+       AND (t.lease_owner IS NULL
+            OR t.lease_expires_at IS NULL
+            OR t.lease_expires_at < v_now)
+     ORDER BY t.priority DESC, t.created_at
+     LIMIT p_limit
+     FOR UPDATE
+  ),
+  claimed AS (
+    UPDATE probe_tasks t
+       SET status           = 'claimed',
+           lease_owner      = p_owner,
+           lease_expires_at = v_expires,
+           attempts         = t.attempts + 1,
+           claimed_at       = v_now,
+           updated_at       = v_now
+      FROM candidate c
+     WHERE t.id = c.id
+    RETURNING t.*
+  )
+  SELECT COALESCE(jsonb_agg(to_jsonb(claimed) ORDER BY claimed.created_at), '[]'::jsonb),
+         COUNT(*)::integer
+    INTO v_claimed, v_count
+    FROM claimed;
+
+  RETURN jsonb_build_object(
+    'owner',         p_owner,
+    'tasks',         v_claimed,
+    'claimed_count', v_count
+  );
+END;
+$fn$;

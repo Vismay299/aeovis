@@ -29,7 +29,7 @@ import {
   getScanSchedule,
   upsertScanSchedule,
 } from "../db/analytics.js";
-import { generateUnbrandedPrompts } from "../scoring/promptGen.js";
+import { generateUnbrandedPrompts, SEED_STATE } from "../scoring/promptGen.js";
 // R3.7.2 — the vocabulary the scrape state is written in. Imported rather than
 // retyped as "ok" so this file and firecrawl.js cannot drift apart silently.
 import { SCRAPE_STATE } from "../firecrawl.js";
@@ -233,6 +233,21 @@ export const CHUNK_SKIP_REASONS = Object.freeze({
    * the `state:state_reason` the sample carries, not by a second reason code.
    */
   WEBSITE_SCRAPE_DEGRADED: "website_scrape_degraded",
+  /**
+   * The PAA / autocomplete seeding leg did not deliver real Google queries, so
+   * the prompt set is grounded in less observed search behaviour than it looks
+   * like (R2.2.12, and R2.2.8 which produced the record this reads).
+   *
+   * NOT a new vocabulary: this is `detail.skips` on the chunk's single
+   * scan_runs row, the same channel and the same shape as
+   * WEBSITE_SCRAPE_DEGRADED above, with no column and no migration. It needs
+   * its own REASON because the alternative is filing a seeding failure under a
+   * name that says "website scrape", which would be a false statement about
+   * which input went missing. `degraded`, `unavailable`, `not_attempted` and a
+   * measured-zero `ok` all land here and are told apart by the
+   * `state:state_reason` the sample carries, exactly as the scrape's are.
+   */
+  PROMPT_SEEDING_DEGRADED: "prompt_seeding_degraded",
   /**
    * The brand was scanned but its `scan_schedules` row could not be written
    * (R3.4.1, finding S14). The scan itself is unaffected; what is lost is the
@@ -1286,6 +1301,59 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     );
   }
 
+  // R2.2.12 — THE SEEDING VERDICT THAT NEVER LEFT THE PROCESS.
+  //
+  // R2.2.8 built `stats.prompt_seeding` (state / state_reason / seed_queries /
+  // per-leg failures) and said so in its own code comment: it had NO production
+  // reader. The block above existed for `stats.website_scrape`, the checkpoint
+  // allowlist below carried that field, and the seeding verdict got neither —
+  // so a scan grounded in 30 real Google queries and one grounded in zero,
+  // because the Bright Data zone was dead, produced identical scan_runs rows
+  // and the fact did not survive a resume. This is the reader.
+  //
+  // ABSENT IS NOT DEGRADED, same as the scrape above: `stats.prompt_seeding` is
+  // undefined when generation never ran (the reuse path in
+  // sourceUnbrandedQueries returns a full tracked pool), and filing a degrade
+  // there would assert a measurement nobody took.
+  const promptSeeding = stats.prompt_seeding;
+  if (
+    promptSeeding &&
+    // The SAME predicate promptGen warns on, taken from the source of truth
+    // rather than re-derived: not-ok, or ok-but-zero. The second disjunct is why
+    // this is not `state !== OK` — every fetch succeeding and Google returning
+    // nothing is a MEASURED zero, but the prompt set is ungrounded either way,
+    // and `ok:no_seed_queries_returned queries=0` in the sample is what keeps
+    // that case readable as a measured zero rather than a failure.
+    (promptSeeding.state !== SEED_STATE.OK || promptSeeding.seed_queries === 0)
+  ) {
+    // NOT `?? 0`. A record from an older checkpoint shape can be missing the
+    // count entirely, and "we did not record how many" is not "we got none"
+    // (standing rule 5).
+    const queries = Number.isFinite(promptSeeding.seed_queries)
+      ? promptSeeding.seed_queries
+      : "not_measured";
+    const attempted = Number.isFinite(promptSeeding.terms_attempted)
+      ? promptSeeding.terms_attempted
+      : "not_measured";
+    const seeded =
+      Number.isFinite(promptSeeding.terms_attempted) && Number.isFinite(promptSeeding.terms_unseeded)
+        ? promptSeeding.terms_attempted - promptSeeding.terms_unseeded
+        : "not_measured";
+    recordSkip(
+      tally,
+      CHUNK_SKIP_REASONS.PROMPT_SEEDING_DEGRADED,
+      `${promptSeeding.state}:${promptSeeding.state_reason || "unspecified"} ` +
+        `queries=${queries} terms=${seeded}/${attempted}`
+    );
+    console.warn(
+      `[scan-chunk] "${brand}" PAA/autocomplete seeding is ${promptSeeding.state} ` +
+        `(${promptSeeding.state_reason || "unspecified"}) with ${queries} real Google queries ` +
+        `from ${seeded}/${attempted} seed terms — these prompts are ` +
+        `${queries === 0 ? "not" : "only partly"} grounded in observed search behaviour. ` +
+        `Recorded on the run as ${CHUNK_SKIP_REASONS.PROMPT_SEEDING_DEGRADED}.`
+    );
+  }
+
   if (staticPackPrompts > 0) {
     console.warn(
       `[scan-chunk] "${brand}" prompt set includes ${staticPackPrompts}/${unbrandedQueries.length} ` +
@@ -1370,6 +1438,12 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
       cost: stats.cost || 0,
       tokens: stats.tokens || 0,
       website_scrape: stats.website_scrape ?? null,
+      // R2.2.12 — the seeding verdict rides the same allowlist for the same
+      // reason: this object is an allowlist, so a field nobody adds here is a
+      // field that dies at the end of this chunk. `?? null` is not a metric
+      // being defaulted; null means "sourcing recorded no seeding state", and
+      // the record's own seed_queries keeps its own zero-vs-absent distinction.
+      prompt_seeding: stats.prompt_seeding ?? null,
     },
     sourced_at: new Date().toISOString(),
   };
@@ -1586,6 +1660,11 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
           cost: stats.cost || 0,
           tokens: stats.tokens || 0,
           website_scrape: workingCheckpoint.stats?.website_scrape ?? null,
+          // R2.2.12 — carried forward for the same reason as website_scrape: the
+          // local `stats` here only accumulates probe cost, so the sourcing
+          // phase's value has to come from the checkpoint it was frozen onto, or
+          // the first persisted batch erases it.
+          prompt_seeding: workingCheckpoint.stats?.prompt_seeding ?? null,
         },
       };
       // R3.3.1 — `attempts: 0` rides on the same UPDATE as the batch that just

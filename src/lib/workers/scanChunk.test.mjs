@@ -523,10 +523,16 @@ test("runSourcingPhase — freezes brand/url/competitors/queries/engines/stats i
   assert.equal(checkpoint.unbranded_texts.length, 10);
   assert.deepEqual(checkpoint.engines, ["aio", "perplexity"]);
   // R3.7.2 added `website_scrape` alongside cost/tokens so a degraded scrape
-  // survives a resume. This job reuses a full prompt pool, so generation — and
-  // therefore the scrape — never ran: null is "nothing measured", which is the
-  // correct value here and NOT a stand-in for a healthy read.
-  assert.deepEqual(checkpoint.stats, { cost: 0, tokens: 0, website_scrape: null });
+  // survives a resume; R2.2.12 added `prompt_seeding` for the same reason. This
+  // job reuses a full prompt pool, so generation — and therefore the scrape and
+  // the seeding leg — never ran: null is "nothing measured" for both, which is
+  // the correct value here and NOT a stand-in for a healthy read.
+  assert.deepEqual(checkpoint.stats, {
+    cost: 0,
+    tokens: 0,
+    website_scrape: null,
+    prompt_seeding: null,
+  });
   assert.ok(checkpoint.sourced_at);
 });
 

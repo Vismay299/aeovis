@@ -15,6 +15,8 @@ import {
   ENGINE_STATE_REASON_DETAIL,
   ENGINE_NOT_MEASURED_LABEL,
   ENGINE_MEASURED_ZERO_LABEL,
+  ENGINE_UNSTATED_ZERO_LABEL,
+  NO_MEASUREMENT_TEXT,
   describeScanMeasurement,
   summarizeEngineSlice,
   computeHeadline,
@@ -825,4 +827,345 @@ test("GUARD — neither surface defaults a missing score back to zero", async ()
     !/\{scan\.visibility_pct\}%/.test(sidebar),
     "the sidebar must not print a raw column next to a percent sign"
   );
+});
+
+// ---------------------------------------------------------------------------
+// 6. R2.1.5 — THE LEGACY ZERO'S CHIP. A 0 WITH NO STATE IS NOT A FINDING.
+//
+// Found by the R2.1.1 verifier by execution: describeScanMeasurement on a
+// pre-R2.1.1 row (visibility_pct 0, no state anywhere) returned label
+// "Measured zero" and the detail "Measured: the answers named vendors on every
+// count, and never this brand." — BYTE-IDENTICAL to a state-backed
+// measured_zero. A stateless row recorded no such measurement fact, and the
+// pipeline that wrote those rows produced the very same bare 0 for a dead
+// engine, an empty eliciting pool and a failed probe. So the surface took the
+// false zero this phase exists to kill and stated it to the user as a finding.
+//
+// WHAT IS AND IS NOT CHANGED:
+//   - the NUMBER is untouched. The legacy tolerance (a stateless finite number
+//     is measured) was ruled correct by the previous verifier and blanking
+//     historical rows would erase real history. A legacy 0 still renders "0%".
+//   - the CHIP and the SENTENCE change, because those are the parts that
+//     claimed a measurement. Both come from one reason token, so they cannot
+//     drift into disagreeing with each other.
+//   - a GENUINELY measured zero must still read as a measured zero. Collapsing
+//     real zeroes into "we cannot tell" would be a worse lie than the one being
+//     removed, so both rows are driven through every assertion below.
+//
+// The distinction is a fact ON THE ROW, not a heuristic: summarizeEngineResults
+// publishes `state` / `state_reason` into `summary_stats` (enginePipeline.js
+// :1600-1601) and db.js round-trips that object, so a post-R2.1.1 measured zero
+// carries `state: "measured_zero"` and a pre-R2.1.1 row carries no state key at
+// all. PRESENCE of the state pair is the only thing these tests read, which is
+// why the two fixtures below are the SAME summary with that pair deleted.
+// ---------------------------------------------------------------------------
+
+const MEASURED_ZERO_STATED_ROW = storedRow({
+  id: "r-zero-stated",
+  scannedAt: "2026-09-02T10:00:00Z",
+  summary: MEASURED_ZERO_SUMMARY,
+});
+
+/** The same stored zero as above, minus the two fields R2.1.1 added. */
+const LEGACY_ZERO_ROW = (() => {
+  const { state, state_reason, ...stateless } = MEASURED_ZERO_SUMMARY;
+  void state;
+  void state_reason;
+  return {
+    ...MEASURED_ZERO_STATED_ROW,
+    id: "r-zero-legacy",
+    scanned_at: "2026-09-01T10:00:00Z",
+    raw_results: { ...MEASURED_ZERO_STATED_ROW.raw_results, summary_stats: stateless },
+  };
+})();
+
+test("premise — the two zero fixtures differ ONLY by the state pair R2.1.1 added", () => {
+  const stated = MEASURED_ZERO_STATED_ROW.raw_results.summary_stats;
+  const legacy = LEGACY_ZERO_ROW.raw_results.summary_stats;
+
+  assert.strictEqual(stated.visibility_pct, 0, "premise: the stated row stores a real 0");
+  assert.strictEqual(legacy.visibility_pct, 0, "premise: the legacy row stores the same 0");
+  assert.equal(stated.state, ENGINE_MEASUREMENT_STATE.MEASURED_ZERO);
+  assert.equal(stated.state_reason, ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE);
+  assert.ok(!("state" in legacy), "a pre-R2.1.1 row has no state key at all");
+  assert.ok(!("state_reason" in legacy), "...and no state_reason either");
+  assert.deepEqual(
+    Object.keys(stated).filter((k) => k !== "state" && k !== "state_reason").sort(),
+    Object.keys(legacy).sort(),
+    "nothing else may differ, or an assertion below could pass for the wrong reason"
+  );
+});
+
+test("ACCEPT — a stateless legacy zero and a state-backed measured zero share neither chip nor sentence", () => {
+  const legacy = describeScanMeasurement(LEGACY_ZERO_ROW);
+  const stated = describeScanMeasurement(MEASURED_ZERO_STATED_ROW);
+
+  // The finding, restated as the thing that must now be false.
+  assert.notEqual(
+    legacy.label,
+    stated.label,
+    "a row that recorded no measurement must not wear the chip of one that did"
+  );
+  assert.notEqual(
+    legacy.detail,
+    stated.detail,
+    "the two rows know different things, so they cannot be explained with one sentence"
+  );
+  assert.notEqual(legacy.reason, stated.reason, "and the tokens behind them must differ too");
+
+  assert.equal(legacy.label, ENGINE_UNSTATED_ZERO_LABEL);
+  assert.equal(stated.label, ENGINE_MEASURED_ZERO_LABEL);
+  assert.equal(legacy.reason, ENGINE_READ_REASONS.LEGACY_ZERO_UNSTATED);
+  assert.equal(stated.reason, ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE);
+});
+
+test("ACCEPT — the legacy zero's sentence asserts no measurement that never happened", () => {
+  const legacy = describeScanMeasurement(LEGACY_ZERO_ROW);
+
+  assert.ok(legacy.detail && legacy.detail.length > 0, "a chip without words is an unexplained state");
+  assert.notEqual(
+    legacy.detail,
+    ENGINE_STATE_REASON_DETAIL[ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE],
+    "this is the exact string the finding named"
+  );
+  assert.ok(
+    !/answers named/i.test(legacy.detail),
+    `nothing on this row says what the answers contained: ${legacy.detail}`
+  );
+  assert.ok(
+    !/^Measured\b/.test(legacy.detail),
+    `the sentence must not open by claiming a measurement: ${legacy.detail}`
+  );
+  assert.ok(
+    !/never this brand/i.test(legacy.detail),
+    "a stateless 0 is not evidence that the brand was absent from anything"
+  );
+  assert.ok(
+    /cannot tell|no measurement state/i.test(legacy.detail),
+    `the sentence must say what is unknown, not merely omit the claim: ${legacy.detail}`
+  );
+  assert.equal(legacy.label, ENGINE_UNSTATED_ZERO_LABEL);
+  assert.ok(
+    !/^Measured/.test(legacy.label),
+    `the chip itself must not claim a measurement: ${legacy.label}`
+  );
+});
+
+test("a GENUINELY measured zero still reads as a measured zero, words and all", () => {
+  // The other half of the accept, and the one a careless fix breaks: if every
+  // zero becomes "we cannot tell", a real finding has been deleted.
+  const stated = describeScanMeasurement(MEASURED_ZERO_STATED_ROW);
+
+  assert.equal(stated.measured, true);
+  assert.equal(stated.measuredZero, true);
+  assert.strictEqual(stated.pct, 0);
+  assert.equal(stated.text, "0%");
+  assert.equal(stated.label, ENGINE_MEASURED_ZERO_LABEL);
+  assert.notEqual(stated.label, ENGINE_UNSTATED_ZERO_LABEL, "a stated zero is not an unstated one");
+  assert.equal(
+    stated.detail,
+    ENGINE_STATE_REASON_DETAIL[ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE],
+    "the state-backed row DID record what the answers contained; it keeps that sentence"
+  );
+});
+
+test("the legacy zero keeps its number — the tolerance the previous verifier ruled correct", () => {
+  const legacy = describeScanMeasurement(LEGACY_ZERO_ROW);
+
+  assert.equal(legacy.measured, true, "blanking historical rows would erase real history");
+  assert.equal(legacy.measuredZero, true);
+  assert.strictEqual(legacy.pct, 0);
+  assert.equal(legacy.text, "0%");
+  assert.notEqual(legacy.text, NO_MEASUREMENT_TEXT, "the fix is the wording, never the number");
+  assert.strictEqual(legacy.state, null, "and it still reports that it carries no state");
+});
+
+test("the unstated-zero reason is a READ reason with its own sentence, not a producer state", () => {
+  const token = ENGINE_READ_REASONS.LEGACY_ZERO_UNSTATED;
+  assert.ok(token, "the token must exist to be rendered");
+  assert.ok(
+    !Object.values(ENGINE_STATE_REASONS).includes(token),
+    "no slice can emit this; it is something a READER concluded about a stored row"
+  );
+  assert.ok(
+    ENGINE_STATE_REASON_DETAIL[token],
+    "a reason with no sentence renders a chip with an empty tooltip"
+  );
+});
+
+const ZERO_HISTORY = [MEASURED_ROW, MEASURED_ZERO_STATED_ROW, LEGACY_ZERO_ROW];
+
+/** The one card whose score element carries `reason`, by that reason. */
+function cardByReason(html, reason) {
+  const card = historyCards(html).find((c) => c.includes(`data-state-reason="${reason}"`));
+  assert.ok(card, `no history card carried data-state-reason="${reason}"`);
+  return card;
+}
+
+/** Every `title` on one card. Two different stories on one card is the bug. */
+function titlesOf(chunk) {
+  return [...chunk.matchAll(/title="([^"]*)"/g)].map((m) => m[1]);
+}
+
+test("ACCEPT (rendered) — the legacy zero card says unstated, and NOTHING beside it says measured", async () => {
+  const html = await renderDashboardShell({ scan: MEASURED_ROW, history: ZERO_HISTORY });
+  const legacyCard = cardByReason(html, ENGINE_READ_REASONS.LEGACY_ZERO_UNSTATED);
+  const text = textOf(legacyCard);
+
+  assert.ok(text.includes("0"), "the recorded 0 still reaches the screen");
+  assert.ok(text.includes(ENGINE_UNSTATED_ZERO_LABEL), "and it is labelled for what it is");
+
+  // THE SIBLING-CONTRADICTION SWEEP. R2.1.2 was failed for exactly this: the
+  // number was disowned and a chip beside it still stated a confident verdict
+  // derived from the same absent value. Every element of this card is read, not
+  // just the one that was fixed.
+  assert.ok(
+    !text.includes(ENGINE_MEASURED_ZERO_LABEL),
+    `a second element still calls this a measured zero: ${text}`
+  );
+  assert.ok(
+    !legacyCard.includes(ENGINE_STATE_REASON_DETAIL[ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE]),
+    `the measurement sentence survives somewhere on the card (title or text): ${legacyCard}`
+  );
+  assert.ok(
+    !text.includes(ENGINE_NOT_MEASURED_LABEL),
+    "nor is it an absence: the row does carry a recorded 0"
+  );
+  assert.equal(
+    legacyCard.split('data-testid="history-card-state"').length - 1,
+    1,
+    "exactly one state chip per card, or two chips are telling two stories"
+  );
+  const titles = new Set(titlesOf(legacyCard));
+  assert.deepEqual(
+    [...titles],
+    [ENGINE_STATE_REASON_DETAIL[ENGINE_READ_REASONS.LEGACY_ZERO_UNSTATED]],
+    "every explanation on the card must be the same one explanation"
+  );
+  assert.ok(
+    !legacyCard.includes('data-testid="history-card-delta-state"'),
+    "nothing was suppressed on this card — the 0 is a real end of a delta — so nothing may say it was"
+  );
+
+  // `data-measured="true"` IS still on this card, deliberately, and this
+  // assertion exists so that choice is recorded rather than discovered later.
+  // The flag means "there is a number in the column to render" — the legacy
+  // tolerance, which a previous verifier ruled correct — and it is what stops
+  // the surfaces printing an em dash over a real historical reading. It is the
+  // CHIP beside it that says how far that number may be trusted. If the flag
+  // ever has to mean "a measurement is attested", the change belongs in
+  // describeScanMeasurement and both consuming components at once, not here.
+  assert.ok(
+    legacyCard.includes('data-measured="true"'),
+    "the legacy row does carry a recorded number; flipping this flag would blank real history"
+  );
+});
+
+test("ACCEPT (rendered) — the state-backed zero on the SAME screen still reads as measured", async () => {
+  const html = await renderDashboardShell({ scan: MEASURED_ROW, history: ZERO_HISTORY });
+  const statedCard = cardByReason(html, ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE);
+  const text = textOf(statedCard);
+
+  assert.ok(statedCard.includes('data-measured="true"'), "0 is a measurement");
+  assert.ok(text.includes("0"), "and it prints as the number 0, not a dash");
+  assert.ok(
+    text.includes(ENGINE_MEASURED_ZERO_LABEL),
+    "a real measured zero must keep saying so, or this fix deleted a finding"
+  );
+  assert.ok(
+    !text.includes(ENGINE_UNSTATED_ZERO_LABEL),
+    `a state-backed zero relabelled as unstated hides a real finding: ${text}`
+  );
+  assert.ok(
+    statedCard.includes(ENGINE_STATE_REASON_DETAIL[ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE]),
+    "and its own sentence is still reachable from the card"
+  );
+});
+
+test("(rendered) the two zero cards are distinguishable ON SCREEN, not merely in the data", async () => {
+  const html = await renderDashboardShell({ scan: MEASURED_ROW, history: ZERO_HISTORY });
+  const legacy = textOf(cardByReason(html, ENGINE_READ_REASONS.LEGACY_ZERO_UNSTATED));
+  const stated = textOf(cardByReason(html, ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE));
+
+  assert.notEqual(
+    legacy.replace(/^\S+ \d+,? ?\d*/, ""),
+    stated.replace(/^\S+ \d+,? ?\d*/, ""),
+    "with the timestamps discounted, two cards reading identically is the finding itself"
+  );
+  assert.ok(legacy.includes("0") && stated.includes("0"), "both still show the 0 they recorded");
+});
+
+test("(rendered) any delta shown beside a zero card is the difference of the two numbers on screen", async () => {
+  // The deliberate decision, pinned: this fix disowns the PROVENANCE of a
+  // legacy 0, not the 0 itself, so the delta beside it stays computable — and
+  // it must equal the arithmetic a reader can do with the two cards in front of
+  // them. A delta that cannot be recomputed from the visible numbers is a
+  // confident claim from somewhere else, which is what this assertion catches.
+  const html = await renderDashboardShell({ scan: MEASURED_ROW, history: ZERO_HISTORY });
+  const cards = historyCards(html);
+  const scoreOf = (card) => {
+    const m = /^[^>]*>(-?\d+(?:\.\d+)?)<small>%<\/small>/.exec(card);
+    return m ? parseFloat(m[1]) : null;
+  };
+  const deltaOf = (card) => {
+    const m = /class="(?:up|dn|flat)">([+-]?\d+(?:\.\d+)?)</.exec(card);
+    return m ? parseFloat(m[1]) : null;
+  };
+
+  assert.deepEqual(cards.map(scoreOf), [40, 0, 0], "premise: three readings, newest first");
+  // Card i is compared with card i-1 (the reading AFTER it in time).
+  cards.forEach((card, i) => {
+    const shown = deltaOf(card);
+    if (i === 0) {
+      assert.strictEqual(shown, null, "the newest card has nothing later to compare with");
+      return;
+    }
+    assert.strictEqual(
+      shown,
+      scoreOf(cards[i - 1]) - scoreOf(card),
+      `card ${i} shows a delta that does not follow from the two numbers on screen`
+    );
+  });
+});
+
+test("(rendered) the sidebar carries the unstated sentence, and not the measured one", async () => {
+  const html = await renderSidebar({
+    brand: "Acme",
+    view: "overview",
+    onViewChange() {},
+    history: [MEASURED_ZERO_STATED_ROW, LEGACY_ZERO_ROW],
+  });
+  const [stated, legacy] = sidebarScores(html);
+
+  assert.ok(legacy.includes(`data-state-reason="${ENGINE_READ_REASONS.LEGACY_ZERO_UNSTATED}"`));
+  assert.ok(
+    legacy.includes(ENGINE_STATE_REASON_DETAIL[ENGINE_READ_REASONS.LEGACY_ZERO_UNSTATED]),
+    "the sidebar's only room for the reason is the title; it must be the right reason"
+  );
+  assert.ok(
+    !legacy.includes(ENGINE_STATE_REASON_DETAIL[ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE]),
+    `the sidebar row still claims a measurement: ${legacy}`
+  );
+  assert.equal(textOf(contentOf(legacy)), "0%", "the recorded 0 is still the number on screen");
+  assert.ok(
+    stated.includes(ENGINE_STATE_REASON_DETAIL[ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE]),
+    "and the state-backed zero in the same list keeps its own sentence"
+  );
+});
+
+test("GUARD — no surface hard-codes either zero chip's wording", async () => {
+  // Both chips come from the shared reader. A component that spelled one out
+  // would keep saying it after this module changed its mind.
+  const shell = await readFile(SHELL_PATH, "utf8");
+  const sidebar = await readFile(SIDEBAR_PATH, "utf8");
+  for (const [name, source] of [["DashboardShell.jsx", shell], ["Sidebar.jsx", sidebar]]) {
+    assert.ok(
+      !source.includes(ENGINE_MEASURED_ZERO_LABEL),
+      `${name} spells out "${ENGINE_MEASURED_ZERO_LABEL}" instead of rendering score.label`
+    );
+    assert.ok(
+      !source.includes(ENGINE_UNSTATED_ZERO_LABEL),
+      `${name} spells out "${ENGINE_UNSTATED_ZERO_LABEL}" instead of rendering score.label`
+    );
+  }
 });

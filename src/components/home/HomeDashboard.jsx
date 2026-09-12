@@ -6,6 +6,24 @@
  * A slim strip above the page carrying every brand already read and every
  * agent run in flight. Renders nothing at all until there is history, so a
  * first-time visitor gets the clean page.
+ *
+ * R2.8.16 — WHY THE `store` FIELD IS READ AND `scans.length` IS NOT. The clean
+ * page above is a claim: "you have never scanned anything". It is only true when
+ * /api/history actually reached the store. This component used to keep whatever
+ * `res.ok` gave it and then decide on `scans.length === 0`, while the route
+ * answered every refusal with 200 and empty arrays — so an unreadable database
+ * rendered as a pristine first run to an operator with brands in it, with no
+ * error anywhere on screen. The route now says which (`store: "ok"` vs
+ * `"unreachable"`, 503 and null collections), and the outage branch below is the
+ * half that makes that visible. Do not collapse it back into `data?.scans || []`.
+ *
+ * STATED PLAINLY, BECAUSE IT CHANGES WHAT THIS FIX IS WORTH TODAY: as of
+ * R2.8.16 this component is not mounted on any page (`git grep HomeDashboard`
+ * finds no importer) and it is the only caller of /api/history. So the change
+ * above is not currently visible to a user — it is the honest shape waiting for
+ * whoever mounts the strip, and the route's 503 is what a direct caller and any
+ * future surface will see. Mounting it is a separate task; do not read this
+ * paragraph as a claim that a live screen was repaired.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -13,6 +31,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { fetchScanHistory, saveScan } from '@/services/api';
 import { hasTimestamp } from '@/utils/format';
+import { historyLoadState } from '@/lib/historyStoreState';
 
 /* The reading's own band. Rivals never take a semantic colour, but this is
    your own score against a threshold, which is exactly what they are for. */
@@ -64,17 +83,23 @@ export function HomeDashboard() {
   const router = useRouter();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [outage, setOutage] = useState(null);
   const [opening, setOpening] = useState(null);
 
   const load = useCallback(async () => {
+    let next;
     try {
       const res = await fetch('/api/history', { cache: 'no-store' });
-      if (res.ok) setData(await res.json());
+      const body = await res.json().catch(() => null);
+      next = historyLoadState({ ok: res.ok, status: res.status, body });
     } catch {
-      /* homepage history is best-effort */
-    } finally {
-      setLoading(false);
+      // The request never completed, so nothing was measured. Saying so is the
+      // whole point; "best-effort" here used to mean "silent".
+      next = historyLoadState(null);
     }
+    setData(next.data);
+    setOutage(next.outage);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -111,6 +136,43 @@ export function HomeDashboard() {
   };
 
   if (loading) return null;
+
+  // The unreachable store. Deliberately states no count, no score and no
+  // "nothing yet" — every number this strip could print would have been
+  // fabricated from a read that did not happen.
+  if (outage) {
+    return (
+      <section
+        data-testid="home-dashboard-unavailable"
+        style={{ background: 'var(--surface)', borderBottom: '1px solid var(--line)' }}
+      >
+        <div
+          className="shell"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+            paddingBlock: 12, minWidth: 0,
+          }}
+        >
+          <span className="chip chip--crit" data-testid="home-history-unavailable-chip">
+            History unavailable
+          </span>
+          <span style={{ color: 'var(--ink-2)', fontSize: 13.5, minWidth: 0 }}>
+            Your workspace could not be read, so nothing is shown here — this is not
+            an empty workspace.
+          </span>
+          <span className="tag" style={{ letterSpacing: '.06em' }}>{outage.reason}</span>
+          <button
+            type="button"
+            className="btn btn--quiet btn--sm"
+            style={{ marginLeft: 'auto' }}
+            onClick={() => { setLoading(true); load(); }}
+          >
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   const scans = data?.scans || [];
   const runs = data?.runs || [];

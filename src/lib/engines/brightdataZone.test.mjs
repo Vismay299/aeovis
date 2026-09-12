@@ -63,6 +63,93 @@ function mockFetch(t, handler) {
   });
 }
 
+/* ===========================================================================
+ * R1.2.16 — THE CORPUS GUARD, because a loop over an empty list asserts nothing.
+ *
+ * FOUR tests in this file are `for (const row of CORPUS)` loops whose every
+ * assertion lives inside the loop body: the three R1.2.11 corpora
+ * (NOT_A_ZONE_REJECTION, IS_A_ZONE_REJECTION, TOLERATED_OVER_MATCHES) and
+ * R1.2.10's ZONE_STATE_WORDINGS. Delete the rows and the body never runs, so the
+ * test reports PASS having exercised nothing. The one assertion that LOOKS like a
+ * count guard -- `zc.calls() === NOT_A_ZONE_REJECTION.length` -- is satisfied by
+ * `0 === 0`, which is why it never caught this.
+ *
+ * MEASURED, not assumed. THIRTEEN mutations of the pre-fix file (HEAD 786cb4e)
+ * were run one at a time and EVERY ONE left it at 18 tests / 18 pass / 0 fail:
+ * emptying any one of the four corpora; cutting any one of them to a single
+ * trivially-clean row; deleting one row; replacing all 55 negatives with 55
+ * copies of one clean row; swapping a load-bearing row for an unrelated one;
+ * blanking a row's reason; and running a loop over only its first row. The only
+ * mutations CI could see were the two that plant a genuinely WRONG row -- a real
+ * permanent rejection in the negatives, a transport reset in the positives -- and
+ * those were 17 pass / 1 fail before this guard and still are, on the original
+ * assertion rather than on the floor. All thirteen are now red, each naming the
+ * corpus and the claim it broke.
+ *
+ * WHY A FLOOR PLUS A MEMBER LIST, and not an exact count. An exact count is a
+ * chore: every row added makes an unrelated number go red, so it gets bumped
+ * reflexively and stops meaning anything. But a floor alone is gameable in the
+ * direction that matters -- swap rows out for junk and the count holds while
+ * coverage collapses (the pad-with-duplicates mutation above). So three
+ * independent claims are made, each catching a different way a corpus rots:
+ *   1. FLOOR       - rows removed. Fires on empty and on shrinkage.
+ *   2. UNIQUENESS  - rows replaced by copies of a survivor to hold the count.
+ *   3. REQUIRED    - the specific rows whose absence would let a known-degenerate
+ *      classifier pass. These are not a sample of the corpus; each one is a row
+ *      that a recorded mutation actually fired on (provenance at each list).
+ * Rows are also required to carry their reason, because a corpus of bare strings
+ * is a list the next editor cannot judge and therefore deletes.
+ *
+ * IF YOU ARE REMOVING A ROW ON PURPOSE: lower the floor, and drop it from the
+ * required list, in the SAME commit. That edit is meant to be visible in review;
+ * a silent deletion is exactly what this exists to make noisy.
+ *
+ * THE NUMBERS (55 / 22 / 13 / 6) were re-derived from the array literals, not
+ * copied. They are NOT the figure in R1.2.11's submit note, which says 57
+ * negatives against a committed 55 -- the code was right, the note was wrong,
+ * and the ledger record has been amended rather than left as the artifact.
+ *
+ * Called as the FIRST line of each corpus test rather than at module scope: a
+ * module-scope throw aborts the file load and shows up as a crash with no test
+ * name, while this way the red names the corpus that shrank.
+ * ======================================================================== */
+function assertCorpusIntact(rows, name, { floor, required }) {
+  assert.ok(Array.isArray(rows), `${name} is not an array at all, so the loop below asserts nothing`);
+  assert.ok(
+    rows.length >= floor,
+    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a corpus ` +
+      `whose test is a loop over it, so assertions below this line silently stopped running. If the ` +
+      `removal was deliberate, lower the floor here in the same commit and say why.`
+  );
+  rows.forEach((row, i) => {
+    assert.ok(
+      Array.isArray(row) && row.length === 2 && typeof row[0] === "string",
+      `${name}[${i}] is not a [text, reason] pair: ${JSON.stringify(row)}`
+    );
+    assert.ok(
+      typeof row[1] === "string" && row[1].trim().length > 0,
+      `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
+        `the next editor deletes, and the floor above would then be met by padding`
+    );
+  });
+  const texts = rows.map((r) => r[0]);
+  const dupes = [...new Set(texts.filter((t, i) => texts.indexOf(t) !== i))];
+  assert.deepEqual(
+    dupes,
+    [],
+    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
+      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
+  );
+  const missing = required.filter((t) => !texts.includes(t));
+  assert.deepEqual(
+    missing,
+    [],
+    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing: each is one a ` +
+      `recorded mutation of the classifier fired on, so losing it makes that mutation invisible again. ` +
+      `Removing one is a decision to stop detecting something -- make it in the same commit as this list.`
+  );
+}
+
 test("the configured zone short-circuits the lookup — which is why the check must read it", async (t) => {
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "my_zone" });
   let called = false;
@@ -535,6 +622,24 @@ test("R1.2.10 — a 200-envelope refusal reaches the caller as an ERROR row, not
   assert.equal(summary.error_rate_pct, 100);
 });
 
+/**
+ * The wordings R1.2.10 was filed about, lifted out of the loop below by R1.2.16
+ * so the corpus guard can see them. Same six strings, same order.
+ *
+ * REQUIRED, not a floor with slack: this corpus IS the finding's enumeration, so
+ * every member is load-bearing and the floor and the member list coincide. A
+ * seventh wording is welcome; losing one of these six means R1.2.10's fix is no
+ * longer pinned in the direction it was filed for.
+ */
+const ZONE_STATE_WORDINGS = [
+  ["zone_suspended", "the wording in the C4 report; \\b treats '_' as a word char, so the pre-fix pattern missed it"],
+  ["zone_disabled", "same shape, second state word"],
+  ["zone_expired", "same shape, third"],
+  ["zone_deleted", "same shape, fourth"],
+  ["suspended_zone", "state word FIRST, underscored -- the other half of the widening"],
+  ["zone_not_active", "the not-active alternative, fully underscored"],
+];
+
 test("R1.2.10 — snake_case zone states are zone rejections too (zone_suspended, zone_disabled, zone_expired)", async (t) => {
   // Bright Data returns machine-readable error CODES as well as prose, and
   // zoneRejectionDetail already anticipates that: its first pattern is
@@ -546,24 +651,34 @@ test("R1.2.10 — snake_case zone states are zone rejections too (zone_suspended
   //
   // Verified against the shipped patterns before the fix: all four wordings
   // below fell through to a plain Error.
+  //
+  // R1.2.16: six committed wordings, all of them required. Emptying this list
+  // used to leave this test green while asserting nothing about the widening it
+  // exists to pin.
+  assertCorpusIntact(ZONE_STATE_WORDINGS, "ZONE_STATE_WORDINGS", {
+    floor: 6,
+    required: ["zone_suspended", "zone_disabled", "zone_expired", "zone_deleted", "suspended_zone", "zone_not_active"],
+  });
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "state_zone" });
 
   let wording = "";
+  let serpCalls = 0;
   mockFetch(t, async (url) => {
     if (String(url).includes("get_all_zones")) {
       return { ok: true, status: 200, json: async () => [] };
     }
+    serpCalls++;
     return { ok: true, status: 200, text: async () => JSON.stringify({ error: wording }) };
   });
 
-  for (const w of ["zone_suspended", "zone_disabled", "zone_expired", "zone_deleted", "suspended_zone", "zone_not_active"]) {
+  for (const [w, why] of ZONE_STATE_WORDINGS) {
     wording = w;
     await assert.rejects(
       () => brightDataSearch("best vitrified tiles", { attempts: 2, backoffMs: 1, timeout: 500 }),
       (err) => {
         assert.ok(
           isBrightDataZoneError(err),
-          `"${w}" is a zone state Bright Data can return; it must type as a zone fault, got ${err?.name}: ${err?.message}`
+          `"${w}" is a zone state Bright Data can return; it must type as a zone fault (${why}), got ${err?.name}: ${err?.message}`
         );
         assert.equal(err.reason, "zone_rejected", `"${w}" must carry the machine-readable reason`);
         assert.equal(err.zone, "state_zone");
@@ -572,6 +687,16 @@ test("R1.2.10 — snake_case zone states are zone rejections too (zone_suspended
       `"${w}" fell through to a generic error — the cache would survive a dead zone`
     );
   }
+
+  // R1.2.16: the loop above is the only place these wordings are exercised, so
+  // the count of real HTTP attempts is what proves each row reached the
+  // classifier rather than being skipped. One call per wording: a typed zone
+  // error is not retried, which is itself asserted at :302.
+  assert.equal(
+    serpCalls,
+    ZONE_STATE_WORDINGS.length,
+    "one probe per wording — a row that made no call would prove nothing about it"
+  );
 });
 
 test("R1.2.10 — RECORDED ASYMMETRY: rate-limit precedence differs between the 200 and not-ok paths", async (t) => {
@@ -817,6 +942,22 @@ const NOT_A_ZONE_REJECTION = [
 ];
 
 test("R1.2.11 — transient and unrelated zone-mentioning failures are NOT permanent zone rejections", async (t) => {
+  // R1.2.16: 55 committed rows, re-counted from the literal above. The four
+  // required rows are the ones the R1.2.11 verifier's degenerate-classifier
+  // mutations actually fired on (recorded in that task's verification note):
+  // prepending /zone/i fires on the no_ready_cookies row, collapsing
+  // /invalid zone/ to /invalid/ fires on the country-code row, and widening the
+  // not-found pattern to a proximity match fires on the 404 row. The empty body
+  // is required because "no evidence" must never read as evidence (rule 1).
+  assertCorpusIntact(NOT_A_ZONE_REJECTION, "NOT_A_ZONE_REJECTION", {
+    floor: 55,
+    required: [
+      "",
+      "no ready cookies for zone serp_api1",
+      "invalid country code",
+      "zone serp_api1: page not found (404)",
+    ],
+  });
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "pinned_zone" });
   const cacheBefore = peekBrightDataZoneCache()?.name ?? null;
   const zc = makeZoneClassifier(t);
@@ -890,6 +1031,15 @@ const IS_A_ZONE_REJECTION = [
 ];
 
 test("R1.2.11 — the positive side, so a NARROWING is caught here and not in production", async (t) => {
+  // R1.2.16: 22 committed rows. Emptying this one would let a total narrowing of
+  // the classifier pass, which is the failure this corpus exists to catch. The
+  // required rows are the two halves of the R1.2.10 widening (`deleted-zone` and
+  // `suspend_zone`, the rows the verifier's narrowing mutations fired on), the
+  // canonical prose form, and the case-insensitivity row.
+  assertCorpusIntact(IS_A_ZONE_REJECTION, "IS_A_ZONE_REJECTION", {
+    floor: 22,
+    required: ["zone not found: pinned_zone", "ZONE NOT FOUND", "deleted-zone", "suspend_zone"],
+  });
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "pinned_zone" });
   const cacheBefore = peekBrightDataZoneCache()?.name ?? null;
   const zc = makeZoneClassifier(t);
@@ -906,6 +1056,15 @@ test("R1.2.11 — the positive side, so a NARROWING is caught here and not in pr
     assert.equal(err.zone, "pinned_zone", "and it names the zone the operator has to fix");
   }
 
+  // R1.2.16: the negative test asserted its call count and these two did not.
+  // The count is the other half of the corpus guard: the floor proves the rows
+  // are still listed, this proves every listed row reached the real classifier
+  // over the mocked transport rather than short-circuiting before the call.
+  assert.equal(
+    zc.calls(),
+    IS_A_ZONE_REJECTION.length,
+    "one probe per corpus entry -- a row that silently made no call would prove nothing"
+  );
   assert.equal(
     peekBrightDataZoneCache()?.name ?? null,
     cacheBefore,
@@ -966,6 +1125,20 @@ const TOLERATED_OVER_MATCHES = [
 ];
 
 test("R1.2.11 — the three over-match MECHANISMS, pinned as tolerated exceptions with their reason", async (t) => {
+  // R1.2.16: 13 committed rows across the three mechanisms. This is the corpus
+  // most likely to be trimmed -- a future editor who tightens a pattern is meant
+  // to MOVE rows into NOT_A_ZONE_REJECTION, and the floor makes a quiet delete
+  // look different from that move. One row per MECHANISM is required, because
+  // the block above claims all three are still tolerated and each of those rows
+  // is the one that goes red when its mechanism is tightened.
+  assertCorpusIntact(TOLERATED_OVER_MATCHES, "TOLERATED_OVER_MATCHES", {
+    floor: 13,
+    required: [
+      "timezone not found",
+      "invalid zonefile",
+      "your session for zone serp_api1 has expired, please retry",
+    ],
+  });
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "pinned_zone" });
   const cacheBefore = peekBrightDataZoneCache()?.name ?? null;
   const zc = makeZoneClassifier(t);
@@ -983,6 +1156,13 @@ test("R1.2.11 — the three over-match MECHANISMS, pinned as tolerated exception
     );
   }
 
+  // R1.2.16, as above: the floor proves the rows are listed, the count proves
+  // each one was actually put through the classifier.
+  assert.equal(
+    zc.calls(),
+    TOLERATED_OVER_MATCHES.length,
+    "one probe per corpus entry -- a row that silently made no call would prove nothing"
+  );
   assert.equal(
     peekBrightDataZoneCache()?.name ?? null,
     cacheBefore,

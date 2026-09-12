@@ -480,6 +480,9 @@ export function isMeasuredEngineSlice(summary) {
  *     state, and blanking those would erase real history to fix a new bug.
  *   - a measured 0 is a measurement (standing rule 1) and renders as "0%", with
  *     a chip that says it was measured so it cannot be read as "unknown".
+ *   - a 0 with NO state renders as "0%" too (same legacy tolerance) but under a
+ *     DIFFERENT chip and sentence: the row recorded no measurement, so the
+ *     surface may not say one happened. See ENGINE_UNSTATED_ZERO_LABEL.
  */
 
 /** Where the state lives on a stored row, in the order a reader should try. */
@@ -507,6 +510,12 @@ export const ENGINE_READ_REASONS = Object.freeze({
   UNRECOGNISED_STATE: "unrecognised_state",
   /** The row claims a measurement and stored no number. A contradiction, shown. */
   MEASURED_WITHOUT_NUMBER: "measured_state_without_number",
+  /**
+   * R2.1.5 — a 0 with NO state beside it. The number stands (see the legacy
+   * tolerance above), but nothing on the row says the 0 was measured, so
+   * nothing may be said on its behalf.
+   */
+  LEGACY_ZERO_UNSTATED: "legacy_zero_unstated",
 });
 
 /** One human sentence per reason. Every token above and in ENGINE_STATE_REASONS. */
@@ -529,10 +538,33 @@ export const ENGINE_STATE_REASON_DETAIL = Object.freeze({
     "This reading carries a measurement state this build does not recognise.",
   [ENGINE_READ_REASONS.MEASURED_WITHOUT_NUMBER]:
     "This reading says it was measured but stored no number.",
+  [ENGINE_READ_REASONS.LEGACY_ZERO_UNSTATED]:
+    "This reading stored 0 and no measurement state. The 0 is shown as recorded, " +
+    "but nothing on the row says it was measured, so this build cannot tell a real " +
+    "zero from one the older pipeline wrote when it had nothing to measure.",
 });
 
 export const ENGINE_NOT_MEASURED_LABEL = "Not measured";
 export const ENGINE_MEASURED_ZERO_LABEL = "Measured zero";
+/**
+ * R2.1.5 — the chip for a 0 that carries no state. NOT "Measured zero": a
+ * stateless row recorded no measurement fact, and the pre-R2.1.1 pipeline this
+ * rebuild is fixing wrote exactly this shape (a bare 0, no state) for a dead
+ * engine, an empty eliciting pool and a failed probe alike. Labelling those
+ * "Measured zero" states the rebuild's central bug to the user as a finding.
+ *
+ * KNOWN GAP, stated rather than hidden: this chip is decided by the PRESENCE of
+ * `state` on the row, which is the only fact a stored row carries about its own
+ * provenance. summarizeEngineResults publishes that pair (:1600) so every
+ * multi-engine scan is covered, but scanWorker's single-engine branch summarises
+ * through summarizeAioResults (src/lib/scoring/aioPipeline.js:199), which emits
+ * no state at all — so on a deployment with exactly one engine enabled, a
+ * genuine measured zero written TODAY is stateless and wears this chip. That
+ * reads as "this build cannot tell", which is true of such a row, but the fix is
+ * for aioPipeline to state its measurement; filed rather than done here, because
+ * it is a write-side change outside this task.
+ */
+export const ENGINE_UNSTATED_ZERO_LABEL = "Unstated zero";
 /** What a surface prints where a number would be. Standing rule 5. */
 export const NO_MEASUREMENT_TEXT = "—";
 
@@ -583,18 +615,39 @@ export function describeScanMeasurement(row, { key = "visibility_pct" } = {}) {
   }
 
   const measuredZero = pct === 0;
+  // R2.1.5 — a 0 with a measured state behind it and a 0 with no state at all
+  // are DIFFERENT FACTS and must not share a chip. The state-backed one knows
+  // what the answers contained ("vendors on every count, and never this
+  // brand"); the stateless legacy one knows only that a 0 was written. Saying
+  // the first sentence over the second asserts a measurement nobody recorded —
+  // and the pre-R2.1.1 pipeline wrote a bare stateless 0 for a dead engine and
+  // an empty eliciting pool too. The NUMBER is unchanged either way: the legacy
+  // tolerance was ruled correct and blanking history would erase real readings.
+  const zeroIsUnstated = measuredZero && state == null;
+  const zeroReason = zeroIsUnstated
+    ? ENGINE_READ_REASONS.LEGACY_ZERO_UNSTATED
+    : reason || ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE;
   return {
     measured: true,
     measuredZero,
     pct,
     text: `${pct}%`,
     state: state ?? null,
-    reason: measuredZero ? reason || ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE : null,
-    // A real number needs no chip; a measured zero needs one, or it reads
-    // exactly like the absence it must not be confused with.
-    label: measuredZero ? ENGINE_MEASURED_ZERO_LABEL : null,
+    reason: measuredZero ? zeroReason : null,
+    // A real number needs no chip; a zero needs one, or it reads exactly like
+    // the absence it must not be confused with — and the chip and the sentence
+    // come from the same reason token so the two cannot disagree.
+    label: measuredZero
+      ? zeroIsUnstated
+        ? ENGINE_UNSTATED_ZERO_LABEL
+        : ENGINE_MEASURED_ZERO_LABEL
+      : null,
     detail: measuredZero
-      ? ENGINE_STATE_REASON_DETAIL[ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE]
+      ? ENGINE_STATE_REASON_DETAIL[zeroReason] ||
+        // A state-backed measured_zero carrying a reason token this build does
+        // not know still gets words: the STATE said measured_zero, so that
+        // sentence is the one the row supports. Never an empty title.
+        ENGINE_STATE_REASON_DETAIL[ENGINE_STATE_REASONS.BRAND_NOT_VISIBLE]
       : null,
   };
 }

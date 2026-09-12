@@ -194,9 +194,25 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   if (failureKindOf(lastErr) === FAILURE_KIND.PERMANENT) {
     const status = lastErr?.status ?? null;
     const reason = status === 401 || status === 403 ? "auth_failed" : "permanent_error";
+    // CONDITIONAL on the counted attempts, because a permanent refusal does not
+    // only arrive first. 429-then-403 on quota exhaustion and 5xx-then-401 on a
+    // mid-run key rotation both reach here with attempts > 1: an earlier
+    // transient failure already bought a retry, and the refusal landed on that
+    // retry. The first draft of this sentence hardcoded "on the first call" and
+    // "not retried" beside the real count, so it printed "on the first call
+    // (2 attempts, not retried)" — contradicting itself in one breath and
+    // undoing the exact distinction `attempts` is counted for. Every attempt
+    // before the last was necessarily a transient failure (the loop only
+    // continues when isRetryableFailure said so), so the count names them.
+    const whenRefused =
+      attempts <= 1
+        ? `on the first call (${spent}, not retried — a permanent refusal does not ` +
+          `improve with backoff)`
+        : `on attempt ${attempts} of ${retries + 1}, after ${attempts - 1} transient ` +
+          `failure${attempts === 2 ? "" : "s"} that earned a retry (${spent}; the refusal ` +
+          `itself was not retried — a permanent refusal does not improve with backoff)`;
     const err = new LlmUnavailableError(
-      `LLM gateway ${baseUrl} refused the request with HTTP ${status} on the first call ` +
-        `(${spent}, not retried — a permanent refusal does not improve with backoff): ` +
+      `LLM gateway ${baseUrl} refused the request with HTTP ${status} ${whenRefused}: ` +
         `${lastErr?.message || lastErr}`,
       { reason, provider, model, cause: lastErr }
     );

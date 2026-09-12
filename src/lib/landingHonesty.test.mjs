@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -25,8 +25,10 @@ import { SAMPLE_DESTINATIONS, SAMPLE_RESULT } from "../data/mockData.js";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const read = (rel) => readFile(path.join(REPO, rel), "utf8");
 
-const SHEET_PATH = path.join(REPO, "src/components/landing/AnswerSheet.jsx");
-const PAGE_PATH = path.join(REPO, "src/app/page.js");
+const SHEET_REL = "src/components/landing/AnswerSheet.jsx";
+const PAGE_REL = "src/app/page.js";
+const SHEET_PATH = path.join(REPO, SHEET_REL);
+const PAGE_PATH = path.join(REPO, PAGE_REL);
 
 /**
  * The landing surfaces that attribute a sample answer to an engine. Both carry
@@ -514,21 +516,84 @@ test("GUARD — no 'Live' chip on scripted content", async () => {
  * apostrophe pair in JSX prose swallow a live Math.random() — a scanner that
  * loses its place must say so.
  *
+ * THE QUOTE-PHASE RULE, added in R6.4.9's second round, and the reason it
+ * exists. The first round shipped the lexer above and documented two "blind
+ * spots". The first was real and stayed open. The SECOND was described as safe
+ * and was not: it was an exploitable hole, and the verifier walked through it.
+ *
+ * The mechanism. JSX text is code position to this lexer (blind spot 1 below),
+ * so an apostrophe in JSX PROSE is read as a string delimiter. It does not just
+ * over-scan the prose — it SHIFTS QUOTE PAIRING FOR THE REST OF THE LINE, so a
+ * REAL string literal later on the same line lands in what the lexer believes is
+ * code, and a comment run inside that real string is stripped. The executed
+ * payload, one line of AnswerSheet.jsx:
+ *
+ *     <span className="chip">Brightwave's mention</span>
+ *     <span className="chip">{' cited SLASH-STAR Perplexity STAR-SLASH first'}</span>
+ *     <span className="chip">NorthPeak's pick</span>
+ *
+ * all on one line. The lexer pairs the apostrophe in "Brightwave's" with the one
+ * that OPENS the real string, so the real string's contents read as code and its
+ * comment run is deleted; the apostrophe in "NorthPeak's" pairs with the one that
+ * CLOSED it, so the line ends in code and nothing refuses. React writes the
+ * string out character for character, so "Perplexity" reached the DOM with all
+ * 24 tests in this file green. The same vehicle on one line of page.js hid
+ * ChatGPT. Both are pinned below as regression cases, with their plain-spelling
+ * controls.
+ *
+ * THE FIX, and why this one rather than a refusal. A comment run is stripped
+ * only if it is stripped under EVERY quote phase of its line. Concretely: if the
+ * same quote character occurs both BEFORE the opener and AFTER it on the opener's
+ * own line, then some pairing of those two quotes puts the opener INSIDE a string,
+ * so the run is kept verbatim instead of deleted. That is sound in the only
+ * direction that matters — it can never delete text the browser renders — and it
+ * is cheap: no JSX parser, one line of context, no guess about which reading is
+ * true. Where it is wrong it KEEPS a real comment, which makes the scan read a
+ * comment and fail loudly, never read clean over prose.
+ *
+ * The alternative the verifier offered was to REFUSE an ambiguous line by name.
+ * Rejected, because the ambiguity test cannot tell the payload from
+ * `const a = 'x'; // note`, and every file this suite strips is full of that
+ * shape — a refusal would fire on ordinary source, be allowlisted within a day,
+ * and end up meaning nothing. Refusal is right when the lexer has LOST its place;
+ * here it still has a place, it just has two, and keeping the text is the answer
+ * that covers both.
+ *
+ * Backticks are deliberately NOT part of this test. A template spans lines and is
+ * tracked on the stack above, and a pair of backticks straddling a comment on one
+ * line is the ordinary `${x SLASH-STAR c STAR-SLASH}` hole, which must keep being
+ * stripped. A stray backtick in JSX prose runs into "a template that never
+ * closes" instead, which is a refusal — the loud direction.
+ *
  * KNOWN BLIND SPOTS, stated rather than papered over:
- *   1. JSX TEXT. `<p>answer/* ChatGPT star-slash reads</p>` is prose React renders, but
- *      it sits in code position as far as this lexer is concerned, so the
- *      sequence is stripped. Closing it needs a real JSX parser. Neither
- *      guarded file writes a bare comment opener into JSX text today, and the
- *      canary below reports every line where a token disappears, so this shows
- *      up as a blind line the moment someone does.
- *   2. AN APOSTROPHE PAIR ON ONE LINE of JSX prose still reads as a string, so
- *      a comment between them is kept rather than stripped. That direction is
- *      safe — it over-scans, and an over-scan is a loud failure, not a false
- *      green. The unsafe direction is closed.
- *   3. A REGEX LITERAL containing a quote (/don't/) would be read as opening a
+ *   1. JSX TEXT is read as CODE position. `<p>answer/* ChatGPT star-slash reads</p>`
+ *      is prose React renders, and with no quote character anywhere on the line
+ *      the rule above has nothing to catch, so the sequence is still stripped.
+ *      This class is OPEN. Closing it needs a real JSX parser.
+ *
+ *      THE CANARY DOES NOT CATCH IT, and R6.4.9's first round claimed it did.
+ *      That claim was false and this is the correction: the canary appends its
+ *      token at the END of a line, AFTER the star-slash, where the token survives
+ *      stripping — so the line reads as loud while the run between the markers is
+ *      gone. What the canary does catch is a span the stripper SKIPS (the lazy
+ *      regex swallow) and a token written inside the first quoted span of a
+ *      MUST_READ line. What covers the JSX-text class instead is the render
+ *      baseline in "PROOF — no surface renders an engine label its deployment
+ *      does not probe, under any config": both guarded surfaces are compiled and
+ *      rendered under a list of deployment configs, and every label in
+ *      ENGINE_LABELS that a config does not deploy is asserted ABSENT from the
+ *      markup, raw and decoded. That test also asserts that every known label is
+ *      off-deployment under at least one config in the list, so the sentence
+ *      above cannot quietly become false by a label being added. A name hidden in
+ *      JSX text is still a name in the DOM, so it fails there even while the
+ *      source scan is blind to it — that is checked, not hoped for: splicing a
+ *      bare "SLASH-STAR Perplexity STAR-SLASH" into the sheet's JSX text fails
+ *      that test ALONE, with all 24 others green. Neither guarded file writes a
+ *      bare comment opener into JSX text today.
+ *   2. A REGEX LITERAL containing a quote (/don't/) would be read as opening a
  *      string. Neither guarded file has one; if one appears, the refusals above
  *      fire rather than the scan quietly narrowing.
- *   4. includes() cannot see a COMPUTED spelling (String.fromCharCode(67) +
+ *   3. includes() cannot see a COMPUTED spelling (String.fromCharCode(67) +
  *      'hatGPT'). Escape spellings are handled — see renderableText below — but
  *      arithmetic is not, and no source scan in this repo can be.
  */
@@ -545,6 +610,31 @@ function withoutComments(src) {
   let out = "";
   let i = 0;
   const n = src.length;
+  /**
+   * The quote-phase test, documented at length above. Returns the quote
+   * character that makes the phase at `at` ambiguous, or null when every phase
+   * of this line agrees that `at` is in code.
+   *
+   * Sound direction: a quote that appears only BEFORE the opener can either pair
+   * off before it or run past the end of its line, and a single-quoted or
+   * double-quoted span that runs past its line is not a phase JavaScript allows
+   * (the lexer above refuses one). So "before only" leaves the opener in code
+   * under every admissible reading. "Before AND after" does not.
+   *
+   * Escapes are ignored on purpose: counting a \' as a delimiter can only ADD
+   * ambiguity, which can only keep more text, which is the safe direction.
+   */
+  const ambiguousPhaseAt = (at) => {
+    const from = at === 0 ? 0 : src.lastIndexOf("\n", at - 1) + 1;
+    let to = src.indexOf("\n", at);
+    if (to < 0) to = n;
+    const before = src.slice(from, at);
+    const after = src.slice(at + 2, to);
+    for (const q of ["'", '"']) {
+      if (before.includes(q) && after.includes(q)) return q;
+    }
+    return null;
+  };
   // Mode stack. A `code` frame counts its own braces so a ${...} hole knows
   // where it ends; a template frame copies text until its own backtick.
   const stack = [{ code: true, depth: 0 }];
@@ -602,13 +692,24 @@ function withoutComments(src) {
       continue;
     }
     if (c === "/" && src[i + 1] === "/") {
-      while (i < n && src[i] !== "\n") i += 1;
+      let to = src.indexOf("\n", i);
+      if (to < 0) to = n;
+      // Ambiguous phase: this may not be a comment at all. Copy it out verbatim
+      // rather than lexing it, so a quote inside it cannot open a span that then
+      // "runs past the end of its line" and refuses honest source.
+      if (ambiguousPhaseAt(i)) out += src.slice(i, to);
+      i = to;
       continue; // the newline itself is kept, so line numbers survive
     }
     if (c === "/" && src[i + 1] === "*") {
       const at = i;
       const end = src.indexOf("*/", i + 2);
       if (end < 0) lose(at, "a block comment that never closes");
+      if (ambiguousPhaseAt(at)) {
+        out += src.slice(at, end + 2);
+        i = end + 2;
+        continue;
+      }
       // A space so nothing splices, then the comment's own newlines, so every
       // line number in every later message still means what it says.
       out += " " + src.slice(i, end).replace(/[^\n]/g, "");
@@ -1320,6 +1421,9 @@ test("GUARD — the comment stripper deletes comments, and nothing else", () => 
   const OPEN = "/" + "*";
   const CLOSE = "*" + "/";
   const TICK = String.fromCharCode(96);
+  const AP = String.fromCharCode(39);
+  const DQ = String.fromCharCode(34);
+  const SPAN = "<span className=" + DQ;
 
   // --- a real comment still goes ---
   assert.ok(
@@ -1373,6 +1477,36 @@ test("GUARD — the comment stripper deletes comments, and nothing else", () => 
       "const t = 'answer'; // ok\nconst u = 'and " + OPEN + " ChatGPT " + CLOSE + " reads';\n",
       "a real comment on one line does not license reaching into the string on the next",
     ],
+    /**
+     * R6.4.9 ROUND TWO — THE QUOTE-PHASE SHIFT, the two payloads that beat the
+     * first round of this fix at 24/24 green. Both are one line, because the
+     * phase shift is a per-line effect.
+     *
+     * The apostrophe in "Brightwave's" is JSX prose, not a delimiter, but this
+     * lexer has no JSX parser. It pairs that apostrophe with the one that OPENS
+     * the real string in the next chip, which leaves the real string's contents
+     * in code position where the comment run is deleted; the apostrophe in
+     * "NorthPeak's" pairs with the one that closed it, so the line ends in code
+     * and nothing refuses. React writes the string out character for character.
+     *
+     * The end-to-end versions of these two — spliced into the real files,
+     * rendered through react-dom/server, with their plain-spelling controls —
+     * are in the PROOF test near the bottom of this file.
+     */
+    [
+      "        " + SPAN + "chip chip--you" + DQ + ">Brightwave" + AP + "s mention</span>"
+        + SPAN + "chip" + DQ + ">{" + AP + " cited " + OPEN + " ChatGPT " + CLOSE + " first"
+        + AP + "}</span>" + SPAN + "chip" + DQ + ">NorthPeak" + AP + "s pick</span>\n",
+      "an apostrophe in JSX prose shifts quote pairing for the rest of the line, so "
+        + "a real string later on it must not be read as code — AnswerSheet.jsx",
+    ],
+    [
+      "        " + SPAN + "chip chip--warn" + DQ + " style={{ marginLeft: " + AP + "auto"
+        + AP + " }}>Brightwave" + AP + "s first</span>" + SPAN + "chip" + DQ + ">{" + AP
+        + " cited " + OPEN + " ChatGPT " + CLOSE + " first" + AP + "}</span>" + SPAN
+        + "chip" + DQ + ">NorthPeak" + AP + "s pick</span>\n",
+      "and a style prop's own quoted value does not re-sync the phase — page.js",
+    ],
   ];
   for (const [src, why] of evasions) {
     assert.ok(withoutComments(src).includes("ChatGPT"), why);
@@ -1381,7 +1515,51 @@ test("GUARD — the comment stripper deletes comments, and nothing else", () => 
       "the fixture must still evade the stripper it was written against, or it "
         + "has stopped testing anything: " + why
     );
+    // The control: the same text with ONLY the comment markers taken out —
+    // block markers where there are any, the slashes otherwise. Both strippers
+    // must see it. A payload whose control is also invisible is not isolating the
+    // comment run, it is testing something else.
+    const noBlock = src.split(OPEN).join("").split(CLOSE).join("");
+    const control = noBlock === src ? src.split("//").join("") : noBlock;
+    assert.notEqual(control, src, "the control is the payload: " + why);
+    assert.ok(withoutComments(control).includes("ChatGPT"), "control, current: " + why);
+    assert.ok(NAIVE_STRIPPER(control).includes("ChatGPT"), "control, old stripper: " + why);
   }
+
+  /**
+   * THE OTHER SIDE OF THE PHASE RULE. It keeps a comment run whenever the same
+   * quote character sits both before and after the opener on the opener's line,
+   * so it has to be shown NOT firing on the ordinary shapes, or this file's own
+   * doctrine — a comment that explains a fix must not read as the thing it
+   * removed — quietly stops holding.
+   */
+  const stillStripped = [
+    ["const a = 'answer'; // ChatGPT is not deployed\n", "a quoted value before a line comment, and no quote after it"],
+    ["const a = 'answer'; " + OPEN + " ChatGPT " + CLOSE + "\n", "the same with a block comment"],
+    ["<p>{" + OPEN + " ChatGPT " + CLOSE + "}</p>\n", "a JSX comment with no quote on the line"],
+    ["const a = 'x';\n" + OPEN + " ChatGPT " + CLOSE + "\n", "a quote on the PREVIOUS line changes nothing"],
+    [
+      "const t = " + TICK + "answer ${x " + OPEN + " ChatGPT " + CLOSE + "} reads" + TICK + ";\n",
+      "backticks are not part of the phase test, so a ${...} hole still strips",
+    ],
+  ];
+  for (const [src, why] of stillStripped) {
+    assert.ok(
+      !withoutComments(src).includes("ChatGPT"),
+      "the phase rule must not keep a real comment here: " + why
+    );
+  }
+
+  // And the documented over-scan, asserted rather than hoped for: a real comment
+  // BETWEEN two quoted spans on one line is kept, because some pairing of those
+  // quotes puts it inside a string. That direction reads a comment and fails
+  // loudly; it never reads clean over prose.
+  assert.ok(
+    withoutComments("const a = 'x'; " + OPEN + " ChatGPT " + CLOSE + " const b = 'y';\n").includes("ChatGPT"),
+    "a comment straddled by quotes on one line is KEPT — the stated cost of the "
+      + "phase rule. If this stops being true the rule has been narrowed, and the "
+      + "payloads above are the thing to re-run."
+  );
 
   // A comment inside a ${...} hole IS a comment: the hole is code again. This
   // is what proves the template handling tracks nesting rather than treating
@@ -1542,6 +1720,15 @@ test("GUARD — the committed evasion fixtures are caught, and the scan they bea
       ["ChatGPT", "Google AI Overview", "Perplexity"],
       "three engine names spelled so that no substring search can see them",
     ],
+    [
+      // R6.4.9 round two. The rejection payload: an apostrophe in JSX prose
+      // shifts quote pairing for the rest of the line, so the real string that
+      // follows lands in code position and its comment run is stripped. This one
+      // beat the FIRST version of the lexer, not only the regex it replaced.
+      "quote-phase-shift.jsx.txt",
+      ["Perplexity"],
+      "an apostrophe in JSX prose moves the lexer's idea of which quote it is inside",
+    ],
   ];
 
   for (const [name, expected, why] of cases) {
@@ -1573,8 +1760,8 @@ test("GUARD — the committed evasion fixtures are caught, and the scan they bea
  * reports green while the page lies. Finding C11 is the second kind, so arguing
  * it in a comment is not enough — the payload has to be shown reaching the DOM.
  *
- * So this compiles the REAL src/components/landing/AnswerSheet.jsx with sucrase
- * and renders it through react-dom/server, the same harness
+ * So this compiles the REAL guarded surfaces with sucrase and renders them
+ * through react-dom/server, the same harness
  * src/components/landing/engineRailAbsentTotal.test.mjs uses on EngineRail, and
  * asserts three things per payload, in this order:
  *
@@ -1598,41 +1785,158 @@ test("GUARD — the committed evasion fixtures are caught, and the scan they bea
  * WHAT IT CANNOT PROVE, stated: this is static markup, not a browser. It shows
  * the characters reach the DOM. It does not show a hydration pass, CSS, or what
  * a screen reader announces.
+ *
+ * R6.4.9 round two — IT RENDERS page.js TOO, and it renders under a CHOSEN
+ * deployment. The first round rendered AnswerSheet.jsx alone, with a two-entry
+ * module map, and its baseline clause asked one question: is the hard-coded token
+ * "ChatGPT" absent. That left the documented JSX-text blind spot doing no work at
+ * all — a name hidden in JSX text of page.js was covered by nothing. So the map
+ * became a loader: `@/...` and relative specifiers are resolved and compiled from
+ * disk, recursively, which is how the whole landing page renders here. Only four
+ * specifiers are stubbed, each named and justified below, and anything else
+ * throws rather than resolving to undefined.
  */
-function renderedMarkup(source, filePath) {
-  const { code } = transform(source, {
-    transforms: ["jsx", "imports"],
-    jsxPragma: "React.createElement",
-    jsxFragmentPragma: "React.Fragment",
-    filePath,
-  });
-  // The REAL engines module, not a stub: the chip's label has to be the one the
-  // deployment would actually print, or the baseline below means nothing.
-  const modules = new Map([
+
+/**
+ * The stub list, rebuilt per render so no two renders share mutable state.
+ *
+ * Deliberately short. A stub renders a proof of the stub, so each of these has to
+ * be a module that cannot carry an engine name into the markup:
+ *   - react: the real one.
+ *   - next/link: an <a>. The only thing these proofs read off the markup is TEXT,
+ *     and a Link's text is its children, which are rendered.
+ *   - next/navigation: a static render never navigates. A throwing stub would
+ *     fail the render for a reason unrelated to this guard.
+ *   - lucide-react: icons are <svg> with no text. A Proxy rather than a list so a
+ *     new icon import does not break the proof, and it passes aria-label and
+ *     title through, because those DO reach a reader.
+ */
+function renderStubs() {
+  return new Map([
     ["react", React],
-    ["@/lib/engines/deployedEngines", { __esModule: true, primaryDeployedEngineLabel }],
+    [
+      "next/link",
+      {
+        __esModule: true,
+        default: (p) => React.createElement(
+          "a",
+          { href: String(p.href ?? ""), className: p.className, style: p.style },
+          p.children
+        ),
+      },
+    ],
+    [
+      "next/navigation",
+      {
+        __esModule: true,
+        useRouter: () => ({ push() {}, replace() {}, prefetch() {}, refresh() {}, back() {} }),
+        usePathname: () => "/",
+        useSearchParams: () => new URLSearchParams(),
+      },
+    ],
+    [
+      "lucide-react",
+      new Proxy({ __esModule: true }, {
+        get: (_t, key) => (key === "__esModule" ? true : ((p = {}) => React.createElement("svg", {
+          "data-icon": String(key),
+          "aria-label": p["aria-label"],
+          title: p.title,
+        }))),
+      }),
+    ],
   ]);
-  const requireShim = (specifier) => {
-    if (modules.has(specifier)) return modules.get(specifier);
+}
+
+/**
+ * Compile and render a real surface from disk.
+ *
+ * `env` is handed to the REAL deployedEngines module rather than stubbing it: that
+ * module documents its `env` argument as the pure path tests are meant to take
+ * (deployedEngines.js:71-73), and it is the only way to render the page under a
+ * deployment other than this process's own, because NEXT_PUBLIC_ENGINES is
+ * captured at module load. Every module in the graph — page.js, EngineRail,
+ * mockData — gets the same env-bound copy, so the render is internally
+ * consistent instead of half one deployment and half another.
+ *
+ * `overrides` maps an absolute path to source text, which is how a payload is
+ * spliced in and how the sheet is put into its reduced-motion state.
+ */
+function renderSurface(entry, { env = null, overrides = new Map(), minChars = 200 } = {}) {
+  const stubs = renderStubs();
+  const enginesPath = path.join(REPO, "src/lib/engines/deployedEngines.js");
+  const enginesModule = {
+    __esModule: true,
+    ENGINE_LABELS,
+    formatEngineList,
+    parseEngineList,
+    engineDriftWarning,
+    deployedEngines: (e = env) => deployedEngines(e),
+    deployedEngineLabels: (e = env) => deployedEngineLabels(e),
+    primaryDeployedEngineLabel: (e = env) => primaryDeployedEngineLabel(e),
+  };
+  const resolveFrom = (specifier, fromFile) => {
+    let base;
+    if (specifier.startsWith("@/")) base = path.join(REPO, "src", specifier.slice(2));
+    else if (specifier.startsWith(".")) base = path.resolve(path.dirname(fromFile), specifier);
+    else return null;
+    for (const candidate of [base, base + ".js", base + ".jsx", path.join(base, "index.js")]) {
+      if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+    }
     throw new Error(
-      filePath + ' imports "' + specifier + '", which this harness does not resolve. '
-        + "Add it to the map deliberately — a silently stubbed import renders a proof "
-        + "of the stub instead of a proof of the component."
+      fromFile + ' imports "' + specifier + '", which resolves to no file on disk. '
+        + "This harness compiles the real graph; a specifier it cannot resolve is a "
+        + "broken import, not something to stub."
     );
   };
-  const mod = { exports: {} };
-  // eslint-disable-next-line no-new-func
-  const factory = new Function("require", "module", "exports", "React", code);
-  factory(requireShim, mod, mod.exports, React);
-  const Component = mod.exports.AnswerSheet || mod.exports.default;
+  const cache = new Map();
+  const load = (file) => {
+    const abs = path.resolve(file);
+    if (abs === enginesPath) return enginesModule;
+    if (cache.has(abs)) return cache.get(abs);
+    const source = overrides.has(abs) ? overrides.get(abs) : readFileSync(abs, "utf8");
+    const { code } = transform(source, {
+      transforms: ["jsx", "imports"],
+      jsxPragma: "React.createElement",
+      jsxFragmentPragma: "React.Fragment",
+      filePath: abs,
+    });
+    const mod = { exports: {} };
+    cache.set(abs, mod.exports); // set before running, so a cycle resolves
+    const requireShim = (specifier) => {
+      if (stubs.has(specifier)) return stubs.get(specifier);
+      const resolved = resolveFrom(specifier, abs);
+      if (!resolved) {
+        throw new Error(
+          abs + ' imports "' + specifier + '", which this harness does not resolve. '
+            + "Add it to renderStubs() deliberately — a silently stubbed import renders "
+            + "a proof of the stub instead of a proof of the component."
+        );
+      }
+      return load(resolved);
+    };
+    // eslint-disable-next-line no-new-func
+    new Function("require", "module", "exports", "React", code)(requireShim, mod, mod.exports, React);
+    cache.set(abs, mod.exports);
+    return mod.exports;
+  };
+  const exported = load(entry);
+  const Component = exported.AnswerSheet || exported.default;
   assert.equal(
     typeof Component,
     "function",
-    filePath + " exported no component, so this render proved nothing"
+    entry + " exported no component, so this render proved nothing"
   );
   const markup = renderToStaticMarkup(React.createElement(Component));
-  assert.ok(markup.length > 200, filePath + " rendered " + markup.length + " characters — that is not the sheet");
+  assert.ok(
+    markup.length > minChars,
+    entry + " rendered " + markup.length + " characters — that is not the surface"
+  );
   return markup;
+}
+
+/** The one-file form the fixture proof uses: source text, rendered at its own path. */
+function renderedMarkup(source, filePath) {
+  return renderSurface(filePath, { overrides: new Map([[path.resolve(filePath), source]]) });
 }
 
 /** AnswerSheet.jsx as a reduced-motion visitor gets it: the whole passage, at once. */
@@ -1648,66 +1952,154 @@ function reducedMotionSheetSource() {
   return raw.replace(TYPED, "const [instant, setInstant] = useState(true);");
 }
 
+const ALL_ENGINE_LABELS = Object.values(ENGINE_LABELS);
+
+/**
+ * The scan pipeline for each guarded file, as it stands NOW and as it stood
+ * BEFORE R6.4.9, so a payload can be shown to have been a false green rather
+ * than merely asserted to have been one.
+ *
+ * page.js keeps its ENGINE_NOTE cut in BOTH columns: R2.10.6 shipped that, and
+ * the only things R6.4.9 changed are the stripper and the decoder. Leaving the
+ * cut out of the "before" column would credit this task with R2.10.6's fix.
+ */
+const SCAN_PIPELINE = {
+  [SHEET_REL]: {
+    before: (src) => NAIVE_STRIPPER(src),
+    now: (src) => renderableText(withoutComments(src)),
+  },
+  [PAGE_REL]: {
+    before: (src) => NAIVE_STRIPPER(withoutEngineNoteDictionary(src, ALL_ENGINE_LABELS)),
+    now: (src) => renderableText(withoutComments(withoutEngineNoteDictionary(src, ALL_ENGINE_LABELS))),
+  },
+};
+
 test("PROOF — the payloads this guard catches are payloads the browser renders", () => {
   const OPEN = "/" + "*";
   const CLOSE = "*" + "/";
   const BS = String.fromCharCode(92);
-  const TOKEN = "ChatGPT";
+  const AP = String.fromCharCode(39);
+  const DQ = String.fromCharCode(34);
 
-  // The old scan, end to end: the stripper this file shipped until R6.4.9, and
-  // no decoding. Exactly what read the file when the payload went out.
-  const scanBefore = (src) => NAIVE_STRIPPER(src).includes(TOKEN);
-  // The scan as it stands now.
-  const scanNow = (src) => renderableText(withoutComments(src)).includes(TOKEN);
+  const cleanSheet = reducedMotionSheetSource();
+  const cleanPage = readFileSync(PAGE_PATH, "utf8");
+  const cleanOf = { [SHEET_REL]: cleanSheet, [PAGE_REL]: cleanPage };
+  // page.js pulls the sheet in, so it gets the reduced-motion source too —
+  // otherwise the typed passage renders empty inside the page and a payload in
+  // that passage could not be seen from here.
+  const overridesFor = (rel, source) => (rel === PAGE_REL
+    ? new Map([[PAGE_PATH, source], [SHEET_PATH, cleanSheet]])
+    : new Map([[SHEET_PATH, source]]));
+  const pathOf = { [SHEET_REL]: SHEET_PATH, [PAGE_REL]: PAGE_PATH };
 
-  const clean = reducedMotionSheetSource();
-  const baseline = renderedMarkup(clean, SHEET_PATH);
+  // The baseline, per surface: it must neither render nor scan as naming the
+  // token, or a payload cannot be told from the file it was spliced into.
+  const sheetBaseline = renderSurface(SHEET_PATH, { overrides: overridesFor(SHEET_REL, cleanSheet) });
   assert.ok(
-    baseline.includes("Clinical outcome analytics"),
+    sheetBaseline.includes("Clinical outcome analytics"),
     "the reduced-motion render must contain the whole passage, or the payload "
       + "assertions below are reading an empty sheet"
   );
+  const pageBaseline = renderSurface(PAGE_PATH, { overrides: overridesFor(PAGE_REL, cleanPage), minChars: 5000 });
   assert.ok(
-    !baseline.includes(TOKEN) && !scanNow(clean),
-    "AnswerSheet.jsx as shipped must neither render nor scan as naming " + TOKEN
-      + ", or a payload cannot be told from the baseline"
+    pageBaseline.includes("Clinical outcome analytics"),
+    "the landing page must render the sheet's whole passage, or a payload spliced "
+      + "into the sheet is invisible from the page's own render"
   );
 
   const payloads = [
     {
+      rel: SHEET_REL,
+      token: "ChatGPT",
       why: "a slash-star run inside a SHEET string — finding C11, first half",
       find: " is cited more often, particularly",
-      put: " is cited more often" + OPEN + " " + TOKEN + ": and the click that never "
+      put: " is cited more often" + OPEN + " ChatGPT: and the click that never "
         + "happens is what it costs you " + CLOSE + ", particularly",
       // The rendered prose keeps the comment characters, because they were never
       // a comment: React writes the string out character for character.
-      renders: " is cited more often" + OPEN + " " + TOKEN + ":",
+      renders: " is cited more often" + OPEN + " ChatGPT:",
     },
     {
+      rel: SHEET_REL,
+      token: "ChatGPT",
       why: "a hex escape in a SHEET string — finding C11, second half",
       find: "{ t: 'Clinical",
       put: "{ t: '" + BS + "x43hatGPT ranks it first. Clinical",
-      renders: TOKEN + " ranks it first.",
+      renders: "ChatGPT ranks it first.",
+      // This payload's hiding mechanism is the ESCAPE, not a comment run, so its
+      // control is the same sentence spelled in plain characters.
+      controlPut: "{ t: 'ChatGPT ranks it first. Clinical",
+    },
+    /**
+     * R6.4.9 ROUND TWO — THE QUOTE-PHASE SHIFT, both surfaces.
+     *
+     * This is the payload that beat the first round of this fix at 24/24 green,
+     * canary and both render proofs included. Three chips on ONE line: the
+     * apostrophe in "Brightwave's" is JSX prose, but the lexer reads it as a
+     * string delimiter and pairs it with the apostrophe that OPENS the real
+     * string in the middle chip — so the real string's contents land in code
+     * position and the comment run inside them is stripped. The apostrophe in
+     * "NorthPeak's" pairs with the one that closed that string, so the line ends
+     * in code and nothing refuses.
+     *
+     * Written as one line on purpose: the phase shift is a per-line effect, and
+     * breaking it across lines is what makes the honest version of this code
+     * safe. Its plain-spelling control is in the loop below.
+     */
+    {
+      rel: SHEET_REL,
+      token: "Perplexity",
+      why: "an apostrophe in JSX prose shifting quote phase — AnswerSheet.jsx",
+      find: "<span className=" + DQ + "chip chip--you" + DQ + ">You · mentioned</span>",
+      put: "<span className=" + DQ + "chip chip--you" + DQ + ">Brightwave" + AP + "s mention</span>"
+        + "<span className=" + DQ + "chip" + DQ + ">{" + AP + " cited " + OPEN + " Perplexity "
+        + CLOSE + " first" + AP + "}</span>"
+        + "<span className=" + DQ + "chip" + DQ + ">NorthPeak" + AP + "s pick</span>",
+      renders: " cited " + OPEN + " Perplexity " + CLOSE + " first",
+    },
+    {
+      rel: PAGE_REL,
+      token: "ChatGPT",
+      why: "an apostrophe in JSX prose shifting quote phase — page.js, which had no "
+        + "render baseline at all until this round",
+      find: "<span className=" + DQ + "chip chip--warn" + DQ + " style={{ marginLeft: "
+        + AP + "auto" + AP + " }}>Rival first</span>",
+      put: "<span className=" + DQ + "chip chip--warn" + DQ + " style={{ marginLeft: "
+        + AP + "auto" + AP + " }}>Brightwave" + AP + "s first</span>"
+        + "<span className=" + DQ + "chip" + DQ + ">{" + AP + " cited " + OPEN + " ChatGPT "
+        + CLOSE + " first" + AP + "}</span>"
+        + "<span className=" + DQ + "chip" + DQ + ">NorthPeak" + AP + "s pick</span>",
+      renders: " cited " + OPEN + " ChatGPT " + CLOSE + " first",
     },
   ];
 
-  for (const { why, find, put, renders } of payloads) {
-    assert.ok(clean.includes(find), why + ": the splice point " + find + " is gone from AnswerSheet.jsx");
+  for (const { rel, token, why, find, put, renders, controlPut } of payloads) {
+    const clean = cleanOf[rel];
+    const { before, now } = SCAN_PIPELINE[rel];
+    assert.ok(
+      !before(clean).includes(token) && !now(clean).includes(token),
+      why + ": " + rel + " as shipped already scans as naming " + token + ", so a "
+        + "payload cannot be told from the baseline. Fix that finding first."
+    );
+    assert.ok(clean.includes(find), why + ": the splice point " + find + " is gone from " + rel);
     const payloaded = clean.replace(find, put);
     assert.notEqual(payloaded, clean, why + ": the splice changed nothing");
 
     // 1. THE BROWSER PRINTS IT.
-    const markup = renderedMarkup(payloaded, SHEET_PATH);
+    const markup = renderSurface(pathOf[rel], {
+      overrides: overridesFor(rel, payloaded),
+      minChars: rel === PAGE_REL ? 5000 : 200,
+    });
     assert.ok(
       markup.includes(renders),
       why + ": the payload did not reach the DOM, so this proves nothing. Expected "
-        + JSON.stringify(renders) + " in the rendered sheet."
+        + JSON.stringify(renders) + " in the rendered markup of " + rel + "."
     );
-    assert.ok(markup.includes(TOKEN), why + ": the rendered sheet does not name " + TOKEN);
+    assert.ok(markup.includes(token), why + ": the rendered markup does not name " + token);
 
     // 2. THE SCAN THAT SHIPPED READ IT CLEAN. This is the false green itself.
     assert.equal(
-      scanBefore(payloaded),
+      before(payloaded).includes(token),
       false,
       why + ": the pre-R6.4.9 scan now catches this payload, so it has stopped being "
         + "the bug. Replace the payload with one that still evades it — do not delete it."
@@ -1715,19 +2107,117 @@ test("PROOF — the payloads this guard catches are payloads the browser renders
 
     // 3. AND THE SCAN AS IT STANDS FAILS ON IT.
     assert.equal(
-      scanNow(payloaded),
+      now(payloaded).includes(token),
       true,
-      why + ": the page renders " + TOKEN + " and the current scan still cannot see it"
+      why + ": " + rel + " renders " + token + " and the current scan still cannot see it"
+    );
+
+    // 4. THE CONTROL. The same name in the same place, with ONLY the hiding
+    //    mechanism removed — the comment markers, or the escape spelling. The
+    //    scan must catch it. If the control were ALSO invisible, the payload
+    //    would be proving something about the surrounding markup rather than
+    //    about the mechanism, which is the whole of this task.
+    const control = clean.replace(
+      find,
+      controlPut ?? put.split(OPEN).join("").split(CLOSE).join("")
+    );
+    assert.notEqual(control, payloaded, why + ": the control is the payload");
+    assert.equal(
+      now(control).includes(token),
+      true,
+      why + ": the plain-spelling control is invisible to the current scan too, so "
+        + "the payload is not isolating the comment run"
     );
   }
 
   // The escape half is the DECODER's, not the lexer's: the stripper alone,
   // however exact, reads source bytes and the bytes spell nothing.
-  const escaped = clean.replace("{ t: 'Clinical", "{ t: '" + BS + "x43hatGPT ranks it first. Clinical");
+  const escaped = cleanSheet.replace("{ t: 'Clinical", "{ t: '" + BS + "x43hatGPT ranks it first. Clinical");
   assert.ok(
-    !withoutComments(escaped).includes(TOKEN),
+    !withoutComments(escaped).includes("ChatGPT"),
     "if the lexer alone now sees a hex escape, renderableText has stopped being the "
       + "thing that closes the second half of C11 and this test is mis-attributing"
+  );
+});
+
+/**
+ * R6.4.9 round two — THE RENDER BASELINE, widened, and why it has to be.
+ *
+ * The JSX-text blind spot (blind spot 1 on withoutComments) is still open: a
+ * slash-star run in JSX text with no quote character on its line is stripped from
+ * the scanned copy, and React renders it. The first round DOCUMENTED that and
+ * then covered it with nothing — the render proof above asked one question of one
+ * file: is the hard-coded token "ChatGPT" absent from AnswerSheet.jsx's markup.
+ * A documented limitation with no check behind it is a comment, not a guard.
+ *
+ * So this is the check behind it. For every deployment config, render BOTH
+ * guarded surfaces and require that every label in ENGINE_LABELS that this
+ * config does not deploy is absent from the markup — in its raw spelling and in
+ * its decoded one, so an entity or a non-breaking space cannot smuggle it past.
+ * A name hidden in JSX text is still a name in the DOM, so it fails here even
+ * while the source scan is blind to it.
+ *
+ * And the deployed label must be PRESENT, or an empty render would pass every
+ * clause in this test by saying nothing at all.
+ */
+test("PROOF — no surface renders an engine label its deployment does not probe, under any config", () => {
+  const reducedSheet = reducedMotionSheetSource();
+  const CONFIGS = ["aio", "chatgpt", "perplexity", "aio,perplexity", "perplexity,chatgpt"];
+  // Every known label has to be OFF-deployment in at least one config here, or
+  // a label exists that this test never checks for absence and the coverage
+  // claim in withoutComments' docblock is false. Asserted at the bottom.
+  const checkedAbsent = new Set();
+
+  for (const configured of CONFIGS) {
+    const env = { NEXT_PUBLIC_ENGINES: configured, ENGINES: configured };
+    const deployed = deployedEngineLabels(env);
+    const notDeployed = ALL_ENGINE_LABELS.filter((l) => !deployed.includes(l));
+    assert.ok(
+      notDeployed.length > 0,
+      "NEXT_PUBLIC_ENGINES=" + configured + " deploys every known engine, so it "
+        + "cannot show that a surface follows the deployment. Every config in this "
+        + "list must leave at least one label off."
+    );
+
+    const surfaces = [
+      [SHEET_REL, SHEET_PATH, 200],
+      [PAGE_REL, PAGE_PATH, 5000],
+    ];
+    for (const [rel, abs, minChars] of surfaces) {
+      const markup = renderSurface(abs, {
+        env,
+        overrides: new Map([[SHEET_PATH, reducedSheet]]),
+        minChars,
+      });
+      assert.ok(
+        markup.includes("Clinical outcome analytics"),
+        rel + " under NEXT_PUBLIC_ENGINES=" + configured + " rendered without the "
+          + "sheet's passage, so this render is reading an empty surface"
+      );
+      assert.ok(
+        markup.includes(deployed[0]),
+        rel + " under NEXT_PUBLIC_ENGINES=" + configured + " names no engine at all. "
+          + "An empty render passes the clause below by saying nothing."
+      );
+      const decoded = renderableText(markup);
+      for (const label of notDeployed) {
+        assert.ok(
+          !markup.includes(label) && !decoded.includes(label),
+          rel + " renders " + JSON.stringify(label) + " under NEXT_PUBLIC_ENGINES="
+            + configured + ", which does not probe it. This is the DOM, not a source "
+            + "scan: the name is on the page whatever the scan above thinks."
+        );
+        checkedAbsent.add(label);
+      }
+    }
+  }
+
+  assert.deepEqual(
+    [...checkedAbsent].sort(),
+    [...ALL_ENGINE_LABELS].sort(),
+    "a known engine label is never checked for absence by any config in this test, "
+      + "so it could be typed into either surface's JSX text and nothing here would "
+      + "see it. Add a config that leaves it off."
   );
 });
 
@@ -1760,6 +2250,21 @@ test("PROOF — the committed fixtures render the payload their provenance block
     assert.ok(renderableText(markupTwo).includes(label), "the fixture must render " + label);
   }
   assert.ok(markupTwo.includes(NBSP), "the non-breaking-space spelling must survive into the markup");
+  // FIXTURE THREE. R6.4.9 round two: the comment markers survive into the DOM
+  // because they were never a comment — the lexer only thought they were, having
+  // been pushed one quote out of phase by an apostrophe in JSX prose.
+  const CLOSE = "*" + "/";
+  const three = path.join(dir, "quote-phase-shift.jsx.txt");
+  const markupThree = renderedMarkup(await read("src/lib/fixtures/landingHonesty/quote-phase-shift.jsx.txt"), three);
+  assert.ok(
+    markupThree.includes(" cited " + OPEN + " Perplexity " + CLOSE + " first"),
+    "the fixture's provenance block quotes this span; it must be what renders"
+  );
+  assert.ok(
+    !NAIVE_STRIPPER(await read("src/lib/fixtures/landingHonesty/quote-phase-shift.jsx.txt")).includes("Perplexity"),
+    "and the scan it was written against must still read it clean"
+  );
+
   const plain = markupTwo.split("Google AI Overview").length - 1;
   const decoded = renderableText(markupTwo).split("Google AI Overview").length - 1;
   assert.equal(plain, 2, "two of the three spellings render as plain characters");

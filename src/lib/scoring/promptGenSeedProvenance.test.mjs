@@ -123,10 +123,16 @@ test("a typed zone error during seeding is logged WITH THE ERROR and recorded as
   assert.ok(rec, "a dead SERP zone must leave a record, not just a log line");
   assert.equal(rec.state, SEED_STATE.UNAVAILABLE);
   assert.equal(rec.state_reason, "serp_zone_no_active_zone");
-  assert.equal(rec.seed_queries, 0);
+  // R2.2.12 — this asserted 0. It was 0 because `Promise.all` bound the two legs
+  // together: the PAA rejection threw away the autocomplete result that HAD come
+  // back, and Google suggest does not route through a Bright Data zone. The
+  // surviving leg's query is real and is kept; the zone verdict above still
+  // stands, because the PAA leg really is dead.
+  assert.equal(rec.seed_queries, 1, "the autocomplete leg answered — its query must not be discarded");
   assert.equal(rec.failures[0].error, "BrightDataZoneError");
   assert.equal(rec.failures[0].reason, "no_active_zone");
   assert.equal(rec.failures[0].stage, "seed");
+  assert.equal(rec.failures[0].leg, "paa", "the record must name which leg the zone killed");
 
   // Every remaining term hits the same dead zone; burning four more 10s
   // deadlines on it is the thing the abort exists to prevent.

@@ -98,6 +98,23 @@ They are the source of the R0–R6 rebuild in
 > lie again, more convincingly. The per-file measurement and the tripwire this
 > argues for are in **Entry #5** at the bottom of this file.
 >
+> **Second pass at `8e6ecc6` on 2026-09-12 under R6.3.6, and what it did NOT
+> cover.** R6.3.6 was scoped to the *unpinned present-tense assertions* in this
+> file and in `docs/HANDOFF-2026-08-30.md` — the three sentences this file had
+> enumerated as saying "at HEAD", plus the claims that carry no line number at
+> all: counts, task statuses, and commands quoted with an expected answer.
+> Claims found rotted now carry a correction dated 2026-09-12 naming `8e6ecc6`.
+> **`grep -n R6.3.6` on either file lists every one**; that grep, not a number
+> written here, is the index — a count in this sentence would be the next thing
+> to rot. **Five in this file:** the *Note on B12* opener, Entry #3's count of
+> `openai.js` exports, the R6.4.8 bullet's `resolveEnabledEngines` line number,
+> *What is still missing*'s "all three rows read `open — no task`", and the
+> appendix cell saying `docs/vendors/` does not exist. The handoff's are listed
+> in its own header. **The 111
+> line citations were NOT re-counted.** The tally above is still the `1a5ed81`
+> measurement and should be read as a lower bound on the drift, since two more
+> weeks of commits have landed on top of it. Do not quote it as current.
+>
 > **How to use a row now:** treat the Anchor cell as a hint about *which file*,
 > take the mechanism sentence as the thing to search for, and re-derive the line
 > yourself with `git grep`. Three rows — `B8`, `B9`, `B12` — have dated
@@ -110,8 +127,11 @@ Read this before trusting a row.
 
 - **All 37 findings are recorded below.** 34 were recoverable from the tree;
   `B8`, `B9` and `B12` were pasted in from the companion artifact on
-  2026-08-30 and their anchors re-verified against source at HEAD — see *Gaps*
-  at the end for exactly how, and for the trap that still sits next to them.
+  2026-08-30 and their anchors re-verified against source at `5d51aa3`, the
+  branch tip that day *(pinned 2026-09-12, R6.3.6; this sentence said "at HEAD"
+  and was one of the three the file had enumerated as an open defect)* — see
+  *Gaps* at the end for exactly how, and for the trap that still sits next to
+  them.
   Until that paste the register held 34 and said so, because quietly
   renumbering 34 findings as "all of them" would be the same lie it exists to
   catalogue.
@@ -159,7 +179,7 @@ Status values: `open` · `closed <task>` · `does not reproduce`.
 | B9 | The frozen engine set can be silently replaced mid-run. Sourcing freezes the resolved engine names onto the checkpoint precisely so a resume cannot re-resolve them, then probing discards that freeze: if no frozen name matches the live registry, `engineDefs` falls back to whatever is enabled today, with no warning and nothing recorded on the scan. | `src/lib/workers/scanWorker.js:472-479` **moved** (audit said `:432-439`, which was exact at `5111219`); the freeze contract it voids is stated at `:364-370` — **both stale at `1a5ed81`; anchor on `runProbingPhase` and the `frozenNames`/`filtered` pair** | **read** at `5d51aa3`; **re-derived 2026-09-05** | **does not reproduce as written** — see *B9 no longer runs silently* below |
 | B10 | `insertScan` has a three-tier column-drop cascade: an insert that fails silently retries with fewer columns, so a scan can persist with fields quietly missing. | `src/lib/db.js:122-167` | **read** | open — R2.2.4 |
 | B11 | `hasActiveScanForBrand` fails open on any DB error and leaves a TOCTOU window, so two concurrent requests could each start a full-budget duplicate scan. | `src/lib/db.js:403-408` | **read** | **closed R0.1.5** |
-| B12 | No Supabase env gives a memory mode that "works": the client is null, so scan jobs live only in a per-instance `global.memoryJobs` map, `insertScan` logs "Skipping database insert" and returns, and every read returns empty. The scan completes and reports success, nothing persists, the dashboard is permanently empty rather than erroring, and two serverless instances disagree about the same job. | `src/lib/db.js:11-15` **moved** (audit said `:5-8`) and `:298` **moved** (audit said `:289`); the silent skip at `:62-65`; empty reads at `:180-182` and `:252` — **of these five, only `:11-15` still resolves to what it claims at `1a5ed81`; anchor on `insertScan`, `resolveClient` and `global.memoryJobs`** | **read** at `5d51aa3`; **re-derived 2026-09-05** | **partly fixed** — the silent-skip half is gone; the memory-mode half reproduces. See *B12: the silent skip is gone, the memory store is not* below |
+| B12 | No Supabase env gives a memory mode that "works": the client is null, so scan jobs live only in a per-instance `global.memoryJobs` map, `insertScan` logs "Skipping database insert" and returns, and every read returns empty. The scan completes and reports success, nothing persists, the dashboard is permanently empty rather than erroring, and two serverless instances disagree about the same job. | `src/lib/db.js:11-15` **moved** (audit said `:5-8`) and `:298` **moved** (audit said `:289`); the silent skip at `:62-65`; empty reads at `:180-182` and `:252` — **of these five, only `:11-15` still resolves to what it claims at `1a5ed81`; anchor on `insertScan`, `resolveClient` and `global.memoryJobs`** | **read** at `5d51aa3`; **re-derived 2026-09-05** | **partly fixed** — the silent-skip half is gone (R2.8.6) and the accept-the-scan half is gone (R0.1.21); the memory-store code survives but no route can reach it at `8e6ecc6`. See *B12: the silent skip is gone, the memory store is not* below, including the 2026-09-12 update |
 | B13 | A fabricated `studio.perceev.app` URL is presented to the user as a real published location. | `src/app/api/content-items/[id]/decision/route.js:19-27` | anchor only | open — R5.2.1 |
 
 **Liveness of B8 and B9 (standing rule 10).** *Line numbers in the next two
@@ -234,7 +254,19 @@ pair (`src/lib/engines/types.js:47` computes engine availability from
 which nothing live imports). Do not cite the dead consumer as proof either
 finding runs; cite the worker chain above.
 
-**Correction to B8 as written.** The companion artifact says the resolver
+**Correction to B8 as written.** *Every line number in this paragraph is a
+snapshot of `5d51aa3` (2026-08-30) and **none of them resolves to what it names
+at `8e6ecc6`** — `enginePipeline.js` has more than doubled again since. Pinned
+2026-09-12 under R6.3.6; the paragraph is not renumbered, because renumbering a
+dated correction re-points it at code that did not exist when it was made. Every
+mechanism it describes was re-derived by symbol at `8e6ecc6` and all of them
+still hold: `aio`'s `isConfigured: () => true` inside `ENGINE_REGISTRY`,
+`brightDataSearch` throwing `"Bright Data SERP is not configured (set
+BRIGHTDATA_API_KEY)."` in `src/lib/engines/brightdata.js`, and `probeAio`'s
+`catch` logging ``[aio] Query failed`` in `src/lib/scoring/enginePipeline.js`.
+Follow those names, not the numbers below.*
+
+The companion artifact says the resolver
 "returns the aio definition it just proved unconfigured". It never proves that,
 and did not at the audit commit either: `aio`'s registry entry hardcodes
 `isConfigured: () => true` (`enginePipeline.js:450`, byte-identical at
@@ -252,18 +284,86 @@ returns a fully-populated row with `answer_present: false`, `visible: false`
 and `cost: 0`. A completely unconfigured engine therefore produces a full set
 of measured-looking zeroes rather than a failure.
 
-**Note on B12.** The finding reproduces in full at HEAD, for the trigger the
-artifact names — *no Supabase env*. A neighbouring trigger for the same map was
-already gone before the audit: `480fd9a` made the job store DB-authoritative,
-so a transient DB error on a **configured** deployment now throws instead of
-tipping the job into `global.memoryJobs` (the mechanism is written up in the
-doc comment at `src/lib/db.js:300-318`). That fix does not touch the
-unconfigured case, which is what B12 is about: `hasDb` is simply `false`
-(`:347`, `:426`, `:457`, `:473`, `:530`) and memory is the only store. Added
-since the audit, `/api/health` reports supabase as `required` with the missing
-env vars named (`src/lib/health.js:20`, `src/app/api/health/route.js:4`) — but
-it is a report, not a gate: nothing on the scan path consults it, so an
-unconfigured deployment still accepts scans and still completes them.
+**Note on B12 — written 2026-08-30, and its headline was wrong by 2026-09-12.**
+
+*This note opened "The finding reproduces in full at HEAD." It did, at
+`5d51aa3`. It does not at `8e6ecc6`, and the word `HEAD` is why nobody noticed:
+the sentence stayed literally true-looking while the tree moved under it. This
+is the second of the three unpinned at-HEAD sentences the file enumerated, now
+resolved rather than re-enumerated (R6.3.6).*
+
+**What B12 asserted.** On the trigger the artifact names — *no Supabase env* —
+the job store silently degrades to memory, `insertScan` skips, reads come back
+empty, and the deployment reports success. **Every one of those four clauses has
+since been closed or made unreachable**, by several separate tasks — `R2.8.6`,
+`R2.8.7`, `R2.8.12`, `R0.1.21` — none of which was aimed at B12, and no task in
+the ledger lists B12 among its `findings` at all. Re-derived at `8e6ecc6`, by
+symbol:
+
+- **The silent skip is gone.** `insertScan` throws `ScanWriteError` with
+  `code: "db_not_configured"` when `resolveClient` yields no client — see
+  *B12: the silent skip is gone, the memory store is not* below for the full
+  derivation and for the past-tense-comment trap that makes a grep read the
+  wrong way.
+- **The deployment no longer accepts the scan.** `POST /api/scan` refuses with
+  a 503 `scan_store_unavailable` on `!supabase`, *before* `createScanJob` and
+  before any vendor spend — `scanStoreUnavailable` in
+  `src/app/api/scan/route.js`, landed by **R0.1.21** (ledger: `done`). The cron
+  entry point refuses too: `GET /api/scan/worker` returns
+  `{ mode: "no-db", dispatched: 0 }` on `!supabase`, and that check sits ahead
+  of the `runSweepMaintenance` call, so the scheduler tick — `createScanJob`'s
+  only other non-test caller, via `runSchedulerTick` — never runs either.
+  **Those are `createScanJob`'s only two non-test call sites at `8e6ecc6`**, so
+  no HTTP path can now put a job into the memory store. Re-derive with
+  `git grep -n createScanJob 8e6ecc6 -- src/ | grep -v test.mjs` and discard
+  the comment mentions and the `export function` line itself; what remains is
+  `src/app/api/scan/route.js` and `runSchedulerTick`'s `deps.createScanJob ||
+  createScanJob` in `src/lib/workers/scanWorker.js`.
+- **The reads refuse instead of coming back empty.** `getScansForBrand` and
+  `getScansByDomain` both throw `ScansUnavailableError` with
+  `code: "db_not_configured"` when there is no client — the second one's message
+  says so in as many words: *"This is a refusal to look, not a domain with no
+  scans."* `R2.8.12` closed the last `if (!client) return []` here, and the
+  contract comment above `getScansByDomain` records it. `listRecentScans` throws
+  the same error on `!supabase` too. **But the refusal does not necessarily reach
+  the screen, and that is not B12's clause — it is the layer above it.**
+  `listRecentScans` still ends `catch { console.warn(...); return []; }`, which
+  covers a *query* error rather than the unconfigured case, and its own contract
+  comment in `src/lib/db.js` records — as a measurement, not an assumption —
+  that `GET /api/history`'s catch turns the refusal into a `200
+  { scans: [], runs: [], activeJobs: [], counts: {} }`, so the log tells the
+  truth and the workspace still renders empty. **`R2.8.16` is `in_verification`
+  for exactly that pair as of 2026-09-12** and `src/app/api/history/route.js` is
+  uncommitted in the working tree while another agent works it, so this bullet
+  states the ledger position and deliberately asserts nothing about whether it
+  is fixed. Check the task, not this sentence.
+- **A neighbouring trigger was already gone before the audit.** `480fd9a` made
+  the job store DB-authoritative, so a transient DB error on a **configured**
+  deployment throws instead of tipping the job into `global.memoryJobs`. The
+  mechanism is written up in the doc comment above `resolveClient` in
+  `src/lib/db.js` (headed *"Scan job store — DB-authoritative, fail-loud"*);
+  it was cited here as `src/lib/db.js:300-318`, which at `8e6ecc6` resolves to
+  `isSchemaMismatch`'s JSDoc instead — the same rot this entry is about.
+
+**What still exists, and why that is not the same as reproducing.** The memory
+mode itself is unchanged.
+`export const supabase = supabaseUrl && supabaseKey ? createClient(...) : null`
+still yields `null`, `hasDb` is still `!!client`, and `global.memoryJobs` is
+still the only store on that branch — five `hasDb = !!client` guards at
+`8e6ecc6`, none at the line numbers this note originally cited (`:347`, `:426`,
+`:457`, `:473`, `:530`; they are hundreds of lines further down now, which is
+why the anchor is the symbol). What changed is *reachability*, not the code:
+the branch survives and is exercised by the test suite and by injected
+`deps.client`, and is no longer reachable from a route.
+
+**`/api/health` is still a report, not a gate.** Supabase is declared
+`required: true` — but in `src/lib/vendorRegistry.js`, not in `src/lib/health.js`
+where this note cited it: **R0.1.16** moved the one vendor list there and
+`health.js` now re-exports `VENDORS` from it. The report is consumed only by
+`src/app/api/health/route.js` and by `health.test.mjs`/`envTruth.test.mjs`/
+`checkSecrets.test.mjs` (`git grep -ln 'buildHealthPayload' 8e6ecc6 -- src/`),
+so nothing on the scan path reads it. The refusal above is what actually gates;
+health still only describes.
 
 ### B9 no longer runs silently — 2026-09-05, at `1a5ed81`
 
@@ -316,6 +416,25 @@ So the row's status moved from `open — no task` to **partly fixed**, by two
 tasks that were never told they touched it. Anchor by symbol: `insertScan`,
 `ScanWriteError`, `resolveClient`, `hasDb`, `global.memoryJobs`.
 
+**Update — 2026-09-12, at `8e6ecc6` (R6.3.6). The memory store is now
+unreachable, which is not the same as gone.** The paragraph above is still
+accurate about the *code*: `supabase` is still `null` without env, `hasDb` is
+still `!!client`, `global.memoryJobs` is still the only store on that branch,
+and five `hasDb = !!client` guards remain. What changed is that nothing can
+reach them from a route. **R0.1.21** (ledger: `done`) put a 503
+`scan_store_unavailable` refusal in front of `createScanJob` in
+`src/app/api/scan/route.js` — see `scanStoreUnavailable` and the `!supabase`
+check immediately above the `createScanJob` call — and `GET /api/scan/worker`
+returns `{ mode: "no-db", dispatched: 0 }` on `!supabase` ahead of its
+`runSweepMaintenance` call, which is the only route into `runSchedulerTick`,
+`createScanJob`'s other non-test call site. So the surviving half of B12 is now
+**latent, not live**: the branch exists, is covered by tests and by injected
+`deps.client`, and cannot be entered by an HTTP request at `8e6ecc6`. Stated
+this way on purpose — "does not reproduce" would be wrong (the code is there and
+a new caller re-arms it) and "reproduces" would be wrong (no request reaches
+it). Anchor by symbol: `scanStoreUnavailable`, `runSweepMaintenance`,
+`runSchedulerTick`.
+
 ### Since, on B8 — 2026-09-05, at `1a5ed81`
 
 Half of B8 is recorded now too. `resolveEnabledEngines` still returns `[aio]`
@@ -364,15 +483,17 @@ their description, mechanism or anchor.
 
 **How the gap was closed.** The operator holding the artifact supplied the
 three verbatim, with the anchors the audit recorded at commit `5111219`. They
-were not pasted as given. Each anchor was re-read against source at HEAD before
-its row was written, because the audit's own closing note says to re-verify
-every line number and eight had already moved:
+were not pasted as given. Each anchor was re-read against source at `5d51aa3`,
+the branch tip on 2026-08-30, before its row was written, because the audit's
+own closing note says to re-verify every line number and eight had already
+moved. *(That sentence read "at HEAD" until 2026-09-12; pinned under R6.3.6 —
+the third of the three the file had enumerated.)*
 
 | Finding | Audit anchor (at `5111219`) | At `5d51aa3`, 2026-08-30 | Outcome, as judged on 2026-08-30 |
 |---|---|---|---|
 | B8 | `enginePipeline.js:510-515` | `enginePipeline.js:510-514` | resolves; `:515` is the blank line closing the block. Mechanism **corrected** — the artifact's "the aio definition it just proved unconfigured" is not what the code does; see *Correction to B8* above. |
 | B9 | `scanWorker.js:432-439` | `scanWorker.js:472-479` | **moved** `+40`. Exact at `5111219` (confirmed with `git show`); the block was displaced by later work in the same file. Mechanism reproduces as written. **Superseded 2026-09-05: it no longer does — see *B9 no longer runs silently*.** |
-| B12 | `db.js:5-8`, `:289` | `db.js:11-15`, `:298` | **moved** `+7` / `+9`, by `4f7b6b6` adding the `duplicateScan` imports at `:4-9`. Mechanism reproduces in full; see *Note on B12* above. **Superseded 2026-09-05: half of it does — see *B12: the silent skip is gone*.** |
+| B12 | `db.js:5-8`, `:289` | `db.js:11-15`, `:298` | **moved** `+7` / `+9`, by `4f7b6b6` adding the `duplicateScan` imports at `:4-9`. Mechanism reproduces in full; see *Note on B12* above. **Superseded 2026-09-05: half of it does — see *B12: the silent skip is gone*. Superseded again 2026-09-12 at `8e6ecc6`: the surviving half is latent, not live — R0.1.21 refuses the request before `createScanJob`.** |
 
 B9's stale anchor is the reason this mattered. At HEAD **as of 2026-08-30
 (`5d51aa3`)**, `scanWorker.js:432-439` still resolved — to the "Prepared N
@@ -412,6 +533,18 @@ work. No rebuild task references B8, B9 or B12, so all three rows read `open —
 no task`. Until a task claims them they are recorded and unowned, which is a
 better state than unrecorded, and not the same as fixed.
 
+> **Half of that is still true and half is not — 2026-09-12 (R6.3.6).** The
+> *ownership* claim holds: at `8e6ecc6` no task's `findings` array contains B8,
+> B9 or B12 (`node -e 'const g=require("./.claude/orchestration/tasks.json");
+> for (const id of ["B8","B9","B12"]) console.log(id,
+> g.tasks.filter(t=>(t.findings||[]).includes(id)).map(t=>t.id));'` prints three
+> empty lists). The *status* claim does not: **the three rows no longer read
+> `open — no task`.** B9's reads `does not reproduce as written`, B12's reads
+> `partly fixed`, and only B8's still opens `open — no task`. All three moved
+> because tasks aimed at neighbouring symptoms landed on them — which is
+> precisely the paragraph's own point, arriving faster than the paragraph did.
+> Unowned and unfixed are different axes, and this sentence conflated them.
+
 ---
 
 ## Appendix — anchors that had already moved
@@ -430,7 +563,7 @@ companion artifact (2026-08-30), three more had moved — **eleven in total**:
 | B9 | `src/lib/workers/scanWorker.js:432-439` | `:472-479` — the old range still resolves, to unrelated code |
 | B12 | `src/lib/db.js:5-8` | `:11-15` (shifted by `4f7b6b6`) |
 | B12 | `src/lib/db.js:289` | `:298` |
-| C4 | `docs/vendors/` | does not exist yet; created by R5.1.1 |
+| C4 | `docs/vendors/` | did not exist on 2026-08-30; created by R5.1.1 and populated since — nine files at `8e6ecc6`, `README.md` plus one per vendor. *(Corrected 2026-09-12, R6.3.6: this cell read "does not exist yet".)* |
 | C12 | `src/app/chart-preview/page.js` | deleted by R0.1.2 |
 
 ---
@@ -441,8 +574,15 @@ companion artifact (2026-08-30), three more had moved — **eleven in total**:
 
 They were a second, parallel engine registry, superseded by
 `src/lib/scoring/enginePipeline.js`. `adapter.js:3` imported `probeOpenAI` from
-`./openai.js`, which has never exported it — `openai.js` exports exactly
-`isChatGptConfigured` and `probeChatGpt`. So both modules threw
+`./openai.js`, which has never exported it — `git grep probeOpenAI 8e6ecc6 -- src/`
+returns nothing, and that is the durable form of the claim. *(This sentence read
+"`openai.js` exports exactly `isChatGptConfigured` and `probeChatGpt`". That was
+true through `1a5ed81` — two exports — and stopped being true at `50672e2`
+(2026-09-08), which added `OPENAI_PROVIDER`, `OPENAI_TOOL`,
+`DEFAULT_OPENAI_MODEL`, `getOpenAiModel` and `COST_STATE`: seven exports at
+`8e6ecc6`. Corrected 2026-09-12 under R6.3.6. The count was never the point —
+`probeOpenAI`'s absence was — but a count is exactly the kind of claim that
+rots without anyone touching the sentence.)* So both modules threw
 `SyntaxError: The requested module './openai.js' does not provide an export
 named 'probeOpenAI'` on import, and had done since `a1ed0e0`.
 
@@ -648,6 +788,15 @@ The doc-to-source staleness tripwire is a separate task and is not built here.
   ("[aio] Query failed")`, which is where that warn sits at `1a5ed81` — so the
   tripwire can assert the line still contains
   it, and fail with "moved to :NNN" rather than "ok".
+  - *The example has since demonstrated itself. Checked 2026-09-12 (R6.3.6):
+    that warn is on `:159` at `8e6ecc6`. The number moved by ten and the
+    quoted fragment did not move at all, so the form above still resolves the
+    reader to the right line while a bare `:149` would not — and a tripwire
+    holding the fragment would have failed with "moved to :159" instead of
+    silently passing. Of the citations R6.3.6 re-checked, this is the one that
+    needed no correction, and the parenthesis is why. That is a sample, not a
+    census — R6.3.6 re-checked the at-HEAD assertions and the `Since` bullets,
+    not all 119.*
 - **Dated documents need an exemption with a declared commit.** A handoff is
   *supposed* to describe an old tree. The tripwire should resolve its citations
   against the declared commit and fail only when the commit is missing or
@@ -655,10 +804,47 @@ The doc-to-source staleness tripwire is a separate task and is not built here.
   absent.
 - **`at HEAD` must be a lint failure in prose.** Three sentences in this file
   said "at HEAD" meaning three different commits. Grep for it.
-- **Source comments drift too, and nothing watches them.**
-  `src/lib/engines/deployedEngines.js:21` cites `enginePipeline.js:527` for
-  `resolveEnabledEngines`, which lives at `:979`. The tripwire's input should be
-  `file:line` citations *in code comments*, not only in `docs/`.
+  - **Resolved 2026-09-12 (R6.3.6).** All three are pinned or rewritten: the
+    *"What this register can and cannot claim"* bullet and the *"How the gap was
+    closed"* paragraph now name `5d51aa3`, and the *Note on B12* opener is
+    rewritten with a dated correction because it had **stopped being true** —
+    see that note. **`grep -n 'at HEAD' docs/HANDOFF-2026-08-30.md` now returns
+    nothing.** It still returns hits in *this* file, and deliberately: every one
+    is either the phrase in quotation marks or backticks, being discussed —
+    including this
+    bullet, its parent, and the corrections that record what each sentence used
+    to say — or the one sentence that pins itself inline, *"At HEAD **as of
+    2026-08-30 (`5d51aa3`)**"* in the *Gaps* section. No count is given for
+    those hits, because the count changes every time somebody writes about the
+    rule. A lint rule should therefore allow `at HEAD` when a sha appears in the
+    same sentence, and when it is inside quotation marks or backticks; otherwise it fires on
+    every paragraph arguing for itself and gets muted.
+- **Source comments drift too, and nothing watches them, and this bullet proves
+  it twice.** `src/lib/engines/deployedEngines.js` cites
+  `enginePipeline.js:527` for `resolveEnabledEngines`, in the doc comment
+  paragraph beginning *"WHAT THIS FILE CANNOT DO"*. The source comment's number
+  was already stale when this bullet was written and is still stale; at
+  `8e6ecc6` the symbol is declared in `src/lib/scoring/enginePipeline.js` at
+  `:1393`. The tripwire's input should be `file:line` citations *in code
+  comments*, not only in `docs/`.
+  - **And this bullet's own correction rotted before it was verified.** It
+    originally read "which lives at `:979`". That was true at `1a5ed81`. By
+    `ea165ed` the symbol was at `:1236` and by `6bb211c` — **the commit that
+    carried R6.3.3's corrected journal into the branch, i.e. the commit that
+    added this very bullet** — it was already at `:1383`. Reproduce the whole
+    slide with
+    `for c in 1a5ed81 ea165ed 6bb211c 8e6ecc6; do git grep -n '^export function resolveEnabledEngines' $c -- src/lib/scoring/enginePipeline.js; done`.
+    It did not fail verification, because the sentence carries the
+    symbol next to the number and resolving the symbol still lands you in the
+    right place. That is the whole argument for the rule in one bullet: at
+    `8e6ecc6`, `enginePipeline.js:979` still **resolves**, cleanly, to an
+    unrelated JSDoc block enumerating the `"none"` / `"partial"` / `"critical"`
+    degradation states — plausible neighbouring code, nothing to tell the reader
+    they are in the wrong place. A citation that goes stale between submission
+    and verification is not a hypothetical the tripwire is guarding against; it
+    is what happened here. Corrected 2026-09-12 under R6.3.6, and the number is
+    not being replaced with a fresh one: `:1393` above is pinned to `8e6ecc6`
+    and the durable anchor is the symbol.
 - **The tree moves under the checker.** While this sweep ran,
   `src/lib/db.js`, `src/lib/workers/scanWorker.js` and `src/middleware.js` were
   all modified uncommitted by other agents; `insertScan` sat at `:126` in

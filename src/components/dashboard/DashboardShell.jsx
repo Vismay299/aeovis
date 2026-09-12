@@ -587,9 +587,24 @@ export default function DashboardShell({ scan, scanId, error = null }) {
   const heroScore = result.isMultiEngine
     ? (result.visibilityIndexPct ?? result.shareOfAiPct ?? result.visibilityScore)
     : (result.shareOfAiPct ?? result.visibilityScore);
-  const tier = dataSourceIssue
-    ? null
-    : scoreTier(heroScore, result.scoringVersion);
+  /* R2.1.2, round 2 — NO SCORE, NO VERDICT.
+     `heroScore` is genuinely nullable since R2.1.1 (a not_assessed scan stores
+     no number), and the hero draws the em dash for it. The tier must be gated on
+     the SAME condition the number is, or the band renders a red "Weak" chip
+     beside that dash — a verdict derived from a measurement that does not exist.
+     REDUNDANT WITH scoreTier, DELIBERATELY. The root cause is fixed in
+     utils/format.js — scoreTier refuses a non-finite score and returns null — so
+     on today's code this `Number.isFinite` test can never be the only thing
+     stopping a chip. It stays because (a) this is also where `dataSourceIssue`
+     suppresses a tier we *could* compute, so the two suppressions belong on one
+     line, and (b) a reader of the surface that actually broke should not have to
+     open format.js to know a null score cannot acquire a colour here. Both
+     layers have their own test in heroVerdictNullScore.test.mjs; removing either
+     one alone turns exactly one of them red. */
+  const tier =
+    dataSourceIssue || !Number.isFinite(heroScore)
+      ? null
+      : scoreTier(heroScore, result.scoringVersion);
   const brandAliases = getBrandAliases(result.brand, result.website);
 
   const handleHistoryClick = (scan) => {
@@ -648,14 +663,30 @@ export default function DashboardShell({ scan, scanId, error = null }) {
 
   const hasBrandedData = (result?.brandPresencePromptsCount ?? 0) > 0;
 
-  const interpretation = {
-    strong:
-      "Your brand holds strong AI Overview presence. Defend the lead by monitoring high-intent comparison queries where rivals push hardest.",
-    moderate:
-      "You appear in some Google AI Overviews but miss most category queries. There is clear, addressable room to grow.",
-    weak:
-      "Your brand is largely absent from Google AI Overviews for its category. Competitors are winning the exact queries your buyers ask.",
-  }[tier];
+  /* R2.1.2, round 2 — the no-tier arm. This map is keyed on `tier`, so gating the
+     tier on a null score leaves it undefined, and OverviewView's "What the
+     reading means" panel would render an EMPTY paragraph under its own heading:
+     an empty state dressed as a clean one (standing rule 1). Before the gate it
+     was worse — a null score fell through to "weak" and this panel stated
+     "largely absent from Google AI Overviews for its category", a market verdict
+     produced by a measurement that never happened. So say which of the two it
+     is, in words, instead of leaving a blank for the reader to fill in.
+
+     ONE sentence, not one per cause: `tier` is also null when `dataSourceIssue`
+     is set, but that case never reaches here — the placeholder panel below
+     replaces the whole view, so OverviewView (the only consumer of this value)
+     is not rendered and a second arm for it would be a dead line. */
+  const interpretation =
+    tier == null
+      ? "This scan produced no visibility score, so there is no verdict to interpret. The reading is not a zero — nothing was measured. Retry the scan, or add more high-intent queries."
+      : {
+          strong:
+            "Your brand holds strong AI Overview presence. Defend the lead by monitoring high-intent comparison queries where rivals push hardest.",
+          moderate:
+            "You appear in some Google AI Overviews but miss most category queries. There is clear, addressable room to grow.",
+          weak:
+            "Your brand is largely absent from Google AI Overviews for its category. Competitors are winning the exact queries your buyers ask.",
+        }[tier];
 
   const tierLabelMap = { strong: "Strong", moderate: "Moderate", weak: "Weak" };
 

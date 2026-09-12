@@ -1,0 +1,97 @@
+-- FIXTURE — R1.2.15. The claim window WIDENED: the lock is perfect and the
+-- predicate that stops one worker claiming another worker's probe is gone.
+--
+-- R1215-EXPECT: reject /LIVE lease/
+-- R1215-DEFEATS: whole-file-regex, comment-stripped-regex, single-executable-clause
+-- R1215-DERIVED-FROM: base-as-in-migration-010.sql.txt
+--
+-- WHERE IT CAME FROM. base-as-in-migration-010.sql.txt with ONE change: the
+-- lease-freedom conjunct
+--
+--     AND (t.lease_owner IS NULL
+--          OR t.lease_expires_at IS NULL
+--          OR t.lease_expires_at < v_now)
+--
+-- deleted from the candidate SELECT. Nothing else moves. `FOR UPDATE SKIP
+-- LOCKED` still closes the candidate SELECT, after ORDER BY and LIMIT, exactly
+-- where every guard in this repo before R1.2.15 wanted it.
+--
+-- WHAT MAKES IT INTERESTING. This is the sabotage the whole pre-R1.2.15 lineage
+-- is blind to, because every one of those checks is about the LOCK and this
+-- change does not touch the lock. The whole-file regex matches; the
+-- comment-stripped regex matches; the clause is executable and appears exactly
+-- once; it is inside the candidate CTE; it is the last clause of the SELECT.
+-- probeQueue.test.mjs's "a lapsed lease is reclaimable" guard also passes — the
+-- status set is untouched. The file is accepted by every string check and is
+-- catastrophically wrong.
+--
+-- WHY IT IS WRONG. A row lock decides which of the ELIGIBLE rows a worker
+-- takes. This predicate is what makes a row ineligible while another worker
+-- holds a live lease on it (jobLease.leaseIsFree, as SQL). Without it, worker B
+-- polling one second after worker A is handed A's in-flight task: the row is
+-- 'claimed', which the status set still allows, and nothing else excludes it.
+-- SKIP LOCKED does not save it — A's transaction committed the moment it
+-- claimed, so there is no lock left to skip. Both workers probe the same
+-- prompt: two live engine calls billed, `attempts` inflated, A's outcome
+-- overwritten by B's, and the queue reporting healthy throughput the whole time.
+--
+-- The behavioural consequence is asserted, not asserted-about: the suite runs
+-- two claimants over one already-claimed row through this fixture's own SQL and
+-- shows BOTH winning. See "TEETH — widening the window hands one task to two
+-- claimants" in src/lib/probeClaimLock.test.mjs.
+--
+-- This file is .txt on purpose: it must never be applied as a migration, and
+-- the migration walker in probeClaimLock.test.mjs must never find it.
+
+CREATE OR REPLACE FUNCTION claim_probe_tasks(
+  p_owner     text,
+  p_engines   text[]  DEFAULT NULL,
+  p_limit     integer DEFAULT 5,
+  p_lease_ms  integer DEFAULT 180000,
+  p_batch_id  uuid    DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+  v_now     timestamptz := now();
+  v_expires timestamptz;
+  v_claimed jsonb;
+  v_count   integer;
+BEGIN
+  v_expires := v_now + make_interval(secs => p_lease_ms / 1000.0);
+
+  WITH candidate AS (
+    SELECT t.id
+      FROM probe_tasks t
+     WHERE t.status IN ('pending', 'claimed')
+       AND (p_engines  IS NULL OR t.engine = ANY (p_engines))
+       AND (p_batch_id IS NULL OR t.batch_id = p_batch_id)
+     ORDER BY t.priority DESC, t.created_at
+     LIMIT p_limit
+     FOR UPDATE SKIP LOCKED
+  ),
+  claimed AS (
+    UPDATE probe_tasks t
+       SET status           = 'claimed',
+           lease_owner      = p_owner,
+           lease_expires_at = v_expires,
+           attempts         = t.attempts + 1,
+           claimed_at       = v_now,
+           updated_at       = v_now
+      FROM candidate c
+     WHERE t.id = c.id
+    RETURNING t.*
+  )
+  SELECT COALESCE(jsonb_agg(to_jsonb(claimed) ORDER BY claimed.created_at), '[]'::jsonb),
+         COUNT(*)::integer
+    INTO v_claimed, v_count
+    FROM claimed;
+
+  RETURN jsonb_build_object(
+    'owner',         p_owner,
+    'tasks',         v_claimed,
+    'claimed_count', v_count
+  );
+END;
+$fn$;

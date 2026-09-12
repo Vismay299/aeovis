@@ -44,7 +44,17 @@ export const SEED_STATE = Object.freeze({
   OK: "ok",
   /** Some seed terms or blend topics failed; the set is partly grounded. */
   DEGRADED: "degraded",
-  /** The SERP leg could not run at all — every term failed, or the zone is dead. */
+  /**
+   * The SERP leg cannot be relied on: every seed term yielded nothing, or the
+   * Bright Data zone is dead and the PAA leg is therefore finished for this run.
+   *
+   * R2.2.12 — this used to read "could not run at all", which stopped being true
+   * when the two legs were unbound: a zone fault can now leave UNAVAILABLE next
+   * to a NON-ZERO `seed_queries`, because Google suggest does not route through
+   * the zone and its answers are kept. That combination is deliberate and it is
+   * the pessimistic direction: the verdict understates the grounding rather than
+   * overstating it, and `seed_queries` states the measured count either way.
+   */
   UNAVAILABLE: "unavailable",
   /** No seed term could be derived, so no SERP call was ever made. */
   NOT_ATTEMPTED: "not_attempted",
@@ -332,7 +342,20 @@ export async function generateUnbrandedPrompts(
     state_reason: "no_seed_terms",
     detail: null,
     terms_attempted: 0,
+    // A seed term that lost AT LEAST ONE of its two legs. This is the DEGRADED
+    // trigger: a term whose PAA leg died still grounds the set on less than it
+    // looks like, even when autocomplete answered.
     terms_failed: 0,
+    // R2.2.12 — a seed term that yielded NOTHING because every leg failed. This
+    // is the UNAVAILABLE trigger, and it is a different number from
+    // `terms_failed` now that the two legs settle independently: "every term
+    // lost its PAA leg" and "every term produced nothing" used to be the same
+    // count, and the second one is the only one that means the leg is dead.
+    terms_unseeded: 0,
+    // The per-leg denominators. `legs_failed` is uncapped, unlike `failures`
+    // below, so "two legs failed" and "twelve did" stay distinguishable.
+    legs_attempted: 0,
+    legs_failed: 0,
     seed_queries: 0,
     blend_topics_attempted: 0,
     blend_fetches_failed: 0,
@@ -341,13 +364,22 @@ export async function generateUnbrandedPrompts(
   /**
    * @param {"seed"|"blend"|"derivation"} stage which SERP leg failed
    * @param {string|null} term the seed term / blend topic, when there is one
+   * @param {"paa"|"autocomplete"|null} leg R2.2.12 — WHICH leg, because a zone
+   *   fault hits PAA only and autocomplete can still have answered
    */
-  const recordSeedFailure = (stage, term, err) => {
-    seeding.terms_failed += stage === "seed" ? 1 : 0;
+  const recordSeedFailure = (stage, term, err, leg = null) => {
+    // R2.2.12: `terms_failed` is no longer bumped here. One term can now report
+    // two failed legs, and counting each as a failed TERM would have made a
+    // single dead-PAA term read as two — and then `terms_failed >=
+    // terms_attempted` would have declared the whole leg unavailable off one
+    // term. The seed loop owns the per-term arithmetic now; this helper owns
+    // the per-leg count.
+    seeding.legs_failed += stage === "seed" ? 1 : 0;
     seeding.blend_fetches_failed += stage === "blend" ? 1 : 0;
     if (seeding.failures.length >= MAX_RECORDED_SEED_FAILURES) return;
     seeding.failures.push({
       stage,
+      leg: leg ?? null,
       term: term ?? null,
       // The typed name and `reason` are what let an operator (or check-secrets)
       // act on this without regex-matching prose.
@@ -382,66 +414,139 @@ export async function generateUnbrandedPrompts(
     for (const term of uniqueTerms) {
       if (paaResults.length >= 30) break;
       seeding.terms_attempted += 1;
-      // R3.7.6 (finding A1): the deadline is held in a variable and cleared in a
-      // `finally`, not left to expire. The executor below runs synchronously
-      // inside `new Promise`, so `seedTimeoutId` is always assigned before the
-      // first await — there is no path that reaches the finally with the timer
-      // scheduled but unrecorded.
+      const queriesBeforeTerm = paaResults.length;
+      // R3.7.6 (finding A1): every deadline is held and cleared in a `finally`,
+      // not left to expire. The executors below run synchronously inside `new
+      // Promise`, so each id is pushed before the first await — there is no path
+      // that reaches the finally with a timer scheduled but unrecorded.
       //
-      // Uncleared, this stranded ONE live 10s Timeout per seed term (up to five)
-      // on every call: ten seconds of event loop kept alive after prompt
-      // generation had already returned, which is a held-open serverless
-      // invocation billed for nothing and, on the long-lived fleet, a timer per
-      // term per scan. Same shape and same fix as R6.5.6 in src/lib/gemini.js:92.
-      let seedTimeoutId = null;
-      try {
-        const result = await Promise.race([
-          Promise.all([paaFn(term), autoFn(term)]),
+      // Uncleared, this stranded live 10s Timeouts on every call: ten seconds of
+      // event loop kept alive after prompt generation had already returned,
+      // which is a held-open serverless invocation billed for nothing and, on
+      // the long-lived fleet, a timer per term per scan. Same shape and same fix
+      // as R6.5.6 in src/lib/gemini.js:92.
+      //
+      // R2.2.12 — ONE DEADLINE PER LEG, not one per pair. The pair used to be
+      // `Promise.all` raced against a single timeout, which bound the two legs
+      // together: the first rejection killed the pair and THREW AWAY the
+      // sibling's result. Per-leg deadlines also mean a timeout is attributable
+      // — the old shape could only say "this term timed out", never which
+      // provider hung.
+      const deadlines = [];
+      /** One seed leg, under its own deadline, settling independently. */
+      const runLeg = (fn, label) =>
+        Promise.race([
+          // `Promise.resolve().then` so a provider that throws SYNCHRONOUSLY
+          // becomes a rejected leg rather than escaping allSettled entirely.
+          Promise.resolve().then(() => fn(term)),
           new Promise((_, reject) => {
-            seedTimeoutId = setTimeout(
-              () => reject(new Error(`seed term timeout after ${SEED_FETCH_TIMEOUT_MS}ms`)),
-              SEED_FETCH_TIMEOUT_MS
+            deadlines.push(
+              setTimeout(
+                () => reject(new Error(`seed ${label} leg timeout after ${SEED_FETCH_TIMEOUT_MS}ms`)),
+                SEED_FETCH_TIMEOUT_MS
+              )
             );
           }),
         ]);
-        const [paa, autos] = result;
-        const merged = [...(paa || []), ...(autos || [])];
-        for (const q of merged) {
-          if (typeof q === "string" && q.trim() && !paaResults.includes(q.trim())) {
-            paaResults.push(q.trim());
+      try {
+        const LEGS = ["paa", "autocomplete"];
+        seeding.legs_attempted += LEGS.length;
+        // allSettled, NOT all (R2.2.12). A Bright Data zone fault in the PAA leg
+        // used to reject the pair, so the autocomplete result that had already
+        // come back was discarded — and Google suggest does not route through a
+        // Bright Data zone, so that result was real and its loss was invented.
+        const outcomes = await Promise.allSettled([
+          runLeg(paaFn, "paa"),
+          runLeg(autoFn, "autocomplete"),
+        ]);
+
+        // KEEP WHAT CAME BACK FIRST, before deciding what failed. A surviving
+        // leg's queries are real whatever its sibling did.
+        for (const outcome of outcomes) {
+          if (outcome.status !== "fulfilled") continue;
+          for (const q of outcome.value || []) {
+            if (typeof q === "string" && q.trim() && !paaResults.includes(q.trim())) {
+              paaResults.push(q.trim());
+            }
           }
         }
-      } catch (err) {
-        // R3.7.6 / rule 1: still best-effort per term, but no longer silent. A
-        // seed term that timed out or threw produced zero queries, and the
-        // sibling branches in the realism blend below already say so; this one
-        // used to look identical to a term that legitimately had nothing.
-        //
-        // R2.2.8: the error object, not `err.message` — a typed zone failure
-        // carries `name` and `reason` and both are the operator's whole answer.
-        // And it is RECORDED, so the degrade outlives the log stream.
-        recordSeedFailure("seed", term, err);
-        console.warn(
-          `[promptGen] seed fetch failed for "${term}" — 0 seed queries from this term:`,
-          err
-        );
-        if (isBrightDataZoneError(err)) {
+
+        const failedLegs = outcomes
+          .map((o, i) => (o.status === "rejected" ? { label: LEGS[i], err: o.reason } : null))
+          .filter(Boolean);
+        const survivingLegs = LEGS.filter((_, i) => outcomes[i].status === "fulfilled");
+
+        if (failedLegs.length > 0) {
+          // R3.7.6 / rule 1: still best-effort per leg, but no longer silent. A
+          // leg that timed out or threw produced zero queries, and the sibling
+          // branches in the realism blend below already say so; this one used to
+          // look identical to a leg that legitimately had nothing.
+          seeding.terms_failed += 1;
+          if (failedLegs.length === outcomes.length) seeding.terms_unseeded += 1;
+          for (const { label, err } of failedLegs) {
+            // R2.2.8: the error object, not `err.message` — a typed zone failure
+            // carries `name` and `reason` and both are the operator's whole
+            // answer. And it is RECORDED, so the degrade outlives the log.
+            recordSeedFailure("seed", term, err, label);
+            console.warn(
+              `[promptGen] seed fetch failed for "${term}" (${label} leg) — ` +
+                `0 seed queries from this leg` +
+                (survivingLegs.length > 0
+                  ? `, but the ${survivingLegs.join("/")} leg answered and its queries are kept`
+                  : `, and its sibling leg failed too`) +
+                `:`,
+              err
+            );
+          }
+        }
+
+        const zoneFault = failedLegs.find(({ err }) => isBrightDataZoneError(err));
+        if (zoneFault) {
           // R2.2.8: not a flaky term. The SERP provider itself is unusable, so
           // every remaining term would burn a 10s deadline to reach the same
-          // failure. Stop, and say the whole leg is unavailable.
+          // failure. Stop, and say that leg is unavailable.
           seeding.state = SEED_STATE.UNAVAILABLE;
-          seeding.state_reason = `serp_zone_${err.reason || "error"}`;
-          seeding.detail = String(err.message).slice(0, 200);
+          seeding.state_reason = `serp_zone_${zoneFault.err.reason || "error"}`;
+          seeding.detail = String(zoneFault.err.message).slice(0, 200);
+          const kept = paaResults.length - queriesBeforeTerm;
+          const abandonedTerms = uniqueTerms.length - seeding.terms_attempted;
+          // R2.2.12 — this line used to claim "no seed term can succeed", which
+          // was strictly wrong: only the zoned leg is dead. It now names what
+          // was actually abandoned and what was actually kept, because the
+          // abort is still over-broad by choice (it drops the remaining terms'
+          // autocomplete too, to avoid burning a 10s deadline per term on a
+          // provider we know is dead) and an over-broad abort that describes
+          // itself accurately is honest where a mis-described one is not.
           console.warn(
             `[promptGen] ABANDONING PAA seeding for "${brand}" after seed term "${term}": ` +
-              `the SERP provider's zone is unusable (${err.reason}), so no seed term can succeed. ` +
-              `This prompt set will be generated with ${paaResults.length} real Google queries ` +
-              `instead of up to 30 — it is NOT grounded in observed search behaviour.`
+              `the SERP provider's zone is unusable (${zoneFault.err.reason}), so the ` +
+              `${zoneFault.label} leg cannot succeed for any term. ` +
+              `KEPT: ${kept} quer${kept === 1 ? "y" : "ies"} from this term's surviving ` +
+              `${survivingLegs.join("/") || "(none)"} leg` +
+              `${survivingLegs.length === 1 ? "" : "s"}; ` +
+              `${paaResults.length} real Google queries in total instead of up to 30. ` +
+              `ABANDONED: the remaining ${abandonedTerms} seed term(s), BOTH legs — ` +
+              `including autocomplete, which does NOT route through the Bright Data zone ` +
+              `and would probably have answered. ` +
+              `This prompt set is ${paaResults.length > 0 ? "only partly" : "NOT"} grounded ` +
+              `in observed search behaviour.`
           );
           break;
         }
+      } catch (err) {
+        // Defensive only: allSettled does not reject, so reaching here means
+        // something outside the two legs threw. It still gets recorded rather
+        // than vanishing — an unattributable failure is a failure.
+        seeding.terms_failed += 1;
+        seeding.terms_unseeded += 1;
+        recordSeedFailure("seed", term, err, null);
+        console.warn(
+          `[promptGen] seed fetch failed for "${term}" (leg unattributable) — ` +
+            `0 seed queries from this term:`,
+          err
+        );
       } finally {
-        if (seedTimeoutId !== null) clearTimeout(seedTimeoutId);
+        for (const id of deadlines) clearTimeout(id);
       }
     }
     seedQueries = paaResults;
@@ -453,13 +558,22 @@ export async function generateUnbrandedPrompts(
         seeding.state = SEED_STATE.NOT_ATTEMPTED;
         seeding.state_reason = "no_seed_terms";
         seeding.detail = "no industry label and no usable website title to derive a seed term from";
-      } else if (seeding.terms_failed >= seeding.terms_attempted) {
+      } else if (seeding.terms_unseeded >= seeding.terms_attempted) {
+        // R2.2.12: `terms_unseeded`, not `terms_failed`. Every term yielded
+        // nothing — that is what makes the leg unavailable. A run where every
+        // term lost its PAA leg but autocomplete answered is DEGRADED below,
+        // and calling it unavailable would disown queries we actually have.
         seeding.state = SEED_STATE.UNAVAILABLE;
         seeding.state_reason = "all_seed_terms_failed";
         seeding.detail = seeding.failures[0]?.message ?? null;
       } else if (seeding.terms_failed > 0) {
         seeding.state = SEED_STATE.DEGRADED;
-        seeding.state_reason = "some_seed_terms_failed";
+        // "some" has to mean some. When every attempted term lost a leg the set
+        // is degraded across the board, and saying "some" would understate it.
+        seeding.state_reason =
+          seeding.terms_failed >= seeding.terms_attempted
+            ? "every_seed_term_lost_a_leg"
+            : "some_seed_terms_failed";
         seeding.detail = seeding.failures[0]?.message ?? null;
       } else if (paaResults.length === 0) {
         // Every fetch SUCCEEDED and Google had nothing. That is a real measured
@@ -491,12 +605,15 @@ export async function generateUnbrandedPrompts(
   // into this same object, and an LLM pass that throws must not erase the fact
   // that the SERP leg was tried and failed.
   //
-  // NO PRODUCTION READER YET — unlike its sibling `stats.website_scrape`, which
-  // runSourcingPhase reads and turns into a CHUNK_SKIP_REASONS skip, nothing
-  // reads `stats.prompt_seeding` and the checkpoint's `stats` allowlist in
-  // src/lib/workers/scanWorker.js does not carry it, so it does not yet survive
-  // a resume. That file is owned by another task in flight; wiring the reader
-  // and the checkpoint carry is filed as the follow-up to this one.
+  // THIS FIELD HAS A PRODUCTION READER (R2.2.12). It used to have none, which
+  // meant the verdict lived and died inside this process. runSourcingPhase in
+  // src/lib/workers/scanWorker.js now reads `stats.prompt_seeding` right after
+  // sourceUnbrandedQueries returns and files
+  // CHUNK_SKIP_REASONS.PROMPT_SEEDING_DEGRADED on the chunk's scan_runs row
+  // under `detail.skips`, exactly as its sibling `stats.website_scrape` does;
+  // and the field rides the checkpoint's `stats` allowlist so it survives a
+  // resume. Renaming or dropping this field silently un-records the degrade;
+  // scanChunkLedger.test.mjs and promptSeedingRecord.test.mjs hold it.
   if (stats && typeof stats === "object") {
     stats.prompt_seeding = seeding;
   }
@@ -508,8 +625,13 @@ export async function generateUnbrandedPrompts(
       `[promptGen] PAA/autocomplete seeding for "${brand}" is ${seeding.state} ` +
         `(${seeding.state_reason}${seeding.detail ? `: ${seeding.detail}` : ""}) — ` +
         `${seeding.seed_queries} real Google queries from ` +
-        `${seeding.terms_attempted - seeding.terms_failed}/${seeding.terms_attempted} seed terms ` +
-        `available to ground this prompt set. These prompts are not grounded in observed ` +
+        // R2.2.12: `terms_unseeded`, not `terms_failed`. A term that lost its PAA
+        // leg but got autocomplete DID ground this set, and subtracting it here
+        // printed "0/1 seed terms available" next to a non-zero query count.
+        `${seeding.terms_attempted - seeding.terms_unseeded}/${seeding.terms_attempted} seed terms ` +
+        `(${seeding.legs_failed}/${seeding.legs_attempted} PAA+autocomplete legs failed) ` +
+        `available to ground this prompt set. These prompts are ` +
+        `${seeding.seed_queries > 0 ? "only partly" : "not"} grounded in observed ` +
         `search behaviour.`
     );
   }
@@ -558,7 +680,7 @@ export async function generateUnbrandedPrompts(
         // than `err.message` alone. This leg is the same SERP dependency the
         // seeding block used, so it lands in the same record under stage
         // "blend" instead of inventing a second vocabulary for it.
-        recordSeedFailure("blend", topic, err);
+        recordSeedFailure("blend", topic, err, "paa");
         console.warn(`[promptGen] PAA fetch failed for "${topic}":`, err);
         if (isBrightDataZoneError(err)) blendZoneDead = true;
       }
@@ -568,7 +690,7 @@ export async function generateUnbrandedPrompts(
         const autos = await autoFn(topic);
         (autos || []).forEach((text) => add({ text, topic, source: "autocomplete" }));
       } catch (err) {
-        recordSeedFailure("blend", topic, err);
+        recordSeedFailure("blend", topic, err, "autocomplete");
         console.warn(`[promptGen] Autocomplete fetch failed for "${topic}":`, err);
       }
     }

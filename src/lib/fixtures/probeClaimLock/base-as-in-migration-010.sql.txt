@@ -1,0 +1,86 @@
+-- FIXTURE — R1.2.15. The CORRECT claim function: the positive control for the
+-- whole corpus in this directory.
+--
+-- R1215-EXPECT: accept
+-- R1215-DEFEATS: n/a
+--
+-- WHERE IT CAME FROM. `claim_probe_tasks` as defined in
+-- supabase/migrations/010_probe_tasks.sql, with 010's explanatory comments
+-- removed and its two counting queries (outstanding / leased_elsewhere, which
+-- are a reporting concern and not part of the claim window) dropped. Its
+-- `candidate` CTE is byte-identical to 010's once comments are stripped and
+-- whitespace is flattened, and `src/lib/probeClaimLock.test.mjs` asserts that
+-- equality — so if 010's claim window is ever edited, this fixture goes red and
+-- has to be updated on purpose. That is the point of keeping it: it is the
+-- pinned SHAPE the four sabotage fixtures beside it are one edit away from.
+--
+-- WHAT MAKES IT INTERESTING. It is the only file here the scope guard must
+-- ACCEPT. Without it, a guard that had degenerated into `throw new Error()`
+-- would satisfy every `assert.throws` in the suite and the corpus would certify
+-- a guard that rejects everything, including the migration that ships.
+--
+-- The four things this file is the control for, each one edit away:
+--   * lock-parked-in-the-claimed-cte.sql.txt        (the lock moves)
+--   * lock-downgraded-to-bare-for-update.sql.txt    (the lock weakens)
+--   * scope-widened-any-live-lease-claimable.sql.txt (the window widens)
+--   * scope-narrowed-to-pending-only.sql.txt        (the window narrows)
+--
+-- This file is .txt on purpose: it must never be applied as a migration, and
+-- the migration walker in probeClaimLock.test.mjs must never find it. It is
+-- read as TEXT by the guard that has to accept it.
+
+CREATE OR REPLACE FUNCTION claim_probe_tasks(
+  p_owner     text,
+  p_engines   text[]  DEFAULT NULL,
+  p_limit     integer DEFAULT 5,
+  p_lease_ms  integer DEFAULT 180000,
+  p_batch_id  uuid    DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+  v_now     timestamptz := now();
+  v_expires timestamptz;
+  v_claimed jsonb;
+  v_count   integer;
+BEGIN
+  v_expires := v_now + make_interval(secs => p_lease_ms / 1000.0);
+
+  WITH candidate AS (
+    SELECT t.id
+      FROM probe_tasks t
+     WHERE t.status IN ('pending', 'claimed')
+       AND (p_engines  IS NULL OR t.engine = ANY (p_engines))
+       AND (p_batch_id IS NULL OR t.batch_id = p_batch_id)
+       AND (t.lease_owner IS NULL
+            OR t.lease_expires_at IS NULL
+            OR t.lease_expires_at < v_now)
+     ORDER BY t.priority DESC, t.created_at
+     LIMIT p_limit
+     FOR UPDATE SKIP LOCKED
+  ),
+  claimed AS (
+    UPDATE probe_tasks t
+       SET status           = 'claimed',
+           lease_owner      = p_owner,
+           lease_expires_at = v_expires,
+           attempts         = t.attempts + 1,
+           claimed_at       = v_now,
+           updated_at       = v_now
+      FROM candidate c
+     WHERE t.id = c.id
+    RETURNING t.*
+  )
+  SELECT COALESCE(jsonb_agg(to_jsonb(claimed) ORDER BY claimed.created_at), '[]'::jsonb),
+         COUNT(*)::integer
+    INTO v_claimed, v_count
+    FROM claimed;
+
+  RETURN jsonb_build_object(
+    'owner',         p_owner,
+    'tasks',         v_claimed,
+    'claimed_count', v_count
+  );
+END;
+$fn$;

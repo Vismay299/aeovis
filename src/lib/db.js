@@ -563,23 +563,32 @@ export async function getScansByDomain(domain, deps = {}) {
  * `db_not_configured` code getScansForBrand/getScansByDomain use — one
  * vocabulary, one branch at the call site.
  *
- * STILL FAIL-QUIET BELOW, AND NOT FIXED HERE: the `catch` at the end of this
- * function swallows a postgrest error (an unreachable DB, a 5xx) and returns [].
- * That is the db_read_failed shape R2.8.5 fixed in the two functions above, it
- * is a genuinely different branch from this one, and it is outside R2.8.15's
- * accept, which names only the `!supabase` line. It was reported as a follow-up
- * in R2.8.15's submit note; if no task id sits beside this paragraph, the
- * follow-up was never filed and this is still open. Do NOT read its survival as
- * a considered exception.
+ * THE OTHER HALF, CLOSED BY R2.8.16: this function used to wrap its whole body
+ * in `try { … } catch (err) { console.warn(…); return [] }`, so a postgrest
+ * error — an unreachable DB, a 5xx, a revoked key — became the same [] as a
+ * database that answered with no rows. That is the db_read_failed shape R2.8.5
+ * fixed in getScansForBrand/getScansByDomain, and it is now fixed the same way
+ * and in the same shape as those two: no try/catch at all, `error` inspected
+ * inline, and the SAME ScansUnavailableError with the SAME `db_read_failed`
+ * code. No third vocabulary exists here on purpose — a caller still branches
+ * once on `instanceof` and reads `code` to tell the deploy's fault
+ * (db_not_configured) from the database's (db_read_failed). Losing the catch is
+ * the point: anything the row-collapsing loop below could throw is a bug, and a
+ * bug must not be laundered into "this operator has no brands" either.
  *
- * GET /api/history has the same problem one level up, and this was measured, not
- * assumed: with the env cleared, the route's own catch turns the refusal below
- * into a 200 `{ scans: [], runs: [], activeJobs: [], counts: {} }`. So today the
- * refusal reaches the server log and any direct caller, but the screen still
- * shows an empty workspace. Fixing that route is also outside this task's file
- * scope and is in the same follow-up.
+ * GET /api/history had the same problem one level up, and it is fixed in the
+ * same commit (R2.8.16): its own catch used to turn the refusal below into a
+ * 200 `{ scans: [], runs: [], activeJobs: [], counts: {} }`, so the refusal
+ * reached the server log and a direct caller but the screen still showed an
+ * empty workspace. It now answers 503 with `store:"unreachable"` and null
+ * collections (the contract lives in src/lib/historyStoreState.js), and
+ * HomeDashboard renders that as a stated outage instead of the clean first-run
+ * page — though that component is currently mounted on no page, which R2.8.16's
+ * own note says out loud rather than implying a screen was repaired. Do not
+ * "simplify" either side back: fixing one without the other changes nothing a
+ * user could ever see.
  *
- * @throws {ScansUnavailableError} db_not_configured
+ * @throws {ScansUnavailableError} db_not_configured | db_read_failed
  */
 export async function listRecentScans(limit = 12) {
   if (!supabase) {
@@ -589,48 +598,53 @@ export async function listRecentScans(limit = 12) {
       { code: "db_not_configured" }
     );
   }
-  try {
-    const { data, error } = await supabase
-      .from("scans")
-      .select("id, brand, url, industry, visibility_pct, scanned_at, raw_results")
-      .order("scanned_at", { ascending: false })
-      .limit(200);
-    if (error) throw error;
+  const { data, error } = await supabase
+    .from("scans")
+    .select("id, brand, url, industry, visibility_pct, scanned_at, raw_results")
+    .order("scanned_at", { ascending: false })
+    .limit(200);
 
-    const byBrand = new Map();
-    for (const s of data || []) {
-      const key = String(s.brand || "").trim().toLowerCase();
-      if (!key) continue;
-      const raw = s.raw_results || {};
-      const engines = raw.engines ? Object.keys(raw.engines) : [];
-      const score =
-        raw.visibility_index_pct ??
-        raw.summary_stats?.share_of_ai_pct ??
-        s.visibility_pct ??
-        null;
-      const existing = byBrand.get(key);
-      if (!existing) {
-        byBrand.set(key, {
-          id: s.id,
-          brand: s.brand,
-          url: s.url,
-          industry: s.industry,
-          score: score == null ? null : Math.round(Number(score) * 10) / 10,
-          scanned_at: s.scanned_at,
-          engines,
-          scan_count: 1,
-        });
-      } else {
-        existing.scan_count += 1;
-      }
-    }
-    return Array.from(byBrand.values())
-      .sort((a, b) => new Date(b.scanned_at) - new Date(a.scanned_at))
-      .slice(0, limit);
-  } catch (err) {
-    console.warn("[db] listRecentScans failed:", err.message);
-    return [];
+  if (error) {
+    console.error("[db] listRecentScans failed:", error);
+    throw new ScansUnavailableError(
+      `Could not read recent scans: ${error.message || error.code || "unknown database error"}. ` +
+        "This is a refusal to look, not a workspace with no brands in it.",
+      { cause: error, code: "db_read_failed" }
+    );
   }
+
+  // No error means the DB answered; an empty result below is a real, measured
+  // "this operator has never scanned anything".
+  const byBrand = new Map();
+  for (const s of data || []) {
+    const key = String(s.brand || "").trim().toLowerCase();
+    if (!key) continue;
+    const raw = s.raw_results || {};
+    const engines = raw.engines ? Object.keys(raw.engines) : [];
+    const score =
+      raw.visibility_index_pct ??
+      raw.summary_stats?.share_of_ai_pct ??
+      s.visibility_pct ??
+      null;
+    const existing = byBrand.get(key);
+    if (!existing) {
+      byBrand.set(key, {
+        id: s.id,
+        brand: s.brand,
+        url: s.url,
+        industry: s.industry,
+        score: score == null ? null : Math.round(Number(score) * 10) / 10,
+        scanned_at: s.scanned_at,
+        engines,
+        scan_count: 1,
+      });
+    } else {
+      existing.scan_count += 1;
+    }
+  }
+  return Array.from(byBrand.values())
+    .sort((a, b) => new Date(b.scanned_at) - new Date(a.scanned_at))
+    .slice(0, limit);
 }
 
 // Global memory store for scan jobs (Next.js hot-reload safe)

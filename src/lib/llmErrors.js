@@ -14,8 +14,17 @@
  */
 export class LlmUnavailableError extends Error {
   /**
+   * `auth_failed` (401/403) and `permanent_error` (other refusals the gateway
+   * understood: 400, 404, 422...) joined the union in R3.6.7 so a revoked key
+   * stops arriving labelled `exhausted_retries`, which sent operators to a
+   * vendor status page instead of to their own credential. Both carry a
+   * `.status`. `exhausted_retries` now means only what it says: a transient
+   * failure that used up its whole retry budget. Emitted by
+   * src/lib/openrouter.js; keep this union in step with what is thrown, since
+   * `.reason` is the one field callers branch on.
+   *
    * @param {string} message human-readable cause
-   * @param {{reason?: "missing_key"|"exhausted_retries"|"unavailable", provider?: string, model?: string, cause?: unknown}} [meta]
+   * @param {{reason?: "missing_key"|"auth_failed"|"permanent_error"|"exhausted_retries"|"unavailable", provider?: string, model?: string, cause?: unknown}} [meta]
    */
   constructor(message, meta = {}) {
     super(message);

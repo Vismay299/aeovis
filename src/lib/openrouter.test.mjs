@@ -614,8 +614,18 @@ test("retry - a 401 reports itself as an auth failure, NOT as exhausted_retries"
   assert.notEqual(out.reason, "exhausted_retries", "a revoked key is not a vendor outage");
   assert.equal(out.status, 401);
   assert.equal(out.provider, "openrouter");
-  assert.match(out.message, /not retried/, "the message has to agree with the reason");
+  // Pins the SINGLE-CALL wording specifically. "on the first call" and "not
+  // retried" are only true when the refusal was the first response, so this
+  // assertion names the whole clause together with the count it belongs to —
+  // a bare /not retried/ here is what let the mixed-sequence message below
+  // contradict itself unnoticed.
+  assert.match(
+    out.message,
+    /on the first call \(1 attempt, not retried/,
+    "one call, and the message says so in the same breath as the count"
+  );
   assert.doesNotMatch(out.message, /3 attempts/, "and must not claim calls it never made");
+  assert.doesNotMatch(out.message, /attempt 1 of/, "a first-call refusal is not an nth attempt");
 });
 
 test("retry - a 403 is auth_failed too; other permanent 4xx are permanent_error", async () => {
@@ -673,7 +683,7 @@ test("retry - an AbortError (the request timeout) is still retried", async () =>
   assert.equal(out.reason, "exhausted_retries");
 });
 
-test("retry - a first-call 401 after a transient 500 still stops immediately", async () => {
+test("retry - a 401 after a transient 500 stops immediately and says it was call TWO", async () => {
   // Mixed sequence: the classification is per-response, not per-run. The 500
   // buys a retry; the 401 that follows ends it on the spot.
   const { out, calls } = await counted(
@@ -682,6 +692,41 @@ test("retry - a first-call 401 after a transient 500 still stops immediately", a
   );
   assert.equal(calls, 2, "one retry earned by the 500, then stop — not 3");
   assert.equal(out.reason, "auth_failed", "the LAST verdict decides the label");
+  assert.equal(out.status, 401);
+  // The message has to survive this sequence too. It used to read "on the first
+  // call (2 attempts, not retried)" — two attempts, one of them a retry,
+  // described as neither. An operator reading that cannot tell a revoked key
+  // from a key revoked mid-run, which is the whole reason attempts is counted.
+  assert.match(
+    out.message,
+    /on attempt 2 of 3, after 1 transient failure that earned a retry \(2 attempts;/,
+    "the prose must report the attempt it actually refused on"
+  );
+  assert.doesNotMatch(
+    out.message,
+    /on the first call/,
+    "the 401 arrived on the SECOND call; saying otherwise contradicts the count beside it"
+  );
+  assert.doesNotMatch(
+    out.message,
+    /\(2 attempts, not retried/,
+    "counted two attempts and claimed none were retried in the same sentence"
+  );
+  // Still says the refusal itself was not retried — true here, and the reason a
+  // reader knows no backoff followed the 401.
+  assert.match(out.message, /the refusal itself was not retried/);
+});
+
+test("retry - two transient 500s before a 403 report all three attempts, plural", async () => {
+  // Guards the plural/singular seam in the conditional clause, and the case
+  // where the refusal lands on the LAST attempt of the budget.
+  const { out, calls } = await counted((n) => new Response("x", { status: n < 3 ? 500 : 403 }), {
+    retries: 2,
+  });
+  assert.equal(calls, 3);
+  assert.equal(out.reason, "auth_failed");
+  assert.match(out.message, /on attempt 3 of 3, after 2 transient failures that earned a retry/);
+  assert.doesNotMatch(out.message, /on the first call/);
 });
 
 test("retry - every permanent status obeys the SHARED classifier, one call each", async () => {

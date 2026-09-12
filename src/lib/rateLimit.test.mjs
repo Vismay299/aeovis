@@ -23,9 +23,16 @@ import {
   UNVERIFIED_CEILING_DECISION,
   UNVERIFIED_CEILING_MULTIPLIER,
   UNVERIFIED_CEILING_SUBJECT,
-  ceilingApplies,
   resolveUnverifiedCeiling,
   unverifiedCeilingBucketKey,
+  ATTESTED_CEILING_DECISION,
+  ATTESTED_CEILING_MULTIPLIER,
+  ATTESTED_CEILING_SUBJECT,
+  CEILING_TIER,
+  attestedCeilingBucketKey,
+  ceilingBucketKey,
+  ceilingTierFor,
+  resolveCeiling,
 } from "./rateLimit.js";
 
 const HOUR = 60 * 60 * 1000;
@@ -63,6 +70,12 @@ test("GUARD — the constants this suite asserts against are pinned, not read ba
   // silently became five scans an hour.
   assert.equal(UNVERIFIED_CEILING_MULTIPLIER, 5);
   assert.equal(UNVERIFIED_CEILING_SUBJECT, "R0.1.22-DEPLOYMENT-UNVERIFIED-TOTAL");
+  // R0.1.24, pinned for the same reason: with the multiplier read back out of
+  // the module, raising it to 1e9 would leave the attested-ceiling suite green
+  // while the bound it asserts became indistinguishable from no bound at all.
+  assert.equal(ATTESTED_CEILING_MULTIPLIER, 40);
+  assert.equal(ATTESTED_CEILING_SUBJECT, "R0.1.24-DEPLOYMENT-ATTESTED-TOTAL");
+  assert.deepEqual({ ...CEILING_TIER }, { UNVERIFIED: "unverified", ATTESTED: "attested" });
 });
 
 test("ACCEPT CRITERION — the 6th scan in an hour from one IP is refused", async () => {
@@ -733,15 +746,21 @@ test("GUARD — every SCAN_RATE_LIMIT_* knob the module reads is documented for 
   // loop below would iterate zero times and this test would pass while the
   // deployment documented no knob at all. An empty set is not a clean one.
   assert.ok(
-    knobs.length >= 5,
-    `the knob extractor found ${knobs.length} (${knobs.join(", ") || "none"}); it read 5 when this ` +
-      `guard was written, so either the regex has stopped matching the module or a knob was removed ` +
-      `— lower this floor deliberately, never to make a red test green`
+    knobs.length >= 6,
+    `the knob extractor found ${knobs.length} (${knobs.join(", ") || "none"}); it read 6 when this ` +
+      `floor was last raised (R0.1.24 added SCAN_RATE_LIMIT_ATTESTED_CEILING), so either the regex ` +
+      `has stopped matching the module or a knob was removed — lower this floor deliberately, never ` +
+      `to make a red test green`
   );
   for (const required of [
     "SCAN_RATE_LIMIT",
     "SCAN_RATE_LIMIT_IP_HEADER",
     "SCAN_RATE_LIMIT_UNVERIFIED_CEILING",
+    // R0.1.24. Named here as well as counted, because the extractor reads
+    // LITERAL `env.NAME` text: if resolveCeiling is ever "simplified" into a
+    // dynamic `env[CEILING_KNOB[tier]]` lookup, the count above still passes
+    // while a live lever over anonymous scan capacity vanishes from the guard.
+    "SCAN_RATE_LIMIT_ATTESTED_CEILING",
   ]) {
     assert.ok(
       knobs.includes(required),
@@ -767,16 +786,30 @@ test("GUARD — every SCAN_RATE_LIMIT_* knob the module reads is documented for 
   );
 });
 
-test("GUARD — .env.example says what each of the two dangerous knobs actually does", async () => {
+test("GUARD — .env.example says what each of the three dangerous knobs actually does", async () => {
   const example = await readFile(new URL("../../.env.example", import.meta.url), "utf8");
-  // Naming a knob is not documenting it. These are the two facts an operator
-  // gets wrong: which header qualifies, and that the ceiling has no off switch.
+  // Naming a knob is not documenting it. These are the facts an operator gets
+  // wrong: which header qualifies, and that neither ceiling has an off switch.
   assert.match(example, /OVERWRITES/, "the whole point of the trust knob is a header the proxy overwrites");
   assert.match(example, /REFUSED/, "the operator must learn that a forgeable name is rejected");
   assert.match(
     example,
     /UNVERIFIED_CEILING_MULTIPLIER/,
     "the ceiling's default is derived, not literal; name the symbol so the operator can grep for it"
+  );
+  // R0.1.24, same rule for the second tier: the default is derived from a named
+  // symbol, and an operator who reads only this file must learn WHY a deployment
+  // with a declared or platform header has a ceiling at all.
+  assert.match(
+    example,
+    /ATTESTED_CEILING_MULTIPLIER/,
+    "the attested ceiling's default is derived too; name the symbol the operator can grep for"
+  );
+  assert.match(
+    example,
+    /catastrophe bound/,
+    "the attested ceiling must not read as a per-IP limit — an operator who thinks it is one will " +
+      "size it like one and hand back the unbounded path R0.1.24 closed"
   );
   // Tolerant of the comment wrapping, intolerant of the sentence disappearing.
   assert.match(
@@ -911,7 +944,12 @@ test("the ceiling bucket is not reachable from any header a caller can send", ()
   }
 });
 
-test("a CONFIGURED deployment is not under the ceiling — the knob still buys a per-IP limit", async () => {
+test("a CONFIGURED deployment keeps a real per-IP limit — the R0.1.24 ceiling is far above it", async () => {
+  // The property R0.1.22 bought with the exemption, and which R0.1.24 must not
+  // cost: a header the operator declares their proxy OVERWRITES names 100
+  // distinct clients, and all 100 are served. The attested ceiling is a
+  // catastrophe bound (40 x 5 = 200 here), not a per-IP substitute, so honest
+  // traffic never meets it — but it IS counted, and reported as counted.
   resetUntrustedSourceWarning();
   const env = {
     SCAN_RATE_LIMIT: "5",
@@ -924,24 +962,28 @@ test("a CONFIGURED deployment is not under the ceiling — the knob still buys a
     100,
     "a header the operator declares their proxy OVERWRITES names 100 clients, not one spoofer"
   );
-  assert.equal(verdicts[99].ceiling.state, CEILING_STATE.NOT_APPLICABLE, "no ceiling was applied...");
-  assert.equal(verdicts[99].ceiling.limit, null, "...and its absence is reported as absent, not as 0");
+  assert.equal(verdicts[99].ceiling.state, CEILING_STATE.COUNTED, "the ceiling ran...");
+  assert.equal(verdicts[99].ceiling.tier, CEILING_TIER.ATTESTED, "...and it is the attested one");
+  assert.equal(verdicts[99].ceiling.limit, 5 * ATTESTED_CEILING_MULTIPLIER);
+  assert.equal(verdicts[99].ceiling.remaining, 100, "a measurement, so the operator can see the headroom");
   assert.equal(verdicts[99].limitScope, BUCKET_SCOPE.CLIENT);
-  assert.equal(ceilingApplies({ trustBasis: TRUST_BASIS.DECLARED }), false);
+  assert.equal(ceilingTierFor({ trustBasis: TRUST_BASIS.DECLARED }), CEILING_TIER.ATTESTED);
 });
 
-test("R0.1.20 IS PRESERVED — the Vercel platform header is not under the ceiling either", async () => {
-  // The axis here is caller-SETTABILITY, not proof. The platform header is
-  // unproven (trusted:false, RESTORE-TRUST-R0.1.20) but it is not a header this
-  // module treats as the caller's word, and R0.1.20 settled that case
-  // deliberately. Putting it under a deployment ceiling would cap every Vercel
-  // deployment at 25 scans an hour on the strength of a doubt.
+test("R0.1.20 IS PRESERVED — the platform header's bucket is unchanged, and now it has a ceiling", async () => {
+  // R0.1.22 exempted this basis because the axis it cared about was
+  // caller-SETTABILITY. R0.1.24 adds the axis that was missing: the header is
+  // unproven (trusted:false, RESTORE-TRUST-R0.1.20), so if the edge does NOT
+  // strip an inbound copy, rotating it was unbounded — measured 60/60 allowed.
+  // What R0.1.20 settled is still settled: the address is read first, the bucket
+  // key is unchanged, and 100 distinct platform-supplied clients are all served.
   resetUntrustedSourceWarning();
   const env = { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: "s", VERCEL: "1" };
   const verdicts = await rotate(100, { env, headerFor: (i) => ({ [PLATFORM_IP_HEADER]: `192.0.2.${i}` }) });
   assert.equal(verdicts.filter((v) => v.allowed).length, 100);
-  assert.equal(verdicts[0].ceiling.state, CEILING_STATE.NOT_APPLICABLE);
-  assert.equal(ceilingApplies({ trustBasis: TRUST_BASIS.PLATFORM_UNPROVEN }), false);
+  assert.equal(verdicts[0].ceiling.state, CEILING_STATE.COUNTED);
+  assert.equal(verdicts[0].ceiling.tier, CEILING_TIER.ATTESTED);
+  assert.equal(ceilingTierFor({ trustBasis: TRUST_BASIS.PLATFORM_UNPROVEN }), CEILING_TIER.ATTESTED);
 
   // But OFF Vercel the same header is nobody's address at all: the caller lands
   // in the shared no-address bucket, which the per-address limit of 5 closes
@@ -956,11 +998,16 @@ test("R0.1.20 IS PRESERVED — the Vercel platform header is not under the ceili
   assert.equal(off[0].ceiling.state, CEILING_STATE.COUNTED, "and the ceiling is watching that bucket too");
 });
 
-test("the no-header caller is under the ceiling too, and an unknown basis fails closed", () => {
-  assert.equal(ceilingApplies({ trustBasis: TRUST_BASIS.ABSENT }), true);
-  assert.equal(ceilingApplies({ trustBasis: TRUST_BASIS.CALLER_SETTABLE }), true);
-  assert.equal(ceilingApplies({}), true, "a basis nobody classified must not escape the ceiling");
-  assert.equal(ceilingApplies(undefined), true);
+test("the no-header caller is under the unverified ceiling, and an unknown basis fails closed", () => {
+  assert.equal(ceilingTierFor({ trustBasis: TRUST_BASIS.ABSENT }), CEILING_TIER.UNVERIFIED);
+  assert.equal(ceilingTierFor({ trustBasis: TRUST_BASIS.CALLER_SETTABLE }), CEILING_TIER.UNVERIFIED);
+  assert.equal(
+    ceilingTierFor({}),
+    CEILING_TIER.UNVERIFIED,
+    "a basis nobody classified must land in the STRICTER tier, never outside both"
+  );
+  assert.equal(ceilingTierFor(undefined), CEILING_TIER.UNVERIFIED);
+  assert.equal(ceilingTierFor({ trustBasis: "some-basis-invented-next-year" }), CEILING_TIER.UNVERIFIED);
 });
 
 test("the ceiling is env-configurable, and garbage falls back to the derived value, never to 0", async () => {
@@ -1159,4 +1206,309 @@ test("GUARD — POST /api/scan does not call a shared refusal an address's own",
   assert.match(src, /limitScope/, "the route must read which limit refused");
   assert.match(src, /BUCKET_SCOPE\.CLIENT/, "and must key the per-address copy off the explicit scope");
   assert.match(src, /Too many scans right now/, "a shared refusal needs its own sentence");
+});
+
+// ---------------------------------------------------------------------------
+// R0.1.24 — the two bases R0.1.22 EXEMPTED are bounded too.
+//
+// Reproduced against the module at HEAD before this block existed, with the real
+// in-memory counter and SCAN_RATE_LIMIT=5:
+//
+//   60 rotating x-vercel-forwarded-for, VERCEL=1        -> 60/60 allowed
+//   60 rotating a declared cf-connecting-ip             -> 60/60 allowed
+//   60 rotating x-real-ip (the R0.1.22 control)         -> 25/60 allowed
+//
+// Both exempt paths reported ceiling.state = "not-applicable" while allowing
+// every request. POST /api/scan is ALLOW_PUBLIC in the operator perimeter, so the
+// caller driving those 60 requests holds no credential, and every allowed request
+// starts a scan that spends scrape + probe + LLM budget.
+//
+// The decision (recorded at ATTESTED_CEILING_DECISION): a ceiling of their own —
+// separate bucket, far larger number, its own env lever — so a correctly
+// configured deployment is not capped at the unverified tier's 25/hour while a
+// forged header still buys a finite number of scans instead of infinity.
+// ---------------------------------------------------------------------------
+
+/** The env in which x-vercel-forwarded-for is the address (PLATFORM_UNPROVEN). */
+const onVercel = (extra = {}) => ({ SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: "s", VERCEL: "1", ...extra });
+/** The env in which a declared header is the address (DECLARED). */
+const withDeclaredHeader = (extra = {}) => ({
+  SCAN_RATE_LIMIT: "5",
+  SCAN_RATE_LIMIT_SALT: "s",
+  SCAN_RATE_LIMIT_IP_HEADER: "cf-connecting-ip",
+  ...extra,
+});
+
+test("THE ROTATION — 60 forged platform headers buy the attested ceiling, not 60 scans", async () => {
+  resetUntrustedSourceWarning();
+  const env = onVercel({ SCAN_RATE_LIMIT_ATTESTED_CEILING: "20" });
+  const increment = counter();
+  const verdicts = await rotate(60, {
+    env,
+    increment,
+    headerFor: (i) => ({ [PLATFORM_IP_HEADER]: `192.0.2.${i}` }),
+  });
+
+  assert.equal(
+    verdicts.filter((v) => v.allowed).length,
+    20,
+    "the pre-R0.1.24 module allowed all 60 — measured, not assumed"
+  );
+
+  // THE DISCRIMINATING ASSERTION. Every one of those 60 requests opened a
+  // per-address bucket that saw exactly ONE request out of a limit of five, so
+  // the per-address tier refused nothing here. The refusals can only have come
+  // from a bucket no request header addresses.
+  const started = windowStart(T0, HOUR);
+  for (const v of verdicts) assert.equal(v.clientRemaining, 4, "each forged address really opened its own bucket");
+  for (let i = 0; i < 60; i++) {
+    const key = clientBucketKey({ header: headers({ [PLATFORM_IP_HEADER]: `192.0.2.${i}` }), salt: "s", env });
+    assert.equal(increment.store.get(`${key}|${started}`), 1);
+  }
+  assert.equal(
+    increment.store.get(`${attestedCeilingBucketKey({ salt: "s" })}|${started}`),
+    60,
+    "every rotated request was counted against the attested bucket"
+  );
+
+  const refused = verdicts.filter((v) => !v.allowed);
+  assert.equal(refused.length, 40);
+  assert.equal(refused[0].limitScope, BUCKET_SCOPE.DEPLOYMENT, "a shared refusal must say it is shared");
+  assert.equal(refused[0].limit, 20, "the reported limit is the one that actually refused");
+  assert.equal(refused[0].remaining, 0);
+  assert.ok(refused[0].retryAfterSec > 0, "a refusal must say when to come back");
+  assert.equal(refused[0].ceiling.tier, CEILING_TIER.ATTESTED);
+  assert.equal(refused[0].ceiling.declared, true, "this run's ceiling came from the env lever");
+});
+
+test("THE ROTATION — 60 forged DECLARED headers buy the attested ceiling, not 60 scans", async () => {
+  // The operator's declaration is an assertion about someone else's proxy. If
+  // that proxy passes the header through instead of overwriting it, this is the
+  // same rotation as above with a different header name, and it measured 60/60.
+  resetUntrustedSourceWarning();
+  const env = withDeclaredHeader({ SCAN_RATE_LIMIT_ATTESTED_CEILING: "20" });
+  const increment = counter();
+  const verdicts = await rotate(60, {
+    env,
+    increment,
+    headerFor: (i) => ({ "cf-connecting-ip": `192.0.2.${i}` }),
+  });
+
+  assert.equal(verdicts.filter((v) => v.allowed).length, 20);
+  for (const v of verdicts) {
+    assert.equal(v.clientRemaining, 4);
+    assert.equal(v.trustBasis, TRUST_BASIS.DECLARED, "this rotation must be exercising the declared basis");
+  }
+  const started = windowStart(T0, HOUR);
+  assert.equal(increment.store.get(`${attestedCeilingBucketKey({ salt: "s" })}|${started}`), 60);
+  assert.equal(verdicts[59].limitScope, BUCKET_SCOPE.DEPLOYMENT);
+  assert.equal(verdicts[59].ceiling.tier, CEILING_TIER.ATTESTED);
+});
+
+test("THE DEFAULT is finite too — the 201st rotated request on an unconfigured Vercel deploy is refused", async () => {
+  // The configuration that actually ships: no SCAN_RATE_LIMIT_ATTESTED_CEILING,
+  // so the ceiling derives as 40 x 5 = 200. N+1 through the real limiter.
+  resetUntrustedSourceWarning();
+  const env = onVercel();
+  const increment = counter();
+  const verdicts = await rotate(201, {
+    env,
+    increment,
+    headerFor: (i) => ({ [PLATFORM_IP_HEADER]: `198.51.100.${i}` }),
+  });
+
+  assert.equal(verdicts.filter((v) => v.allowed).length, 200, "the derived default is the one enforced");
+  assert.equal(verdicts[199].allowed, true, "the 200th is the last one the deployment permits");
+  assert.equal(verdicts[200].allowed, false, "and the 201st is refused");
+  assert.equal(verdicts[200].limitScope, BUCKET_SCOPE.DEPLOYMENT);
+  assert.equal(verdicts[200].limit, 5 * ATTESTED_CEILING_MULTIPLIER);
+  assert.equal(verdicts[200].ceiling.declared, false, "derived, and reported as derived");
+  assert.equal(verdicts[0].ceiling.remaining, 199, "a measurement, never a fabricated 0");
+});
+
+test("NO BASIS IS EXEMPT — every trust basis lands in a tier and is counted", async () => {
+  // The shape of the R0.1.24 bug: a basis that reaches the limiter and answers to
+  // no ceiling. This walks all four and asserts each was COUNTED against a real
+  // bucket. The literal 4 is the anti-vacuity: a fifth basis added later cannot
+  // slip through unclassified while this test keeps passing.
+  assert.equal(Object.values(TRUST_BASIS).length, 4, "a new trust basis must be classified into a tier here");
+  const cases = [
+    {
+      basis: TRUST_BASIS.PLATFORM_UNPROVEN,
+      tier: CEILING_TIER.ATTESTED,
+      env: onVercel(),
+      h: { [PLATFORM_IP_HEADER]: "203.0.113.1" },
+    },
+    {
+      basis: TRUST_BASIS.DECLARED,
+      tier: CEILING_TIER.ATTESTED,
+      env: withDeclaredHeader(),
+      h: { "cf-connecting-ip": "203.0.113.2" },
+    },
+    {
+      basis: TRUST_BASIS.CALLER_SETTABLE,
+      tier: CEILING_TIER.UNVERIFIED,
+      env: { SCAN_RATE_LIMIT: "5" },
+      h: { "x-real-ip": "203.0.113.3" },
+    },
+    { basis: TRUST_BASIS.ABSENT, tier: CEILING_TIER.UNVERIFIED, env: { SCAN_RATE_LIMIT: "5" }, h: {} },
+  ];
+
+  for (const { basis, tier, env, h } of cases) {
+    resetUntrustedSourceWarning();
+    const out = await checkScanRateLimit({
+      header: headers(h),
+      increment: counter(),
+      env,
+      now: T0,
+      logger: silent,
+    });
+    assert.equal(out.trustBasis, basis, `this case must exercise ${basis}`);
+    assert.equal(out.ceiling.tier, tier, `${basis} must answer to the ${tier} ceiling`);
+    assert.equal(out.ceiling.state, CEILING_STATE.COUNTED, `${basis} must be COUNTED, not exempt`);
+    assert.ok(Number.isFinite(out.ceiling.limit) && out.ceiling.limit > 0, `${basis}: a ceiling must be a number`);
+    assert.ok(out.ceiling.bucketKey, `${basis}: a ceiling must name the bucket it counted in`);
+    assert.equal(typeof out.ceiling.remaining, "number", `${basis}: a counted ceiling reports a measurement`);
+  }
+
+  // And the state that meant "no ceiling here" is gone, rather than left
+  // unreachable for a future reader to believe.
+  assert.equal(CEILING_STATE.NOT_APPLICABLE, undefined, "a ceiling state nothing can produce is a lie");
+});
+
+test("the two tiers are separate buckets — neither can spend the other allowance", async () => {
+  resetUntrustedSourceWarning();
+  const increment = counter();
+  const started = windowStart(T0, HOUR);
+  const salt = "s";
+
+  // Exhaust the unverified tier with a rotation, off Vercel.
+  await rotate(30, {
+    env: { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_SALT: salt },
+    increment,
+    headerFor: (i) => ({ "x-real-ip": `192.0.2.${i}` }),
+  });
+  assert.equal(increment.store.get(`${unverifiedCeilingBucketKey({ salt })}|${started}`), 30);
+  assert.equal(
+    increment.store.get(`${attestedCeilingBucketKey({ salt })}|${started}`),
+    undefined,
+    "unverified traffic must not be charged to the attested tier"
+  );
+
+  // The attested tier is untouched by that: a platform-supplied caller is served.
+  resetUntrustedSourceWarning();
+  const out = await checkScanRateLimit({
+    header: headers({ [PLATFORM_IP_HEADER]: "203.0.113.44" }),
+    increment,
+    env: onVercel(),
+    now: T0,
+    logger: silent,
+  });
+  assert.equal(out.allowed, true, "an exhausted unverified ceiling must not refuse the attested tier");
+  assert.equal(out.ceiling.tier, CEILING_TIER.ATTESTED);
+  assert.equal(out.ceiling.remaining, 5 * ATTESTED_CEILING_MULTIPLIER - 1);
+  assert.notEqual(unverifiedCeilingBucketKey({ salt }), attestedCeilingBucketKey({ salt }));
+});
+
+test("the attested ceiling bucket is not reachable from any header a caller can send", () => {
+  // Same UPPERCASE property as the R0.1.22 subject: normaliseAddress lowercases
+  // every address, so no header value collides with the bucket that bounds the
+  // whole deployment.
+  const salt = "s";
+  const target = attestedCeilingBucketKey({ salt });
+  for (const value of [
+    ATTESTED_CEILING_SUBJECT,
+    ATTESTED_CEILING_SUBJECT.toLowerCase(),
+    `${ATTESTED_CEILING_SUBJECT}:443`,
+    `[${ATTESTED_CEILING_SUBJECT}]`,
+  ]) {
+    for (const name of [PLATFORM_IP_HEADER, "cf-connecting-ip", "x-real-ip", "x-forwarded-for"]) {
+      const key = clientBucketKey({
+        header: headers({ [name]: value }),
+        salt,
+        env: { VERCEL: "1", SCAN_RATE_LIMIT_IP_HEADER: "cf-connecting-ip" },
+      });
+      assert.notEqual(key, target, `${name}: ${value} must not land in the attested ceiling bucket`);
+    }
+  }
+
+  // And an unknown tier cannot silently become a bucket of its own.
+  assert.throws(() => ceilingBucketKey({ tier: "typo", salt }), /unknown ceiling tier/);
+  assert.throws(() => ceilingBucketKey({ salt }), /unknown ceiling tier/);
+});
+
+test("an EXHAUSTED attested ceiling is announced once, on a latch of its own, and names the way out", async () => {
+  resetUntrustedSourceWarning();
+  const said = [];
+  await rotate(4, {
+    env: onVercel({ SCAN_RATE_LIMIT_ATTESTED_CEILING: "2" }),
+    headerFor: (i) => ({ [PLATFORM_IP_HEADER]: `192.0.2.${i}` }),
+    logger: { warn: (m) => said.push(m) },
+  });
+  const log = said.join("\n");
+  assert.match(log, /attested deployment ceiling \(2 scans per window/, "name the number that refused");
+  assert.match(log, /EXHAUSTED/);
+  assert.match(log, /SCAN_RATE_LIMIT_ATTESTED_CEILING/, "and the knob that raises it");
+  assert.match(log, /FORGED/, "and the other explanation, which is the security incident");
+  assert.match(log, /RESTORE-TRUST-R0\.1\.20/, "and the check that would settle which one it is");
+  assert.doesNotMatch(
+    log,
+    /Set SCAN_RATE_LIMIT_IP_HEADER to the single header/,
+    "the unverified tier advice is wrong here: this deployment HAS an address source"
+  );
+  assert.equal(said.filter((m) => /EXHAUSTED/.test(m)).length, 1, "one line per process, not one per refusal");
+
+  // Its own latch: exhausting the OTHER tier in the same process must still be
+  // reported. One boolean for both would hide the second outage behind the first.
+  const more = [];
+  await rotate(4, {
+    env: { SCAN_RATE_LIMIT: "5", SCAN_RATE_LIMIT_UNVERIFIED_CEILING: "2" },
+    headerFor: (i) => ({ "x-real-ip": `192.0.2.${i}` }),
+    logger: { warn: (m) => more.push(m) },
+  });
+  const second = more.filter((m) => /EXHAUSTED/.test(m));
+  assert.equal(second.length, 1, "the unverified tier running out is a different incident, not a repeat");
+  assert.match(second[0], /R0\.1\.22 deployment ceiling/);
+});
+
+test("the attested ceiling is env-configurable, and garbage falls back to the derived value, never to 0", async () => {
+  const attested = CEILING_TIER.ATTESTED;
+  assert.equal(resolveCeiling({}, 5, attested).limit, 200);
+  assert.equal(resolveCeiling({}, 5, attested).declared, false);
+  assert.equal(resolveCeiling({ SCAN_RATE_LIMIT_ATTESTED_CEILING: "7" }, 5, attested).limit, 7);
+  assert.equal(resolveCeiling({ SCAN_RATE_LIMIT_ATTESTED_CEILING: "7" }, 5, attested).declared, true);
+  for (const bad of ["0", "-1", "abc", "", "  "]) {
+    assert.equal(
+      resolveCeiling({ SCAN_RATE_LIMIT_ATTESTED_CEILING: bad }, 5, attested).limit,
+      200,
+      `SCAN_RATE_LIMIT_ATTESTED_CEILING=${JSON.stringify(bad)} must not refuse every scan`
+    );
+  }
+
+  // The two knobs move the two tiers independently — a crossed wire here would
+  // let one deployment-wide number be raised by the wrong variable.
+  const env = { SCAN_RATE_LIMIT_UNVERIFIED_CEILING: "3", SCAN_RATE_LIMIT_ATTESTED_CEILING: "9" };
+  assert.equal(resolveCeiling(env, 5, CEILING_TIER.UNVERIFIED).limit, 3);
+  assert.equal(resolveCeiling(env, 5, attested).limit, 9);
+  assert.equal(resolveUnverifiedCeiling(env, 5).limit, 3, "the R0.1.22 name still reads the R0.1.22 knob");
+  assert.equal(resolveCeiling(env, 5).tier, CEILING_TIER.UNVERIFIED, "the default tier is the stricter one");
+});
+
+test("GUARD — the R0.1.24 decision is recorded in the module, not only in a ledger", async () => {
+  assert.match(ATTESTED_CEILING_DECISION, /^R0\.1\.24:/);
+  assert.match(ATTESTED_CEILING_DECISION, /no trust basis is exempt/);
+  assert.match(ATTESTED_CEILING_DECISION, /no request header can move/);
+
+  const src = await readFile(new URL("./rateLimit.js", import.meta.url), "utf8");
+  assert.match(src, /60\/60/, "the measurement that justified this must be in the source, not only in a ledger");
+  assert.match(
+    src,
+    /catastrophe bound/,
+    "the rejected option — folding both bases into the 25/hour tier — must be recorded with its reason"
+  );
+  assert.doesNotMatch(
+    src,
+    /export function ceilingApplies/,
+    "a predicate that answers whether a ceiling applies is a predicate that can answer no"
+  );
 });

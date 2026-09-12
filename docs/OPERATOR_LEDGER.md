@@ -260,11 +260,12 @@ Also environment-shaped and easy to get silently wrong:
   fails the run on a mismatch, and fails again when an advertised engine has no
   API key — otherwise the landing page names an engine that every scan silently
   skips.
-- **The free-scan rate limit is five variables, not one.** `SCAN_RATE_LIMIT`
+- **The free-scan rate limit is six variables, not one.** `SCAN_RATE_LIMIT`
   (scans per window per client), `SCAN_RATE_LIMIT_WINDOW_MS` (the window),
   `SCAN_RATE_LIMIT_SALT` (per-deployment salt for the hashed bucket key — the
-  table is a counter, not a visitor log), `SCAN_RATE_LIMIT_IP_HEADER` and
-  `SCAN_RATE_LIMIT_UNVERIFIED_CEILING`, the last two below. `.env.example` carries
+  table is a counter, not a visitor log), `SCAN_RATE_LIMIT_IP_HEADER`,
+  `SCAN_RATE_LIMIT_UNVERIFIED_CEILING` and `SCAN_RATE_LIMIT_ATTESTED_CEILING`,
+  the last three below. `.env.example` carries
   the long form of each. Which knobs exist is not maintained by hand: a guard in
   `src/lib/rateLimit.test.mjs` extracts every `env.SCAN_RATE_LIMIT_*` read out of
   `src/lib/rateLimit.js` and fails if any of them is missing from `.env.example`
@@ -284,13 +285,33 @@ Also environment-shaped and easy to get silently wrong:
   throughput for honest anonymous clients and for one rotating attacker. When it
   is exhausted the product is down for anonymous callers and the log says so once
   per process — the latch is
-  `git grep -n 'warnedCeilingExhausted' src/lib/rateLimit.js`. The answer to
+  `git grep -n 'warnedCeilingsExhausted' src/lib/rateLimit.js`. The answer to
   hitting it is a declared proxy header, not a bigger number.
   *This variable existed undocumented from R0.1.22 until 2026-09-09 (R6.2.4)* —
   in neither this file nor `.env.example`, while the guard that should have caught
   it asserted only the one knob it was written for. It is recorded rather than
   quietly added, because "the operator had no documented lever over a limit that
   can refuse every scan" is the kind of gap this section exists to surface.
+- **`SCAN_RATE_LIMIT_ATTESTED_CEILING` bounds the address sources this code
+  cannot prove, and it also has no off switch (R0.1.24).** A declared proxy
+  header and `x-vercel-forwarded-for` on Vercel are assertions made *outside* the
+  request: Vercel is documented to strip an inbound copy of its own header and
+  nobody here has forged it against the deployed origin to confirm
+  (`git grep -n RESTORE-TRUST-R0.1.20 src/lib`), and a declared header is only
+  unforgeable if your proxy really overwrites it. R0.1.22 exempted both from any
+  ceiling; measured at the module, 60 requests rotating `x-vercel-forwarded-for`
+  under `VERCEL=1` were allowed 60/60 and 60 rotating a declared header were
+  allowed 60/60, from an unauthenticated caller, each allowed request spending
+  scrape + probe + LLM budget. They now answer to a ceiling of their own — a
+  separate bucket, not the unverified one, so a correctly configured deployment
+  is not capped at 25/hour. Unset it derives as 40× `SCAN_RATE_LIMIT` (200/hour
+  at the defaults): deliberately far above honest traffic, because it is a
+  catastrophe bound rather than a per-IP limit. Same ignore rules as the knob
+  above (`0` is not "off"). If you hit it, the one-per-process log says which
+  address source ran out and names this variable; honest traffic reaching it means
+  raise it, and traffic you do not recognise reaching it means that header is
+  being forged and this ceiling is the only thing between a stranger and the
+  vendor bill.
 - **`LLM_MODEL_PRICES`** — a paid model id that nothing can price is refused
   before the request is sent, because recording $0 for paid inference is how the
   content pipeline's `CONTENT_MAX_COST_PER_ITEM` cap became a cap that could

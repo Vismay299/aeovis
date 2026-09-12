@@ -1,16 +1,28 @@
 import { NextResponse } from "next/server";
 import { listRecentScans } from "@/lib/db";
 import { listContentItems, listContentJobs } from "@/lib/db/content";
+import { historyStoreUnreachable } from "@/lib/historyStoreState";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const RUNNING = ["pending", "coordinating", "researching", "benchmarking", "drafting", "reviewing"];
 
+const NO_STORE = { "Cache-Control": "no-store" };
+
 /**
  * GET /api/history — the homepage workspace: the latest scan per brand, the
  * most recent content runs, and any in-flight agent jobs. Single-operator
- * model, so this is unscoped (matches the rest of the app).
+ * model, so this is unscoped (matches the rest of the app); the operator
+ * perimeter in src/middleware.js gates it, it is not a public route.
+ *
+ * THE ONE THING THIS HANDLER MUST NEVER DO (R2.8.16): answer a refusal with 200
+ * and empty collections. listRecentScans throws ScansUnavailableError rather
+ * than guessing, and this catch used to turn that into
+ * `200 { scans: [], runs: [], activeJobs: [], counts: {} }` — indistinguishable
+ * from a real first run, so the refusal reached the server log and nobody else.
+ * The contract, the 503 and the reason vocabulary live in
+ * src/lib/historyStoreState.js, shared with the surface that renders it.
  */
 export async function GET() {
   try {
@@ -52,11 +64,14 @@ export async function GET() {
     };
 
     return NextResponse.json(
-      { scans, runs, activeJobs, counts },
-      { headers: { "Cache-Control": "no-store" } }
+      { store: "ok", reason: null, scans, runs, activeJobs, counts },
+      { headers: NO_STORE }
     );
   } catch (error) {
+    // The upstream message stays here, in the server log, where an operator can
+    // read it. It must not travel to the client.
     console.error("History API error:", error);
-    return NextResponse.json({ scans: [], runs: [], activeJobs: [], counts: {} }, { status: 200 });
+    const { status, body } = historyStoreUnreachable(error);
+    return NextResponse.json(body, { status, headers: NO_STORE });
   }
 }

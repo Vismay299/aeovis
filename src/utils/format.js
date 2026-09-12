@@ -1,4 +1,36 @@
+/**
+ * The verdict band for a score, or `null` when there is no score to band.
+ *
+ * R2.1.2, round 2 — WHY THE NULL ARM EXISTS. R2.1.1 made the hero score
+ * genuinely nullable (`not_assessed` stores no number), and this function's
+ * final `return "weak"` was a FALLTHROUGH, not a decision: `null >= 50` and
+ * `null >= 25` are both false, so a scan that measured nothing was banded
+ * "weak" — the tier for a brand that is genuinely absent from AI answers. The
+ * shipped symptom was a red "Weak" chip in DashboardShell's hero sitting beside
+ * the em dash where the percentage should be: a verdict rendered from a
+ * measurement that does not exist, which is the same defect this task's diff
+ * already fixed once for Sidebar (see the comment at
+ * src/lib/scoring/enginePipeline.js:462-465).
+ *
+ * So an absent score has no tier at all, and the check is deliberately STRICT
+ * (`typeof === "number"`, matching ScoreBand's own `isNumeric`) rather than
+ * `Number.isFinite(Number(score))`: coercing first would put `null` and `""`
+ * back at 0 and hand them "weak" again through a longer route.
+ *
+ * Callers must treat `null` as "render no chip". `tierLabel(null)` is an em dash
+ * and `tierClasses(null)` is the neutral pair, so a caller that forwards the
+ * null rather than testing it still cannot print a colour-coded verdict.
+ *
+ * A measured 0 IS a score and still bands "weak" — standing rule 1: a measured
+ * zero must stay visibly different from "we never got a number".
+ *
+ * @param {unknown} score
+ * @param {string} [scoringVersion]
+ * @returns {"strong"|"moderate"|"weak"|null}
+ */
 export function scoreTier(score, scoringVersion = "v2-composite") {
+  if (typeof score !== "number" || !Number.isFinite(score)) return null;
+
   const isBinary = scoringVersion === "v1-binary";
   const strongThreshold = isBinary ? 70 : 50;
   const moderateThreshold = isBinary ? 40 : 25;
