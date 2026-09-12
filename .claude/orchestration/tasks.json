@@ -5346,6 +5346,36 @@
       }
     },
     {
+      "id": "R2.7.13",
+      "subphase": "R2.7",
+      "lane": "frontend",
+      "phase": "R2",
+      "deps": [
+        "R2.7.12"
+      ],
+      "tags": [],
+      "findings": [],
+      "title": "The degraded banner prints nullish-to-0 metrics beside its own refusal to trust the measurement",
+      "detail": "Found and RENDERED by the R2.2.7 verifier while exercising the critical-degradation path, filed because it is out of that task scope and belongs to the R2.7 null-honesty line. DashboardShell.jsx:887, :894 and :1156 coalesce absent metrics to 0 INSIDE the degraded-engine banner - the one surface whose entire job is to deny that a measurement happened. Observed on screen for a scan with ZERO answers: the banner printed \"Answer coverage (need >= 15%) 100%\" and \"SERP error rate (limit 50%) 0%\". Both numbers are fabrications, and the 100% is the worse of the two because it reads as a passing threshold check on a scan that measured nothing. This is the same class R2.1.2 was rejected for: a confident derived claim rendered beside an element that has just disowned the underlying value.",
+      "accept": "No metric inside the degraded-engine banner renders a number that was not measured; an unmeasured metric reads as absent. Proven by rendering the real DashboardShell for a zero-answer critical scan with react-dom/server and asserting the emitted markup contains neither a coverage percentage nor an error-rate percentage, plus a positive case where genuinely measured metrics still print. Teeth proven by restoring each coalesce and measuring the suite red.",
+      "anchors": [
+        "src/components/dashboard/DashboardShell.jsx:887",
+        "src/components/dashboard/DashboardShell.jsx:894",
+        "src/components/dashboard/DashboardShell.jsx:1156"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-12T03:27:42.342Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R2.8.1",
       "subphase": "R2.8",
       "lane": "frontend",
@@ -7965,6 +7995,35 @@
       "notes": [
         {
           "at": "2026-09-09T18:07:49.532Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.6.9",
+      "subphase": "R3.6",
+      "lane": "backend",
+      "phase": "R3",
+      "deps": [
+        "R3.6.7"
+      ],
+      "tags": [],
+      "findings": [],
+      "title": "brightdata.js keeps a private retry classifier that never retries a 408",
+      "detail": "Found by the R3.6.7 verifier and explicitly filed as out of scope for it. src/lib/engines/brightdata.js:263 still carries a private isRetryableHttpStatus that diverges from the shared src/lib/engines/httpFailureKind.js on 408 and 425, so a Bright Data 408 Request Timeout is never retried even though it is a textbook transient. The existing ledger note on the brightdata divergence flags only the TRANSPORT-failure case, not this status-code case, which is why it survived. openai.js, perplexity.js and openrouter.js have all been migrated to the shared module; brightdata.js is the last private classifier.",
+      "accept": "brightdata.js uses the shared httpFailureKind.js classifier with no private status table, a 408 and a 425 are retried, and a permanent 4xx still breaks on the first call. Proven behaviourally by call-count assertions per status, with teeth measured by reverting to the private table and observing the 408 case go red.",
+      "anchors": [
+        "src/lib/engines/brightdata.js:263",
+        "src/lib/engines/httpFailureKind.js"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-12T03:27:42.628Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -10664,6 +10723,36 @@
         "at": "2026-09-09T18:33:02.651Z",
         "note": "PASS. THE ORIGINAL GAP REPRODUCED: the verifier applied the per-pathname Map evasion to src/middleware.js itself and ran the OLD suite extracted from 1f528f3 - 4/4 GREEN. It confirmed the cause at old.test.mjs:89-90, where every request was built as the same pathname with only the query string varying. The new suite under the identical mutation goes 2 red, with the tail test reporting 2 extra warnings and naming the diagnosis 'a warning only on the FRESH pathnames means it is keyed per pathname'. FIVE MUTATIONS, each red for the stated reason, and the tail test's 3-versus-2 discriminator was OBSERVED rather than asserted - the verifier saw both values: the per-pathname Map gives count 11 with tail 2; a per-request flag declared inside middleware() gives count 11 with tail 3; a per-METHOD Map gives count 2, which proves the alternating methods are load-bearing rather than decorative; and pointing the walk at a directory that exists but holds no route.js goes red on the >20 floor rather than passing on an empty set. THE SECOND FINDING CONFIRMED INDEPENDENTLY, and it is the more valuable half: deleting the public POST /api/scan entry from PUBLIC_EXACT at operatorPerimeter.js:38 left the OLD suite 4/4 green, so that control genuinely had no teeth - it ran last against a spent once-flag, and in the dev-open configuration an operator route also returns 200, so 'status 200 and no warning' was true of a public route and an operator route alike. The new control goes red on the reason with actual allow_dev_no_token against expected allow_public, and the verifier then neutralised ONLY the reason assertion to isolate the other half, confirming the warnings-deepEqual half goes red on its own. Both halves independently red, as claimed. THE CROSS-FILE SECURITY CLAIM WAS VERIFIED RATHER THAN ACCEPTED, which was the thing most likely to hide a hole between two files: opening GET /api/agents deny-to-allow turns SEVEN tests red in operatorPerimeter.test.mjs including the allowlist deepEqual at :194, whose diff names the newly-opened route; and under the same mutation the middleware suite stays 5/5 green, CORRECTLY, because its probe set is derived and follows the perimeter. There is no hole; the case is owned where the author said it was. LIVENESS: test:scoring's glob at package.json:11 matches this file so the suite actually runs, and middleware.js:83's matcher puts the real middleware in front of all 34 discovered API routes, with the suite driving the real function rather than a copy. Suite 2090/2064/0 fail; git status empty with both sabotaged source files fully restored; the documented evasion snippet at :42-45 sits inside a block comment closed at :82 and is inert. All cited lines resolve. ONE NIT, filed not charged: the comment at :307-311 claims the disk check 'stops the probe set drifting into fiction', and it is weaker than that - DISCOVERED_ROUTES and the probe pathnames both pass through the same concrete() at :136, so the includes check is self-consistent. The verifier appended a fake segment inside concrete() and the suite stayed 5/5 green on eleven pathnames no router serves. Realistic triggers exist: a Next route group would be served at one path but derived at another, and a migration to route.ts would go unseen by the route.js filter. Neither exists today - the verifier checked for group directories, route.ts files and a stray _lib route and found none - so the derived set matches the real router exactly right now. Critically, it re-ran the per-pathname Map mutation WITH the fictional pathnames in place and it still went red, so the once-ness criterion keeps its teeth regardless. An overclaiming comment, not a false-pass vector, and it does not touch the accept. Filed as R6.4.14."
       }
+    },
+    {
+      "id": "R6.4.14",
+      "subphase": "R6.4",
+      "lane": "test",
+      "phase": "R6",
+      "deps": [
+        "R6.4.9"
+      ],
+      "tags": [],
+      "findings": [],
+      "title": "A JSX apostrophe opens a phantom string literal in every comment-stripping guard in the repo",
+      "detail": "Two independent verifiers (R6.4.9 and R2.7.10) reproduced the same root class against unmodified source, so this is a repo-wide sweep, not a single-file fix. Every comment-stripping scanner here treats a single quote as a JS string opener. JSX text is not JS, and the guarded files are JSX, so one apostrophe in rendered prose shifts quote-pairing phase and the remainder of the line - or of the file - is misread. MEASURED by the R2.7.10 verifier with an instrumented copy of the shipped scanner over the whole tree: 3 non-test files have a quote scan that crosses a newline, which is impossible in real JS - src/components/dashboard/DashboardShell.jsx (2 lines, from :362, the rendered word Couldn+apostrophe+t), src/components/dashboard/ContentLiftPanel.jsx (144 lines, from :126) and src/components/studio/AgentBuilder.jsx (68 lines, from :268). Separately 5 non-test files ALREADY have a genuine line comment survive stripping: src/lib/db/analytics.js, src/lib/db/content.js, src/lib/prompts.js, src/lib/scoring/enginePipeline.js, src/lib/scoring/promptGen.js. The exploit needs no artificial setup: inserting one commented-out import between DashboardShell.jsx:362 and :364 - inside the pre-existing phantom string span, adding no quote character - made routeReachability go 10 pass / 0 fail while an orphan component sat unreached. R6.4.9 and R2.7.10 each close it in their own file; this task finds every other guard that shares the shape.",
+      "accept": "Every comment-stripping or token-scanning guard in the repo is enumerated, and each either bounds a single- and double-quoted scan to one line (a real JS string cannot contain a raw newline; template literals keep multi-line behaviour) or carries a symmetric alarm that fails when a kept token is in fact commented out. The enumeration itself is a test that fails when a new guard appears without the defence, so this cannot rot. Teeth proven per guard by the DashboardShell apostrophe-then-commented-import payload.",
+      "anchors": [
+        "src/components/dashboard/routeReachability.test.mjs:152",
+        "src/lib/landingHonesty.test.mjs:365",
+        "src/components/dashboard/DashboardShell.jsx:362"
+      ],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-12T03:27:42.941Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R6.5.1",

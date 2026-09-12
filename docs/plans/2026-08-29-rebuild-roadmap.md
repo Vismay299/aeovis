@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**127 / 245 closed** · 9 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**127 / 248 closed** · 9 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -129,7 +129,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `32/61`
+## R2 — Scoring truth  `32/62`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -186,6 +186,7 @@ Baseline commit: `5111219`
 - [~] **R2.7.10** ScoreBreakdown is imported by nothing, so the honesty fixes in it reach no user — submitted `src/components/dashboard/routeReachability.test.mjs:147`, `src/components/dashboard/routeReachability.test.mjs:231`, `src/components/dashboard/routeReachability.test.mjs:120`, `src/components/dashboard/routeReachability.test.mjs:251`, `src/components/dashboard/routeReachability.test.mjs:404`, `src/components/dashboard/routeReachability.test.mjs:460`, `src/components/dashboard/routeReachability.test.mjs:510`
 - [ ] **R2.7.11** The landing page fabricates the per-engine total one layer above the rail that was just fixed
 - [x] **R2.7.12** OverviewView renders a confident 0 for competitors nobody counted, on a route-reachable surface — closed at `src/components/dashboard/OverviewView.jsx:58`, `src/components/dashboard/OverviewView.jsx:130`, `src/components/dashboard/OverviewView.jsx:177`, `src/components/dashboard/OverviewView.jsx:135`, `src/components/dashboard/DashboardShell.jsx:905`, `src/components/dashboard/DashboardShell.jsx:914`, `src/components/dashboard/overviewCompetitorCountSurface.test.mjs:299`, `src/components/dashboard/overviewCompetitorCountSurface.test.mjs:348`
+- [ ] **R2.7.13** The degraded banner prints nullish-to-0 metrics beside its own refusal to trust the measurement
 ### R2.8
 
 - [ ] **R2.8.1** Gate Studio and Opportunities on data quality
@@ -215,7 +216,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 - [ ] **R2.10.7** The landing-copy guard is blind to two apostrophes on one line
 
-## R3 — Durable backend  `25/43`
+## R3 — Durable backend  `25/44`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -267,6 +268,7 @@ Baseline commit: `5111219`
 - [x] **R3.6.6** openai.js fabricates a cost from a hardcoded rate while the model id is env-overridable — closed at `src/lib/engines/openai.js:122`, `src/lib/engines/openai.js:221`, `src/lib/engines/openai.js:43`, `src/lib/engines/openai.js:30`, `src/lib/llmPricing.js:80`, `src/lib/llmPricing.js:107`, `src/lib/llmPricing.js:342`, `src/lib/llmPricing.js:251`, `src/lib/engines/openai.test.mjs:266`, `src/lib/engines/openai.test.mjs:296`, `src/lib/engines/openai.test.mjs:354`, `src/lib/llmPricing.test.mjs:348`
 - [~] **R3.6.7** openai.js has the identical dead retry guard perplexity just fixed, so a 401 costs three calls and three seconds — submitted `src/lib/openrouter.js:207`, `src/lib/openrouter.js:215`, `src/lib/openrouter.test.mjs:624`, `src/lib/openrouter.test.mjs:702`, `src/lib/openrouter.test.mjs:720`, `src/lib/llmErrors.js:27`
 - [ ] **R3.6.8** cost_unmeasured_calls is write-only, an unmeasured-token row persists cost 0, and the new price rows are undated
+- [ ] **R3.6.9** brightdata.js keeps a private retry classifier that never retries a 408
 ### R3.7
 
 - [x] **R3.7.1** SSRF guard module for Firecrawl fallback and crawlability — closed at `src/lib/ssrfGuard.js:366`, `src/lib/ssrfGuard.js:482`, `src/lib/ssrfGuard.js:552`, `src/lib/firecrawl.js:45`, `src/lib/firecrawl.js:115`, `src/lib/ssrfGuard.test.mjs:1`, `src/lib/firecrawl.test.mjs:1`
@@ -327,7 +329,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `24/46`
+## R6 — Apparatus & guards  `24/47`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -375,6 +377,7 @@ Baseline commit: `5111219`
 - [ ] **R6.4.11** No component-render harness, so every UI guard is a text scan that can pass while the component is broken
 - [x] **R6.4.12** Two crawlability surfaces and two engine-chip renderers each duplicate a taxonomy — closed at `src/lib/crawlabilityOutcome.js:91`, `src/lib/crawlabilityOutcome.js:127`, `src/lib/crawlabilityOutcome.js:152`, `src/lib/crawlabilityOutcome.js:266`, `src/lib/crawlabilityTaxonomy.test.mjs:105`, `src/lib/crawlabilityTaxonomy.test.mjs:153`, `src/lib/crawlabilityTaxonomy.test.mjs:184`, `src/lib/crawlabilityTaxonomy.test.mjs:401`, `src/components/dashboard/AnswersView.jsx:69`, `src/components/dashboard/answersEngineFilters.test.mjs:169`, `src/components/dashboard/answersEngineFilters.test.mjs:300`, `src/components/dashboard/answersEngineFilters.test.mjs:320`
 - [x] **R6.4.13** The perimeter once-ness test varies only the query string, so a per-pathname flag passes it — closed at `src/lib/operatorPerimeter.middleware.test.mjs:263`, `src/lib/operatorPerimeter.middleware.test.mjs:307`, `src/lib/operatorPerimeter.middleware.test.mjs:117`, `src/lib/operatorPerimeter.middleware.test.mjs:379`
+- [ ] **R6.4.14** A JSX apostrophe opens a phantom string literal in every comment-stripping guard in the repo
 ### R6.5
 
 - [x] **R6.5.1** Route tests for the money paths and Bright Data parser fixtures — closed at `src/lib/scanRoute.route.test.mjs`, `src/lib/engines/brightdataParser.test.mjs`, `src/lib/cronAuth.route.test.mjs`
