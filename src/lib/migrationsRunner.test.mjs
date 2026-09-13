@@ -201,6 +201,8 @@ const FULL_CATALOG = [
   // from the runner's verify list -- it ships no index; see the comment on
   // "014_content_job_checkpoints.sql" in scripts/setup-supabase.mjs.)
   "brand_metrics_daily_citation_unverified_idx",
+  // 016 (R4.3.1). Crawlability audit history table + index for history queries.
+  "crawlability_audits", "crawlability_audits_domain_idx",
 ];
 
 function withRegister(dir) {

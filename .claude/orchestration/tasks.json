@@ -3987,11 +3987,23 @@
         "src/components/dashboard/DashboardShell.jsx:299-301"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "dev3",
+      "evidence": [
+        "src/lib/scoring/fullyErroredEngine.test.mjs:1"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-13T13:07:36.218Z",
+          "by": "dev3",
+          "text": "claimed"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T13:35:50.567Z",
+        "note": null
+      }
     },
     {
       "id": "R2.1.5",
@@ -5092,11 +5104,23 @@
         "src/lib/workers/scanWorker.js"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "dev3",
+      "evidence": [
+        "src/lib/scoring/brandsElicitedWrite.test.mjs:1"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-13T13:09:17.760Z",
+          "by": "dev3",
+          "text": "claimed"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T13:36:04.850Z",
+        "note": null
+      }
     },
     {
       "id": "R2.6.2",
@@ -5878,17 +5902,28 @@
       "phase": "R2",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "dev3",
+      "evidence": [
+        "src/components/dashboard/answersVisibleGate.test.mjs:1"
+      ],
       "notes": [
         {
           "at": "2026-09-13T07:11:45.351Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T13:10:51.107Z",
+          "by": "dev3",
+          "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T13:36:16.605Z",
+        "note": null
+      }
     },
     {
       "id": "R2.8.1",
@@ -5910,11 +5945,23 @@
         "src/components/dashboard/DashboardShell.jsx:642"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "dev3",
+      "evidence": [
+        "src/components/studio/opportunitiesDataQuality.test.mjs:1"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-13T13:14:34.600Z",
+          "by": "dev3",
+          "text": "claimed"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T13:36:23.451Z",
+        "note": null
+      }
     },
     {
       "id": "R2.8.2",
@@ -6700,17 +6747,28 @@
       "phase": "R2",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "dev3",
+      "evidence": [
+        "src/components/dashboard/contentLiftFabricatedUrl.test.mjs:1"
+      ],
       "notes": [
         {
           "at": "2026-09-13T07:12:09.643Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T13:20:56.644Z",
+          "by": "dev3",
+          "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T13:36:31.347Z",
+        "note": null
+      }
     },
     {
       "id": "R2.9.1",
@@ -7924,14 +7982,19 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "dev2-backend",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-05T01:57:19.141Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T13:06:06.047Z",
+          "by": "dev2-backend",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -8450,11 +8513,23 @@
         "src/lib/scoring/enginePipeline.js:489"
       ],
       "phase": "R3",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "dev-2",
+      "evidence": [
+        "src/lib/workers/perBrandConfig.test.mjs:360"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-13T11:27:43.996Z",
+          "by": "dev-2",
+          "text": "claimed"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T13:36:40.852Z",
+        "note": null
+      }
     },
     {
       "id": "R3.4.5",
@@ -8564,10 +8639,16 @@
         "supabase/migrations/"
       ],
       "phase": "R3",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "dev2-backend",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-13T13:06:06.107Z",
+          "by": "dev2-backend",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -8737,10 +8818,16 @@
         "src/lib/"
       ],
       "phase": "R3",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "dev2-backend",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-13T13:06:06.185Z",
+          "by": "dev2-backend",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -9028,14 +9115,19 @@
       ],
       "phase": "R3",
       "findings": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "dev2-backend",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-09T18:07:49.532Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T13:06:06.067Z",
+          "by": "dev2-backend",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -9612,10 +9704,16 @@
         "src/lib/crawlers/"
       ],
       "phase": "R4",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "dev4",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-13T13:06:43.736Z",
+          "by": "dev4",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -9735,14 +9833,19 @@
         "src/app/api/brands/[brand]/metrics/route.js:76",
         "src/lib/workers/scanWorker.js:1855"
       ],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "dev4",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-05T07:24:43.664Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T13:28:17.165Z",
+          "by": "dev4",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -9765,14 +9868,19 @@
       "tags": [],
       "phase": "R4",
       "findings": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "dev4",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-08T11:22:09.663Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T13:28:17.238Z",
+          "by": "dev4",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -9901,7 +10009,7 @@
         "docs/"
       ],
       "phase": "R5",
-      "status": "blocked",
+      "status": "todo",
       "owner": null,
       "evidence": [],
       "notes": [
@@ -9914,10 +10022,14 @@
           "at": "2026-09-05T07:02:43.083Z",
           "by": "controller",
           "text": "blocked (needs-llm): Blocked on the operator. Three gates, and the middle one cannot be run from here: check:secrets passes, then ONE METERED CALL proves cost lands non-zero in the price table, then SOV surfaces exit 'not assessed'. Gate two needs a funded OpenRouter key, which is R5.1.3's blocker. R5.1.3's own input sharpens gate two rather than removing it: the gateway is now OpenRouter on z-ai/glm-5.2:free, and OpenRouter's public catalogue reports that id at prompt 0 and completion 0 - a price the vendor STATES rather than one we failed to look up. So the honest requirement is 'the price must be KNOWN', not 'must be non-zero': a free-tier branch passes by asserting the id resolves in the catalogue with an explicit zero, while an id ABSENT from the catalogue still fails loud. That refinement should be written into the checklist when it is unblocked. Nothing else in R5 starts before this. Unblock with an OpenRouter key."
+        },
+        {
+          "at": "2026-09-13T13:06:47.611Z",
+          "by": "controller",
+          "text": "unblocked: R5.1.3 (OpenRouter key) done; all deps (R5.1.1, R0.1.6, R3.6.1) are done. Operator confirmed ready to pick up."
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-llm"
+      "verification": null
     },
     {
       "id": "R5.1.3",
@@ -10059,10 +10171,16 @@
         "src/app/api/content-items/"
       ],
       "phase": "R5",
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "dev4",
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-13T13:15:42.875Z",
+          "by": "dev4",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {

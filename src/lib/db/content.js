@@ -493,6 +493,7 @@ export async function insertContentItem(item, deps = {}) {
     research_pack: item.research_pack || null,
     benchmark_notes: item.benchmark_notes || null,
     rubric: item.rubric || null,
+    cycle: item.cycle || 1,
     revision: item.revision || 0,
     revisions: item.revisions || [],
     target_queries: item.target_queries || [],
@@ -504,11 +505,27 @@ export async function insertContentItem(item, deps = {}) {
   };
 
   if (!client) {
+    // Memory mode: deduplicate by (job_id, cycle) key.
+    const key = `${record.job_id || ""}|${record.cycle}`;
+    const existing = [...memory.values()].find(
+      (r) => `${r.job_id || ""}|${r.cycle}` === key
+    );
+    if (existing) {
+      Object.assign(existing, { ...record, id: existing.id, created_at: existing.created_at });
+      return existing;
+    }
     memory.set(id, record);
     return record;
   }
 
-  const { data, error } = await client.from("content_items").insert([record]).select();
+  // R3.5.2 — upsert on the natural key (job_id, cycle). A crash between
+  // insertContentItem and the status write left the job without an item_id,
+  // so a resume re-inserted instead of updating. With the unique constraint,
+  // a repeated insert in the crash window returns the existing row.
+  const { data, error } = await client
+    .from("content_items")
+    .upsert(record, { onConflict: "job_id,cycle" })
+    .select();
   if (error) throw error;
   return data[0];
 }

@@ -378,7 +378,7 @@ export async function brightDataSearch(query, options = {}) {
     throw new Error("Bright Data SERP is not configured (set BRIGHTDATA_API_KEY).");
   }
 
-  const geo = resolveSerpGeo();
+  const geo = resolveSerpGeo(options.geo);
   const timeoutMs = options.timeout || 60000;
   const maxAttempts = options.attempts ?? 2;
   const backoffMs = options.backoffMs ?? 3000;

@@ -44,7 +44,9 @@ export const JOB_STAGES = {
     // gate is mandatory and re-applies regardless of the revision's verdict.
     requestChangesTo: "awaiting_approval",
   },
-  approved: { kind: "done", terminal: true },
+  approved: { kind: "working" },
+  // R5.2.2 — published item means the job is done
+  published: { kind: "done", terminal: true },
   rejected: { kind: "cancelled", terminal: true },
   failed: { kind: "cancelled", terminal: true },
 };
@@ -61,7 +63,11 @@ export const ITEM_STAGES = {
   },
   // The async revision pass is in flight; it returns the item to the gate.
   changes_requested: { kind: "working" },
-  approved: { kind: "done", terminal: true },
+  // R5.2.2 — approved is no longer terminal: the operator must publish with a
+  // verified live URL before the item is truly done.
+  approved: { kind: "working" },
+  // R5.2.2 — the true terminal state, reached only via the publish step.
+  published: { kind: "done", terminal: true },
   rejected: { kind: "cancelled", terminal: true },
 };
 

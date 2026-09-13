@@ -449,3 +449,101 @@ test("describeEngineSetChange never counts 'I did not look' as 'nothing was prob
   assert.deepEqual(gone.substituted_engines, [], "no substitute was observed, so none is claimed");
   assert.match(gone.detail, /engine set configured when it finished/);
 });
+
+// ---------------------------------------------------------------------------
+// R3.2.9 — On a refrozen scan, finalize summarizes the rows that actually
+// exist rather than the frozen list that produced none.
+// ---------------------------------------------------------------------------
+
+test("R3.2.9 — a refrozen scan summarizes the rows that actually exist, not the frozen list that produced none", async () => {
+  // Frozen engines: ["aio", "perplexity"]. None of them resolve at probing
+  // time, so the scan falls back to today's set: ["chatgpt"]. ChatGPT
+  // produces rows. Finalize must summarize chatgpt's rows, not the empty
+  // slices for aio and perplexity.
+  //
+  // Use 8 queries (not 6) so that after chunk 1's budget cuts aio short
+  // (2 rows), chunk 2 produces enough chatgpt rows (6) to pass
+  // HEADLINE_MIN_NON_BRANDED_ANSWERS (5) and be eligible in computeHeadline.
+  const MORE_QUERIES = [
+    ...QUERIES,
+    { text: "best crm for remote teams", is_branded: false },
+    { text: "crm for startups", is_branded: false },
+  ];
+
+  const backend = makeBackend();
+  const jobId = "job-r329";
+
+  const frozen = ["aio", "perplexity"];
+  const cp = {
+    brand: "Acme",
+    url: "acme.com",
+    industry: "saas",
+    competitors: [],
+    competitors_raw: "",
+    prompt_key: "acme.com",
+    prompt_source: "llm_generated",
+    static_pack_prompts: null,
+    queries: MORE_QUERIES,
+    unbranded_texts: MORE_QUERIES.map((q) => q.text),
+    engines: frozen,
+    stats: { cost: 0, tokens: 0, website_scrape: null },
+    sourced_at: new Date().toISOString(),
+  };
+
+  // Chunk 1 — budget 0 stops after the first batch (2 aio rows).
+  const chunkOne = await runProbingPhase(
+    jobId,
+    cp,
+    {
+      ...backend.deps,
+      resolveEnabledEngines: () => ["aio", "perplexity"].map(fakeEngine),
+      chunkBudgetMs: 0,
+      now: () => 1000,
+    },
+    0,
+    {}
+  );
+  assert.equal(chunkOne.budgetHit, true, "chunk 1 must stop mid-scan");
+
+  // Chunk 2 — registry changed to chatgpt only.
+  const chunkTwo = await runProbingPhase(
+    jobId,
+    chunkOne.checkpoint,
+    {
+      ...backend.deps,
+      resolveEnabledEngines: () => ["chatgpt"].map(fakeEngine),
+    },
+    Date.now(),
+    {}
+  );
+
+  // Finalize — must summarize chatgpt's rows, not the frozen list.
+  const job = await runFinalizePhase(jobId, chunkTwo.checkpoint, {
+    ...backend.deps,
+    resolveEnabledEngines: () => ["chatgpt"].map(fakeEngine),
+  });
+
+  const saved = backend.scans[0];
+
+  // engines_counted must reflect chatgpt's data, not be 0.
+  assert.ok(
+    saved.engines_counted > 0,
+    `THE BUG: engines_counted was ${saved.engines_counted} because finalize summarized the frozen list that produced no rows, ignoring chatgpt's rows`
+  );
+
+  // The engine_set_change marker is still present and says REFROZEN.
+  const change = saved.summary_stats.engine_set_change;
+  assert.ok(change, "the refreeze marker must still be present");
+  assert.equal(change.state, ENGINE_SET_STATES.REFROZEN);
+
+  // The scan record's engine summaries must include chatgpt — the engine that
+  // actually produced rows — and engines_counted must reflect real evidence.
+  assert.ok(
+    saved.engines && saved.engines.chatgpt,
+    "the engine summaries must include chatgpt, the engine that actually produced rows"
+  );
+  assert.ok(
+    saved.engines_counted >= 1,
+    "engines_counted must reflect at least one engine that produced evidence"
+  );
+});

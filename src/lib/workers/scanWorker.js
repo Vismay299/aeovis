@@ -46,6 +46,7 @@ import {
   summarizeEngineResults,
   resolveEnabledEngines,
   describeEngineSetChange,
+  ENGINE_SET_STATES,
   ENGINE_RESOLUTION_SKIPS,
   computeHeadline,
   summarizeEngineSlice,
@@ -53,12 +54,14 @@ import {
   buildTrackedBrandRoster,
 } from "../scoring/enginePipeline.js";
 import { judgeBrandsSymmetric } from "../scoring/judge.js";
+import { countBrandsElicited } from "../scoring/promptQuality.js";
 import { toDateOnly, unionPromptCounts, buildMetricsRows } from "../analytics/rollup.js";
 import { getPromptsForBrand, upsertPrompts } from "../db/prompts.js";
 import { buildBrandedQueries, isBrandedQuery } from "../scoring/aioQueryClassify.js";
 import { getBrandAliases } from "../scoring/aliases.js";
 import { resolveBrandKey } from "../scoring/brandKey.js";
 import { extractBrandDomain } from "../scoring/citations.js";
+import { resolveSerpGeo } from "../engines/serpGeo.js";
 import { enrichCitations } from "../analytics/citationEnrich.js";
 import {
   openScanRun,
@@ -256,6 +259,10 @@ export const CHUNK_SKIP_REASONS = Object.freeze({
    * brand goes back to being one that can never become due and nothing says so.
    */
   SCHEDULE_ENSURE_FAILED: "schedule_ensure_failed",
+  /** Per-scan spend cap (SCAN_MAX_COST_PER_SCAN) exceeded. */
+  SPEND_CAP_PER_SCAN: "spend_cap_per_scan",
+  /** Daily spend cap (SCAN_MAX_COST_PER_DAY) exceeded. */
+  SPEND_CAP_PER_DAY: "spend_cap_per_day",
 
   // The three below happen INSIDE resolveEnabledEngines, one layer earlier than
   // ENGINE_NOT_REGISTERED and before the checkpoint freeze. Their strings are
@@ -270,6 +277,87 @@ export const CHUNK_SKIP_REASONS = Object.freeze({
   /** A resolver drop this file has no reason for — recorded anyway, never discarded. */
   ENGINE_SKIP_UNMAPPED: "engine_skip_unmapped",
 });
+
+// ---------------------------------------------------------------------------
+// R3.6.2 — Per-scan and per-day spend caps enforced from the ledger.
+//
+// The scan path had no cap at all: a scan could burn unbounded vendor budget
+// across its probes. These two env vars (USD, parsed as floats) gate new
+// spend in the probing loop. Fleet costs are included because the fleet
+// writes `cost` into the same `stats` object that the chunk accumulates.
+//
+// Per-scan: SCAN_MAX_COST_PER_SCAN — checked against `stats.cost` before
+//   each probe batch. When exceeded, remaining pairs are skipped with reason
+//   `spend_cap_per_scan` and the scan proceeds to finalize with whatever
+//   evidence it has.
+//
+// Per-day: SCAN_MAX_COST_PER_DAY — checked against the sum of `cost_total`
+//   on scans created today (same UTC day). Prevents a queue of scans from
+//   collectively blowing the daily budget. The query is cheap (one index
+//   scan on scans.created_at) and runs once per chunk, before the loop.
+//
+// Unset or non-positive means "no cap". A cap of 0.00 would halt all spend
+// immediately, which is intentional — an operator setting $0 wants silence.
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the per-scan spend cap from the environment. Returns null when
+ * unset or non-positive (no cap).
+ */
+function resolvePerScanCap() {
+  const raw = process.env.SCAN_MAX_COST_PER_SCAN;
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Resolve the per-day spend cap from the environment. Returns null when
+ * unset or non-positive (no cap).
+ */
+function resolvePerDayCap() {
+  const raw = process.env.SCAN_MAX_COST_PER_DAY;
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/**
+ * Sum cost_total on scans created today (UTC). Returns 0 when the DB is
+ * not configured or the query fails — a read failure must not halt a scan
+ * that hasn't spent anything yet.
+ */
+async function dailyScanSpendToday(deps = {}) {
+  const queryFn = deps.queryScanCostToday || queryScanCostToday;
+  try {
+    return (await queryFn()) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Default implementation: one SQL sum over scans.created_at >= start of
+ * today (UTC). Injected via deps for tests.
+ */
+async function queryScanCostToday() {
+  // Lazy-import to avoid circular: this function is only called when a DB
+  // client exists (deps.resolveClient returns non-null).
+  try {
+    const { getSupabaseClient } = await import("../db.js");
+    const client = getSupabaseClient();
+    if (!client) return 0;
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const { data, error } = await client
+      .from("scans")
+      .select("cost_total")
+      .gte("created_at", `${today}T00:00:00Z`);
+    if (error) return 0;
+    return (data || []).reduce((sum, r) => sum + (Number(r.cost_total) || 0), 0);
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * How many distinct subjects one skip reason keeps. The COUNT is always exact;
@@ -673,8 +761,9 @@ function mapDbPromptRow(p) {
  * next scan top up ADDITIVELY — existing prompts and their histories are never
  * regenerated or replaced (prompt-set contract, 2026-07-20).
  */
-export function resolvePromptTarget() {
-  const raw = Number.parseInt(process.env.PROMPT_TARGET || "", 10);
+export function resolvePromptTarget(override) {
+  const candidate = override != null ? override : process.env.PROMPT_TARGET;
+  const raw = typeof candidate === "number" ? candidate : Number.parseInt(String(candidate || ""), 10);
   if (!Number.isFinite(raw)) return DEFAULT_UNBRANDED_TARGET;
   return Math.min(100, Math.max(10, raw));
 }
@@ -1252,15 +1341,31 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     .filter(Boolean);
 
   const brandAliases = getBrandAliases(brand, url);
+  const promptKey = resolveBrandKey(brand, url);
   const stats = { cost: 0, tokens: 0 };
+
+  // R3.4.4 — Worker honors per-brand prompt_target, engines and geo from the
+  // brand's scan_schedules row, falling back to global env only when absent.
+  const getSchedule = deps.getScanSchedule || getScanSchedule;
+  let schedule = null;
+  if (promptKey) {
+    try {
+      schedule = await getSchedule(promptKey, deps);
+    } catch {
+      // transient read failure or unconfigured — fall back to env
+    }
+  }
+
+  const promptTarget = deps.promptTarget || resolvePromptTarget(schedule?.prompt_target);
+  const enginesConfig = schedule?.engines || undefined;
+  const geo = resolveSerpGeo(schedule?.geo);
 
   const {
     queries: unbrandedQueries,
     newlyGenerated,
-    promptKey,
     prompt_source: promptSource,
     static_pack_prompts: staticPackPrompts,
-  } = await sourceQueries(brand, url, industry, stats, brandAliases, deps);
+  } = await sourceQueries(brand, url, industry, stats, brandAliases, { ...deps, promptTarget });
 
   // R3.4.1 — register the brand with the scheduler. Here and not in
   // POST /api/scan because this is the one place per job where the canonical
@@ -1428,6 +1533,7 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
   // local array no caller read. It surrenders it now, and here — before the
   // freeze — is the last moment at which recording it is possible at all.
   const enabledEngineNames = resolveEngines({
+    engines: enginesConfig,
     onSkip: (kind, engineName) => recordEngineResolutionSkip(tally, kind, engineName),
   }).map((e) => e.name);
 
@@ -1443,6 +1549,8 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     queries,
     unbranded_texts: unbrandedQueries.map((q) => q.text.toLowerCase().trim()),
     engines: enabledEngineNames,
+    geo,
+    prompt_target: promptTarget,
     // R3.7.2 — `website_scrape` rides the checkpoint alongside cost/tokens so a
     // chunk that resumes into probing or finalize can still see that this
     // scan's prompts were built without the site. `?? null` is not a metric
@@ -1489,7 +1597,8 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
   const nowFn = deps.now || Date.now;
   const budgetMs = deps.chunkBudgetMs ?? CHUNK_TIME_BUDGET_MS;
 
-  const { brand, url, competitors, queries, prompt_key: promptKey } = checkpoint;
+  const { brand, url, competitors, queries, prompt_key: promptKey, geo: checkpointGeo } = checkpoint;
+  const geo = checkpointGeo || resolveSerpGeo();
   const brandAliases = getBrandAliases(brand, url);
   const brandDomain = extractBrandDomain(url);
 
@@ -1584,14 +1693,47 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
     : checkpoint;
   let progressPct = Math.min(85, 25 + Math.round((doneCount / totalPairs) * 60));
 
+  // R3.6.2 — spend caps resolved once per chunk, before the probe loop.
+  const perScanCap = resolvePerScanCap();
+  const perDayCap = resolvePerDayCap();
+  let dailySpend = perDayCap != null ? await dailyScanSpendToday(deps) : 0;
+  let spendCapReached = null; // string reason once a cap halts new spend
+
   for (const engine of engineDefs) {
     const pending = queries.filter((q) => !completed.has(`${engine.name}|${q.text}`));
 
     for (let i = 0; i < pending.length; i += engine.concurrency) {
+      // R3.6.2 — check spend caps before starting a new batch. Once a cap
+      // is reached, every remaining batch in this chunk (and every engine
+      // after this one) is skipped — the scan proceeds to finalize with
+      // whatever evidence it has.
+      if (spendCapReached) {
+        recordSkip(tally, spendCapReached, `remaining pairs skipped`);
+        break;
+      }
+      if (perScanCap != null && stats.cost >= perScanCap) {
+        spendCapReached = CHUNK_SKIP_REASONS.SPEND_CAP_PER_SCAN;
+        console.warn(
+          `[scan-chunk] Job ${jobId}: per-scan spend cap $${perScanCap.toFixed(4)} reached ` +
+            `(current $${stats.cost.toFixed(4)}). Halting new spend.`
+        );
+        recordSkip(tally, spendCapReached, `cost=$${stats.cost.toFixed(4)} cap=$${perScanCap.toFixed(4)}`);
+        break;
+      }
+      if (perDayCap != null && dailySpend >= perDayCap) {
+        spendCapReached = CHUNK_SKIP_REASONS.SPEND_CAP_PER_DAY;
+        console.warn(
+          `[scan-chunk] Job ${jobId}: daily spend cap $${perDayCap.toFixed(4)} reached ` +
+            `(rolling $${dailySpend.toFixed(4)}). Halting new spend.`
+        );
+        recordSkip(tally, spendCapReached, `daily=$${dailySpend.toFixed(4)} cap=$${perDayCap.toFixed(4)}`);
+        break;
+      }
+
       const batch = pending.slice(i, i + engine.concurrency);
 
       const batchResults = await Promise.all(
-        batch.map((query) => engine.probe(query, brand, brandAliases, brandDomain, competitors, stats))
+        batch.map((query) => engine.probe(query, brand, brandAliases, brandDomain, competitors, stats, { geo }))
       );
 
       // ATTEMPTED moves here, before the write: these probes really ran and
@@ -1691,6 +1833,12 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       // written anywhere that had not yet persisted anything would hand a poison
       // job an unlimited supply of attempts.
       await updateJob(jobId, { progress_pct: progressPct, checkpoint: workingCheckpoint, attempts: 0 });
+
+      // R3.6.2 — accumulate this batch's spend into the daily tracker so
+      // the next cap check reflects the cost just incurred.
+      if (perDayCap != null) {
+        dailySpend += batchResults.reduce((sum, r) => sum + (r?.cost || 0), 0);
+      }
 
       if (doneCount >= totalPairs) {
         return { budgetHit: false, checkpoint: workingCheckpoint, progressPct };
@@ -1822,7 +1970,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   const brandDomain = extractBrandDomain(url);
 
   const allEngineDefs = resolveEngines();
-  const engineNames = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : allEngineDefs.map((e) => e.name);
+  let engineNames = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : allEngineDefs.map((e) => e.name);
   const isMultiEngine = engineNames.length > 1;
 
   // R3.2.5 — the engine-set verdict this scan is finalized under, recomputed
@@ -1853,6 +2001,25 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
       `[scan-chunk] Job ${jobId}: finalizing a scan whose engine set ${engineSetChange.state}. ` +
         `${engineSetChange.title} — ${engineSetChange.detail}`
     );
+  }
+
+  // R3.2.9 — On a refrozen scan, the frozen engine list produced ZERO rows:
+  // every probe fell through to today's substituted set. Summarizing over the
+  // frozen names yields empty slices and engines_counted=0, which is data loss:
+  // the scan says "refrozen" while also reporting zero engines, so a reader
+  // concludes the run produced nothing when it actually produced results that
+  // finalize threw away. Override engineNames with the engines that actually
+  // have rows so the headline reflects real evidence. The engine_set_change
+  // marker still records the refreeze and names the frozen baseline, so a
+  // reader knows this headline is not comparable to the frozen set.
+  if (engineSetChange?.state === ENGINE_SET_STATES.REFROZEN && probedEngines.length > 0) {
+    const uniqueProbed = [...new Set(probedEngines)];
+    console.warn(
+      `[scan-chunk] Job ${jobId}: refrozen scan — summarizing over the ${uniqueProbed.length} engine(s) ` +
+        `that actually produced rows (${uniqueProbed.join(", ")}), not the frozen list ` +
+        `(${(checkpoint.engines || []).join(", ") || "(none)"}) that produced none.`
+    );
+    engineNames = uniqueProbed;
   }
 
   const scannedAt = new Date().toISOString();
@@ -1980,8 +2147,11 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   //
   // Empty-competitor degradation — and the difference that matters. If the
   // extractor RAN and genuinely found nothing (and no user competitors were
-  // given), fullRoster is `[self]` alone and sov_pct is a real 100%: nobody
-  // else was co-mentioned. If the extractor could not run at all,
+  // given), fullRoster is `[self]` alone and sov_pct is null with
+  // sov_state 'not_assessed' and sov_state_reason 'self_only_roster'
+  // (R4.3.2, rollup.js:172 — a self-only roster has no rival to measure
+  // against, so the result is "not assessed", not "100%"). If the extractor
+  // could not run at all,
   // `rosterSource` above is `carried_forward` or `unavailable` and that same
   // `[self]`-alone shape means NOTHING WAS MEASURED. The two used to be
   // indistinguishable — the old comment here called the second case "an
@@ -2036,6 +2206,21 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   console.log(
     `[scan-chunk] Re-judged ${rejudgedRows}/${results.length} rows against a roster of ${fullRoster.length} (roster_source=${rosterSource})`
   );
+
+  // R2.6.1 — per-prompt brands_elicited. countBrandsElicited counts how many
+  // roster vendors the answer actually named (from the re-judged `r.brands`
+  // above, not the probe-time snapshot). Attached to every result row so the
+  // field is available on the persisted raw and downstream surfaces can read
+  // it without re-deriving from result_brands.
+  //
+  // Array.isArray guard: test mocks may inject an async judgeBrandsSymmetric
+  // that returns a Promise rather than an array. The real function is
+  // synchronous (judge.js), so this guard is a test-robustness measure, not
+  // a production fallback.
+  for (const r of results) {
+    const brands = Array.isArray(r.brands) ? r.brands : [];
+    r.brands_elicited = countBrandsElicited(brands);
+  }
 
   let summary;
   let engineSummaries = null;

@@ -76,7 +76,7 @@ export function domainMatches(candidateDomain, target) {
  * Probes a single query on the Google AIO engine (Bright Data SERP).
  * Returns the same result-row shape as probeQueryOnEngine uses.
  */
-async function probeAio(query, brand, brandAliases, brandDomain, competitors, stats) {
+async function probeAio(query, brand, brandAliases, brandDomain, competitors, stats, options = {}) {
   const result = {
     engine: "aio",
     prompt: query.text,
@@ -109,7 +109,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
   const { cost: queryCost } = resolveSerpQueryCost({ provider: "brightdata" });
 
   try {
-    const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true });
+    const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true, geo: options.geo });
     const { text, citations, references } = extractBrightDataAiOverview(data);
     const organic = extractBrightDataOrganic(data);
     result.organic = organic;
@@ -1521,7 +1521,7 @@ export const ENGINE_RESOLUTION_SKIPS = Object.freeze({
  */
 export function resolveEnabledEngines(options = {}) {
   const onSkip = typeof options.onSkip === "function" ? options.onSkip : null;
-  const envVal = (process.env.ENGINES || "aio").trim();
+  const envVal = ((options.engines && String(options.engines).trim()) || process.env.ENGINES || "aio").trim();
   const requested = envVal.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
   const enabled = [];

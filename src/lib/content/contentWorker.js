@@ -598,6 +598,7 @@ export async function startContentJob(jobId, deps = {}) {
       // revision path (reviseContentItem) can rebuild the draft context.
       benchmark_notes: { ...ctx.benchmarkNotes, work_order: ctx.workOrder },
       rubric,
+      cycle: cycles,
       revision: revisions.length,
       revisions,
       target_queries: ctx.workOrder?.target_queries || [],

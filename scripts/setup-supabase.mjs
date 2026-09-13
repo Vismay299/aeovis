@@ -188,6 +188,15 @@ const EXPECTED_OBJECTS = {
   "015_brand_metrics_citation_state.sql": [
     { kind: "index", name: "brand_metrics_daily_citation_unverified_idx" },
   ],
+  // R4.3.1 — crawlability audit history and change detection. Ships a table
+  // with two indexes: domain+audited_at for history queries, and a per-minute
+  // unique constraint for upsert deduplication. The catalog probe can see
+  // tables and indexes but not columns, so the table entry proves existence
+  // and the domain_idx proves the index was created.
+  "016_crawlability_audit_history.sql": [
+    { kind: "table", name: "crawlability_audits" },
+    { kind: "index", name: "crawlability_audits_domain_idx" },
+  ],
 };
 
 /**

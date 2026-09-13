@@ -15,6 +15,7 @@ const VERDICTS = ["approved", "changes_requested", "rejected"];
 
 /**
  * R5.2.1 / finding B13 — APPROVAL IS NOT PUBLICATION.
+ * R5.2.2 — approved items are ready for publish, not yet published.
  *
  * This route used to synthesize a URL on a studio host that publishes nothing
  * (the host is named in docs/BUILD_JOURNAL.md, finding B13, and in
@@ -24,23 +25,26 @@ const VERDICTS = ["approved", "changes_requested", "rejected"];
  * URL that exists nowhere. The synthesis and the write are deleted — and the
  * host name is deliberately absent from this file, so an edit that brings it
  * back has to type the fabrication out. An approved item has NO url; the
- * operator publishes it by hand, outside this system, and the verified live
- * URL arrives through the publish step (R5.2.2). Nothing here may invent one,
- * and the wire says so rather than leaving the absence to be inferred from a
- * missing field.
+ * operator publishes it through POST /api/content-items/[id]/publish with a
+ * real verified live URL.
  *
  * @param {string} newStatus the routed item status
  * @returns {{published: false, url: null, reason: string, detail: string}}
  */
 function publicationState(newStatus) {
-  const approved = newStatus === "approved";
+  if (newStatus === "approved") {
+    return {
+      published: false,
+      url: null,
+      reason: "approved_not_published",
+      detail: "Approved, not published. Use POST /api/content-items/{id}/publish with a live URL to publish.",
+    };
+  }
   return {
     published: false,
     url: null,
-    reason: approved ? "approved_not_published" : "not_approved",
-    detail: approved
-      ? "Approved, not published. This item has no URL until it is published for real and that live URL is verified, so no content event was recorded and no lift is attributable to it yet."
-      : "Not approved, so not published. This item has no URL and no content event.",
+    reason: "not_approved",
+    detail: "Not approved, so not published. This item has no URL and no content event.",
   };
 }
 

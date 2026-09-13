@@ -235,21 +235,30 @@ export const AnswersView = ({
 
   const hasEngines = prompts.some((p) => p.engine);
 
+  // R2.7.17 — THE ONE RULE for whether a visible row counts under "Names you":
+  // an errored row's VerdictChip renders "Error", so counting it under a
+  // positive label creates a contradiction on the same screen. Every consumer
+  // that reads `visible` for aggregation (chip counts, filters, lift) must
+  // gate on `!p.error`. The ROW itself stays honest — visible = true on an
+  // errored-but-cited row is correct (probeResultContract.js:397 enforces the
+  // identity) — but a count that includes it under "Names you" contradicts
+  // the row's own VerdictChip.
   const filtered = useMemo(() => prompts.filter((p) => {
     if (engineFilter !== 'all' && (p.engine || 'aio') !== engineFilter) return false;
-    if (filter === 'visible') return p.visible;
-    if (filter === 'absent') return !!p.aioPresent && !p.visible;
+    if (filter === 'visible') return p.visible && !p.error;
+    if (filter === 'absent') return !!p.aioPresent && !p.visible && !p.error;
     if (filter === 'no-aio') return !p.aioPresent && !p.error;
-    if (filter === 'cited') return !!p.brandCited;
+    if (filter === 'cited') return !!p.brandCited && !p.error;
     return true;
   }), [prompts, filter, engineFilter]);
 
   const filterChips = [
     { key: 'all', label: 'All', count: prompts.length },
-    { key: 'visible', label: 'Names you', count: prompts.filter((p) => p.visible).length },
-    { key: 'absent', label: 'Rival held it', count: prompts.filter((p) => !!p.aioPresent && !p.visible).length },
+    // R2.7.17 — exclude errored rows so chip count agrees with VerdictChip
+    { key: 'visible', label: 'Names you', count: prompts.filter((p) => p.visible && !p.error).length },
+    { key: 'absent', label: 'Rival held it', count: prompts.filter((p) => !!p.aioPresent && !p.visible && !p.error).length },
     { key: 'no-aio', label: hasEngines ? 'No answer' : 'No AIO', count: prompts.filter((p) => !p.aioPresent && !p.error).length },
-    { key: 'cited', label: 'Cited you', count: prompts.filter((p) => !!p.brandCited).length },
+    { key: 'cited', label: 'Cited you', count: prompts.filter((p) => !!p.brandCited && !p.error).length },
   ];
 
   /* Engine pills come from what the scan reported, never a fixed list.

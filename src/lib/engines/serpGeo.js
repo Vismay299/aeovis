@@ -22,6 +22,10 @@ export const DEFAULT_SERP_GEO = "in";
  * @param {Record<string, string|undefined>} [env]
  * @returns {string}
  */
-export function resolveSerpGeo(env = process.env) {
-  return (env.SERP_GEO || "").trim().toLowerCase() || DEFAULT_SERP_GEO;
+export function resolveSerpGeo(override, env = process.env) {
+  if (typeof override === "string" && override.trim()) {
+    return override.trim().toLowerCase();
+  }
+  const targetEnv = (override && typeof override === "object" && !Array.isArray(override)) ? override : env;
+  return (targetEnv.SERP_GEO || "").trim().toLowerCase() || DEFAULT_SERP_GEO;
 }

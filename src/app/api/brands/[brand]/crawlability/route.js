@@ -10,6 +10,9 @@ import {
   normalizeTargetUrl,
   safeFetch,
 } from "@/lib/ssrfGuard";
+// R4.3.1 — persist audits and detect changes between runs
+import { saveCrawlabilityAudit, getAuditHistory } from "@/lib/db/crawlability";
+import { buildAuditDiff } from "@/lib/crawlabilityChanges";
 
 // A live audit hits the brand's own (and rivals') robots.txt on every call —
 // never statically cache (same reasoning as the sibling metrics/schedule
@@ -55,6 +58,8 @@ const BLOCKED_DOMAIN_MESSAGE =
  *   summary: { open, partial, blocked, total },
  *   bots: [{ name, operator, platform, purpose, status, matchedGroup, reason }],
  *   compare: [{ domain, fetched_ok, blocked, fetch_error, summary }],
+ *   audit_diff: null | { changes, summary, detected_at },  // R4.3.1
+ *   audit_history: [{ id, audited_at, fetched_ok, summary, diff }],  // R4.3.1
  * }
  *
  * Fail-safe by design: an unreachable domain, a missing robots.txt (404), or
@@ -176,11 +181,17 @@ export async function GET(request, { params }, deps = {}) {
       })),
     ];
 
-    return NextResponse.json(
-      {
-        brand: domain,
+    // R4.3.1 — persist audit and detect changes vs. previous run
+    let auditDiff = null;
+    let auditHistory = [];
+    try {
+      const history = await getAuditHistory(domain, 2, deps);
+      const previousAudit = history.length > 0 ? history[0] : null;
+      auditDiff = buildAuditDiff(previousAudit, primary.bots);
+
+      await saveCrawlabilityAudit({
         domain,
-        url: testPath,
+        testPath,
         fetched_ok: primary.fetched_ok,
         robots_txt_status: primary.robots_txt_status,
         robots_malformed: primary.robots_malformed,
@@ -188,10 +199,41 @@ export async function GET(request, { params }, deps = {}) {
         llms_txt_present: primary.llms_txt_present,
         summary: primary.summary,
         bots: primary.bots,
-        compare,
-      },
-      { headers: { "Cache-Control": "no-store" } }
-    );
+        diff: auditDiff,
+      }, deps);
+
+      // Fetch updated history (now includes the just-saved audit)
+      auditHistory = await getAuditHistory(domain, 10, deps);
+    } catch (persistErr) {
+      // Persistence failure must not break the audit response — the operator
+      // still needs the live data. Log and continue.
+      console.error(`[crawlability] failed to persist audit for "${domain}":`, persistErr);
+    }
+
+    const responseBody = {
+      brand: domain,
+      domain,
+      url: testPath,
+      fetched_ok: primary.fetched_ok,
+      robots_txt_status: primary.robots_txt_status,
+      robots_malformed: primary.robots_malformed,
+      fetch_error: primary.fetch_error,
+      llms_txt_present: primary.llms_txt_present,
+      summary: primary.summary,
+      bots: primary.bots,
+      compare,
+      // R4.3.1 — audit history and change detection
+      audit_diff: auditDiff,
+      audit_history: auditHistory.map((row) => ({
+        id: row.id,
+        audited_at: row.audited_at,
+        fetched_ok: row.fetched_ok,
+        summary: row.summary,
+        diff: row.diff,
+      })),
+    };
+
+    return NextResponse.json(responseBody, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("Error in GET /api/brands/[brand]/crawlability:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
