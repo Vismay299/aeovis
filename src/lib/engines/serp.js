@@ -176,7 +176,7 @@ export async function probeGoogleAiOverview(prompt, options = {}, retries = 2) {
   // (standing rules 1 and 2).
   const perQueryCost = resolveSerpQueryCost({ provider: "serpapi" }).cost;
 
-  const geo = resolveSerpGeo();
+  const geo = resolveSerpGeo(options.geo);
   const device = process.env.SERP_DEVICE || "desktop";
 
   // hl=en is required for AI Overview support
@@ -327,7 +327,7 @@ async function probeGoogleAiOverviewBrightData(prompt, options = {}) {
   }
 }
 
-export async function fetchPeopleAlsoAsk(seedTerms) {
+export async function fetchPeopleAlsoAsk(seedTerms, options = {}) {
   if (!isSerpConfigured()) {
     console.warn("[serp] No SERP provider configured. PAA fetch returning empty list.");
     return [];
@@ -340,7 +340,7 @@ export async function fetchPeopleAlsoAsk(seedTerms) {
   for (const term of terms.slice(0, 3)) {
     try {
       if (provider === "brightdata") {
-        const data = await brightDataSearch(term, { aiOverview: false, timeout: 30000 });
+        const data = await brightDataSearch(term, { aiOverview: false, timeout: 30000, geo: options.geo });
         extractBrightDataPaa(data).forEach((q) => questions.add(q));
         continue;
       }
@@ -355,7 +355,7 @@ export async function fetchPeopleAlsoAsk(seedTerms) {
         q: term,
         engine: "google",
         hl: "en",
-        gl: resolveSerpGeo(),
+        gl: resolveSerpGeo(options.geo),
       });
       const res = await serpFetch(searchParams);
       if (res.ok) {
