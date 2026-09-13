@@ -6156,7 +6156,12 @@
       "owner": "Developer 1A",
       "evidence": [
         "src/lib/db.js:911",
-        "src/lib/db.js:930"
+        "src/lib/db.js:930",
+        "src/lib/jobLease.js:104",
+        "src/lib/jobLease.js:138",
+        "src/lib/jobLease.js:169",
+        "src/lib/contentWriteFailure.test.mjs:99",
+        "src/lib/contentWriteFailure.test.mjs:150"
       ],
       "notes": [
         {
@@ -6247,7 +6252,7 @@
         "R2.8.7"
       ],
       "anchors": [
-        "src/lib/workers/scanWorker.js:1892",
+        "src/lib/workers/scanWorker.js:2179",
         "src/lib/db.js:75"
       ],
       "findings": [],
@@ -6255,8 +6260,8 @@
       "status": "in_verification",
       "owner": "Dev 3A",
       "evidence": [
-        "src/lib/workers/scanWorker.js:2164",
-        "src/lib/insertScanWriteFailure.test.mjs:294"
+        "src/lib/workers/scanWorker.js:2179",
+        "src/lib/insertScanWriteFailure.test.mjs:378"
       ],
       "notes": [
         {
@@ -6354,7 +6359,11 @@
       "status": "in_verification",
       "owner": "Dev 4B",
       "evidence": [
-        "src/lib/db/content.js:6"
+        "src/lib/db/content.js:6",
+        "src/lib/db/content.js:319",
+        "src/lib/db/content.js:454",
+        "src/app/api/content/worker/route.js:203",
+        "src/lib/dbContent.test.mjs:707"
       ],
       "notes": [
         {
@@ -6838,8 +6847,8 @@
       "status": "in_verification",
       "owner": "Dev 2C",
       "evidence": [
-        "src/lib/scoring/enginePipeline.js:1367",
-        "src/lib/scoring/enginePipeline.js:1468",
+        "src/lib/scoring/enginePipeline.js:1434",
+        "src/lib/scoring/enginePipeline.js:1537",
         "src/lib/scoring/enginePipeline.test.mjs:312",
         "src/lib/scoring/enginePipeline.test.mjs:325",
         "src/lib/scoring/enginePipeline.test.mjs:337",
@@ -8244,7 +8253,8 @@
         "src/lib/workers/scanSchedule.test.mjs:82",
         "src/lib/workers/scanSchedule.test.mjs:155",
         "src/lib/workers/scanSchedule.test.mjs:197",
-        "src/lib/workers/scanSchedule.test.mjs:285"
+        "src/lib/workers/scanSchedule.test.mjs:285",
+        "src/lib/workers/scanSchedule.test.mjs:387"
       ],
       "notes": [
         {
@@ -8275,7 +8285,7 @@
         "S16"
       ],
       "anchors": [
-        "src/lib/content/"
+        "src/lib/content/contentWorker.js:136-160"
       ],
       "phase": "R3",
       "status": "in_verification",
@@ -8286,7 +8296,7 @@
         "src/lib/content/contentWorker.js:374",
         "src/lib/content/contentWorker.js:448",
         "supabase/migrations/014_content_job_checkpoints.sql:1",
-        "src/lib/db/content.js:122",
+        "src/lib/db/content.js:139",
         "src/lib/content/contentWorker.test.mjs:859",
         "src/lib/content/contentWorker.test.mjs:953",
         "src/lib/content/contentWorker.test.mjs:1008"

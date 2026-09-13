@@ -174,6 +174,20 @@ const EXPECTED_OBJECTS = {
   // docs/OPERATOR_LEDGER.md § C (information_schema.columns; the one-query
   // block in docs/PROD_MIGRATIONS.md has no 014 row yet).
   "014_content_job_checkpoints.sql": [],
+  // R4.3.3. Same column-invisibility problem as 012/013, same answer, and
+  // deliberately NOT 014's empty list: this migration ships its own partial
+  // index (`WHERE citation_state IS NULL AND citation_share_pct IS NOT NULL`),
+  // whose predicate names two of the three new columns, so the index cannot
+  // exist unless they do. All three columns come from one ALTER inside this
+  // migration's own transaction, so the index proves the set.
+  //
+  // Same blast radius as 013 if it is missing: upsertBrandMetricsDaily sends
+  // the rollup row through verbatim, so every scan finalize fails its
+  // brand_metrics_daily write with PGRST204, and scripts/backfill-analytics.mjs
+  // refuses to start.
+  "015_brand_metrics_citation_state.sql": [
+    { kind: "index", name: "brand_metrics_daily_citation_unverified_idx" },
+  ],
 };
 
 /**

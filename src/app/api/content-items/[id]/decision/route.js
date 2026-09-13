@@ -5,7 +5,6 @@ import {
   insertContentFeedback,
   updateContentJob,
 } from "@/lib/db/content";
-import { insertContentEvent } from "@/lib/db";
 import { reviseContentItem } from "@/lib/content/contentWorker";
 import { runLearn } from "@/lib/content/steps/learn";
 import { decideItemStatus, jobStatusForItemStatus } from "@/lib/content/stages";
@@ -14,23 +13,42 @@ export const dynamic = "force-dynamic";
 
 const VERDICTS = ["approved", "changes_requested", "rejected"];
 
-/** Slug for the synthetic content URL — built from the primary target query
- * so contentLift's isPromptRelatedToUrl matches it against scan prompts. */
-function contentEventUrl(item) {
-  const primary = (item.target_queries || [])[0] || item.title || item.id;
-  const slug = String(primary)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .slice(0, 80);
-  return `https://studio.perceev.app/content/${slug || item.id}`;
+/**
+ * R5.2.1 / finding B13 — APPROVAL IS NOT PUBLICATION.
+ *
+ * This route used to synthesize a URL on a studio host that publishes nothing
+ * (the host is named in docs/BUILD_JOURNAL.md, finding B13, and in
+ * src/app/api/content-events/route.js, which quarantines the rows it wrote)
+ * and persist it as a `content_events` row, which the lift computation then
+ * treated as a real published page: the product reported engagement against a
+ * URL that exists nowhere. The synthesis and the write are deleted — and the
+ * host name is deliberately absent from this file, so an edit that brings it
+ * back has to type the fabrication out. An approved item has NO url; the
+ * operator publishes it by hand, outside this system, and the verified live
+ * URL arrives through the publish step (R5.2.2). Nothing here may invent one,
+ * and the wire says so rather than leaving the absence to be inferred from a
+ * missing field.
+ *
+ * @param {string} newStatus the routed item status
+ * @returns {{published: false, url: null, reason: string, detail: string}}
+ */
+function publicationState(newStatus) {
+  const approved = newStatus === "approved";
+  return {
+    published: false,
+    url: null,
+    reason: approved ? "approved_not_published" : "not_approved",
+    detail: approved
+      ? "Approved, not published. This item has no URL until it is published for real and that live URL is verified, so no content event was recorded and no lift is attributable to it yet."
+      : "Not approved, so not published. This item has no URL and no content event.",
+  };
 }
 
 /**
  * POST /api/content-items/[id]/decision — { verdict, comment }.
  * The human gate: status change + feedback row + learn step (async) +
- * on approve (geo_article) a content_events row for lift tracking +
- * on changes_requested an async revision pass.
+ * on changes_requested an async revision pass. It publishes nothing and
+ * records no URL — see publicationState above.
  */
 export async function POST(request, { params }) {
   try {
@@ -88,18 +106,8 @@ export async function POST(request, { params }) {
       }
     }
 
-    // 3. Approved geo_article → content_events row keyed to target queries,
-    //    so the existing contentLift computation picks it up on the next scan.
-    if (verdict === "approved" && item.playbook === "geo_article") {
-      try {
-        await insertContentEvent({
-          brand: item.brand,
-          url: contentEventUrl(item),
-        });
-      } catch (err) {
-        console.warn("[decision] content_events insert failed:", err.message);
-      }
-    }
+    // 3. (deleted) No content_events row is written here. Approval is not
+    //    publication; see publicationState above.
 
     // 4. Learn step — fire-and-forget; a learn failure never blocks the gate.
     if (comment) {
@@ -128,6 +136,7 @@ export async function POST(request, { params }) {
       status: newStatus,
       feedback_id: feedback?.id || null,
       revision_started: verdict === "changes_requested",
+      publication: publicationState(newStatus),
     });
   } catch (error) {
     console.error("Content decision error:", error);

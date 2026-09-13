@@ -1025,7 +1025,10 @@ test("META — every file that imports the live gate arms the write guard", asyn
   // and a fake client, and never against a real database — so it belongs in
   // neither column of the inventory below. Named here rather than pattern-
   // matched, so adding a second exemption is a visible act.
-  const EXERCISES_THE_GATE_ITSELF = new Set(["src/lib/liveWriteGuard.test.mjs"]);
+  const EXERCISES_THE_GATE_ITSELF = new Set([
+    "src/lib/liveWriteGuard.test.mjs",
+    "src/lib/liveWriteGuardAdoption.test.mjs",
+  ]);
 
   const armed = [];
   for (const { rel, src } of importers) {

@@ -322,7 +322,7 @@ Also environment-shaped and easy to get silently wrong:
 
 ## C. Migrations
 
-`supabase/migrations/` holds fourteen files. They are named individually rather
+`supabase/migrations/` holds fifteen files. They are named individually rather
 than as a range, and `src/lib/docStatus.test.mjs` fails this document if a file
 on disk is missing from the list — the previous revision wrote "`001` … `012`"
 in the same commit that added `013`, and nothing caught it. It happened again
@@ -333,7 +333,8 @@ until R3.5.4 added the three rows:
 `004_crew_canvas_knowledge`, `005_analytics_platform`, `006_agent_control_plane`,
 `007_scan_seal`, `008_system_heartbeats`, `009_scan_rate_limit`,
 `010_probe_tasks`, `011_scan_runs`, `012_scan_job_attempts`,
-`013_brand_metrics_sov_state`, `014_content_job_checkpoints`.
+`013_brand_metrics_sov_state`, `014_content_job_checkpoints`,
+`015_brand_metrics_citation_state`.
 
 `npm run setup:db` applies them in filename order, one transaction per file,
 recording each in the `schema_migrations` ledger. The `BEGIN`, the ledger
@@ -394,6 +395,30 @@ the Postgres catalog:
   block' src/lib/content/contentWorker.js`), the first of them at the first
   block boundary. So on a pre-`014` database the first block that finishes
   throws, not the first rescue.
+- `015_brand_metrics_citation_state.sql`: **applied state unverified from this
+  environment.** Do not assume. Check the catalog before relying on it — the
+  `pg_attribute` query is in the file's own header. It is the newest file on
+  disk and it carries the SAME blast radius as `013`, for the same reason: it
+  adds three columns (`brand_metrics_daily.citation_denominator`,
+  `.citation_state`, `.citation_state_reason`) that `src/lib/analytics/rollup.js`
+  now puts on every row it builds, and `upsertBrandMetricsDaily` sends the row
+  through verbatim and then does `if (error) throw error`. So on a pre-`015`
+  database **every scan finalize hard-fails its `brand_metrics_daily` upsert
+  with PostgREST `PGRST204`**, exactly as it would without `013`. Unlike `014`
+  this one IS answerable by `npm run setup:db`: it ships
+  `brand_metrics_daily_citation_unverified_idx`, a partial index whose
+  predicate references two of the three columns, and that index is its
+  `EXPECTED_OBJECTS` entry. `scripts/backfill-analytics.mjs` also reads those
+  three columns before it writes anything, so it aborts with a message naming
+  this migration rather than discovering the gap halfway through. After
+  applying it, run the backfill and read its "Citation denominator (R4.3.3)"
+  block: the migration deliberately ships no SQL re-derivation (the evidence
+  that decides whether a pre-R2.2.2 slice is reconstructible lives in
+  `scans.raw_results`, not in a joinable table — the reasoning is in the file),
+  so until the backfill runs, existing rows keep `citation_state` NULL, which
+  means "unverified", not "measured", and
+  `brand_metrics_daily_citation_unverified_idx` enumerates exactly the rows
+  that still carry a share nobody has re-checked.
 
 **The `014` verification gap — `setup:db` will lie to you about this one.**
 `objectExists()` in `scripts/setup-supabase.mjs` asks `to_regclass` for tables
@@ -469,16 +494,27 @@ comment. That gate is the operator's standing duty: nothing publishes without it
 **Two things about it are not true yet, and the copy around it must not pretend
 otherwise.**
 
-**1. Approval is not publication, but the code treats it as if it were.**
-On an `approved` verdict for a `geo_article`, the route writes a `content_events`
-row (`src/app/api/content-items/[id]/decision/route.js:93-98`) whose URL is
-**synthesized, not real** — `contentEventUrl` at `:19` builds
-`https://studio.perceev.app/content/<slug>` at `:26`. That host is a fabrication.
-The fabricated URL then feeds real lift attribution. R5.2.1 deletes it, R5.2.2
-adds an explicit publish step where the operator pastes the **real** live URL and
-the system verifies the page resolves and matches before the stage flips to
-`PUBLISHED`, and R5.2.3 makes the lift copy read "since approval" with the
-correlation caveat until then. All three are open.
+**1. Approval is not publication. The code used to treat it as if it were; that
+part is now deleted.**
+On an `approved` verdict for a `geo_article`, the route used to write a
+`content_events` row whose URL was **synthesized, not real** — a
+`contentEventUrl` helper built `https://studio.perceev.app/<path>`, a host that
+is a fabrication, and that fabricated URL then fed real lift attribution.
+**R5.2.1 deleted the synthesizer and the write** (`src/app/api/content-items/[id]/decision/route.js`):
+approval now records no URL and no content event, and the decision response
+carries an explicit `publication: { published: false, url: null, reason:
+"approved_not_published" }` so a caller can tell "approved, not published" from
+"published at a URL". **Rows written before that deletion can still exist in
+`content_events`**; `GET /api/content-events` now returns any row on the
+fabricated host with its lift fields null plus `fabricated_url: true` and
+`lift_unavailable_reason: "fabricated_url"` rather than serving a lift number
+computed against a page that never existed. No migration deletes those rows —
+if you want them gone, that is an operator decision, and the same care § C
+demands of a reconcile applies.
+Still open: R5.2.2 adds the explicit publish step where the operator pastes the
+**real** live URL and the system verifies the page resolves and matches before
+the stage flips to `PUBLISHED`, and R5.2.3 makes the lift copy read "since
+approval" with the correlation caveat until then.
 
 **2. The approve → publish → lift loop has never run end to end.**
 This is stated plainly because softening it is the failure mode this whole

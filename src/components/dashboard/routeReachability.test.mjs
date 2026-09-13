@@ -594,6 +594,13 @@ test("R6.4.14 GUARD — comment-stripping guards are enumerated and bound agains
     "lib/envTruth.test.mjs",
     "lib/landingHonesty.test.mjs",
     "lib/landingProbeCounter.test.mjs",
+    // R2.9.7 — the scoring-layer bare-coercion walker. Its `codeOnly()` is the
+    // same line-bounded stripper as servicesApiNullMetrics.test.mjs's (single-
+    // and double-quoted scans never cross a newline), and it carries the
+    // symmetric alarm this guard asks for: "R2.9.7 TEETH — a coercion inside a
+    // comment is not an offence" fails on an under-strip, and the allowlist's
+    // dead-entry test fails on an over-strip.
+    "lib/scoring/metricCoercionGuard.test.mjs",
     "lib/serpQueryPrice.test.mjs",
     "services/servicesApiNullMetrics.test.mjs",
   ].sort();

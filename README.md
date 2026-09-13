@@ -159,6 +159,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `012_scan_job_attempts` | `scan_jobs.attempts` and `claim_scan_job_attempt()` — a job resumed three times without finishing becomes terminal with `max_attempts:` in `error_message`, instead of being re-dispatched by the cron sweep forever |
 | `013_brand_metrics_sov_state` | `brand_metrics_daily.sov_state` / `.sov_state_reason` — a stored share of voice now says whether it is a measurement, so a self-only roster records "not assessed" instead of a durable, exportable 100% |
 | `014_content_job_checkpoints` | `content_jobs.checkpoint` (new here — the `checkpoint` in the `005` row above is on `scan_jobs`, a different table) — a content job killed mid-run resumes at the next block instead of re-paying for every LLM call it had already made, so a rescued job's recorded cost is what was actually spent once. **Unlike `012`/`013` it ships no index, so `npm run setup:db` cannot verify it** — see `docs/OPERATOR_LEDGER.md` § C |
+| `015_brand_metrics_citation_state` | `brand_metrics_daily.citation_denominator` / `.citation_state` / `.citation_state_reason` — a stored citation share now says whether the pool it was divided by was measured (`0` is a real "no opportunities") or is simply unknown on a pre-R2.2.2 scan (`NULL`, never `0`), with a CHECK that will not let the two be stored as the same thing. Verifiable via `brand_metrics_daily_citation_unverified_idx`. **Applied state unverified from this environment** |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.
@@ -169,6 +170,14 @@ re-run, supports `--dry-run`):
 ```bash
 node --env-file=.env.local scripts/backfill-analytics.mjs --dry-run
 ```
+
+The backfill needs `015` applied first (it reads and writes those three
+columns, and fails loudly naming the migration if they are absent). Its
+"Citation denominator (R4.3.3)" report block is the record of what it could and
+could not reconstruct: how many engine slices already carried a denominator,
+how many were re-derived from surviving per-prompt rows, how many were a
+measured zero, and how many are genuinely unrecoverable and were therefore
+stored as unmeasured rather than as `0`.
 
 RLS is enabled on every table with permissive anon policies — the app is
 currently **single-operator with no authentication**. Add auth before exposing

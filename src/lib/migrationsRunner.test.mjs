@@ -195,6 +195,12 @@ const FULL_CATALOG = [
   // 013 (R4.3.2). A partial index standing in for two columns the catalog
   // probe cannot see -- brand_metrics_daily.sov_state / .sov_state_reason.
   "brand_metrics_daily_sov_unverified_idx",
+  // 015 (R4.3.3). Same trick for the three citation-denominator columns:
+  // brand_metrics_daily.citation_denominator / .citation_state /
+  // .citation_state_reason. (014 is deliberately absent from this list and
+  // from the runner's verify list -- it ships no index; see the comment on
+  // "014_content_job_checkpoints.sql" in scripts/setup-supabase.mjs.)
+  "brand_metrics_daily_citation_unverified_idx",
 ];
 
 function withRegister(dir) {

@@ -54,6 +54,82 @@ export const SOV_STATE_REASONS = Object.freeze({
   SELF_ONLY_ROSTER: "self_only_roster",
 });
 
+/**
+ * R4.3.3 — the WHY behind a null (or a zero) `citation_share_pct`, in the same
+ * shape R4.3.2 gave `sov_pct`. The STATE tokens are `ENGINE_MEASUREMENT_STATE`
+ * verbatim; only the reasons are new, and they are new because no existing
+ * token means what these mean:
+ *
+ *   BRAND_NOT_CITED            -> measured_zero. Every citation list in the
+ *                                 pool was READ and none of them names us.
+ *                                 `brand_not_visible` is the mention-side
+ *                                 sibling and says nothing about citations; a
+ *                                 brand can be named in prose and cited nowhere.
+ *   NO_OBSERVED_CITATION_POOL  -> not_assessed. The denominator IS KNOWN and it
+ *                                 is 0: no answered non-branded row had its
+ *                                 citation list observed (none answered, or
+ *                                 every citation leg died — R2.2.11). A
+ *                                 MEASUREMENT of "no opportunities", not an
+ *                                 absence of measurement.
+ *   DENOMINATOR_UNRECOVERABLE  -> not_assessed. The denominator is UNKNOWN and
+ *                                 cannot be reconstructed. Only reachable on
+ *                                 the historical path (see
+ *                                 UNRECOVERABLE_CITATION_DENOMINATOR below):
+ *                                 a pre-R2.2.2 perplexity slice whose rows
+ *                                 carry no `citations_state`, so which of its
+ *                                 answered rows had an observed citation list
+ *                                 is not recorded anywhere that still exists.
+ *
+ * The last two MUST NOT collapse into each other, which is the whole point of
+ * this task: "we counted the opportunities and there were none" and "nobody
+ * ever recorded how many opportunities there were" are different facts, and the
+ * second one must never be stored as the first. `citation_denominator` on the
+ * row is what keeps them apart in storage — 0 versus NULL — and migration 015
+ * carries a CHECK constraint that makes the pairing un-forgeable.
+ */
+export const CITATION_STATE_REASONS = Object.freeze({
+  BRAND_NOT_CITED: "brand_not_cited",
+  NO_OBSERVED_CITATION_POOL: "no_observed_citation_pool",
+  DENOMINATOR_UNRECOVERABLE: "citation_denominator_unrecoverable",
+});
+
+/**
+ * What to do when a slice's citation denominator cannot be determined.
+ *
+ * THROW is the default and the live contract, unchanged from R2.2.2: every
+ * slice `summarizeEngineSlice` produces carries `citation_denominator`, so a
+ * live slice that lacks one is a bug in the producer and must fail loudly
+ * rather than divide by a number that is known to be wrong.
+ *
+ * RECORD is for ONE caller — scripts/backfill-analytics.mjs replaying scans
+ * written before R2.2.2 — and it is not a softer THROW. It does not invent a
+ * denominator, substitute the numerator, default to 0 or drop the row: it
+ * writes `citation_denominator: null` plus
+ * `citation_state_reason: 'citation_denominator_unrecoverable'`, which is a
+ * recorded, counted, queryable statement that the number is unknown. The
+ * backfill reaches this only after trying to re-derive the denominator from the
+ * scan's surviving per-prompt rows (src/lib/analytics/historicalBackfill.js).
+ */
+export const UNRECOVERABLE_CITATION_DENOMINATOR = Object.freeze({
+  THROW: "throw",
+  RECORD: "record",
+});
+
+/**
+ * Engines whose citation list arrives on a call that can fail INDEPENDENTLY of
+ * the answer — the only engines for which `non_branded_with_answer` is not
+ * automatically the citation denominator, and therefore the only ones that can
+ * ever be unrecoverable.
+ *
+ * Exported because src/lib/analytics/historicalBackfill.js has to make the
+ * same distinction when it re-derives a denominator from surviving per-prompt
+ * rows. Two hand-kept copies of "which engines are multi-leg" would drift the
+ * day a second one is added, and the drift would be silent: the backfill would
+ * confidently re-derive an answered count for an engine whose citation leg can
+ * die on its own.
+ */
+export const CITATION_LEG_INDEPENDENT_ENGINES = Object.freeze(["perplexity"]);
+
 // India-first product (SERP_GEO defaults to 'in'): bucket brand_metrics_daily
 // rows by IST calendar day, not UTC, so a 00:00-05:30 IST scan doesn't fall
 // on the previous UTC day's bucket, and two same-IST-day scans don't split
@@ -266,27 +342,73 @@ function resolveSovState(rollup) {
  * its answer, so an answered row's citation list was necessarily observed and
  * `non_branded_with_answer` IS the denominator. Same for a pre-R2.2.2 aio or
  * chatgpt slice, which is why they fall back rather than throw.
+ *
+ * R4.3.3 — `onUnrecoverable` adds the third outcome the historical replay
+ * needs. It is NOT a way to turn the throw off: `RECORD` returns `null`, which
+ * every consumer below turns into a stored "unmeasured" state, never into a
+ * number. See UNRECOVERABLE_CITATION_DENOMINATOR.
+ *
+ * @returns {number|null} the pool size, or null ONLY under
+ *          `onUnrecoverable: "record"` when it genuinely cannot be determined.
  */
-function citationDenominatorOf({ engine, summary, answered }) {
+function citationDenominatorOf({
+  engine,
+  summary,
+  answered,
+  onUnrecoverable = UNRECOVERABLE_CITATION_DENOMINATOR.THROW,
+}) {
   // `typeof`, not `Number(...)`: Number(null) is 0, which is finite, so a slice
   // carrying an explicit null would have been read as "a denominator of zero"
   // and quietly produced a null share instead of reaching the throw below.
   const explicit = summary?.citation_denominator;
   if (typeof explicit === "number" && Number.isFinite(explicit)) return explicit;
 
-  if (engine === "perplexity" && answered > 0) {
+  if (CITATION_LEG_INDEPENDENT_ENGINES.includes(engine) && answered > 0) {
+    if (onUnrecoverable === UNRECOVERABLE_CITATION_DENOMINATOR.RECORD) return null;
     throw new Error(
-      `summaryToMetricsRow: the perplexity slice carries no citation_denominator, so its ` +
+      `summaryToMetricsRow: the ${engine} slice carries no citation_denominator, so its ` +
         `citation share cannot be computed. Perplexity's citation leg (/search) fails ` +
         `independently of its answer leg, so non_branded_with_answer (${answered}) is not a ` +
         `citation denominator — dividing by it reports an unobserved citation list as a ` +
         `confirmed "not cited" (R2.2.2, finding B2). Slices from summarizeEngineSlice always ` +
         `carry the field; one that does not predates R2.2.2 and must be re-derived from its ` +
-        `prompt_results rows, not defaulted.`
+        `prompt_results rows, not defaulted. A historical replay that has already tried and ` +
+        `failed to re-derive it passes onUnrecoverableDenominator: "record" and stores the ` +
+        `unknown as an unknown (R4.3.3).`
     );
   }
 
   return answered;
+}
+
+/**
+ * R4.3.3 — `{ citation_state, citation_state_reason }` for a resolved
+ * denominator + share pair. Three inputs, three states, and the mapping is
+ * total: there is no input for which this returns nothing.
+ *
+ * Reading order matters and is the same "name the first thing that was
+ * missing" ordering resolveEngineMeasurementState and computeBrandRollups use.
+ * An unknown denominator is asked about FIRST, because with no denominator the
+ * share is not a zero over an empty pool — it is not a number at all, and
+ * saying "empty pool" would be a claim about a count nobody has.
+ */
+function resolveCitationState({ denominator, sharePct }) {
+  const { MEASURED, MEASURED_ZERO, NOT_ASSESSED } = ENGINE_MEASUREMENT_STATE;
+  if (denominator == null) {
+    return {
+      citation_state: NOT_ASSESSED,
+      citation_state_reason: CITATION_STATE_REASONS.DENOMINATOR_UNRECOVERABLE,
+    };
+  }
+  if (!(denominator > 0)) {
+    return {
+      citation_state: NOT_ASSESSED,
+      citation_state_reason: CITATION_STATE_REASONS.NO_OBSERVED_CITATION_POOL,
+    };
+  }
+  return sharePct === 0
+    ? { citation_state: MEASURED_ZERO, citation_state_reason: CITATION_STATE_REASONS.BRAND_NOT_CITED }
+    : { citation_state: MEASURED, citation_state_reason: null };
 }
 
 /**
@@ -318,14 +440,36 @@ function citationDenominatorOf({ engine, summary, answered }) {
  * explode — in which case all three stay null, unchanged from before P1.2, and
  * `sov_state`/`sov_state_reason` (R4.3.2) record that as not_assessed /
  * no_results rather than leaving the row silent about why its share is empty.
+ *
+ * `onUnrecoverableDenominator` (R4.3.3, default THROW) — see
+ * UNRECOVERABLE_CITATION_DENOMINATOR. Every row this function builds now also
+ * carries `citation_denominator` + `citation_state` + `citation_state_reason`
+ * (migration 015), so the three outcomes a citation share can have — a real
+ * number, a real zero-sized pool, and a pool nobody recorded — are three
+ * distinct stored shapes rather than one indistinguishable NULL.
  */
-export function summaryToMetricsRow({ brand, date, engine, scanId, promptSetId, summary, answeredKey, brandRollup }) {
+export function summaryToMetricsRow({
+  brand,
+  date,
+  engine,
+  scanId,
+  promptSetId,
+  summary,
+  answeredKey,
+  brandRollup,
+  onUnrecoverableDenominator = UNRECOVERABLE_CITATION_DENOMINATOR.THROW,
+}) {
   const nonBrandedTotal = summary.non_branded_queries ?? 0;
   const nonBrandedAnswered = summary[answeredKey] ?? 0;
   const mentioned = summary.mentioned_non_branded ?? 0;
   const cited = summary.cited_non_branded ?? 0;
   const visibilityPct = summary.visibility_pct ?? summary.share_of_ai_pct ?? null;
-  const citationDenominator = citationDenominatorOf({ engine, summary, answered: nonBrandedAnswered });
+  const citationDenominator = citationDenominatorOf({
+    engine,
+    summary,
+    answered: nonBrandedAnswered,
+    onUnrecoverable: onUnrecoverableDenominator,
+  });
   // R2.2.11 — the DENOMINATOR decides whether there is a share at all, and it
   // decides FIRST. This used to read `summary.citation_share_pct ?? (computed)`,
   // which is the same expression with the guard on the wrong side of the `??`:
@@ -343,9 +487,18 @@ export function summaryToMetricsRow({ brand, date, engine, scanId, promptSetId, 
   // non-empty one the preference is unchanged: a summary that already carries
   // its own citation_share_pct (the v8.1 top-level shape) wins over recomputing
   // it, exactly as before.
+  //
+  // R4.3.3 — `Number.isFinite` on the upstream share rather than `??`. `??`
+  // only rejects null/undefined, so a historical summary carrying a string or
+  // a NaN in `citation_share_pct` would have been preferred VERBATIM over the
+  // computable number and stored as though it were a measurement (and would
+  // then disagree with the citation_state below, which reads the value). Any
+  // well-formed summary is unaffected: a real 0 is finite and still wins.
   const citationSharePct =
     citationDenominator > 0
-      ? summary.citation_share_pct ?? Math.round((cited / citationDenominator) * 1000) / 10
+      ? Number.isFinite(summary.citation_share_pct)
+        ? summary.citation_share_pct
+        : Math.round((cited / citationDenominator) * 1000) / 10
       : null;
   const rollup = brandRollup || {};
 
@@ -361,6 +514,13 @@ export function summaryToMetricsRow({ brand, date, engine, scanId, promptSetId, 
     sentiment_avg: rollup.sentiment_avg ?? null,
     position_avg: rollup.position_avg ?? null,
     citation_share_pct: citationSharePct,
+    // R4.3.3 — the pool the share was (or was not) taken over, stored rather
+    // than left to be re-derived by whoever reads the row next. 0 is "we
+    // counted and there were no observed citation lists"; NULL is "nobody
+    // recorded how many there were". Migration 015 pins the difference with a
+    // CHECK against the state pair below.
+    citation_denominator: citationDenominator,
+    ...resolveCitationState({ denominator: citationDenominator, sharePct: citationSharePct }),
     prompts_total: nonBrandedTotal,
     prompts_answered: nonBrandedAnswered,
     prompts_mentioned: mentioned,
@@ -393,6 +553,10 @@ export function summaryToMetricsRow({ brand, date, engine, scanId, promptSetId, 
  * every row now also carries `sov_state`/`sov_state_reason` (R4.3.2) saying
  * WHICH kind of empty that is, and a self-only roster yields a null share on
  * every row rather than a 100 on all of them.
+ *
+ * `onUnrecoverableDenominator` (R4.3.3) is forwarded to every row built here,
+ * per-engine and blended. The blend is unknown whenever ANY engine's
+ * denominator is unknown — see the sum loop below.
  */
 export function buildMetricsRows({
   isMultiEngine,
@@ -405,6 +569,7 @@ export function buildMetricsRows({
   headline,
   promptResultRows,
   brandJudgmentRows,
+  onUnrecoverableDenominator = UNRECOVERABLE_CITATION_DENOMINATOR.THROW,
 }) {
   const rows = [];
 
@@ -417,6 +582,13 @@ export function buildMetricsRows({
     // without a failable citation leg this is still exactly its answered count,
     // so the blended rate is unchanged for aio/chatgpt-only scans.
     let sumCitationDenominator = 0;
+    // R4.3.3 — every engine whose denominator could not be determined at all
+    // (only reachable under onUnrecoverableDenominator: "record"). A sum that
+    // silently omits one engine's pool is a SMALLER denominator and therefore a
+    // LARGER blended citation share: the flattering direction, and
+    // indistinguishable from an honest blend. So one unknown engine makes the
+    // whole blend unknown rather than quietly partial.
+    const unrecoverableEngines = [];
     let singleEngineTotal = 0;
 
     for (const [engineName, s] of Object.entries(engineSummaries || {})) {
@@ -429,14 +601,18 @@ export function buildMetricsRows({
         summary: s,
         answeredKey: "non_branded_with_answer",
         brandRollup: computeBrandRollups(brandJudgmentRows, { engine: engineName }),
+        onUnrecoverableDenominator,
       });
       rows.push(row);
       sumCited += s.cited_non_branded ?? 0;
-      sumCitationDenominator += citationDenominatorOf({
+      const engineDenominator = citationDenominatorOf({
         engine: engineName,
         summary: s,
         answered: row.prompts_answered || 0,
+        onUnrecoverable: onUnrecoverableDenominator,
       });
+      if (engineDenominator == null) unrecoverableEngines.push(engineName);
+      else sumCitationDenominator += engineDenominator;
       // Every engine shares the same prompt set, so any engine's non-branded
       // count is the true per-scan prompt total (use the max as a robust pick).
       singleEngineTotal = Math.max(singleEngineTotal, row.prompts_total || 0);
@@ -444,6 +620,9 @@ export function buildMetricsRows({
 
     const union = unionPromptCounts(promptResultRows);
     const blendedRollup = computeBrandRollups(brandJudgmentRows); // no engine filter -> blends every engine
+    const blendedDenominator = unrecoverableEngines.length > 0 ? null : sumCitationDenominator;
+    const blendedSharePct =
+      blendedDenominator > 0 ? Math.round((sumCited / blendedDenominator) * 1000) / 10 : null;
     rows.push({
       brand: brandKey,
       date: dateOnly,
@@ -457,8 +636,9 @@ export function buildMetricsRows({
       ...resolveSovState(blendedRollup),
       sentiment_avg: blendedRollup.sentiment_avg,
       position_avg: blendedRollup.position_avg,
-      citation_share_pct:
-        sumCitationDenominator > 0 ? Math.round((sumCited / sumCitationDenominator) * 1000) / 10 : null,
+      citation_share_pct: blendedSharePct,
+      citation_denominator: blendedDenominator,
+      ...resolveCitationState({ denominator: blendedDenominator, sharePct: blendedSharePct }),
       prompts_total: union ? union.total : singleEngineTotal,
       prompts_answered: union ? union.answered : null,
       prompts_mentioned: union ? union.mentioned : null,
@@ -475,6 +655,10 @@ export function buildMetricsRows({
       summary,
       answeredKey: "non_branded_with_aio",
       brandRollup: computeBrandRollups(brandJudgmentRows, { engine: "aio" }),
+      // Passed for completeness, not because this branch can reach the
+      // unknown: aio is single-leg, so its answered count IS its citation
+      // denominator and citationDenominatorOf never returns null for it.
+      onUnrecoverableDenominator,
     });
     rows.push(aioRow, { ...aioRow, engine: "all" });
   }

@@ -7,6 +7,7 @@ import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
 import { detectMention, judgeBrandsSymmetric } from "./judge.js";
 import { countBrandsElicited } from "./promptQuality.js";
 import { extractBrandDomain } from "./citations.js";
+import { measuredNumberOrNull, ratioPctOrNull } from "./measuredNumber.js";
 import {
   AIO_CONCURRENCY,
   AIO_ERROR_RATE_LIMIT_PCT,
@@ -697,7 +698,11 @@ function resolveEngineMeasurementState({
     return {
       state: FAILED,
       state_reason:
-        errorRatePct > gates.errorRateLimitPct
+        // R2.9.7 — `errorRatePct` is null when the slice ran no queries at all.
+        // Such a slice cannot be flagged by the error gate (the caller's
+        // `dataSourceIssue` requires a non-null rate), so it can only have got
+        // here on coverage; naming the null branch keeps that explicit.
+        errorRatePct !== null && errorRatePct > gates.errorRateLimitPct
           ? ENGINE_STATE_REASONS.HIGH_ERROR_RATE
           : ENGINE_STATE_REASONS.LOW_COVERAGE,
     };
@@ -820,26 +825,41 @@ export function summarizeEngineSlice(results, engineName) {
   );
   const rank_not_cited_count = rankNotCited.length;
 
-  const coveragePct =
-    nonBranded.length > 0
-      ? Math.round((nonBrandedWithAnswer.length / nonBranded.length) * 1000) / 10
-      : 0;
-  const errorRatePct = total > 0 ? Math.round((errored / total) * 1000) / 10 : 0;
+  // R2.9.7 — AN EMPTY DENOMINATOR PRODUCES NO PERCENTAGE. These four ratios all
+  // used to end `: 0`, which published a confident reading for a slice that
+  // measured nothing: `coverage_pct: 0` says "we answered none of the prompts we
+  // asked" when none were asked, and `error_rate_pct: 0` says "nothing errored"
+  // for an engine that never ran a query. That second one is the lead this task
+  // was filed on — it is the value emitted at the `error_rate_pct` key below,
+  // and R2.7.16 had already had to un-fabricate the SAME field one layer down in
+  // describeDegradedSlice. The state/state_reason pair emitted with them is what
+  // names which kind of nothing it was.
+  //
+  // A non-empty denominator with a zero numerator still yields 0: "we read 30
+  // answers and none named you" is a measurement and must survive.
+  const coveragePct = ratioPctOrNull(nonBrandedWithAnswer.length, nonBranded.length);
+  const errorRatePct = ratioPctOrNull(errored, total);
 
   // Denominator is the ELICITING pool, not every answered prompt (see above).
-  const visibilityPct =
-    elicitingPool.length > 0
-      ? Math.round((visibleNonBranded / elicitingPool.length) * 1000) / 10
-      : 0;
+  //
+  // R2.9.7 — this one was ALREADY neutralised downstream: an empty eliciting
+  // pool resolves to not_assessed and `reportedVisibilityPct` below publishes
+  // null regardless. It is routed through the shared helper anyway so the two
+  // guards cannot drift apart — if a future state ever reports on an empty
+  // pool, the null arrives here rather than a 0 that the state check waved
+  // through. MEASURED/MEASURED_ZERO both require elicitingPool.length > 0, so
+  // no measured reading is blanked by this.
+  const visibilityPct = ratioPctOrNull(visibleNonBranded, elicitingPool.length);
 
   // What fraction of the prompt set is actually a usable probe? This is a
   // property of the PROMPT SET, not the brand — a low number means the
   // generator produced SEO keywords instead of vendor-selection questions and
   // the scan is measuring almost nothing. Surfaced so it can be alerted on.
-  const elicitationRatePct =
-    nonBrandedWithAnswer.length > 0
-      ? Math.round((elicitingPool.length / nonBrandedWithAnswer.length) * 1000) / 10
-      : 0;
+  //
+  // R2.9.7: null, not 0, with no answered non-branded prompt to judge. "None of
+  // this prompt set is a usable probe" is a damning verdict on the generator and
+  // it must not be handed out for a slice that produced no answers to look at.
+  const elicitationRatePct = ratioPctOrNull(elicitingPool.length, nonBrandedWithAnswer.length);
 
   // --- Share of Voice over the eliciting pool ------------------------------
   // Presence answers "how often do they name me". SOV answers "when they name
@@ -861,11 +881,15 @@ export function summarizeEngineSlice(results, engineName) {
   // ratio is 100% by construction — a live scan reported exactly that
   // (1/1 = 100%) for a brand with one mention in thirty answers. Null makes
   // the dashboard say "not available" instead of printing a flattering lie.
-  const shareOfVoicePct = !hasRivalRoster
-    ? null
-    : allMentions > 0
-      ? Math.round((selfMentions / allMentions) * 1000) / 10
-      : 0;
+  //
+  // R2.9.7 — the OTHER empty denominator on this metric, which the rival-roster
+  // guard above does not cover. `allMentions` is 0 exactly when the eliciting
+  // pool is empty (countBrandsElicited counts MENTIONED rows, so a non-empty
+  // pool implies at least one mention), and that slice is about to be labelled
+  // not_assessed / empty_eliciting_pool. Publishing `share_of_voice_pct: 0`
+  // alongside that state claims "when the engines named someone it was never
+  // you" about answers in which the engines named nobody at all.
+  const shareOfVoicePct = !hasRivalRoster ? null : ratioPctOrNull(selfMentions, allMentions);
 
   const topRivals = Object.entries(rivalMentions)
     .sort((a, b) => b[1] - a[1])
@@ -873,13 +897,14 @@ export function summarizeEngineSlice(results, engineName) {
     .map(([name, mentions]) => ({
       name,
       mentions,
-      share_pct: allMentions > 0 ? Math.round((mentions / allMentions) * 1000) / 10 : 0,
+      // R2.9.7 — unreachable with an empty denominator (a rival is only in this
+      // map because it was mentioned, so allMentions >= mentions >= 1), routed
+      // through the helper so no reader has to re-derive that to trust it.
+      share_pct: ratioPctOrNull(mentions, allMentions),
     }));
 
-  const presenceRatePct =
-    nonBranded.length > 0
-      ? Math.round((visibleNonBranded / nonBranded.length) * 1000) / 10
-      : 0;
+  // R2.9.7 — null with no non-branded prompt asked; see coverage_pct above.
+  const presenceRatePct = ratioPctOrNull(visibleNonBranded, nonBranded.length);
 
   // A degraded read must not report as clean, on EITHER engine class.
   //
@@ -899,9 +924,14 @@ export function summarizeEngineSlice(results, engineName) {
   // coverage_pct is reported as 0 for such a slice, so any rewrite of this gate
   // in terms of coverage_pct would flag every empty slice without it.
   // insufficient_sample is what speaks for a slice that never ran.
+  //
+  // R2.9.7 — `errorRatePct !== null &&` is written out rather than left to
+  // `null > n` being false. The behaviour is identical today; the point is that
+  // a reader can see the null branch was considered, so the next edit does not
+  // "fix" an apparently missing guard by reintroducing a `?? 0`.
   const gates = engineHealthThresholds(engineName);
   const dataSourceIssue =
-    errorRatePct > gates.errorRateLimitPct ||
+    (errorRatePct !== null && errorRatePct > gates.errorRateLimitPct) ||
     (nonBranded.length > 0 &&
       nonBrandedWithAnswer.length / nonBranded.length < gates.minNonBrandedCoverage);
 
@@ -1084,8 +1114,19 @@ export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS) {
  */
 export function describeScanDataSourceIssue(engineSummaries, options = {}) {
   const fallbackIssue = !!options.fallbackIssue;
-  const suppliedCount = Number(options.enginesCounted);
-  const hasSuppliedCount = Number.isFinite(suppliedCount);
+  // R2.9.7 — `Number(options.enginesCounted)` could not tell null from 0:
+  // `Number(null) === 0` and `Number.isFinite(0)` is true, so a caller that
+  // passed null (summarizeEngineResults does exactly that when there is no
+  // headline) was recorded as having SUPPLIED a count of zero. Both paths
+  // happen to emit 0 today, so this is a latent fabrication rather than a live
+  // one — but services/api.js:687 cites this very expression as the reason its
+  // own `enginesCounted ?? 0` is allowed to stay, so leaving it blurred keeps
+  // that argument true by accident. The `: 0` fallback below is unchanged and
+  // deliberate: it is the documented legacy contract (see the docstring), and
+  // turning it null is a consumer-visible change that belongs to whoever owns
+  // that contract.
+  const suppliedCount = measuredNumberOrNull(options.enginesCounted);
+  const hasSuppliedCount = suppliedCount !== null;
 
   const slices = (
     Array.isArray(engineSummaries)
@@ -1332,24 +1373,12 @@ export function describeEngineSetChange({
   };
 }
 
-/**
- * R2.7.16 — a metric the record never carried must not read as a measured zero.
- *
- * `Number(null)` is `0` and `Number.isFinite(0)` is `true`, so the bare
- * coercion this replaced turned a NULL error rate into a confident `0%` on the
- * degraded-engine banner — the one surface whose entire job is to say the
- * reading is incomplete. The renderer downstream cannot undo that: by the time
- * it sees `0` a fabricated zero and a genuinely measured zero are the same
- * value. Null has to survive this function.
- *
- * Returns the finite number, or null for null/undefined/""/non-numeric input.
- * A real `0` still returns `0`.
- */
-function measuredNumberOrNull(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
+// R2.7.16 introduced `measuredNumberOrNull` at this point in the file; R2.9.7
+// moved it (and its empty-denominator sibling `ratioPctOrNull`) to
+// ./measuredNumber.js so contentLift.js and the next producer share ONE
+// implementation instead of re-hand-rolling the shape per site. The reasoning
+// lives in that file's header; src/lib/scoring/metricCoercionGuard.test.mjs is
+// the walker that keeps new bare coercions out of this directory.
 
 /**
  * Restates one degraded slice in the numbers that condemned it, read from the
@@ -1622,8 +1651,16 @@ export function summarizeEngineResults(scanOutput) {
       visible_branded: aioSummary.visible_branded || 0,
       mentioned_non_branded: aioSummary.mentioned_non_branded || 0,
       cited_non_branded: aioSummary.cited_non_branded || 0,
-      aio_coverage_pct: aioSummary.coverage_pct || 0,
-      error_rate_pct: aioSummary.error_rate_pct || 0,
+      // R2.9.7 — `?? null`, not `|| 0`, for the same reason the two lines below
+      // stopped being `|| 0` in R2.1.1: these are now nullable at the source.
+      // summarizeEngineSlice publishes null for both when the slice has no
+      // denominator, and this object is written straight onto the persisted
+      // `scans` row by scanWorker (aio_error_rate_pct at scanWorker.js:2115,
+      // aio_coverage_pct via db.js:216), so a `|| 0` here would re-fabricate the
+      // zero one statement after the producer refused to. `??` rather than `||`
+      // because a measured 0% error rate is a real and good result.
+      aio_coverage_pct: aioSummary.coverage_pct ?? null,
+      error_rate_pct: aioSummary.error_rate_pct ?? null,
       // R2.1.1 — THE SCAN-LEVEL MIRROR OF THE AIO SLICE, AND IT IS LIVE.
       //
       // This function is not a legacy shim. src/lib/workers/scanWorker.js binds
@@ -1653,13 +1690,22 @@ export function summarizeEngineResults(scanOutput) {
       // See ENGINE_MEASUREMENT_STATE / ENGINE_STATE_REASONS for the vocabulary.
       state: aioSummary.state ?? null,
       state_reason: aioSummary.state_reason ?? null,
-      presence_rate_pct: aioSummary.presence_rate_pct || 0,
-      branded_visibility_pct: aioSummary.branded_with_answer > 0
-        ? Math.round((aioSummary.visible_branded / aioSummary.branded_with_answer) * 1000) / 10
-        : 0,
-      mention_rate_pct: aioSummary.non_branded_with_answer > 0
-        ? Math.round((aioSummary.mentioned_non_branded / aioSummary.non_branded_with_answer) * 1000) / 10
-        : 0,
+      // R2.9.7 — nullable at the source now; see aio_coverage_pct above.
+      presence_rate_pct: aioSummary.presence_rate_pct ?? null,
+      // R2.9.7 — these two are DERIVED here rather than copied, so the empty
+      // denominator was fabricated by this function itself. `branded_visibility_pct: 0`
+      // for a scan that asked no branded prompts is a claim that the engines
+      // never named the brand even when asked about it by name — and it is
+      // persisted (scanWorker.js:2114). A brand-presence prompt set that ran
+      // and found nothing still yields a real 0 through the helper.
+      branded_visibility_pct: ratioPctOrNull(
+        aioSummary.visible_branded,
+        aioSummary.branded_with_answer
+      ),
+      mention_rate_pct: ratioPctOrNull(
+        aioSummary.mentioned_non_branded,
+        aioSummary.non_branded_with_answer
+      ),
       // Denominator is the observed-citation pool (see above), not every
       // answered row.
       //

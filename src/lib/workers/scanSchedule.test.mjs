@@ -382,3 +382,89 @@ test("runScanChunk — a brand's first scan unconditionally registers a scan_sch
   assert.equal(scheduleInserts[0].enabled, false, "opt-in: enabled is explicitly false");
   assert.equal(scheduleInserts[0].next_run_at, null, "opt-in: next_run_at is explicitly null");
 });
+
+test("R3.4.5 — insertScanScheduleIfNotExists: atomic ON CONFLICT DO NOTHING with client", async () => {
+  const { insertScanScheduleIfNotExists } = await import("../db/analytics.js");
+
+  let upsertOptions = null;
+  let targetTable = null;
+  let queryPayload = null;
+
+  const fakeClient = {
+    from(table) {
+      targetTable = table;
+      return {
+        upsert(payload, options) {
+          queryPayload = payload;
+          upsertOptions = options;
+          return {
+            select() {
+              return { data: [{ id: 1, ...payload }], error: null };
+            },
+          };
+        },
+      };
+    },
+  };
+
+  const row = { brand: "test-brand.com", enabled: false, next_run_at: null };
+  const res = await insertScanScheduleIfNotExists(row, { client: fakeClient });
+
+  assert.equal(targetTable, "scan_schedules", "targets scan_schedules table");
+  assert.deepEqual(
+    upsertOptions,
+    { onConflict: "brand", ignoreDuplicates: true },
+    "enforces atomic ignoreDuplicates on conflict on brand key"
+  );
+  assert.equal(res.brand, "test-brand.com");
+
+  // Conflict case: data is empty array -> returns null
+  const conflictClient = {
+    from() {
+      return {
+        upsert() {
+          return {
+            select() {
+              return { data: [], error: null };
+            },
+          };
+        },
+      };
+    },
+  };
+  const conflictRes = await insertScanScheduleIfNotExists(row, { client: conflictClient });
+  assert.equal(conflictRes, null, "conflict returns null (no-op, does not throw)");
+
+  // Error case: client throws
+  const errorClient = {
+    from() {
+      return {
+        upsert() {
+          return {
+            select() {
+              return { data: null, error: new Error("db connection error") };
+            },
+          };
+        },
+      };
+    },
+  };
+  await assert.rejects(
+    () => insertScanScheduleIfNotExists(row, { client: errorClient }),
+    /db connection error/
+  );
+});
+
+test("R3.4.5 — insertScanScheduleIfNotExists: memory mode deduplication", async () => {
+  const { insertScanScheduleIfNotExists } = await import("../db/analytics.js");
+  const brand = "memory-brand-" + Date.now() + ".com";
+  const row = { brand, enabled: false, next_run_at: null };
+
+  const first = await insertScanScheduleIfNotExists(row, { client: null });
+  assert.ok(first, "first insert in memory mode succeeds");
+  assert.equal(first.brand, brand);
+
+  const second = await insertScanScheduleIfNotExists(row, { client: null });
+  assert.equal(second, null, "subsequent insert for identical brand returns null without overwriting");
+});
+
