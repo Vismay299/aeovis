@@ -68,7 +68,9 @@ const MEMORY_STORES = {
 };
 
 function resolveClient(deps) {
-  return deps && Object.prototype.hasOwnProperty.call(deps, "client") ? deps.client : supabase;
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "client")) return deps.client;
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "supabase")) return deps.supabase;
+  return supabase;
 }
 
 function resolveMemory(table, deps) {

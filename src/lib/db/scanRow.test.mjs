@@ -49,3 +49,33 @@ test("buildScanBaseRecord - carries exactly the migration-001 column set, nothin
     "visibility_pct",
   ]);
 });
+
+test("R2.3.3 ACCEPT — scans.competitors is non-null for discovered, configured, and carried rosters", () => {
+  const discoveredRow = buildScanBaseRecord({
+    brand: "Acme",
+    competitors: [{ name: "RivalOne", domain: "rivalone.com", source: "discovered" }],
+    raw_results: { roster_source: "extracted" },
+  });
+  assert.ok(discoveredRow.competitors != null, "discovered competitors must be non-null");
+  assert.equal(discoveredRow.competitors.length, 1);
+  assert.equal(discoveredRow.competitors[0].source, "discovered");
+  assert.equal(discoveredRow.raw_results.roster_source, "extracted");
+
+  const configuredRow = buildScanBaseRecord({
+    brand: "Acme",
+    competitors: [{ name: "RivalConfigured", domain: "", source: "user" }],
+    raw_results: { roster_source: "configured" },
+  });
+  assert.ok(configuredRow.competitors != null, "configured competitors must be non-null");
+  assert.equal(configuredRow.competitors[0].source, "user");
+  assert.equal(configuredRow.raw_results.roster_source, "configured");
+
+  const carriedRow = buildScanBaseRecord({
+    brand: "Acme",
+    competitors: [{ name: "RivalCarried", domain: "", source: "carried_forward" }],
+    raw_results: { roster_source: "carried_forward" },
+  });
+  assert.ok(carriedRow.competitors != null, "carried competitors must be non-null");
+  assert.equal(carriedRow.competitors[0].source, "carried_forward");
+  assert.equal(carriedRow.raw_results.roster_source, "carried_forward");
+});

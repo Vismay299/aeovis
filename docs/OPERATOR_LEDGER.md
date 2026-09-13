@@ -273,7 +273,8 @@ Also environment-shaped and easy to get silently wrong:
   `git grep -n 'rateLimitKnobsReadBy' src/lib`.
 - **`SCAN_RATE_LIMIT_IP_HEADER` should stay unset unless you know the answer.**
   It must name the one header your proxy *overwrites*, not appends. Known-forgeable
-  names are refused outright. On Vercel you do not need it.
+  names are refused outright. On Vercel, `x-vercel-forwarded-for` is read as the
+  platform header but remains untrusted-pending-proof (`RESTORE-TRUST-R0.1.20`).
 - **`SCAN_RATE_LIMIT_UNVERIFIED_CEILING` is the only lever over the
   deployment-wide ceiling, and it has no off switch.** Where no address source
   exists that the caller cannot set — the knob above unset and not on Vercel — the
@@ -321,16 +322,18 @@ Also environment-shaped and easy to get silently wrong:
 
 ## C. Migrations
 
-`supabase/migrations/` holds thirteen files. They are named individually rather
+`supabase/migrations/` holds fourteen files. They are named individually rather
 than as a range, and `src/lib/docStatus.test.mjs` fails this document if a file
 on disk is missing from the list — the previous revision wrote "`001` … `012`"
-in the same commit that added `013`, and nothing caught it:
+in the same commit that added `013`, and nothing caught it. It happened again
+with `014`, which landed on disk registered nowhere and turned three guards red
+until R3.5.4 added the three rows:
 
 `001_initial_schema`, `002_content_os`, `003_content_agents`,
 `004_crew_canvas_knowledge`, `005_analytics_platform`, `006_agent_control_plane`,
 `007_scan_seal`, `008_system_heartbeats`, `009_scan_rate_limit`,
 `010_probe_tasks`, `011_scan_runs`, `012_scan_job_attempts`,
-`013_brand_metrics_sov_state`.
+`013_brand_metrics_sov_state`, `014_content_job_checkpoints`.
 
 `npm run setup:db` applies them in filename order, one transaction per file,
 recording each in the `schema_migrations` ledger. The `BEGIN`, the ledger
@@ -353,9 +356,10 @@ the Postgres catalog:
   Do not assume. Check the catalog before relying on it.
 - `013_brand_metrics_sov_state.sql`: **applied state unverified from this
   environment, and this is the one to check first.** Nothing in this repository
-  can read the production catalog, so no agent has confirmed it either way. It is
-  the newest file on disk and it carries the worst consequence of the thirteen if
-  it is missing: per the `013` row of `docs/PROD_MIGRATIONS.md`
+  can read the production catalog, so no agent has confirmed it either way. It
+  carries the worst consequence of the fourteen if it is missing (it was also
+  the newest file on disk until `014` landed): per the `013` row of
+  `docs/PROD_MIGRATIONS.md`
   (`git grep -n 'PGRST204' docs/PROD_MIGRATIONS.md`), **every scan finalize
   hard-fails its `brand_metrics_daily` upsert with PostgREST `PGRST204`
   ("column sov_state ... does not exist")**. Confirmed in the code, not taken on
@@ -372,12 +376,55 @@ the Postgres catalog:
   `brand_metrics_daily`, so a backfill against a pre-013 database fails the same
   way. `GET /api/brands/[brand]/metrics` only reads the table (`select("*")`), so
   it degrades rather than throwing.
+- `014_content_job_checkpoints.sql`: **applied state unverified from this
+  environment.** Do not assume. Check the catalog before relying on it. It is
+  the newest file on disk, and it is the only one `npm run setup:db` cannot
+  answer for you — see the gap below. The whole migration is one statement
+  (line 11 of the file, the only non-comment line):
+  `ALTER TABLE content_jobs ADD COLUMN IF NOT EXISTS checkpoint jsonb;`. Note
+  this is `content_jobs`; the `checkpoint` column `005` adds is on `scan_jobs`,
+  so a database that ran `005` still needs `014`. **If it is missing, content
+  jobs do not merely lose the ability to resume — they fail.** Read from the
+  code, not inferred: `updateContentJob` ends `if (error) throw error`
+  (`git grep -n 'export async function updateContentJob'
+  src/lib/db/content.js`, the throw is the last one in that function), so
+  PostgREST `PGRST204` on an unknown column is a hard throw; and every
+  checkpoint write goes through `writeJob({ checkpoint: … })` inside the
+  pipeline's own `try` (`git grep -n 'persist checkpoint after each completed
+  block' src/lib/content/contentWorker.js`), the first of them at the first
+  block boundary. So on a pre-`014` database the first block that finishes
+  throws, not the first rescue.
+
+**The `014` verification gap — `setup:db` will lie to you about this one.**
+`objectExists()` in `scripts/setup-supabase.mjs` asks `to_regclass` for tables
+and indexes and `pg_proc` for functions. None of the three sees a column, and
+`014` creates only a column — unlike `012` and `013`, which each ship an index
+that references the new column and so stand in for it. `014`'s entry in
+`EXPECTED_OBJECTS` is therefore an empty list, deliberately: the alternative was
+to tick `content_jobs`, which `002` creates and which is present on databases
+that have never seen `014`. The consequence is that **`npm run setup:db` prints
+"All expected objects present" on a database missing `014`.** Settle it by hand
+instead:
+
+```sql
+select column_name, data_type
+  from information_schema.columns
+ where table_schema = 'public'
+   and table_name   = 'content_jobs'
+   and column_name  = 'checkpoint';
+```
+
+Zero rows means `014` has not been applied. `docs/PROD_MIGRATIONS.md` has no
+`014` section and no `014` rows in its one-query block as of 2026-09-13
+(`git grep -c '014_content_job_checkpoints' docs/PROD_MIGRATIONS.md`); adding
+them is out of R3.5.4's scope and is filed as follow-up work, so until then this
+bullet is the only place the `014` check is written down.
 
 **The per-migration verification queries now exist.** `docs/PROD_MIGRATIONS.md`
 landed under R6.1.2 in commit `156c21b` — it did not exist when this section was
 first written, and the earlier revision of this file said so. Go there for the
-catalog query that settles each file, including the `012` and `013` questions
-above: it lists `012`'s four objects (`scan_jobs.attempts`,
+catalog query that settles each file **except `014`, which it does not cover at
+all** — including the `012` and `013` questions above: it lists `012`'s four objects (`scan_jobs.attempts`,
 `scan_jobs_attempts_chk`, `scan_jobs_attempts_idx`, `claim_scan_job_attempt`) and
 `013`'s six (two columns, three constraints and
 `brand_metrics_daily_sov_unverified_idx`) as the things to look for. R6.1.2 was

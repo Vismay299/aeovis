@@ -27,8 +27,6 @@ export function buildScanBaseRecord(scanRecord) {
     visibility_pct: scanRecord.visibility_pct,
     prompts_tracked: scanRecord.prompts_tracked,
     prompts_mentioned: scanRecord.prompts_mentioned,
-    // migration 001 line 15: `competitors jsonb`. Written here, not just into
-    // raw_results, so a SQL reader sees the roster without unpacking JSONB.
     // Never `?? []` this from a null roster — see the note below.
     competitors: scanRecord.competitors || [],
     raw_results: scanRecord.raw_results,

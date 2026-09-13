@@ -1,27 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { transform } from "sucrase";
 import {
   describeScanDataSourceIssue,
   summarizeEngineSlice,
   computeHeadline,
 } from "../../lib/scoring/enginePipeline.js";
+import * as apiClient from "../../services/api.js";
+import * as formatModule from "../../utils/format.js";
+import * as aliasesModule from "../../lib/scoring/aliases.js";
+import * as brandKeyModule from "../../lib/scoring/brandKey.js";
+import * as aioConstantsModule from "../../lib/scoring/aioConstants.js";
+import * as enginePipelineModule from "../../lib/scoring/enginePipeline.js";
 
 /**
  * R2.2.6 (finding B3) — the dashboard half of "say which engine degraded".
  *
  * WHAT THIS FILE CAN AND CANNOT PROVE, SAID PLAINLY.
  *
- * This repo has no component-render harness: no jsdom, no testing-library, and
- * `npm run test:scoring` is a bare `node --test` over .test.mjs files. So the
- * banner's TEXT is exercised by RUNNING describeScanDataSourceIssue — that is
- * where every word of it is decided, and enginePipeline.test.mjs drives it from
- * real summarizeEngineSlice output. What this file adds is the other half: a
- * source guard proving DashboardShell.jsx defers to that function instead of
- * typing its own copy, because a decision function nothing renders is a
- * decision nobody sees. Same split R2.7.4 and R2.10.5 used.
+ * The static source-level half of the banner's proof is below, and the rendered
+ * execution half uses the harness at engineSetChangeSurface.test.mjs:136-213
+ * (landed 2026-09-05) to compile DashboardShell.jsx with sucrase and render it
+ * via react-dom/server. The banner's TEXT is exercised by RUNNING
+ * describeScanDataSourceIssue — that is where every word of it is decided, and
+ * enginePipeline.test.mjs drives it from real summarizeEngineSlice output.
+ * What this file proves is that DashboardShell.jsx defers to that function and
+ * actually renders the named degraded engines and visibility index.
  *
  * WHAT THE GUARD PROVES, AFTER R2.2.7.
  *
@@ -136,9 +146,11 @@ import {
  *     does not treat `'` as a delimiter (see its own docstring for why). The two
  *     flip modes known to exist are now asserted directly; a third nobody has
  *     thought of would still be silent, which is the residual to attack next.
- *   - Nothing here proves React mounted the component, that either branch is
- *     reachable, or that a mounted banner is visible. Only a render harness can,
- *     and this repo has none.
+ *   - The text scan alone cannot prove React mounted the component or that the
+ *     mounted banner is visible in the browser DOM. The render harness from
+ *     engineSetChangeSurface.test.mjs:136-213 executes DashboardShell with
+ *     react-dom/server below to prove the behavioral claims directly against
+ *     rendered markup.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -623,32 +635,321 @@ test("R2.2.6 GUARD — the per-engine chip marks a degraded engine", () => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// R2.2.7 — EXECUTION HARNESS & BEHAVIORAL CLAIMS
+// Harness derived from engineSetChangeSurface.test.mjs:136-213 and
+// scoreBandEngineChips.test.mjs:133-180.
+// ---------------------------------------------------------------------------
+
+const SCORE_BAND_PATH = path.join(HERE, "ScoreBand.jsx");
+
+function nullComponent() {
+  return null;
+}
+
+const anyNamedExport = new Proxy(
+  { __esModule: true },
+  {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      return nullComponent;
+    },
+  }
+);
+
+function makeUseEffectShim() {
+  return function useEffectShim(fn, deps) {
+    const ref = React.useRef(undefined);
+    const prev = ref.current;
+    const changed =
+      prev === undefined ||
+      deps === undefined ||
+      prev.deps === undefined ||
+      prev.deps.length !== deps.length ||
+      deps.some((d, i) => !Object.is(d, prev.deps[i]));
+    if (!changed || (prev !== undefined && deps === undefined)) return;
+    ref.current = { deps };
+    fn();
+  };
+}
+
+async function loadJsx(filePath, requireShim, ReactImpl) {
+  const source = await readFile(filePath, "utf8");
+  const { code } = transform(source, {
+    transforms: ["jsx", "imports"],
+    jsxPragma: "React.createElement",
+    jsxFragmentPragma: "React.Fragment",
+    filePath,
+  });
+  const module = { exports: {} };
+  // eslint-disable-next-line no-new-func
+  const factory = new Function("require", "module", "exports", "React", code);
+  factory(requireShim, module, module.exports, ReactImpl);
+  return module.exports;
+}
+
+async function loadScoreBand() {
+  return loadJsx(
+    SCORE_BAND_PATH,
+    (specifier) => {
+      throw new Error(`ScoreBand.jsx unexpectedly imports "${specifier}"`);
+    },
+    React
+  );
+}
+
+/**
+ * Render the REAL DashboardShell with the REAL ScoreBand, based on
+ * engineSetChangeSurface.test.mjs:136-213 and scoreBandEngineChips.test.mjs:133-180.
+ */
+async function renderDashboardShell(props) {
+  const scoreBandModule = { ...(await loadScoreBand()), __esModule: true };
+
+  const patchedReact = { ...React, useEffect: makeUseEffectShim(), __esModule: true };
+  patchedReact.default = patchedReact;
+
+  const apiStub = {
+    ...apiClient,
+    __esModule: true,
+    fetchScanHistory: () => new Promise(() => {}),
+  };
+
+  const modules = new Map([
+    ["react", patchedReact],
+    ["lucide-react", anyNamedExport],
+    [
+      "next/navigation",
+      {
+        __esModule: true,
+        useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {} }),
+        usePathname: () => "/dashboard",
+        useSearchParams: () => new URLSearchParams(),
+      },
+    ],
+    ["@/components/dashboard/ScoreBand", scoreBandModule],
+    ["@/services/api", apiStub],
+    ["@/utils/format", formatModule],
+    ["@/lib/scoring/aliases", aliasesModule],
+    ["@/lib/scoring/brandKey", brandKeyModule],
+    ["@/lib/scoring/aioConstants", aioConstantsModule],
+    ["@/lib/scoring/enginePipeline", enginePipelineModule],
+  ]);
+
+  const requireShim = (specifier) => {
+    if (modules.has(specifier)) return modules.get(specifier);
+    if (specifier.startsWith("@/components/") || specifier.startsWith("@/lib/")) {
+      return anyNamedExport;
+    }
+    throw new Error(
+      `DashboardShell imports "${specifier}", which this render harness does not resolve.`
+    );
+  };
+
+  const shellModule = await loadJsx(SHELL_PATH, requireShim, patchedReact);
+  const Shell = shellModule.default;
+  assert.equal(
+    typeof Shell,
+    "function",
+    "DashboardShell.jsx must still default-export a component for this harness to render"
+  );
+
+  const realFetch = globalThis.fetch;
+  const realSetInterval = globalThis.setInterval;
+  globalThis.fetch = () => new Promise(() => {});
+  globalThis.setInterval = () => 0;
+  try {
+    return renderToStaticMarkup(React.createElement(Shell, props));
+  } finally {
+    globalThis.fetch = realFetch;
+    globalThis.setInterval = realSetInterval;
+  }
+}
+
+function textOf(html) {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&#x27;|&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function storedScanRow(engines, { enginesCounted = 1, visibilityIndexPct = 50 } = {}) {
+  const summary_stats = {
+    visibility_pct: 50,
+    mention_rate_pct: 50,
+    non_branded_queries: 10,
+    non_branded_with_aio: 10,
+    visible_non_branded: 2,
+    aio_coverage_pct: 100,
+    error_rate_pct: 0,
+    data_source_issue: enginesCounted === 0,
+    insufficient_sample: false,
+  };
+  return {
+    id: "scan-degraded-engine",
+    brand: "Acme",
+    url: "acme.com",
+    scanned_at: "2026-09-01T10:00:00.000Z",
+    visibility_pct: 50,
+    prompts_tracked: 10,
+    prompts_mentioned: 2,
+    competitors: [],
+    results: [],
+    raw_results: {
+      results: [],
+      summary_stats,
+      engines_counted: enginesCounted,
+      visibility_index_pct: visibilityIndexPct,
+      engines,
+      scoring_version: "v7-multi-engine",
+      prompt_set_id: "acme.com:v1",
+    },
+  };
+}
+
+const answered = (i, visible) => ({
+  query: `unbranded prompt ${i}`,
+  is_branded_query: false,
+  answer_present: true,
+  error: null,
+  text: "Vendors worth considering include Kajaria and Somany.",
+  visible,
+  brand_mentioned_in_text: visible,
+  brand_cited: false,
+  brands: [
+    { name: "Italica", is_self: true, mentioned: visible },
+    { name: "Kajaria", is_self: false, mentioned: true },
+  ],
+});
+const empty = (i) => ({
+  query: `unbranded prompt ${i}`,
+  is_branded_query: false,
+  answer_present: false,
+  error: "EMPTY_ANSWER",
+  text: "",
+  visible: false,
+  brands: [],
+});
+
+test("R2.2.7 EXECUTION — the critical banner renders and names the degraded engine", async () => {
+  // Proven by execution with react-dom/server (engineSetChangeSurface.test.mjs:136-213):
+  // When all engines degrade, the critical banner renders and explicitly names the
+  // degraded engines, while ScoreBand and the partial banner are suppressed.
+  const criticalEngines = {
+    aio: summarizeEngineSlice(
+      [...Array.from({ length: 10 }, (_, i) => empty(100 + i))],
+      "aio"
+    ),
+    perplexity: summarizeEngineSlice(
+      [
+        ...Array.from({ length: 4 }, (_, i) => answered(200 + i, true)),
+        ...Array.from({ length: 6 }, (_, i) => empty(300 + i)),
+      ],
+      "perplexity"
+    ),
+  };
+
+  const html = await renderDashboardShell({
+    scan: storedScanRow(criticalEngines, { enginesCounted: 0, visibilityIndexPct: null }),
+  });
+  const text = textOf(html);
+
+  assert.ok(
+    html.includes('data-testid="data-source-issue-banner"'),
+    "critical scan must mount the data-source-issue-banner"
+  );
+  assert.ok(
+    html.includes('data-testid="dashboard-unreliable-placeholder"'),
+    "critical scan must mount the placeholder replacing the views"
+  );
+  assert.ok(
+    !html.includes('data-testid="engine-degraded-banner"'),
+    "critical scan must not mount the partial-read banner"
+  );
+  assert.ok(
+    !html.includes('data-testid="score-band"'),
+    "critical scan must suppress ScoreBand"
+  );
+
+  // Behavioral claim 1: the critical banner MUST name the degraded engines.
+  assert.match(
+    text,
+    /Google AI Overview and Perplexity degraded — no engine left to score/,
+    "the critical banner headline must name the degraded engines"
+  );
+  assert.match(
+    text,
+    /Google AI Overview answered 0 of 10 tracked prompts/,
+    "the banner detail must describe why Google AI Overview was condemned"
+  );
+  assert.match(
+    text,
+    /Perplexity answered 4 of 10 tracked prompts/,
+    "the banner detail must describe why Perplexity was condemned"
+  );
+});
+
+test("R2.2.7 EXECUTION — partial degradation shows the index number and suppresses placeholder", async () => {
+  // Proven by execution with react-dom/server (engineSetChangeSurface.test.mjs:136-213):
+  // When one engine degrades in a multi-engine scan, the partial banner renders,
+  // the ScoreBand renders the AI Visibility Index number, and the unreliable placeholder
+  // is suppressed.
+  const partialEngines = {
+    aio: summarizeEngineSlice(
+      [
+        ...Array.from({ length: 2 }, (_, i) => answered(i, true)),
+        ...Array.from({ length: 8 }, (_, i) => answered(100 + i, false)),
+      ],
+      "aio"
+    ),
+    perplexity: summarizeEngineSlice(
+      [
+        ...Array.from({ length: 6 }, (_, i) => answered(200 + i, true)),
+        ...Array.from({ length: 4 }, (_, i) => empty(300 + i)),
+      ],
+      "perplexity"
+    ),
+  };
+
+  const html = await renderDashboardShell({
+    scan: storedScanRow(partialEngines, { enginesCounted: 1, visibilityIndexPct: 42 }),
+  });
+  const text = textOf(html);
+
+  assert.ok(
+    html.includes('data-testid="engine-degraded-banner"'),
+    "partial degradation must mount the engine-degraded-banner"
+  );
+  assert.ok(
+    !html.includes('data-testid="data-source-issue-banner"'),
+    "partial degradation must NOT mount the critical banner"
+  );
+  assert.ok(
+    !html.includes('data-testid="dashboard-unreliable-placeholder"'),
+    "partial degradation must NOT mount the unreliable placeholder"
+  );
+
+  // Behavioral claim 2: partial degradation must show the index number while suppressing placeholder.
+  assert.ok(
+    html.includes(">42<") && text.includes("42 %"),
+    "partial degradation must show the AI Visibility Index number in ScoreBand"
+  );
+  assert.ok(
+    text.includes("AI Visibility Index"),
+    "multi-engine scan must label the hero score as AI Visibility Index"
+  );
+  assert.match(
+    text,
+    /Perplexity degraded — the index counts 1 of 2 engines/,
+    "partial banner must name the degraded engine and count"
+  );
+});
+
 test("R2.2.6 — the strings the guard proves are rendered are non-empty for the real case", () => {
   // The RUN half, kept beside the guard so this file is not only assertions
   // about text. Healthy aio + a perplexity slice answering 6 of 10.
-  const answered = (i, visible) => ({
-    query: `unbranded prompt ${i}`,
-    is_branded_query: false,
-    answer_present: true,
-    error: null,
-    text: "Vendors worth considering include Kajaria and Somany.",
-    visible,
-    brand_mentioned_in_text: visible,
-    brand_cited: false,
-    brands: [
-      { name: "Italica", is_self: true, mentioned: visible },
-      { name: "Kajaria", is_self: false, mentioned: true },
-    ],
-  });
-  const empty = (i) => ({
-    query: `unbranded prompt ${i}`,
-    is_branded_query: false,
-    answer_present: false,
-    error: "EMPTY_ANSWER",
-    text: "",
-    visible: false,
-    brands: [],
-  });
 
   const engines = {
     aio: summarizeEngineSlice(

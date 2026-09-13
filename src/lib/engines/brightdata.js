@@ -1,5 +1,10 @@
 import { normalizeUrl } from "../scoring/citations.js";
 import { resolveSerpGeo } from "./serpGeo.js";
+import {
+  classifyHttpStatus,
+  FAILURE_KIND,
+  tagHttpFailure,
+} from "./httpFailureKind.js";
 
 /**
  * Typed Bright Data zone failure (R1.2.7, finding C4).
@@ -260,10 +265,6 @@ function buildGoogleSearchUrl(query, { geo = resolveSerpGeo(), aiOverview = true
   return `https://www.google.com/search?${params.toString()}`;
 }
 
-function isRetryableHttpStatus(status) {
-  return status === 429 || status >= 500;
-}
-
 function isRateLimitResponse(data) {
   // Bright Data quota/rate-limit signals: explicit error messages,
   // 429 status from the zone proxy, or a nil/empty body for rate-limited zones.
@@ -415,13 +416,19 @@ export async function brightDataSearch(query, options = {}) {
         // answer, and delays the re-resolve that can actually fix it.
         const httpZoneErr = zoneRejectionDetail(errText);
         if (httpZoneErr) throw zoneRejectedError(httpZoneErr, config.zone);
-        if (isRetryableHttpStatus(res.status) && attempt < maxAttempts) {
-          lastErr = new Error(`Bright Data HTTP ${res.status}: ${errText.slice(0, 200)}`);
+        if (classifyHttpStatus(res.status) === FAILURE_KIND.TRANSIENT && attempt < maxAttempts) {
+          lastErr = tagHttpFailure(
+            new Error(`Bright Data HTTP ${res.status}: ${errText.slice(0, 200)}`),
+            res.status
+          );
           const delay = res.status === 429 ? backoffMs * attempt * 3 : backoffMs * attempt;
           await new Promise((r) => setTimeout(r, delay));
           continue;
         }
-        throw new Error(`Bright Data HTTP ${res.status}: ${errText.slice(0, 200)}`);
+        throw tagHttpFailure(
+          new Error(`Bright Data HTTP ${res.status}: ${errText.slice(0, 200)}`),
+          res.status
+        );
       }
 
       const raw = await res.text();

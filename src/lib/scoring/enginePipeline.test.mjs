@@ -192,37 +192,46 @@ test("summarizeEngineResults branded rows excluded from denominators", () => {
 
 test("resolveEnabledEngines defaults to aio", () => {
   const oldEngines = process.env.ENGINES;
+  const oldBrightdata = process.env.BRIGHTDATA_API_KEY;
   delete process.env.ENGINES;
+  process.env.BRIGHTDATA_API_KEY = "test-key";
 
   const engines = resolveEnabledEngines();
   assert.equal(engines.length, 1);
   assert.equal(engines[0].name, "aio");
 
   if (oldEngines) process.env.ENGINES = oldEngines;
+  if (oldBrightdata) process.env.BRIGHTDATA_API_KEY = oldBrightdata;
+  else delete process.env.BRIGHTDATA_API_KEY;
 });
 
 test("resolveEnabledEngines parses comma-separated list", () => {
   const oldEngines = process.env.ENGINES;
+  const oldBrightdata = process.env.BRIGHTDATA_API_KEY;
   process.env.ENGINES = "aio,chatgpt,perplexity";
+  process.env.BRIGHTDATA_API_KEY = "test-key";
 
   const engines = resolveEnabledEngines();
-  // chatgpt and perplexity may not be configured — aio is always configured
+  // chatgpt and perplexity may not be configured — aio is configured
   assert.ok(engines.length >= 1);
   assert.equal(engines[0].name, "aio");
 
   if (oldEngines) process.env.ENGINES = oldEngines;
+  if (oldBrightdata) process.env.BRIGHTDATA_API_KEY = oldBrightdata;
+  else delete process.env.BRIGHTDATA_API_KEY;
 });
 
 // ---------------------------------------------------------------------------
 // R3.2.2 — the skip set escapes resolveEnabledEngines instead of dying in it
 // ---------------------------------------------------------------------------
 
-/** Swap ENGINES and the two text-engine keys, run fn, put everything back. */
-function withEngineEnv({ engines, openaiKey, perplexityKey }, fn) {
+/** Swap ENGINES and the engine keys, run fn, put everything back. */
+function withEngineEnv({ engines, openaiKey, perplexityKey, brightdataKey }, fn) {
   const saved = {
     ENGINES: process.env.ENGINES,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     PERPLEXITY_API_KEY: process.env.PERPLEXITY_API_KEY,
+    BRIGHTDATA_API_KEY: process.env.BRIGHTDATA_API_KEY,
   };
   const apply = (key, value) => {
     if (value === undefined) delete process.env[key];
@@ -231,6 +240,7 @@ function withEngineEnv({ engines, openaiKey, perplexityKey }, fn) {
   apply("ENGINES", engines);
   apply("OPENAI_API_KEY", openaiKey);
   apply("PERPLEXITY_API_KEY", perplexityKey);
+  apply("BRIGHTDATA_API_KEY", brightdataKey);
   try {
     return fn();
   } finally {
@@ -241,7 +251,7 @@ function withEngineEnv({ engines, openaiKey, perplexityKey }, fn) {
 test("resolveEnabledEngines reports an unknown engine and a keyless engine as DIFFERENT reasons", () => {
   const seen = [];
   const engines = withEngineEnv(
-    { engines: "aio,chatgpt,notanengine", openaiKey: undefined },
+    { engines: "aio,chatgpt,notanengine", openaiKey: undefined, brightdataKey: "test-key" },
     () => resolveEnabledEngines({ onSkip: (kind, subject) => seen.push([kind, subject]) })
   );
 
@@ -261,7 +271,7 @@ test("resolveEnabledEngines reports an unknown engine and a keyless engine as DI
 test("resolveEnabledEngines announces the default-to-aio substitution as its own reason", () => {
   const seen = [];
   const engines = withEngineEnv(
-    { engines: "chatgpt,perplexity", openaiKey: undefined, perplexityKey: undefined },
+    { engines: "chatgpt,perplexity", openaiKey: undefined, perplexityKey: undefined, brightdataKey: "test-key" },
     () => resolveEnabledEngines({ onSkip: (kind, subject) => seen.push([kind, subject]) })
   );
 
@@ -280,7 +290,7 @@ test("resolveEnabledEngines announces the default-to-aio substitution as its own
 
 test("resolveEnabledEngines reports nothing when nothing was dropped", () => {
   const seen = [];
-  const engines = withEngineEnv({ engines: "aio" }, () =>
+  const engines = withEngineEnv({ engines: "aio", brightdataKey: "test-key" }, () =>
     resolveEnabledEngines({ onSkip: (kind, subject) => seen.push([kind, subject]) })
   );
   assert.deepEqual(engines.map((e) => e.name), ["aio"]);
@@ -290,9 +300,84 @@ test("resolveEnabledEngines reports nothing when nothing was dropped", () => {
 test("resolveEnabledEngines still returns a plain array for callers that pass no recorder", () => {
   // ~50 existing call sites destructure the return as an array of engine defs.
   // The recorder is additive; it must never change the shape.
-  const engines = withEngineEnv({ engines: "aio,notanengine" }, () => resolveEnabledEngines());
+  const engines = withEngineEnv({ engines: "aio,notanengine", brightdataKey: "test-key" }, () => resolveEnabledEngines());
   assert.ok(Array.isArray(engines));
   assert.deepEqual(engines.map((e) => e.name), ["aio"]);
+});
+
+// ---------------------------------------------------------------------------
+// R2.10.4 — aio's isConfigured must reflect BRIGHTDATA_API_KEY, not return true
+// ---------------------------------------------------------------------------
+
+test("aio isConfigured returns true when BRIGHTDATA_API_KEY is set", () => {
+  const old = process.env.BRIGHTDATA_API_KEY;
+  process.env.BRIGHTDATA_API_KEY = "test-key";
+  try {
+    const aio = resolveEnabledEngines({ onSkip: () => {} }).find((e) => e.name === "aio");
+    assert.ok(aio, "aio must be in the enabled set when its key is present");
+    assert.equal(aio.isConfigured(), true);
+  } finally {
+    if (old === undefined) delete process.env.BRIGHTDATA_API_KEY;
+    else process.env.BRIGHTDATA_API_KEY = old;
+  }
+});
+
+test("aio isConfigured returns false when BRIGHTDATA_API_KEY is absent", () => {
+  const old = process.env.BRIGHTDATA_API_KEY;
+  delete process.env.BRIGHTDATA_API_KEY;
+  try {
+    const engines = withEngineEnv({ engines: "aio" }, () => resolveEnabledEngines());
+    // aio must not appear in the enabled set — its key is missing.
+    assert.equal(engines.find((e) => e.name === "aio"), undefined, "aio must be dropped when BRIGHTDATA_API_KEY is absent");
+  } finally {
+    if (old !== undefined) process.env.BRIGHTDATA_API_KEY = old;
+  }
+});
+
+test("resolveEnabledEngines drops aio when BRIGHTDATA_API_KEY is absent", () => {
+  const seen = [];
+  const engines = withEngineEnv(
+    { engines: "aio", brightdataKey: undefined },
+    () => resolveEnabledEngines({ onSkip: (kind, subject) => seen.push([kind, subject]) })
+  );
+
+  assert.deepEqual(engines.map((e) => e.name), [], "no engine survives without its key");
+  assert.deepEqual(
+    seen,
+    [[ENGINE_RESOLUTION_SKIPS.NOT_CONFIGURED, "aio"]],
+    "aio must be reported as NOT_CONFIGURED, not silently swallowed"
+  );
+});
+
+test("resolveEnabledEngines does not fall back to aio when aio itself is unconfigured", () => {
+  const seen = [];
+  const engines = withEngineEnv(
+    // Both text engines have no keys, and aio also has no BRIGHTDATA_API_KEY.
+    { engines: "chatgpt,perplexity", openaiKey: undefined, perplexityKey: undefined, brightdataKey: undefined },
+    () => resolveEnabledEngines({ onSkip: (kind, subject) => seen.push([kind, subject]) })
+  );
+
+  assert.deepEqual(engines, [], "the fallback must not silently re-enable an unconfigured aio");
+  assert.equal(
+    seen.filter(([kind]) => kind === ENGINE_RESOLUTION_SKIPS.SET_DEFAULTED).length,
+    0,
+    "SET_DEFAULTED must not fire when even the fallback engine is unconfigured"
+  );
+});
+
+test("R2.10.4 GUARD — aio's isConfigured is not hardcoded to true", () => {
+  // If someone reverts the fix and pins isConfigured: () => true, this test
+  // catches it: with BRIGHTDATA_API_KEY absent, aio must NOT be configured.
+  const old = process.env.BRIGHTDATA_API_KEY;
+  delete process.env.BRIGHTDATA_API_KEY;
+  try {
+    const aio = resolveEnabledEngines({ onSkip: () => [] }).find((e) => e.name === "aio");
+    // If isConfigured is pinned true, aio will be in the list. This assertion
+    // must fail in that case — which is exactly what we want.
+    assert.equal(aio, undefined, "aio must not resolve when BRIGHTDATA_API_KEY is absent — isConfigured may have been pinned true again");
+  } finally {
+    if (old !== undefined) process.env.BRIGHTDATA_API_KEY = old;
+  }
 });
 
 // Reuse summarize logic inline for testing

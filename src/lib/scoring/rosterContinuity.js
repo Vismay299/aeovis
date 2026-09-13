@@ -20,8 +20,12 @@ import { isLlmUnavailable } from "../llmErrors.js";
  * every branch below is unit-testable with no network and no node_modules.
  */
 
-/** The only three values `roster_source` may ever take. */
+/** The provenance values `roster_source` may take. */
 export const ROSTER_SOURCE = Object.freeze({
+  /** User supplied the competitor list. */
+  CONFIGURED: "configured",
+  /** Alias for user-configured roster. */
+  USER: "user",
   /** Extraction ran and its answer is this scan's own roster. */
   EXTRACTED: "extracted",
   /** Extraction was unreachable; this roster belongs to an earlier scan. */
@@ -67,15 +71,47 @@ export function carriedForwardRosterFromResultBrands(rows) {
  * @param {object} args
  * @param {() => Promise<Array>} args.extract runs rival extraction
  * @param {() => Promise<Array>} args.loadPreviousRoster returns the previous scan's result_brands rows
+ * @param {Array} [args.userCompetitors] competitor names or objects configured by the user
  * @param {{warn: Function}} [args.logger]
  * @returns {Promise<{competitors: Array, roster_source: string, extraction_offline: boolean, extraction_error: string|null}>}
  */
-export async function resolveCompetitorRoster({ extract, loadPreviousRoster, logger = console }) {
+export async function resolveCompetitorRoster({
+  extract,
+  loadPreviousRoster,
+  userCompetitors = [],
+  logger = console,
+}) {
+  const hasUserCompetitors =
+    Array.isArray(userCompetitors) &&
+    userCompetitors.some((c) => String(c?.name ?? c ?? "").trim().length > 0);
+
   let competitors;
   try {
     competitors = await extract();
   } catch (err) {
     if (!isLlmUnavailable(err)) throw err;
+
+    // If the user configured competitors, their roster is authoritative even if
+    // the LLM rival extraction leg was offline.
+    if (hasUserCompetitors) {
+      logger.warn(
+        `[roster] Rival extraction unavailable (${err.reason}) — using user-configured ` +
+          `competitor roster. Extractor could not discover additional rivals.`
+      );
+      const configuredRoster = userCompetitors
+        .map((c) => {
+          const name = typeof c === "string" ? c.trim() : String(c?.name || "").trim();
+          return name ? { name, domain: c?.domain || "", source: ROSTER_SOURCE.CONFIGURED } : null;
+        })
+        .filter(Boolean);
+
+      return {
+        competitors: configuredRoster,
+        roster_source: ROSTER_SOURCE.CONFIGURED,
+        extraction_offline: true,
+        extraction_error: err.message,
+      };
+    }
 
     const previousRows = await loadPreviousRoster();
     const carried = carriedForwardRosterFromResultBrands(previousRows);
@@ -111,7 +147,7 @@ export async function resolveCompetitorRoster({ extract, loadPreviousRoster, log
 
   return {
     competitors,
-    roster_source: ROSTER_SOURCE.EXTRACTED,
+    roster_source: hasUserCompetitors ? ROSTER_SOURCE.CONFIGURED : ROSTER_SOURCE.EXTRACTED,
     extraction_offline: false,
     extraction_error: null,
   };
@@ -123,7 +159,12 @@ export async function resolveCompetitorRoster({ extract, loadPreviousRoster, log
  * re-deriving the rule from `roster_source` string comparisons of its own.
  */
 export function isRosterAssessable(rosterSource) {
-  return rosterSource == null || rosterSource === ROSTER_SOURCE.EXTRACTED;
+  return (
+    rosterSource == null ||
+    rosterSource === ROSTER_SOURCE.EXTRACTED ||
+    rosterSource === ROSTER_SOURCE.CONFIGURED ||
+    rosterSource === ROSTER_SOURCE.USER
+  );
 }
 
 /**

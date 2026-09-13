@@ -1423,12 +1423,13 @@ test("runScanChunk — when NO frozen engine resolves, the silent substitution i
 // by the real `ENGINES` variable, because a stubbed resolver cannot drop
 // anything and would prove nothing.
 
-/** Swap ENGINES and the two text-engine keys, run fn, put everything back. */
-async function withEngineEnv({ engines, openaiKey, perplexityKey }, fn) {
+/** Swap ENGINES and the engine keys, run fn, put everything back. */
+async function withEngineEnv({ engines, openaiKey, perplexityKey, brightdataKey }, fn) {
   const saved = {
     ENGINES: process.env.ENGINES,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     PERPLEXITY_API_KEY: process.env.PERPLEXITY_API_KEY,
+    BRIGHTDATA_API_KEY: process.env.BRIGHTDATA_API_KEY,
   };
   const apply = (key, value) => {
     if (value === undefined) delete process.env[key];
@@ -1438,6 +1439,7 @@ async function withEngineEnv({ engines, openaiKey, perplexityKey }, fn) {
   apply("ENGINES", engines);
   apply("OPENAI_API_KEY", openaiKey);
   apply("PERPLEXITY_API_KEY", perplexityKey);
+  apply("BRIGHTDATA_API_KEY", brightdataKey);
   console.warn = () => {};
   try {
     return await fn();
@@ -1464,7 +1466,7 @@ test("runSourcingPhase — a typo in ENGINES and a missing API key are DIFFERENT
 
   const checkpoint = await withEngineEnv(
     // "notanengine" is a typo; "chatgpt" is real but has no key.
-    { engines: "aio,chatgpt,notanengine", openaiKey: undefined },
+    { engines: "aio,chatgpt,notanengine", openaiKey: undefined, brightdataKey: "test-key" },
     () =>
       runSourcingPhase(
         { brand: "Acme", url: "acme.com", industry: "saas", competitors: "" },
@@ -1501,7 +1503,7 @@ test("runSourcingPhase — the default-to-aio substitution is a decision, with i
   const tally = createChunkTally();
 
   const checkpoint = await withEngineEnv(
-    { engines: "chatgpt,perplexity", openaiKey: undefined, perplexityKey: undefined },
+    { engines: "chatgpt,perplexity", openaiKey: undefined, perplexityKey: undefined, brightdataKey: "test-key" },
     () =>
       runSourcingPhase(
         { brand: "Acme", url: "acme.com", industry: "saas", competitors: "" },
@@ -1528,7 +1530,7 @@ test("runSourcingPhase — a clean ENGINES set records no engine skips at all", 
   const queries = makeQueries(1);
   const tally = createChunkTally();
 
-  await withEngineEnv({ engines: "aio" }, () =>
+  await withEngineEnv({ engines: "aio", brightdataKey: "test-key" }, () =>
     runSourcingPhase(
       { brand: "Acme", url: "acme.com", industry: "saas", competitors: "" },
       sourcingDeps(queries),
@@ -1560,7 +1562,7 @@ test("runScanChunk — the engines ENGINES asked for and did not get are on the 
     })
   );
 
-  const result = await withEngineEnv({ engines: "aio,chatgpt,notanengine", openaiKey: undefined }, () =>
+  const result = await withEngineEnv({ engines: "aio,chatgpt,notanengine", openaiKey: undefined, brightdataKey: "test-key" }, () =>
     runScanChunk(job.id, {
       ...backend.deps,
       ...ledger.deps,

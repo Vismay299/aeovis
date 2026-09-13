@@ -29,10 +29,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execSync } from "node:child_process";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
-const LEDGER = path.join(HERE, "tasks.json");
+const LEDGER = process.env.ORCHESTRATION_LEDGER || path.join(HERE, "tasks.json");
 const TRACKER = path.join(REPO, "docs/plans/2026-08-29-rebuild-roadmap.md");
 
 const STATUSES = ["todo", "in_progress", "in_verification", "done", "blocked"];
@@ -123,6 +124,83 @@ function readiness(g, t) {
   return { ready: true, why: "ready" };
 }
 
+const CITATION_RE = /^([^\s:@]+)(?::(\d+)(?:-(\d+))?)?(?:@([^\s:]+))?$/;
+
+/**
+ * Validates a single evidence citation against the working tree or a pinned git commit (R6.1.10).
+ * Refuses citations whose line number exceeds total file lines or resolves to a blank line.
+ * Optionally supports pinned commit citations (`path:line@ref`) resolved via git show.
+ *
+ * @param {string} e
+ * @param {string} [repoPath=REPO]
+ * @returns {string|null} error message, or null if valid
+ */
+function validateEvidenceCitation(e, repoPath = REPO) {
+  const match = String(e || "").trim().match(CITATION_RE);
+  if (!match) {
+    return `evidence citation "${e}" is malformed: must be file or file:line[-end][@ref]`;
+  }
+  const [, filePath, startStr, endStr, ref] = match;
+
+  let content;
+  if (ref) {
+    try {
+      const gitPath = filePath.replace(/\\/g, "/");
+      content = execSync(`git show ${ref}:${gitPath}`, {
+        cwd: repoPath,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } catch (err) {
+      return `evidence citation "${e}" cites file or ref that cannot be resolved in git`;
+    }
+  } else {
+    const fullPath = path.join(repoPath, filePath);
+    if (!fs.existsSync(fullPath)) {
+      return `evidence citation "${e}" cites file that does not exist: ${filePath}`;
+    }
+    try {
+      content = fs.readFileSync(fullPath, "utf8");
+    } catch (err) {
+      return `evidence citation "${e}" cannot read file: ${filePath}`;
+    }
+  }
+
+  // Count lines preserving standard editor/git line numbering (strip single trailing newline)
+  const lines = content.length === 0 ? [] : content.replace(/\r?\n$/, "").split(/\r?\n/);
+  const lineCount = lines.length;
+
+  if (startStr !== undefined) {
+    const startLine = parseInt(startStr, 10);
+    const endLine = endStr !== undefined ? parseInt(endStr, 10) : startLine;
+
+    if (startLine < 1 || startLine > lineCount) {
+      return `evidence citation "${e}" line ${startLine} exceeds file length (${lineCount} lines)`;
+    }
+    if (endLine < startLine || endLine > lineCount) {
+      return `evidence citation "${e}" line ${endLine} exceeds file length (${lineCount} lines)`;
+    }
+
+    if (startStr !== undefined && endStr === undefined) {
+      if (lines[startLine - 1].trim() === "") {
+        return `evidence citation "${e}" points to blank line ${startLine}`;
+      }
+    } else {
+      if (lines[startLine - 1].trim() === "") {
+        return `evidence citation "${e}" points to blank line ${startLine}`;
+      }
+      if (lines[endLine - 1].trim() === "") {
+        return `evidence citation "${e}" points to blank line ${endLine}`;
+      }
+      if (lines.slice(startLine - 1, endLine).every((l) => l.trim() === "")) {
+        return `evidence citation "${e}" resolves to blank lines (${startLine}-${endLine})`;
+      }
+    }
+  }
+
+  return null;
+}
+
 const cmds = {
   status(g, { flags }) {
     const tasks = flags.phase ? g.tasks.filter((t) => t.phase === flags.phase) : g.tasks;
@@ -193,12 +271,14 @@ const cmds = {
       .map((s) => s.trim())
       .filter(Boolean);
     if (!evidence.length) die("--evidence is required: one or more file:line citations");
-    const bad = evidence.filter((e) => !/^[^\s:]+:\d+(-\d+)?$/.test(e) && !/^[^\s:]+$/.test(e));
-    if (bad.length) die(`evidence must be file or file:line — bad: ${bad.join(", ")}`);
-    const missing = evidence
-      .map((e) => e.split(":")[0])
-      .filter((f) => !fs.existsSync(path.join(REPO, f)));
-    if (missing.length) die(`evidence cites files that do not exist: ${missing.join(", ")}`);
+
+    const errors = [];
+    for (const e of evidence) {
+      const err = validateEvidenceCitation(e);
+      if (err) errors.push(err);
+    }
+    if (errors.length) die(errors.join("; "));
+
     t.evidence = evidence;
     t.status = "in_verification";
     if (flags.note) t.notes.push({ at: stamp(), by: t.owner, text: String(flags.note) });
@@ -448,24 +528,29 @@ const cmds = {
   },
 };
 
-const [cmd, ...rest] = process.argv.slice(2);
-if (!cmd || !cmds[cmd]) {
-  console.error(`usage: orchestrate.mjs <${Object.keys(cmds).join("|")}> [args]`);
-  process.exit(1);
-}
-const MUTATES = ["claim", "submit", "verify", "block", "unblock", "add", "rule", "amend", "depend"];
-const args = parseArgs(rest);
-try {
-  if (MUTATES.includes(cmd)) {
-    // Re-read INSIDE the lock: a copy loaded before waiting is already stale.
-    withLock(() => cmds[cmd](load(), args));
-  } else {
-    cmds[cmd](load(), args);
-  }
-} catch (e) {
-  if (e instanceof Died) {
-    console.error(`error: ${e.message}`);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const [cmd, ...rest] = process.argv.slice(2);
+  if (!cmd || !cmds[cmd]) {
+    console.error(`usage: orchestrate.mjs <${Object.keys(cmds).join("|")}> [args]`);
     process.exit(1);
   }
-  throw e;
+  const MUTATES = ["claim", "submit", "verify", "block", "unblock", "add", "rule", "amend", "depend"];
+  const args = parseArgs(rest);
+  try {
+    if (MUTATES.includes(cmd)) {
+      // Re-read INSIDE the lock: a copy loaded before waiting is already stale.
+      withLock(() => cmds[cmd](load(), args));
+    } else {
+      cmds[cmd](load(), args);
+    }
+  } catch (e) {
+    if (e instanceof Died) {
+      console.error(`error: ${e.message}`);
+      process.exit(1);
+    }
+    throw e;
+  }
 }
+
+export { validateEvidenceCitation, cmds };

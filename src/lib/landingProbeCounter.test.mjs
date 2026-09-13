@@ -69,8 +69,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { transform } from "sucrase";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const LANDING_DIR = "src/components/landing";
@@ -228,8 +232,16 @@ const SELF_INCREMENT =
  *
  * What it does NOT catch, stated rather than implied: `x === undefined ? 0 : x`
  * and `Number(x) || 0` spelled across two statements are the same lie in
- * different words and pass this rule. Ternary-to-zero is deliberately excluded
- * because src/app/page.js uses one as a guarded derivation, not as a fallback.
+ * different words and pass this rule.
+ *
+ * R2.7.11 NOTE ON TERNARY-TO-ZERO:
+ * Ternary-to-zero cannot be caught blindly by regex without accusing legitimate
+ * UI styling and geometry across React components (e.g. `style={{ margin: active ? 0 : 8 }}`,
+ * `delay: i === 0 ? 0 : 100`, SVG offsets, and array bounds).
+ * R2.7.11 removed the ternary-to-zero from src/app/page.js:125-127 so an absent
+ * engine reading passes absent (`undefined`) rather than 0. The mechanical invariant
+ * is enforced below by driving the page-level builder with an empty engine set and
+ * proving no digit or fabricated measured zero ("none asked") reaches EngineRail.
  */
 const ZERO_FALLBACK = /(?:\?\?|\|\|)=?\s*-?0(?:\.0+)?(?![\d.])/;
 
@@ -638,4 +650,122 @@ test("GUARD — the landing page renders no counter component, and the simulated
   // raw file: page.js documents the deleted strip by name, and a page that
   // explains why a claim is gone must not be read as making it.
   assert.doesNotMatch(code, /Probes run/i);
+});
+
+async function loadJsx(filePath, requireShim = () => ({})) {
+  const source = await readFile(filePath, "utf8");
+  const { code } = transform(source, {
+    transforms: ["jsx", "imports"],
+    jsxPragma: "React.createElement",
+    jsxFragmentPragma: "React.Fragment",
+    filePath,
+  });
+  const module = { exports: {} };
+  // eslint-disable-next-line no-new-func
+  const factory = new Function("require", "module", "exports", "React", code);
+  factory(requireShim, module, module.exports, React);
+  return module.exports;
+}
+
+test("R2.7.11 ACCEPT — driving the page-level builder with no engines passes absent and renders not-measured, never a digit or fabricated zero", async () => {
+  const pageSource = await readFile(path.join(REPO, PAGE), "utf8");
+  // 1. Static AST/code check: ensure page.js no longer has ternary-to-zero or zero-coalesce for PER_ENGINE_ASKED
+  assert.doesNotMatch(
+    pageSource,
+    /PER_ENGINE_ASKED\s*=\s*[^;]*\?\s*[^;]*:\s*0\b/,
+    "src/app/page.js must not define PER_ENGINE_ASKED via ternary falling back to 0"
+  );
+  assert.doesNotMatch(
+    pageSource,
+    /PER_ENGINE_ASKED\s*=[^;]*(?:\?\?|\|\|)\s*0\b/,
+    "src/app/page.js must not define PER_ENGINE_ASKED via ?? 0 or || 0"
+  );
+
+  // 2. Load page.js module exports
+  const anyNamedExport = new Proxy(
+    { __esModule: true },
+    {
+      get(target, prop) {
+        if (prop in target) return target[prop];
+        return () => null;
+      },
+    }
+  );
+
+  const pageModule = await loadJsx(path.join(REPO, PAGE), (specifier) => {
+    if (specifier === "@/lib/scoring/promptSetSize") return { DEFAULT_UNBRANDED_TARGET: 30 };
+    if (specifier === "@/lib/engines/deployedEngines") {
+      return {
+        ENGINE_LABELS: { aio: "Google AI Overview", chatgpt: "ChatGPT", perplexity: "Perplexity" },
+        deployedEngineLabels: () => ["Google AI Overview"],
+        deployedEngines: () => ["aio"],
+        primaryDeployedEngineLabel: () => "Google AI Overview",
+        formatEngineList: (l) => l.join(", "),
+      };
+    }
+    if (specifier === "@/data/mockData") {
+      return {
+        SAMPLE_DESTINATIONS: [],
+        SAMPLE_RESULT: { engines: { aio: { answered: 30, visible: 15 } } },
+      };
+    }
+    return anyNamedExport;
+  });
+
+  const { computePerEngineAsked } = pageModule;
+  assert.equal(typeof computePerEngineAsked, "function", "page.js must export computePerEngineAsked");
+
+  // Driving with empty engines returns undefined (absent), NEVER 0
+  const emptyEngines = [];
+  const asked = computePerEngineAsked(emptyEngines);
+  assert.strictEqual(asked, undefined, "computePerEngineAsked([]) must be undefined, never 0");
+
+  // 3. Load EngineRail
+  const railModule = await loadJsx(path.join(REPO, LANDING_DIR, "EngineRail.jsx"), (specifier) => {
+    if (specifier === "@/components/landing/Reveal") {
+      return { Reveal: ({ children, className }) => React.createElement("div", { className }, children) };
+    }
+    if (specifier === "@/components/charts/Gauge") {
+      return { Gauge: () => null };
+    }
+    return () => null;
+  });
+  const { EngineRail, describeRailTotal } = railModule;
+
+  // describeRailTotal unit check
+  const described = describeRailTotal({ total: asked, engines: emptyEngines });
+  assert.equal(described.measured, false, "empty engines must result in measured: false");
+  assert.equal(described.value, "—", "empty engines must result in value: —");
+  assert.equal(described.state, "not measured", "empty engines must report not measured state");
+
+  // 4. Render EngineRail with the page-level builder output
+  const html = renderToStaticMarkup(
+    React.createElement(EngineRail, { engines: emptyEngines, notes: [], total: asked })
+  );
+
+  assert.ok(
+    html.includes('data-rail-total-state="not measured"'),
+    "EngineRail must report data-rail-total-state=\"not measured\""
+  );
+  assert.ok(html.includes("not measured"), "EngineRail must render 'not measured' tag");
+  assert.ok(html.includes("—"), "EngineRail must render em dash for absent total");
+  assert.ok(!html.includes("none asked"), "EngineRail must NOT render 'none asked' (which implies measured zero)");
+
+  // Assert no digit reached the question tally
+  const tallyMatch = html.match(/class="num"[^>]*>([^<]*)<\/span>/);
+  assert.ok(tallyMatch, "rendered rail must contain a num element");
+  assert.equal(tallyMatch[1].trim(), "—", "num element must contain em-dash, not a digit");
+  assert.doesNotMatch(tallyMatch[1], /\d/, "num element must not contain any digit");
+
+  // 5. TEETH / SABOTAGE PROOF:
+  // If a fabricated 0 WERE passed (the bug R2.7.11 fixes), EngineRail WOULD render a digit 0 and 'none asked'
+  const fabricatedHtml = renderToStaticMarkup(
+    React.createElement(EngineRail, { engines: emptyEngines, notes: [], total: 0 })
+  );
+  assert.ok(
+    fabricatedHtml.includes('data-rail-total-state="none asked"'),
+    "teeth: passing 0 triggers the bug by manufacturing 'none asked'"
+  );
+  const fabricatedTally = fabricatedHtml.match(/class="num"[^>]*>([^<]*)<\/span>/);
+  assert.equal(fabricatedTally[1].trim(), "0", "teeth: passing 0 puts digit 0 on the rail");
 });

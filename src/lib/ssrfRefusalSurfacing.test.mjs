@@ -53,6 +53,55 @@ function knowledgePost(body) {
   );
 }
 
+function assertCorpusIntact(rows, name, { floor, required = [], rowLength = null, isTuple = true }) {
+  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
+  assert.ok(
+    rows.length >= floor,
+    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a security ` +
+      `corpus whose tests iterate over it, so assertions silently stopped running. If the removal ` +
+      `was deliberate, lower the floor here in the same commit and state why.`
+  );
+  if (isTuple) {
+    rows.forEach((row, i) => {
+      assert.ok(
+        Array.isArray(row) &&
+          (rowLength === null ? row.length >= 2 : row.length === rowLength) &&
+          typeof row[0] === "string",
+        `${name}[${i}] is not a valid tuple entry with expected shape (rowLength=${rowLength ?? ">=2"}): ${JSON.stringify(row)}`
+      );
+      const reason = row[row.length - 1];
+      assert.ok(
+        typeof reason === "string" && reason.trim().length > 0,
+        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
+          `the next editor deletes, and the floor above would then be met by padding`
+      );
+    });
+  } else {
+    rows.forEach((item, i) => {
+      assert.ok(
+        typeof item === "string",
+        `${name}[${i}] is not a string: ${JSON.stringify(item)}`
+      );
+    });
+  }
+  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r));
+  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
+  assert.deepEqual(
+    dupes,
+    [],
+    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
+      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
+  );
+  const missing = required.filter((t) => !targets.includes(t));
+  assert.deepEqual(
+    missing,
+    [],
+    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing security ` +
+      `targets: losing one makes an SSRF bypass silent again. Removing one is a decision to stop ` +
+      `defending that target -- make it in the same commit as this list.`
+  );
+}
+
 /**
  * Literal targets only: assertPublicUrl settles an IP literal before it ever
  * reaches the resolver, so this suite issues no DNS query and opens no socket.
@@ -65,6 +114,55 @@ const REFUSED_KNOWLEDGE_URLS = [
   ["http://10.0.0.1/internal", "RFC1918"],
   ["http://100.64.0.1/", "carrier-grade NAT"],
 ];
+
+const REFUSED_SCHEMES = [
+  "gopher://127.0.0.1:6379/_INFO",
+  "file:///etc/passwd",
+  "ftp://127.0.0.1/",
+  "data:text/html,<h1>x</h1>",
+  "httpx://example.com/",
+];
+
+test("GUARD TEETH — assertCorpusIntact enforces length floor, shape, uniqueness, and required targets", () => {
+  assert.throws(
+    () => assertCorpusIntact([], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /under its floor of 1/
+  );
+  assert.throws(
+    () => assertCorpusIntact(["a", "a"], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /repeats/
+  );
+  assert.throws(
+    () => assertCorpusIntact(["a"], "TEST_CORPUS", { floor: 1, required: ["b"], isTuple: false }),
+    /no longer contains/
+  );
+  assert.throws(
+    () => assertCorpusIntact([["a", ""]], "TEST_CORPUS", { floor: 1, isTuple: true, rowLength: 2 }),
+    /carries no reason/
+  );
+});
+
+test("GUARD — REFUSED_KNOWLEDGE_URLS and REFUSED_SCHEMES security corpora are intact", () => {
+  assertCorpusIntact(REFUSED_KNOWLEDGE_URLS, "REFUSED_KNOWLEDGE_URLS", {
+    floor: 6,
+    required: [
+      "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+      "http://127.0.0.1:5432/",
+      "http://[::1]/",
+    ],
+    rowLength: 2,
+    isTuple: true,
+  });
+  assertCorpusIntact(REFUSED_SCHEMES, "REFUSED_SCHEMES", {
+    floor: 5,
+    required: [
+      "gopher://127.0.0.1:6379/_INFO",
+      "file:///etc/passwd",
+      "data:text/html,<h1>x</h1>",
+    ],
+    isTuple: false,
+  });
+});
 
 for (const [url, why] of REFUSED_KNOWLEDGE_URLS) {
   test(`knowledge POST answers 400, not 500, for ${why}`, async () => {
@@ -86,14 +184,6 @@ test("the knowledge refusal body is not a DNS oracle", async () => {
   // Nothing about resolution, the target, or which range it fell in.
   assert.doesNotMatch(detail, /169\.254|resolv|loopback|link.?local|private|metadata|127\.0\.0/i);
 });
-
-const REFUSED_SCHEMES = [
-  "gopher://127.0.0.1:6379/_INFO",
-  "file:///etc/passwd",
-  "ftp://127.0.0.1/",
-  "data:text/html,<h1>x</h1>",
-  "httpx://example.com/",
-];
 
 for (const source_url of REFUSED_SCHEMES) {
   test(`knowledge POST answers 400 for the scheme in ${source_url}`, async () => {

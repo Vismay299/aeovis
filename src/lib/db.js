@@ -670,7 +670,9 @@ global.memoryJobs = global.memoryJobs || new Map();
  * exactly as `hasDb = !!supabase`.
  */
 function resolveClient(deps) {
-  return deps && Object.prototype.hasOwnProperty.call(deps, "client") ? deps.client : supabase;
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "client")) return deps.client;
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "supabase")) return deps.supabase;
+  return supabase;
 }
 
 /** Worker-active statuses — a job in one of these is still running. */
@@ -906,29 +908,28 @@ export async function claimJobStatus(jobId, fromStatus, toStatus, deps = {}) {
 // Global memory store for content events (Next.js hot-reload safe)
 global.memoryContentEvents = global.memoryContentEvents || new Map();
 
-export async function getContentEvents(brand) {
-  if (!supabase) {
-    const list = Array.from(global.memoryContentEvents.values());
+export async function getContentEvents(brand, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentEvents;
+
+  if (!client) {
+    const list = Array.from(memory.values());
     return list.filter(item => item.brand.toLowerCase() === brand.toLowerCase());
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("content_events")
-      .select("*")
-      .eq("brand", brand)
-      .order("publish_date", { ascending: false });
+  const { data, error } = await client
+    .from("content_events")
+    .select("*")
+    .eq("brand", brand)
+    .order("publish_date", { ascending: false });
 
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.warn("Failed to fetch content_events from database, checking memory:", err.message);
-    const list = Array.from(global.memoryContentEvents.values());
-    return list.filter(item => item.brand.toLowerCase() === brand.toLowerCase());
-  }
+  if (error) throw error;
+  return data || [];
 }
 
-export async function insertContentEvent({ brand, url, publishDate }) {
+export async function insertContentEvent({ brand, url, publishDate }, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentEvents;
   const id = crypto.randomUUID();
   const event = {
     id,
@@ -938,22 +939,16 @@ export async function insertContentEvent({ brand, url, publishDate }) {
     created_at: new Date().toISOString()
   };
 
-  if (!supabase) {
-    global.memoryContentEvents.set(id, event);
+  if (!client) {
+    memory.set(id, event);
     return event;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("content_events")
-      .insert([event])
-      .select();
+  const { data, error } = await client
+    .from("content_events")
+    .insert([event])
+    .select();
 
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("Failed to insert content_event to database, falling back to memory:", err.message);
-    global.memoryContentEvents.set(id, event);
-    return event;
-  }
+  if (error) throw error;
+  return data[0];
 }

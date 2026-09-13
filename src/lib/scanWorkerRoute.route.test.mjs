@@ -140,6 +140,8 @@ test("ROUTE — a garbage job_id is NOT reported as processed", async () => {
   assert.equal(body.reason, "not_found", "the reason the chunk gave must survive to the wire");
   assert.equal(body.job_id, jobId);
   assert.equal(body.mode, "direct-resume");
+  // R3.1.4 — in-memory mode writes no scan_runs row; the response says so.
+  assert.equal(body.ledger_written, false, "no Supabase means no ledger row was written");
 
   // 200, deliberately: a job that is not there is a legitimate no-work
   // outcome, and paging an operator for one would be its own false alarm.
@@ -171,6 +173,8 @@ test("ROUTE — a chunk that could not read the job is reported as FAILED, with 
     assert.equal(body.failed, 1);
     assert.equal(body.skipped, 0);
     assert.equal(body.reason, "read_failed");
+    // R3.1.4 — in-memory mode writes no scan_runs row; the response says so.
+    assert.equal(body.ledger_written, false, "no Supabase means no ledger row was written");
     assert.equal(
       response.status,
       500,
@@ -239,6 +243,9 @@ test("ROUTE — the no-job_id path reports dispatch, never 'processed'", async (
   assert.equal(response.status, 200, "an idle cron tick is not a failure");
   assert.equal(body.mode, "no-db");
   assert.equal(body.dispatched, 0);
+  // R3.1.4 — `ledger_written: false` says plainly that no scan_runs row was
+  // recorded, so an empty ledger can never be mistaken for an idle system.
+  assert.equal(body.ledger_written, false, "no Supabase means no ledger row");
   assert.equal(
     body.processed,
     undefined,

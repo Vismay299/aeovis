@@ -28,6 +28,7 @@ import {
   listDueSchedules,
   getScanSchedule,
   upsertScanSchedule,
+  insertScanScheduleIfNotExists,
 } from "../db/analytics.js";
 import { generateUnbrandedPrompts, SEED_STATE } from "../scoring/promptGen.js";
 // R3.7.2 — the vocabulary the scrape state is written in. Imported rather than
@@ -1135,6 +1136,15 @@ export const SCHEDULE_ROW_STATES = Object.freeze({
  * schedule for had no row at all, `listDueSchedules` could never return it, and
  * it could never be rescanned. This is the registration.
  *
+ * R3.4.5 — ATOMIC SINGLE WRITE. The original implementation used a
+ * get-then-upsert pattern: `getScanSchedule` returned null, then
+ * `upsertScanSchedule` wrote the row. Between the two calls an operator could
+ * PUT `enabled: true` on the brand, and the upsert would clobber it back to
+ * `enabled: false` with `next_run_at` null. The fix: a single
+ * `INSERT ... ON CONFLICT DO NOTHING` (`insertScanScheduleIfNotExists`), which
+ * makes the decision to insert-or-skip atomically in the database. There is no
+ * window for a concurrent edit to be lost.
+ *
  * OPT-IN, NOT OPT-OUT. `enabled` is written EXPLICITLY false. The DB column
  * default is `true` (supabase/migrations/005_analytics_platform.sql:88) but the
  * PRODUCT default is false — see the GET fallback in
@@ -1165,8 +1175,7 @@ export const SCHEDULE_ROW_STATES = Object.freeze({
  * @returns {Promise<string>} one of SCHEDULE_ROW_STATES.
  */
 export async function ensureScanScheduleRow(promptKey, displayName, deps = {}, tally = {}, nowIso = new Date().toISOString()) {
-  const getSchedule = deps.getScanSchedule || getScanSchedule;
-  const upsertSchedule = deps.upsertScanSchedule || upsertScanSchedule;
+  const insertIfNotExists = deps.insertScanScheduleIfNotExists || insertScanScheduleIfNotExists;
 
   if (!promptKey) {
     bumpCount(tally, "errorsRecovered");
@@ -1176,10 +1185,12 @@ export async function ensureScanScheduleRow(promptKey, displayName, deps = {}, t
   }
 
   try {
-    const existing = await getSchedule(promptKey);
-    if (existing) return SCHEDULE_ROW_STATES.EXISTING;
-
-    await upsertSchedule(promptKey, {
+    // R3.4.5 — Single atomic write. `insertScanScheduleIfNotExists` issues
+    // INSERT ... ON CONFLICT DO NOTHING: the database decides insert-vs-skip
+    // in one statement with no window for a concurrent operator edit to be
+    // clobbered. Returns the inserted row (CREATED) or null (EXISTING).
+    const inserted = await insertIfNotExists({
+      brand: promptKey,
       display_name: displayName || promptKey,
       // Explicit. See the opt-in note above; this must not fall through to the
       // column default.
@@ -1189,10 +1200,14 @@ export async function ensureScanScheduleRow(promptKey, displayName, deps = {}, t
       next_run_at: null,
       last_run_at: nowIso,
     });
-    console.log(
-      `[scan-chunk] Registered scan_schedules row for "${promptKey}" (enabled: false — scheduling is opt-in).`
-    );
-    return SCHEDULE_ROW_STATES.CREATED;
+
+    if (inserted) {
+      console.log(
+        `[scan-chunk] Registered scan_schedules row for "${promptKey}" (enabled: false — scheduling is opt-in).`
+      );
+      return SCHEDULE_ROW_STATES.CREATED;
+    }
+    return SCHEDULE_ROW_STATES.EXISTING;
   } catch (err) {
     bumpCount(tally, "errorsRecovered");
     recordSkip(tally, CHUNK_SKIP_REASONS.SCHEDULE_ENSURE_FAILED, `${promptKey}: ${err.message}`);
@@ -1867,23 +1882,37 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   // call exists purely to keep the job looking alive.
   await updateJob(jobId, {});
 
-  // R0.3.3 — roster continuity. extractCompetitorsFn reaches the LLM; since
-  // R0.3.1 an unreachable LLM THROWS LlmUnavailableError rather than
-  // returning an empty answer. resolveCompetitorRoster turns that throw into
-  // a labelled state (carried_forward / unavailable) and lets every other
-  // error propagate, so finalize still dies on a real fault.
+  // R0.3.3 & R2.3.3 — roster continuity and provenance.
+  // extractCompetitorsFn reaches the LLM; since R0.3.1 an unreachable LLM
+  // THROWS LlmUnavailableError rather than returning an empty answer.
+  // resolveCompetitorRoster turns that throw into a labelled state
+  // (carried_forward / unavailable / configured) and records provenance.
+  const userCompetitorList = (typeof competitorsRaw === "string" ? competitorsRaw : "")
+    .split(/[\n,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const combinedUserCompetitors = Array.from(
+    new Set([
+      ...(Array.isArray(competitors)
+        ? competitors.map((c) => (typeof c === "string" ? c.trim() : c?.name?.trim()))
+        : []),
+      ...userCompetitorList,
+    ].filter(Boolean))
+  );
+
   const {
     competitors: competitorObjects,
     roster_source: rosterSource,
     extraction_offline: rosterExtractionOffline,
     extraction_error: rosterExtractionError,
   } = await resolveCompetitorRoster({
+    userCompetitors: combinedUserCompetitors,
     extract: () =>
       extractCompetitorsFn({
         results: normalizedForCompetitors,
         brand,
         brandUrl: url,
-        userCompetitors: competitors,
+        userCompetitors: combinedUserCompetitors,
         stats,
         max: 10,
       }),
@@ -1909,6 +1938,10 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
         (row) => row?.id && row.id !== alreadyStamped?.scan_id
       );
       if (!previous) return [];
+      // R2.3.3: Prefer the non-null competitors column persisted on previous scan
+      if (Array.isArray(previous.competitors) && previous.competitors.length > 0) {
+        return previous.competitors;
+      }
       return getResultBrandsForScanFn(previous.id);
     },
   });
@@ -2134,8 +2167,17 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
       // (scanWorker.js:375-388 in the run-to-completion version) swallowed
       // this; here it propagates to runScanChunk's outer catch, which marks
       // the job failed with this message.
+      //
+      // R2.8.10 — the write-error code is preserved in the message so an
+      // operator reading scan_jobs.error_message can branch on it: the
+      // bracketed code prefix is machine-parseable and distinguishes
+      // db_not_configured (fix the environment) from db_write_failed (the
+      // database rejected the row) from db_write_unconfirmed (a scans row
+      // MAY ALREADY EXIST — look before re-running). Without the code the
+      // three outcomes were flattened into prose and indistinguishable on the
+      // job row.
       throw new Error(
-        `Failed to save scan results: ${insertErr ? insertErr.message || String(insertErr) : "insertScan did not return a saved record id."}`
+        `[${insertErr?.code || "scan_write_failed"}] Failed to save scan results: ${insertErr ? insertErr.message || String(insertErr) : "insertScan did not return a saved record id."}`
       );
     }
   }

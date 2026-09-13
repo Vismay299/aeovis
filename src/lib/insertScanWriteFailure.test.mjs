@@ -290,3 +290,163 @@ test("runFinalizePhase — a real insertScan refusal propagates; the job is neve
     "and must never be stamped with a result_id"
   );
 });
+
+// ---------------------------------------------------------------------------
+// 4. R2.8.10 — the write-error code must survive to the job row.  The three
+//    codes db_not_configured / db_write_failed / db_write_unconfirmed each
+//    demand a different operator response, so they must be distinguishable on
+//    scan_jobs.error_message without parsing prose.
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal deps + checkpoint that reach insertScan without touching any real
+ * I/O.  The checkpoint is just enough for runFinalizePhase to build a
+ * scanRecord; every dependency beyond insertScan is a no-op stub.
+ */
+function finalizeDepsAndCheckpoint(jobId, insertScanFn) {
+  const queries = [
+    { text: "q0", source: "llm_generated", topic: "General", intent_tier: "informational" },
+  ];
+  const promptRows = queries.map((q, i) => ({
+    id: `pr-${i}`,
+    job_id: jobId,
+    engine: "aio",
+    query: q.text,
+    scan_id: null,
+    created_at: new Date(Date.UTC(2026, 8, 1, 12, i)).toISOString(),
+    raw: {
+      engine: "aio",
+      prompt: q.text,
+      topic: "General",
+      intent_tier: "informational",
+      answer_present: true,
+      aio_present: true,
+      text: `Answer about ${q.text}`,
+      citations: [],
+      references: [],
+      brand_mentioned_in_text: true,
+      brand_cited: false,
+      visible: true,
+      competitors_found_in_text: [],
+      competitors_cited: [],
+      brands: [],
+      error: null,
+      cost: 0.001,
+    },
+  }));
+
+  const jobUpdates = [];
+  const checkpoint = {
+    brand: "Acme",
+    url: "acme.com",
+    industry: "saas",
+    competitors: [],
+    competitors_raw: "",
+    prompt_key: "acme.com",
+    queries,
+    unbranded_texts: queries.map((q) => q.text),
+    engines: ["aio"],
+    stats: { cost: 0, tokens: 0 },
+    sourced_at: new Date().toISOString(),
+  };
+
+  const deps = {
+    getPromptResultsForJob: async () => promptRows,
+    claimJobStatus: async (jid, from, to) => ({ id: jid, status: to }),
+    updateScanJob: async (jid, updates) => {
+      jobUpdates.push(updates);
+      return { id: jid, ...updates };
+    },
+    insertScan: insertScanFn,
+    stampScanIdForJob: async () => assert.fail("must not stamp on a failed write"),
+    deleteCitationsForJob: async () => 0,
+    insertCitations: async () => [],
+    deleteResultBrandsForJob: async () => 0,
+    insertResultBrands: async () => [],
+    upsertBrandMetricsDaily: async () => [],
+    resolveEnabledEngines: () => [{ name: "aio" }],
+    extractCompetitors: async () => [],
+    getScansByDomain: async () => [],
+    getResultBrandsForScan: async () => [],
+    enrichCitations: async (rows) => rows,
+    judgeBrandsSymmetric: async () => [],
+  };
+
+  return { checkpoint, deps, jobUpdates };
+}
+
+test("R2.8.10 — each write-error code survives to error_message and the three are distinguishable", async () => {
+  const { runFinalizePhase } = await import("./workers/scanWorker.js");
+
+  // Three distinct insertScan stubs, one per code.
+  const scenarios = [
+    {
+      label: "db_not_configured",
+      insertScan: () => {
+        throw new ScanWriteError(
+          "Supabase is not configured — the scan could not be saved. Nothing was written; this is a refusal, not an empty result.",
+          { code: "db_not_configured" }
+        );
+      },
+    },
+    {
+      label: "db_write_failed",
+      insertScan: () => {
+        throw new ScanWriteError(
+          'Could not write the scan for "Acme": the database rejected the row.',
+          { code: "db_write_failed" }
+        );
+      },
+    },
+    {
+      label: "db_write_unconfirmed",
+      insertScan: () => {
+        throw new ScanWriteError(
+          'The scan for "Acme" was sent to the database but came back without the inserted row.',
+          { code: "db_write_unconfirmed" }
+        );
+      },
+    },
+  ];
+
+  const messages = [];
+
+  for (const { label, insertScan: insertScanFn } of scenarios) {
+    const jobId = `job-r2810-${label}`;
+    const { checkpoint, deps } = finalizeDepsAndCheckpoint(jobId, insertScanFn);
+
+    let failure = null;
+    try {
+      await runFinalizePhase(jobId, checkpoint, deps);
+    } catch (err) {
+      failure = err;
+    }
+
+    assert.ok(failure, `[${label}] runFinalizePhase must throw on a failed insertScan`);
+    assert.match(
+      failure.message,
+      /\[.+\] Failed to save scan results/,
+      `[${label}] the error message must carry the bracketed code prefix`
+    );
+    assert.match(
+      failure.message,
+      new RegExp(`\\[${label}\\]`),
+      `[${label}] the bracketed code must be "${label}", got: ${failure.message}`
+    );
+
+    // This is the message that would land on scan_jobs.error_message via
+    // runScanChunk's catch block (scanWorker.js:2565).  Collect it to assert
+    // the three codes are distinguishable without parsing prose.
+    messages.push(failure.message);
+  }
+
+  // All three messages must be unique — an operator must not need to parse
+  // the prose body to tell which failure they are looking at.
+  const unique = new Set(messages);
+  assert.equal(
+    unique.size,
+    3,
+    `all three write-error codes must produce distinguishable error_messages; ` +
+      `got ${unique.size} unique from ${messages.length}: ${[...unique].join(" | ")}`
+  );
+});

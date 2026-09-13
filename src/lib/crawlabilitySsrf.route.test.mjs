@@ -29,6 +29,74 @@ import { classifyAddress } from "./ssrfGuard.js";
 
 register("./cronAuth.route.hooks.mjs", import.meta.url);
 
+function assertCorpusIntact(rows, name, { floor, required = [], rowLength = null, isTuple = true }) {
+  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
+  assert.ok(
+    rows.length >= floor,
+    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a security ` +
+      `corpus whose tests iterate over it, so assertions silently stopped running. If the removal ` +
+      `was deliberate, lower the floor here in the same commit and state why.`
+  );
+  if (isTuple) {
+    rows.forEach((row, i) => {
+      assert.ok(
+        Array.isArray(row) &&
+          (rowLength === null ? row.length >= 2 : row.length === rowLength) &&
+          typeof row[0] === "string",
+        `${name}[${i}] is not a valid tuple entry with expected shape (rowLength=${rowLength ?? ">=2"}): ${JSON.stringify(row)}`
+      );
+      const reason = row[row.length - 1];
+      assert.ok(
+        typeof reason === "string" && reason.trim().length > 0,
+        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
+          `the next editor deletes, and the floor above would then be met by padding`
+      );
+    });
+  } else {
+    rows.forEach((item, i) => {
+      assert.ok(
+        typeof item === "string",
+        `${name}[${i}] is not a string: ${JSON.stringify(item)}`
+      );
+    });
+  }
+  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r));
+  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
+  assert.deepEqual(
+    dupes,
+    [],
+    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
+      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
+  );
+  const missing = required.filter((t) => !targets.includes(t));
+  assert.deepEqual(
+    missing,
+    [],
+    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing security ` +
+      `targets: losing one makes an SSRF bypass silent again. Removing one is a decision to stop ` +
+      `defending that target -- make it in the same commit as this list.`
+  );
+}
+
+test("GUARD TEETH — assertCorpusIntact enforces length floor, shape, uniqueness, and required targets", () => {
+  assert.throws(
+    () => assertCorpusIntact([], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /under its floor of 1/
+  );
+  assert.throws(
+    () => assertCorpusIntact(["a", "a"], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /repeats/
+  );
+  assert.throws(
+    () => assertCorpusIntact(["a"], "TEST_CORPUS", { floor: 1, required: ["b"], isTuple: false }),
+    /no longer contains/
+  );
+  assert.throws(
+    () => assertCorpusIntact([["a", ""]], "TEST_CORPUS", { floor: 1, isTuple: true, rowLength: 2 }),
+    /carries no reason/
+  );
+});
+
 let importError = null;
 let GET = null;
 try {
@@ -313,6 +381,20 @@ const PUBLIC_BOUNDARY_HOSTS = [
   ["2002:0808:0808::", "6to4 wrapping a public address"],
 ];
 
+test("GUARD — PUBLIC_BOUNDARY_HOSTS security corpus is intact", () => {
+  assertCorpusIntact(PUBLIC_BOUNDARY_HOSTS, "PUBLIC_BOUNDARY_HOSTS", {
+    floor: 20,
+    required: [
+      "8.8.8.8",
+      "169.253.255.255",
+      "169.255.0.1",
+      "2606:4700:4700::1111",
+    ],
+    rowLength: 2,
+    isTuple: true,
+  });
+});
+
 for (const [host, why] of PUBLIC_BOUNDARY_HOSTS) {
   const brand = host.includes(":") ? `[${host}]` : host;
   test(`public ${host} (${why}) is still audited, not refused`, async () => {
@@ -457,6 +539,20 @@ const REFUSED_SHAPES = [
   ["http://example.com", "a scheme the brand key must not carry"],
   ["exam ple.com", "whitespace"],
 ];
+
+test("GUARD — REFUSED_SHAPES security corpus is intact", () => {
+  assertCorpusIntact(REFUSED_SHAPES, "REFUSED_SHAPES", {
+    floor: 9,
+    required: [
+      "localhost",
+      "metadata",
+      "[::1]",
+      "0x7f000001",
+    ],
+    rowLength: 2,
+    isTuple: true,
+  });
+});
 
 for (const [brand, why] of REFUSED_SHAPES) {
   test(`brand ${JSON.stringify(brand)} (${why}) is refused with 400 and never fetched`, async () => {

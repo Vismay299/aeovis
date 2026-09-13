@@ -238,15 +238,21 @@ async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, 
   result.citations_state_reason = probeResult.citations_state_reason ?? null;
   result.citations_state_detail = probeResult.citations_state_detail ?? null;
 
-  if (probeResult.error) {
-    result.error = probeResult.error;
-    result.cost = probeResult.cost || 0;
-    console.warn(`[${engineName}] Query failed: "${query.text}" — ${probeResult.error}`);
-    return result;
-  }
-
+  // R2.2.9 — the citation LIST is copied here for the same reason its STATE is.
+  //
+  // Carrying `citations_state: "verified"` past the error branch while leaving
+  // `citations: []` behind is the worst of the three outcomes: the row claims
+  // the citation leg was observed AND that it found nothing, so the citation
+  // denominator counts it as a confirmed "the brand was not cited here". On
+  // Perplexity the two legs are two calls — a 500 on /chat/completions says
+  // nothing about the /search results already in hand.
+  //
+  // The derived flags come with it. brand_cited/competitors_cited are functions
+  // of `references` alone, so deriving them anywhere else would mean shipping
+  // measured references next to flags that pretend they were never read.
+  // `visible` is recomputed once below, after the answer text is scanned for
+  // mentions — the text half of that OR does not exist on this path.
   result.cost = probeResult.cost || 0;
-  result.text = probeResult.text || "";
   result.citations = probeResult.citations || [];
   result.references = (probeResult.references || []).map((r) => ({
     href: r.href,
@@ -254,6 +260,22 @@ async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, 
     source: r.source || "",
     domain: extractBrandDomain(r.href),
   }));
+
+  if (brandDomain) {
+    result.brand_cited = result.references.some(
+      (ref) => domainMatches(ref.domain || extractBrandDomain(ref.href), brandDomain)
+    );
+  }
+  result.competitors_cited = findCompetitorsCited(result.references, competitors);
+  result.visible = result.brand_mentioned_in_text || result.brand_cited;
+
+  if (probeResult.error) {
+    result.error = probeResult.error;
+    console.warn(`[${engineName}] Query failed: "${query.text}" — ${probeResult.error}`);
+    return result;
+  }
+
+  result.text = probeResult.text || "";
 
   // R2.2.1 — answer_present is decided AFTER the text check, never before it.
   //
@@ -289,14 +311,11 @@ async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, 
     result.brands = judgeBrandsSymmetric(result.text, buildTrackedBrandRoster(brand, brandAliases, competitors));
   }
 
-  if (brandDomain) {
-    result.brand_cited = result.references.some(
-      (ref) => domainMatches(ref.domain || extractBrandDomain(ref.href), brandDomain)
-    );
-  }
-
+  // brand_cited and competitors_cited were derived above, off these same
+  // references, before the error branch — not repeated here. Only `visible`
+  // needs the second pass: its other half, brand_mentioned_in_text, is not
+  // known until the answer text exists and has been scanned.
   result.visible = result.brand_mentioned_in_text || result.brand_cited;
-  result.competitors_cited = findCompetitorsCited(result.references, competitors);
 
   return result;
 }
@@ -1314,6 +1333,25 @@ export function describeEngineSetChange({
 }
 
 /**
+ * R2.7.16 — a metric the record never carried must not read as a measured zero.
+ *
+ * `Number(null)` is `0` and `Number.isFinite(0)` is `true`, so the bare
+ * coercion this replaced turned a NULL error rate into a confident `0%` on the
+ * degraded-engine banner — the one surface whose entire job is to say the
+ * reading is incomplete. The renderer downstream cannot undo that: by the time
+ * it sees `0` a fabricated zero and a genuinely measured zero are the same
+ * value. Null has to survive this function.
+ *
+ * Returns the finite number, or null for null/undefined/""/non-numeric input.
+ * A real `0` still returns `0`.
+ */
+function measuredNumberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
  * Restates one degraded slice in the numbers that condemned it, read from the
  * same engineHealthThresholds the gate used so the banner cannot quote an aio
  * threshold at a text engine.
@@ -1326,15 +1364,15 @@ export function describeEngineSetChange({
 function describeDegradedSlice(slice) {
   const gates = engineHealthThresholds(slice.engine);
   const minCoveragePct = Math.round(gates.minNonBrandedCoverage * 1000) / 10;
-  const nonBranded = Number(slice.non_branded_queries);
-  const answered = Number(slice.non_branded_with_answer);
-  const errorRatePct = Number(slice.error_rate_pct);
+  const nonBranded = measuredNumberOrNull(slice.non_branded_queries);
+  const answered = measuredNumberOrNull(slice.non_branded_with_answer);
+  const errorRatePct = measuredNumberOrNull(slice.error_rate_pct);
 
   const reasons = [];
   if (
-    Number.isFinite(nonBranded) &&
+    nonBranded !== null &&
     nonBranded > 0 &&
-    Number.isFinite(answered) &&
+    answered !== null &&
     answered / nonBranded < gates.minNonBrandedCoverage
   ) {
     const coveragePct = Math.round((answered / nonBranded) * 1000) / 10;
@@ -1342,7 +1380,7 @@ function describeDegradedSlice(slice) {
       `answered ${answered} of ${nonBranded} tracked prompts (${coveragePct}%), under the ${minCoveragePct}% this engine needs`
     );
   }
-  if (Number.isFinite(errorRatePct) && errorRatePct > gates.errorRateLimitPct) {
+  if (errorRatePct !== null && errorRatePct > gates.errorRateLimitPct) {
     reasons.push(`errored on ${errorRatePct}% of its prompts, over its ${gates.errorRateLimitPct}% limit`);
   }
 
@@ -1354,7 +1392,7 @@ function describeDegradedSlice(slice) {
         ? reasons.join(" and ")
         : "was flagged as a degraded read, but this record does not carry the coverage and error numbers that would explain why",
     coverage_pct: Number.isFinite(slice.coverage_pct) ? slice.coverage_pct : null,
-    error_rate_pct: Number.isFinite(errorRatePct) ? errorRatePct : null,
+    error_rate_pct: errorRatePct,
     min_coverage_pct: minCoveragePct,
     error_rate_limit_pct: gates.errorRateLimitPct,
   };
@@ -1364,7 +1402,7 @@ const ENGINE_REGISTRY = [
   {
     name: "aio",
     label: "Google AIO",
-    isConfigured: () => true,
+    isConfigured: () => !!process.env.BRIGHTDATA_API_KEY,
     probe: probeAio,
     concurrency: AIO_CONCURRENCY,
   },
@@ -1466,14 +1504,19 @@ export function resolveEnabledEngines(options = {}) {
   }
 
   if (enabled.length === 0) {
-    // Substituting a DIFFERENT engine set than the one that was asked for. The
-    // scan still runs, so nothing downstream fails — which is precisely why this
-    // needs a reason of its own rather than a bare warning. It is the same class
-    // as the checkpoint-level ENGINE_SET_FALLBACK, one layer earlier.
-    console.warn("[engine-pipeline] No engines enabled! Defaulting to aio.");
-    if (onSkip) onSkip(ENGINE_RESOLUTION_SKIPS.SET_DEFAULTED, requested.join(",") || "(empty ENGINES)");
     const aioDef = ENGINE_REGISTRY.find((e) => e.name === "aio");
-    return [aioDef];
+    if (aioDef.isConfigured()) {
+      // Substituting a DIFFERENT engine set than the one that was asked for. The
+      // scan still runs, so nothing downstream fails — which is precisely why this
+      // needs a reason of its own rather than a bare warning. It is the same class
+      // as the checkpoint-level ENGINE_SET_FALLBACK, one layer earlier.
+      console.warn("[engine-pipeline] No engines enabled! Defaulting to aio.");
+      if (onSkip) onSkip(ENGINE_RESOLUTION_SKIPS.SET_DEFAULTED, requested.join(",") || "(empty ENGINES)");
+      return [aioDef];
+    }
+    // Even aio is not configured — no engine can run.
+    console.warn("[engine-pipeline] No engines enabled and aio is not configured — scan will have no engine results.");
+    return [];
   }
 
   return enabled;

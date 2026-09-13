@@ -158,6 +158,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `011_scan_runs` | `scan_runs` — one row per execution, fleet or web worker — and `open_scan_run()` / `heartbeat_scan_run()` / `close_scan_run()`, so a measured-zero pass and a never-ran pass leave different evidence |
 | `012_scan_job_attempts` | `scan_jobs.attempts` and `claim_scan_job_attempt()` — a job resumed three times without finishing becomes terminal with `max_attempts:` in `error_message`, instead of being re-dispatched by the cron sweep forever |
 | `013_brand_metrics_sov_state` | `brand_metrics_daily.sov_state` / `.sov_state_reason` — a stored share of voice now says whether it is a measurement, so a self-only roster records "not assessed" instead of a durable, exportable 100% |
+| `014_content_job_checkpoints` | `content_jobs.checkpoint` (new here — the `checkpoint` in the `005` row above is on `scan_jobs`, a different table) — a content job killed mid-run resumes at the next block instead of re-paying for every LLM call it had already made, so a rescued job's recorded cost is what was actually spent once. **Unlike `012`/`013` it ships no index, so `npm run setup:db` cannot verify it** — see `docs/OPERATOR_LEDGER.md` § C |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

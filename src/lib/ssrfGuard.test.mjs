@@ -26,6 +26,91 @@ const noLookup = async () => {
 };
 const lookupPublic = async () => ["93.184.216.34"];
 
+/* ===========================================================================
+ * R3.7.9 — THE SSRF CORPUS GUARD, because a loop over an empty list asserts nothing.
+ *
+ * SIX security corpora in this file define the perimeter against SSRF:
+ *   - BLOCKED_LITERALS: loopback, link-local / metadata, private, multicast, IPv6, 6to4, NAT64.
+ *   - ALLOWED_LITERALS: legitimate public unicast IPv4 and IPv6 addresses.
+ *   - C12_RANGES: the seven non-public IPv6 ranges from finding C12.
+ *   - C12_STILL_ALLOWED: carve-outs and boundaries that must stay globally reachable.
+ *   - BLOCKED_SCHEMES: dangerous non-http(s) schemes (file, gopher, data, ftp, etc.).
+ *   - MALFORMED: boundary-violating inputs that must fail closed with policy error.
+ *
+ * THE VACUOUS CORPUS DEFECT:
+ * Iterating an empty array silently registers 0 tests or passes with 0 assertions.
+ * If BLOCKED_LITERALS is emptied, all 68 individual tests disappear and the end-to-end
+ * test completes with 0 assertions — leaving the suite 100% green while completely
+ * disarming protection against AWS/GCP metadata theft and local service exploitation.
+ *
+ * FOUR INDEPENDENT CLAIMS (mirroring brightdataZone.test.mjs R1.2.16):
+ *   1. FLOOR: rows.length >= committed floor. Catches accidental deletion and shrinkage.
+ *   2. SHAPE & REASON:
+ *      - tuple corpora: entries must be well-formed tuples carrying an explicit, non-empty
+ *        human-readable reason. A row nobody can justify is a row the next editor deletes.
+ *      - string list corpora: entries must be strings.
+ *   3. UNIQUENESS: no duplicated targets. Catches padding-with-copies to satisfy floor.
+ *   4. REQUIRED MEMBERS: specific critical load-bearing targets that must never vanish
+ *      (e.g., 169.254.169.254, 127.0.0.1, ::1, metadata endpoints, RFC1918 boundaries).
+ *
+ * FLOORS DERIVED EXACTLY FROM COMMITTED ARRAY LITERALS:
+ *   BLOCKED_LITERALS: 68
+ *   ALLOWED_LITERALS: 20
+ *   C12_RANGES: 15
+ *   C12_STILL_ALLOWED: 16
+ *   BLOCKED_SCHEMES: 9
+ *   MALFORMED: 6
+ * ======================================================================== */
+function assertCorpusIntact(rows, name, { floor, required = [], rowLength = null, isTuple = true }) {
+  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
+  assert.ok(
+    rows.length >= floor,
+    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a security ` +
+      `corpus whose tests iterate over it, so assertions silently stopped running. If the removal ` +
+      `was deliberate, lower the floor here in the same commit and state why.`
+  );
+  if (isTuple) {
+    rows.forEach((row, i) => {
+      assert.ok(
+        Array.isArray(row) &&
+          (rowLength === null ? row.length >= 2 : row.length === rowLength) &&
+          typeof row[0] === "string",
+        `${name}[${i}] is not a valid tuple entry with expected shape (rowLength=${rowLength ?? ">=2"}): ${JSON.stringify(row)}`
+      );
+      const reason = row[row.length - 1];
+      assert.ok(
+        typeof reason === "string" && reason.trim().length > 0,
+        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
+          `the next editor deletes, and the floor above would then be met by padding`
+      );
+    });
+  } else {
+    rows.forEach((item, i) => {
+      assert.ok(
+        typeof item === "string",
+        `${name}[${i}] is not a string: ${JSON.stringify(item)}`
+      );
+    });
+  }
+  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r));
+  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
+  assert.deepEqual(
+    dupes,
+    [],
+    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
+      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
+  );
+  const missing = required.filter((t) => !targets.includes(t));
+  assert.deepEqual(
+    missing,
+    [],
+    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing security ` +
+      `targets: losing one makes an SSRF bypass silent again. Removing one is a decision to stop ` +
+      `defending that target -- make it in the same commit as this list.`
+  );
+}
+
+
 // ---------------------------------------------------------------------------
 // 1. Notation table — the same loopback/metadata address, spelled every way
 // ---------------------------------------------------------------------------
@@ -115,6 +200,30 @@ const BLOCKED_LITERALS = [
   ["2001:10::1", "orchid", "deprecated ORCHID"],
 ];
 
+test("BLOCKED_LITERALS corpus is intact (floor, shape, uniqueness, required members)", () => {
+  assertCorpusIntact(BLOCKED_LITERALS, "BLOCKED_LITERALS", {
+    floor: 68,
+    rowLength: 3,
+    required: [
+      "127.0.0.1",
+      "0x7f000001",
+      "169.254.169.254",
+      "2852039166",
+      "10.0.0.0",
+      "192.168.1.1",
+      "::1",
+      "[::1]",
+      "::ffff:127.0.0.1",
+      "::ffff:169.254.169.254",
+      "64:ff9b::a9fe:a9fe",
+      "2002:a9fe:a9fe::",
+      "::ffff:8.8.8.8",
+      "3fff::1",
+      "5f00::1",
+    ],
+  });
+});
+
 for (const [host, expectedReason, notation] of BLOCKED_LITERALS) {
   test(`classifyAddress blocks ${host} (${notation})`, () => {
     const verdict = classifyAddress(host);
@@ -125,6 +234,28 @@ for (const [host, expectedReason, notation] of BLOCKED_LITERALS) {
 }
 
 test("assertPublicUrl refuses every blocked notation end to end", async () => {
+  assertCorpusIntact(BLOCKED_LITERALS, "BLOCKED_LITERALS", {
+    floor: 68,
+    rowLength: 3,
+    required: [
+      "127.0.0.1",
+      "0x7f000001",
+      "169.254.169.254",
+      "2852039166",
+      "10.0.0.0",
+      "192.168.1.1",
+      "::1",
+      "[::1]",
+      "::ffff:127.0.0.1",
+      "::ffff:169.254.169.254",
+      "64:ff9b::a9fe:a9fe",
+      "2002:a9fe:a9fe::",
+      "::ffff:8.8.8.8",
+      "3fff::1",
+      "5f00::1",
+    ],
+  });
+  let tested = 0;
   for (const [host, expectedReason, notation] of BLOCKED_LITERALS) {
     const hostForUrl = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
     let url;
@@ -144,7 +275,9 @@ test("assertPublicUrl refuses every blocked notation end to end", async () => {
       },
       `${host} (${notation}) reached the network`
     );
+    tested++;
   }
+  assert.ok(tested >= 60, `assertPublicUrl tested ${tested} hosts, expected at least 60`);
 });
 
 // ---------------------------------------------------------------------------
@@ -173,6 +306,24 @@ const ALLOWED_LITERALS = [
   ["64:ff9b::8.8.8.8", "NAT64 wrapping a public address"],
   ["2002:0808:0808::", "6to4 wrapping a public address"],
 ];
+
+test("ALLOWED_LITERALS corpus is intact (floor, shape, uniqueness, required members)", () => {
+  assertCorpusIntact(ALLOWED_LITERALS, "ALLOWED_LITERALS", {
+    floor: 20,
+    rowLength: 2,
+    required: [
+      "8.8.8.8",
+      "1.1.1.1",
+      "93.184.216.34",
+      "11.0.0.1",
+      "128.0.0.1",
+      "169.255.0.1",
+      "2606:4700:4700::1111",
+      "64:ff9b::8.8.8.8",
+      "2002:0808:0808::",
+    ],
+  });
+});
 
 for (const [host, why] of ALLOWED_LITERALS) {
   test(`classifyAddress allows public ${host} (${why})`, () => {
@@ -217,6 +368,20 @@ const C12_RANGES = [
 ];
 
 test("C12 — all seven ranges are refused, with the CIDR that caught them", () => {
+  assertCorpusIntact(C12_RANGES, "C12_RANGES", {
+    floor: 15,
+    rowLength: 4,
+    required: [
+      "fec0::",
+      "64:ff9b:1::",
+      "::ffff:0:0",
+      "::ffff:8.8.8.8",
+      "2001:2::",
+      "3fff::",
+      "5f00::",
+      "2001:10::",
+    ],
+  });
   const distinctRanges = new Set(
     C12_RANGES.map(([, reason, range]) => range ?? `unwrapped:${reason}`)
   );
@@ -237,6 +402,21 @@ test("C12 — all seven ranges are refused, with the CIDR that caught them", () 
 });
 
 test("C12 — every refusal is a policy refusal, never 'unusable input'", async () => {
+  assertCorpusIntact(C12_RANGES, "C12_RANGES", {
+    floor: 15,
+    rowLength: 4,
+    required: [
+      "fec0::",
+      "64:ff9b:1::",
+      "::ffff:0:0",
+      "::ffff:8.8.8.8",
+      "2001:2::",
+      "3fff::",
+      "5f00::",
+      "2001:10::",
+    ],
+  });
+  let tested = 0;
   for (const [host, reason, , what] of C12_RANGES) {
     await assert.rejects(
       () => assertPublicUrl(`http://[${host}]/`, { lookup: noLookup }),
@@ -248,7 +428,9 @@ test("C12 — every refusal is a policy refusal, never 'unusable input'", async 
       },
       `${host} (${what}) was not refused end to end`
     );
+    tested++;
   }
+  assert.equal(tested, C12_RANGES.length, "every C12 refusal was checked end to end");
 });
 
 test("C12 — a hostname resolving into one of the seven is refused too", async () => {
@@ -286,6 +468,24 @@ const C12_STILL_ALLOWED = [
   ["2606:4700:4700::1111", "an ordinary public resolver, the control case"],
 ];
 
+test("C12_STILL_ALLOWED corpus is intact (floor, shape, uniqueness, required members)", () => {
+  assertCorpusIntact(C12_STILL_ALLOWED, "C12_STILL_ALLOWED", {
+    floor: 16,
+    rowLength: 2,
+    required: [
+      "fe00::1",
+      "fe7f:ffff::1",
+      "64:ff9b:2::1",
+      "64:ff9b::8.8.8.8",
+      "8.8.8.8",
+      "2001:1::3",
+      "2001:20::1",
+      "3ffe::1",
+      "5eff:ffff::1",
+    ],
+  });
+});
+
 for (const [host, why] of C12_STILL_ALLOWED) {
   // febf::1 is genuinely blocked (link-local); it is in the table to document
   // the boundary between fe80::/10 and fec0::/10, not as an allow case.
@@ -298,6 +498,21 @@ for (const [host, why] of C12_STILL_ALLOWED) {
 }
 
 test("C12 — the fe80::/10 and fec0::/10 boundary is exact, not a single fe00::/8 sweep", () => {
+  assertCorpusIntact(C12_STILL_ALLOWED, "C12_STILL_ALLOWED", {
+    floor: 16,
+    rowLength: 2,
+    required: [
+      "fe00::1",
+      "fe7f:ffff::1",
+      "64:ff9b:2::1",
+      "64:ff9b::8.8.8.8",
+      "8.8.8.8",
+      "2001:1::3",
+      "2001:20::1",
+      "3ffe::1",
+      "5eff:ffff::1",
+    ],
+  });
   assert.equal(classifyAddress("fe7f:ffff::1").blocked, false, "fe7f is below fe80::/10");
   assert.equal(classifyAddress("fe80::1").reason, "link_local");
   assert.equal(classifyAddress("febf:ffff::1").reason, "link_local", "febf is the fe80::/10 ceiling");
@@ -351,6 +566,19 @@ const BLOCKED_SCHEMES = [
   "httpx://evil.example.com/",
   "ws://example.com/socket",
 ];
+
+test("BLOCKED_SCHEMES corpus is intact (floor, shape, uniqueness, required members)", () => {
+  assertCorpusIntact(BLOCKED_SCHEMES, "BLOCKED_SCHEMES", {
+    floor: 9,
+    isTuple: false,
+    required: [
+      "file:///etc/passwd",
+      "gopher://127.0.0.1:6379/_INFO",
+      "data:text/html;base64,PHNjcmlwdD4=",
+      "javascript:alert(1)",
+    ],
+  });
+});
 
 for (const raw of BLOCKED_SCHEMES) {
   test(`normalizeTargetUrl refuses scheme in ${raw}`, () => {
@@ -417,6 +645,22 @@ test("an over-long hostname is refused", async () => {
 });
 
 const MALFORMED = ["", "   ", "https://", "http://", "not a url at all", "http://exa mple.com/"];
+
+test("MALFORMED corpus is intact (floor, shape, uniqueness, required members)", () => {
+  assertCorpusIntact(MALFORMED, "MALFORMED", {
+    floor: 6,
+    isTuple: false,
+    required: [
+      "",
+      "   ",
+      "https://",
+      "http://",
+      "not a url at all",
+      "http://exa mple.com/",
+    ],
+  });
+});
+
 for (const raw of MALFORMED) {
   test(`malformed input is refused: ${JSON.stringify(raw)}`, async () => {
     await assert.rejects(

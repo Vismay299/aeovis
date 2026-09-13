@@ -170,6 +170,7 @@ test("required vs optional is data on the field, not a convention in the prose",
   assert.equal(isRequired("SUPABASE_URL"), true);
   assert.equal(isRequired("SUPABASE_SERVICE_ROLE_KEY"), true);
   for (const name of [
+    "FLEET_ALLOW_PRODUCTION_DB",
     "FLEET_ENGINES",
     "FLEET_BATCH_SIZE",
     "FLEET_LEASE_MS",
@@ -617,6 +618,149 @@ test("GUARD — every budget variable is discoverable in .env.example", async ()
     assert.ok(
       CONFIG_FIELDS.some((f) => f.name === name),
       `${name} is guarded here but is not a configuration field`
+    );
+    assert.match(example, new RegExp(name), `${name} is read at boot but absent from .env.example`);
+  }
+});
+
+/* ------------------------------------------------------------------ *
+ * R1.2.12 — Production database refusal guard for laptop workers.
+ *
+ * A worker process refuses to start against the production database unless
+ * explicitly armed, in the same shape liveDbGate uses for tests.
+ * ------------------------------------------------------------------ */
+
+test("R1.2.12 — worker refuses to boot when app production values are present without explicit arming", () => {
+  const prodAppEnv = {
+    NEXT_PUBLIC_SUPABASE_URL: "https://production-app.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "ey-anon-token-123",
+  };
+  const err = refusal(prodAppEnv);
+  assert.equal(err.problems[0].name, "SUPABASE_URL");
+  assert.equal(err.problems[0].kind, "production_refusal");
+  assert.match(err.message, /refuses to start against the production database without explicit arming/);
+});
+
+test("R1.2.12 — worker refuses when SUPABASE_URL targets the same host as NEXT_PUBLIC_SUPABASE_URL", () => {
+  const matchingEnv = {
+    SUPABASE_URL: "https://production-app.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "sk-service-key-123",
+    NEXT_PUBLIC_SUPABASE_URL: "https://production-app.supabase.co",
+  };
+  const err = refusal(matchingEnv);
+  assert.equal(err.problems[0].kind, "production_refusal");
+  assert.match(err.message, /matches application database credentials/);
+});
+
+test("R1.2.12 — worker refuses when SUPABASE_URL targets the same host as DATABASE_URL", () => {
+  const matchingEnv = {
+    SUPABASE_URL: "https://prod-db.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "sk-service-key-123",
+    DATABASE_URL: "postgresql://postgres:secret@prod-db.supabase.co:5432/postgres",
+  };
+  const err = refusal(matchingEnv);
+  assert.equal(err.problems[0].kind, "production_refusal");
+  assert.match(err.message, /matches application database credentials/);
+});
+
+test("R1.2.12 — worker starts when explicitly armed with FLEET_ALLOW_PRODUCTION_DB=true", () => {
+  const armedEnv = {
+    NEXT_PUBLIC_SUPABASE_URL: "https://production-app.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "ey-anon-token-123",
+    FLEET_ALLOW_PRODUCTION_DB: "true",
+  };
+  const config = resolveConfig(armedEnv);
+  assert.equal(config.supabaseUrl, "https://production-app.supabase.co");
+  assert.equal(config.allowProductionDb, true);
+  assert.match(describeConfig(config), /allowProductionDb=true/);
+});
+
+test("R1.2.12 — worker starts when explicitly armed with FLEET_ARM_PRODUCTION_DB alias", () => {
+  const armedEnv = {
+    NEXT_PUBLIC_SUPABASE_URL: "https://production-app.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "ey-anon-token-123",
+    FLEET_ARM_PRODUCTION_DB: "true",
+  };
+  const config = resolveConfig(armedEnv);
+  assert.equal(config.supabaseUrl, "https://production-app.supabase.co");
+  assert.equal(config.allowProductionDb, true);
+});
+
+test("R1.2.12 — worker starts without arming when SUPABASE_URL points to a distinct dev database", () => {
+  const devEnv = {
+    SUPABASE_URL: "https://dev-project.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "sk-dev-service-key-123",
+    NEXT_PUBLIC_SUPABASE_URL: "https://production-app.supabase.co",
+  };
+  const config = resolveConfig(devEnv);
+  assert.equal(config.supabaseUrl, "https://dev-project.supabase.co");
+  assert.equal(config.allowProductionDb, false);
+});
+
+test("R1.2.12 ACCEPT — starting worker process via CLI with app production values exits non-zero with refusal", async () => {
+  const run = promisify(execFile);
+  const env = {
+    ...process.env,
+    NEXT_PUBLIC_SUPABASE_URL: "https://prod-cluster.supabase.co",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon-key-abc",
+  };
+  // Delete explicit worker keys and arming flags so it inherits the app values
+  delete env.SUPABASE_URL;
+  delete env.SUPABASE_SERVICE_ROLE_KEY;
+  delete env.FLEET_ALLOW_PRODUCTION_DB;
+  delete env.FLEET_ARM_PRODUCTION_DB;
+  delete env.ARM_LIVE_DB;
+
+  let failed = null;
+  try {
+    await run(process.execPath, [path.join(REPO, "worker/src/index.js")], { env, timeout: 30_000 });
+  } catch (err) {
+    failed = err;
+  }
+
+  assert.ok(failed, "worker must exit non-zero when inheriting app production values");
+  assert.equal(failed.code, 1, "exit code must be 1 on boot refusal");
+  assert.match(
+    failed.stderr,
+    /fatal: the fleet refuses to start/,
+    "stderr must announce boot refusal"
+  );
+  assert.match(
+    failed.stderr,
+    /refuses to start against the production database without explicit arming/,
+    "stderr must name the production refusal guard"
+  );
+  assert.match(
+    failed.stderr,
+    /FLEET_ALLOW_PRODUCTION_DB=true/,
+    "stderr must instruct how to explicitly arm if intended"
+  );
+});
+
+test("R1.2.12 GUARD — all fleet credentials and configuration variables are discoverable in .env.example", async () => {
+  const example = await readFile(path.join(REPO, ".env.example"), "utf8");
+  const fleetVars = [
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "FLEET_ALLOW_PRODUCTION_DB",
+    "FLEET_ENGINES",
+    "FLEET_BATCH_SIZE",
+    "FLEET_LEASE_MS",
+    "FLEET_IDLE_POLL_MS",
+    "FLEET_HEARTBEAT_MS",
+    "FLEET_WORKER_ID",
+    "FLEET_MAX_CONCURRENCY",
+    "FLEET_PROBE_DELAY_MIN_MS",
+    "FLEET_PROBE_DELAY_MAX_MS",
+    "FLEET_DAILY_CAP",
+    "FLEET_CANARY_INTERVAL_MS",
+    "FLEET_PROBE_TIMEOUT_MS",
+  ];
+
+  for (const name of fleetVars) {
+    assert.ok(
+      CONFIG_FIELDS.some((f) => f.name === name),
+      `${name} is guarded here but is not a configuration field in CONFIG_FIELDS`
     );
     assert.match(example, new RegExp(name), `${name} is read at boot but absent from .env.example`);
   }

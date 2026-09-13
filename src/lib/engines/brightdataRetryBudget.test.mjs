@@ -3,27 +3,22 @@ import assert from "node:assert/strict";
 import { brightDataSearch, isBrightDataZoneError } from "./brightdata.js";
 
 /**
- * R3.6.7 — does brightdata.js have the dead retry guard the other adapters had?
+ * R3.6.7 / R3.6.9 — brightdata.js retry behavior and status classification.
  *
- * THE ANSWER IS NO, AND THIS FILE IS THE MEASUREMENT THAT ESTABLISHES IT.
+ * R3.6.9 unified brightdata.js with the shared httpFailureKind.js classifier,
+ * eliminating the private status table. HTTP 408 Request Timeout and HTTP 425
+ * Too Early are now properly retried to exhaustion, while permanent 4xx (400, 401,
+ * 403, 404, 422) break on the first call.
  *
- * The shape being hunted (found live in src/lib/engines/openai.js,
- * src/lib/engines/perplexity.js and src/lib/openrouter.js) is a status guard
- * sitting above a `throw` whose own enclosing `catch` backs off and loops
- * regardless of status — so the guard decides nothing and a 401 costs the full
- * retry budget. brightdata.js declares the same-looking rule at
- * `isRetryableHttpStatus` (status === 429 || status >= 500), so it had to be
- * checked rather than assumed.
- *
- * It is NOT the same shape. brightDataSearch's catch does not retry
- * unconditionally: it re-discriminates (zone fault, rate limit, abort, 5xx,
- * HTML page, bad JSON, truncation) and rethrows anything else. A 401 therefore
- * costs exactly one call already. These tests pin that, so the guard cannot
- * quietly become dead later — which is exactly what happened to the other three.
+ * The shape originally hunted in R3.6.7 (found live in src/lib/engines/openai.js,
+ * src/lib/engines/perplexity.js and src/lib/openrouter.js) was a status guard
+ * sitting above a `throw` whose enclosing `catch` backed off and looped
+ * regardless of status. brightDataSearch does not have a dead catch guard: a
+ * 401 costs exactly one call.
  *
  * Everything here counts calls to an injected fetch stub. No log strings, no
- * network, no real credential: BRIGHTDATA_API_KEY is a placeholder and the 401
- * is manufactured by the stub.
+ * network, no real credential: BRIGHTDATA_API_KEY is a placeholder and the
+ * responses are manufactured by the stub.
  */
 
 const ENV = ["BRIGHTDATA_API_KEY", "BRIGHTDATA_SERP_ZONE", "BRIGHTDATA_ZONE_TTL_MS", "SERP_GEO"];
@@ -99,6 +94,36 @@ test("brightdata - a recovered 429 returns the answer rather than the error", as
   const { out, calls } = await counted(t, (n) =>
     n < 3
       ? new Response("slow down", { status: 429 })
+      : Response.json({ body: JSON.stringify({ organic: [{ link: "https://a.example" }] }) })
+  );
+  assert.equal(calls, 3);
+  assert.ok(!(out instanceof Error), `expected a result, got ${out}`);
+  assert.ok(out.organic, "the third call's SERP must come back parsed");
+});
+
+test("brightdata - a 408 Request Timeout spends the whole attempt budget (R3.6.9)", async (t) => {
+  const { out, calls } = await counted(t, status(408, "Request Timeout"));
+  assert.equal(calls, 3, "HTTP 408 is a transient timeout and must retry to exhaustion");
+  assert.match(out.message, /HTTP 408/);
+});
+
+test("brightdata - a 425 Too Early spends the whole attempt budget (R3.6.9)", async (t) => {
+  const { out, calls } = await counted(t, status(425, "Too Early"));
+  assert.equal(calls, 3, "HTTP 425 is transient and must retry to exhaustion");
+  assert.match(out.message, /HTTP 425/);
+});
+
+test("brightdata - permanent 4xx (404, 422) break on the first call (R3.6.9)", async (t) => {
+  const notFound = await counted(t, status(404, "Not Found"));
+  assert.equal(notFound.calls, 1, "HTTP 404 is a permanent refusal and breaks on first call");
+  const unproc = await counted(t, status(422, "Unprocessable"));
+  assert.equal(unproc.calls, 1, "HTTP 422 is a permanent refusal and breaks on first call");
+});
+
+test("brightdata - a recovered 408 returns the answer rather than the error (R3.6.9)", async (t) => {
+  const { out, calls } = await counted(t, (n) =>
+    n < 3
+      ? new Response("Request Timeout", { status: 408 })
       : Response.json({ body: JSON.stringify({ organic: [{ link: "https://a.example" }] }) })
   );
   assert.equal(calls, 3);

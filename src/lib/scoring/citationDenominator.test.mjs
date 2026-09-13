@@ -95,9 +95,11 @@ function mockPerplexity(t, routeOf) {
     const route = routeOf(query);
 
     if (isSearch) {
-      return route === "ok" ? okResponse(searchPayload()) : failResponse(503);
+      return route === "ok" || route === "answer_fails_search_ok"
+        ? okResponse(searchPayload())
+        : failResponse(503);
     }
-    if (route === "both_dead") return failResponse(503);
+    if (route === "both_dead" || route === "answer_fails_search_ok") return failResponse(503);
     if (route === "empty_answer") return okResponse(chatPayload("   "));
     return okResponse(chatPayload("For this, Acme is a common pick; Rival is another."));
   };
@@ -271,6 +273,32 @@ test("R2.2.2 — the two return paths that are not the happy one keep the state 
       "the EMPTY_ANSWER return must carry the state too"
     );
   });
+});
+
+test("R2.2.9 — probeTextEngine preserves measured citations when the answer leg fails", async (t) => {
+  useEnv(t, { ENGINES: "perplexity", PERPLEXITY_API_KEY: "EXAMPLE-NOT-A-REAL-KEY" });
+
+  const ANSWER_FAILS_SEARCH_OK = "answer leg fails but citations succeed";
+  mockPerplexity(t, (q) => (q === ANSWER_FAILS_SEARCH_OK ? "answer_fails_search_ok" : "ok"));
+
+  const perplexity = resolveEnabledEngines().find((e) => e.name === "perplexity");
+  assert.ok(perplexity, "the perplexity engine def must resolve — this is the live registry");
+
+  const row = await perplexity.probe(asQuery(ANSWER_FAILS_SEARCH_OK), BRAND, [BRAND], "acme.io", COMPETITORS, null);
+
+  assert.ok(row.error, "the answer leg failed, so row.error must be set");
+  assert.equal(row.answer_present, false, "an answer-leg failure does not count as answered");
+  assert.equal(row.citations_state, CITATIONS_STATE.VERIFIED, "search leg succeeded, so citations_state is verified");
+  assert.equal(row.citations_state_reason, null);
+  assert.equal(row.citations.length, 2, "measured citations must not be silently emptied");
+  assert.deepEqual(row.citations, [
+    "https://acme.io/tile-guide",
+    "https://elsewhere.example/roundup",
+  ]);
+  assert.equal(row.references.length, 2);
+  assert.equal(row.references[0].domain, "acme.io");
+  assert.equal(row.brand_cited, true, "acme.io in references must mark brand_cited true");
+  assert.equal(row.visible, true, "brand_cited true marks visible true");
 });
 
 test("R2.2.2 — a perplexity slice with no citation_denominator FAILS LOUD, it does not default", () => {

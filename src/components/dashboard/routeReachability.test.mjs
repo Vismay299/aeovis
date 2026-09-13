@@ -179,6 +179,14 @@ function stripComments(source) {
           i += 2;
           continue;
         }
+        // R2.7.10 / R6.4.14: A real JS single/double-quoted string cannot contain
+        // an unescaped newline. Bound bare ' and " string literal scanning to a single
+        // line so JSX apostrophes (like DashboardShell.jsx:362 "Couldn't") don't
+        // consume subsequent lines as a phantom string. Template literals (`) keep
+        // the multi-line path.
+        if (c !== "`" && source[i] === "\n") {
+          break;
+        }
         out += source[i];
         const closed = source[i] === c;
         i += 1;
@@ -338,7 +346,9 @@ function testLoadsComponent(testSource, componentName) {
   const importForm = new RegExp(
     `from\\s*["'][^"']*[/"']${componentName}(?:\\.jsx)?["']`
   );
-  const literalFileForm = new RegExp(`["'\`]${componentName}\\.jsx["'\`]`);
+  // R2.7.10: Support new URL("./Foo.jsx", import.meta.url) and path-prefixed forms
+  // in addition to adjacent quote forms like "Foo.jsx".
+  const literalFileForm = new RegExp(`["'\`](?:[^"'\`]*[\\/])?${componentName}\\.jsx["'\`]`);
   return importForm.test(code) || literalFileForm.test(code);
 }
 
@@ -415,6 +425,18 @@ test("a commented-out import is not an import edge", () => {
     specifiersIn(`/**\n * import x from "./Dead";\n */\nimport y from "./Live";\n`),
     ["./Live"],
     "a JSDoc block that quotes an import must not create an edge, and must not eat the real one after it"
+  );
+  // DashboardShell.jsx:362 shape: an apostrophe in JSX prose ("Couldn't") must
+  // not open a phantom string literal that swallows a commented import on the next line.
+  assert.deepEqual(
+    specifiersIn("<div>Couldn't find what you're looking for?</div>\n// import { Dead } from \"./Dead\";\n"),
+    [],
+    "an apostrophe in JSX prose swallowed a commented-out import on the next line"
+  );
+  assert.deepEqual(
+    specifiersIn("<span className=\"tag\">Couldn't load</span>\n// import { Dead } from \"./Dead\";\n<h2>We couldn't reach your data</h2>\n"),
+    [],
+    "an unmatched apostrophe in JSX prose swallowed a commented-out import on the next line"
   );
   // ...and the opposite direction: stripping must not swallow live code.
   assert.deepEqual(
@@ -508,6 +530,89 @@ test("comment stripping never drops a real import edge", async () => {
   );
 });
 
+test("comment stripping never keeps a commented-out import edge", async () => {
+  // Symmetric mirror of "never drops a real import edge". An under-strip keeps a
+  // commented-out import as a live edge, which can make an orphaned component look
+  // reachable. The cross-check asserts that for every specifier kept by specifiersIn,
+  // occurrenceIsCommented(raw, index) is false.
+  const files = (await listFiles(SRC)).filter(
+    (f) => /\.(jsx?|mjs|tsx?)$/.test(f) && f !== fileURLToPath(import.meta.url)
+  );
+  const keptCommented = [];
+  let edgesExamined = 0;
+  for (const file of files) {
+    const raw = await readFile(file, "utf8");
+    const kept = specifiersIn(raw);
+    edgesExamined += kept.filter((s) => s.startsWith(".") || s.startsWith("@/")).length;
+    const rawFound = [];
+    for (const re of [STATIC_IMPORT, LITERAL_DYNAMIC]) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(raw)) !== null) {
+        rawFound.push({ specifier: m[1], index: m.index + m[0].lastIndexOf(m[1]) });
+      }
+    }
+    for (const { specifier, index } of rawFound) {
+      if (!specifier.startsWith(".") && !specifier.startsWith("@/")) continue;
+      if (kept.includes(specifier) && occurrenceIsCommented(raw, index)) {
+        keptCommented.push(`${path.relative(SRC, file)} -> ${specifier}`);
+      }
+    }
+  }
+  assert.ok(
+    files.length > 100 && edgesExamined > 200,
+    `this cross-check compared ${edgesExamined} edges across ${files.length} files — too few to mean anything`
+  );
+  assert.deepEqual(
+    keptCommented,
+    [],
+    "stripComments() kept a specifier that sits in a comment, so the walk would treat a dead import as live"
+  );
+});
+
+test("R6.4.14 GUARD — comment-stripping guards are enumerated and bound against JSX apostrophe phantom strings", async () => {
+  // R6.4.14: Every comment-stripping or token-scanning guard in the repo is
+  // enumerated, and each bounds a single- and double-quoted scan to one line or
+  // carries a symmetric alarm that fails when a kept token is commented out.
+  const files = (await listFiles(SRC)).filter((f) => f.endsWith(".test.mjs"));
+  const guardsFound = [];
+  const stripperRegex = /\b(?:function\s+(?:stripComments|withoutComments|codeOnly|scanSource)|const\s+stripComments\s*=)/;
+
+  for (const file of files) {
+    const content = await readFile(file, "utf8");
+    if (stripperRegex.test(content)) {
+      guardsFound.push(path.relative(SRC, file).replace(/\\/g, "/"));
+    }
+  }
+
+  guardsFound.sort();
+  const EXPECTED_GUARDS = [
+    "components/dashboard/answersEngineFilters.test.mjs",
+    "components/dashboard/degradedEngineBanner.test.mjs",
+    "components/dashboard/routeReachability.test.mjs",
+    "lib/crawlabilityTaxonomy.test.mjs",
+    "lib/envTruth.test.mjs",
+    "lib/landingHonesty.test.mjs",
+    "lib/landingProbeCounter.test.mjs",
+    "lib/serpQueryPrice.test.mjs",
+    "services/servicesApiNullMetrics.test.mjs",
+  ].sort();
+
+  assert.deepEqual(
+    guardsFound,
+    EXPECTED_GUARDS,
+    "The set of comment-stripping / token-scanning guards in the repo must match the enumerated list."
+  );
+
+  // Teeth: verify that the DashboardShell apostrophe payload does not allow a commented import to be kept
+  const payload = "<span className=\"tag\">Couldn't load</span>\n// import { Dead } from \"./Dead\";\n<h2>We couldn't reach your data</h2>\n";
+  assert.deepEqual(
+    specifiersIn(payload),
+    [],
+    "stripComments must bound ' and drop the commented import on the next line"
+  );
+});
+
 test("the walker calls a component orphaned even when a live file mentions it in a comment", async (t) => {
   // The verifier's bypass, rebuilt as a permanent fixture: a throwaway tree with
   // a real route root, a component the route really imports, and inside that
@@ -526,9 +631,11 @@ test("the walker calls a component orphaned even when a live file mentions it in
   );
   await writeFile(
     path.join(components, "Live.jsx"),
-    '// Someday: import Orphan from "./Orphan";\n' +
+    'export function Note() { return <p>Couldn\'t load</p>; }\n' +
+      '// Someday: import Orphan from "./Orphan";\n' +
       '/* import Orphan from "./Orphan"; */\n' +
       'const help = "see https://example.com/docs";\n' +
+      'export function Subnote() { return <p>We couldn\'t find it</p>; }\n' +
       "export default function Live() { return null; }\n"
   );
   await writeFile(path.join(components, "Orphan.jsx"), "export default function Orphan() { return null; }\n");

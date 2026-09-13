@@ -179,7 +179,7 @@ No row in this table is `no_answer`-capable except row 1. That restriction is
 | **Geo** | `country: "IN"` hardcoded in the answer body only. The `/search` call carries no geo at all. Neither is recorded on the row. |
 | **Unavailable** | No key → `error: "PERPLEXITY_API_KEY not set"`. Both legs failing → `error` from the answer leg. |
 | **Degraded — search leg alone fails** | `probeSearch` exhausts its retries and returns `{ references: [], citations: [], cost: 0, error: … }`, but `probePerplexity` **discards that error** and returns a hardcoded `error: null` with `citations: []`. "Cited nothing" and "citations unverifiable" become the same value. Filed as **R2.2.2**, currently `in_verification`, and **being written into this file right now** — see the working-tree disclosure above. |
-| **Degraded — answer leg alone fails** | `probePerplexity` returns `text: ""` with the answer leg's `error` **and** the search leg's real `citations`/`references`. `probeTextEngine` then early-returns on `probeResult.error` before assigning `result.citations`, so **measured citations are thrown away**. See §5.3: no task owns this. |
+| **Degraded — answer leg alone fails** | `probePerplexity` returns `text: ""` with the answer leg's `error` **and** the search leg's real `citations`/`references`. Fixed in **R2.2.9**: `probeTextEngine` copies citations and references before checking `probeResult.error`, so measured citations are preserved on the row with `citations_state: "verified"`. See §5.3. |
 | **Cost** | `answer.cost + search.cost`. The answer leg is `usage.cost.total_cost ?? usage.total_cost ?? 0.005` — a real vendor number *or* a hardcoded guess, with **no field distinguishing which**. The search leg is a flat `0.005` on success that no vendor reported. R3.6.5. |
 | **Honest status** | **Implemented and live where the key is set** — and the only engine other than `aio` that can produce rows today. It is still an API surface, not the product surface. |
 
@@ -356,20 +356,16 @@ The vocabulary that fixes all four already exists one layer over
 (`src/lib/llmPricing.js`'s `cost_source`, mapped to `cost.basis` in
 `probe-result.md` §3.9) and **no probe adapter uses it**.
 
-### 5.3 A perplexity answer-leg failure discards measured citations — no owning task
+### 5.3 A perplexity answer-leg failure discards measured citations — resolved in R2.2.9
 
 When `probeAnswer` fails and `probeSearch` succeeds, `probePerplexity` returns
 the real `citations` and `references` alongside the answer leg's `error`.
-`probeTextEngine` then checks `probeResult.error` first and returns immediately,
-before `result.citations` or `result.references` are ever assigned. The row is
-persisted with `citations: []`.
+Previously, `probeTextEngine` checked `probeResult.error` first and returned immediately,
+before `result.citations` or `result.references` were assigned, persisting `citations: []`.
 
-So the *inverse* of R2.2.2 is also true and is not filed: R2.2.2 covers
-"answer ok, search failed" (unverifiable citations reported as zero); this is
-"answer failed, search ok" (verified citations reported as zero). Both produce
-`citations: []`; only one has a task.
-
-**Recorded here, not filed.** This document does not write to the ledger.
+Fixed in **R2.2.9**: `probeTextEngine` copies `citations`, `references`, `brand_cited`,
+and `competitors_cited` before the `probeResult.error` return path, preserving measured
+citations and references on the row alongside the answer error and `citations_state: "verified"`.
 
 ### 5.4 The dead second registry is still importable
 

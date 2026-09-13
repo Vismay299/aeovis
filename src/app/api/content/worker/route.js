@@ -114,14 +114,25 @@ export function brandsForDailyBatch({ data, error } = {}) {
 /**
  * The cron's report of its own pass, and the status that carries it.
  *
- * `batch_unavailable` is ALWAYS present so `batch_created: 0` can be read at
- * all: null means the brand list was read and there was nothing to create (a
- * measured zero), an object means it could not be read (never ran). The status
- * is 5xx in the second case — a cron whose batch stage did nothing must not
- * answer 200, or the platform's own failure alerting never sees it.
+ * R3.1.4 — DISPATCHED, NOT RESUMED / DONE. The content worker sweep fires off
+ * content jobs via `dispatchWithLease` (fire-and-forget), the same shape the
+ * scan worker sweep uses. Before this fix the report called the dispatched
+ * count `resumed` and the skipped-lease count, which collapsed two
+ * facts: a job we kicked off and a job we chose not to kick off both rode the
+ * same wire as "resumed". Now it follows the scan worker's vocabulary:
+ *   - `dispatched` — fire-and-forget jobs we kicked off
+ *   - `skipped` — jobs we chose not to kick off (leased by another worker)
+ *   - `batch_dispatched` / `batch_dispatched_ids` — daily-batch jobs kicked off
+ *   - `batch_failed` — brands where the batch creation itself failed
  *
- * The resume counts survive either way: they really did happen, and an operator
- * needs to see which half of the pass worked.
+ * `batch_unavailable` is ALWAYS present so `batch_dispatched: 0` can be read
+ * at all: null means the brand list was read and there was nothing to create
+ * (a measured zero), an object means it could not be read (never ran). The
+ * status is 5xx in the second case — a cron whose batch stage did nothing
+ * must not answer 200, or the platform's own failure alerting never sees it.
+ *
+ * The dispatched counts survive either way: they really did happen, and an
+ * operator needs to see which half of the pass worked.
  */
 export function contentCronReport({
   startedIds = [],
@@ -133,11 +144,11 @@ export function contentCronReport({
   return {
     status: batchUnavailable ? 500 : 200,
     body: {
-      resumed: startedIds.length,
-      resumed_ids: startedIds,
-      skipped_leased: skippedIds.length,
-      batch_created: batchCreated.length,
-      batch_ids: batchCreated,
+      dispatched: startedIds.length,
+      dispatched_ids: startedIds,
+      skipped: skippedIds.length,
+      batch_dispatched: batchCreated.length,
+      batch_dispatched_ids: batchCreated,
       batch_failed: batchFailed.length,
       batch_failed_brands: batchFailed,
       batch_unavailable: batchUnavailable,
@@ -166,11 +177,22 @@ export async function GET(request) {
   // makes a dead cron look alive on /api/health. Non-fatal by design.
   await recordCronTick("content-worker");
 
+  // R2.8.14: an unconfigured deploy must not answer 200 from a cron that ran
+  // nothing — a cron monitor watching status codes would report the system
+  // healthy. Reuses the batch_unavailable envelope from R2.8.5 so all
+  // fail-quiet DB-read outages share one shape and one reason vocabulary.
+  //
+  // R3.1.4 — `ledger_written: false` says plainly that no scan_runs row was
+  // recorded, so an empty ledger can never be mistaken for an idle system.
   if (!supabase) {
-    return NextResponse.json({
-      processed: 0,
-      info: "No Supabase configured. Local in-memory worker runs automatically.",
+    const { status, body } = contentCronReport({
+      batchUnavailable: {
+        reason: "db_not_configured",
+        detail:
+          "The data store is not configured — the content cron cannot resume jobs or create batches.",
+      },
     });
+    return NextResponse.json({ ...body, ledger_written: false }, { status });
   }
 
   try {

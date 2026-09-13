@@ -36,7 +36,7 @@ import { historyLoadState } from '@/lib/historyStoreState';
 /* The reading's own band. Rivals never take a semantic colour, but this is
    your own score against a threshold, which is exactly what they are for. */
 function scoreChip(v) {
-  if (v == null) return 'chip';
+  if (v == null || !Number.isFinite(v)) return 'chip';
   if (v >= 50) return 'chip chip--good';
   if (v >= 25) return 'chip chip--warn';
   return 'chip chip--crit';
@@ -79,10 +79,10 @@ const itemStyle = {
   whiteSpace: 'nowrap',
 };
 
-export function HomeDashboard() {
+export function HomeDashboard({ initialData = null } = {}) {
   const router = useRouter();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(initialData);
+  const [loading, setLoading] = useState(!initialData);
   const [outage, setOutage] = useState(null);
   const [opening, setOpening] = useState(null);
 
@@ -103,8 +103,9 @@ export function HomeDashboard() {
   }, []);
 
   useEffect(() => {
+    if (initialData) return;
     load();
-  }, [load]);
+  }, [load, initialData]);
 
   const hasActive = (data?.activeJobs || []).length > 0;
   useEffect(() => {
@@ -206,7 +207,7 @@ export function HomeDashboard() {
             >
               <b style={{ color: 'var(--ink-1)', fontWeight: 600 }}>{s.brand}</b>
               <span className={scoreChip(s.score)}>
-                {s.score == null ? '—' : `${Math.round(s.score)}%`}
+                {s.score == null || !Number.isFinite(s.score) ? '—' : `${Math.round(s.score)}%`}
               </span>
               <span className="tag" style={{ letterSpacing: '.06em' }}>{timeAgo(s.scanned_at)}</span>
               {opening === s.brand && <Loader2 size={12} aria-hidden="true" />}

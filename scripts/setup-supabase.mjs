@@ -141,6 +141,39 @@ const EXPECTED_OBJECTS = {
   "013_brand_metrics_sov_state.sql": [
     { kind: "index", name: "brand_metrics_daily_sov_unverified_idx" },
   ],
+  // R3.5.4, registering the file R3.5.1 left orphaned. THE EMPTY LIST IS THE
+  // FINDING, not an oversight — read this before "fixing" it.
+  //
+  // 014 is one statement, read off supabase/migrations/014_content_job_checkpoints.sql
+  // line 11, which is the only non-comment line in the file:
+  //
+  //   ALTER TABLE content_jobs ADD COLUMN IF NOT EXISTS checkpoint jsonb;
+  //
+  // It creates no table, no index and no function. objectExists() below asks
+  // to_regclass and pg_proc, and neither can see a column, so there is no
+  // object name that could honestly go here. Empty beats wrong.
+  //
+  // Why not the 012/013 move: both of those ship an index whose definition
+  // references the new column, so the index stands in for what the probe
+  // cannot see. 014 ships no such index, and the migration file belongs to
+  // R3.5.1 (in verification), so this task may not add one to it.
+  //
+  // Why not { kind: "table", name: "content_jobs" }: that table is 002's and
+  // is present on every database that ever ran 002. It would print a ✓ under
+  // the 014 heading on a database that has never seen 014 — a false green,
+  // which is C10, the exact defect this list exists to prevent. Printing
+  // nothing is the honest output.
+  //
+  // THE RESIDUAL GAP, STATED PLAINLY: `npm run setup:db` cannot tell you
+  // whether 014 is applied: it reaches its final green verdict on a database
+  // that is missing this migration. (That verdict sentence is deliberately not
+  // quoted here — a guard in src/lib/migrationsLedger.test.mjs requires the
+  // only occurrence of it in this file to sit after the catalog check, and a
+  // comment repeating it above would be indistinguishable from a claim.)
+  // The query that settles 014 by hand is in
+  // docs/OPERATOR_LEDGER.md § C (information_schema.columns; the one-query
+  // block in docs/PROD_MIGRATIONS.md has no 014 row yet).
+  "014_content_job_checkpoints.sql": [],
 };
 
 /**

@@ -4,6 +4,23 @@ import { leaseIsFree } from "../jobLease.js";
 import { builtinAgents } from "../content/agents/model.js";
 
 /**
+ * Error thrown when a content DB read cannot be performed — mirrors
+ * ScansUnavailableError in db.js. A read that could not be performed must
+ * never return [] or null, which are indistinguishable from a genuine empty.
+ *
+ * @param {string} message
+ * @param {{ cause?: Error, code?: string }} options
+ */
+export class ContentReadError extends Error {
+  constructor(message, { cause, code = "content_read_failed" } = {}) {
+    super(message);
+    this.name = "ContentReadError";
+    this.code = code;
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
+/**
  * DB helpers for the Agent Content OS (content_jobs, content_items,
  * content_feedback, brand_briefs, content_lessons).
  *
@@ -31,7 +48,9 @@ global.memoryContentAgents = global.memoryContentAgents || new Map();
  * `hasDb = !!supabase`.
  */
 function resolveClient(deps) {
-  return deps && Object.prototype.hasOwnProperty.call(deps, "client") ? deps.client : supabase;
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "client")) return deps.client;
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "supabase")) return deps.supabase;
+  return supabase;
 }
 
 /** Worker-active statuses. awaiting_approval and beyond are human-side. */
@@ -117,6 +136,7 @@ export async function createContentJob({ brand, playbook, input, agent_id, agent
     agent_id: agent_id || null,
     agent_snapshot: agent_snapshot || null,
     agent_trace: [],
+    checkpoint: null,           // R3.5.1 — per-block checkpoint for resume
     created_at: now,
     heartbeat_at: now,
   };
@@ -283,22 +303,40 @@ export async function listContentJobs(brand, limit = 20) {
  * a fixed `created_at` window. The old `created_at`-based filter re-picked
  * healthy in-flight jobs and was the direct cause of D1 (double-run,
  * double-spend); see shouldRescueContentJob's note.
+ *
+ * CONTRACT (R2.8.13): fail-loud, same shape as getScansForBrand / getScansByDomain
+ * in db.js. The returned array means "the database answered". A read that could
+ * not be performed THROWS ContentReadError — it never fabricates [].
+ *
+ * This function used to catch every failure and return [], so the content-worker
+ * cron pass reported "resumed 0 jobs" when the resume list could not be read —
+ * half the endpoint telling the truth (R2.8.5 fixed the brand-list half) and
+ * half still lying. A dead resume stage that reports itself healthy is
+ * indistinguishable from a genuinely idle pass.
+ *
+ * @throws {ContentReadError} db_not_configured | db_read_failed
  */
 export async function listResumableContentJobs(limit = 5, deps = {}) {
   const client = resolveClient(deps);
-  if (!client) return [];
-  try {
-    const { data, error } = await client
-      .from("content_jobs")
-      .select("*")
-      .in("status", CONTENT_JOB_RUNNING)
-      .limit(Math.max(limit * 4, 20));
-    if (error) throw error;
-    return (data || []).filter((job) => shouldRescueContentJob(job)).slice(0, limit);
-  } catch (err) {
-    console.warn("[content-db] listResumableContentJobs failed:", err.message);
-    return [];
+  if (!client) {
+    throw new ContentReadError(
+      "Supabase is not configured — resumable content jobs cannot be read. " +
+        "This is a refusal to look, not a workspace with no resumable jobs.",
+      { code: "db_not_configured" }
+    );
   }
+  const { data, error } = await client
+    .from("content_jobs")
+    .select("*")
+    .in("status", CONTENT_JOB_RUNNING)
+    .limit(Math.max(limit * 4, 20));
+  if (error) {
+    throw new ContentReadError(
+      `Could not read resumable content jobs: ${error.message || error.code || "unknown database error"}`,
+      { cause: error, code: "db_read_failed" }
+    );
+  }
+  return (data || []).filter((job) => shouldRescueContentJob(job)).slice(0, limit);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,7 +436,21 @@ export async function finishContentRun(runId, { status, cost = 0, tokens = 0, er
   }
 }
 
-/** The execution history of one job, oldest first. */
+/**
+ * The execution history of one job, oldest first.
+ *
+ * CONTRACT (R2.8.13): the returned array means "the database answered". A read
+ * that could not be performed THROWS ContentReadError — it never fabricates [].
+ *
+ * The no-client path preserves the in-memory fallback used by the content_runs
+ * ledger's local dev mode (insertContentRun / finishContentRun write to memory
+ * when there is no client, so reads must too — a one-sided contract would break
+ * the only mode where writes succeed). The DB-error path used to catch and
+ * return [], which made the status poll at /api/content/[job_id]/status show
+ * zero runs during an outage — identical on screen to "this job has never run".
+ *
+ * @throws {ContentReadError} db_read_failed
+ */
 export async function listContentRunsForJob(jobId, deps = {}) {
   const client = resolveClient(deps);
 
@@ -408,25 +460,27 @@ export async function listContentRunsForJob(jobId, deps = {}) {
       .sort((a, b) => new Date(a.started_at) - new Date(b.started_at));
   }
 
-  try {
-    const { data, error } = await client
-      .from("content_runs")
-      .select("*")
-      .eq("job_id", jobId)
-      .order("started_at", { ascending: true });
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.warn("[content-db] listContentRunsForJob failed:", err.message);
-    return [];
+  const { data, error } = await client
+    .from("content_runs")
+    .select("*")
+    .eq("job_id", jobId)
+    .order("started_at", { ascending: true });
+  if (error) {
+    throw new ContentReadError(
+      `Could not read content runs for job ${jobId}: ${error.message || error.code || "unknown database error"}`,
+      { cause: error, code: "db_read_failed" }
+    );
   }
+  return data || [];
 }
 
 // ---------------------------------------------------------------------------
 // content_items
 // ---------------------------------------------------------------------------
 
-export async function insertContentItem(item) {
+export async function insertContentItem(item, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentItems;
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const record = {
@@ -449,20 +503,14 @@ export async function insertContentItem(item) {
     updated_at: now,
   };
 
-  if (!supabase) {
-    global.memoryContentItems.set(id, record);
+  if (!client) {
+    memory.set(id, record);
     return record;
   }
 
-  try {
-    const { data, error } = await supabase.from("content_items").insert([record]).select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[content-db] insert content_item failed, using memory:", err.message);
-    global.memoryContentItems.set(id, record);
-    return record;
-  }
+  const { data, error } = await client.from("content_items").insert([record]).select();
+  if (error) throw error;
+  return data[0];
 }
 
 export async function updateContentItem(id, updates, deps = {}) {
@@ -471,7 +519,8 @@ export async function updateContentItem(id, updates, deps = {}) {
   const withTimestamp = { ...updates, updated_at: new Date().toISOString() };
 
   if (!hasDb) {
-    const memItem = global.memoryContentItems.get(id);
+    const memory = deps?.memory || global.memoryContentItems;
+    const memItem = memory.get(id);
     if (memItem) Object.assign(memItem, withTimestamp);
     return memItem || null;
   }
@@ -490,7 +539,8 @@ export async function getContentItem(id, deps = {}) {
   const hasDb = !!client;
 
   if (!hasDb) {
-    return global.memoryContentItems.get(id) || null;
+    const memory = deps?.memory || global.memoryContentItems;
+    return memory.get(id) || null;
   }
 
   const { data, error } = await client
@@ -501,37 +551,39 @@ export async function getContentItem(id, deps = {}) {
   return data[0] || null;
 }
 
-export async function listContentItems(brand) {
-  if (!supabase) {
-    const list = Array.from(global.memoryContentItems.values());
-    const filtered = brand
-      ? list.filter((i) => i.brand.toLowerCase() === brand.toLowerCase())
+export async function listContentItems(brand, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentItems;
+  const key = String(brand || "").trim().toLowerCase();
+
+  if (!client) {
+    const list = Array.from(memory.values());
+    const filtered = key
+      ? list.filter((i) => i.brand.toLowerCase() === key)
       : list;
     return filtered.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
   }
-  try {
-    let query = supabase
-      .from("content_items")
-      .select("*")
-      .order("updated_at", { ascending: false });
-    if (brand) query = query.ilike("brand", brand);
-    const { data, error } = await query;
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.warn("[content-db] list content_items failed, checking memory:", err.message);
-    const list = Array.from(global.memoryContentItems.values());
-    return brand
-      ? list.filter((i) => i.brand.toLowerCase() === brand.toLowerCase())
-      : list;
-  }
+
+  let query = client
+    .from("content_items")
+    .select("*")
+    .order("updated_at", { ascending: false });
+  if (key) query = query.ilike("brand", key);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
 }
 
 // ---------------------------------------------------------------------------
 // content_feedback
 // ---------------------------------------------------------------------------
 
-export async function insertContentFeedback({ item_id, brand, verdict, comment }) {
+export async function insertContentFeedback(
+  { item_id, brand, verdict, comment },
+  deps = {}
+) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentFeedback;
   const id = crypto.randomUUID();
   const record = {
     id,
@@ -542,23 +594,17 @@ export async function insertContentFeedback({ item_id, brand, verdict, comment }
     created_at: new Date().toISOString(),
   };
 
-  if (!supabase) {
-    global.memoryContentFeedback.set(id, record);
+  if (!client) {
+    memory.set(id, record);
     return record;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("content_feedback")
-      .insert([record])
-      .select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[content-db] insert content_feedback failed, using memory:", err.message);
-    global.memoryContentFeedback.set(id, record);
-    return record;
-  }
+  const { data, error } = await client
+    .from("content_feedback")
+    .insert([record])
+    .select();
+  if (error) throw error;
+  return data[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -569,100 +615,86 @@ function briefKey(brand) {
   return String(brand || "").trim().toLowerCase();
 }
 
-export async function getBrandBrief(brand) {
+export async function getBrandBrief(brand, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryBrandBriefs;
   const key = briefKey(brand);
-  if (!supabase) {
-    return global.memoryBrandBriefs.get(key) || null;
+  if (!client) {
+    return memory.get(key) || null;
   }
-  try {
-    const { data, error } = await supabase
-      .from("brand_briefs")
-      .select("*")
-      .ilike("brand", key)
-      .limit(1);
-    if (error) throw error;
-    return data?.[0] || global.memoryBrandBriefs.get(key) || null;
-  } catch (err) {
-    console.warn("[content-db] get brand_brief failed, checking memory:", err.message);
-    return global.memoryBrandBriefs.get(key) || null;
-  }
+  const { data, error } = await client
+    .from("brand_briefs")
+    .select("*")
+    .ilike("brand", key)
+    .limit(1);
+  if (error) throw error;
+  return data?.[0] || null;
 }
 
-export async function upsertBrandBrief(brand, brief) {
+export async function upsertBrandBrief(brand, brief, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryBrandBriefs;
   const key = briefKey(brand);
   const now = new Date().toISOString();
 
-  if (!supabase) {
-    const existing = global.memoryBrandBriefs.get(key);
+  if (!client) {
+    const existing = memory.get(key);
     const record = existing
       ? { ...existing, brief, updated_at: now }
       : { id: crypto.randomUUID(), brand, brief, created_at: now, updated_at: now };
-    global.memoryBrandBriefs.set(key, record);
+    memory.set(key, record);
     return record;
   }
 
-  try {
-    const existing = await getBrandBrief(brand);
-    if (existing?.id && !global.memoryBrandBriefs.has(key)) {
-      const { data, error } = await supabase
-        .from("brand_briefs")
-        .update({ brief, updated_at: now })
-        .eq("id", existing.id)
-        .select();
-      if (error) throw error;
-      return data[0];
-    }
-    const { data, error } = await supabase
+  const existing = await getBrandBrief(brand, deps);
+  if (existing?.id && !memory.has(key)) {
+    const { data, error } = await client
       .from("brand_briefs")
-      .insert([{ brand, brief, created_at: now, updated_at: now }])
+      .update({ brief, updated_at: now })
+      .eq("id", existing.id)
       .select();
     if (error) throw error;
     return data[0];
-  } catch (err) {
-    console.warn("[content-db] upsert brand_brief failed, using memory:", err.message);
-    const record = { id: crypto.randomUUID(), brand, brief, created_at: now, updated_at: now };
-    global.memoryBrandBriefs.set(key, record);
-    return record;
   }
+  const { data, error } = await client
+    .from("brand_briefs")
+    .insert([{ brand, brief, created_at: now, updated_at: now }])
+    .select();
+  if (error) throw error;
+  return data[0];
 }
 
 // ---------------------------------------------------------------------------
 // content_lessons
 // ---------------------------------------------------------------------------
 
-export async function listLessons(brand, playbook, { activeOnly = true } = {}) {
+export async function listLessons(brand, playbook, { activeOnly = true } = {}, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentLessons;
   const key = briefKey(brand);
-  if (!supabase) {
-    return Array.from(global.memoryContentLessons.values()).filter(
+  if (!client) {
+    return Array.from(memory.values()).filter(
       (l) =>
         l.brand.toLowerCase() === key &&
         (!playbook || l.playbook === playbook) &&
         (!activeOnly || l.active)
     );
   }
-  try {
-    let query = supabase
-      .from("content_lessons")
-      .select("*")
-      .ilike("brand", key)
-      .order("created_at", { ascending: false });
-    if (playbook) query = query.eq("playbook", playbook);
-    if (activeOnly) query = query.eq("active", true);
-    const { data, error } = await query;
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.warn("[content-db] list content_lessons failed, checking memory:", err.message);
-    return Array.from(global.memoryContentLessons.values()).filter(
-      (l) =>
-        l.brand.toLowerCase() === key &&
-        (!playbook || l.playbook === playbook) &&
-        (!activeOnly || l.active)
-    );
-  }
+  let query = client
+    .from("content_lessons")
+    .select("*")
+    .ilike("brand", key)
+    .order("created_at", { ascending: false });
+  if (playbook) query = query.eq("playbook", playbook);
+  if (activeOnly) query = query.eq("active", true);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
 }
 
-export async function insertLessons(brand, playbook, lessons, sourceFeedbackId) {
+export async function insertLessons(brand, playbook, lessons, sourceFeedbackId, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentLessons;
   const records = (lessons || [])
     .filter((l) => l && l.trim())
     .map((lesson) => ({
@@ -676,54 +708,44 @@ export async function insertLessons(brand, playbook, lessons, sourceFeedbackId) 
     }));
   if (records.length === 0) return [];
 
-  if (!supabase) {
-    records.forEach((r) => global.memoryContentLessons.set(r.id, r));
+  if (!client) {
+    records.forEach((r) => memory.set(r.id, r));
     return records;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("content_lessons")
-      .insert(records)
-      .select();
-    if (error) throw error;
-    return data;
-  } catch (err) {
-    console.warn("[content-db] insert content_lessons failed, using memory:", err.message);
-    records.forEach((r) => global.memoryContentLessons.set(r.id, r));
-    return records;
-  }
+  const { data, error } = await client
+    .from("content_lessons")
+    .insert(records)
+    .select();
+  if (error) throw error;
+  return data;
 }
 
-export async function setLessonActive(id, active) {
-  const memLesson = global.memoryContentLessons.get(id);
-  if (memLesson) memLesson.active = active;
-
-  if (!supabase || global.memoryContentLessons.has(id)) {
+export async function setLessonActive(id, active, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentLessons;
+  if (!client) {
+    const memLesson = memory.get(id);
+    if (memLesson) memLesson.active = active;
     return memLesson || null;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("content_lessons")
-      .update({ active })
-      .eq("id", id)
-      .select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[content-db] setLessonActive failed:", err.message);
-    return memLesson || null;
-  }
+  const { data, error } = await client
+    .from("content_lessons")
+    .update({ active })
+    .eq("id", id)
+    .select();
+  if (error) throw error;
+  return data?.[0] || null;
 }
 
 /** Deactivate a lesson by exact text match (learn step `supersedes`). */
-export async function deactivateLessonByText(brand, playbook, lessonText) {
+export async function deactivateLessonByText(brand, playbook, lessonText, deps = {}) {
   const target = String(lessonText || "").trim();
   if (!target) return;
-  const all = await listLessons(brand, playbook, { activeOnly: true });
+  const all = await listLessons(brand, playbook, { activeOnly: true }, deps);
   const match = all.find((l) => l.lesson.trim() === target);
-  if (match) await setLessonActive(match.id, false);
+  if (match) await setLessonActive(match.id, false, deps);
 }
 
 // ---------------------------------------------------------------------------
@@ -738,107 +760,95 @@ function agentBrandKey(brand) {
  * List agents for a brand. Seeds the two built-in agents on first call for a
  * brand that has none, so every brand starts with usable agents.
  */
-export async function listAgents(brand, { seedIfEmpty = true } = {}) {
+export async function listAgents(brand, { seedIfEmpty = true } = {}, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentAgents;
   const key = agentBrandKey(brand);
 
   const readMemory = () =>
-    Array.from(global.memoryContentAgents.values())
+    Array.from(memory.values())
       .filter((a) => a.brand.toLowerCase() === key)
       .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
   let agents;
-  if (!supabase) {
+  if (!client) {
     agents = readMemory();
   } else {
-    try {
-      const { data, error } = await supabase
-        .from("content_agents")
-        .select("*")
-        .ilike("brand", key)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      agents = data || [];
-    } catch (err) {
-      console.warn("[content-db] listAgents failed, checking memory:", err.message);
-      agents = readMemory();
-    }
+    const { data, error } = await client
+      .from("content_agents")
+      .select("*")
+      .ilike("brand", key)
+      .order("created_at", { ascending: true });
+    if (error) throw error;
+    agents = data || [];
   }
 
   if (agents.length === 0 && seedIfEmpty && key) {
     const seeded = [];
     for (const a of builtinAgents()) {
-      seeded.push(await insertAgent(brand, a));
+      seeded.push(await insertAgent(brand, a, deps));
     }
     return seeded;
   }
   return agents;
 }
 
-export async function getAgent(id) {
-  if (!supabase || global.memoryContentAgents.has(id)) {
-    return global.memoryContentAgents.get(id) || null;
+export async function getAgent(id, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentAgents;
+  if (!client) {
+    return memory.get(id) || null;
   }
-  try {
-    const { data, error } = await supabase.from("content_agents").select("*").eq("id", id);
-    if (error) throw error;
-    return data?.[0] || null;
-  } catch (err) {
-    console.warn("[content-db] getAgent failed, checking memory:", err.message);
-    return global.memoryContentAgents.get(id) || null;
-  }
+  const { data, error } = await client.from("content_agents").select("*").eq("id", id);
+  if (error) throw error;
+  return data?.[0] || null;
 }
 
-export async function insertAgent(brand, agent) {
+export async function insertAgent(brand, agent, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentAgents;
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const record = { id, brand, ...agent, created_at: now, updated_at: now };
 
-  if (!supabase) {
-    global.memoryContentAgents.set(id, record);
+  if (!client) {
+    memory.set(id, record);
     return record;
   }
-  try {
-    const { data, error } = await supabase.from("content_agents").insert([record]).select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[content-db] insertAgent failed, using memory:", err.message);
-    global.memoryContentAgents.set(id, record);
-    return record;
-  }
+  const { data, error } = await client.from("content_agents").insert([record]).select();
+  if (error) throw error;
+  return data[0];
 }
 
-export async function updateAgent(id, updates) {
+export async function updateAgent(id, updates, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentAgents;
   const withTs = { ...updates, updated_at: new Date().toISOString() };
-  const mem = global.memoryContentAgents.get(id);
-  if (mem) Object.assign(mem, withTs);
-  if (!supabase || global.memoryContentAgents.has(id)) return mem || null;
-  try {
-    const { data, error } = await supabase
-      .from("content_agents")
-      .update(withTs)
-      .eq("id", id)
-      .select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[content-db] updateAgent failed:", err.message);
+  if (!client) {
+    const mem = memory.get(id);
+    if (mem) Object.assign(mem, withTs);
     return mem || null;
   }
+  const { data, error } = await client
+    .from("content_agents")
+    .update(withTs)
+    .eq("id", id)
+    .select();
+  if (error) throw error;
+  return data?.[0] || null;
 }
 
-export async function deleteAgent(id) {
-  if (global.memoryContentAgents.has(id)) {
-    global.memoryContentAgents.delete(id);
-    return true;
-  }
-  if (!supabase) return false;
-  try {
-    const { error } = await supabase.from("content_agents").delete().eq("id", id);
-    if (error) throw error;
-    return true;
-  } catch (err) {
-    console.warn("[content-db] deleteAgent failed:", err.message);
+export async function deleteAgent(id, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentAgents;
+  if (!client) {
+    if (memory.has(id)) {
+      memory.delete(id);
+      return true;
+    }
     return false;
   }
+  const { data, error } = await client.from("content_agents").delete().eq("id", id).select();
+  if (error) throw error;
+  return !!(data && data.length > 0);
 }

@@ -15,6 +15,52 @@ import { fileURLToPath } from "node:url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const MARK = "<!-- doc-status -->";
 
+function assertCorpusIntact(rows, name, { floor, required = [], isTuple = false }) {
+  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
+  assert.ok(
+    rows.length >= floor,
+    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a corpus ` +
+      `whose tests iterate over it, so assertions silently stopped running. If the removal ` +
+      `was deliberate, lower the floor here in the same commit and state why.`
+  );
+  if (isTuple) {
+    rows.forEach((row, i) => {
+      assert.ok(
+        Array.isArray(row) && row.length >= 2 && typeof row[0] === "string",
+        `${name}[${i}] is not a valid tuple entry: ${JSON.stringify(row)}`
+      );
+      const reason = row[row.length - 1];
+      assert.ok(
+        typeof reason === "string" && reason.trim().length > 0,
+        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
+          `the next editor deletes, and the floor above would then be met by padding`
+      );
+    });
+  } else {
+    rows.forEach((item, i) => {
+      assert.ok(
+        typeof item === "string",
+        `${name}[${i}] is not a string: ${JSON.stringify(item)}`
+      );
+    });
+  }
+  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r));
+  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
+  assert.deepEqual(
+    dupes,
+    [],
+    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
+      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
+  );
+  const missing = required.filter((t) => !targets.includes(t));
+  assert.deepEqual(
+    missing,
+    [],
+    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing ` +
+      `targets: removing one is a decision to stop defending that target -- make it in the same commit as this list.`
+  );
+}
+
 /** Every markdown doc that must carry a header. */
 async function governedDocs() {
   const out = ["DESIGN.md", "PRODUCT.md"];
@@ -29,9 +75,28 @@ async function governedDocs() {
   return out;
 }
 
+test("GUARD TEETH — assertCorpusIntact rejects under-floor, duplicate, missing required, or untyped corpora", () => {
+  assert.throws(() => assertCorpusIntact([], "TEST_CORPUS", { floor: 1, isTuple: false }), /under its floor of 1/);
+  assert.throws(() => assertCorpusIntact(["a", "a"], "TEST_CORPUS", { floor: 1, isTuple: false }), /repeats/);
+  assert.throws(() => assertCorpusIntact(["a"], "TEST_CORPUS", { floor: 1, required: ["b"], isTuple: false }), /no longer contains/);
+  assert.throws(() => assertCorpusIntact([123], "TEST_CORPUS", { floor: 1, isTuple: false }), /is not a string/);
+});
+
 test("GUARD — every governed doc carries a status header", async () => {
+  const docs = await governedDocs();
+  assertCorpusIntact(docs, "governedDocs()", {
+    floor: 35,
+    required: [
+      "DESIGN.md",
+      "PRODUCT.md",
+      "docs/OPERATOR_LEDGER.md",
+      "docs/BUILD_JOURNAL.md",
+      "docs/plans/2026-08-29-rebuild-roadmap.md",
+    ],
+    isTuple: false,
+  });
   const missing = [];
-  for (const rel of await governedDocs()) {
+  for (const rel of docs) {
     const src = await readFile(path.join(REPO, rel), "utf8");
     // The generated tracker declares its status in its own generator template.
     if (rel.endsWith("2026-08-29-rebuild-roadmap.md")) {
@@ -140,6 +205,11 @@ test("GUARD — the README migration table lists every migration on disk", async
     .filter((f) => f.endsWith(".sql"))
     .map((f) => f.replace(/\.sql$/, ""))
     .sort();
+  assertCorpusIntact(onDisk, "onDisk migrations", {
+    floor: 12,
+    required: ["001_initial_schema", "013_brand_metrics_sov_state"],
+    isTuple: false,
+  });
   const missing = onDisk.filter((m) => !readme.includes("`" + m + "`"));
   assert.deepEqual(
     missing,
@@ -170,6 +240,11 @@ test("GUARD — OPERATOR_LEDGER § C lists every migration on disk", async () =>
     .filter((f) => f.endsWith(".sql"))
     .map((f) => f.replace(/\.sql$/, ""))
     .sort();
+  assertCorpusIntact(onDisk, "onDisk migrations", {
+    floor: 12,
+    required: ["001_initial_schema", "013_brand_metrics_sov_state"],
+    isTuple: false,
+  });
   const missing = onDisk.filter((m) => !section.includes("`" + m + "`"));
   assert.deepEqual(
     missing,

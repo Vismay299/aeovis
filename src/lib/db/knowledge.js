@@ -17,34 +17,39 @@ function brandKey(brand) {
   return String(brand || "").trim().toLowerCase();
 }
 
-export async function listKnowledgeBlocks(brand, { activeOnly = false } = {}) {
+function resolveClient(deps) {
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "client")) return deps.client;
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "supabase")) return deps.supabase;
+  return supabase;
+}
+
+export async function listKnowledgeBlocks(brand, { activeOnly = false } = {}, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryKnowledgeBlocks;
   const key = brandKey(brand);
   const fromMemory = () =>
-    Array.from(global.memoryKnowledgeBlocks.values())
+    Array.from(memory.values())
       .filter((b) => b.brand.toLowerCase() === key && (!activeOnly || b.active))
       .sort((a, b) => a.sort_order - b.sort_order);
 
-  if (!supabase) return fromMemory();
-  try {
-    let q = supabase
-      .from("knowledge_blocks")
-      .select("*")
-      .ilike("brand", key)
-      .order("sort_order", { ascending: true });
-    if (activeOnly) q = q.eq("active", true);
-    const { data, error } = await q;
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.warn("[knowledge-db] list failed, checking memory:", err.message);
-    return fromMemory();
-  }
+  if (!client) return fromMemory();
+  let q = client
+    .from("knowledge_blocks")
+    .select("*")
+    .ilike("brand", key)
+    .order("sort_order", { ascending: true });
+  if (activeOnly) q = q.eq("active", true);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
 }
 
-export async function insertKnowledgeBlock(brand, block) {
+export async function insertKnowledgeBlock(brand, block, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryKnowledgeBlocks;
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const existing = await listKnowledgeBlocks(brand);
+  const existing = await listKnowledgeBlocks(brand, {}, deps);
   const record = {
     id,
     brand,
@@ -58,66 +63,58 @@ export async function insertKnowledgeBlock(brand, block) {
     updated_at: now,
   };
 
-  if (!supabase) {
-    global.memoryKnowledgeBlocks.set(id, record);
+  if (!client) {
+    memory.set(id, record);
     return record;
   }
-  try {
-    const { data, error } = await supabase.from("knowledge_blocks").insert([record]).select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[knowledge-db] insert failed, using memory:", err.message);
-    global.memoryKnowledgeBlocks.set(id, record);
-    return record;
-  }
+  const { data, error } = await client.from("knowledge_blocks").insert([record]).select();
+  if (error) throw error;
+  return data[0];
 }
 
-export async function updateKnowledgeBlock(id, updates) {
+export async function updateKnowledgeBlock(id, updates, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryKnowledgeBlocks;
   const clean = { ...updates, updated_at: new Date().toISOString() };
   if (clean.content) clean.content = String(clean.content).slice(0, MAX_CONTENT_CHARS);
-  const mem = global.memoryKnowledgeBlocks.get(id);
-  if (mem) Object.assign(mem, clean);
-  if (!supabase || global.memoryKnowledgeBlocks.has(id)) return mem || null;
-  try {
-    const { data, error } = await supabase
-      .from("knowledge_blocks")
-      .update(clean)
-      .eq("id", id)
-      .select();
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("[knowledge-db] update failed:", err.message);
+  if (!client) {
+    const mem = memory.get(id);
+    if (mem) Object.assign(mem, clean);
     return mem || null;
   }
+  const { data, error } = await client
+    .from("knowledge_blocks")
+    .update(clean)
+    .eq("id", id)
+    .select();
+  if (error) throw error;
+  return data?.[0] || null;
 }
 
-export async function deleteKnowledgeBlock(id) {
-  if (global.memoryKnowledgeBlocks.has(id)) {
-    global.memoryKnowledgeBlocks.delete(id);
-    return true;
-  }
-  if (!supabase) return false;
-  try {
-    const { error } = await supabase.from("knowledge_blocks").delete().eq("id", id);
-    if (error) throw error;
-    return true;
-  } catch (err) {
-    console.warn("[knowledge-db] delete failed:", err.message);
+export async function deleteKnowledgeBlock(id, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryKnowledgeBlocks;
+  if (!client) {
+    if (memory.has(id)) {
+      memory.delete(id);
+      return true;
+    }
     return false;
   }
+  const { data, error } = await client.from("knowledge_blocks").delete().eq("id", id).select();
+  if (error) throw error;
+  return !!(data && data.length > 0);
 }
 
 /** Persist a new drag order: array of block ids in the desired sequence. */
-export async function reorderKnowledgeBlocks(brand, orderedIds) {
-  const blocks = await listKnowledgeBlocks(brand);
+export async function reorderKnowledgeBlocks(brand, orderedIds, deps = {}) {
+  const blocks = await listKnowledgeBlocks(brand, {}, deps);
   const byId = new Map(blocks.map((b) => [b.id, b]));
   let i = 0;
   for (const id of orderedIds) {
     if (!byId.has(id)) continue;
-    await updateKnowledgeBlock(id, { sort_order: i });
+    await updateKnowledgeBlock(id, { sort_order: i }, deps);
     i += 1;
   }
-  return listKnowledgeBlocks(brand);
+  return listKnowledgeBlocks(brand, {}, deps);
 }

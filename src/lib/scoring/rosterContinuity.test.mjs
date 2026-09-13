@@ -115,8 +115,43 @@ test("resolveCompetitorRoster - a DB failure loading the previous roster is NOT 
   );
 });
 
-test("isRosterAssessable - only a genuinely extracted roster (or a pre-R0.3.3 scan) is assessable", () => {
+test("resolveCompetitorRoster - user competitors configured: roster_source is 'configured'", async () => {
+  const out = await resolveCompetitorRoster({
+    userCompetitors: ["Kajaria", "Somany"],
+    extract: async () => [
+      { name: "Kajaria", source: "user" },
+      { name: "Somany", source: "user" },
+      { name: "Simpolo", source: "discovered" },
+    ],
+    loadPreviousRoster: async () => [],
+    logger: silent,
+  });
+  assert.equal(out.roster_source, ROSTER_SOURCE.CONFIGURED);
+  assert.equal(out.extraction_offline, false);
+  assert.equal(isRosterAssessable(out.roster_source), true);
+  assert.deepEqual(out.competitors.map((c) => c.name), ["Kajaria", "Somany", "Simpolo"]);
+});
+
+test("resolveCompetitorRoster - user competitors configured and extractor offline: preserves user roster as 'configured'", async () => {
+  const out = await resolveCompetitorRoster({
+    userCompetitors: ["Kajaria", "Somany"],
+    extract: async () => {
+      throw new LlmUnavailableError("timeout", { reason: "timeout" });
+    },
+    loadPreviousRoster: async () => [],
+    logger: silent,
+  });
+  assert.equal(out.roster_source, ROSTER_SOURCE.CONFIGURED);
+  assert.equal(out.extraction_offline, true);
+  assert.equal(isRosterAssessable(out.roster_source), true);
+  assert.deepEqual(out.competitors.map((c) => c.name), ["Kajaria", "Somany"]);
+  assert.ok(out.competitors.every((c) => c.source === ROSTER_SOURCE.CONFIGURED));
+});
+
+test("isRosterAssessable - extracted, configured, or historical scans are assessable; offline are not", () => {
   assert.equal(isRosterAssessable(ROSTER_SOURCE.EXTRACTED), true);
+  assert.equal(isRosterAssessable(ROSTER_SOURCE.CONFIGURED), true);
+  assert.equal(isRosterAssessable(ROSTER_SOURCE.USER), true);
   assert.equal(isRosterAssessable(null), true, "historical scans carry no label — treated as measured");
   assert.equal(isRosterAssessable(undefined), true);
   assert.equal(isRosterAssessable(ROSTER_SOURCE.CARRIED_FORWARD), false);

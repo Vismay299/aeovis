@@ -535,6 +535,13 @@ export default function DashboardShell({ scan, scanId, error = null }) {
           const summary = result.perEngineSummaries[key] || {};
           const share = summary.share_of_ai_pct;
           const measured = typeof share === "number" && Number.isFinite(share);
+          const stateReason = summary.state_reason ?? null;
+          let declaredState = summary.state ?? (measured ? null : "no share recorded");
+          if (!measured && (declaredState === "did-not-report" || declaredState === "did_not_report" || stateReason === "no_results")) {
+            declaredState = "did-not-report";
+          } else if (!measured && (declaredState === "not_assessed" || declaredState === "not-assessed")) {
+            declaredState = "not-assessed";
+          }
           return {
             key: `engine-${key}`,
             // A degraded engine's share is a real measurement of an
@@ -545,21 +552,24 @@ export default function DashboardShell({ scan, scanId, error = null }) {
               ? `${engineLabel(key)} (degraded)`
               : engineLabel(key),
             value: measured ? share : null,
-            state: summary.state ?? (measured ? null : "no share recorded"),
-            stateReason: summary.state_reason ?? null,
+            state: declaredState,
+            stateReason,
           };
         })
       : [];
 
-  const droppedEngineChips = engineSetDropped.map((e, i) => ({
-    key: `dropped-${(typeof e === "string" ? e : e?.engine) ?? i}`,
-    label: engineSetRefLabel(e),
-    value: null,
-    state: "not probed",
-    stateReason:
-      engineSetChange?.title ||
-      "This engine was frozen into the scan but produced no answer, so it is not in the index.",
-  }));
+  const droppedEngineChips = engineSetDropped.map((e, i) => {
+    const explicitState = typeof e === "object" && e?.state ? e.state : null;
+    return {
+      key: `dropped-${(typeof e === "string" ? e : e?.engine) ?? i}`,
+      label: engineSetRefLabel(e),
+      value: null,
+      state: explicitState || "not probed",
+      stateReason:
+        engineSetChange?.title ||
+        "This engine was frozen into the scan but produced no answer, so it is not in the index.",
+    };
+  });
 
   /**
    * The row is shown when the scan blended more than one engine, and ALSO
@@ -573,6 +583,51 @@ export default function DashboardShell({ scan, scanId, error = null }) {
       ? [...measuredEngineChips, ...droppedEngineChips]
       : null;
 
+  /* R2.1.3: engines_counted and UI vocabulary states.
+     engines_counted is persisted and must be rendered on the dashboard so
+     users know how many engines are blended into the AI Visibility Index.
+     Read the raw stored value first: normalizeResult defaults enginesCounted to 0
+     for legacy compatibility, so reading result.enginesCounted directly would
+     falsely coerce an absent/null count to a measured zero. */
+  const rawEnginesCounted =
+    scan?.raw_results?.engines_counted !== undefined
+      ? scan.raw_results.engines_counted
+      : scan?.engines_counted !== undefined
+        ? scan.engines_counted
+        : result?.raw_results?.engines_counted !== undefined
+          ? result.raw_results.engines_counted
+          : result?.engines_counted !== undefined
+            ? result.engines_counted
+            : undefined;
+  const enginesCountedRaw =
+    rawEnginesCounted !== undefined ? rawEnginesCounted : result.enginesCounted;
+  const enginesCounted =
+    typeof enginesCountedRaw === "number" && Number.isFinite(enginesCountedRaw)
+      ? enginesCountedRaw
+      : null;
+  const displayEnginesCounted =
+    enginesCounted !== null
+      ? `${enginesCounted} ${enginesCounted === 1 ? "engine" : "engines"} counted`
+      : "— engines counted";
+
+  const hasDidNotReport =
+    (engineChips || []).some(
+      (c) =>
+        c.state === "did-not-report" ||
+        c.state === "did_not_report" ||
+        c.stateToken === "did-not-report" ||
+        c.stateToken === "did_not_report"
+    ) ||
+    (result.perEngineSummaries &&
+      typeof result.perEngineSummaries === "object" &&
+      Object.values(result.perEngineSummaries).some(
+        (s) =>
+          s &&
+          (s.state === "did-not-report" ||
+            s.state === "did_not_report" ||
+            s.state_reason === "no_results")
+      ));
+
   /**
    * "There is no trustworthy slice left" — the state that suppresses the score
    * and replaces the views with the placeholder. It is deliberately NOT "any
@@ -582,6 +637,12 @@ export default function DashboardShell({ scan, scanId, error = null }) {
    * below is what says the index got narrower and why.
    */
   const dataSourceIssue = scanHealth.severity === "critical";
+
+  const isNotAssessed =
+    result.state === "not_assessed" ||
+    result.state === "not-assessed" ||
+    result.measurementState === "not_assessed" ||
+    (result.visibilityScore == null && !dataSourceIssue && result.visibilityIndexPct == null && result.shareOfAiPct == null);
   // Hero metric. Multi-engine: AI Visibility Index (equal-weight mean).
   // Single-engine: shareOfAiPct (the AIO-only value).
   const heroScore = result.isMultiEngine
@@ -753,6 +814,45 @@ export default function DashboardShell({ scan, scanId, error = null }) {
           <span className="chip" title={`Scoring ${result.scoringVersion}`}>
             {probeSources.map(engineLabel).join(" · ")}
           </span>
+          {/* R2.1.3: engines_counted rendered on the dashboard */}
+          {(result.isMultiEngine || enginesCounted !== null || result.enginesCounted !== undefined || result.engines_counted !== undefined) && (
+            <span
+              className="chip"
+              data-testid="dashboard-engines-counted"
+              data-measured={enginesCounted !== null ? "true" : "false"}
+              title="Number of engines blended into the headline AI Visibility Index"
+            >
+              {displayEnginesCounted}
+            </span>
+          )}
+          {/* R2.1.3: UI chips for did-not-report / not-assessed / small-sample */}
+          {hasDidNotReport && (
+            <span
+              className="chip chip--warn"
+              data-testid="chip-did-not-report"
+              title="One or more engines did not report answers"
+            >
+              Did not report
+            </span>
+          )}
+          {isNotAssessed && (
+            <span
+              className="chip chip--warn"
+              data-testid="chip-not-assessed"
+              title="This reading was not assessed"
+            >
+              Not assessed
+            </span>
+          )}
+          {result.insufficientSample && (
+            <span
+              className="chip chip--warn"
+              data-testid="chip-small-sample"
+              title="Only a small sample of prompts returned an answer"
+            >
+              Small sample
+            </span>
+          )}
           {/* A record with no collection time reads as an em dash and says so —
               it must not be indistinguishable from one collected a moment ago. */}
           {hasTimestamp(result.scanTimestamp) ? (
@@ -890,7 +990,7 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                           <span className="dim">(need ≥ {engine.min_coverage_pct}%)</span>
                         </span>
                         <span className="row__v">
-                          {engine.coverage_pct === null ? "—" : `${engine.coverage_pct}%`}
+                          {engine.coverage_pct == null || !Number.isFinite(engine.coverage_pct) ? "—" : `${engine.coverage_pct}%`}
                         </span>
                       </div>
                     ))}
@@ -901,29 +1001,19 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                           <span className="dim">(limit {engine.error_rate_limit_pct}%)</span>
                         </span>
                         <span className="row__v">
-                          {engine.error_rate_pct === null ? "—" : `${engine.error_rate_pct}%`}
+                          {engine.error_rate_pct == null || !Number.isFinite(engine.error_rate_pct) ? "—" : `${engine.error_rate_pct}%`}
                         </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  /* R2.7.12 — the em dash, same as the per-engine rows above.
+                  /* R2.7.12 / R2.7.13 — em dash for unmeasured/nullish figures.
                      This is the banner whose entire job is to say the reading
                      is incomplete; printing "0%" for a coverage figure the
                      record does not carry claims a measurement on the one
                      screen that exists to deny one, and "0%" is also exactly
                      what a genuinely empty scan looks like. The degradedEngines
-                     branch twenty lines up has always written `=== null ? "—"`;
-                     these two legacy rows now match it.
-                     CURRENTLY LATENT, SAY SO: services/api.js:510-511 ends
-                     normalizeResult() with `aioCoveragePct = aioCoveragePct ??
-                     0` and the same for the error rate, so a scan coming
-                     through the normalizer arrives here already coerced and
-                     this branch renders "0%" regardless. That file is owned by
-                     another task in flight and is not touched here. The fix is
-                     live only for a pre-normalized `result` that kept its null;
-                     until the upstream coercion dies this is the render edge
-                     being correct ahead of its input, not a visible change. */
+                     branch above writes the same em dash for unmeasured slices. */
                   <div className="rows">
                     <div className="row">
                       <span className="row__n">
@@ -985,7 +1075,7 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                         <span className="dim">(need ≥ {engine.min_coverage_pct}%)</span>
                       </span>
                       <span className="row__v">
-                        {engine.coverage_pct === null ? "—" : `${engine.coverage_pct}%`}
+                        {engine.coverage_pct == null || !Number.isFinite(engine.coverage_pct) ? "—" : `${engine.coverage_pct}%`}
                       </span>
                     </div>
                   ))}
@@ -1092,7 +1182,7 @@ export default function DashboardShell({ scan, scanId, error = null }) {
           {!dataSourceIssue && result.insufficientSample && (
             <div className="panel" data-testid="small-sample-warning" style={{ marginBottom: 16 }}>
               <div className="panel__h">
-                <span className="chip chip--warn">Small sample</span>
+                <span className="chip chip--warn" data-testid="chip-small-sample">Small sample</span>
                 <b>
                   Only {result.queriesWithAio ?? result.nonBrandedWithAio} of{" "}
                   {result.promptsTracked ?? result.promptsAnalyzed} tracked prompts returned a live
@@ -1199,17 +1289,29 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                 promptSetChanged={!deltaSamePromptSet && !!previousScan}
                 scoreLabel={result.isMultiEngine ? "AI Visibility Index" : null}
                 engineChips={engineChips}
+                enginesCounted={enginesCounted}
                 stats={[
                   {
-                    value: `${result.visibleNonBranded ?? 0}/${result.nonBrandedWithAio ?? 0}`,
+                    value:
+                      result.visibleNonBranded == null ||
+                      result.nonBrandedWithAio == null ||
+                      result.nonBrandedWithAio === 0
+                        ? "—"
+                        : `${result.visibleNonBranded}/${result.nonBrandedWithAio}`,
                     label: "answers naming you",
                   },
                   {
-                    value: `${result.aioCoveragePct ?? 0}%`,
+                    value:
+                      result.aioCoveragePct == null || !Number.isFinite(result.aioCoveragePct)
+                        ? "—"
+                        : `${result.aioCoveragePct}%`,
                     label: "answer coverage",
                   },
                   {
-                    value: `${result.promptsAnalyzed ?? 0}`,
+                    value:
+                      result.promptsAnalyzed == null || !Number.isFinite(result.promptsAnalyzed)
+                        ? "—"
+                        : `${result.promptsAnalyzed}`,
                     label: "queries tracked",
                   },
                 ]}

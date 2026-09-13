@@ -122,9 +122,18 @@ const DEMO_ENGINES = DEPLOYED_ENGINE_KEYS.map((key) => {
 // The rail says "the same N questions go to each", which is only true when the
 // set divides evenly across the deployed engines. Take the smallest, so an
 // uneven split under-claims rather than over-claims.
-const PER_ENGINE_ASKED = DEMO_ENGINES.length
-  ? Math.min(...DEMO_ENGINES.map((e) => e.asked))
-  : 0;
+// R2.7.11: pass absent rather than 0 when there are no engine readings, so
+// EngineRail reports not-measured rather than a labelled measured zero ("none asked").
+export function computePerEngineAsked(engines) {
+  if (!Array.isArray(engines) || engines.length === 0) return undefined;
+  const asked = engines
+    .map((e) => e?.asked)
+    .filter((a) => typeof a === 'number' && Number.isFinite(a));
+  if (asked.length === 0) return undefined;
+  return Math.min(...asked);
+}
+
+const PER_ENGINE_ASKED = computePerEngineAsked(DEMO_ENGINES);
 
 // Prose only. Two of these notes used to carry arithmetic — "three of your four
 // highest-intent questions", "six of its 64" — that was never true of the

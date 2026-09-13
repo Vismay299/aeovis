@@ -29,10 +29,18 @@ runs in the main CI suite and fails the build if a crossing import appears.
 
 ## Running it
 
+For a complete step-by-step operator guide to starting dev Supabase, seeding tasks, running the loop on a laptop, and observing ledger state, see the **[Dev runbook for the fleet](../docs/runbooks/fleet-dev.md)** (R1.2.5).
+
 ```bash
 npm --prefix worker install
 npm --prefix worker run check     # parses, then starts and completes one pass
 npm --prefix worker start         # the real loop; needs SUPABASE_URL + a key
+```
+
+Or from the repository root:
+```bash
+npm run fleet:check               # pre-flight selftest
+npm run fleet:dev                 # runs against dev Supabase (.env.fleet.local)
 ```
 
 `npm run check` runs `--selftest`, which boots the real config path and drives
@@ -46,6 +54,7 @@ acceptance criterion.
 |---|---|---|---|---|
 | `SUPABASE_URL` | **yes** | — | http(s) URL | The queue to read. `NEXT_PUBLIC_SUPABASE_URL` also accepted. |
 | `SUPABASE_SERVICE_ROLE_KEY` | **yes** | — | — | Credentials for it. `NEXT_PUBLIC_SUPABASE_ANON_KEY` also accepted. |
+| `FLEET_ALLOW_PRODUCTION_DB` | no | `false` | `true`, `false` | Explicit arming flag required to run the fleet against the production database (R1.2.12). `FLEET_ARM_PRODUCTION_DB` also accepted. |
 | `FLEET_ENGINES` | no | `perplexity` | `perplexity`, `chatgpt` | Which surfaces this container drives. |
 | `FLEET_BATCH_SIZE` | no | `5`, narrowed to what one lease can pay for | 1–50 | Tasks claimed per poll. See *the lease arithmetic* below: on the shipped defaults it runs at **2**, announced at boot. |
 | `FLEET_LEASE_MS` | no | `300000` | 30000–3600000 | How long a claim is held before it can be reaped. |
@@ -140,6 +149,14 @@ are the classic place a key leaks into a container log.
 `--selftest` relaxes **only** the two credentials. A malformed `FLEET_*` value
 still refuses there, so `npm run check` cannot go green on a config the real
 boot would reject.
+
+### Production database protection (R1.2.12)
+
+A laptop fleet started in a shell that carries the web app's credentials (`NEXT_PUBLIC_SUPABASE_URL` or app production values) will **refuse to boot** by default. Because `scan_runs` and `probe_tasks` are writable tables, an unguarded worker booting against production would immediately write rows into the production database.
+
+The worker process checks if the target database matches the application's production database credentials or was inherited via fallback. If so, it requires explicit arming:
+`FLEET_ALLOW_PRODUCTION_DB=true` (or `FLEET_ARM_PRODUCTION_DB=true`).
+Without this explicit variable, the boot halts with a non-zero exit code and an explanatory error.
 
 ## What is not built
 

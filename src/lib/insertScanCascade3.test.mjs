@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { register } from "node:module";
+import { register, createRequire } from "node:module";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 /**
  * R2.8.7 — insertScan's cascade 3 wrote the row and reported nothing.
@@ -61,15 +64,41 @@ import { readFile } from "node:fs/promises";
 // The library under observation. One constant, used both to READ the source
 // (test 1) and to CONSTRUCT the client (tests 2-5) — so a wrong path fails
 // both, loudly, instead of quietly proving nothing.
+//
+// Resolved dynamically without hardcoded relative paths so it works in both
+// main workspace and isolated git worktrees (.claude/worktrees/<name>) where
+// node_modules lives in an ancestor directory.
 // ---------------------------------------------------------------------------
-const POSTGREST_DIST = new URL(
-  "../../node_modules/@supabase/postgrest-js/dist/index.mjs",
-  import.meta.url
-);
+function resolvePostgrestDist() {
+  try {
+    const res = import.meta.resolve("@supabase/postgrest-js");
+    if (res) return new URL(res);
+  } catch {}
 
+  try {
+    const req = createRequire(import.meta.url);
+    const resolved = req.resolve("@supabase/postgrest-js");
+    const mjs = path.join(path.dirname(resolved), "index.mjs");
+    if (existsSync(mjs)) return pathToFileURL(mjs);
+    return pathToFileURL(resolved);
+  } catch {}
+
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  while (dir && path.dirname(dir) !== dir) {
+    const candidate = path.join(dir, "node_modules", "@supabase", "postgrest-js", "dist", "index.mjs");
+    if (existsSync(candidate)) return pathToFileURL(candidate);
+    const nested = path.join(dir, "node_modules", "@supabase", "supabase-js", "node_modules", "@supabase", "postgrest-js", "dist", "index.mjs");
+    if (existsSync(nested)) return pathToFileURL(nested);
+    dir = path.dirname(dir);
+  }
+  throw new Error("Could not locate @supabase/postgrest-js");
+}
+
+let POSTGREST_DIST = null;
 let postgrest = null;
 let postgrestImportError = null;
 try {
+  POSTGREST_DIST = resolvePostgrestDist();
   postgrest = await import(POSTGREST_DIST.href);
 } catch (err) {
   postgrestImportError = err;
@@ -142,6 +171,52 @@ const LEGACY_COLUMNS = new Set([
   "competitors_raw",
 ]);
 
+function assertCorpusIntact(rows, name, { floor, required = [], isTuple = false }) {
+  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
+  assert.ok(
+    rows.length >= floor,
+    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a corpus ` +
+      `whose tests iterate over it, so assertions silently stopped running. If the removal ` +
+      `was deliberate, lower the floor here in the same commit and state why.`
+  );
+  if (isTuple) {
+    rows.forEach((row, i) => {
+      assert.ok(
+        Array.isArray(row) && row.length >= 2 && typeof row[0] === "string",
+        `${name}[${i}] is not a valid tuple entry: ${JSON.stringify(row)}`
+      );
+      const reason = row[row.length - 1];
+      assert.ok(
+        typeof reason === "string" && reason.trim().length > 0,
+        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
+          `the next editor deletes, and the floor above would then be met by padding`
+      );
+    });
+  } else {
+    rows.forEach((item, i) => {
+      assert.ok(
+        typeof item === "string",
+        `${name}[${i}] is not a string: ${JSON.stringify(item)}`
+      );
+    });
+  }
+  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r));
+  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
+  assert.deepEqual(
+    dupes,
+    [],
+    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
+      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
+  );
+  const missing = required.filter((t) => !targets.includes(t));
+  assert.deepEqual(
+    missing,
+    [],
+    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing ` +
+      `targets: removing one is a decision to stop defending that target -- make it in the same commit as this list.`
+  );
+}
+
 // The five R2.2.4 refuses to drop, on top of the legacy set.
 const CASCADE_DROPPED_COLUMNS = [
   "scoring_version",
@@ -150,6 +225,39 @@ const CASCADE_DROPPED_COLUMNS = [
   "stability",
   "mention_rate_pct",
 ];
+
+test("GUARD TEETH — assertCorpusIntact enforces length floor, uniqueness, and required targets", () => {
+  assert.throws(
+    () => assertCorpusIntact([], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /under its floor of 1/
+  );
+  assert.throws(
+    () => assertCorpusIntact(["a", "a"], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /repeats/
+  );
+  assert.throws(
+    () => assertCorpusIntact(["a"], "TEST_CORPUS", { floor: 1, required: ["b"], isTuple: false }),
+    /no longer contains/
+  );
+  assert.throws(
+    () => assertCorpusIntact([123], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /is not a string/
+  );
+});
+
+test("GUARD — CASCADE_DROPPED_COLUMNS corpus is intact", () => {
+  assertCorpusIntact(CASCADE_DROPPED_COLUMNS, "CASCADE_DROPPED_COLUMNS", {
+    floor: 5,
+    required: [
+      "scoring_version",
+      "score_ci_low",
+      "score_ci_high",
+      "stability",
+      "mention_rate_pct",
+    ],
+    isTuple: false,
+  });
+});
 
 const MODERN_COLUMNS = new Set([...LEGACY_COLUMNS, ...CASCADE_DROPPED_COLUMNS, "query_source"]);
 
@@ -243,6 +351,7 @@ const RECORD = Object.freeze({
 // ---------------------------------------------------------------------------
 
 test("postgrest-js — only .select() asks for the row back, and an empty 201 body leaves data null", async () => {
+  requirePostgrest();
   const source = await readFile(POSTGREST_DIST, "utf8");
 
   const representation = [...source.matchAll(/return=representation/g)];

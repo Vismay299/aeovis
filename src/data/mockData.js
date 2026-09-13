@@ -31,6 +31,7 @@
 
 import { DEFAULT_UNBRANDED_TARGET } from '../lib/scoring/promptSetSize.js';
 import { ENGINE_LABELS, deployedEngines } from '../lib/engines/deployedEngines.js';
+import { ROSTER_SOURCE } from '../lib/scoring/rosterContinuity.js';
 
 const YOU = 'you';
 const R1 = 'r1';   /* NorthPeak */
@@ -195,6 +196,36 @@ function buildRows(brand, site) {
       });
     }
 
+    const text = answerText(item.won, item.q, brand);
+    const r1Won = item.won === R1;
+    const r2Won = item.won === R2;
+    const brands = [
+      {
+        name: brand,
+        is_self: true,
+        isSelf: true,
+        mentioned: mine,
+        position: mine ? 1 : null,
+        sentiment: mine ? 1 : null,
+      },
+      {
+        name: RIVAL_NAME[R1],
+        is_self: false,
+        isSelf: false,
+        mentioned: r1Won,
+        position: r1Won ? 1 : null,
+        sentiment: r1Won ? 1 : null,
+      },
+      {
+        name: RIVAL_NAME[R2],
+        is_self: false,
+        isSelf: false,
+        mentioned: r2Won,
+        position: r2Won ? 1 : null,
+        sentiment: r2Won ? 1 : null,
+      },
+    ];
+
     return {
       prompt: item.q,
       engine: engineFor(i),
@@ -204,14 +235,20 @@ function buildRows(brand, site) {
       is_branded_query: false,
       aio_present: true,
       answer_present: true,
-      aio_text: answerText(item.won, item.q, brand),
+      text,
+      aio_text: text,
+      references: refs,
       aio_references: refs,
+      citations: refs,
       aio_citations: refs,
       brand_mentioned_in_text: mine,
       brand_cited: cited,
       visible: mine,
       competitors_found_in_text: rivals,
       competitors_cited: citedRivalsAt(i),
+      brands,
+      error: null,
+      cost: 0,
     };
   });
 }
@@ -255,16 +292,95 @@ export function buildMockResult(brand, website) {
   const perEngine = {};
   ENGINE_KEYS.forEach((k) => {
     const of = rows.filter((r) => r.engine === k);
+    const totalQ = of.length;
+    const withAnswer = of.filter((r) => r.answer_present);
+    const nonBranded = of.filter((r) => !r.is_branded_query);
+    const nonBrandedWithAnswer = nonBranded.filter((r) => r.answer_present);
+    const eliciting = nonBrandedWithAnswer.filter((r) => (r.brands || []).some((b) => b && b.mentioned));
+    const dead = nonBrandedWithAnswer.length - eliciting.length;
+    const visibleCount = of.filter((r) => r.visible).length;
+    const answeredCount = of.length;
+
+    let selfMentions = 0;
+    let allMentions = 0;
+    const rivalMentionsMap = new Map();
+    for (const r of eliciting) {
+      for (const b of r.brands || []) {
+        if (!b || !b.mentioned) continue;
+        allMentions += 1;
+        if (b.is_self ?? b.isSelf) {
+          selfMentions += 1;
+        } else if (b.name) {
+          rivalMentionsMap.set(b.name, (rivalMentionsMap.get(b.name) || 0) + 1);
+        }
+      }
+    }
+
+    const topRivals = [...rivalMentionsMap.entries()]
+      .map(([nm, count]) => ({
+        name: nm,
+        mentions: count,
+        share_pct: allMentions > 0 ? Math.round((count / allMentions) * 1000) / 10 : 0,
+      }))
+      .sort((a, b) => b.mentions - a.mentions);
+
+    const sovPct = allMentions > 0 ? Math.round((selfMentions / allMentions) * 1000) / 10 : null;
+    const visibilityPct = eliciting.length > 0 ? Math.round((visibleCount / eliciting.length) * 1000) / 10 : 0;
+    const elicitationRatePct = nonBrandedWithAnswer.length > 0
+      ? Math.round((eliciting.length / nonBrandedWithAnswer.length) * 1000) / 10
+      : 0;
+    const presenceRatePct = totalQ > 0
+      ? Math.round((of.filter((r) => r.brand_mentioned_in_text).length / totalQ) * 1000) / 10
+      : 0;
+
     perEngine[k] = {
-      share_of_ai_pct: Math.round((of.filter((r) => r.visible).length / of.length) * 100),
-      visible: of.filter((r) => r.visible).length,
-      answered: of.length,
+      engine: k,
+      total_queries: totalQ,
+      branded_queries: 0,
+      non_branded_queries: nonBranded.length,
+      queries_with_answer: withAnswer.length,
+      non_branded_with_answer: nonBrandedWithAnswer.length,
+      branded_with_answer: 0,
+      errored_queries: 0,
+      eliciting_queries: eliciting.length,
+      dead_prompts: dead,
+      elicitation_rate_pct: elicitationRatePct,
+      share_of_voice_pct: sovPct,
+      self_mentions: selfMentions,
+      total_brand_mentions: allMentions,
+      top_rivals: topRivals,
+      visible_non_branded: visibleCount,
+      visible_branded: 0,
+      mentioned_non_branded: of.filter((r) => r.brand_mentioned_in_text).length,
+      cited_non_branded: of.filter((r) => r.brand_cited).length,
+      citation_denominator: totalQ,
+      citations_unverified_count: 0,
+      rank_not_cited_count: 0,
+      coverage_pct: 100,
+      error_rate_pct: 0,
+      share_of_ai_pct: visibilityPct,
+      visibility_pct: visibilityPct,
+      state: 'measured',
+      state_reason: null,
+      presence_rate_pct: presenceRatePct,
+      data_source_issue: false,
+      insufficient_sample: false,
+
+      // Backward compatibility for existing landing / gauge consumers
+      visible: visibleCount,
+      answered: answeredCount,
     };
   });
 
   /* The headline is the row counts, rounded once. It used to be typed as 41
      under a comment explaining why it disagreed with its own data. */
   const share = Math.round((wins / total) * 100);
+
+  const totalSelfMentions = Object.values(perEngine).reduce((sum, e) => sum + e.self_mentions, 0);
+  const totalBrandMentions = Object.values(perEngine).reduce((sum, e) => sum + e.total_brand_mentions, 0);
+  const scanSovPct = totalBrandMentions > 0
+    ? Math.round((totalSelfMentions / totalBrandMentions) * 1000) / 10
+    : null;
 
   const rivals = [
     { name: RIVAL_NAME[R1], mentions: held(R1), prompts: held(R1), citations: citedBy(RIVAL_NAME[R1]), userAbsent: true },
@@ -295,6 +411,22 @@ export function buildMockResult(brand, website) {
     aio_coverage_pct: 100,
     aio_error_rate_pct: 0,
     brand_citation_share_pct: Math.round((rows.filter((r) => r.brand_cited).length / total) * 100),
+
+    // Real scan SOV and roster fields (R2.7.7)
+    share_of_voice_pct: scanSovPct,
+    shareOfVoicePct: scanSovPct,
+    self_mentions: totalSelfMentions,
+    total_brand_mentions: totalBrandMentions,
+    rosterSource: ROSTER_SOURCE.EXTRACTED,
+    roster_source: ROSTER_SOURCE.EXTRACTED,
+
+    summary_stats: {
+      share_of_voice_pct: scanSovPct,
+      visibility_pct: share,
+      presence_rate_pct: share,
+      coverage_pct: 100,
+      error_rate_pct: 0,
+    },
 
     promptsAnalyzed: total,
     promptsTracked: total,

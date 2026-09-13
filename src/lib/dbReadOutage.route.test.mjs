@@ -432,8 +432,8 @@ test("SITE 4 — an unreadable brand list is a 5xx that NAMES the dead batch, no
 
   const { status, body } = contentCronReport({ batchUnavailable: unavailable });
   assert.equal(status, 500, "a cron pass whose batch stage never ran must not answer 200");
-  assert.equal(body.batch_created, 0);
-  assert.ok(body.batch_unavailable, "batch_unavailable is what makes batch_created:0 readable");
+  assert.equal(body.batch_dispatched, 0);
+  assert.ok(body.batch_unavailable, "batch_unavailable is what makes batch_dispatched:0 readable");
   assert.match(
     body.batch_unavailable.detail,
     /did not run/i,
@@ -451,7 +451,7 @@ test("SITE 4 — THE OTHER HALF: a real empty brand list is a 200 with batch_una
 
   const { status, body } = contentCronReport({ batchUnavailable: unavailable });
   assert.equal(status, 200);
-  assert.equal(body.batch_created, 0);
+  assert.equal(body.batch_dispatched, 0);
   assert.equal(
     body.batch_unavailable,
     null,
@@ -482,10 +482,12 @@ test("SITE 4 — the outage report and the healthy report are distinguishable in
 
   assert.notEqual(outage.status, healthy.status);
   assert.notDeepEqual(outage.body, healthy.body);
+  // R3.1.4 — `dispatched`, not `resumed`: these are fire-and-forget kicks, not
+  // completed jobs. The count must still survive the outage report.
   assert.equal(
-    outage.body.resumed,
+    outage.body.dispatched,
     1,
-    "the resume half of the pass really happened and must still be reported"
+    "the dispatch half of the pass really happened and must still be reported"
   );
 });
 
@@ -520,5 +522,36 @@ test("SITE 4 — the handler routes its brand list and its status through those 
     source,
     /NextResponse\.json\(body, \{ status \}\)/,
     "…and actually send that status, rather than computing it and answering 200"
+  );
+});
+
+test("SITE 5 — the !supabase branch must also use contentCronReport, not answer 200", async () => {
+  const source = await readFile(
+    new URL("../app/api/content/worker/route.js", import.meta.url),
+    "utf8"
+  );
+
+  // The !supabase branch must not produce a green 200 — it must route through
+  // contentCronReport with a batchUnavailable envelope, the same shape R2.8.5
+  // established for an unreadable brand list.
+  assert.doesNotMatch(
+    source,
+    /if \(!supabase\)\s*\{[^}]*return NextResponse\.json\(\{[^}]*processed:\s*0/,
+    "the old 'processed: 0' 200 response must be gone"
+  );
+  assert.doesNotMatch(
+    source,
+    /if \(!supabase\)\s*\{[^}]*return NextResponse\.json\(\{[^}]*dispatched:\s*0/,
+    "the 'dispatched: 0' 200 response must also be gone"
+  );
+  assert.match(
+    source,
+    /if \(!supabase\)[\s\S]*contentCronReport\(/,
+    "the !supabase branch must route through contentCronReport with a batchUnavailable envelope"
+  );
+  assert.match(
+    source,
+    /if \(!supabase\)[\s\S]*db_not_configured/,
+    "the reason code must be db_not_configured"
   );
 });

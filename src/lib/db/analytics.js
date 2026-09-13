@@ -727,6 +727,39 @@ export async function getScanSchedule(brand, deps = {}) {
 }
 
 /**
+ * R3.4.5 — Insert a new scan_schedules row only if one does not already exist.
+ *
+ * Atomic: the decision to insert or skip is made by the database in a single
+ * statement (INSERT ... ON CONFLICT DO NOTHING), so there is no window where
+ * a concurrent operator edit can be clobbered by a stale write.
+ *
+ * Returns the inserted row if a new row was created, or null if one already
+ * existed (conflict). Null is NOT a failure — the caller distinguishes
+ * "already there" from "failed" by catching exceptions.
+ */
+export async function insertScanScheduleIfNotExists(row, deps = {}) {
+  const client = resolveClient(deps);
+
+  if (!client) {
+    // Memory mode: same contract as Supabase's ON CONFLICT DO NOTHING.
+    const existing = global.memoryScanSchedules.get(row.brand);
+    if (existing) return null;
+    const stamped = { ...row, updated_at: new Date().toISOString() };
+    global.memoryScanSchedules.set(row.brand, stamped);
+    return stamped;
+  }
+
+  const { data, error } = await client
+    .from("scan_schedules")
+    .upsert(row, { onConflict: "brand", ignoreDuplicates: true })
+    .select();
+  if (error) throw error;
+  // ignoreDuplicates: true → INSERT ... ON CONFLICT DO NOTHING.
+  // On conflict, `data` is an empty array; on insert, it contains the row.
+  return data && data.length > 0 ? data[0] : null;
+}
+
+/**
  * Upsert on the `brand` PK. Always stamps `updated_at = now` — both the
  * schedule editor (P0.4) and the cron tick (P0.2, after each scheduled run)
  * call this, and every write should move the freshness marker regardless of

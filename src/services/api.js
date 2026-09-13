@@ -230,7 +230,16 @@ function mapCompetitorRow(c) {
 function resolveCompetitors(data, raw, results, brand, website) {
   const stored = (data.competitors ?? raw.competitors ?? []).map(mapCompetitorRow);
   const withSignal = countCompetitorsFound(stored);
-  if (withSignal > 0 || stored.some((c) => c.source === "discovered")) {
+  if (
+    withSignal > 0 ||
+    stored.some(
+      (c) =>
+        c.source === "discovered" ||
+        c.source === "carried_forward" ||
+        c.source === "configured" ||
+        c.source === "user"
+    )
+  ) {
     return stored;
   }
 

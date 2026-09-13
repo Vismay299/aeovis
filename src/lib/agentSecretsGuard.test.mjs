@@ -26,6 +26,52 @@ import { fileURLToPath } from "node:url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const AGENTS_DIR = path.join(REPO, ".claude/agents");
 
+function assertCorpusIntact(rows, name, { floor, required = [], isTuple = false }) {
+  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
+  assert.ok(
+    rows.length >= floor,
+    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a corpus ` +
+      `whose tests iterate over it, so assertions silently stopped running. If the removal ` +
+      `was deliberate, lower the floor here in the same commit and state why.`
+  );
+  if (isTuple) {
+    rows.forEach((row, i) => {
+      assert.ok(
+        Array.isArray(row) && row.length >= 2 && typeof row[0] === "string",
+        `${name}[${i}] is not a valid tuple entry: ${JSON.stringify(row)}`
+      );
+      const reason = row[row.length - 1];
+      assert.ok(
+        typeof reason === "string" && reason.trim().length > 0,
+        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
+          `the next editor deletes, and the floor above would then be met by padding`
+      );
+    });
+  } else {
+    rows.forEach((item, i) => {
+      assert.ok(
+        typeof item === "string",
+        `${name}[${i}] is not a string: ${JSON.stringify(item)}`
+      );
+    });
+  }
+  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r));
+  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
+  assert.deepEqual(
+    dupes,
+    [],
+    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
+      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
+  );
+  const missing = required.filter((t) => !targets.includes(t));
+  assert.deepEqual(
+    missing,
+    [],
+    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing ` +
+      `targets: removing one is a decision to stop defending that target -- make it in the same commit as this list.`
+  );
+}
+
 /**
  * Every phrase the rule must contain, matched against the file with all runs of
  * whitespace collapsed, so re-wrapping a paragraph does not break the guard but
@@ -47,6 +93,39 @@ const REQUIRED_PHRASES = [
   // What to do when it happens anyway — the norm both real leaks followed.
   "stop, do not repeat it, disclose it",
 ];
+
+test("GUARD TEETH — assertCorpusIntact enforces length floor, uniqueness, and required targets", () => {
+  assert.throws(
+    () => assertCorpusIntact([], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /under its floor of 1/
+  );
+  assert.throws(
+    () => assertCorpusIntact(["a", "a"], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /repeats/
+  );
+  assert.throws(
+    () => assertCorpusIntact(["a"], "TEST_CORPUS", { floor: 1, required: ["b"], isTuple: false }),
+    /no longer contains/
+  );
+  assert.throws(
+    () => assertCorpusIntact([123], "TEST_CORPUS", { floor: 1, isTuple: false }),
+    /is not a string/
+  );
+});
+
+test("GUARD — REQUIRED_PHRASES corpus is intact", () => {
+  assertCorpusIntact(REQUIRED_PHRASES, "REQUIRED_PHRASES", {
+    floor: 8,
+    required: [
+      "## Secrets hygiene",
+      "**Never print a credential value.**",
+      "A prefix is still a leak.",
+      "`.env.example` is safe",
+      "stop, do not repeat it, disclose it",
+    ],
+    isTuple: false,
+  });
+});
 
 /** `.claude/agents/rebuild-*.md`, discovered on disk, never hardcoded. */
 async function rebuildAgentDefinitions() {

@@ -820,6 +820,20 @@ test("GUARD — .env.example says what each of the three dangerous knobs actuall
   );
 });
 
+test("GUARD — R0.1.23: .env.example and docs/OPERATOR_LEDGER.md describe Vercel header as untrusted-pending-proof", async () => {
+  const example = await readFile(new URL("../../.env.example", import.meta.url), "utf8");
+  const ledger = await readFile(new URL("../../docs/OPERATOR_LEDGER.md", import.meta.url), "utf8");
+
+  assert.match(example, /untrusted-pending-proof/, ".env.example must describe Vercel header as untrusted-pending-proof");
+  assert.match(example, /RESTORE-TRUST-R0.1.20/, ".env.example must point at RESTORE-TRUST-R0.1.20");
+  assert.doesNotMatch(example, /x-vercel-forwarded-for is trusted/i, ".env.example must never claim x-vercel-forwarded-for is trusted");
+  assert.doesNotMatch(example, /On Vercel you do not need this/i, ".env.example must not tell the operator they do not need the knob on Vercel");
+
+  assert.match(ledger, /untrusted-pending-proof/, "docs/OPERATOR_LEDGER.md must describe Vercel header as untrusted-pending-proof");
+  assert.match(ledger, /RESTORE-TRUST-R0.1.20/, "docs/OPERATOR_LEDGER.md must point at RESTORE-TRUST-R0.1.20");
+  assert.doesNotMatch(ledger, /On Vercel you do not need it/i, "docs/OPERATOR_LEDGER.md must not tell the operator they do not need a trusted header on Vercel");
+});
+
 test("GUARD — POST /api/scan counts the request and returns 429 with Retry-After", async () => {
   const src = await readFile(new URL("../app/api/scan/route.js", import.meta.url), "utf8");
   assert.match(src, /checkScanRateLimit/, "the route must use the tested limiter");

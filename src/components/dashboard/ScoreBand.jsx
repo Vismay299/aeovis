@@ -47,6 +47,11 @@ const MEASURED_STATES = new Set(['ok', 'measured', 'complete', 'healthy', 'probe
 const STATE_PHRASES = {
   measured_zero: 'measured zero',
   not_assessed: 'not assessed',
+  'not-assessed': 'not assessed',
+  did_not_report: 'did not report',
+  'did-not-report': 'did not report',
+  small_sample: 'small sample',
+  'small-sample': 'small sample',
   /* Both `failed` arms (high_error_rate, low_coverage) mean the same thing to a
      reader: a number exists but is not worth reporting. The cause is in
      `stateReason`, which rides along as the chip's title. */
@@ -138,6 +143,7 @@ export const ScoreBand = ({
   engineChips,
   scoreLabel,
   promptSetChanged,
+  enginesCounted,
 }) => {
   const isNumeric = typeof score === 'number' && Number.isFinite(score);
   const delta = trend != null && trend !== '' ? parseFloat(trend) : null;
@@ -148,6 +154,15 @@ export const ScoreBand = ({
       <div className="panel__h">
         <b>{scoreLabel || 'Share of AI'}</b>
         {tier && <span className={tierChip[tier] || 'chip'}>{tier}</span>}
+        {enginesCounted != null && Number.isFinite(enginesCounted) && (
+          <span
+            className="chip"
+            data-engines-counted={enginesCounted}
+            title="Number of engines counted in this index"
+          >
+            {enginesCounted} {enginesCounted === 1 ? 'engine' : 'engines'} counted
+          </span>
+        )}
         {engineChips && engineChips.length > 0 && (
           <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
             {engineChips.map((chip, i) => {
@@ -157,13 +172,16 @@ export const ScoreBand = ({
                   key={chip?.key ?? `${c.label}-${i}`}
                   className={c.measured ? 'chip' : 'chip chip--warn'}
                   data-testid="engine-chip"
+                  data-chip-state={c.stateToken || undefined}
                   data-engine-measured={c.measured ? 'true' : 'false'}
                   data-engine-chip-state={c.stateToken || undefined}
                   title={c.reason || undefined}
                 >
                   {c.label} {c.value}
                   {c.state && (
-                    <span style={{ color: 'var(--ink-3)', marginLeft: 4 }}>· {c.state}</span>
+                    <span style={{ color: 'var(--ink-3)', marginLeft: 4 }}>
+                      · {c.state}
+                    </span>
                   )}
                 </span>
               );
@@ -187,8 +205,14 @@ export const ScoreBand = ({
                 letterSpacing: '-.045em', color: 'var(--brand)',
               }}
             >
-              {isNumeric ? Math.round(score) : '—'}
-              <span style={{ fontSize: '.42em', color: 'var(--ink-3)', marginLeft: 4 }}>%</span>
+              {isNumeric ? (
+                <>
+                  {Math.round(score)}
+                  <span style={{ fontSize: '.42em', color: 'var(--ink-3)', marginLeft: 4 }}>%</span>
+                </>
+              ) : (
+                '—'
+              )}
             </div>
             <div className="tag" style={{ marginTop: 8 }}>of answers name you</div>
 

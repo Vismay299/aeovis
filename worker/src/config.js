@@ -142,6 +142,14 @@ export const CONFIG_FIELDS = Object.freeze([
     why: "credentials for that queue",
   }),
   Object.freeze({
+    name: "FLEET_ALLOW_PRODUCTION_DB",
+    required: false,
+    kind: "boolean",
+    alsoAccepts: Object.freeze(["FLEET_ARM_PRODUCTION_DB", "ARM_LIVE_DB"]),
+    fallback: false,
+    why: "explicit arming flag required to run the fleet against the production database (R1.2.12)",
+  }),
+  Object.freeze({
     name: "FLEET_ENGINES",
     required: false,
     kind: "enumList",
@@ -366,6 +374,19 @@ function parseField(field, raw) {
     };
   }
 
+  if (field.kind === "boolean") {
+    const lower = trimmed.toLowerCase();
+    if (lower === "true" || lower === "1" || lower === "yes") return { value: true };
+    if (lower === "false" || lower === "0" || lower === "no") return { value: false };
+    return {
+      problem: {
+        name,
+        kind: "unparseable",
+        message: `${name}="${trimmed}" is not a boolean (${why}); expected true or false`,
+      },
+    };
+  }
+
   if (field.kind === "int") {
     // /^[+-]?\d+$/ and not parseInt: parseInt("5x") is 5 and parseInt("5.9") is
     // 5, so both would have run on a number nobody typed.
@@ -480,6 +501,53 @@ function describeFallback(field) {
 }
 
 /**
+ * Extract a comparable target from a URL string, or null if not a URL.
+ *
+ * Returns only the hostname — NOT the pathname — because the worker compares
+ * across protocol families: an HTTPS Supabase URL (`https://host/path`) and a
+ * PostgreSQL connection string (`postgresql://...host:5432/dbname`) name the
+ * same server but carry different pathnames (the API path vs the database
+ * name). Including the pathname would make them never match.
+ *
+ * Shape derived from src/lib/liveDbGate.js:dbTarget per worker isolation
+ * (R1.2.1), narrowed to hostname-only for the cross-protocol case.
+ */
+function dbTarget(value) {
+  try {
+    const u = new URL(value);
+    return u.hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compare two database targets by host and path (ignoring credentials, query params, etc.).
+ * Shape copied from src/lib/liveDbGate.js:namesSameTarget.
+ */
+function namesSameTarget(value, real) {
+  if (value === real) return true;
+  if (typeof value !== "string" || value === "" || typeof real !== "string" || real === "") return false;
+  const a = dbTarget(value);
+  return a !== null && a === dbTarget(real);
+}
+
+/**
+ * Checks whether the production arming flag is explicitly set.
+ * Supports FLEET_ALLOW_PRODUCTION_DB and FLEET_ARM_PRODUCTION_DB.
+ */
+function isArmedForProduction(env) {
+  if (!env || typeof env !== "object") return false;
+  const v = env.FLEET_ALLOW_PRODUCTION_DB ?? env.FLEET_ARM_PRODUCTION_DB ?? env.ARM_LIVE_DB;
+  if (v === true || v === 1) return true;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    return s === "true" || s === "1" || s === "yes";
+  }
+  return false;
+}
+
+/**
  * Resolve and validate the fleet's configuration.
  *
  * `strict` decides ONLY what a missing credential means — it does not turn
@@ -495,9 +563,11 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
   const problems = [];
   const values = {};
   const defaulted = new Set();
+  const rawSources = {};
 
   for (const field of CONFIG_FIELDS) {
     const raw = readRaw(env, field);
+    rawSources[field.name] = raw.source;
     const result = parseField(field, raw);
     if (result.problem) {
       // Tagged centrally so the error can separate "a credential the fleet
@@ -510,6 +580,48 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
     if (result.defaulted) defaulted.add(field.name);
   }
 
+  // --- R1.2.12: Production Database Protection Guard ---
+  // A worker process refuses to start against the production database unless
+  // explicitly armed, in the same shape liveDbGate uses for tests.
+  const isArmed = Boolean(values.FLEET_ALLOW_PRODUCTION_DB) || isArmedForProduction(env);
+  const resolvedUrl = values.SUPABASE_URL;
+
+  if (resolvedUrl) {
+    const inheritedAppCreds =
+      rawSources.SUPABASE_URL === "NEXT_PUBLIC_SUPABASE_URL" ||
+      rawSources.SUPABASE_SERVICE_ROLE_KEY === "NEXT_PUBLIC_SUPABASE_ANON_KEY";
+
+    // Only inspect the env that was PASSED in, never peek at process.env
+    // behind the caller's back. Tests pass a clean env and must not be
+    // affected by NODE_ENV or credentials on the developer's machine.
+    // A real worker process passes process.env itself, so those values
+    // are visible through `env` when they matter.
+    const matchesAppTarget =
+      namesSameTarget(resolvedUrl, env.NEXT_PUBLIC_SUPABASE_URL) ||
+      namesSameTarget(resolvedUrl, env.DATABASE_URL);
+
+    const matchesExplicitProd =
+      namesSameTarget(resolvedUrl, env.PRODUCTION_SUPABASE_URL);
+
+    const isProductionEnv = env.NODE_ENV === "production";
+
+    const isProductionTarget = inheritedAppCreds || matchesAppTarget || matchesExplicitProd || isProductionEnv;
+
+    if (isProductionTarget && !isArmed) {
+      problems.push({
+        name: "SUPABASE_URL",
+        required: true,
+        kind: "production_refusal",
+        message:
+          `the fleet refuses to start against the production database without explicit arming (R1.2.12). ` +
+          `The target database (${resolvedUrl}) matches application database credentials or was inherited ` +
+          `from ${rawSources.SUPABASE_URL}. A laptop worker must use an isolated dev Supabase instance ` +
+          `(see docs/runbooks/fleet-dev.md), or set FLEET_ALLOW_PRODUCTION_DB=true ` +
+          `(or FLEET_ARM_PRODUCTION_DB=true) to explicitly arm production writes.`,
+      });
+    }
+  }
+
   // Absent-or-blank REQUIRED credentials are what `strict:false` forgives, and
   // nothing else. Their names still travel on `missing` so --selftest can say
   // out loud that it is running on stubs.
@@ -518,7 +630,9 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
   );
   const missing = credentialProblems.map((p) => p.name);
 
-  const fatal = strict ? problems : problems.filter((p) => !credentialProblems.includes(p));
+  const fatal = strict
+    ? problems
+    : problems.filter((p) => !credentialProblems.includes(p) && p.kind !== "production_refusal");
   if (fatal.length) throw new FleetConfigError(fatal);
 
   const leaseMs = values.FLEET_LEASE_MS;
@@ -729,6 +843,8 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
   return {
     supabaseUrl: values.SUPABASE_URL ?? null,
     supabaseKey: values.SUPABASE_SERVICE_ROLE_KEY ?? null,
+    /** Whether production database access is explicitly armed (R1.2.12). */
+    allowProductionDb: isArmed,
     /** Which real surfaces this container drives. */
     engines,
     /** Probe batch size per claim, never larger than one lease can pay for. */
@@ -789,6 +905,7 @@ export function describeConfig(config) {
     `workerId=${config.workerId}`,
     `probeTimeoutMs=${config.probeTimeoutMs}`,
     `canaryIntervalMs=${config.canaryIntervalMs}`,
+    `allowProductionDb=${Boolean(config.allowProductionDb)}`,
   ];
 
   // One line per surface, because a budget printed as a single number for a

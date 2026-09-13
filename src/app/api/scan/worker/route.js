@@ -108,14 +108,22 @@ function classifyChunkResult(result) {
   return { outcome: bucket, reason, ledger_outcome: ledger.outcome };
 }
 
-/** The wire body for one directly-resumed chunk. Counters, so 0 is visible. */
-function chunkResponseBody(jobId, verdict) {
+/**
+ * The wire body for one directly-resumed chunk. Counters, so 0 is visible.
+ *
+ * R3.1.4 — `ledger_written` is false when the scan_runs ledger is disabled
+ * (in-memory mode, no Supabase client). An operator reading this response
+ * must never confuse an empty scan_runs table with "no chunks ran": the
+ * response says so explicitly.
+ */
+function chunkResponseBody(jobId, verdict, { ledgerWritten = true } = {}) {
   return {
     mode: "direct-resume",
     job_id: jobId,
     outcome: verdict.outcome,
     reason: verdict.reason,
     ledger_outcome: verdict.ledger_outcome,
+    ledger_written: ledgerWritten,
     processed: verdict.outcome === "processed" ? 1 : 0,
     skipped: verdict.outcome === "skipped" ? 1 : 0,
     failed: verdict.outcome === "failed" ? 1 : 0,
@@ -469,7 +477,9 @@ export async function GET(request) {
   if (directJobId) {
     try {
       const verdict = classifyChunkResult(await runScanChunk(directJobId));
-      const body = chunkResponseBody(directJobId, verdict);
+      // R3.1.4 — when no Supabase, the chunk wrote no scan_runs row; the
+      // response says so explicitly so an empty ledger is never read as idle.
+      const body = chunkResponseBody(directJobId, verdict, { ledgerWritten: !!supabase });
 
       // STATUS CODE (R3.1.3). 200 for processed AND for skipped: an absent
       // job, a job already finished, or a claim lost to a concurrent
@@ -502,6 +512,7 @@ export async function GET(request) {
           job_id: directJobId,
           outcome: "failed",
           reason: "exception",
+          ledger_written: !!supabase,
           processed: 0,
           skipped: 0,
           failed: 1,
@@ -516,9 +527,13 @@ export async function GET(request) {
     // `dispatched`, not `processed`: this invocation ran no chunk at all. Same
     // word as the sweep below, and deliberately NOT the direct path's
     // `processed: 0`, which means "a chunk ran and did no work".
+    //
+    // R3.1.4 — `ledger_written: false` says plainly that no scan_runs row was
+    // recorded, so an empty ledger can never be mistaken for an idle system.
     return NextResponse.json({
       mode: "no-db",
       dispatched: 0,
+      ledger_written: false,
       info: "No Supabase configured. Local in-memory worker runs automatically.",
     });
   }

@@ -149,26 +149,38 @@ export const OverviewView = ({
         <div className="stat" data-testid="kpi-aio-coverage">
           <span className="stat__k">Answer coverage</span>
           <span className="stat__v">
-            {dataSourceIssue ? '—' : Math.round(aioCoverage ?? 0)}<small>%</small>
+            {dataSourceIssue || aioCoverage == null || !Number.isFinite(aioCoverage) ? (
+              '—'
+            ) : (
+              <>{Math.round(aioCoverage)}<small>%</small></>
+            )}
           </span>
           <span className="stat__d dim">
-            {nonBrandedWithAio ?? 0} of {promptsTracked ?? 0} returned an answer
+            {nonBrandedWithAio == null ? '—' : nonBrandedWithAio} of {promptsTracked == null ? '—' : promptsTracked} returned an answer
           </span>
         </div>
 
         <div className="stat" data-testid="kpi-presence">
           <span className="stat__k">Your presence</span>
           <span className="stat__v is-you">
-            {dataSourceIssue ? '—' : Math.round(presenceRate ?? 0)}<small>%</small>
+            {dataSourceIssue || presenceRate == null || !Number.isFinite(presenceRate) ? (
+              '—'
+            ) : (
+              <>{Math.round(presenceRate)}<small>%</small></>
+            )}
           </span>
           <span className="stat__d dim">
-            {visibleCount ?? 0} of {promptsTracked ?? 0} answers name you
+            {visibleCount == null ? '—' : visibleCount} of {promptsTracked == null ? '—' : promptsTracked} answers name you
           </span>
         </div>
 
         <div className="stat" data-testid="kpi-prompts">
           <span className="stat__k">Questions tracked</span>
-          <span className="stat__v">{promptsTracked ?? promptsAnalyzed ?? 0}</span>
+          <span className="stat__v">
+            {promptsTracked == null && promptsAnalyzed == null
+              ? '—'
+              : (promptsTracked ?? promptsAnalyzed)}
+          </span>
           <span className="stat__d dim">Unbranded, never leading</span>
         </div>
 
