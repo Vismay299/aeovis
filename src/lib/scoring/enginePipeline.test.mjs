@@ -1045,3 +1045,83 @@ test("R2.2.6 — a defaulted engines_counted of 0 must not blank a scan that sti
   assert.equal(d.enginesCounted, 1);
   assert.match(d.title, /1 of 2 engines/);
 });
+
+test("R2.7.5: summarizeEngineResults unions underlying mention counts across engines rather than averaging ratios", () => {
+  // Engine 1 (aio): 1 self mention out of 2 total brand mentions (50% per-engine SOV)
+  const aioRows = [
+    rowWithBrands({
+      brands: [
+        { name: "Italica", is_self: true, mentioned: true },
+        { name: "Kajaria", is_self: false, mentioned: true },
+      ],
+    }),
+  ];
+  // Engine 2 (perplexity): 0 self mentions out of 8 total brand mentions (0% per-engine SOV)
+  const perplexityRows = Array.from({ length: 8 }, (_, i) =>
+    rowWithBrands({
+      brands: [
+        { name: "Italica", is_self: true, mentioned: false },
+        { name: `Rival${i}`, is_self: false, mentioned: true },
+      ],
+    })
+  );
+
+  const engines = {
+    aio: summarizeEngineSlice(aioRows, "aio"),
+    perplexity: summarizeEngineSlice(perplexityRows, "perplexity"),
+  };
+  assert.equal(engines.aio.share_of_voice_pct, 50);
+  assert.equal(engines.perplexity.share_of_voice_pct, 0);
+
+  const out = summarizeEngineResults({ engines, results: [] });
+
+  // Averaging ratios would be (50 + 0) / 2 = 25%.
+  // Unioning underlying counts is (1 + 0) / (2 + 8) = 1 / 10 = 10.0%.
+  assert.equal(out.summary.share_of_voice_pct, 10, "scan-level SOV unions underlying mention counts");
+});
+
+test("R2.7.5: summarizeEngineResults preserves three-way distinction for multi-engine scans", () => {
+  // 1. Without rivals across all engines: SOV is null
+  const noRivalsScan = summarizeEngineResults({
+    engines: {
+      aio: summarizeEngineSlice([rowWithBrands({ visible: true })], "aio"),
+      chatgpt: summarizeEngineSlice([rowWithBrands({ visible: true })], "chatgpt"),
+    },
+    results: [],
+  });
+  assert.equal(noRivalsScan.summary.share_of_voice_pct, null, "null when no rivals are tracked");
+
+  // 2. With rivals assessed, but empty eliciting pool: SOV is null
+  const emptyElicitingScan = summarizeEngineResults({
+    engines: {
+      aio: summarizeEngineSlice([
+        rowWithBrands({
+          visible: false,
+          brands: [
+            { name: "Italica", is_self: true, mentioned: false },
+            { name: "Kajaria", is_self: false, mentioned: false },
+          ],
+        }),
+      ], "aio"),
+    },
+    results: [],
+  });
+  assert.equal(emptyElicitingScan.summary.share_of_voice_pct, null, "null when eliciting pool is empty");
+
+  // 3. With rivals assessed, rival mentioned, self 0: SOV is 0
+  const measuredZeroScan = summarizeEngineResults({
+    engines: {
+      aio: summarizeEngineSlice([
+        rowWithBrands({
+          visible: false,
+          brands: [
+            { name: "Italica", is_self: true, mentioned: false },
+            { name: "Kajaria", is_self: false, mentioned: true },
+          ],
+        }),
+      ], "aio"),
+    },
+    results: [],
+  });
+  assert.equal(measuredZeroScan.summary.share_of_voice_pct, 0, "0 when assessed and not mentioned");
+});

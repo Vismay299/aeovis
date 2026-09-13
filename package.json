@@ -15,7 +15,7 @@
     "setup:db": "node --env-file=.env.local scripts/setup-supabase.mjs",
     "check:secrets": "node --env-file-if-exists=.env.local scripts/check-secrets.mjs",
     "fleet:check": "npm --prefix worker run check",
-    "fleet:dev": "node --env-file-if-exists=.env.fleet.local --env-file-if-exists=.env.local worker/src/index.js",
+    "fleet:dev": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.fleet.local worker/src/index.js",
     "test": "node --import ./src/lib/liveWriteGuardAuto.mjs --test \"src/**/*.test.mjs\"",
     "baseline:archive": "node --env-file-if-exists=.env.local scripts/archive-reference-scan.mjs"
   },

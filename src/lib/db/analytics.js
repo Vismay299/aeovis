@@ -542,8 +542,6 @@ export async function incrementScanRateLimit({ bucketKey, windowStart }, deps = 
 // system heartbeats (migration 008) — "did the cron actually fire?"
 // ---------------------------------------------------------------------------
 
-global.memorySystemHeartbeats = global.memorySystemHeartbeats || new Map();
-
 /**
  * Record that a named scheduled job ran. Called by the worker routes AFTER
  * their auth gate, so a rejected request never looks like a healthy tick.
@@ -551,14 +549,18 @@ global.memorySystemHeartbeats = global.memorySystemHeartbeats || new Map();
  * Deliberately non-fatal: a heartbeat write failing must not fail the worker
  * run it is only observing. It IS logged, so a systematically broken
  * heartbeat does not become invisible.
+ *
+ * R3.1.7: When no data store is configured, returns null and does NOT write
+ * to an in-memory map. A tick recorded with no data store must never be read
+ * back as a measured tick.
  */
 export async function recordCronTick(name, detail = null, deps = {}) {
-  const row = { name, last_tick_at: new Date().toISOString(), detail };
   const client = resolveClient(deps);
   if (!client) {
-    global.memorySystemHeartbeats.set(name, row);
-    return row;
+    console.warn(`[heartbeat] no Supabase client — cannot record "${name}" cron tick`);
+    return null;
   }
+  const row = { name, last_tick_at: new Date().toISOString(), detail };
   const { error } = await client.from("system_heartbeats").upsert([row], { onConflict: "name" });
   if (error) {
     console.warn(`[heartbeat] could not record the "${name}" tick: ${error.message}`);
@@ -570,7 +572,7 @@ export async function recordCronTick(name, detail = null, deps = {}) {
 /** Every recorded ticker, for /api/health. */
 export async function getCronTicks(deps = {}) {
   const client = resolveClient(deps);
-  if (!client) return Array.from(global.memorySystemHeartbeats.values());
+  if (!client) return [];
   const { data, error } = await client.from("system_heartbeats").select("*");
   if (error) throw error;
   return data || [];

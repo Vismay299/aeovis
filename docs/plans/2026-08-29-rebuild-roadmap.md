@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**174 / 265 closed** · 7 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**178 / 265 closed** · 7 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -72,7 +72,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `19/40`
+## R1 — Real-surface probe fleet  `21/40`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -100,8 +100,8 @@ Baseline commit: `5111219`
 - [x] **R1.2.13** The SKIP LOCKED static guard matches prose comments, so the migration documentation certifies itself — closed at `src/lib/probeQueue.test.mjs:463`, `src/lib/probeQueue.test.mjs:494`, `src/lib/probeQueue.test.mjs:505`, `src/lib/probeClaimLock.guard.mjs:134`, `src/lib/probeClaimLock.guard.mjs:172`, `src/lib/probeClaimLock.test.mjs:110`
 - [x] **R1.2.15** The probe-claim guard CTE scoping has no fixture pinning it, so a refactor could retire it silently — closed at `src/lib/probeClaimLock.test.mjs:403`, `src/lib/probeClaimLock.test.mjs:430`, `src/lib/probeClaimLock.test.mjs:509`, `src/lib/probeClaimLock.test.mjs:525`, `src/lib/probeClaimLock.test.mjs:550`, `src/lib/probeClaimLock.test.mjs:574`, `src/lib/probeClaimLock.test.mjs:592`, `src/lib/probeClaimLock.test.mjs:623`, `src/lib/probeClaimLock.guard.mjs:650`, `src/lib/probeClaimLock.guard.mjs:755`, `src/lib/probeClaimLock.guard.mjs:775`, `src/lib/fixtures/probeClaimLock/base-as-in-migration-010.sql.txt:4`, `src/lib/fixtures/probeClaimLock/lock-parked-in-the-claimed-cte.sql.txt:4`, `src/lib/fixtures/probeClaimLock/scope-widened-any-live-lease-claimable.sql.txt:4`, `src/lib/fixtures/probeClaimLock/scope-narrowed-to-pending-only.sql.txt:4`, `src/lib/fixtures/probeClaimLock/candidate-select-unordered.sql.txt:4`, `src/lib/fixtures/probeClaimLock/lock-downgraded-to-bare-for-update.sql.txt:4`
 - [x] **R1.2.16** The zone-corpus negative test passes vacuously on an empty corpus, and the submit note miscounts it — closed at `src/lib/engines/brightdataZone.test.mjs:66`, `src/lib/engines/brightdataZone.test.mjs:116`, `src/lib/engines/brightdataZone.test.mjs:634`, `src/lib/engines/brightdataZone.test.mjs:652`, `src/lib/engines/brightdataZone.test.mjs:700`, `src/lib/engines/brightdataZone.test.mjs:956`, `src/lib/engines/brightdataZone.test.mjs:1043`, `src/lib/engines/brightdataZone.test.mjs:1068`, `src/lib/engines/brightdataZone.test.mjs:1138`, `src/lib/engines/brightdataZone.test.mjs:1166`
-- [ ] **R1.2.17** SECURITY: --selftest exempts the production refusal and leaves one unstubbed path to a real production write
-- [ ] **R1.2.18** SECURITY: fleet:dev loads the app env file LAST, so the fleet runs holding the production service-role key
+- [x] **R1.2.17** SECURITY: --selftest exempts the production refusal and leaves one unstubbed path to a real production write — closed at `worker/src/config.js:148`, `worker/src/config.js:541`, `worker/src/config.js:624`, `worker/src/index.js:346`, `src/lib/fleetConfig.test.mjs:827`, `src/lib/fleetConfig.test.mjs:838`, `src/lib/fleetConfig.test.mjs:853`
+- [x] **R1.2.18** SECURITY: fleet:dev loads the app env file LAST, so the fleet runs holding the production service-role key — closed at `package.json:18`, `docs/runbooks/fleet-dev.md:44`, `.env.example:242`, `src/lib/fleetConfig.test.mjs:769`, `src/lib/fleetConfig.test.mjs:785`, `src/lib/fleetConfig.test.mjs:818`
 ### R1.3
 
 - [ ] **R1.3.1** Spike: Playwright against perplexity.ai `needs-secrets`
@@ -131,7 +131,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `54/69`
+## R2 — Scoring truth  `55/69`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -181,7 +181,7 @@ Baseline commit: `5111219`
 - [x] **R2.7.2** SourcesView reads v9 field names — closed at `src/components/dashboard/SourcesView.jsx:19`, `src/components/dashboard/SourcesView.jsx:71`, `src/components/dashboard/sourcesMetrics.js:41`, `src/components/dashboard/sourcesMetrics.js:97`, `src/components/dashboard/sourcesMetrics.test.mjs:90`
 - [x] **R2.7.3** Delete the new Date() timestamp fallback — closed at `src/services/api.js:568`, `src/utils/format.js:34`, `src/utils/format.js:55`, `src/components/dashboard/DashboardShell.jsx:439`, `src/components/dashboard/DashboardShell.jsx:29`, `src/components/home/HomeDashboard.jsx:26`, `src/utils/format.test.mjs:63`, `src/services/api.test.mjs:493`
 - [x] **R2.7.4** Persist and render the collection window — closed at `src/lib/db.js:97`, `src/lib/db.js:98`, `src/components/dashboard/DashboardShell.jsx:431`, `src/components/dashboard/DashboardShell.jsx:503`, `src/lib/collectionWindowPersist.test.mjs:393`, `src/lib/collectionWindowPersist.test.mjs:336`, `src/lib/collectionWindowPersist.test.mjs:185`, `src/lib/collectionWindowPersist.test.mjs:471`
-- [~] **R2.7.5** share_of_voice_pct exists only per engine; the scan-level field is never written
+- [x] **R2.7.5** share_of_voice_pct exists only per engine; the scan-level field is never written — closed at `src/lib/scoring/enginePipeline.js:1648`, `src/lib/scoring/enginePipeline.js:1709`, `src/lib/scoring/aioPipeline.js:288`, `src/lib/scoring/aioPipeline.js:297`, `src/lib/workers/scanWorker.js:2080`, `src/services/api.js:455`, `src/services/api.js:621`, `src/lib/scoring/enginePipeline.test.mjs:1049`, `src/lib/scoring/summarize.test.mjs:76`
 - [x] **R2.7.6** ScoreBreakdown prints a confident 0% for a share of voice nobody computed — closed at `src/components/dashboard/ScoreBreakdown.jsx:86`, `src/components/perceev/charts/shareOfVoice.js:298`, `src/components/dashboard/scoreBreakdownShare.test.mjs:176`
 - [x] **R2.7.7** The demo data does not carry the fields a real scan carries, so the sample report reads as broken — closed at `src/data/mockData.js:202-227`, `src/data/mockData.js:336-372`, `src/data/mockData.js:416-421`, `src/data/mockDataShapeContract.test.mjs:42`, `src/data/mockDataShapeContract.test.mjs:67`, `src/data/mockDataShapeContract.test.mjs:93`, `src/data/mockDataShapeContract.test.mjs:110`
 - [x] **R2.7.8** ScoreBand hardcodes a percent sign, so no engine chip can carry a non-numeric state — closed at `src/components/dashboard/ScoreBand.jsx:42`, `src/components/dashboard/ScoreBand.jsx:104`, `src/components/dashboard/DashboardShell.jsx:441`, `src/components/dashboard/DashboardShell.jsx:465`, `src/components/dashboard/DashboardShell.jsx:482`, `src/components/dashboard/scoreBandEngineChips.test.mjs:430`
@@ -225,7 +225,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 - [ ] **R2.10.7** The landing-copy guard is blind to two apostrophes on one line
 
-## R3 — Durable backend  `33/48`
+## R3 — Durable backend  `34/48`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -236,7 +236,7 @@ Baseline commit: `5111219`
 - [x] **R3.1.3** The scan worker route reports processed:1 for a request that failed — closed at `src/app/api/scan/worker/route.js:79`, `src/app/api/scan/worker/route.js:104`, `src/app/api/scan/worker/route.js:138`, `src/app/api/scan/worker/route.js:160`, `src/app/api/scan/worker/route.js:187`, `src/app/api/scan/worker/route.js:249`, `src/lib/scanWorkerRoute.route.test.mjs:101`, `src/lib/scanWorkerRoute.route.test.mjs:119`, `src/lib/scanWorkerRoute.route.test.mjs:203`
 - [x] **R3.1.4** The content worker sweep counts dispatched as done, and an in-memory scan leaves no ledger row — closed at `src/app/api/content/worker/route.js:137-157`
 - [ ] **R3.1.5** The post-response scan trigger has no keepalive, and three compensations hide it `needs-vercel`
-- [ ] **R3.1.7** recordCronTick fabricates liveness in an unconfigured deploy, so health shows a fresh tick while the cron answers 500
+- [x] **R3.1.7** recordCronTick fabricates liveness in an unconfigured deploy, so health shows a fresh tick while the cron answers 500 — closed at `src/lib/db/analytics.js:557`, `src/lib/db/analytics.js:573`, `src/lib/health.test.mjs:232`, `src/lib/health.test.mjs:242`, `src/lib/health.test.mjs:257`
 - [ ] **R3.1.8** A lease-acquire failure is indistinguishable from a lease legitimately held, and a batch job whose dispatch fails vanishes from every counter
 ### R3.2
 

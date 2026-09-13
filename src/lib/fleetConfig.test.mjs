@@ -765,3 +765,104 @@ test("R1.2.12 GUARD — all fleet credentials and configuration variables are di
     assert.match(example, new RegExp(name), `${name} is read at boot but absent from .env.example`);
   }
 });
+
+test("R1.2.18 — fleet:dev script loads .env.local before .env.fleet.local", async () => {
+  const pkgJson = JSON.parse(await readFile(path.join(REPO, "package.json"), "utf8"));
+  const script = pkgJson.scripts["fleet:dev"];
+  assert.ok(script, "fleet:dev script must exist in package.json");
+
+  const idxApp = script.indexOf("--env-file-if-exists=.env.local");
+  const idxFleet = script.indexOf("--env-file-if-exists=.env.fleet.local");
+
+  assert.ok(idxApp !== -1, "fleet:dev must specify --env-file-if-exists=.env.local");
+  assert.ok(idxFleet !== -1, "fleet:dev must specify --env-file-if-exists=.env.fleet.local");
+  assert.ok(
+    idxApp < idxFleet,
+    "fleet:dev must load .env.local first and .env.fleet.local second so fleet credentials win"
+  );
+});
+
+test("R1.2.18 — Node --env-file precedence verifies later files override earlier ones", async () => {
+  const os = await import("node:os");
+  const fs = await import("node:fs/promises");
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "fleet-env-test-"));
+
+  try {
+    const file1 = path.join(tmpDir, "base.env");
+    const file2 = path.join(tmpDir, "override.env");
+
+    await fs.writeFile(file1, "FLEET_TEST_FLAG_R1218=base_value\n", "utf8");
+    await fs.writeFile(file2, "FLEET_TEST_FLAG_R1218=override_value\n", "utf8");
+
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [
+        `--env-file=${file1}`,
+        `--env-file=${file2}`,
+        "-e",
+        "console.log(process.env.FLEET_TEST_FLAG_R1218)",
+      ],
+      { encoding: "utf8" }
+    );
+
+    assert.equal(stdout.trim(), "override_value", "later --env-file flag must override earlier flag");
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("R1.2.18 — PRODUCTION_SUPABASE_URL is discoverable in .env.example", async () => {
+  const example = await readFile(path.join(REPO, ".env.example"), "utf8");
+  assert.match(
+    example,
+    /PRODUCTION_SUPABASE_URL=/,
+    "PRODUCTION_SUPABASE_URL placeholder must be documented in .env.example"
+  );
+});
+
+test("R1.2.17 — ARM_LIVE_DB is dropped and does not arm production", () => {
+  const err = refusal({
+    SUPABASE_URL: "https://prod.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "prod-key",
+    NEXT_PUBLIC_SUPABASE_URL: "https://prod.supabase.co",
+    ARM_LIVE_DB: "true",
+  });
+  assert.ok(err, "ARM_LIVE_DB must not arm production");
+  assert.equal(err.problems[0].kind, "production_refusal");
+});
+
+test("R1.2.17 — non-strict config resolution nulls out production credentials when unarmed", () => {
+  const cfg = resolveConfig(
+    {
+      SUPABASE_URL: "https://prod.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "prod-key",
+      NEXT_PUBLIC_SUPABASE_URL: "https://prod.supabase.co",
+    },
+    { strict: false }
+  );
+
+  assert.equal(cfg.supabaseUrl, null, "supabaseUrl must be nulled out when unarmed against production");
+  assert.equal(cfg.supabaseKey, null, "supabaseKey must be nulled out when unarmed against production");
+  assert.equal(cfg.allowProductionDb, false);
+});
+
+test("R1.2.17 — selftest in production-carrying shell runs safely with nulled credentials", () => {
+  const booted = bootConfig(
+    {
+      SUPABASE_URL: "https://prod.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "prod-key",
+      NEXT_PUBLIC_SUPABASE_URL: "https://prod.supabase.co",
+    },
+    { strict: false }
+  );
+
+  assert.ok(booted.config, "selftest boots with non-strict config");
+  assert.equal(booted.config.supabaseUrl, null, "selftest config must never carry production url");
+  assert.equal(booted.config.supabaseKey, null, "selftest config must never carry production key");
+});
+
+

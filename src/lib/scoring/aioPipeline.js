@@ -10,6 +10,8 @@ import {
 import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
 import { detectMention } from "./judge.js";
 import { extractBrandDomain } from "./citations.js";
+import { countBrandsElicited } from "./promptQuality.js";
+import { ratioPctOrNull } from "./measuredNumber.js";
 
 /**
  * AIO-Only Probing Pipeline
@@ -262,6 +264,29 @@ export function summarizeAioResults(results) {
 
   const insufficientSample = nonBrandedWithAio.length < AIO_MIN_NON_BRANDED_WITH_AIO;
 
+  // R2.7.5 — share_of_voice_pct over the eliciting pool for AIO-only scans.
+  // Preserves the three-way distinction:
+  // null = undefined without rivals (or empty eliciting pool),
+  // 0 = assessed and nothing mentioned, a number otherwise.
+  const hasRivalRoster = nonBrandedWithAio.some(
+    (r) => Array.isArray(r.brands) && r.brands.some((b) => b && !(b.is_self ?? b.isSelf))
+  );
+  const elicitingPool = hasRivalRoster
+    ? nonBrandedWithAio.filter((r) => countBrandsElicited(r.brands) >= 1)
+    : nonBrandedWithAio;
+
+  let selfMentions = 0;
+  let allMentions = 0;
+  for (const r of elicitingPool) {
+    const brands = Array.isArray(r.brands) ? r.brands : [];
+    for (const b of brands) {
+      if (!b || !b.mentioned) continue;
+      allMentions += 1;
+      if (b.is_self ?? b.isSelf) selfMentions += 1;
+    }
+  }
+  const shareOfVoicePct = !hasRivalRoster ? null : ratioPctOrNull(selfMentions, allMentions);
+
   // Scoring contract — three consistently-defined numbers, never mixed:
   //   visibility_pct / share_of_ai_pct (HERO) = visible ÷ queries_with_aio (non-branded)
   //   aio_coverage_pct                        = queries_with_aio ÷ 30 (non-branded)
@@ -269,6 +294,7 @@ export function summarizeAioResults(results) {
   return {
     results,
     summary: {
+      share_of_voice_pct: shareOfVoicePct,
       total_queries: total,
       branded_queries: branded.length,
       non_branded_queries: nonBranded.length,

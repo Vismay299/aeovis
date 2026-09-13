@@ -1636,6 +1636,29 @@ export function summarizeEngineResults(scanOutput) {
     ? aioSummary.citation_denominator
     : aioSummary.non_branded_with_answer;
 
+  // R2.7.5 — Scan-level share_of_voice_pct. Unions the underlying mention
+  // counts across all engines that assessed a rival roster, rather than
+  // averaging per-engine ratios. Preserves the three-way distinction:
+  // null = undefined without rivals (or empty eliciting pool),
+  // 0 = assessed and nothing mentioned, a number otherwise.
+  const slices = Object.values(engines || {}).filter((s) => s && typeof s === "object");
+  const anyHasRivalRoster = slices.some(
+    (s) => s.share_of_voice_pct !== null || (s.top_rivals && s.top_rivals.length > 0)
+  );
+  let scanShareOfVoicePct = null;
+  if (anyHasRivalRoster) {
+    let pooledSelf = 0;
+    let pooledAll = 0;
+    for (const s of slices) {
+      const hasRivals = s.share_of_voice_pct !== null || (s.top_rivals && s.top_rivals.length > 0);
+      if (hasRivals) {
+        if (Number.isFinite(s.self_mentions)) pooledSelf += s.self_mentions;
+        if (Number.isFinite(s.total_brand_mentions)) pooledAll += s.total_brand_mentions;
+      }
+    }
+    scanShareOfVoicePct = ratioPctOrNull(pooledSelf, pooledAll);
+  }
+
   return {
     results: scanOutput.results,
     summary: {
@@ -1682,6 +1705,7 @@ export function summarizeEngineResults(scanOutput) {
       // `??`, not `||`: a measured 0 is a real finding and must survive.
       visibility_pct: aioSummary.visibility_pct ?? null,
       share_of_ai_pct: aioSummary.share_of_ai_pct ?? null,
+      share_of_voice_pct: scanShareOfVoicePct,
       // ...and WHY there is no number, carried up from the slice so a scan-level
       // reader can render the em dash plus a state chip without re-deriving it
       // from `engines.aio`. Null (not "measured") on a slice written before

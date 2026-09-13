@@ -228,3 +228,61 @@ test("GUARD — both worker routes record their tick AFTER the auth gate", async
     );
   }
 });
+
+test("R3.1.7 — recordCronTick refuses to fabricate ticks in memory when no client is configured", async () => {
+  const { recordCronTick, getCronTicks } = await import("./db/analytics.js");
+
+  const recorded = await recordCronTick("test-worker", null, { client: null });
+  assert.equal(recorded, null, "unconfigured client must return null and not fabricate a tick");
+
+  const ticks = await getCronTicks({ client: null });
+  assert.deepEqual(ticks, [], "unconfigured client must return empty array, not memory fallback");
+});
+
+test("R3.1.7 — /api/health reports unmeasured cron liveness as unknown, never fresh", () => {
+  const p = buildHealthPayload({
+    db: { ok: false },
+    env: FULL_ENV,
+    ticks: [],
+    now: NOW,
+  });
+
+  assert.equal(p.cron["scan-worker"].last_tick_at, null, "last_tick_at must be null when unmeasured");
+  assert.equal(p.cron["scan-worker"].age_ms, null, "age_ms must be null when unmeasured");
+  assert.equal(p.cron["scan-worker"].stale, null, "stale must be null when unmeasured");
+  assert.equal(p.cron["content-worker"].last_tick_at, null);
+  assert.equal(p.cron["content-worker"].stale, null);
+});
+
+test("R3.1.7 — positive case: genuinely stored ticks report fresh with calculated age_ms", async () => {
+  const { recordCronTick } = await import("./db/analytics.js");
+
+  let storedRow = null;
+  const mockClient = {
+    from(table) {
+      assert.equal(table, "system_heartbeats");
+      return {
+        upsert([row]) {
+          storedRow = row;
+          return { error: null };
+        },
+      };
+    },
+  };
+
+  const tick = await recordCronTick("content-worker", { test: true }, { client: mockClient });
+  assert.ok(tick, "tick recorded when client is configured");
+  assert.equal(storedRow.name, "content-worker");
+
+  const p = buildHealthPayload({
+    db: { ok: true },
+    env: FULL_ENV,
+    ticks: [storedRow],
+    now: new Date(Date.parse(storedRow.last_tick_at) + 5000).toISOString(),
+  });
+
+  assert.equal(p.cron["content-worker"].last_tick_at, storedRow.last_tick_at);
+  assert.equal(p.cron["content-worker"].age_ms, 5000);
+  assert.equal(p.cron["content-worker"].stale, false);
+});
+

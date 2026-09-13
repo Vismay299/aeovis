@@ -41,7 +41,7 @@ The fleet requires credentials with permissions to claim tasks, renew heartbeats
 
 ### Configuration File: `.env.fleet.local`
 
-Create a `.env.fleet.local` file in the repository root (or set variables directly in your terminal environment). Do not source or copy production `.env.local` keys.
+Create a `.env.fleet.local` file in the repository root (or set variables directly in your terminal environment). Do not source or copy production `.env.local` keys. `npm run fleet:dev` loads `.env.local` first and `.env.fleet.local` second, so scoped dev credentials take precedence over application keys (R1.2.18).
 
 ```bash
 # --- Required: Dev Supabase Credentials ---

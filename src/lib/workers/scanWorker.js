@@ -2077,6 +2077,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     platform,
     visibility_pct: summary.visibility_pct,
     share_of_ai_pct: summary.share_of_ai_pct,
+    share_of_voice_pct: summary.share_of_voice_pct ?? null,
     aio_coverage_pct: summary.aio_coverage_pct,
     presence_rate_pct: summary.presence_rate_pct,
     mention_rate_pct: summary.mention_rate_pct,

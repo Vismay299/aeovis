@@ -92,6 +92,11 @@ export function enrichScanForClient(scan) {
     competitors: scan.competitors ?? raw.competitors ?? [],
     results,
     summary_stats,
+    share_of_voice_pct:
+      scan.share_of_voice_pct ??
+      raw.share_of_voice_pct ??
+      summary_stats?.share_of_voice_pct ??
+      null,
     aio_coverage_pct:
       raw.aio_coverage_pct ?? summary_stats?.aio_coverage_pct ?? null,
     brand_citation_share_pct:

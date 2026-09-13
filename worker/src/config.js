@@ -145,7 +145,7 @@ export const CONFIG_FIELDS = Object.freeze([
     name: "FLEET_ALLOW_PRODUCTION_DB",
     required: false,
     kind: "boolean",
-    alsoAccepts: Object.freeze(["FLEET_ARM_PRODUCTION_DB", "ARM_LIVE_DB"]),
+    alsoAccepts: Object.freeze(["FLEET_ARM_PRODUCTION_DB"]),
     fallback: false,
     why: "explicit arming flag required to run the fleet against the production database (R1.2.12)",
   }),
@@ -538,7 +538,7 @@ function namesSameTarget(value, real) {
  */
 function isArmedForProduction(env) {
   if (!env || typeof env !== "object") return false;
-  const v = env.FLEET_ALLOW_PRODUCTION_DB ?? env.FLEET_ARM_PRODUCTION_DB ?? env.ARM_LIVE_DB;
+  const v = env.FLEET_ALLOW_PRODUCTION_DB ?? env.FLEET_ARM_PRODUCTION_DB;
   if (v === true || v === 1) return true;
   if (typeof v === "string") {
     const s = v.trim().toLowerCase();
@@ -619,6 +619,10 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
           `(see docs/runbooks/fleet-dev.md), or set FLEET_ALLOW_PRODUCTION_DB=true ` +
           `(or FLEET_ARM_PRODUCTION_DB=true) to explicitly arm production writes.`,
       });
+      // R1.2.17: When unarmed against production, strip production credentials completely.
+      // A process must NEVER hold live production credentials while reporting itself unarmed.
+      values.SUPABASE_URL = null;
+      values.SUPABASE_SERVICE_ROLE_KEY = null;
     }
   }
 

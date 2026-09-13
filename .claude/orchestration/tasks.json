@@ -3225,17 +3225,39 @@
       "phase": "R1",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "dev-1",
+      "evidence": [
+        "worker/src/config.js:148",
+        "worker/src/config.js:541",
+        "worker/src/config.js:624",
+        "worker/src/index.js:346",
+        "src/lib/fleetConfig.test.mjs:827",
+        "src/lib/fleetConfig.test.mjs:838",
+        "src/lib/fleetConfig.test.mjs:853"
+      ],
       "notes": [
         {
           "at": "2026-09-13T07:10:33.583Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T10:44:01.161Z",
+          "by": "dev-1",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T10:45:16.425Z",
+          "by": "dev-1",
+          "text": "Dropped ARM_LIVE_DB alias, nulled out production credentials when unarmed, and stubbed releaseBatch in selftest with 3 tests in fleetConfig.test.mjs"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:45:20.651Z",
+        "note": "Verified by QA 1 & Judge: ARM_LIVE_DB dropped, production credentials nulled when unarmed, releaseBatch stubbed in selftest, 68/68 tests pass"
+      }
     },
     {
       "id": "R1.2.18",
@@ -3254,17 +3276,38 @@
       "phase": "R1",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "dev-1",
+      "evidence": [
+        "package.json:18",
+        "docs/runbooks/fleet-dev.md:44",
+        ".env.example:242",
+        "src/lib/fleetConfig.test.mjs:769",
+        "src/lib/fleetConfig.test.mjs:785",
+        "src/lib/fleetConfig.test.mjs:818"
+      ],
       "notes": [
         {
           "at": "2026-09-13T07:10:44.846Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T10:42:56.807Z",
+          "by": "dev-1",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T10:43:50.165Z",
+          "by": "dev-1",
+          "text": "Swapped flag order in package.json, documented PRODUCTION_SUPABASE_URL in .env.example, updated fleet-dev.md runbook, added 3 automated tests in fleetConfig.test.mjs"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:43:54.391Z",
+        "note": "Verified by QA 1 & Judge: fleet:dev flag order swapped so scoped dev credentials take precedence, node precedence proven with dummy files, .env.example placeholder added, 65/65 tests pass"
+      }
     },
     {
       "id": "R1.3.1",
@@ -5298,9 +5341,19 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_progress",
+      "status": "done",
       "owner": "dev-2a",
-      "evidence": [],
+      "evidence": [
+        "src/lib/scoring/enginePipeline.js:1648",
+        "src/lib/scoring/enginePipeline.js:1709",
+        "src/lib/scoring/aioPipeline.js:288",
+        "src/lib/scoring/aioPipeline.js:297",
+        "src/lib/workers/scanWorker.js:2080",
+        "src/services/api.js:455",
+        "src/services/api.js:621",
+        "src/lib/scoring/enginePipeline.test.mjs:1049",
+        "src/lib/scoring/summarize.test.mjs:76"
+      ],
       "notes": [
         {
           "at": "2026-09-05T01:51:52.466Z",
@@ -5316,9 +5369,18 @@
           "at": "2026-09-13T06:42:37.554Z",
           "by": "controller",
           "text": "amended: Controller 2026-09-13: claimed by dev-2a 2026-09-12T17:03Z, 19h stale, zero evidence, no live process and no git worktree behind it. Treating as abandoned. Held rather than re-dispatched immediately because its anchor src/lib/scoring/enginePipeline.js collides with the R2.2.14 regression fix; will re-claim once R2.2.14 closes."
+        },
+        {
+          "at": "2026-09-13T10:55:47.283Z",
+          "by": "dev-2a",
+          "text": "Implemented scan-level share_of_voice_pct across multi-engine and AIO pipelines, persisting to scanRecord and exposing in normalizeResult with full 3-way distinction and count unioning."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:55:50.727Z",
+        "note": "Verified by Chief Verification Judge: multi-engine unioning, AIO calculation, persistence in scanWorker, exposure in api.js, and unit tests passing with zero regressions across the 2572 test suite."
+      }
     },
     {
       "id": "R2.7.6",
@@ -7293,17 +7355,37 @@
       "phase": "R3",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "dev-2",
+      "evidence": [
+        "src/lib/db/analytics.js:557",
+        "src/lib/db/analytics.js:573",
+        "src/lib/health.test.mjs:232",
+        "src/lib/health.test.mjs:242",
+        "src/lib/health.test.mjs:257"
+      ],
       "notes": [
         {
           "at": "2026-09-13T07:11:11.468Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T10:45:29.372Z",
+          "by": "dev-2",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T10:46:24.438Z",
+          "by": "dev-2",
+          "text": "Deleted global.memorySystemHeartbeats; unconfigured database reports null/unknown instead of fabricated liveness; 3 tests in health.test.mjs"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:46:27.674Z",
+        "note": "Verified by QA 1 & Judge: in-memory heartbeat map deleted, unmeasured cron liveness reports as unknown/null rather than fabricated freshness, positive case confirmed, 23/23 tests pass"
+      }
     },
     {
       "id": "R3.1.8",

@@ -72,3 +72,58 @@ test("summarizeAioResults - low India coverage flags data_source_issue, not a fa
   assert.equal(summary.data_source_issue, true);
   assert.equal(summary.insufficient_sample, true);
 });
+
+test("R2.7.5: summarizeAioResults distinguishes null, 0, and measured share_of_voice_pct", () => {
+  // 1. Without rivals, SOV is null
+  const noRivals = [
+    {
+      ...makeResult({ aioPresent: true, visible: true }),
+      brands: [{ name: "SelfBrand", is_self: true, mentioned: true }],
+    },
+  ];
+  assert.equal(summarizeAioResults(noRivals).summary.share_of_voice_pct, null, "null without rivals");
+
+  // 2. Rivals assessed, but empty eliciting pool (no brands mentioned at all)
+  const emptyEliciting = [
+    {
+      ...makeResult({ aioPresent: true, visible: false }),
+      brands: [
+        { name: "SelfBrand", is_self: true, mentioned: false },
+        { name: "RivalBrand", is_self: false, mentioned: false },
+      ],
+    },
+  ];
+  assert.equal(summarizeAioResults(emptyEliciting).summary.share_of_voice_pct, null, "null when eliciting pool is empty");
+
+  // 3. Rivals assessed, rival mentioned, self NOT mentioned -> 0
+  const measuredZero = [
+    {
+      ...makeResult({ aioPresent: true, visible: false }),
+      brands: [
+        { name: "SelfBrand", is_self: true, mentioned: false },
+        { name: "RivalBrand", is_self: false, mentioned: true },
+      ],
+    },
+  ];
+  assert.equal(summarizeAioResults(measuredZero).summary.share_of_voice_pct, 0, "0 when assessed and not mentioned");
+
+  // 4. Rivals assessed, self mentioned 1 / 4 total -> 25.0%
+  const measuredScore = [
+    {
+      ...makeResult({ aioPresent: true, visible: true }),
+      brands: [
+        { name: "SelfBrand", is_self: true, mentioned: true },
+        { name: "Rival1", is_self: false, mentioned: true },
+      ],
+    },
+    {
+      ...makeResult({ aioPresent: true, visible: false }),
+      brands: [
+        { name: "SelfBrand", is_self: true, mentioned: false },
+        { name: "Rival1", is_self: false, mentioned: true },
+        { name: "Rival2", is_self: false, mentioned: true },
+      ],
+    },
+  ];
+  assert.equal(summarizeAioResults(measuredScore).summary.share_of_voice_pct, 25, "measured percentage when self mentioned");
+});

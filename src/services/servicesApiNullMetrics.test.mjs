@@ -233,17 +233,20 @@ const METRIC_IDENTIFIERS = [
   "aio_error_rate_pct",
   "cost_total",
   "costTotal",
+  "shareOfVoicePct",
+  "share_of_voice_pct",
 ];
 
 test("GUARD — METRIC_IDENTIFIERS corpus is intact", () => {
   assertCorpusIntact(METRIC_IDENTIFIERS, "METRIC_IDENTIFIERS", {
-    floor: 20,
+    floor: 22,
     required: [
       "visibilityPct",
       "visibilityScore",
       "visibilityIndexPct",
       "aioCoveragePct",
       "costTotal",
+      "shareOfVoicePct",
     ],
     isTuple: false,
   });
@@ -297,16 +300,19 @@ const NULLABLE_METRICS = [
   "aioErrorRatePct",
   "presenceRatePct",
   "serpCoveragePct",
+  "shareOfVoicePct",
+  "share_of_voice_pct",
 ];
 
 test("GUARD — NULLABLE_METRICS corpus is intact", () => {
   assertCorpusIntact(NULLABLE_METRICS, "NULLABLE_METRICS", {
-    floor: 8,
+    floor: 10,
     required: [
       "visibilityScore",
       "shareOfAiPct",
       "brandCitationSharePct",
       "aioCoveragePct",
+      "shareOfVoicePct",
     ],
     isTuple: false,
   });
@@ -321,6 +327,7 @@ test("R2.1.2 ACCEPT — a scan that recorded no readings returns null metrics, n
       aio_coverage_pct: null,
       error_rate_pct: null,
       presence_rate_pct: null,
+      share_of_voice_pct: null,
       state: "not_assessed",
       state_reason: "empty_eliciting_pool",
     })
@@ -346,6 +353,7 @@ test("R2.1.2 — a genuinely measured zero is still a zero (standing rule 1)", (
       aio_coverage_pct: 0,
       error_rate_pct: 0,
       presence_rate_pct: 0,
+      share_of_voice_pct: 0,
       state: "measured_zero",
       state_reason: "brand_not_visible",
     })

@@ -343,6 +343,7 @@ async function selftest(resolved) {
         ended_at: new Date().toISOString(),
       });
     },
+    releaseBatch: async () => 0,
     sleep: async () => {},
   });
 

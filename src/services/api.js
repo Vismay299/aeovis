@@ -377,6 +377,16 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
         data.aliasBrandedOnlyCount ??
         Math.max(0, brandedPromptsCount - brandPresencePromptsCount),
       queriesTracked,
+      shareOfVoicePct:
+        data.shareOfVoicePct ??
+        data.share_of_voice_pct ??
+        (data.raw_results || {}).share_of_voice_pct ??
+        null,
+      share_of_voice_pct:
+        data.share_of_voice_pct ??
+        data.shareOfVoicePct ??
+        (data.raw_results || {}).share_of_voice_pct ??
+        null,
     };
   }
 
@@ -442,6 +452,12 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     data.presence_rate_pct ?? data.presenceRatePct ?? summary?.presence_rate_pct ?? null;
   let shareOfAiPct =
     data.share_of_ai_pct ?? data.shareOfAiPct ?? summary?.share_of_ai_pct ?? visibilityPct;
+  let shareOfVoicePct =
+    data.share_of_voice_pct ??
+    data.shareOfVoicePct ??
+    summary?.share_of_voice_pct ??
+    raw.share_of_voice_pct ??
+    null;
 
   // Multi-engine detection: record carries an `engines` key with per-engine summaries.
   const isMultiEngine = !!(data.engines || raw.engines);
@@ -602,6 +618,8 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     visibilityScore: visibilityPct,
     /** Hero metric — same value as visibilityScore, named for the "Share of AI answers" hero. */
     shareOfAiPct,
+    shareOfVoicePct,
+    share_of_voice_pct: shareOfVoicePct,
     presenceRatePct,
     /** Denominator the hero uses: non-branded queries where Google actually returned an AIO. */
     queriesWithAio: nonBrandedWithAio,
