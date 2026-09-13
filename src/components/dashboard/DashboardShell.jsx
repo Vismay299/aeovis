@@ -6,6 +6,7 @@ import { RefreshCw, FlaskConical, Loader2, Download, ShieldAlert } from "lucide-
 import { Sidebar } from "@/components/perceev/Sidebar";
 import { ThemeToggle } from "@/components/perceev/ThemeToggle";
 import { ScoreBand } from "@/components/dashboard/ScoreBand";
+import { ProvenanceStrip } from "@/components/dashboard/ProvenanceStrip";
 import { OverviewView } from "@/components/dashboard/OverviewView";
 import { AnswersView } from "@/components/dashboard/AnswersView";
 import { RivalsView } from "@/components/dashboard/RivalsView";
@@ -1328,6 +1329,11 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                   {trendUnavailable}
                 </p>
               )}
+              {/* R2.9.1 — provenance strip: engines, eliciting pool, dead
+                  prompts, prompt-set version, geo, collection window.
+                  All values are read off the persisted record; nothing
+                  is recomputed here. */}
+              <ProvenanceStrip result={result} />
             </div>
           )}
 

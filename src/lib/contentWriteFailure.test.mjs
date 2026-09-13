@@ -29,6 +29,7 @@ function makeFailingClient(errorMsg = "Database connection error") {
   const chain = {
     insert: () => chain,
     update: () => chain,
+    upsert: () => chain,
     delete: () => chain,
     select: () => chain,
     eq: () => chain,

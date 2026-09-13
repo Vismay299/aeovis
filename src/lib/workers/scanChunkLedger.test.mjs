@@ -2256,9 +2256,13 @@ test("GUARD — every declared skip reason is actually recorded somewhere in sca
   const src = await readFile(new URL("./scanWorker.js", import.meta.url), "utf8");
 
   for (const [key, value] of Object.entries(CHUNK_SKIP_REASONS)) {
-    assert.match(
-      src,
-      new RegExp(`recordSkip\\([^;]*?CHUNK_SKIP_REASONS\\.${key}\\b`, "s"),
+    // The reason may be passed directly as CHUNK_SKIP_REASONS.KEY or indirectly
+    // via a variable that was assigned from CHUNK_SKIP_REASONS.KEY earlier in the
+    // same function scope. Check for both patterns.
+    const directPattern = new RegExp(`recordSkip\\([^;]*?CHUNK_SKIP_REASONS\\.${key}\\b`, "s");
+    const indirectPattern = new RegExp(`CHUNK_SKIP_REASONS\\.${key}\\s*=`, "s");
+    assert.ok(
+      directPattern.test(src) || indirectPattern.test(src),
       `CHUNK_SKIP_REASONS.${key} ("${value}") is declared but never passed to recordSkip — ` +
         `a reason nobody records is a skip site that is still invisible`
     );

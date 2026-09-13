@@ -334,7 +334,8 @@ until R3.5.4 added the three rows:
 `007_scan_seal`, `008_system_heartbeats`, `009_scan_rate_limit`,
 `010_probe_tasks`, `011_scan_runs`, `012_scan_job_attempts`,
 `013_brand_metrics_sov_state`, `014_content_job_checkpoints`,
-`015_brand_metrics_citation_state`.
+`015_brand_metrics_citation_state`, `016_crawlability_audit_history`,
+`016_content_items_natural_key`.
 
 `npm run setup:db` applies them in filename order, one transaction per file,
 recording each in the `schema_migrations` ledger. The `BEGIN`, the ledger

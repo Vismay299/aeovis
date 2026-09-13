@@ -197,6 +197,9 @@ const EXPECTED_OBJECTS = {
     { kind: "table", name: "crawlability_audits" },
     { kind: "index", name: "crawlability_audits_domain_idx" },
   ],
+  "016_content_items_natural_key.sql": [
+    { kind: "constraint", name: "content_items_job_id_cycle_key" },
+  ],
 };
 
 /**

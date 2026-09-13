@@ -107,6 +107,11 @@ export const OverviewView = ({
 }) => {
   const { engines, platforms, total, answered } = buildInterlocking(result);
 
+  /* R2.8.2 — "N reporting" counts only engines that actually produced rows,
+     not every engine the scan was frozen with. An engine whose gauges show
+     "no data" must not inflate the reporting count. */
+  const reportingEngines = engines.filter((e) => !e.noData);
+
   /* Destinations, coloured by role: you are always indigo, rivals ramp down
      the neutral scale in rank order, nobody-named takes the flattest tone. */
   let rivalIdx = 0;
@@ -244,7 +249,7 @@ export const OverviewView = ({
         <div className="panel" data-testid="engine-breakdown">
           <div className="panel__h">
             <b>Coverage by engine</b>
-            <span className="tag">{engines.length} reporting</span>
+            <span className="tag" data-testid="engine-reporting-count">{reportingEngines.length} reporting</span>
           </div>
           <div className="panel__b">
             <p style={{ fontSize: 13.5, color: 'var(--ink-3)', marginBottom: 4 }}>

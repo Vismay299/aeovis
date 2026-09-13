@@ -15,13 +15,13 @@
  *   node .claude/orchestration/orchestrate.mjs next [--phase R0] [--lane backend] [--limit 5]
  *   node .claude/orchestration/orchestrate.mjs show <id>
  *   node .claude/orchestration/orchestrate.mjs claim <id> --agent <name>
- *   node .claude/orchestration/orchestrate.mjs submit <id> --evidence <f:l,f:l> [--note "..."]
+ *   node .claude/orchestration/orchestrate.mjs submit <id> --evidence <f:l,f:l> [--note "..." | --note-file <path>]
  *   node .claude/orchestration/orchestrate.mjs verify <id> --verdict pass|fail [--note "..."]
  *   node .claude/orchestration/orchestrate.mjs block <id> --reason <code> [--note "..."]
  *   node .claude/orchestration/orchestrate.mjs unblock <id> [--note "..."]
  *   node .claude/orchestration/orchestrate.mjs add <--json '{...}'>
  *   node .claude/orchestration/orchestrate.mjs rule --add "<text>"
- *   node .claude/orchestration/orchestrate.mjs amend <id> --note "..." [--anchors f:l]
+ *   node .claude/orchestration/orchestrate.mjs amend <id> [--note "..." | --note-file <path>] [--correction "..."] [--anchors f:l]
  *   node .claude/orchestration/orchestrate.mjs depend <id> [--add x] [--remove y] --reason "..."
  *   node .claude/orchestration/orchestrate.mjs render
  *   node .claude/orchestration/orchestrate.mjs validate
@@ -105,6 +105,41 @@ function parseArgs(argv) {
     else positional.push(argv[i]);
   }
   return { flags, positional };
+}
+
+/**
+ * R6.1.13 — resolve a note from --note-file (file path or "-" for stdin) or
+ * --note (shell argument).
+ *
+ * Shell arguments are subject to expansion before Node ever sees them:
+ * backticks execute, $(...) substitutes, and newlines are mangled by many
+ * shells.  --note-file reads from a file on disk, bypassing the shell
+ * entirely.  When --note-file is "-" the note is read from stdin.
+ *
+ * Returns { text, source } or null when no note was requested.
+ */
+function resolveNote(flags) {
+  if (flags["note-file"] !== undefined) {
+    const target = String(flags["note-file"]);
+    if (target === "-") {
+      // Read from stdin synchronously. fs.readFileSync(0) reads from fd 0,
+      // which is stdin on both Unix and Windows.
+      const chunks = [];
+      const buf = Buffer.alloc(65536);
+      for (;;) {
+        const n = fs.readSync(0, buf, 0, buf.length);
+        if (n === 0) break;
+        chunks.push(buf.subarray(0, n));
+      }
+      return { text: Buffer.concat(chunks).toString("utf8"), source: "stdin" };
+    }
+    if (!fs.existsSync(target)) die(`--note-file: file not found: ${target}`);
+    return { text: fs.readFileSync(target, "utf8"), source: target };
+  }
+  if (flags.note !== undefined && flags.note !== true) {
+    return { text: String(flags.note), source: "arg" };
+  }
+  return null;
 }
 
 function find(g, id) {
@@ -279,9 +314,13 @@ const cmds = {
     }
     if (errors.length) die(errors.join("; "));
 
+    // R6.1.13 — read the note via resolveNote so shell metacharacters
+    // (backticks, $(), newlines) reach the ledger byte-identical.
+    const resolved = resolveNote(flags);
+
     t.evidence = evidence;
     t.status = "in_verification";
-    if (flags.note) t.notes.push({ at: stamp(), by: t.owner, text: String(flags.note) });
+    if (resolved) t.notes.push({ at: stamp(), by: t.owner, text: resolved.text });
     save(g);
     console.log(`${t.id} submitted for verification with ${evidence.length} citation(s)`);
   },
@@ -387,14 +426,29 @@ const cmds = {
    * `anchors` only. It deliberately CANNOT touch `accept`: moving an acceptance
    * criterion to fit what was built is the failure this ledger exists to stop.
    * A criterion that is genuinely wrong needs a new task, not a quiet edit.
+   *
+   * R6.1.13 — --note is read via resolveNote (file or stdin), and a new
+   * --correction flag adds a note entry WITHOUT appending to detail, for
+   * correcting a record without changing the task description.
    */
   amend(g, { positional, flags }) {
     const t = find(g, positional[0]);
     if (flags.accept) die("`accept` is immutable — file a new task instead of moving the goalposts");
-    if (!flags.note && !flags.anchors) die("--note and/or --anchors is required");
-    if (flags.note) {
-      t.detail += ` ${String(flags.note)}`;
-      t.notes.push({ at: stamp(), by: "controller", text: `amended: ${flags.note}` });
+    if (!flags.note && !flags["note-file"] && !flags.anchors && !flags.correction)
+      die("--note, --note-file, --correction, and/or --anchors is required");
+
+    // R6.1.13 — resolve the note text from file or argument.
+    const resolved = resolveNote(flags);
+
+    // --correction adds a note entry without appending to detail.
+    if (flags.correction !== undefined) {
+      const correctionText = String(flags.correction);
+      t.notes.push({ at: stamp(), by: "controller", text: `correction: ${correctionText}` });
+    }
+
+    if (resolved) {
+      t.detail += ` ${resolved.text}`;
+      t.notes.push({ at: stamp(), by: "controller", text: `amended: ${resolved.text}` });
     }
     if (flags.anchors)
       for (const a of String(flags.anchors).split(",").map((x) => x.trim()).filter(Boolean))
@@ -553,4 +607,4 @@ if (isMain) {
   }
 }
 
-export { validateEvidenceCitation, cmds };
+export { validateEvidenceCitation, resolveNote, cmds };

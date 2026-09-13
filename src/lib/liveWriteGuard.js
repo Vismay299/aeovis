@@ -114,7 +114,7 @@
  * genuinely disposable table, add it here in the same commit as the test that
  * needs it, so the widening shows up in the diff instead of in the database.
  */
-export const WRITABLE_BY_OPT_IN = Object.freeze(["scan_runs", "probe_tasks"]);
+export const WRITABLE_BY_OPT_IN = Object.freeze(["scan_runs", "probe_tasks", "crawlability_audits"]);
 
 /**
  * The tables the incident actually touched, plus their neighbours: everything a

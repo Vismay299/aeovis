@@ -433,7 +433,7 @@ test("AN UNKNOWN TABLE CANNOT BE OPTED INTO EITHER — widening is a diff, not a
     () => installLiveWriteGuard({ label: "self-test/unknown", allow: ["some_new_ledger"] }),
     /not a table a live test may write/
   );
-  assert.deepEqual([...WRITABLE_BY_OPT_IN], ["scan_runs", "probe_tasks"]);
+  assert.deepEqual([...WRITABLE_BY_OPT_IN].sort(), ["crawlability_audits", "probe_tasks", "scan_runs"]);
 });
 
 test("a guard with no label is refused: an anonymous refusal names nobody", async () => {

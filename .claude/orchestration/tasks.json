@@ -5982,10 +5982,25 @@
         "src/components/dashboard/OverviewView.jsx:140"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "aeovis-dev",
+      "evidence": [
+        "src/components/dashboard/interlocking.js:106",
+        "src/components/charts/Gauge.jsx:19",
+        "src/components/dashboard/OverviewView.jsx:113"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-13T16:24:15.110Z",
+          "by": "aeovis-dev",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T16:25:03.789Z",
+          "by": "aeovis-dev",
+          "text": "Zero-row engines no longer fall back to all rows. buildInterlocking marks noData:true with probes/cleared=0. Gauge renders 'no data' when asked=0. The 'N reporting' count excludes no-data engines. 8 new tests in interlocking.test.mjs. Full suite: 2714 pass, 18 pre-existing fail, no regressions."
+        }
+      ],
       "verification": null
     },
     {
@@ -6790,10 +6805,25 @@
         "src/components/dashboard/DashboardShell.jsx"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "aeovis-dev",
+      "evidence": [
+        "src/components/dashboard/ProvenanceStrip.jsx:42",
+        "src/components/dashboard/ProvenanceStrip.jsx:83",
+        "src/components/dashboard/DashboardShell.jsx:1336"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-13T16:24:15.055Z",
+          "by": "aeovis-dev",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T16:25:03.824Z",
+          "by": "aeovis-dev",
+          "text": "New ProvenanceStrip component renders under the hero with: engines counted/skipped, eliciting pool size, aggregate elicitation rate (total eliciting / total answered), dead prompts, prompt-set version, geo, collection window. All values read off persisted record. Elicitation rate computed as weighted aggregate, not summed per-engine rates. 24 new tests in ProvenanceStrip.test.mjs. Full suite: 2714 pass, 18 pre-existing fail, no regressions."
+        }
+      ],
       "verification": null
     },
     {
@@ -10923,14 +10953,23 @@
       "tags": [],
       "phase": "R6",
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "claude-r6",
+      "evidence": [
+        ".claude/orchestration/orchestrate.mjs:121",
+        "src/lib/orchestrateNotes.test.mjs:1",
+        "src/lib/evidenceValidation.test.mjs:22"
+      ],
       "notes": [
         {
           "at": "2026-09-08T11:19:34.623Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T16:29:38.489Z",
+          "by": "claude-r6",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -10953,14 +10992,22 @@
       "tags": [],
       "phase": "R6",
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "claude-r6",
+      "evidence": [
+        "src/lib/migrationsLedger.test.mjs:164",
+        "src/lib/migrationsLedger.test.mjs:274"
+      ],
       "notes": [
         {
           "at": "2026-09-08T11:22:10.122Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T16:29:38.619Z",
+          "by": "claude-r6",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -11057,10 +11104,19 @@
         "docs/"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "claude-r6",
+      "evidence": [
+        "docs/RUNBOOK.md:1",
+        "docs/RUNBOOK.md:20"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-13T16:29:38.556Z",
+          "by": "claude-r6",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
