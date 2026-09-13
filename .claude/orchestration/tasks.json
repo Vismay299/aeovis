@@ -2969,7 +2969,7 @@
         "src/lib/liveDbGate.js",
         ".env.example"
       ],
-      "status": "in_verification",
+      "status": "done",
       "owner": "Developer 1B",
       "evidence": [
         "worker/src/config.js:586",
@@ -2995,7 +2995,11 @@
           "text": "Production guard fixed: (1) only inspects the passed env parameter, never peeks at process.env behind the caller's back, preventing false positives when NODE_ENV=production is set on the developer machine; (2) dbTarget uses hostname-only comparison to match across HTTPS and PostgreSQL protocol families. All 62 tests pass."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T07:09:37.764Z",
+        "note": "Verified in isolated worktree at 4eefaec. Original defect reproduced by driving both config revisions through nine laptop-shell scenarios: pre-fix an env carrying only NEXT_PUBLIC_SUPABASE_URL + anon key booted against production; post-fix it refuses with production_refusal. Exercised end to end, not just the unit path - the real worker entry point exits 1 on a scrubbed prod-carrying env. Hostname comparison is case- and port-insensitive; genuine dev separation and the armed case still boot. Five sabotages, four red. Suite 2500/2474/0/26, exact baseline. No credential value was read or printed."
+      }
     },
     {
       "id": "R1.2.13",
@@ -3180,6 +3184,65 @@
         "at": "2026-09-12T04:04:06.544Z",
         "note": "Audited assertCorpusIntact across all 4 corpora in src/lib/engines/brightdataZone.test.mjs:116 (floors 55, 22, 13, 6). Isolated mutation testing confirmed loud failures on empty corpus (floor breach), truncated array, duplicate entries (padding attack), and missing load-bearing required members. All 18 tests pass cleanly."
       }
+    },
+    {
+      "id": "R1.2.17",
+      "subphase": "R1.2",
+      "lane": "backend",
+      "title": "SECURITY: --selftest exempts the production refusal and leaves one unstubbed path to a real production write",
+      "detail": "Found by the R1.2.12 verifier after passing that task. worker/src/config.js:633-635 filters kind === production_refusal out of the fatal list when strict is false, and worker/src/index.js:402 passes strict:false for --selftest, which is what npm run fleet:check runs. Observed directly: running the selftest in a shell carrying production credentials prints supabaseUrl=set supabaseKey=set allowProductionDb=false and exits 0 - a config holding production credentials while reporting itself unarmed. The refusal R1.2.12 just installed is therefore bypassable by the one command an operator is most likely to run first. No live write happens today only because selftest stubs every dep it reaches - but releaseBatch is NOT stubbed: worker/src/index.js:290-341 calls it directly, whereas runOnce takes deps.releaseBatch || releaseBatch at :113. So the selftest is one unstubbed error path away from a real production UPDATE. Second, separate hole in the same guard: worker/src/config.js:148 and :541 accept ARM_LIVE_DB as a production arming alias. It appears nowhere else in the tracked tree so it is inert today, but it is the generic name someone will introduce for exactly that purpose, and the day they do, having it in the shell silently disarms the fleet production guard. That is the same defect class R1.2.12 fixed.",
+      "accept": "A fleet selftest cannot hold production credentials while reporting itself unarmed: when unarmed, supabaseUrl and supabaseKey are nulled out rather than merely flagged, OR releaseBatch is stubbed in the selftest path and the refusal is reported in the selftest output as a problem rather than filtered from it. Whichever is chosen, a test drives the real selftest in a production-carrying shell and asserts no production credential survives into the resolved config. The ARM_LIVE_DB alias is dropped, with a test asserting it no longer arms production. Teeth proven by restoring each and watching the suite go red. Never print a credential value while exercising this - assert on presence and on the resolved URL host only.",
+      "deps": [],
+      "anchors": [
+        "worker/src/config.js:633",
+        "worker/src/config.js:148",
+        "worker/src/config.js:541",
+        "worker/src/index.js:290",
+        "worker/src/index.js:402"
+      ],
+      "phase": "R1",
+      "tags": [],
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-13T07:10:33.583Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R1.2.18",
+      "subphase": "R1.2",
+      "lane": "infra",
+      "title": "SECURITY: fleet:dev loads the app env file LAST, so the fleet runs holding the production service-role key",
+      "detail": "Found by the R1.2.12 verifier, belongs to R1.2.5 which is already done, so filed as a cross-finding. package.json:18 reads fleet:dev as node --env-file-if-exists=.env.fleet.local --env-file-if-exists=.env.local worker/src/index.js. The verifier MEASURED Node precedence with dummy files rather than assuming it: between two --env-file flags the LATER file wins. So the application env file overrides the fleet own env file, and a fleet file that deliberately sets a scoped SUPABASE_SERVICE_ROLE_KEY is clobbered by the application one. The fleet therefore runs holding the production service-role key - which is precisely what docs/runbooks/fleet-dev.md:44 instructs the operator to avoid, in those words: Do not source or copy production .env.local keys. The runbook tells the operator to do the right thing and the npm script then undoes it. No production write occurs today because the URL still points at dev and the R1.2.12 guard refuses when the host matches production, but that is one guard deep and the credential is in the process either way. Related and cheap: the R1.2.12 guard supports PRODUCTION_SUPABASE_URL as an explicit production designator at worker/src/config.js:604 but it is documented nowhere, so the residual case - SUPABASE_URL typed straight at the production host in a shell with no app vars, no DATABASE_URL and NODE_ENV not production - boots unarmed. Adding that var to .env.example closes it cheaply.",
+      "accept": "fleet:dev loads .env.fleet.local LAST so the fleet scoped credentials win over the application ones, with the flag order swapped in package.json and a test or documented measurement proving the precedence rather than asserting it. PRODUCTION_SUPABASE_URL is added to .env.example as a commented placeholder with a line explaining it is the explicit production designator the fleet guard checks. docs/runbooks/fleet-dev.md is updated so the runbook and the script now agree. .env.example is safe to edit and holds placeholder names only - never add a value, and never read .env.local while testing this: prove precedence with throwaway dummy files outside the repo and assert on a non-secret variable name.",
+      "deps": [],
+      "anchors": [
+        "package.json:18",
+        "docs/runbooks/fleet-dev.md:44",
+        "worker/src/config.js:604",
+        ".env.example"
+      ],
+      "phase": "R1",
+      "tags": [],
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-13T07:10:44.846Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R1.3.1",
@@ -4676,7 +4739,7 @@
       "phase": "R2",
       "tags": [],
       "findings": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "impl-R2.2.14",
       "evidence": [
         "src/lib/scoring/enginePipeline.js:241",
@@ -4704,7 +4767,11 @@
           "text": "Restored the R2.2.9 source half in probeTextEngine. The measured-citation copy (cost :255, citations :256, references :257-262) is hoisted above the 'if (probeResult.error)' branch (now :272), immediately after the citations_state copy, following the existing comment block's discipline: copied ONCE before the first return, not repeated in each of the three returns (rationale added at :241-254). The derived flags move with it - brand_cited (:264-268) and competitors_cited (:269) are pure functions of references, so they now reflect the same measurement the references do on the error path. The duplicate 'result.cost = probeResult.cost || 0' is gone; assigned once at :255. The old derivation block at the tail of the success path is deleted and replaced with a single 'result.visible = brand_mentioned_in_text || brand_cited' recompute at :316, because visible's text half is only known after mention detection. answer_present / EMPTY_ANSWER logic untouched: result.text is still assigned AFTER the error branch (a failed answer leg has no text to preserve - probePerplexity returns text:'' on that path), so hasText/hasCitations and the EMPTY_ANSWER check keep their exact meaning and an errored answer leg still returns answer_present=false. Verified an error row carrying visible=true cannot leak into any metric: every pool in summarizeEngineSlice (elicitingPool, citationPool, branded/non-branded counts) filters on answer_present first. Tests: all 17 in answerFailsCitationsPreserved.test.mjs + citationDenominator.test.mjs pass unmodified (neither test file was touched), enginePipeline.test.mjs 48/48. Teeth re-confirmed: temporarily reinjected an early error return above the citation copy and got exactly the three named failures - 'all 3 search citations must be preserved', 'scan.results must persist citations on failed-answer row', 'measured citations must not be silently emptied' - then restored the fix (65/65 green). npm run test:scoring: 2472 pass / 2 fail, both pre-existing and unrelated to this file (OPERATOR_LEDGER § C and migrations-ledger guards for 014_content_job_checkpoints, from a concurrent task). NOTE: enginePipeline.js also carries another agent's uncommitted edits (error_rate_pct null-preservation near :969 and an R2.7.16 doc block) - not mine, left alone. OUT OF SCOPE, deserves its own task: probeTextEngine drops probeResult.cost_state/cost_source/cost_state_detail entirely and coerces a fail-loud 'cost: null' to 0 via 'probeResult.cost || 0' at :255 - perplexity.js returns cost:null with COST_STATE.PROBE_FAILED/NOT_CONFIGURED precisely so an unpriced call is not a measured zero-dollar reading. I preserved that line verbatim rather than change pricing semantics inside a regression-restore task."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T07:09:41.060Z",
+        "note": "Verified in isolated worktree at 4eefaec by an agent that did not write the code. Original defect reproduced by reverse-applying only the three probeTextEngine hunks: exactly the three named tests fail with 0-vs-3, 0-vs-3, 0-vs-2. Four sabotages all red. Sabotage D is decisive - setting answer_present true inside the error branch fails 5 tests, proving the test is not shaped to fit and that the R2.2.1 denominator invariant is genuinely guarded. The visible:true question the implementer raised was chased independently: two ungated readers exist but brand_cited is itself a real measurement mandated by the accept criterion, and probeResultContract.js:397 enforces visible == brand_mentioned_in_text || brand_cited, so forcing it false would violate the contract. Concurrent R2.7.16 edit to the same file confirmed non-interfering. Suite exact baseline."
+      }
     },
     {
       "id": "R2.3.1",
@@ -5677,7 +5744,7 @@
       "phase": "R2",
       "tags": [],
       "findings": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "impl-R2.7.16",
       "evidence": [
         "src/lib/scoring/enginePipeline.js:1348",
@@ -5701,6 +5768,40 @@
           "at": "2026-09-13T06:49:28.340Z",
           "by": "impl-R2.7.16",
           "text": "SCOPE DEVIATION, disclosed: the defect is NOT in DashboardShell.jsx. DashboardShell:993/1004 already guard correctly with '== null || !Number.isFinite'. The fabricated 0 is manufactured upstream in describeDegradedSlice (enginePipeline.js): 'const errorRatePct = Number(slice.error_rate_pct)' — Number(null) is 0 and Number.isFinite(0) is true, so a NULL error rate left the pipeline as a real 0 and the renderer cannot tell it from a measured zero. Proved before touching anything: describeScanDataSourceIssue with the test's exact per-engine slice returned {coverage_pct: null, error_rate_pct: 0} — exactly one coerced row, matching the one failing assertion. Fix: added measuredNumberOrNull() at enginePipeline.js:1348 (null/undefined/'' -> null; a real 0 stays 0) and used it for error_rate_pct (:1369, returned unwrapped at :1395) and for the sibling non_branded_queries/non_branded_with_answer counters at :1367-1368 that feed the same per-engine banner's reason prose (same Number(null)->0 shape, would have printed 'answered 0 of N' off a null). DashboardShell.jsx NOT modified; ScoreBand/HomeDashboard/OverviewView NOT touched; no test weakened, relaxed or added. RESULTS: degradedBannerNullMetrics.test.mjs 8/8. TEETH re-proven: restoring 'Number(slice.error_rate_pct)' put :233 back to red with the identical 'expected per-engine row value to be \"—\", got \"0%\"' while the per-engine POSITIVE case (10.5%/62%) stayed green, then reverted. Adjacent: degradedEngineBanner + routeReachability + target = 29/29. npm run test:scoring = 2500 tests, 2474 pass, 0 fail. (One earlier run showed a flaky fail in an unrelated migration-runner GUARD test that reads files from disk mid-write by a concurrent agent; it passed on both re-runs.)"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T07:09:41.308Z",
+        "note": "Verified in isolated worktree at 4eefaec. The scope deviation was CORRECT and is the finding worth keeping: the ledger anchored this to DashboardShell, but the verifier proved independently that reverting DashboardShell:1004 to its base-commit guard leaves the test 8/8 green - the pipeline fix alone carries the accept, and no renderer guard could have, because Number(null) makes a fabricated zero and a measured zero the same value before the JSX ever sees it. Teeth proven in BOTH directions: restoring the coercion reddens :233 with the exact reported string while the positive case stays green, and making measuredNumberOrNull collapse a real 0 to null is caught by degradedEngineBanner.test.mjs:836. Test file byte-identical to the main tree, nothing weakened. The flaky banned-literals guard did NOT recur in isolation, confirming the concurrent-write attribution. Suite exact baseline."
+      }
+    },
+    {
+      "id": "R2.7.17",
+      "subphase": "R2.7",
+      "lane": "frontend",
+      "title": "Two ungated readers of visible count an errored row, so a chip says Names you while the row itself says Error",
+      "detail": "Found by the R2.2.14 verifier while chasing the visible-on-an-errored-row question, and explicitly recorded rather than buried because it was the one point on which that task could have failed. R2.2.14 correctly preserves visible = brand_mentioned_in_text || brand_cited on a row whose ANSWER leg failed but whose SEARCH leg returned real citations - probeResultContract.js:397 enforces that identity, so forcing it false would be the contract violation. The exposure is in two ungated consumers. FIRST: src/components/dashboard/AnswersView.jsx:240 and :249 filter and count prompts.filter(p => p.visible) with no answer_present or error gate, and errored rows genuinely reach there - DashboardShell.jsx:1384 passes result.nonBrandedResults, which is nonBranded.map(mapPromptForUi) at src/services/api.js:728 with no error filter. So an errored-but-cited row increments a chip labelled Names you while its own VerdictChip at AnswersView.jsx:38 renders Error. The count and the row contradict each other on the same screen. The omission looks accidental rather than deliberate: the sibling chips ARE gated - absent at :250 uses aioPresent, no-aio at :251 uses !p.error. SECOND: src/app/api/content-items/[id]/lift/route.js:53 and :60 do e.visible = e.visible || r.visible and the same for brand_cited with no answer_present gate, feeding visible_delta on a live GET rendered at src/components/studio/ContentItemView.jsx:251 - so a post-publish scan whose answer leg failed can register content lift. THIRD, design-level: probeAio catch at enginePipeline.js:155-158 leaves every derived flag at its initialiser, so an aio error row is never visible, while probeTextEngine now preserves it. The two engines follow different rules on error and nothing documents why.",
+      "accept": "A count or a filter that reads visible or brand_cited states which rows it includes, and an errored row is never counted under a label that the row itself contradicts. Decide and document ONE rule for whether a citation measured on a surviving search leg counts as visibility when the answer leg died, then apply it to AnswersView, the lift route and probeAio alike - the current inconsistency between engines is the real defect. Do NOT fix this by forcing visible false on the row: probeResultContract.js:397 enforces the identity and R2.2.14 depends on it. Tests assert the chip count and the row verdict agree for an errored-but-cited row, and that lift does not accrue from an answer-failed scan. Teeth proven by ungating each reader again and watching the suite go red.",
+      "deps": [],
+      "anchors": [
+        "src/components/dashboard/AnswersView.jsx:240",
+        "src/components/dashboard/AnswersView.jsx:249",
+        "src/app/api/content-items/[id]/lift/route.js:53",
+        "src/lib/scoring/enginePipeline.js:155",
+        "src/app/api/internal/_lib/probeResultContract.js:397"
+      ],
+      "phase": "R2",
+      "tags": [],
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-13T07:11:45.351Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
         }
       ],
       "verification": null
@@ -6291,7 +6392,7 @@
       "tags": [],
       "phase": "R2",
       "findings": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "Dev 4A",
       "evidence": [
         "src/app/api/content/worker/route.js:187"
@@ -6308,7 +6409,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T07:10:06.846Z",
+        "note": "Verified in isolated worktree at 4eefaec. Original defect reproduced by restoring the pre-fix branch and driving the REAL exported GET handler with the three Supabase env vars cleared: HTTP 200 with processed:0 and a reassuring info string. Post-fix the identical driver returns HTTP 500 with batch_unavailable reason db_not_configured. Externally distinguishable confirmed structurally, not assumed: vercel.json schedules this path as a cron, so Vercel classifies non-2xx as a failed invocation. The empty-queue side is genuinely tested too, proven by the over-eager sabotage - forcing status 500 unconditionally reddens three tests including a healthy pass with nothing to do reports measured zeros. Two further sabotages, including a subtle status-only weakening that still failed 6 tests, so the suite asserts the thing a cron monitor actually reads. Honest gap recorded: no test drives the real GET through to a 200 because the live-write guard blocks it in process. Suite exact baseline."
+      }
     },
     {
       "id": "R2.8.15",
@@ -6474,6 +6579,35 @@
       }
     },
     {
+      "id": "R2.8.20",
+      "subphase": "R2.8",
+      "lane": "frontend",
+      "title": "ContentLiftPanel renders a quarantined fabricated-URL row as Awaiting rescan and prints the fabricated URL verbatim",
+      "detail": "Found by the R5.2.1 implementer, one layer above where it was allowed to edit. R5.2.1 stops new fabricated studio.perceev.app URLs being synthesized on approval and quarantines the historical rows at the API: GET /api/content-events now returns those rows with lift, current_score and previous_score null plus fabricated_url: true and lift_unavailable_reason: fabricated_url. The dashboard does not read any of that. src/components/dashboard/ContentLiftPanel.jsx renders any null-lift row as Awaiting rescan and still prints event.url verbatim, so a legacy row for a page that was NEVER PUBLISHED reads on screen as a real live page that is merely waiting for its next measurement. The API now tells the truth and the component translates it back into a reassuring lie. This is the eighth sighting of the unmeasured-value-reads-as-measured class in this session and the first where the honest signal already exists on the wire and is simply ignored. Distinct from R5.2.3, which owns the Studio ContentItemView lift copy rather than this dashboard panel.",
+      "accept": "A content event whose URL was fabricated is visibly marked as such - a chip reading that the URL was fabricated and the page was never published - and is not presented as awaiting a rescan, because no rescan will ever produce a measurement for a page that does not exist. The fabricated URL is not rendered as a link. The component reads fabricated_url and lift_unavailable_reason from the API rather than inferring anything from a null lift, and a genuinely published row still awaiting its first rescan must remain distinguishable from a fabricated one - both cases tested. Teeth proven by feeding a fabricated row and watching the assertion that no Awaiting rescan text appears go red when the guard is removed.",
+      "deps": [
+        "R5.2.1"
+      ],
+      "anchors": [
+        "src/components/dashboard/ContentLiftPanel.jsx",
+        "src/app/api/content-events/route.js:31"
+      ],
+      "phase": "R2",
+      "tags": [],
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-13T07:12:09.643Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R2.9.1",
       "subphase": "R2.9",
       "lane": "frontend",
@@ -6531,7 +6665,7 @@
       "subphase": "R2.9",
       "lane": "backend",
       "title": "SWEEP: bare Number() and || 0 on nullable metric fields across the scoring layer",
-      "detail": "Proposed by the R2.7.16 implementer and by the session handoff, after the SEVENTH independent sighting of one defect class: a value that means not measured silently becoming 0. Confirmed instances so far - R2.1.2, R2.7.12, R2.2.7, R2.8.16, R2.7.13, R2.7.16, R2.9.6. The rebuild has been catching these one component at a time for many hours; each fix is correct and each next sighting is somewhere new. R2.7.16 proved the important structural lesson: the coercion is usually NOT in the component. DashboardShell.jsx:1004 already guarded error_rate_pct correctly and still printed 0%, because describeDegradedSlice in enginePipeline.js had already done Number(slice.error_rate_pct) and Number(null) is 0. By the time a renderer sees the value, a fabricated zero and a measured zero are the same number and no UI guard can separate them. So the sweep must run at the layer that PRODUCES metric objects, not the layer that renders them. Two specific leads already named and not yet inspected: enginePipeline.js:969 carries an error_rate_pct in a different function that may share the shape, and R2.7.16 explicitly declined to inspect it as out of its path.",
+      "detail": "Proposed by the R2.7.16 implementer and by the session handoff, after the SEVENTH independent sighting of one defect class: a value that means not measured silently becoming 0. Confirmed instances so far - R2.1.2, R2.7.12, R2.2.7, R2.8.16, R2.7.13, R2.7.16, R2.9.6. The rebuild has been catching these one component at a time for many hours; each fix is correct and each next sighting is somewhere new. R2.7.16 proved the important structural lesson: the coercion is usually NOT in the component. DashboardShell.jsx:1004 already guarded error_rate_pct correctly and still printed 0%, because describeDegradedSlice in enginePipeline.js had already done Number(slice.error_rate_pct) and Number(null) is 0. By the time a renderer sees the value, a fabricated zero and a measured zero are the same number and no UI guard can separate them. So the sweep must run at the layer that PRODUCES metric objects, not the layer that renders them. Two specific leads already named and not yet inspected: enginePipeline.js:969 carries an error_rate_pct in a different function that may share the shape, and R2.7.16 explicitly declined to inspect it as out of its path. Controller 2026-09-13, from the R2.7.16 verifier: four concrete producer-side sites already located, all in src/lib/scoring/enginePipeline.js, none yet fixed. (1) :823-827 - coveragePct and errorRatePct both fall back to a hard 0 when the denominator is 0, so a slice that ran NO queries publishes error_rate_pct: 0. This is the same field R2.7.16 defended one layer down, and its consumer-side fix cannot detect this one because by then it is a genuine 0. :969 is the field the sweep was already told to inspect and it is fed from here. (2) :1614-1626 and :1656/:1659/:1662 - || 0 and : 0 on persisted metrics in the scan-level mirror. :1626 is error_rate_pct: aioSummary.error_rate_pct || 0, the scan-level twin of the same field, and per the comment at :1629-1632 it is written straight onto the persisted scans row by scanWorker.js, so this one reaches the database and not just the screen. Note the adjacent :1646 and :1647 were ALREADY converted to ?? null by earlier work and these were missed - evidence the one-at-a-time approach is what this sweep exists to replace. Do not treat this list as complete; it is a head start on the enumeration.",
       "accept": "Every bare Number(x), +x, x || 0 and parseFloat(x) applied to a nullable metric field under src/lib/scoring/ is enumerated with file:line, and each is classified as either genuinely-always-present (left alone, with the reason recorded) or a null-to-zero fabrication (fixed to preserve null). The shared helper is used rather than the shape being re-hand-rolled per site - R2.7.16 introduced measuredNumberOrNull() at enginePipeline.js:1348, so extend and reuse that rather than adding a second. A guard walker prevents regression: it fails on a NEW bare coercion of a field whose name matches the metric suffixes already in use (_pct, _rate, _count, _score, cost) inside src/lib/scoring/, with an explicit allowlist carrying a justification per entry. Teeth proven by adding a fresh offending line and watching the walker go red. Enumerate first and report the count before fixing - if the list is large this should be split, and the enumeration is itself the valuable artifact.",
       "deps": [],
       "anchors": [
@@ -6542,14 +6676,24 @@
       "phase": "R2",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "impl-R2.9.7",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-13T06:50:57.511Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T06:58:19.831Z",
+          "by": "impl-R2.9.7",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T07:12:09.209Z",
+          "by": "controller",
+          "text": "amended: Controller 2026-09-13, from the R2.7.16 verifier: four concrete producer-side sites already located, all in src/lib/scoring/enginePipeline.js, none yet fixed. (1) :823-827 - coveragePct and errorRatePct both fall back to a hard 0 when the denominator is 0, so a slice that ran NO queries publishes error_rate_pct: 0. This is the same field R2.7.16 defended one layer down, and its consumer-side fix cannot detect this one because by then it is a genuine 0. :969 is the field the sweep was already told to inspect and it is fed from here. (2) :1614-1626 and :1656/:1659/:1662 - || 0 and : 0 on persisted metrics in the scan-level mirror. :1626 is error_rate_pct: aioSummary.error_rate_pct || 0, the scan-level twin of the same field, and per the comment at :1629-1632 it is written straight onto the persisted scans row by scanWorker.js, so this one reaches the database and not just the screen. Note the adjacent :1646 and :1647 were ALREADY converted to ?? null by earlier work and these were missed - evidence the one-at-a-time approach is what this sweep exists to replace. Do not treat this list as complete; it is a head start on the enumeration."
         }
       ],
       "verification": null
@@ -7018,7 +7162,7 @@
       ],
       "phase": "R3",
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "Dev 3B",
       "evidence": [
         "src/app/api/content/worker/route.js:137-157"
@@ -7035,7 +7179,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T07:10:07.211Z",
+        "note": "Verified in isolated worktree at 4eefaec. Note the controller's dispatch brief mis-summarised defect 2 as an in-memory dedup set; the verifier judged against the ledger spec instead, which is the authority, and separately confirmed the prompt's version does not reproduce - the only module-level state in the route is a log-once box and the Set at :109 is a per-request brand dedupe. Defect 1 reproduces and is fixed: pre-fix resumed counted jobs at hand-off, now dispatched/skipped/batch_dispatched matching the scan sweep's vocabulary. Defect 2 reproduces and is fixed via the accept criterion's second branch - the sweep says plainly that no ledger is being written (ledgerWritten: !!supabase). Claim atomicity checked and is not this task's risk: acquireLease is a single conditional UPDATE, not the get-then-upsert of R3.4.5, and concurrency is tested at jobLease.test.mjs:108. Three sabotages all red. Suite exact baseline."
+      }
     },
     {
       "id": "R3.1.5",
@@ -7062,6 +7210,62 @@
       "notes": [
         {
           "at": "2026-09-05T07:13:25.906Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.1.7",
+      "subphase": "R3.1",
+      "lane": "backend",
+      "title": "recordCronTick fabricates liveness in an unconfigured deploy, so health shows a fresh tick while the cron answers 500",
+      "detail": "Found by the R2.8.14 verifier. src/lib/db/analytics.js:555-561 - with no supabase client, recordCronTick writes the tick into global.memorySystemHeartbeats, and getCronTicks at :571-573 reads that same in-memory map straight back. So /api/health in a misconfigured deploy can display a fresh content-worker tick while the cron itself is correctly answering HTTP 500. This is the exact defect R2.8.14 just fixed, one surface over, and it is worse here because it actively contradicts the fix: R2.8.14 made the cron tell the truth about an outage and the health endpoint goes on reporting that the cron ran. An operator triaging a stalled queue will look at health first and be told everything is fine. In-memory state in a serverless deployment also does not survive between invocations or across instances, so the tick is not even a reliable local signal.",
+      "accept": "A cron tick recorded with no data store is not readable back as a measured tick. Either recordCronTick refuses and the health endpoint reports the liveness of that cron as unknown rather than fresh, or the tick carries an explicit unmeasured/in-memory state that /api/health renders as such - never as a timestamp that reads like a real one. A missing tick and an unstored tick must stay distinguishable from a genuinely recent tick. A test drives the health endpoint with no supabase configured and asserts no cron reports as fresh, plus a positive case where a genuinely stored tick still reports fresh. Teeth proven by restoring the in-memory read and watching the test go red.",
+      "deps": [],
+      "anchors": [
+        "src/lib/db/analytics.js:555",
+        "src/lib/db/analytics.js:571"
+      ],
+      "phase": "R3",
+      "tags": [],
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-13T07:11:11.468Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.1.8",
+      "subphase": "R3.1",
+      "lane": "backend",
+      "title": "A lease-acquire failure is indistinguishable from a lease legitimately held, and a batch job whose dispatch fails vanishes from every counter",
+      "detail": "Two findings from the R3.1.4 verifier, both in src/app/api/content/worker/route.js, both left standing by the task that imported the honest-counter vocabulary. FIRST: dispatchWithLease at route.js:51-64 returns null both when another worker legitimately holds the lease - benign, expected, the system working - and when acquireLease THROWS, which is a data-store failure. The route folds both into skippedIds and answers HTTP 200. So a lease-table outage is reported to the cron as skipped:N with a success status: could not look disguised as chose not to, which is the fail-quiet class R2.8.14 was filed for. The R3.1.4 detail explicitly asked for the ledger reason to travel on the wire and it does not. The error side is untested. SECOND: route.js:243-244 reads const owner = await dispatchWithLease(job.id, batch job); if (owner) batchCreated.push(job.id); with no else. A batch job that is created in content_jobs but whose dispatch fails appears in neither batch_dispatched nor batch_failed - it is silently dropped from BOTH tallies, so the sweep response does not add up. Pre-existing rather than introduced, and the next resume sweep does recover the job, but an unreconciled counter is how a stalled queue stays invisible. THIRD, cheap and adjacent: route.js:185 and contentWorkerSweep.route.test.mjs:98 both say ledger_written:false means no scan_runs row was recorded. The content cron never writes scan_runs; its ledger is content_runs. The field behaves correctly, the prose names the wrong table.",
+      "accept": "skipped carries a reason so a lease legitimately held is distinguishable on the wire from a lease acquire that failed, and a lease-store failure does not reach the caller as HTTP 200 - it goes through the same batch_unavailable path R2.8.14 established rather than inventing a second shape. Every created batch job lands in exactly one counter, so dispatched plus failed plus skipped reconciles against created, asserted by a test. Tests drive the acquire-throws path specifically, which is currently uncovered. The scan_runs comment and the test assertion string are corrected to content_runs. Teeth proven by making acquireLease throw and watching the suite go red.",
+      "deps": [],
+      "anchors": [
+        "src/app/api/content/worker/route.js:51",
+        "src/app/api/content/worker/route.js:243",
+        "src/app/api/content/worker/route.js:185",
+        "src/lib/contentWorkerSweep.route.test.mjs:98"
+      ],
+      "phase": "R3",
+      "tags": [],
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-13T07:11:12.065Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
@@ -7480,14 +7684,19 @@
       ],
       "phase": "R3",
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "test-R3.2.7",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-04T04:11:59.616Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T07:05:46.504Z",
+          "by": "test-R3.2.7",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -8159,7 +8368,7 @@
       "phase": "R3",
       "tags": [],
       "findings": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "scribe-R3.5.4",
       "evidence": [
         "README.md:161",
@@ -8188,7 +8397,11 @@
           "text": "014 registered in all three registries. Object name read out of the SQL: the file's only non-comment line is 014_...sql:11, 'ALTER TABLE content_jobs ADD COLUMN IF NOT EXISTS checkpoint jsonb' - one column, no table/index/function. Guards: all 3 named guards green; ran docStatus + migrationsLedger + migrationsRunner = 39/39 pass. No guard loosened, skipped or edited; 014.sql untouched. IMPORTANT - the verify-list entry is an EMPTY array, deliberately, and the honest gap is documented at setup-supabase.mjs:143-176 and OPERATOR_LEDGER.md:398. objectExists() asks to_regclass and pg_proc, neither of which sees a column; 012/013 each ship an index referencing their new column as a stand-in, 014 ships none, and 014.sql is R3.5.1's file so I may not add one. Ticking content_jobs (002's table) would print a green tick for 014 on a DB that never ran it - C10 exactly. Adding a 'column' kind to objectExists was considered and rejected as out of scope: it would require editing src/lib/migrationsRunner.test.mjs (FULL_CATALOG is hardcoded at :181 and reportedObjects() at :438 only matches table|index|function), which I am not permitted to touch. Net effect: setup:db reaches its green verdict on a DB missing 014; the information_schema query that settles it by hand is in OPERATOR_LEDGER SS C. Applied state: NOT claimed - recorded with 013's exact hedging, 'applied state unverified from this environment'. One consequence verified in code rather than assumed: updateContentJob ends 'if (error) throw error' (db/content.js:192) and the first checkpoint write sits inside the pipeline try (contentWorker.js:401), so a pre-014 DB fails content jobs at the first block boundary, it does not merely lose resume. Two follow-ups for the controller: (1) docs/PROD_MIGRATIONS.md has zero 014 references - no section, no row in the one-query block - out of my scope, noted at OPERATOR_LEDGER.md:419; (2) the real fix for the verify gap is a column probe, which needs migrationsRunner.test.mjs opened. One self-inflicted red found and fixed mid-task: my first comment quoted the runner's success sentence, which tripped migrationsLedger.test.mjs:129 (that literal must occur only after the catalog check); reworded, not the guard."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T07:10:05.889Z",
+        "note": "Verified in isolated worktree at 4eefaec. Original failure reproduced by checking out the three files from HEAD~1 while leaving 014 on disk: exactly three guards red, each naming the orphan. Four sabotages including adding a fake 015 (all three guards red, so they read disk rather than being narrowed to 014) and deleting the section-C enumeration row (proving the new applied-state bullet does not accidentally satisfy the guard). Object names confirmed read from the SQL, not guessed: 014 is one line, ALTER TABLE content_jobs ADD COLUMN checkpoint jsonb, while the checkpoint in the 005 row is on scan_jobs - the README disambiguation is true. Applied-state honesty checked sentence by sentence across all three files: no smuggled claim, 013 hedging matched exactly. The empty verify array is the honest answer given available options (objectExists uses to_regclass and pg_proc, neither of which sees a column; 012/013 ship indexes as stand-ins, 014 does not, and its SQL belongs to R3.5.1) - but the verifier notes it satisfies the guard letter while delivering zero coverage, and setup:db still reaches a green verdict on a DB missing 014. Widening recorded against R6.1.12. Suite exact baseline."
+      }
     },
     {
       "id": "R3.6.1",
@@ -9227,14 +9440,19 @@
         "scripts/backfill-analytics.mjs",
         "src/lib/analytics/rollup.js:270"
       ],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "impl-R4.3.3",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-05T07:13:26.203Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T06:59:19.051Z",
+          "by": "impl-R4.3.3",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -9491,9 +9709,7 @@
       "title": "Kill the fabricated studio.perceev.app URL",
       "detail": "Approval is not publication. The synthesized URL is stored as a content event and feeds real lift attribution.",
       "accept": "No URL is synthesized on approval; the fabricated-URL path is deleted with its test.",
-      "deps": [
-        "R5.1.2"
-      ],
+      "deps": [],
       "tags": [],
       "findings": [
         "B13"
@@ -9503,10 +9719,39 @@
         "src/app/api/content-items/[id]/decision/route.js:93-102"
       ],
       "phase": "R5",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "impl-R5.2.1",
+      "evidence": [
+        "src/app/api/content-items/[id]/decision/route.js:35",
+        "src/app/api/content-items/[id]/decision/route.js:109",
+        "src/app/api/content-items/[id]/decision/route.js:139",
+        "src/app/api/content-events/route.js:19",
+        "src/app/api/content-events/route.js:31",
+        "src/app/api/content-events/route.js:74",
+        "src/app/api/content-events/route.js:100",
+        "src/lib/approvalNotPublication.route.test.mjs:92",
+        "src/lib/approvalNotPublication.route.test.mjs:169",
+        "src/lib/approvalNotPublication.route.test.mjs:199",
+        "docs/OPERATOR_LEDGER.md:473",
+        "docs/BUILD_JOURNAL.md:183"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-13T06:57:15.257Z",
+          "by": "controller",
+          "text": "deps  -R5.1.2: R5.1.2 is blocked on the operator supplying an OpenRouter key and its detail asserts a blanket phase gate: 'Nothing else in R5 starts before this.' Applied to R5.2.1 that gate is wrong, and it is the single reason R5 stands at 1/12. The gate's purpose is to stop the rebuild BUILDING new content-quality features on an LLM pipeline that has never been proven to make a real, priced call. R5.2.1 builds nothing. It DELETES a fabrication: src/app/api/content-items/[id]/decision/route.js synthesizes a studio.perceev.app URL on approval and stores it as a content event that feeds real lift attribution, so the product currently reports engagement against a page that does not exist. Its accept criterion - no URL is synthesized on approval, the fabricated-URL path is deleted with its test - needs no model call, no key, and no metered spend to exercise. Holding a known fabrication in the product behind a credential the operator has not yet supplied inverts the rebuild's own rule that a skip is not a success. Checked R5.2.2 and R5.2.3 too: the publish step verifies an operator-pasted live URL resolves and matches (an HTTP fetch, not an LLM call) and the lift-copy task is wording plus a build-journal row. Neither needs the key either; both stay chained behind R5.2.1 on genuine sequencing. The R5.3/R5.4 tasks that DO need a model keep their needs-llm tags and remain gated. Controller decision, 2026-09-13, recorded here so the operator can reverse it in one command if the blanket gate was intended literally."
+        },
+        {
+          "at": "2026-09-13T06:57:50.218Z",
+          "by": "impl-R5.2.1",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T07:07:11.134Z",
+          "by": "impl-R5.2.1",
+          "text": "Anchors re-verified exact at 4323f78 (contentEventUrl at :19-27, the insertContentEvent block at :93-102). DELETED: contentEventUrl() and the approval-time content_events write, plus the 'import { insertContentEvent } from @/lib/db' that only they used. Approval now produces no URL and writes no event. The absence is stated on the wire, not inferred: the decision response carries publication: { published:false, url:null, reason:'approved_not_published'|'not_approved', detail } so a caller can distinguish 'approved, not published' from 'published at <url>' and from 'not approved' (route.js:35,:139). DOWNSTREAM READERS TRACED: (1) GET /api/content-items/[id]/lift computes from target_queries vs scans and never read content_events - unaffected; (2) GET /api/content-events -> computeContentLiftReports is the only reader of the fabricated rows, reached via services/api.js getContentEvents -> components/dashboard/ContentLiftPanel.jsx. HISTORICAL ROWS: yes, they can exist - every prior approval of a geo_article wrote one, and nothing in this task deletes them. Before this change a reader saw the fabricated URL rendered as a real published location with a lift percentage next to it. Now GET /api/content-events runs withFabricatedUrlsQuarantined (content-events/route.js:31,:74,:81): any row whose hostname is studio.perceev.app comes back with lift/current_score/previous_score null, related_prompts [], fabricated_url:true, lift_unavailable_reason:'fabricated_url' and a detail saying it is not a measured zero. No fabricated lift number is served any more. POST /api/content-events also 400s on that host (:100) so the fabrication cannot re-enter by the manual door. KNOWN GAP I DID NOT FIX (out of scope, needs its own task): ContentLiftPanel.jsx is in the do-not-touch list, and it renders any null-lift row as 'Awaiting rescan' and still prints event.url - so a quarantined legacy row now reads as a real page awaiting a rescan rather than as a fabricated row. The API says fabricated_url; the dashboard does not read it. TEST: no test asserted the synthesis (searched src for studio.perceev.app / contentEventUrl / insertContentEvent - only db.js unit tests, which are about the write path and stay). Added src/lib/approvalNotPublication.route.test.mjs, 9 tests, which drives the REAL POST handler with no Supabase client (memory maps are the write log) and asserts: approval adds no content_events row, no URL appears anywhere in the response, the publication envelope is explicit and distinguishes approved/not-approved, the route source no longer contains the host or the synthesizer, the quarantine nulls lift without coercing to 0, and the manual POST is refused. I exercised all of it: npm run test:scoring is 2509 tests / 2483 pass / 0 fail / 26 skipped, against the 2500/2474/0/26 baseline (+9 = this file). Note I deliberately did NOT add a comment-stripping helper to the new test - the R6.4.14 enumeration that would have to register it lives in src/components/dashboard/routeReachability.test.mjs, a do-not-touch file - so the source guard reads raw source and the route comment names finding B13 instead of repeating the host. Docs: OPERATOR_LEDGER §D.1 and the B13 journal row updated to say what is deleted, what survives in the table, and that R5.2.2/R5.2.3 remain open. I did not touch ContentItemView.jsx (R5.2.3) or write a migration."
+        }
+      ],
       "verification": null
     },
     {
@@ -11499,7 +11744,7 @@
         "src/lib/agentSecretsGuard.test.mjs"
       ],
       "phase": "R6",
-      "status": "in_verification",
+      "status": "done",
       "owner": "Developer 2B",
       "evidence": [
         "src/lib/docStatus.test.mjs:18",
@@ -11530,7 +11775,11 @@
           "text": "Applied assertCorpusIntact across all 10 audited sibling files. Enforced length floors, shape validation with non-empty reasons, uniqueness deduplication, and required load-bearing members. Guard teeth tests added to every file verifying loud failure on empty, truncated, duplicate, or missing targets. All 178 tests pass."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T07:10:06.512Z",
+        "note": "Verified in isolated worktree at 4eefaec. Not spot-checked - all 17 corpora across the 10 files were individually truncated and all 17 went red. The core contrast was reproduced directly for all three SSRF files: pre-fix with corpora emptied, ssrfRefusalSurfacing drops 16 tests to 5 and exits GREEN, crawlabilitySsrf drops 55 to 26 and exits GREEN, firecrawl drops 29 to 13 and exits GREEN - 11, 29 and 16 security assertions silently deleted while CI reports success. Post-fix each fails. Helper soundness probed across all ten copies against seven degenerate inputs; neutering the floor check reddens all ten files. agentSecretsGuard floors are exact (8 phrases, 6 rebuild-*.md on disk) and deleting a single phrase goes red. Deletions across the ten files total 15 lines and include a STRENGTHENING - publicRouteExposure's assert.ok(routes.length > 0) replaced by a floor of 5. insertScanCascade3 did not hit the old resolver bug; the ancestor walk found the root node_modules and it ran 13/13 with 0 skipped. Suite exact baseline."
+      }
     },
     {
       "id": "R6.4.16",
@@ -11553,6 +11802,35 @@
       "notes": [
         {
           "at": "2026-09-13T06:51:13.700Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R6.4.17",
+      "subphase": "R6.4",
+      "lane": "test",
+      "title": "assertCorpusIntact is copy-pasted twelve times and has already drifted into weaker variants",
+      "detail": "Found by the R6.4.15 verifier while passing that task. The corpus-floor helper it swept in is not shared - it is duplicated in twelve places and the copies have already diverged. src/lib/serpQueryPrice.test.mjs accepts RegExp members. src/lib/scoring/publicRouteExposure.test.mjs matches its required list by SUBSTRING (targets.some(t => t.includes(req))) rather than by equality - necessary there because the targets are absolute paths, but it makes that copy materially weaker than the other nine, and nothing marks it as the odd one out. src/lib/ssrfGuard.test.mjs and src/lib/engines/brightdataZone.test.mjs carry two further variants. This is the same shape as the defect the helper exists to prevent: a guard whose own strength varies silently by location. Two concrete weaknesses the verifier proved by probing all ten copies against seven degenerate inputs: every copy throws on empty, undefined, non-array, empty strings and under-floor, but a corpus of exactly one empty string with floor 1 passes in all of them. Unreachable today because no real call site uses floor 1 and every real site carries a non-empty required list - but it is load-bearing only by accident. Separately: src/lib/serpQueryPrice.test.mjs:269 passes required: [COST_LITERAL_PATTERNS[0].source, COST_LITERAL_PATTERNS[1].source], a required list DERIVED FROM THE CORPUS IT IS CHECKING, so it can never detect a removal on its own. Truncation there still goes red, but via a TypeError reading .source of undefined rather than the floor message - it fails by accident, not by design. Also: governedDocs() in docStatus.test.mjs has floor 35 against a real 43, the one materially loose floor, so eight governed docs could be deleted with the guard still green.",
+      "accept": "One shared helper in src/lib/testCorpus.mjs replaces all twelve copies, with the substring-matching behaviour publicRouteExposure needs expressed as an explicit named option rather than as a silently different implementation. The helper rejects a corpus of blank entries regardless of floor. serpQueryPrice required list is inlined as literals so it is independent of the corpus it guards, and its truncation failure comes from the floor assertion rather than a TypeError. The governedDocs floor is raised to at or near its real count. A guard test asserts no test file defines its own local copy of the helper, so the drift cannot restart. Teeth proven by reintroducing a local copy and watching that guard go red, and by truncating two corpora through the shared helper.",
+      "deps": [],
+      "anchors": [
+        "src/lib/serpQueryPrice.test.mjs:269",
+        "src/lib/scoring/publicRouteExposure.test.mjs:32",
+        "src/lib/docStatus.test.mjs:18",
+        "src/lib/ssrfGuard.test.mjs"
+      ],
+      "phase": "R6",
+      "tags": [],
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-13T07:11:46.555Z",
           "by": "controller",
           "text": "filed mid-rebuild"
         }
