@@ -7154,17 +7154,33 @@
       ],
       "phase": "R2",
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "qa-1",
+      "evidence": [
+        "src/lib/landingProbeCounter.test.mjs:49",
+        "src/lib/landingProbeCounter.test.mjs:251",
+        "src/lib/landingProbeCounter.test.mjs:314",
+        "src/lib/landingProbeCounter.test.mjs:322",
+        "src/lib/landingProbeCounter.test.mjs:651",
+        "src/lib/landingProbeCounter.test.mjs:673"
+      ],
       "notes": [
         {
           "at": "2026-09-09T18:08:21.020Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T11:09:11.290Z",
+          "by": "qa-1",
+          "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T11:14:22.168Z",
+        "note": "Audited: same-line apostrophes adjacent to alnum characters and single-quoted spans containing fabrication rules throw with informative line errors. Committed fixture verifies rejection of concealed Math.random. All 2583 repo tests pass."
+      }
     },
     {
       "id": "R3.1.1",
@@ -8249,17 +8265,31 @@
       ],
       "phase": "R3",
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "qa-2",
+      "evidence": [
+        "src/lib/scanRuns.js:377",
+        "src/lib/workers/scanWorker.js:3330",
+        "src/lib/workers/scanRunReaper.test.mjs:521",
+        "src/lib/workers/scanRunReaper.test.mjs:560"
+      ],
       "notes": [
         {
           "at": "2026-09-09T18:06:43.693Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T11:14:31.869Z",
+          "by": "qa-2",
+          "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T11:17:28.883Z",
+        "note": "Audited: Added query builder recorder tests for listStaleScanRuns and reapStaleRuns asserting .neq('id', excludeRunId). Sabotage verified: commenting out the neq clause immediately turned 2 tests RED."
+      }
     },
     {
       "id": "R3.4.1",
@@ -8377,11 +8407,28 @@
         "src/app/api/brands/[brand]/coverage/route.js:24-30"
       ],
       "phase": "R3",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "dev-2",
+      "evidence": [
+        "src/lib/db.js:404",
+        "src/lib/db.js:425",
+        "src/lib/db.js:473",
+        "src/app/api/brands/[brand]/coverage/route.js:52",
+        "src/lib/workers/scanWorker.js:2851",
+        "src/lib/brandScanHistory.test.mjs:49"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-13T11:17:34.743Z",
+          "by": "dev-2",
+          "text": "claimed"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T11:26:25.841Z",
+        "note": null
+      }
     },
     {
       "id": "R3.4.4",

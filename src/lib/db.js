@@ -401,8 +401,78 @@ export class ScansUnavailableError extends Error {
  * exactly the "no scans" lie this change exists to remove. A throw cannot be
  * silently mis-handled.
  */
-export async function getScansForBrand(brand) {
-  if (!supabase) {
+export function joinScanIdentities(brandScans = [], domainScans = []) {
+  const combined = [...(brandScans || []), ...(domainScans || [])];
+  const seen = new Set();
+  const deduplicated = [];
+
+  for (const scan of combined) {
+    if (!scan) continue;
+    const key = scan.id != null ? String(scan.id) : JSON.stringify(scan);
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduplicated.push(scan);
+    }
+  }
+
+  return deduplicated.sort((a, b) => {
+    const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : 0;
+    const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : 0;
+    return timeB - timeA;
+  });
+}
+
+export async function getContinuousScanHistory(brandOrDomain, deps = {}) {
+  const getBrandScans = deps.getScansForBrand || getScansForBrand;
+  const getDomainScans = deps.getScansByDomain || getScansByDomain;
+
+  const key = String(brandOrDomain || "").trim();
+  if (!key) {
+    throw new ScansUnavailableError(
+      "Cannot read scan history: no brand or domain was supplied.",
+      { code: "brand_required" }
+    );
+  }
+
+  const brandScans = await getBrandScans(key, { ...deps, skipJoin: true });
+
+  const candidateDomains = new Set();
+  const lowerKey = key.toLowerCase();
+  if (lowerKey.includes(".")) {
+    candidateDomains.add(
+      lowerKey.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]
+    );
+  }
+
+  for (const s of brandScans || []) {
+    if (s.url) {
+      const host = String(s.url)
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .split("/")[0];
+      if (host) candidateDomains.add(host);
+    }
+  }
+
+  let domainScans = [];
+  for (const domain of candidateDomains) {
+    try {
+      const found = await getDomainScans(domain, deps);
+      if (Array.isArray(found)) domainScans.push(...found);
+    } catch (err) {
+      if (err?.code === "domain_required") continue;
+      throw err;
+    }
+  }
+
+  return joinScanIdentities(brandScans, domainScans);
+}
+
+export async function getScansForBrand(brand, deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) {
     // No memory fallback exists for scans (insertScan refuses without a
     // client — R2.8.6), so [] here could only ever have been a fabricated
     // measurement.
@@ -412,7 +482,7 @@ export async function getScansForBrand(brand) {
     );
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from("scans")
     .select("*")
     .ilike("brand", brand)
@@ -426,8 +496,50 @@ export async function getScansForBrand(brand) {
     );
   }
 
-  // No error means the DB answered; [] here is a real, measured empty.
-  return data || [];
+  const brandScans = data || [];
+  if (deps.skipJoin) {
+    return brandScans;
+  }
+
+  // R3.4.3 — A brand scanned both ways (manual scans keyed by display name,
+  // scheduled scans keyed by domain) has one continuous history. Join them
+  // so neither identity is dropped.
+  const candidateDomains = new Set();
+  const lowerBrand = String(brand || "").trim().toLowerCase();
+  if (lowerBrand.includes(".")) {
+    candidateDomains.add(
+      lowerBrand.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]
+    );
+  }
+
+  for (const s of brandScans) {
+    if (s.url) {
+      const host = String(s.url)
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .split("/")[0];
+      if (host) candidateDomains.add(host);
+    }
+  }
+
+  if (candidateDomains.size === 0) {
+    return brandScans;
+  }
+
+  let domainScans = [];
+  for (const domain of candidateDomains) {
+    try {
+      const found = await getScansByDomain(domain, { client });
+      if (Array.isArray(found)) domainScans.push(...found);
+    } catch (err) {
+      if (err?.code === "domain_required") continue;
+      throw err;
+    }
+  }
+
+  return joinScanIdentities(brandScans, domainScans);
 }
 
 /**

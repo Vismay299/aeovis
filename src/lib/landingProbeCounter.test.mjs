@@ -46,11 +46,11 @@
  *     span crosses a line break the walk now THROWS, because a JavaScript
  *     single- or double-quoted string cannot hold an unescaped newline; that is
  *     language semantics, not a heuristic, and it covers the multi-line JSX case
- *     that made this guard blind in review. It does NOT cover two apostrophes on
- *     ONE line: code between those is still swallowed silently, and the
- *     "returned no code to scan" smoke test below will not notice, because the
- *     rest of the file survives. So: write a contraction in landing copy as
- *     &rsquo; or inside a template literal, never as a bare `'`.
+ *     that made this guard blind in review. It also covers two apostrophes on
+ *     ONE line (R2.10.7): prose apostrophes adjacent to word characters and
+ *     same-line single-quoted spans enclosing fabrication rule matches THROW,
+ *     naming the line. So: write a contraction in landing copy as &rsquo; or
+ *     inside a template literal, never as a bare `'`.
  *   - The self-increment rule reads a bounded, brace-balanced window of a block
  *     body, so a body nested more than one level deep can hide the `+` from it.
  *   - The timer rule takes a bare `setInterval`, but a `setTimeout` only when it
@@ -99,104 +99,10 @@ const PAGE = "src/app/page.js";
  *      everything after it up to the next apostrophe would have been deleted
  *      unread. (A `\` line continuation is escaped and still legal, and template
  *      literals span lines legitimately, so neither is refused.)
- * Two apostrophes on the SAME line are NOT refused and still hide the code
- * between them. That is the residual blind spot; see the header.
+ *   3. Prose apostrophes adjacent to word characters on the same line, or
+ *      same-line single-quoted spans enclosing code matching fabrication rules.
+ *      These THROW, closing the residual blind spot (R2.10.7).
  */
-export function codeOnly(src, label = "source") {
-  let out = "";
-  let i = 0;
-  let mode = "code";
-  let quote = "";
-  // Where the current quote opened, so the refusal can name the line.
-  let quoteAt = 0;
-  const lineOf = (idx) => src.slice(0, idx).split("\n").length;
-  // Depth of `${` interpolations, so a template inside a template is tracked.
-  const templates = [];
-
-  while (i < src.length) {
-    const ch = src[i];
-    const next = src[i + 1];
-
-    if (mode === "code") {
-      if (ch === "/" && next === "/") { mode = "line"; i += 2; continue; }
-      if (ch === "/" && next === "*") { mode = "block"; i += 2; continue; }
-      if (ch === '"' || ch === "'") {
-        mode = "quoted";
-        quote = ch;
-        quoteAt = i;
-        out += " ";
-        i += 1;
-        continue;
-      }
-      if (ch === "`") { mode = "template"; templates.push(0); out += " "; i += 1; continue; }
-      if (ch === "}" && templates.length > 0 && templates[templates.length - 1] > 0) {
-        templates[templates.length - 1] -= 1;
-        mode = "template";
-        i += 1;
-        continue;
-      }
-      out += ch;
-      i += 1;
-      continue;
-    }
-
-    if (mode === "line") {
-      if (ch === "\n") { mode = "code"; out += "\n"; }
-      i += 1;
-      continue;
-    }
-
-    if (mode === "block") {
-      if (ch === "*" && next === "/") { mode = "code"; i += 2; continue; }
-      if (ch === "\n") out += "\n";
-      i += 1;
-      continue;
-    }
-
-    if (mode === "quoted") {
-      // A `\` escapes the next character, including a legal line continuation.
-      if (ch === "\\") { i += 2; continue; }
-      if (ch === "\n") {
-        // Language semantics, not a heuristic: a JS single- or double-quoted
-        // string cannot contain an unescaped newline. So this quote never opened
-        // a string, and everything since it has been swallowed unread.
-        throw new Error(
-          `landingProbeCounter: could not read ${label} — the ${quote} on line `
-          + `${lineOf(quoteAt)} was read as a string quote, but the line ended before it `
-          + `closed (line ${lineOf(i)}). A JavaScript string cannot span a line unescaped, `
-          + "so that quote is prose — an apostrophe in JSX copy is the usual cause — and "
-          + "every character after it would have been deleted before the rules ran. "
-          + "Write it as &rsquo; or in a template literal; do not let this scan go quiet.",
-        );
-      }
-      if (ch === quote) { mode = "code"; quote = ""; }
-      i += 1;
-      continue;
-    }
-
-    // template
-    if (ch === "\\") { i += 2; continue; }
-    if (ch === "$" && next === "{") {
-      templates[templates.length - 1] += 1;
-      mode = "code";
-      out += " ";
-      i += 2;
-      continue;
-    }
-    if (ch === "`") { mode = "code"; templates.pop(); i += 1; continue; }
-    if (ch === "\n") out += "\n";
-    i += 1;
-  }
-
-  if (mode !== "code" || templates.length > 0) {
-    throw new Error(
-      `landingProbeCounter: could not read ${label} — the scan ended inside a `
-      + `${mode === "code" ? "template" : mode}, so something in that file is a shape this `
-      + "scanner cannot tell apart from a string. Teach it before shipping the shape.",
-    );
-  }
-  return out;
-}
 
 /**
  * `setCount((c) => c + inc)`, and the same lie with a block body,
@@ -312,6 +218,148 @@ const RULES = [
 
 /** A rule is a regex or, where one pattern is not enough, a predicate. */
 const fires = (rule, code) => (rule.test ? rule.test(code) : rule.re.test(code));
+
+export function codeOnly(src, label = "source") {
+  let out = "";
+  let i = 0;
+  let mode = "code";
+  let quote = "";
+  // Where the current quote opened, so the refusal can name the line.
+  let quoteAt = 0;
+  let quotedSpan = "";
+  const lineOf = (idx) => src.slice(0, idx).split("\n").length;
+  // Depth of `${` interpolations, so a template inside a template is tracked.
+  const templates = [];
+
+  while (i < src.length) {
+    const ch = src[i];
+    const next = src[i + 1];
+
+    if (mode === "code") {
+      if (ch === "/" && next === "/") { mode = "line"; i += 2; continue; }
+      if (ch === "/" && next === "*") { mode = "block"; i += 2; continue; }
+      if (ch === '"') {
+        mode = "quoted";
+        quote = ch;
+        quoteAt = i;
+        quotedSpan = "";
+        out += " ";
+        i += 1;
+        continue;
+      }
+      if (ch === "'") {
+        if (i > 0 && /[a-zA-Z0-9]/.test(src[i - 1])) {
+          throw new Error(
+            `landingProbeCounter: could not read ${label} — the ' on line `
+            + `${lineOf(i)} was read as an apostrophe in prose (preceded by a word character), `
+            + "not a string delimiter. A same-line apostrophe pair swallows code unread. "
+            + "Write it as &rsquo; or in a template literal; do not let this scan go quiet.",
+          );
+        }
+        mode = "quoted";
+        quote = ch;
+        quoteAt = i;
+        quotedSpan = "";
+        out += " ";
+        i += 1;
+        continue;
+      }
+      if (ch === "`") { mode = "template"; templates.push(0); out += " "; i += 1; continue; }
+      if (ch === "}" && templates.length > 0 && templates[templates.length - 1] > 0) {
+        templates[templates.length - 1] -= 1;
+        mode = "template";
+        i += 1;
+        continue;
+      }
+      out += ch;
+      i += 1;
+      continue;
+    }
+
+    if (mode === "line") {
+      if (ch === "\n") { mode = "code"; out += "\n"; }
+      i += 1;
+      continue;
+    }
+
+    if (mode === "block") {
+      if (ch === "*" && next === "/") { mode = "code"; i += 2; continue; }
+      if (ch === "\n") out += "\n";
+      i += 1;
+      continue;
+    }
+
+    if (mode === "quoted") {
+      // A `\` escapes the next character, including a legal line continuation.
+      if (ch === "\\") {
+        quotedSpan += ch + (next || "");
+        i += 2;
+        continue;
+      }
+      if (ch === "\n") {
+        // Language semantics, not a heuristic: a JS single- or double-quoted
+        // string cannot contain an unescaped newline. So this quote never opened
+        // a string, and everything since it has been swallowed unread.
+        throw new Error(
+          `landingProbeCounter: could not read ${label} — the ${quote} on line `
+          + `${lineOf(quoteAt)} was read as a string quote, but the line ended before it `
+          + `closed (line ${lineOf(i)}). A JavaScript string cannot span a line unescaped, `
+          + "so that quote is prose — an apostrophe in JSX copy is the usual cause — and "
+          + "every character after it would have been deleted before the rules ran. "
+          + "Write it as &rsquo; or in a template literal; do not let this scan go quiet.",
+        );
+      }
+      if (ch === quote) {
+        if (quote === "'") {
+          if (i + 1 < src.length && /[a-zA-Z0-9]/.test(src[i + 1])) {
+            throw new Error(
+              `landingProbeCounter: could not read ${label} — the ' on line `
+              + `${lineOf(i)} was read as an apostrophe in prose (followed by a word character), `
+              + "not a string delimiter. A same-line apostrophe pair swallows code unread. "
+              + "Write it as &rsquo; or in a template literal; do not let this scan go quiet.",
+            );
+          }
+          if (RULES.some((r) => fires(r, quotedSpan))) {
+            throw new Error(
+              `landingProbeCounter: could not read ${label} — the ' on line `
+              + `${lineOf(quoteAt)} closed on line ${lineOf(i)}, but the quoted span `
+              + "contained code matching fabrication rules. "
+              + "Write contractions as &rsquo; or in a template literal; do not let this scan go quiet.",
+            );
+          }
+        }
+        mode = "code";
+        quote = "";
+      } else {
+        quotedSpan += ch;
+      }
+      i += 1;
+      continue;
+    }
+
+    // template
+    if (ch === "\\") { i += 2; continue; }
+    if (ch === "$" && next === "{") {
+      templates[templates.length - 1] += 1;
+      mode = "code";
+      out += " ";
+      i += 2;
+      continue;
+    }
+    if (ch === "`") { mode = "code"; templates.pop(); i += 1; continue; }
+    if (ch === "\n") out += "\n";
+    i += 1;
+  }
+
+  if (mode !== "code" || templates.length > 0) {
+    throw new Error(
+      `landingProbeCounter: could not read ${label} — the scan ended inside a `
+      + `${mode === "code" ? "template" : mode}, so something in that file is a shape this `
+      + "scanner cannot tell apart from a string. Teach it before shipping the shape.",
+    );
+  }
+  return out;
+}
 
 function fabrications(src, label = "source") {
   const code = codeOnly(src, label);
@@ -600,20 +648,44 @@ test("REFUSAL — an apostrophe pair in JSX copy is rejected, never scanned quie
   // being swallowed into a clean-looking empty list.
   assert.throws(() => fabrications(APOSTROPHE_HAZARD, "Hero.jsx"), /could not read Hero\.jsx/);
 
-  // The proof that this is the failure it looks like: with the newline refusal
-  // removed, the swallowed span takes Math.random with it and the file scans
-  // green. This is that same walk minus rule 2 of the refusal contract.
+  // R2.10.7: With the newline refusal removed, the same-line apostrophe pair is
+  // now refused by rule 3 of the refusal contract (prose apostrophe check and
+  // fabricated content in single-quoted span), closing the residual blind spot.
   const withoutTheRefusal = APOSTROPHE_HAZARD.replace(/\n/g, " ");
-  assert.doesNotMatch(
-    codeOnly(withoutTheRefusal, "one-line"),
-    /Math\s*\.\s*random/,
-    "if this ever finds Math.random the demonstration has rotted and this test proves nothing",
+  assert.throws(
+    () => codeOnly(withoutTheRefusal, "one-line"),
+    /could not read one-line/,
+    "same-line apostrophe pair must be refused by codeOnly",
   );
-  assert.deepEqual(
-    fabrications(withoutTheRefusal, "one-line"),
-    [],
-    "the same-line apostrophe pair is the documented residual blind spot; if it "
-      + "ever starts firing, delete that bullet from the header",
+  assert.throws(
+    () => fabrications(withoutTheRefusal, "one-line"),
+    /could not read one-line/,
+    "same-line apostrophe pair must be refused by fabrications",
+  );
+});
+
+/**
+ * Committed fixture for R2.10.7: A same-line apostrophe pair concealing a live
+ * random call. The guard refuses the file and names the line.
+ */
+const SAME_LINE_APOSTROPHE_FIXTURE = [
+  "export const Hero = () => (",
+  "  <p>It doesn't lie: {Math.random()} that's all.</p>",
+  ");",
+].join("\n");
+
+test("REFUSAL — a same-line apostrophe pair concealing Math.random() is rejected (R2.10.7)", () => {
+  assert.throws(
+    () => codeOnly(SAME_LINE_APOSTROPHE_FIXTURE, "SameLineHero.jsx"),
+    (err) => {
+      assert.match(err.message, /could not read SameLineHero\.jsx/);
+      assert.match(err.message, /line 2\b/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => fabrications(SAME_LINE_APOSTROPHE_FIXTURE, "SameLineHero.jsx"),
+    /could not read SameLineHero\.jsx/,
   );
 });
 

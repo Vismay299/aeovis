@@ -52,7 +52,7 @@ const {
 } = await import("./scanWorker.js");
 // R3.3.4 folded the reaper's runner name into the shared vocabulary, so this
 // file reads it from the same place every other runner name comes from.
-const { RUN_OUTCOMES, RUNNERS } = await import("../scanRuns.js");
+const { RUN_OUTCOMES, RUNNERS, listStaleScanRuns } = await import("../scanRuns.js");
 const REAPER_RUNNER = RUNNERS.REAPER;
 const { HEARTBEAT_STALE_MS } = await import("../db.js");
 const { supabase } = await import("../db.js");
@@ -516,6 +516,80 @@ test("R3.3.2 — the reaper never reaps its own pass row", async () => {
   const passRow = findPassRow(ledger);
   assert.ok(passRow, "the pass still closed its own row itself");
   assert.notEqual(passRow.outcome, "reaped");
+});
+
+test("R3.3.6 — listStaleScanRuns applies SQL-side self-exclusion (.neq) when excludeRunId is provided", async () => {
+  const calls = [];
+  const builder = {
+    select(...args) { calls.push({ op: "select", args }); return builder; },
+    is(...args) { calls.push({ op: "is", args }); return builder; },
+    lt(...args) { calls.push({ op: "lt", args }); return builder; },
+    order(...args) { calls.push({ op: "order", args }); return builder; },
+    limit(...args) { calls.push({ op: "limit", args }); return builder; },
+    neq(...args) { calls.push({ op: "neq", args }); return builder; },
+    then(resolve, reject) {
+      return Promise.resolve({ data: [], error: null }).then(resolve, reject);
+    },
+  };
+  const client = {
+    from(table) {
+      calls.push({ op: "from", args: [table] });
+      return builder;
+    },
+  };
+
+  // With excludeRunId: query builder MUST receive .neq("id", excludeRunId)
+  await listStaleScanRuns(
+    { cutoffIso: new Date(T0 - REAP_STALE_AFTER_MS).toISOString(), limit: 10, excludeRunId: "run-exclude-42" },
+    { client }
+  );
+
+  const neqCall = calls.find((c) => c.op === "neq");
+  assert.ok(neqCall, "query builder must receive neq clause when excludeRunId is provided");
+  assert.deepEqual(neqCall.args, ["id", "run-exclude-42"], "neq clause must exclude the given run id on column id");
+
+  // Without excludeRunId: query builder must NOT receive neq
+  calls.length = 0;
+  await listStaleScanRuns(
+    { cutoffIso: new Date(T0 - REAP_STALE_AFTER_MS).toISOString(), limit: 10, excludeRunId: null },
+    { client }
+  );
+  assert.equal(calls.some((c) => c.op === "neq"), false, "query builder must not add neq when excludeRunId is null");
+});
+
+test("R3.3.6 — reapStaleRuns passes its own pass run id to the SQL query builder as .neq('id', passRun.id)", async () => {
+  const ledger = makeLedger({ rows: [] });
+  const calls = [];
+  const builder = {
+    select(...args) { calls.push({ op: "select", args }); return builder; },
+    is(...args) { calls.push({ op: "is", args }); return builder; },
+    lt(...args) { calls.push({ op: "lt", args }); return builder; },
+    order(...args) { calls.push({ op: "order", args }); return builder; },
+    limit(...args) { calls.push({ op: "limit", args }); return builder; },
+    neq(...args) { calls.push({ op: "neq", args }); return builder; },
+    then(resolve, reject) {
+      return Promise.resolve({ data: [], error: null }).then(resolve, reject);
+    },
+  };
+  const client = {
+    from(table) {
+      calls.push({ op: "from", args: [table] });
+      return builder;
+    },
+  };
+
+  await quietly(() =>
+    reapStaleRuns(NOW, {
+      ...ledger.deps,
+      client,
+    })
+  );
+
+  const passRow = findPassRow(ledger);
+  assert.ok(passRow, "reaper pass opened its own row");
+  const neqCall = calls.find((c) => c.op === "neq");
+  assert.ok(neqCall, "reaper SQL query builder received .neq clause to self-exclude pass row");
+  assert.deepEqual(neqCall.args, ["id", passRow.id], "SQL .neq clause targets passRow.id directly");
 });
 
 // ---------------------------------------------------------------------------

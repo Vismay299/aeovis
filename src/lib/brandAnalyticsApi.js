@@ -135,6 +135,13 @@ export function validateScheduleBody(body) {
   const updates = {};
   const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
 
+  if (has("display_name")) {
+    if (typeof body.display_name !== "string" || !body.display_name.trim()) {
+      return { error: "display_name must be a non-empty string.", updates: null };
+    }
+    updates.display_name = body.display_name.trim();
+  }
+
   if (has("cadence")) {
     if (!VALID_CADENCES.includes(body.cadence)) {
       return { error: `cadence must be one of: ${VALID_CADENCES.join(", ")}`, updates: null };

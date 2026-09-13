@@ -2848,7 +2848,22 @@ export async function runSchedulerTick(nowIso, deps = {}) {
     dueCount = due.length;
 
     for (const schedule of due) {
-      const brandLabel = schedule.display_name || schedule.brand;
+      let brandLabel = schedule.display_name;
+      if (!brandLabel && (deps.getScansByDomain || getScansByDomain)) {
+        try {
+          const prevScans = await (deps.getScansByDomain || getScansByDomain)(schedule.brand);
+          const withDisplay = prevScans?.find((s) => s.brand && s.brand !== schedule.brand);
+          if (withDisplay) {
+            brandLabel = withDisplay.brand;
+            // R3.4.3: Write display_name back to the schedule row so scheduled and manual
+            // scans share one identity continuously.
+            await upsertSchedule(schedule.brand, { display_name: brandLabel });
+          }
+        } catch {
+          // Keep brandLabel unset, fall back to schedule.brand below
+        }
+      }
+      if (!brandLabel) brandLabel = schedule.brand;
 
       // Defensive: cadence 'off' should never fire a scan even if `enabled`
       // says otherwise (the two fields are independent columns; the P0.4
