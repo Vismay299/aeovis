@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**162 / 265 closed** · 9 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**174 / 265 closed** · 7 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -24,7 +24,7 @@ Baseline commit: `5111219`
 10. Trace a call site to an HTTP route or a cron entry before describing it as live. A correct file:line proves a line exists, not that anything reaches it.
 11. Close an item only when, in the same commit, its box is ticked, the commit body cites the file:line where the change lives, and the acceptance criterion was exercised — run, not read and not reasoned about. If it could not be exercised here, the item is blocked with the reason, never closed.
 
-## R0 — Ground zero  `32/35`
+## R0 — Ground zero  `33/35`
 
 *2-3 days.* Stop the active lies, seal the obvious holes, freeze a baseline to measure the rebuild against.
 
@@ -44,7 +44,7 @@ Baseline commit: `5111219`
 - [-] **R0.1.12** Confirm CRON_SECRET and OPERATOR_TOKEN are live on the Vercel project `needs-vercel` — blocked: needs-vercel
 - [x] **R0.1.13** cronAuth fails OPEN when NODE_ENV is unset — closed at `src/lib/cronAuth.js:20`, `src/lib/cronAuth.js:55`, `src/lib/cronAuth.js:116`, `src/lib/cronAuth.test.mjs:244`, `src/lib/cronAuth.test.mjs:269`, `src/lib/cronAuth.test.mjs:318`, `src/lib/cronAuth.test.mjs:187`
 - [x] **R0.1.14** The operator perimeter opens silently in a non-production NODE_ENV — closed at `src/lib/operatorPerimeter.js:180`, `src/lib/operatorPerimeter.js:189`, `src/middleware.js:24`, `src/middleware.js:54`, `src/lib/operatorPerimeter.test.mjs:308`, `src/lib/operatorPerimeter.test.mjs:428`
-- [-] **R0.1.15** ROTATE the GSC service-account key — leaked into an agent transcript `needs-secrets` — blocked: needs-secrets
+- [x] **R0.1.15** ROTATE the GSC service-account key — leaked into an agent transcript `needs-secrets` — closed at `src/lib/engines/gsc.js:17`, `scripts/check-secrets.mjs:304`, `scripts/check-secrets.mjs:317`
 - [x] **R0.1.16** health.js keeps a second vendor list and claims it is shared — closed at `src/lib/vendorRegistry.js:49`, `src/lib/vendorRegistry.js:92`, `src/lib/health.js:28`, `src/lib/health.js:15`, `scripts/check-secrets.mjs:43`, `scripts/check-secrets.mjs:96`, `scripts/check-secrets.mjs:380`, `scripts/check-secrets.mjs:526`, `src/lib/vendorRegistry.test.mjs:46`, `src/lib/vendorRegistry.test.mjs:61`, `src/lib/engines/types.test.mjs:122`
 - [x] **R0.1.17** Nothing detects a NODE_ENV that lies — closed at `src/lib/operatorPerimeter.js:206`, `src/lib/operatorPerimeter.js:161`, `src/lib/operatorPerimeter.js:133`, `src/lib/cronAuth.js:76`, `src/lib/cronAuth.js:135`, `src/lib/cronAuth.js:153`, `src/lib/health.js:106`, `src/lib/health.js:124`, `src/lib/envTruth.test.mjs:44`, `src/lib/envTruth.test.mjs:132`, `src/lib/envTruth.test.mjs:167`, `src/lib/envTruth.test.mjs:215`, `src/lib/cronAuth.test.mjs:324`
 - [x] **R0.1.18** Three footguns in the rate-limit trust knob — closed at `src/lib/rateLimit.test.mjs:327`, `src/lib/rateLimit.test.mjs:46`, `src/lib/rateLimit.test.mjs:456`, `src/lib/rateLimit.test.mjs:476`, `src/lib/rateLimit.js:196`, `src/lib/rateLimit.js:231`, `src/lib/rateLimit.js:240`, `src/lib/rateLimit.js:110`, `src/lib/rateLimit.js:145`, `.env.example:60`
@@ -131,7 +131,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `49/69`
+## R2 — Scoring truth  `54/69`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -201,11 +201,11 @@ Baseline commit: `5111219`
 - [x] **R2.8.5** The remaining fail-quiet DB reads, same class as R2.8.4 — closed at `src/lib/db.js:489`, `src/app/api/scans/_lib/scanRow.js:36`, `src/app/api/content/worker/route.js:98`, `src/app/api/content/worker/route.js:126`, `src/app/api/content/worker/route.js:209`, `src/app/api/content/worker/route.js:238`, `src/lib/workers/scanWorker.js:1813`, `src/lib/dbReadOutage.route.test.mjs:170`, `src/lib/dbReadOutage.route.test.mjs:312`, `src/lib/dbReadOutage.route.test.mjs:422`, `src/lib/scanByIdUnconfigured.route.test.mjs:103`
 - [x] **R2.8.6** insertScan fail-softs on a missing client and returns undefined — closed at `src/lib/db.js:120`, `src/lib/db.js:122`, `src/lib/db.js:126`, `src/lib/db.js:75`, `src/lib/db.js:255`, `src/lib/db.js:263`, `src/lib/insertScanWriteFailure.test.mjs:67`, `src/lib/insertScanWriteFailure.test.mjs:124`, `src/lib/insertScanWriteFailure.test.mjs:166`
 - [x] **R2.8.7** insertScan cascade 3 writes the row and reports failure, so a re-finalize inserts a duplicate — closed at `src/lib/db.js:268`, `src/lib/db.js:270`, `src/lib/db.js:275`, `src/lib/db.js:314`, `src/lib/insertScanCascade3.test.mjs:243`, `src/lib/insertScanCascade3.test.mjs:473`, `src/lib/insertScanCascade3.test.mjs:524`
-- [~] **R2.8.8** The content event and lease writers take no deps and swallow their own errors — submitted `src/lib/db.js:911`, `src/lib/db.js:930`
+- [x] **R2.8.8** The content event and lease writers take no deps and swallow their own errors — closed at `src/lib/db.js:911`, `src/lib/db.js:930`, `src/lib/jobLease.js:104`, `src/lib/jobLease.js:138`, `src/lib/jobLease.js:169`, `src/lib/contentWriteFailure.test.mjs:99`, `src/lib/contentWriteFailure.test.mjs:150`
 - [x] **R2.8.9** insertScan cascades 1 and 2 can retry an already-written row into a duplicate — closed at `src/lib/db.js:264`, `src/lib/insertScanCascade3.test.mjs:339`
-- [~] **R2.8.10** runFinalizePhase flattens the write-error code into prose, so an operator cannot branch on it — submitted `src/lib/workers/scanWorker.js:2164`, `src/lib/insertScanWriteFailure.test.mjs:294`
+- [x] **R2.8.10** runFinalizePhase flattens the write-error code into prose, so an operator cannot branch on it — closed at `src/lib/workers/scanWorker.js:2179`, `src/lib/insertScanWriteFailure.test.mjs:378`
 - [x] **R2.8.12** getScansByDomain fabricates never-scanned from a missing client — closed at `src/lib/db.js:477`, `src/lib/db.js:481`, `src/lib/db.js:491`, `src/lib/scansByDomainUnconfigured.test.mjs:81`, `src/lib/scansByDomainUnconfigured.test.mjs:117`, `src/lib/scansByDomainUnconfigured.test.mjs:140`, `src/lib/scansByDomainUnconfigured.test.mjs:158`, `src/lib/scansByDomainUnconfigured.test.mjs:197`
-- [~] **R2.8.13** Four more fail-quiet reads, including the other half of the endpoint R2.8.5 just fixed — submitted `src/lib/db/content.js:6`
+- [x] **R2.8.13** Four more fail-quiet reads, including the other half of the endpoint R2.8.5 just fixed — closed at `src/lib/db/content.js:6`, `src/lib/db/content.js:319`, `src/lib/db/content.js:454`, `src/app/api/content/worker/route.js:203`, `src/lib/dbContent.test.mjs:707`
 - [x] **R2.8.14** The content cron returns HTTP 200 with processed:0 when supabase is unset — closed at `src/app/api/content/worker/route.js:187`
 - [x] **R2.8.15** A false history comment in the R2.8.12 guard, plus the last two fail-quiet reads in db.js — closed at `src/lib/coverageUnconfigured.route.test.mjs:12`, `src/lib/coverageUnconfigured.route.test.mjs:118`, `src/lib/coverageUnconfigured.route.test.mjs:123`, `src/lib/scansByDomainUnconfigured.test.mjs:21`, `src/lib/scansByDomainUnconfigured.test.mjs:36`, `src/lib/scansByDomainUnconfigured.test.mjs:280`, `src/lib/scansByDomainUnconfigured.test.mjs:384`, `src/lib/db.js:513`, `src/lib/db.js:585`
 - [x] **R2.8.16** The last fail-quiet read in db.js, and the history route that turns any refusal into a 200 empty workspace — closed at `src/lib/db.js:608`, `src/lib/db.js:612`, `src/app/api/history/route.js:74`, `src/app/api/history/route.js:67`, `src/lib/historyStoreState.js:48`, `src/lib/historyStoreState.js:77`, `src/components/home/HomeDashboard.jsx:143`, `src/lib/historyStoreRefusal.route.test.mjs:255`, `src/lib/historyStoreRefusal.route.test.mjs:372`, `src/lib/historyUnconfigured.route.test.mjs:97`
@@ -215,17 +215,17 @@ Baseline commit: `5111219`
 
 - [ ] **R2.9.1** Provenance strip under the hero
 - [ ] **R2.9.6** probeTextEngine drops every cost_state field and coerces a deliberate null cost to a measured $0
-- [~] **R2.9.7** SWEEP: bare Number() and || 0 on nullable metric fields across the scoring layer
+- [x] **R2.9.7** SWEEP: bare Number() and || 0 on nullable metric fields across the scoring layer — closed at `src/lib/scoring/measuredNumber.js:14`, `src/lib/scoring/measuredNumber.js:46`, `src/lib/scoring/metricCoercionGuard.test.mjs:154`, `src/lib/scoring/metricCoercionGuard.test.mjs:410`, `src/lib/scoring/enginePipeline.js:823`
 ### R2.10
 
 - [x] **R2.10.1** De-fake the landing page — closed at `src/data/mockData.js:51`, `src/data/mockData.js:106`, `src/data/mockData.js:123`, `src/app/page.js:70`, `src/app/page.js:80`, `src/app/scan/page.js:50`, `src/lib/landingHonesty.test.mjs:111`, `src/lib/landingHonesty.test.mjs:291`, `scripts/check-secrets.mjs:320`, `src/lib/engines/deployedEngines.js:75`
 - [x] **R2.10.2** Probe counter backed by a real count query — closed at `src/lib/landingProbeCounter.test.mjs:155`, `src/lib/landingProbeCounter.test.mjs:205`, `src/lib/landingProbeCounter.test.mjs:238`, `src/lib/landingProbeCounter.test.mjs:473`, `src/lib/landingProbeCounter.test.mjs:506`, `src/lib/landingProbeCounter.test.mjs:368`, `src/lib/landingProbeCounter.test.mjs:415`, `src/lib/landingProbeCounter.test.mjs:39`, `src/lib/landingProbeCounter.test.mjs:87`, `src/app/page.js:55`
-- [~] **R2.10.4** ENGINE_REGISTRY says aio is always configured — submitted `src/lib/scoring/enginePipeline.js:1367`, `src/lib/scoring/enginePipeline.js:1468`, `src/lib/scoring/enginePipeline.test.mjs:312`, `src/lib/scoring/enginePipeline.test.mjs:325`, `src/lib/scoring/enginePipeline.test.mjs:337`, `src/lib/scoring/enginePipeline.test.mjs:348`, `src/lib/scoring/enginePipeline.test.mjs:361`
+- [x] **R2.10.4** ENGINE_REGISTRY says aio is always configured — closed at `src/lib/scoring/enginePipeline.js:1434`, `src/lib/scoring/enginePipeline.js:1537`, `src/lib/scoring/enginePipeline.test.mjs:312`, `src/lib/scoring/enginePipeline.test.mjs:325`, `src/lib/scoring/enginePipeline.test.mjs:337`, `src/lib/scoring/enginePipeline.test.mjs:348`, `src/lib/scoring/enginePipeline.test.mjs:361`
 - [x] **R2.10.5** The hero sample card hardcodes a Perplexity chip — closed at `src/components/landing/AnswerSheet.jsx:72`, `src/components/landing/AnswerSheet.jsx:22`, `src/lib/engines/deployedEngines.js:107`, `src/lib/landingHonesty.test.mjs:57`, `src/lib/landingHonesty.test.mjs:348`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 - [ ] **R2.10.7** The landing-copy guard is blind to two apostrophes on one line
 
-## R3 — Durable backend  `30/48`
+## R3 — Durable backend  `33/48`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -246,7 +246,7 @@ Baseline commit: `5111219`
 - [x] **R3.2.4** A live test wrote to production because only its reads were stubbed — closed at `src/lib/liveDbGate.js:141`, `src/lib/liveDbGate.js:90`, `src/lib/liveDbGate.js:53`, `src/lib/liveWriteGuard.js:370`, `src/lib/liveWriteGuard.test.mjs:488`, `src/lib/liveWriteGuard.test.mjs:451`, `src/lib/liveWriteGuard.test.mjs:571`, `src/lib/liveWriteGuard.test.mjs:605`, `src/lib/liveWriteGuard.test.mjs:413`, `src/lib/scanRuns.test.mjs:669`, `package.json:12`, `src/lib/scanRunsLive.test.mjs:50`, `src/lib/probeTasksRace.test.mjs:41`, `src/lib/workers/scanChunkLedgerLive.test.mjs:52`, `src/lib/liveWriteGuardAuto.mjs:64`
 - [x] **R3.2.5** A frozen engine that stops resolving silently shrinks the headline — closed at `src/services/api.js:598`, `src/components/dashboard/DashboardShell.jsx:394`, `src/components/dashboard/DashboardShell.jsx:802`, `src/components/dashboard/DashboardShell.jsx:812`, `src/components/dashboard/engineSetChangeSurface.test.mjs:136`, `src/components/dashboard/engineSetChangeSurface.test.mjs:361`, `src/components/dashboard/engineSetChangeSurface.test.mjs:394`, `src/components/dashboard/engineSetChangeSurface.test.mjs:322`
 - [x] **R3.2.6** The cron reports a scheduler tick that declined every brand as a clean empty tick — closed at `src/app/api/scan/worker/route.js:390`, `src/app/api/scan/worker/route.js:179`, `src/app/api/scan/worker/route.js:257`, `src/app/api/scan/worker/route.js:236`, `src/lib/scanWorkerRoute.route.test.mjs:356`, `src/lib/scanWorkerRoute.route.test.mjs:496`
-- [~] **R3.2.7** The live write guard cannot force its own adoption
+- [x] **R3.2.7** The live write guard cannot force its own adoption — closed at `src/lib/liveWriteGuardAdoption.test.mjs:482`, `src/lib/liveWriteGuardAdoption.test.mjs:624`, `src/lib/liveWriteGuardAdoption.test.mjs:669`, `src/lib/liveWriteGuard.test.mjs:1030`
 - [ ] **R3.2.9** On a refrozen scan, finalize summarizes engines that produced nothing and ignores the rows that exist
 - [x] **R3.2.10** A live test can spread process.env into the gate and bypass the write guard — closed at `src/lib/liveDbGate.js:87`, `src/lib/liveDbGate.js:107`, `src/lib/liveWriteGuard.test.mjs:522`, `src/lib/liveWriteGuard.test.mjs:531`, `src/lib/liveWriteGuard.test.mjs:696`, `src/lib/liveWriteGuard.js:81`
 ### R3.3
@@ -263,10 +263,10 @@ Baseline commit: `5111219`
 - [x] **R3.4.2** Skips bump next_run_at and write a skip row — closed at `src/lib/workers/scanWorker.js:2671`, `src/lib/workers/scanWorker.js:2664`, `src/lib/workers/scanWorker.js:2581`, `src/lib/workers/scanWorker.js:2564`, `src/lib/workers/scanWorker.js:2734`, `src/lib/workers/scanWorker.js:2749`, `src/lib/workers/schedulerSkipBackoff.test.mjs:153`, `src/lib/workers/schedulerSkipBackoff.test.mjs:191`, `src/lib/workers/schedulerSkipBackoff.test.mjs:343`, `src/lib/workers/schedulerSkipBackoff.test.mjs:386`
 - [ ] **R3.4.3** display_name written so scheduled and manual scans share one identity
 - [ ] **R3.4.4** Worker honors per-brand prompt_target, engines and geo
-- [~] **R3.4.5** The first-scan schedule registration is a non-atomic get-then-upsert, and its wiring is untested — submitted `src/lib/db/analytics.js:740`, `src/lib/workers/scanWorker.js:1177`, `src/lib/workers/scanSchedule.test.mjs:82`, `src/lib/workers/scanSchedule.test.mjs:155`, `src/lib/workers/scanSchedule.test.mjs:197`, `src/lib/workers/scanSchedule.test.mjs:285`
+- [x] **R3.4.5** The first-scan schedule registration is a non-atomic get-then-upsert, and its wiring is untested — closed at `src/lib/db/analytics.js:740`, `src/lib/workers/scanWorker.js:1177`, `src/lib/workers/scanSchedule.test.mjs:82`, `src/lib/workers/scanSchedule.test.mjs:155`, `src/lib/workers/scanSchedule.test.mjs:197`, `src/lib/workers/scanSchedule.test.mjs:285`, `src/lib/workers/scanSchedule.test.mjs:387`
 ### R3.5
 
-- [~] **R3.5.1** Per-block checkpoints in content jobs — submitted `src/lib/content/contentWorker.js:136`, `src/lib/content/contentWorker.js:344`, `src/lib/content/contentWorker.js:374`, `src/lib/content/contentWorker.js:448`, `supabase/migrations/014_content_job_checkpoints.sql:1`, `src/lib/db/content.js:122`, `src/lib/content/contentWorker.test.mjs:859`, `src/lib/content/contentWorker.test.mjs:953`, `src/lib/content/contentWorker.test.mjs:1008`
+- [x] **R3.5.1** Per-block checkpoints in content jobs — closed at `src/lib/content/contentWorker.js:136`, `src/lib/content/contentWorker.js:344`, `src/lib/content/contentWorker.js:374`, `src/lib/content/contentWorker.js:448`, `supabase/migrations/014_content_job_checkpoints.sql:1`, `src/lib/db/content.js:139`, `src/lib/content/contentWorker.test.mjs:859`, `src/lib/content/contentWorker.test.mjs:953`, `src/lib/content/contentWorker.test.mjs:1008`
 - [ ] **R3.5.2** Natural key on content_items (job_id, cycle)
 - [ ] **R3.5.3** Stage transitions warn-to-throw after a quiet telemetry week `needs-soak`
 - [x] **R3.5.4** REGRESSION: migration 014 is on disk but in no ledger, so three registry guards fail — closed at `README.md:161`, `docs/OPERATOR_LEDGER.md:336`, `docs/OPERATOR_LEDGER.md:379`, `docs/OPERATOR_LEDGER.md:398`, `scripts/setup-supabase.mjs:176`, `supabase/migrations/014_content_job_checkpoints.sql:11`, `src/lib/db/content.js:192`, `src/lib/content/contentWorker.js:401`
@@ -292,7 +292,7 @@ Baseline commit: `5111219`
 - [x] **R3.7.8** The primary-domain crawlability banner conflates a customer typo with a network problem — closed at `src/lib/crawlabilityOutcome.js:181`, `src/components/dashboard/CrawlabilityView.jsx:310`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:502`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:616`
 - [x] **R3.7.9** SSRF guard corpus gap: src/lib/ssrfGuard.test.mjs has no length assertion across six security corpora — closed at `src/lib/ssrfGuard.test.mjs:29-664`
 
-## R4 — Ground truth & analytics completion  `1/10`
+## R4 — Ground truth & analytics completion  `2/10`
 
 *1 week.* Probe scores sitting next to Google-verified numbers, change detection, referral capture.
 
@@ -307,7 +307,7 @@ Baseline commit: `5111219`
 
 - [ ] **R4.3.1** crawlability_audits history and change detection
 - [x] **R4.3.2** computeBrandRollups still yields a real 100% for a self-only roster — closed at `src/lib/analytics/rollup.js:172`, `src/lib/analytics/rollup.js:339`, `supabase/migrations/013_brand_metrics_sov_state.sql:120`, `src/lib/analytics/rollup.test.mjs:193`, `src/lib/analytics/rollup.test.mjs:796`, `src/lib/workers/scanChunk.test.mjs:1021`, `scripts/setup-supabase.mjs:131`, `docs/PROD_MIGRATIONS.md:139`, `README.md:160`
-- [~] **R4.3.3** The analytics backfill cannot re-derive a citation denominator for historical rows
+- [x] **R4.3.3** The analytics backfill cannot re-derive a citation denominator for historical rows — closed at `src/lib/analytics/historicalBackfill.js:102`, `src/lib/analytics/historicalBackfill.js:193`, `src/lib/analytics/historicalBackfill.test.mjs:30`, `src/lib/analytics/historicalBackfill.test.mjs:125`, `supabase/migrations/015_brand_metrics_citation_state.sql:1`
 - [ ] **R4.3.4** The metrics endpoint drops the new SOV state, so the client still gets a bare null
 - [ ] **R4.3.5** The new sov_state columns never reach the metrics API, and a scanWorker comment now states the opposite of what the code does
 ### R4.4
@@ -317,7 +317,7 @@ Baseline commit: `5111219`
 
 - [ ] **R4.5.1** Decide-or-delete pass on schema-only subsystems `needs-decision`
 
-## R5 — Content OS quality  `1/12`
+## R5 — Content OS quality  `3/12`
 
 *1 week.* Model-layer truth, a publish loop that stops pretending, drafts benchmarked against what engines cite.
 
@@ -325,10 +325,10 @@ Baseline commit: `5111219`
 
 - [x] **R5.1.1** Provider-neutral LLM config — closed at `src/lib/llmConfig.js:53`, `src/lib/llmConfig.js:99`, `src/lib/openrouter.js:20`, `src/lib/openrouter.js:48`, `src/lib/health.js:25`, `scripts/check-secrets.mjs:95`, `src/lib/scoring/promptGen.js:275`, `.env.example:11`, `docs/vendors/mimo.md:40`, `src/lib/openrouter.test.mjs:191`
 - [-] **R5.1.2** Key re-enable checklist `needs-llm` `needs-secrets` — blocked: needs-llm
-- [-] **R5.1.3** The LLM gateway is MiMo while every var is named OPENROUTER_* `needs-llm` — blocked: needs-llm
+- [x] **R5.1.3** The LLM gateway is MiMo while every var is named OPENROUTER_* `needs-llm` — closed at `src/lib/llmConfig.js:22`, `scripts/check-secrets.mjs:218`, `scripts/check-secrets.mjs:234`
 ### R5.2
 
-- [~] **R5.2.1** Kill the fabricated studio.perceev.app URL — submitted `src/app/api/content-items/[id]/decision/route.js:35`, `src/app/api/content-items/[id]/decision/route.js:109`, `src/app/api/content-items/[id]/decision/route.js:139`, `src/app/api/content-events/route.js:19`, `src/app/api/content-events/route.js:31`, `src/app/api/content-events/route.js:74`, `src/app/api/content-events/route.js:100`, `src/lib/approvalNotPublication.route.test.mjs:92`, `src/lib/approvalNotPublication.route.test.mjs:169`, `src/lib/approvalNotPublication.route.test.mjs:199`, `docs/OPERATOR_LEDGER.md:473`, `docs/BUILD_JOURNAL.md:183`
+- [x] **R5.2.1** Kill the fabricated studio.perceev.app URL — closed at `src/app/api/content-items/[id]/decision/route.js:35`, `src/app/api/content-items/[id]/decision/route.js:109`, `src/app/api/content-items/[id]/decision/route.js:139`, `src/app/api/content-events/route.js:19`, `src/app/api/content-events/route.js:31`, `src/app/api/content-events/route.js:74`, `src/app/api/content-events/route.js:100`, `src/lib/approvalNotPublication.route.test.mjs:92`, `src/lib/approvalNotPublication.route.test.mjs:169`, `src/lib/approvalNotPublication.route.test.mjs:199`, `docs/OPERATOR_LEDGER.md:473`, `docs/BUILD_JOURNAL.md:183`
 - [ ] **R5.2.2** Explicit publish step with verification
 - [ ] **R5.2.3** Lift copy honest until PUBLISHED exists
 ### R5.3

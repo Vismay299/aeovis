@@ -888,9 +888,13 @@
         "C9"
       ],
       "phase": "R0",
-      "status": "blocked",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "operator-session",
+      "evidence": [
+        "src/lib/engines/gsc.js:17",
+        "scripts/check-secrets.mjs:304",
+        "scripts/check-secrets.mjs:317"
+      ],
       "notes": [
         {
           "at": "2026-09-03T07:20:49.262Z",
@@ -901,10 +905,28 @@
           "at": "2026-09-03T07:20:51.011Z",
           "by": "controller",
           "text": "blocked (needs-secrets): Operator action only: revoking and reissuing a Google Cloud service-account key cannot be done from this environment. Filed rather than left in a report so it cannot be lost. The leaked key's read authority is currently nil (zero properties) but it authenticates as a service account in the aeovis project."
+        },
+        {
+          "at": "2026-09-13T10:41:23.352Z",
+          "by": "controller",
+          "text": "unblocked: Operator rotated GSC service account key; authenticated live in check:secrets"
+        },
+        {
+          "at": "2026-09-13T10:41:28.894Z",
+          "by": "operator-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T10:41:31.315Z",
+          "by": "operator-session",
+          "text": "Rotated service-account key operational and authenticating"
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-secrets"
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:41:35.826Z",
+        "note": "Verified by QA 3: key authenticated via OAuth2 JWT assertion; check:secrets passes"
+      }
     },
     {
       "id": "R0.1.16",
@@ -6152,7 +6174,7 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "Developer 1A",
       "evidence": [
         "src/lib/db.js:911",
@@ -6190,7 +6212,11 @@
           "text": "Added deps parameter to insertContentEvent and getContentEvents in src/lib/db.js. Both functions now use resolveClient(deps) instead of raw supabase import, accept injectable deps (client, memory), and throw DB errors directly instead of swallowing them into memory fallbacks. Memory fallback only occurs when client is null (no DB configured). All 22 tests in contentWriteFailure.test.mjs pass."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:40:37.438Z",
+        "note": "Verified by Judge & QA 1: deps injected, memory swallow removed, sabotage bites in contentWriteFailure.test.mjs:99,115"
+      }
     },
     {
       "id": "R2.8.9",
@@ -6257,7 +6283,7 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "Dev 3A",
       "evidence": [
         "src/lib/workers/scanWorker.js:2179",
@@ -6280,7 +6306,11 @@
           "text": "R2.8.10: Preserved write-error code in runFinalizePhase's thrown error message by adding a bracketed [code] prefix. The three codes (db_not_configured, db_write_failed, db_write_unconfirmed) now survive to scan_jobs.error_message and are machine-parseable by an operator. Added test driving all three codes through runFinalizePhase that asserts they are distinguishable on the job row."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:40:40.004Z",
+        "note": "Verified by Judge & QA 1: write-error code preserved in brackets, sabotage bites in insertScanWriteFailure.test.mjs:378"
+      }
     },
     {
       "id": "R2.8.12",
@@ -6356,7 +6386,7 @@
         "src/lib/db.js:479",
         "src/lib/db/content.js:6"
       ],
-      "status": "in_verification",
+      "status": "done",
       "owner": "Dev 4B",
       "evidence": [
         "src/lib/db/content.js:6",
@@ -6382,7 +6412,11 @@
           "text": "amended: TWO OF FOUR ANCHORS ALREADY FIXED: db.js:513 (listRecentScans) and db.js:479 (getScansByDomain host check) were already fixed by R2.8.12/R2.8.15/R2.8.16. The two remaining content.js anchors FIXED: (1) listResumableContentJobs (content.js:319-340) throws ContentReadError(db_not_configured) when no client, ContentReadError(db_read_failed) on query error. The content-worker route (route.js:239-241) catches and returns 500. (2) listContentRunsForJob (content.js:454-475) throws ContentReadError(db_read_failed) on query error. The status route (route.js:58-61) catches and returns 500. No-client memory fallback preserved. NEW CLASS: ContentReadError (content.js:6-21). TESTS: 3 new tests in dbContent.test.mjs. All 47 content+outage tests pass. Full suite: 2443 pass, 9 pre-existing unrelated failures."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:40:42.348Z",
+        "note": "Verified by Judge & QA 1: ContentReadError thrown instead of silent empty array, sabotage bites in dbContent.test.mjs:624,707"
+      }
     },
     {
       "id": "R2.8.14",
@@ -6685,9 +6719,15 @@
       "phase": "R2",
       "tags": [],
       "findings": [],
-      "status": "in_progress",
+      "status": "done",
       "owner": "impl-R2.9.7",
-      "evidence": [],
+      "evidence": [
+        "src/lib/scoring/measuredNumber.js:14",
+        "src/lib/scoring/measuredNumber.js:46",
+        "src/lib/scoring/metricCoercionGuard.test.mjs:154",
+        "src/lib/scoring/metricCoercionGuard.test.mjs:410",
+        "src/lib/scoring/enginePipeline.js:823"
+      ],
       "notes": [
         {
           "at": "2026-09-13T06:50:57.511Z",
@@ -6703,9 +6743,18 @@
           "at": "2026-09-13T07:12:09.209Z",
           "by": "controller",
           "text": "amended: Controller 2026-09-13, from the R2.7.16 verifier: four concrete producer-side sites already located, all in src/lib/scoring/enginePipeline.js, none yet fixed. (1) :823-827 - coveragePct and errorRatePct both fall back to a hard 0 when the denominator is 0, so a slice that ran NO queries publishes error_rate_pct: 0. This is the same field R2.7.16 defended one layer down, and its consumer-side fix cannot detect this one because by then it is a genuine 0. :969 is the field the sweep was already told to inspect and it is fed from here. (2) :1614-1626 and :1656/:1659/:1662 - || 0 and : 0 on persisted metrics in the scan-level mirror. :1626 is error_rate_pct: aioSummary.error_rate_pct || 0, the scan-level twin of the same field, and per the comment at :1629-1632 it is written straight onto the persisted scans row by scanWorker.js, so this one reaches the database and not just the screen. Note the adjacent :1646 and :1647 were ALREADY converted to ?? null by earlier work and these were missed - evidence the one-at-a-time approach is what this sweep exists to replace. Do not treat this list as complete; it is a head start on the enumeration."
+        },
+        {
+          "at": "2026-09-13T10:40:26.702Z",
+          "by": "impl-R2.9.7",
+          "text": "SWEEP complete: measuredNumberOrNull and ratioPctOrNull eliminate silent zero coercion across scoring layer with 19 guard tests"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:40:56.135Z",
+        "note": "Verified by Dev 3 & QA 1: bare Number() and || 0 sweep completed across scoring layer, 19/19 tests passing in metricCoercionGuard.test.mjs"
+      }
     },
     {
       "id": "R2.10.1",
@@ -6844,7 +6893,7 @@
       ],
       "phase": "R2",
       "tags": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "Dev 2C",
       "evidence": [
         "src/lib/scoring/enginePipeline.js:1434",
@@ -6872,7 +6921,11 @@
           "text": "Fixed aio isConfigured to check BRIGHTDATA_API_KEY instead of returning true. Fixed resolveEnabledEngines fallback to not return unconfigured aio. Added 5 new tests covering isConfigured true/false, resolveEnabledEngines dropping aio, fallback behavior, and a guard test against regression. Updated 6 existing tests in enginePipeline.test.mjs and 4 in scanChunkLedger.test.mjs to provide BRIGHTDATA_API_KEY where aio is expected. All 133 tests in affected files pass; 18 pre-existing failures in full suite are unrelated."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:40:44.861Z",
+        "note": "Verified by Judge & QA 1: aio isConfigured reflects BRIGHTDATA_API_KEY, sabotage bites in enginePipeline.test.mjs:325,337,368"
+      }
     },
     {
       "id": "R2.10.5",
@@ -7693,9 +7746,14 @@
       ],
       "phase": "R3",
       "tags": [],
-      "status": "in_progress",
+      "status": "done",
       "owner": "test-R3.2.7",
-      "evidence": [],
+      "evidence": [
+        "src/lib/liveWriteGuardAdoption.test.mjs:482",
+        "src/lib/liveWriteGuardAdoption.test.mjs:624",
+        "src/lib/liveWriteGuardAdoption.test.mjs:669",
+        "src/lib/liveWriteGuard.test.mjs:1030"
+      ],
       "notes": [
         {
           "at": "2026-09-04T04:11:59.616Z",
@@ -7706,9 +7764,18 @@
           "at": "2026-09-13T07:05:46.504Z",
           "by": "test-R3.2.7",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T10:40:23.974Z",
+          "by": "test-R3.2.7",
+          "text": "Implemented static adoption walker over all tests and runtime covers enforcement at armedLiveDbGate and liveDbGate"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:40:52.885Z",
+        "note": "Verified by Dev 2 & QA 2: live write guard adoption enforced across all test files with 6/6 tests passing in liveWriteGuardAdoption.test.mjs"
+      }
     },
     {
       "id": "R3.2.9",
@@ -8245,7 +8312,7 @@
         "src/lib/workers/scanWorker.js",
         "src/lib/workers/scanSchedule.test.mjs"
       ],
-      "status": "in_verification",
+      "status": "done",
       "owner": "Dev 5A",
       "evidence": [
         "src/lib/db/analytics.js:740",
@@ -8268,7 +8335,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:40:47.062Z",
+        "note": "Verified by Judge & QA 1: direct atomic query unit tests added at scanSchedule.test.mjs:387, atomic ignoreDuplicates proven, 10/10 tests pass"
+      }
     },
     {
       "id": "R3.5.1",
@@ -8288,7 +8359,7 @@
         "src/lib/content/contentWorker.js:136-160"
       ],
       "phase": "R3",
-      "status": "in_verification",
+      "status": "done",
       "owner": "Dev 5B",
       "evidence": [
         "src/lib/content/contentWorker.js:136",
@@ -8308,7 +8379,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:40:49.591Z",
+        "note": "Verified by Judge & QA 1: per-block checkpoints in content jobs, anchor file:line amended, sabotage bites in contentWorker.test.mjs:859,953"
+      }
     },
     {
       "id": "R3.5.2",
@@ -9450,9 +9525,15 @@
         "scripts/backfill-analytics.mjs",
         "src/lib/analytics/rollup.js:270"
       ],
-      "status": "in_progress",
+      "status": "done",
       "owner": "impl-R4.3.3",
-      "evidence": [],
+      "evidence": [
+        "src/lib/analytics/historicalBackfill.js:102",
+        "src/lib/analytics/historicalBackfill.js:193",
+        "src/lib/analytics/historicalBackfill.test.mjs:30",
+        "src/lib/analytics/historicalBackfill.test.mjs:125",
+        "supabase/migrations/015_brand_metrics_citation_state.sql:1"
+      ],
       "notes": [
         {
           "at": "2026-09-05T07:13:26.203Z",
@@ -9463,9 +9544,18 @@
           "at": "2026-09-13T06:59:19.051Z",
           "by": "impl-R4.3.3",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T10:40:30.617Z",
+          "by": "impl-R4.3.3",
+          "text": "Honest 5-way classification for historical citation denominator with migration 015 schema constraints and 24 unit tests"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:41:00.076Z",
+        "note": "Verified by Dev 4 & QA 1: historical citation denominator 5-way classification implemented, migration 015 added, 24/24 tests pass in historicalBackfill.test.mjs"
+      }
     },
     {
       "id": "R4.3.4",
@@ -9689,9 +9779,13 @@
         "src/lib/llmConfig.js:22"
       ],
       "phase": "R5",
-      "status": "blocked",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "operator-session",
+      "evidence": [
+        "src/lib/llmConfig.js:22",
+        "scripts/check-secrets.mjs:218",
+        "scripts/check-secrets.mjs:234"
+      ],
       "notes": [
         {
           "at": "2026-08-30T08:31:18.600Z",
@@ -9707,10 +9801,28 @@
           "at": "2026-08-30T08:34:16.777Z",
           "by": "controller",
           "text": "amended: CONFIG SWITCHED, KEY STILL MISSING. .env.local now sets only the canonical names: LLM_BASE_URL=https://openrouter.ai/api/v1, LLM_MODEL=z-ai/glm-5.2:free (operator's choice), CONTENT_MODEL=z-ai/glm-5.2:free. All three OPENROUTER_* aliases retired; the old MiMo key is preserved commented out as MIMO_LEGACY_KEY in case that account is topped up instead. MODEL ID VERIFIED AGAINST OPENROUTER'S PUBLIC CATALOGUE BEFORE WIRING, not assumed: GET /api/v1/models returns 396 models and z-ai/glm-5.2:free is an exact match — Z.ai GLM 5.2 (free), 256000 context, pricing prompt 0 completion 0. Sixteen z-ai ids exist and only this one is free, so a near-miss would have been easy. Resolution proven through the app's own llmConfig: base https://openrouter.ai/api/v1, model z-ai/glm-5.2:free, provider openrouter, token param max_tokens (not MiMo's max_completion_tokens). check:secrets now reports llm UNCONFIGURED missing LLM_API_KEY rather than FAIL, which is the correct distinction between an absent credential and a broken one, and the three llmConfig deprecation warnings are gone. 879/879 green. REMAINING: one sk-or-v1 key. Nothing else about this task is unresolved. NOTE FOR R5.1.2: this model is priced at a MEASURED zero — OpenRouter's catalogue reports prompt 0 and completion 0 — which is a different thing from an unpriced id defaulting to $0. That distinction is the honest free-tier branch its middle gate needs."
+        },
+        {
+          "at": "2026-09-13T10:41:39.511Z",
+          "by": "controller",
+          "text": "unblocked: OpenRouter key configured in .env.local; check:secrets verified live with deepseek model"
+        },
+        {
+          "at": "2026-09-13T10:41:42.065Z",
+          "by": "operator-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T10:41:44.581Z",
+          "by": "operator-session",
+          "text": "OpenRouter configured, check:secrets passes live 200 OK"
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-llm"
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:41:47.136Z",
+        "note": "Verified by QA 3: model ~deepseek/deepseek-v4-flash-latest answered on openrouter; check:secrets passes"
+      }
     },
     {
       "id": "R5.2.1",
@@ -9729,7 +9841,7 @@
         "src/app/api/content-items/[id]/decision/route.js:93-102"
       ],
       "phase": "R5",
-      "status": "in_verification",
+      "status": "done",
       "owner": "impl-R5.2.1",
       "evidence": [
         "src/app/api/content-items/[id]/decision/route.js:35",
@@ -9762,7 +9874,11 @@
           "text": "Anchors re-verified exact at 4323f78 (contentEventUrl at :19-27, the insertContentEvent block at :93-102). DELETED: contentEventUrl() and the approval-time content_events write, plus the 'import { insertContentEvent } from @/lib/db' that only they used. Approval now produces no URL and writes no event. The absence is stated on the wire, not inferred: the decision response carries publication: { published:false, url:null, reason:'approved_not_published'|'not_approved', detail } so a caller can distinguish 'approved, not published' from 'published at <url>' and from 'not approved' (route.js:35,:139). DOWNSTREAM READERS TRACED: (1) GET /api/content-items/[id]/lift computes from target_queries vs scans and never read content_events - unaffected; (2) GET /api/content-events -> computeContentLiftReports is the only reader of the fabricated rows, reached via services/api.js getContentEvents -> components/dashboard/ContentLiftPanel.jsx. HISTORICAL ROWS: yes, they can exist - every prior approval of a geo_article wrote one, and nothing in this task deletes them. Before this change a reader saw the fabricated URL rendered as a real published location with a lift percentage next to it. Now GET /api/content-events runs withFabricatedUrlsQuarantined (content-events/route.js:31,:74,:81): any row whose hostname is studio.perceev.app comes back with lift/current_score/previous_score null, related_prompts [], fabricated_url:true, lift_unavailable_reason:'fabricated_url' and a detail saying it is not a measured zero. No fabricated lift number is served any more. POST /api/content-events also 400s on that host (:100) so the fabrication cannot re-enter by the manual door. KNOWN GAP I DID NOT FIX (out of scope, needs its own task): ContentLiftPanel.jsx is in the do-not-touch list, and it renders any null-lift row as 'Awaiting rescan' and still prints event.url - so a quarantined legacy row now reads as a real page awaiting a rescan rather than as a fabricated row. The API says fabricated_url; the dashboard does not read it. TEST: no test asserted the synthesis (searched src for studio.perceev.app / contentEventUrl / insertContentEvent - only db.js unit tests, which are about the write path and stay). Added src/lib/approvalNotPublication.route.test.mjs, 9 tests, which drives the REAL POST handler with no Supabase client (memory maps are the write log) and asserts: approval adds no content_events row, no URL appears anywhere in the response, the publication envelope is explicit and distinguishes approved/not-approved, the route source no longer contains the host or the synthesizer, the quarantine nulls lift without coercing to 0, and the manual POST is refused. I exercised all of it: npm run test:scoring is 2509 tests / 2483 pass / 0 fail / 26 skipped, against the 2500/2474/0/26 baseline (+9 = this file). Note I deliberately did NOT add a comment-stripping helper to the new test - the R6.4.14 enumeration that would have to register it lives in src/components/dashboard/routeReachability.test.mjs, a do-not-touch file - so the source guard reads raw source and the route comment names finding B13 instead of repeating the host. Docs: OPERATOR_LEDGER §D.1 and the B13 journal row updated to say what is deleted, what survives in the table, and that R5.2.2/R5.2.3 remain open. I did not touch ContentItemView.jsx (R5.2.3) or write a migration."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T10:40:34.822Z",
+        "note": "Verified by Judge & QA 1: working tree committed, 9/9 tests pass, sabotage proof confirmed in approvalNotPublication.route.test.mjs:109,127,169"
+      }
     },
     {
       "id": "R5.2.2",
