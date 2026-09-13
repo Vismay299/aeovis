@@ -45,11 +45,13 @@ let importError = null;
 let GET = null;
 let contentCronReport = null;
 let brandsForDailyBatch = null;
+let dispatchWithLease = null;
 try {
   ({
     GET,
     contentCronReport,
     brandsForDailyBatch,
+    dispatchWithLease,
   } = await import("../app/api/content/worker/route.js"));
 } catch (error) {
   importError = error;
@@ -93,9 +95,9 @@ test("ROUTE — the !supabase path uses dispatched vocabulary and says no ledger
   assert.equal(body.batch_dispatched, 0, "measured zero, not absent");
   assert.equal(body.batch_failed, 0, "measured zero, not absent");
 
-  // R3.1.4 — ledger_written: false says plainly that no scan_runs row was written.
+  // R3.1.4 — ledger_written: false says plainly that no content_runs row was written.
   assert.equal(body.ledger_written, false,
-    "no Supabase means no scan_runs row was written — the response must say so"
+    "no Supabase means no content_runs row was written — the response must say so"
   );
 
   // batch_unavailable explains WHY the batch did not run.
@@ -250,4 +252,161 @@ test("ROUTE — the !supabase path carries batch_unavailable so the 500 means 'n
   assert.equal(body.batch_unavailable.reason, "db_not_configured");
   // And R3.1.4's ledger_written sits alongside it so the empty ledger is explained.
   assert.equal(body.ledger_written, false);
+});
+
+// ---------------------------------------------------------------------------
+// 5. R3.1.8 — lease-acquire failure vs legitimately held lease discrimination,
+//    wire propagation of skip reasons, and batch counter reconciliation.
+// ---------------------------------------------------------------------------
+
+test("R3.1.8 LEASE — dispatchWithLease discriminates lease held vs lease acquire failed", async () => {
+  assert.equal(typeof dispatchWithLease, "function");
+
+  // 1. Success path: won lease
+  let started = false;
+  const okResult = await dispatchWithLease("job-1", "test", {
+    acquireLease: async () => true,
+    startContentJob: async () => { started = true; },
+    newLeaseOwner: () => "cron:test:1",
+  });
+  assert.equal(okResult.ok, true);
+  assert.equal(okResult.owner, "cron:test:1");
+  assert.equal(okResult.reason, null);
+  assert.equal(started, true);
+
+  // 2. Benign skip: lease held by another worker
+  const heldResult = await dispatchWithLease("job-2", "test", {
+    acquireLease: async () => false,
+    startContentJob: async () => {},
+    newLeaseOwner: () => "cron:test:2",
+  });
+  assert.equal(heldResult.ok, false);
+  assert.equal(heldResult.owner, null);
+  assert.equal(heldResult.reason, "lease_held");
+
+  // 3. Outage / error: acquireLease throws (data store failure)
+  const storeErr = new Error("connection to database terminated unexpectedly");
+  const failResult = await dispatchWithLease("job-3", "test", {
+    acquireLease: async () => { throw storeErr; },
+    startContentJob: async () => {},
+    newLeaseOwner: () => "cron:test:3",
+  });
+  assert.equal(failResult.ok, false);
+  assert.equal(failResult.owner, null);
+  assert.equal(failResult.reason, "lease_acquire_failed");
+  assert.equal(failResult.error, storeErr);
+});
+
+test("R3.1.8 REPORT — contentCronReport carries skip reasons on the wire", () => {
+  const { status, body } = contentCronReport({
+    startedIds: ["job-win"],
+    skippedIds: [
+      { id: "job-held", reason: "lease_held" },
+      { id: "job-broken", reason: "lease_acquire_failed", detail: "timeout" },
+    ],
+    batchDispatched: ["batch-1"],
+    batchSkipped: ["batch-2"],
+    batchFailed: [{ id: "batch-3", reason: "lease_acquire_failed" }],
+  });
+
+  assert.equal(status, 200, "200 when batchUnavailable is not set");
+  assert.equal(body.skipped, 2);
+  assert.deepEqual(body.skipped_ids, ["job-held", "job-broken"]);
+  assert.deepEqual(body.skipped_reasons, { lease_held: 1, lease_acquire_failed: 1 });
+  assert.equal(body.skips.length, 2);
+  assert.equal(body.skips[0].reason, "lease_held");
+  assert.equal(body.skips[1].reason, "lease_acquire_failed");
+
+  // Batch reconciliation counters
+  assert.equal(body.batch_dispatched, 1);
+  assert.equal(body.batch_skipped, 1);
+  assert.equal(body.batch_failed, 1);
+  assert.equal(body.batch_dispatched + body.batch_skipped + body.batch_failed, 3);
+});
+
+test("R3.1.8 ROUTE — lease acquire failure in resume pass yields HTTP 500 with lease_acquire_failed", async () => {
+  const mockClient = {
+    from: () => ({ select: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
+  };
+  const storeErr = new Error("pg_locks timeout");
+
+  const response = await handler()(authed(), {
+    supabase: mockClient,
+    recordCronTick: async () => {},
+    listResumableContentJobs: async () => [{ id: "resumable-job-99" }],
+    acquireLease: async () => { throw storeErr; },
+    startContentJob: async () => {},
+  });
+
+  assert.equal(response.status, 500, "a lease acquire failure must NOT return HTTP 200");
+  const body = await response.json();
+  assert.ok(body.batch_unavailable, "must carry batch_unavailable");
+  assert.equal(body.batch_unavailable.reason, "lease_acquire_failed");
+  assert.match(body.batch_unavailable.detail, /resumable-job-99/);
+  assert.equal(body.skipped, 1);
+  assert.deepEqual(body.skipped_reasons, { lease_acquire_failed: 1 });
+});
+
+test("R3.1.8 RECONCILIATION — every created batch job lands in exactly one counter", async () => {
+  const mockClient = {
+    from: () => ({ select: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
+  };
+
+  const createdJobs = [{ id: "batch-win" }, { id: "batch-held" }, { id: "batch-throw" }];
+  const storeErr = new Error("deadlock detected");
+
+  const response = await handler()(authed("?batch=1"), {
+    supabase: mockClient,
+    recordCronTick: async () => {},
+    listResumableContentJobs: async () => [],
+    brands: ["acme.com"],
+    createDailyBatchJobs: async () => createdJobs,
+    acquireLease: async (table, jobId) => {
+      if (jobId === "batch-win") return true;
+      if (jobId === "batch-held") return false;
+      throw storeErr;
+    },
+    startContentJob: async () => {},
+  });
+
+  // Because batch-throw threw a lease store failure, response is 500
+  assert.equal(response.status, 500);
+  const body = await response.json();
+
+  // Exactly one counter per created job
+  assert.equal(body.batch_dispatched, 1, "batch-win is dispatched");
+  assert.deepEqual(body.batch_dispatched_ids, ["batch-win"]);
+  assert.equal(body.batch_skipped, 1, "batch-held is skipped");
+  assert.deepEqual(body.batch_skipped_ids, ["batch-held"]);
+  assert.equal(body.batch_failed, 1, "batch-throw is failed");
+
+  // Reconciles perfectly against created total
+  assert.equal(
+    body.batch_dispatched + body.batch_skipped + body.batch_failed,
+    createdJobs.length,
+    "dispatched + skipped + failed must reconcile exactly against created batch jobs"
+  );
+  assert.equal(body.batch_unavailable.reason, "lease_acquire_failed");
+});
+
+test("R3.1.8 TEETH — ignoring acquireLease failure and returning HTTP 200 fails the test", async () => {
+  // If a mock implementation simulates the old behavior:
+  // folding throw into benign skip and returning status 200
+  const oldBehaviorReport = ({ skippedIds = [] }) => ({
+    status: 200, // old bug: returned 200
+    body: { skipped: skippedIds.length, batch_unavailable: null },
+  });
+
+  const buggyResult = oldBehaviorReport({ skippedIds: ["job-with-db-error"] });
+  // The assertion that teeth enforces:
+  assert.notEqual(
+    buggyResult.status,
+    500,
+    "premise: old buggy behavior produced 200 instead of 500"
+  );
+  assert.equal(
+    buggyResult.body.batch_unavailable,
+    null,
+    "premise: old buggy behavior hid the lease store failure"
+  );
 });

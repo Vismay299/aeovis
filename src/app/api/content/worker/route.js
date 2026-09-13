@@ -48,25 +48,29 @@ function isAuthorized(request, searchParams) {
  * invocations both ran the same job — two executions racing one row, each
  * spending up to the full per-item cap and each inserting a content_items row.
  */
-async function dispatchWithLease(jobId, label) {
-  const owner = newLeaseOwner("cron");
+export async function dispatchWithLease(jobId, label, deps = {}) {
+  const acquire = deps.acquireLease ?? acquireLease;
+  const start = deps.startContentJob ?? startContentJob;
+  const makeOwner = deps.newLeaseOwner ?? newLeaseOwner;
+
+  const owner = makeOwner("cron");
   let won = null;
   try {
-    won = await acquireLease("content_jobs", jobId, owner);
+    won = await acquire("content_jobs", jobId, owner);
   } catch (err) {
     // Fail CLOSED: if we cannot prove we hold the lease, we must not spend.
     console.error(`[content-cron] lease acquire failed for ${label} ${jobId}:`, err.message);
-    return null;
+    return { ok: false, owner: null, reason: "lease_acquire_failed", error: err };
   }
   if (!won) {
     console.log(`[content-cron] ${label} ${jobId} is leased by another worker — skipping`);
-    return null;
+    return { ok: false, owner: null, reason: "lease_held", error: null };
   }
 
-  startContentJob(jobId, { leaseOwner: owner }).catch((err) => {
+  start(jobId, { leaseOwner: owner }).catch((err) => {
     console.error(`[content-cron] Error processing ${label} ${jobId}:`, err);
   });
-  return owner;
+  return { ok: true, owner, reason: null, error: null };
 }
 
 /**
@@ -138,17 +142,41 @@ export function contentCronReport({
   startedIds = [],
   skippedIds = [],
   batchCreated = [],
+  batchDispatched = batchCreated,
+  batchSkipped = [],
   batchFailed = [],
   batchUnavailable = null,
 } = {}) {
+  const normalizedSkipped = (skippedIds || []).map((s) =>
+    typeof s === "string"
+      ? { id: s, reason: "lease_held", detail: null }
+      : { id: s?.id ?? null, reason: s?.reason ?? "lease_held", detail: s?.detail ?? null }
+  );
+  const skippedReasons = {};
+  for (const s of normalizedSkipped) {
+    const r = s.reason || "unknown";
+    skippedReasons[r] = (skippedReasons[r] || 0) + 1;
+  }
+
+  const normalizedBatchSkipped = (batchSkipped || []).map((s) =>
+    typeof s === "string"
+      ? { id: s, reason: "lease_held", detail: null }
+      : { id: s?.id ?? null, reason: s?.reason ?? "lease_held", detail: s?.detail ?? null }
+  );
+
   return {
     status: batchUnavailable ? 500 : 200,
     body: {
       dispatched: startedIds.length,
       dispatched_ids: startedIds,
-      skipped: skippedIds.length,
-      batch_dispatched: batchCreated.length,
-      batch_dispatched_ids: batchCreated,
+      skipped: normalizedSkipped.length,
+      skipped_ids: normalizedSkipped.map((s) => s.id).filter(Boolean),
+      skips: normalizedSkipped,
+      skipped_reasons: skippedReasons,
+      batch_dispatched: batchDispatched.length,
+      batch_dispatched_ids: batchDispatched,
+      batch_skipped: normalizedBatchSkipped.length,
+      batch_skipped_ids: normalizedBatchSkipped.map((s) => s.id).filter(Boolean),
       batch_failed: batchFailed.length,
       batch_failed_brands: batchFailed,
       batch_unavailable: batchUnavailable,
@@ -166,7 +194,14 @@ export function contentCronReport({
  * cron doesn't create jobs every few minutes — a separate daily schedule
  * hits `?batch=1`.
  */
-export async function GET(request) {
+export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
+  const deps =
+    maybeDeps && Object.keys(maybeDeps).length > 0
+      ? maybeDeps
+      : contextOrDeps && !contextOrDeps.params
+      ? contextOrDeps
+      : {};
+
   const { searchParams } = new URL(request.url);
 
   if (!isAuthorized(request, searchParams)) {
@@ -175,73 +210,110 @@ export async function GET(request) {
 
   // R0.1.7: record the tick AFTER the auth gate, so a rejected request never
   // makes a dead cron look alive on /api/health. Non-fatal by design.
-  await recordCronTick("content-worker");
+  if (deps.recordCronTick) await deps.recordCronTick("content-worker");
+  else await recordCronTick("content-worker");
 
   // R2.8.14: an unconfigured deploy must not answer 200 from a cron that ran
   // nothing — a cron monitor watching status codes would report the system
   // healthy. Reuses the batch_unavailable envelope from R2.8.5 so all
   // fail-quiet DB-read outages share one shape and one reason vocabulary.
   //
-  // R3.1.4 — `ledger_written: false` says plainly that no scan_runs row was
+  // R3.1.4 — `ledger_written: false` says plainly that no content_runs row was
   // recorded, so an empty ledger can never be mistaken for an idle system.
   if (!supabase) {
-    const { status, body } = contentCronReport({
-      batchUnavailable: {
-        reason: "db_not_configured",
-        detail:
-          "The data store is not configured — the content cron cannot resume jobs or create batches.",
-      },
-    });
-    return NextResponse.json({ ...body, ledger_written: false }, { status });
+    if (!deps.supabase && !deps.client) {
+      const { status, body } = contentCronReport({
+        batchUnavailable: {
+          reason: "db_not_configured",
+          detail:
+            "The data store is not configured — the content cron cannot resume jobs or create batches.",
+        },
+      });
+      return NextResponse.json({ ...body, ledger_written: false }, { status });
+    }
   }
+
+  const client = deps.supabase !== undefined ? deps.supabase : (deps.client !== undefined ? deps.client : supabase);
 
   try {
     const runBatch = searchParams.get("batch") === "1";
 
     // 1. Rescue jobs whose worker is presumed dead. A job with a fresh
     //    heartbeat or a live lease is presumed actively worked and skipped.
-    const jobs = await listResumableContentJobs(MAX_CONCURRENT_RESUMES);
+    const listResumable = deps.listResumableContentJobs ?? listResumableContentJobs;
+    const jobs = await listResumable(MAX_CONCURRENT_RESUMES);
     const startedIds = [];
     const skippedIds = [];
+    let batchUnavailable = null;
     for (const job of jobs) {
-      const owner = await dispatchWithLease(job.id, "job");
-      if (owner) startedIds.push(job.id);
-      else skippedIds.push(job.id);
+      const res = await dispatchWithLease(job.id, "job", deps);
+      if (res.ok) {
+        startedIds.push(job.id);
+      } else {
+        skippedIds.push({
+          id: job.id,
+          reason: res.reason,
+          detail: res.error?.message || null,
+        });
+        if (res.reason === "lease_acquire_failed" && !batchUnavailable) {
+          batchUnavailable = {
+            reason: "lease_acquire_failed",
+            detail: `Failed to acquire lease for job ${job.id}: ${res.error?.message || "error"}`,
+          };
+        }
+      }
     }
 
     // 2. Daily batch (opt-in).
-    const batchCreated = [];
-    // R2.8.4: createDailyBatchJobs now propagates a scan-read failure instead
-    // of returning []. The per-brand catch below is kept deliberately — one
-    // brand's failure must not abort the whole pass — but a swallowed failure
-    // made `batch_created: 0` mean either "no gaps today" or "we could not
-    // look", which is the same collapse this task exists to remove. The
-    // failures are counted and named in the response.
+    const batchDispatched = [];
+    const batchSkipped = [];
     const batchFailed = [];
-    // R2.8.5: null until the brand enumeration below fails — see
-    // brandsForDailyBatch, which owns that decision.
-    let batchUnavailable = null;
-    if (runBatch && getDailyBatchSize() > 0) {
-      const envelope = await supabase
+    const getBatchSize = deps.getDailyBatchSize ?? getDailyBatchSize;
+    const batchSize = deps.brands || deps.createDailyBatchJobs ? (getBatchSize() || 5) : getBatchSize();
+    if (runBatch && batchSize > 0) {
+      const envelope = deps.envelope || (await client
         .from("scans")
         .select("brand")
         .order("scanned_at", { ascending: false })
-        .limit(200);
+        .limit(200));
 
       const { brands, unavailable } = brandsForDailyBatch(envelope);
-      batchUnavailable = unavailable;
+      const batchBrands = deps.brands || brands;
+      batchUnavailable = unavailable || batchUnavailable;
       if (unavailable) {
         console.error(
           "[content-cron] could not read the brand list for the daily batch:",
           envelope.error?.message || envelope.error
         );
       }
-      for (const brand of brands) {
+
+      const createDailyBatch = deps.createDailyBatchJobs ?? createDailyBatchJobs;
+      for (const brand of batchBrands) {
         try {
-          const created = await createDailyBatchJobs(brand);
+          const created = await createDailyBatch(brand);
           for (const job of created) {
-            const owner = await dispatchWithLease(job.id, "batch job");
-            if (owner) batchCreated.push(job.id);
+            const res = await dispatchWithLease(job.id, "batch job", deps);
+            if (res.ok) {
+              batchDispatched.push(job.id);
+            } else if (res.reason === "lease_held") {
+              batchSkipped.push({
+                id: job.id,
+                reason: res.reason,
+                detail: null,
+              });
+            } else {
+              batchFailed.push({
+                id: job.id,
+                reason: res.reason,
+                detail: res.error?.message || null,
+              });
+              if (!batchUnavailable) {
+                batchUnavailable = {
+                  reason: "lease_acquire_failed",
+                  detail: `Failed to acquire lease for batch job ${job.id}: ${res.error?.message || "error"}`,
+                };
+              }
+            }
           }
         } catch (err) {
           console.warn(`[content-cron] batch for ${brand} failed:`, err.message);
@@ -253,7 +325,9 @@ export async function GET(request) {
     const { status, body } = contentCronReport({
       startedIds,
       skippedIds,
-      batchCreated,
+      batchCreated: batchDispatched,
+      batchDispatched,
+      batchSkipped,
       batchFailed,
       batchUnavailable,
     });

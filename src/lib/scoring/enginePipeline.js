@@ -180,7 +180,7 @@ export const EMPTY_ANSWER = "empty_answer";
  * previous wording here — "always produce an answer unless the API errors" —
  * was the assumption that made the bug invisible.
  */
-async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, competitors, stats) {
+export async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, competitors, stats) {
   const probeFn = engine.probe;
   const engineName = engine.name;
 
@@ -203,7 +203,10 @@ async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, 
     competitors_cited: [],
     brands: [], // P1.2 — see probeAio's field of the same name
     error: null,
-    cost: 0,
+    cost: null,
+    cost_state: null,
+    cost_source: null,
+    cost_state_detail: null,
     // R2.2.2 — whether `citations` above is a MEASUREMENT or the absence of
     // one. Distinct from `error`, which speaks only for the ANSWER. A multi-leg
     // engine (Perplexity: /chat/completions for the answer, /search for the
@@ -253,7 +256,13 @@ async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, 
   // measured references next to flags that pretend they were never read.
   // `visible` is recomputed once below, after the answer text is scanned for
   // mentions — the text half of that OR does not exist on this path.
-  result.cost = probeResult.cost || 0;
+  // R2.9.6 — preserve null cost and propagate cost_state / cost_source / cost_state_detail.
+  // Copied once above the error branch, so that unpriced, failed, or unmeasured probes
+  // never fabricate a $0 measurement.
+  result.cost = probeResult.cost !== undefined ? probeResult.cost : null;
+  result.cost_state = probeResult.cost_state ?? null;
+  result.cost_source = probeResult.cost_source ?? null;
+  result.cost_state_detail = probeResult.cost_state_detail ?? null;
   result.citations = probeResult.citations || [];
   result.references = (probeResult.references || []).map((r) => ({
     href: r.href,

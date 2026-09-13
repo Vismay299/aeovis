@@ -195,11 +195,6 @@ const DECLARED_COERCIONS = [
     "`Array.length` on an optional chain: `|| 0` is the undefined guard for a missing array, and the result is a boolean, not a published metric. Matched only because the word `cost` appears in the surrounding window.",
   ],
   [
-    "enginePipeline.js » cost » result.cost = probeResult.cost || 0;",
-    DEFERRED,
-    "THIS IS THE DEFECT AND IT IS OWNED BY R2.9.6, which is in flight on this exact line: probeTextEngine drops `cost_state` and coerces a deliberate `cost: null` (an unpriced model) into $0, violating standing rule 3. R2.9.7 was instructed to enumerate it and leave it alone so two tasks do not edit one line.",
-  ],
-  [
     "enginePipeline.js » enginesCounted » enginesCounted: hasSuppliedCount ? suppliedCount : 0,",
     DEFERRED,
     "the legacy-path fallback in describeScanDataSourceIssue. R2.9.7 fixed the COERCION above it (`Number(options.enginesCounted)` could not tell null from 0) but deliberately left this `: 0`: it is the documented legacy contract that this function's own docstring and services/api.js:687 both cite by name, and making it null is a consumer-visible change that needs the owner of that contract. Filed as a follow-up.",
@@ -394,9 +389,8 @@ test("R2.9.7 GUARD FLOOR — the coercion and allowlist corpora are intact", () 
     }
   );
   assertCorpusIntact(DECLARED_COERCIONS, "DECLARED_COERCIONS", {
-    floor: 20,
+    floor: 19,
     required: [
-      "enginePipeline.js » cost » result.cost = probeResult.cost || 0;",
       "aioPipeline.js » visibilityPct » : 0.0;",
       "enginePipeline.js » enginesCounted » enginesCounted: hasSuppliedCount ? suppliedCount : 0,",
     ],
@@ -420,7 +414,7 @@ test("R2.9.7 GUARD — every bare coercion on a metric-named field is declared, 
   // Teeth for the whole test: if the walker stops matching, everything below is
   // vacuous and a reintroduced `Number(slice.error_rate_pct)` sails through.
   assert.ok(
-    offences.length >= 20,
+    offences.length >= 19,
     `the walker found ${offences.length} coercion sites in src/lib/scoring/, well under the ${25} it was ` +
       `written against. Either a large cleanup landed (lower this floor in the same commit and say so) or ` +
       `the walker has stopped reading the code it guards.`

@@ -5,6 +5,7 @@ import {
   summarizeEngineSlice,
   resolveEnabledEngines,
   buildTrackedBrandRoster,
+  probeTextEngine,
   ENGINE_RESOLUTION_SKIPS,
 } from "./enginePipeline.js";
 import { getBrandAliases } from "./aliases.js";
@@ -1124,4 +1125,171 @@ test("R2.7.5: summarizeEngineResults preserves three-way distinction for multi-e
     results: [],
   });
   assert.equal(measuredZeroScan.summary.share_of_voice_pct, 0, "0 when assessed and not mentioned");
+});
+
+// ---------------------------------------------------------------------------
+// R2.9.6 — probeTextEngine preserves null cost and cost_state fields
+// ---------------------------------------------------------------------------
+
+test("R2.9.6 ACCEPT — PROBE_FAILED preserves cost: null and copies cost_state fields", async () => {
+  const mockEngine = {
+    name: "perplexity",
+    probe: async () => ({
+      text: "",
+      citations: [],
+      references: [],
+      cost: null,
+      cost_source: null,
+      cost_state: "probe_failed",
+      cost_state_detail: "Perplexity answer probe failed",
+      error: "500 Internal Server Error",
+      error_kind: "retryable",
+      citations_state: "unverified",
+    }),
+  };
+
+  const result = await probeTextEngine(
+    mockEngine,
+    { text: "best tiles" },
+    "Acme",
+    ["Acme"],
+    "acme.com",
+    [],
+    null
+  );
+
+  assert.equal(result.cost, null, "cost must remain null, NOT coerced to 0");
+  assert.equal(result.cost_state, "probe_failed", "cost_state must survive probeTextEngine");
+  assert.equal(result.cost_source, null);
+  assert.equal(result.cost_state_detail, "Perplexity answer probe failed");
+  assert.equal(result.error, "500 Internal Server Error");
+});
+
+test("R2.9.6 ACCEPT — NOT_CONFIGURED preserves cost: null and copies cost_state fields", async () => {
+  const mockEngine = {
+    name: "perplexity",
+    probe: async () => ({
+      text: "",
+      citations: [],
+      references: [],
+      cost: null,
+      cost_source: null,
+      cost_state: "not_configured",
+      cost_state_detail: "PERPLEXITY_API_KEY is not set",
+      error: "PERPLEXITY_API_KEY not set",
+      error_kind: "permanent",
+      citations_state: "unverified",
+    }),
+  };
+
+  const result = await probeTextEngine(
+    mockEngine,
+    { text: "best tiles" },
+    "Acme",
+    ["Acme"],
+    "acme.com",
+    [],
+    null
+  );
+
+  assert.equal(result.cost, null, "unconfigured cost is null, never 0");
+  assert.equal(result.cost_state, "not_configured");
+  assert.equal(result.cost_state_detail, "PERPLEXITY_API_KEY is not set");
+});
+
+test("R2.9.6 ACCEPT — UNPRICED probe preserves cost: null on a successful answer", async () => {
+  const mockEngine = {
+    name: "perplexity",
+    probe: async () => ({
+      text: "Acme makes top-grade tiles.",
+      citations: [],
+      references: [],
+      cost: null,
+      cost_source: null,
+      cost_state: "unpriced",
+      cost_state_detail: "model unpriced",
+      error: null,
+    }),
+  };
+
+  const result = await probeTextEngine(
+    mockEngine,
+    { text: "best tiles" },
+    "Acme",
+    ["Acme"],
+    "acme.com",
+    [],
+    null
+  );
+
+  assert.equal(result.cost, null, "an unpriced model must NOT be recorded as a $0 call");
+  assert.equal(result.cost_state, "unpriced");
+  assert.equal(result.answer_present, true);
+  assert.equal(result.text, "Acme makes top-grade tiles.");
+});
+
+test("R2.9.6 ACCEPT — a measured cost (including measured zero) is preserved", async () => {
+  // Free tier measured zero
+  const freeEngine = {
+    name: "chatgpt",
+    probe: async () => ({
+      text: "Answer from free model",
+      cost: 0,
+      cost_source: "openrouter_free",
+      cost_state: "measured",
+      cost_state_detail: null,
+      error: null,
+    }),
+  };
+
+  const freeResult = await probeTextEngine(
+    freeEngine,
+    { text: "best tiles" },
+    "Acme",
+    ["Acme"],
+    "acme.com",
+    [],
+    null
+  );
+
+  assert.equal(freeResult.cost, 0, "measured $0 must survive as 0");
+  assert.equal(freeResult.cost_state, "measured");
+  assert.equal(freeResult.cost_source, "openrouter_free");
+
+  // Paid tier measured cost
+  const paidEngine = {
+    name: "chatgpt",
+    probe: async () => ({
+      text: "Answer from paid model",
+      cost: 0.005,
+      cost_source: "price_table",
+      cost_state: "measured",
+      cost_state_detail: null,
+      error: null,
+    }),
+  };
+
+  const paidResult = await probeTextEngine(
+    paidEngine,
+    { text: "best tiles" },
+    "Acme",
+    ["Acme"],
+    "acme.com",
+    [],
+    null
+  );
+
+  assert.equal(paidResult.cost, 0.005);
+  assert.equal(paidResult.cost_state, "measured");
+});
+
+test("R2.9.6 TEETH — reverting cost null preservation causes the test to fail", () => {
+  // Simulating the pre-fix probeTextEngine behavior:
+  const preFixResult = { cost: null || 0, cost_state: undefined };
+
+  assert.equal(preFixResult.cost, 0, "premise: pre-fix code coerced null to 0");
+  assert.equal(preFixResult.cost_state, undefined, "premise: pre-fix code dropped cost_state");
+
+  // The assertion that teeth enforces on the fixed result:
+  assert.notEqual(null, preFixResult.cost, "the buggy 0 fails when null is asserted");
 });

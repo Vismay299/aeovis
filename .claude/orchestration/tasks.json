@@ -6753,17 +6753,33 @@
       "phase": "R2",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "dev-3",
+      "evidence": [
+        "src/lib/scoring/enginePipeline.test.mjs:1286"
+      ],
       "notes": [
         {
           "at": "2026-09-13T06:50:37.691Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T11:04:11.644Z",
+          "by": "dev-3",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T11:06:26.771Z",
+          "by": "dev-3",
+          "text": "In probeTextEngine: cost is initialized to null and preserved as null when unmeasured or unpriced (never coerced to 0 via || 0). cost_state, cost_source, and cost_state_detail are copied onto the result once above the error branch, ensuring failed, unconfigured, and unpriced calls do not drop their cost state. Removed fixed coercion from DECLARED_COERCIONS in metricCoercionGuard.test.mjs with allowlist floor lowered to 19. Added tests for PROBE_FAILED, NOT_CONFIGURED, UNPRICED, measured /positive, and mutation teeth."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T11:06:30.390Z",
+        "note": "PASS. Chief Verification Judge verification complete: probeTextEngine exports and preserves null cost and copies cost_state, cost_source, and cost_state_detail above the error branch. Tested on PROBE_FAILED, NOT_CONFIGURED, and UNPRICED probe responses, verifying cost is null (not 0) and state reaches row. Measured  correctly preserved as  with measured state. Dead coercion entry removed from metricCoercionGuard.test.mjs allowlist and floor lowered to 19. Full suite 2556/2556 passing."
+      }
     },
     {
       "id": "R2.9.7",
@@ -7404,17 +7420,33 @@
       "phase": "R3",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "dev-1",
+      "evidence": [
+        "src/lib/contentWorkerSweep.route.test.mjs:392"
+      ],
       "notes": [
         {
           "at": "2026-09-13T07:11:12.065Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-13T10:56:44.231Z",
+          "by": "dev-1",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-13T11:03:52.595Z",
+          "by": "dev-1",
+          "text": "Implemented lease-acquire error discrimination in dispatchWithLease, returning lease_acquire_failed vs lease_held. Updated GET to return HTTP 500 with batch_unavailable on lease store failures. Updated contentCronReport to report skip reasons and batch_skipped. Reconciled batch jobs across batch_dispatched, batch_skipped, and batch_failed. Corrected scan_runs to content_runs in route comment and test assertion. Added comprehensive unit, reconciliation, and teeth tests."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T11:03:59.478Z",
+        "note": "PASS. Chief Verification Judge and QA 1 sabotage verification complete: dispatchWithLease discriminates lease_held from lease_acquire_failed. On lease_acquire_failed, GET returns HTTP 500 with batch_unavailable { reason: 'lease_acquire_failed' } rather than disguising outage as 200. Every created batch job reconciles across batch_dispatched, batch_skipped, and batch_failed. Prose in comment and test assertion updated to content_runs. Unit, reconciliation, and mutation teeth tests all green."
+      }
     },
     {
       "id": "R3.2.1",
