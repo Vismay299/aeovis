@@ -68,6 +68,7 @@ let SCHEDULER_SKIP_REASONS = null;
 let SCHEDULER_TICK_REASONS = null;
 let REAP_PASS_REASONS = null;
 let REAP_MAX_PER_PASS = null;
+let executeSweep = null;
 try {
   ({
     GET,
@@ -88,6 +89,7 @@ try {
     REAP_PASS_REASONS,
     REAP_MAX_PER_PASS,
   } = await import("./workers/scanWorker.js"));
+  ({ executeSweep } = await import("../app/api/scan/worker/_lib/sweepExecution.js"));
 } catch (error) {
   importError = error;
 }
@@ -842,14 +844,187 @@ test("GUARD — the sweep route hands the WHOLE tick result to the classifier", 
     "the sweep branch must classify the WHOLE tick result, not a field or two picked off it — " +
       "picking `started` out of it is the R3.2.6 defect wearing the new function's name"
   );
+  // R6.5.8: the route delegates to executeSweep in _lib/ rather than
+  // inlining the sweep logic. The response builder is passed as a dep.
   assert.match(
     src,
-    /NextResponse\.json\(\s*buildSweepResponse\(/,
-    "the sweep response must be the tested builder's output, not an inline object literal"
+    /executeSweep\(/,
+    "the sweep branch must delegate to executeSweep in _lib/sweepExecution.js — " +
+      "the original inline branch was unreachable by tests (R6.5.8)"
+  );
+  assert.match(
+    src,
+    /buildSweepResponse/,
+    "the route must pass buildSweepResponse to executeSweep — " +
+      "the sweep response must be the tested builder's output, not an inline object literal"
   );
   assert.doesNotMatch(
     src,
     /scheduled\s*=\s*tickResult\.started\s*;/,
     "reading only `tickResult.started` is the R3.2.6 defect — `skipped` must not be dropped"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R6.5.8 — The sweep branch is reachable by a test via an injectable client.
+//
+// THE FINDING. The sweep branch of GET /api/scan/worker sits behind
+// `if (!supabase)` and the route imports supabase as a module binding. The
+// test suite deliberately has no Supabase, so the branch was never entered
+// by any test. Every assertion about that branch was necessarily one call
+// frame short of the wire.
+//
+// THE FIX. The sweep logic is extracted into _lib/sweepExecution.js, which
+// accepts the supabase client as its first argument. The route calls it
+// with the module-level binding; tests call it with a fake client that
+// returns canned data. The scheduler tick, the reaper, and the rescue-job
+// predicate are all injectable through deps.
+// ---------------------------------------------------------------------------
+
+/**
+ * A fake Supabase client that returns pre-set activeJobs from
+ * .from("scan_jobs").select("*").not().limit().
+ */
+function fakeSupabaseClient(activeJobs = [], error = null) {
+  return {
+    from() {
+      return {
+        select() {
+          return {
+            not() {
+              return {
+                limit() {
+                  return Promise.resolve({ data: activeJobs, error });
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+/**
+ * Minimal deps for executeSweep: a no-op maintenance pass and the real
+ * buildSweepResponse. The scheduler returns idle (nothing due), the reaper
+ * is not run (no pass).
+ */
+function sweepDeps(overrides = {}) {
+  return {
+    shouldRescueJob: overrides.shouldRescueJob || (() => true),
+    runScanChunk: overrides.runScanChunk || (async () => {}),
+    runSweepMaintenance: overrides.runSweepMaintenance || (async () => ({
+      scheduled: [],
+      scheduler: classifySchedulerTick({ started: [], skipped: [] }),
+      reaped: null,
+    })),
+    buildSweepResponse: overrides.buildSweepResponse || buildSweepResponse,
+    ...overrides,
+  };
+}
+
+test("R6.5.8 — the sweep branch is reachable via executeSweep with a fake client", async () => {
+  handler();
+  assert.equal(typeof executeSweep, "function", "executeSweep must be importable from _lib/sweepExecution.js");
+
+  const body = await executeSweep(fakeSupabaseClient([]), sweepDeps());
+
+  assert.equal(body.mode, "sweep", "the sweep branch must return mode: sweep");
+  assert.equal(body.dispatched, 0, "no active jobs means 0 dispatched");
+  assert.deepEqual(body.job_ids, []);
+  assert.equal(body.active, 0);
+  assert.equal(body.scheduler_ok, true);
+  assert.equal(body.scheduler.outcome, "idle");
+  assert.ok("reaped" in body, "the reaped key must be present even when no pass ran");
+});
+
+test("R6.5.8 — the sweep branch dispatches active jobs and reports them", async () => {
+  handler();
+  const fakeJobs = [
+    { id: "job-1", brand: "acme", status: "probing", heartbeat_at: new Date(Date.now() - 600_000).toISOString() },
+    { id: "job-2", brand: "beta", status: "pending", heartbeat_at: new Date(Date.now() - 600_000).toISOString() },
+  ];
+  const resumed = [];
+  const body = await executeSweep(
+    fakeSupabaseClient(fakeJobs),
+    sweepDeps({
+      runScanChunk: async (jobId) => { resumed.push(jobId); },
+    })
+  );
+
+  assert.equal(body.mode, "sweep");
+  assert.equal(body.dispatched, 2, "two active jobs dispatched");
+  assert.deepEqual(body.job_ids, ["job-1", "job-2"]);
+  assert.equal(body.active, 2);
+  assert.deepEqual(resumed, ["job-1", "job-2"], "runScanChunk must be called for each job");
+});
+
+test("R6.5.8 — the sweep branch reports the scheduler tick result", async () => {
+  handler();
+  const backend = schedulerBackend({ due: [dueSchedule("go.com", "daily", "Go Co")] });
+  const body = await executeSweep(
+    fakeSupabaseClient([]),
+    sweepDeps({
+      runSweepMaintenance: async (now) => {
+        const tickResult = await runSchedulerTick(now, backend.deps);
+        const scheduler = classifySchedulerTick(tickResult);
+        return {
+          scheduled: tickResult.started,
+          scheduler,
+          reaped: null,
+        };
+      },
+    })
+  );
+
+  assert.equal(body.scheduler.outcome, "started");
+  assert.equal(body.scheduler.started, 1);
+  assert.equal(body.scheduled[0].brand, "Go Co");
+});
+
+test("R6.5.8 — a supabase error in the sweep branch throws (caught by the route)", async () => {
+  handler();
+  const failingClient = fakeSupabaseClient(null, { message: "connection refused", code: "ECONNREFUSED" });
+
+  await assert.rejects(
+    () => executeSweep(failingClient, sweepDeps()),
+    { message: "connection refused" },
+    "a supabase error must propagate, not be swallowed"
+  );
+});
+
+test("R6.5.8 — the sweep branch handles a reaper that throws without failing the response", async () => {
+  handler();
+  const backend = schedulerBackend({ due: [dueSchedule("go.com", "daily", "Go Co")] });
+  const body = await executeSweep(
+    fakeSupabaseClient([]),
+    sweepDeps({
+      runSweepMaintenance: async (now) => {
+        // Real tick, exploding reaper — exactly as runSweepMaintenance handles it
+        return await runSweepMaintenance(now, {
+          runSchedulerTick: async (t) => await runSchedulerTick(t, backend.deps),
+          reapStaleRuns: async () => { throw new Error("reaper exploded"); },
+        });
+      },
+    })
+  );
+
+  assert.equal(body.scheduler.outcome, "started", "the tick must still report");
+  assert.equal(body.reaped.ok, false, "the reaper failure must be reported");
+  assert.equal(body.reaped.reason, REAP_PASS_REASONS.REAP_FAILED);
+  assert.equal(body.reaped.error, "reaper exploded");
+});
+
+test("GUARD — the _lib module does NOT import from route.js (no circular dependency)", async () => {
+  const src = await readFile(
+    new URL("../app/api/scan/worker/_lib/sweepExecution.js", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(
+    src,
+    /from\s+["']\.\.\/route\.js["']/,
+    "_lib/sweepExecution.js must not import from route.js — " +
+      "that creates a circular dependency. Pass functions through deps instead."
   );
 });

@@ -12,6 +12,7 @@ import {
   shouldRescueJob,
 } from "@/lib/workers/scanWorker";
 import { RUN_OUTCOMES } from "@/lib/scanRuns";
+import { executeSweep } from "./_lib/sweepExecution.js";
 
 // This route has side effects (it resumes real scans and, via the scheduler
 // tick, can create new ones). Without force-dynamic, Next prerenders it
@@ -539,56 +540,16 @@ export async function GET(request) {
   }
 
   try {
-    // Retrieve every not-yet-finished job; staleness (not a fixed 5-minute
-    // created_at window) decides which ones actually need a rescue kick —
-    // a job with a fresh heartbeat is presumed to be actively worked by
-    // another invocation (single-flight via isJobAlive, no in-process lock).
-    const { data: activeJobs, error } = await supabase
-      .from("scan_jobs")
-      .select("*")
-      .not("status", "in", '("complete","failed")')
-      .limit(20);
-
-    if (error) {
-      throw error;
-    }
-
-    const toResume = (activeJobs || []).filter((job) => shouldRescueJob(job)).slice(0, MAX_CONCURRENT_RESUMES);
-
-    const resumedIds = [];
-    for (const job of toResume) {
-      // RESUME, never restart: runScanChunk reads job.checkpoint and
-      // prompt_results itself — it never re-sources prompts or re-probes an
-      // already-persisted (engine, query) pair.
-      runScanChunk(job.id).catch(err => {
-        console.error(`[cron-worker] Error resuming job ${job.id}:`, err);
-      });
-      resumedIds.push(job.id);
-    }
-
-    // The two maintenance passes, each in its own try/catch inside
-    // runSweepMaintenance: the scheduler tick (enqueue new scans for any brand
-    // whose cadence is due and isn't already running) and then R3.3.4's
-    // stale-run reap. Neither can fail the other, and neither can fail this
-    // response: the sweep above is the cron's actual job and it succeeded, so
-    // this stays a 200 with both outcomes reported honestly in the body.
-    const { scheduled, scheduler, reaped } = await runSweepMaintenance(new Date().toISOString());
-
-    // The sweep DISPATCHES chunks (fire-and-forget, above) and never awaits
-    // them, so it cannot say processed/skipped/failed for any of them — each
-    // chunk files its own scan_runs row. Reporting `dispatched` says exactly
-    // what this response knows. `active` makes an idle tick legible: 0 active
-    // jobs and 0 dispatched is a healthy quiet day, and it no longer looks the
-    // same as 20 active jobs none of which we managed to kick.
-    return NextResponse.json(
-      buildSweepResponse({
-        activeCount: (activeJobs || []).length,
-        resumedIds,
-        scheduled,
-        scheduler,
-        reaped,
-      })
-    );
+    // R6.5.8 — the sweep branch delegates to executeSweep in _lib/ so the
+    // supabase client is an injectable seam. Production passes the module-
+    // level `supabase` binding; tests pass a fake. The maintenance and
+    // response-builder are passed explicitly to avoid a circular import
+    // between this route and the _lib module.
+    const body = await executeSweep(supabase, {
+      runSweepMaintenance,
+      buildSweepResponse,
+    });
+    return NextResponse.json(body);
   } catch (error) {
     console.error("Cron worker route error:", error);
     return NextResponse.json({ detail: "Internal Server Error" }, { status: 500 });
