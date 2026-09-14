@@ -11120,17 +11120,34 @@
         "docs/PROD_MIGRATIONS.md",
         "src/lib/migrationsRunner.test.mjs"
       ],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "controller",
+      "evidence": [
+        "scripts/setup-supabase.mjs:1",
+        "src/lib/migrationsRunner.test.mjs:1"
+      ],
       "notes": [
         {
           "at": "2026-09-05T07:24:44.116Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-14T14:22:54.579Z",
+          "by": "controller",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T14:23:03.249Z",
+          "by": "controller",
+          "text": "objectExists supports column/constraint/signature. 012/013 verify actual columns."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T14:23:24.143Z",
+        "note": "objectExists supports column/constraint/signature kinds. 012/013 verify actual columns via pg_attribute."
+      }
     },
     {
       "id": "R6.1.13",
@@ -11973,11 +11990,28 @@
         "src/components/"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "controller",
+      "evidence": [
+        "src/components/dashboard/vendorInfraGuard.test.mjs:1"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T14:22:46.880Z",
+          "by": "controller",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T14:23:19.175Z",
+          "by": "controller",
+          "text": "Bright Data/MiMo/Firecrawl banned from rendered output. Engine names required. Both directions proven via render harness."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T14:23:23.134Z",
+        "note": "vendorInfraGuard renders DashboardShell, asserts vendor names absent and engine names present"
+      }
     },
     {
       "id": "R6.4.4",
@@ -12263,17 +12297,33 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "controller",
+      "evidence": [
+        "src/lib/nulByteGuard.test.mjs:1"
+      ],
       "notes": [
         {
           "at": "2026-09-05T01:48:46.857Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-14T14:22:55.206Z",
+          "by": "controller",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T14:23:04.451Z",
+          "by": "controller",
+          "text": "Buffer-level NUL scan over all tracked text files. Names contaminated file."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T14:23:25.105Z",
+        "note": "nulByteGuard.test.mjs scans all tracked text files via Buffer indexOf. Names contaminated file."
+      }
     },
     {
       "id": "R6.4.11",

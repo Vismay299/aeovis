@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**216 / 265 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**219 / 265 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -342,7 +342,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `44/51`
+## R6 — Apparatus & guards  `47/51`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -359,7 +359,7 @@ Baseline commit: `5111219`
 - [-] **R6.1.9** The secrets rule binds six rebuild agents; every other agent this project spawns is uncovered `needs-decision` — blocked: needs-decision
 - [x] **R6.1.10** The ledger validates a citation by checking the file exists, never the line — closed at `.claude/orchestration/orchestrate.mjs:138-202`, `.claude/orchestration/orchestrate.mjs:266-285`, `src/lib/evidenceValidation.test.mjs:13`, `src/lib/evidenceValidation.test.mjs:20`, `src/lib/evidenceValidation.test.mjs:63`, `src/lib/evidenceValidation.test.mjs:125`
 - [x] **R6.1.11** submit silently keeps only the last of repeated --evidence flags — closed at `.claude/orchestration/orchestrate.mjs:100`, `.claude/orchestration/orchestrate.mjs:337`, `src/lib/orchestrate.test.mjs:17`, `src/lib/orchestrate.test.mjs:72`
-- [ ] **R6.1.12** The migration runner cannot verify a column, so column-only migrations are checked by proxy
+- [x] **R6.1.12** The migration runner cannot verify a column, so column-only migrations are checked by proxy — closed at `scripts/setup-supabase.mjs:1`, `src/lib/migrationsRunner.test.mjs:1`
 - [x] **R6.1.13** orchestrate.mjs takes the submit note as a shell argument, so backticks in a note execute and write command output into the ledger — closed at `.claude/orchestration/orchestrate.mjs:121`, `src/lib/orchestrateNotes.test.mjs:1`, `src/lib/evidenceValidation.test.mjs:22`
 - [x] **R6.1.14** The migration verify list checks object COUNT and presence but never that the names match the SQL, so a rename reports an applied migration as missing forever — closed at `src/lib/migrationsLedger.test.mjs:164`, `src/lib/migrationsLedger.test.mjs:274`
 ### R6.2
@@ -380,14 +380,14 @@ Baseline commit: `5111219`
 
 - [x] **R6.4.1** Guard: route-perimeter walker — closed at `src/lib/operatorPerimeter.test.mjs:175`, `src/lib/operatorPerimeter.js:37`, `src/lib/operatorPerimeter.js:56`
 - [x] **R6.4.2** Guard: fail-loud walker — closed at `src/lib/failLoudGuard.test.mjs:1-171`
-- [ ] **R6.4.3** Guard: infra vendors never in rendered copy, engine names required
+- [x] **R6.4.3** Guard: infra vendors never in rendered copy, engine names required — closed at `src/components/dashboard/vendorInfraGuard.test.mjs:1`
 - [ ] **R6.4.4** Guard: engine-count-agnostic UI
 - [x] **R6.4.5** testCoverageGuard fails on Windows: path.relative yields backslashes — closed at `src/lib/testCoverageGuard.test.mjs:29`, `src/lib/testCoverageGuard.test.mjs:41`
 - [x] **R6.4.6** archive-reference-scan takes a URL host but --list prints brand names — closed at `scripts/archive-reference-scan.mjs:83`, `scripts/archive-reference-scan.mjs:105`, `scripts/archive-reference-scan.mjs:54`, `scripts/archive-reference-scan.mjs:155`
 - [~] **R6.4.7** The working tree is half CRLF despite .gitattributes eol=lf
 - [x] **R6.4.8** Doc-to-source staleness tripwire, recommended by R6.3.2 and not buildable there — closed at `src/lib/docSourceStaleness.test.mjs:1`
 - [x] **R6.4.9** withoutComments strips engine names out of strings in every other guarded file — closed at `src/lib/landingHonesty.test.mjs:627`, `src/lib/landingHonesty.test.mjs:519`, `src/lib/landingHonesty.test.mjs:574`, `src/lib/landingHonesty.test.mjs:1481`, `src/lib/landingHonesty.test.mjs:1530`, `src/lib/landingHonesty.test.mjs:2034`, `src/lib/landingHonesty.test.mjs:2163`, `src/lib/landingHonesty.test.mjs:1864`, `src/lib/fixtures/landingHonesty/quote-phase-shift.jsx.txt:55`
-- [ ] **R6.4.10** A NUL byte in a source file makes it invisible to every grep-based guard
+- [x] **R6.4.10** A NUL byte in a source file makes it invisible to every grep-based guard — closed at `src/lib/nulByteGuard.test.mjs:1`
 - [x] **R6.4.11** No component-render harness, so every UI guard is a text scan that can pass while the component is broken — closed at `src/lib/renderHarness.mjs:1`, `src/components/dashboard/crawlabilityRivalOutcome.test.mjs:1`
 - [x] **R6.4.12** Two crawlability surfaces and two engine-chip renderers each duplicate a taxonomy — closed at `src/lib/crawlabilityOutcome.js:91`, `src/lib/crawlabilityOutcome.js:127`, `src/lib/crawlabilityOutcome.js:152`, `src/lib/crawlabilityOutcome.js:266`, `src/lib/crawlabilityTaxonomy.test.mjs:105`, `src/lib/crawlabilityTaxonomy.test.mjs:153`, `src/lib/crawlabilityTaxonomy.test.mjs:184`, `src/lib/crawlabilityTaxonomy.test.mjs:401`, `src/components/dashboard/AnswersView.jsx:69`, `src/components/dashboard/answersEngineFilters.test.mjs:169`, `src/components/dashboard/answersEngineFilters.test.mjs:300`, `src/components/dashboard/answersEngineFilters.test.mjs:320`
 - [x] **R6.4.13** The perimeter once-ness test varies only the query string, so a per-pathname flag passes it — closed at `src/lib/operatorPerimeter.middleware.test.mjs:263`, `src/lib/operatorPerimeter.middleware.test.mjs:307`, `src/lib/operatorPerimeter.middleware.test.mjs:117`, `src/lib/operatorPerimeter.middleware.test.mjs:379`
