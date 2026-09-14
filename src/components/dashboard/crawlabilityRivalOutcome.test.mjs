@@ -11,11 +11,6 @@
  *
  * WHAT THIS FILE PROVES, AND HOW.
  *
- * This repo has no component-render harness — no jsdom, no testing-library;
- * `npm run test:scoring` is a bare `node --test` over .test.mjs (see
- * degradedEngineBanner.test.mjs, which says the same thing). So the proof is
- * split in two, and neither half is a stand-in for the API:
- *
  *   1. The rows are REAL. Every fixture below comes out of the actual route
  *      handler, driven through its `deps` seam with an injected lookup and
  *      fetch. Nothing here hand-writes what "the API emits"; if route.js
@@ -26,12 +21,14 @@
  *      copy is decided, so the suite runs it on those real rows and asserts the
  *      three outcomes come back distinguishable — different kind, different
  *      label, different detail.
- *
- * A source guard over CrawlabilityView.jsx then proves the component defers to
- * that function instead of re-typing the old one-size line. The guard cannot
- * prove React mounted it; it CAN prove the three ways this fix could rot: the
- * import going away, the copy being re-inlined, and the row being narrowed back
- * to a bare `fetched_ok` boolean.
+ *   3. R6.4.11 — the RENDERED surface. The shared render harness
+ *      (src/lib/renderHarness.mjs) compiles CrawlabilityView.jsx with sucrase,
+ *      evaluates it, and renders RivalCrawlRow to static markup. An inverted
+ *      ternary that swaps the refusal branch and the meter branch is caught by
+ *      the rendered HTML: a refused row would show the open meter instead of
+ *      the refusal text.  A text scan of the source cannot catch this because
+ *      the strings `outcome.label` and `outcome.detail` exist in the JSX
+ *      either way — only mounting the component shows which branch executed.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -40,6 +37,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { register } from "node:module";
 
+import React from "react";
+import {
+  compileJsx,
+  renderToHtml,
+  textOf,
+  passThrough,
+  passThroughExports,
+  anyNamedExport,
+} from "../../lib/renderHarness.mjs";
+
 import {
   MAX_COMPARE_DOMAINS,
   UNVERIFIED_NOTE,
@@ -47,6 +54,8 @@ import {
   describePrimaryCrawlOutcome,
   describeRivalCrawlOutcome,
 } from "../../lib/crawlabilityOutcome.js";
+import * as crawlabilityOutcomeModule from "../../lib/crawlabilityOutcome.js";
+import { extractBrandDomain } from "../../lib/scoring/citations.js";
 
 register("../../lib/cronAuth.route.hooks.mjs", import.meta.url);
 
@@ -65,6 +74,29 @@ const VIEW = readFileSync(VIEW_PATH, "utf8");
 const ROUTE = readFileSync(
   path.join(REPO, "src/app/api/brands/[brand]/crawlability/route.js"),
   "utf8"
+);
+
+// ---------------------------------------------------------------------------
+// R6.4.11 — compile CrawlabilityView.jsx and expose RivalCrawlRow so we can
+// render it directly with test data.
+// ---------------------------------------------------------------------------
+
+const viewModule = await compileJsx(VIEW_PATH, {
+  modules: new Map([
+    ["react", { ...React, __esModule: true, default: React }],
+    ["@/lib/crawlabilityOutcome", crawlabilityOutcomeModule],
+    ["@/lib/scoring/citations", { extractBrandDomain, __esModule: true }],
+    ["./SectionStrap", { SectionStrap: passThrough, __esModule: true }],
+  ]),
+  autoStub: ["@/components/perceev/", "lucide-react"],
+  exposeInternals: ["RivalCrawlRow"],
+});
+
+const RivalCrawlRow = viewModule.RivalCrawlRow;
+assert.equal(
+  typeof RivalCrawlRow,
+  "function",
+  "CrawlabilityView.jsx must contain a RivalCrawlRow function for the render harness to mount it"
 );
 
 // ---------------------------------------------------------------------------
@@ -395,52 +427,153 @@ test("R3.7.7 GUARD — the client's copy of MAX_COMPARE_DOMAINS matches the rout
 });
 
 // ---------------------------------------------------------------------------
-// 3. Source guard — the component uses the decision instead of retyping it.
+// 3. R6.4.11 RENDERED GUARD — RivalCrawlRow mounted through the real
+//    describeRivalCrawlOutcome, not a text scan of the source.
+//
+//    An inverted ternary in RivalCrawlRow (swapping the `?` and `:` branches
+//    of `outcome ? <refusal text> : <meter>`) makes EVERY source-guard
+//    assertion above still pass: `outcome.label`, `outcome.detail`,
+//    `data-outcome`, and the whole-row prop are all in the JSX either way.
+//    Only mounting the component shows which branch executed.
 // ---------------------------------------------------------------------------
 
-test("R3.7.7 GUARD — CrawlabilityView defers to describeRivalCrawlOutcome", () => {
-  // R3.7.8 added a third name to this import and wrapped it across lines, so the
-  // guard now reads the import STATEMENT rather than one exact line of
-  // formatting. The teeth are unchanged: the symbol must come from the shared
-  // module, so a component that re-typed the copy locally still fails.
-  const importBlock = /import \{([^}]*)\} from "@\/lib\/crawlabilityOutcome"/.exec(VIEW);
-  assert.ok(importBlock, "the component must import the one derivation, not reimplement it");
-  assert.match(importBlock[1], /\bdescribeRivalCrawlOutcome\b/, "...including the rival-row wording");
-  assert.match(importBlock[1], /\bdescribeCompareBudget\b/, "...and the compare-budget explanation");
-  assert.match(
-    VIEW,
-    /const outcome = describeRivalCrawlOutcome\(row\)/,
-    "every rival row's failure state comes from that function"
+test("R6.4.11 RENDERED — a refused rival renders the refusal text, not the meter", () => {
+  const refusedRow = {
+    fetched_ok: false,
+    blocked: true,
+    fetch_error: "blocked",
+    summary: { total: 0, open: 0, partial: 0, blocked: 0 },
+  };
+  const html = renderToHtml(RivalCrawlRow, {
+    label: "169.254.169.254",
+    summary: refusedRow.summary,
+    row: refusedRow,
+  });
+
+  // The refusal text must appear.
+  assert.ok(
+    html.includes("crawlability-rival-outcome-169.254.169.254"),
+    "a refused rival must render the outcome span — the inverted ternary would render the meter instead"
   );
-  assert.match(VIEW, /\{outcome\.label\}/, "the label is rendered");
-  assert.match(VIEW, /\{outcome\.detail\}/, "and so is the reason under it");
-  assert.match(
-    VIEW,
-    /data-outcome=\{outcome \? outcome\.kind : "audited"\}/,
-    "the outcome kind is on the row so QA can tell the three apart without reading prose"
+  assert.ok(
+    html.includes("we refused this domain") || html.includes("refused"),
+    "the refusal copy must be in the rendered HTML"
+  );
+  assert.ok(
+    html.includes("not a fault with the site"),
+    "the refusal must clear the rival of blame"
   );
 
-  // TEETH 1: the row must receive the WHOLE compare row. Narrowing it back to a
-  // boolean is exactly how the three outcomes collapsed into one.
-  assert.match(
-    VIEW,
-    /<RivalCrawlRow key=\{r\.domain\} label=\{r\.domain\} summary=\{r\.summary\} row=\{r\} \/>/,
-    "the compare row is passed whole — blocked and fetch_error live on it"
-  );
+  // The meter must NOT appear (total is 0, so there would be no open count
+  // text — but the meter div structure would still render).
   assert.ok(
-    !/fetchedOk=\{/.test(VIEW),
-    "a bare fetched_ok prop cannot carry the difference between a refusal and a timeout"
+    !html.includes("open</span>") || html.includes("0 open"),
+    "a refused rival must not show the open meter"
   );
 
-  // TEETH 2: the one-size-fits-all sentence must not come back as a literal.
+  // data-outcome on the outer div.
   assert.ok(
-    !/Unreachable — treated as fully open, unverified/.test(VIEW),
-    "the line that made a security refusal look like a flaky network must stay gone"
+    html.includes('data-outcome="refused"'),
+    "the outer div must carry data-outcome=refused"
+  );
+});
+
+test("R6.4.11 RENDERED — a healthy rival renders the meter, not refusal text", () => {
+  const healthyRow = {
+    fetched_ok: true,
+    blocked: false,
+    fetch_error: null,
+    summary: { total: 10, open: 7, partial: 2, blocked: 1 },
+  };
+  const html = renderToHtml(RivalCrawlRow, {
+    label: "rival.com",
+    summary: healthyRow.summary,
+    row: healthyRow,
+  });
+
+  // The meter must appear.
+  assert.ok(html.includes("7 open"), "the open count must render");
+  assert.ok(html.includes("2 partial"), "the partial count must render");
+  assert.ok(html.includes("1 blocked"), "the blocked count must render");
+
+  // The refusal text must NOT appear.
+  assert.ok(
+    !html.includes("we refused this domain"),
+    "a healthy rival must not show refusal copy — the inverted ternary would render it"
   );
   assert.ok(
-    !/Perceev only audits rivals/.test(VIEW),
-    "the refusal copy belongs in crawlabilityOutcome.js where the suite can execute it"
+    !html.includes("crawlability-rival-outcome-rival.com"),
+    "a healthy rival must not render the outcome span"
   );
+
+  // data-outcome on the outer div.
+  assert.ok(
+    html.includes('data-outcome="audited"'),
+    "the outer div must carry data-outcome=audited"
+  );
+});
+
+test("R6.4.11 RENDERED — the three failure types render distinguishable HTML", () => {
+  const refused = {
+    fetched_ok: false,
+    blocked: true,
+    fetch_error: "blocked",
+    summary: { total: 0, open: 0, partial: 0, blocked: 0 },
+  };
+  const unresolved = {
+    fetched_ok: false,
+    blocked: false,
+    fetch_error: "unresolved",
+    summary: { total: 0, open: 0, partial: 0, blocked: 0 },
+  };
+  const timedOut = {
+    fetched_ok: false,
+    blocked: false,
+    fetch_error: "timeout",
+    summary: { total: 0, open: 0, partial: 0, blocked: 0 },
+  };
+
+  const refusedHtml = renderToHtml(RivalCrawlRow, { label: "a.com", summary: refused.summary, row: refused });
+  const unresolvedHtml = renderToHtml(RivalCrawlRow, { label: "b.com", summary: unresolved.summary, row: unresolved });
+  const timedOutHtml = renderToHtml(RivalCrawlRow, { label: "c.com", summary: timedOut.summary, row: timedOut });
+
+  // Each must carry a different data-outcome.
+  assert.ok(refusedHtml.includes('data-outcome="refused"'));
+  assert.ok(unresolvedHtml.includes('data-outcome="unresolved"'));
+  assert.ok(timedOutHtml.includes('data-outcome="timeout"'));
+
+  // The visible text must differ pairwise.
+  const refusedText = textOf(refusedHtml);
+  const unresolvedText = textOf(unresolvedHtml);
+  const timedOutText = textOf(timedOutHtml);
+  assert.notEqual(refusedText, unresolvedText, "refused and unresolved must not render identically");
+  assert.notEqual(refusedText, timedOutText, "refused and timeout must not render identically");
+  assert.notEqual(unresolvedText, timedOutText, "unresolved and timeout must not render identically");
+});
+
+test("R6.4.11 RENDERED — the refusal reads as OUR decision and leaks nothing", () => {
+  const refusedRow = {
+    fetched_ok: false,
+    blocked: true,
+    fetch_error: "blocked",
+    summary: { total: 0, open: 0, partial: 0, blocked: 0 },
+  };
+  // Use a neutral label so the leak check tests only the refusal COPY,
+  // not the domain name passed as a prop.
+  const html = renderToHtml(RivalCrawlRow, { label: "rival.com", summary: refusedRow.summary, row: refusedRow });
+  const text = textOf(html).toLowerCase();
+
+  for (const forbidden of ["unreachable", "couldn't reach", "could not reach", "down", "offline", "timed out"]) {
+    assert.ok(!text.includes(forbidden), `a refusal must not be worded as an outage ("${forbidden}")`);
+  }
+  assert.ok(!text.includes("fully open"), "a refused domain was not audited");
+  assert.ok(text.includes("refused"), "the label must name the refusal");
+  assert.ok(text.includes("our"), "the detail must attribute the decision to us");
+  assert.ok(text.includes("not a fault with the site"), "and must clear the rival of blame");
+
+  for (const leak of ["private", "internal", "localhost", "loopback", "link-local", "metadata", "127.", "169.254"]) {
+    assert.ok(!text.includes(leak), `refusal copy must not leak network detail ("${leak}")`);
+  }
 });
 
 // ---------------------------------------------------------------------------
