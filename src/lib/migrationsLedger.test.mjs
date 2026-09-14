@@ -221,11 +221,16 @@ function extractObjectsFromSql(sql) {
     }
 
     // ALTER TABLE <table> ADD COLUMN [IF NOT EXISTS] <column>
-    const colMatch = line.match(
-      /ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i
-    );
-    if (colMatch) {
-      add("column", `${colMatch[1].toLowerCase()}.${colMatch[2].toLowerCase()}`);
+    // Use matchAll to handle multiple ADD COLUMN clauses on the same joined
+    // line (e.g. 013_brand_metrics_sov_state.sql has sov_state and
+    // sov_state_reason as two ADD COLUMN clauses separated by a comma).
+    const tableForCol = line.match(/ALTER\s+TABLE\s+(\w+)/i);
+    if (tableForCol) {
+      const tableName = tableForCol[1].toLowerCase();
+      const colRe = /ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/gi;
+      for (let cm = colRe.exec(line); cm; cm = colRe.exec(line)) {
+        add("column", `${tableName}.${cm[1].toLowerCase()}`);
+      }
     }
 
     // ALTER TABLE <table> ADD CONSTRAINT <name>

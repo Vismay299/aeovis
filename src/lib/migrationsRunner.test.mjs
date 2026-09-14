@@ -103,13 +103,48 @@ class Client {
     // Catalog probes. The sentinel goes out on stdout IN LINE with the runner's
     // own output — same process, same stream — so the transcript records when
     // the database was really consulted relative to what the runner claimed.
+    //
+    // Each pattern must be specific enough to NOT match migration SQL (DDL).
+    // Migrations contain their own SELECT 1 FROM pg_constraint / pg_policies
+    // inside DO blocks, so bare "FROM pg_constraint" would false-match. The
+    // runner's catalog queries always JOIN pg_namespace, which migration SQL
+    // never does — that is the discriminator.
     if (/to_regclass/.test(sql)) {
       const name = String((params && params[0]) || "").replace("public.", "");
       log.push({ txn, sql: "PROBE", name });
       process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
       return { rows: [{ regclass: CATALOG.includes(name) ? name : null }] };
     }
-    if (/pg_proc/.test(sql)) {
+    if (/pg_get_function_identity_arguments/.test(sql) && /JOIN pg_namespace/.test(sql)) {
+      const name = (params && params[0]) || "";
+      const sig = (params && params[1]) || "";
+      const key = sig ? name + "(" + sig + ")" : name;
+      // Emit the probe with just the function name, matching the runner's
+      // reported format. The signature check is internal; the probe name is
+      // what the R6.1.7 ordering guard compares against reported objects.
+      log.push({ txn, sql: "PROBE", name });
+      process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
+      return { rows: CATALOG.includes(name) || CATALOG.includes(key) ? [{ "?column?": 1 }] : [] };
+    }
+    if (/FROM pg_proc/.test(sql) && /JOIN pg_namespace/.test(sql)) {
+      const name = (params && params[0]) || "";
+      log.push({ txn, sql: "PROBE", name });
+      process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
+      return { rows: CATALOG.includes(name) ? [{ "?column?": 1 }] : [] };
+    }
+    // R6.1.12 — column existence via pg_attribute. The runner's query JOINs
+    // pg_class and pg_namespace; migration DO blocks use information_schema.
+    if (/FROM pg_attribute/.test(sql) && /JOIN pg_class/.test(sql) && /JOIN pg_namespace/.test(sql)) {
+      const table = (params && params[0]) || "";
+      const column = (params && params[1]) || "";
+      const name = table + "." + column;
+      log.push({ txn, sql: "PROBE", name });
+      process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
+      return { rows: CATALOG.includes(name) ? [{ "?column?": 1 }] : [] };
+    }
+    // R6.1.12 — constraint existence via pg_constraint. The runner's query
+    // JOINs pg_namespace; migration DO blocks query pg_constraint directly.
+    if (/FROM pg_constraint/.test(sql) && /JOIN pg_namespace/.test(sql)) {
       const name = (params && params[0]) || "";
       log.push({ txn, sql: "PROBE", name });
       process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
@@ -177,7 +212,7 @@ function pathToFileUrlString(p) {
   return new URL(`file://${p.replace(/\\/g, "/").replace(/^([A-Za-z]:)/, "/$1")}`).href;
 }
 
-/** Everything 001-013 must leave behind, per the runner's own expectations. */
+/** Everything 001-017 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
   "scans", "brand_prompts", "scan_jobs", "content_events",
   "content_jobs", "content_items", "content_feedback", "brand_briefs", "content_lessons",
@@ -191,9 +226,11 @@ const FULL_CATALOG = [
   "claim_probe_tasks", "complete_probe_tasks", "renew_probe_lease", "release_probe_tasks",
   "scan_runs", "scan_runs_job_idx", "scan_runs_batch_idx", "scan_runs_open_idx", "scan_runs_runner_idx",
   "open_scan_run", "heartbeat_scan_run", "close_scan_run",
-  "scan_jobs_attempts_idx", "claim_scan_job_attempt",
-  // 013 (R4.3.2). A partial index standing in for two columns the catalog
-  // probe cannot see -- brand_metrics_daily.sov_state / .sov_state_reason.
+  // R6.1.12 — 012 now verifies the column directly too.
+  "scan_jobs.attempts", "scan_jobs_attempts_idx",
+  "claim_scan_job_attempt(uuid, integer)",
+  // R6.1.12 — 013 now verifies the columns directly too.
+  "brand_metrics_daily.sov_state", "brand_metrics_daily.sov_state_reason",
   "brand_metrics_daily_sov_unverified_idx",
   // 015 (R4.3.3). Same trick for the three citation-denominator columns:
   // brand_metrics_daily.citation_denominator / .citation_state /
@@ -203,6 +240,10 @@ const FULL_CATALOG = [
   "brand_metrics_daily_citation_unverified_idx",
   // 016 (R4.3.1). Crawlability audit history table + index for history queries.
   "crawlability_audits", "crawlability_audits_domain_idx",
+  // 016_content_items_natural_key.sql — constraint.
+  "content_items_job_id_cycle_key",
+  // 017_cost_unmeasured_calls.sql — column.
+  "scans.cost_unmeasured_calls",
 ];
 
 function withRegister(dir) {
@@ -251,6 +292,21 @@ test("a missing FUNCTION is caught, which to_regclass alone cannot see", () => {
     const { status, out } = runRunner(dir);
     assert.equal(status, 1, "009's table present with its function absent is the 2026-08-30 state");
     assert.match(out, /increment_scan_rate_limit/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("R6.1.12 — a catalog missing scan_jobs.attempts but carrying the proxy index EXITS NON-ZERO", () => {
+  // The proxy index (scan_jobs_attempts_idx) can exist without the column in
+  // the test stub — it is just a name in a list. The column check must catch
+  // this case independently of the index.
+  const catalog = FULL_CATALOG.filter((n) => n !== "scan_jobs.attempts");
+  const dir = withRegister(makeSandbox({ catalog }));
+  try {
+    const { status, out } = runRunner(dir);
+    assert.equal(status, 1, "the column check must catch what the proxy index cannot");
+    assert.match(out, /scan_jobs\.attempts/, "the missing column must be named");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -446,7 +502,7 @@ function auditByProbe(stdout, token) {
  */
 function reportedObjects(stdout) {
   const out = [];
-  const re = /^ +(✓|✗) (table|index|function) (\S+)$/gm;
+  const re = /^ +(✓|✗) (table|index|function|column|constraint) (\S+)$/gm;
   for (let m = re.exec(stdout); m; m = re.exec(stdout)) {
     out.push({ at: m.index, mark: m[1], kind: m[2], name: m[3] });
   }

@@ -125,9 +125,12 @@ const EXPECTED_OBJECTS = {
   // index is what makes it checkable: an index ON the column cannot exist
   // unless the column does. Verifying only the function would not do it, since
   // a plpgsql body does not resolve its column references until it runs.
+  // R6.1.12 — also verify the column directly via pg_attribute, so a database
+  // with the index but without the column is caught.
   "012_scan_job_attempts.sql": [
+    { kind: "column", name: "scan_jobs.attempts" },
     { kind: "index", name: "scan_jobs_attempts_idx" },
-    { kind: "function", name: "claim_scan_job_attempt" },
+    { kind: "function", name: "claim_scan_job_attempt", signature: "uuid, integer" },
   ],
   // R4.3.2. Same column-invisibility problem as 012, same answer: the probe
   // cannot see `brand_metrics_daily.sov_state` / `.sov_state_reason`, but it can
@@ -138,7 +141,10 @@ const EXPECTED_OBJECTS = {
   // This one matters more than a schema tick: without these columns every scan
   // finalize fails its brand_metrics_daily upsert (PGRST204), because
   // upsertBrandMetricsDaily sends the rollup row through verbatim.
+  // R6.1.12 — also verify the columns directly via pg_attribute.
   "013_brand_metrics_sov_state.sql": [
+    { kind: "column", name: "brand_metrics_daily.sov_state" },
+    { kind: "column", name: "brand_metrics_daily.sov_state_reason" },
     { kind: "index", name: "brand_metrics_daily_sov_unverified_idx" },
   ],
   // R3.5.4, registering the file R3.5.1 left orphaned. THE EMPTY LIST IS THE
@@ -453,11 +459,53 @@ export function driftMessage(file, verdict, { prior, checksum }) {
   );
 }
 
-async function objectExists(client, { kind, name }) {
+async function objectExists(client, { kind, name, signature }) {
   if (kind === "function") {
+    // R6.1.12 — match on signature, not just name. A CREATE OR REPLACE that
+    // changed a signature and created an overload reads as present under a
+    // name-only check. pg_get_function_identity_arguments returns the
+    // parenthesised argument types, which is the function's identity.
+    const sig = signature || null;
+    if (sig) {
+      const { rows } = await client.query(
+        `SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+          WHERE n.nspname = 'public' AND p.proname = $1
+            AND pg_get_function_identity_arguments(p.oid) = $2 LIMIT 1`,
+        [name, sig]
+      );
+      return rows.length > 0;
+    }
     const { rows } = await client.query(
       `SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = 'public' AND p.proname = $1 LIMIT 1`,
+      [name]
+    );
+    return rows.length > 0;
+  }
+  if (kind === "column") {
+    // R6.1.12 — pg_attribute sees columns, which to_regclass and pg_proc
+    // cannot. The name is "table.column"; split on the first dot.
+    const dot = name.indexOf(".");
+    if (dot === -1) return false;
+    const table = name.slice(0, dot);
+    const column = name.slice(dot + 1);
+    const { rows } = await client.query(
+      `SELECT 1 FROM pg_attribute a
+         JOIN pg_class c     ON c.oid = a.attrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname = $1
+          AND a.attname = $2
+          AND a.attnum > 0
+          AND NOT a.attisdropped LIMIT 1`,
+      [table, column]
+    );
+    return rows.length > 0;
+  }
+  if (kind === "constraint") {
+    const { rows } = await client.query(
+      `SELECT 1 FROM pg_constraint k JOIN pg_namespace n ON n.oid = k.connamespace
+        WHERE n.nspname = 'public' AND k.conname = $1 LIMIT 1`,
       [name]
     );
     return rows.length > 0;
