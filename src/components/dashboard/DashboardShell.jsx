@@ -639,10 +639,17 @@ export default function DashboardShell({ scan, scanId, error = null }) {
    */
   const dataSourceIssue = scanHealth.severity === "critical";
 
+  // R2.4.2 — the shared gate-honoring selector, called on the raw scan row.
+  // For multi-engine scans, visibility_pct IS the blended headline index
+  // (enginePipeline writes it there since R2.4.1), so one call covers both
+  // the score and the measurement state the hero needs.
+  const heroMeasurement = scan ? describeScanMeasurement(scan) : null;
+
   const isNotAssessed =
     result.state === "not_assessed" ||
     result.state === "not-assessed" ||
     result.measurementState === "not_assessed" ||
+    (heroMeasurement != null && !heroMeasurement.measured) ||
     (result.visibilityScore == null && !dataSourceIssue && result.visibilityIndexPct == null && result.shareOfAiPct == null);
   // Hero metric. Multi-engine: AI Visibility Index (equal-weight mean).
   // Single-engine: shareOfAiPct (the AIO-only value).
@@ -664,7 +671,7 @@ export default function DashboardShell({ scan, scanId, error = null }) {
      layers have their own test in heroVerdictNullScore.test.mjs; removing either
      one alone turns exactly one of them red. */
   const tier =
-    dataSourceIssue || !Number.isFinite(heroScore)
+    dataSourceIssue || !Number.isFinite(heroScore) || (heroMeasurement != null && !heroMeasurement.measured)
       ? null
       : scoreTier(heroScore, result.scoringVersion);
   const brandAliases = getBrandAliases(result.brand, result.website);

@@ -5044,11 +5044,26 @@
         "src/components/dashboard/Sidebar.jsx:138-143"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "claude",
+      "evidence": [
+        "src/lib/db.js:757",
+        "src/components/home/HomeDashboard.jsx:204",
+        "src/components/dashboard/DashboardShell.jsx:646",
+        "src/lib/oneScoreSelector.test.mjs:1"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T05:17:09.202Z",
+          "by": "claude",
+          "text": "claimed"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:24:46.426Z",
+        "note": "VERIFIED. All 8 tests pass (oneScoreSelector.test.mjs). (1) listRecentScans in db.js:757 carries visibility_pct and raw_results. (2) HomeDashboard.jsx:204 calls describeScanMeasurement(s). (3) DashboardShell.jsx:646 calls describeScanMeasurement(scan). (4) null renders em dash never bare percent. (5) measured_zero renders 0% not dash. Source-text guards prove all four surfaces import and call the shared selector. Sabotage: removing s.score== check fails the guard. Acceptance met: one selector, listRecentScans reads quality flags, null=em dash."
+      }
     },
     {
       "id": "R2.5.1",
@@ -8049,9 +8064,12 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "in_progress",
+      "status": "done",
       "owner": "dev2-backend",
-      "evidence": [],
+      "evidence": [
+        "src/lib/workers/scanWorker.js:2029",
+        "src/lib/workers/engineSetChange.test.mjs:458"
+      ],
       "notes": [
         {
           "at": "2026-09-05T01:57:19.141Z",
@@ -8062,9 +8080,18 @@
           "at": "2026-09-13T13:06:06.047Z",
           "by": "dev2-backend",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T05:25:59.673Z",
+          "by": "dev2-backend",
+          "text": "R3.2.9: Code at scanWorker.js:2020-2037 overrides engineNames with probedEngines when engineSetChange.state is REFROZEN. Test at engineSetChange.test.mjs:458 drives full refreeze scenario with 8 queries across 2 chunks, proving engines_counted reflects real evidence not frozen list."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:26:37.001Z",
+        "note": "VERIFIED. 11 engineSetChange tests pass including R3.2.9 at :458. Code at scanWorker.js:2029-2037 detects REFROZEN state with probedEngines.length>0 and overrides engineNames with unique probed engines. Test drives full refreeze: frozen=[aio,perplexity], registry changes to chatgpt, assert engines_counted reflects chatgpt rows not frozen list. engines_counted is never 0 while probe rows exist. engine_set_change marker still records refreeze. Sabotage: removing the override block causes engines_counted=0 when probe rows exist."
+      }
     },
     {
       "id": "R3.2.10",
@@ -8706,17 +8733,29 @@
         "supabase/migrations/"
       ],
       "phase": "R3",
-      "status": "in_progress",
+      "status": "done",
       "owner": "dev2-backend",
-      "evidence": [],
+      "evidence": [
+        "supabase/migrations/016_content_items_natural_key.sql:29",
+        "src/lib/contentItemsNaturalKey.test.mjs:43"
+      ],
       "notes": [
         {
           "at": "2026-09-13T13:06:06.107Z",
           "by": "dev2-backend",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T05:25:59.746Z",
+          "by": "dev2-backend",
+          "text": "R3.5.2: Migration 016 adds UNIQUE(job_id, cycle) constraint with ON CONFLICT. insertContentItem in memory mode mirrors DB constraint: repeated insert returns existing row. 6 tests pass covering cycle inclusion, default, idempotent insert, different cycles, different jobs, migration documentation."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:26:37.115Z",
+        "note": "VERIFIED. 6 contentItemsNaturalKey tests pass. Migration 016_content_items_natural_key.sql:29 declares UNIQUE(job_id, cycle) named constraint. insertContentItem memory mode: cycle field included, defaults to 1, repeated insert returns existing row (idempotent), different cycles produce different rows, different jobs with same cycle produce different rows. Migration content verified by test reading the SQL file."
+      }
     },
     {
       "id": "R3.5.3",
@@ -8885,17 +8924,29 @@
         "src/lib/"
       ],
       "phase": "R3",
-      "status": "in_progress",
+      "status": "done",
       "owner": "dev2-backend",
-      "evidence": [],
+      "evidence": [
+        "src/lib/workers/scanWorker.js:1724",
+        "src/lib/workers/spendCap.test.mjs:139"
+      ],
       "notes": [
         {
           "at": "2026-09-13T13:06:06.185Z",
           "by": "dev2-backend",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T05:25:59.713Z",
+          "by": "dev2-backend",
+          "text": "R3.6.2: Per-scan cap at scanWorker.js:1724 (SPEND_CAP_PER_SCAN) and per-day cap at :1733 (SPEND_CAP_PER_DAY) halt new spend and record skip reasons. 5 tests pass: per-scan halts and records skip, cap=0 halts all, cap unset means no cap, per-day halts and records, daily unset means no daily cap."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:26:37.051Z",
+        "note": "VERIFIED. 5 spendCap tests pass. Per-scan cap at scanWorker.js:1724 halts new spend and records SPEND_CAP_PER_SCAN skip. Per-day cap at :1733 halts and records SPEND_CAP_PER_DAY. Cap=0 halts all spend immediately. Both caps unset means no cap. Exceeding either cap halts new spend (remaining pairs skipped with recordSkip). Reason recorded in tally skips for ledger traceability."
+      }
     },
     {
       "id": "R3.6.3",
@@ -9771,17 +9822,30 @@
         "src/lib/crawlers/"
       ],
       "phase": "R4",
-      "status": "in_progress",
+      "status": "done",
       "owner": "dev4",
-      "evidence": [],
+      "evidence": [
+        "src/lib/db/crawlability.js:1",
+        "src/lib/crawlabilityChanges.js:56",
+        "supabase/migrations/016_crawlability_audit_history.sql:1"
+      ],
       "notes": [
         {
           "at": "2026-09-13T13:06:43.736Z",
           "by": "dev4",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T05:26:15.118Z",
+          "by": "dev4",
+          "text": "R4.3.1: crawlability.js persists audit history via upsert with onConflict. crawlabilityChanges.js detectBotChanges compares bot status transitions (open/partial/blocked) and buildAuditDiff computes diff with summary. Migration 016_crawlability_audit_history.sql creates the table. 29 tests pass: 11 in crawlabilityAuditDb.test.mjs + 18 in crawlabilityChanges.test.mjs. Acceptance met: audit history persists, change between runs raises detected event."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:26:37.075Z",
+        "note": "VERIFIED. 29 tests pass (11 crawlabilityAuditDb + 18 crawlabilityChanges). crawlability.js:1 provides saveCrawlabilityAudit (upsert with onConflict), getAuditHistory, getLatestAudit. crawlabilityChanges.js:56 detectBotChanges compares status transitions ignoring reason text. buildAuditDiff computes diff with summary mentioning transition directions. Migration 016_crawlability_audit_history.sql creates the table. Write functions throw when no client (standing rule 2), read functions return empty arrays. Acceptance: audit history persists, change between runs raises detected event."
+      }
     },
     {
       "id": "R4.3.2",
@@ -9900,9 +9964,12 @@
         "src/app/api/brands/[brand]/metrics/route.js:76",
         "src/lib/workers/scanWorker.js:1855"
       ],
-      "status": "in_progress",
+      "status": "done",
       "owner": "dev4",
-      "evidence": [],
+      "evidence": [
+        "src/app/api/brands/[brand]/metrics/route.js:84",
+        "src/lib/analytics/rollup.test.mjs:161"
+      ],
       "notes": [
         {
           "at": "2026-09-05T07:24:43.664Z",
@@ -9913,9 +9980,18 @@
           "at": "2026-09-13T13:28:17.165Z",
           "by": "dev4",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T05:26:15.196Z",
+          "by": "dev4",
+          "text": "R4.3.4: metrics/route.js:84-85 passes sov_state and sov_state_reason through to client response. rollup.test.mjs tests verify not_assessed vs measured_zero distinction with 42 tests all passing. Consumer can distinguish self-only-roster (no number) from brand-not-visible (0%). Stale scanWorker comment corrected via R4.3.5."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:26:51.126Z",
+        "note": "VERIFIED. metrics/route.js:84-85 maps sov_state and sov_state_reason from DB rows to API response with null coalescing. rollup.test.mjs:161-888 has 42 tests proving the full pipeline: not_assessed/self_only_roster/empty_eliciting_pool/measured_zero/brand_not_visible/measured states all correctly distinguished. scanWorker.js:2331 comment describes engine_set_change behavior accurately. Client receives state+reason enabling em dash + state chip rendering."
+      }
     },
     {
       "id": "R4.3.5",
@@ -9935,9 +10011,12 @@
       "tags": [],
       "phase": "R4",
       "findings": [],
-      "status": "in_progress",
+      "status": "done",
       "owner": "dev4",
-      "evidence": [],
+      "evidence": [
+        "src/app/api/brands/[brand]/metrics/route.js:81",
+        "src/lib/analytics/rollup.js:280"
+      ],
       "notes": [
         {
           "at": "2026-09-08T11:22:09.663Z",
@@ -9948,9 +10027,18 @@
           "at": "2026-09-13T13:28:17.238Z",
           "by": "dev4",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T05:26:15.154Z",
+          "by": "dev4",
+          "text": "R4.3.5: sov_state and sov_state_reason survive from rollup.js:280 return through metrics/route.js:81-85 to API response. 42 rollup tests pass including self-only-roster (NOT_ASSESSED/SELF_ONLY_ROSTER), empty pool, measured_zero, and measured states. scanWorker comment at scanWorker.js:2331 describes engine_set_change behavior correctly."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:26:51.147Z",
+        "note": "VERIFIED. rollup.js:280 returns sov_state and sov_state_reason computed from the R2.1.1 vocabulary. metrics/route.js:81-85 passes them through to the API response. 42 rollup tests pass: self-only roster yields NOT_ASSESSED/SELF_ONLY_ROSTER with null sov_pct; empty pool yields NOT_ASSESSED/EMPTY_ELICITING_POOL; brand-not-visible yields MEASURED_ZERO/BRAND_NOT_VISIBLE with sov_pct=0; visible yields MEASURED with null reason. PROD_MIGRATIONS.md truth about column readers verified."
+      }
     },
     {
       "id": "R4.4.1",
@@ -10817,17 +10905,36 @@
       ],
       "findings": [],
       "tags": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "R6-worker",
+      "evidence": [
+        "src/lib/orchestrate.test.mjs:24",
+        "src/lib/orchestrate.test.mjs:44",
+        "src/lib/orchestrate.test.mjs:108",
+        ".claude/orchestration/orchestrate.mjs:132"
+      ],
       "notes": [
         {
           "at": "2026-09-05T02:14:45.169Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-14T05:07:36.027Z",
+          "by": "R6-worker",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T05:08:23.954Z",
+          "by": "R6-worker",
+          "text": "R6.1.8: --note-file support added to orchestrate.mjs.\n\nresolveNote() at orchestrate.mjs:132 already handles --note-file (file path or \"-\" for stdin) and --note (shell argument). The implementation was present but had zero test coverage.\n\nTests written in src/lib/orchestrate.test.mjs:\n- resolveNote reads from a temp file (5000 chars)\n- resolveNote preserves shell metacharacters byte-identical (backticks, dollar-parens, newlines)\n- resolveNote fails loudly on missing file\n- resolveNote --note (shell arg) still works for short notes\n- resolveNote no note returns null\n- resolveNote a very long note (10000+ chars) is read intact via --note-file\n- validateEvidenceCitation edge cases (valid, non-existent, exceeds length, blank line, range)\n\nAlso exported parseArgs from orchestrate.mjs:656 for direct testing."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:24:46.497Z",
+        "note": "VERIFIED. 7 resolveNote tests + 6 validateEvidenceCitation tests all pass (orchestrate.test.mjs). (1) resolveNote at orchestrate.mjs:132 reads from --note-file (file path or stdin) bypassing shell expansion. (2) --note arg still works for short notes. (3) Missing file fails loudly. (4) 5000-char file read intact. (5) Backticks and dollar signs preserved byte-identical. Acceptance met: note of any length reaches ledger or fails loudly, --note-file provided."
+      }
     },
     {
       "id": "R6.1.9",
@@ -10935,17 +11042,36 @@
       "anchors": [
         ".claude/orchestration/orchestrate.mjs"
       ],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "R6-worker",
+      "evidence": [
+        ".claude/orchestration/orchestrate.mjs:100",
+        ".claude/orchestration/orchestrate.mjs:337",
+        "src/lib/orchestrate.test.mjs:17",
+        "src/lib/orchestrate.test.mjs:72"
+      ],
       "notes": [
         {
           "at": "2026-09-05T06:51:44.001Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-14T05:07:44.860Z",
+          "by": "R6-worker",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T05:08:47.992Z",
+          "by": "R6-worker",
+          "text": "R6.1.11: Evidence accumulation via repeated --evidence flags.\n\nparseArgs() at orchestrate.mjs:100-118 now accumulates repeated flags into arrays. The submit handler at orchestrate.mjs:337-351 handles arrays by comma-splitting each element and concatenating.\n\nTests written in src/lib/orchestrate.test.mjs:\n- parseArgs: single flag stays scalar (backward compatible)\n- parseArgs: two repeated flags become an array\n- parseArgs: three repeated flags become a three-element array\n- parseArgs: non-repeated flags stay scalar\n- evidence accumulation: comma-split within a single flag\n- evidence accumulation: repeated flags are concatenated\n- evidence accumulation: six citations from three flags\n- validateEvidenceCitation rejects non-existent file\n- validateEvidenceCitation accepts valid file:line\n\nAlso: --amend-evidence mode allows re-submitting while in_verification (orchestrate.mjs:325-329)."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:24:46.457Z",
+        "note": "VERIFIED. 10 tests pass (orchestrate.test.mjs:17-72). (1) parseArgs at orchestrate.mjs:100-118 accumulates repeated --evidence flags into arrays. (2) Submit handler at orchestrate.mjs:337-351 comma-splits each array element and concatenates. (3) Single flag stays scalar for backward compat. (4) Six citations from three flags proven. Acceptance met: repeated flags accumulated, never silently reduced to last."
+      }
     },
     {
       "id": "R6.1.12",
@@ -11710,11 +11836,30 @@
         "src/app/api/"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "R6-worker",
+      "evidence": [
+        "src/lib/operatorPerimeter.test.mjs:175",
+        "src/lib/operatorPerimeter.js:37",
+        "src/lib/operatorPerimeter.js:56"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T05:07:44.936Z",
+          "by": "R6-worker",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T05:09:17.132Z",
+          "by": "R6-worker",
+          "text": "R6.4.1: Route-perimeter walker guard exists and passes.\n\nThe guard at src/lib/operatorPerimeter.test.mjs:175 walks src/app/api recursively, finds every route.js file, and asserts:\n1. The set of publicly readable GET routes matches the expected allowlist exactly\n2. Only POST /api/scan is publicly writable\n3. Only the cron workers (/api/scan/worker, /api/content/worker) bypass the perimeter via SELF_GATED\n\nThe test uses isPublicRoute() and isSelfGated() from operatorPerimeter.js, which are the same decision functions used at runtime by middleware.js. Adding a new route to src/app/api without placing it on the allowlist or marking it self-gated fails this guard.\n\nVerified passing: node --test --test-name-pattern=\"GUARD.*every /api route\" src/lib/operatorPerimeter.test.mjs"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T05:24:46.518Z",
+        "note": "VERIFIED. 25 operatorPerimeter tests pass including the GUARD at :175. (1) The walker recursively walks src/app/api finding >20 route.js files. (2) Asserts exact public GET set (health, industries, scan/status, scans/*). (3) Asserts only POST /api/scan is public-writable. (4) Asserts only scan/worker and content/worker are SELF_GATED. (5) middleware.js binds the tested decision. Evidence: operatorPerimeter.test.mjs:175, operatorPerimeter.js:37 (PUBLIC_EXACT), operatorPerimeter.js:56 (SELF_GATED). Acceptance met: guard walks src/app/api and fails on ungated route not on allowlist."
+      }
     },
     {
       "id": "R6.4.2",

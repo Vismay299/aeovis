@@ -749,6 +749,13 @@ export async function listRecentScans(limit = 12) {
         url: s.url,
         industry: s.industry,
         score: score == null ? null : Math.round(Number(score) * 10) / 10,
+        // R2.4.2 — carry the raw column and quality flags so
+        // describeScanMeasurement can read measurement state from any surface
+        // that renders a listRecentScans row.  The `score` field above is kept
+        // for backward compatibility; callers that want gate-honouring display
+        // should use describeScanMeasurement(row) instead.
+        visibility_pct: s.visibility_pct,
+        raw_results: raw,
         scanned_at: s.scanned_at,
         engines,
         scan_count: 1,

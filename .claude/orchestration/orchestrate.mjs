@@ -653,4 +653,4 @@ if (isMain) {
   }
 }
 
-export { validateEvidenceCitation, resolveNote, cmds };
+export { validateEvidenceCitation, resolveNote, parseArgs, cmds };

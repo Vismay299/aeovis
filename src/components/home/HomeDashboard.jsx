@@ -32,6 +32,7 @@ import { Loader2 } from 'lucide-react';
 import { fetchScanHistory, saveScan } from '@/services/api';
 import { hasTimestamp } from '@/utils/format';
 import { historyLoadState } from '@/lib/historyStoreState';
+import { describeScanMeasurement } from '@/lib/scoring/enginePipeline';
 
 /* The reading's own band. Rivals never take a semantic colour, but this is
    your own score against a threshold, which is exactly what they are for. */
@@ -197,22 +198,27 @@ export function HomeDashboard({ initialData = null } = {}) {
         <span className="tag">Already running</span>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0, flex: '1 1 320px' }}>
-          {scans.map((s) => (
-            <button
-              key={s.brand}
-              type="button"
-              data-testid="home-brand-card"
-              style={itemStyle}
-              onClick={() => openBrand(s.brand)}
-            >
-              <b style={{ color: 'var(--ink-1)', fontWeight: 600 }}>{s.brand}</b>
-              <span className={scoreChip(s.score)}>
-                {s.score == null || !Number.isFinite(s.score) ? '—' : `${Math.round(s.score)}%`}
-              </span>
-              <span className="tag" style={{ letterSpacing: '.06em' }}>{timeAgo(s.scanned_at)}</span>
-              {opening === s.brand && <Loader2 size={12} aria-hidden="true" />}
-            </button>
-          ))}
+          {scans.map((s) => {
+            // R2.4.2 — one gate-honoring selector for every surface.  A null
+            // measurement renders an em dash, never a bare percent sign.
+            const m = describeScanMeasurement(s);
+            return (
+              <button
+                key={s.brand}
+                type="button"
+                data-testid="home-brand-card"
+                style={itemStyle}
+                onClick={() => openBrand(s.brand)}
+              >
+                <b style={{ color: 'var(--ink-1)', fontWeight: 600 }}>{s.brand}</b>
+                <span className={m.measured ? scoreChip(m.pct) : 'chip'}>
+                  {m.text}
+                </span>
+                <span className="tag" style={{ letterSpacing: '.06em' }}>{timeAgo(s.scanned_at)}</span>
+                {opening === s.brand && <Loader2 size={12} aria-hidden="true" />}
+              </button>
+            );
+          })}
 
           {runs.slice(0, 3).map((r) => (
             <button
