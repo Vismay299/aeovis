@@ -5002,11 +5002,25 @@
         "src/lib/scoring/enginePipeline.js:583-613"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "claude",
+      "evidence": [
+        "src/lib/scoring/enginePipeline.js:1716",
+        "src/lib/scoring/enginePipeline.js:1820",
+        "src/lib/scoring/enginePipeline.test.mjs:1306"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T04:29:19.755Z",
+          "by": "claude",
+          "text": "claimed"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T04:33:57.449Z",
+        "note": null
+      }
     },
     {
       "id": "R2.4.2",
@@ -5141,11 +5155,26 @@
         "src/components/dashboard/"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "claude",
+      "evidence": [
+        "src/lib/analytics/promptMetrics.js:12",
+        "src/lib/analytics/promptMetrics.js:171",
+        "src/components/dashboard/PromptMetricsTable.jsx:463",
+        "src/lib/analytics/promptMetrics.test.mjs:249"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T04:30:03.515Z",
+          "by": "claude",
+          "text": "claimed"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T04:33:57.522Z",
+        "note": null
+      }
     },
     {
       "id": "R2.7.1",
@@ -5982,7 +6011,7 @@
         "src/components/dashboard/OverviewView.jsx:140"
       ],
       "phase": "R2",
-      "status": "in_verification",
+      "status": "done",
       "owner": "aeovis-dev",
       "evidence": [
         "src/components/dashboard/interlocking.js:106",
@@ -6001,7 +6030,11 @@
           "text": "Zero-row engines no longer fall back to all rows. buildInterlocking marks noData:true with probes/cleared=0. Gauge renders 'no data' when asked=0. The 'N reporting' count excludes no-data engines. 8 new tests in interlocking.test.mjs. Full suite: 2714 pass, 18 pre-existing fail, no regressions."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T19:28:22.802Z",
+        "note": null
+      }
     },
     {
       "id": "R2.8.3",
@@ -6805,7 +6838,7 @@
         "src/components/dashboard/DashboardShell.jsx"
       ],
       "phase": "R2",
-      "status": "in_verification",
+      "status": "done",
       "owner": "aeovis-dev",
       "evidence": [
         "src/components/dashboard/ProvenanceStrip.jsx:42",
@@ -6824,7 +6857,11 @@
           "text": "New ProvenanceStrip component renders under the hero with: engines counted/skipped, eliciting pool size, aggregate elicitation rate (total eliciting / total answered), dead prompts, prompt-set version, geo, collection window. All values read off persisted record. Elicitation rate computed as weighted aggregate, not summed per-engine rates. 24 new tests in ProvenanceStrip.test.mjs. Full suite: 2714 pass, 18 pre-existing fail, no regressions."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T19:28:30.057Z",
+        "note": null
+      }
     },
     {
       "id": "R2.9.6",
@@ -10953,7 +10990,7 @@
       "tags": [],
       "phase": "R6",
       "findings": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "claude-r6",
       "evidence": [
         ".claude/orchestration/orchestrate.mjs:121",
@@ -10972,7 +11009,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T19:28:37.936Z",
+        "note": null
+      }
     },
     {
       "id": "R6.1.14",
@@ -10992,7 +11033,7 @@
       "tags": [],
       "phase": "R6",
       "findings": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "claude-r6",
       "evidence": [
         "src/lib/migrationsLedger.test.mjs:164",
@@ -11010,7 +11051,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T19:28:46.772Z",
+        "note": null
+      }
     },
     {
       "id": "R6.2.1",
@@ -11104,7 +11149,7 @@
         "docs/"
       ],
       "phase": "R6",
-      "status": "in_verification",
+      "status": "done",
       "owner": "claude-r6",
       "evidence": [
         "docs/RUNBOOK.md:1",
@@ -11117,7 +11162,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-13T19:28:55.124Z",
+        "note": null
+      }
     },
     {
       "id": "R6.2.4",

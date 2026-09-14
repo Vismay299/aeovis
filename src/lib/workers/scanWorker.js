@@ -1560,6 +1560,8 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     stats: {
       cost: stats.cost || 0,
       tokens: stats.tokens || 0,
+      // R3.6.8 — carried through the checkpoint so finalize can persist it.
+      cost_unmeasured_calls: stats.cost_unmeasured_calls || 0,
       website_scrape: stats.website_scrape ?? null,
       // R2.2.12 — the seeding verdict rides the same allowlist for the same
       // reason: this object is an allowlist, so a field nobody adds here is a
@@ -1687,7 +1689,14 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
   const totalPairs = Math.max(queries.length * engineDefs.length, 1);
   let doneCount = completed.size;
 
-  const stats = { cost: checkpoint.stats?.cost || 0, tokens: checkpoint.stats?.tokens || 0 };
+  // R3.6.8 — cost_unmeasured_calls carried from the checkpoint so it can be
+  // persisted to the scan row, distinguishing a genuinely free run from one
+  // where nothing could be priced.
+  const stats = {
+    cost: checkpoint.stats?.cost || 0,
+    tokens: checkpoint.stats?.tokens || 0,
+    cost_unmeasured_calls: checkpoint.stats?.cost_unmeasured_calls || 0,
+  };
   let workingCheckpoint = engineSetChange
     ? { ...checkpoint, engine_set_change: engineSetChange }
     : checkpoint;
@@ -1816,6 +1825,11 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
         stats: {
           cost: stats.cost || 0,
           tokens: stats.tokens || 0,
+          // R3.6.8 — carried forward for the same reason as website_scrape: the
+          // local `stats` here only accumulates probe cost, so the sourcing
+          // phase's value has to come from the checkpoint it was frozen onto, or
+          // the first persisted batch erases it.
+          cost_unmeasured_calls: stats.cost_unmeasured_calls || 0,
           website_scrape: workingCheckpoint.stats?.website_scrape ?? null,
           // R2.2.12 — carried forward for the same reason as website_scrape: the
           // local `stats` here only accumulates probe cost, so the sourcing
@@ -2038,7 +2052,14 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
       engine: r.engine,
     }));
 
-  const stats = { cost: checkpoint.stats?.cost || 0, tokens: checkpoint.stats?.tokens || 0 };
+  // R3.6.8 — cost_unmeasured_calls carried from the checkpoint so it can be
+  // persisted to the scan row, distinguishing a genuinely free run from one
+  // where nothing could be priced.
+  const stats = {
+    cost: checkpoint.stats?.cost || 0,
+    tokens: checkpoint.stats?.tokens || 0,
+    cost_unmeasured_calls: checkpoint.stats?.cost_unmeasured_calls || 0,
+  };
 
   // Heartbeat immediately before the slow LLM call (P0.2 FIX 2):
   // extractCompetitors can take up to ~75s, and until now finalize had NO
@@ -2290,6 +2311,10 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     used_dynamic_prompts: true,
     tokens_used: stats.tokens || 0,
     cost_total: stats.cost || 0,
+    // R3.6.8 — the count of probes whose cost could not be priced. A run
+    // where nothing could be priced has cost_total=0 but cost_unmeasured_calls>0,
+    // distinguishable from a genuinely free run where both are 0.
+    cost_unmeasured_calls: stats.cost_unmeasured_calls || 0,
     scoring_version: scoringVersion,
     prompt_set_id,
     prompt_set_hash,

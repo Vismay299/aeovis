@@ -183,3 +183,169 @@ test("R6.1.10 TEETH: orchestrate.mjs submit CLI refuses citation to blank line b
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// R6.1.11 — repeated --evidence flags accumulate instead of silently dropping
+// ---------------------------------------------------------------------------
+
+function makeTaskLedger(tmpDir, taskId, status) {
+  const testLedgerPath = path.join(tmpDir, "tasks.json");
+  const testLedger = {
+    $schema: "./schema.md",
+    version: 1,
+    source: { plan: "test", companion: "test", baseline_commit: "test", tracker: "test" },
+    block_reasons: {},
+    lanes: {},
+    phases: [{ id: "T0", title: "Test Phase", estimate: "1 day", why: "testing" }],
+    standing_rules: [],
+    tasks: [
+      {
+        id: taskId,
+        subphase: "T0.1",
+        lane: "test",
+        phase: "T0",
+        title: "Test Task",
+        detail: "testing evidence",
+        accept: "testing",
+        deps: [],
+        anchors: [],
+        findings: [],
+        tags: [],
+        status,
+        owner: "test-agent",
+        evidence: [],
+        notes: [],
+        verification: null,
+      },
+    ],
+  };
+  fs.writeFileSync(testLedgerPath, JSON.stringify(testLedger, null, 2) + "\n");
+  return testLedgerPath;
+}
+
+test("R6.1.11: repeated --evidence flags are accumulated, not reduced to last", () => {
+  const tmpDir = path.join(REPO, "tmp_test_r6111_" + Date.now());
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const testLedgerPath = makeTaskLedger(tmpDir, "T0.1.1", "in_progress");
+
+  try {
+    // Two separate --evidence flags, each with one citation
+    execFileSync(
+      process.execPath,
+      [
+        ORCHESTRATE_CLI,
+        "submit",
+        "T0.1.1",
+        "--evidence",
+        "package.json:1",
+        "--evidence",
+        "README.md:1",
+      ],
+      {
+        env: { ...process.env, ORCHESTRATION_LEDGER: testLedgerPath },
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+
+    const written = JSON.parse(fs.readFileSync(testLedgerPath, "utf8"));
+    const task = written.tasks.find((t) => t.id === "T0.1.1");
+    assert.equal(task.status, "in_verification");
+    assert.deepEqual(task.evidence, ["package.json:1", "README.md:1"]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("R6.1.11: comma-separated and repeated flags merge correctly", () => {
+  const tmpDir = path.join(REPO, "tmp_test_r6111b_" + Date.now());
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const testLedgerPath = makeTaskLedger(tmpDir, "T0.1.1", "in_progress");
+
+  try {
+    // First flag has two comma-separated, second has one
+    execFileSync(
+      process.execPath,
+      [
+        ORCHESTRATE_CLI,
+        "submit",
+        "T0.1.1",
+        "--evidence",
+        "package.json:1,README.md:1",
+        "--evidence",
+        "CLAUDE.md:1",
+      ],
+      {
+        env: { ...process.env, ORCHESTRATION_LEDGER: testLedgerPath },
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+
+    const written = JSON.parse(fs.readFileSync(testLedgerPath, "utf8"));
+    const task = written.tasks.find((t) => t.id === "T0.1.1");
+    assert.deepEqual(task.evidence, ["package.json:1", "README.md:1", "CLAUDE.md:1"]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("R6.1.11: --amend-evidence corrects citations on an in_verification task", () => {
+  const tmpDir = path.join(REPO, "tmp_test_r6111c_" + Date.now());
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const testLedgerPath = makeTaskLedger(tmpDir, "T0.1.1", "in_verification");
+
+  try {
+    // Replace evidence on an already-in_verification task
+    execFileSync(
+      process.execPath,
+      [
+        ORCHESTRATE_CLI,
+        "submit",
+        "T0.1.1",
+        "--amend-evidence",
+        "corrected",
+        "--evidence",
+        "package.json:2",
+      ],
+      {
+        env: { ...process.env, ORCHESTRATION_LEDGER: testLedgerPath },
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+
+    const written = JSON.parse(fs.readFileSync(testLedgerPath, "utf8"));
+    const task = written.tasks.find((t) => t.id === "T0.1.1");
+    assert.equal(task.status, "in_verification");
+    assert.deepEqual(task.evidence, ["package.json:2"]);
+    const amendNote = task.notes.find((n) => n.text === "evidence amended");
+    assert.ok(amendNote, "should have an 'evidence amended' note");
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("R6.1.11 TEETH: single --evidence flag still works (backward compat)", () => {
+  const tmpDir = path.join(REPO, "tmp_test_r6111d_" + Date.now());
+  fs.mkdirSync(tmpDir, { recursive: true });
+  const testLedgerPath = makeTaskLedger(tmpDir, "T0.1.1", "in_progress");
+
+  try {
+    execFileSync(
+      process.execPath,
+      [ORCHESTRATE_CLI, "submit", "T0.1.1", "--evidence", "package.json:1"],
+      {
+        env: { ...process.env, ORCHESTRATION_LEDGER: testLedgerPath },
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+
+    const written = JSON.parse(fs.readFileSync(testLedgerPath, "utf8"));
+    const task = written.tasks.find((t) => t.id === "T0.1.1");
+    assert.deepEqual(task.evidence, ["package.json:1"]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

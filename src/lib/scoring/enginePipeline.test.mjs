@@ -1293,3 +1293,104 @@ test("R2.9.6 TEETH — reverting cost null preservation causes the test to fail"
   // The assertion that teeth enforces on the fixed result:
   assert.notEqual(null, preFixResult.cost, "the buggy 0 fails when null is asserted");
 });
+
+// ---------------------------------------------------------------------------
+// R2.4.1 — top-level scan fields become blended/index values
+//
+// scans.visibility_pct, data_source_issue and insufficient_sample previously
+// described AIO only. A totally failed second engine raised no top-level flag.
+// Now visibility_pct carries the blended headline index, and insufficient_sample
+// is true when ANY engine has it.
+// ---------------------------------------------------------------------------
+
+test("R2.4.1 — visibility_pct carries the blended headline index, not AIO alone", () => {
+  // AIO: 2/10 visible → share_of_ai 20. Perplexity: 8/10 → share_of_ai 80.
+  // Headline blend: (20 + 80) / 2 = 50.
+  const aioSlice = summarizeEngineSlice(
+    [
+      ...Array.from({ length: 2 }, (_, i) => ({ ...textAnswerRow(i), visible: true })),
+      ...Array.from({ length: 8 }, (_, i) => textAnswerRow(100 + i)),
+    ],
+    "aio"
+  );
+  const ppxSlice = summarizeEngineSlice(
+    [
+      ...Array.from({ length: 8 }, (_, i) => ({ ...textAnswerRow(200 + i), visible: true })),
+      ...Array.from({ length: 2 }, (_, i) => textAnswerRow(300 + i)),
+    ],
+    "perplexity"
+  );
+
+  const engines = { aio: aioSlice, perplexity: ppxSlice };
+  const headline = computeHeadline(Object.values(engines));
+  assert.equal(headline.visibility_index_pct, 50, "premise: headline blends both engines");
+
+  const out = summarizeEngineResults({ engines, headline, results: [] });
+  // Before R2.4.1 this was aioSummary.visibility_pct (20), not the headline (50).
+  assert.equal(out.summary.visibility_pct, 50, "top-level visibility_pct is the blended headline");
+});
+
+test("R2.4.1 — visibility_pct falls back to AIO when there is no headline", () => {
+  // Only 3 non-branded answers — below HEADLINE_MIN_NON_BRANDED_ANSWERS (5) —
+  // so the headline counts 0 eligible engines.
+  const aioSlice = summarizeEngineSlice(
+    [
+      ...Array.from({ length: 2 }, (_, i) => ({ ...textAnswerRow(i), visible: true })),
+      textEmptyRow(100),
+    ],
+    "aio"
+  );
+  const engines = { aio: aioSlice };
+  const headline = computeHeadline(Object.values(engines));
+  assert.equal(headline.engines_counted, 0, "premise: no engine eligible");
+
+  const out = summarizeEngineResults({ engines, headline, results: [] });
+  assert.equal(
+    out.summary.visibility_pct,
+    aioSlice.visibility_pct,
+    "falls back to AIO's visibility_pct when headline has no value"
+  );
+});
+
+test("R2.4.1 — a totally failed second engine now raises the top-level insufficient_sample flag", () => {
+  // AIO: healthy. Perplexity: never ran (0 rows → insufficient_sample true).
+  const aioSlice = summarizeEngineSlice(healthyAioRows(), "aio");
+  const ppxSlice = summarizeEngineSlice([], "perplexity");
+
+  assert.equal(aioSlice.insufficient_sample, false, "premise: AIO is healthy");
+  assert.equal(ppxSlice.insufficient_sample, true, "premise: perplexity never ran");
+
+  const engines = { aio: aioSlice, perplexity: ppxSlice };
+  const headline = computeHeadline(Object.values(engines));
+  const out = summarizeEngineResults({ engines, headline, results: [] });
+  assert.equal(
+    out.summary.insufficient_sample,
+    true,
+    "scan-level insufficient_sample is true when ANY engine has it"
+  );
+});
+
+test("R2.4.1 — insufficient_sample stays false when no engine has it", () => {
+  const engines = {
+    aio: summarizeEngineSlice(healthyAioRows(), "aio"),
+    perplexity: summarizeEngineSlice(healthyAioRows(), "perplexity"),
+  };
+  const headline = computeHeadline(Object.values(engines));
+  const out = summarizeEngineResults({ engines, headline, results: [] });
+  assert.equal(out.summary.insufficient_sample, false, "no engine has insufficient_sample");
+});
+
+test("R2.4.1 — insufficient_sample on a legacy record with no engine slices stays false", () => {
+  const out = summarizeEngineResults({ engines: {}, headline: null, results: [] });
+  assert.equal(out.summary.insufficient_sample, false, "no engines → false");
+});
+
+test("R2.4.1 — data_source_issue remains blended (no regression from the visibility_pct change)", () => {
+  const engines = {
+    aio: summarizeEngineSlice(healthyAioRows(), "aio"),
+    perplexity: summarizeEngineSlice(degradedPerplexityRows(), "perplexity"),
+  };
+  const headline = computeHeadline(Object.values(engines));
+  const out = summarizeEngineResults({ engines, headline, results: [] });
+  assert.equal(out.summary.data_source_issue, true, "still flags the degraded engine");
+});

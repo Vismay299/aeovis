@@ -1712,7 +1712,14 @@ export function summarizeEngineResults(scanOutput) {
       // a number here.
       //
       // `??`, not `||`: a measured 0 is a real finding and must survive.
-      visibility_pct: aioSummary.visibility_pct ?? null,
+      //
+      // R2.4.1 — the top-level visibility_pct is the BLENDED headline index,
+      // not the AIO slice alone. Before this, a totally failed second engine
+      // raised no top-level flag: the score moved (engines_counted fell) while
+      // scans.visibility_pct still read AIO's number. The headline is the
+      // weighted mean across every eligible engine; it already excludes
+      // degraded/not-assessed slices, so it is the honest top-level number.
+      visibility_pct: headline?.visibility_index_pct ?? aioSummary.visibility_pct ?? null,
       share_of_ai_pct: aioSummary.share_of_ai_pct ?? null,
       share_of_voice_pct: scanShareOfVoicePct,
       // ...and WHY there is no number, carried up from the slice so a scan-level
@@ -1806,7 +1813,13 @@ export function summarizeEngineResults(scanOutput) {
       // Reading it off aioSummary alone let a text-only degradation drop the
       // headline from two engines to one with no banner to explain it.
       data_source_issue: scanHealth.dataSourceIssue,
-      insufficient_sample: aioSummary.insufficient_sample || false,
+      // R2.4.1 — quality flags become ANY-ENGINE flags. Before this, a
+      // perplexity slice that never ran (insufficient_sample true) while AIO
+      // scored cleanly left the scan-level flag false. The dashboard showed a
+      // score with no banner explaining that one engine was absent.
+      insufficient_sample: Object.values(engines || {}).some(
+        (s) => s && s.insufficient_sample
+      ) || false,
       thresholds: {
         error_rate_limit_pct: AIO_ERROR_RATE_LIMIT_PCT,
         min_non_branded_coverage: AIO_MIN_NON_BRANDED_COVERAGE,

@@ -101,8 +101,19 @@ function parseArgs(argv) {
   const flags = {};
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i].startsWith("--")) flags[argv[i].slice(2)] = argv[++i] ?? true;
-    else positional.push(argv[i]);
+    if (argv[i].startsWith("--")) {
+      const key = argv[i].slice(2);
+      const val = argv[++i] ?? true;
+      // R6.1.11 — accumulate repeated flags into an array instead of
+      // silently overwriting.  A single value stays scalar for backward
+      // compatibility; a second occurrence promotes to an array.
+      if (key in flags) {
+        const prev = flags[key];
+        flags[key] = Array.isArray(prev) ? [...prev, val] : [prev, val];
+      } else {
+        flags[key] = val;
+      }
+    } else positional.push(argv[i]);
   }
   return { flags, positional };
 }
@@ -297,14 +308,47 @@ const cmds = {
     console.log(`${t.id} claimed by ${flags.agent}`);
   },
 
-  /** Implementer hands off to verification. Evidence is mandatory here, not at done. */
+  /**
+   * Implementer hands off to verification. Evidence is mandatory here, not at
+   * done.
+   *
+   * R6.1.11 — repeated --evidence flags are accumulated, not silently reduced
+   * to the last.  Each flag value is comma-split and the results concatenated,
+   * so both `--evidence a,b --evidence c` and `--evidence a --evidence b,c`
+   * produce [a, b, c].
+   *
+   * R6.1.11 — --amend-evidence allows correcting citations while the task is
+   * already in_verification (re-submitting without going back to in_progress).
+   */
   submit(g, { positional, flags }) {
     const t = find(g, positional[0]);
-    if (t.status !== "in_progress") die(`${t.id} is ${t.status}, expected in_progress`);
-    const evidence = String(flags.evidence || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const amendMode = flags["amend-evidence"] !== undefined && flags["amend-evidence"] !== true;
+    if (amendMode) {
+      // Allow correcting evidence on an in_verification task.
+      if (t.status !== "in_verification")
+        die(`${t.id} is ${t.status}, expected in_verification for --amend-evidence`);
+    } else {
+      if (t.status !== "in_progress") die(`${t.id} is ${t.status}, expected in_progress`);
+    }
+
+    // R6.1.11 — handle repeated --evidence flags (which parseArgs now
+    // accumulates into arrays).  Each value is comma-split, then all
+    // sub-values are concatenated.
+    const rawEvidence = flags.evidence;
+    let evidence;
+    if (!rawEvidence) {
+      evidence = [];
+    } else if (Array.isArray(rawEvidence)) {
+      evidence = rawEvidence
+        .flatMap((v) => String(v).split(","))
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else {
+      evidence = String(rawEvidence)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
     if (!evidence.length) die("--evidence is required: one or more file:line citations");
 
     const errors = [];
@@ -321,6 +365,8 @@ const cmds = {
     t.evidence = evidence;
     t.status = "in_verification";
     if (resolved) t.notes.push({ at: stamp(), by: t.owner, text: resolved.text });
+    if (amendMode)
+      t.notes.push({ at: stamp(), by: t.owner, text: "evidence amended" });
     save(g);
     console.log(`${t.id} submitted for verification with ${evidence.length} citation(s)`);
   },

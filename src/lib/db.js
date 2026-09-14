@@ -239,6 +239,9 @@ export async function insertScan(scanRecord, deps = {}) {
     content_lift: scanRecord.content_lift || [],
     cost_total: scanRecord.cost_total,
     tokens_used: scanRecord.tokens_used,
+    // R3.6.8 — the count of probes whose cost could not be priced. Distinguishes
+    // a genuinely free run from one where every probe was unpriced/unmeasured.
+    cost_unmeasured_calls: scanRecord.cost_unmeasured_calls ?? 0,
   };
 
   const baseRecord = buildScanBaseRecord({ ...scanRecord, raw_results: rawPayload });
