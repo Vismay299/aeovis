@@ -11635,14 +11635,24 @@
         "docs/contracts/probe-result.md",
         "src/lib/engines/deployedEngines.js"
       ],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "claude",
+      "evidence": [
+        "src/lib/db/scanRow.js:17-20",
+        "src/lib/db/prompts.js:125",
+        "docs/contracts/probe-result.md:117-119",
+        "src/lib/engines/deployedEngines.js:21"
+      ],
       "notes": [
         {
           "at": "2026-09-05T06:52:50.362Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-14T06:24:53.922Z",
+          "by": "claude",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -11806,14 +11816,23 @@
       "phase": "R6",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "claude",
+      "evidence": [
+        "docs/PROD_MIGRATIONS.md:1019-1051",
+        "docs/PROD_MIGRATIONS.md:303-310",
+        "src/lib/docStatus.test.mjs:267-284"
+      ],
       "notes": [
         {
           "at": "2026-09-13T06:51:23.469Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-14T06:26:37.554Z",
+          "by": "claude",
+          "text": "claimed"
         }
       ],
       "verification": null
@@ -11879,10 +11898,18 @@
         "src/lib/"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "claude",
+      "evidence": [
+        "src/lib/failLoudGuard.test.mjs:1-171"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T06:31:02.771Z",
+          "by": "claude",
+          "text": "claimed"
+        }
+      ],
       "verification": null
     },
     {
@@ -12043,14 +12070,19 @@
       ],
       "phase": "R6",
       "tags": [],
-      "status": "todo",
-      "owner": null,
+      "status": "in_progress",
+      "owner": "claude",
       "evidence": [],
       "notes": [
         {
           "at": "2026-09-03T02:22:24.166Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-14T06:39:00.243Z",
+          "by": "claude",
+          "text": "claimed"
         }
       ],
       "verification": null

@@ -18,7 +18,7 @@
  *
  * WHAT THIS FILE CANNOT DO, and where that is covered.
  *
- * resolveEnabledEngines (src/lib/scoring/enginePipeline.js:527) additionally
+ * resolveEnabledEngines (src/lib/scoring/enginePipeline.js:resolveEnabledEngines) additionally
  * drops any engine whose isConfigured() is false. This module CANNOT: it is
  * bundled into a client component, so it must never read OPENAI_API_KEY or
  * PERPLEXITY_API_KEY, and if it tried, the value would be undefined in the

@@ -122,7 +122,7 @@ export async function getPromptsForBrand(brand, includeDisabled = false, options
  * that path is ALWAYS null — a real error has already been thrown.
  *
  * NOTE on `data`: the upsert deliberately does not `.select()`, so PostgREST
- * resolves `data: null` on SUCCESS (see ../db.js insertScan's cascade-3 note).
+ * resolves `data: null` on SUCCESS (the `.upsert()` deliberately omits `.select()`).
  * No caller reads `data`, and success/failure here is decided by the error
  * envelope, not by the row count — but nobody may start treating a null `data`
  * as "nothing was written" without adding `.select()` first.

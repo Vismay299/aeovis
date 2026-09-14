@@ -252,3 +252,33 @@ test("GUARD — OPERATOR_LEDGER § C lists every migration on disk", async () =>
     `these migrations exist but OPERATOR_LEDGER.md § C does not name them: ${missing}`
   );
 });
+
+/**
+ * R6.3.7 — PROD_MIGRATIONS.md is the fourth ledger of migration state.
+ *
+ * Three other places are already guarded (README table, OPERATOR_LEDGER § C,
+ * setup-supabase verify list). PROD_MIGRATIONS.md was out of scope for R3.5.4
+ * and stayed silent when 014 landed — the first three guards fired and this one
+ * did not. The interesting part is not the missing row, which is a five-minute
+ * edit; it is that three guards fired and this file stayed silent, so
+ * PROD_MIGRATIONS.md can drift arbitrarily far behind the other three and the
+ * suite stays green.
+ */
+test("GUARD — PROD_MIGRATIONS.md lists every migration on disk", async () => {
+  const prod = await readFile(path.join(REPO, "docs/PROD_MIGRATIONS.md"), "utf8");
+  const onDisk = (await readdir(path.join(REPO, "supabase/migrations")))
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => f.replace(/\.sql$/, ""))
+    .sort();
+  assertCorpusIntact(onDisk, "onDisk migrations", {
+    floor: 12,
+    required: ["001_initial_schema", "014_content_job_checkpoints"],
+    isTuple: false,
+  });
+  const missing = onDisk.filter((m) => !prod.includes("`" + m + "`"));
+  assert.deepEqual(
+    missing,
+    [],
+    `these migrations exist but PROD_MIGRATIONS.md does not name them: ${missing}`
+  );
+});

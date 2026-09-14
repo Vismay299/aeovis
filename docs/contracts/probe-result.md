@@ -114,8 +114,9 @@ at `:283` at `25e7727`, and at `:335` at `49fe39e`. The rule that follows: on a
 repo with concurrent writers, `git diff` being clean is a fact about the past,
 and only `git show <commit>:<path>` produces a citation that means anything.
 
-This is the only document in `docs/contracts/`. Contracts are **normative**:
-"must", "must not" and "never" here are requirements on code, not advice.
+This document is **normative**: "must", "must not" and "never" here are
+requirements on code, not advice. Other documents in `docs/contracts/`
+may exist; each carries its own `<!-- doc-status -->` header.
 
 ---
 

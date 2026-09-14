@@ -299,7 +299,15 @@ WITH expected(migration, kind, name) AS (
     ('013_brand_metrics_sov_state', 'constraint', 'brand_metrics_daily_sov_state_check'),
     ('013_brand_metrics_sov_state', 'constraint', 'brand_metrics_daily_sov_state_reason_check'),
     ('013_brand_metrics_sov_state', 'constraint', 'brand_metrics_daily_sov_state_pct_agreement_check'),
-    ('013_brand_metrics_sov_state', 'index',      'brand_metrics_daily_sov_unverified_idx')
+    ('013_brand_metrics_sov_state', 'index',      'brand_metrics_daily_sov_unverified_idx'),
+    -- 014_content_job_checkpoints.sql
+    -- Same column-invisibility problem as 012/013 but without a proxy index.
+    -- The only non-comment line is:
+    --   ALTER TABLE content_jobs ADD COLUMN IF NOT EXISTS checkpoint jsonb;
+    -- Unlike 012/013, this migration ships no index that references the new
+    -- column, so there is no catalog object whose existence proves the column
+    -- was added. The column check below uses pg_attribute directly.
+    ('014_content_job_checkpoints', 'column',     'content_jobs.checkpoint')
 ),
 checked AS (
   SELECT e.migration, e.kind, e.name,
@@ -1006,7 +1014,41 @@ table on PostgreSQL 11+ (the default is stored in the catalog), so the
 `ACCESS EXCLUSIVE` lock on `scan_jobs` lasts for a catalog write, not a table
 scan. It does not backfill or retire jobs already stranded in a running status —
 they start at `attempts = 0` and get three fresh chances. Retiring existing
-corpses is an operator action.
+ corpses is an operator action.
+
+## `014_content_job_checkpoints.sql`
+
+**Creates:** column `content_jobs.checkpoint jsonb`.
+
+The only non-comment line in the file is (line 11):
+`ALTER TABLE content_jobs ADD COLUMN IF NOT EXISTS checkpoint jsonb;`
+
+This is a column-only migration with no index, no constraint and no function —
+the same column-invisibility problem as 012 and 013, but without a proxy index
+whose existence could stand in for the column.
+
+```sql
+SELECT 'column' AS kind, a.attname AS name,
+       format_type(a.atttypid, a.atttypmod) || ' notnull=' || a.attnotnull::text
+         || ' default=' || coalesce(pg_get_expr(d.adbin, d.adrelid), 'none') AS detail
+  FROM pg_attribute a
+  JOIN pg_class c ON c.oid = a.attrelid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+ WHERE n.nspname = 'public' AND c.relname = 'content_jobs' AND a.attname = 'checkpoint'
+   AND a.attnum > 0 AND NOT a.attisdropped;
+```
+
+**Applied ⇔ 1 row.** Zero rows means not applied.
+
+**Why this matters.** Without `checkpoint`, content jobs do not merely lose the
+ability to resume — they fail. `updateContentJob` throws on a PostgREST `PGRST204`
+for an unknown column, and the first checkpoint write goes out at the first block
+boundary. On a pre-`014` database the first block that finishes throws, not the
+first rescue.
+
+**Re-run:** safe. `ADD COLUMN IF NOT EXISTS` is a no-op on a database that
+already has the column.
 
 ---
 

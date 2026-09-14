@@ -14,8 +14,10 @@
  */
 
 /**
- * The column set present in EVERY deployment (migration 001), used by all
- * three of insertScan's schema-fallback cascades.
+ * The column set present in EVERY deployment (migration 001). This was
+ * historically used by insertScan's schema-fallback cascades, which R2.2.4
+ * deleted — the cascades silently truncated rows to work around a schema
+ * drift that no longer exists, and standing rule 1 forbade the silence.
  *
  * @param {object} scanRecord
  */
