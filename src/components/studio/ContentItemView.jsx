@@ -248,13 +248,18 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
               GEO lift: <strong>{lift.target_count}</strong> target{" "}
               {lift.target_count === 1 ? "query" : "queries"} → cited on{" "}
               <strong>{lift.after.cited}</strong> (was {lift.before.cited}), visible on{" "}
-              <strong>{lift.after.visible}</strong> since publish.
+              <strong>{lift.after.visible}</strong> since approval.
               {lift.cited_delta > 0 && ` +${lift.cited_delta} newly cited.`}
+              {/* R5.2.3 — the approve→publish→lift pipeline has not been
+                  proven end-to-end; this is a correlation, not a causal
+                  measurement.  The caveat stays until the pipeline runs
+                  once with a verified live URL (R5.2.2) and a post-publish
+                  re-scan confirms the lift is real. */}
             </span>
           ) : (
             <span>
               Tracking <strong>{lift.target_count}</strong> target{" "}
-              {lift.target_count === 1 ? "query" : "queries"} — re-scan the brand to measure lift since publish.
+              {lift.target_count === 1 ? "query" : "queries"} — re-scan the brand to measure lift since approval.
             </span>
           )}
         </div>

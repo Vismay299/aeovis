@@ -1,0 +1,4 @@
+{
+  "description": "R1.4.1 fixture: a corrupted ChatGPT response — intentionally malformed to test parse_error.",
+  "response": "not even close to valid JSON structure"
+}

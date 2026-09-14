@@ -873,3 +873,31 @@ The doc-to-source staleness tripwire is a separate task and is not built here.
   out. **A tripwire must resolve `HEAD` to a sha once and pin it**, and prose
   must never carry the word `HEAD`, for the same reason: on a branch a dozen
   agents are committing to, `HEAD` is not a citation, it is a race.
+
+---
+
+# Entry #6 — 2026-09-14 — the approve→publish→lift pipeline is unproven
+
+**Filed under R5.2.3.** The lift copy in `src/components/studio/ContentItemView.jsx`
+said "since publish" — implying the operator had verified a live URL and that a
+post-publish re-scan confirmed the lift was real. Neither was true: the
+approve→publish→lift chain has never run end-to-end on a real brand with a
+verified live URL.
+
+**What was wrong.** The word "publish" in the lift panel created the impression
+that a publish step had occurred and that the lift measurement was causal. The
+publish step (R5.2.2) exists but has not been exercised against a real deployment.
+The lift measurement is a correlation between the approval timestamp and the
+post-approval re-scan — it is not proof that the published content caused the
+lift.
+
+**What was fixed.** Changed "since publish" to "since approval" in both the
+post-scan and pre-scan copy at `ContentItemView.jsx:251,262`. This is the honest
+description of what the measurement actually represents: the difference between
+the scan before approval and the scan after approval. The word "publish" will
+return when the pipeline runs once with a verified live URL and a post-publish
+re-scan confirms the lift.
+
+**Status.** The copy now reads "since approval" with a code comment recording
+the known-open pipeline. The build journal entry (this one) is the ledger row
+the accept criterion required.

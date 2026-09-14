@@ -1,0 +1,10 @@
+{
+  "description": "R1.4.1 fixture: a ChatGPT response blocked by content policy — carries an error, no output.",
+  "response": {
+    "error": {
+      "message": "This content policy request cannot be served.",
+      "type": "content_policy_violation",
+      "code": "content_filter"
+    }
+  }
+}

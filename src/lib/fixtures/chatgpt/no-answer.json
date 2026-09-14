@@ -1,0 +1,6 @@
+{
+  "description": "R1.4.1 fixture: a ChatGPT response with empty output — no assistant message.",
+  "response": {
+    "output": []
+  }
+}

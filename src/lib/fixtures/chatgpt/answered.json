@@ -1,0 +1,29 @@
+{
+  "description": "R1.4.1 fixture: a healthy ChatGPT Responses API response with text and citation annotations.",
+  "response": {
+    "output": [
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "The best CRM platforms for small businesses include HubSpot, Zoho CRM, and Salesforce. HubSpot offers a free tier, Zoho provides affordable plans, and Salesforce is the market leader for enterprise solutions.",
+            "annotations": [
+              {
+                "type": "url_citation",
+                "url": "https://www.hubspot.com/products/crm",
+                "title": "HubSpot CRM"
+              },
+              {
+                "type": "url_citation",
+                "url": "https://www.zoho.com/crm/",
+                "title": "Zoho CRM"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

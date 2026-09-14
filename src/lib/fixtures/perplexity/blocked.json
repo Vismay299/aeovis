@@ -1,0 +1,12 @@
+{
+  "description": "R1.3.1 fixture: a Perplexity block page — the response carries no usable choices.",
+  "answer": {
+    "error": {
+      "message": "Your request has been blocked by our content policy.",
+      "code": "content_policy_violation"
+    }
+  },
+  "search": {
+    "results": []
+  }
+}

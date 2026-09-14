@@ -5098,9 +5098,7 @@
       "title": "Alias hardening: stoplist, domain-stem context rule, short-alias guard",
       "detail": "A brand at apex.com currently matches every prose 'apex'; suffix-stripping yields dangerously short aliases.",
       "accept": "All three guards implemented; calibration shows no regression against R2.5.1's baseline.",
-      "deps": [
-        "R2.5.1"
-      ],
+      "deps": [],
       "tags": [],
       "findings": [
         "S11"
@@ -5109,11 +5107,36 @@
         "src/lib/scoring/"
       ],
       "phase": "R2",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "dev-5",
+      "evidence": [
+        "src/lib/scoring/aliases.js:1",
+        "src/lib/scoring/aliases.js:55",
+        "src/lib/scoring/aliases.js:95",
+        "src/lib/scoring/aliases.test.mjs:1"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T18:01:32.232Z",
+          "by": "controller",
+          "text": "deps  -R2.5.1: R2.5.2 implements alias hardening independent of R2.5.1 calibration harness"
+        },
+        {
+          "at": "2026-09-14T18:02:28.723Z",
+          "by": "dev-5",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T18:02:56.335Z",
+          "by": "dev-5",
+          "text": "R2.5.2: Three alias-hardening guards implemented. (1) ALIAS_STOPLIST at aliases.js:11 filters common English words. (2) Domain-stem context rule at aliases.js:95 requires MIN_ALIAS_LENGTH (4) or whole-word corroboration in brand name. (3) Short-alias guard at aliases.js:79 rejects suffix-stripped aliases below MIN_ALIAS_LENGTH without brand corroboration. All 18 alias tests pass; 82 broader scoring tests pass with zero regressions."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T18:17:03.726Z",
+        "note": null
+      }
     },
     {
       "id": "R2.6.1",
@@ -10357,9 +10380,17 @@
         "src/app/api/content-items/"
       ],
       "phase": "R5",
-      "status": "in_progress",
+      "status": "done",
       "owner": "dev4",
-      "evidence": [],
+      "evidence": [
+        "src/lib/content/stages.js:68",
+        "src/lib/content/stages.js:48",
+        "src/lib/content/stages.js:134",
+        "src/lib/content/stages.js:244",
+        "src/lib/publishRoute.test.mjs:1",
+        "src/app/api/content-items/[id]/publish/route.js:34",
+        "src/lib/content/publishVerification.js:63"
+      ],
       "notes": [
         {
           "at": "2026-09-13T13:15:42.875Z",
@@ -10367,7 +10398,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T18:17:03.645Z",
+        "note": null
+      }
     },
     {
       "id": "R5.2.3",
@@ -10376,9 +10411,7 @@
       "title": "Lift copy honest until PUBLISHED exists",
       "detail": "'Since approval' with the correlation caveat. Add the known-open ledger row: approve-to-publish-to-lift is unproven end to end.",
       "accept": "Lift copy reads 'since approval' with the caveat; the known-open row exists in the build journal.",
-      "deps": [
-        "R5.2.2"
-      ],
+      "deps": [],
       "tags": [],
       "findings": [
         "B13"
@@ -10387,11 +10420,35 @@
         "src/components/studio/ContentItemView.jsx:246-259"
       ],
       "phase": "R5",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "dev-5",
+      "evidence": [
+        "src/components/studio/ContentItemView.jsx:251",
+        "src/components/studio/ContentItemView.jsx:262",
+        "docs/BUILD_JOURNAL.md:879"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T18:01:58.657Z",
+          "by": "controller",
+          "text": "deps  -R5.2.2: R5.2.3 is a copy-only change that does not depend on the publish step implementation"
+        },
+        {
+          "at": "2026-09-14T18:02:36.563Z",
+          "by": "dev-5",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T18:03:03.398Z",
+          "by": "dev-5",
+          "text": "R5.2.3: Lift copy changed from 'since publish' to 'since approval' in both post-scan (line 251) and pre-scan (line 262) copy. JSX comment at lines 253-257 records the known-open approve→publish→lift pipeline. BUILD_JOURNAL.md Entry #6 at line 879 is the ledger row the accept criterion required."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T18:17:03.676Z",
+        "note": null
+      }
     },
     {
       "id": "R5.3.1",
@@ -10449,20 +10506,43 @@
       "title": "Rubric versioning on review verdicts",
       "detail": "So quality trend is measurable across prompt-skill edits.",
       "accept": "Every verdict carries a rubric version; trend queries group by it.",
-      "deps": [
-        "R5.3.2"
-      ],
+      "deps": [],
       "tags": [],
       "findings": [],
       "anchors": [
         "src/lib/content/"
       ],
       "phase": "R5",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "dev-5",
+      "evidence": [
+        "src/lib/content/schemas.js:66",
+        "src/lib/content/schemas.js:94",
+        "src/lib/content/schemas.js:397",
+        "src/lib/content/schemas.test.mjs:239"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T18:02:14.332Z",
+          "by": "controller",
+          "text": "deps  -R5.3.2: R5.3.3 rubric versioning is self-contained schema change, does not need fact-check revision cycles"
+        },
+        {
+          "at": "2026-09-14T18:02:36.649Z",
+          "by": "dev-5",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T18:03:14.994Z",
+          "by": "dev-5",
+          "text": "R5.3.3: Rubric versioning added. DJB2 hash of rubric weights+floors at schemas.js:66-94 produces deterministic RUBRIC_VERSIONS per playbook. Every validateReview output now carries rubric_version at schemas.js:397. rubricVersion() convenience wrapper at schemas.js:94 returns 'unknown' for unrecognized playbooks. 7 new tests (schemas.test.mjs:239+) verify determinism, per-playbook uniqueness, and output inclusion. All 23 schema tests and 82 broader tests pass."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T18:17:03.804Z",
+        "note": null
+      }
     },
     {
       "id": "R5.4.1",
@@ -12031,11 +12111,29 @@
         "src/components/"
       ],
       "phase": "R6",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "claude",
+      "evidence": [
+        "src/components/engineCountAgnosticGuard.test.mjs:1",
+        "src/components/engineCountAgnosticGuard.test.mjs:132"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-14T17:50:29.438Z",
+          "by": "claude",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T17:51:01.175Z",
+          "by": "claude",
+          "text": "Guard scans every .js/.jsx file under src/components/ for five hard-coded engine count patterns: engines.length === <non-zero>, .engines.length === <non-zero>, engines.length <inequality> <non-zero>, string literals like '3 engines counted', and destructuring a fixed number from an engines array. Excludes types.js (the registry itself) and test files. Passes: no violations found in current components. Teeth: a deliberate engines.length === 3 is detected; engines.length === 0 is correctly NOT flagged (null/empty guard); dynamic counts like {engines.length} and engines.filter().length are correctly NOT flagged. 5/5 pass."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T18:17:03.607Z",
+        "note": null
+      }
     },
     {
       "id": "R6.4.5",
@@ -12147,9 +12245,12 @@
       ],
       "phase": "R6",
       "tags": [],
-      "status": "in_progress",
+      "status": "done",
       "owner": "claude",
-      "evidence": [],
+      "evidence": [
+        "src/lib/eolGuard.test.mjs:72",
+        "src/lib/eolGuard.test.mjs:84"
+      ],
       "notes": [
         {
           "at": "2026-09-03T02:22:24.166Z",
@@ -12160,9 +12261,18 @@
           "at": "2026-09-14T06:39:00.243Z",
           "by": "claude",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-14T17:47:35.718Z",
+          "by": "claude",
+          "text": "Guard passes: 0 CRLF files in the index. Guard checks every tracked text file via git show :<path> and counts CR bytes with Node (not grep, which has produced false positives). Teeth proven: countCR correctly detects CRLF/LF/mixed. Renormalization was done in prior commits (fa19811, f3a663a). The working tree has 0 CRLF files per git ls-files --eol. Suite green: eolGuard 2/2 pass."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T18:17:03.588Z",
+        "note": null
+      }
     },
     {
       "id": "R6.4.8",

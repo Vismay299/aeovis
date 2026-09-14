@@ -79,6 +79,48 @@ test("generateUnbrandedPrompts - drops branded leaks, dupes, and single-word noi
   assert.equal(dupeCount, 1);
 });
 
+/**
+ * R1.7.4 — a deployment with only SERPAPI_KEY set makes no serpapi.com request
+ * from promptGen. The PAA path is gated by the same capability check as the
+ * AIO probe (BRIGHTDATA_API_KEY), so a stale SERPAPI_KEY must not reach any
+ * network call.
+ *
+ * This test exercises the real fetchPeopleAlsoAsk from serp.js (not a stub)
+ * with no BRIGHTDATA_API_KEY set, proving the gate fires before any request.
+ */
+test("R1.7.4 — stale SERPAPI_KEY alone makes no PAA request from promptGen", async () => {
+  const oldBD = process.env.BRIGHTDATA_API_KEY;
+  const oldSerp = process.env.SERPAPI_KEY;
+  const oldSerpZone = process.env.BRIGHTDATA_SERP_ZONE;
+  delete process.env.BRIGHTDATA_API_KEY;
+  delete process.env.BRIGHTDATA_SERP_ZONE;
+  process.env.SERPAPI_KEY = "stale-serpapi-key";
+
+  let networkCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (...args) => {
+    networkCalls++;
+    throw new Error(`should not have made a network call: ${args[0]}`);
+  };
+
+  try {
+    // Use the REAL fetchPeopleAlsoAsk, not the noNetwork stub.
+    const { fetchPeopleAlsoAsk } = await import("../engines/serp.js");
+    const result = await fetchPeopleAlsoAsk(["best crm software"]);
+
+    assert.deepEqual(result, [], "PAA must return empty when Bright Data is not configured");
+    assert.equal(networkCalls, 0, "no network call must be made with only a stale SERPAPI_KEY");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (oldBD === undefined) delete process.env.BRIGHTDATA_API_KEY;
+    else process.env.BRIGHTDATA_API_KEY = oldBD;
+    if (oldSerp === undefined) delete process.env.SERPAPI_KEY;
+    else process.env.SERPAPI_KEY = oldSerp;
+    if (oldSerpZone === undefined) delete process.env.BRIGHTDATA_SERP_ZONE;
+    else process.env.BRIGHTDATA_SERP_ZONE = oldSerpZone;
+  }
+});
+
 test("generateUnbrandedPrompts - throws a clear error when it cannot reach count", async () => {
   const llmJson = async () => makeItems("short", 3);
 

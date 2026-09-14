@@ -25,28 +25,11 @@ export const ENGINE_HYBRID_WEIGHTS = {
   [Engine.GEMINI]: 0.10
 };
 
-export function getEnabledEngines() {
-  const envVal = process.env.ENGINES_ENABLED;
-  const probeMode = process.env.PROBE_MODE || "hybrid";
-  
-  if (envVal) {
-    return envVal
-      .split(",")
-      .map(s => s.trim().toLowerCase())
-      .filter(s => ENGINES.includes(s));
-  }
-  
-  // Dynamic API Key check fallback
-  const list = [Engine.GEMINI];
-  if (process.env.OPENAI_API_KEY) list.push(Engine.OPENAI);
-  if (process.env.PERPLEXITY_API_KEY) list.push(Engine.PERPLEXITY);
-  // BRIGHTDATA_API_KEY only. SERPAPI_KEY is deliberately absent: Bright Data is
-  // the chosen SERP provider (docs/decisions/2026-08-29-serp-provider-bright-data.md),
-  // so a stale SERPAPI_KEY must read as unconfigured here rather than let a
-  // deployment look configured at boot and fail at probe time.
-  const serpConfigured = process.env.BRIGHTDATA_API_KEY;
-  if (serpConfigured && probeMode !== "llm_only") {
-    list.push(Engine.GOOGLE_AI_OVERVIEW);
-  }
-  return list;
-}
+/**
+ * R1.7.3 — getEnabledEngines() was the dead second engine registry.
+ *
+ * It had zero production callers outside its own tests: the real gating lives
+ * in src/lib/scoring/enginePipeline.js's resolveEnabledEngines(). The function
+ * is deleted; the Engine enum and weight tables remain for aggregate.js and
+ * qualityGate.js.
+ */

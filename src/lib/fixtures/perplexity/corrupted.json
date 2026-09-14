@@ -1,0 +1,5 @@
+{
+  "description": "R1.3.1 fixture: a corrupted Perplexity response — intentionally malformed to test parse_error.",
+  "answer": "this is not an object with choices",
+  "search": "this is not an object with results"
+}
