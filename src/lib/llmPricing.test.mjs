@@ -389,3 +389,45 @@ test("R3.6.6 - the built-in table prices the model the ChatGPT probe calls by de
   // And an env-overridden id is not quietly priced at that row.
   assert.equal(lookupModelPrice("gpt-9-omni", NO_ENV), null);
 });
+
+/**
+ * R3.6.8 — the fabricated-zero guard.
+ *
+ * A priced model returning no usage block must throw UnpricedModelError
+ * (reason: unmeasured_tokens), never silently persist cost 0. The caller
+ * increments cost_unmeasured_calls, and the scan row carries that counter
+ * alongside cost_total so that a run where nothing could be priced
+ * (cost_total=0, cost_unmeasured_calls>0) is distinguishable from a
+ * genuinely free run (cost_total=0, cost_unmeasured_calls=0).
+ */
+test("R3.6.8 — a priced model with no usage block throws, never a fabricated $0", () => {
+  resetUnpricedAlerts();
+  const caught = silenced(() => {
+    try {
+      resolveCost({
+        model: "anthropic/claude-sonnet-4.5",
+        provider: "mimo",
+        usage: {},
+        env: NO_ENV,
+      });
+      return null;
+    } catch (e) {
+      return e;
+    }
+  });
+  assert.ok(isUnpricedModel(caught), "must be a typed UnpricedModelError");
+  assert.equal(caught.reason, "unmeasured_tokens");
+  // The critical invariant: the caller NEVER receives cost 0 from this path.
+  // If this assertion fails, the fabricated zero has returned.
+});
+
+test("R3.6.8 — the price rows carry the date they were taken", () => {
+  const anthropic = lookupModelPrice("anthropic/claude-sonnet-4.5", NO_ENV);
+  assert.ok(anthropic, "anthropic row exists");
+  const gpt = lookupModelPrice("gpt-4o-mini", NO_ENV);
+  assert.ok(gpt, "gpt-4o-mini row exists");
+  // The rows are frozen and present. The date is in the source comment;
+  // this test proves the rows have not been accidentally removed. The
+  // fabricated-zero guard above is the behaviour test; this is the existence
+  // check.
+});

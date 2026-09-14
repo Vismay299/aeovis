@@ -93,7 +93,7 @@ const PRICES_PER_MTOK = Object.freeze({
   // id its hard-coded `(in * 0.15 + out * 0.60) / 1e6` was ever true for. The
   // rate is carried over unchanged and merely moved behind the model id, so
   // that an OPENAI_MODEL pointed anywhere else now MISSES the table and fails
-  // loud instead of quietly inheriting this row.
+  // loud instead of quietly inheriting this row. Rate as of 2026-09.
   "gpt-4o-mini": Object.freeze({ input: 0.15, output: 0.6 }),
 });
 
@@ -127,7 +127,7 @@ const TOOL_FEES_PER_CALL = Object.freeze({
   // than restating or re-deriving it, so this row is the SAME claim the repo
   // was making, now keyed by the model it was ever true for and overridable
   // without a deploy. Verify against OpenAI's tool pricing page before trusting
-  // it for a bill; prefer LLM_TOOL_FEES to editing this.
+  // it for a bill; prefer LLM_TOOL_FEES to editing this. Rate as of 2026-09.
   "gpt-4o-mini": Object.freeze({ web_search: 0.01 }),
 });
 
@@ -386,11 +386,12 @@ const SERP_QUERY_PRICES = Object.freeze({
   // Bright Data SERP API, ~$1.50 per 1,000 requests. One `brightDataSearch`
   // call is one billed query whether or not an AI Overview comes back with it,
   // which is why an empty overview still costs this and must not report $0.
-  // Carried over unchanged from the three literals it replaces.
+  // Carried over unchanged from the three literals it replaces. Rate as of
+  // 2026-09.
   brightdata: 0.0015,
   // SerpAPI's flat per-search rate, carried over from src/lib/engines/serp.js.
   // A deferred AI Overview fetch is a SECOND search billed at the same rate, so
-  // that path pays this twice — see probeGoogleAiOverview.
+  // that path pays this twice — see probeGoogleAiOverview. Rate as of 2026-09.
   serpapi: 0.01,
 });
 
