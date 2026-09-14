@@ -457,6 +457,16 @@ test("R2.7.13 ACCEPT — HomeDashboard safely renders unmeasured scores with em-
     ["@/services/api", { __esModule: true, fetchScanHistory: () => Promise.resolve({ data: [] }), saveScan: () => {} }],
     ["@/utils/format", formatModule],
     ["@/lib/historyStoreState", { historyLoadState: () => ({ status: "ready", scans: [] }) }],
+    ["@/lib/scoring/enginePipeline", {
+      __esModule: true,
+      describeScanMeasurement: (row) => {
+        const pct = row?.score != null ? Number(row.score) : null;
+        if (pct === null || !Number.isFinite(pct)) {
+          return { measured: false, measuredZero: false, pct: null, text: '—', state: null, reason: null, label: 'not measured', detail: '' };
+        }
+        return { measured: true, measuredZero: pct === 0, pct, text: `${pct}%`, state: 'measured', reason: null, label: 'measured', detail: '' };
+      },
+    }],
   ]);
 
   const module = { exports: {} };

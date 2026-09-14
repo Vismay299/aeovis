@@ -532,6 +532,7 @@ test("runSourcingPhase — freezes brand/url/competitors/queries/engines/stats i
     tokens: 0,
     website_scrape: null,
     prompt_seeding: null,
+    cost_unmeasured_calls: 0,
   });
   assert.ok(checkpoint.sourced_at);
 });

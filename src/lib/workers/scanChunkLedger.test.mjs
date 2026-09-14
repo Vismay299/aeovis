@@ -2260,7 +2260,7 @@ test("GUARD — every declared skip reason is actually recorded somewhere in sca
     // via a variable that was assigned from CHUNK_SKIP_REASONS.KEY earlier in the
     // same function scope. Check for both patterns.
     const directPattern = new RegExp(`recordSkip\\([^;]*?CHUNK_SKIP_REASONS\\.${key}\\b`, "s");
-    const indirectPattern = new RegExp(`CHUNK_SKIP_REASONS\\.${key}\\s*=`, "s");
+    const indirectPattern = new RegExp(`CHUNK_SKIP_REASONS\\.${key}\\s*[=;,]`, "s");
     assert.ok(
       directPattern.test(src) || indirectPattern.test(src),
       `CHUNK_SKIP_REASONS.${key} ("${value}") is declared but never passed to recordSkip — ` +

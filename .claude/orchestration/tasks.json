@@ -11635,7 +11635,7 @@
         "docs/contracts/probe-result.md",
         "src/lib/engines/deployedEngines.js"
       ],
-      "status": "in_verification",
+      "status": "done",
       "owner": "claude",
       "evidence": [
         "src/lib/db/scanRow.js:17-20",
@@ -11655,7 +11655,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T07:20:08.695Z",
+        "note": null
+      }
     },
     {
       "id": "R6.3.5",
@@ -11816,7 +11820,7 @@
       "phase": "R6",
       "tags": [],
       "findings": [],
-      "status": "in_verification",
+      "status": "done",
       "owner": "claude",
       "evidence": [
         "docs/PROD_MIGRATIONS.md:1019-1051",
@@ -11835,7 +11839,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T07:20:29.363Z",
+        "note": null
+      }
     },
     {
       "id": "R6.4.1",
@@ -11898,7 +11906,7 @@
         "src/lib/"
       ],
       "phase": "R6",
-      "status": "in_verification",
+      "status": "done",
       "owner": "claude",
       "evidence": [
         "src/lib/failLoudGuard.test.mjs:1-171"
@@ -11910,7 +11918,11 @@
           "text": "claimed"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-14T07:20:52.739Z",
+        "note": null
+      }
     },
     {
       "id": "R6.4.3",

@@ -200,6 +200,9 @@ const EXPECTED_OBJECTS = {
   "016_content_items_natural_key.sql": [
     { kind: "constraint", name: "content_items_job_id_cycle_key" },
   ],
+  "017_cost_unmeasured_calls.sql": [
+    { kind: "column", name: "scans.cost_unmeasured_calls" },
+  ],
 };
 
 /**

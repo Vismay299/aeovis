@@ -18,11 +18,11 @@ test("R6.1.10: refuse evidence citation whose line number exceeds file length", 
 });
 
 test("R6.1.10: refuse evidence citation to a blank line", () => {
-  // Line 163 of orchestrate.mjs is an empty line
-  const err = validateEvidenceCitation(".claude/orchestration/orchestrate.mjs:163", REPO);
+  // Line 33 of orchestrate.mjs is an empty line
+  const err = validateEvidenceCitation(".claude/orchestration/orchestrate.mjs:33", REPO);
   assert.ok(err, "should fail on blank line");
-  assert.match(err, /\.claude\/orchestration\/orchestrate\.mjs:163/);
-  assert.match(err, /points to blank line 163/);
+  assert.match(err, /\.claude\/orchestration\/orchestrate\.mjs:33/);
+  assert.match(err, /points to blank line 33/);
 });
 
 test("R6.1.10: refuse evidence citation with range exceeding file length or inverted", () => {
@@ -164,7 +164,7 @@ test("R6.1.10 TEETH: orchestrate.mjs submit CLI refuses citation to blank line b
       () => {
         execFileSync(
           process.execPath,
-          [ORCHESTRATE_CLI, "submit", "T0.1.1", "--evidence", ".claude/orchestration/orchestrate.mjs:163"],
+          [ORCHESTRATE_CLI, "submit", "T0.1.1", "--evidence", ".claude/orchestration/orchestrate.mjs:33"],
           {
             env: { ...process.env, ORCHESTRATION_LEDGER: testLedgerPath },
             encoding: "utf8",
@@ -174,8 +174,8 @@ test("R6.1.10 TEETH: orchestrate.mjs submit CLI refuses citation to blank line b
       },
       (err) => {
         const output = String(err.stderr || "") + String(err.stdout || "");
-        assert.match(output, /\.claude\/orchestration\/orchestrate\.mjs:163/);
-        assert.match(output, /points to blank line 163/);
+        assert.match(output, /\.claude\/orchestration\/orchestrate\.mjs:33/);
+        assert.match(output, /points to blank line 33/);
         return true;
       }
     );

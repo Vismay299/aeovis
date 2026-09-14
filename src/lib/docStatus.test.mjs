@@ -275,7 +275,7 @@ test("GUARD — PROD_MIGRATIONS.md lists every migration on disk", async () => {
     required: ["001_initial_schema", "014_content_job_checkpoints"],
     isTuple: false,
   });
-  const missing = onDisk.filter((m) => !prod.includes("`" + m + "`"));
+  const missing = onDisk.filter((m) => !prod.includes("`" + m + ".sql`"));
   assert.deepEqual(
     missing,
     [],
