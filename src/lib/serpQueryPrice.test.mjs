@@ -51,6 +51,7 @@ import {
 import { probeGoogleAiOverview } from "./engines/serp.js";
 import { runAioScan } from "./scoring/aioPipeline.js";
 import { runMultiEngineScan } from "./scoring/enginePipeline.js";
+import { assertCorpusIntact } from "./testCorpus.mjs";
 
 /** Every call in the unit block is env-explicit, so nothing reads the ambient process. */
 const NO_ENV = {};
@@ -166,52 +167,6 @@ test("R3.6.4 — a query count that is not a number is a caller bug, not a defau
 // 2. The static guard.
 // ---------------------------------------------------------------------------
 
-function assertCorpusIntact(rows, name, { floor, required = [], isTuple = false }) {
-  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
-  assert.ok(
-    rows.length >= floor,
-    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a corpus ` +
-      `whose tests iterate over it, so assertions silently stopped running. If the removal ` +
-      `was deliberate, lower the floor here in the same commit and state why.`
-  );
-  if (isTuple) {
-    rows.forEach((row, i) => {
-      assert.ok(
-        Array.isArray(row) && row.length >= 2 && typeof row[0] === "string",
-        `${name}[${i}] is not a valid tuple entry: ${JSON.stringify(row)}`
-      );
-      const reason = row[row.length - 1];
-      assert.ok(
-        typeof reason === "string" && reason.trim().length > 0,
-        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
-          `the next editor deletes, and the floor above would then be met by padding`
-      );
-    });
-  } else {
-    rows.forEach((item, i) => {
-      assert.ok(
-        typeof item === "string" || item instanceof RegExp,
-        `${name}[${i}] is not a string or RegExp: ${JSON.stringify(item)}`
-      );
-    });
-  }
-  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r instanceof RegExp ? r.source : r));
-  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
-  assert.deepEqual(
-    dupes,
-    [],
-    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
-      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
-  );
-  const missing = required.filter((t) => !targets.includes(t));
-  assert.deepEqual(
-    missing,
-    [],
-    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing ` +
-      `targets: removing one is a decision to stop defending that target -- make it in the same commit as this list.`
-  );
-}
-
 /**
  * The scan path, for the purposes of this guard: the files that issue a billed
  * SERP query and therefore have a per-query price to get wrong. Nothing else.
@@ -252,7 +207,7 @@ test("GUARD TEETH — assertCorpusIntact enforces length floor, shape, uniquenes
   );
   assert.throws(
     () => assertCorpusIntact([123], "TEST_CORPUS", { floor: 1, isTuple: false }),
-    /is not a string or RegExp/
+    /is not a string/
   );
 });
 
@@ -269,10 +224,11 @@ test("GUARD — SCAN_PATH_FILES and COST_LITERAL_PATTERNS corpora are intact", (
   assertCorpusIntact(COST_LITERAL_PATTERNS, "COST_LITERAL_PATTERNS", {
     floor: 2,
     required: [
-      COST_LITERAL_PATTERNS[0].source,
-      COST_LITERAL_PATTERNS[1].source,
+      "[\\w$.]*cost[\\w$]*\\s*(?:\\+|-)?=[^=]\\s*(-?\\d+(?:\\.\\d+)?(?:e[-+]?\\d+)?)",
+      "[\\w$]*cost[\\w$]*\\s*:\\s*(-?\\d+(?:\\.\\d+)?(?:e[-+]?\\d+)?)",
     ],
     isTuple: false,
+    allowRegExp: true,
   });
 });
 

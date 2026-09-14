@@ -44,54 +44,7 @@ function htmlResponse(body, status = 200) {
   };
 }
 
-function assertCorpusIntact(rows, name, { floor, required = [], rowLength = null, isTuple = true }) {
-  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
-  assert.ok(
-    rows.length >= floor,
-    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a security ` +
-      `corpus whose tests iterate over it, so assertions silently stopped running. If the removal ` +
-      `was deliberate, lower the floor here in the same commit and state why.`
-  );
-  if (isTuple) {
-    rows.forEach((row, i) => {
-      assert.ok(
-        Array.isArray(row) &&
-          (rowLength === null ? row.length >= 2 : row.length === rowLength) &&
-          typeof row[0] === "string",
-        `${name}[${i}] is not a valid tuple entry with expected shape (rowLength=${rowLength ?? ">=2"}): ${JSON.stringify(row)}`
-      );
-      const reason = row[row.length - 1];
-      assert.ok(
-        typeof reason === "string" && reason.trim().length > 0,
-        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason/code -- a row nobody can justify is a row ` +
-          `the next editor deletes, and the floor above would then be met by padding`
-      );
-    });
-  } else {
-    rows.forEach((item, i) => {
-      assert.ok(
-        typeof item === "string",
-        `${name}[${i}] is not a string: ${JSON.stringify(item)}`
-      );
-    });
-  }
-  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r));
-  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
-  assert.deepEqual(
-    dupes,
-    [],
-    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
-      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
-  );
-  const missing = required.filter((t) => !targets.includes(t));
-  assert.deepEqual(
-    missing,
-    [],
-    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing security ` +
-      `targets: losing one makes an SSRF bypass silent again. Removing one is a decision to stop ` +
-      `defending that target -- make it in the same commit as this list.`
-  );
-}
+import { assertCorpusIntact } from "./testCorpus.mjs";
 
 // ---------------------------------------------------------------------------
 // The hole this task closes

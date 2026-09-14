@@ -93,50 +93,7 @@ const SCAN_ROOTS = ["src", "worker/src"];
  * R6.4.15: a floor at the true current count, uniqueness, and named members
  * that must never silently drop out of the scan.
  * ======================================================================== */
-function assertCorpusIntact(rows, name, { floor, required = [], rowLength = null, isTuple = true }) {
-  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
-  assert.ok(
-    rows.length >= floor,
-    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a corpus ` +
-      `whose tests iterate over it, so assertions silently stopped running. If the removal was ` +
-      `deliberate, lower the floor here in the same commit and state why.`
-  );
-  if (isTuple) {
-    rows.forEach((row, i) => {
-      assert.ok(
-        Array.isArray(row) &&
-          (rowLength === null ? row.length >= 2 : row.length === rowLength) &&
-          typeof row[0] === "string",
-        `${name}[${i}] is not a valid tuple entry with expected shape (rowLength=${rowLength ?? ">=2"}): ${JSON.stringify(row)}`
-      );
-      const reason = row[row.length - 1];
-      assert.ok(
-        typeof reason === "string" && reason.trim().length > 0,
-        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason — a row nobody can justify is a row ` +
-          `the next editor deletes, and the floor above would then be met by padding`
-      );
-    });
-  } else {
-    rows.forEach((item, i) => {
-      assert.ok(typeof item === "string", `${name}[${i}] is not a string: ${JSON.stringify(item)}`);
-    });
-  }
-  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r));
-  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
-  assert.deepEqual(
-    dupes,
-    [],
-    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
-      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
-  );
-  const missing = required.filter((t) => !targets.includes(t));
-  assert.deepEqual(
-    missing,
-    [],
-    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing: losing one ` +
-      `makes a whole class of bypass invisible again.`
-  );
-}
+import { assertCorpusIntact } from "./testCorpus.mjs";
 
 // ---------------------------------------------------------------------------
 // The detector
@@ -374,12 +331,13 @@ test("GUARD — the signal and exemption corpora are intact, so the walker below
   assertCorpusIntact(SIGNALS, "SIGNALS", {
     floor: 11, // 3 structural + one per DB_CREDENTIALS entry (8)
     rowLength: 3,
+    isTuple: true,
     required: ["pg-driver", "supabase-create-client", "shared-supabase-client", "env:DATABASE_URL"],
   });
   for (const [id, detect] of SIGNALS) {
     assert.equal(typeof detect, "function", `SIGNALS row ${id} has no detector, so it can never fire`);
   }
-  assertCorpusIntact(EXEMPTIONS, "EXEMPTIONS", { floor: 3, rowLength: 2 });
+  assertCorpusIntact(EXEMPTIONS, "EXEMPTIONS", { floor: 3, rowLength: 2, isTuple: true });
   for (const [key] of EXEMPTIONS) {
     assert.match(key, /^[\w./-]+#[\w:-]+$/, `exemption key ${key} must be file#signal, never a bare file`);
     const signal = key.split("#")[1];

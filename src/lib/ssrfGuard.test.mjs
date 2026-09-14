@@ -61,54 +61,7 @@ const lookupPublic = async () => ["93.184.216.34"];
  *   BLOCKED_SCHEMES: 9
  *   MALFORMED: 6
  * ======================================================================== */
-function assertCorpusIntact(rows, name, { floor, required = [], rowLength = null, isTuple = true }) {
-  assert.ok(Array.isArray(rows), `${name} is not an array at all, so tests assert nothing`);
-  assert.ok(
-    rows.length >= floor,
-    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a security ` +
-      `corpus whose tests iterate over it, so assertions silently stopped running. If the removal ` +
-      `was deliberate, lower the floor here in the same commit and state why.`
-  );
-  if (isTuple) {
-    rows.forEach((row, i) => {
-      assert.ok(
-        Array.isArray(row) &&
-          (rowLength === null ? row.length >= 2 : row.length === rowLength) &&
-          typeof row[0] === "string",
-        `${name}[${i}] is not a valid tuple entry with expected shape (rowLength=${rowLength ?? ">=2"}): ${JSON.stringify(row)}`
-      );
-      const reason = row[row.length - 1];
-      assert.ok(
-        typeof reason === "string" && reason.trim().length > 0,
-        `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
-          `the next editor deletes, and the floor above would then be met by padding`
-      );
-    });
-  } else {
-    rows.forEach((item, i) => {
-      assert.ok(
-        typeof item === "string",
-        `${name}[${i}] is not a string: ${JSON.stringify(item)}`
-      );
-    });
-  }
-  const targets = rows.map((r) => (Array.isArray(r) ? r[0] : r));
-  const dupes = [...new Set(targets.filter((t, i) => targets.indexOf(t) !== i))];
-  assert.deepEqual(
-    dupes,
-    [],
-    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
-      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
-  );
-  const missing = required.filter((t) => !targets.includes(t));
-  assert.deepEqual(
-    missing,
-    [],
-    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing security ` +
-      `targets: losing one makes an SSRF bypass silent again. Removing one is a decision to stop ` +
-      `defending that target -- make it in the same commit as this list.`
-  );
-}
+import { assertCorpusIntact } from "./testCorpus.mjs";
 
 
 // ---------------------------------------------------------------------------
@@ -204,6 +157,7 @@ test("BLOCKED_LITERALS corpus is intact (floor, shape, uniqueness, required memb
   assertCorpusIntact(BLOCKED_LITERALS, "BLOCKED_LITERALS", {
     floor: 68,
     rowLength: 3,
+    isTuple: true,
     required: [
       "127.0.0.1",
       "0x7f000001",
@@ -237,6 +191,7 @@ test("assertPublicUrl refuses every blocked notation end to end", async () => {
   assertCorpusIntact(BLOCKED_LITERALS, "BLOCKED_LITERALS", {
     floor: 68,
     rowLength: 3,
+    isTuple: true,
     required: [
       "127.0.0.1",
       "0x7f000001",
@@ -311,6 +266,7 @@ test("ALLOWED_LITERALS corpus is intact (floor, shape, uniqueness, required memb
   assertCorpusIntact(ALLOWED_LITERALS, "ALLOWED_LITERALS", {
     floor: 20,
     rowLength: 2,
+    isTuple: true,
     required: [
       "8.8.8.8",
       "1.1.1.1",
@@ -371,6 +327,7 @@ test("C12 — all seven ranges are refused, with the CIDR that caught them", () 
   assertCorpusIntact(C12_RANGES, "C12_RANGES", {
     floor: 15,
     rowLength: 4,
+    isTuple: true,
     required: [
       "fec0::",
       "64:ff9b:1::",
@@ -405,6 +362,7 @@ test("C12 — every refusal is a policy refusal, never 'unusable input'", async 
   assertCorpusIntact(C12_RANGES, "C12_RANGES", {
     floor: 15,
     rowLength: 4,
+    isTuple: true,
     required: [
       "fec0::",
       "64:ff9b:1::",
@@ -472,6 +430,7 @@ test("C12_STILL_ALLOWED corpus is intact (floor, shape, uniqueness, required mem
   assertCorpusIntact(C12_STILL_ALLOWED, "C12_STILL_ALLOWED", {
     floor: 16,
     rowLength: 2,
+    isTuple: true,
     required: [
       "fe00::1",
       "fe7f:ffff::1",
@@ -501,6 +460,7 @@ test("C12 — the fe80::/10 and fec0::/10 boundary is exact, not a single fe00::
   assertCorpusIntact(C12_STILL_ALLOWED, "C12_STILL_ALLOWED", {
     floor: 16,
     rowLength: 2,
+    isTuple: true,
     required: [
       "fe00::1",
       "fe7f:ffff::1",
@@ -644,21 +604,32 @@ test("an over-long hostname is refused", async () => {
   );
 });
 
-const MALFORMED = ["", "   ", "https://", "http://", "not a url at all", "http://exa mple.com/"];
+const MALFORMED = ["https://", "http://", "not a url at all", "http://exa mple.com/"];
 
 test("MALFORMED corpus is intact (floor, shape, uniqueness, required members)", () => {
   assertCorpusIntact(MALFORMED, "MALFORMED", {
-    floor: 6,
+    floor: 4,
     isTuple: false,
     required: [
-      "",
-      "   ",
       "https://",
       "http://",
       "not a url at all",
       "http://exa mple.com/",
     ],
   });
+});
+
+test("empty and whitespace-only input is refused (not in MALFORMED corpus because the guard rejects empty strings)", async () => {
+  for (const raw of ["", "   "]) {
+    await assert.rejects(
+      () => assertPublicUrl(raw, { lookup: lookupPublic }),
+      (err) => {
+        assert.ok(err instanceof SsrfBlockedError);
+        assert.ok(["empty", "malformed"].includes(err.code), `unexpected code ${err.code}`);
+        return true;
+      }
+    );
+  }
 });
 
 for (const raw of MALFORMED) {

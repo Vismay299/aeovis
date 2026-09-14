@@ -113,42 +113,7 @@ function mockFetch(t, handler) {
  * module-scope throw aborts the file load and shows up as a crash with no test
  * name, while this way the red names the corpus that shrank.
  * ======================================================================== */
-function assertCorpusIntact(rows, name, { floor, required }) {
-  assert.ok(Array.isArray(rows), `${name} is not an array at all, so the loop below asserts nothing`);
-  assert.ok(
-    rows.length >= floor,
-    `${name} holds ${rows.length} rows, under its floor of ${floor}. Rows were removed from a corpus ` +
-      `whose test is a loop over it, so assertions below this line silently stopped running. If the ` +
-      `removal was deliberate, lower the floor here in the same commit and say why.`
-  );
-  rows.forEach((row, i) => {
-    assert.ok(
-      Array.isArray(row) && row.length === 2 && typeof row[0] === "string",
-      `${name}[${i}] is not a [text, reason] pair: ${JSON.stringify(row)}`
-    );
-    assert.ok(
-      typeof row[1] === "string" && row[1].trim().length > 0,
-      `${name}[${i}] (${JSON.stringify(row[0])}) carries no reason -- a row nobody can justify is a row ` +
-        `the next editor deletes, and the floor above would then be met by padding`
-    );
-  });
-  const texts = rows.map((r) => r[0]);
-  const dupes = [...new Set(texts.filter((t, i) => texts.indexOf(t) !== i))];
-  assert.deepEqual(
-    dupes,
-    [],
-    `${name} repeats ${JSON.stringify(dupes)}. A duplicated row holds the count up without adding ` +
-      `coverage, which is how a corpus passes its floor while testing less than it did yesterday.`
-  );
-  const missing = required.filter((t) => !texts.includes(t));
-  assert.deepEqual(
-    missing,
-    [],
-    `${name} no longer contains ${JSON.stringify(missing)}. These rows are load-bearing: each is one a ` +
-      `recorded mutation of the classifier fired on, so losing it makes that mutation invisible again. ` +
-      `Removing one is a decision to stop detecting something -- make it in the same commit as this list.`
-  );
-}
+import { assertCorpusIntact } from "../testCorpus.mjs";
 
 test("the configured zone short-circuits the lookup — which is why the check must read it", async (t) => {
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "my_zone" });
@@ -658,6 +623,8 @@ test("R1.2.10 — snake_case zone states are zone rejections too (zone_suspended
   assertCorpusIntact(ZONE_STATE_WORDINGS, "ZONE_STATE_WORDINGS", {
     floor: 6,
     required: ["zone_suspended", "zone_disabled", "zone_expired", "zone_deleted", "suspended_zone", "zone_not_active"],
+    isTuple: true,
+    rowLength: 2,
   });
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "state_zone" });
 
@@ -957,6 +924,8 @@ test("R1.2.11 — transient and unrelated zone-mentioning failures are NOT perma
       "invalid country code",
       "zone serp_api1: page not found (404)",
     ],
+    isTuple: true,
+    rowLength: 2,
   });
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "pinned_zone" });
   const cacheBefore = peekBrightDataZoneCache()?.name ?? null;
@@ -1039,6 +1008,8 @@ test("R1.2.11 — the positive side, so a NARROWING is caught here and not in pr
   assertCorpusIntact(IS_A_ZONE_REJECTION, "IS_A_ZONE_REJECTION", {
     floor: 22,
     required: ["zone not found: pinned_zone", "ZONE NOT FOUND", "deleted-zone", "suspend_zone"],
+    isTuple: true,
+    rowLength: 2,
   });
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "pinned_zone" });
   const cacheBefore = peekBrightDataZoneCache()?.name ?? null;
@@ -1138,6 +1109,8 @@ test("R1.2.11 — the three over-match MECHANISMS, pinned as tolerated exception
       "invalid zonefile",
       "your session for zone serp_api1 has expired, please retry",
     ],
+    isTuple: true,
+    rowLength: 2,
   });
   useEnv(t, { BRIGHTDATA_API_KEY: "bd-key", BRIGHTDATA_SERP_ZONE: "pinned_zone" });
   const cacheBefore = peekBrightDataZoneCache()?.name ?? null;
