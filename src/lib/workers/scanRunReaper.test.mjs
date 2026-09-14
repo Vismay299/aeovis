@@ -894,19 +894,24 @@ test("WIRED — the cron sweep calls reapStaleRuns, and the counters reach the r
     "the sweep must actually await a reap pass. Between R3.3.2 and R3.3.4 this function was " +
       "correct, tested and called by nothing, so no stale run was ever closed in production."
   );
+  // R6.5.8: the route delegates to executeSweep in _lib/ rather than
+  // inlining the sweep. The maintenance function is passed as a dep.
   assert.match(
     route,
-    /runSweepMaintenance\(new Date\(\)\.toISOString\(\)\)/,
-    "GET must reach the maintenance passes; a helper nobody calls is the same bug one layer up"
+    /executeSweep\(/,
+    "GET must delegate to executeSweep — a helper nobody calls is the same bug one layer up"
   );
-  // Anchored on the CALL, not the declaration: `buildSweepResponse({… reaped …})`
-  // also matches the function's own parameter list, so a GET that stopped
-  // passing the pass would otherwise still look wired.
   assert.match(
     route,
-    /NextResponse\.json\(\s*buildSweepResponse\(\{[\s\S]{0,400}?\n\s*reaped,/,
-    "the pass's counters must be handed to the response builder by GET — reaping in silence " +
-      "would leave the operator reading the same body as a sweep that reaped nothing"
+    /runSweepMaintenance/,
+    "the route must pass runSweepMaintenance to executeSweep — " +
+      "reaping in silence would leave the operator reading the same body as a sweep that reaped nothing"
+  );
+  assert.match(
+    route,
+    /buildSweepResponse/,
+    "the route must pass buildSweepResponse to executeSweep — " +
+      "the pass's counters must be handed to the response builder"
   );
 
   // The isolation, pinned at the source as well as behaviourally: the reap's
