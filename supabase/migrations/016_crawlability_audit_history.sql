@@ -53,9 +53,11 @@ CREATE INDEX IF NOT EXISTS crawlability_audits_domain_idx
   ON crawlability_audits (domain, audited_at DESC);
 
 -- Unique constraint: at most one audit per domain per minute (prevents
--- duplicate writes from rapid UI refreshes while still allowing history)
+-- duplicate writes from rapid UI refreshes while still allowing history).
+-- date_trunc on timestamptz is STABLE, not IMMUTABLE, and Postgres refuses it
+-- in an index expression; truncating the UTC wall-clock timestamp is IMMUTABLE.
 CREATE UNIQUE INDEX IF NOT EXISTS crawlability_audits_domain_minute_idx
-  ON crawlability_audits (domain, date_trunc('minute', audited_at));
+  ON crawlability_audits (domain, date_trunc('minute', audited_at AT TIME ZONE 'UTC'));
 
 ALTER TABLE crawlability_audits ENABLE ROW LEVEL SECURITY;
 DO $$
