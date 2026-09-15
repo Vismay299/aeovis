@@ -109,6 +109,12 @@ class Client {
     // inside DO blocks, so bare "FROM pg_constraint" would false-match. The
     // runner's catalog queries always JOIN pg_namespace, which migration SQL
     // never does — that is the discriminator.
+    if (/^SELECT 1 FROM storage\\.buckets WHERE id/.test(sql)) {
+      const name = (params && params[0]) || "";
+      log.push({ txn, sql: "PROBE", name });
+      process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
+      return { rows: CATALOG.includes(name) ? [{ "?column?": 1 }] : [] };
+    }
     if (/to_regclass/.test(sql)) {
       const name = String((params && params[0]) || "").replace("public.", "");
       log.push({ txn, sql: "PROBE", name });
@@ -212,7 +218,7 @@ function pathToFileUrlString(p) {
   return new URL(`file://${p.replace(/\\/g, "/").replace(/^([A-Za-z]:)/, "/$1")}`).href;
 }
 
-/** Everything 001-018 must leave behind, per the runner's own expectations. */
+/** Everything 001-019 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
   "scans", "brand_prompts", "scan_jobs", "content_events",
   "content_jobs", "content_items", "content_feedback", "brand_briefs", "content_lessons",
@@ -246,6 +252,8 @@ const FULL_CATALOG = [
   "scans.cost_unmeasured_calls",
   // 018_gsc_daily.sql (R4.1.1) — GSC connection + daily query tables.
   "gsc_connections", "gsc_daily", "gsc_daily_brand_date_idx",
+  // 019_probe_evidence_bucket.sql (R1.5.1) — storage bucket.
+  "probe-evidence",
 ];
 
 function withRegister(dir) {
@@ -504,7 +512,7 @@ function auditByProbe(stdout, token) {
  */
 function reportedObjects(stdout) {
   const out = [];
-  const re = /^ +(✓|✗) (table|index|function|column|constraint) (\S+)$/gm;
+  const re = /^ +(✓|✗) (table|index|function|column|constraint|bucket) (\S+)$/gm;
   for (let m = re.exec(stdout); m; m = re.exec(stdout)) {
     out.push({ at: m.index, mark: m[1], kind: m[2], name: m[3] });
   }

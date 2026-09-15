@@ -6,6 +6,7 @@ import { listResumableContentJobs } from "@/lib/db/content";
 import { acquireLease, newLeaseOwner } from "@/lib/jobLease";
 import { startContentJob } from "@/lib/content/contentWorker";
 import { createDailyBatchJobs, getDailyBatchSize } from "@/lib/content/dailyBatch";
+import { keepAlive } from "@/lib/keepAlive";
 
 // Side-effectful (spends real model budget) — must never run at build time.
 export const dynamic = "force-dynamic";
@@ -67,8 +68,9 @@ export async function dispatchWithLease(jobId, label, deps = {}) {
     return { ok: false, owner: null, reason: "lease_held", error: null };
   }
 
-  start(jobId, { leaseOwner: owner }).catch((err) => {
-    console.error(`[content-cron] Error processing ${label} ${jobId}:`, err);
+  keepAlive(() => start(jobId, { leaseOwner: owner }), {
+    label: `[content-cron] ${label} ${jobId}`,
+    waitUntil: deps.waitUntil,
   });
   return { ok: true, owner, reason: null, error: null };
 }

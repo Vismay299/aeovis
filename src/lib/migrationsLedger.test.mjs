@@ -162,7 +162,7 @@ test("GUARD — functions are checked via pg_proc, not to_regclass", async () =>
  * covers every pattern the existing migration set uses.
  */
 function extractObjectsFromSql(sql) {
-  const objects = { table: [], index: [], function: [], column: [], constraint: [] };
+  const objects = { table: [], index: [], function: [], column: [], constraint: [], bucket: [] };
   const seen = new Set();
 
   const add = (kind, name) => {
@@ -201,6 +201,7 @@ function extractObjectsFromSql(sql) {
       return acc;
     }, []);
 
+  let pendingBucket = false;
   for (const line of joined) {
     // CREATE TABLE [IF NOT EXISTS] <name>
     const tableMatch = line.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i);
@@ -239,6 +240,17 @@ function extractObjectsFromSql(sql) {
     );
     if (alterConstraintMatch) {
       add("constraint", alterConstraintMatch[1].toLowerCase());
+    }
+
+    // INSERT INTO storage.buckets (...) VALUES ('<id>', ... — R1.5.1. The id is
+    // the first value, which the migration puts on the line after VALUES (.
+    if (/INSERT\s+INTO\s+storage\.buckets/i.test(line)) pendingBucket = true;
+    if (pendingBucket) {
+      const bucketMatch = line.match(/^\s*(?:VALUES\s*\(\s*)?'([a-z0-9._-]+)'/i);
+      if (bucketMatch) {
+        add("bucket", bucketMatch[1].toLowerCase());
+        pendingBucket = false;
+      }
     }
 
     // Inline CONSTRAINT <name> (inside CREATE TABLE blocks)

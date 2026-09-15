@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabase, getScanJob, HEARTBEAT_STALE_MS } from "@/lib/db";
 import { normalizeRun } from "@/lib/scanRuns";
 import { runScanChunk } from "@/lib/workers/scanWorker";
+import { keepAlive } from "@/lib/keepAlive";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -636,9 +637,7 @@ export async function GET(request, { params }) {
     // and achieved nothing.
     const verdict = decideRescue({ job, summary, historyKnown: history.known, nowMs });
     if (verdict.rescue) {
-      runScanChunk(job.id).catch((err) => {
-        console.error(`[status-rescue] Failed to resume job ${job.id}:`, err);
-      });
+      keepAlive(() => runScanChunk(job.id), { label: `[status-rescue] resume of job ${job.id}` });
     } else if (verdict.reason === RESCUE_REASONS.HISTORY_UNKNOWN) {
       // The one refusal that is not a decision: we did not decline to rescue,
       // we could not tell whether to. Say it out loud on the server too — the

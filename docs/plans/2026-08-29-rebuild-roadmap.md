@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**225 / 265 closed** · 7 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**225 / 265 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -117,7 +117,7 @@ Baseline commit: `5111219`
 - [ ] **R1.4.4** Fallback policy: UI blocked records blocked
 ### R1.5
 
-- [-] **R1.5.1** Storage bucket probe-evidence `needs-secrets` — blocked: needs-secrets
+- [~] **R1.5.1** Storage bucket probe-evidence `needs-secrets` — submitted `supabase/migrations/019_probe_evidence_bucket.sql:19`, `src/lib/evidenceRetention.js:61`, `docs/runbooks/probe-evidence.md:31`
 - [ ] **R1.5.2** prompt_results evidence-id columns
 - [ ] **R1.5.3** AnswersView 'View evidence' -> signed-URL screenshot
 ### R1.6
@@ -235,7 +235,7 @@ Baseline commit: `5111219`
 - [ ] **R3.1.2** Add the missing ?batch=1 cron entry `needs-vercel` `needs-llm`
 - [x] **R3.1.3** The scan worker route reports processed:1 for a request that failed — closed at `src/app/api/scan/worker/route.js:79`, `src/app/api/scan/worker/route.js:104`, `src/app/api/scan/worker/route.js:138`, `src/app/api/scan/worker/route.js:160`, `src/app/api/scan/worker/route.js:187`, `src/app/api/scan/worker/route.js:249`, `src/lib/scanWorkerRoute.route.test.mjs:101`, `src/lib/scanWorkerRoute.route.test.mjs:119`, `src/lib/scanWorkerRoute.route.test.mjs:203`
 - [x] **R3.1.4** The content worker sweep counts dispatched as done, and an in-memory scan leaves no ledger row — closed at `src/app/api/content/worker/route.js:137-157`
-- [ ] **R3.1.5** The post-response scan trigger has no keepalive, and three compensations hide it `needs-vercel`
+- [~] **R3.1.5** The post-response scan trigger has no keepalive, and three compensations hide it `needs-vercel` — submitted `src/lib/keepAlive.js:36`, `src/lib/keepAlive.test.mjs:69`, `src/app/api/scan/route.js:142`
 - [x] **R3.1.7** recordCronTick fabricates liveness in an unconfigured deploy, so health shows a fresh tick while the cron answers 500 — closed at `src/lib/db/analytics.js:557`, `src/lib/db/analytics.js:573`, `src/lib/health.test.mjs:232`, `src/lib/health.test.mjs:242`, `src/lib/health.test.mjs:257`
 - [x] **R3.1.8** A lease-acquire failure is indistinguishable from a lease legitimately held, and a batch job whose dispatch fails vanishes from every counter — closed at `src/lib/contentWorkerSweep.route.test.mjs:392`
 ### R3.2
@@ -255,7 +255,7 @@ Baseline commit: `5111219`
 - [x] **R3.3.2** Sweep reaps heartbeat-stale runs — closed at `src/lib/workers/scanWorker.js:2878`, `src/lib/workers/scanWorker.js:3040`, `src/lib/workers/scanWorker.js:3177`, `src/lib/workers/scanWorker.js:2783`, `src/lib/workers/scanRunReaper.test.mjs:317`, `src/lib/workers/scanRunReaper.test.mjs:436`
 - [x] **R3.3.3** Content cost accumulates across rescues — closed at `src/lib/content/contentWorker.js:201`, `src/lib/content/contentWorker.js:248`, `src/lib/content/contentWorker.js:269`, `src/lib/content/contentWorker.js:494`, `src/lib/content/contentWorker.test.mjs:730`, `src/lib/content/contentWorker.test.mjs:773`, `src/lib/content/contentWorker.test.mjs:797`, `src/lib/content/contentWorker.test.mjs:826`
 - [x] **R3.3.4** Wire the stale-run reaper into the cron sweep; nothing calls it yet — closed at `src/app/api/scan/worker/route.js:560`, `src/app/api/scan/worker/route.js:427`, `src/app/api/scan/worker/route.js:312`, `src/lib/scanRuns.js:83`, `src/lib/scanRuns.js:356`, `src/lib/workers/scanWorker.js:3165`, `src/lib/workers/scanWorker.js:3136`, `src/lib/workers/scanRunReaper.test.mjs:809`, `src/lib/scanWorkerRoute.route.test.mjs:656`, `src/lib/scanWorkerRoute.route.test.mjs:620`, `worker/src/lib/runLedger.js:70`
-- [ ] **R3.3.5** The reaper idempotence rests on plpgsql behaviour proven only by a fake that re-implements it `needs-secrets`
+- [~] **R3.3.5** The reaper idempotence rests on plpgsql behaviour proven only by a fake that re-implements it `needs-secrets` — submitted `src/lib/workers/reaperCloseLive.test.mjs:100`, `src/lib/workers/reaperCloseLive.test.mjs:127`, `src/lib/workers/reaperCloseLive.test.mjs:144`
 - [x] **R3.3.6** The reaper SQL-side self-exclusion is untested and can be deleted with the suite still green — closed at `src/lib/scanRuns.js:377`, `src/lib/workers/scanWorker.js:3330`, `src/lib/workers/scanRunReaper.test.mjs:521`, `src/lib/workers/scanRunReaper.test.mjs:560`
 ### R3.4
 
@@ -338,7 +338,7 @@ Baseline commit: `5111219`
 - [x] **R5.3.3** Rubric versioning on review verdicts — closed at `src/lib/content/schemas.js:66`, `src/lib/content/schemas.js:94`, `src/lib/content/schemas.js:397`, `src/lib/content/schemas.test.mjs:239`
 ### R5.4
 
-- [ ] **R5.4.1** Lessons loop test `needs-llm`
+- [~] **R5.4.1** Lessons loop test `needs-llm` — submitted `src/lib/content/lessonsLoop.test.mjs:168`, `src/lib/content/lessonsLoop.test.mjs:217`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 

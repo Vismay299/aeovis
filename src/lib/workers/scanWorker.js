@@ -62,6 +62,7 @@ import { getBrandAliases } from "../scoring/aliases.js";
 import { resolveBrandKey } from "../scoring/brandKey.js";
 import { extractBrandDomain } from "../scoring/citations.js";
 import { resolveSerpGeo } from "../engines/serpGeo.js";
+import { keepAlive } from "../keepAlive.js";
 import { enrichCitations } from "../analytics/citationEnrich.js";
 import {
   openScanRun,
@@ -1167,6 +1168,9 @@ export function resolveSelfContinueUrl(jobId) {
   return `${base.replace(/\/$/, "")}/api/scan/worker?job_id=${encodeURIComponent(jobId)}`;
 }
 
+/** R3.1.5 — how long a chunk keeps its instance alive for the self-continue request to go out. */
+export const SELF_CONTINUE_HOLD_MS = 5000;
+
 function defaultSelfContinue(jobId) {
   const url = resolveSelfContinueUrl(jobId);
   if (!url) return;
@@ -1176,11 +1180,17 @@ function defaultSelfContinue(jobId) {
   const secret = (process.env.CRON_SECRET || "").trim();
   const init = secret ? { headers: { "x-cron-secret": secret } } : undefined;
   try {
-    fetch(url, init).catch((err) => {
-      console.warn(
-        `[scan-chunk] Self-continue fetch failed for job ${jobId} (poll/cron rescue will still pick it up): ${err.message}`
-      );
-    });
+    // R3.1.5: hold the instance just long enough for the request to leave.
+    // Waiting for the response would bill this function for the whole next
+    // chunk; not waiting at all let a freeze drop the request unsent.
+    keepAlive(
+      fetch(url, init).catch((err) => {
+        console.warn(
+          `[scan-chunk] Self-continue fetch failed for job ${jobId} (poll/cron rescue will still pick it up): ${err.message}`
+        );
+      }),
+      { label: `[scan-chunk] self-continue for job ${jobId}`, maxMs: SELF_CONTINUE_HOLD_MS }
+    );
   } catch (err) {
     console.warn(`[scan-chunk] Self-continue fetch could not be started for job ${jobId}: ${err.message}`);
   }
@@ -3134,8 +3144,8 @@ export async function runSchedulerTick(nowIso, deps = {}) {
         next_run_at: computeNextRunAt(schedule.cadence, nowIso),
       });
 
-      kickChunk(job.id).catch((err) => {
-        console.error(`[scheduler] Chunk kick failed for job ${job.id} (brand ${brandLabel}):`, err.message);
+      keepAlive(() => kickChunk(job.id), {
+        label: `[scheduler] chunk kick for job ${job.id} (brand ${brandLabel})`,
       });
       started.push({ brand: brandLabel, job_id: job.id });
     }

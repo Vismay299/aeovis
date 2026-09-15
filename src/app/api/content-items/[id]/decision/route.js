@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/content";
 import { reviseContentItem } from "@/lib/content/contentWorker";
 import { runLearn } from "@/lib/content/steps/learn";
+import { keepAlive } from "@/lib/keepAlive";
 import { decideItemStatus, jobStatusForItemStatus } from "@/lib/content/stages";
 
 export const dynamic = "force-dynamic";
@@ -115,24 +116,26 @@ export async function POST(request, { params }) {
 
     // 4. Learn step — fire-and-forget; a learn failure never blocks the gate.
     if (comment) {
-      runLearn(
-        {
-          brand: item.brand,
-          playbook: item.playbook,
-          verdict,
-          comment,
-          item,
-        },
-        { sourceFeedbackId: feedback?.id }
-      ).catch((err) => console.warn("[decision] learn step failed:", err.message));
+      keepAlive(
+        () =>
+          runLearn(
+            {
+              brand: item.brand,
+              playbook: item.playbook,
+              verdict,
+              comment,
+              item,
+            },
+            { sourceFeedbackId: feedback?.id }
+          ),
+        { label: "[decision] learn step" }
+      );
     }
 
     // 5. Changes requested → async revision pass with the human comment as
     //    the critique. Fire-and-forget; Studio polls the item list.
     if (verdict === "changes_requested") {
-      reviseContentItem(id, comment).catch((err) =>
-        console.error(`[decision] revision of item ${id} failed:`, err)
-      );
+      keepAlive(() => reviseContentItem(id, comment), { label: `[decision] revision of item ${id}` });
     }
 
     return NextResponse.json({

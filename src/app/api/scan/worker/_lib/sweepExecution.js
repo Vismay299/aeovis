@@ -2,6 +2,7 @@ import {
   runScanChunk,
   shouldRescueJob,
 } from "@/lib/workers/scanWorker";
+import { keepAlive } from "@/lib/keepAlive";
 
 const MAX_CONCURRENT_RESUMES = 3;
 
@@ -65,9 +66,7 @@ export async function executeSweep(supabaseClient, deps = {}) {
 
   const resumedIds = [];
   for (const job of toResume) {
-    scanChunk(job.id).catch((err) => {
-      console.error(`[cron-worker] Error resuming job ${job.id}:`, err);
-    });
+    keepAlive(() => scanChunk(job.id), { label: `[cron-worker] resume of job ${job.id}` });
     resumedIds.push(job.id);
   }
 

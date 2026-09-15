@@ -9,6 +9,14 @@
       "schedule": "30 0 * * *"
     },
     {
+      "path": "/api/content/worker?batch=1",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/evidence/retention",
+      "schedule": "0 3 * * *"
+    },
+    {
       "path": "/api/gsc/worker",
       "schedule": "0 2 * * 1"
     }

@@ -216,6 +216,10 @@ const EXPECTED_OBJECTS = {
     { kind: "table", name: "gsc_daily" },
     { kind: "index", name: "gsc_daily_brand_date_idx" },
   ],
+  // R1.5.1 — private Storage bucket for probe screenshots + gzipped HTML.
+  "019_probe_evidence_bucket.sql": [
+    { kind: "bucket", name: "probe-evidence" },
+  ],
 };
 
 /**
@@ -507,6 +511,12 @@ async function objectExists(client, { kind, name, signature }) {
           AND NOT a.attisdropped LIMIT 1`,
       [table, column]
     );
+    return rows.length > 0;
+  }
+  if (kind === "bucket") {
+    // R1.5.1 — a Storage bucket is a row in storage.buckets, invisible to
+    // to_regclass and pg_proc alike.
+    const { rows } = await client.query(`SELECT 1 FROM storage.buckets WHERE id = $1 LIMIT 1`, [name]);
     return rows.length > 0;
   }
   if (kind === "constraint") {
