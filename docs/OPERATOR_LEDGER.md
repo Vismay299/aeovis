@@ -335,7 +335,7 @@ until R3.5.4 added the three rows:
 `010_probe_tasks`, `011_scan_runs`, `012_scan_job_attempts`,
 `013_brand_metrics_sov_state`, `014_content_job_checkpoints`,
 `015_brand_metrics_citation_state`, `016_crawlability_audit_history`,
-`016_content_items_natural_key`, `017_cost_unmeasured_calls`.
+`016_content_items_natural_key`, `017_cost_unmeasured_calls`, `018_gsc_daily`.
 
 `npm run setup:db` applies them in filename order, one transaction per file,
 recording each in the `schema_migrations` ledger. The `BEGIN`, the ledger

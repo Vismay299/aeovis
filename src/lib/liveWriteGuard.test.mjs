@@ -297,8 +297,9 @@ test("EVERY NEVER_WRITABLE TABLE IS REFUSED — at install and at both transport
   // before this case existed: deleting `content_lessons` from NEVER_WRITABLE
   // left the whole suite 23/23 green, so sixteen of the twenty entries were
   // load-bearing in production and asserted by nothing.
-  assert.equal(NEVER_WRITABLE.length, 20, "the roster changed size — see the classification walk below");
-  assert.equal(new Set(NEVER_WRITABLE).size, 20, "a duplicated entry hides a missing one");
+  // 22 since R4.1.1 added gsc_connections and gsc_daily.
+  assert.equal(NEVER_WRITABLE.length, 22, "the roster changed size — see the classification walk below");
+  assert.equal(new Set(NEVER_WRITABLE).size, 22, "a duplicated entry hides a missing one");
   assert.ok(Object.isFrozen(NEVER_WRITABLE), "the roster must not be mutable at runtime");
   for (const t of WRITABLE_BY_OPT_IN) {
     assert.ok(!NEVER_WRITABLE.includes(t), `${t} cannot be both writable by opt-in and never writable`);

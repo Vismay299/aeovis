@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**219 / 265 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**225 / 265 closed** · 7 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -131,7 +131,7 @@ Baseline commit: `5111219`
 - [ ] **R1.7.3** Demote API adapters to explicit fallback; delete dead paths
 - [ ] **R1.7.4** fetchPeopleAlsoAsk bypasses the engine capability gate and can spend on a stale SERPAPI_KEY
 
-## R2 — Scoring truth  `67/69`
+## R2 — Scoring truth  `68/69`
 
 *1 week.* Four-state vocabulary, roster feeding the headline, de-fake sweep, provenance on every number.
 
@@ -170,7 +170,7 @@ Baseline commit: `5111219`
 ### R2.5
 
 - [ ] **R2.5.1** Point the calibration harness at the live judge `needs-secrets`
-- [ ] **R2.5.2** Alias hardening: stoplist, domain-stem context rule, short-alias guard
+- [x] **R2.5.2** Alias hardening: stoplist, domain-stem context rule, short-alias guard — closed at `src/lib/scoring/aliases.js:1`, `src/lib/scoring/aliases.js:55`, `src/lib/scoring/aliases.js:95`, `src/lib/scoring/aliases.test.mjs:1`
 ### R2.6
 
 - [x] **R2.6.1** Finalize writes per-prompt brands_elicited — closed at `src/lib/scoring/brandsElicitedWrite.test.mjs:1`
@@ -298,7 +298,7 @@ Baseline commit: `5111219`
 
 ### R4.1
 
-- [ ] **R4.1.1** Wire the orphaned GSC client `needs-secrets`
+- [-] **R4.1.1** Wire the orphaned GSC client `needs-secrets` — blocked: needs-secrets
 - [ ] **R4.1.2** Prompt grounding seeds from real GSC queries `needs-llm`
 ### R4.2
 
@@ -317,7 +317,7 @@ Baseline commit: `5111219`
 
 - [ ] **R4.5.1** Decide-or-delete pass on schema-only subsystems `needs-decision`
 
-## R5 — Content OS quality  `3/12`
+## R5 — Content OS quality  `6/12`
 
 *1 week.* Model-layer truth, a publish loop that stops pretending, drafts benchmarked against what engines cite.
 
@@ -329,20 +329,20 @@ Baseline commit: `5111219`
 ### R5.2
 
 - [x] **R5.2.1** Kill the fabricated studio.perceev.app URL — closed at `src/app/api/content-items/[id]/decision/route.js:35`, `src/app/api/content-items/[id]/decision/route.js:109`, `src/app/api/content-items/[id]/decision/route.js:139`, `src/app/api/content-events/route.js:19`, `src/app/api/content-events/route.js:31`, `src/app/api/content-events/route.js:74`, `src/app/api/content-events/route.js:100`, `src/lib/approvalNotPublication.route.test.mjs:92`, `src/lib/approvalNotPublication.route.test.mjs:169`, `src/lib/approvalNotPublication.route.test.mjs:199`, `docs/OPERATOR_LEDGER.md:473`, `docs/BUILD_JOURNAL.md:183`
-- [~] **R5.2.2** Explicit publish step with verification
-- [ ] **R5.2.3** Lift copy honest until PUBLISHED exists
+- [x] **R5.2.2** Explicit publish step with verification — closed at `src/lib/content/stages.js:68`, `src/lib/content/stages.js:48`, `src/lib/content/stages.js:134`, `src/lib/content/stages.js:244`, `src/lib/publishRoute.test.mjs:1`, `src/app/api/content-items/[id]/publish/route.js:34`, `src/lib/content/publishVerification.js:63`
+- [x] **R5.2.3** Lift copy honest until PUBLISHED exists — closed at `src/components/studio/ContentItemView.jsx:251`, `src/components/studio/ContentItemView.jsx:262`, `docs/BUILD_JOURNAL.md:879`
 ### R5.3
 
 - [ ] **R5.3.1** Benchmark step grounded in winners `needs-llm`
 - [ ] **R5.3.2** Fact-check on revision cycles too, cost-gated `needs-llm`
-- [ ] **R5.3.3** Rubric versioning on review verdicts
+- [x] **R5.3.3** Rubric versioning on review verdicts — closed at `src/lib/content/schemas.js:66`, `src/lib/content/schemas.js:94`, `src/lib/content/schemas.js:397`, `src/lib/content/schemas.test.mjs:239`
 ### R5.4
 
 - [ ] **R5.4.1** Lessons loop test `needs-llm`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `47/51`
+## R6 — Apparatus & guards  `49/51`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -381,10 +381,10 @@ Baseline commit: `5111219`
 - [x] **R6.4.1** Guard: route-perimeter walker — closed at `src/lib/operatorPerimeter.test.mjs:175`, `src/lib/operatorPerimeter.js:37`, `src/lib/operatorPerimeter.js:56`
 - [x] **R6.4.2** Guard: fail-loud walker — closed at `src/lib/failLoudGuard.test.mjs:1-171`
 - [x] **R6.4.3** Guard: infra vendors never in rendered copy, engine names required — closed at `src/components/dashboard/vendorInfraGuard.test.mjs:1`
-- [ ] **R6.4.4** Guard: engine-count-agnostic UI
+- [x] **R6.4.4** Guard: engine-count-agnostic UI — closed at `src/components/engineCountAgnosticGuard.test.mjs:1`, `src/components/engineCountAgnosticGuard.test.mjs:132`
 - [x] **R6.4.5** testCoverageGuard fails on Windows: path.relative yields backslashes — closed at `src/lib/testCoverageGuard.test.mjs:29`, `src/lib/testCoverageGuard.test.mjs:41`
 - [x] **R6.4.6** archive-reference-scan takes a URL host but --list prints brand names — closed at `scripts/archive-reference-scan.mjs:83`, `scripts/archive-reference-scan.mjs:105`, `scripts/archive-reference-scan.mjs:54`, `scripts/archive-reference-scan.mjs:155`
-- [~] **R6.4.7** The working tree is half CRLF despite .gitattributes eol=lf
+- [x] **R6.4.7** The working tree is half CRLF despite .gitattributes eol=lf — closed at `src/lib/eolGuard.test.mjs:72`, `src/lib/eolGuard.test.mjs:84`
 - [x] **R6.4.8** Doc-to-source staleness tripwire, recommended by R6.3.2 and not buildable there — closed at `src/lib/docSourceStaleness.test.mjs:1`
 - [x] **R6.4.9** withoutComments strips engine names out of strings in every other guarded file — closed at `src/lib/landingHonesty.test.mjs:627`, `src/lib/landingHonesty.test.mjs:519`, `src/lib/landingHonesty.test.mjs:574`, `src/lib/landingHonesty.test.mjs:1481`, `src/lib/landingHonesty.test.mjs:1530`, `src/lib/landingHonesty.test.mjs:2034`, `src/lib/landingHonesty.test.mjs:2163`, `src/lib/landingHonesty.test.mjs:1864`, `src/lib/fixtures/landingHonesty/quote-phase-shift.jsx.txt:55`
 - [x] **R6.4.10** A NUL byte in a source file makes it invisible to every grep-based guard — closed at `src/lib/nulByteGuard.test.mjs:1`

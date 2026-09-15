@@ -204,6 +204,53 @@ export async function fetchSearchQueries(siteUrl, opts = {}) {
 }
 
 /**
+ * Per-day, per-query Search Analytics rows for an explicit date window,
+ * paginated until Google returns a short page (R4.1.1 weekly ingest).
+ *
+ * @param {string} siteUrl - GSC property id
+ * @param {{startDate: string, endDate: string, pageSize?: number, maxRows?: number}} opts
+ *   dates as YYYY-MM-DD, inclusive. maxRows bounds a runaway property.
+ * @returns {Promise<{rows: Array<{date: string, query: string, clicks: number,
+ *   impressions: number, ctr: number, position: number}>, truncated: boolean}>}
+ *   truncated=true means maxRows was hit and rows is NOT the whole window.
+ */
+export async function fetchDailyQueryRows(siteUrl, opts = {}) {
+  const { startDate, endDate } = opts;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate || "") || !/^\d{4}-\d{2}-\d{2}$/.test(endDate || "")) {
+    throw new Error(`fetchDailyQueryRows needs YYYY-MM-DD startDate/endDate, got ${startDate}..${endDate}`);
+  }
+  const pageSize = Math.min(opts.pageSize || 25000, 25000);
+  const maxRows = opts.maxRows || 250000;
+
+  const rows = [];
+  for (let startRow = 0; ; startRow += pageSize) {
+    const data = await gscFetch(`/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
+      method: "POST",
+      body: JSON.stringify({
+        startDate,
+        endDate,
+        dimensions: ["date", "query"],
+        rowLimit: pageSize,
+        startRow,
+      }),
+    });
+    const page = data.rows || [];
+    for (const r of page) {
+      rows.push({
+        date: r.keys?.[0] || "",
+        query: r.keys?.[1] || "",
+        clicks: r.clicks || 0,
+        impressions: r.impressions || 0,
+        ctr: r.ctr || 0,
+        position: r.position || 0,
+      });
+    }
+    if (page.length < pageSize) return { rows, truncated: false };
+    if (rows.length >= maxRows) return { rows, truncated: true };
+  }
+}
+
+/**
  * Convenience: resolve a brand URL to whichever property the service account
  * can actually read, then pull its queries. Returns { siteUrl, rows }.
  */

@@ -53,7 +53,12 @@ const PUBLIC_PATTERNS = [
  * Adding to this list is the dangerous edit in this file: anything listed
  * must already refuse unauthenticated callers by itself.
  */
-const SELF_GATED = [/^\/api\/scan\/worker\/?$/, /^\/api\/content\/worker\/?$/];
+const SELF_GATED = [
+  /^\/api\/scan\/worker\/?$/,
+  /^\/api\/content\/worker\/?$/,
+  // R4.1.1 — refuses without CRON_SECRET via src/lib/cronAuth.js, same as the two above.
+  /^\/api\/gsc\/worker\/?$/,
+];
 
 /** Non-API paths the middleware never sees (see the matcher in middleware.js). */
 export function isApiPath(pathname) {
