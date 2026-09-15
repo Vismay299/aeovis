@@ -1,0 +1,58 @@
+name: CI
+
+# On every push and every PR. The point of this workflow is that a red test
+# stops being something you have to remember to run: before it existed, the
+# package.json glob quietly excluded two files holding 57 tests, one of which
+# had been failing since the design-system port and nobody could see it.
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # No `continue-on-error` and no `|| true` anywhere in this file: a red
+      # test must fail the job. That is the whole contract.
+      - name: unit tests
+        run: npm run test:scoring
+
+      # The "is any test file orphaned by the glob?" guard is itself a test
+      # (src/lib/testCoverageGuard.test.mjs), so it fails on a developer's
+      # machine too rather than only in CI.
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `next build` needs the public Supabase vars to exist at module scope in
+      # src/lib/db.js. Placeholders are enough to compile; nothing here makes a
+      # live call, and no real credential belongs in a workflow file.
+      - name: next build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+        run: npm run build

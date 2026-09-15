@@ -42,6 +42,7 @@ function makeFakeBackend() {
   const resultBrands = [];
   const scans = [];
   const brandMetrics = [];
+  const scanRuns = [];
   const schedules = new Map();
   const calls = { updateScanJob: [], insertScan: [], selfContinue: [], claimJobStatus: [] };
   let idCounter = 0;
@@ -202,9 +203,36 @@ function makeFakeBackend() {
     selfContinue: (jobId) => {
       calls.selfContinue.push(jobId);
     },
+
+    // R3.2.4 — the scan_runs ledger, faked in memory like everything else here.
+    // Without these three, `resolveChunkLedger` falls back to db.js's shared
+    // client and every `runScanChunk` in this file called the REAL
+    // `open_scan_run()` RPC against whatever database the shell happened to be
+    // pointing at. It wrote nothing only because `NEXT_PUBLIC_SUPABASE_*` is
+    // normally unset; with `--env-file=.env.local` (which src/lib/liveDbGate.js
+    // tells authors to use) those eight calls went to production. The file's
+    // own header promises "never a real Supabase client" — these keep that
+    // promise instead of relying on the ambient environment to keep it.
+    openScanRun: async (fields) => {
+      const row = { id: nextId("run"), ...fields, beats: 0, closed: null };
+      scanRuns.push(row);
+      return { ...row, open: true };
+    },
+    heartbeatScanRun: async ({ runId }) => {
+      const row = scanRuns.find((r) => r.id === runId);
+      if (!row) throw new Error(`heartbeatScanRun: no run ${runId}`);
+      row.beats++;
+      return { runId, heartbeatAt: new Date().toISOString() };
+    },
+    closeScanRun: async ({ runId, ...fields }) => {
+      const row = scanRuns.find((r) => r.id === runId);
+      if (!row) throw new Error(`closeScanRun: no run ${runId}`);
+      row.closed = fields;
+      return { ...row, ...fields, id: runId, open: false, endedAt: new Date().toISOString() };
+    },
   };
 
-  return { jobs, promptResults, citations, resultBrands, scans, brandMetrics, schedules, calls, deps };
+  return { jobs, promptResults, citations, resultBrands, scans, brandMetrics, schedules, scanRuns, calls, deps };
 }
 
 function makeQueries(n) {
@@ -494,7 +522,18 @@ test("runSourcingPhase — freezes brand/url/competitors/queries/engines/stats i
   assert.equal(checkpoint.queries.length, 11, "10 unbranded + 1 branded seed");
   assert.equal(checkpoint.unbranded_texts.length, 10);
   assert.deepEqual(checkpoint.engines, ["aio", "perplexity"]);
-  assert.deepEqual(checkpoint.stats, { cost: 0, tokens: 0 });
+  // R3.7.2 added `website_scrape` alongside cost/tokens so a degraded scrape
+  // survives a resume; R2.2.12 added `prompt_seeding` for the same reason. This
+  // job reuses a full prompt pool, so generation — and therefore the scrape and
+  // the seeding leg — never ran: null is "nothing measured" for both, which is
+  // the correct value here and NOT a stand-in for a healthy read.
+  assert.deepEqual(checkpoint.stats, {
+    cost: 0,
+    tokens: 0,
+    website_scrape: null,
+    prompt_seeding: null,
+    cost_unmeasured_calls: 0,
+  });
   assert.ok(checkpoint.sourced_at);
 });
 
@@ -953,7 +992,7 @@ test("runFinalizePhase — writes one result_brands row per (non-branded result,
   );
 });
 
-test("runFinalizePhase — no competitors at all (none user-supplied, none discovered): roster is self-only, one result_brands row per result, sov_pct legitimately 100% (empty-competitor degradation, not a bug)", async () => {
+test("runFinalizePhase — no competitors at all (none user-supplied, none discovered): roster is self-only, one result_brands row per result, and sov_pct is NOT the old 100% (R4.3.2)", async () => {
   const backend = makeFakeBackend();
   const jobId = "job-p12-empty-roster";
   const queries = makeQueries(2);
@@ -975,8 +1014,18 @@ test("runFinalizePhase — no competitors at all (none user-supplied, none disco
   assert.equal(backend.resultBrands.length, 2, "one row per non-branded result -- self only, no rivals to track");
   assert.ok(backend.resultBrands.every((r) => r.is_self && r.name === "Acme" && r.mentioned === true));
 
+  // R4.3.2 -- this assertion used to read `sov_pct === 100`, described as
+  // "legitimate when zero rivals were ever tracked, not a bug". It was the bug.
+  // self / self is 1 by construction, so the stored daily metric reported a
+  // confident 100% share of voice for a brand measured against nobody -- while
+  // the dashboard donut (fixed by R2.7.1) said "not available" for the same
+  // scan. The durable row was the worse of the two lies: it is what a trend
+  // chart and any export read.
   const allRow = backend.brandMetrics.find((m) => m.scan_id === finalJob.result_id && m.engine === "all");
-  assert.equal(allRow.sov_pct, 100, "self / self = 100% -- legitimate when zero rivals were ever tracked, not a bug");
+  assert.notEqual(allRow.sov_pct, 100, "a self-only roster must never store a 100% share");
+  assert.equal(allRow.sov_pct, null, "share of voice is UNDEFINED without rivals -- not 0 and not 100");
+  assert.equal(allRow.sov_state, "not_assessed");
+  assert.equal(allRow.sov_state_reason, "self_only_roster", "and the row says WHY there is no number");
 });
 
 test("runFinalizePhase — re-finalize (crash recovery) deletes-then-reinserts result_brands, never duplicates them (P1.2 idempotency, full-roster judging)", async () => {
@@ -1486,7 +1535,12 @@ test("runScanChunk — unknown job id returns not_found without throwing", async
 });
 
 test("runScanChunk — a getScanJob read failure is reported, not thrown, and never marks the job failed", async () => {
+  // R3.2.4: the fake backend first, so the scan_runs ledger is the in-memory
+  // one. A bare `{ getScanJob }` here left `resolveChunkLedger` to fall through
+  // to db.js's shared client, and this case opened a real run.
+  const backend = makeFakeBackend();
   const result = await runScanChunk("job-x", {
+    ...backend.deps,
     getScanJob: async () => {
       throw new Error("connection refused");
     },

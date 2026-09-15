@@ -14,6 +14,18 @@ import {
   ListChecks, Bot, Radar,
 } from 'lucide-react';
 import { Wordmark } from '@/components/landing/SiteNav';
+/**
+ * R2.1.1 — the readings list prints a stored scan's score, and that score is
+ * now nullable (an engine that measured nothing publishes null, never 0). One
+ * shared reader decides what a stored number means; see describeScanMeasurement.
+ *
+ * KNOWN COST, same one DashboardShell records at its own import of this module:
+ * enginePipeline pulls the probe modules into the client bundle. Sidebar is
+ * imported by DashboardShell and by nothing else (`git grep perceev/Sidebar`),
+ * and DashboardShell already imports this module, so this adds no bundle weight
+ * that was not already there — but it is the same debt and it moves with it.
+ */
+import { describeScanMeasurement } from '@/lib/scoring/enginePipeline';
 
 const GROUPS = [
   {
@@ -127,6 +139,10 @@ export const Sidebar = ({
             {history.slice(0, 8).map((scan, i) => {
               const isActive = activeScanTimestamp
                 && new Date(scan.scanned_at).getTime() === new Date(activeScanTimestamp).getTime();
+              // `{scan.visibility_pct}%` printed a bare "%" on a null. The dash
+              // and the percent sign both come from `text`, so an unmeasured
+              // reading cannot render a stray unit.
+              const score = describeScanMeasurement(scan);
               return (
                 <button
                   key={i}
@@ -139,7 +155,28 @@ export const Sidebar = ({
                       month: 'short', day: 'numeric',
                     })}
                   </span>
-                  <b>{scan.visibility_pct}%</b>
+                  {/*
+                    The row is a fixed-height two-column button, so a state CHIP
+                    does not fit here without redesigning the list; the state
+                    rides as a title + aria-label instead, and the same words are
+                    rendered as visible text on the dashboard's history cards
+                    (DashboardShell "Previous readings"), which is the surface
+                    that has room for them. Stated rather than implied: a
+                    sighted user hovers to get the reason here.
+                  */}
+                  <b
+                    data-testid="sidebar-history-score"
+                    data-measured={score.measured ? 'true' : 'false'}
+                    data-state-reason={score.reason || undefined}
+                    title={score.detail || undefined}
+                    aria-label={
+                      score.measured
+                        ? undefined
+                        : `${score.label}: ${score.detail}`
+                    }
+                  >
+                    {score.text}
+                  </b>
                 </button>
               );
             })}

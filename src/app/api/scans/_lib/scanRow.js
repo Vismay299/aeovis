@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/db";
+import { supabase, ScansUnavailableError } from "@/lib/db";
 
 // Private helper module (the `_lib` prefix opts it out of Next.js route
 // resolution) shared by the two new P0.3 single-scan endpoints:
@@ -11,14 +11,33 @@ export function isValidScanId(id) {
 }
 
 /**
- * Fetch one `scans` row by its uuid primary key. Returns null both when the
- * row is absent AND when Supabase isn't configured — same fail-quiet
- * convention as getScansForBrand in src/lib/db.js (which returns [] rather
- * than throwing when `!supabase`), so a dev environment without a DB reads
- * as a clean 404 instead of a 500.
+ * Fetch one `scans` row by its uuid primary key. A postgrest error is
+ * rethrown, so a DB outage reaches the route's catch as a 500 rather than a
+ * 404 — the distinction R2.8.4 is about.
+ *
+ * NOW THE SAME CONVENTION AS getScansForBrand (R2.8.5). This used to `return
+ * null` when `!supabase`, which the by-id route turns into 404 "Scan not
+ * found." — so a deploy with no Supabase credentials told every visitor of
+ * /dashboard/[brand]/[scanId] that their scan did not exist, when the truth is
+ * that nothing was ever asked. There is no memory fallback for scans
+ * (insertScan refuses without a client), so no scan could exist to find:
+ * `null` there was a statement about the environment dressed up as a statement
+ * about the row. It throws ScansUnavailableError with code `db_not_configured`
+ * instead, and the route's existing catch returns a 500.
+ *
+ * `null` now has exactly one meaning left: the database answered and holds no
+ * row with this id — a genuine 404.
+ *
+ * @throws {ScansUnavailableError} db_not_configured
+ * @throws {object} the raw postgrest error envelope, when the DB answered with one
  */
 export async function getScanById(scanId) {
-  if (!supabase) return null;
+  if (!supabase) {
+    throw new ScansUnavailableError(
+      "Supabase is not configured — this scan cannot be read.",
+      { code: "db_not_configured" }
+    );
+  }
 
   const { data, error } = await supabase
     .from("scans")
@@ -73,6 +92,11 @@ export function enrichScanForClient(scan) {
     competitors: scan.competitors ?? raw.competitors ?? [],
     results,
     summary_stats,
+    share_of_voice_pct:
+      scan.share_of_voice_pct ??
+      raw.share_of_voice_pct ??
+      summary_stats?.share_of_voice_pct ??
+      null,
     aio_coverage_pct:
       raw.aio_coverage_pct ?? summary_stats?.aio_coverage_pct ?? null,
     brand_citation_share_pct:

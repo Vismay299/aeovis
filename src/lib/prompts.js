@@ -1,5 +1,5 @@
 import { generateContent } from "./gemini.js";
-import { scrapeForSummary } from "./firecrawl.js";
+import { SCRAPE_STATE, scrapeSite } from "./firecrawl.js";
 import { normalizeTopic } from "./scoring/topics.js";
 
 async function summarizeWebsiteContent(rawContent, brand, industry, stats = null) {
@@ -36,8 +36,28 @@ Return ONLY a concise 300-500 word summary. No introductions or JSON.`;
 }
 
 export async function generatePromptsForBrand(brand, website, industry = "", stats = null) {
-  let websiteSummary = await scrapeForSummary(website);
-  websiteSummary = await summarizeWebsiteContent(websiteSummary, brand, industry, stats);
+  // R3.7.2 / B7: this used to be `await scrapeForSummary(website)`, which
+  // returned the sentence "No website content available." on every failure and
+  // interpolated it below under "Website summary:". A scrape that produced
+  // nothing now produces null, and says why.
+  const scrape = await scrapeSite(website);
+  if (scrape.state !== SCRAPE_STATE.OK) {
+    console.warn(
+      `[prompts] website scrape for "${website}" is ${scrape.state} ` +
+        `(${scrape.state_reason}${scrape.detail ? `: ${scrape.detail}` : ""}) — ` +
+        `${scrape.content_chars} chars available to prompt generation.`
+    );
+  }
+  if (stats && typeof stats === "object") {
+    stats.website_scrape = {
+      state: scrape.state,
+      state_reason: scrape.state_reason,
+      reasons: scrape.reasons,
+      source: scrape.source,
+      content_chars: scrape.content_chars,
+    };
+  }
+  let websiteSummary = await summarizeWebsiteContent(scrape.content, brand, industry, stats);
 
   const genPrompt = `You are an expert in real buyer search behavior for B2B products and services.
 
@@ -45,8 +65,14 @@ Your job is to generate realistic questions that a potential customer would actu
 
 Use the website summary below to understand the specific pains, language, and use cases for THIS product.
 
-Website summary:
-${(websiteSummary || "").slice(0, 3500)}
+${
+    // No content means no heading. An empty "Website summary:" block asserts we
+    // read the site and it said nothing, which is a different fact from not
+    // having read it (R3.7.2).
+    String(websiteSummary || "").trim()
+      ? `Website summary:\n${String(websiteSummary).trim().slice(0, 3500)}`
+      : ""
+  }
 
 Generate 18-22 natural, realistic prompts that real users would type.
 

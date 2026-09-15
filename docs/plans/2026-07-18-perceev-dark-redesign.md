@@ -1,5 +1,8 @@
 # Perceev Dark Redesign — Implementation Plan
 
+> <!-- doc-status -->
+> **Status: SUPERSEDED-BY** [DESIGN.md](../../DESIGN.md). The dark redesign this plan describes was replaced by the Signal Box design system ported in `5111219`.
+
 **Date:** 2026-07-18
 **Source:** `C:\Users\Vismay\Downloads\Perceev Design System\design_handoff_perceev_dark_redesign\`
 **Scope:** UI/UX only — zero backend, zero data shape, zero API changes

@@ -1,0 +1,172 @@
+{
+  "timestamp": "2026-09-13T13:09:58.638Z",
+  "round": 2,
+  "summary": {
+    "total": 17,
+    "caught": 12,
+    "missed": 3,
+    "skipped": 2,
+    "mutationScore": "80.0%"
+  },
+  "results": [
+    {
+      "id": "DB-004-R2",
+      "file": "src/lib/duplicateScan.js",
+      "name": "Remove duplicate scan violation detection",
+      "severity": "critical",
+      "result": "caught",
+      "description": "Never detects duplicate scan violations (correct test file)"
+    },
+    {
+      "id": "DB-005-R2",
+      "file": "src/lib/duplicateScan.js",
+      "name": "Always reject duplicate scans",
+      "severity": "high",
+      "result": "caught",
+      "description": "Always rejects scans even when blocking jobs are dead"
+    },
+    {
+      "id": "SSRF-006-R2",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Remove MAX_REDIRECTS limit",
+      "severity": "high",
+      "result": "missed",
+      "description": "Raises MAX_REDIRECTS to 500 (still caught if tests assert the value)"
+    },
+    {
+      "id": "SCORE-005-R2",
+      "file": "src/lib/scoring/computeVisibilityScore.js",
+      "name": "Break score rounding (truncate instead of round)",
+      "severity": "medium",
+      "result": "missed",
+      "description": "Truncates instead of rounding visibility score"
+    },
+    {
+      "id": "SSRF-009",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Invert blocked address classification",
+      "severity": "critical",
+      "result": "caught",
+      "description": "Inverts the IPv4 block matching — allows private, blocks public"
+    },
+    {
+      "id": "SSRF-010",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Remove DNS lookup failure handling",
+      "severity": "critical",
+      "result": "caught",
+      "description": "Skips all DNS validation — allows any hostname"
+    },
+    {
+      "id": "SSRF-011",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Remove ipv6InPrefix check",
+      "severity": "high",
+      "result": "caught",
+      "description": "IPv6 prefix check always returns false (no IPv6 addresses blocked)"
+    },
+    {
+      "id": "RL-006",
+      "file": "src/lib/rateLimit.js",
+      "name": "Invert allowed decision in evaluate()",
+      "severity": "critical",
+      "result": "caught",
+      "description": "Allows requests over limit, refuses requests under limit"
+    },
+    {
+      "id": "RL-007",
+      "file": "src/lib/rateLimit.js",
+      "name": "Remove window boundary calculation",
+      "severity": "high",
+      "result": "caught",
+      "description": "All requests share the same window start (broken windowed limiting)"
+    },
+    {
+      "id": "RL-008",
+      "file": "src/lib/rateLimit.js",
+      "name": "Break retryAfterSec calculation",
+      "severity": "medium",
+      "result": "caught",
+      "description": "Always reports retryAfterSec as 0"
+    },
+    {
+      "id": "SCORE-009",
+      "file": "src/lib/scoring/computeVisibilityScore.js",
+      "name": "Swap position and sentiment weights",
+      "severity": "high",
+      "result": "caught",
+      "description": "Adds weights instead of multiplying (different formula)"
+    },
+    {
+      "id": "SCORE-010",
+      "file": "src/lib/scoring/computeVisibilityScore.js",
+      "name": "Remove empty results check",
+      "severity": "medium",
+      "result": "skip",
+      "description": "Does not return 0 for empty results (may return NaN)"
+    },
+    {
+      "id": "SCORE-011",
+      "file": "src/lib/scoring/constants.js",
+      "name": "Change positive position weight from 1.0 to 0.0",
+      "severity": "critical",
+      "result": "caught",
+      "description": "Recommended position scores as 0 (most important position ignored)"
+    },
+    {
+      "id": "SCORE-012",
+      "file": "src/lib/scoring/constants.js",
+      "name": "Change sentiment neutral weight from 0.5 to 1.0",
+      "severity": "medium",
+      "result": "caught",
+      "description": "Neutral sentiment scored same as positive (inflates scores)"
+    },
+    {
+      "id": "DB-007",
+      "file": "src/lib/db.js",
+      "name": "Remove scan write error throwing",
+      "severity": "critical",
+      "result": "skip",
+      "description": "Returns null instead of throwing on write error (silent failure)"
+    },
+    {
+      "id": "DB-008",
+      "file": "src/lib/db.js",
+      "name": "Remove deduplication in joinScanIdentities",
+      "severity": "medium",
+      "result": "caught",
+      "description": "Removes deduplication (allows duplicate scan records)"
+    },
+    {
+      "id": "DB-009",
+      "file": "src/lib/db.js",
+      "name": "Remove sort in joinScanIdentities",
+      "severity": "low",
+      "result": "missed",
+      "description": "Removes sort order from joined scan identities"
+    }
+  ],
+  "missedDetails": [
+    {
+      "id": "SSRF-006-R2",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Remove MAX_REDIRECTS limit",
+      "severity": "high",
+      "description": "Raises MAX_REDIRECTS to 500 (still caught if tests assert the value)"
+    },
+    {
+      "id": "SCORE-005-R2",
+      "file": "src/lib/scoring/computeVisibilityScore.js",
+      "name": "Break score rounding (truncate instead of round)",
+      "severity": "medium",
+      "description": "Truncates instead of rounding visibility score"
+    },
+    {
+      "id": "DB-009",
+      "file": "src/lib/db.js",
+      "name": "Remove sort in joinScanIdentities",
+      "severity": "low",
+      "description": "Removes sort order from joined scan identities"
+    }
+  ]
+}

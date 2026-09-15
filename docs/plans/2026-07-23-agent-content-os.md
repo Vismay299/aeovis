@@ -1,5 +1,8 @@
 # Agent Content OS — v1 (zero integrations, in-app everything)
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** A record of work done at the time, not an authority for current decisions. It predates the 2026-08-29 honesty audit, so any claim it makes about what is finished must be checked against [docs/BUILD_JOURNAL.md](../BUILD_JOURNAL.md) and [2026-08-29-rebuild-roadmap.md](./2026-08-29-rebuild-roadmap.md).
+
 **Date:** 2026-07-23
 **Scope:** The first buildable slice of the GEO operating system: a coordinated agent
 pipeline that goes ideation → research → benchmark analysis → draft → QA review →

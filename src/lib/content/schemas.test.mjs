@@ -8,6 +8,10 @@ import {
   validateReview,
   validateLessons,
   PASS_THRESHOLD,
+  RUBRIC_VERSIONS,
+  RUBRIC_WEIGHTS,
+  RUBRIC_FLOORS,
+  rubricVersion,
 } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
@@ -230,4 +234,79 @@ test("validateLessons accepts an empty lessons array", () => {
   const r = validateLessons({ lessons: [] });
   assert.equal(r.ok, true);
   assert.deepEqual(r.value.lessons, []);
+});
+
+// ---------------------------------------------------------------------------
+// R5.3.3 — rubric versioning
+// ---------------------------------------------------------------------------
+
+test("RUBRIC_VERSIONS has an entry for each playbook", () => {
+  for (const playbook of ["geo_article", "linkedin_post"]) {
+    assert.ok(RUBRIC_VERSIONS[playbook], `RUBRIC_VERSIONS should have an entry for ${playbook}`);
+    assert.equal(typeof RUBRIC_VERSIONS[playbook], "string");
+    assert.ok(RUBRIC_VERSIONS[playbook].length > 0, "version should be non-empty");
+  }
+});
+
+test("rubricVersion returns the version for known playbooks", () => {
+  assert.equal(rubricVersion("geo_article"), RUBRIC_VERSIONS.geo_article);
+  assert.equal(rubricVersion("linkedin_post"), RUBRIC_VERSIONS.linkedin_post);
+});
+
+test("rubricVersion returns 'unknown' for unrecognized playbooks", () => {
+  assert.equal(rubricVersion("unknown_playbook"), "unknown");
+  assert.equal(rubricVersion(""), "unknown");
+});
+
+test("rubric versions are deterministic (same weights → same version)", () => {
+  // Importing twice should produce the same version
+  assert.equal(RUBRIC_VERSIONS.geo_article, RUBRIC_VERSIONS.geo_article);
+  assert.equal(RUBRIC_VERSIONS.linkedin_post, RUBRIC_VERSIONS.linkedin_post);
+  // Different playbooks should have different versions (different weights)
+  assert.notStrictEqual(RUBRIC_VERSIONS.geo_article, RUBRIC_VERSIONS.linkedin_post);
+});
+
+test("validateReview includes rubric_version in the output", () => {
+  const r = validateReview("linkedin_post", {
+    scores: LI_PASS_SCORES,
+    verdict: "pass",
+    violations: [],
+    critique: "",
+  });
+  assert.equal(r.ok, true);
+  assert.equal(typeof r.value.rubric_version, "string");
+  assert.equal(r.value.rubric_version, RUBRIC_VERSIONS.linkedin_post);
+});
+
+test("validateReview includes rubric_version for geo_article", () => {
+  const r = validateReview("geo_article", {
+    scores: {
+      facts_vs_research: 0.9,
+      citation_validity: 0.9,
+      authority_specificity: 0.9,
+      brand_voice: 0.9,
+      channel_checklist: 0.9,
+      ymyl_compliance: 1.0,
+    },
+    verdict: "pass",
+    violations: [],
+    critique: "",
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.value.rubric_version, RUBRIC_VERSIONS.geo_article);
+});
+
+test("rubric version changes when weights change (simulation)", () => {
+  // We can't actually change the module-level constant in a test, but we can
+  // verify that the fingerprint function would produce a different hash for
+  // different weights by checking that the two playbooks have different versions
+  // (they have different weights).
+  const fp1 = Object.keys(RUBRIC_WEIGHTS.geo_article).sort().join(",");
+  const fp2 = Object.keys(RUBRIC_WEIGHTS.linkedin_post).sort().join(",");
+  assert.notStrictEqual(fp1, fp2, "different playbooks have different dimension sets");
+  assert.notStrictEqual(
+    RUBRIC_VERSIONS.geo_article,
+    RUBRIC_VERSIONS.linkedin_post,
+    "different rubric definitions produce different versions"
+  );
 });

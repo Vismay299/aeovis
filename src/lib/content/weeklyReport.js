@@ -2,6 +2,51 @@ import { contentLlmJson } from "../llm.js";
 import { getScansForBrand } from "../db.js";
 import { listContentItems } from "../db/content.js";
 
+// ---------------------------------------------------------------------------
+// R3.6.3 — Report quota: one report per brand per day.
+//
+// The paid refresh button was unmetered. A brand could regenerate its report
+// on every click, each one costing an LLM call. This quota limits generation
+// to once per brand per UTC day. The check is in-memory by default (same
+// pattern as scanRateLimit in analytics.js); pass deps.checkReportQuota and
+// deps.recordReportGeneration to override with a DB-backed implementation.
+// ---------------------------------------------------------------------------
+
+global.memoryReportQuota = global.memoryReportQuota || new Map();
+
+function quotaDate(now) {
+  return (now || new Date().toISOString()).slice(0, 10);
+}
+
+function quotaKey(brand, date) {
+  return `${String(brand).trim().toLowerCase()}:${date}`;
+}
+
+/**
+ * How many reports this brand has generated today. 0 means "under quota".
+ * In-memory; pass deps.checkReportQuota to override.
+ */
+export function checkReportQuota(brand, deps = {}) {
+  if (typeof deps.checkReportQuota === "function") return deps.checkReportQuota(brand);
+  const date = quotaDate(deps.now);
+  const key = quotaKey(brand, date);
+  return global.memoryReportQuota.get(key) || 0;
+}
+
+/**
+ * Record that a report was generated for this brand today.
+ * In-memory; pass deps.recordReportGeneration to override.
+ */
+export function recordReportGeneration(brand, deps = {}) {
+  if (typeof deps.recordReportGeneration === "function") return deps.recordReportGeneration(brand);
+  const date = quotaDate(deps.now);
+  const key = quotaKey(brand, date);
+  global.memoryReportQuota.set(key, (global.memoryReportQuota.get(key) || 0) + 1);
+}
+
+/** The daily limit. 1 means "one report per brand per day". */
+export const REPORT_QUOTA_PER_DAY = 1;
+
 /**
  * Weekly report (Phase 4): one LLM call over scan history + content
  * activity, landing in Studio. Three KPIs with week-over-week deltas,
@@ -106,6 +151,21 @@ function worstGaps(scan, limit = 8) {
 }
 
 export async function generateWeeklyReport(brand, deps = {}) {
+  // R3.6.3 — quota check: one report per brand per day.
+  const used = checkReportQuota(brand, deps);
+  if (used >= REPORT_QUOTA_PER_DAY) {
+    return {
+      brand,
+      error: `Report quota exceeded — ${brand} has already generated a report today. Try again tomorrow.`,
+      quota_exceeded: true,
+    };
+  }
+
+  // R2.8.4: a scan-read failure propagates out of here to the route's outer
+  // catch, which answers 500. That is deliberate — before, a DB outage came
+  // back as [] and this branch told the user "No scans yet" over a 400, the
+  // same lie the dashboard was telling. This message is now reachable only
+  // when the database answered and the brand really has no scans.
   const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
   if (!scans || scans.length === 0) {
     return { brand, error: "No scans yet — run a scan before generating a report." };
@@ -162,6 +222,10 @@ ${JSON.stringify(gaps, null, 2)}
   const out = await call(prompt, { stats: deps.stats, temperature: 0.3, max_tokens: 2000 });
 
   const priorities = Array.isArray(out?.priorities) ? out.priorities.slice(0, 3) : [];
+
+  // R3.6.3 — record the generation AFTER the LLM call succeeds. If the LLM
+  // throws, the quota is not consumed — the brand can retry.
+  recordReportGeneration(brand, deps);
 
   return {
     brand,

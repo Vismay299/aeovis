@@ -1,5 +1,8 @@
 # aeovis — AIO Unbranded 30-Prompt Rebuild (Google AI Overview)
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** A record of work done at the time, not an authority for current decisions. It predates the 2026-08-29 honesty audit, so any claim it makes about what is finished must be checked against [docs/BUILD_JOURNAL.md](../BUILD_JOURNAL.md) and [2026-08-29-rebuild-roadmap.md](./2026-08-29-rebuild-roadmap.md).
+
 ## Context
 
 `aeovis` measures how visible a brand is inside **Google AI Overviews (AIO)**. The

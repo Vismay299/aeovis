@@ -1,0 +1,19 @@
+{
+  "name": "perceev-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Real-surface probe fleet. Runs on a container host, independent of the Next app.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js && node src/index.js --selftest",
+    "test": "node --test \"src/**/*.test.mjs\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "playwright": "^1.47.0"
+  }
+}

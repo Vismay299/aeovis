@@ -160,6 +160,35 @@ function GapCard({ gap, agents, onLaunch }) {
 }
 
 /**
+ * R2.8.1 — detect a data-quality crisis from the scan's per-engine summaries.
+ *
+ * "No gaps" and "nothing was answered" are different screens. An all-errored
+ * scan has no gaps because every prompt errored — not because the brand is
+ * cited. Without this gate, OpportunitiesPanel renders the clean "your brand
+ * is cited across the tracked queries" message on a scan where nothing was
+ * measured.
+ *
+ * True when at least one engine ran (had non-branded queries) and EVERY engine
+ * that ran reported data_source_issue, or when no engine had any answers at all.
+ */
+function hasCriticalDataSourceIssue(scan) {
+  const engines = scan?.engines;
+  if (!engines || typeof engines !== "object") {
+    // No per-engine data — fall back to the scan-level flag if present.
+    return !!(scan?.data_source_issue);
+  }
+  const slices = Object.values(engines).filter((s) => s && typeof s === "object");
+  if (slices.length === 0) return false;
+  // Did any engine actually run (had non-branded queries)?
+  const ran = slices.filter((s) => Number(s.non_branded_queries) > 0);
+  if (ran.length === 0) return false;
+  // R2.8.1 — "nothing was answered" is different from "no gaps": every engine
+  // that ran reported a data source issue, so no gaps can be found because
+  // nothing was measured, not because the brand is cited.
+  return ran.every((s) => s.data_source_issue);
+}
+
+/**
  * Opportunities — the scan → OS bridge. Turns the latest scan's gaps into
  * actionable cards: what you're losing, where the citations come from, the
  * format that wins, and one click to point an agent at it.
@@ -202,6 +231,23 @@ export function OpportunitiesPanel({ brand, scan, agents, onLaunched }) {
         <Radar size={26} style={{ color: "var(--text-3)", margin: "0 auto var(--space-3)" }} />
         <p style={{ fontSize: "13px", color: "var(--text-2)" }}>
           Run a visibility scan first. Its gaps become the opportunities your agents optimize for.
+        </p>
+      </Card>
+    );
+  }
+
+  // R2.8.1 — "No gaps" and "nothing was answered" are different screens.
+  // An all-errored scan has zero gaps because nothing was measured, not
+  // because the brand is cited. Rendering the clean "no gaps" message on a
+  // failed scan is the same class defect as reporting a null score as 0%.
+  const dataSourceIssue = hasCriticalDataSourceIssue(scan);
+
+  if (dataSourceIssue && gaps.length === 0) {
+    return (
+      <Card style={{ padding: "var(--space-9)", textAlign: "center" }}>
+        <Radar size={26} style={{ color: "var(--text-3)", margin: "0 auto var(--space-3)" }} />
+        <p style={{ fontSize: "13px", color: "var(--text-2)" }}>
+          Data quality issue — the engines returned errors for most tracked queries. No gap analysis is possible until a clean scan completes.
         </p>
       </Card>
     );

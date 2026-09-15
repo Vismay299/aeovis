@@ -423,3 +423,63 @@ test("normalizeResult — single-engine counts unchanged by unique-prompt logic"
   assert.equal(out.brandPresencePromptsCount, 1);
   assert.equal(out.brandPresenceWithAio, 1);
 });
+
+/**
+ * R2.7.3 (finding C1) — normalizeResult must not invent a collection time.
+ *
+ * The scanTimestamp chain used to end in `?? new Date().toISOString()`, so a
+ * run record with no `scanned_at` came out stamped with the moment the page
+ * normalized it and the dashboard rendered "just now". Unknown age must stay
+ * unknown: null, which the UI renders as an em dash plus a state chip.
+ */
+test("normalizeResult — a record with no scanned_at gets a null scanTimestamp", () => {
+  const record = {
+    brand: "Acme",
+    url: "acme.com",
+    summary_stats: { visibility_pct: 50, non_branded_with_aio: 1, visible_non_branded: 1 },
+    results: [
+      {
+        prompt: "q one",
+        is_branded_query: false,
+        intent_tier: "informational",
+        source: "llm_generated",
+        aio_present: true,
+        aio_text: "text",
+        aio_citations: [],
+        brand_mentioned_in_text: true,
+        brand_cited: false,
+        visible: true,
+        error: null,
+      },
+    ],
+  };
+
+  const out = normalizeResult(record, "Acme", "acme.com");
+  assert.equal(
+    out.scanTimestamp,
+    null,
+    "a missing collection time must be null, not the current clock"
+  );
+});
+
+test("normalizeResult — a real scanned_at is preserved verbatim", () => {
+  const scannedAt = "2026-08-20T09:30:00.000Z";
+  const record = {
+    brand: "Acme",
+    url: "acme.com",
+    scanned_at: scannedAt,
+    summary_stats: { visibility_pct: 50, non_branded_with_aio: 1, visible_non_branded: 1 },
+    results: [],
+  };
+
+  assert.equal(normalizeResult(record, "Acme", "acme.com").scanTimestamp, scannedAt);
+  assert.equal(
+    normalizeResult(
+      { ...record, scanned_at: undefined, scanTimestamp: scannedAt },
+      "Acme",
+      "acme.com"
+    ).scanTimestamp,
+    scannedAt,
+    "the camelCase carrier still works"
+  );
+});

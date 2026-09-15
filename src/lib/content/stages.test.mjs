@@ -82,12 +82,18 @@ test("reviewStatuses names the human gate on both tables", () => {
 // --- transitions ------------------------------------------------------------
 
 test("nothing escapes a terminal stage", () => {
-  for (const terminal of ["approved", "rejected", "failed"]) {
-    assert.equal(isTerminal(terminal), true);
-    assert.equal(allowedTransitions(terminal).size, 0);
-    assert.equal(isLegalTransition(terminal, "drafting"), false);
-    assert.equal(isLegalTransition(terminal, "awaiting_approval"), false);
+  // R5.2.2 — approved is no longer terminal; published is the new terminal done state
+  for (const terminal of ["published", "rejected"]) {
+    assert.equal(isTerminal(terminal, ITEM_STAGES), true, `${terminal} must be terminal`);
+    assert.equal(allowedTransitions(terminal, ITEM_STAGES).size, 0, `${terminal} must have no outgoing transitions`);
+    assert.equal(isLegalTransition(terminal, "draft", ITEM_STAGES), false);
+    assert.equal(isLegalTransition(terminal, "awaiting_approval", ITEM_STAGES), false);
   }
+  // approved is now a working state, not terminal
+  assert.equal(isTerminal("approved", ITEM_STAGES), false, "approved must no longer be terminal");
+  // failed is terminal in JOB_STAGES (not in ITEM_STAGES)
+  assert.equal(isTerminal("failed", JOB_STAGES), true, "failed must be terminal in JOB_STAGES");
+  assert.equal(allowedTransitions("failed", JOB_STAGES).size, 0, "failed must have no outgoing transitions in JOB_STAGES");
 });
 
 test("working stages move freely between each other (pipelines are composable)", () => {

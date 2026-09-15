@@ -1,0 +1,229 @@
+{
+  "timestamp": "2026-09-13T13:07:30.482Z",
+  "summary": {
+    "total": 27,
+    "caught": 4,
+    "missed": 18,
+    "skipped": 5,
+    "errors": 0,
+    "mutationScore": "18.2%"
+  },
+  "results": [
+    {
+      "id": "SSRF-001",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Allow file:// scheme in SSRF guard",
+      "severity": "critical",
+      "result": "missed",
+      "description": "Removes protocol whitelist restriction, allowing file:// URLs"
+    },
+    {
+      "id": "SSRF-002",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Remove credential check in URL normalization",
+      "severity": "critical",
+      "result": "missed",
+      "description": "Allows URLs with embedded credentials (user:pass@host)"
+    },
+    {
+      "id": "SSRF-003",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Bypass loopback address blocking",
+      "severity": "critical",
+      "result": "missed",
+      "description": "Allows 127.0.0.0/8 (loopback) addresses to pass SSRF guard"
+    },
+    {
+      "id": "SSRF-004",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Bypass link-local (metadata) blocking",
+      "severity": "critical",
+      "result": "missed",
+      "description": "Allows 169.254.0.0/16 (cloud metadata) addresses to pass"
+    },
+    {
+      "id": "SSRF-005",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Remove redirect validation in safeFetch",
+      "severity": "critical",
+      "result": "skip",
+      "description": "Follows redirects without re-validating target address"
+    },
+    {
+      "id": "SSRF-006",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Remove MAX_REDIRECTS limit",
+      "severity": "high",
+      "result": "caught",
+      "description": "Allows unlimited redirects (redirect loop vulnerability)"
+    },
+    {
+      "id": "SSRF-007",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Remove private IPv6 blocking (fc00::/7)",
+      "severity": "high",
+      "result": "missed",
+      "description": "Allows private IPv6 ULA addresses to pass"
+    },
+    {
+      "id": "SSRF-008",
+      "file": "src/lib/ssrfGuard.js",
+      "name": "Remove hostname length check",
+      "severity": "medium",
+      "result": "missed",
+      "description": "Allows arbitrarily long hostnames (potential buffer overflow)"
+    },
+    {
+      "id": "RL-001",
+      "file": "src/lib/rateLimit.js",
+      "name": "Remove deployment ceiling enforcement",
+      "severity": "critical",
+      "result": "missed",
+      "description": "Removes effective deployment-wide rate limit ceiling"
+    },
+    {
+      "id": "RL-002",
+      "file": "src/lib/rateLimit.js",
+      "name": "Change default limit from 5 to unlimited",
+      "severity": "critical",
+      "result": "missed",
+      "description": "Makes default rate limit effectively unlimited"
+    },
+    {
+      "id": "RL-003",
+      "file": "src/lib/rateLimit.js",
+      "name": "Remove trust basis distinction",
+      "severity": "high",
+      "result": "missed",
+      "description": "All trust bases treated as unverified (weaker limits)"
+    },
+    {
+      "id": "RL-004",
+      "file": "src/lib/rateLimit.js",
+      "name": "Bypass address normalization",
+      "severity": "high",
+      "result": "missed",
+      "description": "Does not strip ports, allowing bucket splitting"
+    },
+    {
+      "id": "RL-005",
+      "file": "src/lib/rateLimit.js",
+      "name": "Remove refused IP headers",
+      "severity": "high",
+      "result": "skip",
+      "description": "Allows declaring x-real-ip as trusted header"
+    },
+    {
+      "id": "SCORE-001",
+      "file": "src/lib/scoring/constants.js",
+      "name": "Invert sentiment weights",
+      "severity": "critical",
+      "result": "missed",
+      "description": "Positive sentiment scores as 0 instead of 1.0"
+    },
+    {
+      "id": "SCORE-002",
+      "file": "src/lib/scoring/constants.js",
+      "name": "Remove citation bonus",
+      "severity": "high",
+      "result": "missed",
+      "description": "Removes citation bonus from visibility score"
+    },
+    {
+      "id": "SCORE-003",
+      "file": "src/lib/scoring/constants.js",
+      "name": "Invert intent weights",
+      "severity": "high",
+      "result": "missed",
+      "description": "High-intent queries weighted lower than exploratory"
+    },
+    {
+      "id": "SCORE-004",
+      "file": "src/lib/scoring/computeVisibilityScore.js",
+      "name": "Remove citation share blending",
+      "severity": "high",
+      "result": "missed",
+      "description": "Ignores citation share in composite visibility score"
+    },
+    {
+      "id": "SCORE-005",
+      "file": "src/lib/scoring/computeVisibilityScore.js",
+      "name": "Break score rounding",
+      "severity": "medium",
+      "result": "caught",
+      "description": "Changes score precision (2 decimal places instead of 1)"
+    },
+    {
+      "id": "SCORE-006",
+      "file": "src/lib/scoring/bayesian.js",
+      "name": "Break posterior calculation",
+      "severity": "critical",
+      "result": "missed",
+      "description": "Incorrect Bayesian posterior mean calculation"
+    },
+    {
+      "id": "SCORE-007",
+      "file": "src/lib/scoring/judge.js",
+      "name": "Invert position detection logic",
+      "severity": "high",
+      "result": "missed",
+      "description": "Inverts position detection for cited brand mentions"
+    },
+    {
+      "id": "SCORE-008",
+      "file": "src/lib/scoring/judge.js",
+      "name": "Break word boundary detection",
+      "severity": "high",
+      "result": "skip",
+      "description": "Removes word boundary checks from mention detection"
+    },
+    {
+      "id": "DB-001",
+      "file": "src/lib/db.js",
+      "name": "Remove scan write confirmation",
+      "severity": "critical",
+      "result": "skip",
+      "description": "Allows unconfirmed writes to be treated as successful"
+    },
+    {
+      "id": "DB-002",
+      "file": "src/lib/db.js",
+      "name": "Remove job alive check",
+      "severity": "critical",
+      "result": "missed",
+      "description": "All jobs considered alive regardless of heartbeat"
+    },
+    {
+      "id": "DB-003",
+      "file": "src/lib/db.js",
+      "name": "Remove heartbeat stamping",
+      "severity": "high",
+      "result": "missed",
+      "description": "Heartbeat not updated on job updates (causes false staleness)"
+    },
+    {
+      "id": "DB-004",
+      "file": "src/lib/duplicateScan.js",
+      "name": "Remove duplicate scan violation detection",
+      "severity": "critical",
+      "result": "caught",
+      "description": "Never detects duplicate scan violations"
+    },
+    {
+      "id": "DB-005",
+      "file": "src/lib/duplicateScan.js",
+      "name": "Always reject duplicate scans",
+      "severity": "high",
+      "result": "caught",
+      "description": "Always rejects scans even when blocking jobs are dead"
+    },
+    {
+      "id": "DB-006",
+      "file": "src/lib/db.js",
+      "name": "Remove schema mismatch detection",
+      "severity": "medium",
+      "result": "skip",
+      "description": "Schema mismatches not detected (less informative errors)"
+    }
+  ]
+}

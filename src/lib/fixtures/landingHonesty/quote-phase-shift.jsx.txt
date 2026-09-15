@@ -1,0 +1,65 @@
+'use client';
+
+/**
+ * FIXTURE — R6.4.9 round two, finding C11. A component that renders an engine
+ * name the FIRST version of the R6.4.9 comment lexer could not see.
+ *
+ * WHERE IT CAME FROM. This is the verifier's rejection payload for R6.4.9,
+ * reduced to the smallest component that still carries it. It was executed
+ * against the real src/components/landing/AnswerSheet.jsx (replacing the
+ * "You mentioned" chip line) and against the real src/app/page.js (replacing the
+ * "Rival first" chip line). In both files all 24 tests in landingHonesty.test.mjs
+ * reported green — the canary and both render proofs included — while
+ * react-dom/server emitted the engine name into the DOM.
+ *
+ * WHAT MAKES IT INTERESTING, and it is not the comment run on its own. R6.4.9's
+ * lexer knows which quote it is inside, so a slash-star run inside a string is
+ * safe from it. This payload moves the LEXER'S IDEA OF WHICH QUOTE IT IS INSIDE.
+ *
+ * The three chips are on ONE line, deliberately. The apostrophe in
+ * "Brightwave's" is JSX prose, but the lexer treats JSX text as code position,
+ * so it reads that apostrophe as a string delimiter and pairs it with the
+ * apostrophe that OPENS the real string in the middle chip. Everything between
+ * them — including the middle chip's opening quote — is swallowed as "a string",
+ * which leaves the real string's CONTENTS in code position, where the slash-star
+ * run reads as a comment and is deleted. The apostrophe in "NorthPeak's" then
+ * pairs with the one that closed the real string, so the line ends in code and
+ * the lexer never refuses. Quote pairing is shifted by exactly one, and the shift
+ * is what hides the name.
+ *
+ * Break the line into three lines and the payload dies: the shift is per-line.
+ * That is why this file keeps it on one.
+ *
+ * IT RENDERS — verified, not argued. Transformed with sucrase and rendered
+ * through react-dom/server, the markup contains:
+ *   span class="chip" -- cited SLASH-STAR Perplexity STAR-SLASH first
+ * spelled with the real markers, which is what the assertion in
+ * landingHonesty.test.mjs builds and compares against. (Written out in words
+ * here only because a real star-slash would close this comment.)
+ * React writes the string out character for character, comment markers and all,
+ * because they were never a comment.
+ *
+ * WHAT CLOSED IT. withoutComments now strips a comment run only if it is stripped
+ * under EVERY quote phase of its line: if the same quote character appears both
+ * before and after the opener on that line, some pairing puts the opener inside a
+ * string, so the run is kept verbatim instead of deleted. The scan then reads
+ * Perplexity here, which is the loud direction.
+ *
+ * This file is .txt on purpose: it must never be compiled into the app, only read
+ * as text by the guard that has to see through it.
+ */
+
+const CAPTION = 'Sample answer';
+
+export function AnswerSheet() {
+  return (
+    <div className="sheet">
+      <span className="chip">{CAPTION}</span>
+      <div className="sheet__foot">
+        <span className="chip chip--you">Brightwave's mention</span><span className="chip">{' cited /* Perplexity */ first'}</span><span className="chip">NorthPeak's pick</span>
+      </div>
+    </div>
+  );
+}
+
+export default AnswerSheet;

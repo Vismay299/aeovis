@@ -1,5 +1,8 @@
 # UI/UX source research — Perceev page redesign
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** Research notes gathered while choosing the visual direction. Not an authority — [DESIGN.md](../../DESIGN.md) is.
+
 Compiled 2026-08-16. Every repo below was verified live against the GitHub REST API
 (`gh api repos/<owner>/<name>`) on that date — star counts and licenses are read values,
 not recalled ones. Sorted into the categories that actually matter for this page.

@@ -56,6 +56,68 @@ export const RUBRIC_FLOORS = {
 
 export const PASS_THRESHOLD = 0.75;
 
+// ---------------------------------------------------------------------------
+// R5.3.3 — Rubric versioning
+// ---------------------------------------------------------------------------
+
+/**
+ * Deterministic hash of a rubric definition.  Two identical weight/floor
+ * objects always produce the same version; any change to a weight, a floor,
+ * or a dimension name produces a different version.
+ *
+ * The version is a 8-char hex string derived from a DJB2 hash of the
+ * canonical JSON representation.  It is short enough to store in a database
+ * column and unique enough to distinguish any rubric change we are likely to
+ * make.  The hash is intentionally NOT cryptographic — it is a content
+ * fingerprint for grouping, not a security boundary.
+ */
+function djb2(str) {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+/**
+ * Canonical string representation of a rubric definition: sorted keys,
+ * fixed-precision numbers, no whitespace.  This is the input to the hash
+ * and must be stable across runs.
+ */
+function rubricFingerprint(weights, floors) {
+  const dims = Object.keys(weights).sort();
+  const wParts = dims.map((d) => `${d}:${weights[d]}`);
+  const fParts = dims
+    .filter((d) => floors[d] != null)
+    .map((d) => `${d}:${floors[d]}`);
+  return `w=${wParts.join(",")};f=${fParts.join(",")};t=${PASS_THRESHOLD}`;
+}
+
+/**
+ * Per-playbook rubric version.  Computed once at module load from the
+ * canonical weights and floors — a change to either constant produces a new
+ * version on the next import.  Trend queries GROUP BY `rubric_version` to
+ * compare quality across rubric epochs.
+ */
+export const RUBRIC_VERSIONS = {};
+for (const playbook of PLAYBOOKS) {
+  const fp = rubricFingerprint(
+    RUBRIC_WEIGHTS[playbook] || {},
+    RUBRIC_FLOORS[playbook] || {}
+  );
+  RUBRIC_VERSIONS[playbook] = djb2(fp).toString(16).padStart(8, "0");
+}
+
+/**
+ * The rubric version for a given playbook.  Convenience wrapper over
+ * RUBRIC_VERSIONS that returns "unknown" for an unrecognized playbook
+ * rather than undefined — callers can store the string without a null
+ * check.
+ */
+export function rubricVersion(playbook) {
+  return RUBRIC_VERSIONS[playbook] || "unknown";
+}
+
 function isNonEmptyString(v) {
   return typeof v === "string" && v.trim().length > 0;
 }
@@ -329,6 +391,10 @@ export function validateReview(playbook, obj, rubricEmphasis) {
     floor_breaches: floorBreaches,
     violations,
     critique: isNonEmptyString(obj.critique) ? obj.critique.trim() : "",
+    // R5.3.3 — every verdict carries the rubric version it was scored against,
+    // so trend queries can GROUP BY rubric_version and compare quality across
+    // rubric epochs without conflating a rubric change with a quality change.
+    rubric_version: rubricVersion(playbook),
   };
 
   if (verdict === "fail" && !value.critique && !ymylViolation) {

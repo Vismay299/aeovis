@@ -1,5 +1,8 @@
 # AIO-Only Branch Fix Plan (`updated-logic-july10`)
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** A record of work done at the time, not an authority for current decisions. It predates the 2026-08-29 honesty audit, so any claim it makes about what is finished must be checked against [docs/BUILD_JOURNAL.md](../BUILD_JOURNAL.md) and [2026-08-29-rebuild-roadmap.md](./2026-08-29-rebuild-roadmap.md).
+
 **Created**: 2026-07-10  
 **Status**: Ready to implement (do not start until this plan is approved)  
 **Branch**: `updated-logic-july10` (base commit at plan writing: `a04dbfb`)  

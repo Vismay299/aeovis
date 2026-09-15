@@ -7,6 +7,18 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "tracker-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "C:/Users/Vismay/Desktop/Projects/monoedge-project-tracker",
+        "run",
+        "dev"
+      ],
+      "port": 3001,
+      "autoPort": true
     }
   ]
 }

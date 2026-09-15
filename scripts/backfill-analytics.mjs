@@ -50,6 +50,37 @@
  *   - citations.content_type / domain_type / citation_class (P3 enrichment)
  *   - brand_metrics_daily.sov_pct / sentiment_avg / position_avg (same P1.1/
  *     P1.2 gap as above)
+ *
+ * R4.3.3 — THE CITATION DENOMINATOR OF A HISTORICAL SCAN.
+ *
+ * Since R2.2.2, rollup.js refuses to compute a citation share for a
+ * multi-leg-engine slice that carries no `citation_denominator`, because the
+ * only other candidate denominator (the answered count) is known to be wrong:
+ * it scores a dead Perplexity /search leg as a confirmed "the brand was not
+ * cited here". Pre-R2.2.2 scans have no such field, so this script used to
+ * THROW on them — and the throw took the whole scan down, prompt_results and
+ * citations included, and reported it as an error, which is not what it is.
+ *
+ * Now every engine slice of every scan lands in exactly one of five outcomes
+ * (src/lib/analytics/historicalBackfill.js, DENOMINATOR_OUTCOME) and all five
+ * are counted and printed in the summary below:
+ *
+ *   slice_carried          the stored summary already had the number
+ *   single_leg_engine      aio/chatgpt — answered count IS the denominator
+ *   empty_answer_pool      nothing answered: a MEASURED zero, not an unknown
+ *   rederived_from_results recounted from surviving per-probe rows that carry
+ *                          `citations_state`
+ *   unrecoverable          the number is gone. The row is written with
+ *                          citation_denominator NULL, citation_state
+ *                          'not_assessed' and citation_state_reason
+ *                          'citation_denominator_unrecoverable' — an explicit,
+ *                          queryable unknown. NEVER 0, never the numerator,
+ *                          never a dropped row.
+ *
+ * Requires migration 015 (brand_metrics_daily.citation_denominator /
+ * citation_state / citation_state_reason). Against a pre-015 database both the
+ * pre-read and the upsert fail loudly with PostgREST PGRST204 rather than
+ * silently dropping the three columns.
  */
 
 import crypto from "crypto";
@@ -58,7 +89,14 @@ import { resolveBrandKey } from "../src/lib/scoring/brandKey.js";
 import { getBrandAliases } from "../src/lib/scoring/aliases.js";
 import { detectMention } from "../src/lib/scoring/judge.js";
 import { extractBrandDomain } from "../src/lib/scoring/citations.js";
-import { toDateOnly, buildMetricsRows } from "../src/lib/analytics/rollup.js";
+import { toDateOnly } from "../src/lib/analytics/rollup.js";
+import {
+  buildHistoricalMetricsRows,
+  preserveMeasuredDenominator,
+  createCitationDenominatorTally,
+  formatCitationDenominatorReport,
+  DENOMINATOR_OUTCOME,
+} from "../src/lib/analytics/historicalBackfill.js";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const PAGE_SIZE = 200;
@@ -85,6 +123,15 @@ function normalizeResultRow(r) {
     topic: r.topic || null,
     source: r.source || null,
     brand_cited: !!r.brand_cited,
+    // R4.3.3 — the citation-observability marker (R2.2.2), carried through
+    // rather than dropped. This allowlist is the only way a field reaches
+    // prompt_results.raw, and this script DELETES the live-written rows before
+    // reinserting: without these two lines a re-run would erase the only
+    // per-row evidence of which citation lists were actually observed, i.e.
+    // convert a re-derivable scan into an unrecoverable one. `?? null` keeps a
+    // pre-R2.2.2 row's absent marker distinguishable from "verified".
+    citations_state: r.citations_state ?? null,
+    citations_state_reason: r.citations_state_reason ?? null,
     error: r.error || null,
     organic: r.organic,
     brand_organic_position: r.brand_organic_position ?? null,
@@ -159,53 +206,37 @@ async function deleteForScan(table, scanId) {
 }
 
 /**
- * Adapts one historical `scans` row to the shared buildMetricsRows contract
- * (src/lib/analytics/rollup.js — the single source of truth for
- * brand_metrics_daily math, also used by the live pipeline's
- * runFinalizePhase). Two raw_results shapes exist across scan history (see
- * file header):
- *   - v9 multi-engine (`rawResults.engines`): one row per engine that
- *     actually reported, plus a blended 'all' row using the real
- *     cross-engine headline (computeHeadline in enginePipeline.js) rather
- *     than re-deriving a blend ourselves.
- *   - v8.1 single-engine AIO-only (`rawResults.summary_stats`): 'aio' and
- *     'all' rows are identical since AIO is the only engine that ran.
- *   - Neither shape present (malformed row, or predates both pipelines):
- *     contributes no brand_metrics_daily rows — brand_metrics_daily has no
- *     job_id column, so this is independent of the job-link gating above.
+ * Every brand_metrics_daily row already in the table, keyed by its natural
+ * (brand, date, engine) key. Read ONCE up front so the per-scan merge below
+ * costs no extra round trips (R4.3.3 — see preserveMeasuredDenominator: a
+ * re-run must never demote a stored real denominator to an unknown).
+ *
+ * The three R4.3.3 columns are named explicitly rather than taken via `*`, so
+ * a database missing migration 015 fails HERE, before a single write, with a
+ * message that says which migration is missing — instead of failing later on
+ * the upsert or, worse, looking like it worked.
  */
-function buildBackfillMetricsRows(scan, rawResults, brandKey, dateOnly, promptResultRows) {
-  const promptSetId = rawResults.prompt_set_id ?? null;
-
-  if (rawResults.engines && typeof rawResults.engines === "object" && Object.keys(rawResults.engines).length > 0) {
-    return buildMetricsRows({
-      isMultiEngine: true,
-      brandKey,
-      dateOnly,
-      scanId: scan.id,
-      promptSetId,
-      engineSummaries: rawResults.engines,
-      headline: { visibility_index_pct: rawResults.visibility_index_pct ?? null },
-      promptResultRows,
-    });
+async function buildStoredMetricsMap() {
+  try {
+    const rows = await fetchAll(
+      "brand_metrics_daily",
+      "brand, date, engine, scan_id, citation_share_pct, citation_denominator, citation_state, citation_state_reason",
+      [["date", { ascending: true }], ["brand", { ascending: true }], ["engine", { ascending: true }]]
+    );
+    const map = new Map();
+    for (const row of rows) map.set(`${row.brand}|${row.date}|${row.engine}`, row);
+    return map;
+  } catch (err) {
+    throw new Error(
+      `Could not read brand_metrics_daily with its R4.3.3 citation columns ` +
+        `(${err.message}). If this is PostgREST PGRST204, supabase/migrations/` +
+        `015_brand_metrics_citation_state.sql has not been applied to this database — ` +
+        `apply it first: the upserts below would fail the same way.`
+    );
   }
-
-  if (rawResults.summary_stats && typeof rawResults.summary_stats === "object") {
-    return buildMetricsRows({
-      isMultiEngine: false,
-      brandKey,
-      dateOnly,
-      scanId: scan.id,
-      promptSetId,
-      summary: rawResults.summary_stats,
-      promptResultRows,
-    });
-  }
-
-  return [];
 }
 
-async function processScan(scan, scanToJobMap, counters) {
+async function processScan(scan, scanToJobMap, storedMetrics, counters) {
   const rawResults = scan.raw_results || {};
   const resultRows = Array.isArray(rawResults.results) ? rawResults.results : [];
 
@@ -276,6 +307,9 @@ async function processScan(scan, scanToJobMap, counters) {
           raw: {
             organic: r.organic ?? null,
             brand_organic_position: r.brand_organic_position,
+            // R2.2.2's per-row marker — see normalizeResultRow.
+            citations_state: r.citations_state,
+            citations_state_reason: r.citations_state_reason,
             error: r.error,
             topic: r.topic,
             source: r.source,
@@ -307,8 +341,50 @@ async function processScan(scan, scanToJobMap, counters) {
     }
 
   // --- brand_metrics_daily ---------------------------------------------------
-  const metricsRows = buildBackfillMetricsRows(scan, rawResults, brandKey, dateOnly, promptResultRows);
+  // R4.3.3 — `slices` is one entry per engine summary considered, carrying HOW
+  // its citation denominator was obtained (or why it could not be). Every
+  // entry is counted below; none is dropped.
+  const { rows: builtRows, slices } = buildHistoricalMetricsRows({
+    scanId: scan.id,
+    rawResults,
+    brandKey,
+    dateOnly,
+    promptResultRows,
+  });
+
+  for (const slice of slices) {
+    counters.denominatorOutcomes[slice.outcome] = (counters.denominatorOutcomes[slice.outcome] || 0) + 1;
+    if (slice.outcome === DENOMINATOR_OUTCOME.UNRECOVERABLE) {
+      counters.unrecoverableSlices.push({
+        scanId: scan.id,
+        brand: brandKey,
+        date: dateOnly,
+        engine: slice.engine,
+        detail: slice.detail,
+        observedRows: slice.observedRows,
+      });
+      console.warn(
+        `  [unmeasured] scan ${scan.id} ${slice.engine}: citation denominator unrecoverable ` +
+          `(${slice.detail}) — storing citation_denominator NULL + ` +
+          `citation_state_reason 'citation_denominator_unrecoverable', not a zero`
+      );
+    }
+  }
+
+  // A re-run must not demote a stored real denominator to an unknown.
+  const metricsRows = builtRows.map((row) => {
+    const stored = storedMetrics.get(`${row.brand}|${row.date}|${row.engine}`) || null;
+    const { row: merged, preserved } = preserveMeasuredDenominator(row, stored);
+    if (preserved) counters.denominatorPreserved++;
+    return merged;
+  });
+
   if (metricsRows.length === 0) counters.scansWithNoSummary++;
+
+  for (const row of metricsRows) {
+    counters.metricsRowsByCitationState[row.citation_state] =
+      (counters.metricsRowsByCitationState[row.citation_state] || 0) + 1;
+  }
 
   counters.scansProcessed++;
   counters.promptResultRows += promptResultRows.length;
@@ -348,8 +424,15 @@ async function main() {
 
   console.log(`Backfill analytics — ${DRY_RUN ? "DRY RUN (no writes)" : "LIVE"}\n`);
 
-  const [scans, scanToJobMap] = await Promise.all([fetchAllScans(), buildScanToJobMap()]);
-  console.log(`Found ${scans.length} scans, ${scanToJobMap.size} scan_jobs with a result_id.\n`);
+  const [scans, scanToJobMap, storedMetrics] = await Promise.all([
+    fetchAllScans(),
+    buildScanToJobMap(),
+    buildStoredMetricsMap(),
+  ]);
+  console.log(
+    `Found ${scans.length} scans, ${scanToJobMap.size} scan_jobs with a result_id, ` +
+      `${storedMetrics.size} brand_metrics_daily rows already stored.\n`
+  );
 
   const counters = {
     scansProcessed: 0,
@@ -359,12 +442,13 @@ async function main() {
     promptResultRows: 0,
     citationRows: 0,
     metricsRows: 0,
+    ...createCitationDenominatorTally(),
     errors: [],
   };
 
   for (const scan of scans) {
     try {
-      await processScan(scan, scanToJobMap, counters);
+      await processScan(scan, scanToJobMap, storedMetrics, counters);
     } catch (err) {
       counters.errors.push({ scanId: scan.id, brand: scan.brand, message: err.message });
       console.error(`  [error] scan ${scan.id} (${scan.brand}): ${err.message}`);
@@ -383,6 +467,7 @@ async function main() {
   console.log(`prompt_results rows:      ${counters.promptResultRows}`);
   console.log(`citations rows:           ${counters.citationRows}`);
   console.log(`brand_metrics_daily rows: ${counters.metricsRows}`);
+  for (const reportLine of formatCitationDenominatorReport(counters)) console.log(reportLine);
   console.log(`Errors:                   ${counters.errors.length}`);
   if (counters.errors.length > 0) {
     console.log("\nErrored scans:");

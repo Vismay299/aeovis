@@ -67,6 +67,11 @@ export async function createDailyBatchJobs(brand, deps = {}) {
   const batchSize = deps.batchSize ?? getDailyBatchSize();
   if (batchSize <= 0) return [];
 
+  // R2.8.4: a scan-read failure PROPAGATES to the caller (the cron at
+  // src/app/api/content/worker/route.js counts it per brand and names it in
+  // the response). Do not wrap this — `return []` below must keep meaning
+  // "this brand has genuinely never been scanned, so there are no gaps to
+  // work", not "we could not find out".
   const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
   const scan = scans?.[0];
   if (!scan) return [];

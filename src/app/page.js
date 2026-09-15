@@ -16,6 +16,11 @@ that document) and every brand on it is fictional.
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+import { DEFAULT_UNBRANDED_TARGET } from '@/lib/scoring/promptSetSize';
+import {
+  ENGINE_LABELS, deployedEngineLabels, deployedEngines, formatEngineList,
+  primaryDeployedEngineLabel,
+} from '@/lib/engines/deployedEngines';
 import { SiteNav } from '@/components/landing/SiteNav';
 import { SiteFooter } from '@/components/landing/SiteFooter';
 import { Reveal } from '@/components/landing/Reveal';
@@ -28,30 +33,119 @@ import {
   CapabilityDeck, TrackedSetViz, TrendViz, RivalViz, SourcesViz,
 } from '@/components/landing/CapabilityDeck';
 import { saveScan } from '@/services/api';
-import { SAMPLE_RESULT } from '@/data/mockData';
+import { SAMPLE_DESTINATIONS, SAMPLE_RESULT } from '@/data/mockData';
 
 /* ── the one demonstration reading ──────────────────────────────────
-   15 + 12 + 6 + 3 = 36. Change one of these and change all of them. */
-const TRACKED = 36;
+   Nothing below is a number typed twice. TRACKED is the constant a scan runs
+   on, the donut is the array the sample report renders, and the rail is that
+   report's own per-engine tally.
 
-const DESTINATIONS = [
-  { key: 'you', label: 'Brightwave', answers: 15, colour: 'var(--you)', isYou: true },
-  { key: 'r1', label: 'NorthPeak', answers: 12, colour: 'var(--rival-1)' },
-  { key: 'r2', label: 'Lumen IQ', answers: 6, colour: 'var(--rival-2)' },
-  { key: 'none', label: 'No brand named', answers: 3, colour: 'var(--rival-3)', muted: true },
-];
+   R2.10.1 — the first pass at this kept a SECOND copy of each and they drifted
+   inside one commit: this page moved to 30 questions and 13/10/5/2 while the
+   sample report one click away (src/data/mockData.js, reached from the "See a
+   sample report" button below) stayed on 36 and 15/12/6/3, and still credited
+   twelve of them to ChatGPT. landingHonesty.test.mjs asserts the tie now,
+   rather than asking a human to hold two files in their head. */
+// R2.10.1 — was a hardcoded 36 while a scan tracks 30 by default and every
+// archived reference scan recorded prompts_tracked=30, so the page promised a
+// fifth more than the product delivers. Now derived from the same constant the
+// worker uses.
+const TRACKED = DEFAULT_UNBRANDED_TARGET;
 
-const DEMO_ENGINES = [
-  { name: 'Google AI Overview', asked: 12, reached: 5 },
-  { name: 'ChatGPT', asked: 12, reached: 6 },
-  { name: 'Perplexity', asked: 12, reached: 4 },
-];
+/* R2.10.2 — THE PROBE COUNTER, AND WHY THERE ISN'T ONE.
+   This page used to carry a stats strip whose first figure was "Probes run":
+   src/components/landing/ProbeCounter.jsx started at a typed 37720 and added a
+   random 1 to 3 to itself every 2.2 seconds. It measured nothing — two tabs open
+   side by side disagreed about how much work the product had ever done — and
+   PRODUCT.md's "Evidence on Hand" still flags it as simulated. That module and
+   the strip around it were deleted on 2026-08-16 in 5111219, the design-system
+   port, so the flag is stale: this page has made no lifetime claim since, and
+   nothing here counts anything but the tracked set and the sample report.
+   Nothing is put back in its place either. There is no aggregate probe count in
+   this deployment worth quoting, and a plausible number is worse than no number
+   because it cannot be checked. If one ever returns it reads a real count query,
+   and when that query cannot answer it renders an em dash and a state chip —
+   never a zero, which is a reading, and never a seed, which is a lie.
+   src/lib/landingProbeCounter.test.mjs holds that line. */
 
-const RAIL_NOTES = [
-  'Three of your four highest-intent questions live in AI Overview.',
-  "ChatGPT is your strongest engine, and your rivals' weakest.",
-  'Perplexity cites sources hardest — six of its 64 are pages you control.',
-];
+// R2.10.1 — the engines this deployment actually probes, not a hardcoded three.
+// The hero used to name Google AI Overview, ChatGPT and Perplexity while the
+// deployment ran ENGINES=aio,perplexity with no OPENAI_API_KEY at all, so
+// ChatGPT could not have run even if it had been configured. Claiming an engine
+// we do not probe is a claim about coverage, and it was wrong in the flattering
+// direction. See src/lib/engines/deployedEngines.js.
+const ENGINE_SENTENCE = formatEngineList(deployedEngineLabels());
+
+const DEPLOYED_ENGINE_KEYS = deployedEngines();
+const DEPLOYED_ENGINE_LABELS = deployedEngineLabels();
+
+/* R2.10.6 — the evidence section's sample card carries a chip naming the engine
+   that supposedly returned the answer below it, and that chip was typed. R2.10.5
+   fixed the hero sheet's identical chip and its close record claimed this page
+   held no more; rebuilt under NEXT_PUBLIC_ENGINES=perplexity the hero sentence,
+   the rail and the hero sheet all narrowed correctly and the served HTML still
+   held exactly one Google AI Overview — this chip, attributing a fabricated
+   answer to an engine the deployment does not probe. The card shows ONE answer,
+   so it names one engine, and it is the deployment's own. Read at module scope
+   through deployedEngines' inlined NEXT_PUBLIC_ literal, so SSR and the browser
+   cannot pick differently. */
+const SAMPLE_CARD_ENGINE = primaryDeployedEngineLabel();
+
+// The donut. Colour is presentation and belongs here; the counts are the sample
+// report's own, so the two surfaces cannot disagree again.
+const DESTINATION_COLOUR = {
+  you: 'var(--you)', r1: 'var(--rival-1)', r2: 'var(--rival-2)', none: 'var(--rival-3)',
+};
+const DESTINATIONS = SAMPLE_DESTINATIONS.map((d) => ({
+  ...d,
+  colour: DESTINATION_COLOUR[d.key] ?? 'var(--rival-3)',
+}));
+
+// R2.10.1 — the rail showed a fixed three engines including ChatGPT, which this
+// deployment does not probe, and derived `reached` from a hardcoded share per
+// engine. Both the engines AND their tallies now come from the sample report:
+// `asked`/`reached` are the rows it actually holds, so this gauge and the
+// report behind the button cannot say different things.
+const DEMO_ENGINES = DEPLOYED_ENGINE_KEYS.map((key) => {
+  const stat = SAMPLE_RESULT.engines[key];
+  if (!stat) {
+    // Both lists come from deployedEngines(), so this is unreachable. If it
+    // ever fires, a gauge with no reading behind it still LOOKS like a reading.
+    throw new Error(
+      `landing: the sample report holds no reading for "${key}", so this rail `
+      + 'would render a gauge with nothing behind it.',
+    );
+  }
+  return { name: ENGINE_LABELS[key], asked: stat.answered, reached: stat.visible };
+});
+
+// The rail says "the same N questions go to each", which is only true when the
+// set divides evenly across the deployed engines. Take the smallest, so an
+// uneven split under-claims rather than over-claims.
+// R2.7.11: pass absent rather than 0 when there are no engine readings, so
+// EngineRail reports not-measured rather than a labelled measured zero ("none asked").
+export function computePerEngineAsked(engines) {
+  if (!Array.isArray(engines) || engines.length === 0) return undefined;
+  const asked = engines
+    .map((e) => e?.asked)
+    .filter((a) => typeof a === 'number' && Number.isFinite(a));
+  if (asked.length === 0) return undefined;
+  return Math.min(...asked);
+}
+
+const PER_ENGINE_ASKED = computePerEngineAsked(DEMO_ENGINES);
+
+// Prose only. Two of these notes used to carry arithmetic — "three of your four
+// highest-intent questions", "six of its 64" — that was never true of the
+// demonstration data behind them. The numbers on this rail are the gauges, and
+// those are derived.
+const ENGINE_NOTE = {
+  'Google AI Overview': 'An AI Overview answer is the one your buyer reads without clicking anything.',
+  ChatGPT: 'ChatGPT returns a single paragraph. There is no second place inside it.',
+  Perplexity: 'Perplexity cites its sources, so a lost answer names the page that took it.',
+};
+
+const RAIL_NOTES = DEPLOYED_ENGINE_LABELS.map((name) => ENGINE_NOTE[name]).filter(Boolean);
 
 const SLIDES = [
   {
@@ -123,7 +217,7 @@ export default function Landing() {
               The answer names two brands. <em>Is one of them yours?</em>
             </Reveal>
             <Reveal as="p" className="lede hero__sub" delay={120}>
-              Perceev asks Google AI Overview, ChatGPT and Perplexity the {TRACKED} unbranded
+              Perceev asks {ENGINE_SENTENCE} the {TRACKED} unbranded
               questions your buyers actually type, then shows you which brand each answer
               recommends.
             </Reveal>
@@ -153,7 +247,7 @@ export default function Landing() {
       </div>
 
       {/* ── engine coverage ──────────────────────────────────────── */}
-      <EngineRail engines={DEMO_ENGINES} notes={RAIL_NOTES} total={12} />
+      <EngineRail engines={DEMO_ENGINES} notes={RAIL_NOTES} total={PER_ENGINE_ASKED} />
 
       {/* ── the gap: one statement, one graphic, air ──────────────── */}
       <section className="sec shell" id="gap">
@@ -231,8 +325,13 @@ export default function Landing() {
                   paddingBottom: 16, borderBottom: '1px solid var(--line-soft)', marginBottom: 18,
                 }}
               >
-                <span className="chip">Google AI Overview</span>
-                <span className="tag">16 Aug 2026 · 09:14 IST</span>
+                {/* R2.10.1 — this card is an illustration with fictional brands
+                    (NorthPeak, Brightwave). It carried a precise timestamp,
+                    "16 Aug 2026 · 09:14 IST", which reads as provenance for a
+                    real probe. A made-up answer wearing a real answer's
+                    metadata is the exact confusion this page has to avoid. */}
+                <span className="chip">{SAMPLE_CARD_ENGINE}</span>
+                <span className="tag">Sample · illustrative brands</span>
                 <span className="chip chip--warn" style={{ marginLeft: 'auto' }}>Rival first</span>
               </div>
               <p

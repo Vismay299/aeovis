@@ -1,4 +1,5 @@
 import { brightDataSearch, extractBrightDataAiOverview, extractBrightDataOrganic } from "../engines/brightdata.js";
+import { resolveSerpQueryCost } from "../llmPricing.js";
 import { getBrandAliases } from "./aliases.js";
 import {
   AIO_CONCURRENCY,
@@ -9,6 +10,8 @@ import {
 import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
 import { detectMention } from "./judge.js";
 import { extractBrandDomain } from "./citations.js";
+import { countBrandsElicited } from "./promptQuality.js";
+import { ratioPctOrNull } from "./measuredNumber.js";
 
 /**
  * AIO-Only Probing Pipeline
@@ -91,6 +94,18 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
     cost: 0.0,
   };
 
+  // R3.6.4 — one Bright Data query costs whatever the price table in
+  // src/lib/llmPricing.js says it costs; this file used to restate the number
+  // itself, as did enginePipeline.js and serp.js, and three copies of a price
+  // drift independently.
+  //
+  // Resolved OUTSIDE the try on purpose. The catch below records a throw as a
+  // per-query error row and leaves `cost` at 0, so a pricing refusal raised in
+  // there would arrive downstream as a query that failed for free. The price
+  // is a configuration fact, identical for all 30 queries: if it cannot be
+  // established, the right blast radius is the scan, not one row.
+  const { cost: queryCost } = resolveSerpQueryCost({ provider: "brightdata" });
+
   try {
     // Bright Data SERP responses for AI Overview average ~45-50s; a 30s
     // timeout aborts the majority of otherwise-successful queries and inflates
@@ -107,7 +122,7 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
       );
       result.brand_organic_position = brandPos >= 0 ? brandPos + 1 : null;
     }
-    result.cost = 0.0015;
+    result.cost = queryCost;
     if (stats) stats.cost = (stats.cost || 0) + result.cost;
 
     const hasText = Boolean(text && text.trim());
@@ -249,6 +264,29 @@ export function summarizeAioResults(results) {
 
   const insufficientSample = nonBrandedWithAio.length < AIO_MIN_NON_BRANDED_WITH_AIO;
 
+  // R2.7.5 — share_of_voice_pct over the eliciting pool for AIO-only scans.
+  // Preserves the three-way distinction:
+  // null = undefined without rivals (or empty eliciting pool),
+  // 0 = assessed and nothing mentioned, a number otherwise.
+  const hasRivalRoster = nonBrandedWithAio.some(
+    (r) => Array.isArray(r.brands) && r.brands.some((b) => b && !(b.is_self ?? b.isSelf))
+  );
+  const elicitingPool = hasRivalRoster
+    ? nonBrandedWithAio.filter((r) => countBrandsElicited(r.brands) >= 1)
+    : nonBrandedWithAio;
+
+  let selfMentions = 0;
+  let allMentions = 0;
+  for (const r of elicitingPool) {
+    const brands = Array.isArray(r.brands) ? r.brands : [];
+    for (const b of brands) {
+      if (!b || !b.mentioned) continue;
+      allMentions += 1;
+      if (b.is_self ?? b.isSelf) selfMentions += 1;
+    }
+  }
+  const shareOfVoicePct = !hasRivalRoster ? null : ratioPctOrNull(selfMentions, allMentions);
+
   // Scoring contract — three consistently-defined numbers, never mixed:
   //   visibility_pct / share_of_ai_pct (HERO) = visible ÷ queries_with_aio (non-branded)
   //   aio_coverage_pct                        = queries_with_aio ÷ 30 (non-branded)
@@ -256,6 +294,7 @@ export function summarizeAioResults(results) {
   return {
     results,
     summary: {
+      share_of_voice_pct: shareOfVoicePct,
       total_queries: total,
       branded_queries: branded.length,
       non_branded_queries: nonBranded.length,

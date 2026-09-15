@@ -1,5 +1,8 @@
 # Plan: Review, Grill & Refine AEO Visibility Tracker MVP Implementation Document v1
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** A record of work done at the time, not an authority for current decisions. It predates the 2026-08-29 honesty audit, so any claim it makes about what is finished must be checked against [docs/BUILD_JOURNAL.md](../BUILD_JOURNAL.md) and [2026-08-29-rebuild-roadmap.md](./2026-08-29-rebuild-roadmap.md).
+
 **Date**: 2026-07-05  
 **Status**: Approved  
 **Related**: [aeo-visibility-tracker-mvp-implementation-document-v1.md](../aeo-visibility-tracker-mvp-implementation-document-v1.md)

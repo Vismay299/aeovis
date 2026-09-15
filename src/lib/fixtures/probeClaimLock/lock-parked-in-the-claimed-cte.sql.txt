@@ -1,0 +1,108 @@
+-- FIXTURE — R1.2.15. A claim_probe_tasks whose FOR UPDATE SKIP LOCKED is
+-- EXECUTABLE, is present exactly once, and is in the WRONG CTE.
+--
+-- R1215-EXPECT: reject /OUTSIDE the candidate CTE/
+-- R1215-DEFEATS: whole-file-regex, comment-stripped-regex, single-executable-clause
+-- R1215-DERIVED-FROM: base-as-in-migration-010.sql.txt
+--
+-- WHERE IT CAME FROM. base-as-in-migration-010.sql.txt (which is
+-- supabase/migrations/010_probe_tasks.sql's claim_probe_tasks) with ONE change:
+-- the `FOR UPDATE SKIP LOCKED` that closed the `candidate` SELECT has been
+-- moved down into the `claimed` CTE, onto a sub-SELECT that re-reads the rows
+-- the UPDATE is about to write. That is the same relocation R1.2.8's verifier
+-- performed against the live migration to prove the guard's scoping worked;
+-- this file is that attack, committed, so the scoping cannot be retired by a
+-- refactor without a test going red.
+--
+-- WHAT MAKES IT INTERESTING. It defeats every cheaper check in the lineage:
+--
+--   * the ORIGINAL whole-file regex (/FOR UPDATE SKIP LOCKED/ over the raw
+--     text, probeQueue.test.mjs:459 before R1.2.13) matches it;
+--   * stripping comments first does not help — the clause here is real SQL,
+--     not prose, so a comment-stripped regex matches it too;
+--   * the counting guard ("exactly one EXECUTABLE clause in the file",
+--     probeClaimLock.test.mjs) counts exactly one and passes. That guard is
+--     deliberately GLOBAL rather than scoped — it is the check that a second
+--     stray clause has not appeared elsewhere — so it is not the check that
+--     is supposed to catch this, and it must not be narrowed to try.
+--
+-- The ONLY thing that rejects this file is the match being scoped to the
+-- row-choosing SELECT. Replace `candidateCte` with a passthrough that returns
+-- the whole function body and every OTHER assertion in the suite still passes:
+-- that is the hole this fixture plugs.
+--
+-- WHY IT IS STILL WRONG (reasoned, not measured — nothing here talks to
+-- Postgres; the behavioural proof is src/lib/probeTasksRace.test.mjs, which
+-- needs a real database and skips loudly without one). Migration 010's
+-- atomicity argument is that CHOOSING a row IS LOCKING it, in one statement.
+-- Here the candidate SELECT takes no lock, so two workers evaluate it against
+-- the same snapshot and both come away with the same task id. The lock has
+-- moved to a point where it can no longer prevent that: the second worker's
+-- sub-SELECT waits for the first to commit and then proceeds, and the UPDATE's
+-- WHERE re-checks nothing but `t.id = c.id` — not the status, not the lease —
+-- so it overwrites lease_owner and hands the same task out twice. SKIP LOCKED
+-- on a row the transaction is already going to update skips nothing useful.
+--
+-- This file is .txt on purpose: it must never be applied as a migration, and
+-- the migration walker in probeClaimLock.test.mjs must never find it. It is
+-- read as TEXT by the guard that has to reject it.
+
+CREATE OR REPLACE FUNCTION claim_probe_tasks(
+  p_owner     text,
+  p_engines   text[]  DEFAULT NULL,
+  p_limit     integer DEFAULT 5,
+  p_lease_ms  integer DEFAULT 180000,
+  p_batch_id  uuid    DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+AS $fn$
+DECLARE
+  v_now     timestamptz := now();
+  v_expires timestamptz;
+  v_claimed jsonb;
+  v_count   integer;
+BEGIN
+  v_expires := v_now + make_interval(secs => p_lease_ms / 1000.0);
+
+  WITH candidate AS (
+    SELECT t.id
+      FROM probe_tasks t
+     WHERE t.status IN ('pending', 'claimed')
+       AND (p_engines  IS NULL OR t.engine = ANY (p_engines))
+       AND (p_batch_id IS NULL OR t.batch_id = p_batch_id)
+       AND (t.lease_owner IS NULL
+            OR t.lease_expires_at IS NULL
+            OR t.lease_expires_at < v_now)
+     ORDER BY t.priority DESC, t.created_at
+     LIMIT p_limit
+  ),
+  claimed AS (
+    UPDATE probe_tasks t
+       SET status           = 'claimed',
+           lease_owner      = p_owner,
+           lease_expires_at = v_expires,
+           attempts         = t.attempts + 1,
+           claimed_at       = v_now,
+           updated_at       = v_now
+      FROM (
+             SELECT c.id
+               FROM candidate c
+               JOIN probe_tasks p ON p.id = c.id
+               FOR UPDATE SKIP LOCKED
+           ) c
+     WHERE t.id = c.id
+    RETURNING t.*
+  )
+  SELECT COALESCE(jsonb_agg(to_jsonb(claimed) ORDER BY claimed.created_at), '[]'::jsonb),
+         COUNT(*)::integer
+    INTO v_claimed, v_count
+    FROM claimed;
+
+  RETURN jsonb_build_object(
+    'owner',         p_owner,
+    'tasks',         v_claimed,
+    'claimed_count', v_count
+  );
+END;
+$fn$;

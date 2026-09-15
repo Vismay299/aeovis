@@ -35,8 +35,9 @@ export default function BrandDashboardPage() {
   }
 
   // undefined = loading, null = nothing to show, object = ready — the
-  // three-state contract DashboardShell expects.
+  // three-state contract DashboardShell expects, plus `error` for the fourth.
   const [scan, setScan] = useState(undefined);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!brand) {
@@ -45,21 +46,38 @@ export default function BrandDashboardPage() {
     }
     let cancelled = false;
     setScan(undefined);
+    setError(null);
 
     fetch(`/api/scans/${encodeURIComponent(brand)}/latest`, { cache: "no-store" })
       .then(async (res) => {
         if (cancelled) return;
-        if (!res.ok) {
-          // 404 (no scans yet) and any transient error both collapse to the
-          // shell's existing empty state — no new UI for this package.
+
+        // R2.8.4 — a 404 and a failure are different claims.
+        //
+        // These used to collapse together into the first-run empty state, so a
+        // database outage rendered as "Your dashboard is waiting — run your
+        // first visibility check". A user with a year of history was told they
+        // had never scanned, and invited to spend a scan budget to fix it. Only
+        // a 404 means the brand genuinely has no scans; anything else means we
+        // could not find out, which is not the same as finding nothing.
+        if (res.status === 404) {
           setScan(null);
+          return;
+        }
+        if (!res.ok) {
+          setError(`The dashboard could not be loaded (HTTP ${res.status}).`);
           return;
         }
         const data = await res.json();
         setScan(data.scan || null);
       })
-      .catch(() => {
-        if (!cancelled) setScan(null);
+      .catch((err) => {
+        if (cancelled) return;
+        setError(
+          err?.message
+            ? `The dashboard could not be loaded (${err.message}).`
+            : "The dashboard could not be loaded."
+        );
       });
 
     return () => {
@@ -67,5 +85,5 @@ export default function BrandDashboardPage() {
     };
   }, [brand]);
 
-  return <DashboardShell scan={scan} scanId={scan?.id ?? null} />;
+  return <DashboardShell scan={scan} scanId={scan?.id ?? null} error={error} />;
 }

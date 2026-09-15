@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getScansForBrand, getScansByDomain } from "@/lib/db";
+import { getScansForBrand, getScansByDomain, joinScanIdentities } from "@/lib/db";
 import { listContentJobs, listContentItems } from "@/lib/db/content";
 import { queryUniverseFromScan, rollupCoverage, summarizeCoverage } from "@/lib/content/coverage";
 
@@ -50,10 +50,14 @@ export async function GET(request, { params }) {
     let scans;
     try {
       scans = await getScansForBrand(brandKey);
-      // Caller used the domain key (the sibling-route convention) but scans are
-      // stored under the display name — resolve via the scan's own url.
-      if (!scans?.length) {
-        scans = await getScansByDomain(brandKey);
+      // R3.4.3: A brand scanned both ways has one continuous history. Join
+      // scheduled scans (keyed by domain) and manual scans (keyed by display name)
+      // so neither identity is dropped.
+      try {
+        const domainScans = await getScansByDomain(brandKey);
+        scans = joinScanIdentities(scans, domainScans);
+      } catch (err) {
+        if (err?.code !== "domain_required") throw err;
       }
     } catch (dbError) {
       console.error(`Error fetching scans for "${brandKey}":`, dbError);

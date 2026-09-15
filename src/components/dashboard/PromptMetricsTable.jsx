@@ -458,6 +458,31 @@ export const PromptMetricsTable = ({ brand }) => {
                             }}
                           >
                             {row.query}
+                            {/* R2.6.2 — dud prompts are flagged as suggested_retire.
+                                The chip is additive-only: advisory, never mutating. */}
+                            {row.suggested_retire && (
+                              <span
+                                data-testid={`prompt-metrics-row-${i}-retire`}
+                                title="This prompt has never elicited a brand mention across multiple scans. Consider retiring it."
+                                style={{
+                                  display: "inline-block",
+                                  marginLeft: "6px",
+                                  padding: "1px 5px",
+                                  borderRadius: "var(--radius-1)",
+                                  fontSize: "9px",
+                                  fontWeight: 600,
+                                  letterSpacing: "0.04em",
+                                  textTransform: "uppercase",
+                                  background: "var(--warn-soft, #fff3e0)",
+                                  color: "var(--warn, #e65100)",
+                                  border: "1px solid var(--warn-border, #ffcc80)",
+                                  verticalAlign: "middle",
+                                  lineHeight: "14px",
+                                }}
+                              >
+                                suggested retire
+                              </span>
+                            )}
                           </span>
 
                           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>

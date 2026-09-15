@@ -236,3 +236,95 @@ test("pickScanIds — non-integer/zero/negative range falls back to 1", () => {
   assert.deepEqual(pickScanIds(["s3", "s2", "s1"], { range: -1 }), { scanId: "s3", prevScanId: "s2" });
   assert.deepEqual(pickScanIds(["s3", "s2", "s1"], { range: 1.5 }), { scanId: "s3", prevScanId: "s2" });
 });
+
+// ---------------------------------------------------------------------------
+// R2.6.2 — isDudPrompt -> suggested_retire, surfaced in the Queries tab
+//
+// Duds flag as suggested_retire and appear in the Queries tab. The flag is
+// computed from prompt_results rows using `mentioned` as a proxy for
+// brands_elicited, applying the same isDudPrompt logic from promptQuality.js.
+// Additive-only contract: retire, never mutate.
+// ---------------------------------------------------------------------------
+
+test("R2.6.2 — a prompt answered 3+ times with no brand mention is flagged suggested_retire", () => {
+  // 2 scans × 3 engines = 6 observations, all answered, none mentioning the brand.
+  const rows = [
+    { scan_id: "s2", query: "how to calculate tiles needed", engine: "aio", answered: true, mentioned: false },
+    { scan_id: "s2", query: "how to calculate tiles needed", engine: "chatgpt", answered: true, mentioned: false },
+    { scan_id: "s2", query: "how to calculate tiles needed", engine: "perplexity", answered: true, mentioned: false },
+    { scan_id: "s1", query: "how to calculate tiles needed", engine: "aio", answered: true, mentioned: false },
+    { scan_id: "s1", query: "how to calculate tiles needed", engine: "chatgpt", answered: true, mentioned: false },
+    { scan_id: "s1", query: "how to calculate tiles needed", engine: "perplexity", answered: true, mentioned: false },
+  ];
+  const out = groupPromptRows(rows, { scanId: "s2", prevScanId: "s1" });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].suggested_retire, true, "6 answered observations, zero brand mentions → dud");
+});
+
+test("R2.6.2 — a prompt that elicited even once is NOT flagged", () => {
+  // 6 observations, but one mentions the brand → not a dud.
+  const rows = [
+    { scan_id: "s2", query: "best tile brands", engine: "aio", answered: true, mentioned: true },
+    { scan_id: "s2", query: "best tile brands", engine: "chatgpt", answered: true, mentioned: false },
+    { scan_id: "s2", query: "best tile brands", engine: "perplexity", answered: true, mentioned: false },
+    { scan_id: "s1", query: "best tile brands", engine: "aio", answered: true, mentioned: false },
+    { scan_id: "s1", query: "best tile brands", engine: "chatgpt", answered: true, mentioned: false },
+    { scan_id: "s1", query: "best tile brands", engine: "perplexity", answered: true, mentioned: false },
+  ];
+  const out = groupPromptRows(rows, { scanId: "s2", prevScanId: "s1" });
+  assert.equal(out[0].suggested_retire, false, "one mention is enough to spare the prompt");
+});
+
+test("R2.6.2 — fewer than DUD_MIN_OBSERVATIONS answered observations are not enough to flag", () => {
+  // Only 2 answered observations (DUD_MIN_OBSERVATIONS is 3).
+  const rows = [
+    { scan_id: "s2", query: "new prompt", engine: "aio", answered: true, mentioned: false },
+    { scan_id: "s2", query: "new prompt", engine: "chatgpt", answered: true, mentioned: false },
+  ];
+  const out = groupPromptRows(rows, { scanId: "s2" });
+  assert.equal(out[0].suggested_retire, false, "only 2 observations → not enough to retire");
+});
+
+test("R2.6.2 — unanswered observations are ignored for dud detection", () => {
+  // 3 unanswered + 1 answered (not mentioned) = only 1 answered observation → not enough.
+  const rows = [
+    { scan_id: "s2", query: "q1", engine: "aio", answered: false, mentioned: false },
+    { scan_id: "s2", query: "q1", engine: "chatgpt", answered: false, mentioned: false },
+    { scan_id: "s2", query: "q1", engine: "perplexity", answered: false, mentioned: false },
+    { scan_id: "s1", query: "q1", engine: "aio", answered: true, mentioned: false },
+  ];
+  const out = groupPromptRows(rows, { scanId: "s2", prevScanId: "s1" });
+  assert.equal(out[0].suggested_retire, false, "unanswered observations don't count toward the threshold");
+});
+
+test("R2.6.2 — mixed prompts: one flagged, one clean", () => {
+  const rows = [
+    // Dud: all answered, none mentioned
+    { scan_id: "s2", query: "dud prompt", engine: "aio", answered: true, mentioned: false },
+    { scan_id: "s2", query: "dud prompt", engine: "chatgpt", answered: true, mentioned: false },
+    { scan_id: "s2", query: "dud prompt", engine: "perplexity", answered: true, mentioned: false },
+    { scan_id: "s1", query: "dud prompt", engine: "aio", answered: true, mentioned: false },
+    { scan_id: "s1", query: "dud prompt", engine: "chatgpt", answered: true, mentioned: false },
+    { scan_id: "s1", query: "dud prompt", engine: "perplexity", answered: true, mentioned: false },
+    // Good: has mentions
+    { scan_id: "s2", query: "good prompt", engine: "aio", answered: true, mentioned: true },
+    { scan_id: "s2", query: "good prompt", engine: "chatgpt", answered: true, mentioned: false },
+    { scan_id: "s2", query: "good prompt", engine: "perplexity", answered: true, mentioned: true },
+    { scan_id: "s1", query: "good prompt", engine: "aio", answered: true, mentioned: true },
+    { scan_id: "s1", query: "good prompt", engine: "chatgpt", answered: true, mentioned: false },
+    { scan_id: "s1", query: "good prompt", engine: "perplexity", answered: true, mentioned: true },
+  ];
+  const out = groupPromptRows(rows, { scanId: "s2", prevScanId: "s1" });
+  const dud = out.find((r) => r.query === "dud prompt");
+  const good = out.find((r) => r.query === "good prompt");
+  assert.equal(dud.suggested_retire, true, "dud prompt flagged");
+  assert.equal(good.suggested_retire, false, "good prompt not flagged");
+});
+
+test("R2.6.2 — suggested_retire is always present on every output row (boolean, never undefined)", () => {
+  const rows = [
+    { scan_id: "s1", query: "q1", engine: "aio", answered: true, mentioned: true },
+  ];
+  const out = groupPromptRows(rows, { scanId: "s1" });
+  assert.equal(typeof out[0].suggested_retire, "boolean", "suggested_retire is a boolean");
+});

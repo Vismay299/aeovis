@@ -78,6 +78,14 @@ export async function GET(request, { params }) {
       engine: row.engine,
       visibility_pct: row.visibility_pct ?? null,
       sov_pct: row.sov_pct ?? null,
+      // R4.3.4 — sov_state and sov_state_reason survive to the client so it
+      // can distinguish "not assessed" (self-only roster) from "measured zero"
+      // (brand not visible) instead of showing a bare null for both.
+      sov_state: row.sov_state ?? null,
+      sov_state_reason: row.sov_state_reason ?? null,
+      // R4.3.3 — citation_state travels with the share
+      citation_state: row.citation_state ?? null,
+      citation_state_reason: row.citation_state_reason ?? null,
       sentiment_avg: row.sentiment_avg ?? null,
       position_avg: row.position_avg ?? null,
       citation_share_pct: row.citation_share_pct ?? null,

@@ -44,7 +44,9 @@ export const JOB_STAGES = {
     // gate is mandatory and re-applies regardless of the revision's verdict.
     requestChangesTo: "awaiting_approval",
   },
-  approved: { kind: "done", terminal: true },
+  // R5.2.2 — approved job transitions to published when the item is published
+  approved: { kind: "working", publishTo: "published" },
+  published: { kind: "done", terminal: true },
   rejected: { kind: "cancelled", terminal: true },
   failed: { kind: "cancelled", terminal: true },
 };
@@ -61,7 +63,11 @@ export const ITEM_STAGES = {
   },
   // The async revision pass is in flight; it returns the item to the gate.
   changes_requested: { kind: "working" },
-  approved: { kind: "done", terminal: true },
+  // R5.2.2 — approved is no longer terminal: the operator must publish with a
+  // verified live URL before the item is truly done.
+  approved: { kind: "working", publishTo: "published" },
+  // R5.2.2 — the true terminal state, reached only via the publish step.
+  published: { kind: "done", terminal: true },
   rejected: { kind: "cancelled", terminal: true },
 };
 
@@ -120,6 +126,13 @@ export function allowedTransitions(from, stages = JOB_STAGES) {
   } else {
     for (const [status, s] of Object.entries(stages)) {
       if (s.kind === "working" || s.kind === "open" || s.kind === "review") out.add(status);
+    }
+    // R5.2.2 — explicit named transitions out of working/open stages to
+    // terminal stages (e.g., the publish step moves approved → published).
+    // These are declared on the source stage, not the target, so only the
+    // stage that names the transition can take it.
+    for (const key of ["publishTo"]) {
+      if (stage[key]) out.add(stage[key]);
     }
   }
 
@@ -228,7 +241,7 @@ function assertStagesValid(name, stages) {
     if ((stage.kind === "done" || stage.kind === "cancelled") && !stage.terminal) {
       throw new Error(`${name}.${status}: ${stage.kind} stages must be terminal`);
     }
-    for (const key of ["approveTo", "rejectTo", "requestChangesTo"]) {
+    for (const key of ["approveTo", "rejectTo", "requestChangesTo", "publishTo"]) {
       if (stage[key] && !stages[stage[key]]) {
         throw new Error(`${name}.${status}.${key} points at unknown stage "${stage[key]}"`);
       }

@@ -1,6 +1,51 @@
 # Plans
 
+> <!-- doc-status -->
+> **Status: LIVE.** How this folder works. Read the status header on any plan before acting on it.
+
 This folder contains implementation plans, design decisions, and feature specifications for the AEO (AnswerRank) project.
+
+## Status headers — mandatory
+
+Every document under `docs/`, plus `DESIGN.md` and `PRODUCT.md`, carries a
+status header directly under its title:
+
+```
+> <!-- doc-status -->
+> **Status: LIVE.** <why this is the authority>
+```
+
+Three values, and they describe the document's **authority**, not how much of it
+shipped:
+
+| Value | Means |
+|---|---|
+| `LIVE` | This document is currently authoritative. Implement from it. |
+| `SUPERSEDED-BY <link>` | A named later document is authoritative instead. Kept for its rationale; do not implement from it. |
+| `HISTORICAL` | A record of past work. Not an authority for current decisions. |
+
+This exists because four documents claimed design authority at once with no
+supersession markers between them, so "what does the design say" had four
+answers and no way to choose. `DESIGN.md` is the live one; the others now say so
+themselves.
+
+`2026-08-29-rebuild-roadmap.md` is **generated** by
+`node .claude/orchestration/orchestrate.mjs render` and carries its header
+automatically. Never hand-edit it — edits belong in the ledger.
+
+## Closing an item
+
+A checkbox is not evidence. An item is closed when, **in the same commit**:
+
+1. its box is ticked, and
+2. the commit body cites the `file:line` where the change actually lives, and
+3. the acceptance criterion was exercised — not read, not reasoned about, run.
+
+If the criterion could not be exercised in the environment at hand, the item is
+**blocked with the reason**, not closed. A skip is not a success. This is the
+rule the whole R0–R6 rebuild exists to install, and the orchestration CLI
+enforces it mechanically: `orchestrate.mjs` refuses to close a task without a
+passing verification and at least one citation that resolves to a real file.
 
 ## Purpose
 

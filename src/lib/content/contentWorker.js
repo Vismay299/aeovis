@@ -119,6 +119,37 @@ function round4(n) {
   return Math.round((n || 0) * 10000) / 10000;
 }
 
+// --- Checkpoint helpers (R3.5.1) --------------------------------------------
+
+/**
+ * Build a checkpoint snapshot of the pipeline state. Written at every block
+ * boundary so a killed worker's completed blocks are not re-paid on rescue.
+ *
+ * The shape mirrors scanWorker's checkpoint: an opaque JSON blob on the job
+ * row that a rescuing execution reads to determine what to skip.
+ *
+ * `completedBlocks` uses slug-only IDs for Phase A blocks ("coordinate") and
+ * cycle-suffixed IDs for Phase B loop blocks ("draft:1", "review:2").  The
+ * cycle suffix lets the resumer distinguish draft-pass-1 from draft-pass-2
+ * and skip only the ones that actually finished.
+ */
+function buildCheckpoint(pipeline, ctx, { completedBlocks, cycle, review, revisions }) {
+  return {
+    pipeline,
+    completedBlocks: [...completedBlocks],
+    cycle,
+    review: review || null,
+    revisions: [...(revisions || [])],
+    // Context outputs the resumer needs to skip re-computation.
+    workOrder: ctx.workOrder || null,
+    researchPack: ctx.researchPack || null,
+    benchmarkNotes: ctx.benchmarkNotes || null,
+    draft: ctx.draft || null,
+    factCheck: ctx.factCheck || null,
+    critique: ctx.critique || "",
+  };
+}
+
 /**
  * Run one block inside a ledger row (T3). Captures this block's own spend as
  * the delta of the shared `stats` accumulator across the call, so per-block
@@ -133,7 +164,7 @@ async function withLedger({ jobId, brand, slug, cycle = 1, stats, deps = {} }, f
   const open = deps.insertContentRun || insertContentRun;
   const close = deps.finishContentRun || finishContentRun;
 
-  const run = await open({ job_id: jobId, brand, block: slug, cycle });
+  const run = await open({ job_id: jobId, brand, block: slug, cycle }, deps);
   const costBefore = stats.cost || 0;
   const tokensBefore = stats.tokens || 0;
   const delta = () => ({
@@ -143,10 +174,10 @@ async function withLedger({ jobId, brand, slug, cycle = 1, stats, deps = {} }, f
 
   try {
     const out = await fn();
-    await close(run?.id, { status: "succeeded", ...delta() });
+    await close(run?.id, { status: "succeeded", ...delta() }, deps);
     return out;
   } catch (err) {
-    await close(run?.id, { status: "failed", ...delta(), error: err.message || "failed" });
+    await close(run?.id, { status: "failed", ...delta(), error: err.message || "failed" }, deps);
     throw err;
   }
 }
@@ -156,6 +187,50 @@ export async function startContentJob(jobId, deps = {}) {
 
   const update = deps.updateContentJob || updateContentJob;
 
+  // --- Cost across attempts (R3.3.3) --------------------------------------
+  // `stats` is THIS EXECUTION's spend. `cost_total` on the row is the JOB's
+  // spend, and a job can be executed more than once: the cron rescues a job
+  // whose worker died (db/content.js shouldRescueContentJob → the route's
+  // dispatchWithLease) and re-runs the pipeline from the top, paying for every
+  // block a second time. Writing `cost_total: stats.cost` reported the LAST
+  // attempt and deleted every earlier one, so a job that cost twice looked
+  // like it cost once.
+  //
+  // Two halves, and only both together make the row a sum:
+  //   (a) `costBase` — what the row already recorded before this execution
+  //       began. Every write below is base + this execution's spend, so a
+  //       rescue ADDS to the earlier attempts instead of replacing them. The
+  //       written value is absolute rather than a delta, so re-writing it
+  //       (every block boundary, plus the terminal write) cannot double-count.
+  //   (b) folding as we go — a killed attempt is exactly the case rescues
+  //       exist for, and it never reaches a terminal write. Spend recorded
+  //       only at the end therefore dies with the process and the "sum" is
+  //       short by a whole attempt. Every job write now carries the running
+  //       total, so a killed attempt leaves behind what it really spent. The
+  //       residual window is one block: spend between a block finishing and
+  //       the next status write, which is microseconds.
+  //
+  // NOT an atomic increment, because the storage layer does not offer one:
+  // supabase-js has no `cost_total = cost_total + $1` expression and there is
+  // no RPC for content_jobs (the repo's atomic writes — claim_scan_job_attempt,
+  // increment_scan_rate_limit — are all SQL functions this table has none of).
+  // This is a read-modify-write with the read at attempt start, so a second
+  // writer during the attempt would be clobbered. The job lease makes that
+  // structurally impossible for two executions of the same job, and
+  // reviseContentItem only folds into jobs that have reached
+  // awaiting_approval, which is not a rescuable status. A zombie that lost its
+  // lease and kept running is the one case that can still lose an update.
+  let costBase = null; // null = the row's recorded total is not known yet
+
+  /**
+   * The `cost_total` field for a job write: the row's prior total plus what
+   * this execution has spent so far. Before the job row is read we do not KNOW
+   * the prior total, and writing 0 there would erase the earlier attempts we
+   * exist to preserve — so the field is omitted entirely rather than guessed.
+   */
+  const costFields = () =>
+    costBase === null ? {} : { cost_total: round4(costBase + (stats.cost || 0)) };
+
   // --- Lease: structural single-flight (T1) -------------------------------
   // The cron may have already won the lease and hands its owner id down via
   // deps.leaseOwner; a direct dispatch (POST /api/content) acquires one here.
@@ -163,10 +238,13 @@ export async function startContentJob(jobId, deps = {}) {
   // this, two overlapping dispatches each ran the full pipeline against one
   // row, each spending up to the per-item cap (D1).
   const leaseOwner = deps.leaseOwner || newLeaseOwner("job");
+  const acquire = deps.acquireLease || acquireLease;
+  const renew = deps.renewLease || renewLease;
+  const release = deps.releaseLease || releaseLease;
   if (!deps.leaseOwner) {
     let won = null;
     try {
-      won = await acquireLease("content_jobs", jobId, leaseOwner);
+      won = await acquire("content_jobs", jobId, leaseOwner, deps);
     } catch (err) {
       // Fail CLOSED: without proven exclusivity we must not spend budget.
       console.error(`[content-worker] lease acquire failed for job ${jobId}:`, err.message);
@@ -198,16 +276,32 @@ export async function startContentJob(jobId, deps = {}) {
       }
       lastStatus = fields.status;
     }
-    const result = await update(jobId, { ...fields, agent_trace: trace });
-    renewLease("content_jobs", jobId, leaseOwner).catch((err) =>
+    // costFields() rides on every job write, not just the terminal one — see
+    // (b) above: a worker that is killed mid-pipeline still leaves its spend
+    // on the row, which is what makes the rescued total a sum.
+    const result = await update(jobId, { ...fields, ...costFields(), agent_trace: trace }, deps);
+    renew("content_jobs", jobId, leaseOwner, deps).catch((err) =>
       console.warn(`[content-worker] lease renew failed for job ${jobId}:`, err.message)
     );
     return result;
   };
 
   try {
-    const job = deps.job || (await getContentJob(jobId));
+    const job = deps.job || (await (deps.getContentJob || getContentJob)(jobId, deps));
     if (!job) throw new Error(`content job ${jobId} not found`);
+
+    // What earlier attempts already spent. From here on every job write adds
+    // this execution's spend to it instead of overwriting it.
+    const recordedCost = Number(job.cost_total);
+    if (job.cost_total != null && !Number.isFinite(recordedCost)) {
+      console.warn(
+        `[content-worker] job ${jobId}: cost_total is not a number ` +
+          `(${typeof job.cost_total}) — this attempt's spend is added to 0 and ` +
+          `whatever earlier attempts recorded is NOT represented in the total`
+      );
+    }
+    costBase = Number.isFinite(recordedCost) ? recordedCost : 0;
+
     const { brand, playbook, input } = job;
     const agent = resolveAgent(job);
     const pipeline = resolvePipeline(agent);
@@ -222,12 +316,17 @@ export async function startContentJob(jobId, deps = {}) {
     const brief = await resolveBrief(brand, input, deps);
     const lessons = await (deps.listLessons || listLessons)(brand, playbook, {
       activeOnly: true,
-    });
-    const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
+    }, deps);
+    // R2.8.4: a scan-read failure throws and is caught by this function’s own
+    // catch, which marks the job `failed` with the reason and releases the
+    // lease. That is the right outcome, not a regression: drafting against
+    // `scan: null` would spend the full LLM budget producing content with no
+    // gap context, and could not be persisted anyway with the DB down.
+    const scans = await (deps.getScansForBrand || getScansForBrand)(brand, deps);
     const scan = scans?.[0] || null;
     const knowledgeBlocks = await (deps.listKnowledgeBlocks || listKnowledgeBlocks)(brand, {
       activeOnly: true,
-    });
+    }, deps);
 
     const ctx = {
       brand,
@@ -242,6 +341,28 @@ export async function startContentJob(jobId, deps = {}) {
       knowledge: formatKnowledge(knowledgeBlocks),
     };
 
+    // --- Checkpoint restore (R3.5.1) ----------------------------------------
+    // A rescued job carries a checkpoint written at each block boundary by the
+    // prior (killed) execution.  We restore the accumulated context so later
+    // blocks can run without re-calling the LLM for earlier ones, and mark the
+    // completed blocks in the trace so the theater shows honest history.
+    const checkpoint = job.checkpoint || null;
+    const completedBlocks = checkpoint
+      ? new Set(checkpoint.completedBlocks || [])
+      : new Set();
+    if (checkpoint) {
+      if (checkpoint.workOrder) ctx.workOrder = checkpoint.workOrder;
+      if (checkpoint.researchPack) ctx.researchPack = checkpoint.researchPack;
+      if (checkpoint.benchmarkNotes) ctx.benchmarkNotes = checkpoint.benchmarkNotes;
+      if (checkpoint.draft) ctx.draft = checkpoint.draft;
+      if (checkpoint.factCheck) ctx.factCheck = checkpoint.factCheck;
+      if (checkpoint.critique) ctx.critique = checkpoint.critique;
+      // Populate the trace for every block the prior execution completed.
+      for (const blockId of completedBlocks) {
+        markDone(trace, blockId.replace(/:\d+$/, ""), "(completed before resume)");
+      }
+    }
+
     // Progress: distribute 8→92% across the pipeline's blocks.
     const pctFor = (idx) => 8 + Math.round((idx / pipeline.length) * 84);
 
@@ -249,6 +370,15 @@ export async function startContentJob(jobId, deps = {}) {
     const draftIdx = pipeline.indexOf("draft");
     for (let i = 0; i < draftIdx; i++) {
       const slug = pipeline[i];
+
+      // R3.5.1 — skip blocks already completed by a prior execution.
+      if (completedBlocks.has(slug)) {
+        if (checkpoint) {
+          console.log(`[content-worker] Job ${jobId}: resuming — block "${slug}" already completed`);
+        }
+        continue;
+      }
+
       markWorking(trace, slug);
       await writeJob({ status: statusForBlock(slug), progress_pct: pctFor(i) });
 
@@ -264,6 +394,14 @@ export async function startContentJob(jobId, deps = {}) {
         markDone(trace, slug, summarizeBenchmark(ctx.benchmarkNotes, playbook));
       }
       assertUnderCostCap(stats, slug);
+
+      // R3.5.1 — persist checkpoint after each completed block.
+      completedBlocks.add(slug);
+      await writeJob({
+        checkpoint: buildCheckpoint(pipeline, ctx, {
+          completedBlocks: [...completedBlocks], cycle: 0, review: null, revisions: [],
+        }),
+      });
     }
 
     // Removed context blocks leave honest holes the prompts flag themselves.
@@ -275,35 +413,85 @@ export async function startContentJob(jobId, deps = {}) {
     // --- Phase B: Writer → transforms → checks → Editor (bounded loop) ---
     // Post-draft blocks between the Writer and the Editor:
     const midBlocks = pipeline.slice(draftIdx + 1, pipeline.length - 1);
-    const revisions = [];
-    let draft = null;
-    let review = null;
-    let factCheck = null;
-    let cycles = 0;
+    const revisions = checkpoint?.revisions ? [...checkpoint.revisions] : [];
+    let draft = checkpoint?.draft || null;
+    let review = checkpoint?.review || null;
+    let factCheck = checkpoint?.factCheck || null;
+    let cycles = checkpoint?.cycle || 0;
 
-    while (cycles < MAX_DRAFT_REVIEW_CYCLES) {
-      cycles += 1;
+    // R3.5.1 — determine whether the loop needs to run at all.  If the
+    // checkpoint's last cycle already produced a terminal verdict or the
+    // revision budget is exhausted, skip the loop entirely.
+    let enterLoop = true;
+    let midCycleResume = false; // true when draft is done but review isn't for the current cycle
+    if (review && completedBlocks.has(`review:${cycles}`)) {
+      if (review.verdict === "pass" || review.ymyl_violation) {
+        enterLoop = false;
+      } else if (cycles >= MAX_DRAFT_REVIEW_CYCLES) {
+        enterLoop = false;
+      } else {
+        // Last review failed, budget remains — archive the revision and advance.
+        revisions.push({
+          revision: cycles - 1,
+          title: draft.title,
+          body_md: draft.body_md,
+          rubric: review,
+          critique: review.critique,
+        });
+        ctx.critique = review.critique;
+      }
+    } else if (cycles > 0 && completedBlocks.has(`draft:${cycles}`)) {
+      // Draft done but review not — resume at the review step of this cycle.
+      midCycleResume = true;
+    }
 
-      bumpCycle(trace, "draft", cycles);
-      markWorking(
-        trace,
-        "draft",
-        cycles === 1 ? crewMember("draft").verb : `Redrafting from the critique (pass ${cycles})`
-      );
-      await writeJob({ status: "drafting", progress_pct: cycles === 1 ? pctFor(draftIdx) : 84 });
-      draft = await withLedger(
-        { jobId, brand, slug: "draft", cycle: cycles, stats, deps },
-        () => runDraft(ctx, deps)
-      );
-      assertUnderCostCap(stats, "draft");
-      markDone(trace, "draft", summarizeDraft(draft, cycles));
-      ctx.draft = draft;
+    while (enterLoop && cycles < MAX_DRAFT_REVIEW_CYCLES) {
+      if (!midCycleResume) cycles += 1;
+      midCycleResume = false; // consumed — subsequent iterations increment normally
+
+      // --- Draft ---
+      const draftBlockId = `draft:${cycles}`;
+      if (!completedBlocks.has(draftBlockId)) {
+        bumpCycle(trace, "draft", cycles);
+        markWorking(
+          trace,
+          "draft",
+          cycles === 1 ? crewMember("draft").verb : `Redrafting from the critique (pass ${cycles})`
+        );
+        await writeJob({ status: "drafting", progress_pct: cycles === 1 ? pctFor(draftIdx) : 84 });
+        draft = await withLedger(
+          { jobId, brand, slug: "draft", cycle: cycles, stats, deps },
+          () => runDraft(ctx, deps)
+        );
+        assertUnderCostCap(stats, "draft");
+        markDone(trace, "draft", summarizeDraft(draft, cycles));
+        ctx.draft = draft;
+        // R3.5.1 — checkpoint after draft completes.
+        completedBlocks.add(draftBlockId);
+        await writeJob({
+          checkpoint: buildCheckpoint(pipeline, ctx, {
+            completedBlocks: [...completedBlocks], cycle: cycles, review, revisions,
+          }),
+        });
+      } else if (checkpoint) {
+        console.log(`[content-worker] Job ${jobId}: resuming — draft cycle ${cycles} already completed`);
+      }
 
       // Transforms + fact-check run on the FIRST pass only; a revision cycle
       // goes straight back to the Editor (cost-bounded, documented behavior).
       if (cycles === 1) {
         for (let m = 0; m < midBlocks.length; m++) {
           const slug = midBlocks[m];
+          const blockId = `${slug}:1`;
+
+          // R3.5.1 — skip completed mid-blocks.
+          if (completedBlocks.has(blockId)) {
+            if (checkpoint) {
+              console.log(`[content-worker] Job ${jobId}: resuming — block "${slug}" already completed`);
+            }
+            continue;
+          }
+
           const block = getBlock(slug);
           markWorking(trace, slug);
           await writeJob({ status: statusForBlock(slug), progress_pct: pctFor(draftIdx + 1 + m) });
@@ -320,22 +508,42 @@ export async function startContentJob(jobId, deps = {}) {
             ctx.factCheck = factCheck;
           }
           assertUnderCostCap(stats, slug);
+          // R3.5.1 — checkpoint after mid-block completes.
+          completedBlocks.add(blockId);
+          await writeJob({
+            checkpoint: buildCheckpoint(pipeline, ctx, {
+              completedBlocks: [...completedBlocks], cycle: cycles, review, revisions,
+            }),
+          });
         }
       }
 
-      bumpCycle(trace, "review", cycles);
-      markWorking(
-        trace,
-        "review",
-        cycles === 1 ? crewMember("review").verb : `Re-scoring the redraft (pass ${cycles})`
-      );
-      await writeJob({ status: "reviewing", progress_pct: cycles === 1 ? pctFor(pipeline.length - 1) : 92 });
-      review = await withLedger(
-        { jobId, brand, slug: "review", cycle: cycles, stats, deps },
-        () => runReview({ ...ctx, draft }, deps)
-      );
-      assertUnderCostCap(stats, "review");
-      markDone(trace, "review", summarizeReview(review));
+      // --- Review ---
+      const reviewBlockId = `review:${cycles}`;
+      if (!completedBlocks.has(reviewBlockId)) {
+        bumpCycle(trace, "review", cycles);
+        markWorking(
+          trace,
+          "review",
+          cycles === 1 ? crewMember("review").verb : `Re-scoring the redraft (pass ${cycles})`
+        );
+        await writeJob({ status: "reviewing", progress_pct: cycles === 1 ? pctFor(pipeline.length - 1) : 92 });
+        review = await withLedger(
+          { jobId, brand, slug: "review", cycle: cycles, stats, deps },
+          () => runReview({ ...ctx, draft }, deps)
+        );
+        assertUnderCostCap(stats, "review");
+        markDone(trace, "review", summarizeReview(review));
+        // R3.5.1 — checkpoint after review completes.
+        completedBlocks.add(reviewBlockId);
+        await writeJob({
+          checkpoint: buildCheckpoint(pipeline, ctx, {
+            completedBlocks: [...completedBlocks], cycle: cycles, review, revisions,
+          }),
+        });
+      } else if (checkpoint) {
+        console.log(`[content-worker] Job ${jobId}: resuming — review cycle ${cycles} already completed`);
+      }
 
       if (review.verdict === "pass") break;
 
@@ -390,23 +598,27 @@ export async function startContentJob(jobId, deps = {}) {
       // revision path (reviseContentItem) can rebuild the draft context.
       benchmark_notes: { ...ctx.benchmarkNotes, work_order: ctx.workOrder },
       rubric,
+      cycle: cycles,
       revision: revisions.length,
       revisions,
-      target_queries: ctx.workOrder.target_queries || [],
+      target_queries: ctx.workOrder?.target_queries || [],
       status: "awaiting_approval",
-    });
+    }, deps);
 
+    // cost_total comes from costFields() inside writeJob: base + this
+    // execution's spend. Writing `stats.cost` here is what dropped every
+    // earlier attempt on the floor.
     await writeJob({
       status: "awaiting_approval",
       progress_pct: 100,
       item_id: item.id,
-      cost_total: Math.round((stats.cost || 0) * 10000) / 10000,
     });
 
     console.log(
       `[content-worker] Job ${jobId} queued for approval. verdict=${review.verdict}` +
         ` weighted=${review.weighted_total} ymyl=${review.ymyl_violation}` +
-        ` cycles=${cycles} cost=$${(stats.cost || 0).toFixed(4)}`
+        ` cycles=${cycles} cost=$${(stats.cost || 0).toFixed(4)}` +
+        ` job_total=$${round4(costBase + (stats.cost || 0)).toFixed(4)}`
     );
 
     return item;
@@ -415,20 +627,24 @@ export async function startContentJob(jobId, deps = {}) {
     // Mark whichever specialist was mid-flight as failed for the theater.
     const active = trace.find((t) => t.status === "working");
     if (active) markFailed(trace, active.step, error.message || "failed");
+    // costFields() is empty when the job row was never read (a failure before
+    // or at getContentJob): we do not know what the row already holds, and
+    // writing 0 would erase an earlier attempt's spend. Omitting the field
+    // leaves the recorded total untouched instead of silently zeroing it.
     await update(jobId, {
       status: "failed",
       progress_pct: 100,
       error_message: error.message || "Unexpected content pipeline error.",
-      cost_total: Math.round((stats.cost || 0) * 10000) / 10000,
+      ...costFields(),
       agent_trace: trace,
-    });
+    }, deps);
     return null;
   } finally {
     // Release on EVERY terminal outcome, success or failure. Without this a
     // job that crashed and needs a retry would sit out the full lease TTL for
     // no reason, and a finished job would look busy to the rescue sweep.
     try {
-      await releaseLease("content_jobs", jobId, leaseOwner);
+      await release("content_jobs", jobId, leaseOwner, deps);
     } catch (err) {
       console.warn(`[content-worker] lease release failed for job ${jobId}:`, err.message);
     }
@@ -446,7 +662,7 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
   const getItem = deps.getContentItem || getContentItem;
   const updateItem = deps.updateContentItem || updateContentItem;
 
-  const item = await getItem(itemId);
+  const item = await getItem(itemId, deps);
   if (!item) throw new Error(`content item ${itemId} not found`);
 
   const { brand, playbook } = item;
@@ -455,8 +671,12 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
   const brief = await resolveBrief(brand, {}, deps);
   const lessons = await (deps.listLessons || listLessons)(brand, playbook, {
     activeOnly: true,
-  });
-  const scans = await (deps.getScansForBrand || getScansForBrand)(brand);
+  }, deps);
+  // R2.8.4: this read sits BEFORE the try below, so a scan-read failure
+  // propagates to the caller (POST /api/content-items/[id]/decision, which
+  // logs it against the item id). Deliberate: it fails before any LLM spend
+  // instead of redrafting blind and failing at the write anyway.
+  const scans = await (deps.getScansForBrand || getScansForBrand)(brand, deps);
 
   const benchmarkNotes = { ...(item.benchmark_notes || {}) };
   const workOrder =
@@ -475,7 +695,7 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
   const agent = item.agent_snapshot || defaultAgentForBase(playbook);
   const knowledgeBlocks = await (deps.listKnowledgeBlocks || listKnowledgeBlocks)(brand, {
     activeOnly: true,
-  });
+  }, deps);
 
   const ctx = {
     brand,
@@ -531,17 +751,17 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
       revision: (item.revision || 0) + 1,
       revisions,
       status: "awaiting_approval",
-    });
+    }, deps);
 
     // Fold revision spend into the originating job's total.
     if (item.job_id) {
       try {
-        const job = await getContentJob(item.job_id);
+        const job = await (deps.getContentJob || getContentJob)(item.job_id, deps);
         const prev = Number(job?.cost_total) || 0;
         await (deps.updateContentJob || updateContentJob)(item.job_id, {
           status: "awaiting_approval",
           cost_total: Math.round((prev + stats.cost) * 10000) / 10000,
-        });
+        }, deps);
       } catch (err) {
         console.warn("[content-worker] revision cost fold failed:", err.message);
       }
@@ -555,7 +775,7 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
     console.error(`[content-worker] Revision of item ${itemId} failed:`, error);
     // Leave the item visible in the queue with its previous draft rather
     // than losing it — the human can retry or edit manually.
-    await updateItem(itemId, { status: "awaiting_approval" });
+    await updateItem(itemId, { status: "awaiting_approval" }, deps);
     return null;
   }
 }

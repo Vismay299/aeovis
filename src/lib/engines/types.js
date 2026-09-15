@@ -25,24 +25,11 @@ export const ENGINE_HYBRID_WEIGHTS = {
   [Engine.GEMINI]: 0.10
 };
 
-export function getEnabledEngines() {
-  const envVal = process.env.ENGINES_ENABLED;
-  const probeMode = process.env.PROBE_MODE || "hybrid";
-  
-  if (envVal) {
-    return envVal
-      .split(",")
-      .map(s => s.trim().toLowerCase())
-      .filter(s => ENGINES.includes(s));
-  }
-  
-  // Dynamic API Key check fallback
-  const list = [Engine.GEMINI];
-  if (process.env.OPENAI_API_KEY) list.push(Engine.OPENAI);
-  if (process.env.PERPLEXITY_API_KEY) list.push(Engine.PERPLEXITY);
-  const serpConfigured = process.env.BRIGHTDATA_API_KEY || process.env.SERPAPI_KEY;
-  if (serpConfigured && probeMode !== "llm_only") {
-    list.push(Engine.GOOGLE_AI_OVERVIEW);
-  }
-  return list;
-}
+/**
+ * R1.7.3 — getEnabledEngines() was the dead second engine registry.
+ *
+ * It had zero production callers outside its own tests: the real gating lives
+ * in src/lib/scoring/enginePipeline.js's resolveEnabledEngines(). The function
+ * is deleted; the Engine enum and weight tables remain for aggregate.js and
+ * qualityGate.js.
+ */

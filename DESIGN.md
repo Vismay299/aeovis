@@ -1,5 +1,8 @@
 # Design
 
+> <!-- doc-status -->
+> **Status: LIVE.** The authority for visual design. The shipped components implement this document's Signal Box vocabulary directly — `--lamp-*`, `--steel-*` and `--nickel` appear in `src/components/perceev/charts/chartMath.js` and across `src/components/`. Supersedes `docs/design/DESIGN-SYSTEM.md` and `docs/plans/2026-07-18-perceev-dark-redesign.md`.
+
 <!-- impeccable:design-schema 1 -->
 
 ## Visual World

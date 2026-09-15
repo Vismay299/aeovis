@@ -93,23 +93,31 @@ export function buildInterlocking(result, { maxRivals = 4 } = {}) {
 
   const total = rows.length || result?.promptsAnalyzed || result?.promptsTracked || 0;
 
-  /* Engines: whatever actually reported, never a hardcoded list. */
+  /* Engines: whatever actually reported, never a hardcoded list.
+
+     R2.8.2 — an engine with zero rows of its own is marked `noData` rather
+     than silently inheriting all rows.  Before this fix, `scoped = of.length
+     ? of : rows` made a zero-row engine look identical to one that answered
+     every prompt, and the fallback at probes/cleared invented counts from the
+     whole set — an engine that never ran appeared to report. */
   const engineKeys = Object.keys(result?.engineScores || {});
   const engines = (engineKeys.length ? engineKeys : ['aio']).map((k) => {
     const of = rows.filter((r) => (r.engine || 'aio') === k);
-    const scoped = of.length ? of : rows;
-    const cleared = scoped.filter(
-      (r) =>
-        (r.brand_mentioned_in_text ?? r.brandMentionedInText) ||
-        (r.brand_cited ?? r.brandCited),
-    ).length;
+    const hasData = of.length > 0;
+    const cleared = hasData
+      ? of.filter(
+          (r) =>
+            (r.brand_mentioned_in_text ?? r.brandMentionedInText) ||
+            (r.brand_cited ?? r.brandCited),
+        ).length
+      : 0;
     return {
       key: k,
       name: engineName(k),
-      /* With no per-question rows on hand (a stored summary, or the sample
-         report) fall back to the set size rather than reporting zero asked. */
-      probes: scoped.length || Math.round(total / (engineKeys.length || 1)),
-      cleared: scoped.length ? cleared : yours,
+      /* R2.8.2 — no-data engines report zero, not a phantom count. */
+      probes: hasData ? of.length : 0,
+      cleared,
+      noData: !hasData,
     };
   });
 

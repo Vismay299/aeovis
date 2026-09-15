@@ -15,6 +15,7 @@ import {
   insertContentRun,
   finishContentRun,
   listContentRunsForJob,
+  ContentReadError,
 } from "./db/content.js";
 
 /**
@@ -66,6 +67,9 @@ function makeMockClient(tableHandlers) {
         },
         limit(n) {
           state.limitN = n;
+          return builder;
+        },
+        order(_col, _opts) {
           return builder;
         },
         then(resolve, reject) {
@@ -532,11 +536,30 @@ test("listResumableContentJobs returns genuinely dead jobs, capped at the limit"
   assert.deepEqual(resumable.map((j) => j.id), ["dead-1", "dead-2"]);
 });
 
-test("listResumableContentJobs fails soft: a DB error yields no work, never a throw", async () => {
+test("listResumableContentJobs THROWS on a DB error — it never fabricates 'no work'", async () => {
   const { client } = makeMockClient({
     content_jobs: () => ({ data: null, error: new Error("db down") }),
   });
-  assert.deepEqual(await listResumableContentJobs(5, { client }), []);
+  await assert.rejects(
+    () => listResumableContentJobs(5, { client }),
+    (err) => {
+      assert.ok(err instanceof ContentReadError, `expected ContentReadError, got ${err?.name}`);
+      assert.equal(err.code, "db_read_failed");
+      assert.ok(err.cause, "the original error must survive on `cause`");
+      return true;
+    }
+  );
+});
+
+test("listResumableContentJobs THROWS when no client is configured — it never returns 'no work'", async () => {
+  await assert.rejects(
+    () => listResumableContentJobs(5, { client: null }),
+    (err) => {
+      assert.ok(err instanceof ContentReadError, `expected ContentReadError, got ${err?.name}`);
+      assert.equal(err.code, "db_not_configured");
+      return true;
+    }
+  );
 });
 
 // --- content_runs ledger (T3) -----------------------------------------------
@@ -593,5 +616,22 @@ test("listContentRunsForJob returns one job's runs oldest-first", async () => {
     (await listContentRunsForJob("job-B", { client: null })).length,
     1,
     "runs are scoped to their own job"
+  );
+});
+
+// --- R2.8.13 — fail-loud reads ------------------------------------------------
+
+test("listContentRunsForJob THROWS on a DB error — it never fabricates 'no runs'", async () => {
+  const { client } = makeMockClient({
+    content_runs: () => ({ data: null, error: new Error("db unreachable") }),
+  });
+  await assert.rejects(
+    () => listContentRunsForJob("any-job", { client }),
+    (err) => {
+      assert.ok(err instanceof ContentReadError, `expected ContentReadError, got ${err?.name}`);
+      assert.equal(err.code, "db_read_failed");
+      assert.ok(err.cause, "the original error must survive on `cause`");
+      return true;
+    }
   );
 });

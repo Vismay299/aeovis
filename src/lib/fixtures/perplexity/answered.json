@@ -1,0 +1,35 @@
+{
+  "description": "R1.3.1 fixture: a healthy Perplexity answer — two choices, real text, usage block present.",
+  "answer": {
+    "choices": [
+      {
+        "message": {
+          "role": "assistant",
+          "content": "HubSpot and Zoho are among the top CRM platforms for small businesses. HubSpot offers a free tier with robust marketing tools, while Zoho CRM provides affordable plans with extensive customization."
+        }
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 42,
+      "completion_tokens": 38,
+      "total_tokens": 80,
+      "total_cost": 0.006
+    }
+  },
+  "search": {
+    "results": [
+      {
+        "url": "https://www.hubspot.com/products/crm",
+        "title": "Free CRM Software - HubSpot"
+      },
+      {
+        "url": "https://www.zoho.com/crm/zohocrm-small-business.html",
+        "title": "Zoho CRM for Small Business"
+      },
+      {
+        "url": "https://www.salesforce.com/crm/what-is-crm/",
+        "title": "What is CRM? - Salesforce"
+      }
+    ]
+  }
+}

@@ -1,11 +1,43 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validatePipeline, resolvePipeline, DEFAULT_PIPELINES, getBlock } from "./agents/blocks.js";
-import { validateFactCheck } from "./schemas.js";
-import { formatKnowledge } from "./steps/shared.js";
-import { renderDirective } from "./steps/transform.js";
-import { initTrace } from "./agents/trace.js";
-import { startContentJob } from "./contentWorker.js";
+
+/**
+ * R3.2.4 — this suite is hermetic BY CONSTRUCTION, not by an unset shell.
+ *
+ * Two cases below run `startContentJob`, which acquires and renews a lease with
+ * `acquireLease("content_jobs", ...)` / `renewLease(...)`. Neither takes an
+ * injectable client from here — both resolve db.js's module-level one, which is
+ * built at import time from NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY. So with
+ * credentials loaded (what src/lib/liveDbGate.js tells live-test authors to do)
+ * those cases issued real `UPDATE content_jobs` statements against production,
+ * on a job id that exists only in this file. Nothing here ever intended to
+ * touch a database; it was kept off one by the accident of an unset variable.
+ *
+ * Clearing the credentials FIRST and importing the module graph afterwards
+ * makes db.js's client null no matter how the suite is invoked. The imports
+ * have to be dynamic for that to work: static ones are hoisted and evaluated
+ * before any statement in this file, so db.js would capture the credentials
+ * before the two `delete`s ran. All of them are dynamic rather than only the
+ * ones that reach db.js today, because which import reaches it is not this
+ * file's business to track.
+ */
+delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const { validatePipeline, resolvePipeline, DEFAULT_PIPELINES, getBlock } = await import("./agents/blocks.js");
+const { validateFactCheck } = await import("./schemas.js");
+const { formatKnowledge } = await import("./steps/shared.js");
+const { renderDirective } = await import("./steps/transform.js");
+const { initTrace } = await import("./agents/trace.js");
+const { startContentJob } = await import("./contentWorker.js");
+const { supabase } = await import("../db.js");
+
+assert.equal(
+  supabase,
+  null,
+  "db.js still has a client: the credential clearing above did not take effect, and the two " +
+    "startContentJob cases below would write to production's content_jobs"
+);
 
 // --- pipeline validation ---------------------------------------------------
 

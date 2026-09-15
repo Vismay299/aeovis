@@ -1,13 +1,45 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startContentJob, reviseContentItem } from "./contentWorker.js";
-import { isLegalTransition } from "./stages.js";
 
 /**
  * End-to-end pipeline tests against a scripted fake LLM — zero live calls.
  * Verifies the plan's guardrails: revision-loop caps, YMYL routing,
  * lessons injection, cost cap, and the awaiting_approval terminal state.
+ *
+ * R3.2.4 — "zero live calls" now includes the database, and by construction.
+ *
+ * `makeDeps` below stubs `updateContentJob`, but `startContentJob` also takes a
+ * lease (`acquireLease("content_jobs", ...)`), renews it on EVERY job update
+ * (`renewLease`), releases it at the end, and opens a row in `content_runs` per
+ * block (`insertContentRun`). None of those four resolves a client from the
+ * deps this file passes; they use db.js's module-level one, built at import
+ * time from NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY. With credentials loaded —
+ * which is what src/lib/liveDbGate.js tells live-test authors to do — this
+ * file issued 16 real `UPDATE content_jobs` and 2 real `INSERT INTO
+ * content_runs` against production, on job ids that exist only here, and said
+ * nothing about it: the lease renew is fire-and-forget with a `.catch`, and
+ * db/content.js's ledger writes are fail-soft on purpose. It stayed green
+ * either way, which is precisely the failure R3.2.4 exists for.
+ *
+ * Clearing the credentials before the module graph is evaluated makes db.js's
+ * client null however the suite is invoked, so the memory lease this file
+ * actually means to exercise is the one it gets. The imports must be dynamic:
+ * static imports are hoisted above these two `delete`s and db.js would capture
+ * the credentials first.
  */
+delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+const { startContentJob, reviseContentItem } = await import("./contentWorker.js");
+const { isLegalTransition } = await import("./stages.js");
+const { supabase } = await import("../db.js");
+
+assert.equal(
+  supabase,
+  null,
+  "db.js still has a client: the credential clearing above did not take effect, and this file's " +
+    "lease and content_runs writes would land on production"
+);
 
 // --- fixtures --------------------------------------------------------------
 
@@ -617,4 +649,516 @@ test("ledger: a broken ledger never breaks the pipeline", async () => {
 
   assert.ok(item, "the job must still produce an item");
   assert.equal(items[0].status, "awaiting_approval");
+});
+
+// --- cost accumulates across attempts (R3.3.3) ------------------------------
+//
+// A content job can be EXECUTED more than once: the cron rescues a job whose
+// worker died and startContentJob re-runs the pipeline from the top, paying
+// for every block again. `stats` is per-execution, so writing
+// `cost_total: stats.cost` reported the last attempt and deleted the earlier
+// ones. These tests run two attempts against ONE row and assert the sum.
+
+const COST_PER_CALL = 0.01;
+
+/**
+ * An LLM that dies on its Nth call the way a killed worker does: the promise
+ * never settles, so the caller never resumes and never reaches a terminal
+ * write. The hanging call adds NO cost — it never returned.
+ */
+function makeDyingLlm(responses, { hangAtCall }) {
+  const queue = [...responses];
+  let calls = 0;
+  const llm = async (prompt, options = {}) => {
+    calls += 1;
+    if (calls === hangAtCall) return new Promise(() => {});
+    if (options.stats) options.stats.cost = (options.stats.cost || 0) + COST_PER_CALL;
+    if (queue.length === 0) throw new Error("fake llm exhausted — test script too short");
+    return queue.shift();
+  };
+  return { llm, callCount: () => calls };
+}
+
+/**
+ * One mutable content_jobs row plus deps that write to it, mirroring
+ * db/content.js's memory path (Object.assign onto the stored row). Both
+ * attempts read and write the SAME row, which is what makes this a rescue
+ * rather than two unrelated jobs.
+ */
+function makeRescueRow() {
+  const jobRow = {
+    id: "job-rescued",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "pending",
+    input: { type: "topic", topic: "home collection economics", brand_profile: "healthcare-cxo" },
+    cost_total: 0,
+  };
+  const jobUpdates = [];
+  const items = [];
+  const baseDeps = {
+    scrape: async () => "No website content available.",
+    // `leaseOwner` is how the cron's dispatchWithLease hands a won lease down
+    // (api/content/worker/route.js) — the real rescue path.
+    leaseOwner: "cron_test_owner",
+    updateContentJob: async (jobId, updates) => {
+      jobUpdates.push({ jobId, ...updates });
+      Object.assign(jobRow, updates);
+      return { ...jobRow };
+    },
+    insertContentItem: async (item) => {
+      const record = { id: `item-${items.length + 1}`, ...item };
+      items.push(record);
+      return record;
+    },
+    listLessons: async () => [],
+    getScansForBrand: async () => [],
+    getBrandBrief: async () => null,
+    upsertBrandBrief: async () => ({}),
+  };
+  return { jobRow, jobUpdates, items, baseDeps };
+}
+
+async function waitUntil(predicate, label) {
+  for (let i = 0; i < 500; i++) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  assert.fail(`timed out waiting for: ${label}`);
+}
+
+test("rescue: cost_total is the SUM across attempts, not the last attempt", async () => {
+  const { jobRow, baseDeps, items } = makeRescueRow();
+
+  // Attempt 1 — dies inside the Writer (call 3: coordinate, research, draft;
+  // benchmark is static for linkedin_post). It never reaches a terminal write,
+  // exactly like a worker killed by the platform timeout.
+  const dying = makeDyingLlm([LI_WORK_ORDER, RESEARCH_PACK], { hangAtCall: 3 });
+  startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm: dying.llm });
+  await waitUntil(() => jobRow.status === "drafting", "attempt 1 to reach the Writer");
+  await waitUntil(() => dying.callCount() === 3, "attempt 1 to die mid-draft");
+
+  const spentByAttempt1 = jobRow.cost_total;
+  assert.equal(
+    spentByAttempt1,
+    2 * COST_PER_CALL,
+    "a killed attempt must leave its spend on the row — if this is 0 the spend " +
+      "was only written at the terminal write and died with the process"
+  );
+  assert.notEqual(jobRow.status, "failed", "a killed attempt writes no terminal status");
+
+  // Attempt 2 — the rescue.  The checkpoint written by attempt 1 lets the
+  // worker skip coordinate, research, and benchmark — only draft + review
+  // are paid again (R3.5.1).
+  const { llm } = makeFakeLlm([LI_DRAFT, LI_REVIEW_PASS], {
+    costPerCall: COST_PER_CALL,
+  });
+  const item = await startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm });
+
+  assert.ok(item, "the rescue completes the job");
+  assert.equal(items.length, 1);
+  assert.equal(jobRow.status, "awaiting_approval");
+
+  const spentByAttempt2 = 2 * COST_PER_CALL; // draft + review only (R3.5.1 skips completed blocks)
+  assert.equal(
+    jobRow.cost_total,
+    Math.round((spentByAttempt1 + spentByAttempt2) * 10000) / 10000,
+    "the job cost both attempts and the row must say so"
+  );
+  assert.notEqual(
+    jobRow.cost_total,
+    spentByAttempt2,
+    "cost_total is the last attempt's spend — the earlier attempt was overwritten"
+  );
+});
+
+test("rescue: a second attempt that FAILS still adds its spend to the total", async () => {
+  const { jobRow, baseDeps, jobUpdates } = makeRescueRow();
+
+  const dying = makeDyingLlm([LI_WORK_ORDER, RESEARCH_PACK], { hangAtCall: 3 });
+  startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm: dying.llm });
+  await waitUntil(() => jobRow.status === "drafting", "attempt 1 to reach the Writer");
+  await waitUntil(() => dying.callCount() === 3, "attempt 1 to die mid-draft");
+  const afterAttempt1 = jobRow.cost_total;
+  assert.equal(afterAttempt1, 2 * COST_PER_CALL);
+
+  // Attempt 2 burns two calls on an invalid work order, then fails loudly.
+  const { llm } = makeFakeLlm([{ angle: "" }, { angle: "" }], { costPerCall: COST_PER_CALL });
+  const item = await startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm });
+
+  assert.equal(item, null);
+  const final = jobUpdates[jobUpdates.length - 1];
+  assert.equal(final.status, "failed");
+  assert.equal(
+    jobRow.cost_total,
+    4 * COST_PER_CALL,
+    "a failed rescue spent real money — the failure write must add it, not replace the total"
+  );
+});
+
+test("one attempt writes cost_total many times and never double-counts itself", async () => {
+  const { jobRow, baseDeps, jobUpdates } = makeRescueRow();
+  jobRow.cost_total = 0.02; // an earlier attempt's recorded spend
+
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS], {
+    costPerCall: COST_PER_CALL,
+  });
+  await startContentJob("job-rescued", { ...baseDeps, job: jobRow, llm });
+
+  // Every job write carries the running total (that is what survives a kill),
+  // so the value written must be ABSOLUTE — base + this attempt's spend — and
+  // never an increment applied once per write.
+  const written = jobUpdates.map((u) => u.cost_total);
+  assert.ok(written.length >= 6, "the pipeline writes the job row several times");
+  assert.ok(
+    written.every((c) => typeof c === "number"),
+    "every job write carries the total"
+  );
+  for (let i = 1; i < written.length; i++) {
+    assert.ok(written[i] >= written[i - 1], "the recorded total never goes backwards");
+  }
+  assert.equal(written[0], 0.02, "the first write preserves what earlier attempts recorded");
+  assert.equal(
+    jobRow.cost_total,
+    0.06,
+    "0.02 already recorded + 4 calls at 0.01 — anything higher is a double count"
+  );
+});
+
+test("a failure before the job row is read leaves cost_total alone, never 0", async () => {
+  const jobUpdates = [];
+  // No `deps.job`: getContentJob is not injectable, the memory store has no
+  // such row, so the worker throws "not found" before it can learn what the
+  // row already recorded. Writing 0 there would erase an earlier attempt.
+  const item = await startContentJob("job-that-does-not-exist", {
+    leaseOwner: "cron_test_owner",
+    llm: async () => assert.fail("no LLM call may happen before the job is read"),
+    updateContentJob: async (jobId, updates) => {
+      jobUpdates.push({ jobId, ...updates });
+      return { id: jobId, ...updates };
+    },
+  });
+
+  assert.equal(item, null);
+  const final = jobUpdates[jobUpdates.length - 1];
+  assert.equal(final.status, "failed");
+  assert.ok(final.error_message.includes("not found"));
+  assert.ok(
+    !("cost_total" in final),
+    "an unknown prior total must be omitted, not written as a measured 0"
+  );
+});
+
+// --- R3.5.1: per-block checkpoints ------------------------------------------
+
+/**
+ * A job with a checkpoint skips completed Phase A blocks and restores the
+ * accumulated context (workOrder, researchPack, benchmarkNotes) so later
+ * blocks can run without re-calling the LLM for earlier ones.
+ */
+test("checkpoint: Phase A blocks completed before a kill are skipped on rescue", async () => {
+  const { llm } = makeFakeLlm([LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates } = makeDeps(llm);
+
+  // Simulate a rescued job that already completed coordinate + research + benchmark.
+  deps.job = {
+    id: "job-cp-1",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "researching", // last written status before the kill
+    input: { type: "topic", topic: "home collection economics" },
+    cost_total: 0.02,
+    checkpoint: {
+      pipeline: ["coordinate", "research", "benchmark", "draft", "review"],
+      completedBlocks: ["coordinate", "research", "benchmark"],
+      cycle: 0,
+      review: null,
+      revisions: [],
+      workOrder: LI_WORK_ORDER,
+      researchPack: RESEARCH_PACK,
+      benchmarkNotes: { pack: {} },
+      draft: null,
+      factCheck: null,
+      critique: "",
+    },
+  };
+
+  const item = await startContentJob("job-cp-1", deps);
+  assert.ok(item, "the rescued job produces an item");
+  assert.equal(item.status, "awaiting_approval");
+
+  // Only draft + review should have run — no extra LLM calls for context blocks.
+  const statuses = jobUpdates.map((u) => u.status).filter(Boolean);
+  assert.ok(!statuses.includes("coordinating"), "coordinate was skipped");
+  assert.ok(!statuses.includes("researching"), "research was skipped");
+  assert.ok(!statuses.includes("benchmarking"), "benchmark was skipped");
+  assert.ok(statuses.includes("drafting"), "draft ran");
+  assert.ok(statuses.includes("reviewing"), "review ran");
+});
+
+/**
+ * A checkpoint written by Phase A blocks is persisted on every writeJob call.
+ * The job row's checkpoint field should grow as blocks complete.
+ */
+test("checkpoint: every Phase A block boundary writes a checkpoint to the job row", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates } = makeDeps(llm);
+
+  await startContentJob("job-cp-2", deps);
+
+  // Collect every writeJob call that included a checkpoint field.
+  const checkpointWrites = jobUpdates.filter((u) => u.checkpoint);
+  assert.ok(checkpointWrites.length >= 4, "at least 4 checkpoint writes (coordinate, research, benchmark, draft)");
+
+  // The first checkpoint should have only coordinate completed.
+  const firstCp = checkpointWrites[0].checkpoint;
+  assert.deepEqual(firstCp.completedBlocks, ["coordinate"]);
+  assert.ok(firstCp.workOrder, "workOrder is captured in the checkpoint");
+
+  // The final checkpoint before terminal should have all blocks completed.
+  const lastCp = checkpointWrites[checkpointWrites.length - 1].checkpoint;
+  assert.ok(lastCp.completedBlocks.includes("coordinate"), "coordinate done");
+  assert.ok(lastCp.completedBlocks.includes("research"), "research done");
+  assert.ok(lastCp.completedBlocks.includes("benchmark"), "benchmark done");
+});
+
+/**
+ * Phase B (the draft-review loop) checkpoints cycle-suffixed block IDs
+ * (e.g. "draft:1", "review:1") so each sub-step is independently resumable.
+ */
+test("checkpoint: Phase B loop writes cycle-suffixed block IDs", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates } = makeDeps(llm);
+
+  await startContentJob("job-cp-3", deps);
+
+  const checkpointWrites = jobUpdates.filter((u) => u.checkpoint);
+  // Find the draft:1 and review:1 entries.
+  const draftCheckpoint = checkpointWrites.find(
+    (w) => w.checkpoint.completedBlocks.includes("draft:1")
+  );
+  const reviewCheckpoint = checkpointWrites.find(
+    (w) => w.checkpoint.completedBlocks.includes("review:1")
+  );
+  assert.ok(draftCheckpoint, "draft:1 checkpoint was written");
+  assert.ok(reviewCheckpoint, "review:1 checkpoint was written");
+  assert.equal(draftCheckpoint.checkpoint.cycle, 1);
+  assert.equal(reviewCheckpoint.checkpoint.cycle, 1);
+});
+
+/**
+ * A job killed mid-draft-review-loop (after draft passes but before review)
+ * resumes at the review step on rescue, skipping the already-paid draft.
+ */
+test("checkpoint: resume mid-loop skips completed draft, runs only review", async () => {
+  const { llm } = makeFakeLlm([LI_REVIEW_PASS]);
+  const { deps, jobUpdates, items } = makeDeps(llm);
+
+  deps.job = {
+    id: "job-cp-4",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "drafting",
+    input: { type: "topic", topic: "home collection economics" },
+    cost_total: 0.03,
+    checkpoint: {
+      pipeline: ["coordinate", "research", "benchmark", "draft", "review"],
+      completedBlocks: ["coordinate", "research", "benchmark", "draft:1"],
+      cycle: 1,
+      review: null,
+      revisions: [],
+      workOrder: LI_WORK_ORDER,
+      researchPack: RESEARCH_PACK,
+      benchmarkNotes: { pack: {} },
+      draft: LI_DRAFT,
+      factCheck: null,
+      critique: "",
+    },
+  };
+
+  const item = await startContentJob("job-cp-4", deps);
+  assert.ok(item);
+  assert.equal(item.status, "awaiting_approval");
+
+  // The only LLM call should have been the review — draft was skipped.
+  const statuses = jobUpdates.map((u) => u.status).filter(Boolean);
+  assert.ok(!statuses.includes("drafting"), "draft was skipped via checkpoint");
+  assert.ok(statuses.includes("reviewing"), "review ran");
+});
+
+/**
+ * A job whose checkpoint says the review passed (verdict=pass) does not
+ * re-enter the loop — it goes straight to the terminal write.
+ */
+test("checkpoint: a rescued job whose loop already passed skips the entire loop", async () => {
+  const { deps, jobUpdates, items } = makeDeps(async () => assert.fail("no LLM calls expected"));
+
+  deps.job = {
+    id: "job-cp-5",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "reviewing",
+    input: { type: "topic", topic: "home collection economics" },
+    cost_total: 0.04,
+    checkpoint: {
+      pipeline: ["coordinate", "research", "benchmark", "draft", "review"],
+      completedBlocks: ["coordinate", "research", "benchmark", "draft:1", "review:1"],
+      cycle: 1,
+      review: LI_REVIEW_PASS,
+      revisions: [],
+      workOrder: LI_WORK_ORDER,
+      researchPack: RESEARCH_PACK,
+      benchmarkNotes: { pack: {} },
+      draft: LI_DRAFT,
+      factCheck: null,
+      critique: "",
+    },
+  };
+
+  const item = await startContentJob("job-cp-5", deps);
+  assert.ok(item, "the item is created from the checkpointed draft");
+  assert.equal(item.status, "awaiting_approval");
+  assert.equal(item.title, LI_DRAFT.title);
+  // No LLM calls — the loop was already resolved.
+});
+
+/**
+ * When a checkpoint says the last review failed and the revision budget is
+ * exhausted (cycles = MAX_DRAFT_REVIEW_CYCLES), the loop is not re-entered.
+ */
+test("checkpoint: rescued job with exhausted revision budget skips the loop", async () => {
+  const { deps, items } = makeDeps(async () => assert.fail("no LLM calls expected"));
+
+  const exhaustedReview = { ...LI_REVIEW_FAIL, verdict: "fail" };
+  deps.job = {
+    id: "job-cp-6",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "reviewing",
+    input: {},
+    cost_total: 0.05,
+    checkpoint: {
+      pipeline: ["coordinate", "research", "benchmark", "draft", "review"],
+      completedBlocks: ["coordinate", "research", "benchmark", "draft:1", "review:1", "draft:2", "review:2"],
+      cycle: 2,
+      review: exhaustedReview,
+      revisions: [
+        { revision: 0, title: "v1", body_md: "old", rubric: LI_REVIEW_FAIL, critique: "fix hook" },
+      ],
+      workOrder: LI_WORK_ORDER,
+      researchPack: RESEARCH_PACK,
+      benchmarkNotes: { pack: {} },
+      draft: LI_DRAFT,
+      factCheck: null,
+      critique: "fix hook",
+    },
+  };
+
+  const item = await startContentJob("job-cp-6", deps);
+  assert.ok(item, "item created with below-threshold flag");
+  assert.equal(items[0].rubric.below_threshold, true);
+  assert.equal(items[0].rubric.cycles, 2);
+});
+
+/**
+ * A rescue after a failed review (non-YMYL, budget remains) starts a new
+ * cycle.  The checkpoint's revisions and critique are carried forward.
+ */
+test("checkpoint: rescue after failed review starts next cycle with carried context", async () => {
+  const revisedDraft = { ...LI_DRAFT, title: "revised-v2" };
+  const { llm, prompts } = makeFakeLlm([revisedDraft, LI_REVIEW_PASS]);
+  const { deps, items } = makeDeps(llm);
+
+  deps.job = {
+    id: "job-cp-7",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "reviewing",
+    input: {},
+    cost_total: 0.04,
+    checkpoint: {
+      pipeline: ["coordinate", "research", "benchmark", "draft", "review"],
+      completedBlocks: ["coordinate", "research", "benchmark", "draft:1", "review:1"],
+      cycle: 1,
+      review: LI_REVIEW_FAIL,
+      revisions: [],
+      workOrder: LI_WORK_ORDER,
+      researchPack: RESEARCH_PACK,
+      benchmarkNotes: { pack: {} },
+      draft: LI_DRAFT,
+      factCheck: null,
+      critique: "",
+    },
+  };
+
+  const item = await startContentJob("job-cp-7", deps);
+  assert.ok(item);
+  assert.equal(items[0].title, "revised-v2");
+  assert.equal(items[0].rubric.cycles, 2);
+
+  // The redraft prompt should carry the critique from the failed review.
+  const redraftPrompt = prompts[0]; // only 2 LLM calls: draft + review
+  assert.ok(redraftPrompt.includes("Open with the 18% figure"), "critique carried into the redraft prompt");
+});
+
+/**
+ * A job with no checkpoint (fresh start) behaves exactly as before.
+ */
+test("checkpoint: a job with no checkpoint starts from the beginning", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates, items } = makeDeps(llm);
+
+  // No checkpoint field on the job.
+  await startContentJob("job-cp-8", deps);
+
+  const statuses = jobUpdates.map((u) => u.status).filter(Boolean);
+  assert.deepEqual(statuses, [
+    "coordinating",
+    "researching",
+    "benchmarking",
+    "drafting",
+    "reviewing",
+    "awaiting_approval",
+  ]);
+  assert.equal(items.length, 1);
+});
+
+/**
+ * The trace shows completed blocks from the checkpoint as "done" so the
+ * theater displays honest history for a rescued job.
+ */
+test("checkpoint: skipped blocks are marked done in the trace", async () => {
+  const { llm } = makeFakeLlm([LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates } = makeDeps(llm);
+
+  deps.job = {
+    id: "job-cp-9",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "researching",
+    input: {},
+    cost_total: 0.02,
+    checkpoint: {
+      pipeline: ["coordinate", "research", "benchmark", "draft", "review"],
+      completedBlocks: ["coordinate", "research", "benchmark"],
+      cycle: 0,
+      review: null,
+      revisions: [],
+      workOrder: LI_WORK_ORDER,
+      researchPack: RESEARCH_PACK,
+      benchmarkNotes: { pack: {} },
+    },
+  };
+
+  await startContentJob("job-cp-9", deps);
+
+  const withTrace = jobUpdates.filter((u) => Array.isArray(u.agent_trace));
+  const finalTrace = withTrace[withTrace.length - 1].agent_trace;
+
+  // Skipped blocks should be marked as done (restored from checkpoint).
+  const coordEntry = finalTrace.find((t) => t.step === "coordinate");
+  const researchEntry = finalTrace.find((t) => t.step === "research");
+  assert.equal(coordEntry.status, "done", "coordinate marked done from checkpoint");
+  assert.ok(coordEntry.summary.includes("completed before resume"));
+  assert.equal(researchEntry.status, "done", "research marked done from checkpoint");
 });

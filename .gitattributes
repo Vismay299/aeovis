@@ -1,0 +1,18 @@
+# Consistent line endings everywhere. Without this, a checkout on Windows
+# rewrites every file to CRLF, which changes the bytes CI hashes, breaks
+# `git diff` on unrelated lines, and makes the SQL migrations and .mjs test
+# fixtures differ between machines for no reason.
+* text=auto eol=lf
+
+# Binary — never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary

@@ -1,5 +1,20 @@
 # Decision Note: SERP API Provider for Google AI Overview (SGE)
 
+> <!-- doc-status -->
+> **Status: SUPERSEDED-BY** [2026-08-29-serp-provider-bright-data.md](./2026-08-29-serp-provider-bright-data.md)
+> — superseded 2026-08-29, marked under task R0.2.3.
+> This note chose SerpAPI. Production ships **Bright Data**, and has for some
+> time; the second decision was never written down, so this document was the
+> only ADR in the repository and it described a provider the code does not use.
+> Kept because its comparison of what AI Overview probing requires is still the
+> best write-up of the problem — but every number below is a SerpAPI number and
+> describes nothing we run.
+>
+> **SerpAPI is not gone from the code.** `src/lib/engines/serp.js:15` still falls
+> through to it when no Bright Data key is present, and one of its call sites is
+> live and billable. Read the superseding ADR's evidence section before planning
+> any deletion; do not infer from this header that the path is dead.
+
 ## Context
 Google's AI Overview (formerly Search Generative Experience, or SGE) has become the primary answer engine result shown to users for informational and commercial queries. Probing live AI Overviews requires querying Google search results dynamically and parsing the generated AI Overview box. 
 

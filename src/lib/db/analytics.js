@@ -120,6 +120,33 @@ export async function getPromptResultsForJob(jobId, deps = {}) {
 }
 
 /**
+ * All prompt_results rows for a finished SCAN.
+ *
+ * The archive script needs this because `scans` has no job_id column at all —
+ * the link runs the other way, prompt_results carrying scan_id once
+ * stampScanIdForJob has run at finalize. Looking the rows up by a column that
+ * does not exist returned undefined, which a truthiness guard read as "no job"
+ * and skipped silently, writing an empty array that looked like a measured zero.
+ */
+export async function getPromptResultsForScan(scanId, deps = {}) {
+  const client = resolveClient(deps);
+
+  if (!client) {
+    return Array.from(global.memoryPromptResults.values())
+      .filter((r) => r.scan_id === scanId)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  }
+
+  const { data, error } = await client
+    .from("prompt_results")
+    .select("*")
+    .eq("scan_id", scanId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+/**
  * Set of `"engine|query"` pairs already persisted for a job, from a
  * lightweight column-limited select. The chunk worker (P0.2) diffs its
  * (engine, query) worklist against this set on resume so it skips pairs a
@@ -450,6 +477,107 @@ export async function getResultBrandsForBrand(brand, { limit = DEFAULT_RESULT_BR
   return data || [];
 }
 
+/**
+ * Every result_brands row belonging to ONE scan (R0.3.3 roster continuity).
+ *
+ * Used by finalize to recover the last roster a scan actually measured, so a
+ * scan whose rival extractor was unreachable can carry that roster forward
+ * under an explicit `carried_forward` label instead of silently reporting an
+ * empty rival set (which is what made Share of Voice read a false 100%).
+ *
+ * Deliberately keyed on scan_id, not on brand: result_brands carries no
+ * created_at column, and its `id` is a random uuid, so rows for a brand
+ * cannot be ordered chronologically from this table alone. The caller
+ * establishes chronology from `scans.scanned_at` and passes the winning
+ * scan_id in.
+ */
+export async function getResultBrandsForScan(scanId, deps = {}) {
+  if (!scanId) return [];
+  const client = resolveClient(deps);
+
+  if (!client) {
+    return Array.from(global.memoryResultBrands.values()).filter((r) => r.scan_id === scanId);
+  }
+
+  const { data, error } = await client.from("result_brands").select("*").eq("scan_id", scanId);
+  if (error) throw error;
+  return data || [];
+}
+
+// ---------------------------------------------------------------------------
+// scan rate limit (migration 009)
+// ---------------------------------------------------------------------------
+
+global.memoryRateLimits = global.memoryRateLimits || new Map();
+
+/**
+ * Atomically add one to a rate-limit bucket and return the resulting count
+ * (R0.1.4). Atomic because two concurrent requests must not both read the
+ * same pre-increment value and both proceed.
+ *
+ * Postgres has no PostgREST verb for "upsert and return count+1", so this
+ * uses the `increment_scan_rate_limit` function created in migration 009.
+ * Throws on failure — checkScanRateLimit decides what a broken counter means,
+ * and it says so out loud rather than silently allowing.
+ */
+export async function incrementScanRateLimit({ bucketKey, windowStart }, deps = {}) {
+  const client = resolveClient(deps);
+
+  if (!client) {
+    const key = `${bucketKey}|${windowStart}`;
+    const next = (global.memoryRateLimits.get(key) || 0) + 1;
+    global.memoryRateLimits.set(key, next);
+    return next;
+  }
+
+  const { data, error } = await client.rpc("increment_scan_rate_limit", {
+    p_bucket_key: bucketKey,
+    p_window_start: windowStart,
+  });
+  if (error) throw error;
+  return Number(data);
+}
+
+// ---------------------------------------------------------------------------
+// system heartbeats (migration 008) — "did the cron actually fire?"
+// ---------------------------------------------------------------------------
+
+/**
+ * Record that a named scheduled job ran. Called by the worker routes AFTER
+ * their auth gate, so a rejected request never looks like a healthy tick.
+ *
+ * Deliberately non-fatal: a heartbeat write failing must not fail the worker
+ * run it is only observing. It IS logged, so a systematically broken
+ * heartbeat does not become invisible.
+ *
+ * R3.1.7: When no data store is configured, returns null and does NOT write
+ * to an in-memory map. A tick recorded with no data store must never be read
+ * back as a measured tick.
+ */
+export async function recordCronTick(name, detail = null, deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) {
+    console.warn(`[heartbeat] no Supabase client — cannot record "${name}" cron tick`);
+    return null;
+  }
+  const row = { name, last_tick_at: new Date().toISOString(), detail };
+  const { error } = await client.from("system_heartbeats").upsert([row], { onConflict: "name" });
+  if (error) {
+    console.warn(`[heartbeat] could not record the "${name}" tick: ${error.message}`);
+    return null;
+  }
+  return row;
+}
+
+/** Every recorded ticker, for /api/health. */
+export async function getCronTicks(deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) return [];
+  const { data, error } = await client.from("system_heartbeats").select("*");
+  if (error) throw error;
+  return data || [];
+}
+
 // ---------------------------------------------------------------------------
 // finalize: stamp scan_id
 // ---------------------------------------------------------------------------
@@ -598,6 +726,39 @@ export async function getScanSchedule(brand, deps = {}) {
   const { data, error } = await client.from("scan_schedules").select("*").eq("brand", brand);
   if (error) throw error;
   return data[0] || null;
+}
+
+/**
+ * R3.4.5 — Insert a new scan_schedules row only if one does not already exist.
+ *
+ * Atomic: the decision to insert or skip is made by the database in a single
+ * statement (INSERT ... ON CONFLICT DO NOTHING), so there is no window where
+ * a concurrent operator edit can be clobbered by a stale write.
+ *
+ * Returns the inserted row if a new row was created, or null if one already
+ * existed (conflict). Null is NOT a failure — the caller distinguishes
+ * "already there" from "failed" by catching exceptions.
+ */
+export async function insertScanScheduleIfNotExists(row, deps = {}) {
+  const client = resolveClient(deps);
+
+  if (!client) {
+    // Memory mode: same contract as Supabase's ON CONFLICT DO NOTHING.
+    const existing = global.memoryScanSchedules.get(row.brand);
+    if (existing) return null;
+    const stamped = { ...row, updated_at: new Date().toISOString() };
+    global.memoryScanSchedules.set(row.brand, stamped);
+    return stamped;
+  }
+
+  const { data, error } = await client
+    .from("scan_schedules")
+    .upsert(row, { onConflict: "brand", ignoreDuplicates: true })
+    .select();
+  if (error) throw error;
+  // ignoreDuplicates: true → INSERT ... ON CONFLICT DO NOTHING.
+  // On conflict, `data` is an empty array; on insert, it contains the row.
+  return data && data.length > 0 ? data[0] : null;
 }
 
 /**

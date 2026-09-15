@@ -1,0 +1,9 @@
+{
+  "description": "R1.3.1 fixture: a Perplexity CAPTCHA challenge — no answer content, just a challenge token.",
+  "answer": {
+    "choices": []
+  },
+  "search": {
+    "results": []
+  }
+}

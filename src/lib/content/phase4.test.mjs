@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { selectGapsForBatch, createDailyBatchJobs } from "./dailyBatch.js";
-import { computeReportKpis } from "./weeklyReport.js";
+import { computeReportKpis, generateWeeklyReport, checkReportQuota, recordReportGeneration, REPORT_QUOTA_PER_DAY } from "./weeklyReport.js";
 
 // --- daily batch gap selection --------------------------------------------
 
@@ -133,4 +133,112 @@ test("computeReportKpis returns null deltas with only one scan", () => {
 
 test("computeReportKpis returns null with no scans", () => {
   assert.equal(computeReportKpis([]), null);
+});
+
+// --- R3.6.3 — weekly report quota per brand per day -----------------------
+
+test("R3.6.3 — checkReportQuota returns 0 for a brand that has not generated today", () => {
+  const count = checkReportQuota("Acme", { now: "2026-09-14T12:00:00Z" });
+  assert.equal(count, 0);
+});
+
+test("R3.6.3 — recordReportGeneration increments the counter", () => {
+  const brand = `R363-counter-${Date.now()}`;
+  const now = "2026-09-14T12:00:00Z";
+  assert.equal(checkReportQuota(brand, { now }), 0);
+  recordReportGeneration(brand, { now });
+  assert.equal(checkReportQuota(brand, { now }), 1);
+  recordReportGeneration(brand, { now });
+  assert.equal(checkReportQuota(brand, { now }), 2);
+});
+
+test("R3.6.3 — quota is per brand (different brands do not interfere)", () => {
+  const now = "2026-09-14T15:00:00Z";
+  const brandA = `R363-brandA-${Date.now()}`;
+  const brandB = `R363-brandB-${Date.now()}`;
+  recordReportGeneration(brandA, { now });
+  assert.equal(checkReportQuota(brandA, { now }), 1);
+  assert.equal(checkReportQuota(brandB, { now }), 0);
+});
+
+test("R3.6.3 — quota resets on a new day", () => {
+  const brand = `R363-newday-${Date.now()}`;
+  recordReportGeneration(brand, { now: "2026-09-14T23:59:59Z" });
+  assert.equal(checkReportQuota(brand, { now: "2026-09-14T23:59:59Z" }), 1);
+  // Next day — fresh quota
+  assert.equal(checkReportQuota(brand, { now: "2026-09-15T00:00:00Z" }), 0);
+});
+
+test("R3.6.3 — generateWeeklyReport enforces the quota and returns quota_exceeded", async () => {
+  const brand = `R363-enforce-${Date.now()}`;
+  const now = "2026-09-14T12:00:00Z";
+
+  // Burn the quota
+  recordReportGeneration(brand, { now });
+
+  const report = await generateWeeklyReport(brand, {
+    now,
+    getScansForBrand: async () => [{ scanned_at: "2026-09-14", raw_results: {} }],
+  });
+
+  assert.equal(report.quota_exceeded, true, "the response must flag the quota exceeded");
+  assert.ok(report.error.includes("quota"), "the error message must mention quota");
+  assert.equal(report.brand, brand);
+});
+
+test("R3.6.3 — generateWeeklyReport records a generation on success", async () => {
+  const brand = `R363-record-${Date.now()}`;
+  const now = "2026-09-14T12:00:00Z";
+
+  assert.equal(checkReportQuota(brand, { now }), 0);
+
+  await generateWeeklyReport(brand, {
+    now,
+    getScansForBrand: async () => [scanMetrics(40, 70, 12, 38, { aio: { share_of_ai_pct: 42 } }, "2026-09-14T00:00:00Z")],
+    listContentItems: async () => [],
+    llm: async () => ({ headline: "test", summary: "test", top_movers: [], priorities: [] }),
+  });
+
+  assert.equal(checkReportQuota(brand, { now }), 1, "a successful generation must consume the quota");
+});
+
+test("R3.6.3 — generateWeeklyReport does NOT consume quota on LLM failure", async () => {
+  const brand = `R363-llm-fail-${Date.now()}`;
+  const now = "2026-09-14T12:00:00Z";
+
+  try {
+    await generateWeeklyReport(brand, {
+      now,
+      getScansForBrand: async () => [scanMetrics(40, 70, 12, 38, { aio: { share_of_ai_pct: 42 } }, "2026-09-14T00:00:00Z")],
+      listContentItems: async () => [],
+      llm: async () => { throw new Error("LLM unavailable"); },
+    });
+  } catch {
+    // expected
+  }
+
+  assert.equal(
+    checkReportQuota(brand, { now }),
+    0,
+    "a failed generation must not consume the quota — the brand can retry"
+  );
+});
+
+test("R3.6.3 — REPORT_QUOTA_PER_DAY is 1", () => {
+  assert.equal(REPORT_QUOTA_PER_DAY, 1, "one report per brand per day");
+});
+
+test("R3.6.3 — custom deps.checkReportQuota overrides the in-memory check", async () => {
+  const brand = "R363-custom-deps";
+  const now = "2026-09-14T12:00:00Z";
+  let checked = false;
+
+  const report = await generateWeeklyReport(brand, {
+    now,
+    checkReportQuota: () => { checked = true; return 999; },
+    getScansForBrand: async () => [{ scanned_at: "2026-09-14", raw_results: {} }],
+  });
+
+  assert.equal(checked, true, "the custom check must be called");
+  assert.equal(report.quota_exceeded, true, "999 is over quota");
 });

@@ -2,7 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isPromptRelatedToUrl } from './topics.js';
 import { computeContentLiftReport, computeContentLiftReports } from './contentLift.js';
-import { getContentEvents, insertContentEvent } from '../db.js';
+
+/**
+ * R3.2.4 — this file's last case is about the MEMORY fallback, and it has to
+ * make that fallback happen instead of hoping for it.
+ *
+ * `insertContentEvent` and `getContentEvents` take no deps: they use db.js's
+ * module-level client, which is built at import time from
+ * NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY. So this file used to exercise the
+ * memory path only while those were unset. With them set — which is what
+ * src/lib/liveDbGate.js tells live-test authors to do — the same case inserted
+ * a row into the production `content_events` table, and it did so INVISIBLY:
+ * insertContentEvent catches its own error and falls back to memory
+ * (db.js:668), so the assertions below passed either way. A green test that
+ * writes to production is the exact failure R3.2.4 exists for.
+ *
+ * Clearing the credentials before db.js is evaluated makes the no-client path
+ * a property of this file. The import must be dynamic: a static one is hoisted
+ * above these two lines and db.js would capture the credentials first.
+ */
+delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const { getContentEvents, insertContentEvent, supabase } = await import('../db.js');
 
 test('isPromptRelatedToUrl - semantic keyword matching', () => {
   // Positive matching cases
@@ -72,6 +93,14 @@ test('computeContentLiftReports - returns lift per registered event', () => {
 });
 
 test('Content Events CRUD - persistence and memory fallback', async () => {
+  // The precondition, asserted rather than assumed: without this the case
+  // would still pass while writing a row to production's content_events.
+  assert.equal(
+    supabase,
+    null,
+    "db.js still has a client, so this case would write content_events for real; " +
+      "the credential clearing at the top of this file did not take effect"
+  );
   const brand = "LiftTestBrand";
   const url = "https://lifttest.com/blog/aeo-guide";
   const publishDate = new Date().toISOString();

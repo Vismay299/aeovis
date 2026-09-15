@@ -1,6 +1,6 @@
 import { renderStepPrompt } from "../skills/loader.js";
 import { validateResearchPack } from "../schemas.js";
-import { scrapeForSummary } from "../../firecrawl.js";
+import { normalizeScrapeResult, scrapeSite } from "../../firecrawl.js";
 import {
   callStepLlm,
   formatLessons,
@@ -21,7 +21,7 @@ import {
  * the same scrapes instead of paying for them twice.
  */
 export async function runResearch(ctx, deps = {}) {
-  const scrape = deps.scrape || scrapeForSummary;
+  const scrape = deps.scrape || scrapeSite;
 
   const targetQueries =
     ctx.workOrder?.target_queries?.length > 0
@@ -34,17 +34,34 @@ export async function runResearch(ctx, deps = {}) {
   // have no rows — that's fine, the pack leans on the model + brief instead.
   const winnerUrls = topCitedUrls(rows, 3);
   const scraped = [];
+  const skippedScrapes = [];
   for (const url of winnerUrls) {
     try {
-      const content = await scrape(url);
-      if (content && content !== "No website content available.") {
-        scraped.push({ url, content });
+      // R3.7.2: this used to compare the returned string against the literal
+      // "No website content available." — the sentinel was the API. Now the
+      // scrape reports its own state and the reason is kept, not inferred.
+      const res = normalizeScrapeResult(await scrape(url));
+      if (res.content) {
+        scraped.push({ url, content: res.content });
+      } else {
+        skippedScrapes.push(`${url} (${res.state_reason})`);
       }
     } catch (err) {
+      skippedScrapes.push(`${url} (threw: ${err.message})`);
       console.warn(`[research] scrape failed for ${url}:`, err.message);
     }
   }
   ctx.scrapedPages = scraped;
+  // A research pack built on 0 of 3 winning pages is not the same artifact as
+  // one built on 3 of 3. There is no persisted channel on ctx for this today,
+  // so the log line is the trace — but it names the count AND the reason,
+  // rather than the step continuing as if it had scraped everything.
+  if (skippedScrapes.length > 0) {
+    console.warn(
+      `[research] ${skippedScrapes.length}/${winnerUrls.length} winning pages could not be ` +
+        `scraped, so the research pack is thinner than it looks: ${skippedScrapes.join(", ")}`
+    );
+  }
 
   const scanAnswersBlock =
     rows.length > 0

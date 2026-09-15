@@ -128,6 +128,9 @@ export function normalizeScanRows(scan) {
     brand_cited: !!(r.brand_cited ?? r.brandCited),
     is_branded_query: !!(r.is_branded_query ?? r.isBrandedQuery),
     topic: r.topic || "General",
+    // R2.7.17 — error state so consumers can gate aggregation on !error
+    error: r.error || null,
+    answer_present: !!(r.answer_present || r.aio_present),
   }));
 }
 

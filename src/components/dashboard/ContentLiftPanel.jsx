@@ -163,6 +163,9 @@ export default function ContentLiftPanel({ brand }) {
               const isPositive = hasLift && event.lift > 0;
               const isNegative = hasLift && event.lift < 0;
               const isExpanded = expandedEventId === event.id;
+              // R2.8.20 — a row whose URL was synthesized on approval (finding B13)
+              // is not a real publication and must not be presented as awaiting rescan.
+              const isFabricated = !!event.fabricated_url;
 
               return (
                 <div key={event.id} className="border border-[var(--rule-1)] rounded-sm overflow-hidden transition-all hover:border-[var(--text-1)]">
@@ -174,19 +177,32 @@ export default function ContentLiftPanel({ brand }) {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <LinkIcon className="w-4 h-4 text-[var(--text-3)]" />
-                        <span className="font-sans font-bold text-sm text-[var(--text-1)] truncate max-w-md">
-                          {event.url}
-                        </span>
+                        {isFabricated ? (
+                          <span className="font-sans font-bold text-sm text-[var(--text-3)] truncate max-w-md line-through" data-testid="fabricated-url">
+                            {event.url}
+                          </span>
+                        ) : (
+                          <span className="font-sans font-bold text-sm text-[var(--text-1)] truncate max-w-md">
+                            {event.url}
+                          </span>
+                        )}
+                        {/* R2.8.20 — fabricated URL gets a visible chip, not a rescan promise */}
+                        {isFabricated && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-sm bg-[var(--lamp-amber-soft)] text-[var(--lamp-amber)]" data-testid="fabricated-chip">
+                            URL was fabricated
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-3 text-xs text-[var(--text-2)]">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3.5 h-3.5" />
-                          Published {new Date(event.publish_date).toLocaleDateString()}
+                          {isFabricated ? "Never published" : `Published ${new Date(event.publish_date).toLocaleDateString()}`}
                         </span>
                         <span>·</span>
                         <span>{event.related_prompts?.length || 0} matching queries</span>
                       </div>
-                      {event.lift !== null && (
+                      {/* R2.8.20 — fabricated rows do not show lift copy */}
+                      {!isFabricated && event.lift !== null && (
                         <p className="text-xs text-[var(--text-2)]">
                           After publishing {event.url.replace(/^https?:\/\/[^/]+/i, "") || event.url}:{" "}
                           <span className={event.lift > 0 ? "text-[var(--lamp-green)] font-semibold" : event.lift < 0 ? "text-[var(--lamp-red)] font-semibold" : "font-semibold text-[var(--text-1)]"}>
@@ -202,7 +218,12 @@ export default function ContentLiftPanel({ brand }) {
                       <div className="text-right">
                         <div className="text-xs uppercase tracking-wider text-[var(--text-3)] font-bold">Visibility Lift</div>
                         <div className="flex items-center gap-1.5 mt-1 justify-end">
-                          {hasLift ? (
+                          {isFabricated ? (
+                            /* R2.8.20 — fabricated URL: no rescan promise, show the truth */
+                            <span className="text-xs text-[var(--lamp-amber)] italic" data-testid="fabricated-lift-status">
+                              Never published
+                            </span>
+                          ) : hasLift ? (
                             <>
                               {isPositive ? (
                                 <TrendingUp className="w-4 h-4 text-[var(--lamp-green)]" />

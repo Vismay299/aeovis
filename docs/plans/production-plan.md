@@ -1,5 +1,8 @@
 # Perceev — Production Hardening & Growth Plan
 
+> <!-- doc-status -->
+> **Status: SUPERSEDED-BY** [2026-08-29-rebuild-roadmap.md](./2026-08-29-rebuild-roadmap.md). Its own B1–B9 section numbering is unrelated to the audit's A/B/C finding ids — see the Gaps note in [docs/BUILD_JOURNAL.md](../BUILD_JOURNAL.md).
+
 **Date:** 2026-07-25
 **Status:** Draft for execution — supersedes nothing; runs alongside `docs/plans/plan.md` (the P0–P7 analytics plan, of which P0–P3a + P5 are built and committed).
 **Source:** the 2026-07-25 five-track production audit (77 findings: 12 critical / 31 high / 26 medium / 8 low).

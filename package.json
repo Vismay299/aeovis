@@ -8,10 +8,16 @@
     "start": "next start",
     "lint": "next lint",
     "test:prompts": "node --env-file=.env.local scripts/test-dynamic-prompts.mjs",
-    "test:scoring": "node --test src/lib/*.test.mjs src/lib/db/**/*.test.mjs src/lib/scoring/**/*.test.mjs src/lib/engines/**/*.test.mjs src/lib/content/**/*.test.mjs src/lib/workers/**/*.test.mjs src/lib/analytics/**/*.test.mjs src/lib/crawlers/**/*.test.mjs",
+    "test:scoring": "node --import ./src/lib/liveWriteGuardAuto.mjs --test \"src/**/*.test.mjs\"",
+    "test:live": "node --import ./src/lib/liveWriteGuardAuto.mjs --env-file=.env.local --test",
     "test:calibration": "node src/lib/scoring/test_calibration.js",
     "test:gsc": "node --env-file=.env.local scripts/test-gsc.mjs",
-    "setup:db": "node --env-file=.env.local scripts/setup-supabase.mjs"
+    "setup:db": "node --env-file=.env.local scripts/setup-supabase.mjs",
+    "check:secrets": "node --env-file-if-exists=.env.local scripts/check-secrets.mjs",
+    "fleet:check": "npm --prefix worker run check",
+    "fleet:dev": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.fleet.local worker/src/index.js",
+    "test": "node --import ./src/lib/liveWriteGuardAuto.mjs --test \"src/**/*.test.mjs\"",
+    "baseline:archive": "node --env-file-if-exists=.env.local scripts/archive-reference-scan.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

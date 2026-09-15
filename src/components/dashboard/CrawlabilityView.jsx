@@ -9,6 +9,11 @@ import { Skeleton } from "@/components/perceev/Skeleton";
 import { KpiCard } from "@/components/perceev/KpiCard";
 import { SectionStrap } from "./SectionStrap";
 import { extractBrandDomain } from "@/lib/scoring/citations";
+import {
+  describeCompareBudget,
+  describePrimaryCrawlOutcome,
+  describeRivalCrawlOutcome,
+} from "@/lib/crawlabilityOutcome";
 
 const STATUS_META = {
   open: { label: "Open", badgeVariant: "strong" },
@@ -136,6 +141,30 @@ export const CrawlabilityView = ({ brand, competitors }) => {
       return true;
     });
   }, [data, purposeFilter, statusFilter]);
+
+  // R3.7.7: the route audits at most MAX_COMPARE_DOMAINS rivals and a refused
+  // domain spends one of those slots, so asking about six can return four
+  // scored rows. Rendering the short list without a word is the same empty-
+  // state-as-clean-state bug this task exists to fix, so the gap between what
+  // we asked for and what came back is stated explicitly.
+  const compareBudget = useMemo(
+    () =>
+      data
+        ? describeCompareBudget({
+            requested: rivalDomains,
+            compared: data.compare,
+            primaryDomain: data.domain || brand,
+          })
+        : null,
+    [data, rivalDomains, brand]
+  );
+
+  // R3.7.8: the reason the brand's OWN robots.txt was not read. A typo in their
+  // domain and a network fault we own are different facts and must not share a
+  // banner; the words live in describePrimaryCrawlOutcome so the suite can run
+  // them. Returns null when the fetch succeeded, so the banner's existence is
+  // decided by the derivation rather than by a second reading of fetched_ok.
+  const primaryOutcome = useMemo(() => (data ? describePrimaryCrawlOutcome(data) : null), [data]);
 
   return (
     <div data-testid="crawlability-view" style={{ display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
@@ -276,13 +305,27 @@ export const CrawlabilityView = ({ brand, competitors }) => {
           </div>
 
           {/* Reliability banners — never silently hide a degraded read */}
-          {!data.fetched_ok && (
-            <Alert variant="warn" data-testid="crawlability-unreachable">
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                <ShieldQuestion size={16} />
-                Couldn&apos;t reach {data.domain}/robots.txt
-                {data.fetch_error ? ` (${data.fetch_error.replace(/_/g, " ")})` : ""} — showing every crawler as
-                default-open, unverified.
+          {/* The testid names the SURFACE, not one of its states: the old
+              "crawlability-unreachable" asserted a network problem on a banner
+              that now also carries "your domain does not resolve". Nothing
+              outside this component selected it. */}
+          {primaryOutcome && (
+            <Alert
+              variant={primaryOutcome.tone === "crit" ? "crit" : "warn"}
+              data-testid="crawlability-primary-outcome"
+              data-outcome={primaryOutcome.kind}
+              data-actionable={primaryOutcome.actionable}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-2)" }}>
+                {primaryOutcome.actionable === "you" ? (
+                  <ShieldAlert size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
+                ) : (
+                  <ShieldQuestion size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
+                )}
+                <span>
+                  <strong style={{ fontWeight: 600 }}>{primaryOutcome.label}</strong>
+                  <span style={{ color: "var(--text-3)" }}>. {primaryOutcome.detail}</span>
+                </span>
               </div>
             </Alert>
           )}
@@ -521,10 +564,25 @@ export const CrawlabilityView = ({ brand, competitors }) => {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
                 {/* You, first, for a fixed reference point */}
-                <RivalCrawlRow label={data.domain} isYou summary={data.summary} fetchedOk={data.fetched_ok} />
+                <RivalCrawlRow label={data.domain} isYou summary={data.summary} row={data} />
                 {(data.compare || []).map((r) => (
-                  <RivalCrawlRow key={r.domain} label={r.domain} summary={r.summary} fetchedOk={r.fetched_ok} />
+                  <RivalCrawlRow key={r.domain} label={r.domain} summary={r.summary} row={r} />
                 ))}
+                {compareBudget && (
+                  <p
+                    data-testid="crawlability-compare-budget"
+                    style={{
+                      marginTop: "var(--space-2)",
+                      fontSize: "12px",
+                      lineHeight: 1.5,
+                      color: "var(--text-3)",
+                      borderLeft: "2px solid var(--border-2)",
+                      paddingLeft: "var(--space-3)",
+                    }}
+                  >
+                    {compareBudget.message}
+                  </p>
+                )}
               </div>
             )}
           </Card>
@@ -534,16 +592,35 @@ export const CrawlabilityView = ({ brand, competitors }) => {
   );
 };
 
-function RivalCrawlRow({ label, isYou, summary, fetchedOk }) {
+const OUTCOME_TONE = {
+  crit: "var(--crit)",
+  warn: "var(--warn)",
+  muted: "var(--text-3)",
+};
+
+/**
+ * One rival's crawlability, or — when there is no audit — the reason there
+ * isn't one.
+ *
+ * `row` is the whole compare row (or the primary payload for the "you" line),
+ * not just `fetched_ok`: the three failure states R3.7.4 made distinguishable
+ * live in `blocked` and `fetch_error`, and reading only `fetched_ok` is what
+ * collapsed a security refusal, a dead domain and a timeout into one
+ * "Unreachable" line. The wording itself is in describeRivalCrawlOutcome so
+ * the suite can execute it.
+ */
+function RivalCrawlRow({ label, isYou, summary, row }) {
   const total = summary?.total || 0;
   const open = summary?.open || 0;
   const partial = summary?.partial || 0;
   const blocked = summary?.blocked || 0;
   const openPct = total > 0 ? Math.round((open / total) * 100) : 0;
+  const outcome = describeRivalCrawlOutcome(row);
 
   return (
     <div
       data-testid={`crawlability-rival-${label}`}
+      data-outcome={outcome ? outcome.kind : "audited"}
       style={{
         display: "flex",
         alignItems: "center",
@@ -581,8 +658,16 @@ function RivalCrawlRow({ label, isYou, summary, fetchedOk }) {
         )}
       </div>
 
-      {!fetchedOk ? (
-        <span style={{ fontSize: "12px", color: "var(--warn)" }}>Unreachable — treated as fully open, unverified</span>
+      {outcome ? (
+        <span
+          data-testid={`crawlability-rival-outcome-${label}`}
+          style={{ flex: 1, fontSize: "12px", lineHeight: 1.4, color: OUTCOME_TONE[outcome.tone] || "var(--text-3)" }}
+        >
+          {/* No dash separator: several labels already carry an em dash, and
+              two in one line reads as a typo. */}
+          <strong style={{ fontWeight: 600 }}>{outcome.label}</strong>
+          <span style={{ color: "var(--text-3)" }}>. {outcome.detail}</span>
+        </span>
       ) : (
         <>
           <div

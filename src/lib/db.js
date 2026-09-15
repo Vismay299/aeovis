@@ -1,5 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import { buildScanBaseRecord } from "./db/scanRow.js";
+import {
+  DuplicateScanError,
+  isDuplicateScanViolation,
+  resolveDuplicateScan,
+  reclaimReason,
+} from "./duplicateScan.js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -7,7 +14,10 @@ const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 // Avoid throwing if env vars are missing during build phase, but we'll need them at runtime
 export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-// Migration SQL:
+// Migration SQL. HISTORICAL: these five ALTERs were folded into
+// supabase/migrations/001_initial_schema.sql (:20-24) long ago, so they are the
+// baseline `scans` shape and not optional extras — insertScan writes them
+// unconditionally and a database that lacks them fails the write (R2.2.4).
 // ALTER TABLE scans ADD COLUMN scoring_version text;
 // ALTER TABLE scans ADD COLUMN score_ci_low numeric;
 // ALTER TABLE scans ADD COLUMN score_ci_high numeric;
@@ -51,10 +61,102 @@ export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, s
 // );
 // CREATE UNIQUE INDEX content_events_brand_url_idx ON content_events (brand, url);
 
-export async function insertScan(scanRecord) {
-  if (!supabase) {
-    console.warn("Supabase credentials missing. Skipping database insert.");
-    return;
+/**
+ * Raised when a scan row could not be WRITTEN. Carries a `code` so a caller —
+ * or the operator reading the failed job's error_message — can tell a
+ * misconfigured deployment ("db_not_configured") from a database that rejected
+ * or could not receive the insert ("db_write_failed").
+ *
+ * Deliberately the same shape and the same two code strings as
+ * ScansUnavailableError below (R2.8.4, the read side of this bug): one
+ * vocabulary for "the database did not do the thing", not two. A separate class
+ * rather than a reused one because `instanceof ScansUnavailableError` on a
+ * write failure would be a lie — the two are caught in different places and a
+ * read-error handler that also swallowed write errors is the next version of
+ * this finding.
+ */
+export class ScanWriteError extends Error {
+  constructor(message, { cause, code = "scan_write_failed" } = {}) {
+    super(message);
+    this.name = "ScanWriteError";
+    this.code = code;
+    if (cause !== undefined) this.cause = cause;
+  }
+}
+
+/**
+ * Writes the finished scan to `scans` and returns the inserted row(s).
+ *
+ * CONTRACT (R2.8.6 / finding A1): this function either RETURNS what the
+ * database gave back for a write it actually performed, or it THROWS a
+ * ScanWriteError. It never resolves with `undefined` to mean "I did nothing".
+ *
+ * It used to do exactly that: with no Supabase client it logged
+ * "Skipping database insert." and returned, handing `undefined` to a caller
+ * whose next line reads `savedScan?.[0]?.id`. Standing rule 2 — never fail-soft
+ * a create call — and standing rule 1: a skip is not a success. The one
+ * production caller (runFinalizePhase in workers/scanWorker.js) happened to
+ * check for a falsy id and throw, so the outcome was already a failed job, but
+ * it failed with the generic "insertScan did not return a saved record id" for
+ * BOTH a missing client and an empty insert result. An operator could not tell
+ * a deploy with no credentials from a database that rejected the row. Any
+ * future caller that trusted the resolve — the shape R2.8.4 removed from
+ * getScansForBrand on the read side — got a silent no-op.
+ *
+ * Throwing rather than returning a discriminated union, for the same reason
+ * getScansForBrand throws: a union that a caller forgot to unwrap lands on
+ * `savedScan?.[0]?.id === undefined`, which is byte-for-byte the failure this
+ * change exists to remove. A throw cannot be silently mis-handled.
+ *
+ * `deps.client` is test-only injection (defaults to the module-level
+ * `supabase`), matching every other function in this file, so the no-client
+ * branch is reachable from a test without unsetting env for the whole process.
+ *
+ * R2.8.7 closed the mirror of that defect inside the old fallback cascade, and
+ * `confirmScanWritten` below is what survives of it: `.select()` is the only
+ * thing postgrest-js appends `Prefer: return=representation` for
+ * (postgrest-js/dist/index.mjs:614), and without it PostgREST answers 201 with
+ * an EMPTY BODY, which `processResponse` (:378-385) turns into
+ * `{ data: null, error: null }` — a row that WAS written, reported as nothing.
+ *
+ * R2.2.4 / finding B10 — THE COLUMN-DROP CASCADE IS GONE. This used to be
+ * three chained try/catches: insert with every column; on ANY failure warn to
+ * the console and retry with `scoring_version` only; on any failure warn again
+ * and retry with `buildScanBaseRecord`'s columns alone. The retries were not
+ * narrower QUERIES, they were narrower ROWS — a deployment that rejected
+ * `mention_rate_pct` got a scan row with score_ci_low, score_ci_high,
+ * stability, mention_rate_pct and scoring_version silently NULL, and insertScan
+ * returned it as an unqualified success. Every downstream reader (the CI band,
+ * the stability chip, the mention-rate metric) then rendered a measured value's
+ * absence as if it had been measured. Standing rule 1: a write that stores less
+ * than it was asked to store must say so; a console.warn on a server nobody
+ * tails is not saying so.
+ *
+ * It was also compensating for a schema drift that does not exist any more.
+ * All five "new" columns are in `supabase/migrations/001_initial_schema.sql`
+ * (:20-24) — the baseline every deployment starts from — so cascades 2 and 3
+ * can only fire on a database that is BEHIND ITS OWN FIRST MIGRATION. That is
+ * an operator emergency, not a shape to quietly accommodate: standing rule 4
+ * says the SQL ships with the code that needs it, and the honest response to
+ * "the column is missing" is to fail with the Postgres error naming it.
+ *
+ * So there is now exactly ONE insert, with the full column set, and three
+ * outcomes: the row comes back (returned), the database refuses it (throws,
+ * with the PostgREST envelope intact on `cause`), or the database takes it and
+ * will not show it (throws `db_write_unconfirmed`). No fourth outcome writes a
+ * thinner row and calls it success.
+ *
+ * @throws {ScanWriteError} db_not_configured | db_schema_mismatch |
+ *   db_write_failed | db_write_unconfirmed
+ */
+export async function insertScan(scanRecord, deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) {
+    throw new ScanWriteError(
+      "Supabase is not configured — the scan could not be saved. " +
+        "Nothing was written; this is a refusal, not an empty result.",
+      { code: "db_not_configured" }
+    );
   }
 
   // Persist rich scan data in raw_results JSONB for history / normalizeResult
@@ -62,6 +164,35 @@ export async function insertScan(scanRecord) {
     results: scanRecord.results || [],
     competitors: scanRecord.competitors || [],
     competitors_raw: scanRecord.competitors_raw,
+    // R0.3.3: how this scan's roster was obtained — "extracted",
+    // "carried_forward" or "unavailable". Lives in JSONB rather than its own
+    // column so it ships without a migration this environment cannot apply;
+    // every dashboard surface reads it to decide whether Share of Voice is a
+    // measurement or an unassessed state.
+    roster_source: scanRecord.roster_source ?? null,
+    roster_extraction_offline: scanRecord.roster_extraction_offline ?? null,
+    roster_extraction_error: scanRecord.roster_extraction_error ?? null,
+    // R2.7.4 — the window the answers were actually COLLECTED in: first to
+    // last probe write, computed by collectionWindow() in scanWorker.js and
+    // spread onto the scan record there. Like roster_source above it rides in
+    // this JSONB payload rather than in its own column: `scans` has no
+    // collected_from/collected_to (no migration 001-012 adds them), so a
+    // column-borne window would need a migration to exist at all. (Before
+    // R2.2.4 it would additionally have been dropped IN SILENCE by the
+    // column-narrowing retries that used to live below; that cascade is gone —
+    // a column the database lacks now fails the write loudly.)
+    //
+    // THIS ALLOWLIST IS THE ONLY WAY IN. insertScan is not a pass-through, so
+    // a field the worker computes and this object never names is discarded
+    // before the write with nothing logged — which is exactly how the window
+    // was computed correctly and persisted as nothing.
+    //
+    // Explicit `?? null` rather than a bare read: a scan whose rows carried no
+    // timestamps stores an EXPLICIT unknown, so "we looked and there was no
+    // window" stays distinguishable from a pre-R2.7.4 row where the key is
+    // absent entirely.
+    collected_from: scanRecord.collected_from ?? null,
+    collected_to: scanRecord.collected_to ?? null,
     used_dynamic_prompts: !!scanRecord.used_dynamic_prompts,
     platform: scanRecord.platform,
     scoring_version: scanRecord.scoring_version,
@@ -73,6 +204,9 @@ export async function insertScan(scanRecord) {
     sample_size_adequacy: scanRecord.sample_size_adequacy,
     prompt_set_id: scanRecord.prompt_set_id,
     prompt_set_hash: scanRecord.prompt_set_hash,
+    // R0.3.4: "llm_generated" or "static_industry_pack" — null on older scans.
+    prompt_source: scanRecord.prompt_source ?? null,
+    static_pack_prompts: scanRecord.static_pack_prompts ?? null,
     intent_breakdown: scanRecord.intent_breakdown,
     topic_scores: scanRecord.topic_scores,
     share_of_voice_pct: scanRecord.share_of_voice_pct,
@@ -105,74 +239,253 @@ export async function insertScan(scanRecord) {
     content_lift: scanRecord.content_lift || [],
     cost_total: scanRecord.cost_total,
     tokens_used: scanRecord.tokens_used,
+    // R3.6.8 — the count of probes whose cost could not be priced. Distinguishes
+    // a genuinely free run from one where every probe was unpriced/unmeasured.
+    cost_unmeasured_calls: scanRecord.cost_unmeasured_calls ?? 0,
   };
 
-  const baseRecord = {
-    brand: scanRecord.brand,
-    url: scanRecord.url,
-    industry: scanRecord.industry,
-    visibility_pct: scanRecord.visibility_pct,
-    prompts_tracked: scanRecord.prompts_tracked,
-    prompts_mentioned: scanRecord.prompts_mentioned,
-    raw_results: rawPayload,
-    scanned_at: scanRecord.scanned_at,
+  const baseRecord = buildScanBaseRecord({ ...scanRecord, raw_results: rawPayload });
+
+  // The row the caller asked for, in full. Every column here is in migration
+  // 001 (:12-24); nothing in it is optional-on-some-deployments.
+  const scanRow = {
+    ...baseRecord,
+    scoring_version: scanRecord.scoring_version,
+    score_ci_low: scanRecord.score_ci_low,
+    score_ci_high: scanRecord.score_ci_high,
+    stability: scanRecord.stability,
+    mention_rate_pct: scanRecord.mention_rate_pct,
   };
 
-  // Cascade 1: try to insert with all new columns
+  // ONE insert. `.select()` with no argument is `select=*`, which names no
+  // column (so it cannot itself 42703) and is what makes PostgREST return the
+  // written row — the same grant the insert already needs: migration
+  // 001_initial_schema.sql:118 is `FOR ALL TO anon USING (true) WITH CHECK
+  // (true)`, one policy covering INSERT and SELECT.
+  let result;
   try {
-    const { data, error } = await supabase
-      .from("scans")
-      .insert([
-        {
-          ...baseRecord,
-          scoring_version: scanRecord.scoring_version,
-          score_ci_low: scanRecord.score_ci_low,
-          score_ci_high: scanRecord.score_ci_high,
-          stability: scanRecord.stability,
-          mention_rate_pct: scanRecord.mention_rate_pct,
-        }
-      ])
-      .select();
-    if (error) throw error;
-    return data;
-  } catch (err) {
-    console.warn("Inserting with all columns failed, retrying with only scoring_version:", err.message || err);
-    // Cascade 2: try to insert with scoring_version only (Phase 1 schema)
-    try {
-      const { data, error } = await supabase
-        .from("scans")
-        .insert([
-          {
-            ...baseRecord,
-            scoring_version: scanRecord.scoring_version,
-          }
-        ])
-        .select();
-      if (error) throw error;
-      return data;
-    } catch (err2) {
-      console.warn("Inserting with scoring_version failed, retrying baseRecord only:", err2.message || err2);
-      // Cascade 3: try base record only (Legacy schema)
-      try {
-        const { data, error } = await supabase
-          .from("scans")
-          .insert([baseRecord]);
-        if (error) throw error;
-        return data;
-      } catch (fallbackErr) {
-        console.error("Fallback insert failed:", fallbackErr);
-        throw fallbackErr;
-      }
-    }
+    result = await client.from("scans").insert([scanRow]).select();
+  } catch (transportErr) {
+    // postgrest-js resolves statement errors rather than throwing, so reaching
+    // here means the request never completed (DNS, socket, an injected client
+    // that threw). Nothing was written, and the envelope is preserved on
+    // `cause` rather than flattened into the message.
+    throw new ScanWriteError(
+      `Could not write the scan for "${scanRecord?.brand ?? "unknown brand"}": ${
+        transportErr?.message || transportErr?.code || "the database could not be reached"
+      }`,
+      { cause: transportErr, code: "db_write_failed" }
+    );
+  }
+
+  const { data, error } = result || {};
+
+  if (error) {
+    // A missing column gets its OWN code. "db_write_failed" sends an operator
+    // to look at the row; a schema mismatch means the DATABASE is behind the
+    // code and the fix is a migration, not a retry — and it is the exact case
+    // the deleted cascade used to answer by writing a thinner row and
+    // reporting success. Both codes mean the same thing about the data
+    // (nothing was stored), so no caller has to learn the new one to stay
+    // correct; it only makes the message actionable.
+    const mismatch = isSchemaMismatch(error);
+    throw new ScanWriteError(
+      `Could not write the scan for "${scanRecord?.brand ?? "unknown brand"}": ${
+        error.message || error.code || "unknown database error"
+      }${
+        mismatch
+          ? ". The `scans` table is missing a column this build writes — apply the " +
+            "pending migrations (all of scoring_version, score_ci_low, score_ci_high, " +
+            "stability and mention_rate_pct are in 001_initial_schema.sql). NOTHING was " +
+            "stored: no partial row was written in its place."
+          : ""
+      }`,
+      { cause: error, code: mismatch ? "db_schema_mismatch" : "db_write_failed" }
+    );
+  }
+
+  return confirmScanWritten(data, scanRecord);
+}
+
+/**
+ * Does this PostgREST/Postgres error mean "that column is not in the table"?
+ *
+ * PGRST204 is PostgREST's schema-cache miss ("Could not find the 'x' column of
+ * 'scans' in the schema cache"); 42703 is Postgres' own undefined_column, which
+ * is what arrives when the statement reaches the database. The message sniff is
+ * a third line for clients that surface neither code — deliberately last, and
+ * deliberately conservative: mislabelling a genuine refusal as a schema
+ * mismatch only changes the operator's first hypothesis, never whether the
+ * write is reported as failed.
+ *
+ * @param {{code?: string, message?: string}} error
+ */
+function isSchemaMismatch(error) {
+  const code = String(error?.code ?? "");
+  if (code === "PGRST204" || code === "42703") return true;
+  const message = String(error?.message ?? "");
+  if (/PGRST204|42703/.test(message)) return true;
+  return /column\b[^]*\b(does not exist|not found|schema cache)/i.test(message);
+}
+
+/**
+ * The last line of insertScan: an insert that PostgREST accepted must come back
+ * with the row it wrote. (Until R2.2.4 this guarded only the third cascade;
+ * with the cascade gone it guards the one and only insert, which is where it
+ * always belonged — R2.8.9 filed the gap on cascades 1 and 2.)
+ *
+ * With `.select()` in place this is expected to be unreachable — PostgREST
+ * answers `return=representation` with the inserted rows. It exists because
+ * the failure it catches is invisible: a 201 whose representation went missing
+ * (a proxy that drops `Prefer`, a gateway that rewrites the body, a future
+ * client change) resolves as `{ data: null, error: null }`, and the caller
+ * downstream reads `savedScan?.[0]?.id` and concludes NOTHING WAS WRITTEN.
+ * That conclusion is wrong in the most expensive direction: the row exists,
+ * nothing points at it, and a re-dispatched finalize writes a second one.
+ *
+ * So the unconfirmed case gets its OWN code. "db_write_unconfirmed" is not
+ * "db_write_failed": one means the database refused the row, the other means
+ * the database took it and would not say so, and the operator's next action is
+ * different in each case — the second one has to go LOOK before re-running.
+ *
+ * @param {unknown} data   whatever the insert resolved `data` to
+ * @param {object} scanRecord  only for the message
+ * @returns {unknown} `data`, unchanged, when it genuinely carries a written row
+ */
+function confirmScanWritten(data, scanRecord) {
+  const rows = Array.isArray(data) ? data : [];
+  if (rows.length > 0 && rows[0] && rows[0].id) return data;
+
+  throw new ScanWriteError(
+    `The scan for "${scanRecord?.brand ?? "unknown brand"}" was accepted by the ` +
+      "database but came back without the inserted row, so it CANNOT be confirmed " +
+      "written. A `scans` row may already exist for this scan: check before " +
+      "re-running, or the retry will duplicate it.",
+    { code: "db_write_unconfirmed" }
+  );
+}
+
+/**
+ * Raised when scan history could not be READ at all — as opposed to being read
+ * and found empty. Carries a `code` so a caller can tell a missing client
+ * ("db_not_configured") from a database that answered with an error or did not
+ * answer at all ("db_read_failed").
+ */
+export class ScansUnavailableError extends Error {
+  constructor(message, { cause, code = "scans_unavailable" } = {}) {
+    super(message);
+    this.name = "ScansUnavailableError";
+    this.code = code;
+    if (cause !== undefined) this.cause = cause;
   }
 }
 
-export async function getScansForBrand(brand) {
-  if (!supabase) {
-    return [];
+/**
+ * Every scan for a brand, newest first.
+ *
+ * CONTRACT (R2.8.4 / finding A12): the returned array means "the database
+ * answered". An empty array means the brand genuinely has no scans. A read
+ * that could not be performed THROWS — it never fabricates [].
+ *
+ * This function used to return [] both when the Supabase client was missing
+ * and when the query came back with an error, so a total outage was reported
+ * to every caller as "this brand has never been scanned". postgrest-js does
+ * not reject on DNS/network/5xx failures (the client above is built without
+ * `throwOnError`), so those arrive here as { data: null, error } and were
+ * swallowed on the very next line. The consequence, reproduced live: with the
+ * DB unreachable, /api/scans/italica/latest returned 404 for a brand with 38
+ * real scans and the dashboard rendered "run your first visibility check" —
+ * inviting the user to spend scan budget to fix our outage. Every `catch`
+ * around a call to this function was dead code for that failure mode.
+ *
+ * Throwing rather than returning a discriminated union is deliberate: nine
+ * call sites already treat the result as an array, and a union that one of
+ * them forgot to unwrap would land on `scans[0] === undefined` — reproducing
+ * exactly the "no scans" lie this change exists to remove. A throw cannot be
+ * silently mis-handled.
+ */
+export function joinScanIdentities(brandScans = [], domainScans = []) {
+  const combined = [...(brandScans || []), ...(domainScans || [])];
+  const seen = new Set();
+  const deduplicated = [];
+
+  for (const scan of combined) {
+    if (!scan) continue;
+    const key = scan.id != null ? String(scan.id) : JSON.stringify(scan);
+    if (!seen.has(key)) {
+      seen.add(key);
+      deduplicated.push(scan);
+    }
   }
 
-  const { data, error } = await supabase
+  return deduplicated.sort((a, b) => {
+    const timeA = a.scanned_at ? new Date(a.scanned_at).getTime() : 0;
+    const timeB = b.scanned_at ? new Date(b.scanned_at).getTime() : 0;
+    return timeB - timeA;
+  });
+}
+
+export async function getContinuousScanHistory(brandOrDomain, deps = {}) {
+  const getBrandScans = deps.getScansForBrand || getScansForBrand;
+  const getDomainScans = deps.getScansByDomain || getScansByDomain;
+
+  const key = String(brandOrDomain || "").trim();
+  if (!key) {
+    throw new ScansUnavailableError(
+      "Cannot read scan history: no brand or domain was supplied.",
+      { code: "brand_required" }
+    );
+  }
+
+  const brandScans = await getBrandScans(key, { ...deps, skipJoin: true });
+
+  const candidateDomains = new Set();
+  const lowerKey = key.toLowerCase();
+  if (lowerKey.includes(".")) {
+    candidateDomains.add(
+      lowerKey.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]
+    );
+  }
+
+  for (const s of brandScans || []) {
+    if (s.url) {
+      const host = String(s.url)
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .split("/")[0];
+      if (host) candidateDomains.add(host);
+    }
+  }
+
+  let domainScans = [];
+  for (const domain of candidateDomains) {
+    try {
+      const found = await getDomainScans(domain, deps);
+      if (Array.isArray(found)) domainScans.push(...found);
+    } catch (err) {
+      if (err?.code === "domain_required") continue;
+      throw err;
+    }
+  }
+
+  return joinScanIdentities(brandScans, domainScans);
+}
+
+export async function getScansForBrand(brand, deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) {
+    // No memory fallback exists for scans (insertScan refuses without a
+    // client — R2.8.6), so [] here could only ever have been a fabricated
+    // measurement.
+    throw new ScansUnavailableError(
+      "Supabase is not configured — scan history cannot be read.",
+      { code: "db_not_configured" }
+    );
+  }
+
+  const { data, error } = await client
     .from("scans")
     .select("*")
     .ilike("brand", brand)
@@ -180,10 +493,56 @@ export async function getScansForBrand(brand) {
 
   if (error) {
     console.error("Error fetching scans from Supabase:", error);
-    return [];
+    throw new ScansUnavailableError(
+      `Could not read scans for "${brand}": ${error.message || error.code || "unknown database error"}`,
+      { cause: error, code: "db_read_failed" }
+    );
   }
 
-  return data;
+  const brandScans = data || [];
+  if (deps.skipJoin) {
+    return brandScans;
+  }
+
+  // R3.4.3 — A brand scanned both ways (manual scans keyed by display name,
+  // scheduled scans keyed by domain) has one continuous history. Join them
+  // so neither identity is dropped.
+  const candidateDomains = new Set();
+  const lowerBrand = String(brand || "").trim().toLowerCase();
+  if (lowerBrand.includes(".")) {
+    candidateDomains.add(
+      lowerBrand.replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0]
+    );
+  }
+
+  for (const s of brandScans) {
+    if (s.url) {
+      const host = String(s.url)
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .split("/")[0];
+      if (host) candidateDomains.add(host);
+    }
+  }
+
+  if (candidateDomains.size === 0) {
+    return brandScans;
+  }
+
+  let domainScans = [];
+  for (const domain of candidateDomains) {
+    try {
+      const found = await getScansByDomain(domain, { client });
+      if (Array.isArray(found)) domainScans.push(...found);
+    } catch (err) {
+      if (err?.code === "domain_required") continue;
+      throw err;
+    }
+  }
+
+  return joinScanIdentities(brandScans, domainScans);
 }
 
 /**
@@ -198,10 +557,50 @@ export async function getScansForBrand(brand) {
  * Matching is done on the scan's own `url` host, in JS rather than SQL, so
  * "https://www.x.com/path", "x.com" and "X.COM" all resolve to one brand.
  * Full rows (raw_results included) — callers need the per-prompt payload.
+ *
+ * CONTRACT (R2.8.5): same as getScansForBrand above. The returned array means
+ * "the database answered"; [] means this domain genuinely has no scans. A read
+ * that could not be performed THROWS ScansUnavailableError.
+ *
+ * This used to `catch` every failure, console.warn it and return [], so a
+ * postgrest error (which is how a refused connection or a 5xx arrives — the
+ * client is built without `throwOnError`) was reported to callers as "this
+ * domain has never been scanned". Two callers read that lie: the coverage
+ * route, whose own catch was dead code for this mode, and — worse —
+ * scanWorker's loadPreviousRoster (workers/scanWorker.js), which carries a
+ * previous scan's rival roster forward when the LLM extractor is offline. An
+ * unreadable DB there silently became "this brand has no history", downgrading
+ * a carry-forward into roster_source=unavailable with no trace of why.
+ * rosterContinuity.js already documents that a DB failure loading the previous
+ * roster must NOT be swallowed; the swallow here is what made that dead code.
+ *
+ * R2.8.12 closed the last fail-quiet branch here: `if (!client) return []`,
+ * which R2.8.5 left behind and flagged in place. An unconfigured deploy — no
+ * NEXT_PUBLIC_SUPABASE_URL/ANON_KEY, so db.js's module-level `supabase` is
+ * null — answered every caller with "this domain has never been scanned",
+ * a factual claim about the customer's data derived entirely from our own
+ * missing environment. It could never have been a defensible degradation:
+ * insertScan refuses without a client (R2.8.6) and there is no memory fallback
+ * for scans, so nothing could ever be there to find. It now throws the same
+ * ScansUnavailableError with the same `db_not_configured` code getScansForBrand
+ * uses, so a caller has one vocabulary to branch on and not two.
+ *
+ * R2.8.15 closed the one remaining silent []: a blank `domain`. See the comment
+ * at the guard below — it is an argument error, not a measurement, and it now
+ * refuses with `domain_required` on the same error class.
+ *
+ * @throws {ScansUnavailableError} db_not_configured | domain_required |
+ *   db_read_failed
  */
 export async function getScansByDomain(domain, deps = {}) {
   const client = resolveClient(deps);
-  if (!client) return [];
+  if (!client) {
+    throw new ScansUnavailableError(
+      "Supabase is not configured — scan history cannot be read by domain. " +
+        "This is a refusal to look, not a domain with no scans.",
+      { code: "db_not_configured" }
+    );
+  }
 
   const host = String(domain || "")
     .trim()
@@ -209,80 +608,165 @@ export async function getScansByDomain(domain, deps = {}) {
     .replace(/^https?:\/\//, "")
     .replace(/^www\./, "")
     .split("/")[0];
-  if (!host) return [];
-
-  try {
-    const { data, error } = await client
-      .from("scans")
-      .select("*")
-      .order("scanned_at", { ascending: false })
-      .limit(200);
-    if (error) throw error;
-
-    return (data || []).filter((s) => {
-      const scanHost = String(s.url || "")
-        .trim()
-        .toLowerCase()
-        .replace(/^https?:\/\//, "")
-        .replace(/^www\./, "")
-        .split("/")[0];
-      return scanHost === host;
-    });
-  } catch (err) {
-    console.warn("[db] getScansByDomain failed:", err.message);
-    return [];
+  // R2.8.15 — a blank domain is an ARGUMENT error, and it used to return [].
+  // This branch is only reachable with a live client (the !client refusal above
+  // runs first), so it can never mask an unreachable database — but it could
+  // and did mask a caller with nothing to ask about. scanWorker's
+  // loadPreviousRoster (workers/scanWorker.js:1827) passes `url || promptKey`;
+  // a checkpoint carrying neither would land here, and the [] then flowed on as
+  // "this brand has never been scanned" — the carry-forward skipped and the scan
+  // stamped roster_source=unavailable, with no trace of the real cause. (That
+  // reachability is read off the call site; no live job in that state has been
+  // observed. What WAS measured for R2.8.15 is the guard itself: undefined,
+  // null, "", "   ", "https://", "www." and "/" all returned [].)
+  //
+  // It refuses with the SAME ScansUnavailableError class as the two branches
+  // around it — a caller still branches once on `instanceof` — and is told apart
+  // by `code`. No third error type exists here on purpose: `domain_required`
+  // must not be conflated with db_not_configured (which would blame the deploy
+  // for a bad argument) nor with a measured [].
+  if (!host) {
+    throw new ScansUnavailableError(
+      `Cannot read scans by domain: no domain was supplied (received ${JSON.stringify(
+        domain ?? null
+      )}). This is a bad argument, not a domain with no scans.`,
+      { code: "domain_required" }
+    );
   }
+
+  const { data, error } = await client
+    .from("scans")
+    .select("*")
+    .order("scanned_at", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    console.error("[db] getScansByDomain failed:", error);
+    throw new ScansUnavailableError(
+      `Could not read scans for domain "${host}": ${error.message || error.code || "unknown database error"}`,
+      { cause: error, code: "db_read_failed" }
+    );
+  }
+
+  // No error means the DB answered; an empty match below is a real, measured
+  // "this domain has no scans".
+  return (data || []).filter((s) => {
+    const scanHost = String(s.url || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .split("/")[0];
+    return scanHost === host;
+  });
 }
 
 /**
  * Recent scans collapsed to the latest per brand, for the homepage workspace.
  * Returns lightweight rows (no full raw_results payload beyond what a card
  * needs) so the homepage stays fast.
+ *
+ * CONTRACT (R2.8.15, the last member of the R2.8.4/R2.8.5/R2.8.12 family in this
+ * file): the returned array means "the database answered". A deploy with no
+ * NEXT_PUBLIC_SUPABASE_URL/ANON_KEY used to open `if (!supabase) return []`, so
+ * the homepage workspace rendered an unconfigured process as a workspace with no
+ * brands in it — "you have never scanned anything", manufactured entirely from
+ * our own missing environment, and identical on screen to a real first-run. It
+ * could not even have been a degradation: insertScan refuses without a client
+ * (R2.8.6) and there is no memory fallback for scans, so nothing could be there
+ * to find. It now refuses with the SAME ScansUnavailableError and the SAME
+ * `db_not_configured` code getScansForBrand/getScansByDomain use — one
+ * vocabulary, one branch at the call site.
+ *
+ * THE OTHER HALF, CLOSED BY R2.8.16: this function used to wrap its whole body
+ * in `try { … } catch (err) { console.warn(…); return [] }`, so a postgrest
+ * error — an unreachable DB, a 5xx, a revoked key — became the same [] as a
+ * database that answered with no rows. That is the db_read_failed shape R2.8.5
+ * fixed in getScansForBrand/getScansByDomain, and it is now fixed the same way
+ * and in the same shape as those two: no try/catch at all, `error` inspected
+ * inline, and the SAME ScansUnavailableError with the SAME `db_read_failed`
+ * code. No third vocabulary exists here on purpose — a caller still branches
+ * once on `instanceof` and reads `code` to tell the deploy's fault
+ * (db_not_configured) from the database's (db_read_failed). Losing the catch is
+ * the point: anything the row-collapsing loop below could throw is a bug, and a
+ * bug must not be laundered into "this operator has no brands" either.
+ *
+ * GET /api/history had the same problem one level up, and it is fixed in the
+ * same commit (R2.8.16): its own catch used to turn the refusal below into a
+ * 200 `{ scans: [], runs: [], activeJobs: [], counts: {} }`, so the refusal
+ * reached the server log and a direct caller but the screen still showed an
+ * empty workspace. It now answers 503 with `store:"unreachable"` and null
+ * collections (the contract lives in src/lib/historyStoreState.js), and
+ * HomeDashboard renders that as a stated outage instead of the clean first-run
+ * page — though that component is currently mounted on no page, which R2.8.16's
+ * own note says out loud rather than implying a screen was repaired. Do not
+ * "simplify" either side back: fixing one without the other changes nothing a
+ * user could ever see.
+ *
+ * @throws {ScansUnavailableError} db_not_configured | db_read_failed
  */
 export async function listRecentScans(limit = 12) {
-  if (!supabase) return [];
-  try {
-    const { data, error } = await supabase
-      .from("scans")
-      .select("id, brand, url, industry, visibility_pct, scanned_at, raw_results")
-      .order("scanned_at", { ascending: false })
-      .limit(200);
-    if (error) throw error;
-
-    const byBrand = new Map();
-    for (const s of data || []) {
-      const key = String(s.brand || "").trim().toLowerCase();
-      if (!key) continue;
-      const raw = s.raw_results || {};
-      const engines = raw.engines ? Object.keys(raw.engines) : [];
-      const score =
-        raw.visibility_index_pct ??
-        raw.summary_stats?.share_of_ai_pct ??
-        s.visibility_pct ??
-        null;
-      const existing = byBrand.get(key);
-      if (!existing) {
-        byBrand.set(key, {
-          id: s.id,
-          brand: s.brand,
-          url: s.url,
-          industry: s.industry,
-          score: score == null ? null : Math.round(Number(score) * 10) / 10,
-          scanned_at: s.scanned_at,
-          engines,
-          scan_count: 1,
-        });
-      } else {
-        existing.scan_count += 1;
-      }
-    }
-    return Array.from(byBrand.values())
-      .sort((a, b) => new Date(b.scanned_at) - new Date(a.scanned_at))
-      .slice(0, limit);
-  } catch (err) {
-    console.warn("[db] listRecentScans failed:", err.message);
-    return [];
+  if (!supabase) {
+    throw new ScansUnavailableError(
+      "Supabase is not configured — recent scans cannot be read. " +
+        "This is a refusal to look, not a workspace with no brands in it.",
+      { code: "db_not_configured" }
+    );
   }
+  const { data, error } = await supabase
+    .from("scans")
+    .select("id, brand, url, industry, visibility_pct, scanned_at, raw_results")
+    .order("scanned_at", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    console.error("[db] listRecentScans failed:", error);
+    throw new ScansUnavailableError(
+      `Could not read recent scans: ${error.message || error.code || "unknown database error"}. ` +
+        "This is a refusal to look, not a workspace with no brands in it.",
+      { cause: error, code: "db_read_failed" }
+    );
+  }
+
+  // No error means the DB answered; an empty result below is a real, measured
+  // "this operator has never scanned anything".
+  const byBrand = new Map();
+  for (const s of data || []) {
+    const key = String(s.brand || "").trim().toLowerCase();
+    if (!key) continue;
+    const raw = s.raw_results || {};
+    const engines = raw.engines ? Object.keys(raw.engines) : [];
+    const score =
+      raw.visibility_index_pct ??
+      raw.summary_stats?.share_of_ai_pct ??
+      s.visibility_pct ??
+      null;
+    const existing = byBrand.get(key);
+    if (!existing) {
+      byBrand.set(key, {
+        id: s.id,
+        brand: s.brand,
+        url: s.url,
+        industry: s.industry,
+        score: score == null ? null : Math.round(Number(score) * 10) / 10,
+        // R2.4.2 — carry the raw column and quality flags so
+        // describeScanMeasurement can read measurement state from any surface
+        // that renders a listRecentScans row.  The `score` field above is kept
+        // for backward compatibility; callers that want gate-honouring display
+        // should use describeScanMeasurement(row) instead.
+        visibility_pct: s.visibility_pct,
+        raw_results: raw,
+        scanned_at: s.scanned_at,
+        engines,
+        scan_count: 1,
+      });
+    } else {
+      existing.scan_count += 1;
+    }
+  }
+  return Array.from(byBrand.values())
+    .sort((a, b) => new Date(b.scanned_at) - new Date(a.scanned_at))
+    .slice(0, limit);
 }
 
 // Global memory store for scan jobs (Next.js hot-reload safe)
@@ -308,7 +792,9 @@ global.memoryJobs = global.memoryJobs || new Map();
  * exactly as `hasDb = !!supabase`.
  */
 function resolveClient(deps) {
-  return deps && Object.prototype.hasOwnProperty.call(deps, "client") ? deps.client : supabase;
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "client")) return deps.client;
+  if (deps && Object.prototype.hasOwnProperty.call(deps, "supabase")) return deps.supabase;
+  return supabase;
 }
 
 /** Worker-active statuses — a job in one of these is still running. */
@@ -361,10 +847,45 @@ export async function createScanJob({ brand, url, industry, competitors }, deps 
     return job;
   }
 
-  const { data, error } = await client
-    .from("scan_jobs")
-    .insert([job])
-    .select();
+  const insert = async () => client.from("scan_jobs").insert([job]).select();
+
+  let { data, error } = await insert();
+
+  // R0.1.5: migration 007's unique partial index is now the authority on
+  // "one running scan per brand". Its predicate cannot include heartbeat
+  // freshness (partial-index predicates must be IMMUTABLE), so a job that
+  // crashed while running would otherwise hold its brand's lock forever.
+  // Resolve that here: a genuinely live holder is a 409; a dead one is
+  // failed and the insert retried exactly once.
+  if (error && isDuplicateScanViolation(error)) {
+    const { data: blocking, error: readErr } = await client
+      .from("scan_jobs")
+      .select("id, status, heartbeat_at")
+      .ilike("brand", String(brand || "").trim())
+      .in("status", SCAN_JOB_RUNNING)
+      .limit(20);
+    // Never fail-soft here. If we cannot tell whether the holder is alive,
+    // the safe answer is "someone is scanning" — refusing a scan costs a
+    // retry, permitting a duplicate costs a full vendor budget.
+    if (readErr) throw new DuplicateScanError(brand, null);
+
+    const decision = resolveDuplicateScan(blocking, isJobAlive);
+    if (decision.action === "reject") throw new DuplicateScanError(brand, decision.liveJobId);
+
+    if (decision.deadJobIds.length) {
+      const { error: failErr } = await client
+        .from("scan_jobs")
+        .update({ status: "failed", error_message: reclaimReason(now) })
+        .in("id", decision.deadJobIds);
+      if (failErr) throw new DuplicateScanError(brand, decision.deadJobIds[0]);
+    }
+
+    ({ data, error } = await insert());
+    // A second violation means someone else won the reclaim race. That is a
+    // real 409, not a retry loop.
+    if (error && isDuplicateScanViolation(error)) throw new DuplicateScanError(brand, null);
+  }
+
   if (error) throw error;
   return data[0];
 }
@@ -509,29 +1030,28 @@ export async function claimJobStatus(jobId, fromStatus, toStatus, deps = {}) {
 // Global memory store for content events (Next.js hot-reload safe)
 global.memoryContentEvents = global.memoryContentEvents || new Map();
 
-export async function getContentEvents(brand) {
-  if (!supabase) {
-    const list = Array.from(global.memoryContentEvents.values());
+export async function getContentEvents(brand, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentEvents;
+
+  if (!client) {
+    const list = Array.from(memory.values());
     return list.filter(item => item.brand.toLowerCase() === brand.toLowerCase());
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("content_events")
-      .select("*")
-      .eq("brand", brand)
-      .order("publish_date", { ascending: false });
+  const { data, error } = await client
+    .from("content_events")
+    .select("*")
+    .eq("brand", brand)
+    .order("publish_date", { ascending: false });
 
-    if (error) throw error;
-    return data || [];
-  } catch (err) {
-    console.warn("Failed to fetch content_events from database, checking memory:", err.message);
-    const list = Array.from(global.memoryContentEvents.values());
-    return list.filter(item => item.brand.toLowerCase() === brand.toLowerCase());
-  }
+  if (error) throw error;
+  return data || [];
 }
 
-export async function insertContentEvent({ brand, url, publishDate }) {
+export async function insertContentEvent({ brand, url, publishDate }, deps = {}) {
+  const client = resolveClient(deps);
+  const memory = deps?.memory || global.memoryContentEvents;
   const id = crypto.randomUUID();
   const event = {
     id,
@@ -541,22 +1061,16 @@ export async function insertContentEvent({ brand, url, publishDate }) {
     created_at: new Date().toISOString()
   };
 
-  if (!supabase) {
-    global.memoryContentEvents.set(id, event);
+  if (!client) {
+    memory.set(id, event);
     return event;
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("content_events")
-      .insert([event])
-      .select();
+  const { data, error } = await client
+    .from("content_events")
+    .insert([event])
+    .select();
 
-    if (error) throw error;
-    return data[0];
-  } catch (err) {
-    console.warn("Failed to insert content_event to database, falling back to memory:", err.message);
-    global.memoryContentEvents.set(id, event);
-    return event;
-  }
+  if (error) throw error;
+  return data[0];
 }

@@ -1,0 +1,74 @@
+// FIXTURE — R6.5.10. MUST BE REFUSED by credentialAssertionGuard.test.mjs.
+//
+// Not executed. The `.txt` suffix keeps it out of `src/**/*.test.mjs`, so
+// neither `npm run test:scoring` nor the guard's own tree walk picks it up; the
+// guard reads it as text. Without the suffix this file would be a real offence
+// in the live sweep and the sweep's own must-be-empty assertion would fail.
+//
+// Provenance: this is the opening guard of src/lib/engines/serp.test.mjs — "an
+// ambient Bright Data key is scrubbed, not inherited", around line 93 on
+// claude/aeo-orchestration-agents-xbh5uc — carrying the R6.5.9 fix pattern
+// `assert.ok(process.env.X === undefined, msg)`, and then refactored one single
+// step further: the env read is hoisted into a local and the assertion goes back
+// to assert.equal.
+//
+// What makes it interesting is that the refactor is smaller and tidier than the
+// form R6.5.9 banned, and yet it discloses identically: node:test sources
+// `actual` from the *binding*, not from the syntax, so on the day the scrub
+// regresses it prints the live key into the CI log twice — once in the
+// `+ actual - expected` diff and once in the AssertionError's `actual:` field —
+// custom message or not. Before R6.5.10 this file read completely clean.
+//
+// Every line here that does NOT end in `// LEAKS` is the correct pattern, so a
+// guard that judges a file by its general shape rather than by each assertion
+// passes this fixture. The guard's fixture test derives the expected offence
+// lines from those markers, so the two cannot drift apart.
+//
+// No real or realistic credential value appears anywhere in this file, by
+// design: every value is read from the environment or is a labelled placeholder.
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+const SERP_ENV = ['SERP_PROVIDER', 'SERPAPI_KEY', 'BRIGHTDATA_API_KEY'];
+
+/** Shape of a value, never the value. */
+function describeEnv(v) {
+  return v === undefined ? 'unset' : `set (len ${v.length})`;
+}
+
+function useSerpEnv(t, env) {
+  const saved = Object.fromEntries(SERP_ENV.map((k) => [k, process.env[k]]));
+  for (const k of SERP_ENV) delete process.env[k];
+  for (const [k, v] of Object.entries(env)) process.env[k] = v;
+  t.after(() => {
+    for (const k of SERP_ENV) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+}
+
+test('GUARD — an ambient Bright Data key is scrubbed, not inherited', (t) => {
+  useSerpEnv(t, { SERPAPI_KEY: 'mock-key' });
+
+  // The hoist. Reads as a tidy local; is a latent disclosure.
+  const brightdataKey = process.env.BRIGHTDATA_API_KEY;
+  assert.equal(brightdataKey, undefined, `must be scrubbed; ${describeEnv(brightdataKey)}`); // LEAKS
+
+  // Same defect through bracket access, which is how it gets written when the
+  // var name is built from a table.
+  const cron = process.env['CRON_SECRET'];
+  assert.strictEqual(cron, undefined, 'the cron secret must not be inherited'); // LEAKS
+
+  // Same defect through destructuring, the other one-line spelling.
+  const { SUPABASE_SERVICE_ROLE_KEY } = process.env;
+  assert.deepEqual([SUPABASE_SERVICE_ROLE_KEY], [undefined], 'service role key must be scrubbed'); // LEAKS
+
+  // Correct: the comparison collapses `actual` to a boolean before the assertion
+  // can see the value, so there is nothing left for the reporter to print.
+  assert.ok(process.env.SERPAPI_KEY === 'mock-key', `mock key must apply; ${describeEnv(process.env.SERPAPI_KEY)}`);
+
+  // Correct: a non-credential var is not this guard's business.
+  assert.equal(process.env.SERP_PROVIDER, undefined, 'the provider override must be scrubbed');
+});

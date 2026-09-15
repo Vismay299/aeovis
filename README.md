@@ -65,8 +65,8 @@ the UI can mark the point where a tracked set changed.
 - **Supabase** (Postgres) — schema in `supabase/migrations/`
 - **Engines**: Google AI Overview via Bright Data SERP · ChatGPT via the OpenAI
   Responses API with `web_search` · Perplexity `sonar`
-- **Utility LLM**: OpenRouter-compatible free model for prompt generation,
-  competitor extraction, and classification chores
+- **Utility LLM**: a free model on any OpenAI-compatible gateway (`LLM_BASE_URL`)
+  for prompt generation, competitor extraction, and classification chores
 - **Content OS**: a paid model (`CONTENT_MODEL`) with a hard per-item cost cap
 
 ---
@@ -95,9 +95,12 @@ PERPLEXITY_API_KEY=...
 OPENAI_API_KEY=...            # required for the `chatgpt` engine
 
 # --- Utility LLM (prompt gen, competitor extraction, classification) ---
-OPENROUTER_API_KEY=...
-OPENROUTER_BASE_URL=...
-OPENROUTER_MODEL=...
+# Provider-neutral: any OpenAI-compatible gateway. The model id must be valid
+# on THIS gateway (docs/vendors/mimo.md). OPENROUTER_* still works as a
+# deprecated alias and warns once.
+LLM_API_KEY=...
+LLM_BASE_URL=...               # default https://openrouter.ai/api/v1
+LLM_MODEL=...                  # default google/gemma-4-31b-it:free
 
 # --- Content OS ---
 CONTENT_MODEL=...
@@ -108,7 +111,7 @@ FIRECRAWL_API_KEY=...          # site scrape for prompt gen + research
 GSC_SERVICE_ACCOUNT_KEY=...    # Search Console (service-account JSON or base64)
 SERP_GEO=in                    # probe geography
 PROMPT_TARGET=30               # default tracked-set size for new brands
-CRON_SECRET=...                # REQUIRED in production — gates /api/scan/worker
+CRON_SECRET=...                # REQUIRED in production — the ONLY credential for the worker cron routes
 ```
 
 Apply the schema, then run:
@@ -124,8 +127,15 @@ npm run dev
 > **`CRON_SECRET` matters.** `/api/scan/worker` resumes scans and, via the
 > scheduler tick, creates new ones — each costing real SERP and LLM spend. When
 > `CRON_SECRET` is set the route requires it (`Authorization: Bearer …`,
-> `x-cron-secret`, `?secret=`, or Vercel's own cron header). It is left open
-> only when the variable is unset, for local development.
+> `x-cron-secret`, or `?secret=`). It is left open only when the variable is
+> unset, for local development.
+>
+> The `x-vercel-cron` header is no longer accepted as a credential (R0.1.8) —
+> any client can set it. That means the cron entries in `vercel.json`
+> authenticate **solely** by `CRON_SECRET`, which Vercel attaches as
+> `Authorization: Bearer <CRON_SECRET>` when the variable is set on the
+> project. **`CRON_SECRET` MUST be set in the deployment environment or every
+> scheduled scan and content batch will 401 and silently never run.**
 
 ---
 
@@ -140,6 +150,19 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `003_content_agents` | `content_agents` + agent columns on jobs/items |
 | `004_crew_canvas_knowledge` | composable agent pipelines, `knowledge_blocks` |
 | `005_analytics_platform` | `prompt_results`, `result_brands`, `citations`, `brand_metrics_daily`, `scan_schedules`, `topics`; job `checkpoint`/`heartbeat_at` |
+| `006_agent_control_plane` | agent control-plane tables and the `content_jobs` heartbeat index |
+| `007_scan_seal` | unique partial index enforcing one running scan per brand (closes the duplicate-scan race) |
+| `008_system_heartbeats` | `system_heartbeats` — the "did the cron actually fire?" record behind `/api/health` |
+| `009_scan_rate_limit` | `scan_rate_limits` + the atomic `increment_scan_rate_limit()` behind the free-scan per-IP cap |
+| `010_probe_tasks` | `probe_tasks` — the probe fleet's queue — and `claim_probe_tasks()`, the `FOR UPDATE SKIP LOCKED` claim two workers cannot both win |
+| `011_scan_runs` | `scan_runs` — one row per execution, fleet or web worker — and `open_scan_run()` / `heartbeat_scan_run()` / `close_scan_run()`, so a measured-zero pass and a never-ran pass leave different evidence |
+| `012_scan_job_attempts` | `scan_jobs.attempts` and `claim_scan_job_attempt()` — a job resumed three times without finishing becomes terminal with `max_attempts:` in `error_message`, instead of being re-dispatched by the cron sweep forever |
+| `013_brand_metrics_sov_state` | `brand_metrics_daily.sov_state` / `.sov_state_reason` — a stored share of voice now says whether it is a measurement, so a self-only roster records "not assessed" instead of a durable, exportable 100% |
+| `014_content_job_checkpoints` | `content_jobs.checkpoint` (new here — the `checkpoint` in the `005` row above is on `scan_jobs`, a different table) — a content job killed mid-run resumes at the next block instead of re-paying for every LLM call it had already made, so a rescued job's recorded cost is what was actually spent once. **Unlike `012`/`013` it ships no index, so `npm run setup:db` cannot verify it** — see `docs/OPERATOR_LEDGER.md` § C |
+| `015_brand_metrics_citation_state` | `brand_metrics_daily.citation_denominator` / `.citation_state` / `.citation_state_reason` — a stored citation share now says whether the pool it was divided by was measured (`0` is a real "no opportunities") or is simply unknown on a pre-R2.2.2 scan (`NULL`, never `0`), with a CHECK that will not let the two be stored as the same thing. Verifiable via `brand_metrics_daily_citation_unverified_idx`. **Applied state unverified from this environment** |
+| `016_crawlability_audit_history` | `crawlability_audits` — history of robots.txt audits per domain, with per-bot diffs between runs. Enables "Your site started blocking GPTBot on Tuesday" as the first change detector. Verifiable via `crawlability_audits_domain_idx`. **Applied state unverified from this environment** |
+| `016_content_items_natural_key` | `content_items` — natural key on `(job_id, cycle)` to prevent duplicate content items when a job crashes and resumes. Verifiable via unique constraint. **Applied state unverified from this environment** |
+| `017_cost_unmeasured_calls` | `scans.cost_unmeasured_calls` — counter for pricing calls that fail to resolve a model id. A run where nothing could be priced now looks different from a run that genuinely cost nothing. Verifiable via column existence. **Applied state unverified from this environment** |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.
@@ -150,6 +173,14 @@ re-run, supports `--dry-run`):
 ```bash
 node --env-file=.env.local scripts/backfill-analytics.mjs --dry-run
 ```
+
+The backfill needs `015` applied first (it reads and writes those three
+columns, and fails loudly naming the migration if they are absent). Its
+"Citation denominator (R4.3.3)" report block is the record of what it could and
+could not reconstruct: how many engine slices already carried a denominator,
+how many were re-derived from surviving per-prompt rows, how many were a
+measured zero, and how many are genuinely unrecoverable and were therefore
+stored as unmeasured rather than as `0`.
 
 RLS is enabled on every table with permissive anon policies — the app is
 currently **single-operator with no authentication**. Add auth before exposing

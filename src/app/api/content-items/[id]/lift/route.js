@@ -45,9 +45,13 @@ export async function GET(request, { params }) {
     const countVisibleCited = (scan) => {
       if (!scan) return { visible: 0, cited: 0, matched: 0 };
       const rows = normalizeScanRows(scan).filter((r) => targetSet.has(queryKey(r.prompt)));
-      // Collapse multi-engine rows: a query is "visible" if visible on ANY engine.
+      // Collapse multi-engine rows: a query is "visible" if visible on ANY engine
+      // whose answer actually succeeded. R2.7.17 — an errored row's visible flag
+      // may be true from a surviving search leg (probeResultContract:397), but
+      // lift only accrues from a scan whose answer leg survived.
       const byQuery = new Map();
       for (const r of rows) {
+        if (!r.answer_present) continue;
         const k = queryKey(r.prompt);
         const e = byQuery.get(k) || { visible: false, cited: false };
         e.visible = e.visible || r.visible;

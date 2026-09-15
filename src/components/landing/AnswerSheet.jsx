@@ -10,6 +10,17 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { primaryDeployedEngineLabel } from '@/lib/engines/deployedEngines';
+
+/* R2.10.5 — this chip was the string 'Perplexity', typed. Rebuilt under
+   NEXT_PUBLIC_ENGINES=aio the hero sentence and the engine rail both narrowed
+   to Google AI Overview and the served HTML still carried exactly one
+   Perplexity: this chip, attributing a sample answer to an engine that
+   deployment does not probe. The sheet shows one answer, so it names one
+   engine, and it is the deployment's own. Read at module scope, from the
+   inlined NEXT_PUBLIC_ literal, so SSR and the browser cannot disagree. */
+const SHEET_ENGINE = primaryDeployedEngineLabel();
+
 /* One segment per run of text. `mark` is the verdict the segment carries. */
 const SHEET = [
   { t: 'Clinical outcome analytics generally splits between registry-based reporting and real-time dashboards. ' },
@@ -58,10 +69,14 @@ export function AnswerSheet() {
   return (
     <div className="sheet">
       <div className="sheet__top">
-        <span className="chip">Perplexity</span>
+        <span className="chip">{SHEET_ENGINE}</span>
         <span className="tag">Unbranded question 04</span>
-        <span className="chip chip--good" style={{ marginLeft: 'auto' }}>
-          <i className="chip__led" /> Live
+        {/* R2.10.1 — this sheet types out a hardcoded script (SHEET above). It
+            was labelled "Live" with a status LED, the strongest claim the design
+            system can make and the one thing this content cannot support. It is
+            an illustration, and now says so. */}
+        <span className="chip" style={{ marginLeft: 'auto' }}>
+          Sample answer
         </span>
       </div>
       <div className="sheet__body">

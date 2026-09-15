@@ -9,6 +9,8 @@
  * file and out of the component.
  */
 
+import { isDudPrompt, DUD_MIN_OBSERVATIONS } from "../scoring/promptQuality.js";
+
 function round1(n) {
   return Math.round(n * 10) / 10;
 }
@@ -153,6 +155,21 @@ export function groupPromptRows(rows, { scanId, prevScanId } = {}) {
     const prevVisibilityPct = prevVisibilityByQuery.has(key) ? prevVisibilityByQuery.get(key) : null;
     const intentRow = groupRows.find((r) => r.intent != null);
 
+    // R2.6.2 — dud prompt detection: is this prompt a broken instrument?
+    // Maps prompt_results rows to isDudPrompt's observation format using
+    // `mentioned` (self-brand mention) as a proxy for brands_elicited > 0.
+    // A prompt where every answered observation names zero brands across
+    // DUD_MIN_OBSERVATIONS+ answered rows is flagged for suggested retirement.
+    //
+    // Additive-only contract: this flag is advisory (retire, never mutate).
+    // The consumer (PromptMetricsTable) surfaces it as a chip; the actual
+    // retirement action is a prompt-set version bump on the caller's side.
+    const observations = groupRows.map((r) => ({
+      answered: r.answered === true,
+      brands_elicited: r.mentioned === true ? 1 : 0,
+    }));
+    const suggestedRetire = isDudPrompt(observations);
+
     out.push({
       query,
       engines: answeredRows.map((r) => r.engine),
@@ -169,6 +186,7 @@ export function groupPromptRows(rows, { scanId, prevScanId } = {}) {
       is_branded_query: groupRows.some((r) => !!r.is_branded_query),
       answered_count: answeredRows.length,
       mentioned_count: mentionedCount,
+      suggested_retire: suggestedRetire,
     });
   }
 

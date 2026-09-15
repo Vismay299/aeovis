@@ -21,6 +21,15 @@ import { toast } from 'sonner';
 import { Wordmark } from '@/components/landing/SiteNav';
 import { ThemeToggle } from '@/components/perceev/ThemeToggle';
 import { runScan, saveScan, fetchIndustries, loadScan, clearScan } from '@/services/api';
+import {
+  initialScanProgress,
+  beginScanProgress,
+  applyScanReading,
+  applyScanUnknown,
+  isReconnecting,
+  progressLabel,
+  progressFraction,
+} from '@/lib/scanProgress';
 import { SAMPLE_RESULT } from '@/data/mockData';
 
 const STAGES = [
@@ -31,11 +40,19 @@ const STAGES = [
 ];
 
 /* The sample report, quoting the one demonstration reading. Brightwave is
-   fictional, and the page says so. */
+   fictional, and the page says so.
+
+   R2.10.1 — these three were typed: '41%', '15 / 36', '7'. The report they
+   preview moved to 30 questions and a 13-answer win, so this panel advertised a
+   reading that no longer existed anywhere. Read off SAMPLE_RESULT now; it is
+   the same object the button below hands to the dashboard. */
 const SAMPLE_FACTS = [
-  { k: 'Share of AI', v: '41%' },
-  { k: 'Answers naming you', v: '15 / 36' },
-  { k: 'Rivals discovered', v: '7' },
+  { k: 'Share of AI', v: `${SAMPLE_RESULT.visibilityScore}%` },
+  {
+    k: 'Answers naming you',
+    v: `${SAMPLE_RESULT.results.filter((r) => r.visible).length} / ${SAMPLE_RESULT.promptsTracked}`,
+  },
+  { k: 'Rivals discovered', v: String(SAMPLE_RESULT.competitorsFound) },
 ];
 
 export default function Scan() {
@@ -49,9 +66,15 @@ export default function Scan() {
   const [errors, setErrors] = useState({});
 
   const [scanning, setScanning] = useState(false);
-  const [stage, setStage] = useState(-1);
-  const [progress, setProgress] = useState(0);
+  /* Stage, progress and connection move together — a poll that reports nothing
+     must not be able to rewind one of them behind the others. See
+     lib/scanProgress.js (R2.8.3 / finding A11). */
+  const [progressState, setProgressState] = useState(initialScanProgress);
   const [failed, setFailed] = useState(false);
+
+  const stage = progressState.stage;
+  const label = progressLabel(progressState);
+  const reconnecting = isReconnecting(progressState);
 
   useEffect(() => {
     fetchIndustries()
@@ -101,8 +124,7 @@ export default function Scan() {
 
     setScanning(true);
     setFailed(false);
-    setStage(0);
-    setProgress(0);
+    setProgressState(beginScanProgress());
     try {
       const result = await runScan(
         {
@@ -111,10 +133,13 @@ export default function Scan() {
           industry: industry === '__custom__' ? customIndustry.trim() : industry,
           competitors: competitors.trim(),
         },
-        (s, p) => {
-          setStage(s);
-          setProgress(p !== undefined ? p : Math.round(((s + 1) / STAGES.length) * 100));
-        },
+        /* A reading. `p` may be null — that is "not measured yet", not zero,
+           so the reducer keeps the last known figure instead of inventing one
+           from the stage number. */
+        (s, p) => setProgressState((prev) => applyScanReading(prev, { stage: s, progressPct: p })),
+        /* A tick that produced no reading. The bar holds where it was and the
+           page says "reconnecting" rather than pretending to be at 0%. */
+        (meta) => setProgressState((prev) => applyScanUnknown(prev, meta)),
       );
       saveScan(result);
       toast.success('Reading ready');
@@ -299,11 +324,31 @@ export default function Scan() {
             </p>
 
             <div className="probe">
-              <div className="probe__bar">
-                <i style={{ transform: `scaleX(${Math.max(0, Math.min(1, progress / 100))})` }} />
+              <div
+                className="probe__bar"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={label.known ? progressState.progress : undefined}
+                aria-valuetext={label.known ? label.text : 'Progress not known yet'}
+                data-progress-state={label.known ? 'known' : 'unknown'}
+              >
+                <i style={{ transform: `scaleX(${progressFraction(progressState)})` }} />
               </div>
               <div className="probe__meta">
-                <span className="tag">{progress}% complete</span>
+                {/* An em dash, never "0%", when there is no measurement — and a
+                    chip that names the state (finding A11). */}
+                <span className="tag" data-testid="scan-progress">{label.text}</span>
+                {label.chip && (
+                  <span
+                    className="chip"
+                    data-testid="scan-progress-state"
+                    data-state={reconnecting ? 'reconnecting' : 'unmeasured'}
+                  >
+                    <i className="chip__led" />
+                    {reconnecting ? 'Reconnecting…' : label.chip}
+                  </span>
+                )}
                 <span className="tag">
                   {stage >= 0 && stage < STAGES.length ? STAGES[stage].label : 'Finishing'}
                 </span>
