@@ -9801,11 +9801,23 @@
         "src/lib/engines/gsc.js"
       ],
       "phase": "R4",
-      "status": "todo",
-      "owner": null,
+      "status": "blocked",
+      "owner": "local-session",
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-09-15T09:42:53.547Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-15T09:42:53.762Z",
+          "by": "local-session",
+          "text": "blocked (needs-secrets): CODE COMPLETE, DEPLOY PENDING A PROPERTY. Built: supabase/migrations/018_gsc_daily.sql (gsc_connections + gsc_daily; applied to prod nggyizuwqepxaqnpcqqj 2026-09-15, verified via pg_class/pg_policies), src/lib/engines/gsc.js fetchDailyQueryRows (date x query, paginated), src/lib/gsc/ingest.js (overlap window, per-brand isolation, watermark only advances on a full successful pass), src/lib/db/gsc.js, src/app/api/gsc/worker/route.js (weekly cron 0 2 * * 1 in vercel.json, CRON_SECRET-gated, SELF_GATED in operatorPerimeter.js), src/app/api/brands/[brand]/gsc/route.js (operator connect flow, 422 names the SA email), docs/vendors/gsc.md (connect flow), src/lib/gsc/ingest.test.mjs 17/17. Full suite: 8 failures, all pre-existing on clean main. GSC_SERVICE_ACCOUNT_KEY added to Vercel production. NOT MET: 'a connected brand's GSC data lands in gsc_daily weekly' - npm run test:gsc shows the service account (perceev-gsc@aeovis.iam.gserviceaccount.com) authenticates but has access to ZERO properties. Unblock: property owner adds that email as Restricted user, operator POSTs /api/brands/<domain>/gsc, then one authorized GET /api/gsc/worker shows rows in gsc_daily."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-secrets"
     },
     {
       "id": "R4.1.2",

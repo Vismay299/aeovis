@@ -209,6 +209,13 @@ const EXPECTED_OBJECTS = {
   "017_cost_unmeasured_calls.sql": [
     { kind: "column", name: "scans.cost_unmeasured_calls" },
   ],
+  // R4.1.1 — weekly GSC ingest: the brand->property connection and the
+  // per-day, per-query rows it writes.
+  "018_gsc_daily.sql": [
+    { kind: "table", name: "gsc_connections" },
+    { kind: "table", name: "gsc_daily" },
+    { kind: "index", name: "gsc_daily_brand_date_idx" },
+  ],
 };
 
 /**

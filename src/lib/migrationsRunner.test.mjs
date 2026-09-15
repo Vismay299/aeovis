@@ -212,7 +212,7 @@ function pathToFileUrlString(p) {
   return new URL(`file://${p.replace(/\\/g, "/").replace(/^([A-Za-z]:)/, "/$1")}`).href;
 }
 
-/** Everything 001-017 must leave behind, per the runner's own expectations. */
+/** Everything 001-018 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
   "scans", "brand_prompts", "scan_jobs", "content_events",
   "content_jobs", "content_items", "content_feedback", "brand_briefs", "content_lessons",
@@ -244,6 +244,8 @@ const FULL_CATALOG = [
   "content_items_job_id_cycle_key",
   // 017_cost_unmeasured_calls.sql — column.
   "scans.cost_unmeasured_calls",
+  // 018_gsc_daily.sql (R4.1.1) — GSC connection + daily query tables.
+  "gsc_connections", "gsc_daily", "gsc_daily_brand_date_idx",
 ];
 
 function withRegister(dir) {

@@ -144,6 +144,9 @@ export const NEVER_WRITABLE = Object.freeze([
   "content_events",
   "content_feedback",
   "content_lessons",
+  // R4.1.1 — a customer's own Search Console data.
+  "gsc_connections",
+  "gsc_daily",
 ]);
 
 /**
