@@ -6,17 +6,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * R6.1.4 (finding S17) — the secrets rule must live in the agent definitions,
- * not in whatever the controller remembers to type into a prompt.
+ * R6.1.4 (finding S17) — the secrets rule must ship by construction, not in
+ * whatever the controller remembers to type into a prompt.
  *
  * Two agents working R0.1.6 pasted live credentials into their transcripts by
  * running an unscoped recursive search that matched `.env.local`. Both
  * disclosed it themselves; the second one happened after the first was already
  * reported. A rule that depends on a human retyping it is a rule that will be
- * skipped, so it now ships inside every `.claude/agents/rebuild-*.md` and this
- * guard fails when a definition stops carrying it — including a brand new
- * definition added later, because the set of files is read off disk rather than
- * hardcoded.
+ * skipped.
+ *
+ * R6.1.9 (operator decision, 2026-09-15) — the full rule now lives ONCE in
+ * CLAUDE.md, which every session and every agent in the project loads, so
+ * skills and non-rebuild agents are covered too. Each `.claude/agents/rebuild-*.md`
+ * keeps a pointer section; this guard fails if CLAUDE.md loses any phrase of the
+ * rule, or if a rebuild definition (read off disk, never hardcoded) loses its
+ * pointer — or grows a second full copy that could drift.
  *
  * Honest about its limits: this asserts the rule is IN the brief. It cannot
  * assert an agent obeyed it, and it cannot see a transcript. The behavioural
@@ -94,7 +98,26 @@ async function rebuildAgentDefinitions() {
 
 const collapse = (s) => s.replace(/\s+/g, " ");
 
-test("GUARD — every rebuild-* agent definition carries the secrets-hygiene rule", async () => {
+test("GUARD — CLAUDE.md carries the full secrets-hygiene rule for every session and agent", async () => {
+  const text = collapse(await readFile(path.join(REPO, "CLAUDE.md"), "utf8"));
+  const missing = REQUIRED_PHRASES.filter((phrase) => !text.includes(collapse(phrase)));
+  assert.deepEqual(
+    missing,
+    [],
+    `CLAUDE.md is the one place the secrets rule lives (R6.1.9); it is missing:\n  ${missing.join("\n  ")}`,
+  );
+  const tracked = execFileSync("git", ["ls-files", "CLAUDE.md"], { cwd: REPO }).toString("utf8").trim();
+  assert.equal(tracked, "CLAUDE.md", "CLAUDE.md must be tracked, or the rule does not ship with the repo");
+});
+
+/** What a rebuild-* pointer must say: the section, the headline, and where the rule lives. */
+const POINTER_PHRASES = [
+  "## Secrets hygiene",
+  "**Never print a credential value.**",
+  '`CLAUDE.md` § "Secrets hygiene"',
+];
+
+test("GUARD — every rebuild-* agent definition points to the CLAUDE.md rule, without a second copy", async () => {
   const files = await rebuildAgentDefinitions();
 
   // A guard that finds nothing must fail, not pass quietly: an empty sweep is
@@ -104,18 +127,22 @@ test("GUARD — every rebuild-* agent definition carries the secrets-hygiene rul
     `expected the six known rebuild-* definitions in ${AGENTS_DIR}, found ${files.length}: ${files.join(", ")}`,
   );
 
-  const missing = [];
+  const problems = [];
   for (const file of files) {
     const text = collapse(await readFile(path.join(AGENTS_DIR, file), "utf8"));
-    for (const phrase of REQUIRED_PHRASES) {
-      if (!text.includes(collapse(phrase))) missing.push(`${file} is missing: ${phrase}`);
+    for (const phrase of POINTER_PHRASES) {
+      if (!text.includes(collapse(phrase))) problems.push(`${file} is missing: ${phrase}`);
+    }
+    // The body phrases belong to CLAUDE.md alone; a copy here is the thing that drifts.
+    if (text.includes(collapse("stop, do not repeat it, disclose it"))) {
+      problems.push(`${file} carries a second full copy of the rule — keep only the pointer`);
     }
   }
 
   assert.deepEqual(
-    missing,
+    problems,
     [],
-    `every rebuild-* agent must carry the secrets rule by construction, not by prompt:\n  ${missing.join("\n  ")}`,
+    `every rebuild-* agent must point to the one secrets rule:\n  ${problems.join("\n  ")}`,
   );
 });
 
