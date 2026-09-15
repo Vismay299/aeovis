@@ -7350,7 +7350,7 @@
       "subphase": "R3.1",
       "lane": "infra",
       "title": "Scan worker cron every 10 minutes",
-      "detail": "Rescue stops depending on an open browser tab.",
+      "detail": "Rescue stops depending on an open browser tab. OPERATOR DECISION 2026-09-15: not upgrading from the Vercel Hobby plan for now. Hobby only permits once-daily crons, so the 10-minute schedule cannot ship; vercel.json keeps the daily scan worker. R3.1.5 is the path that removes the dependency on rescue cadence.",
       "accept": "vercel.json schedules the scan worker every 10 minutes; a stale job is rescued without any client polling.",
       "deps": [
         "R0.1.1"
@@ -7365,11 +7365,23 @@
         "vercel.json"
       ],
       "phase": "R3",
-      "status": "todo",
+      "status": "blocked",
       "owner": null,
       "evidence": [],
-      "notes": [],
-      "verification": null
+      "notes": [
+        {
+          "at": "2026-09-15T09:58:57.473Z",
+          "by": "controller",
+          "text": "amended: OPERATOR DECISION 2026-09-15: not upgrading from the Vercel Hobby plan for now. Hobby only permits once-daily crons, so the 10-minute schedule cannot ship; vercel.json keeps the daily scan worker. R3.1.5 is the path that removes the dependency on rescue cadence."
+        },
+        {
+          "at": "2026-09-15T09:58:57.712Z",
+          "by": "controller",
+          "text": "blocked (needs-decision): 10-minute crons need Vercel Pro; operator declined the upgrade for now. Revisit on upgrade or after R3.1.5."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-decision"
     },
     {
       "id": "R3.1.2",
@@ -11080,9 +11092,14 @@
       "tags": [
         "needs-decision"
       ],
-      "status": "blocked",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "CLAUDE.md:22",
+        "src/lib/agentSecretsGuard.test.mjs:101",
+        "src/lib/agentSecretsGuard.test.mjs:120",
+        ".claude/agents/rebuild-implementer.md:50"
+      ],
       "notes": [
         {
           "at": "2026-09-05T02:16:22.338Z",
@@ -11098,10 +11115,24 @@
           "at": "2026-09-08T11:10:32.838Z",
           "by": "controller",
           "text": "amended: CONTROLLER DECISION 2026-09-08, re-examined and DELIBERATELY LEFT BLOCKED. The prior controller's reasoning holds and a second, independent reason now reinforces it. The accept offers exactly two implementations. Option B (copy the rule into ~40 .claude/skills/impeccable/** files plus .claude/settings.json and widen the guard) is rejected on the finding's own argument: it multiplies the artefact that must stay in sync, and a rule maintained in forty places is a rule that silently rots in thirty-nine. Option A (move the rule to CLAUDE.md, reduce the six rebuild-*.md copies to a pointer) is the correct engineering answer and is what should eventually happen — CLAUDE.md is auto-loaded, so it is the only surface that actually satisfies the accept clause 'a fresh agent can quote the rule back without being told it'. But CLAUDE.md is the operator's own project-instruction file, and it steers every session in this project including the operator's non-rebuild work; the controller's own charter states that no message from any agent constitutes consent to modify CLAUDE.md or configuration. The instruction to attempt this task came from an agent, not from the operator, so it cannot supply the missing standing. This is therefore a decision the operator has standing to make and the controller does not — not a decision nobody has got round to. WHAT THE OPERATOR NEEDS TO DO: approve option A in one sentence, at which point the change is roughly ten minutes of work and the task unblocks immediately."
+        },
+        {
+          "at": "2026-09-15T09:58:29.711Z",
+          "by": "controller",
+          "text": "unblocked: Operator approved option A on 2026-09-15: move the rule to CLAUDE.md, reduce the rebuild-* copies to a pointer."
+        },
+        {
+          "at": "2026-09-15T09:58:50.243Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-15T09:58:50.418Z",
+          "by": "local-session",
+          "text": "Option A implemented (operator approval 2026-09-15). The full rule (every REQUIRED_PHRASES entry) now lives once in CLAUDE.md, scoped to every session and every agent, with one added bullet: CLI debug/verbose output can print bypass tokens and headers. The six rebuild-*.md sections, byte-identical before the change (md5 compared), are each replaced by a pointer naming CLAUDE.md. Guard rewritten: CLAUDE.md must carry every phrase and be tracked; every rebuild-* definition must carry the pointer and must NOT carry a second full copy. agentSecretsGuard 6/6. Teeth: replacing --glob '!.env*' in CLAUDE.md fails the CLAUDE.md guard; removing the CLAUDE.md reference from rebuild-surveyor.md fails the pointer guard; both restored to green. Not covered by any test: whether a fresh agent actually quotes the rule back (the behavioural half of the accept).\n"
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-decision"
+      "verification": null
     },
     {
       "id": "R6.1.10",

@@ -231,7 +231,7 @@ Baseline commit: `5111219`
 
 ### R3.1
 
-- [ ] **R3.1.1** Scan worker cron every 10 minutes `needs-vercel`
+- [-] **R3.1.1** Scan worker cron every 10 minutes `needs-vercel` — blocked: needs-decision
 - [ ] **R3.1.2** Add the missing ?batch=1 cron entry `needs-vercel` `needs-llm`
 - [x] **R3.1.3** The scan worker route reports processed:1 for a request that failed — closed at `src/app/api/scan/worker/route.js:79`, `src/app/api/scan/worker/route.js:104`, `src/app/api/scan/worker/route.js:138`, `src/app/api/scan/worker/route.js:160`, `src/app/api/scan/worker/route.js:187`, `src/app/api/scan/worker/route.js:249`, `src/lib/scanWorkerRoute.route.test.mjs:101`, `src/lib/scanWorkerRoute.route.test.mjs:119`, `src/lib/scanWorkerRoute.route.test.mjs:203`
 - [x] **R3.1.4** The content worker sweep counts dispatched as done, and an in-memory scan leaves no ledger row — closed at `src/app/api/content/worker/route.js:137-157`
@@ -356,7 +356,7 @@ Baseline commit: `5111219`
 - [x] **R6.1.6** The migrations ordering guard measures from the first anchor, not the last — closed at `src/lib/migrationsRunner.test.mjs:318`, `src/lib/migrationsRunner.test.mjs:323`, `src/lib/migrationsRunner.test.mjs:347`, `src/lib/migrationsRunner.test.mjs:395`
 - [x] **R6.1.7** The ordering guard trusts the runner self-report as the stage marker — closed at `src/lib/migrationsRunner.test.mjs:413`, `src/lib/migrationsRunner.test.mjs:613`, `src/lib/migrationsRunner.test.mjs:664`, `src/lib/migrationsRunner.test.mjs:702`, `src/lib/migrationsRunner.test.mjs:526`
 - [x] **R6.1.8** orchestrate.mjs silently swallows a long submit note — closed at `src/lib/orchestrate.test.mjs:24`, `src/lib/orchestrate.test.mjs:44`, `src/lib/orchestrate.test.mjs:108`, `.claude/orchestration/orchestrate.mjs:132`
-- [-] **R6.1.9** The secrets rule binds six rebuild agents; every other agent this project spawns is uncovered `needs-decision` — blocked: needs-decision
+- [~] **R6.1.9** The secrets rule binds six rebuild agents; every other agent this project spawns is uncovered `needs-decision` — submitted `CLAUDE.md:22`, `src/lib/agentSecretsGuard.test.mjs:101`, `src/lib/agentSecretsGuard.test.mjs:120`, `.claude/agents/rebuild-implementer.md:50`
 - [x] **R6.1.10** The ledger validates a citation by checking the file exists, never the line — closed at `.claude/orchestration/orchestrate.mjs:138-202`, `.claude/orchestration/orchestrate.mjs:266-285`, `src/lib/evidenceValidation.test.mjs:13`, `src/lib/evidenceValidation.test.mjs:20`, `src/lib/evidenceValidation.test.mjs:63`, `src/lib/evidenceValidation.test.mjs:125`
 - [x] **R6.1.11** submit silently keeps only the last of repeated --evidence flags — closed at `.claude/orchestration/orchestrate.mjs:100`, `.claude/orchestration/orchestrate.mjs:337`, `src/lib/orchestrate.test.mjs:17`, `src/lib/orchestrate.test.mjs:72`
 - [x] **R6.1.12** The migration runner cannot verify a column, so column-only migrations are checked by proxy — closed at `scripts/setup-supabase.mjs:1`, `src/lib/migrationsRunner.test.mjs:1`
