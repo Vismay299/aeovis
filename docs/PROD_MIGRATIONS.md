@@ -1052,7 +1052,7 @@ already has the column.
 
 ---
 
-## `015_brand_metrics_citation_state.sql` … `018_gsc_daily.sql`
+## `015_brand_metrics_citation_state.sql` … `019_probe_evidence_bucket.sql`
 
 Applied to production (`nggyizuwqepxaqnpcqqj`) on 2026-09-15 through the
 Supabase MCP, in filename order, immediately before PR #1 merged to `main`,
@@ -1066,6 +1066,7 @@ head probe. Each file's own header carries its catalog query.
 | `016_crawlability_audit_history.sql` | table `crawlability_audits`, `crawlability_audits_domain_idx`, unique `crawlability_audits_domain_minute_idx` | table + both indexes. The minute index truncates `audited_at AT TIME ZONE 'UTC'`: `date_trunc` on `timestamptz` is STABLE and Postgres refuses it in an index |
 | `017_cost_unmeasured_calls.sql` | `scans.cost_unmeasured_calls` | column |
 | `018_gsc_daily.sql` | tables `gsc_connections`, `gsc_daily`, index `gsc_daily_brand_date_idx` (R4.1.1) | both tables + index |
+| `019_probe_evidence_bucket.sql` | Storage bucket `probe-evidence` (private, 5 MiB, png/gzip/html) + three `storage.objects` policies `probe-evidence anon *` (R1.5.1) | 1 row in `storage.buckets` + 3 policies — see `docs/runbooks/probe-evidence.md` |
 
 **015 has no SQL backfill.** Run `scripts/backfill-analytics.mjs` afterwards;
 until then pre-015 rows keep `citation_state` NULL (unverified).

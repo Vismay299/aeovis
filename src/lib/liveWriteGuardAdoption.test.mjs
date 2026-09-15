@@ -282,6 +282,8 @@ const EXEMPTIONS = Object.freeze([
 const LIVE_DB_TEST_FILES = Object.freeze([
   "src/lib/probeTasksRace.test.mjs",
   "src/lib/scanRunsLive.test.mjs",
+  // R3.3.5 — declares only scan_runs.
+  "src/lib/workers/reaperCloseLive.test.mjs",
   "src/lib/workers/scanChunkLedgerLive.test.mjs",
 ]);
 

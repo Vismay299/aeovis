@@ -6,6 +6,7 @@ import {
   getAgent,
 } from "@/lib/db/content";
 import { startContentJob } from "@/lib/content/contentWorker";
+import { keepAlive } from "@/lib/keepAlive";
 import { PLAYBOOKS } from "@/lib/content/schemas";
 
 export const dynamic = "force-dynamic";
@@ -96,9 +97,7 @@ export async function POST(request) {
       agent_snapshot: agent || null,
     });
 
-    startContentJob(job.id).catch((err) => {
-      console.error(`[content-trigger] Error in background content job ${job.id}:`, err);
-    });
+    keepAlive(() => startContentJob(job.id), { label: `[content-trigger] content job ${job.id}` });
 
     return NextResponse.json(
       { job_id: job.id, status: job.status, progress_pct: job.progress_pct, agent: agent?.name || null },

@@ -731,7 +731,7 @@
       "subphase": "R0.1",
       "lane": "infra",
       "title": "Confirm CRON_SECRET and OPERATOR_TOKEN are live on the Vercel project",
-      "detail": "R0.1.1 and R0.1.3 are now proven over HTTP against a local production-mode server, which settles the code. What is still unproven is the deployment: check:secrets reports cron UNCONFIGURED, and the handoff asserts both values are set on Vercel without having been able to reach the API to confirm it. Standing rule 3 applies — set and works are different claims. This matters asymmetrically: OPERATOR_TOKEN fails closed, so if src/middleware.js ships while the value is unset every operator route 401s and the dashboard goes dark. Both values were also pasted into a session transcript and are due for rotation, so the confirmation and the rotation are one job.",
+      "detail": "R0.1.1 and R0.1.3 are now proven over HTTP against a local production-mode server, which settles the code. What is still unproven is the deployment: check:secrets reports cron UNCONFIGURED, and the handoff asserts both values are set on Vercel without having been able to reach the API to confirm it. Standing rule 3 applies — set and works are different claims. This matters asymmetrically: OPERATOR_TOKEN fails closed, so if src/middleware.js ships while the value is unset every operator route 401s and the dashboard goes dark. Both values were also pasted into a session transcript and are due for rotation, so the confirmation and the rotation are one job. 2026-09-15: attempted rotation of CRON_SECRET and OPERATOR_TOKEN (new 64-hex values into .env.local and Vercel production). The session's permission classifier refused the secret-store write, and nothing was changed (.env.local mtime unchanged). Current state observed: production answers /api/health 200, /api/industries 200, /api/scan/worker 401 without a header, and 401 WITH the local CRON_SECRET, so the local and production values differ. Operator action: rotate both on Vercel and in .env.local, redeploy, then GET /api/scan/worker with the bearer secret must return 200 and POST /api/content with no token must return 401.",
       "accept": "Against the deployed instance: GET /api/scan/worker with no header returns 401 and with the bearer secret returns 200; POST /api/content with no token returns 401; GET /api/industries and GET /api/health both return 200 — using freshly rotated values.",
       "deps": [],
       "tags": [
@@ -759,6 +759,11 @@
           "at": "2026-08-30T07:59:26.595Z",
           "by": "controller",
           "text": "blocked (needs-vercel): No Vercel credentials on this machine and the Vercel MCP server is unauthorised in this session."
+        },
+        {
+          "at": "2026-09-15T13:50:48.423Z",
+          "by": "controller",
+          "text": "amended: 2026-09-15: attempted rotation of CRON_SECRET and OPERATOR_TOKEN (new 64-hex values into .env.local and Vercel production). The session's permission classifier refused the secret-store write, and nothing was changed (.env.local mtime unchanged). Current state observed: production answers /api/health 200, /api/industries 200, /api/scan/worker 401 without a header, and 401 WITH the local CRON_SECRET, so the local and production values differ. Operator action: rotate both on Vercel and in .env.local, redeploy, then GET /api/scan/worker with the bearer secret must return 200 and POST /api/content with no token must return 401."
         }
       ],
       "verification": null,
@@ -3541,18 +3546,36 @@
         "supabase/"
       ],
       "phase": "R1",
-      "status": "blocked",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "supabase/migrations/019_probe_evidence_bucket.sql:19",
+        "src/lib/evidenceRetention.js:61",
+        "docs/runbooks/probe-evidence.md:31"
+      ],
       "notes": [
         {
           "at": "2026-09-05T07:02:42.640Z",
           "by": "controller",
           "text": "blocked (needs-secrets): Blocked on the operator. The accept is that the probe-evidence storage bucket EXISTS with a retention policy - that is a live Supabase provisioning action against project nggyizuwqepxaqnpcqqj, requiring the service-role key and a decision on storage spend. The size budget can be written down without credentials, but the accept is a conjunction and the bucket half cannot be honestly claimed from here. Provisioning it and calling the task done because a doc says 90 days would be the exact false success this rebuild exists to kill. Unblock when the operator creates the bucket or grants provisioning access."
+        },
+        {
+          "at": "2026-09-15T13:50:38.181Z",
+          "by": "controller",
+          "text": "unblocked: Supabase MCP access to the production project is available in this session."
+        },
+        {
+          "at": "2026-09-15T13:50:38.333Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-15T13:50:38.500Z",
+          "by": "local-session",
+          "text": "Migration 019_probe_evidence_bucket.sql applied to production and verified: storage.buckets row probe-evidence, public=false, file_size_limit 5 MiB, mimes png/gzip/html; 3 storage.objects policies scoped to the bucket. Retention: Supabase's protect_objects_delete trigger refuses SQL deletes, so 90-day retention is src/lib/evidenceRetention.js (walks folders via Storage API, removes objects older than 90 days in chunks, keeps undated objects, throws on list/remove failure, reports truncated) run daily at 03:00 UTC by self-gated cron GET /api/evidence/retention. evidenceRetention.test.mjs 8/8. LIVE: uploaded one object with the anon key, a real pass reported scanned 1 (proving the select policy exposes objects, so an empty result is not a hidden one), removed it, next pass scanned 0. Size budget written in docs/runbooks/probe-evidence.md: ~0.5 MB/probe, ~30 MB/scan, 30 GB steady-state budget at 90 days (planning numbers, explicitly unmeasured until R1.3.5). setup-supabase.mjs gained a bucket verify kind; runner fake, R6.1.14 SQL parser and all three migration ledgers updated.\n"
         }
       ],
-      "verification": null,
-      "blocked_reason": "needs-secrets"
+      "verification": null
     },
     {
       "id": "R1.5.2",
@@ -7388,7 +7411,7 @@
       "subphase": "R3.1",
       "lane": "infra",
       "title": "Add the missing ?batch=1 cron entry",
-      "detail": "The one automated scan-to-content chain is unreachable because the cron entry has no query string.",
+      "detail": "The one automated scan-to-content chain is unreachable because the cron entry has no query string. vercel.json now schedules /api/content/worker?batch=1 daily at 01:00 UTC (Hobby allows daily). CONTENT_DAILY_BATCH=1 set in Vercel production (was unset = off). CONTENT_MODEL is openrouter/free, so batch drafts cost nothing. NOT YET EVIDENCED: the accept (batch fires and produces drafts; decisions recorded) needs the first 01:00 UTC tick after deploy. Verify: content_jobs rows with input->>source = 'daily_batch' created after that tick, and the cron response's batch_dispatched / batch_skipped / batch_failed.\n",
       "accept": "The daily batch fires and produces drafts; batch decisions are recorded.",
       "deps": [
         "R3.1.1"
@@ -7409,7 +7432,13 @@
       "status": "todo",
       "owner": null,
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-15T13:50:38.789Z",
+          "by": "controller",
+          "text": "amended: vercel.json now schedules /api/content/worker?batch=1 daily at 01:00 UTC (Hobby allows daily). CONTENT_DAILY_BATCH=1 set in Vercel production (was unset = off). CONTENT_MODEL is openrouter/free, so batch drafts cost nothing. NOT YET EVIDENCED: the accept (batch fires and produces drafts; decisions recorded) needs the first 01:00 UTC tick after deploy. Verify: content_jobs rows with input->>source = 'daily_batch' created after that tick, and the cron response's batch_dispatched / batch_skipped / batch_failed.\n"
+        }
+      ],
       "verification": null
     },
     {
@@ -7535,14 +7564,28 @@
         "vercel.json",
         "docs/plans/production-plan.md"
       ],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/keepAlive.js:36",
+        "src/lib/keepAlive.test.mjs:69",
+        "src/app/api/scan/route.js:142"
+      ],
       "notes": [
         {
           "at": "2026-09-05T07:13:25.906Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-15T13:50:28.788Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-15T13:50:28.970Z",
+          "by": "local-session",
+          "text": "ADR answer: platform mechanism. Next is 14.2 (no after()), so @vercel/functions waitUntil is used through one helper, src/lib/keepAlive.js, which registers the promise with the request context, always handles rejection under a label, and supports a maxMs cap. Applied at all 9 post-response sites: POST /api/scan, status-route poll rescue, cron sweep dispatch (sweepExecution.js), content-cron dispatchWithLease, POST /api/content, both decision-route jobs (learn + revise), scheduler kickChunk, and the self-continue fetch (capped at SELF_CONTINUE_HOLD_MS=5000 so a chunk is not billed for the next chunk). The three compensations are untouched. keepAlive.test.mjs 7/7, including a git-grep GUARD that fails if any route or the scan worker kicks background work with a bare .catch; sabotage: reverting POST /api/content to startContentJob(job.id).catch(...) failed the guard, restored green. Off Vercel waitUntil is a no-op (optional-chained context), proven by a test. NOT proven here: the platform actually holding the instance longer; that is observable only on a deployed scan.\n"
         }
       ],
       "verification": null
@@ -8427,14 +8470,28 @@
       ],
       "phase": "R3",
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/workers/reaperCloseLive.test.mjs:100",
+        "src/lib/workers/reaperCloseLive.test.mjs:127",
+        "src/lib/workers/reaperCloseLive.test.mjs:144"
+      ],
       "notes": [
         {
           "at": "2026-09-08T11:26:00.545Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-15T13:50:29.141Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-15T13:50:29.317Z",
+          "by": "local-session",
+          "text": "New live-gated src/lib/workers/reaperCloseLive.test.mjs, run against production Postgres nggyizuwqepxaqnpcqqj via npm run test:live: 4/4 pass, 0 skipped. (1) the app's own closeScanRun over PostgREST closes a run, a second close RAISES, and classifyReapCloseFailure on the REAL error returns lost_race; the row keeps the first outcome. (2) a ghost uuid classifies vanished; a malformed id (a real 22P02-class DB error) classifies close_failed, so the text match neither misses a race nor hides a failure. (3) two real reapStaleRuns passes race one backdated stale row behind a barrier so both LIST before either CLOSES: exactly one reaped, one lost_race, zero close_failed; a third pass considers 0. Listing is the real listStaleScanRuns filtered to the test row, so no production run is reaped. Write guard armed with allow [scan_runs], GUARD case asserts coverage and assertClean. Cleanup verified: 0 test-r335 rows remain. Without a DB: NOT RUN banner, 4 skipped. Registered in liveWriteGuard.test.mjs and liveWriteGuardAdoption.test.mjs live-file lists. The text match was robust against the real messages, so no structured-code migration was needed.\n"
         }
       ],
       "verification": null
@@ -10586,10 +10643,24 @@
         "src/lib/content/"
       ],
       "phase": "R5",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "local-session",
+      "evidence": [
+        "src/lib/content/lessonsLoop.test.mjs:168",
+        "src/lib/content/lessonsLoop.test.mjs:217"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-15T13:50:29.638Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-15T13:50:29.954Z",
+          "by": "local-session",
+          "text": "src/lib/content/lessonsLoop.test.mjs (written by a rebuild-test-author subagent, re-run by the controller session: 2/2 pass). Offline: Supabase env cleared so db.js has no client; the REAL runLearn stores the lesson via insertLessons and the REAL startContentJob reads it via listLessons, with only the model, scans, brief and knowledge faked. The fake model ends the draft on a question only if the draft prompt contains the lesson text. Test 1: job 1 has no lessons (prompt shows the none-yet placeholder, draft ends on a pitch, agent_trace summary margin-trap-ends-on-a-pitch); runLearn stores a lesson; job 2's draft prompt carries it, body differs and ends on a question, agent_trace summary changes. A lesson for the other playbook never leaks in. Test 2: a superseded lesson stops altering drafts. Sabotage by the author: contentWorker.js:337 lessons -> [] and draft.js:15 formatLessons([]) each turned both tests red; restored. Not proven: a real model obeying the lesson, the Supabase query path of listLessons, and the decision route wiring.\n"
+        }
+      ],
       "verification": null
     },
     {

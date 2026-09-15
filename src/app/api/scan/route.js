@@ -4,6 +4,7 @@ import { DuplicateScanError } from "@/lib/duplicateScan";
 import { BUCKET_SCOPE, checkScanRateLimit } from "@/lib/rateLimit";
 import { incrementScanRateLimit } from "@/lib/db/analytics";
 import { runScanChunk } from "@/lib/workers/scanWorker";
+import { keepAlive } from "@/lib/keepAlive";
 
 // A chunk can run for up to ~150s (CHUNK_TIME_BUDGET_MS in scanWorker.js)
 // plus finalize; give the fire-and-forget first chunk kicked off below room
@@ -136,9 +137,9 @@ export async function POST(request) {
     // Trigger the first chunk asynchronously (non-blocking). runScanChunk
     // resumes/advances by job id alone — sourcing, probing, and finalize are
     // all driven off the job row + checkpoint, not these function args.
-    runScanChunk(job.id).catch(err => {
-      console.error(`[worker-trigger] Error in async background scan job ${job.id}:`, err);
-    });
+    // R3.1.5: keepAlive registers it with waitUntil so the platform keeps the
+    // function alive after the 201 instead of freezing it mid-scan.
+    keepAlive(() => runScanChunk(job.id), { label: `[worker-trigger] scan job ${job.id}` });
 
     return NextResponse.json({
       job_id: job.id,

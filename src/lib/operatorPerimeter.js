@@ -58,6 +58,8 @@ const SELF_GATED = [
   /^\/api\/content\/worker\/?$/,
   // R4.1.1 — refuses without CRON_SECRET via src/lib/cronAuth.js, same as the two above.
   /^\/api\/gsc\/worker\/?$/,
+  // R1.5.1 — same cronAuth gate; deletes expired probe evidence daily.
+  /^\/api\/evidence\/retention\/?$/,
 ];
 
 /** Non-API paths the middleware never sees (see the matcher in middleware.js). */

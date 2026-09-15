@@ -1058,6 +1058,8 @@ test("META — every file that imports the live gate arms the write guard", asyn
     [
       "src/lib/probeTasksRace.test.mjs",
       "src/lib/scanRunsLive.test.mjs",
+      // R3.3.5 — close_scan_run double-close and the reaper race; declares only scan_runs.
+      "src/lib/workers/reaperCloseLive.test.mjs",
       "src/lib/workers/scanChunkLedgerLive.test.mjs",
     ],
     "every live-DB test file, and only those, opens the gate through armedLiveDbGate"
