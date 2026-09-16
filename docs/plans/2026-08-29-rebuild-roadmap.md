@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**225 / 265 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**225 / 268 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -225,7 +225,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 - [x] **R2.10.7** The landing-copy guard is blind to two apostrophes on one line — closed at `src/lib/landingProbeCounter.test.mjs:49`, `src/lib/landingProbeCounter.test.mjs:251`, `src/lib/landingProbeCounter.test.mjs:314`, `src/lib/landingProbeCounter.test.mjs:322`, `src/lib/landingProbeCounter.test.mjs:651`, `src/lib/landingProbeCounter.test.mjs:673`
 
-## R3 — Durable backend  `43/48`
+## R3 — Durable backend  `43/51`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -236,8 +236,11 @@ Baseline commit: `5111219`
 - [x] **R3.1.3** The scan worker route reports processed:1 for a request that failed — closed at `src/app/api/scan/worker/route.js:79`, `src/app/api/scan/worker/route.js:104`, `src/app/api/scan/worker/route.js:138`, `src/app/api/scan/worker/route.js:160`, `src/app/api/scan/worker/route.js:187`, `src/app/api/scan/worker/route.js:249`, `src/lib/scanWorkerRoute.route.test.mjs:101`, `src/lib/scanWorkerRoute.route.test.mjs:119`, `src/lib/scanWorkerRoute.route.test.mjs:203`
 - [x] **R3.1.4** The content worker sweep counts dispatched as done, and an in-memory scan leaves no ledger row — closed at `src/app/api/content/worker/route.js:137-157`
 - [~] **R3.1.5** The post-response scan trigger has no keepalive, and three compensations hide it `needs-vercel` — submitted `src/lib/keepAlive.js:36`, `src/lib/keepAlive.test.mjs:69`, `src/app/api/scan/route.js:142`
+- [~] **R3.1.6** A scan cannot finish itself in production: the self-continue fetch is refused by Deployment Protection, and a finalize claim held by a dead instance never expires `needs-vercel` — submitted `src/lib/workers/scanWorker.js:1186`, `src/lib/db.js:1030`, `src/lib/workers/finalizeReclaim.test.mjs:66`
 - [x] **R3.1.7** recordCronTick fabricates liveness in an unconfigured deploy, so health shows a fresh tick while the cron answers 500 — closed at `src/lib/db/analytics.js:557`, `src/lib/db/analytics.js:573`, `src/lib/health.test.mjs:232`, `src/lib/health.test.mjs:242`, `src/lib/health.test.mjs:257`
 - [x] **R3.1.8** A lease-acquire failure is indistinguishable from a lease legitimately held, and a batch job whose dispatch fails vanishes from every counter — closed at `src/lib/contentWorkerSweep.route.test.mjs:392`
+- [~] **R3.1.9** Crawlability audit history was never written: the upsert names an expression index PostgREST cannot use — submitted `src/lib/db/crawlability.js:93`, `src/lib/crawlabilityAuditDb.test.mjs:142`
+- [ ] **R3.1.10** A content job has no self-continue, so it advances one function-lifetime per day
 ### R3.2
 
 - [x] **R3.2.1** One scan_runs row per chunk execution — closed at `src/lib/workers/scanWorker.js:1540`, `src/lib/workers/scanWorker.js:1555`, `src/lib/workers/scanWorker.js:321`, `src/lib/workers/scanWorker.js:854`, `src/lib/workers/scanWorker.js:203`, `src/lib/workers/scanWorker.js:270`, `src/lib/workers/scanChunkLedger.test.mjs:327`, `src/lib/workers/scanChunkLedgerLive.test.mjs:176`
@@ -324,7 +327,7 @@ Baseline commit: `5111219`
 ### R5.1
 
 - [x] **R5.1.1** Provider-neutral LLM config — closed at `src/lib/llmConfig.js:53`, `src/lib/llmConfig.js:99`, `src/lib/openrouter.js:20`, `src/lib/openrouter.js:48`, `src/lib/health.js:25`, `scripts/check-secrets.mjs:95`, `src/lib/scoring/promptGen.js:275`, `.env.example:11`, `docs/vendors/mimo.md:40`, `src/lib/openrouter.test.mjs:191`
-- [ ] **R5.1.2** Key re-enable checklist `needs-llm` `needs-secrets`
+- [~] **R5.1.2** Key re-enable checklist `needs-llm` `needs-secrets` — submitted `docs/runbooks/key-re-enable.md:36`, `docs/runbooks/key-re-enable.md:57`
 - [x] **R5.1.3** The LLM gateway is MiMo while every var is named OPENROUTER_* `needs-llm` — closed at `src/lib/llmConfig.js:22`, `scripts/check-secrets.mjs:218`, `scripts/check-secrets.mjs:234`
 ### R5.2
 
