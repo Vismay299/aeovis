@@ -2,15 +2,15 @@
 
 > <!-- doc-status -->
 > **Status: LIVE.** Supersedes nothing; the first decision written down about
-> where the probe fleet runs. **Two of its three parts are decided and one is
-> not** — the *vendor* (Railway / Fly / Hetzner) is marked
-> *[pending operator ratification](#5-the-vendor-is-not-decided-here)* and this
-> document must not be cited as having chosen one.
+> where the probe fleet runs. **All three parts are now decided.** The operator
+> ratified the vendor on 2026-09-16 — see
+> [§5](#5-the-vendor--ratified-2026-09-16-zeabur) — and it is **not** one of the
+> three this document originally compared.
 
-**Date:** 2026-09-05
+**Date:** 2026-09-05 · **Vendor ratified:** 2026-09-16
 **Task:** R1.1.3 (`needs-decision`), depends on R1.1.1
 (`docs/contracts/probe-result.md`).
-**Status:** parts 1 and 2 accepted; part 3 **proposed, awaiting the operator**.
+**Status:** parts 1, 2 and 3 accepted.
 **Citation baseline:** every `file:line` below was read in the working tree at
 commit `95b190d`. Four files this document cites were **dirty in the working
 tree** when it was written — `src/lib/workers/scanWorker.js`, `src/lib/db.js`,
@@ -420,12 +420,138 @@ chosen for its migration story.**
 
 ---
 
-## 5. The vendor is **not** decided here
+## 5. The vendor — ratified 2026-09-16: Zeabur
+
+**Decision: the fleet runs on the operator's existing Zeabur server.** Ratified
+by the operator on 2026-09-16. It is **not** one of the three candidates §5.1
+compared; it won on the one ground §5.1 named last and could not see —
+*"the operator already has an account and paid capacity somewhere."*
+
+| | |
+|---|---|
+| Server | `server-6a527fe7e33921bfb5d0fa29`, "Tencent Tokyo 2C 2GB" |
+| Provider / region | Tencent Cloud · Tokyo, JP |
+| Runtime | ZeaburOS + **K3s** |
+| Spec | 2 vCPU · 2 GB RAM · 39.3 GB disk · 512 GB/mo egress |
+| Cost | US$3/mo, paid through 2026-10-11 |
+| Observed at ratification | CPU 6% (120m/2000m) · **memory 1084 MB of 1935 MB already in use** · disk 15.0 GB of 39.3 GB |
+| Upgrade path | US$4/mo → 4 GB / 60 GB / 1.536 TB · US$6/mo → 8 GB / 80 GB / 2.56 TB |
+
+*Every figure above is read from the operator's Zeabur dashboard on 2026-09-16
+and is not verified by anything in this repository.*
+
+**Grounds, in order of weight:**
+
+1. **Paid capacity already exists**, and the marginal cost of using it is zero.
+   §5.1's ground 1 — that the near-term dominant cost is time-to-first-container
+   rather than the box — argues *more* strongly for a box already running than
+   it did for Railway.
+2. **K3s satisfies C1 better than a generic PaaS does.** §1's whole argument
+   rests on a process that gets SIGTERM and finishes the pass in flight rather
+   than orphaning a lease (`worker/src/index.js:258`). On K3s that grace period
+   is an explicit `terminationGracePeriodSeconds` on the Deployment, set by us,
+   rather than a platform default we would have to discover empirically.
+3. **Reversal still costs one image definition.** The isolation rule
+   (`src/lib/workerIsolation.test.mjs:55`, `:72`) is what makes this true, and it
+   is as true for Zeabur as it was for the three candidates.
+
+### 5.1.a What ratification changes about C4, and what it does not
+
+**At the ratified 2 GB, roughly 850 MB is free** (1935 − 1084; the consumed
+portion is ZeaburOS and K3s, not our workload).
+
+> **CORRECTED 2026-09-16, hours after this section was first written.** The
+> first draft said 850 MB "does not host `FLEET_BATCH_SIZE`'s default of 5
+> concurrent Chromium contexts" and concluded that R1.1.2's spike must run on
+> the US$6/mo 8 GB tier. **Both halves were wrong, and the error was reading a
+> documented default instead of resolving the config.** It is corrected in place
+> rather than deleted, because a memory ceiling asserted from a number nobody
+> executed is exactly the class of claim this ADR is otherwise careful about.
+
+Resolve the config and the real concurrency is far lower than the raw defaults
+suggest — `resolveConfig` with only the two required variables set yields:
+
+- **`batchSize: 2`, not 5.** The resolver refuses 5 and says why in its own
+  `adjustments` output: `FLEET_BATCH_SIZE × (probeDelayMaxMs + probeTimeoutMs)`
+  must fit inside `FLEET_LEASE_MS` (300 000), and at perplexity.ai's delays it
+  does not. A batch that outlives its lease has its results refused.
+- **`maxConcurrency: 1` per surface**, from `SURFACE_BUDGETS` in
+  `worker/src/config.js`. This is a **politeness** ceiling from R1.1.5, not a
+  resource one — its stated reason is that "a logged-out consumer UI is a claim
+  to be one person, and two simultaneous requests from one session is the
+  cheapest possible contradiction of it." It will not be raised to buy
+  throughput.
+
+So the ceiling on concurrent Chromium contexts is **the number of enabled
+surfaces — one by default (`engines: ["perplexity"]`), two if ChatGPT is also
+enabled — not `FLEET_BATCH_SIZE`.** One context fits in ~850 MB with room; two
+is tight but not obviously impossible.
+
+**What follows for R1.1.2:** the 2 GB tier is a legitimate place to *begin* the
+spike, and the upgrade is a response to a measured footprint rather than a
+precondition for measuring one. What must not happen is the other failure: if
+self-hosted Playwright is observed to thrash or OOM at 2 GB, that is a signal to
+raise the tier and re-measure, **not** evidence that self-hosted browsing loses.
+Ruling it out on a constraint the operator can lift for US$6/mo would be
+choosing on the box rather than on the measurement, which is the failure
+R1.1.2's acceptance criterion exists to prevent.
+
+### 5.1.b What ratification changes about C2
+
+The egress is **Tencent Cloud datacenter IPs in Tokyo**, against a market whose
+target geography is India (`SERP_GEO=in` in `.env.example`).
+
+Per §4, C2 is conditional on R1.1.2 and remains so. If R1.1.2 picks managed
+browsing, browsing egress is the vendor's residential network and Tokyo stops
+mattering for block rate. If R1.1.2 picks self-hosted Playwright, then Tokyo
+datacenter IPs are in the path, and that is a **measurement R1.1.2 must take,
+not an assumption this ADR may make in either direction.** Datacenter IPs are
+commonly blocked harder than residential ones; whether these are, against
+perplexity.ai and chatgpt.com, is unknown and cheap to find out.
+
+### 5.1.c What ratification does not settle
+
+- **Nothing here verifies Zeabur's platform capabilities.** Whether it deploys
+  from a Dockerfile, how it injects secrets, what its log retention is, and
+  whether a K3s workload can be given the grace period §1 needs are all
+  **unconfirmed by this document** and must be established by the first deploy.
+  This is the same rule §5.1's table was marked with, applied to the winner.
+- **1084 MB was already in use at ratification with none of our workload
+  deployed.** If other projects are running on this server, the free figure is
+  lower than 850 MB and §5.1.a's arithmetic moves.
+- **No probe has ever run** (`worker/src/lib/probe.js:27` throws). Every
+  statement about memory footprint per Chromium context remains an estimate.
+
+**Reversal conditions — any one of these should reopen the vendor question:**
+
+- **R1.1.2 measures an unacceptable block rate from Tokyo datacenter egress
+  *and* picks self-hosted Playwright.** Then IN-region egress becomes
+  first-order and Zeabur's Tokyo region is disqualifying for the browsing path
+  specifically — though it may still host the fleet process while browsing goes
+  elsewhere.
+- **The 8 GB tier proves insufficient at the measured footprint**, or volume
+  resolves to the onboarding case (~17k probes/month per
+  `docs/HANDOFF-2026-08-30.md:139-142`). Re-run §5.1's C4/C5 comparison with
+  real numbers.
+- **Zeabur cannot give a K3s workload the SIGTERM grace period §1 requires.**
+  Then C1 — the one criterion §5.1 called decisive and assumed all candidates
+  met — fails, and this decision was made on a false premise.
+
+**What ratification unblocks:** an image definition (a Dockerfile with
+Playwright's system libraries), a K3s manifest carrying
+`terminationGracePeriodSeconds` and the `FLEET_*` / `SUPABASE_SERVICE_ROLE_KEY`
+environment, and `npm --prefix worker run check` in CI. R1.2.5's runbook and
+R1.2.6's boot validation have both since landed and no longer wait on this.
+
+---
+
+### 5.1 What was compared before ratification — superseded, kept as record
 
 **Which of Railway, Fly and Hetzner runs the fleet is a spend-and-vendor
-commitment and belongs to the operator.** This section is a recommendation with
-its reasoning and its reversal conditions. It is *not* a decision, and no other
-document should cite this ADR as having made one.
+commitment and belongs to the operator.** This section was a recommendation with
+its reasoning and its reversal conditions. It is **superseded by the ratification
+above** and is kept because the reasoning is what the ratification was judged
+against, not because it still stands.
 
 *(**Every cell below the C1 row is a vendor capability or pricing claim, and
 none of it is verified by this document.** It is undated recollection, not
@@ -449,7 +575,9 @@ If a cell is wrong, the recommendation below moves.)*
 | C8 ops burden | least | middle | most (patching, restarts, backups are yours) |
 | Reversal cost | one image definition | one image definition | one image definition |
 
-**Recommendation, provisional: Railway**, on three grounds and no others.
+**Recommendation, provisional: Railway** — *superseded 2026-09-16 by §5; the
+operator ratified Zeabur, which this comparison did not consider.* Recorded on
+three grounds and no others.
 
 1. **The near-term dominant cost is time-to-first-container, not the box.** The
    repository has zero deploy artifacts of any kind, `probeBatch` still throws,
@@ -465,7 +593,8 @@ If a cell is wrong, the recommendation below moves.)*
    to save a fixed monthly amount is the wrong trade while the variable cost is
    the browsing bill.
 
-**Reversal conditions — any one of these should reverse the recommendation:**
+**Reversal conditions for the superseded Railway recommendation** — kept because
+the fourth is the one that actually fired:
 
 - **R1.1.2 measures an unacceptable block rate from managed browsing, or picks
   self-hosted Playwright + residential proxies.** C2 becomes first-order and
@@ -480,13 +609,15 @@ If a cell is wrong, the recommendation below moves.)*
   becomes "an IP we control", which points away from the managed options.
 - **The operator already has an account and paid capacity somewhere.** Named
   last because it is the most likely deciding factor in practice and the one
-  this document has no visibility into.
+  this document has no visibility into. **This is the condition that fired**, on
+  2026-09-16, and the capacity was on a vendor this table does not list.
 
-**What ratification means:** the operator names one, it is recorded in
-`docs/OPERATOR_LEDGER.md`, and the follow-on work (an image definition, the
-`SUPABASE_SERVICE_ROLE_KEY` and `FLEET_*` variables added to `.env.example`,
-R1.2.5's runbook, R1.2.6's boot validation) can then be filed against a real
-target. Until then §§1–3 stand on their own and gate nothing.
+**What ratification meant, and what happened:** the operator names one and it is
+recorded in `docs/OPERATOR_LEDGER.md`. Done on 2026-09-16 — see §5. Of the
+follow-on work this paragraph listed, `SUPABASE_SERVICE_ROLE_KEY` and the
+`FLEET_*` variables have since been added to `.env.example`, R1.2.5's runbook
+landed (`docs/runbooks/fleet-dev.md`) and R1.2.6's boot validation landed
+(`worker/src/config.js`). What remains is the image definition.
 
 ---
 
@@ -516,12 +647,14 @@ target. Until then §§1–3 stand on their own and gate nothing.
 
 ## What this ADR does NOT decide
 
-- **The vendor.** §5, pending operator ratification.
+- ~~**The vendor.**~~ **Decided 2026-09-16: Zeabur.** See §5.
 - **Browser infrastructure.** Bright Data Scraping Browser vs self-hosted
   Playwright + residential proxies vs Browserless is **R1.1.2**, which requires
   a measured block rate and cost per probe from IN egress and is `blocked:
-  needs-secrets`. Nothing here should be read as pre-judging it; §5's
-  recommendation is explicitly conditioned on its outcome.
+  needs-secrets`. Nothing here should be read as pre-judging it. **Ratifying
+  Zeabur does not decide it**, and §5.1.a states the condition explicitly: the
+  spike is run at a memory tier where self-hosted Playwright can execute, so
+  that it is ruled in or out by measurement rather than by the 2 GB tier.
 - **Probe volume, cadence or politeness budget.** R1.1.5 and R3.1.
 - **Whether the *existing* API-based scan pipeline moves off Vercel.** It stays
   where it is. This ADR moves real-surface probe execution only.
@@ -604,38 +737,45 @@ in what it refuses to claim.
 - **The `~$27–68/month` and `~1,300 / ~17,000 probes per month` figures are
   quoted from `docs/HANDOFF-2026-08-30.md` and are not derived from anything in
   the repository.** They are the operator's numbers to confirm.
-- **The R1.1.2 ⇄ R1.1.3 cycle is real and is not resolved by this document** —
-  it is only broken far enough for a spike to be sited. If the operator ratifies
-  a host and the spike then measures against it, C2 may reverse §5.
+- **The R1.1.2 ⇄ R1.1.3 cycle was broken by siting, not by resolving** — the
+  host is now named (§5) so the spike has somewhere to run, but C2 is still
+  conditional on R1.1.2's measurement and may yet reverse part of §5.
 - **Nothing in this repository deploys `worker/`**, so no claim here has been
-  tested on any host. The first deploy is the first test.
-- **§3.1's rule is a convention, not a guard.** A laptop fleet started with the
-  app's production credentials in scope would write `probe_tasks` and
-  `scan_runs` on production, and neither `liveWriteGuardAuto` nor
-  `WRITABLE_BY_OPT_IN` would stop it. R1.2.6 is the task that would make this
-  sentence obsolete; it is `todo`.
-- **Every cell of §5's vendor comparison table is unverified by this
+  tested on any host — including the ratified one. The first deploy is the
+  first test, and §5.1.c says which Zeabur capabilities it will be testing.
+- ~~**§3.1's rule is a convention, not a guard.**~~ **Obsolete since R1.2.6
+  closed** (`worker/src/config.js` validates and refuses at boot). §3.1's
+  closing paragraph still reads as though R1.2.6 were `todo` and should be
+  rewritten from "convention" to "enforced, by `worker/src/config.js`"; it is
+  left standing here rather than silently edited, per reversal condition 3.
+- **Every cell of §5.1's vendor comparison table is unverified by this
   document.** Railway's, Fly's and Hetzner's capabilities, regions and pricing
   are undated recollection, sourced to no vendor page and to nothing in this
-  repository. The three cells the recommendation actually turns on — Fly's
-  Mumbai region, Hetzner's per-GB price, Hetzner's datacenter IPs — are exactly
-  the ones an operator must re-check, because each is the sole support for one
-  ground or one reversal condition. Confirming them against current vendor
-  pricing and region lists is part of ratification, not a follow-up to it.
+  repository. That table is now superseded and nothing turns on it — but it is
+  the reasoning the ratification was judged against, so its unreliability is
+  worth keeping in view rather than deleting along with the recommendation.
+- **§5's Zeabur figures are the operator's dashboard, read once on 2026-09-16**,
+  and Zeabur's platform behaviour — Dockerfile deploys, secret injection, K3s
+  grace periods, log retention — is **entirely unverified**. §5.1.c enumerates
+  what the first deploy has to settle.
 
 ---
 
-## The one decision this document leaves open
+## The decision this document left open — closed 2026-09-16
 
-**Which of Railway, Fly.io or Hetzner runs the fleet.** Nothing in this
-repository can settle it: it is a spend-and-vendor commitment, and §5's
-comparison of the three is unverified recollection that the operator must
-confirm before it is leaned on.
+It asked for one sentence — *"the fleet runs on ⟨host⟩"* — and on 2026-09-16 the
+operator supplied it:
 
-Ratification is one sentence — *"the fleet runs on ⟨host⟩"* — recorded in
-`docs/OPERATOR_LEDGER.md`, after which §5's provisional recommendation is
-either confirmed or replaced and the follow-on work named at the end of §5
-(image definition, `.env.example` variables, R1.2.5's runbook, R1.2.6's boot
-validation) can be filed against a real target. Until that sentence exists,
-**this ADR has not named a host, and no document may cite it as having named
-one.** §§1–3 are decided, stand on their own, and gate nothing.
+> **The fleet runs on Zeabur** (`server-6a527fe7e33921bfb5d0fa29`, Tencent Cloud
+> Tokyo, ZeaburOS + K3s).
+
+Recorded in `docs/OPERATOR_LEDGER.md` under R1.1.3. §5 carries the grounds, what
+it does and does not settle, and the conditions that would reopen it. §5.1 keeps
+the superseded Railway / Fly / Hetzner comparison as the record of what the
+choice was judged against.
+
+**What is still open is the deploy, not the decision.** No Dockerfile, no K3s
+manifest and no CI entry for `worker/` exist; `probeBatch` still throws. A first
+deploy produces a fleet that claims tasks, writes `scan_runs` rows and refuses
+loudly at the probe — which is the platform R1.1.2's spike needs, and the point
+of naming a host now.

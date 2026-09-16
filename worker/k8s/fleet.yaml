@@ -1,0 +1,96 @@
+# The probe fleet as a K3s workload. Ratified host: Zeabur (Tencent Cloud Tokyo,
+# ZeaburOS + K3s) — docs/decisions/2026-09-05-worker-host.md §5.
+#
+# Apply the Secret FIRST and never commit its values:
+#   kubectl create secret generic perceev-fleet \
+#     --from-literal=SUPABASE_URL='https://<project>.supabase.co' \
+#     --from-literal=SUPABASE_SERVICE_ROLE_KEY='<key>'
+#
+# The service-role key bypasses row-level security. It belongs in a Secret or in
+# Zeabur's own environment UI, never in this file, never in the image, and never
+# in a chat transcript — two credentials have already leaked into agent
+# transcripts on this project (docs/OPERATOR_LEDGER.md §A item 1).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perceev-fleet
+  labels:
+    app: perceev-fleet
+spec:
+  replicas: 1
+  # Recreate, not RollingUpdate. The lease in probe_tasks makes two concurrent
+  # fleets CORRECT (that is what R1.2.2 built), but on a 2 GB box it is not
+  # AFFORDABLE — a rolling update would briefly run two browsers.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: perceev-fleet
+  template:
+    metadata:
+      labels:
+        app: perceev-fleet
+    spec:
+      # Longer than FLEET_LEASE_MS (300000). worker/src/index.js:258 handles
+      # SIGTERM by finishing the pass in flight rather than dying mid-batch,
+      # "what keeps a lease from being orphaned for its full duration on every
+      # deploy". A grace period shorter than the lease would defeat that: K8s
+      # would SIGKILL mid-pass and the orphaned lease is exactly what the
+      # handler exists to prevent.
+      terminationGracePeriodSeconds: 330
+      restartPolicy: Always
+      containers:
+        - name: fleet
+          # Replace with the image reference your registry/Zeabur build produces.
+          image: perceev-fleet:latest
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            # REVISIT AT R1.3, when a real browser first launches. Today
+            # probeBatch throws (worker/src/lib/probe.js:27) so nothing spawns
+            # Chromium and this is generous. Concurrency is capped at one
+            # context PER SURFACE by SURFACE_BUDGETS — a politeness ceiling, not
+            # a resource one — so the ceiling is the number of enabled engines,
+            # not FLEET_BATCH_SIZE. Raise against a MEASURED footprint.
+            limits:
+              memory: 640Mi
+              cpu: 1000m
+          envFrom:
+            - secretRef:
+                name: perceev-fleet
+          env:
+            # Identity written onto every claim and heartbeat. Taking it from
+            # the pod name means the scan_runs ledger says which pod did the
+            # work, and a restarted pod is visibly a different worker.
+            - name: FLEET_WORKER_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+
+            # STAGE 2 ONLY. Leave this commented out for the first deploy: run
+            # `--selftest` first, which needs no database, so that a Zeabur or
+            # K3s failure cannot be mistaken for a credential failure.
+            #
+            # The ratified target IS the live project, so R1.2.12's guard will
+            # refuse to boot without this. That refusal is correct and must stay
+            # loud — it is the reason this flag lives HERE, on the Deployment,
+            # where a reader can see production is armed, rather than in the
+            # image where every deployment would inherit it silently.
+            #
+            # When unarmed against a production target, R1.2.17 strips the
+            # credentials from the process entirely rather than letting it hold
+            # live keys while reporting itself unarmed. Do not read an unarmed
+            # boot as "it connected but declined to write".
+            # - name: FLEET_ALLOW_PRODUCTION_DB
+            #   value: "true"
+          # No liveness/readiness probe: the fleet serves no HTTP and a probe
+          # endpoint would be the only reason to add one. Its liveness signal is
+          # the scan_runs ledger — worker/README.md explains why even an idle
+          # pass writes a row. If the process exits, restartPolicy handles it.
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]

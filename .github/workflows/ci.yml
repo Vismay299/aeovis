@@ -35,6 +35,41 @@ jobs:
       # (src/lib/testCoverageGuard.test.mjs), so it fails on a developer's
       # machine too rather than only in CI.
 
+  # The fleet is a separate npm workspace with its own dependency set, and until
+  # R1.2.19 this job did not exist: `npm --prefix worker test` matched no files
+  # and CI never entered worker/, so the only automated check on the fleet was
+  # the isolation guard running in the main suite. The worker-host ADR named
+  # adding this as the deploy owner's job.
+  fleet:
+    name: fleet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - run: npm --prefix worker ci
+
+      # Parses, then starts and completes one pass against stubs. Needs no
+      # database, no browser and no credential — so a broken fleet fails here
+      # rather than on the host.
+      - name: fleet selftest
+        run: npm --prefix worker run check
+
+      # Builds the deploy image and runs the SAME selftest inside it. This is
+      # what proves the Dockerfile before it reaches Zeabur: that the Playwright
+      # system libraries install, that the browser matches the resolved library
+      # version, and that tini + the node user can actually start the process.
+      - name: build the fleet image
+        run: docker build -t perceev-fleet:ci worker
+
+      - name: selftest inside the image
+        run: docker run --rm perceev-fleet:ci node src/index.js --selftest
+
   build:
     name: build
     runs-on: ubuntu-latest

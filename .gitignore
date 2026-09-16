@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+# The fleet is a separate npm workspace with its own dependency set, so the
+# rooted pattern above does not reach it.
+/worker/node_modules
 /.pnp
 .pnp.js
 .yarn/install-state.gz

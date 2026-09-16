@@ -2228,17 +2228,12 @@
         "docs/decisions/"
       ],
       "phase": "R1",
-      "status": "blocked",
-      "owner": "rebuild-scribe",
+      "status": "in_verification",
+      "owner": "local-session",
       "evidence": [
-        "docs/decisions/2026-09-05-worker-host.md:430",
-        "docs/decisions/2026-09-05-worker-host.md:617",
-        "docs/decisions/2026-09-05-worker-host.md:325",
-        "docs/decisions/2026-09-05-worker-host.md:388",
-        "docs/decisions/2026-09-05-worker-host.md:628",
-        "src/lib/liveWriteGuard.js:126",
-        "worker/src/index.js:38",
-        "worker/src/index.js:270"
+        "docs/decisions/2026-09-05-worker-host.md:423",
+        "docs/decisions/2026-09-05-worker-host.md:5",
+        "docs/OPERATOR_LEDGER.md:629"
       ],
       "notes": [
         {
@@ -2275,14 +2270,28 @@
           "at": "2026-09-09T18:00:41.831Z",
           "by": "rebuild-scribe",
           "text": "blocked (needs-decision): Blocked on the operator, on the verifier's explicit recommendation ('do not send this back to an implementer; there is nothing left for one to do'). The ADR is complete and verified on three of its four accept clauses — why Vercel functions cannot serve this workload, the dev-mode story, and a dated honest account of what is unproven. The fourth clause, NAMING THE HOST, is a spend-and-vendor commitment no agent can make. OPERATOR ACTION: one sentence — 'the fleet runs on <host>' — choosing among Railway (the ADR's provisional recommendation), Fly, or Hetzner, recorded in docs/OPERATOR_LEDGER.md. On receipt, section 5 is confirmed or replaced and the stale :128 citation in section 2.9 is re-anchored, and the task closes without further engineering."
+        },
+        {
+          "at": "2026-09-16T09:59:29.510Z",
+          "by": "controller",
+          "text": "unblocked: Operator ratified the vendor on 2026-09-16: the fleet runs on Zeabur (server-6a527fe7e33921bfb5d0fa29, Tencent Cloud Tokyo, ZeaburOS + K3s). This was the single outstanding accept clause; the other two (why Vercel functions cannot serve the workload, the dev-mode story) were already verified."
+        },
+        {
+          "at": "2026-09-16T09:59:38.580Z",
+          "by": "local-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-16T09:59:54.676Z",
+          "by": "local-session",
+          "text": "All three accept clauses now met. (1) NAMES THE HOST: §5 (docs/decisions/2026-09-05-worker-host.md:423) records the operator's 2026-09-16 ratification — the fleet runs on Zeabur, server-6a527fe7e33921bfb5d0fa29, Tencent Cloud Tokyo, ZeaburOS + K3s, with the dashboard specs as read that day and marked unverified-by-this-repository. (2) WHY VERCEL FUNCTIONS CANNOT SERVE IT: §2, unchanged and previously verified, ten sub-arguments each anchored on machinery this repo wrote only to survive a request-scoped runtime. (3) DEV-MODE STORY: §3, unchanged and previously verified. Also done in this pass: the doc-status header and the closing section no longer claim the vendor is open; the Railway recommendation is marked superseded rather than deleted, and §5.1 keeps the three-way comparison as the record the ratification was judged against; §5.1.a records that the 2 GB tier leaves ~850 MB free, which does not host FLEET_BATCH_SIZE=5 local Chromium contexts, and states that R1.1.2's spike must therefore run on the 8 GB tier so self-hosted Playwright is ruled in or out by measurement rather than by the box; §5.1.b records that egress is Tencent Tokyo datacenter IPs against an IN-target market and leaves that as an R1.1.2 measurement rather than an assumption in either direction; §5.1.c lists what ratification does NOT settle — no Zeabur platform capability is verified by this document. Two stale bullets corrected while in the file: R1.2.6 has closed, so §3.1's convention-not-a-guard caveat is marked obsolete, and the .env.example gap it named is filled. NOT CLAIMED: nothing is deployed, probeBatch still throws, and no Zeabur capability has been exercised."
         }
       ],
       "verification": {
         "verdict": "fail",
         "at": "2026-09-09T18:00:41.476Z",
         "note": "FAIL on the accept, but NOT on the work — the verifier's recommendation is block-on-operator, not rework, and the controller is taking it. THREE OF FOUR ACCEPT CLAUSES ARE MET AND MET WELL. All three defects from the previous rejection are genuinely fixed, each re-derived from source: (D2) liveWriteGuard.js:126 opens NEVER_WRITABLE with entries at :127-146 and the close at :147 — TWENTY tables, identical at 95b190d and at HEAD, and the doc at :325-328 now states 20 and names the list's extent and last element so the count is re-checkable; (D3) worker/src/index.js:38 routes through console.log, i.e. STDOUT, and git grep over worker/ returns exactly four describeRun/describeClaim call sites (:88, :121, :144, :242) all going through it, with console.error appearing only at :270 and :367 — the doc at :388 states stdout and names all four sites plus the exception; (D1) the vendor table's parenthetical at :430-439 marks every cell below the C1 row as unverified, undated and sourced to no vendor page, names the three load-bearing cells and what each alone supports, and the seventh 'what is unproven' bullet at :617-624 agrees with it. SEVENTEEN greppable anchors re-run at HEAD 6a7ab1f all resolve, all three negative-evidence greps reproduce (no deploy artifacts, no waitUntil, .env.example count 0), root package.json has neither playwright nor @vercel/functions, ci.yml never enters worker/, and npm --prefix worker test genuinely matches zero files. Every quoted source block the verifier diffed is verbatim. Suite 1975/1949/0 fail/26 skip, exact baseline; docStatus 11/11 with the guard confirmed to walk all of docs/ so it really covers this file. WHY IT CANNOT PASS: the accept requires a 'dated ADR NAMING THE HOST'. The document itself says at :640-641 that it has not named a host and that no document may cite it as having named one. Section 5 deliberately leaves Railway vs Fly vs Hetzner open, the task carries needs-decision, readiness reports gated, and the implementer twice stated it expects a block. Nothing in this environment can supply a spend-and-vendor commitment, and inventing one to satisfy the accept is precisely the failure class this rebuild exists to close. THE MISSING INPUT IS ONE SENTENCE FROM THE OPERATOR — 'the fleet runs on <host>' — after which section 5's provisional Railway recommendation is confirmed or replaced. Sending this back to an implementer would produce a guess. OUT-OF-SCOPE ROT CAUSED BY A LATER COMMIT, not by this task: 736f4f4 added 11 lines to src/app/api/scan/route.js, so the runScanChunk call the ADR cites as :128 in section 2.9 and in its evidence list is now at :139, with :128 an unrelated memoryJobs comment. It resolved correctly at the doc's declared baseline 95b190d and at the commit it shipped in, and the doc's own staleness command at :24 correctly returns non-empty now — the doc telling the reader to re-derive, which is the anchoring style working as designed. Fix by dropping the line number when the host is ratified."
-      },
-      "blocked_reason": "needs-decision"
+      }
     },
     {
       "id": "R1.1.4",
@@ -3313,6 +3322,84 @@
         "at": "2026-09-13T10:43:54.391Z",
         "note": "Verified by QA 1 & Judge: fleet:dev flag order swapped so scoped dev credentials take precedence, node precedence proven with dummy files, .env.example placeholder added, 65/65 tests pass"
       }
+    },
+    {
+      "id": "R1.2.19",
+      "subphase": "R1.2",
+      "lane": "infra",
+      "title": "Deploy the fleet to Zeabur: image definition, K3s manifest, CI check",
+      "detail": "R1.1.3 ratified Zeabur (server-6a527fe7e33921bfb5d0fa29, Tencent Cloud Tokyo, ZeaburOS + K3s) on 2026-09-16, and the worker-host ADR explicitly declined to claim a task for the deploy itself. Nothing in this repository deploys worker/: git ls-files matches no dockerfile, fly.toml, railway.json, nixpacks, Procfile, docker-compose or render.yaml, and .github/workflows/ci.yml never enters worker/. What this task builds: (1) a Dockerfile carrying Playwright system libraries on Node >= 20, (2) a K3s manifest with an explicit terminationGracePeriodSeconds long enough for worker/src/index.js:258 to finish the pass in flight rather than orphaning a lease on every deploy, (3) the FLEET_* and SUPABASE_SERVICE_ROLE_KEY environment injected as Zeabur secrets and never baked into the image, (4) npm --prefix worker run check in CI, which the ADR named as the deploy owner going concern. ADR section 5.1.c lists what this deploy is the first test of: whether Zeabur deploys from a Dockerfile at all, how it injects secrets, whether a K3s workload can be given the grace period, and what its log retention is. None of those is verified by anything in the repository today. NOTE probeBatch still throws by design (R1.3), so a successful first deploy is a fleet that claims tasks, writes a closed scan_runs row and refuses loudly at the probe - that is the expected shape, not a failure.",
+      "accept": "The image builds and runs on the ratified Zeabur server; one pass completes against a non-production Supabase and leaves a closed scan_runs row; SIGTERM during a pass finishes that pass rather than orphaning the lease, evidenced from the run ledger; SUPABASE_SERVICE_ROLE_KEY is present in the container environment and absent from the image layers; CI runs npm --prefix worker run check.",
+      "deps": [
+        "R1.1.3"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "anchors": [
+        "worker/src/index.js:258",
+        "worker/package.json",
+        "docs/decisions/2026-09-05-worker-host.md:423",
+        ".github/workflows/ci.yml"
+      ],
+      "phase": "R1",
+      "findings": [],
+      "status": "blocked",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-16T10:00:16.513Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-16T10:37:31.557Z",
+          "by": "controller",
+          "text": "correction: MIS-SPECIFIED AT FILING, superseded by R1.2.20. I wrote the accept clause 'one pass completes against a non-production Supabase' hours before the operator named the target database, and it was wrong on the merits, not merely inconvenient. The worker-host ADR's section 3.1 non-production rule governs a LAPTOP dev fleet, where the hazard is a developer's shell inheriting the app's credentials. It was never a rule about the deployed fleet, whose entire purpose is to serve the production queue. Importing it into this task's accept invented a constraint the ADR does not impose. Operator decision 2026-09-16: the fleet targets https://nggyizuwqepxaqnpcqqj.supabase.co, the live AEO project, which already carries probe_tasks and scan_runs from migrations 010 and 011. That makes this accept unsatisfiable as written. Per the ledger's own rule -- a criterion that is genuinely wrong needs a new task, not a quiet edit -- R1.2.20 carries the corrected criteria and this task is blocked rather than reworded."
+        },
+        {
+          "at": "2026-09-16T10:37:38.471Z",
+          "by": "controller",
+          "text": "blocked (needs-decision): Superseded by R1.2.20. Held blocked rather than reworded because its accept is immutable and is now unsatisfiable by operator decision. Withdraw it if the ledger grows a withdraw verb; do not close it on R1.2.20's evidence."
+        }
+      ],
+      "verification": null,
+      "blocked_reason": "needs-decision"
+    },
+    {
+      "id": "R1.2.20",
+      "subphase": "R1.2",
+      "lane": "infra",
+      "title": "Deploy the fleet to Zeabur against the live project, explicitly armed",
+      "detail": "Replaces R1.2.19, whose accept imported the ADR section 3.1 non-production rule that governs a LAPTOP dev fleet and does not govern the deployed one. Operator named the target on 2026-09-16: https://nggyizuwqepxaqnpcqqj.supabase.co, the live AEO project, which already carries probe_tasks (010) and scan_runs (011). Two stages, deliberately separated so a platform failure cannot be confused with a credential failure. STAGE 1 is credential-free: build the image and run node src/index.js --selftest on the Zeabur box. It stubs the queue, probe, report and ledger and asserts a pass opened AND closed a run, so it needs no database, no browser and no key. That stage alone settles every Zeabur capability ADR section 5.1.c lists as unverified: Dockerfile builds, K3s scheduling, Playwright system libraries, SIGTERM reaching the handler, log retention. STAGE 2 points at the live project and requires FLEET_ALLOW_PRODUCTION_DB=true, because R1.2.12 refuses otherwise and, when unarmed, R1.2.17 strips the credentials from the process entirely rather than holding live keys while reporting itself unarmed. Verified by execution 2026-09-16: dev URL unarmed boots, dev URL with NODE_ENV=production REFUSES, live URL unarmed REFUSES, live URL armed boots. NOTE the image must NOT set NODE_ENV=production: config.js treats that alone as a production target, so baking it in would force the arming flag on every deployment including dev ones and make the guard a no-op. ALSO NOTE probeBatch still throws (R1.3), so a correct stage 2 is a fleet that claims from an empty queue, writes a closed scan_runs row, and refuses at the probe. Expect ledger rows, not probe results.",
+      "accept": "Stage 1: the image builds and node src/index.js --selftest completes one pass inside a container on the ratified Zeabur server, evidenced from the container log. Stage 2: with FLEET_ALLOW_PRODUCTION_DB=true and the live project credentials supplied as K3s secrets, the fleet boots, completes at least one pass and leaves a closed scan_runs row attributable to its FLEET_WORKER_ID; SIGTERM during a pass finishes that pass rather than orphaning the lease, evidenced from the run ledger; SUPABASE_SERVICE_ROLE_KEY is present in the container environment and absent from every image layer; CI runs npm --prefix worker run check and builds the image.",
+      "deps": [
+        "R1.1.3"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "anchors": [
+        "worker/Dockerfile",
+        "worker/k8s/fleet.yaml",
+        "worker/src/config.js:610",
+        "worker/src/index.js:258",
+        ".github/workflows/ci.yml"
+      ],
+      "phase": "R1",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-16T10:37:55.948Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R1.3.1",
