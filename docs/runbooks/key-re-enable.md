@@ -54,4 +54,4 @@ the roster had no rival — not a key problem, but the gate is not passed.
 
 | Date | Model | Gate 1 | Gate 2 | Gate 3 |
 |---|---|---|---|---|
-| 2026-09-15 | `openrouter/free` on OpenRouter | PASS — 8 pass, 0 fail; openai unconfigured (optional) | PASS — `cost: 0`, `cost_source: "gateway"`, 60 tokens; unknown id on `custom` gateway threw `UnpricedModelError` | see ledger R5.1.2 note |
+| 2026-09-15 | `openrouter/free` on OpenRouter | PASS — 8 pass, 0 fail; openai unconfigured (optional) | PASS — `cost: 0`, `cost_source: "gateway"`, 60 tokens; unknown id on `custom` gateway threw `UnpricedModelError` | PASS (2026-09-16) — production scan `e00af0d1` (Italica + 3 rivals) completed in 8 min with 0 rescue attempts; `brand_metrics_daily` rows for `aio` and `all` carry `sov_state = measured_zero`, `sov_state_reason = brand_not_visible`, `sov_pct = 0`, `citation_denominator = 26`. Rivals were named and the brand was not: a real measured zero, not an absence. |
