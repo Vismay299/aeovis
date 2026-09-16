@@ -1027,6 +1027,54 @@ export async function claimJobStatus(jobId, fromStatus, toStatus, deps = {}) {
   return data && data[0] ? data[0] : null;
 }
 
+/**
+ * Take over a finalize claim whose owner is dead (R3.1.6).
+ *
+ * `claimJobStatus(jobId, "probing", "scoring")` is the finalize single-flight:
+ * whoever flips probing -> scoring owns completing the job. That claim had no
+ * expiry, so an instance that died inside finalize — frozen at maxDuration,
+ * killed mid-write — left the row in "scoring" forever. Every later rescue
+ * found a status that is no longer "probing", lost the claim, and closed its
+ * run 'skipped'/'finalize_claimed_elsewhere'. Observed in production on
+ * 2026-09-15: job 8e25a0fe stuck at 90% with three consecutive skipped
+ * finalize runs and no path to complete.
+ *
+ * The takeover is the same shape as the original claim — one conditional
+ * UPDATE, so it is atomic. The predicate is "still scoring AND its heartbeat
+ * is older than the staleness window", and the update stamps a fresh
+ * heartbeat, so a second racer's predicate no longer matches and exactly one
+ * instance takes over. A LIVE finalize (heartbeat inside the window) is never
+ * disturbed: this only ever fires where the alternative is a job nothing can
+ * finish.
+ *
+ * @returns {Promise<object|null>} the row when this caller took over, else null
+ */
+export async function reclaimStaleFinalize(jobId, deps = {}) {
+  const client = resolveClient(deps);
+  const now = new Date();
+  const staleMs = Number.isFinite(deps.staleAfterMs) ? deps.staleAfterMs : HEARTBEAT_STALE_MS;
+  const cutoff = new Date(now.getTime() - staleMs).toISOString();
+
+  if (!client) {
+    const memJob = global.memoryJobs.get(jobId);
+    if (!memJob || memJob.status !== "scoring") return null;
+    const beat = new Date(memJob.heartbeat_at || 0).getTime();
+    if (!Number.isFinite(beat) || now.getTime() - beat < staleMs) return null;
+    memJob.heartbeat_at = now.toISOString();
+    return memJob;
+  }
+
+  const { data, error } = await client
+    .from("scan_jobs")
+    .update({ heartbeat_at: now.toISOString() })
+    .eq("id", jobId)
+    .eq("status", "scoring")
+    .lt("heartbeat_at", cutoff)
+    .select();
+  if (error) throw error;
+  return data && data[0] ? data[0] : null;
+}
+
 // Global memory store for content events (Next.js hot-reload safe)
 global.memoryContentEvents = global.memoryContentEvents || new Map();
 

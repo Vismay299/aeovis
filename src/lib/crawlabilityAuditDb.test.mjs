@@ -72,7 +72,7 @@ test("saveCrawlabilityAudit throws when no client is configured", async () => {
   );
 });
 
-test("saveCrawlabilityAudit throws when upsert fails", async () => {
+test("saveCrawlabilityAudit throws when the write fails", async () => {
   const client = createMockClient({ insertError: { message: "relation does not exist" } });
   await assert.rejects(
     () => saveCrawlabilityAudit({ domain: "example.com", fetched_ok: true, summary: { open: 1, partial: 0, blocked: 0, total: 1 }, bots: [] }, { client }),
@@ -83,7 +83,7 @@ test("saveCrawlabilityAudit throws when upsert fails", async () => {
   );
 });
 
-test("saveCrawlabilityAudit calls upsert with correct table name", async () => {
+test("saveCrawlabilityAudit inserts into the right table with a normalized row", async () => {
   const client = createMockClient();
   const audit = {
     domain: "Example.com",
@@ -100,10 +100,10 @@ test("saveCrawlabilityAudit calls upsert with correct table name", async () => {
 
   const result = await saveCrawlabilityAudit(audit, { client });
 
-  // Should have called from("crawlability_audits") then upsert
+  // Should have called from("crawlability_audits") then insert
   assert.equal(client._calls[0].op, "from");
   assert.equal(client._calls[0].table, "crawlability_audits");
-  assert.equal(client._calls[1].op, "upsert");
+  assert.equal(client._calls[1].op, "insert");
 
   // Domain should be normalized to lowercase
   const upsertedRow = client._calls[1].args[0];
@@ -122,7 +122,7 @@ test("saveCrawlabilityAudit calls upsert with correct table name", async () => {
   assert.equal(result.id, "test-id-123");
 });
 
-test("saveCrawlabilityAudit uses upsert with onConflict", async () => {
+test("saveCrawlabilityAudit inserts without an on_conflict option", async () => {
   const client = createMockClient();
   await saveCrawlabilityAudit({
     domain: "example.com",
@@ -130,9 +130,80 @@ test("saveCrawlabilityAudit uses upsert with onConflict", async () => {
     summary: { open: 0, partial: 0, blocked: 0, total: 0 },
   }, { client });
 
-  assert.equal(client._calls[1].op, "upsert");
-  assert.ok(client._calls[1].opts);
-  assert.ok(client._calls[1].opts.onConflict);
+  assert.equal(client._calls[1].op, "insert");
+  // R3.1.9: NOT upsert. PostgREST's on_conflict names columns, and the
+  // per-minute constraint is an EXPRESSION index — the old
+  // `onConflict: "domain,date_trunc('minute', audited_at)"` made every save
+  // fail, which the route caught and logged, so audit history was never
+  // written at all while the endpoint still answered 200.
+  assert.ok(!client._calls[1].opts, "an insert carries no on_conflict option");
+});
+
+test("R3.1.9 — a second audit in the same minute REPLACES the first instead of failing", async () => {
+  // The per-minute unique index fires as 23505; the newer audit wins.
+  const calls = [];
+  const client = {
+    from(table) {
+      calls.push({ op: "from", table });
+      return {
+        insert(row) {
+          calls.push({ op: "insert", args: [row] });
+          return {
+            select: () => ({
+              single: async () => ({ data: null, error: { code: "23505", message: "duplicate key" } }),
+            }),
+          };
+        },
+        update(row) {
+          calls.push({ op: "update", args: [row], filters: [] });
+          const chain = {
+            eq(col, val) {
+              calls.at(-1).filters.push(["eq", col, val]);
+              return chain;
+            },
+            gte(col, val) {
+              calls.at(-1).filters.push(["gte", col, val]);
+              return chain;
+            },
+            lt(col, val) {
+              calls.at(-1).filters.push(["lt", col, val]);
+              return chain;
+            },
+            select: () => ({ single: async () => ({ data: { id: "replaced-1", ...row }, error: null }) }),
+          };
+          return chain;
+        },
+      };
+    },
+  };
+
+  const result = await saveCrawlabilityAudit(
+    { domain: "Example.com", fetched_ok: true, summary: { open: 1, partial: 0, blocked: 0, total: 1 } },
+    { client }
+  );
+
+  assert.equal(result.id, "replaced-1", "the duplicate must resolve to the stored row, not throw");
+  const update = calls.find((c) => c.op === "update");
+  assert.ok(update, "a 23505 must be handled, not rethrown");
+  assert.deepEqual(update.filters[0], ["eq", "domain", "example.com"]);
+  assert.equal(update.filters[1][0], "gte");
+  assert.equal(update.filters[2][0], "lt");
+  const windowMs = new Date(update.filters[2][2]).getTime() - new Date(update.filters[1][2]).getTime();
+  assert.equal(windowMs, 60_000, "the replace must be scoped to exactly the conflicting minute");
+});
+
+test("R3.1.9 — a non-duplicate insert error still throws", async () => {
+  const client = createMockClient({
+    insertError: { code: "42501", message: "permission denied" },
+  });
+  await assert.rejects(
+    () =>
+      saveCrawlabilityAudit(
+        { domain: "example.com", fetched_ok: true, summary: { open: 0, partial: 0, blocked: 0, total: 0 } },
+        { client }
+      ),
+    /permission denied/
+  );
 });
 
 test("saveCrawlabilityAudit defaults testPath to /", async () => {

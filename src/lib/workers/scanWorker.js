@@ -12,6 +12,7 @@ import {
   // a heartbeat means dead" has exactly one definition in this codebase.
   HEARTBEAT_STALE_MS,
   claimJobStatus,
+  reclaimStaleFinalize,
   getScansByDomain,
 } from "../db.js";
 import {
@@ -1171,14 +1172,51 @@ export function resolveSelfContinueUrl(jobId) {
 /** R3.1.5 — how long a chunk keeps its instance alive for the self-continue request to go out. */
 export const SELF_CONTINUE_HOLD_MS = 5000;
 
+/**
+ * The headers the self-continue request must carry, and why each one exists.
+ *
+ * TWO DIFFERENT GATES, and only one of them is this app's:
+ *  - `x-cron-secret` authenticates to the WORKER ROUTE (reviewer D4). Without
+ *    it the route answers 401 and the chunk stops advancing.
+ *  - `x-vercel-protection-bypass` gets PAST DEPLOYMENT PROTECTION, which sits
+ *    in front of the function. R3.1.6: with Vercel Authentication on
+ *    (ssoProtection `all_except_custom_domains` on this project), a self-fetch
+ *    to the deployment URL is answered by an SSO redirect and the next chunk
+ *    never starts — observed in production on 2026-09-15, where a scan sat
+ *    6 minutes between chunks until a browser poll rescued it. The cron secret
+ *    cannot help there: the request never reaches the route that reads it.
+ *    Vercel exposes VERCEL_AUTOMATION_BYPASS_SECRET to the deployment when
+ *    Protection Bypass for Automation is enabled.
+ *
+ * Returns `{ init, missingBypass }`. `missingBypass` is true only where it is
+ * a real risk — on Vercel, with no bypass secret — so the caller can say so
+ * once instead of this function guessing about local dev.
+ *
+ * @param {object} [env]
+ */
+export function buildSelfContinueInit(env = process.env) {
+  const headers = {};
+  const secret = (env.CRON_SECRET || "").trim();
+  if (secret) headers["x-cron-secret"] = secret;
+  const bypass = (env.VERCEL_AUTOMATION_BYPASS_SECRET || "").trim();
+  if (bypass) headers["x-vercel-protection-bypass"] = bypass;
+  return {
+    init: Object.keys(headers).length ? { headers } : undefined,
+    missingBypass: !bypass && !!env.VERCEL,
+  };
+}
+
 function defaultSelfContinue(jobId) {
   const url = resolveSelfContinueUrl(jobId);
   if (!url) return;
-  // The worker route is secret-gated when CRON_SECRET is set (reviewer D4), so
-  // the self-continue call must authenticate itself or it 401s and the chunk
-  // silently stops advancing (poll rescue would still recover it, but slower).
-  const secret = (process.env.CRON_SECRET || "").trim();
-  const init = secret ? { headers: { "x-cron-secret": secret } } : undefined;
+  const { init, missingBypass } = buildSelfContinueInit();
+  if (missingBypass) {
+    console.warn(
+      `[scan-chunk] self-continue for job ${jobId} is going out WITHOUT a protection bypass ` +
+        `(VERCEL_AUTOMATION_BYPASS_SECRET is unset). If Deployment Protection is on, this request is ` +
+        `refused before it reaches the worker and the scan advances only on a poll or cron rescue.`
+    );
+  }
   try {
     // R3.1.5: hold the instance just long enough for the request to leave.
     // Waiting for the response would bill this function for the whole next
@@ -1960,8 +1998,23 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   if (!alreadyStamped) {
     const claimed = await claimJob(jobId, "probing", "scoring");
     if (!claimed) {
-      console.warn(`[scan-chunk] Job ${jobId}: lost the finalize claim — another instance owns it.`);
-      return null;
+      // R3.1.6 — a lost claim has a THIRD case the two above do not cover: the
+      // claim holder is DEAD. It flipped the row to "scoring", died before
+      // stamping a scan_id, and left a claim with no expiry, so this branch
+      // returned null on every rescue forever and the job could never finish.
+      // Take the claim over only when its heartbeat has gone stale; a live
+      // finalize still wins and this caller still bails.
+      const reclaim = deps.reclaimStaleFinalize || reclaimStaleFinalize;
+      const takenOver = await reclaim(jobId, deps);
+      if (!takenOver) {
+        console.warn(`[scan-chunk] Job ${jobId}: lost the finalize claim — another instance owns it.`);
+        return null;
+      }
+      console.warn(
+        `[scan-chunk] Job ${jobId}: TOOK OVER a finalize claim whose owner stopped heartbeating ` +
+          `(last beat ${takenOver.heartbeat_at ?? "never"}). The previous finalize never stamped a scan_id, ` +
+          `so no scan row of its own can be orphaned by this.`
+      );
     }
   }
 

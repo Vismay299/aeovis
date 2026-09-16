@@ -575,6 +575,7 @@ whether the sentence beside an id is *true*; that is still on the author.
 | R3.3.5 | A reachable Postgres (the Supabase service-role credentials plus migration `011`) so the reaper's idempotence is exercised against the real `close_scan_run`, not against a JS fake that re-implements what the migration is *believed* to do. Today `classifyReapCloseFailure` sorts a close failure by text-matching the plpgsql `RAISE` strings and that SQL has never been executed here. The test must skip **loudly and countably** with no database, never silently. |
 | R4.1.1 | A Search Console property with the (rotated) service-account email added as a Restricted user. Today the account is on zero properties, which is why the GSC client is orphaned. |
 | R4.4.1 | GA4 read access or permission to place a first-party snippet, for AI-referral attribution. |
+| R3.1.6 | Confirm Protection Bypass for Automation is enabled on the Vercel project, so `VERCEL_AUTOMATION_BYPASS_SECRET` reaches the deployment and a scan chunk can call the next one. This project runs `ssoProtection` with `deploymentType: all_except_custom_domains`, so without that secret every self-continue fetch is answered by an SSO redirect and scans advance only on a browser poll or the daily cron. Verify by watching a production scan move between chunks with no client polling. |
 
 ### Needs a Vercel action (`needs-vercel`)
 

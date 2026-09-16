@@ -7591,6 +7591,36 @@
       "verification": null
     },
     {
+      "id": "R3.1.6",
+      "subphase": "R3.1",
+      "lane": "backend",
+      "title": "A scan cannot finish itself in production: the self-continue fetch is refused by Deployment Protection, and a finalize claim held by a dead instance never expires",
+      "detail": "Found by running a real production scan on 2026-09-15 (job 8e25a0fe-660f-40e8-a809-3c2c9df0969a, Italica + 3 rivals). TWO defects, both observed. (1) SELF-CONTINUE IS REFUSED BEFORE IT REACHES THE ROUTE: resolveSelfContinueUrl targets VERCEL_URL, and this project has ssoProtection enabled with deploymentType all_except_custom_domains, so Vercel Authentication answers the self-fetch with an SSO redirect. The x-cron-secret header cannot help: protection sits in front of the function. Observed as a 6-minute gap between chunks, ended only by a browser status poll. The daily cron and the poll rescue are therefore the only things advancing a scan in production. (2) A FINALIZE CLAIM HAS NO EXPIRY: runFinalizePhase claims probing->scoring via claimJobStatus, and that status IS the claim. The instance holding it died inside finalize without stamping a scan_id, so every later rescue found a status that is no longer probing, lost the claim and closed its run skipped/finalize_claimed_elsewhere. Three consecutive skipped finalize runs were recorded and the job sat at 90 percent with no path to completion.",
+      "accept": "A production scan advances from chunk to chunk with no browser polling and no cron tick; and a finalize claim whose holder stopped heartbeating is taken over by the next rescue, so a job whose finalizer died still completes. Unit tests cover the header construction and the takeover, including that a LIVE finalize is never stolen.",
+      "tags": [
+        "needs-vercel"
+      ],
+      "findings": [],
+      "anchors": [
+        "src/lib/workers/scanWorker.js:1170",
+        "src/lib/workers/scanWorker.js:1963",
+        "src/lib/db.js:1030"
+      ],
+      "phase": "R3",
+      "deps": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-16T03:31:12.474Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R3.1.7",
       "subphase": "R3.1",
       "lane": "backend",
@@ -7681,6 +7711,33 @@
         "at": "2026-09-13T11:03:59.478Z",
         "note": "PASS. Chief Verification Judge and QA 1 sabotage verification complete: dispatchWithLease discriminates lease_held from lease_acquire_failed. On lease_acquire_failed, GET returns HTTP 500 with batch_unavailable { reason: 'lease_acquire_failed' } rather than disguising outage as 200. Every created batch job reconciles across batch_dispatched, batch_skipped, and batch_failed. Prose in comment and test assertion updated to content_runs. Unit, reconciliation, and mutation teeth tests all green."
       }
+    },
+    {
+      "id": "R3.1.9",
+      "subphase": "R3.1",
+      "lane": "backend",
+      "title": "Crawlability audit history was never written: the upsert names an expression index PostgREST cannot use",
+      "detail": "saveCrawlabilityAudit called .upsert(row, { onConflict: \"domain,date_trunc('minute', audited_at)\" }). PostgREST's on_conflict takes COLUMN NAMES only and cannot name an expression index, so every save failed. GET /api/brands/[brand]/crawlability catches persistence failures by design (the live audit must still be returned), so the failure was invisible: the endpoint answered 200 with audit_diff null and audit_history empty on every call, and crawlability_audits stayed empty. The change-detection feature R4.3.1 shipped never detected a change, because there was never a previous audit to compare against.",
+      "accept": "An audit written through saveCrawlabilityAudit is readable back through getAuditHistory against a real database, and a second audit for the same domain in the same minute replaces the first rather than failing or duplicating. A non-duplicate write error still throws.",
+      "tags": [],
+      "findings": [],
+      "anchors": [
+        "src/lib/db/crawlability.js:93",
+        "supabase/migrations/016_crawlability_audit_history.sql:55"
+      ],
+      "phase": "R3",
+      "deps": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-16T03:31:13.032Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R3.2.1",

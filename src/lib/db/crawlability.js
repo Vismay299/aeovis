@@ -90,18 +90,39 @@ export async function saveCrawlabilityAudit(audit, deps = {}) {
     diff: audit.diff || null,
   };
 
-  // Upsert on the unique constraint (domain, minute-truncated timestamp).
-  // If an audit already exists for this domain in the current minute, update it.
-  const { data, error } = await client
-    .from("crawlability_audits")
-    .upsert(row, {
-      onConflict: "domain,date_trunc('minute', audited_at)",
-      ignoreDuplicates: false,
-    })
-    .select()
-    .single();
+  // INSERT, then handle the per-minute unique index by hand.
+  //
+  // This used to be `.upsert(row, { onConflict: "domain,date_trunc('minute', audited_at)" })`,
+  // and PostgREST's `on_conflict` takes COLUMN NAMES ONLY — it cannot name an
+  // expression index. So every save failed, the route's catch logged it and
+  // returned the live audit anyway, and audit history was silently never
+  // written: `crawlability_audits` stayed empty while the feature looked fine.
+  //
+  // The dedupe the index provides is kept: on 23505 the row for this domain in
+  // this minute already exists, and a rapid refresh should REPLACE it (the
+  // newer audit is the better one) rather than fail or duplicate.
+  const { data, error } = await client.from("crawlability_audits").insert(row).select().single();
 
   if (error) {
+    if (error.code === "23505") {
+      const minuteStart = new Date(minuteBucket).toISOString();
+      const minuteEnd = new Date(minuteBucket.getTime() + 60_000).toISOString();
+      const { data: updated, error: updateError } = await client
+        .from("crawlability_audits")
+        .update(row)
+        .eq("domain", row.domain)
+        .gte("audited_at", minuteStart)
+        .lt("audited_at", minuteEnd)
+        .select()
+        .single();
+      if (updateError) {
+        throw new Error(
+          `Failed to replace the existing crawlability audit for "${row.domain}" in this minute: ${updateError.message}`,
+          { cause: updateError }
+        );
+      }
+      return updated;
+    }
     throw new Error(`Failed to save crawlability audit: ${error.message}`, {
       cause: error,
     });
