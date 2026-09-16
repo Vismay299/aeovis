@@ -1,4 +1,4 @@
-import { supabase } from "../db.js";
+import { getSupabase } from "../db.js";
 
 /**
  * Gets prompts for a given brand from the database.
@@ -8,13 +8,13 @@ import { supabase } from "../db.js";
  * @returns {Promise<Array>} List of prompt objects
  */
 export async function getPromptsForBrand(brand, includeDisabled = false) {
-  if (!supabase) {
+  if (!getSupabase()) {
     console.warn("Supabase client is not initialized.");
     return [];
   }
 
   try {
-    let query = supabase
+    let query = getSupabase()
       .from("brand_prompts")
       .select("*")
       .eq("brand", brand);
@@ -44,7 +44,7 @@ export async function getPromptsForBrand(brand, includeDisabled = false) {
  * @returns {Promise<Object>} { data, error }
  */
 export async function upsertPrompts(brand, prompts) {
-  if (!supabase) {
+  if (!getSupabase()) {
     return { error: new Error("Supabase client is not initialized.") };
   }
 
@@ -71,7 +71,7 @@ export async function upsertPrompts(brand, prompts) {
       };
     });
 
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from("brand_prompts")
       .upsert(rows, { onConflict: "brand,text" });
 
@@ -90,12 +90,12 @@ export async function upsertPrompts(brand, prompts) {
  * @returns {Promise<boolean>} Success status (true if row updated)
  */
 export async function updatePromptStatus(id, enabled) {
-  if (!supabase) {
+  if (!getSupabase()) {
     return false;
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from("brand_prompts")
       .update({ enabled })
       .eq("id", id)

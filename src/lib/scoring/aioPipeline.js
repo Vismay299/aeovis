@@ -70,7 +70,7 @@ function findCompetitorsCited(citations, competitors) {
   return Array.from(hits);
 }
 
-async function probeQueryOnce(query, brand, brandAliases, brandDomain, competitors, stats) {
+export async function probeQueryOnce(query, brand, brandAliases, brandDomain, competitors, stats) {
   const result = {
     prompt: query.text,
     is_branded_query: isBrandedQuery(query.text, brandAliases),
@@ -92,7 +92,7 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
   };
 
   try {
-    const data = await brightDataSearch(query.text, { timeout: 30000, aiOverview: true });
+    const data = await brightDataSearch(query.text, { timeout: 45000, aiOverview: true });
     const { text, citations, references } = extractBrightDataAiOverview(data);
     result.cost = 0.0015;
     if (stats) stats.cost = (stats.cost || 0) + result.cost;
@@ -172,7 +172,8 @@ export async function runAioScan({ brand, url, competitors = [], queries, stats,
 
 export function summarizeAioResults(results) {
   const total = results.length;
-  const errored = results.filter((r) => r.error).length;
+  const erroredRows = results.filter((r) => r.error);
+  const errored = erroredRows.length;
   const withAio = results.filter((r) => r.aio_present);
   const branded = results.filter((r) => r.is_branded_query);
   const nonBranded = results.filter((r) => !r.is_branded_query);
@@ -222,6 +223,14 @@ export function summarizeAioResults(results) {
 
   const insufficientSample = nonBrandedWithAio.length < AIO_MIN_NON_BRANDED_WITH_AIO;
 
+  // Distinct error messages for the dashboard (config missing vs API failures).
+  const sampleErrors = [
+    ...new Set(erroredRows.map((r) => String(r.error || "").trim()).filter(Boolean)),
+  ].slice(0, 5);
+  const configMissing = sampleErrors.some((e) =>
+    /not configured|BRIGHTDATA_API_KEY|No active Bright Data SERP zone/i.test(e)
+  );
+
   return {
     results,
     summary: {
@@ -244,6 +253,8 @@ export function summarizeAioResults(results) {
       citation_share_pct: citationSharePct,
       data_source_issue: dataSourceIssue,
       insufficient_sample: insufficientSample,
+      sample_errors: sampleErrors,
+      config_missing: configMissing,
       thresholds: {
         error_rate_limit_pct: AIO_ERROR_RATE_LIMIT_PCT,
         min_non_branded_coverage: AIO_MIN_NON_BRANDED_COVERAGE,

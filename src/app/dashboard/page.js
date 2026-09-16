@@ -277,9 +277,9 @@ export default function Dashboard() {
                 <h4 className="font-serif text-lg font-bold">Data source issue — scan incomplete</h4>
               </div>
               <p className="text-sm mt-2 text-[#8B3A3A]/90 max-w-2xl">
-                Bright Data returned no AI Overview for the majority of tracked queries,
-                or the SERP API errored out too often. We are not showing a visibility
-                score to avoid misleading you with a false 0%.
+                {result.configMissing
+                  ? "Bright Data SERP is not configured on the server (missing BRIGHTDATA_API_KEY). Every query failed before Google was probed. Add the key to your deployment environment and re-run."
+                  : "Bright Data returned no AI Overview for the majority of tracked queries, or the SERP API errored out too often. We are not showing a visibility score to avoid misleading you with a false 0%."}
               </p>
               <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 text-xs font-semibold text-[#8B3A3A]/80">
                 <span>
@@ -297,6 +297,11 @@ export default function Dashboard() {
                   (limit {AIO_ERROR_RATE_LIMIT_PCT}%)
                 </span>
               </div>
+              {Array.isArray(result.sampleErrors) && result.sampleErrors.length > 0 && (
+                <p className="mt-2 text-xs text-[#8B3A3A]/75 max-w-2xl break-words">
+                  Last error: {result.sampleErrors[0]}
+                </p>
+              )}
             </div>
             <button
               onClick={handleRerun}

@@ -1,11 +1,29 @@
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Lazy init so scripts that load .env after import still work, and serverless
+// cold starts always read the latest env.
+let _supabase = undefined; // undefined = not tried yet
 
-// Avoid throwing if env vars are missing during build phase, but we'll need them at runtime
-export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+/** @returns {import("@supabase/supabase-js").SupabaseClient | null} */
+export function getSupabase() {
+  if (_supabase !== undefined) return _supabase;
+  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+  const supabaseKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
+  if (!supabaseUrl || !supabaseKey) {
+    _supabase = null;
+    return null;
+  }
+  _supabase = createClient(supabaseUrl, supabaseKey);
+  return _supabase;
+}
+
+/** @deprecated Prefer getSupabase() — kept for call sites that check truthiness carefully */
+export const supabase = {
+  get client() {
+    return getSupabase();
+  },
+};
 
 // Migration SQL:
 // ALTER TABLE scans ADD COLUMN scoring_version text;
@@ -52,7 +70,7 @@ export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, s
 // CREATE UNIQUE INDEX content_events_brand_url_idx ON content_events (brand, url);
 
 export async function insertScan(scanRecord) {
-  if (!supabase) {
+  if (!getSupabase()) {
     console.warn("Supabase credentials missing. Skipping database insert.");
     return;
   }
@@ -115,7 +133,7 @@ export async function insertScan(scanRecord) {
 
   // Cascade 1: try to insert with all new columns
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from("scans")
       .insert([
         {
@@ -125,31 +143,34 @@ export async function insertScan(scanRecord) {
           score_ci_high: scanRecord.score_ci_high,
           stability: scanRecord.stability,
           mention_rate_pct: scanRecord.mention_rate_pct,
-        }
-      ]);
+        },
+      ])
+      .select();
     if (error) throw error;
     return data;
   } catch (err) {
     console.warn("Inserting with all columns failed, retrying with only scoring_version:", err.message || err);
     // Cascade 2: try to insert with scoring_version only (Phase 1 schema)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("scans")
         .insert([
           {
             ...baseRecord,
             scoring_version: scanRecord.scoring_version,
-          }
-        ]);
+          },
+        ])
+        .select();
       if (error) throw error;
       return data;
     } catch (err2) {
       console.warn("Inserting with scoring_version failed, retrying baseRecord only:", err2.message || err2);
       // Cascade 3: try base record only (Legacy schema)
       try {
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
           .from("scans")
-          .insert([baseRecord]);
+          .insert([baseRecord])
+          .select();
         if (error) throw error;
         return data;
       } catch (fallbackErr) {
@@ -161,11 +182,11 @@ export async function insertScan(scanRecord) {
 }
 
 export async function getScansForBrand(brand) {
-  if (!supabase) {
+  if (!getSupabase()) {
     return [];
   }
   
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from("scans")
     .select("*")
     .ilike("brand", brand)
@@ -200,13 +221,13 @@ export async function createScanJob({ brand, url, industry, competitors }) {
     run_record: null
   };
 
-  if (!supabase) {
+  if (!getSupabase()) {
     global.memoryJobs.set(jobId, job);
     return job;
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from("scan_jobs")
       .insert([job])
       .select();
@@ -220,52 +241,51 @@ export async function createScanJob({ brand, url, industry, competitors }) {
 }
 
 export async function getScanJob(jobId) {
-  if (!supabase || global.memoryJobs.has(jobId)) {
-    return global.memoryJobs.get(jobId) || null;
+  // Prefer Supabase when configured — never let a stale memory entry block DB reads.
+  if (getSupabase()) {
+    try {
+      const { data, error } = await getSupabase()
+        .from("scan_jobs")
+        .select("*")
+        .eq("id", jobId);
+      if (error) throw error;
+      if (data?.[0]) return data[0];
+    } catch (err) {
+      console.warn("Failed to get scan_job from database, checking memory:", err.message);
+    }
   }
-
-  try {
-    const { data, error } = await supabase
-      .from("scan_jobs")
-      .select("*")
-      .eq("id", jobId);
-    if (error) throw error;
-    return data[0] || global.memoryJobs.get(jobId) || null;
-  } catch (err) {
-    console.warn("Failed to get scan_job from database, checking memory:", err.message);
-    return global.memoryJobs.get(jobId) || null;
-  }
+  return global.memoryJobs.get(jobId) || null;
 }
 
 export async function updateScanJob(jobId, updates) {
-  // Always update in memory as fallback/mirror
+  // Mirror to memory for local/dev fallback
   const memJob = global.memoryJobs.get(jobId);
   if (memJob) {
     Object.assign(memJob, updates);
   }
 
-  if (!supabase || global.memoryJobs.has(jobId)) {
+  if (!getSupabase()) {
     if (!memJob) {
-      const fallbackJob = { id: jobId, ...updates };
-      global.memoryJobs.set(jobId, fallbackJob);
+      global.memoryJobs.set(jobId, { id: jobId, ...updates });
     }
-    return memJob || global.memoryJobs.get(jobId);
+    return global.memoryJobs.get(jobId);
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from("scan_jobs")
       .update(updates)
       .eq("id", jobId)
       .select();
     if (error) throw error;
-    return data[0];
+    if (data?.[0] && memJob) Object.assign(memJob, data[0]);
+    return data?.[0] || memJob || { id: jobId, ...updates };
   } catch (err) {
     console.warn("Failed to update scan_job in database, updated memory:", err.message);
-    if (memJob) return memJob;
-    const updated = { id: jobId, ...updates };
-    global.memoryJobs.set(jobId, updated);
-    return updated;
+    if (!memJob) {
+      global.memoryJobs.set(jobId, { id: jobId, ...updates });
+    }
+    return global.memoryJobs.get(jobId);
   }
 }
 
@@ -273,13 +293,13 @@ export async function updateScanJob(jobId, updates) {
 global.memoryContentEvents = global.memoryContentEvents || new Map();
 
 export async function getContentEvents(brand) {
-  if (!supabase) {
+  if (!getSupabase()) {
     const list = Array.from(global.memoryContentEvents.values());
     return list.filter(item => item.brand.toLowerCase() === brand.toLowerCase());
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from("content_events")
       .select("*")
       .eq("brand", brand)
@@ -304,13 +324,13 @@ export async function insertContentEvent({ brand, url, publishDate }) {
     created_at: new Date().toISOString()
   };
 
-  if (!supabase) {
+  if (!getSupabase()) {
     global.memoryContentEvents.set(id, event);
     return event;
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from("content_events")
       .insert([event])
       .select();

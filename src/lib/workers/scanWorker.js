@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { insertScan, updateScanJob } from "../db.js";
+import { getScanJob, insertScan, updateScanJob } from "../db.js";
 import { buildAioQueries } from "../scoring/aioPrompts.js";
 import {
   buildBrandedQueries,
@@ -10,6 +10,7 @@ import {
 } from "../scoring/aioQueryClassify.js";
 import {
   runAioScan,
+  summarizeAioResults,
   aggregateAioTopDomains,
 } from "../scoring/aioPipeline.js";
 import {
@@ -19,6 +20,8 @@ import {
 import { getBrandAliases } from "../scoring/aliases.js";
 import { getPromptsForBrand, upsertPrompts } from "../db/prompts.js";
 import { extractBrandDomain } from "../scoring/citations.js";
+import { getBrightDataConfig } from "../engines/brightdata.js";
+import { AIO_PROBES_PER_INVOCATION } from "../scoring/aioConstants.js";
 
 function queryTextKey(text) {
   return String(text || "").toLowerCase().trim();
@@ -81,7 +84,55 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
 
   try {
     console.log(`[aio-worker] Starting scan job ${jobId} for brand: ${brand}`);
-    await updateScanJob(jobId, { status: "generating_prompts", progress_pct: 10 });
+
+    const existingJob = await getScanJob(jobId);
+    if (existingJob?.status === "complete" || existingJob?.status === "failed") {
+      console.log(`[aio-worker] Job ${jobId} already ${existingJob.status} — skip`);
+      return;
+    }
+
+    // Soft lease so concurrent status polls don't double-probe the same batch.
+    const leaseUntil = existingJob?.run_record?.worker_lease_until;
+    if (leaseUntil && new Date(leaseUntil).getTime() > Date.now()) {
+      console.log(
+        `[aio-worker] Job ${jobId} lease held until ${leaseUntil} — skip`
+      );
+      return;
+    }
+
+    // Fail fast if Bright Data is not configured — avoids 100% SERP error rate
+    // with a generic "data source issue" banner that hides the real cause.
+    try {
+      const bdConfig = await getBrightDataConfig();
+      if (!bdConfig?.apiKey) {
+        throw new Error(
+          "Bright Data SERP is not configured (set BRIGHTDATA_API_KEY in the server environment)."
+        );
+      }
+      console.log(
+        `[aio-worker] Bright Data ready (zone=${bdConfig.zone || "unknown"})`
+      );
+    } catch (cfgErr) {
+      const msg = cfgErr?.message || String(cfgErr);
+      console.error(`[aio-worker] SERP preflight failed: ${msg}`);
+      await updateScanJob(jobId, {
+        status: "failed",
+        progress_pct: 100,
+        error_message: msg,
+      });
+      return;
+    }
+
+    const checkpoint = existingJob?.run_record?.checkpoint || null;
+    const leaseMs = 55_000;
+    const nextLease = new Date(Date.now() + leaseMs).toISOString();
+    await updateScanJob(jobId, {
+      run_record: {
+        ...(existingJob?.run_record || {}),
+        checkpoint,
+        worker_lease_until: nextLease,
+      },
+    });
 
     const competitors = (competitorsRaw || "")
       .split(",")
@@ -91,8 +142,27 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     const brandAliases = getBrandAliases(brand, url);
 
     // 1. Build the query list (PAA + Autocomplete seeded by category + few branded)
+    //    Resume from checkpoint when a prior invocation already prepared queries.
     let queryPlan;
     let usedDbPrompts = false;
+    let partialResults = Array.isArray(checkpoint?.partial_results)
+      ? checkpoint.partial_results
+      : [];
+
+    if (checkpoint?.queries?.length) {
+      queryPlan = {
+        queries: checkpoint.queries,
+        seeds: checkpoint.seeds || [],
+        nonBrandedCount: checkpoint.nonBrandedCount ?? 0,
+        brandedCount: checkpoint.brandedCount ?? 0,
+      };
+      usedDbPrompts = !!checkpoint.usedDbPrompts;
+      stats.cost = Number(checkpoint.cost || 0);
+      console.log(
+        `[aio-worker] Resuming checkpoint: ${partialResults.length}/${queryPlan.queries.length} probed`
+      );
+    } else {
+    await updateScanJob(jobId, { status: "generating_prompts", progress_pct: 10 });
     try {
       const dbPrompts = await getPromptsForBrand(brand, false);
       if (dbPrompts && dbPrompts.length > 0) {
@@ -212,26 +282,107 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
     console.log(
       `[aio-worker] Prepared ${queryPlan.queries.length} queries (${queryPlan.nonBrandedCount} non-branded, ${queryPlan.brandedCount} brand-presence)`
     );
+    } // end else (fresh query plan)
 
-    // 2. Probe each query via BrightData AIO
-    await updateScanJob(jobId, { status: "probing", progress_pct: 25 });
-
-    const scanOutput = await runAioScan({
-      brand,
-      url,
-      competitors,
-      queries: queryPlan.queries,
-      stats,
-      onProgress: async (done, total) => {
-        const pct = 25 + Math.round((done / total) * 60); // 25% -> 85%
-        await updateScanJob(jobId, { progress_pct: pct });
+    const buildCheckpoint = (results) => ({
+      checkpoint: {
+        queries: queryPlan.queries,
+        seeds: queryPlan.seeds || [],
+        nonBrandedCount: queryPlan.nonBrandedCount,
+        brandedCount: queryPlan.brandedCount,
+        usedDbPrompts,
+        partial_results: results,
+        cost: stats.cost || 0,
+        brand,
+        url,
+        industry,
+        competitorsRaw,
       },
+      // Keep lease while we still have work so other polls don't pile on.
+      worker_lease_until: new Date(Date.now() + leaseMs).toISOString(),
     });
 
-    // 3. Scoring / aggregation
+    // Persist query plan immediately so a mid-batch kill can still resume.
+    await updateScanJob(jobId, {
+      status: "probing",
+      progress_pct: Math.max(
+        25,
+        25 + Math.round((partialResults.length / Math.max(queryPlan.queries.length, 1)) * 60)
+      ),
+      run_record: buildCheckpoint(partialResults),
+    });
+
+    // 2. Probe via BrightData AIO in batches so Hobby-plan 60s limits can resume.
+    const doneKeys = new Set(
+      partialResults.map((r) => queryTextKey(r.prompt || r.text || ""))
+    );
+    const remaining = queryPlan.queries.filter(
+      (q) => !doneKeys.has(queryTextKey(q.text))
+    );
+    const batch = remaining.slice(0, AIO_PROBES_PER_INVOCATION);
+
+    if (batch.length > 0) {
+      console.log(
+        `[aio-worker] Probing batch of ${batch.length} (${partialResults.length} done, ${remaining.length} remaining)`
+      );
+      const batchOutput = await runAioScan({
+        brand,
+        url,
+        competitors,
+        queries: batch,
+        stats,
+        onProgress: async (done, total, lastResult) => {
+          // lastResult optional — progress only
+          const totalDone = partialResults.length + done;
+          const pct =
+            25 + Math.round((totalDone / queryPlan.queries.length) * 60);
+          await updateScanJob(jobId, { progress_pct: Math.min(pct, 85) });
+        },
+      });
+      partialResults = [...partialResults, ...batchOutput.results];
+      await updateScanJob(jobId, {
+        status: "probing",
+        progress_pct: Math.min(
+          25 + Math.round((partialResults.length / queryPlan.queries.length) * 60),
+          85
+        ),
+        run_record: buildCheckpoint(partialResults),
+      });
+    }
+
+    const stillRemaining = queryPlan.queries.length - partialResults.length;
+    if (stillRemaining > 0) {
+      console.log(
+        `[aio-worker] Checkpoint saved — ${partialResults.length}/${queryPlan.queries.length}. Resume via status poll or cron.`
+      );
+      return;
+    }
+
+    // 3. Scoring / aggregation (all queries probed)
     await updateScanJob(jobId, { status: "scoring", progress_pct: 90 });
 
-    let { results, summary } = scanOutput;
+    let { results, summary } = summarizeAioResults(partialResults);
+
+    // Never publish a "complete" scan when every probe failed due to missing config —
+    // that overwrites a good dashboard with a false data-source banner.
+    const configFail =
+      summary.config_missing ||
+      (summary.sample_errors || []).some((e) =>
+        /not configured|BRIGHTDATA_API_KEY/i.test(String(e))
+      );
+    if (configFail && (summary.error_rate_pct || 0) >= 50) {
+      const msg =
+        (summary.sample_errors && summary.sample_errors[0]) ||
+        "Bright Data SERP is not configured (set BRIGHTDATA_API_KEY on the server).";
+      console.error(`[aio-worker] Refusing to save scan — config failure: ${msg}`);
+      await updateScanJob(jobId, {
+        status: "failed",
+        progress_pct: 100,
+        error_message: msg,
+        run_record: { checkpoint: null, summary_stats: summary, results },
+      });
+      return;
+    }
 
     // Attach brand-in-prompt warning to non-branded results just in case
     results.forEach((r) => {
@@ -300,6 +451,8 @@ export async function startScanJob(jobId, brand, url, industry, competitorsRaw) 
       query_source: "aio_paa_autocomplete",
       data_source_issue: summary.data_source_issue,
       insufficient_sample: summary.insufficient_sample,
+      sample_errors: summary.sample_errors || [],
+      config_missing: !!summary.config_missing,
       summary_stats: summary,
     };
 

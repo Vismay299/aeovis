@@ -414,6 +414,25 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     summary?.insufficient_sample ??
     raw.insufficient_sample
   );
+  const sampleErrors = [
+    ...new Set(
+      [
+        ...(summary?.sample_errors || []),
+        ...(raw.sample_errors || []),
+        ...(data.sample_errors || []),
+        ...results.map((r) => r.error).filter(Boolean),
+      ]
+        .map((e) => String(e || "").trim())
+        .filter(Boolean)
+    ),
+  ].slice(0, 5);
+  const configMissing = !!(
+    summary?.config_missing ??
+    raw.config_missing ??
+    sampleErrors.some((e) =>
+      /not configured|BRIGHTDATA_API_KEY|No active Bright Data SERP zone/i.test(e)
+    )
+  );
 
   const competitors = resolveCompetitors(data, raw, results, brand, website);
   const competitorsFound = countCompetitorsFound(competitors);
@@ -456,6 +475,8 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     costTotal: data.cost_total ?? raw.cost_total ?? 0,
     dataSourceIssue,
     insufficientSample,
+    sampleErrors,
+    configMissing,
     // For legacy dashboard components that key off `qualityGateFailed`
     qualityGateFailed: dataSourceIssue,
     sampleSizeAdequacy: !insufficientSample,
@@ -581,29 +602,61 @@ export async function runScan({ brand, website, industry, competitors }, onProgr
 
   const delay = (ms) => new Promise((r) => setTimeout(r, ms));
   let attempts = 0;
-  const maxAttempts = 300;
+  const maxAttempts = 360; // ~12 min at 2s interval
+  let consecutivePollFailures = 0;
 
   while (attempts < maxAttempts) {
     await delay(2000);
     attempts++;
 
-    const pollRes = await fetch(`/api/scan/${jobId}/status`);
-    if (!pollRes.ok) throw new Error("Failed to retrieve scan progress status.");
+    let statusData;
+    try {
+      const pollRes = await fetch(`/api/scan/${encodeURIComponent(jobId)}/status`, {
+        cache: "no-store",
+      });
+      if (!pollRes.ok) {
+        consecutivePollFailures++;
+        // Transient 504/timeouts while the worker is probing — keep polling.
+        if (consecutivePollFailures <= 8) continue;
+        throw new Error(
+          `Failed to retrieve scan progress (HTTP ${pollRes.status}). Please try again.`
+        );
+      }
+      statusData = await pollRes.json();
+      consecutivePollFailures = 0;
+    } catch (err) {
+      if (err?.message?.startsWith("Failed to retrieve scan")) throw err;
+      consecutivePollFailures++;
+      if (consecutivePollFailures <= 8) continue;
+      throw new Error("Failed to retrieve scan progress. Please try again.");
+    }
 
-    const statusData = await pollRes.json();
     const stage = statusToStage[statusData.status] ?? 0;
     onProgress(stage, statusData.progress_pct);
 
     if (statusData.status === "complete") {
-      if (!statusData.run_record) throw new Error("Scan finished but no record was returned.");
-      return normalizeResult(statusData.run_record, brand, website);
+      if (statusData.run_record) {
+        return normalizeResult(statusData.run_record, brand, website);
+      }
+      // Fallback: load the persisted scan row by result_id / brand history
+      if (statusData.result_id || brand) {
+        const history = await fetchScanHistory(brand);
+        const match =
+          (statusData.result_id &&
+            history.find((s) => s.id === statusData.result_id)) ||
+          history[0];
+        if (match) {
+          return normalizeResult(match, brand, website);
+        }
+      }
+      throw new Error("Scan finished but no record was returned.");
     }
     if (statusData.status === "failed") {
       throw new Error(statusData.error_message || "Async scan job failed.");
     }
   }
 
-  throw new Error("Scan timed out after 10 minutes.");
+  throw new Error("Scan timed out after 12 minutes. Open the dashboard and re-run if needed.");
 }
 
 export async function getContentEvents(brand) {
