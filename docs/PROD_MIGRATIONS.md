@@ -1050,6 +1050,21 @@ first rescue.
 **Re-run:** safe. `ADD COLUMN IF NOT EXISTS` is a no-op on a database that
 already has the column.
 
+**APPLIED 2026-09-16, and it had NOT been applied before that.** It was found
+the way 014 is always found — by a failure, not by a check: every daily-batch
+content job died with PostgREST `Could not find the 'checkpoint' column of
+'content_jobs' in the schema cache`, so the batch cron created nothing while
+answering 200. A catalog probe that matched `attname = 'checkpoint'` WITHOUT
+naming the table passed, because `scan_jobs.checkpoint` exists. Name the table:
+
+```sql
+SELECT c.relname, a.attname FROM pg_attribute a
+  JOIN pg_class c ON c.oid = a.attrelid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname = 'public' AND c.relname = 'content_jobs' AND a.attname = 'checkpoint'
+   AND a.attnum > 0 AND NOT a.attisdropped;
+```
+
 ---
 
 ## `015_brand_metrics_citation_state.sql` … `019_probe_evidence_bucket.sql`
