@@ -18,6 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The doc-staleness tripwire (src/lib/docSourceStaleness.test.mjs)
+          # reads git history: it asserts a named commit is reachable and
+          # compares each doc's last change against its sources' last change.
+          # On the default depth-1 checkout the commit is unreachable and every
+          # file's last change is HEAD, so the guard reported nothing and was
+          # red in CI for that reason alone.
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

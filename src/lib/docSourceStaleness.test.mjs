@@ -129,6 +129,23 @@ function git(cmd) {
   }
 }
 
+/**
+ * Every git-backed assertion below reads history, and `git()` turns any
+ * failure into "" — which on a depth-1 checkout reads exactly like "no file
+ * has changed since HEAD" and "that commit does not exist". Both tripwire
+ * tests were red in CI for that reason alone, and the failure named the
+ * symptom, not the cause. So the cause is asserted first, by name.
+ */
+function assertFullHistory() {
+  assert.notEqual(
+    git("rev-parse --is-shallow-repository"),
+    "true",
+    "this checkout is SHALLOW, so git history is unreadable and every tripwire assertion " +
+      "below would fail for a reason that has nothing to do with the docs. In CI, set " +
+      "`fetch-depth: 0` on actions/checkout for the job that runs this file."
+  );
+}
+
 /** Files changed in a specific commit (one per line). */
 export function filesChangedInCommit(commitHash) {
   const out = git(`show --name-only --format="" ${commitHash}`);
@@ -226,6 +243,7 @@ test("R6.4.8 — the edge manifest meets its floor", async () => {
 });
 
 test("R6.4.8 — the tripwire fires on ee5504e, the commit that falsified gemini.md", async () => {
+  assertFullHistory();
   const changed = filesChangedInCommit("ee5504e");
   assert.ok(changed.length > 0, "ee5504e must be reachable in this repo's history");
 
@@ -244,6 +262,7 @@ test("R6.4.8 — the tripwire fires on ee5504e, the commit that falsified gemini
 });
 
 test("R6.4.8 — the tripwire fires on the live state, proving it works", async () => {
+  assertFullHistory();
   const edges = await parseDocSourceEdges();
   const violations = await checkTripwire(edges);
 
