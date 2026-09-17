@@ -317,9 +317,11 @@ function mockFetch(t, handler) {
  * site is still reading a literal, the number that comes back is 0.0015 or
  * 0.01 and the assertion says so.
  */
+// serpapi stays in the declared table on purpose: it is still a priced vendor
+// id in BUILT_IN_SERP_QUERY_PRICES (asserted above). Its PROBE path in serp.js
+// is gone (R1.7.3), so there is no serp.js call site to price it at any more.
 const DECLARED = '{"brightdata":0.25,"serpapi":0.37}';
 const BRIGHTDATA_SENTINEL = 0.25;
-const SERPAPI_SENTINEL = 0.37;
 
 /** A Bright Data /request response body with a real AI Overview in it. */
 const brightDataBody = () =>
@@ -349,30 +351,6 @@ test("CALL SITE 1 — serp.js prices a Bright Data probe from the table, not a l
   const res = await probeGoogleAiOverview("best crm", { stats });
   assert.equal(res.cost, BRIGHTDATA_SENTINEL, "the declared rate must reach the probe result");
   assert.equal(stats.cost, BRIGHTDATA_SENTINEL, "and the same number must reach the scan's spend total");
-});
-
-test("CALL SITE 1b — serp.js prices a SerpAPI probe, and a deferred fetch is a SECOND query", async (t) => {
-  useEnv(t, { SERPAPI_KEY: "serp-key-EXAMPLE-NOT-A-REAL-KEY", [SERP_QUERY_PRICES_ENV]: DECLARED });
-
-  let calls = 0;
-  mockFetch(t, async () => {
-    calls++;
-    return {
-      ok: true,
-      json: async () =>
-        calls === 1
-          ? { ai_overview_deferred: { token: "deferred_token_xyz" } }
-          : { ai_overview: { text_blocks: [{ snippet: "Deferred content." }] } },
-    };
-  });
-
-  const res = await probeGoogleAiOverview("best crm");
-  assert.equal(calls, 2, "the fixture must exercise the deferred branch for the doubling to mean anything");
-  assert.equal(
-    res.cost,
-    SERPAPI_SENTINEL * 2,
-    "two billed searches cost twice the table rate — and neither copy is a literal"
-  );
 });
 
 test("CALL SITE 2 — aioPipeline prices each Bright Data query from the table", async (t) => {

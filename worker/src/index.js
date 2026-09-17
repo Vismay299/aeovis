@@ -210,8 +210,18 @@ export async function runOnce(config, deps = {}) {
   try {
     written = await report(outcomes, config);
   } catch (err) {
-    // The probes ran; the write did not. Recording 0 succeeded is the truth
-    // about what is DURABLE, which is the only thing a later reader can check.
+    // The probes ran; the write did not. Nothing is durable, so the batch is
+    // handed back the same way a failed probe hands it back: parked for the
+    // full lease TTL it would starve every other worker of these tasks for
+    // FLEET_LEASE_MS, and they will be re-probed either way.
+    const ids = batch.map((t) => t.id);
+    const released = await release(ids, config).catch((e) => {
+      log(`could not release ${ids.length} task(s) after a failed report: ${e.message}`);
+      return null;
+    });
+    if (released !== null) log(`released ${released}/${ids.length} task(s) after a failed report`);
+    // Recording 0 succeeded is the truth about what is DURABLE, which is the
+    // only thing a later reader can check.
     await closeOrWarn(
       close,
       run.id,
@@ -222,6 +232,7 @@ export async function runOnce(config, deps = {}) {
         probesSucceeded: 0,
         errorsRecovered: 0,
         error: err.message,
+        detail: { released },
       },
       config
     );

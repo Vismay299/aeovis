@@ -35,7 +35,7 @@ export const ALIAS_STOPLIST = new Set([
   "wave", "zone", "bolt", "beam", "grid", "rock", "vine", "zoom",
   "spark", "glow", "echo", "aura", "boon", "clue", "dart", "fame",
   "hint", "idea", "jump", "keen", "lore", "mint", "nook", "opal",
-  "pace", "peak", "tide", "vibe", "apex", "apex", "calm", "dash",
+  "pace", "peak", "tide", "vibe", "apex", "calm", "dash",
   "epic", "fast", "gist", "halt", "info", "iris", "jade", "kite",
   "loom", "muse", "nest", "onyx", "prey", "rush", "sage", "tone",
   "unit", "vast", "ward", "xeno", "yarn", "zen",

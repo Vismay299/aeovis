@@ -41,6 +41,23 @@ function useSerpEnv(t, env) {
   });
 }
 
+test('useSerpEnv scrubs every ambient SERP credential before applying the mock', (t) => {
+  // R6.5.9: asserted with `assert.ok(x === y, msg)` and never `assert.equal`,
+  // because a failing assert.equal prints BOTH operands — a live key — into the
+  // CI log. Only the shape goes in the message, via describeEnv. A guard in
+  // credentialAssertionGuard.test.mjs pins these three by name.
+  useSerpEnv(t, { BRIGHTDATA_API_KEY: 'bd-mock-key', BRIGHTDATA_SERP_ZONE: 'mock_zone' });
+
+  assert.ok(process.env.SERPAPI_KEY === undefined,
+    `an ambient SerpAPI key must be scrubbed — the probe path is gone, but the variable is still real` +
+      ` and must not leak between suites; still ${describeEnv(process.env.SERPAPI_KEY)}`);
+  assert.ok(process.env.SERP_PROVIDER === undefined,
+    `an explicit provider override must be scrubbed too; still ${describeEnv(process.env.SERP_PROVIDER)}`);
+  assert.ok(process.env.BRIGHTDATA_API_KEY === 'bd-mock-key',
+    `useSerpEnv must apply the mock key, so the Bright Data mocks measure the mock and not an ambient` +
+      ` credential; BRIGHTDATA_API_KEY is ${describeEnv(process.env.BRIGHTDATA_API_KEY)} (the mock is len 11)`);
+});
+
 test('extractTextFromBlocks - nested list, snippets, tables, and expandable formats', () => {
   const blocks = [
     { snippet: "Here is the first paragraph." },

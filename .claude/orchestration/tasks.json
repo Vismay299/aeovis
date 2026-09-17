@@ -3372,7 +3372,7 @@
       "subphase": "R1.2",
       "lane": "infra",
       "title": "Deploy the fleet to Zeabur against the live project, explicitly armed",
-      "detail": "Replaces R1.2.19, whose accept imported the ADR section 3.1 non-production rule that governs a LAPTOP dev fleet and does not govern the deployed one. Operator named the target on 2026-09-16: https://nggyizuwqepxaqnpcqqj.supabase.co, the live AEO project, which already carries probe_tasks (010) and scan_runs (011). Two stages, deliberately separated so a platform failure cannot be confused with a credential failure. STAGE 1 is credential-free: build the image and run node src/index.js --selftest on the Zeabur box. It stubs the queue, probe, report and ledger and asserts a pass opened AND closed a run, so it needs no database, no browser and no key. That stage alone settles every Zeabur capability ADR section 5.1.c lists as unverified: Dockerfile builds, K3s scheduling, Playwright system libraries, SIGTERM reaching the handler, log retention. STAGE 2 points at the live project and requires FLEET_ALLOW_PRODUCTION_DB=true, because R1.2.12 refuses otherwise and, when unarmed, R1.2.17 strips the credentials from the process entirely rather than holding live keys while reporting itself unarmed. Verified by execution 2026-09-16: dev URL unarmed boots, dev URL with NODE_ENV=production REFUSES, live URL unarmed REFUSES, live URL armed boots. NOTE the image must NOT set NODE_ENV=production: config.js treats that alone as a production target, so baking it in would force the arming flag on every deployment including dev ones and make the guard a no-op. ALSO NOTE probeBatch still throws (R1.3), so a correct stage 2 is a fleet that claims from an empty queue, writes a closed scan_runs row, and refuses at the probe. Expect ledger rows, not probe results.",
+      "detail": "Replaces R1.2.19, whose accept imported the ADR section 3.1 non-production rule that governs a LAPTOP dev fleet and does not govern the deployed one. Operator named the target on 2026-09-16: https://nggyizuwqepxaqnpcqqj.supabase.co, the live AEO project, which already carries probe_tasks (010) and scan_runs (011). Two stages, deliberately separated so a platform failure cannot be confused with a credential failure. STAGE 1 is credential-free: build the image and run node src/index.js --selftest on the Zeabur box. It stubs the queue, probe, report and ledger and asserts a pass opened AND closed a run, so it needs no database, no browser and no key. That stage alone settles every Zeabur capability ADR section 5.1.c lists as unverified: Dockerfile builds, K3s scheduling, Playwright system libraries, SIGTERM reaching the handler, log retention. STAGE 2 points at the live project and requires FLEET_ALLOW_PRODUCTION_DB=true, because R1.2.12 refuses otherwise and, when unarmed, R1.2.17 strips the credentials from the process entirely rather than holding live keys while reporting itself unarmed. Verified by execution 2026-09-16: dev URL unarmed boots, dev URL with NODE_ENV=production REFUSES, live URL unarmed REFUSES, live URL armed boots. NOTE the image must NOT set NODE_ENV=production: config.js treats that alone as a production target, so baking it in would force the arming flag on every deployment including dev ones and make the guard a no-op. ALSO NOTE probeBatch still throws (R1.3), so a correct stage 2 is a fleet that claims from an empty queue, writes a closed scan_runs row, and refuses at the probe. Expect ledger rows, not probe results. PLATFORM FACT measured on the ratified server 2026-09-16, settling part of ADR section 5.1.c. Read over SSH from the live K3s cluster. (1) Zeabur runs its platform in the 'default' namespace and creates NO namespace per project: get ns returns only default, kube-node-lease, kube-public, kube-system. (2) All 7 existing Deployments carry terminationGracePeriodSeconds: 30 -- Kubernetes' stock default, so Zeabur expresses no opinion and our 330 is not overriding a platform choice, it is overriding an unset value. Whether its UI can set it is still unknown. (3) The server runs 14 platform pods, all 66 days old, none of them application workloads: cadvisor, fluent-bit, ingress-controller, nats-0, node-exporter, vector-aggregator, victoria-metrics-0, zeabur-dns, zeabur-kube-watch, zeabur-log-api, coredns, crictl-image-prune, local-path-provisioner, metrics-server. Three metrics systems and three log systems. (4) MEMORY, the finding that matters: free -h reports 1.9Gi total, 1.1Gi used, 798Mi available and 721Mi ALREADY IN SWAP with zero application workloads deployed. The dashboard's 57% figure hides the swap. 798Mi is the permanent budget. That is ample for the fleet as it ships (Node only, no browser until R1.3) and is the number to re-check when Chromium first launches: swap growth during a pass makes FLEET_PROBE_TIMEOUT_MS fire for reasons that have nothing to do with the surface being probed, and a timeout scored as a probe outcome is exactly the infrastructure-failure-read-as-result error decision D2 exists to prevent. A run whose swap grew is not evidence about block rate. (5) The 30s grace does NOT block stage 1 or stage 2: probeBatch throws, so a pass completes in milliseconds. It becomes load-bearing at R1.3.",
       "accept": "Stage 1: the image builds and node src/index.js --selftest completes one pass inside a container on the ratified Zeabur server, evidenced from the container log. Stage 2: with FLEET_ALLOW_PRODUCTION_DB=true and the live project credentials supplied as K3s secrets, the fleet boots, completes at least one pass and leaves a closed scan_runs row attributable to its FLEET_WORKER_ID; SIGTERM during a pass finishes that pass rather than orphaning the lease, evidenced from the run ledger; SUPABASE_SERVICE_ROLE_KEY is present in the container environment and absent from every image layer; CI runs npm --prefix worker run check and builds the image.",
       "deps": [
         "R1.1.3"
@@ -3397,6 +3397,11 @@
           "at": "2026-09-16T10:37:55.948Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-16T11:15:40.994Z",
+          "by": "controller",
+          "text": "amended: PLATFORM FACT measured on the ratified server 2026-09-16, settling part of ADR section 5.1.c. Read over SSH from the live K3s cluster. (1) Zeabur runs its platform in the 'default' namespace and creates NO namespace per project: get ns returns only default, kube-node-lease, kube-public, kube-system. (2) All 7 existing Deployments carry terminationGracePeriodSeconds: 30 -- Kubernetes' stock default, so Zeabur expresses no opinion and our 330 is not overriding a platform choice, it is overriding an unset value. Whether its UI can set it is still unknown. (3) The server runs 14 platform pods, all 66 days old, none of them application workloads: cadvisor, fluent-bit, ingress-controller, nats-0, node-exporter, vector-aggregator, victoria-metrics-0, zeabur-dns, zeabur-kube-watch, zeabur-log-api, coredns, crictl-image-prune, local-path-provisioner, metrics-server. Three metrics systems and three log systems. (4) MEMORY, the finding that matters: free -h reports 1.9Gi total, 1.1Gi used, 798Mi available and 721Mi ALREADY IN SWAP with zero application workloads deployed. The dashboard's 57% figure hides the swap. 798Mi is the permanent budget. That is ample for the fleet as it ships (Node only, no browser until R1.3) and is the number to re-check when Chromium first launches: swap growth during a pass makes FLEET_PROBE_TIMEOUT_MS fire for reasons that have nothing to do with the surface being probed, and a timeout scored as a probe outcome is exactly the infrastructure-failure-read-as-result error decision D2 exists to prevent. A run whose swap grew is not evidence about block rate. (5) The 30s grace does NOT block stage 1 or stage 2: probeBatch throws, so a pass completes in milliseconds. It becomes load-bearing at R1.3."
         }
       ],
       "verification": null
@@ -3857,7 +3862,13 @@
       "status": "todo",
       "owner": null,
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-17T20:44:03.628Z",
+          "by": "controller",
+          "text": "correction: LEDGER DRIFT, found 2026-09-18 during a bug review of the last 8 days. This task is todo here, but the code says part of it shipped unclaimed: src/lib/engines/serp.test.mjs opens with 'R1.7.3 — SerpAPI probe path and resolveSerpCredentials/serpFetch deleted', serp.js has no SerpAPI branch left (isBrightDataConfigured is the only gate), and an engines reviewer confirmed the dead SerpAPI path is gone. Two tests were still exercising the deleted path and failing in CI: promptGenSeedProvenance 'fetchPeopleAlsoAsk still absorbs an ordinary per-term failure' (configured serpapi, so it hit the unconfigured branch instead of the per-term one) and serpQueryPrice 'CALL SITE 1b — serp.js prices a SerpAPI probe' (no SerpAPI probe exists to price). Both repaired in the same commit as this note: the first now configures Bright Data, the second is deleted because its subject is. serpapi REMAINS a priced vendor id in BUILT_IN_SERP_QUERY_PRICES on purpose. Whoever claims this task should verify what else the accept asks for (demote API adapters to explicit fallback; delete dead paths) against the current tree rather than re-doing the SerpAPI deletion."
+        }
+      ],
       "verification": null
     },
     {
@@ -9131,6 +9142,39 @@
         "at": "2026-09-13T07:10:05.889Z",
         "note": "Verified in isolated worktree at 4eefaec. Original failure reproduced by checking out the three files from HEAD~1 while leaving 014 on disk: exactly three guards red, each naming the orphan. Four sabotages including adding a fake 015 (all three guards red, so they read disk rather than being narrowed to 014) and deleting the section-C enumeration row (proving the new applied-state bullet does not accidentally satisfy the guard). Object names confirmed read from the SQL, not guessed: 014 is one line, ALTER TABLE content_jobs ADD COLUMN checkpoint jsonb, while the checkpoint in the 005 row is on scan_jobs - the README disambiguation is true. Applied-state honesty checked sentence by sentence across all three files: no smuggled claim, 013 hedging matched exactly. The empty verify array is the honest answer given available options (objectExists uses to_regclass and pg_proc, neither of which sees a column; 012/013 ship indexes as stand-ins, 014 does not, and its SQL belongs to R3.5.1) - but the verifier notes it satisfies the guard letter while delivering zero coverage, and setup:db still reaches a green verdict on a DB missing 014. Widening recorded against R6.1.12. Suite exact baseline."
       }
+    },
+    {
+      "id": "R3.5.5",
+      "subphase": "R3.5",
+      "lane": "data",
+      "title": "content_items natural key admits duplicates when job_id is NULL",
+      "detail": "Found by a review of the last 8 days of changes, 2026-09-18. Migration 016_content_items_natural_key.sql adds UNIQUE (job_id, cycle) so insertContentItem can upsert on the natural key (src/lib/db/content.js, onConflict job_id,cycle) and a crash between insert and the status write no longer creates a duplicate draft (R3.5.2). But content_items.job_id is nullable by schema — 002_content_os.sql declares it `uuid REFERENCES content_jobs(id) ON DELETE SET NULL` — and insertContentItem writes `job_id: item.job_id || null`. In Postgres a UNIQUE constraint treats NULLs as distinct, so any number of rows with (NULL, 1) are accepted and the upsert never matches them. Two paths reach NULL: a deleted job (ON DELETE SET NULL, orphans — harmless, nothing resumes them) and a caller inserting an item without a job (any such caller defeats the R3.5.2 guarantee for that item). Whether the second path exists in practice is not established; grep the non-test callers of insertContentItem and check each passes a job id. Fix, if a NULL-job insert path is real: a NEW migration (do not edit 016, it may already be applied) that either makes job_id NOT NULL after confirming zero NULL rows in production, or recreates the key as UNIQUE NULLS NOT DISTINCT (Postgres 15+, which Supabase runs). Both are data-dependent: a production table that already holds NULL-job duplicates fails the migration mid-transaction, so per docs/OPERATOR_LEDGER.md section C the pre-check against the live catalog is an operator step, not an agent one.",
+      "accept": "Either (a) every non-test caller of insertContentItem is shown to pass a non-null job_id, with a test that fails if a new caller omits it, and this task closes with no migration; or (b) a new migration lands that makes (job_id, cycle) unique with NULLs treated as equal or job_id NOT NULL, applied to production after a catalog query proves no conflicting rows exist, with the query and its result recorded in docs/PROD_MIGRATIONS.md.",
+      "deps": [
+        "R3.5.2"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "anchors": [
+        "supabase/migrations/016_content_items_natural_key.sql:30",
+        "supabase/migrations/002_content_os.sql:21",
+        "src/lib/db/content.js:488",
+        "src/lib/db/content.js:527"
+      ],
+      "phase": "R3",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-17T19:51:53.241Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R3.6.1",

@@ -364,7 +364,18 @@ test("fetchPeopleAlsoAsk propagates a typed zone error instead of returning an e
 });
 
 test("fetchPeopleAlsoAsk still absorbs an ordinary per-term failure", async (t) => {
-  useEnv(t, { SERP_PROVIDER: "serpapi", SERPAPI_KEY: "serpapi-EXAMPLE-NOT-A-REAL-KEY" });
+  // Bright Data only: the SerpAPI probe path is gone (R1.7.3), and with no
+  // Bright Data key configured fetchPeopleAlsoAsk returns [] before any fetch,
+  // which is the "unconfigured" branch, not the per-term one this test is for.
+  // The zone is given explicitly so no zone-discovery request happens and the
+  // stub's throw is the ONLY failure in play. Placeholder values only.
+  useEnv(t, {
+    SERP_PROVIDER: "brightdata",
+    BRIGHTDATA_API_KEY: "bd-EXAMPLE-NOT-A-REAL-KEY",
+    BRIGHTDATA_SERP_ZONE: "test_zone",
+  });
+  // brightDataSearch retries a thrown fetch once (attempts=2) with a backoff
+  // before rethrowing the SAME error object, so this test pays one backoff.
   stubFetch(t, async () => { throw new Error("socket hang up"); });
 
   const warned = captureWarnings();

@@ -1,5 +1,12 @@
 # R6 Acceptance Criteria — Scoring & Analytics Review
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** A dated review artefact from the 2026-09-14 session:
+> the acceptance verdicts it records were acted on and the tasks it names have
+> since closed in the ledger. `.claude/orchestration/tasks.json` is the record
+> of what each task's verifier actually accepted; read this for the reasoning
+> at the time, not for current status.
+
 **Reviewer:** PM2 (Scoring & Analytics)
 **Date:** 2026-09-14
 **Scope:** R6.4.17, R6.4.16, R6.4.10, R6.4.11, R6.4.3, R6.4.8, R6.5.8

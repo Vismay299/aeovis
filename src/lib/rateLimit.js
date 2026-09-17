@@ -544,7 +544,26 @@ export function resolveDeclaredIpHeader(env = process.env) {
  * across buckets. Merging is the dangerous direction here; splitting is not
  * available.
  */
-export function normaliseAddress(raw) { return String(raw ?? "").trim().toLowerCase(); }
+export function normaliseAddress(raw) {
+  // Folded once, up front: an address is case-insensitive in every form that
+  // reaches here (hex in IPv6, DNS labels in a hostname, digits in IPv4).
+  const value = String(raw ?? "").trim().toLowerCase();
+  if (!value) return "";
+
+  // `[2001:db8::1]:443` and `[2001:db8::1]` are one client. A port is never
+  // part of who the client is, and on the caller-settable fallback headers a
+  // port that DID count would let one caller mint a fresh budget per port.
+  const bracketed = /^\[([^\]]+)\](?::\d{1,5})?$/.exec(value);
+  if (bracketed) return bracketed[1];
+
+  // Exactly one colon, so a bare IPv6 (which has at least two) is left alone
+  // and a zone ID (`fe80::1%eth0`) survives. Not restricted to IPv4: a declared
+  // header can carry `proxy.example:8080`.
+  const withPort = /^([^:]+):\d{1,5}$/.exec(value);
+  if (withPort) return withPort[1];
+
+  return value;
+}
 
 export function resolveClientIp({ header, env = process.env }) {
   const read = (name) => normaliseAddress((header(name) || "").split(",")[0]);

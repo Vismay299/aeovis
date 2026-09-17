@@ -369,7 +369,11 @@ test("GUARD — every table this repo creates or reads is classified, so a new o
 
   const created = new Set();
   for (const f of files) {
-    const sql = await readFile(path.join(MIGRATIONS, f), "utf8");
+    // Line comments are stripped first. 016's header wraps "`CREATE TABLE IF
+    // NOT\n-- EXISTS`" across two comment lines; the regex below crossed the
+    // newline, could not match `-- EXISTS` as `exists`, backtracked, and
+    // recorded a table named `if`.
+    const sql = (await readFile(path.join(MIGRATIONS, f), "utf8")).replace(/--[^\n]*/g, "");
     for (const m of sql.matchAll(/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?([a-z_][a-z0-9_]*)/gi)) {
       created.add(m[1].toLowerCase());
     }
@@ -383,6 +387,10 @@ test("GUARD — every table this repo creates or reads is classified, so a new o
     const out = [];
     for (const e of await readdir(dir, { withFileTypes: true })) {
       const full = path.join(dir, e.name);
+      // worker/ is its own npm workspace: a `worker/node_modules` on disk is
+      // full of vendors' README examples (`.from("avatars")`, `very_big_table`),
+      // none of which is a table this app touches.
+      if (e.isDirectory() && e.name === "node_modules") continue;
       if (e.isDirectory()) out.push(...(await walk(full)));
       else if (/\.(mjs|js|jsx)$/.test(e.name) && !/\.test\.mjs$/.test(e.name)) out.push(full);
     }
@@ -999,6 +1007,10 @@ test("META — every file that imports the live gate arms the write guard", asyn
     const out = [];
     for (const e of await readdir(dir, { withFileTypes: true })) {
       const full = path.join(dir, e.name);
+      // worker/ is its own npm workspace: a `worker/node_modules` on disk is
+      // full of vendors' README examples (`.from("avatars")`, `very_big_table`),
+      // none of which is a table this app touches.
+      if (e.isDirectory() && e.name === "node_modules") continue;
       if (e.isDirectory()) out.push(...(await walk(full)));
       else if (/\.(mjs|js|jsx)$/.test(e.name)) out.push(full);
     }
