@@ -731,7 +731,7 @@
       "subphase": "R0.1",
       "lane": "infra",
       "title": "Confirm CRON_SECRET and OPERATOR_TOKEN are live on the Vercel project",
-      "detail": "R0.1.1 and R0.1.3 are now proven over HTTP against a local production-mode server, which settles the code. What is still unproven is the deployment: check:secrets reports cron UNCONFIGURED, and the handoff asserts both values are set on Vercel without having been able to reach the API to confirm it. Standing rule 3 applies — set and works are different claims. This matters asymmetrically: OPERATOR_TOKEN fails closed, so if src/middleware.js ships while the value is unset every operator route 401s and the dashboard goes dark. Both values were also pasted into a session transcript and are due for rotation, so the confirmation and the rotation are one job. 2026-09-15: attempted rotation of CRON_SECRET and OPERATOR_TOKEN (new 64-hex values into .env.local and Vercel production). The session's permission classifier refused the secret-store write, and nothing was changed (.env.local mtime unchanged). Current state observed: production answers /api/health 200, /api/industries 200, /api/scan/worker 401 without a header, and 401 WITH the local CRON_SECRET, so the local and production values differ. Operator action: rotate both on Vercel and in .env.local, redeploy, then GET /api/scan/worker with the bearer secret must return 200 and POST /api/content with no token must return 401.",
+      "detail": "R0.1.1 and R0.1.3 are now proven over HTTP against a local production-mode server, which settles the code. What is still unproven is the deployment: check:secrets reports cron UNCONFIGURED, and the handoff asserts both values are set on Vercel without having been able to reach the API to confirm it. Standing rule 3 applies — set and works are different claims. This matters asymmetrically: OPERATOR_TOKEN fails closed, so if src/middleware.js ships while the value is unset every operator route 401s and the dashboard goes dark. Both values were also pasted into a session transcript and are due for rotation, so the confirmation and the rotation are one job. 2026-09-15: attempted rotation of CRON_SECRET and OPERATOR_TOKEN (new 64-hex values into .env.local and Vercel production). The session's permission classifier refused the secret-store write, and nothing was changed (.env.local mtime unchanged). Current state observed: production answers /api/health 200, /api/industries 200, /api/scan/worker 401 without a header, and 401 WITH the local CRON_SECRET, so the local and production values differ. Operator action: rotate both on Vercel and in .env.local, redeploy, then GET /api/scan/worker with the bearer secret must return 200 and POST /api/content with no token must return 401. 2026-09-18: 'set' confirmed — vercel env ls production lists CRON_SECRET and OPERATOR_TOKEN (names only). 'works' half-confirmed: https://aeo-vis.vercel.app/api/scan/worker answers 401 unauthenticated. Bearer 200 and POST /api/content 401 still owed by the operator; agent attempts were refused by its permission policy on production reads.",
       "accept": "Against the deployed instance: GET /api/scan/worker with no header returns 401 and with the bearer secret returns 200; POST /api/content with no token returns 401; GET /api/industries and GET /api/health both return 200 — using freshly rotated values.",
       "deps": [],
       "tags": [
@@ -764,6 +764,11 @@
           "at": "2026-09-15T13:50:48.423Z",
           "by": "controller",
           "text": "amended: 2026-09-15: attempted rotation of CRON_SECRET and OPERATOR_TOKEN (new 64-hex values into .env.local and Vercel production). The session's permission classifier refused the secret-store write, and nothing was changed (.env.local mtime unchanged). Current state observed: production answers /api/health 200, /api/industries 200, /api/scan/worker 401 without a header, and 401 WITH the local CRON_SECRET, so the local and production values differ. Operator action: rotate both on Vercel and in .env.local, redeploy, then GET /api/scan/worker with the bearer secret must return 200 and POST /api/content with no token must return 401."
+        },
+        {
+          "at": "2026-09-18T11:29:01.760Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18: 'set' confirmed — vercel env ls production lists CRON_SECRET and OPERATOR_TOKEN (names only). 'works' half-confirmed: https://aeo-vis.vercel.app/api/scan/worker answers 401 unauthenticated. Bearer 200 and POST /api/content 401 still owed by the operator; agent attempts were refused by its permission policy on production reads."
         }
       ],
       "verification": null,
@@ -7475,7 +7480,7 @@
       "subphase": "R3.1",
       "lane": "infra",
       "title": "Scan worker cron every 10 minutes",
-      "detail": "Rescue stops depending on an open browser tab. OPERATOR DECISION 2026-09-15: not upgrading from the Vercel Hobby plan for now. Hobby only permits once-daily crons, so the 10-minute schedule cannot ship; vercel.json keeps the daily scan worker. R3.1.5 is the path that removes the dependency on rescue cadence.",
+      "detail": "Rescue stops depending on an open browser tab. OPERATOR DECISION 2026-09-15: not upgrading from the Vercel Hobby plan for now. Hobby only permits once-daily crons, so the 10-minute schedule cannot ship; vercel.json keeps the daily scan worker. R3.1.5 is the path that removes the dependency on rescue cadence. 2026-09-18: superseded by R3.1.12. Hobby runs a cron once a day and the operator is not upgrading; the 10-minute sweep now comes from a K3s CronJob on the Zeabur box (worker/k8s/scan-cron.yaml). This task stays blocked; its accept names vercel.json and cannot be met on this plan.",
       "accept": "vercel.json schedules the scan worker every 10 minutes; a stale job is rescued without any client polling.",
       "deps": [
         "R0.1.1"
@@ -7503,6 +7508,11 @@
           "at": "2026-09-15T09:58:57.712Z",
           "by": "controller",
           "text": "blocked (needs-decision): 10-minute crons need Vercel Pro; operator declined the upgrade for now. Revisit on upgrade or after R3.1.5."
+        },
+        {
+          "at": "2026-09-18T11:29:01.724Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18: superseded by R3.1.12. Hobby runs a cron once a day and the operator is not upgrading; the 10-minute sweep now comes from a K3s CronJob on the Zeabur box (worker/k8s/scan-cron.yaml). This task stays blocked; its accept names vercel.json and cannot be met on this plan."
         }
       ],
       "verification": null,
@@ -7906,7 +7916,7 @@
       "subphase": "R3.1",
       "lane": "backend",
       "title": "A content job has no self-continue, so it advances one function-lifetime per day",
-      "detail": "Observed 2026-09-16 after R3.1.2 and migration 014 made the daily batch work. Six daily_batch jobs were created and dispatched by GET /api/content/worker?batch=1; all six ran inside that one cron invocation, checkpointed, and stopped heartbeating together when the function hit maxDuration (researching 25%, benchmarking 42%, drafting 58%, reviewing 75% - none reached a content_items row). Nothing resumes them: startContentJob has no equivalent of the scan worker's selfContinue, so the only resume path is the next /api/content/worker tick, which is DAILY. A pipeline with five or six stages therefore needs five or six days to produce one draft, and each resumed chunk re-enters a job that is otherwise idle. The scan side of this was R3.1.5 (keepAlive) plus R3.1.6 (a self-continue that can actually reach the worker); the content side has neither.",
+      "detail": "Observed 2026-09-16 after R3.1.2 and migration 014 made the daily batch work. Six daily_batch jobs were created and dispatched by GET /api/content/worker?batch=1; all six ran inside that one cron invocation, checkpointed, and stopped heartbeating together when the function hit maxDuration (researching 25%, benchmarking 42%, drafting 58%, reviewing 75% - none reached a content_items row). Nothing resumes them: startContentJob has no equivalent of the scan worker's selfContinue, so the only resume path is the next /api/content/worker tick, which is DAILY. A pipeline with five or six stages therefore needs five or six days to produce one draft, and each resumed chunk re-enters a job that is otherwise idle. The scan side of this was R3.1.5 (keepAlive) plus R3.1.6 (a self-continue that can actually reach the worker); the content side has neither. 2026-09-18: production had NO Protection Bypass secret and no NEXT_PUBLIC_APP_URL, so the self-continue resolved to the SSO-protected VERCEL_URL and never reached the worker. Filed and fixed as R3.1.13; the owed observation moves to after that deploy.",
       "accept": "A content job started by the batch reaches a content_items draft without waiting for a second cron day: either the job self-continues after a checkpoint the way a scan chunk does, or the resume cadence is raised, or the work moves to a host that owns its own lifetime (see the R1.1.3 worker-host ADR). Evidenced by a batch-created job going from creation to an item in one day, read from content_jobs/content_items.",
       "tags": [],
       "findings": [],
@@ -7947,6 +7957,11 @@
           "at": "2026-09-18T04:33:45.225Z",
           "by": "rebuild-implementer",
           "text": "R3.1.10 — a content job now self-continues, so it no longer advances one\nfunction-lifetime per cron day.\n\nAPPROACH: the mandated one. Mirrors the scan pipeline (R3.1.5 keepAlive +\nR3.1.6 protection bypass) rather than inventing a second mechanism. The scan\nfiles were held by another worker, so instead of refactoring\n`src/lib/workers/scanWorker.js` I lifted the mechanism into a new,\nroute-parameterised module. MIGRATING `scanWorker.js` ONTO\n`src/lib/selfContinue.js` IS A FOLLOW-UP TASK — right now the two copies are\nbyte-for-byte equivalent in behaviour (same header names, same\n`SELF_CONTINUE_HOLD_MS = 5000`, same URL precedence) but they can drift.\n\nWHAT CHANGED\n\n1. `src/lib/selfContinue.js` (new) — `resolveSelfContinueUrl(routePath, jobId,\n   env)` :51, `buildSelfContinueInit(env)` :91, `makeSelfContinue({routePath,\n   label, ...})` :108. Same `x-cron-secret` + `x-vercel-protection-bypass`\n   pair, same `missingBypass` disclosure, same `keepAlive(..., {maxMs})` cap.\n   Every failure path returns `{fired:false, reason}` AND warns — a\n   self-continue that quietly never went out is exactly the silent-skip the\n   standing rules forbid.\n\n2. `src/lib/content/contentWorker.js`\n   - `CONTENT_CHUNK_BUDGET_MS = 150_000` :77 (route `maxDuration = 300`, same\n     ratio the scan chunk uses; the check runs AFTER a block, so the remaining\n     150s has to absorb one more block).\n   - `contentSelfContinue` :104 — the content-route instance.\n   - chunk clock + `overBudget()` :354-361, `handOff()` :385.\n   - four hand-off sites, each immediately after a checkpoint write that is\n     already `await`ed: Phase A block :544, draft :619, mid-block (transform /\n     fact_check) :664, post-review :712.\n   - `startContentJob` now has THREE outcomes, documented at :232: an item,\n     `null` (failed / not ours), or `{checkpointed:true, after, blocks_run,\n     self_continue}`. Both live call sites are fire-and-forget and ignore the\n     return; the shape exists so nothing can read \"handed off\" as \"done\".\n\n3. `src/app/api/content/worker/route.js`\n   - `contentDirectResumeReport()` :101 — its own vocabulary, separate from\n     `contentCronReport`, with `ledger_written` (R3.1.4).\n   - the `?job_id=` direct-resume branch :284-312, placed BEFORE the staleness\n     sweep and before the `!supabase` guard, mirroring\n     `src/app/api/scan/worker/route.js`. It dispatches the named job\n     UNCONDITIONALLY: `shouldRescueContentJob` requires a STALE heartbeat, and\n     the invocation that fires the self-continue heartbeated on its very last\n     write, so the sweep would (correctly, for its own purpose) skip it.\n   - auth is unchanged: the same `isCronAuthorized`, so `x-cron-secret`\n     authenticates here with no new code. Verified by test: an unauthenticated\n     `?job_id=` gets 401 and nothing runs.\n\n4. `src/app/api/content/route.js:22` — added `export const maxDuration = 300;`\n   The surveyor flagged this and I did it: the UI-triggered POST starts the job\n   under `keepAlive` and then returns 201, so with the inherited platform\n   default the job was killed in seconds — long before the 150s soft budget\n   could fire a self-continue. One line, in an owned directory, and without it\n   the fix does not reach the UI path at all. Called out loudly here because it\n   is the one change outside the strict letter of the accept.\n\nLEASE CONTINUITY — THE DECISION AND WHY (this is what to scrutinise)\n\nRELEASE THE LEASE FIRST, THEN FIRE. Not carry the owner forward.\n\n- Ordering is the whole argument. The receiver acquires a fresh lease through\n  the route's existing `dispatchWithLease`. If the outgoing invocation still\n  held the lease when the request landed, the receiver would lose the acquire,\n  report `lease_held`, and the job would stall until the lease expired — i.e.\n  the fix would become a slower version of the bug.\n- Two invocations cannot run the same job at once: after `handOff()` the\n  outgoing invocation does nothing but return, and the `finally` release is\n  owner-scoped (`.eq(\"lease_owner\", owner)`), so it cannot take the lease away\n  from whoever holds it next. `leaseAlreadyReleased` skips the redundant write\n  but still retries if `handOff`'s release failed.\n- If the self-continue never arrives, the job sits checkpointed with a FREE\n  lease; its heartbeat goes stale after `CONTENT_HEARTBEAT_STALE_MS` (3 min)\n  and `shouldRescueContentJob` picks it up on the existing sweep, unchanged.\n  Carrying the owner forward would instead have left a live lease pointing at a\n  dead invocation, delaying rescue by a full TTL — strictly worse.\n- Rejected alternative: passing `lease_owner` on the self-continue URL. It puts\n  an ownership token in a query string and in logs for no benefit.\n\nNO NEW ENVIRONMENT VARIABLE. `CRON_SECRET` is already in `.env.example:51` and\nalready used by this path. `VERCEL_AUTOMATION_BYPASS_SECRET` is injected by\nVercel when \"Protection Bypass for Automation\" is on — a platform toggle\nalready ratified for the scan side by R3.1.6, not an operator-set value, which\nis why it stays out of `.env.example`. `NEXT_PUBLIC_APP_URL` is optional: the\nresolver falls back to `VERCEL_URL` then localhost. `.env.example` unchanged.\nNo migration: `content_jobs.checkpoint` already exists (migration\n`014_content_job_checkpoints.sql`), and nothing here changes the schema.\n`vercel.json` unchanged — the cron cadence is not the mechanism.\n\nTESTS (targeted only; the full suite was NOT run, per the controller's\ninstruction that two other workers are sabotaging `scanWorker.js` / `db.js`\nin this same tree, which would make a full-suite baseline meaningless)\n\n- `src/lib/selfContinue.test.mjs` (new) — 13 tests, 13 pass. URL precedence and\n  job-id encoding; the two-gate header construction and all three\n  `missingBypass` cases; one-request-only; `keepAlive` cap =\n  `SELF_CONTINUE_HOLD_MS`; a rejected fetch warns and never throws; a fetch that\n  cannot start reports `fired:false`. No network, no real env read.\n- `src/lib/content/contentWorker.test.mjs` — 30 -> 35 tests, 35 pass (5 new,\n  :1201-1380). Budget-hit hand-off returns the third outcome with a durable\n  checkpoint and no item; release-before-fire ordering; a mid-loop hand-off\n  after a FAILING review resumes at cycle 2 with the revision archived exactly\n  once; a hand-off never fires without at least one block of progress.\n- `src/lib/contentWorkerSweep.route.test.mjs` — 12 -> 20 tests, 20 pass (7 new\n  + 1 source guard, :457-595). `?job_id=` dispatches unconditionally and never\n  calls `listResumableContentJobs`; a job that `shouldRescueContentJob` refuses\n  (fresh heartbeat) is still dispatched — the premise is asserted against the\n  real predicate; `lease_held` is a 200 skip, `lease_acquire_failed` is a 500;\n  401 without the secret; `ledger_written` present.\n- Unchanged and still green: `contentWorkerUnconfigured.route` 6,\n  `dbReadOutage.route` 14, `cronAuth.route` 7, `cronAuth` 21, `keepAlive` 7,\n  `operatorPerimeter` 25, `dbContent` 34, `contentWriteFailure` 22, `health` 23,\n  `envTruth` 14, `publishRoute` 18, `approvalNotPublication` 9,\n  `content/crewCanvas` 13, `content/lessonsLoop` 2, `agentSecretsGuard` 6.\n\nWHAT I PROVED AND WHAT I DID NOT\n\nPROVED OFFLINE: the mechanism. The chain test at\n`contentWorker.test.mjs:1250` drives the worst case the platform can impose —\n`chunkBudgetMs: 0`, so every invocation completes exactly ONE block and hands\noff — and shows a `daily_batch`-shaped job going from `pending` to a single\n`content_items` row across five self-continue hops, with the scripted LLM\nproving no block was paid for twice and no duplicate item was inserted. No cron\ntick is involved anywhere in that chain.\n\nNOT PROVED, AND IT NEEDS A DEPLOYED RUN: the accept's final sentence —\n\"a batch-created job going from creation to an item in one day, read from\n`content_jobs`/`content_items`\". I have no production credentials and did not\nrun anything against production. What that observation needs, once this is\ndeployed: trigger `GET /api/content/worker?batch=1` with the cron secret, then\nread `content_jobs` for a row with `input.source = 'daily_batch'` whose\n`created_at` and the matching `content_items.created_at` fall on the SAME day,\nand confirm the job's `status` reached `awaiting_approval` with a non-null\n`item_id`. The deployed run also exercises the one thing no unit test can: that\n`VERCEL_AUTOMATION_BYPASS_SECRET` is actually injected and the self-fetch is not\nanswered by an SSO redirect. If Protection Bypass for Automation is NOT enabled\non this project, the self-continue will be refused before it reaches the route\nand the jobs will fall back to the daily sweep — the logs will say so\nexplicitly (\"going out WITHOUT a protection bypass\").\n\nFOR THE CONTROLLER TO LAND ON MY BEHALF (I own no file under `docs/`)\n\nSuggested `docs/OPERATOR_LEDGER.md` row:\n\n| R3.1.10 | Content jobs self-continue | `GET /api/content/worker?job_id=<id>`\nis the resume target a content job fires at itself after checkpointing at a\n150s soft budget. It requires the SAME two credentials as the scan self-continue\n(R3.1.6): `CRON_SECRET` for the route's own auth gate, and Vercel's\n\"Protection Bypass for Automation\" toggle (which injects\n`VERCEL_AUTOMATION_BYPASS_SECRET`) to get past Deployment Protection. No new\nenvironment variable. If the bypass is off, content jobs still complete but\nadvance one block per daily cron tick, and the function logs\n\"self-continue ... WITHOUT a protection bypass\" every hop. |\n\nFOLLOW-UP TASKS I DID NOT DO (each deserves its own ledger row)\n\n1. Migrate `src/lib/workers/scanWorker.js` onto `src/lib/selfContinue.js` and\n   delete its private `resolveSelfContinueUrl` / `buildSelfContinueInit` /\n   `defaultSelfContinue`. Deliberately out of scope: that file was held and\n   being sabotaged by a concurrent worker. Two copies of a security-relevant\n   header builder is a drift risk.\n2. `dispatchWithLease` calls `acquire(\"content_jobs\", jobId, owner)` WITHOUT\n   forwarding `deps` (`src/app/api/content/worker/route.js:60`), so an injected\n   test client never reaches `acquireLease`. Pre-existing; I did not change it\n   because it is load-bearing for the existing sweep tests.\n3. `reviseContentItem` (the human-feedback path) has no chunking at all. It is\n   two LLM blocks so it fits one lifetime today, but it shares none of this\n   machinery.\n\nWHAT THE VERIFIER SHOULD BE MOST SUSPICIOUS OF\n\n- The release-before-fire ordering (above). If it is wrong, the symptom is a\n  job that stalls a full lease TTL per hop instead of advancing.\n- The `blocksRun > 0` guard in `overBudget()` :361. It is what makes an\n  infinite hand-off ping-pong structurally impossible; without it a\n  misconfigured budget could bounce a job forever at zero progress.\n- The post-review hand-off site :712 sits BELOW the pass and YMYL breaks on\n  purpose — a terminal verdict is one non-LLM insert from an item, so handing\n  off there would cost a round trip and buy nothing. Check I did not move the\n  break semantics.\n- Placing the direct-resume branch before the `!supabase` guard. That is what\n  the scan route does, and it is what lets the branch answer honestly\n  (`ledger_written: false`) on an unconfigured deploy instead of reporting a\n  sweep it never ran.\n"
+        },
+        {
+          "at": "2026-09-18T11:29:01.826Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18: production had NO Protection Bypass secret and no NEXT_PUBLIC_APP_URL, so the self-continue resolved to the SSO-protected VERCEL_URL and never reached the worker. Filed and fixed as R3.1.13; the owed observation moves to after that deploy."
         }
       ],
       "verification": {
@@ -7984,6 +7999,100 @@
         }
       ],
       "verification": null
+    },
+    {
+      "id": "R3.1.12",
+      "subphase": "R3.1",
+      "lane": "infra",
+      "title": "Scan-worker sweep every 10 minutes from the Zeabur box",
+      "detail": "Supersedes R3.1.1, whose accept names vercel.json: the operator is not upgrading from Vercel Hobby (decision 2026-09-15) and Hobby runs a cron once a day. The same GET the daily Vercel cron makes is instead issued every 10 minutes by a K3s CronJob on the ratified fleet host (docs/decisions/2026-09-05-worker-host.md section 5). Manifest worker/k8s/scan-cron.yaml: curl image, Authorization: Bearer from a perceev-cron Secret, concurrencyPolicy Forbid, activeDeadlineSeconds 240, exit code derived from the HTTP status so a 401 counts as a failed Job. Targets the production ALIAS https://aeo-vis.vercel.app, which is outside Vercel Authentication (observed 2026-09-18: alias answers the route own 401 unauthenticated; the deployment URL answers 302 to sso-api), so no protection-bypass header is needed.",
+      "accept": "On the Zeabur K3s cluster, `kubectl get cronjob perceev-scan-cron` shows schedule */10 * * * *, and the log of one completed Job shows `scan-worker sweep: HTTP 200` with a JSON body carrying processed/skipped counts; a stale scan job is then rescued within 10 minutes with no browser tab open.",
+      "deps": [
+        "R1.2.20"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "anchors": [
+        "worker/k8s/scan-cron.yaml",
+        "src/app/api/scan/worker/route.js:36",
+        "docs/OPERATOR_LEDGER.md"
+      ],
+      "phase": "R3",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-18T11:29:01.632Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R3.1.13",
+      "subphase": "R3.1",
+      "lane": "backend",
+      "title": "Self-continue must target the production alias, not the SSO-protected deployment URL",
+      "detail": "Found 2026-09-18 while checking the R3.1.10 observation. The live project has Vercel Authentication on (all_except_custom_domains), NO Protection Bypass secret created (the panel is empty, so VERCEL_AUTOMATION_BYPASS_SECRET is never injected), and no NEXT_PUBLIC_APP_URL in production. Both resolveSelfContinueUrl copies therefore fell through to VERCEL_URL, the per-deployment URL, which answers 302 -> vercel.com/sso-api. Every self-continue on production, scan (R3.1.6) and content (R3.1.10) alike, died at that wall and the job waited for the daily cron. The production alias (aeo-vis.vercel.app) is not protected: it answers the route own 401 unauthenticated. Fix: productionAliasBase in src/lib/selfContinue.js returns https://VERCEL_PROJECT_PRODUCTION_URL when VERCEL_ENV is production (a system variable Vercel injects, so no operator action), and both resolvers rank it after NEXT_PUBLIC_APP_URL and before VERCEL_URL. A preview deployment must never hand its job to production, hence the VERCEL_ENV guard. anchors corrected to the committed lines",
+      "accept": "resolveSelfContinueUrl in both src/lib/selfContinue.js and src/lib/workers/scanWorker.js returns https://<VERCEL_PROJECT_PRODUCTION_URL>/... when VERCEL_ENV=production and NEXT_PUBLIC_APP_URL is unset, returns the VERCEL_URL form when VERCEL_ENV is preview, and still honours NEXT_PUBLIC_APP_URL first; tests pin all three. Production observation (owed by the operator after deploy, not by this close): a daily_batch content job reaches content_items the same day with no cron tick between.",
+      "deps": [
+        "R3.1.10"
+      ],
+      "tags": [],
+      "anchors": [
+        "src/lib/selfContinue.js:52",
+        "src/lib/workers/scanWorker.js:1163",
+        "src/lib/selfContinue.test.mjs:47",
+        "src/lib/workers/scanChunk.test.mjs:364",
+        "src/lib/selfContinue.js:58",
+        "src/lib/selfContinue.js:81",
+        "src/lib/workers/scanWorker.js:1168",
+        "src/lib/selfContinue.test.mjs:70",
+        "src/lib/workers/scanChunk.test.mjs:385"
+      ],
+      "phase": "R3",
+      "findings": [],
+      "status": "done",
+      "owner": "main-session",
+      "evidence": [
+        "src/lib/selfContinue.js:52",
+        "src/lib/selfContinue.js:75",
+        "src/lib/workers/scanWorker.js:1166",
+        "src/lib/selfContinue.test.mjs:47",
+        "src/lib/selfContinue.test.mjs:73",
+        "src/lib/workers/scanChunk.test.mjs:378"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-18T11:29:01.685Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-18T11:29:01.860Z",
+          "by": "main-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-18T11:29:01.897Z",
+          "by": "main-session",
+          "text": "productionAliasBase + precedence in both resolvers; 60/60 in selfContinue.test.mjs and scanChunk.test.mjs."
+        },
+        {
+          "at": "2026-09-18T11:29:35.394Z",
+          "by": "controller",
+          "text": "amended: anchors corrected to the committed lines"
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-18T11:32:07.806Z",
+        "note": "Verified independently. Pre-fix repro: ran HEAD's resolver against {VERCEL_ENV:production, VERCEL_PROJECT_PRODUCTION_URL:aeo-vis.vercel.app, VERCEL_URL:aeo-gv31q4miu-...} -> https://aeo-gv31q4miu-....vercel.app/api/content/worker?job_id=j1 (the SSO-protected deployment URL); working tree returns https://aeo-vis.vercel.app/... Helper at src/lib/selfContinue.js:58-62, ranked at src/lib/selfContinue.js:81 and src/lib/workers/scanWorker.js:1168 (import at scanWorker.js:67 - one shared helper, no drift). Accept criterion exercised directly for all three cases in both copies. Adversarial: empty/whitespace/absent VERCEL_PROJECT_PRODUCTION_URL and VERCEL_ENV=preview/development/'Production' all fall through to VERCEL_URL/localhost; NEXT_PUBLIC_APP_URL with trailing slash still wins and is normalised. Mutation check: deleting the new line from each copy turns selfContinue.test.mjs:47 and scanChunk.test.mjs:364 red (2 fail), restored byte-identical. Tests: selfContinue 15/15, scanChunk 45/45, keepAlive 7/7, workerIsolation 5/5; npm run test:scoring 2985 pass / 0 fail / 30 skipped. Liveness traced: POST /api/content/worker -> startContentJob -> contentWorker.js:104 makeSelfContinue -> selfContinue.js:81; POST /api/scan/worker -> runScanChunk -> scanWorker.js:2839 defaultSelfContinue -> scanWorker.js:1168. Nothing run against production. Minor, not blocking: a VERCEL_PROJECT_PRODUCTION_URL carrying a scheme would yield https://https://... - same host-only assumption the pre-existing VERCEL_URL branch already makes, and Vercel injects host-only. Production observation (daily_batch job reaching content_items with no cron tick) remains owed by the operator after deploy."
+      }
     },
     {
       "id": "R3.2.1",
@@ -9240,7 +9349,7 @@
       "subphase": "R3.5",
       "lane": "data",
       "title": "content_items natural key admits duplicates when job_id is NULL",
-      "detail": "Found by a review of the last 8 days of changes, 2026-09-18. Migration 016_content_items_natural_key.sql adds UNIQUE (job_id, cycle) so insertContentItem can upsert on the natural key (src/lib/db/content.js, onConflict job_id,cycle) and a crash between insert and the status write no longer creates a duplicate draft (R3.5.2). But content_items.job_id is nullable by schema — 002_content_os.sql declares it `uuid REFERENCES content_jobs(id) ON DELETE SET NULL` — and insertContentItem writes `job_id: item.job_id || null`. In Postgres a UNIQUE constraint treats NULLs as distinct, so any number of rows with (NULL, 1) are accepted and the upsert never matches them. Two paths reach NULL: a deleted job (ON DELETE SET NULL, orphans — harmless, nothing resumes them) and a caller inserting an item without a job (any such caller defeats the R3.5.2 guarantee for that item). Whether the second path exists in practice is not established; grep the non-test callers of insertContentItem and check each passes a job id. Fix, if a NULL-job insert path is real: a NEW migration (do not edit 016, it may already be applied) that either makes job_id NOT NULL after confirming zero NULL rows in production, or recreates the key as UNIQUE NULLS NOT DISTINCT (Postgres 15+, which Supabase runs). Both are data-dependent: a production table that already holds NULL-job duplicates fails the migration mid-transaction, so per docs/OPERATOR_LEDGER.md section C the pre-check against the live catalog is an operator step, not an agent one.",
+      "detail": "Found by a review of the last 8 days of changes, 2026-09-18. Migration 016_content_items_natural_key.sql adds UNIQUE (job_id, cycle) so insertContentItem can upsert on the natural key (src/lib/db/content.js, onConflict job_id,cycle) and a crash between insert and the status write no longer creates a duplicate draft (R3.5.2). But content_items.job_id is nullable by schema — 002_content_os.sql declares it `uuid REFERENCES content_jobs(id) ON DELETE SET NULL` — and insertContentItem writes `job_id: item.job_id || null`. In Postgres a UNIQUE constraint treats NULLs as distinct, so any number of rows with (NULL, 1) are accepted and the upsert never matches them. Two paths reach NULL: a deleted job (ON DELETE SET NULL, orphans — harmless, nothing resumes them) and a caller inserting an item without a job (any such caller defeats the R3.5.2 guarantee for that item). Whether the second path exists in practice is not established; grep the non-test callers of insertContentItem and check each passes a job id. Fix, if a NULL-job insert path is real: a NEW migration (do not edit 016, it may already be applied) that either makes job_id NOT NULL after confirming zero NULL rows in production, or recreates the key as UNIQUE NULLS NOT DISTINCT (Postgres 15+, which Supabase runs). Both are data-dependent: a production table that already holds NULL-job duplicates fails the migration mid-transaction, so per docs/OPERATOR_LEDGER.md section C the pre-check against the live catalog is an operator step, not an agent one. 2026-09-18: operator ran the pre-check on production: select count(*) from content_items where job_id is null -> 0. Migration 020_content_items_key_nulls_not_distinct.sql written (UNIQUE NULLS NOT DISTINCT, NOT deferrable because ON CONFLICT refuses a deferrable arbiter — 016's comment says DEFERRABLE but its SQL never was). Recorded in docs/PROD_MIGRATIONS.md. Apply-to-production and the applied-check remain the operator's (needs-secrets).",
       "accept": "Either (a) every non-test caller of insertContentItem is shown to pass a non-null job_id, with a test that fails if a new caller omits it, and this task closes with no migration; or (b) a new migration lands that makes (job_id, cycle) unique with NULLs treated as equal or job_id NOT NULL, applied to production after a catalog query proves no conflicting rows exist, with the query and its result recorded in docs/PROD_MIGRATIONS.md.",
       "deps": [
         "R3.5.2"
@@ -9264,6 +9373,11 @@
           "at": "2026-09-17T19:51:53.241Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-18T11:29:01.795Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18: operator ran the pre-check on production: select count(*) from content_items where job_id is null -> 0. Migration 020_content_items_key_nulls_not_distinct.sql written (UNIQUE NULLS NOT DISTINCT, NOT deferrable because ON CONFLICT refuses a deferrable arbiter — 016's comment says DEFERRABLE but its SQL never was). Recorded in docs/PROD_MIGRATIONS.md. Apply-to-production and the applied-check remain the operator's (needs-secrets)."
         }
       ],
       "verification": null

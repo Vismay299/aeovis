@@ -1088,6 +1088,36 @@ until then pre-015 rows keep `citation_state` NULL (unverified).
 
 ---
 
+## `020_content_items_key_nulls_not_distinct.sql`
+
+**Not yet applied** to production as of 2026-09-18 (R3.5.5). Written after the
+operator ran the data-dependence check; apply it in the SQL editor, then run the
+applied-check.
+
+**Pre-check, run by the operator against `nggyizuwqepxaqnpcqqj` on 2026-09-18,
+before the file existed:**
+
+```sql
+select count(*) from content_items where job_id is null;
+```
+
+Result: **`0`**. No NULL-job rows, so the new constraint cannot collide with
+existing data and the migration is safe to apply as written. Re-run it before
+applying if a day has passed.
+
+| Creates | Applied ⇔ |
+|---|---|
+| Replaces constraint `content_items_job_id_cycle_key` with `UNIQUE NULLS NOT DISTINCT (job_id, cycle)` | `select pg_get_constraintdef(oid) from pg_constraint where conname = 'content_items_job_id_cycle_key'` contains `NULLS NOT DISTINCT` |
+
+Same constraint **name** as 016, on purpose — `insertContentItem` upserts with
+`onConflict: "job_id,cycle"` and PostgREST resolves that by columns, not by
+name. Two consequences: `scripts/setup-supabase.mjs` cannot tell 016 from 020
+by presence, and the constraint is deliberately **not** deferrable, because
+`ON CONFLICT` refuses a deferrable arbiter (016's comment claims DEFERRABLE;
+its SQL never was).
+
+---
+
 ## Function signatures — the check the runner cannot make
 
 `scripts/setup-supabase.mjs:382-388` checks functions by **name only**. Two

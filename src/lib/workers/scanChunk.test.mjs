@@ -361,11 +361,13 @@ test("shouldRescueJob — rescues only running-status jobs with a stale/absent h
   assert.equal(shouldRescueJob(null, now), false);
 });
 
-test("resolveSelfContinueUrl — prefers NEXT_PUBLIC_APP_URL, then VERCEL_URL, then localhost", () => {
+test("resolveSelfContinueUrl — prefers NEXT_PUBLIC_APP_URL, then the production alias, then VERCEL_URL, then localhost", () => {
   const saved = {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     VERCEL_URL: process.env.VERCEL_URL,
     PORT: process.env.PORT,
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    VERCEL_PROJECT_PRODUCTION_URL: process.env.VERCEL_PROJECT_PRODUCTION_URL,
   };
   try {
     process.env.NEXT_PUBLIC_APP_URL = "https://app.example.com/";
@@ -375,6 +377,16 @@ test("resolveSelfContinueUrl — prefers NEXT_PUBLIC_APP_URL, then VERCEL_URL, t
     delete process.env.NEXT_PUBLIC_APP_URL;
     process.env.VERCEL_URL = "my-deploy.vercel.app";
     assert.equal(resolveSelfContinueUrl("job-2"), "https://my-deploy.vercel.app/api/scan/worker?job_id=job-2");
+
+    // R3.1.13: on production the alias wins over the SSO-protected deployment URL;
+    // on preview it does not apply.
+    process.env.VERCEL_ENV = "production";
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "aeo-vis.vercel.app";
+    assert.equal(resolveSelfContinueUrl("job-2b"), "https://aeo-vis.vercel.app/api/scan/worker?job_id=job-2b");
+    process.env.VERCEL_ENV = "preview";
+    assert.equal(resolveSelfContinueUrl("job-2c"), "https://my-deploy.vercel.app/api/scan/worker?job_id=job-2c");
+    delete process.env.VERCEL_ENV;
+    delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
 
     delete process.env.VERCEL_URL;
     delete process.env.PORT;
@@ -386,6 +398,10 @@ test("resolveSelfContinueUrl — prefers NEXT_PUBLIC_APP_URL, then VERCEL_URL, t
     else process.env.VERCEL_URL = saved.VERCEL_URL;
     if (saved.PORT === undefined) delete process.env.PORT;
     else process.env.PORT = saved.PORT;
+    for (const k of ["VERCEL_ENV", "VERCEL_PROJECT_PRODUCTION_URL"]) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
   }
 });
 

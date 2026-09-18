@@ -64,6 +64,7 @@ import { resolveBrandKey } from "../scoring/brandKey.js";
 import { extractBrandDomain } from "../scoring/citations.js";
 import { resolveSerpGeo } from "../engines/serpGeo.js";
 import { keepAlive } from "../keepAlive.js";
+import { productionAliasBase } from "../selfContinue.js";
 import { enrichCitations } from "../analytics/citationEnrich.js";
 import {
   openScanRun,
@@ -1163,6 +1164,8 @@ async function claimJobAttempt(jobId, job, deps = {}) {
 export function resolveSelfContinueUrl(jobId) {
   const base =
     process.env.NEXT_PUBLIC_APP_URL ||
+    // R3.1.13: on production the alias, never the SSO-protected deployment URL.
+    productionAliasBase(process.env) ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
     `http://localhost:${process.env.PORT || 3000}`;
   if (!base) return null;

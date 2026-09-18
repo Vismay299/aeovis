@@ -165,6 +165,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `017_cost_unmeasured_calls` | `scans.cost_unmeasured_calls` — counter for pricing calls that fail to resolve a model id. A run where nothing could be priced now looks different from a run that genuinely cost nothing. Verifiable via column existence. Applied to production 2026-09-15 |
 | `018_gsc_daily` | `gsc_connections` (brand → Search Console property) and `gsc_daily` (brand × date × query clicks/impressions/ctr/position), filled weekly by cron `/api/gsc/worker` (R4.1.1). Connect flow: `docs/vendors/gsc.md` |
 | `019_probe_evidence_bucket` | Private Storage bucket `probe-evidence` (PNG + gzipped HTML per probe, 5 MiB/object) with anon policies scoped to it; 90-day retention by cron `/api/evidence/retention` (R1.5.1). Budget: `docs/runbooks/probe-evidence.md` |
+| `020_content_items_key_nulls_not_distinct` | Recreates `content_items_job_id_cycle_key` as `UNIQUE NULLS NOT DISTINCT (job_id, cycle)` so a draft with no job is deduplicated too (R3.5.5). Not deferrable: `ON CONFLICT` refuses a deferrable arbiter. Pre-check + applied-check in `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

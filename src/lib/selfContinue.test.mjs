@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import {
   SELF_CONTINUE_HOLD_MS,
   resolveSelfContinueUrl,
+  productionAliasBase,
   buildSelfContinueInit,
   makeSelfContinue,
 } from "./selfContinue.js";
@@ -41,6 +42,42 @@ test("URL — falls back to the Vercel deployment URL, then to localhost", () =>
     resolveSelfContinueUrl("/api/content/worker", "job-3", { PORT: "4000" }),
     "http://localhost:4000/api/content/worker?job_id=job-3"
   );
+});
+
+test("URL — R3.1.13: on a production deployment the production alias beats VERCEL_URL", () => {
+  // The deployment URL sits behind Vercel Authentication (observed 302 -> sso-api,
+  // 2026-09-18); the alias reaches the route. No NEXT_PUBLIC_APP_URL is set on
+  // the live project, so this branch is what production actually takes.
+  assert.equal(
+    resolveSelfContinueUrl("/api/content/worker", "job-4", {
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_PRODUCTION_URL: "aeo-vis.vercel.app",
+      VERCEL_URL: "aeo-gv31q4miu-vismays-projects-e0c6f290.vercel.app",
+    }),
+    "https://aeo-vis.vercel.app/api/content/worker?job_id=job-4"
+  );
+  // NEXT_PUBLIC_APP_URL still wins over the alias: an operator override stays an override.
+  assert.equal(
+    resolveSelfContinueUrl("/api/content/worker", "job-5", {
+      NEXT_PUBLIC_APP_URL: "https://app.example.com",
+      VERCEL_ENV: "production",
+      VERCEL_PROJECT_PRODUCTION_URL: "aeo-vis.vercel.app",
+    }),
+    "https://app.example.com/api/content/worker?job_id=job-5"
+  );
+});
+
+test("URL — R3.1.13: a PREVIEW deployment never hands its job to the production alias", () => {
+  assert.equal(
+    resolveSelfContinueUrl("/api/content/worker", "job-6", {
+      VERCEL_ENV: "preview",
+      VERCEL_PROJECT_PRODUCTION_URL: "aeo-vis.vercel.app",
+      VERCEL_URL: "aeo-git-branch.vercel.app",
+    }),
+    "https://aeo-git-branch.vercel.app/api/content/worker?job_id=job-6"
+  );
+  assert.equal(productionAliasBase({ VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "  " }), "");
+  assert.equal(productionAliasBase({ VERCEL_PROJECT_PRODUCTION_URL: "aeo-vis.vercel.app" }), "");
 });
 
 test("URL — a job id is encoded, so it cannot forge extra query parameters", () => {

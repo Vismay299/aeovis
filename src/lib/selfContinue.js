@@ -37,10 +37,36 @@ import { keepAlive } from "./keepAlive.js";
 export const SELF_CONTINUE_HOLD_MS = 5000;
 
 /**
+ * R3.1.13 — on a PRODUCTION deployment, the base URL a worker calls itself on
+ * must be the production alias (`VERCEL_PROJECT_PRODUCTION_URL`, e.g.
+ * `aeo-vis.vercel.app`), never the per-deployment URL in `VERCEL_URL`.
+ *
+ * Observed 2026-09-18 against the live project: the deployment URL answers
+ * `302 -> vercel.com/sso-api` (Vercel Authentication, "all except custom
+ * domains"), while the production alias reaches the route and answers its own
+ * `401` to an unauthenticated call. With no Protection Bypass secret created on
+ * the project, every self-continue aimed at `VERCEL_URL` died at the SSO wall
+ * and the job waited for the daily cron — which is exactly the failure R3.1.6
+ * and R3.1.10 were built to remove. `VERCEL_PROJECT_PRODUCTION_URL` is a system
+ * variable Vercel injects into every deployment, so this needs no operator
+ * action. It is honoured only when `VERCEL_ENV === "production"`: a preview
+ * deployment must not hand its job to the production code.
+ *
+ * @param {object} env
+ * @returns {string} an `https://` base, or "" when not on a production deployment
+ */
+export function productionAliasBase(env = process.env) {
+  if (env.VERCEL_ENV !== "production") return "";
+  const host = (env.VERCEL_PROJECT_PRODUCTION_URL || "").trim();
+  return host ? `https://${host}` : "";
+}
+
+/**
  * Best-effort absolute URL for a worker route to call itself on.
  *
  * Identical resolution order to scanWorker's copy: NEXT_PUBLIC_APP_URL, then
- * the Vercel deployment URL, then localhost. The localhost fallback means this
+ * the production alias (production deployments only, see productionAliasBase),
+ * then the Vercel deployment URL, then localhost. The localhost fallback means this
  * effectively always resolves; the null guard stays so a caller passing a
  * stripped env object gets an explicit "no" rather than a malformed URL, and
  * makeSelfContinue below warns instead of failing silently in that case.
@@ -52,6 +78,7 @@ export const SELF_CONTINUE_HOLD_MS = 5000;
 export function resolveSelfContinueUrl(routePath, jobId, env = process.env) {
   const base =
     env.NEXT_PUBLIC_APP_URL ||
+    productionAliasBase(env) ||
     (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : "") ||
     `http://localhost:${env.PORT || 3000}`;
   if (!base) return null;

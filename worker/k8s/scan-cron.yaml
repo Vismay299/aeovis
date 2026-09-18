@@ -1,0 +1,82 @@
+# R3.1.12 — the 10-minute scan-worker sweep, run from the Zeabur box.
+#
+# WHY HERE AND NOT vercel.json: the Vercel project is on the Hobby plan, which
+# runs a cron at most once a day (R3.1.1, operator decision 2026-09-15: not
+# upgrading). A stalled scan therefore waited up to 24 h for a rescue, or for a
+# browser tab to poll it. This CronJob is the same GET the daily Vercel cron
+# makes — nothing new is reachable — ten minutes apart, from the K3s cluster
+# that already hosts the probe fleet (docs/decisions/2026-09-05-worker-host.md §5).
+#
+# TARGET: the production ALIAS (aeo-vis.vercel.app), never a deployment URL.
+# Deployment URLs sit behind Vercel Authentication and answer 302 -> sso-api;
+# the alias reaches the route (observed 2026-09-18). No protection-bypass
+# header is needed for the alias.
+#
+# Apply the Secret FIRST and never commit its value. CRON_SECRET is the same
+# value the Vercel project holds (docs/OPERATOR_LEDGER.md §B):
+#   sudo k3s kubectl create secret generic perceev-cron \
+#     --from-literal=CRON_SECRET='<value from the Vercel project>' \
+#     --from-literal=SCAN_WORKER_URL='https://aeo-vis.vercel.app/api/scan/worker'
+#   sudo k3s kubectl apply -f scan-cron.yaml
+#
+# Check it ran:
+#   sudo k3s kubectl get jobs -l app=perceev-scan-cron --sort-by=.status.startTime | tail -3
+#   sudo k3s kubectl logs job/<name>
+# A run prints the HTTP status and the route's JSON. 200 with
+# {"processed":N,"skipped":M,...} is the healthy shape; 401 means the secret
+# on this box does not match the Vercel one.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: perceev-scan-cron
+  labels:
+    app: perceev-scan-cron
+spec:
+  schedule: "*/10 * * * *"
+  # A sweep that has not returned in 4 minutes is not going to; the route's own
+  # maxDuration is 300 s and the next tick is 10 minutes away. Never overlap two
+  # sweeps: the lease makes overlap correct, but the 2 GB box makes it wasteful.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 240
+      template:
+        metadata:
+          labels:
+            app: perceev-scan-cron
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: curl
+              image: curlimages/curl:8.10.1
+              envFrom:
+                - secretRef:
+                    name: perceev-cron
+              # -f is deliberately NOT used: a 401/500 must be visible in the
+              # log with its body, not collapsed into "exit 22". The exit code
+              # is derived from the status instead so K8s counts the failure.
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -u
+                  out=$(curl -sS --max-time 230 \
+                    -H "Authorization: Bearer ${CRON_SECRET}" \
+                    -w '\n%{http_code}' \
+                    "${SCAN_WORKER_URL}")
+                  code=$(printf '%s' "$out" | tail -n1)
+                  body=$(printf '%s' "$out" | sed '$d')
+                  echo "scan-worker sweep: HTTP ${code}"
+                  echo "${body}" | head -c 2000
+                  echo
+                  [ "${code}" = "200" ]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  memory: 64Mi

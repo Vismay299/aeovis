@@ -220,6 +220,12 @@ const EXPECTED_OBJECTS = {
   "019_probe_evidence_bucket.sql": [
     { kind: "bucket", name: "probe-evidence" },
   ],
+  // R3.5.5 — recreates 016's key as UNIQUE NULLS NOT DISTINCT. Same constraint
+  // NAME, so presence alone cannot tell 016 from 020; the definition check is
+  // the query in the file's header (pg_get_constraintdef LIKE '%NULLS NOT DISTINCT%').
+  "020_content_items_key_nulls_not_distinct.sql": [
+    { kind: "constraint", name: "content_items_job_id_cycle_key" },
+  ],
 };
 
 /**
