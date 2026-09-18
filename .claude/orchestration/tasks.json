@@ -9415,9 +9415,15 @@
       ],
       "phase": "R3",
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "main-session",
+      "evidence": [
+        "supabase/migrations/020_content_items_key_nulls_not_distinct.sql:46",
+        "supabase/migrations/020_content_items_key_nulls_not_distinct.sql:18",
+        "docs/PROD_MIGRATIONS.md",
+        "scripts/setup-supabase.mjs:224",
+        "src/lib/db/content.js:527"
+      ],
       "notes": [
         {
           "at": "2026-09-17T19:51:53.241Z",
@@ -9428,9 +9434,23 @@
           "at": "2026-09-18T11:29:01.795Z",
           "by": "controller",
           "text": "amended: 2026-09-18: operator ran the pre-check on production: select count(*) from content_items where job_id is null -> 0. Migration 020_content_items_key_nulls_not_distinct.sql written (UNIQUE NULLS NOT DISTINCT, NOT deferrable because ON CONFLICT refuses a deferrable arbiter — 016's comment says DEFERRABLE but its SQL never was). Recorded in docs/PROD_MIGRATIONS.md. Apply-to-production and the applied-check remain the operator's (needs-secrets)."
+        },
+        {
+          "at": "2026-09-18T19:16:15.991Z",
+          "by": "main-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-18T19:16:34.918Z",
+          "by": "main-session",
+          "text": "Option (b) of the accept. Operator pre-check on production 2026-09-18: count of NULL job_id rows = 0. Operator applied 020 in the SQL editor ~19:10 UTC; applied-check (pg_get_constraintdef) returned 'UNIQUE NULLS NOT DISTINCT (job_id, cycle)' — screenshot seen by the controller. Query and result recorded in docs/PROD_MIGRATIONS.md. Constraint deliberately NOT deferrable: ON CONFLICT refuses a deferrable arbiter and insertContentItem upserts on job_id,cycle."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-18T19:19:21.195Z",
+        "note": "Exercised against a throwaway local Postgres 16 cluster (not production; prod apply not re-observable by me). Reproduced the old failure with 016's actual SQL (supabase/migrations/016_content_items_natural_key.sql:30, UNIQUE (job_id, cycle) — never DEFERRABLE despite its comment at :20): three (NULL,1) rows accepted, the ON CONFLICT (job_id,cycle) upsert inserted a third instead of matching. Then ran supabase/migrations/020_content_items_key_nulls_not_distinct.sql:28-47 verbatim; all three DO-block branches traced live: (a) constraint exists-but-old -> dropped and re-added as 'UNIQUE NULLS NOT DISTINCT (job_id, cycle)', condeferrable=f; (b) re-run -> no-op, still exactly one constraint with the same def; (c) constraint absent -> created. Dirty-table run failed inside the single DO statement and rolled the DROP back, leaving the 016 def intact — the documented data-dependence is real and safe. Post-apply behaviour: second (NULL,1) insert rejected by content_items_job_id_cycle_key; ON CONFLICT (job_id,cycle) DO UPDATE and DO NOTHING both matched the NULL-job row (1 row, title updated); non-null job path unchanged. Deferrable claim proven empirically: a DEFERRABLE unique constraint makes ON CONFLICT raise 'ON CONFLICT does not support deferrable unique constraints ... as arbiters', and src/lib/db/content.js:527 upserts with onConflict \"job_id,cycle\" (live path: src/lib/content/contentWorker.js:745 passes job_id). Docs: docs/PROD_MIGRATIONS.md:1088-1112 records the pre-check query, its result (0), and the applied-check contains-NULLS-NOT-DISTINCT; docs/OPERATOR_LEDGER.md:341 and :581 mark 020 applied / R3.5.5 closed. Runner: scripts/setup-supabase.mjs:223-228 registers 020's constraint expectation; src/lib/migrationsRunner.test.mjs:345-347 counts migrations from disk so 020 is applied and ledgered with no stale literal. Tests: node --test migrationsRunner/docStatus/operatorLedgerGates/liveWriteGuard 66/66 pass; npm run test:scoring 2985 pass, 0 fail, 30 skipped. Diff scoped to the three doc/task files plus the already-committed migration; no bare catch, no fail-soft path added."
+      }
     },
     {
       "id": "R3.6.1",

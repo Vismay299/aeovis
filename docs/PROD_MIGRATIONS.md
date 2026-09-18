@@ -1090,9 +1090,10 @@ until then pre-015 rows keep `citation_state` NULL (unverified).
 
 ## `020_content_items_key_nulls_not_distinct.sql`
 
-**Not yet applied** to production as of 2026-09-18 (R3.5.5). Written after the
-operator ran the data-dependence check; apply it in the SQL editor, then run the
-applied-check.
+**Applied to production (`nggyizuwqepxaqnpcqqj`) by the operator on 2026-09-18
+~19:10 UTC in the SQL editor** (R3.5.5). The applied-check returned one row:
+`UNIQUE NULLS NOT DISTINCT (job_id, cycle)`. Written after the operator ran the
+data-dependence check below.
 
 **Pre-check, run by the operator against `nggyizuwqepxaqnpcqqj` on 2026-09-18,
 before the file existed:**

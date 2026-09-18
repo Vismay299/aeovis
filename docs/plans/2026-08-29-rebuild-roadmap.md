@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**237 / 274 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**238 / 274 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -227,7 +227,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 - [x] **R2.10.7** The landing-copy guard is blind to two apostrophes on one line — closed at `src/lib/landingProbeCounter.test.mjs:49`, `src/lib/landingProbeCounter.test.mjs:251`, `src/lib/landingProbeCounter.test.mjs:314`, `src/lib/landingProbeCounter.test.mjs:322`, `src/lib/landingProbeCounter.test.mjs:651`, `src/lib/landingProbeCounter.test.mjs:673`
 
-## R3 — Durable backend  `50/55`
+## R3 — Durable backend  `51/55`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -278,7 +278,7 @@ Baseline commit: `5111219`
 - [x] **R3.5.2** Natural key on content_items (job_id, cycle) — closed at `supabase/migrations/016_content_items_natural_key.sql:29`, `src/lib/contentItemsNaturalKey.test.mjs:43`
 - [ ] **R3.5.3** Stage transitions warn-to-throw after a quiet telemetry week `needs-soak`
 - [x] **R3.5.4** REGRESSION: migration 014 is on disk but in no ledger, so three registry guards fail — closed at `README.md:161`, `docs/OPERATOR_LEDGER.md:336`, `docs/OPERATOR_LEDGER.md:379`, `docs/OPERATOR_LEDGER.md:398`, `scripts/setup-supabase.mjs:176`, `supabase/migrations/014_content_job_checkpoints.sql:11`, `src/lib/db/content.js:192`, `src/lib/content/contentWorker.js:401`
-- [ ] **R3.5.5** content_items natural key admits duplicates when job_id is NULL `needs-secrets`
+- [x] **R3.5.5** content_items natural key admits duplicates when job_id is NULL `needs-secrets` — closed at `supabase/migrations/020_content_items_key_nulls_not_distinct.sql:46`, `supabase/migrations/020_content_items_key_nulls_not_distinct.sql:18`, `docs/PROD_MIGRATIONS.md`, `scripts/setup-supabase.mjs:224`, `src/lib/db/content.js:527`
 ### R3.6
 
 - [x] **R3.6.1** Price table that fails loud on an unknown model id — closed at `docs/vendors/mimo.md:47`, `docs/vendors/mimo.md:54`, `docs/vendors/mimo.md:68`, `docs/vendors/mimo.md:84`, `docs/vendors/mimo.md:99`, `docs/vendors/mimo.md:107`, `docs/vendors/mimo.md:172`, `src/lib/llmPricing.js:244`, `src/lib/llmPricing.js:267`, `src/lib/llmPricing.js:355`, `src/lib/openrouter.js:111`, `src/lib/openrouter.test.mjs:504`, `src/lib/llmPricing.test.mjs:221`
