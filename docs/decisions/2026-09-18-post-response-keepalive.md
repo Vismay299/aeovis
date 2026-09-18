@@ -77,13 +77,22 @@ Concretely:
    - `try/catch`es the registration itself (`:65-71`), so a platform helper that
      throws cannot take the response down with it.
 
-3. **Applied at all nine post-response sites**, and only those:
+3. **Applied at all post-response sites**, and only those (nine when this was
+   written; ten as recounted under R3.1.14, which added the tenth caller and
+   found `src/lib/selfContinue.js` — R3.1.10's helper, landed the same day as
+   this record — missing from the list):
    `src/app/api/scan/route.js:142` · `src/app/api/scan/[job_id]/status/route.js:640`
    · `src/app/api/scan/worker/_lib/sweepExecution.js:69` ·
-   `src/app/api/content/worker/route.js:71` · `src/app/api/content/route.js:110` ·
+   `src/app/api/content/worker/route.js:161` (was `:71`; the call still wraps
+   `startContentJob`, but since **R3.1.14** its only caller is the `?job_id=`
+   direct-resume branch — the cron sweep and the daily batch no longer run a job in
+   their own invocation, they fire one request per job through
+   `src/lib/selfContinue.js:169`, which registers that fetch with `keepAlive`
+   under the same 5 s cap as §4 — the same helper contentWorker's hand-off has
+   used since R3.1.10) · `src/app/api/content/route.js:110` ·
    `src/app/api/content-items/[id]/decision/route.js:119` (learn) and `:138`
-   (revise) · `src/lib/workers/scanWorker.js:3200` (scheduler `kickChunk`) and
-   `:1224` (self-continue). The one remaining bare `.catch` in
+   (revise) · `src/lib/workers/scanWorker.js:3203` (scheduler `kickChunk`) and
+   `:1227` (self-continue). The one remaining bare `.catch` in
    that scope — the in-chunk heartbeat at `src/lib/workers/scanWorker.js:574`,
    inside `startChunkHeartbeat` (`:568`) — is deliberately **not** wrapped: it
    runs inside a chunk the platform is already holding and its interval handle is

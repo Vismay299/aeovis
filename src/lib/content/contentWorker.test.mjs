@@ -1389,3 +1389,90 @@ test("self-continue: a mid-loop hand-off after a failing review resumes at the n
   assert.equal(item.cycle, 2, "it resumed at the SECOND draft cycle, as the checkpoint said");
   assert.equal(item.revisions.length, 1, "the failed cycle-1 draft was archived exactly once");
 });
+
+// ---------------------------------------------------------------------------
+// R3.1.14 — the budget is measured against the INVOCATION, not against the
+// moment this job happened to start.
+//
+// THE FINDING (production, 2026-09-18 19:15 UTC). The cron sweep ran four jobs
+// inside one 300 s function. Each job's 150 s budget was measured from its own
+// chunkStartMs, so a job that started 200 s into the invocation still believed
+// it had 150 s of runway — it never once evaluated over budget, and the
+// platform killed it mid-block with no hand-off. The route now hands the
+// worker the invocation's start clock.
+// ---------------------------------------------------------------------------
+
+test("R3.1.14 budget: an invocation that is already old hands off after its first block", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, items } = makeDeps(llm);
+  const { fired } = withHandOffRecorders(deps);
+
+  // One fake clock for both, exactly as production uses Date.now for both.
+  let clock = 250_000;
+  deps.now = () => clock;
+  // The invocation began 250 s ago; THIS job starts now. Under the old
+  // per-job clock it would have had a full budget of runway.
+  deps.invocationStartMs = 0;
+  deps.chunkBudgetMs = 90_000;
+
+  const result = await startContentJob("job-old-invocation", deps);
+
+  assert.ok(
+    result && result.checkpointed === true,
+    "the job must hand off: the FUNCTION is nearly out of time even though this job just started"
+  );
+  assert.equal(result.blocks_run, 1, "one real block of progress first — a hand-off is never free");
+  assert.deepEqual(fired, ["job-old-invocation"]);
+  assert.equal(items.length, 0);
+});
+
+test("R3.1.14 budget: a fresh invocation still runs the whole job in one go", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, items } = makeDeps(llm);
+  const { fired } = withHandOffRecorders(deps);
+
+  let clock = 1_000;
+  deps.now = () => clock;
+  deps.invocationStartMs = 1_000; // this job IS the invocation
+  deps.chunkBudgetMs = 90_000;
+
+  const item = await startContentJob("job-fresh-invocation", deps);
+
+  assert.ok(item && item.id, "a short job inside a fresh invocation finishes without a round trip");
+  assert.equal(items.length, 1);
+  assert.deepEqual(fired, [], "no hand-off was spent");
+});
+
+test("R3.1.14 budget: with no invocation clock the worker falls back to its own start", async () => {
+  // The fallback keeps every existing caller (and every existing test) exact:
+  // a job that IS the invocation measures from itself.
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, items } = makeDeps(llm);
+  const { fired } = withHandOffRecorders(deps);
+
+  let clock = 500_000; // an absolute clock far from zero, and no invocationStartMs
+  deps.now = () => clock;
+  deps.chunkBudgetMs = 90_000;
+
+  const item = await startContentJob("job-no-clock", deps);
+
+  assert.ok(item && item.id, "the job runs to completion — the elapsed time is 0, not 500_000");
+  assert.equal(items.length, 1);
+  assert.deepEqual(fired, []);
+});
+
+test("R3.1.14 budget: the shipped default leaves headroom for one more content block", async () => {
+  const { CONTENT_CHUNK_BUDGET_MS } = await import("./contentWorker.js");
+  // 300_000 is the route's maxDuration (src/app/api/content/worker/route.js).
+  // The budget is checked AFTER a block, so what is left has to absorb one more
+  // block that started just under the line, plus the checkpoint write, the
+  // lease release and the hand-off fetch.
+  assert.ok(
+    CONTENT_CHUNK_BUDGET_MS >= 60_000 && CONTENT_CHUNK_BUDGET_MS <= 90_000,
+    `the chunk budget must hand off well before the 300 s platform cap; got ${CONTENT_CHUNK_BUDGET_MS}`
+  );
+  assert.ok(
+    300_000 - CONTENT_CHUNK_BUDGET_MS >= 200_000,
+    "at least 200 s must remain after the budget line for the overshooting block and the hand-off"
+  );
+});

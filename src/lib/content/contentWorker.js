@@ -66,15 +66,29 @@ const MAX_DRAFT_REVIEW_CYCLES = 2;
 export const CONTENT_WORKER_PATH = "/api/content/worker";
 
 /**
- * Soft wall-clock budget for ONE invocation of startContentJob, checked only
- * at block boundaries (where a checkpoint has just been persisted).
+ * Soft wall-clock budget for ONE INVOCATION, checked only at block boundaries
+ * (where a checkpoint has just been persisted).
  *
- * 150s against the route's `maxDuration = 300`, the same numbers the scan
- * chunk uses: the check happens AFTER a block, so the remaining headroom has
- * to be able to absorb one more block that started just under the line. An LLM
- * block is tens of seconds, so 150s of slack is generous.
+ * R3.1.14 lowered this from 150_000 and re-based it on the INVOCATION's clock
+ * rather than this job's own start. Both changes come from the same production
+ * failure (2026-09-18 19:15 UTC): the cron sweep ran four jobs inline inside
+ * one 300 s function, so each job's own 150 s budget was measured from a start
+ * time that was already minutes into the invocation. Three of the four were
+ * killed by `Vercel Runtime Timeout Error: Task timed out after 300 seconds`
+ * having never once evaluated over budget — the platform cap arrived first and
+ * no hand-off was ever reachable.
+ *
+ * The sweep now dispatches by fetch (src/app/api/content/worker/route.js), so
+ * a job normally gets a whole invocation to itself; the budget is what decides
+ * how much of that invocation one chunk may spend before checkpointing. 90 s
+ * against `maxDuration = 300`: the check runs AFTER a block, so the remaining
+ * 210 s has to absorb one more block that started just under the line (an LLM
+ * block is tens of seconds) plus the checkpoint write, the lease release and
+ * the hand-off fetch. Lower than the scan chunk's 150 s on purpose — a content
+ * block is a much larger single unit than a scan batch, so the overshoot past
+ * the line is larger and needs more headroom left behind it.
  */
-export const CONTENT_CHUNK_BUDGET_MS = 150_000;
+export const CONTENT_CHUNK_BUDGET_MS = 90_000;
 
 /**
  * R3.1.10 — the reason a content job advanced one function-lifetime per day.
@@ -100,6 +114,14 @@ export const CONTENT_CHUNK_BUDGET_MS = 150_000;
  * stale after CONTENT_HEARTBEAT_STALE_MS, and the existing daily sweep rescues
  * it exactly as before. That is why handOff() below warns loudly on every
  * failure path but never throws.
+ *
+ * R3.1.14 — WHY THIS WAS STILL UNREACHABLE IN PRODUCTION. The mechanism above
+ * was correct and never fired: the cron sweep kept running every job INLINE in
+ * its own invocation, so four pipelines shared one 300 s function and the
+ * platform cap always arrived before any of them reached its budget. The sweep
+ * now dispatches by fetch (dispatchBySelfContinue in
+ * src/app/api/content/worker/route.js), so a job normally has an invocation to
+ * itself, and the budget below is measured against that invocation's start.
  */
 const contentSelfContinue = makeSelfContinue({
   routePath: CONTENT_WORKER_PATH,
@@ -354,13 +376,28 @@ export async function startContentJob(jobId, deps = {}) {
   // leases, which must stay on real time.
   const nowFn = deps.now || Date.now;
   const chunkStartMs = nowFn();
+  // R3.1.14 — the budget is measured from the INVOCATION's start, not from
+  // this job's start, whenever the caller can tell us when the invocation
+  // began (the route passes `invocationStartMs`; see
+  // src/app/api/content/worker/route.js). The platform cap applies to the
+  // function, so a job that begins 200 s into a 300 s invocation has 100 s of
+  // real headroom no matter what its own clock says. With no caller-supplied
+  // value this falls back to chunkStartMs — identical to the old behaviour for
+  // a job that IS the invocation.
+  //
+  // One clock, not two: `invocationStartMs` must come from the same clock as
+  // `deps.now` (tests drive both at fake speed; production uses Date.now for
+  // both).
+  const invocationStartMs = Number.isFinite(deps.invocationStartMs)
+    ? deps.invocationStartMs
+    : chunkStartMs;
   const budgetMs = Number.isFinite(deps.chunkBudgetMs) ? deps.chunkBudgetMs : CONTENT_CHUNK_BUDGET_MS;
   const selfContinue = deps.selfContinue || contentSelfContinue;
   // Blocks THIS invocation actually ran. A hand-off is only legal after real
   // progress, so two invocations can never ping-pong a job forward zero
   // blocks at a time however the budget is configured.
   let blocksRun = 0;
-  const overBudget = () => blocksRun > 0 && nowFn() - chunkStartMs >= budgetMs;
+  const overBudget = () => blocksRun > 0 && nowFn() - invocationStartMs >= budgetMs;
   // Set only once handOff has PROVEN the lease is gone, so the `finally` below
   // skips a redundant write — and still retries if handOff's release failed.
   let leaseAlreadyReleased = false;

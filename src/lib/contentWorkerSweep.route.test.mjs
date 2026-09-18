@@ -326,36 +326,62 @@ test("R3.1.8 REPORT — contentCronReport carries skip reasons on the wire", () 
   assert.equal(body.batch_dispatched + body.batch_skipped + body.batch_failed, 3);
 });
 
-test("R3.1.8 ROUTE — lease acquire failure in resume pass yields HTTP 500 with lease_acquire_failed", async () => {
+// R3.1.14 REWROTE THE TWO TESTS BELOW, and this is why.
+//
+// They used to prove that a lease-store FAULT inside the sweep's own
+// `acquireLease` reached the wire as HTTP 500 + `lease_acquire_failed`, and
+// that every created batch job landed in exactly one of dispatched/skipped/
+// failed. The sweep no longer acquires any lease: it fires one `?job_id=`
+// request per job and the RECEIVING invocation takes the lease (see
+// dispatchBySelfContinue in the route — four jobs sharing one 300 s function
+// is what made R3.1.10's hand-off unreachable in production on 2026-09-18).
+// So the sweep has no `acquireLease` call left to fail, and `lease_held` is no
+// longer an outcome it can observe.
+//
+// What the tests must keep proving is the PROPERTY, not the old mechanism: a
+// dispatch that did not happen is never reported as one, it carries the 5xx,
+// and every created batch job still lands in exactly one counter. The fault
+// they inject is therefore the fault the sweep can now actually suffer — a
+// self-continue that could not be fired. The lease-fault path itself is still
+// pinned, one hop later, by the `?job_id=` tests below ("a lease store failure
+// is a 500, never a quiet zero") and by the dispatchWithLease unit test above.
+
+test("R3.1.8/R3.1.14 ROUTE — a hand-off that could not be fired yields HTTP 500, never a quiet zero", async () => {
   const mockClient = {
     from: () => ({ select: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
   };
-  const storeErr = new Error("pg_locks timeout");
 
   const response = await handler()(authed(), {
     supabase: mockClient,
     recordCronTick: async () => {},
     listResumableContentJobs: async () => [{ id: "resumable-job-99" }],
-    acquireLease: async () => { throw storeErr; },
-    startContentJob: async () => {},
+    selfContinue: () => ({ fired: false, reason: "no_url" }),
+    startContentJob: async () => {
+      throw new Error("the sweep must not run a job in its own invocation");
+    },
   });
 
-  assert.equal(response.status, 500, "a lease acquire failure must NOT return HTTP 200");
+  assert.equal(response.status, 500, "a sweep that dispatched nothing must NOT return HTTP 200");
   const body = await response.json();
   assert.ok(body.batch_unavailable, "must carry batch_unavailable");
-  assert.equal(body.batch_unavailable.reason, "lease_acquire_failed");
+  assert.equal(body.batch_unavailable.reason, "self_continue_failed");
   assert.match(body.batch_unavailable.detail, /resumable-job-99/);
+  assert.equal(body.dispatched, 0, "nothing was handed off");
   assert.equal(body.skipped, 1);
-  assert.deepEqual(body.skipped_reasons, { lease_acquire_failed: 1 });
+  assert.deepEqual(body.skipped_reasons, { self_continue_failed: 1 });
+  assert.deepEqual(
+    body.self_continue,
+    [{ id: "resumable-job-99", fired: false, reason: "no_url" }],
+    "the per-job verdict names the failure, so `dispatched: 0` is readable"
+  );
 });
 
-test("R3.1.8 RECONCILIATION — every created batch job lands in exactly one counter", async () => {
+test("R3.1.8/R3.1.14 RECONCILIATION — every created batch job lands in exactly one counter", async () => {
   const mockClient = {
     from: () => ({ select: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
   };
 
-  const createdJobs = [{ id: "batch-win" }, { id: "batch-held" }, { id: "batch-throw" }];
-  const storeErr = new Error("deadlock detected");
+  const createdJobs = [{ id: "batch-win" }, { id: "batch-lost" }];
 
   const response = await handler()(authed("?batch=1"), {
     supabase: mockClient,
@@ -363,32 +389,31 @@ test("R3.1.8 RECONCILIATION — every created batch job lands in exactly one cou
     listResumableContentJobs: async () => [],
     brands: ["acme.com"],
     createDailyBatchJobs: async () => createdJobs,
-    acquireLease: async (table, jobId) => {
-      if (jobId === "batch-win") return true;
-      if (jobId === "batch-held") return false;
-      throw storeErr;
+    selfContinue: (jobId) =>
+      jobId === "batch-win"
+        ? { fired: true, reason: null }
+        : { fired: false, reason: "fetch_start_failed" },
+    startContentJob: async () => {
+      throw new Error("the sweep must not run a batch job in its own invocation");
     },
-    startContentJob: async () => {},
   });
 
-  // Because batch-throw threw a lease store failure, response is 500
+  // batch-lost was created and nothing is running it this pass — a failure.
   assert.equal(response.status, 500);
   const body = await response.json();
 
-  // Exactly one counter per created job
-  assert.equal(body.batch_dispatched, 1, "batch-win is dispatched");
+  assert.equal(body.batch_dispatched, 1, "batch-win was handed off");
   assert.deepEqual(body.batch_dispatched_ids, ["batch-win"]);
-  assert.equal(body.batch_skipped, 1, "batch-held is skipped");
-  assert.deepEqual(body.batch_skipped_ids, ["batch-held"]);
-  assert.equal(body.batch_failed, 1, "batch-throw is failed");
+  assert.equal(body.batch_skipped, 0, "measured zero: the sweep takes no lease, so nothing is skipped");
+  assert.equal(body.batch_failed, 1, "batch-lost never left the process");
 
-  // Reconciles perfectly against created total
   assert.equal(
     body.batch_dispatched + body.batch_skipped + body.batch_failed,
     createdJobs.length,
     "dispatched + skipped + failed must reconcile exactly against created batch jobs"
   );
-  assert.equal(body.batch_unavailable.reason, "lease_acquire_failed");
+  assert.equal(body.batch_unavailable.reason, "self_continue_failed");
+  assert.match(body.batch_unavailable.detail, /batch-lost/);
 });
 
 test("R3.1.8 TEETH — ignoring acquireLease failure and returning HTTP 200 fails the test", async () => {
@@ -593,5 +618,172 @@ test("R3.1.10 GUARD — the worker route really has a ?job_id= branch that bypas
   assert.ok(
     directIndex > 0 && sweepIndex > directIndex,
     "the direct branch must return before the staleness sweep, which would skip a fresh job"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R3.1.14 — the sweep dispatches BY FETCH, not by inline start.
+//
+// THE FINDING (production, 2026-09-18 19:15 UTC). One cron invocation ran four
+// content jobs inline through keepAlive(() => startContentJob(...)). One
+// finished; the other three were killed mid-block by `Vercel Runtime Timeout
+// Error: Task timed out after 300 seconds`, and the R3.1.10 hand-off never
+// fired once — four pipelines sharing one 300 s function reach the platform cap
+// long before any of them reaches its own chunk budget.
+//
+// THE FIX. The sweep fires one `?job_id=` request per job and takes NO lease;
+// the receiving invocation acquires the lease and runs the job with its own
+// 300 s. The `?job_id=` branch itself still runs inline — it IS the per-job
+// invocation.
+// ---------------------------------------------------------------------------
+
+/** A sweep with no database and no network: records every hand-off fired. */
+function sweepDeps(overrides = {}) {
+  const fired = [];
+  const startedInline = [];
+  const deps = {
+    supabase: {
+      from: () => ({ select: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }) }) }),
+    },
+    recordCronTick: async () => {},
+    listResumableContentJobs: async () => [],
+    selfContinue: (jobId) => {
+      fired.push(jobId);
+      return { fired: true, reason: null };
+    },
+    acquireLease: async () => true,
+    newLeaseOwner: (p) => `${p}_test`,
+    startContentJob: async (jobId) => {
+      startedInline.push(jobId);
+      return null;
+    },
+    waitUntil: () => {},
+    ...overrides,
+  };
+  return { deps, fired, startedInline };
+}
+
+test("R3.1.14 SWEEP — every resumable job is handed off by fetch, and none runs inline", async () => {
+  const { deps, fired, startedInline } = sweepDeps({
+    listResumableContentJobs: async () => [{ id: "job-a" }, { id: "job-b" }, { id: "job-c" }],
+  });
+
+  const response = await handler()(authed(), deps);
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(fired, ["job-a", "job-b", "job-c"], "one hand-off per job, so one invocation per job");
+  assert.deepEqual(
+    startedInline,
+    [],
+    "NOT ONE job may run inside the sweep's own invocation — that is the bug: four pipelines " +
+      "in one 300 s function hit the platform cap before any chunk budget"
+  );
+  assert.equal(body.dispatched, 3);
+  assert.deepEqual(body.dispatched_ids, ["job-a", "job-b", "job-c"]);
+  assert.equal(
+    body.dispatch_mode,
+    "self_continue",
+    "`dispatched` now means `hand-off fired`, and the report says so on the wire"
+  );
+  assert.deepEqual(
+    body.self_continue,
+    [
+      { id: "job-a", fired: true, reason: null },
+      { id: "job-b", fired: true, reason: null },
+      { id: "job-c", fired: true, reason: null },
+    ],
+    "per-job verdicts, so the count can be audited job by job"
+  );
+});
+
+test("R3.1.14 SWEEP — the sweep takes NO lease; the receiving invocation does", async () => {
+  let acquires = 0;
+  const { deps, fired } = sweepDeps({
+    listResumableContentJobs: async () => [{ id: "job-lease" }],
+    acquireLease: async () => {
+      acquires += 1;
+      return true;
+    },
+  });
+
+  await handler()(authed(), deps);
+
+  assert.deepEqual(fired, ["job-lease"]);
+  assert.equal(
+    acquires,
+    0,
+    "if the sweep held the lease, the receiving invocation's own acquire would answer " +
+      "lease_held and the job would stall until the lease expired — a slower version of the bug"
+  );
+});
+
+test("R3.1.14 BATCH — a freshly created batch job is handed off too, not run in the cron", async () => {
+  const { deps, fired, startedInline } = sweepDeps({
+    brands: ["acme.com"],
+    createDailyBatchJobs: async () => [{ id: "batch-1" }, { id: "batch-2" }],
+  });
+
+  const response = await handler()(authed("?batch=1"), deps);
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(fired, ["batch-1", "batch-2"]);
+  assert.deepEqual(startedInline, [], "the daily batch must not run n pipelines in one function");
+  assert.equal(body.batch_dispatched, 2);
+  assert.deepEqual(body.batch_dispatched_ids, ["batch-1", "batch-2"]);
+});
+
+test("R3.1.14 DIRECT — `?job_id=` still runs the job inline: it IS the per-job invocation", async () => {
+  const { deps, fired, startedInline } = sweepDeps();
+  const response = await handler()(authed("?job_id=job-received"), deps);
+  const body = await response.json();
+
+  assert.equal(body.dispatched, 1);
+  assert.deepEqual(
+    startedInline,
+    ["job-received"],
+    "the receiving invocation does the work — if it fired another request it would loop forever"
+  );
+  assert.deepEqual(fired, [], "no self-continue is fired by the branch that received one");
+});
+
+test("R3.1.14 BUDGET — the invocation's start clock reaches the worker", async () => {
+  const seen = [];
+  const { deps } = sweepDeps({
+    startContentJob: async (jobId, opts) => {
+      seen.push(opts);
+      return null;
+    },
+    invocationStartMs: 1_700_000_000_000,
+  });
+
+  await handler()(authed("?job_id=job-clock"), deps);
+
+  assert.equal(seen.length, 1);
+  assert.equal(
+    seen[0].invocationStartMs,
+    1_700_000_000_000,
+    "the chunk budget must be measured against the FUNCTION's life, not against the moment " +
+      "this particular job happened to start"
+  );
+  assert.ok(seen[0].leaseOwner, "and it still runs under its own fresh lease");
+});
+
+test("R3.1.14 GUARD — the sweep loop calls no inline start", async () => {
+  const source = await readFile(
+    new URL("../app/api/content/worker/route.js", import.meta.url),
+    "utf8"
+  );
+  const sweepStart = source.indexOf("listResumable(MAX_CONCURRENT_RESUMES)");
+  assert.ok(sweepStart > 0, "premise: the sweep is still here");
+  const sweepOnwards = source.slice(sweepStart);
+  assert.ok(
+    !/dispatchWithLease\(/.test(sweepOnwards),
+    "from the sweep onwards nothing may dispatch by lease-and-run — that is the inline path"
+  );
+  assert.ok(
+    /dispatchBySelfContinue\(/.test(sweepOnwards),
+    "the sweep and the batch loop both hand off by fetch"
   );
 });

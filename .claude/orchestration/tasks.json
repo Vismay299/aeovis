@@ -8179,17 +8179,41 @@
       ],
       "phase": "R3",
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/app/api/content/worker/route.js:89",
+        "src/app/api/content/worker/route.js:467",
+        "src/app/api/content/worker/route.js:524",
+        "src/app/api/content/worker/route.js:161",
+        "src/lib/content/contentWorker.js:91",
+        "src/lib/content/contentWorker.js:400",
+        "src/lib/contentWorkerSweep.route.test.mjs:666",
+        "src/lib/content/contentWorker.test.mjs:1405",
+        "docs/decisions/2026-09-18-post-response-keepalive.md:80"
+      ],
       "notes": [
         {
           "at": "2026-09-18T19:21:34.842Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-18T19:34:25.757Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-18T19:43:02.122Z",
+          "by": "rebuild-implementer",
+          "text": "Sweep + daily batch now dispatch by fetch: dispatchBySelfContinue (route.js:89) fires /api/content/worker?job_id= via makeSelfContinue (label content-cron, keepAlive 5s hold) and takes NO lease — the receiving invocation's dispatchWithLease acquire is the single-flight gate, mirroring handOff's release-then-fire. ?job_id= still runs inline (it IS the per-job invocation) and now receives invocationStartMs (route.js:161). overBudget measures from the invocation clock (contentWorker.js:400) and CONTENT_CHUNK_BUDGET_MS 150s -> 90s (contentWorker.js:91); blocksRun>0 guard untouched. Report gains dispatch_mode:'self_continue' + per-job self_continue verdicts; a fetch that could not be fired is a skip/batch_failed with batch_unavailable -> HTTP 500, never a silent dispatched. Two R3.1.8 route tests rewritten (the sweep has no acquireLease left to fail) with a comment saying why; lease-fault coverage kept at the ?job_id= tests and the dispatchWithLease unit test. Tests: npm test 3025 tests, 0 fail, 30 skipped (also run as test:scoring); node --test keepAlive.test.mjs 7/7, workerIsolation.test.mjs 5/5. NOT exercised against production: no deploy, no cron run — the accept criterion's log evidence (one invocation per job, no 300s timeout, a handed-off line) needs a Vercel deploy and a real sweep, which I did not run."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-18T19:47:15.172Z",
+        "note": "CODE HALF VERIFIED; PRODUCTION LOG HALF NOT OBSERVABLE HERE (no deploy, no cron run — implementer disclosed this honestly). Reproduced the pre-fix shape: git show HEAD:src/app/api/content/worker/route.js shows the sweep loop calling 'await dispatchWithLease(job.id, \"job\", deps)' -> keepAlive(() => startContentJob(...)) inline; now src/app/api/content/worker/route.js:467 and :524 call the sync dispatchBySelfContinue (:89), which fires makeSelfContinue(CONTENT_WORKER_PATH,'content-cron') and takes NO lease. MUTATION 1: restored 'await dispatchWithLease' in the sweep loop -> 4 tests red (contentWorkerSweep.route.test.mjs tests 10, 21, 22, 26 incl. the source-text GUARD at :779); restored. MUTATION 2: overBudget re-based to chunkStartMs (contentWorker.js:400) -> contentWorker.test.mjs:1405 red; restored. MUTATION 3: CONTENT_CHUNK_BUDGET_MS 90_000 -> 250_000 (contentWorker.js:91) -> the headroom test (contentWorker.test.mjs:1466) red, so it really computes 300_000-budget>=200_000 rather than asserting a constant; restored. git diff HEAD --stat back to the submitted 540/59. LEASE RACE traced by hand: acquireLease is one conditional UPDATE (src/lib/jobLease.js:104, EvalPlanQual argument) so two receivers for one job cannot both win — the loser gets lease_held and 200 dispatched:0 at contentDirectResumeReport; the sweep only lists jobs that shouldRescueContentJob (src/lib/db/content.js:110) already judged lease-free AND heartbeat-stale, and content has only the 00:30 and 01:00 daily crons (vercel.json), 30 min apart vs a 3 min lease TTL / heartbeat window, so no double-fire path. Auth hop confirmed: buildSelfContinueInit sets x-cron-secret (src/lib/selfContinue.js:114) and cronAuth.js:96 accepts that exact header; productionAliasBase (selfContinue.js:58) is honoured only under VERCEL_ENV=production (R3.1.13). KEEPALIVE HOLD: makeSelfContinue registers each fetch with maxMs=SELF_CONTINUE_HOLD_MS 5000 (selfContinue.js:169-177) and keepAlive races the promise against that timer (src/lib/keepAlive.js:56-64), so the sweep holds ~5 s total (registrations are concurrent), never the receivers' runtime; the unawaited response matches scanWorker's kickChunk (scanWorker.js:3203). DELETED COVERAGE: the two rewritten R3.1.8 tests still pin the property (a non-dispatch is never counted as a dispatch, 5xx surfaces, dispatched+skipped+failed reconciles against created) using the fault the sweep can now actually suffer; the lease-fault 500 stays pinned one hop later at the ?job_id= tests. GUARDS: node --test keepAlive/workerIsolation/docStatus/docSourceStaleness + both changed suites 93/93 pass; full npm test 3025 tests, 0 fail, 30 skipped (test:scoring is the same script) — matches baseline. All 9 evidence citations resolve to the lines they claim. NON-BLOCKING DEFECTS: (1) ADR docs/decisions/2026-09-18-post-response-keepalive.md:86-88 still cites scanWorker.js:3200 and :1224 while git grep puts those keepAlive calls at :3203 and :1227 — 3-line pre-existing drift, not introduced by this diff (the anchor in this task says 3200 too); (2) at 01:00 the batch sweep now fires up to MAX_CONCURRENT_RESUMES(3) + batchSize(default 5) concurrent invocations instead of serialising them in one function — per-item cost caps are unchanged but the spend burst is new and worth watching. MUST STILL BE CONFIRMED AFTER DEPLOY: one /api/content/worker?job_id= invocation per dispatched job, no 'Task timed out after 300 seconds', at least one '[content-worker] ... hit its 90000ms chunk budget ... handed off ... self_continue_fired=true' line (contentWorker.js:444) followed by the receiving invocation, and a daily_batch job reaching content_items the same day."
+      }
     },
     {
       "id": "R3.2.1",

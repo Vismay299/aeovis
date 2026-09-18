@@ -4,9 +4,10 @@ import { recordCronTick } from "@/lib/db/analytics";
 import { supabase } from "@/lib/db";
 import { listResumableContentJobs } from "@/lib/db/content";
 import { acquireLease, newLeaseOwner } from "@/lib/jobLease";
-import { startContentJob } from "@/lib/content/contentWorker";
+import { startContentJob, CONTENT_WORKER_PATH } from "@/lib/content/contentWorker";
 import { createDailyBatchJobs, getDailyBatchSize } from "@/lib/content/dailyBatch";
 import { keepAlive } from "@/lib/keepAlive";
+import { makeSelfContinue } from "@/lib/selfContinue";
 
 // Side-effectful (spends real model budget) — must never run at build time.
 export const dynamic = "force-dynamic";
@@ -43,11 +44,97 @@ function isAuthorized(request, searchParams) {
 }
 
 /**
- * Take the lease, then dispatch. Returns the lease owner if we won the job,
- * else null. This is the single-flight gate (D1): before this, the cron fired
- * startContentJob() fire-and-forget with no exclusivity, so two overlapping
- * invocations both ran the same job — two executions racing one row, each
- * spending up to the full per-item cap and each inserting a content_items row.
+ * The sweep's own self-continue: one request per job at this same route's
+ * `?job_id=` branch. Labelled `content-cron` so its warnings are readable
+ * apart from the worker's own hand-off (`content-worker`).
+ */
+const cronSelfContinue = makeSelfContinue({
+  routePath: CONTENT_WORKER_PATH,
+  label: "content-cron",
+});
+
+/**
+ * R3.1.14 — dispatch one job by FETCH, giving it its own invocation and its
+ * own 300 s. This is what the cron sweep and the daily batch now use; only the
+ * `?job_id=` branch below still runs a job in-process, because that branch IS
+ * the per-job invocation this function creates.
+ *
+ * THE FINDING (production, 2026-09-18 19:15 UTC). The sweep dispatched four
+ * jobs through dispatchWithLease, each one `keepAlive(() => startContentJob())`
+ * INSIDE the sweep's single invocation. One finished; the other three were
+ * killed mid-block by `Vercel Runtime Timeout Error: Task timed out after 300
+ * seconds`, with no hand-off line in the logs and only ONE request to this
+ * route for the whole pass. Four pipelines sharing one function lifetime slow
+ * each other down until the platform cap arrives before any per-job budget
+ * does, which made R3.1.10's hand-off unreachable in practice rather than
+ * merely rare.
+ *
+ * THE LEASE — and this is the design decision, of the two that were open:
+ * THE SWEEP DOES NOT ACQUIRE. It fires the request and the RECEIVING
+ * invocation takes the lease through dispatchWithLease, exactly as it already
+ * does for a self-continue fired by contentWorker's handOff (which releases
+ * first, then fires, for this same reason). Acquiring here and firing anyway
+ * would hand the receiver a lease it cannot take: its own acquire would return
+ * `lease_held` and the job would sit until our lease expired — a slower
+ * version of the bug. Acquiring, releasing and then firing was rejected as two
+ * extra writes buying nothing: the receiver's conditional UPDATE is the
+ * single-flight authority either way (D1 is preserved, it just happens one hop
+ * later), and a job already being worked simply answers `lease_held` there.
+ *
+ * WHAT `ok` MEANS HERE: "the hand-off request left this process", not "the job
+ * ran" and not "we hold the lease". A fetch that could not be started is a
+ * failure and is reported as one (`self_continue_failed`) — a sweep that fired
+ * nothing must never read as a sweep that dispatched everything.
+ */
+export function dispatchBySelfContinue(jobId, label, deps = {}) {
+  const fire = deps.selfContinue ?? cronSelfContinue;
+  let fired = null;
+  try {
+    fired = fire(jobId);
+  } catch (err) {
+    console.error(`[content-cron] self-continue for ${label} ${jobId} threw:`, err.message);
+    return {
+      ok: false,
+      owner: null,
+      reason: "self_continue_failed",
+      error: err,
+      selfContinue: { fired: false, reason: "threw" },
+    };
+  }
+  if (!fired || fired.fired !== true) {
+    const reason = fired?.reason || "unknown";
+    console.warn(
+      `[content-cron] ${label} ${jobId} was NOT handed off — the self-continue fetch could not ` +
+        `be sent (${reason}). The job is untouched and the next sweep will try again.`
+    );
+    return {
+      ok: false,
+      owner: null,
+      reason: "self_continue_failed",
+      error: new Error(`self-continue not fired: ${reason}`),
+      selfContinue: fired || { fired: false, reason },
+    };
+  }
+  console.log(
+    `[content-cron] ${label} ${jobId} handed off to ${CONTENT_WORKER_PATH}?job_id=... ` +
+      `self_continue_fired=true`
+  );
+  return { ok: true, owner: null, reason: null, error: null, selfContinue: fired };
+}
+
+/**
+ * Take the lease, then run the job IN THIS INVOCATION. Returns the lease owner
+ * if we won the job, else null. This is the single-flight gate (D1): before
+ * this, the cron fired startContentJob() fire-and-forget with no exclusivity,
+ * so two overlapping invocations both ran the same job — two executions racing
+ * one row, each spending up to the full per-item cap and each inserting a
+ * content_items row.
+ *
+ * R3.1.14 — THE ONLY CALLER LEFT IS THE `?job_id=` BRANCH. The sweep and the
+ * daily batch dispatch through dispatchBySelfContinue above instead, so that
+ * each job gets an invocation of its own. Running inline is correct here and
+ * only here: this request already IS one job's invocation, and it must not
+ * fire another request at itself.
  */
 export async function dispatchWithLease(jobId, label, deps = {}) {
   const acquire = deps.acquireLease ?? acquireLease;
@@ -68,7 +155,10 @@ export async function dispatchWithLease(jobId, label, deps = {}) {
     return { ok: false, owner: null, reason: "lease_held", error: null };
   }
 
-  keepAlive(() => start(jobId, { leaseOwner: owner }), {
+  // `invocationStartMs` is this invocation's own clock, handed to the worker so
+  // its chunk budget is measured against the function's remaining life rather
+  // than against the moment this particular job happened to start (R3.1.14).
+  keepAlive(() => start(jobId, { leaseOwner: owner, invocationStartMs: deps.invocationStartMs }), {
     label: `[content-cron] ${label} ${jobId}`,
     waitUntil: deps.waitUntil,
   });
@@ -167,8 +257,9 @@ export function brandsForDailyBatch({ data, error } = {}) {
  * The cron's report of its own pass, and the status that carries it.
  *
  * R3.1.4 — DISPATCHED, NOT RESUMED / DONE. The content worker sweep fires off
- * content jobs via `dispatchWithLease` (fire-and-forget), the same shape the
- * scan worker sweep uses. Before this fix the report called the dispatched
+ * content jobs fire-and-forget (via `dispatchWithLease` when this was written;
+ * via `dispatchBySelfContinue` since R3.1.14), the same shape the scan worker
+ * sweep uses. Before this fix the report called the dispatched
  * count `resumed` and the skipped-lease count, which collapsed two
  * facts: a job we kicked off and a job we chose not to kick off both rode the
  * same wire as "resumed". Now it follows the scan worker's vocabulary:
@@ -185,6 +276,13 @@ export function brandsForDailyBatch({ data, error } = {}) {
  *
  * The dispatched counts survive either way: they really did happen, and an
  * operator needs to see which half of the pass worked.
+ *
+ * R3.1.14 — WHAT `dispatched` NOW MEANS. The sweep no longer runs jobs in its
+ * own invocation; it fires one `?job_id=` request per job. So `dispatched`
+ * counts HAND-OFFS FIRED, not pipelines running, and the report says so twice:
+ * `dispatch_mode: "self_continue"` names the mechanism, and `self_continue`
+ * carries the per-job verdict `{ id, fired, reason }` so a pass where every
+ * fetch failed cannot be read as a pass that dispatched everything.
  */
 export function contentCronReport({
   startedIds = [],
@@ -194,6 +292,8 @@ export function contentCronReport({
   batchSkipped = [],
   batchFailed = [],
   batchUnavailable = null,
+  selfContinue = [],
+  dispatchMode = "self_continue",
 } = {}) {
   const normalizedSkipped = (skippedIds || []).map((s) =>
     typeof s === "string"
@@ -228,6 +328,8 @@ export function contentCronReport({
       batch_failed: batchFailed.length,
       batch_failed_brands: batchFailed,
       batch_unavailable: batchUnavailable,
+      dispatch_mode: dispatchMode,
+      self_continue: selfContinue,
     },
   };
 }
@@ -251,6 +353,14 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
       : {};
 
   const { searchParams } = new URL(request.url);
+
+  // R3.1.14 — when THIS invocation began. Handed to startContentJob so the
+  // chunk budget is measured against the function's remaining life. Tests may
+  // supply it to drive the budget at fake speed.
+  const invocationStartMs = Number.isFinite(deps.invocationStartMs)
+    ? deps.invocationStartMs
+    : Date.now();
+  const dispatchDeps = { ...deps, invocationStartMs };
 
   if (!isAuthorized(request, searchParams)) {
     return NextResponse.json({ detail: "Unauthorized." }, { status: 401 });
@@ -280,11 +390,18 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
   // still the single-flight authority: the handing-off invocation released it
   // before firing, so dispatchWithLease's conditional UPDATE decides whether
   // this request or a concurrent sweep does the work, never both.
+  //
+  // R3.1.14 — THE SWEEP NOW FIRES AT THIS BRANCH TOO, and it is the only place
+  // a content job runs in-process. The sweep takes no lease at all, so the
+  // acquire below is the single-flight gate for EVERY dispatch, cron and
+  // hand-off alike. This branch must never fire a self-continue of its own:
+  // this request already is the job's invocation, and a request that answered
+  // itself with another request would never do any work.
   // ---------------------------------------------------------------------
   const directJobId = searchParams.get("job_id");
   if (directJobId) {
     try {
-      const res = await dispatchWithLease(directJobId, "direct resume", deps);
+      const res = await dispatchWithLease(directJobId, "direct resume", dispatchDeps);
       const { status, body } = contentDirectResumeReport({
         jobId: directJobId,
         ok: res.ok,
@@ -340,9 +457,15 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
     const jobs = await listResumable(MAX_CONCURRENT_RESUMES);
     const startedIds = [];
     const skippedIds = [];
+    /** Per-job hand-off verdicts, so `dispatched: n` is auditable job by job. */
+    const selfContinueResults = [];
     let batchUnavailable = null;
     for (const job of jobs) {
-      const res = await dispatchWithLease(job.id, "job", deps);
+      // R3.1.14 — BY FETCH, NOT INLINE. Each job gets its own invocation and
+      // its own 300 s; this sweep only fires the request. See
+      // dispatchBySelfContinue for the lease reasoning.
+      const res = dispatchBySelfContinue(job.id, "job", deps);
+      selfContinueResults.push({ id: job.id, ...(res.selfContinue || { fired: false, reason: "unknown" }) });
       if (res.ok) {
         startedIds.push(job.id);
       } else {
@@ -351,10 +474,13 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
           reason: res.reason,
           detail: res.error?.message || null,
         });
-        if (res.reason === "lease_acquire_failed" && !batchUnavailable) {
+        // A hand-off that could not be fired is the sweep doing nothing for
+        // that job. It carries the same 5xx as an unreadable brand list: a
+        // cron pass that dispatched nothing must not answer 200.
+        if (res.reason === "self_continue_failed" && !batchUnavailable) {
           batchUnavailable = {
-            reason: "lease_acquire_failed",
-            detail: `Failed to acquire lease for job ${job.id}: ${res.error?.message || "error"}`,
+            reason: "self_continue_failed",
+            detail: `Could not fire the self-continue for job ${job.id}: ${res.error?.message || "error"}`,
           };
         }
       }
@@ -362,6 +488,11 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
 
     // 2. Daily batch (opt-in).
     const batchDispatched = [];
+    // Kept as a measured zero on the wire. R3.1.14 removed the only way it
+    // could be non-empty (the sweep's lease acquire, whose `lease_held` was a
+    // benign skip); the counter stays so the batch reconciliation
+    // dispatched + skipped + failed = created still reads, and so a consumer
+    // of this field does not see it vanish.
     const batchSkipped = [];
     const batchFailed = [];
     const getBatchSize = deps.getDailyBatchSize ?? getDailyBatchSize;
@@ -388,16 +519,20 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
         try {
           const created = await createDailyBatch(brand);
           for (const job of created) {
-            const res = await dispatchWithLease(job.id, "batch job", deps);
+            // R3.1.14 — a freshly created batch job is handed off by fetch too,
+            // so `?batch=1` no longer tries to run n pipelines in one function.
+            const res = dispatchBySelfContinue(job.id, "batch job", deps);
+            selfContinueResults.push({
+              id: job.id,
+              ...(res.selfContinue || { fired: false, reason: "unknown" }),
+            });
             if (res.ok) {
               batchDispatched.push(job.id);
-            } else if (res.reason === "lease_held") {
-              batchSkipped.push({
-                id: job.id,
-                reason: res.reason,
-                detail: null,
-              });
             } else {
+              // There is no `lease_held` outcome on this path any more — the
+              // sweep takes no lease. A created job that was not handed off is
+              // a failure, never a benign skip: it exists, it cost a write, and
+              // nothing is running it this pass.
               batchFailed.push({
                 id: job.id,
                 reason: res.reason,
@@ -405,8 +540,8 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
               });
               if (!batchUnavailable) {
                 batchUnavailable = {
-                  reason: "lease_acquire_failed",
-                  detail: `Failed to acquire lease for batch job ${job.id}: ${res.error?.message || "error"}`,
+                  reason: res.reason || "self_continue_failed",
+                  detail: `Could not fire the self-continue for batch job ${job.id}: ${res.error?.message || "error"}`,
                 };
               }
             }
@@ -426,6 +561,7 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
       batchSkipped,
       batchFailed,
       batchUnavailable,
+      selfContinue: selfContinueResults,
     });
     return NextResponse.json(body, { status });
   } catch (error) {
