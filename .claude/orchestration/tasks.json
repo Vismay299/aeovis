@@ -731,7 +731,7 @@
       "subphase": "R0.1",
       "lane": "infra",
       "title": "Confirm CRON_SECRET and OPERATOR_TOKEN are live on the Vercel project",
-      "detail": "R0.1.1 and R0.1.3 are now proven over HTTP against a local production-mode server, which settles the code. What is still unproven is the deployment: check:secrets reports cron UNCONFIGURED, and the handoff asserts both values are set on Vercel without having been able to reach the API to confirm it. Standing rule 3 applies — set and works are different claims. This matters asymmetrically: OPERATOR_TOKEN fails closed, so if src/middleware.js ships while the value is unset every operator route 401s and the dashboard goes dark. Both values were also pasted into a session transcript and are due for rotation, so the confirmation and the rotation are one job. 2026-09-15: attempted rotation of CRON_SECRET and OPERATOR_TOKEN (new 64-hex values into .env.local and Vercel production). The session's permission classifier refused the secret-store write, and nothing was changed (.env.local mtime unchanged). Current state observed: production answers /api/health 200, /api/industries 200, /api/scan/worker 401 without a header, and 401 WITH the local CRON_SECRET, so the local and production values differ. Operator action: rotate both on Vercel and in .env.local, redeploy, then GET /api/scan/worker with the bearer secret must return 200 and POST /api/content with no token must return 401. 2026-09-18: 'set' confirmed — vercel env ls production lists CRON_SECRET and OPERATOR_TOKEN (names only). 'works' half-confirmed: https://aeo-vis.vercel.app/api/scan/worker answers 401 unauthenticated. Bearer 200 and POST /api/content 401 still owed by the operator; agent attempts were refused by its permission policy on production reads.",
+      "detail": "R0.1.1 and R0.1.3 are now proven over HTTP against a local production-mode server, which settles the code. What is still unproven is the deployment: check:secrets reports cron UNCONFIGURED, and the handoff asserts both values are set on Vercel without having been able to reach the API to confirm it. Standing rule 3 applies — set and works are different claims. This matters asymmetrically: OPERATOR_TOKEN fails closed, so if src/middleware.js ships while the value is unset every operator route 401s and the dashboard goes dark. Both values were also pasted into a session transcript and are due for rotation, so the confirmation and the rotation are one job. 2026-09-15: attempted rotation of CRON_SECRET and OPERATOR_TOKEN (new 64-hex values into .env.local and Vercel production). The session's permission classifier refused the secret-store write, and nothing was changed (.env.local mtime unchanged). Current state observed: production answers /api/health 200, /api/industries 200, /api/scan/worker 401 without a header, and 401 WITH the local CRON_SECRET, so the local and production values differ. Operator action: rotate both on Vercel and in .env.local, redeploy, then GET /api/scan/worker with the bearer secret must return 200 and POST /api/content with no token must return 401. 2026-09-18: 'set' confirmed — vercel env ls production lists CRON_SECRET and OPERATOR_TOKEN (names only). 'works' half-confirmed: https://aeo-vis.vercel.app/api/scan/worker answers 401 unauthenticated. Bearer 200 and POST /api/content 401 still owed by the operator; agent attempts were refused by its permission policy on production reads. 2026-09-18 ~18:58 UTC: CRON_SECRET ROTATED (new value on aeo-vis production, redeployed dpl_3tWvLVkt). Bearer GET /api/scan/worker from the Zeabur CronJob -> 200 with the sweep JSON; unauthenticated -> 401 (runtime logs 18:49, 18:54 UTC). Remaining: OPERATOR_TOKEN rotation, POST /api/content no-token 401, /api/industries and /api/health 200. Also found: a second Vercel project 'aeovis' is linked to the same repo and builds on every push — operator decision owed on pausing it.",
       "accept": "Against the deployed instance: GET /api/scan/worker with no header returns 401 and with the bearer secret returns 200; POST /api/content with no token returns 401; GET /api/industries and GET /api/health both return 200 — using freshly rotated values.",
       "deps": [],
       "tags": [
@@ -769,6 +769,11 @@
           "at": "2026-09-18T11:29:01.760Z",
           "by": "controller",
           "text": "amended: 2026-09-18: 'set' confirmed — vercel env ls production lists CRON_SECRET and OPERATOR_TOKEN (names only). 'works' half-confirmed: https://aeo-vis.vercel.app/api/scan/worker answers 401 unauthenticated. Bearer 200 and POST /api/content 401 still owed by the operator; agent attempts were refused by its permission policy on production reads."
+        },
+        {
+          "at": "2026-09-18T19:01:11.647Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18 ~18:58 UTC: CRON_SECRET ROTATED (new value on aeo-vis production, redeployed dpl_3tWvLVkt). Bearer GET /api/scan/worker from the Zeabur CronJob -> 200 with the sweep JSON; unauthenticated -> 401 (runtime logs 18:49, 18:54 UTC). Remaining: OPERATOR_TOKEN rotation, POST /api/content no-token 401, /api/industries and /api/health 200. Also found: a second Vercel project 'aeovis' is linked to the same repo and builds on every push — operator decision owed on pausing it."
         }
       ],
       "verification": null,
@@ -8005,32 +8010,77 @@
       "subphase": "R3.1",
       "lane": "infra",
       "title": "Scan-worker sweep every 10 minutes from the Zeabur box",
-      "detail": "Supersedes R3.1.1, whose accept names vercel.json: the operator is not upgrading from Vercel Hobby (decision 2026-09-15) and Hobby runs a cron once a day. The same GET the daily Vercel cron makes is instead issued every 10 minutes by a K3s CronJob on the ratified fleet host (docs/decisions/2026-09-05-worker-host.md section 5). Manifest worker/k8s/scan-cron.yaml: curl image, Authorization: Bearer from a perceev-cron Secret, concurrencyPolicy Forbid, activeDeadlineSeconds 240, exit code derived from the HTTP status so a 401 counts as a failed Job. Targets the production ALIAS https://aeo-vis.vercel.app, which is outside Vercel Authentication (observed 2026-09-18: alias answers the route own 401 unauthenticated; the deployment URL answers 302 to sso-api), so no protection-bypass header is needed.",
+      "detail": "Supersedes R3.1.1, whose accept names vercel.json: the operator is not upgrading from Vercel Hobby (decision 2026-09-15) and Hobby runs a cron once a day. The same GET the daily Vercel cron makes is instead issued every 10 minutes by a K3s CronJob on the ratified fleet host (docs/decisions/2026-09-05-worker-host.md section 5). Manifest worker/k8s/scan-cron.yaml: curl image, Authorization: Bearer from a perceev-cron Secret, concurrencyPolicy Forbid, activeDeadlineSeconds 240, exit code derived from the HTTP status so a 401 counts as a failed Job. Targets the production ALIAS https://aeo-vis.vercel.app, which is outside Vercel Authentication (observed 2026-09-18: alias answers the route own 401 unauthenticated; the deployment URL answers 302 to sso-api), so no protection-bypass header is needed. anchors shifted by the header edit; corrected",
       "accept": "On the Zeabur K3s cluster, `kubectl get cronjob perceev-scan-cron` shows schedule */10 * * * *, and the log of one completed Job shows `scan-worker sweep: HTTP 200` with a JSON body carrying processed/skipped counts; a stale scan job is then rescued within 10 minutes with no browser tab open.",
-      "deps": [
-        "R1.2.20"
-      ],
+      "deps": [],
       "tags": [
         "needs-secrets"
       ],
       "anchors": [
         "worker/k8s/scan-cron.yaml",
         "src/app/api/scan/worker/route.js:36",
-        "docs/OPERATOR_LEDGER.md"
+        "docs/OPERATOR_LEDGER.md",
+        "worker/k8s/scan-cron.yaml:37",
+        "worker/k8s/scan-cron.yaml:41",
+        "worker/k8s/scan-cron.yaml:48",
+        "worker/k8s/scan-cron.yaml:66",
+        "docs/OPERATOR_LEDGER.md:576",
+        "src/lib/cronAuth.js:96"
       ],
       "phase": "R3",
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "main-session",
+      "evidence": [
+        "worker/k8s/scan-cron.yaml:35",
+        "worker/k8s/scan-cron.yaml:39",
+        "worker/k8s/scan-cron.yaml:46",
+        "worker/k8s/scan-cron.yaml:64",
+        "docs/OPERATOR_LEDGER.md:576",
+        "src/lib/cronAuth.js:96"
+      ],
       "notes": [
         {
           "at": "2026-09-18T11:29:01.632Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-18T19:01:11.542Z",
+          "by": "controller",
+          "text": "deps  -R1.2.20: The CronJob is a curl pod on the same K3s cluster; it shares the host with the fleet but nothing else — it does not read probe_tasks or need the fleet image, Secret or Deployment. The dep was filed for 'same box, same access', which the operator has demonstrated by applying it; keeping it would hold a working sweep hostage to the fleet's own grace-period check."
+        },
+        {
+          "at": "2026-09-18T19:01:11.584Z",
+          "by": "main-session",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-18T19:01:11.616Z",
+          "by": "main-session",
+          "text": "Operator applied on the Zeabur host (ubuntu@VM-10-68-ubuntu) 2026-09-18 ~18:58 UTC. 'kubectl get cronjob perceev-scan-cron' -> SCHEDULE */10 * * * *, SUSPEND False. Manual job scan-test-3 log: 'scan-worker sweep: HTTP 200' + JSON {mode:sweep, dispatched:0, scheduler.outcome:idle (no_schedules_due), reaped.outcome:noop (no_stale_runs)}. First two attempts were 401 because the rotated CRON_SECRET had been saved on the WRONG Vercel project ('aeovis', an older project linked to the same repo) — the live one is 'aeo-vis'; saved + redeployed there, then 200. Accept clause 'a stale scan job is then rescued within 10 minutes': the sweep's reap path ran and answered no_stale_runs; no stale job existed to observe. CRON_SECRET rotated in the process."
+        },
+        {
+          "at": "2026-09-18T19:05:13.694Z",
+          "by": "verifier",
+          "text": "rejected: Manifest and route check out; the ledger row does not, and closing this task turns a green guard red. FAIL is on that one defect. (1) BLOCKER: docs/OPERATOR_LEDGER.md:576 is the section E (## E, line 542) row whose subject cell is 'R3.1.12', and it carries no 'CLOSED' label. src/lib/operatorLedgerGates.test.mjs:104-134 fails every section E table row whose subject id has status 'done' and lacks /CLOSED/; orchestrate.mjs:381-382 sets status='done' on a pass verdict. Verified the row text: subject cell ' R3.1.12 ', /CLOSED/ === false. So a pass makes test 16 of operatorLedgerGates.test.mjs go red immediately. FIX: prefix the row with '**CLOSED (verified pass, 2026-09-18)**' and state what is still owed there -- the 'pause or delete the aeovis project' decision and the unobserved rescue clause -- in the style of the R0.1.20/R0.1.21 rows. Re-run 'node --test src/lib/operatorLedgerGates.test.mjs' after. (2) Everything else PASSED and does not need rework. worker/k8s/scan-cron.yaml parses as valid batch/v1 CronJob (python3 yaml; kubectl/kubeconform/kubeval are NOT installed here, so no server- or schema-side dry run was possible -- stated plainly): schedule '*/10 * * * *' (:35), concurrencyPolicy Forbid (:39), activeDeadlineSeconds 240 (:46), backoffLimit 0 (:45), image curlimages/curl:8.10.1 (:55). No credential value anywhere: only envFrom secretRef perceev-cron (:56-58); the header's create-secret example uses the placeholder '<value from the Vercel project>' (:18). The alias target is not hardcoded -- SCAN_WORKER_URL comes from the Secret, documented as https://aeo-vis.vercel.app/api/scan/worker (:19); no deployment URL, no bypass header. (3) Exit-code clause exercised, not read: extracted the container command (:62-76) verbatim and ran it under /bin/sh against a local stub on 127.0.0.1:8731 that calls the REAL authorizeCronRequest from src/lib/cronAuth.js with nodeEnv/vercelEnv='production'. Wrong secret -> 'scan-worker sweep: HTTP 401' + body, exit 1 (reason deny_bad_secret); correct secret -> 'HTTP 200', exit 0 (reason ok_secret); unreachable host -> 'HTTP 000', exit 1. With backoffLimit 0 a 401 is therefore a failed Job, and 'Authorization: Bearer <CRON_SECRET>' really satisfies the gate (src/lib/cronAuth.js:96-98). The -f-free design is honest: the body is logged, the status drives the exit. (4) The submit note's pasted JSON matches the real response builder: buildSweepResponse at src/app/api/scan/worker/route.js:364-378 emits exactly mode:'sweep', dispatched, job_ids, active, scheduled, scheduler_ok, scheduler_error, scheduler, reaped; reaped.reason 'no_stale_runs' is REAP_PASS_REASONS.NO_STALE_RUNS (src/lib/workers/scanWorker.js:3347, emitted :3744) and scheduler no_schedules_due is scanWorker.js:3000. Liveness traced: GET (route.js:459) -> auth gate :462-464 -> executeSweep (route.js:549, src/app/api/scan/worker/_lib/sweepExecution.js:40) -> resume dispatch :63-71 and runSweepMaintenance :73. No fail-soft, no bare catch, no '?? 0' -- reapCount (route.js:283) returns null for unknown, deliberately. (5) Tests: 'node --test src/lib/operatorLedgerGates.test.mjs src/lib/docStatus.test.mjs' 16/16 pass TODAY (it is the close that breaks it, see 1). 'npm run test:scoring' 2985 pass / 0 fail / 30 skipped -- no regression. scanRunReaper.test.mjs + scanWorkerRoute.route.test.mjs 59/59, including 'the sweep branch dispatches active jobs and reports them' (scanWorkerRoute.route.test.mjs:942-961), which is the only proof of the rescue path. (6) SCOPE CAVEAT to carry forward, not itself the fail: the live-cluster half of the accept -- 'kubectl get cronjob shows */10' and the completed Job log -- rests ENTIRELY on the operator's pasted log in the submit note, not on any observation of mine; I cannot reach the Zeabur box and did not try. The accept's second clause, 'a stale scan job is then rescued within 10 minutes', was NOT demonstrated live: the operator's own note says the reap answered no_stale_runs because no stale job existed. Rescue is covered by unit test only. (7) Two smaller inaccuracies to fix while you are in there: worker/k8s/scan-cron.yaml:26 tells the operator the healthy body is '{\"processed\":N,\"skipped\":M,...}', but the sweep path never returns top-level processed/skipped -- that is the direct-resume shape (route.js:122-129); the sweep returns mode/dispatched/active/scheduler/reaped. And the recorded evidence lines 'scan-cron.yaml:33' (a label) and ':52' (restartPolicy) point at real but non-load-bearing lines; the ones that carry the claims are :35, :39, :46 and :62-76."
+        },
+        {
+          "at": "2026-09-18T19:05:57.311Z",
+          "by": "main-session",
+          "text": "Resubmit after verifier FAIL: OPERATOR_LEDGER row now carries the CLOSED label and names the two owed items (aeovis decision; live rescue clause unobserved). Manifest header's healthy-body hint corrected to the sweep shape (buildSweepResponse). Operator evidence unchanged: cronjob */10, scan-test-3 HTTP 200 sweep JSON."
+        },
+        {
+          "at": "2026-09-18T19:06:06.279Z",
+          "by": "controller",
+          "text": "amended: anchors shifted by the header edit; corrected"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-18T19:08:20.663Z",
+        "note": "PASS. Blocker from the 2026-09-18T19:05 FAIL is fixed and I re-exercised the whole task, not just the delta. LIVE-CLUSTER CAVEAT, stated plainly and not softened: the accept's cluster half -- 'kubectl get cronjob perceev-scan-cron shows */10 * * * *' and 'the log of one completed Job shows scan-worker sweep: HTTP 200' -- rests ENTIRELY on the operator's pasted log in the submit note. I cannot reach the Zeabur box (ubuntu@VM-10-68-ubuntu), did not try, and observed none of it myself. The accept's final clause, 'a stale scan job is then rescued within 10 minutes with no browser tab open', was NOT observed live by anyone: the operator's own note says the reap ran and answered no_stale_runs because no stale job existed. That clause is carried by unit test only (src/lib/scanWorkerRoute.route.test.mjs:942-961, 'the sweep branch dispatches active jobs and reports them': two stale jobs in, dispatched=2, runScanChunk called for each) and the ledger row now says so in writing. (1) BLOCKER CLEARED: docs/OPERATOR_LEDGER.md:576 is in section E (## E. Standing gates by task id, line 542), subject cell ' R3.1.12 ', and /CLOSED/ now matches -- it opens '**CLOSED in the ledger (verified pass, 2026-09-18) - two things still owed...**' and names both: the aeovis pause/delete decision and the unobserved live-rescue clause. src/lib/operatorLedgerGates.test.mjs:104-134 (the guard that would have gone red on close) now passes WITH the CLOSED label in place: 'node --test src/lib/operatorLedgerGates.test.mjs src/lib/docStatus.test.mjs' 16/16 pass, 0 fail. (2) Manifest header corrected: worker/k8s/scan-cron.yaml:25-29 now names the real sweep shape {\"mode\":\"sweep\",\"dispatched\":N,\"scheduler\":{...},\"reaped\":{...}} and points at buildSweepResponse, replacing the old processed/skipped hint that belonged to the direct-resume path (route.js:122-129); it also records the wrong-project 401 cause. (3) YAML re-parsed after the +2 line shift (python3 yaml; kubectl/kubeconform/kubeval are NOT installed on this machine, so no schema or server dry-run was possible -- saying so rather than implying one): valid batch/v1 CronJob 'perceev-scan-cron', schedule '*/10 * * * *' (:37), concurrencyPolicy Forbid (:41), activeDeadlineSeconds 240 (:48), backoffLimit 0 (:47), image curlimages/curl:8.10.1 (:57). Zero credential material: envFrom secretRef perceev-cron only (:58-60), no literal env, and the alias URL is not in the container spec at all -- SCAN_WORKER_URL arrives from the Secret, documented in the header (:19). No deployment URL, no protection-bypass header. (4) EXIT-CODE CLAUSE RE-EXERCISED on the current file, not inferred: extracted command[2] (:64-78) verbatim and ran it under /bin/sh against a local stub on 127.0.0.1:8732 that calls the REAL authorizeCronRequest from src/lib/cronAuth.js with nodeEnv/vercelEnv='production'. Wrong secret -> 'scan-worker sweep: HTTP 401' with the body printed, exit 1 (reason deny_bad_secret). Correct 'Authorization: Bearer <secret>' -> 'HTTP 200', exit 0 (reason ok_secret). Unreachable host (first round) -> 'HTTP 000', exit 1. With backoffLimit 0 a 401 is therefore a genuinely failed Job, which is the clause the task detail names; the body is still logged because -f is deliberately absent. (5) Bearer gate traced to the line: the branch that accepts 'Authorization: Bearer <CRON_SECRET>' is src/lib/cronAuth.js:93, NOT :96 -- :96 is the x-cron-secret branch and :99 the ?secret= branch. The anchor and evidence entry 'src/lib/cronAuth.js:96' is off by three and should read :93; correcting it here so the audit trail is right. (6) Liveness re-traced hop by hop: GET (src/app/api/scan/worker/route.js:459) -> auth gate :462-464 (401 on refusal) -> recordCronTick AFTER the gate -> executeSweep (route.js:549 -> src/app/api/scan/worker/_lib/sweepExecution.js:40) -> stale-job resume :63-71 -> runSweepMaintenance :73 -> buildSweepResponse (route.js:364-378). The operator's pasted JSON matches that builder key-for-key; reaped.reason 'no_stale_runs' is REAP_PASS_REASONS.NO_STALE_RUNS (src/lib/workers/scanWorker.js:3347, emitted :3744) and scheduler 'no_schedules_due' is :3000. No fail-soft, no bare catch, no '?? 0' on any counter -- reapCount (route.js:283) returns null for an unmeasured value by design, and an absent reap pass is reported as unmeasured rather than omitted. (7) NOTHING ELSE BROKE: 'npm run test:scoring' 2985 pass / 0 fail / 30 skipped -- identical to the pre-change baseline I took at the FAIL. (8) Two cosmetic defects recorded, neither blocking and neither touched by me: the ledger row at :576 carries a stray unmatched '**' after '.' from the edit, so that fragment renders literally; and the task's 'evidence' array still holds the PRE-SHIFT manifest lines 35/39/46/64, which now land on a label, a comment, 'spec:' and 'command:' respectively -- the anchors were corrected to 37/41/48/66 but evidence was not. The load-bearing lines are the ones cited in (3) and (4) of this note, which is the authoritative trail for this close."
+      }
     },
     {
       "id": "R3.1.13",

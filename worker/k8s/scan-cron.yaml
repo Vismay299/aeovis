@@ -23,8 +23,10 @@
 #   sudo k3s kubectl get jobs -l app=perceev-scan-cron --sort-by=.status.startTime | tail -3
 #   sudo k3s kubectl logs job/<name>
 # A run prints the HTTP status and the route's JSON. 200 with
-# {"processed":N,"skipped":M,...} is the healthy shape; 401 means the secret
-# on this box does not match the Vercel one.
+# {"mode":"sweep","dispatched":N,"scheduler":{...},"reaped":{...}} is the
+# healthy shape (buildSweepResponse in src/app/api/scan/worker/route.js);
+# 401 means the secret on this box does not match the Vercel one — check you
+# saved it on the LIVE Vercel project (aeo-vis), not the older aeovis one.
 apiVersion: batch/v1
 kind: CronJob
 metadata:

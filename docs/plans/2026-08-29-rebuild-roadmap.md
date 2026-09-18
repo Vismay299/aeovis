@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**236 / 274 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**237 / 274 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -227,7 +227,7 @@ Baseline commit: `5111219`
 - [x] **R2.10.6** A second hardcoded engine chip survives at page.js:295 — closed at `src/lib/landingHonesty.test.mjs:99`, `src/lib/landingHonesty.test.mjs:107`, `src/lib/landingHonesty.test.mjs:145`, `src/lib/landingHonesty.test.mjs:179`, `src/lib/landingHonesty.test.mjs:189`, `src/lib/landingHonesty.test.mjs:214`, `src/lib/landingHonesty.test.mjs:225`, `src/lib/landingHonesty.test.mjs:235`, `src/lib/landingHonesty.test.mjs:245`, `src/lib/landingHonesty.test.mjs:305`, `src/lib/landingHonesty.test.mjs:710`, `src/app/page.js:76`, `src/app/page.js:308`
 - [x] **R2.10.7** The landing-copy guard is blind to two apostrophes on one line — closed at `src/lib/landingProbeCounter.test.mjs:49`, `src/lib/landingProbeCounter.test.mjs:251`, `src/lib/landingProbeCounter.test.mjs:314`, `src/lib/landingProbeCounter.test.mjs:322`, `src/lib/landingProbeCounter.test.mjs:651`, `src/lib/landingProbeCounter.test.mjs:673`
 
-## R3 — Durable backend  `49/55`
+## R3 — Durable backend  `50/55`
 
 *1 week.* Real cadence, a reaper, a run ledger, a scheduler that reconciles, spend that cannot silently read $0.
 
@@ -244,7 +244,7 @@ Baseline commit: `5111219`
 - [x] **R3.1.9** Crawlability audit history was never written: the upsert names an expression index PostgREST cannot use — closed at `src/lib/db/crawlability.js:93`, `src/lib/crawlabilityAuditDb.test.mjs:142`
 - [x] **R3.1.10** A content job has no self-continue, so it advances one function-lifetime per day — closed at `src/lib/selfContinue.js:108`, `src/lib/content/contentWorker.js:385`, `src/lib/content/contentWorker.js:544`, `src/lib/content/contentWorker.js:619`, `src/lib/content/contentWorker.js:712`, `src/app/api/content/worker/route.js:284`, `src/app/api/content/worker/route.js:101`, `src/app/api/content/route.js:22`, `src/lib/selfContinue.test.mjs:63`, `src/lib/content/contentWorker.test.mjs:1250`, `src/lib/contentWorkerSweep.route.test.mjs:457`
 - [ ] **R3.1.11** Two test seams the R3.1.10 verifier found loose in the content worker
-- [ ] **R3.1.12** Scan-worker sweep every 10 minutes from the Zeabur box `needs-secrets`
+- [x] **R3.1.12** Scan-worker sweep every 10 minutes from the Zeabur box `needs-secrets` — closed at `worker/k8s/scan-cron.yaml:35`, `worker/k8s/scan-cron.yaml:39`, `worker/k8s/scan-cron.yaml:46`, `worker/k8s/scan-cron.yaml:64`, `docs/OPERATOR_LEDGER.md:576`, `src/lib/cronAuth.js:96`
 - [x] **R3.1.13** Self-continue must target the production alias, not the SSO-protected deployment URL — closed at `src/lib/selfContinue.js:52`, `src/lib/selfContinue.js:75`, `src/lib/workers/scanWorker.js:1166`, `src/lib/selfContinue.test.mjs:47`, `src/lib/selfContinue.test.mjs:73`, `src/lib/workers/scanChunk.test.mjs:378`
 ### R3.2
 
