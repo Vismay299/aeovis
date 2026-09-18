@@ -2046,7 +2046,36 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     static_pack_prompts: staticPackPrompts,
   } = checkpoint;
 
-  const results = allRows.map((r) => r.raw);
+  /**
+   * The stored answer payloads, each stamped with the identity of the
+   * `prompt_results` row it came from (R1.5.3).
+   *
+   * `r.raw` is the verbatim probe result and stays verbatim — the three added
+   * keys are the row's own columns, not fields invented about the answer:
+   * `result_id`/`job_id` are how the dashboard addresses the row later, and
+   * `evidence_screenshot_id` (migration 021) is how it knows whether a capture
+   * exists at all. Without them a scan read back from `scans.raw_results` has no
+   * way to reach its own evidence, and the "View evidence" affordance can never
+   * appear — it would be dead code by construction.
+   *
+   * Spread, not mutated: `allRows` is handed on as `promptResultRows` below, and
+   * writing into `r.raw` would edit rows other code still reads as stored.
+   * `?? null` and not `|| ""`: a row with no capture must stay NULL.
+   *
+   * A row whose `raw` is not an object is passed through untouched (null stays
+   * null): stamping ids onto nothing would turn "this row stored no payload"
+   * into an object that later code reads as a result.
+   */
+  const results = allRows.map((r) => {
+    const raw = r?.raw;
+    if (!raw || typeof raw !== "object") return raw ?? null;
+    return {
+      ...raw,
+      result_id: r.id ?? null,
+      job_id: r.job_id ?? jobId,
+      evidence_screenshot_id: r.evidence_screenshot_id ?? null,
+    };
+  });
   const brandDomain = extractBrandDomain(url);
 
   const allEngineDefs = resolveEngines();

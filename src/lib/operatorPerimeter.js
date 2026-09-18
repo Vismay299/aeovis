@@ -46,6 +46,23 @@ const PUBLIC_PATTERNS = [
   { method: "GET", re: /^\/api\/scan\/[^/]+\/status\/?$/ },
   // Read scan results: /api/scans/<brand>, /<brand>/latest, /by-id/<scanId>.
   { method: "GET", re: /^\/api\/scans\/[^?]*$/ },
+  /**
+   * R1.5.3 — "View evidence" in the dashboard: redirect to a signed URL for the
+   * screenshot stored against one result of this scan.
+   *
+   * Public for the SAME reason the status poll and the scan reads above are:
+   * the free-scan dashboard is anonymous, and this is one more artefact of a
+   * scan whose answers that anonymous reader can already fetch from
+   * /api/scans/... . Gating it with the operator token would 401 the only user
+   * the button exists for, while the answer text it is a screenshot OF stayed
+   * public — a stricter door beside an open one.
+   *
+   * What bounds it is not this line but the route: the result row must belong
+   * to the job id in the path, and the object key is read off that row, so a
+   * caller can name a job and a result and never an object
+   * (src/lib/evidenceSignedUrl.js). GET only, like its siblings.
+   */
+  { method: "GET", re: /^\/api\/scan\/[^/]+\/evidence\/?$/ },
 ];
 
 /**

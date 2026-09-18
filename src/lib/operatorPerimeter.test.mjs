@@ -44,6 +44,7 @@ test("FREE SCAN — the whole anonymous flow passes with no credentials at all",
     ["GET", "/api/scans/by-id/3f2c-scan-id"],                // read the record
     ["GET", "/api/scans/Italica"],                           // brand history
     ["GET", "/api/scans/italicatiles.com/latest"],           // dashboard load
+    ["GET", "/api/scan/8b1f-4c2a-job/evidence"],              // R1.5.3 "View evidence" (?result=... is the query)
     ["GET", "/api/industries"],                              // the scan form's picker
     ["GET", "/api/health"],                                  // uptime monitor
   ];
@@ -110,6 +111,11 @@ test("a WRITE to a scan-read path is not public just because the prefix matches"
   assert.equal(isPublicRoute("DELETE", "/api/scans/Italica"), false);
   assert.equal(isPublicRoute("POST", "/api/scans/by-id/x"), false);
   assert.equal(isPublicRoute("POST", "/api/scan/job-1/status"), false);
+  // R1.5.3 — the evidence link is a read. Nothing may be written through it.
+  assert.equal(isPublicRoute("POST", "/api/scan/job-1/evidence"), false);
+  assert.equal(isPublicRoute("DELETE", "/api/scan/job-1/evidence"), false);
+  // ...and the pattern does not open anything BELOW it.
+  assert.equal(isPublicRoute("GET", "/api/scan/job-1/evidence/raw/secret"), false);
 });
 
 test("the operator token is accepted as bearer, header, or cookie", () => {
@@ -193,7 +199,18 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
   const publicGet = routes.filter((r) => isPublicRoute("GET", concrete(r)));
   assert.deepEqual(
     publicGet.map(concrete).sort(),
-    ["/api/health", "/api/industries", "/api/scan/sample/status", "/api/scans/by-id/sample", "/api/scans/sample", "/api/scans/sample/latest"].sort(),
+    [
+      "/api/health",
+      "/api/industries",
+      // R1.5.3 — deliberate: the anonymous dashboard's "View evidence" link.
+      // It redirects to a signed URL for a screenshot of an answer the same
+      // anonymous reader can already fetch the TEXT of from /api/scans/...
+      "/api/scan/sample/evidence",
+      "/api/scan/sample/status",
+      "/api/scans/by-id/sample",
+      "/api/scans/sample",
+      "/api/scans/sample/latest",
+    ].sort(),
     "the set of publicly readable API routes changed — is that deliberate?"
   );
 

@@ -777,6 +777,25 @@ function mapPromptForUi(r) {
   return {
     prompt: r.prompt,
     engine: r.engine || null,
+    /**
+     * R1.5.3 — the identity a "View evidence" link needs, and nothing more.
+     *
+     * `resultId`/`jobId` address the prompt_results row; `evidenceScreenshotId`
+     * only says WHETHER a capture exists, so the affordance can be hidden when
+     * none does. The object key is never sent from here — the route reads it off
+     * the row (src/lib/evidenceSignedUrl.js).
+     *
+     * All three are null on rows read through a path that does not carry them
+     * (sample data, and scans stored before the finalize carry-through in
+     * scanWorker.js). null hides the button; it never becomes "" or a guess.
+     * The snake_case spellings are the stored columns, the camelCase ones are
+     * already-mapped rows; `r.evidence?.screenshot_id` is the §3.7 field as it
+     * sits inside the verbatim `raw` payload.
+     */
+    resultId: r.result_id ?? r.resultId ?? r.id ?? null,
+    jobId: r.job_id ?? r.jobId ?? null,
+    evidenceScreenshotId:
+      r.evidence_screenshot_id ?? r.evidenceScreenshotId ?? r.evidence?.screenshot_id ?? null,
     rank,
     organicPosition: r.brand_organic_position ?? r.organicPosition ?? null,
     volume: source ? source.toUpperCase() : "—",

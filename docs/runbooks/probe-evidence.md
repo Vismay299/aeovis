@@ -1,9 +1,11 @@
 # Runbook: `probe-evidence` Storage bucket
 
 > <!-- doc-status -->
-> **Status: LIVE.** The bucket, its retention job and its size budget. Fulfills
-> R1.5.1. Writers arrive with R1.5.2 (evidence-id columns) and R1.5.3 (signed-URL
-> viewer); until then the bucket is expected to be empty.
+> **Status: LIVE.** The bucket, its retention job, its size budget and the
+> signed-URL read path. Fulfills R1.5.1, plus R1.5.2 (evidence-id columns) and
+> R1.5.3 ("Viewing", below). No PRODUCER exists yet — no probe adapter writes
+> evidence (R1.3.x is unbuilt) — so the bucket is still expected to be empty and
+> every `prompt_results.evidence_*_id` is still NULL.
 
 **Date:** 2026-09-15 · **Lane:** data · **Migration:** `019_probe_evidence_bucket.sql`
 
@@ -27,6 +29,55 @@
 
 Keying by scan job keeps one scan's evidence under one prefix, so an operator
 can inspect or delete it as a unit.
+
+## Viewing (R1.5.3)
+
+`GET /api/scan/<job_id>/evidence?result=<prompt_result_id>&kind=screenshot`
+
+Answers **302** to a Storage signed URL for the object whose key is stored on
+that `prompt_results` row, or a plain-text refusal. `kind` is one of
+`screenshot | dom | har | raw`, each mapping to its own `evidence_*_id` column.
+
+| | |
+|---|---|
+| Expiry | **120 s** — `EVIDENCE_SIGNED_URL_TTL_SECONDS`, `src/lib/evidenceSignedUrl.js`, the only place the number is written |
+| Route | `src/app/api/scan/[job_id]/evidence/route.js` |
+| UI | "View evidence" in `src/components/dashboard/AnswersView.jsx` (`evidenceScreenshotHref`) |
+
+The URL carries a click and nothing else: it is not a share link, and pasting it
+into Slack buys the reader two minutes at most. That is the whole reason the
+expiry is short.
+
+**A caller can never name an object.** It names a scan job and a result row; the
+object key is read off that row (`evidence_*_id`), and the row must match BOTH
+the result id and the job id in the path. No caller-supplied string ever reaches
+`createSignedUrl`.
+
+Refusals, all plain text, never a fabricated URL:
+
+| Situation | Status |
+|---|---|
+| Job id not in `scan_jobs` | 404 `Job not found.` |
+| Result id unknown, malformed, or belonging to another job | 404 `No such result for this scan job.` |
+| Row exists, `evidence_<kind>_id` is NULL or blank | 404 "This answer has no stored `<kind>`" |
+| Unknown `kind`, missing `?result` | 400 |
+| Row unreadable, or Storage would not sign | 502 — unknown, explicitly NOT "no evidence" |
+| Supabase not configured on the deployment | 503 |
+
+**Perimeter:** the same one `GET /api/scan/<job_id>/status` has. It is on the
+anonymous free-scan allowlist in `src/lib/operatorPerimeter.js` (GET only), next
+to the status poll and the `/api/scans/...` reads, because the dashboard that
+renders the link is anonymous and can already fetch the TEXT of the answer this
+is a screenshot of. The entry cost is knowing the brand, not holding a job
+uuid: the public `GET /api/scans/<brand>` returns `raw_results.results`, which
+carries `job_id` and `result_id`. There is no per-user auth on scans anywhere
+yet. This route deliberately does not
+invent a second, stricter door around one scan while the first stays open; when
+scans get an owner, both routes change together.
+
+**The affordance is hidden, not broken, when there is nothing to show.** The
+link renders only when the row carries a non-empty `evidence_screenshot_id` plus
+its own job and result ids. Today that is no rows at all, by design.
 
 ## Size budget
 

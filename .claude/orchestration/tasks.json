@@ -3753,7 +3753,7 @@
         "src/components/dashboard/"
       ],
       "phase": "R1",
-      "status": "in_verification",
+      "status": "done",
       "owner": "rebuild-implementer",
       "evidence": [
         "src/app/api/scan/[job_id]/evidence/route.js:59",
@@ -3777,6 +3777,73 @@
           "at": "2026-09-18T21:47:15.947Z",
           "by": "rebuild-implementer",
           "text": "GET /api/scan/[job_id]/evidence?result=<prompt_result_id>&kind=screenshot answers 302 to a Storage signed URL with a 120 s expiry (EVIDENCE_SIGNED_URL_TTL_SECONDS, the single place the number lives). The object key is ONLY ever read off a prompt_results row matched by BOTH id and job_id — no caller-supplied string reaches createSignedUrl. NULL/blank id -> 404 plain text; unknown or foreign result -> 404; unknown kind / missing ?result -> 400; unreadable row or unsignable object -> 502 'unknown, not no-evidence'; no Supabase -> 503. Perimeter: the status route's, stated plainly — scans are unauthenticated today, so the path joins the free-scan GET allowlist in operatorPerimeter.js and the enumeration test's 'is that deliberate?' set was updated deliberately. AnswersView renders 'View evidence' only when the row carries a non-empty evidenceScreenshotId plus its own jobId/resultId (evidenceScreenshotHref); scanWorker's finalize now stamps result_id/job_id/evidence_screenshot_id onto the stored results so the dashboard can address its own rows (the prompt_results read path is select('*'), so the new columns were already selected). Tests: 16 new route tests (expiry passed, exact stored key, NULL->404, blank->404, unknown/foreign/malformed result->404, unknown job->404, per-kind column) + 8 new AnswersView/predicate tests; npm test 3060 tests, 0 fail; npm run build clean, route registered dynamic. NOT exercised end to end against live Storage: no probe adapter writes evidence yet (R1.3 unbuilt), so no object exists in probe-evidence and every evidence_screenshot_id in production is NULL — the route was exercised at the real handler with an injected storage client, not against Supabase. Heads-up for the controller: src/lib/migrationsRunner.test.mjs and src/lib/fixtures/migrationsRunner/ are dirty from a CONCURRENT agent (R6.2.6), not from me — they also flipped the 3 baseline R6.1.7 failures to passing."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-18T21:53:38.507Z",
+        "note": "Exercised the REAL handler (src/app/api/scan/[job_id]/evidence/route.js:59) with an injected storage recorder: a stored key answers 302 Location=<signed url>, Cache-Control no-store, Referrer-Policy no-referrer, and createSignedUrl was called exactly once with (stored key, 120) = EVIDENCE_SIGNED_URL_TTL_SECONDS (src/lib/evidenceSignedUrl.js:37). Mutations all go red: TTL 0 and TTL 86400 each fail the expiry test; replacing .eq('job_id', jobId) with a second id filter fails 2 (foreign-result + scoping); dropping the jobId/resultId requirement in evidenceScreenshotHref (AnswersView.jsx:37) and dropping rel='noopener noreferrer' each fail the render tests. Adversarial probe with hostile query params (key=../../../secrets/prod.png, bucket/path/ttl/expiresIn overrides, kind=__proto__/constructor/hasOwnProperty, duplicate kind, job_id='..'): the signed key was ALWAYS the row's stored value and the TTL always 120; proto-polluting kinds are 400; traversal job ids 404. Liveness traced hop by hop: scanWorker finalize (2069) stamps result_id/job_id/evidence_screenshot_id from getPromptResultsForJob's select('*') into scans.raw_results.results -> normalizeResult -> mapPromptForUi (api.js:795) -> DashboardShell:1392 -> AnswersView link -> the route. Perimeter GET-only entry (operatorPerimeter.js:65) with POST/DELETE/deeper-path negatives asserted. npm test 3060/0 fail, npm run test:scoring 3060/0 fail, node --test operatorPerimeter+keepAlive+workerIsolation 37/0, all 305 worker tests 0 fail, npm run build clean with the route registered dynamic. CAVEAT recorded: no probe adapter writes evidence yet, so no real object exists and the click-through was never exercised against live Supabase Storage - only against an injected storage client at the real handler."
+      }
+    },
+    {
+      "id": "R1.5.4",
+      "subphase": "R1.5",
+      "lane": "backend",
+      "title": "Evidence signing must use a client that can sign a private bucket, and no query param may reach the key",
+      "detail": "Two findings from the R1.5.3 verifier, 2026-09-18. (1) signEvidenceForResult in src/lib/evidenceSignedUrl.js signs through the `supabase` export of src/lib/db.js, the ANON client. createSignedUrl on a private bucket generally needs the service-role key (or a storage policy granting the anon role select on that bucket — the R1.5.1 runbook says the bucket policies are anon-scoped, which may make it work; nobody has proven either). With only the anon key it answers 502 sign_failed the first time a real object exists, which is invisible until an R1.3 adapter lands a producer and a CXO clicks. The Vercel production env has no SUPABASE_SERVICE_ROLE_KEY today (names read 2026-09-18), so if a service-role client is the answer this is needs-secrets and the key must be server-only, never NEXT_PUBLIC. (2) No negative test pins that a query parameter cannot influence the signed key or TTL: the verifier forwarded ?key= into the signer and the 16-test suite stayed green; the shipped code is safe by signature only.",
+      "accept": "Against the live project with one real object in probe-evidence (uploaded by hand under a test key), GET /api/scan/<job>/evidence?result=<id>&kind=screenshot answers 302 and the Location opens the object, then fails after the TTL; the client used is documented and, if service-role, is server-only. A route test drives the endpoint with hostile extra params (?key=, ?ttl=, ?bucket=, ?path=) and asserts the storage double was called with exactly the stored id and 120.",
+      "deps": [
+        "R1.5.3"
+      ],
+      "tags": [
+        "needs-secrets"
+      ],
+      "anchors": [
+        "src/lib/evidenceSignedUrl.js:37",
+        "src/app/api/scan/[job_id]/evidence/route.js:59",
+        "docs/runbooks/probe-evidence.md:33"
+      ],
+      "phase": "R1",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-18T21:55:17.224Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R1.5.5",
+      "subphase": "R1.5",
+      "lane": "data",
+      "title": "Historical scans carry no result_id in raw_results, so View evidence can never appear for them",
+      "detail": "From R1.5.3 (2026-09-18): the dashboard reads answers from scans.raw_results.results (denormalised JSONB), never from prompt_results. Finalize now stamps result_id / job_id / evidence_screenshot_id into each stored row (src/lib/workers/scanWorker.js ~:2069), but every scan finalized before that commit has rows without identity, so the affordance is dead for them even once a producer exists. Hidden, not broken. Decide: back-fill raw_results from prompt_results (a one-off script over scans, matching on prompt+engine, recorded in docs), or accept that evidence starts with scans after the deploy and say so in the runbook.",
+      "accept": "A recorded decision in docs/BUILD_JOURNAL.md; if back-fill: a script under scripts/ that is idempotent, dry-runs by default, and a count of rows stamped on production recorded in the ledger; if accept: the runbook says from which deploy evidence links can exist.",
+      "deps": [
+        "R1.5.3"
+      ],
+      "tags": [
+        "needs-decision"
+      ],
+      "anchors": [
+        "src/lib/workers/scanWorker.js:2069",
+        "src/services/api.js:795"
+      ],
+      "phase": "R1",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-18T21:55:17.262Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
         }
       ],
       "verification": null

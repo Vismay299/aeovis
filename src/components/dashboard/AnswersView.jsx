@@ -11,8 +11,37 @@
  */
 
 import { useMemo, useState } from 'react';
-import { ExternalLink, Link2, Sparkles, Loader2 } from 'lucide-react';
+import { Camera, ExternalLink, Link2, Sparkles, Loader2 } from 'lucide-react';
 import { engineName } from './interlocking';
+
+/**
+ * R1.5.3 — the href behind "View evidence", or null when there is nothing to
+ * open. THE predicate for the affordance, exported so it can be tested on its
+ * own and so nothing re-derives it by hand.
+ *
+ * Three things must be true, and all three are about EXISTENCE, never about a
+ * fallback:
+ *   1. `evidenceScreenshotId` is a non-empty string — the answer has a stored
+ *      capture. NULL means no capture was taken; the button then does not exist
+ *      at all, because a button that opens a 404 is worse than no button.
+ *   2. `resultId` — the prompt_results row the key hangs off.
+ *   3. `jobId` — the scan job that row belongs to, which is what the route
+ *      scopes the lookup by.
+ * Missing (2) or (3) means this row was read through a path that does not carry
+ * its identity (older stored scans, sample data), so the link cannot be
+ * addressed. It is hidden rather than guessed.
+ *
+ * The id is NEVER put in the URL as an object key — it is checked here only to
+ * decide whether a capture exists. The route reads the key off the row itself.
+ */
+export function evidenceScreenshotHref(prompt) {
+  if (!prompt) return null;
+  const hasScreenshot = typeof prompt.evidenceScreenshotId === 'string' && prompt.evidenceScreenshotId.trim() !== '';
+  const jobId = typeof prompt.jobId === 'string' ? prompt.jobId.trim() : '';
+  const resultId = typeof prompt.resultId === 'string' ? prompt.resultId.trim() : '';
+  if (!hasScreenshot || !jobId || !resultId) return null;
+  return `/api/scan/${encodeURIComponent(jobId)}/evidence?result=${encodeURIComponent(resultId)}&kind=screenshot`;
+}
 
 /* Marks the brand in the engine's text. `mark.lit-you` is the design system's
    own verdict mark, so this reads the same here as it does on the landing. */
@@ -109,6 +138,7 @@ function Verbatim({ prompt, brandAliases, onGenerateContent }) {
 
   const label = engineName(prompt.engine || 'aio');
   const gap = isGapRow(prompt);
+  const evidenceHref = evidenceScreenshotHref(prompt);
 
   const handleGenerate = async () => {
     if (generating || !onGenerateContent) return;
@@ -143,6 +173,30 @@ function Verbatim({ prompt, brandAliases, onGenerateContent }) {
         >
           &ldquo;{prompt.prompt}&rdquo;
         </p>
+
+        {/* R1.5.3 — the engine's own screen, behind a signed URL that expires
+            (120 s; src/lib/evidenceSignedUrl.js). Rendered only when a capture
+            was actually stored for this answer: no capture, no button. A plain
+            link, so the new tab is a real navigation the browser cannot block
+            and the signed URL never touches this page. */}
+        {evidenceHref && (
+          <p style={{ marginTop: -6, marginBottom: 14 }}>
+            <a
+              href={evidenceHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="view-evidence-link"
+              title="Open the stored screenshot of this answer (link expires)"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 7,
+                fontSize: 13.5, color: 'var(--brand)', fontWeight: 500,
+              }}
+            >
+              <Camera size={13} aria-hidden="true" />
+              View evidence
+            </a>
+          </p>
+        )}
 
         {prompt.error ? (
           <p style={{ fontSize: 14, color: 'var(--crit)' }}>
