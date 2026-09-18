@@ -8015,7 +8015,7 @@
       "subphase": "R3.1",
       "lane": "infra",
       "title": "Scan-worker sweep every 10 minutes from the Zeabur box",
-      "detail": "Supersedes R3.1.1, whose accept names vercel.json: the operator is not upgrading from Vercel Hobby (decision 2026-09-15) and Hobby runs a cron once a day. The same GET the daily Vercel cron makes is instead issued every 10 minutes by a K3s CronJob on the ratified fleet host (docs/decisions/2026-09-05-worker-host.md section 5). Manifest worker/k8s/scan-cron.yaml: curl image, Authorization: Bearer from a perceev-cron Secret, concurrencyPolicy Forbid, activeDeadlineSeconds 240, exit code derived from the HTTP status so a 401 counts as a failed Job. Targets the production ALIAS https://aeo-vis.vercel.app, which is outside Vercel Authentication (observed 2026-09-18: alias answers the route own 401 unauthenticated; the deployment URL answers 302 to sso-api), so no protection-bypass header is needed. anchors shifted by the header edit; corrected",
+      "detail": "Supersedes R3.1.1, whose accept names vercel.json: the operator is not upgrading from Vercel Hobby (decision 2026-09-15) and Hobby runs a cron once a day. The same GET the daily Vercel cron makes is instead issued every 10 minutes by a K3s CronJob on the ratified fleet host (docs/decisions/2026-09-05-worker-host.md section 5). Manifest worker/k8s/scan-cron.yaml: curl image, Authorization: Bearer from a perceev-cron Secret, concurrencyPolicy Forbid, activeDeadlineSeconds 240, exit code derived from the HTTP status so a 401 counts as a failed Job. Targets the production ALIAS https://aeo-vis.vercel.app, which is outside Vercel Authentication (observed 2026-09-18: alias answers the route own 401 unauthenticated; the deployment URL answers 302 to sso-api), so no protection-bypass header is needed. anchors shifted by the header edit; corrected 2026-09-18 ~19:30 UTC: operator deleted the duplicate Vercel project 'aeovis'; list_projects now shows only aeo-vis linked to Vismay299/aeovis. Owed item (1) closed.",
       "accept": "On the Zeabur K3s cluster, `kubectl get cronjob perceev-scan-cron` shows schedule */10 * * * *, and the log of one completed Job shows `scan-worker sweep: HTTP 200` with a JSON body carrying processed/skipped counts; a stale scan job is then rescued within 10 minutes with no browser tab open.",
       "deps": [],
       "tags": [
@@ -8079,6 +8079,11 @@
           "at": "2026-09-18T19:06:06.279Z",
           "by": "controller",
           "text": "amended: anchors shifted by the header edit; corrected"
+        },
+        {
+          "at": "2026-09-18T19:30:33.007Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18 ~19:30 UTC: operator deleted the duplicate Vercel project 'aeovis'; list_projects now shows only aeo-vis linked to Vismay299/aeovis. Owed item (1) closed."
         }
       ],
       "verification": {
