@@ -1300,10 +1300,15 @@ test("self-continue: a job started by the batch reaches an item WITHOUT a second
   assert.equal(statuses[statuses.length - 1], "awaiting_approval");
 });
 
-test("self-continue: a hand-off never happens without at least one block of progress", async () => {
-  // A job whose checkpoint already covers every block it would run this
-  // invocation must NOT hand off — two invocations that each advance zero
-  // blocks would ping-pong the job forever.
+test("self-continue: a resume whose last remaining block ends in a terminal verdict finishes instead of handing off", async () => {
+  // R3.1.11 — RENAMED. This was called "a hand-off never happens without at
+  // least one block of progress", which it does not prove: its fixture runs the
+  // review block either way, so `blocksRun` is 1 by the time any budget check
+  // is reached and the `blocksRun > 0` guard in overBudget() is never the
+  // reason for the outcome. What it really proves is the hand-off point's
+  // placement BELOW the terminal-verdict breaks: a pass is one non-LLM insert
+  // from an item, so no round trip is spent on it. The zero-progress guard
+  // itself is proven by the test that follows.
   const { llm } = makeFakeLlm([LI_REVIEW_PASS]);
   const { deps, items } = makeDeps(llm);
   const { fired } = withHandOffRecorders(deps);
@@ -1337,6 +1342,140 @@ test("self-continue: a hand-off never happens without at least one block of prog
   assert.ok(result && result.id, "the job finished rather than handing off");
   assert.equal(items.length, 1);
   assert.deepEqual(fired, [], "a terminal verdict is not worth a round trip");
+});
+
+/**
+ * R3.1.11 — THE ZERO-PROGRESS GUARD: `blocksRun > 0 &&` in overBudget()
+ * (src/lib/content/contentWorker.js). Nothing covered it, because every other
+ * hand-off point in this suite is reached immediately after a `blocksRun += 1`,
+ * so the guard is true whether or not it is written.
+ *
+ * The one hand-off point that can be reached having run NOTHING is the post-
+ * review one: a resume whose checkpoint already holds this cycle's draft AND
+ * this cycle's review skips both blocks, then falls through to the budget check
+ * with a failing verdict and a cycle still owed. Combine that with an
+ * invocation that is ALREADY over budget when it starts — which is the normal
+ * case R3.1.14 made expressible, the sweep's fourth job beginning 250 s into a
+ * 300 s function — and without the guard this invocation hands the job straight
+ * back without writing a single new checkpoint. The receiver reads the same row,
+ * makes the same decision, and the job ping-pongs between invocations forever
+ * while every log line reads "checkpointed and handed off".
+ *
+ * THE FIXTURE is a checkpoint whose `cycle` counter lags its completedBlocks
+ * (cycle 0, but draft:1 and review:1 recorded, with cycle 1's failing review
+ * attached). The current writer cannot produce this row — buildCheckpoint
+ * writes `cycle` and the blocks together into one jsonb column, so a killed
+ * worker leaves either the old checkpoint or the new one, never a mix. What
+ * CAN produce it is a hand-edited rescue or a future writer that drifts, and
+ * that is the class of input the guard exists to make harmless (the R3.1.11
+ * verifier confirmed the guard is unreachable defensive code against every
+ * state today's writer emits). MAX_DRAFT_REVIEW_CYCLES is 2, so cycle 2 is
+ * still owed and the loop has real work to do.
+ */
+function staleReviewBoundaryJob(jobId) {
+  return {
+    id: jobId,
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "reviewing",
+    input: {},
+    cost_total: 0.04,
+    checkpoint: {
+      pipeline: ["coordinate", "research", "benchmark", "draft", "review"],
+      // draft:1 and review:1 are done; the cycle counter did not keep up.
+      completedBlocks: ["coordinate", "research", "benchmark", "draft:1", "review:1"],
+      cycle: 0,
+      review: LI_REVIEW_FAIL,
+      revisions: [],
+      workOrder: LI_WORK_ORDER,
+      researchPack: RESEARCH_PACK,
+      benchmarkNotes: { pack: {} },
+      draft: LI_DRAFT,
+      factCheck: null,
+      critique: "",
+    },
+  };
+}
+
+test("R3.1.11 self-continue: an invocation already over budget on entry runs a block before handing off — never zero", async () => {
+  const { llm } = makeFakeLlm([LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates, items } = makeDeps(llm);
+  const { fired } = withHandOffRecorders(deps);
+
+  // Over budget the moment this invocation begins: the function started 250 s
+  // ago and the budget is 90 s. One clock for both, as production has.
+  deps.now = () => 250_000;
+  deps.invocationStartMs = 0;
+  deps.chunkBudgetMs = 90_000;
+  deps.job = staleReviewBoundaryJob("job-zero-progress");
+
+  const result = await startContentJob("job-zero-progress", deps);
+
+  assert.ok(result && result.checkpointed === true, "premise: this invocation does hand off");
+  assert.notEqual(
+    result.blocks_run,
+    0,
+    "a hand-off with blocks_run: 0 is the ping-pong — the receiving invocation would read the " +
+      "identical row, hand off again, and the job would never advance. Restore `blocksRun > 0 &&` " +
+      "in overBudget()."
+  );
+  assert.equal(result.blocks_run, 1, "exactly one block of real progress was bought first");
+  assert.equal(
+    result.after,
+    "draft:2",
+    "it handed off after the draft it just paid for, not at the review boundary it walked in on"
+  );
+  // And that block left a durable checkpoint behind, which is what makes the
+  // hand-off progress rather than a round trip.
+  const checkpoints = jobUpdates.filter((u) => u.checkpoint).map((u) => u.checkpoint);
+  assert.ok(checkpoints.length >= 1, "the block it ran was persisted before the hand-off");
+  assert.ok(
+    checkpoints[checkpoints.length - 1].completedBlocks.includes("draft:2"),
+    "the receiving invocation will not be asked to pay for draft:2 again"
+  );
+  assert.deepEqual(fired, ["job-zero-progress"]);
+  assert.equal(items.length, 0, "still mid-pipeline");
+});
+
+test("R3.1.11 self-continue: the chain out of that state terminates instead of ping-ponging", async () => {
+  // The same stale row, driven as a chain of invocations (each one already over
+  // budget on entry, the worst case the platform can impose). With the guard
+  // the chain advances one block per invocation and ends in an item; without it
+  // no invocation writes a checkpoint and this loop runs to its cap.
+  const { llm } = makeFakeLlm([LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates, items } = makeDeps(llm);
+  const { fired } = withHandOffRecorders(deps);
+  deps.now = () => 250_000;
+  deps.invocationStartMs = 0;
+  deps.chunkBudgetMs = 90_000;
+  deps.job = staleReviewBoundaryJob("job-zero-progress-chain");
+
+  let result = null;
+  let invocations = 0;
+  const handOffs = [];
+  while (invocations < 8) {
+    invocations += 1;
+    result = await startContentJob("job-zero-progress-chain", deps);
+    if (!result || !result.checkpointed) break;
+    handOffs.push(result);
+    const lastCheckpoint = jobUpdates.filter((u) => u.checkpoint).pop()?.checkpoint || null;
+    const lastStatus = jobUpdates.map((u) => u.status).filter(Boolean).pop();
+    deps.job = { ...deps.job, status: lastStatus, checkpoint: lastCheckpoint };
+  }
+
+  assert.ok(
+    result && result.id,
+    `the chain reached an item; instead it handed off ${invocations} times in a row, which is the ` +
+      "zero-progress ping-pong"
+  );
+  assert.equal(items.length, 1, "exactly one content_items row");
+  for (const handOff of handOffs) {
+    assert.ok(
+      handOff.blocks_run >= 1,
+      `every hand-off must carry progress; "${handOff.after}" carried ${handOff.blocks_run}`
+    );
+  }
+  assert.equal(fired.length, handOffs.length, "one self-continue per hand-off and no more");
 });
 
 test("self-continue: a mid-loop hand-off after a failing review resumes at the next draft cycle", async () => {

@@ -299,6 +299,142 @@ test("R3.1.8 LEASE — dispatchWithLease discriminates lease held vs lease acqui
   assert.equal(failResult.error, storeErr);
 });
 
+// ---------------------------------------------------------------------------
+// 5b. R3.1.11 — the lease seam is drivable offline: the REAL acquireLease runs
+//     against an injected supabase client.
+//
+// THE FINDING. dispatchWithLease called `acquire("content_jobs", jobId, owner)`
+// with no fourth argument, so acquireLease's `deps` was always `{}` and its
+// `resolveClient` always fell back to the module-level client. Offline (this
+// suite, `npm run test:scoring`) that client is null, so the lease took the
+// MEMORY path and, for a job absent from the memory store, returned a SYNTHETIC
+// GRANT. Every test of the gate therefore had to stub `acquireLease` itself —
+// the conditional UPDATE that is the whole single-flight argument (D1) was
+// never executed by any test, and a lost race and a database fault were both
+// unreachable through the real function.
+//
+// These three tests use the real acquireLease (imported, not stubbed) with a
+// fake postgrest client, so the UPDATE is built and its verdict is read.
+// ---------------------------------------------------------------------------
+
+// NOTE: no `acquireLease` key appears in any deps below — that is the point.
+// dispatchWithLease falls back to its own module-level import of the real
+// acquireLease, and the only thing injected is the CLIENT it writes through.
+
+/**
+ * A fake postgrest chain for ONE update, mirroring the shape jobLease.js
+ * builds: .from(table).update(patch).eq("id", id).or(filter).select().
+ * `verdict` is the `{ data, error }` envelope the real client would resolve to.
+ */
+function fakeLeaseClient(verdict) {
+  const calls = [];
+  return {
+    calls,
+    from(table) {
+      const call = { table, patch: null, eq: null, or: null };
+      calls.push(call);
+      const chain = {
+        update(patch) {
+          call.patch = patch;
+          return chain;
+        },
+        eq(column, value) {
+          call.eq = [column, value];
+          return chain;
+        },
+        or(filter) {
+          call.or = filter;
+          return chain;
+        },
+        select() {
+          return Promise.resolve(verdict);
+        },
+      };
+      return chain;
+    },
+  };
+}
+
+test("R3.1.11 LEASE — dispatchWithLease forwards deps, so the REAL acquireLease runs the UPDATE on the injected client", async () => {
+  const client = fakeLeaseClient({
+    data: [{ id: "job-real-win", lease_owner: "cron:real:1", lease_expires_at: "2026-09-18T20:00:00.000Z" }],
+    error: null,
+  });
+  let started = null;
+  const res = await dispatchWithLease("job-real-win", "direct resume", {
+    client, // must reach acquireLease's resolveClient
+    nowMs: Date.parse("2026-09-18T19:57:00.000Z"),
+    startContentJob: async (jobId, opts) => {
+      started = { jobId, opts };
+    },
+    newLeaseOwner: () => "cron:real:1",
+  });
+
+  assert.equal(res.ok, true);
+  assert.equal(res.owner, "cron:real:1");
+  assert.equal(
+    client.calls.length,
+    1,
+    "the injected client must be the one that was written to — if this is 0, dispatchWithLease " +
+      "did not forward deps and acquireLease silently used the module-level client (offline: the " +
+      "memory path, which grants synthetically)"
+  );
+  const [call] = client.calls;
+  assert.equal(call.table, "content_jobs");
+  assert.equal(call.patch.lease_owner, "cron:real:1", "the UPDATE claims the lease for THIS owner");
+  assert.ok(call.patch.lease_expires_at, "and sets an expiry");
+  assert.deepEqual(call.eq, ["id", "job-real-win"], "scoped to the one row");
+  assert.ok(
+    /lease_owner\.is\.null/.test(call.or) && /lease_expires_at\.lt\./.test(call.or),
+    `the conditional filter is what makes this single-flight; got ${call.or}`
+  );
+  assert.equal(started?.jobId, "job-real-win", "having won, the job runs in this invocation");
+  assert.equal(started?.opts?.leaseOwner, "cron:real:1", "under the lease we just took");
+});
+
+test("R3.1.11 LEASE — a lost race through the real acquireLease is lease_held, not a synthetic grant", async () => {
+  // Zero rows updated is exactly what Postgres returns to the LOSER of the race
+  // (EvalPlanQual re-checks the WHERE against the winner's committed row).
+  const client = fakeLeaseClient({ data: [], error: null });
+  let started = false;
+  const res = await dispatchWithLease("job-real-held", "direct resume", {
+    client,
+    startContentJob: async () => {
+      started = true;
+    },
+    newLeaseOwner: () => "cron:real:2",
+  });
+
+  assert.equal(client.calls.length, 1, "the real UPDATE was attempted against the injected client");
+  assert.equal(res.ok, false, "we do not hold the lease, so we must not spend");
+  assert.equal(res.reason, "lease_held");
+  assert.equal(res.owner, null);
+  assert.equal(started, false, "and nothing ran — two workers on one job is the bug D1 closed");
+});
+
+test("R3.1.11 LEASE — a database fault through the real acquireLease fails CLOSED", async () => {
+  const dbErr = { message: "could not connect to server: Connection refused" };
+  const client = fakeLeaseClient({ data: null, error: dbErr });
+  let started = false;
+  const res = await dispatchWithLease("job-real-broken", "direct resume", {
+    client,
+    startContentJob: async () => {
+      started = true;
+    },
+    newLeaseOwner: () => "cron:real:3",
+  });
+
+  assert.equal(client.calls.length, 1);
+  assert.equal(res.ok, false);
+  assert.equal(
+    res.reason,
+    "lease_acquire_failed",
+    "a lease we cannot prove we hold is an outage, never a quiet skip and never a grant"
+  );
+  assert.equal(res.error, dbErr);
+  assert.equal(started, false);
+});
+
 test("R3.1.8 REPORT — contentCronReport carries skip reasons on the wire", () => {
   const { status, body } = contentCronReport({
     startedIds: ["job-win"],

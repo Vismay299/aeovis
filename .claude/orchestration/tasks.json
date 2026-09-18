@@ -7998,17 +7998,39 @@
       "phase": "R3",
       "tags": [],
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "rebuild-test-author",
+      "evidence": [
+        "src/lib/content/contentWorker.test.mjs:1396",
+        "src/lib/content/contentWorker.test.mjs:1436",
+        "src/lib/content/contentWorker.test.mjs:1303",
+        "src/lib/contentWorkerSweep.route.test.mjs:356",
+        "src/lib/contentWorkerSweep.route.test.mjs:393",
+        "src/lib/contentWorkerSweep.route.test.mjs:413",
+        "src/app/api/content/worker/route.js:153"
+      ],
       "notes": [
         {
           "at": "2026-09-18T05:50:51.680Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-18T19:48:24.604Z",
+          "by": "rebuild-test-author",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-18T19:55:19.750Z",
+          "by": "rebuild-test-author",
+          "text": "Seam 1: the zero-progress guard is now covered. Every other overBudget() call site sits immediately after blocksRun += 1, so the only hand-off point reachable with zero blocks run is the post-review one (contentWorker.js:748) on a resume whose checkpoint already holds this cycle's draft AND review. New fixture staleReviewBoundaryJob (contentWorker.test.mjs:1371) is that state plus an invocation already over budget on entry (invocationStartMs 0, now 250_000, budget 90_000); the test asserts blocks_run===1 and after==='draft:2', and a second test drives the chain to an item so the ping-pong shows up as non-termination. Mutation: removing 'blocksRun > 0 &&' at contentWorker.js:400 => both new tests fail (41 tests, 2 fail) and the other 39 still pass, i.e. nothing else covered it; restored => 41/41. Renamed the mis-named test at :1303 to what it actually proves (the hand-off point sits below the terminal-verdict breaks), with a comment saying why the old name overclaimed. Seam 2: dispatchWithLease now forwards deps to acquire (route.js:153), so jobLease's resolveClient sees deps.client. Three new tests drive the REAL acquireLease (no acquireLease stub anywhere in their deps) through a fake postgrest client: win asserts the UPDATE's table/patch/eq/or filter and that the injected client was the one written to; zero rows => lease_held, not the memory path's synthetic grant; {error} => lease_acquire_failed fail-closed. Mutation: dropping the deps argument => all three fail (29 tests, 3 fail); restored => 29/29. Existing dispatchWithLease tests (R3.1.8, R3.1.14 clock, R3.1.14 sweep guard) untouched and green. npm test: 3030 tests, 3000 pass, 0 fail, 30 skipped (was 3025/2995/0). node --test src/lib/keepAlive.test.mjs: 7/7. Nothing committed."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-18T20:04:17.719Z",
+        "note": "Verified by re-running both mutations myself. (1) Removed 'blocksRun > 0 &&' at src/lib/content/contentWorker.js:400 -> node --test src/lib/content/contentWorker.test.mjs = 41 tests, 2 fail, exactly the two new tests (contentWorker.test.mjs:1396, :1436); restored -> 41/41. (2) Dropped the 4th deps arg at src/app/api/content/worker/route.js:153 -> node --test src/lib/contentWorkerSweep.route.test.mjs = 29 tests, 3 fail, exactly the three new lease tests (contentWorkerSweep.route.test.mjs:358, :395, :415 - the submitted evidence lines 356/393/413 are ~2 lines off, they land on adjacent braces); restored -> 29/29. Those three drive the REAL acquireLease (no acquireLease key in their deps; route.js:6 imports it from @/lib/jobLease) through fakeLeaseClient, asserting table/patch/eq/or on the injected client, lease_held on 0 rows, lease_acquire_failed fail-closed on {error}. Liveness traced: dispatchWithLease is reached from the live GET ?job_id= branch at route.js:410. Full npm test 3030/3000 pass/0 fail/30 skipped (baseline 3025/2995/0, +5 = the 5 new tests); test:scoring same; keepAlive 7/7. Rename at contentWorker.test.mjs:1303 is accurate (fixture leaves only review, verdict pass breaks above the hand-off). Only the old name+comment were removed - no existing assertion weakened. CAVEAT (recorded, not a fail): the guard fixture staleReviewBoundaryJob (contentWorker.test.mjs:1371) has cycle:0 with draft:1/review:1 completed; every writer path (contentWorker.js:573/650/696/725) writes cycle consistent with completedBlocks, and every other overBudget() call site (581/656/701) sits immediately after blocksRun += 1, so the zero-progress hand-off at :748 is unreachable from any state the current writer emits - the guard is defensive-only today and the fixture is a hand-constructed corrupt row. The test asserts nothing false about current code; the comment's claim that a killed worker leaves this row is overstated, since the checkpoint is written whole as one jsonb column."
+      }
     },
     {
       "id": "R3.1.12",

@@ -144,7 +144,13 @@ export async function dispatchWithLease(jobId, label, deps = {}) {
   const owner = makeOwner("cron");
   let won = null;
   try {
-    won = await acquire("content_jobs", jobId, owner);
+    // R3.1.11 — `deps` is forwarded. acquireLease reads its client from
+    // `deps.client` / `deps.supabase` (src/lib/jobLease.js resolveClient) and
+    // its clock from `deps.nowMs`; without this argument an injected client
+    // never reached the lease UPDATE, so the real single-flight gate could only
+    // ever be tested by stubbing itself out. Real callers pass none of these
+    // keys and get the module-level client exactly as before.
+    won = await acquire("content_jobs", jobId, owner, deps);
   } catch (err) {
     // Fail CLOSED: if we cannot prove we hold the lease, we must not spend.
     console.error(`[content-cron] lease acquire failed for ${label} ${jobId}:`, err.message);
