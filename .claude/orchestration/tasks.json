@@ -8042,7 +8042,7 @@
       "subphase": "R3.1",
       "lane": "backend",
       "title": "A content job has no self-continue, so it advances one function-lifetime per day",
-      "detail": "Observed 2026-09-16 after R3.1.2 and migration 014 made the daily batch work. Six daily_batch jobs were created and dispatched by GET /api/content/worker?batch=1; all six ran inside that one cron invocation, checkpointed, and stopped heartbeating together when the function hit maxDuration (researching 25%, benchmarking 42%, drafting 58%, reviewing 75% - none reached a content_items row). Nothing resumes them: startContentJob has no equivalent of the scan worker's selfContinue, so the only resume path is the next /api/content/worker tick, which is DAILY. A pipeline with five or six stages therefore needs five or six days to produce one draft, and each resumed chunk re-enters a job that is otherwise idle. The scan side of this was R3.1.5 (keepAlive) plus R3.1.6 (a self-continue that can actually reach the worker); the content side has neither. 2026-09-18: production had NO Protection Bypass secret and no NEXT_PUBLIC_APP_URL, so the self-continue resolved to the SSO-protected VERCEL_URL and never reached the worker. Filed and fixed as R3.1.13; the owed observation moves to after that deploy. 2026-09-18 19:15 UTC production observation (post R3.1.13 deploy): NOT met. Four jobs ran inline in one cron invocation; one finished (italica -> content_items 19:17:51, same invocation, no hand-off needed); three were killed at the 300 s platform cap mid-block with no hand-off line and no second /api/content/worker request. Root cause filed as R3.1.14 (sweep runs jobs inline; budget only checked between blocks).",
+      "detail": "Observed 2026-09-16 after R3.1.2 and migration 014 made the daily batch work. Six daily_batch jobs were created and dispatched by GET /api/content/worker?batch=1; all six ran inside that one cron invocation, checkpointed, and stopped heartbeating together when the function hit maxDuration (researching 25%, benchmarking 42%, drafting 58%, reviewing 75% - none reached a content_items row). Nothing resumes them: startContentJob has no equivalent of the scan worker's selfContinue, so the only resume path is the next /api/content/worker tick, which is DAILY. A pipeline with five or six stages therefore needs five or six days to produce one draft, and each resumed chunk re-enters a job that is otherwise idle. The scan side of this was R3.1.5 (keepAlive) plus R3.1.6 (a self-continue that can actually reach the worker); the content side has neither. 2026-09-18: production had NO Protection Bypass secret and no NEXT_PUBLIC_APP_URL, so the self-continue resolved to the SSO-protected VERCEL_URL and never reached the worker. Filed and fixed as R3.1.13; the owed observation moves to after that deploy. 2026-09-18 19:15 UTC production observation (post R3.1.13 deploy): NOT met. Four jobs ran inline in one cron invocation; one finished (italica -> content_items 19:17:51, same invocation, no hand-off needed); three were killed at the 300 s platform cap mid-block with no hand-off line and no second /api/content/worker request. Root cause filed as R3.1.14 (sweep runs jobs inline; budget only checked between blocks). 2026-09-18 21:57 UTC: owed observation MET via R3.1.14 — hand-off fired and received per job in production.",
       "accept": "A content job started by the batch reaches a content_items draft without waiting for a second cron day: either the job self-continues after a checkpoint the way a scan chunk does, or the resume cadence is raised, or the work moves to a host that owns its own lifetime (see the R1.1.3 worker-host ADR). Evidenced by a batch-created job going from creation to an item in one day, read from content_jobs/content_items.",
       "tags": [],
       "findings": [],
@@ -8093,6 +8093,11 @@
           "at": "2026-09-18T19:21:34.885Z",
           "by": "controller",
           "text": "amended: 2026-09-18 19:15 UTC production observation (post R3.1.13 deploy): NOT met. Four jobs ran inline in one cron invocation; one finished (italica -> content_items 19:17:51, same invocation, no hand-off needed); three were killed at the 300 s platform cap mid-block with no hand-off line and no second /api/content/worker request. Root cause filed as R3.1.14 (sweep runs jobs inline; budget only checked between blocks)."
+        },
+        {
+          "at": "2026-09-18T21:59:15.095Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18 21:57 UTC: owed observation MET via R3.1.14 — hand-off fired and received per job in production."
         }
       ],
       "verification": {
@@ -8307,7 +8312,7 @@
       "subphase": "R3.1",
       "lane": "backend",
       "title": "Content cron sweep runs every job inside its own 300 s and never reaches a hand-off",
-      "detail": "Observed on production 2026-09-18 19:15 UTC (manual `vercel crons run /api/content/worker?batch=1`, deployment carrying R3.1.10 + R3.1.13). The invocation dispatched 4 jobs INLINE via keepAlive(start(jobId)) in src/app/api/content/worker/route.js dispatchWithLease (:71) — three resumes plus one new daily_batch job — all sharing the single 300 s function. One job (italica, 355b0237) ran benchmark+draft+review to completion in 2m51s and reached content_items at 19:17:51; the other three were killed mid-block by `Vercel Runtime Timeout Error: Task timed out after 300 seconds` (left at benchmarking / drafting / researching) with NO `hit its chunk budget ... handed off` line and only ONE /api/content/worker request in the logs — the self-continue never fired. Two causes, both structural: (1) overBudget() in src/lib/content/contentWorker.js:363 is only consulted BETWEEN blocks and only after blocksRun > 0, so a first block that outlives the invocation can never hand off; (2) the sweep shares one 300 s budget across MAX_CONCURRENT_RESUMES + batch jobs, so every job slows every other and the platform cap arrives before any job hits its own 150 s CONTENT_CHUNK_BUDGET_MS. R3.1.10 and R3.1.13 wired the hand-off correctly; this is the reason it is unreachable in practice. Fix direction, mirroring the scan worker (kickChunk): the sweep should NOT run jobs inline — it should acquire the lease, then fire the self-continue fetch for each job so each runs in its own invocation with its own 300 s; and the chunk budget should be checked against the invocation start, with a budget small enough (e.g. 60 s) that a job hands off after its first completed block when the invocation is already old.",
+      "detail": "Observed on production 2026-09-18 19:15 UTC (manual `vercel crons run /api/content/worker?batch=1`, deployment carrying R3.1.10 + R3.1.13). The invocation dispatched 4 jobs INLINE via keepAlive(start(jobId)) in src/app/api/content/worker/route.js dispatchWithLease (:71) — three resumes plus one new daily_batch job — all sharing the single 300 s function. One job (italica, 355b0237) ran benchmark+draft+review to completion in 2m51s and reached content_items at 19:17:51; the other three were killed mid-block by `Vercel Runtime Timeout Error: Task timed out after 300 seconds` (left at benchmarking / drafting / researching) with NO `hit its chunk budget ... handed off` line and only ONE /api/content/worker request in the logs — the self-continue never fired. Two causes, both structural: (1) overBudget() in src/lib/content/contentWorker.js:363 is only consulted BETWEEN blocks and only after blocksRun > 0, so a first block that outlives the invocation can never hand off; (2) the sweep shares one 300 s budget across MAX_CONCURRENT_RESUMES + batch jobs, so every job slows every other and the platform cap arrives before any job hits its own 150 s CONTENT_CHUNK_BUDGET_MS. R3.1.10 and R3.1.13 wired the hand-off correctly; this is the reason it is unreachable in practice. Fix direction, mirroring the scan worker (kickChunk): the sweep should NOT run jobs inline — it should acquire the lease, then fire the self-continue fetch for each job so each runs in its own invocation with its own 300 s; and the chunk budget should be checked against the invocation start, with a budget small enough (e.g. 60 s) that a job hands off after its first completed block when the invocation is already old. 2026-09-18 21:57 UTC production run: PROVEN. Sweep logged four handed-off lines with self_continue_fired=true; four separate /api/content/worker?job_id= invocations followed at 21:57:04 and 21:57:32 (one per job), no 300 s timeout line. Surfaced R3.5.6 (upsert rewrites item id on conflict -> FK 23503) on a job that should not have been resumable.",
       "accept": "After a cron sweep with >= 3 resumable jobs, the Vercel logs show one /api/content/worker?job_id=<id> invocation per dispatched job (not one shared invocation), no `Task timed out after 300 seconds` line, and at least one `hit its ... chunk budget ... handed off ... self_continue_fired=true` line followed by the receiving invocation; a daily_batch job created by that sweep reaches content_items the same day with no cron tick in between. Unit tests pin that the sweep dispatches by fetch, not by inline start.",
       "deps": [
         "R3.1.13"
@@ -8350,6 +8355,11 @@
           "at": "2026-09-18T19:43:02.122Z",
           "by": "rebuild-implementer",
           "text": "Sweep + daily batch now dispatch by fetch: dispatchBySelfContinue (route.js:89) fires /api/content/worker?job_id= via makeSelfContinue (label content-cron, keepAlive 5s hold) and takes NO lease — the receiving invocation's dispatchWithLease acquire is the single-flight gate, mirroring handOff's release-then-fire. ?job_id= still runs inline (it IS the per-job invocation) and now receives invocationStartMs (route.js:161). overBudget measures from the invocation clock (contentWorker.js:400) and CONTENT_CHUNK_BUDGET_MS 150s -> 90s (contentWorker.js:91); blocksRun>0 guard untouched. Report gains dispatch_mode:'self_continue' + per-job self_continue verdicts; a fetch that could not be fired is a skip/batch_failed with batch_unavailable -> HTTP 500, never a silent dispatched. Two R3.1.8 route tests rewritten (the sweep has no acquireLease left to fail) with a comment saying why; lease-fault coverage kept at the ?job_id= tests and the dispatchWithLease unit test. Tests: npm test 3025 tests, 0 fail, 30 skipped (also run as test:scoring); node --test keepAlive.test.mjs 7/7, workerIsolation.test.mjs 5/5. NOT exercised against production: no deploy, no cron run — the accept criterion's log evidence (one invocation per job, no 300s timeout, a handed-off line) needs a Vercel deploy and a real sweep, which I did not run."
+        },
+        {
+          "at": "2026-09-18T21:59:15.063Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18 21:57 UTC production run: PROVEN. Sweep logged four handed-off lines with self_continue_fired=true; four separate /api/content/worker?job_id= invocations followed at 21:57:04 and 21:57:32 (one per job), no 300 s timeout line. Surfaced R3.5.6 (upsert rewrites item id on conflict -> FK 23503) on a job that should not have been resumable."
         }
       ],
       "verification": {
@@ -9665,6 +9675,42 @@
         "at": "2026-09-18T19:19:21.195Z",
         "note": "Exercised against a throwaway local Postgres 16 cluster (not production; prod apply not re-observable by me). Reproduced the old failure with 016's actual SQL (supabase/migrations/016_content_items_natural_key.sql:30, UNIQUE (job_id, cycle) — never DEFERRABLE despite its comment at :20): three (NULL,1) rows accepted, the ON CONFLICT (job_id,cycle) upsert inserted a third instead of matching. Then ran supabase/migrations/020_content_items_key_nulls_not_distinct.sql:28-47 verbatim; all three DO-block branches traced live: (a) constraint exists-but-old -> dropped and re-added as 'UNIQUE NULLS NOT DISTINCT (job_id, cycle)', condeferrable=f; (b) re-run -> no-op, still exactly one constraint with the same def; (c) constraint absent -> created. Dirty-table run failed inside the single DO statement and rolled the DROP back, leaving the 016 def intact — the documented data-dependence is real and safe. Post-apply behaviour: second (NULL,1) insert rejected by content_items_job_id_cycle_key; ON CONFLICT (job_id,cycle) DO UPDATE and DO NOTHING both matched the NULL-job row (1 row, title updated); non-null job path unchanged. Deferrable claim proven empirically: a DEFERRABLE unique constraint makes ON CONFLICT raise 'ON CONFLICT does not support deferrable unique constraints ... as arbiters', and src/lib/db/content.js:527 upserts with onConflict \"job_id,cycle\" (live path: src/lib/content/contentWorker.js:745 passes job_id). Docs: docs/PROD_MIGRATIONS.md:1088-1112 records the pre-check query, its result (0), and the applied-check contains-NULLS-NOT-DISTINCT; docs/OPERATOR_LEDGER.md:341 and :581 mark 020 applied / R3.5.5 closed. Runner: scripts/setup-supabase.mjs:223-228 registers 020's constraint expectation; src/lib/migrationsRunner.test.mjs:345-347 counts migrations from disk so 020 is applied and ledgered with no stale literal. Tests: node --test migrationsRunner/docStatus/operatorLedgerGates/liveWriteGuard 66/66 pass; npm run test:scoring 2985 pass, 0 fail, 30 skipped. Diff scoped to the three doc/task files plus the already-committed migration; no bare catch, no fail-soft path added."
       }
+    },
+    {
+      "id": "R3.5.6",
+      "subphase": "R3.5",
+      "lane": "backend",
+      "title": "insertContentItem upsert rewrites the item id on conflict and trips content_jobs.item_id FK",
+      "detail": "Observed on production 2026-09-18 21:57 UTC, first real run of R3.1.14 (each job in its own invocation — that part worked: the sweep logged four `handed off ... self_continue_fired=true` lines and four separate /api/content/worker?job_id= invocations followed). Job 355b0237 (italica), which already held an awaiting_approval item from 19:17 UTC, was listed as resumable, re-ran review, hit the YMYL branch and then FAILED with Postgres 23503: `update or delete on table content_items violates foreign key constraint content_jobs_item_id_fkey`. Cause in src/lib/db/content.js insertContentItem (~:488-527): the record carries a FRESH `id: crypto.randomUUID()` and is upserted with onConflict job_id,cycle, so on conflict Postgres runs UPDATE ... SET id = <new uuid> on the existing row — which content_jobs.item_id references. The memory-mode branch (~:508) preserves `id: existing.id`; the database branch does not, so R3.5.2 idempotence was only ever true offline. Second question the same event raises: why was a job whose status was awaiting_approval at 19:20 UTC resumable at 21:57? Either its status had been rewound by the 19:15 invocation being killed at 300 s after the item write (check what runFinalize/reviewing writes and in what order), or listResumableContentJobs/shouldRescueContentJob admits a status it should not. Establish which with the run ledger before fixing.",
+      "accept": "insertContentItem on a (job_id, cycle) conflict returns the EXISTING row with its original id (test: two inserts for the same key with different generated ids yield one row, same id, and a fake FK check does not fire); the cause of the awaiting_approval job being re-dispatched is written down with evidence and closed either by a status fix or a listResumable fix with a test; job 355b0237 is left in a coherent state on production (operator SQL recorded).",
+      "deps": [
+        "R3.1.14"
+      ],
+      "tags": [],
+      "anchors": [
+        "src/lib/db/content.js:488",
+        "src/lib/db/content.js:527",
+        "src/lib/db/content.js:111",
+        "src/app/api/content/worker/route.js:89"
+      ],
+      "phase": "R3",
+      "findings": [],
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-18T21:59:15.027Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-18T21:59:25.817Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R3.6.1",
