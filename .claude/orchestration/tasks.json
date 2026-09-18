@@ -7921,7 +7921,7 @@
       "subphase": "R3.1",
       "lane": "backend",
       "title": "A content job has no self-continue, so it advances one function-lifetime per day",
-      "detail": "Observed 2026-09-16 after R3.1.2 and migration 014 made the daily batch work. Six daily_batch jobs were created and dispatched by GET /api/content/worker?batch=1; all six ran inside that one cron invocation, checkpointed, and stopped heartbeating together when the function hit maxDuration (researching 25%, benchmarking 42%, drafting 58%, reviewing 75% - none reached a content_items row). Nothing resumes them: startContentJob has no equivalent of the scan worker's selfContinue, so the only resume path is the next /api/content/worker tick, which is DAILY. A pipeline with five or six stages therefore needs five or six days to produce one draft, and each resumed chunk re-enters a job that is otherwise idle. The scan side of this was R3.1.5 (keepAlive) plus R3.1.6 (a self-continue that can actually reach the worker); the content side has neither. 2026-09-18: production had NO Protection Bypass secret and no NEXT_PUBLIC_APP_URL, so the self-continue resolved to the SSO-protected VERCEL_URL and never reached the worker. Filed and fixed as R3.1.13; the owed observation moves to after that deploy.",
+      "detail": "Observed 2026-09-16 after R3.1.2 and migration 014 made the daily batch work. Six daily_batch jobs were created and dispatched by GET /api/content/worker?batch=1; all six ran inside that one cron invocation, checkpointed, and stopped heartbeating together when the function hit maxDuration (researching 25%, benchmarking 42%, drafting 58%, reviewing 75% - none reached a content_items row). Nothing resumes them: startContentJob has no equivalent of the scan worker's selfContinue, so the only resume path is the next /api/content/worker tick, which is DAILY. A pipeline with five or six stages therefore needs five or six days to produce one draft, and each resumed chunk re-enters a job that is otherwise idle. The scan side of this was R3.1.5 (keepAlive) plus R3.1.6 (a self-continue that can actually reach the worker); the content side has neither. 2026-09-18: production had NO Protection Bypass secret and no NEXT_PUBLIC_APP_URL, so the self-continue resolved to the SSO-protected VERCEL_URL and never reached the worker. Filed and fixed as R3.1.13; the owed observation moves to after that deploy. 2026-09-18 19:15 UTC production observation (post R3.1.13 deploy): NOT met. Four jobs ran inline in one cron invocation; one finished (italica -> content_items 19:17:51, same invocation, no hand-off needed); three were killed at the 300 s platform cap mid-block with no hand-off line and no second /api/content/worker request. Root cause filed as R3.1.14 (sweep runs jobs inline; budget only checked between blocks).",
       "accept": "A content job started by the batch reaches a content_items draft without waiting for a second cron day: either the job self-continues after a checkpoint the way a scan chunk does, or the resume cadence is raised, or the work moves to a host that owns its own lifetime (see the R1.1.3 worker-host ADR). Evidenced by a batch-created job going from creation to an item in one day, read from content_jobs/content_items.",
       "tags": [],
       "findings": [],
@@ -7967,6 +7967,11 @@
           "at": "2026-09-18T11:29:01.826Z",
           "by": "controller",
           "text": "amended: 2026-09-18: production had NO Protection Bypass secret and no NEXT_PUBLIC_APP_URL, so the self-continue resolved to the SSO-protected VERCEL_URL and never reached the worker. Filed and fixed as R3.1.13; the owed observation moves to after that deploy."
+        },
+        {
+          "at": "2026-09-18T19:21:34.885Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18 19:15 UTC production observation (post R3.1.13 deploy): NOT met. Four jobs ran inline in one cron invocation; one finished (italica -> content_items 19:17:51, same invocation, no hand-off needed); three were killed at the 300 s platform cap mid-block with no hand-off line and no second /api/content/worker request. Root cause filed as R3.1.14 (sweep runs jobs inline; budget only checked between blocks)."
         }
       ],
       "verification": {
@@ -8087,7 +8092,7 @@
       "subphase": "R3.1",
       "lane": "backend",
       "title": "Self-continue must target the production alias, not the SSO-protected deployment URL",
-      "detail": "Found 2026-09-18 while checking the R3.1.10 observation. The live project has Vercel Authentication on (all_except_custom_domains), NO Protection Bypass secret created (the panel is empty, so VERCEL_AUTOMATION_BYPASS_SECRET is never injected), and no NEXT_PUBLIC_APP_URL in production. Both resolveSelfContinueUrl copies therefore fell through to VERCEL_URL, the per-deployment URL, which answers 302 -> vercel.com/sso-api. Every self-continue on production, scan (R3.1.6) and content (R3.1.10) alike, died at that wall and the job waited for the daily cron. The production alias (aeo-vis.vercel.app) is not protected: it answers the route own 401 unauthenticated. Fix: productionAliasBase in src/lib/selfContinue.js returns https://VERCEL_PROJECT_PRODUCTION_URL when VERCEL_ENV is production (a system variable Vercel injects, so no operator action), and both resolvers rank it after NEXT_PUBLIC_APP_URL and before VERCEL_URL. A preview deployment must never hand its job to production, hence the VERCEL_ENV guard. anchors corrected to the committed lines",
+      "detail": "Found 2026-09-18 while checking the R3.1.10 observation. The live project has Vercel Authentication on (all_except_custom_domains), NO Protection Bypass secret created (the panel is empty, so VERCEL_AUTOMATION_BYPASS_SECRET is never injected), and no NEXT_PUBLIC_APP_URL in production. Both resolveSelfContinueUrl copies therefore fell through to VERCEL_URL, the per-deployment URL, which answers 302 -> vercel.com/sso-api. Every self-continue on production, scan (R3.1.6) and content (R3.1.10) alike, died at that wall and the job waited for the daily cron. The production alias (aeo-vis.vercel.app) is not protected: it answers the route own 401 unauthenticated. Fix: productionAliasBase in src/lib/selfContinue.js returns https://VERCEL_PROJECT_PRODUCTION_URL when VERCEL_ENV is production (a system variable Vercel injects, so no operator action), and both resolvers rank it after NEXT_PUBLIC_APP_URL and before VERCEL_URL. A preview deployment must never hand its job to production, hence the VERCEL_ENV guard. anchors corrected to the committed lines 2026-09-18 19:15 UTC: the alias fix could not be observed because no self-continue was attempted at all — the invocation died at 300 s before any job reached a hand-off point. See R3.1.14.",
       "accept": "resolveSelfContinueUrl in both src/lib/selfContinue.js and src/lib/workers/scanWorker.js returns https://<VERCEL_PROJECT_PRODUCTION_URL>/... when VERCEL_ENV=production and NEXT_PUBLIC_APP_URL is unset, returns the VERCEL_URL form when VERCEL_ENV is preview, and still honours NEXT_PUBLIC_APP_URL first; tests pin all three. Production observation (owed by the operator after deploy, not by this close): a daily_batch content job reaches content_items the same day with no cron tick between.",
       "deps": [
         "R3.1.10"
@@ -8136,6 +8141,11 @@
           "at": "2026-09-18T11:29:35.394Z",
           "by": "controller",
           "text": "amended: anchors corrected to the committed lines"
+        },
+        {
+          "at": "2026-09-18T19:21:34.920Z",
+          "by": "controller",
+          "text": "amended: 2026-09-18 19:15 UTC: the alias fix could not be observed because no self-continue was attempted at all — the invocation died at 300 s before any job reached a hand-off point. See R3.1.14."
         }
       ],
       "verification": {
@@ -8143,6 +8153,38 @@
         "at": "2026-09-18T11:32:07.806Z",
         "note": "Verified independently. Pre-fix repro: ran HEAD's resolver against {VERCEL_ENV:production, VERCEL_PROJECT_PRODUCTION_URL:aeo-vis.vercel.app, VERCEL_URL:aeo-gv31q4miu-...} -> https://aeo-gv31q4miu-....vercel.app/api/content/worker?job_id=j1 (the SSO-protected deployment URL); working tree returns https://aeo-vis.vercel.app/... Helper at src/lib/selfContinue.js:58-62, ranked at src/lib/selfContinue.js:81 and src/lib/workers/scanWorker.js:1168 (import at scanWorker.js:67 - one shared helper, no drift). Accept criterion exercised directly for all three cases in both copies. Adversarial: empty/whitespace/absent VERCEL_PROJECT_PRODUCTION_URL and VERCEL_ENV=preview/development/'Production' all fall through to VERCEL_URL/localhost; NEXT_PUBLIC_APP_URL with trailing slash still wins and is normalised. Mutation check: deleting the new line from each copy turns selfContinue.test.mjs:47 and scanChunk.test.mjs:364 red (2 fail), restored byte-identical. Tests: selfContinue 15/15, scanChunk 45/45, keepAlive 7/7, workerIsolation 5/5; npm run test:scoring 2985 pass / 0 fail / 30 skipped. Liveness traced: POST /api/content/worker -> startContentJob -> contentWorker.js:104 makeSelfContinue -> selfContinue.js:81; POST /api/scan/worker -> runScanChunk -> scanWorker.js:2839 defaultSelfContinue -> scanWorker.js:1168. Nothing run against production. Minor, not blocking: a VERCEL_PROJECT_PRODUCTION_URL carrying a scheme would yield https://https://... - same host-only assumption the pre-existing VERCEL_URL branch already makes, and Vercel injects host-only. Production observation (daily_batch job reaching content_items with no cron tick) remains owed by the operator after deploy."
       }
+    },
+    {
+      "id": "R3.1.14",
+      "subphase": "R3.1",
+      "lane": "backend",
+      "title": "Content cron sweep runs every job inside its own 300 s and never reaches a hand-off",
+      "detail": "Observed on production 2026-09-18 19:15 UTC (manual `vercel crons run /api/content/worker?batch=1`, deployment carrying R3.1.10 + R3.1.13). The invocation dispatched 4 jobs INLINE via keepAlive(start(jobId)) in src/app/api/content/worker/route.js dispatchWithLease (:71) — three resumes plus one new daily_batch job — all sharing the single 300 s function. One job (italica, 355b0237) ran benchmark+draft+review to completion in 2m51s and reached content_items at 19:17:51; the other three were killed mid-block by `Vercel Runtime Timeout Error: Task timed out after 300 seconds` (left at benchmarking / drafting / researching) with NO `hit its chunk budget ... handed off` line and only ONE /api/content/worker request in the logs — the self-continue never fired. Two causes, both structural: (1) overBudget() in src/lib/content/contentWorker.js:363 is only consulted BETWEEN blocks and only after blocksRun > 0, so a first block that outlives the invocation can never hand off; (2) the sweep shares one 300 s budget across MAX_CONCURRENT_RESUMES + batch jobs, so every job slows every other and the platform cap arrives before any job hits its own 150 s CONTENT_CHUNK_BUDGET_MS. R3.1.10 and R3.1.13 wired the hand-off correctly; this is the reason it is unreachable in practice. Fix direction, mirroring the scan worker (kickChunk): the sweep should NOT run jobs inline — it should acquire the lease, then fire the self-continue fetch for each job so each runs in its own invocation with its own 300 s; and the chunk budget should be checked against the invocation start, with a budget small enough (e.g. 60 s) that a job hands off after its first completed block when the invocation is already old.",
+      "accept": "After a cron sweep with >= 3 resumable jobs, the Vercel logs show one /api/content/worker?job_id=<id> invocation per dispatched job (not one shared invocation), no `Task timed out after 300 seconds` line, and at least one `hit its ... chunk budget ... handed off ... self_continue_fired=true` line followed by the receiving invocation; a daily_batch job created by that sweep reaches content_items the same day with no cron tick in between. Unit tests pin that the sweep dispatches by fetch, not by inline start.",
+      "deps": [
+        "R3.1.13"
+      ],
+      "tags": [],
+      "anchors": [
+        "src/app/api/content/worker/route.js:71",
+        "src/app/api/content/worker/route.js:344",
+        "src/lib/content/contentWorker.js:363",
+        "src/lib/content/contentWorker.js:77",
+        "src/lib/workers/scanWorker.js:3200"
+      ],
+      "phase": "R3",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-18T19:21:34.842Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R3.2.1",
