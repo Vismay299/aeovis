@@ -106,9 +106,32 @@ export function isContentJobAlive(job, nowMs = Date.now()) {
  * the very next cron tick and run twice. Both dispatch paths now agree on
  * heartbeat liveness: a pending job whose creator died is rescued one
  * heartbeat window later instead of within seconds of a healthy start.
+ *
+ * NOTE ON `item_id` (R3.5.6): a job that already carries an item_id has
+ * DELIVERED. The only writer of that column in the pipeline is contentWorker's
+ * terminal write, which sets `item_id` and `status: "awaiting_approval"` in the
+ * SAME update (src/lib/content/contentWorker.js:805-809) — so a job sitting in
+ * a RUNNING status WITH an item_id is, by construction, a delivered job whose
+ * status was rewound afterwards by a second execution (writeJob at
+ * contentWorker.js:554 / :638 / :714 writes a running status with no regard for
+ * what the row already holds). Production, 2026-09-18: job 355b0237 reached
+ * awaiting_approval with an item at 19:17:51 and was still being re-dispatched
+ * at 21:57, re-running review and re-paying for it. Re-running such a job can
+ * only duplicate spend and fight its own item row, so it is refused here —
+ * LOUDLY, because a refusal to rescue is not the same as nothing to rescue
+ * (standing rule 1), and the row needs an operator's eye.
  */
 export function shouldRescueContentJob(job, nowMs = Date.now()) {
   if (!job || !CONTENT_JOB_RUNNING.includes(job.status)) return false;
+  if (job.item_id) {
+    console.warn(
+      `[content-db] job ${job.id} is in running status "${job.status}" but already has ` +
+        `item_id ${job.item_id} — NOT resumable: it already delivered an item, so its ` +
+        `status was rewound after the terminal write. Left for an operator; re-running ` +
+        `it would re-pay for a draft that exists.`
+    );
+    return false;
+  }
   if (!leaseIsFree(job, null, nowMs)) return false;
   return !isContentJobAlive(job, nowMs);
 }
@@ -483,8 +506,16 @@ export async function insertContentItem(item, deps = {}) {
   const memory = deps?.memory || global.memoryContentItems;
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  // R3.5.6 — DELIBERATELY NO `id` AND NO `created_at`. This object is both the
+  // INSERT payload and, on conflict, the UPDATE SET list of the upsert below,
+  // so every key here is a column a conflict OVERWRITES on the existing row.
+  // `id` in that list made a conflict run `UPDATE ... SET id = <fresh uuid>`,
+  // which content_jobs.item_id references → Postgres 23503 (production,
+  // 2026-09-18 21:57 UTC). Both columns have table defaults (migration 002:
+  // `id uuid DEFAULT gen_random_uuid()`, `created_at timestamptz DEFAULT
+  // now()`), so an INSERT still mints them; a conflict now preserves the
+  // originals, exactly as the memory branch below does.
   const record = {
-    id,
     job_id: item.job_id || null,
     brand: item.brand,
     playbook: item.playbook,
@@ -500,12 +531,14 @@ export async function insertContentItem(item, deps = {}) {
     agent_id: item.agent_id || null,
     agent_snapshot: item.agent_snapshot || null,
     status: item.status || "draft",
-    created_at: now,
     updated_at: now,
   };
 
   if (!client) {
-    // Memory mode: deduplicate by (job_id, cycle) key.
+    // Memory mode: deduplicate by (job_id, cycle) key. `id` and `created_at`
+    // are minted here because there is no column default to do it — and, on a
+    // repeat, the EXISTING row keeps both. The DB branch below matches by
+    // leaving both out of the upsert payload entirely.
     const key = `${record.job_id || ""}|${record.cycle}`;
     const existing = [...memory.values()].find(
       (r) => `${r.job_id || ""}|${r.cycle}` === key
@@ -514,20 +547,40 @@ export async function insertContentItem(item, deps = {}) {
       Object.assign(existing, { ...record, id: existing.id, created_at: existing.created_at });
       return existing;
     }
-    memory.set(id, record);
-    return record;
+    const fresh = { id, ...record, created_at: now };
+    memory.set(id, fresh);
+    return fresh;
   }
 
   // R3.5.2 — upsert on the natural key (job_id, cycle). A crash between
   // insertContentItem and the status write left the job without an item_id,
   // so a resume re-inserted instead of updating. With the unique constraint,
   // a repeated insert in the crash window returns the existing row.
+  //
+  // R3.5.6 — one statement, on purpose: `INSERT ... ON CONFLICT (job_id,cycle)
+  // DO UPDATE` is atomic, so two concurrent callers yield exactly ONE row (the
+  // loser blocks on the unique index, then updates the winner's row and reads
+  // back the winner's id). The rejected alternative was
+  // `ignoreDuplicates: true` plus a follow-up select: it needs two round trips,
+  // and the loser's draft would be dropped on the floor with no row written and
+  // nothing said about it — a silent no-op (standing rule 1). Select-first is
+  // worse still: the gap between the select and the insert is the race.
   const { data, error } = await client
     .from("content_items")
     .upsert(record, { onConflict: "job_id,cycle" })
     .select();
   if (error) throw error;
-  return data[0];
+  // A create that wrote nothing must never be returned as a value (standing
+  // rule 2): the caller writes `content_jobs.item_id = item.id` next, and an
+  // undefined row there would null out a job's only deliverable pointer.
+  const row = (data || [])[0];
+  if (!row) {
+    throw new Error(
+      `insertContentItem: upsert on (job_id=${record.job_id}, cycle=${record.cycle}) ` +
+        `returned no row — the item was NOT written`
+    );
+  }
+  return row;
 }
 
 export async function updateContentItem(id, updates, deps = {}) {

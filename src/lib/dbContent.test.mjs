@@ -635,3 +635,51 @@ test("listContentRunsForJob THROWS on a DB error — it never fabricates 'no run
     }
   );
 });
+
+// --- R3.5.6: a delivered job is never re-dispatched --------------------------
+//
+// Production, 2026-09-18: job 355b0237 wrote its item at 19:17:51 and reached
+// awaiting_approval, yet the 21:57 sweep listed it as resumable, re-ran review
+// and failed on the FK. contentWorker's terminal write sets item_id and
+// status:"awaiting_approval" in ONE update (contentWorker.js:805-809), and only
+// writeJob (:554/:638/:714) ever writes a running status — so a running status
+// WITH an item_id can only mean a second execution rewound a delivered job.
+// Such a row is refused here so the rescue loop cannot re-pay for a draft that
+// already exists.
+
+test("R3.5.6 — a job with an item_id is NOT resumable, whatever its status says", () => {
+  const stale = isoMinutesAgo(10);
+  for (const status of CONTENT_JOB_RUNNING) {
+    assert.equal(
+      shouldRescueContentJob({ id: "355b0237", status, heartbeat_at: stale, item_id: "item-1" }),
+      false,
+      `THE BUG: a delivered job in status "${status}" was re-dispatched`
+    );
+  }
+  assert.equal(
+    shouldRescueContentJob({ id: "j9", status: "drafting", heartbeat_at: stale, item_id: null }),
+    true,
+    "a genuinely dead job with no item is still rescued — the guard must not swallow real work"
+  );
+});
+
+test("R3.5.6 — listResumableContentJobs drops the rewound job and keeps the real one", async () => {
+  const stale = isoMinutesAgo(10);
+  const { client } = makeMockClient({
+    content_jobs: () => ({
+      data: [
+        // The 355b0237 shape: delivered at 19:17:51, status rewound to reviewing.
+        { id: "355b0237", status: "reviewing", heartbeat_at: stale, created_at: stale, item_id: "item-355" },
+        { id: "really-dead", status: "drafting", heartbeat_at: stale, created_at: stale, item_id: null },
+      ],
+      error: null,
+    }),
+  });
+
+  const resumable = await listResumableContentJobs(5, { client });
+  assert.deepEqual(
+    resumable.map((j) => j.id),
+    ["really-dead"],
+    "a job that already produced an item must not be handed a second invocation"
+  );
+});
