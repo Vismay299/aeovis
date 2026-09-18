@@ -3421,7 +3421,7 @@
       "subphase": "R1.3",
       "lane": "infra",
       "title": "Spike: Playwright against perplexity.ai",
-      "detail": "Detect answer-stream completion; dump HTML plus screenshot; save at least 5 fixtures including a no-answer and a block page.",
+      "detail": "Detect answer-stream completion; dump HTML plus screenshot; save at least 5 fixtures including a no-answer and a block page. GATE from R1.5.2 (2026-09-18): migration 021_prompt_results_evidence.sql must be APPLIED to production before any real adapter posts to /api/internal/probe-results — otherwise PostgREST answers PGRST204 on the evidence columns and the route returns 502 for the whole batch. Listed in docs/OPERATOR_LEDGER.md section E under R1.5.2 until applied.",
       "accept": "Five or more fixtures committed covering answered, no-answer and blocked.",
       "deps": [
         "R1.2.1",
@@ -3438,7 +3438,13 @@
       "status": "todo",
       "owner": null,
       "evidence": [],
-      "notes": [],
+      "notes": [
+        {
+          "at": "2026-09-18T20:31:28.660Z",
+          "by": "controller",
+          "text": "amended: GATE from R1.5.2 (2026-09-18): migration 021_prompt_results_evidence.sql must be APPLIED to production before any real adapter posts to /api/internal/probe-results — otherwise PostgREST answers PGRST204 on the evidence columns and the route returns 502 for the whole batch. Listed in docs/OPERATOR_LEDGER.md section E under R1.5.2 until applied."
+        }
+      ],
       "verification": null
     },
     {
@@ -3699,11 +3705,37 @@
         "supabase/migrations/"
       ],
       "phase": "R1",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
-      "verification": null
+      "status": "done",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "supabase/migrations/021_prompt_results_evidence.sql:58",
+        "src/app/api/internal/_lib/probeResultContract.js:684",
+        "src/app/api/internal/_lib/probeResultContract.js:750",
+        "scripts/setup-supabase.mjs:234",
+        "src/lib/probeResultsIngest.route.test.mjs:916",
+        "src/lib/probeResultsIngest.route.test.mjs:980",
+        "src/lib/migrationsRunner.test.mjs:257",
+        "docs/PROD_MIGRATIONS.md:1122",
+        "README.md:169",
+        "docs/OPERATOR_LEDGER.md:342"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-18T20:05:45.609Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-18T20:13:56.469Z",
+          "by": "rebuild-implementer",
+          "text": "New migration 021_prompt_results_evidence.sql adds five nullable columns to prompt_results: evidence_screenshot_id / evidence_dom_id / evidence_har_id / evidence_raw_id / evidence_captured_at, all ADD COLUMN IF NOT EXISTS, no default, no backfill, no index. Names are Probe Result Contract v2 §3.7's own field names with an evidence_ prefix, because §3.7 already defines those four ids as opaque object keys in the probe-evidence bucket — which is exactly what createSignedUrl takes in R1.5.3 — so the promotion is a copy, not a translation, and har_id/raw_id (what an api-surface probe has instead of a screenshot) have somewhere to land. Round-trip: toPromptResultRow() now promotes them (probeResultContract.js:684 promotedEvidence, spread at :750); upsertPromptResults passes rows through verbatim, so the ingest route POST /api/internal/probe-results carries fleet evidence paths into the row. Missing/blank ids store NULL, never '' and never a synthesised path; evidence_captured_at is the row's own probed_at and is written only when at least one id survived. Registered in setup-supabase EXPECTED_OBJECTS (column probes), migrationsRunner FULL_CATALOG, README table, OPERATOR_LEDGER §C and a new PROD_MIGRATIONS.md section marked NOT YET APPLIED. Four new tests in probeResultsIngest.route.test.mjs drive the REAL handler and read the stored row back (ui, failed-state, api-surface, and a no-evidence/blank-string case against the mapper, plus an anti-drift assert that the column set equals EVIDENCE_IDS). Verified by sabotage: deleting the spread fails 4 tests, returning '' instead of null fails 3. NOT applied to production and nothing committed; I could not execute the SQL against any database from here — the applied-check query is in the file header and in PROD_MIGRATIONS.md for the operator. No worker/ change: the fleet has no producer yet (probeBatch is the R1.3 stub and nothing in worker/ posts to the ingest route), so the fleet side of the round trip is the contract payload, which already carries evidence. npm test: 3034 tests, 3004 pass, 0 fail, 30 skipped (baseline 3030/3000/0/30)."
+        }
+      ],
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-18T20:30:34.079Z",
+        "note": "PASS. Migration applies for real: stood up a throwaway PG16 cluster (127.0.0.1:55999), created prompt_results verbatim from 005_analytics_platform.sql:8-29, applied supabase/migrations/021_prompt_results_evidence.sql twice — first run ALTER TABLE + 5 COMMENTs, second run 5 'already exists, skipping' NOTICEs and no error (idempotent). The header's applied-check (021:46-50, information_schema form) and the PROD_MIGRATIONS.md:1135 pg_attribute form each return exactly 5 rows: evidence_screenshot_id/dom_id/har_id/raw_id text, evidence_captured_at timestamptz, all is_nullable=YES, column_default empty. setup-supabase.mjs:522 column probe returns 1 for all five. Round-trip proven end-to-end, not by reading code: ran the REAL toPromptResultRow (probeResultContract.js:684 promotedEvidence, :750 spread) on a v2 ui row, took its 17 output keys and INSERTed them by explicit column list into the migrated table — the five evidence values came back verbatim ('ev/2026/shot-1.png', 'ev/2026/dom-1.html.gz', NULL, NULL, probed_at). ORIGINAL FAILURE REPRODUCED on a clone of the same table with the five columns dropped: same insert dies 'column \"evidence_screenshot_id\" of relation does not exist' (42703, the local analogue of PGRST204). Path is allowlist-free: route.js:117 maps every result, :146 hands the whole row objects to upsertPromptResults, analytics.js:95 .upsert(rows) with no column filter. Mutations: deleting the '...evidence' spread -> 4 fails in probeResultsIngest.route.test.mjs; returning '' instead of null for a missing id -> 3 fails; restored, 32/32 pass and git diff --stat is byte-identical to before. Guards 84/84 (workerIsolation, migrationsRunner, docStatus, liveWriteGuard, migrationsLedger, operatorLedgerGates); npm test and test:scoring both 3034 tests / 3004 pass / 0 fail / 30 skipped (baseline 3030/3000/0/30, +4 = the new tests). worker/ byte-unchanged. All 10 cited file:line resolve to what they claim. NAMING: agree with evidence_<contract id> over _path — §3.7 (docs/contracts/probe-result.md:514) says the ids ARE opaque object keys in probe-evidence, which is exactly the argument createSignedUrl takes in R1.5.3, so the promotion is a copy with no rename to get wrong, and har_id/raw_id (all an api-surface probe has) get somewhere to land. STUB FINDING (recorded, not a blocker): bending 021's comment to information_schema was the right call for THIS task (same answer, and OPERATOR_LEDGER C already uses that form), but the migrationsRunner.test.mjs:143 discriminator is too loose and should be tightened separately — I proved it: rewriting 021's applied-check comment into the pg_attribute/pg_class/pg_namespace shape turns 5 of 21 runner tests red with no SQL change at all, i.e. a comment is executable in that stub. Fix belongs in the stub (strip -- comments before matching and/or anchor on ^SELECT 1 FROM pg_attribute with params present), not in every future migration's prose. OUT-OF-SCOPE, both confirmed, please file: (1) docs/OPERATOR_LEDGER.md:327 says 'holds fifteen files' while supabase/migrations holds 22 — pre-existing at HEAD (4502fe3), not introduced here, and docStatus.test.mjs does not check the count word; (2) 021 is NOT APPLIED to production — harmless today because no producer exists (nothing in worker/ posts to /api/internal/probe-results), but the moment an R1.3/R1.4 adapter posts, PostgREST answers PGRST204 on the unknown columns and the route returns 502 for the whole batch, so 021 must be applied before any adapter goes live."
+      }
     },
     {
       "id": "R1.5.3",
@@ -12248,6 +12280,33 @@
         "at": "2026-09-11T21:05:52.940Z",
         "note": "Fresh verifier, isolated worktree at 786cb4e. Original gap reproduced at 05dc488: the ceiling name appears 0 times in .env.example, 0 in docs/OPERATOR_LEDGER.md, and R3.3.5 0 times in the ledger; all three non-zero at HEAD. GUARDED, not merely declared, and proven both ways: disabling the env override at src/lib/rateLimit.js:259 turns three behavioural tests red, and renaming the variable at .env.example:105 turns src/lib/rateLimit.test.mjs:728 red — the accept criterion run verbatim. EXHAUSTIVE is DERIVED, not a hand list, and the verifier broke it on purpose to prove it: injecting a brand-new env read (SCAN_RATE_LIMIT_BRAND_NEW_KNOB, a name in no test) turned the guard red, and documenting it in .env.example ONLY turned it red a second time on the ledger assertion. Section E likewise derives from tasks.json — a fabricated open needs-secrets task turned operatorLedgerGates.test.mjs:86 red. The 786cb4e anchor fix is real: the old anchor grep exited 1 because the log is a template literal split across rateLimit.js:720-721; the new anchor resolves to the genuine once-per-process latch at rateLimit.js:41/:47/:717-718. Suite 2133/2107/0 fail/26 skipped, exactly baseline. Noted, not disqualifying: OPERATOR_LEDGER.md citations :446/:469 drifted one line at 786cb4e (exact at submit commit 1f528f3; intended :447/:470). Residual: the ledger half of the knob guard searches the whole file rather than section B, and documentsExactName has no left boundary."
       }
+    },
+    {
+      "id": "R6.2.6",
+      "subphase": "R6.2",
+      "lane": "test",
+      "title": "Migration-runner test stub treats SQL comments as executable probes",
+      "detail": "Found by the R1.5.2 implementer and confirmed by its verifier, 2026-09-18. The pg stub in src/lib/migrationsRunner.test.mjs (~:143) regex-matches the WHOLE statement text, comments included, to recognise a catalog probe of the `SELECT 1 FROM pg_attribute ... JOIN pg_class ... JOIN pg_namespace` shape. A migration whose header COMMENT quotes that shape as its applied-check therefore emits a phantom __PROBE before the verify banner and turns 5 of 21 runner tests red with no SQL change at all. 021 worked around it by phrasing its applied-check against information_schema.columns; the durable fix is in the stub: strip `--` line comments (and /* */ blocks) before matching, and/or anchor on the statement start with params present, so a comment can never be read as a query.",
+      "accept": "A migration file whose only occurrence of `pg_attribute ... JOIN pg_class ... JOIN pg_namespace` is inside a `--` comment passes the migrationsRunner suite unchanged (test added with such a fixture); the stub matches probes on statement text with comments stripped; existing 21 runner tests still pass.",
+      "deps": [],
+      "tags": [],
+      "anchors": [
+        "src/lib/migrationsRunner.test.mjs:143",
+        "supabase/migrations/021_prompt_results_evidence.sql:46"
+      ],
+      "phase": "R6",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-18T20:31:28.619Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R6.3.1",

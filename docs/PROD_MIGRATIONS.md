@@ -1119,6 +1119,43 @@ its SQL never was).
 
 ---
 
+## `021_prompt_results_evidence.sql`
+
+**NOT YET APPLIED to production (`nggyizuwqepxaqnpcqqj`).** Written for R1.5.2;
+the operator applies it. Nothing in the app depends on the columns existing
+before that: until the fleet reports evidence there is nothing to write, and the
+producer side (the R1.3/R1.4 adapters) is unbuilt. What *does* break if the code
+ships and the SQL does not is the fleet ingest the moment a real adapter starts
+posting — PostgREST answers `PGRST204` for an unknown column and
+`POST /api/internal/probe-results` returns 502 for the whole batch, loudly.
+
+**No pre-check is owed.** The file is five `ADD COLUMN IF NOT EXISTS` on
+`prompt_results` with no `DEFAULT`, no `NOT NULL`, no constraint and no index:
+it cannot collide with existing data, it does not rewrite the table, and it is
+safe to re-run.
+
+| Creates | Applied ⇔ |
+|---|---|
+| `prompt_results.evidence_screenshot_id`, `.evidence_dom_id`, `.evidence_har_id`, `.evidence_raw_id` (text, the Probe Result Contract v2 §3.7 object keys in the `probe-evidence` bucket) and `.evidence_captured_at` (timestamptz, the §3.1 `probed_at` of the capture) | the query below returns **five** rows |
+
+```sql
+SELECT a.attname, format_type(a.atttypid, a.atttypmod) AS type
+  FROM pg_attribute a
+  JOIN pg_class c ON c.oid = a.attrelid
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname = 'public' AND c.relname = 'prompt_results'
+   AND a.attnum > 0 AND NOT a.attisdropped
+   AND a.attname LIKE 'evidence\_%';
+```
+
+Pre-019 rows and every v1 scan-worker row keep all five NULL, which is correct
+and is not a backfill candidate: no evidence was ever captured for them, and a
+path written after the fact would point at nothing. The writer
+(`toPromptResultRow` in `src/app/api/internal/_lib/probeResultContract.js`)
+stores NULL rather than `''` for the same reason.
+
+---
+
 ## Function signatures — the check the runner cannot make
 
 `scripts/setup-supabase.mjs:382-388` checks functions by **name only**. Two

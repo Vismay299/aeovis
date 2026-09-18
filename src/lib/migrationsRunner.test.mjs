@@ -254,6 +254,15 @@ const FULL_CATALOG = [
   "gsc_connections", "gsc_daily", "gsc_daily_brand_date_idx",
   // 019_probe_evidence_bucket.sql (R1.5.1) — storage bucket.
   "probe-evidence",
+  // 021_prompt_results_evidence.sql (R1.5.2) — the §3.7 evidence ids, promoted
+  // onto prompt_results. Columns, so the catalog probe reads pg_attribute.
+  // (020 adds no object of its own: it recreates 016's constraint under the
+  // same name, which is already in this list.)
+  "prompt_results.evidence_screenshot_id",
+  "prompt_results.evidence_dom_id",
+  "prompt_results.evidence_har_id",
+  "prompt_results.evidence_raw_id",
+  "prompt_results.evidence_captured_at",
 ];
 
 function withRegister(dir) {

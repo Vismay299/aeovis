@@ -661,12 +661,54 @@ export function validateIngestBody(body) {
 }
 
 /**
+ * The four §3.7 evidence ids, as the `prompt_results` columns migration 021
+ * added, plus the instant they were captured.
+ *
+ * A COLUMN NAME IS THE CONTRACT'S FIELD NAME with an `evidence_` prefix, so
+ * this is a copy and not a translation: `evidence.screenshot_id` →
+ * `evidence_screenshot_id`. §3.7 says the ids are opaque object keys in the
+ * `probe-evidence` bucket, which is precisely what `createSignedUrl` takes, so
+ * nothing here parses, joins or rewrites a path.
+ *
+ * MISSING IS NULL, AND NULL IS NOT "". A blank string in these columns would
+ * render as a link to an object that does not exist, and the viewer could not
+ * tell "no capture was taken" from "a capture was taken and we lost the key".
+ * So anything that is not a non-empty string becomes null — including the
+ * absent `evidence` object of a producer that predates v2.
+ *
+ * `evidence_captured_at` is `probed_at` (§3.1), and ONLY when at least one id
+ * survived: a capture time on a row with no capture is a claim about something
+ * that was never stored. It is stored as the ISO instant the fleet sent, not a
+ * clock reading taken here.
+ */
+function promotedEvidence(row) {
+  const evidence = isPlainObject(row?.evidence) ? row.evidence : null;
+  const idOf = (field) => {
+    const value = evidence ? evidence[field] : null;
+    return isNonEmptyString(value) ? value.trim() : null;
+  };
+  const ids = {
+    evidence_screenshot_id: idOf("screenshot_id"),
+    evidence_dom_id: idOf("dom_id"),
+    evidence_har_id: idOf("har_id"),
+    evidence_raw_id: idOf("raw_id"),
+  };
+  const anyEvidence = Object.values(ids).some((value) => value !== null);
+  return {
+    ...ids,
+    evidence_captured_at: anyEvidence && isNonEmptyString(row?.probed_at) ? row.probed_at : null,
+  };
+}
+
+/**
  * Map a validated v2 result onto a `prompt_results` row (§2.4).
  *
  * The COMPLETE result goes into `raw` verbatim, which is what lets v2 fields
  * land with no migration — `state`, `state_reason`, `citations_state`,
- * `engine_surface`, `geo`, `evidence`, `timings`, `cost`, `attempt` and
- * `probed_at` have no promoted columns until R1.5.2.
+ * `engine_surface`, `geo`, `timings`, `cost`, `attempt` and `probed_at` have no
+ * promoted columns. `evidence` now does: migration 021 added the four §3.7 ids
+ * and `evidence_captured_at` to `prompt_results` (R1.5.2), so R1.5.3 can select
+ * a signable object key per answer row instead of digging through a jsonb blob.
  *
  * THE ONE MAPPING THAT MATTERS. `answered` is a nullable boolean, and the six
  * non-denominator states must NOT write `false` into it: `false` there is a
@@ -682,6 +724,7 @@ export function toPromptResultRow(envelope, row) {
   const answered = row.state === "answered";
   const measuredAbsence = row.state === "no_answer";
   const selfBrand = Array.isArray(row.brands) ? row.brands.find((b) => b && b.is_self) : null;
+  const evidence = promotedEvidence(row);
 
   return {
     job_id: envelope.job_id,
@@ -702,6 +745,9 @@ export function toPromptResultRow(envelope, row) {
     // whether this query was branded" must not read as "it was not".
     is_branded_query: typeof row.is_branded_query === "boolean" ? row.is_branded_query : null,
     answer_text: answered ? row.text : null,
+    // Migration 021. Object keys in the private `probe-evidence` bucket, or
+    // null — never "", never a path this function assembled.
+    ...evidence,
     raw: row,
   };
 }

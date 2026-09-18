@@ -226,6 +226,18 @@ const EXPECTED_OBJECTS = {
   "020_content_items_key_nulls_not_distinct.sql": [
     { kind: "constraint", name: "content_items_job_id_cycle_key" },
   ],
+  // R1.5.2 — the Probe Result Contract v2 §3.7 evidence ids, promoted out of
+  // `raw` so R1.5.3 can sign a URL per answer row. Columns, not a table: the
+  // catalog probe checks each one by name, because a prompt_results that
+  // exists without them is exactly the state the ingest would fail in
+  // (PGRST204 on every fleet batch).
+  "021_prompt_results_evidence.sql": [
+    { kind: "column", name: "prompt_results.evidence_screenshot_id" },
+    { kind: "column", name: "prompt_results.evidence_dom_id" },
+    { kind: "column", name: "prompt_results.evidence_har_id" },
+    { kind: "column", name: "prompt_results.evidence_raw_id" },
+    { kind: "column", name: "prompt_results.evidence_captured_at" },
+  ],
 };
 
 /**

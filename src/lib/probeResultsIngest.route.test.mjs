@@ -904,6 +904,126 @@ test("STORED SHAPE — an absent is_branded_query stores null, not the column's 
 });
 
 // ---------------------------------------------------------------------------
+// 6b. R1.5.2 — the evidence ids round-trip from the fleet to the row
+//
+// Migration 021 promoted the four §3.7 ids out of `raw` into columns, because
+// R1.5.3 signs a URL per answer row and cannot dig a path out of a jsonb blob
+// for every row on a page. These tests drive the REAL handler and read the
+// stored row back, so they fail if the promotion is dropped, renamed, or turned
+// into a fabricated path.
+// ---------------------------------------------------------------------------
+
+test("EVIDENCE ROUND-TRIP — a UI row's screenshot/dom ids reach the stored columns unchanged", async () => {
+  process.env.PROBE_INGEST_TOKEN = TOKEN;
+  const { getPromptResultsForJob } = await import("./db/analytics.js");
+  const jobId = nextJobId();
+  const sent = answeredUiRow();
+
+  assert.equal(
+    (await ingestPost(jobId, [sent])).status,
+    200,
+    "the fixture must be accepted, or this test proves nothing about the columns"
+  );
+  const [row] = await getPromptResultsForJob(jobId);
+
+  // The id IS the object key createSignedUrl takes (§3.7) — copied, never
+  // re-derived, never prefixed with a bucket name here.
+  assert.equal(row.evidence_screenshot_id, sent.evidence.screenshot_id);
+  assert.equal(row.evidence_dom_id, sent.evidence.dom_id);
+  assert.equal(row.evidence_har_id, null, "the fleet sent null; null is what is stored");
+  assert.equal(row.evidence_raw_id, null);
+  assert.equal(
+    row.evidence_captured_at,
+    sent.probed_at,
+    "the capture time is the probe's own probed_at (§3.1), not a clock reading taken at ingest"
+  );
+  // And the verbatim copy in `raw` still agrees — the promotion is a copy, not a move.
+  assert.equal(row.raw.evidence.screenshot_id, sent.evidence.screenshot_id);
+});
+
+test("EVIDENCE ROUND-TRIP — a failed probe's evidence is promoted too, in every state", async () => {
+  process.env.PROBE_INGEST_TOKEN = TOKEN;
+  const { getPromptResultsForJob } = await import("./db/analytics.js");
+  const jobId = nextJobId();
+  const sent = blockedUiRow();
+  await ingestPost(jobId, [sent]);
+  const [row] = await getPromptResultsForJob(jobId);
+  assert.equal(
+    row.evidence_screenshot_id,
+    sent.evidence.screenshot_id,
+    "failure evidence is how a block gets debugged (§3.7); a login_wall row whose screenshot " +
+      "is unreachable from the row is the debugging evidence thrown away"
+  );
+  assert.equal(row.evidence_dom_id, sent.evidence.dom_id);
+  assert.equal(row.evidence_captured_at, sent.probed_at);
+  assert.equal(row.answered, null, "and promoting evidence changed nothing about §3.11");
+});
+
+test("EVIDENCE ROUND-TRIP — an api-surface row stores raw_id and NULLs the three it has not got", async () => {
+  process.env.PROBE_INGEST_TOKEN = TOKEN;
+  const { getPromptResultsForJob } = await import("./db/analytics.js");
+  const jobId = nextJobId();
+  const sent = answeredUiRow({
+    engine_surface: "api",
+    timings: { total_ms: 9004, navigation_ms: null, extract_ms: 41 },
+    evidence: { screenshot_id: null, dom_id: null, har_id: null, raw_id: "ev/pplx-api/7c2d.json" },
+  });
+  assert.equal((await ingestPost(jobId, [sent])).status, 200);
+  const [row] = await getPromptResultsForJob(jobId);
+  assert.equal(row.evidence_raw_id, "ev/pplx-api/7c2d.json");
+  for (const column of ["evidence_screenshot_id", "evidence_dom_id", "evidence_har_id"]) {
+    assert.equal(row[column], null, `${column} must be NULL, never ""`);
+    assert.notEqual(row[column], "", "an empty string would render as a link to nothing");
+  }
+});
+
+test("EVIDENCE ROUND-TRIP — no evidence writes NULL, never '' and never a fabricated path", async () => {
+  const { toPromptResultRow, EVIDENCE_IDS } = await import(
+    "../app/api/internal/_lib/probeResultContract.js"
+  );
+  const envelope = { job_id: "0f2c1f8e-0000-4000-8000-000000000001", brand: "italicatiles.com" };
+  const COLUMNS = [
+    "evidence_screenshot_id",
+    "evidence_dom_id",
+    "evidence_har_id",
+    "evidence_raw_id",
+  ];
+
+  // Anti-drift: a fifth id added to the contract without a column would be
+  // promoted nowhere, silently.
+  assert.deepEqual(
+    COLUMNS,
+    EVIDENCE_IDS.map((id) => `evidence_${id}`),
+    "every §3.7 evidence id needs a promoted column (migration 021), in the same order"
+  );
+
+  // The route rejects these bodies (§3.7 requires one id per surface), so the
+  // mapper is exercised directly: it is also reached by any future producer,
+  // and a blank id must not become a stored blank either way.
+  const cases = {
+    "all ids null": { screenshot_id: null, dom_id: null, har_id: null, raw_id: null },
+    "blank strings": { screenshot_id: "", dom_id: "   ", har_id: "", raw_id: "" },
+  };
+  for (const [name, evidence] of Object.entries(cases)) {
+    const row = toPromptResultRow(envelope, { ...answeredUiRow({ evidence }) });
+    for (const column of COLUMNS) {
+      assert.equal(row[column], null, `${name}: ${column} must be null, got ${JSON.stringify(row[column])}`);
+    }
+    assert.equal(
+      row.evidence_captured_at,
+      null,
+      `${name}: a capture time with no capture claims something was stored that was not`
+    );
+  }
+
+  // A producer that predates v2 sends no evidence object at all.
+  const legacy = toPromptResultRow(envelope, { ...answeredUiRow(), evidence: undefined });
+  for (const column of [...COLUMNS, "evidence_captured_at"]) {
+    assert.equal(legacy[column], null, `${column} must be null when there is no evidence object`);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 7. The write is never faked
 // ---------------------------------------------------------------------------
 

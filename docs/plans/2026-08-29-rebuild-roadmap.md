@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**240 / 275 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**241 / 276 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -72,7 +72,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `23/42`
+## R1 — Real-surface probe fleet  `24/42`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -120,7 +120,7 @@ Baseline commit: `5111219`
 ### R1.5
 
 - [x] **R1.5.1** Storage bucket probe-evidence `needs-secrets` — closed at `supabase/migrations/019_probe_evidence_bucket.sql:19`, `src/lib/evidenceRetention.js:61`, `docs/runbooks/probe-evidence.md:31`
-- [ ] **R1.5.2** prompt_results evidence-id columns
+- [x] **R1.5.2** prompt_results evidence-id columns — closed at `supabase/migrations/021_prompt_results_evidence.sql:58`, `src/app/api/internal/_lib/probeResultContract.js:684`, `src/app/api/internal/_lib/probeResultContract.js:750`, `scripts/setup-supabase.mjs:234`, `src/lib/probeResultsIngest.route.test.mjs:916`, `src/lib/probeResultsIngest.route.test.mjs:980`, `src/lib/migrationsRunner.test.mjs:257`, `docs/PROD_MIGRATIONS.md:1122`, `README.md:169`, `docs/OPERATOR_LEDGER.md:342`
 - [ ] **R1.5.3** AnswersView 'View evidence' -> signed-URL screenshot
 ### R1.6
 
@@ -352,7 +352,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `50/51`
+## R6 — Apparatus & guards  `50/52`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -377,6 +377,7 @@ Baseline commit: `5111219`
 - [x] **R6.2.1** docs/OPERATOR_LEDGER.md — closed at `docs/OPERATOR_LEDGER.md:268`, `docs/OPERATOR_LEDGER.md:298`, `docs/OPERATOR_LEDGER.md:405`, `docs/OPERATOR_LEDGER.md:433`, `docs/OPERATOR_LEDGER.md:435`, `docs/OPERATOR_LEDGER.md:473`, `docs/OPERATOR_LEDGER.md:568`, `src/lib/docStatus.test.mjs:161`, `src/lib/rateLimit.js:128`, `scripts/setup-supabase.mjs:485`, `scripts/setup-supabase.mjs:522`, `src/lib/db/analytics.js:672`, `src/lib/workers/scanWorker.js:1643`, `docs/PROD_MIGRATIONS.md:144`
 - [x] **R6.2.2** docs/RUNBOOK.md seeded with 10 symptom rows — closed at `docs/RUNBOOK.md:1`, `docs/RUNBOOK.md:20`
 - [x] **R6.2.4** SCAN_RATE_LIMIT_UNVERIFIED_CEILING is undocumented and unguarded, and section E of the operator ledger is not exhaustive — closed at `docs/OPERATOR_LEDGER.md:287`, `docs/OPERATOR_LEDGER.md:276`, `docs/OPERATOR_LEDGER.md:446`, `docs/OPERATOR_LEDGER.md:469`, `.env.example:105`, `src/lib/rateLimit.test.mjs:713`, `src/lib/rateLimit.test.mjs:728`, `src/lib/rateLimit.test.mjs:770`, `src/lib/operatorLedgerGates.test.mjs:86`, `src/lib/operatorLedgerGates.test.mjs:104`
+- [ ] **R6.2.6** Migration-runner test stub treats SQL comments as executable probes
 ### R6.3
 
 - [x] **R6.3.1** Vendor contract docs — closed at `docs/vendors/suggestqueries.md:1`, `docs/vendors/README.md:90`, `docs/vendors/README.md:186`, `docs/vendors/README.md:208`, `docs/vendors/README.md:59`, `docs/vendors/brightdata.md:65`, `src/lib/engines/serp.js:372`, `src/lib/engines/serp.js:375`, `src/lib/engines/serp.js:379`, `src/lib/workers/scanWorker.js:197`
