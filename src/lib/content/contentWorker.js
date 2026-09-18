@@ -40,6 +40,7 @@ import { runTransform } from "./steps/transform.js";
 import { runFactCheck } from "./steps/factCheck.js";
 import { formatKnowledge } from "./steps/shared.js";
 import { listKnowledgeBlocks } from "../db/knowledge.js";
+import { makeSelfContinue } from "../selfContinue.js";
 
 /**
  * Content-pipeline background worker. Identical shape to scanWorker.js:
@@ -58,6 +59,52 @@ import { listKnowledgeBlocks } from "../db/knowledge.js";
  */
 
 const MAX_DRAFT_REVIEW_CYCLES = 2;
+
+// --- Chunking / self-continue (R3.1.10) -------------------------------------
+
+/** The worker route that accepts `?job_id=` and resumes one named job. */
+export const CONTENT_WORKER_PATH = "/api/content/worker";
+
+/**
+ * Soft wall-clock budget for ONE invocation of startContentJob, checked only
+ * at block boundaries (where a checkpoint has just been persisted).
+ *
+ * 150s against the route's `maxDuration = 300`, the same numbers the scan
+ * chunk uses: the check happens AFTER a block, so the remaining headroom has
+ * to be able to absorb one more block that started just under the line. An LLM
+ * block is tens of seconds, so 150s of slack is generous.
+ */
+export const CONTENT_CHUNK_BUDGET_MS = 150_000;
+
+/**
+ * R3.1.10 — the reason a content job advanced one function-lifetime per day.
+ *
+ * THE FINDING (production, 2026-09-16). GET /api/content/worker?batch=1 at
+ * 01:00 UTC created six geo_article jobs and ran all six inside that one cron
+ * invocation. Every one of them checkpointed and then stopped when the
+ * function hit maxDuration — at researching, benchmarking, drafting,
+ * reviewing. None reached a content_items row. Nothing resumed them until the
+ * NEXT daily tick, because the only resume path was that cron: a six-block
+ * pipeline therefore needed six days to produce one draft.
+ *
+ * THE FIX, mirroring the scan pipeline (R3.1.5 + R3.1.6) rather than inventing
+ * anything: on hitting the soft budget above at a block boundary, the
+ * invocation releases its lease, fires a fire-and-forget request at
+ * CONTENT_WORKER_PATH?job_id=<id> carrying the cron secret and the deployment
+ * protection bypass, and returns a CHECKPOINTED verdict instead of an item.
+ * The receiving invocation resumes from the checkpoint. The job advances at
+ * machine speed.
+ *
+ * The self-continue is an optimisation and never a guarantee: if it is refused
+ * or lost, the job sits checkpointed with a free lease, its heartbeat goes
+ * stale after CONTENT_HEARTBEAT_STALE_MS, and the existing daily sweep rescues
+ * it exactly as before. That is why handOff() below warns loudly on every
+ * failure path but never throws.
+ */
+const contentSelfContinue = makeSelfContinue({
+  routePath: CONTENT_WORKER_PATH,
+  label: "content-worker",
+});
 
 function getCostCap() {
   const cap = Number(process.env.CONTENT_MAX_COST_PER_ITEM);
@@ -182,6 +229,21 @@ async function withLedger({ jobId, brand, slug, cycle = 1, stats, deps = {} }, f
   }
 }
 
+/**
+ * Run (or resume) one content job for at most one function lifetime.
+ *
+ * THREE outcomes, and a caller must be able to tell them apart (standing rule 1):
+ *   - a `content_items` row  — the job finished and is awaiting approval;
+ *   - `null`                 — the job failed, or was not ours to run (lease);
+ *   - `{ checkpointed: true, after, blocks_run, self_continue }` (R3.1.10) —
+ *     the job hit its soft chunk budget at a block boundary, persisted a
+ *     checkpoint, released its lease and handed itself to a fresh invocation
+ *     via CONTENT_WORKER_PATH. Real progress was made and more remains.
+ *
+ * Both live call sites (POST /api/content and the worker route's
+ * dispatchWithLease) are fire-and-forget and ignore the return; the shape
+ * exists so tests and any future caller cannot read "handed off" as "done".
+ */
 export async function startContentJob(jobId, deps = {}) {
   const stats = { cost: 0, tokens: 0 };
 
@@ -284,6 +346,78 @@ export async function startContentJob(jobId, deps = {}) {
       console.warn(`[content-worker] lease renew failed for job ${jobId}:`, err.message)
     );
     return result;
+  };
+
+  // --- Chunking (R3.1.10) --------------------------------------------------
+  // This invocation's own clock. `deps.now` is the soft-budget clock and tests
+  // drive it at fake speed; it is deliberately NOT used for heartbeats or
+  // leases, which must stay on real time.
+  const nowFn = deps.now || Date.now;
+  const chunkStartMs = nowFn();
+  const budgetMs = Number.isFinite(deps.chunkBudgetMs) ? deps.chunkBudgetMs : CONTENT_CHUNK_BUDGET_MS;
+  const selfContinue = deps.selfContinue || contentSelfContinue;
+  // Blocks THIS invocation actually ran. A hand-off is only legal after real
+  // progress, so two invocations can never ping-pong a job forward zero
+  // blocks at a time however the budget is configured.
+  let blocksRun = 0;
+  const overBudget = () => blocksRun > 0 && nowFn() - chunkStartMs >= budgetMs;
+  // Set only once handOff has PROVEN the lease is gone, so the `finally` below
+  // skips a redundant write — and still retries if handOff's release failed.
+  let leaseAlreadyReleased = false;
+
+  /**
+   * Hand this job to a fresh invocation and stop working, having just
+   * persisted a checkpoint.
+   *
+   * ORDER MATTERS, and this is the lease-continuity decision (R3.1.10):
+   * RELEASE FIRST, then fire. The receiving invocation acquires its own fresh
+   * lease through the route's dispatchWithLease; if we still held ours when it
+   * arrived it would lose the acquire, report `lease_held`, and the job would
+   * stall until our lease expired — turning the fix into a slower version of
+   * the bug. Releasing first also means two invocations can never work the
+   * same job at once: we do nothing after this point except return, and the
+   * `finally` release below is owner-scoped (`.eq("lease_owner", owner)`) so
+   * it cannot take the lease away from whoever has it next.
+   *
+   * If the release fails we STILL fire — the receiver will simply be refused
+   * and the daily sweep rescues the job one lease TTL later — but we say so.
+   */
+  const handOff = async (after) => {
+    let released = false;
+    try {
+      released = await release("content_jobs", jobId, leaseOwner, deps);
+    } catch (err) {
+      console.error(
+        `[content-worker] job ${jobId}: could not release the lease before handing off after ` +
+          `"${after}" (${err.message}). The self-continue will be refused as lease_held and this ` +
+          `job resumes on the cron sweep after the lease expires.`
+      );
+    }
+    leaseAlreadyReleased = released;
+    if (!released) {
+      console.warn(
+        `[content-worker] job ${jobId}: the lease was not ours to release when handing off after ` +
+          `"${after}" — another worker may already hold it. Firing the self-continue anyway; ` +
+          `whichever invocation holds the lease is the one that will do the work.`
+      );
+    }
+
+    const fired = selfContinue(jobId);
+    console.log(
+      `[content-worker] Job ${jobId} hit its ${budgetMs}ms chunk budget after "${after}" ` +
+        `(${blocksRun} block(s) this invocation) — checkpointed and handed off to ` +
+        `${CONTENT_WORKER_PATH}?job_id=... self_continue_fired=${fired?.fired === true}` +
+        (fired?.reason ? ` reason=${fired.reason}` : "")
+    );
+    // NOT an item and NOT null: "checkpointed, more work to do" is a third
+    // outcome and must not be readable as either success or failure.
+    return {
+      checkpointed: true,
+      job_id: jobId,
+      after,
+      blocks_run: blocksRun,
+      self_continue: fired || { fired: false, reason: "no_verdict" },
+    };
   };
 
   try {
@@ -397,11 +531,17 @@ export async function startContentJob(jobId, deps = {}) {
 
       // R3.5.1 — persist checkpoint after each completed block.
       completedBlocks.add(slug);
+      blocksRun += 1;
       await writeJob({
         checkpoint: buildCheckpoint(pipeline, ctx, {
           completedBlocks: [...completedBlocks], cycle: 0, review: null, revisions: [],
         }),
       });
+
+      // R3.1.10 — the checkpoint above is durable, so this is a safe place to
+      // stop. Returning here runs the `finally` release, which is a no-op
+      // after handOff's own release.
+      if (overBudget()) return await handOff(slug);
     }
 
     // Removed context blocks leave honest holes the prompts flag themselves.
@@ -468,11 +608,15 @@ export async function startContentJob(jobId, deps = {}) {
         ctx.draft = draft;
         // R3.5.1 — checkpoint after draft completes.
         completedBlocks.add(draftBlockId);
+        blocksRun += 1;
         await writeJob({
           checkpoint: buildCheckpoint(pipeline, ctx, {
             completedBlocks: [...completedBlocks], cycle: cycles, review, revisions,
           }),
         });
+        // R3.1.10 — hand off after the draft; the resumer re-enters the loop
+        // at this cycle's review step (midCycleResume above).
+        if (overBudget()) return await handOff(draftBlockId);
       } else if (checkpoint) {
         console.log(`[content-worker] Job ${jobId}: resuming — draft cycle ${cycles} already completed`);
       }
@@ -510,11 +654,14 @@ export async function startContentJob(jobId, deps = {}) {
           assertUnderCostCap(stats, slug);
           // R3.5.1 — checkpoint after mid-block completes.
           completedBlocks.add(blockId);
+          blocksRun += 1;
           await writeJob({
             checkpoint: buildCheckpoint(pipeline, ctx, {
               completedBlocks: [...completedBlocks], cycle: cycles, review, revisions,
             }),
           });
+          // R3.1.10 — hand off between transforms/fact-check.
+          if (overBudget()) return await handOff(blockId);
         }
       }
 
@@ -536,6 +683,7 @@ export async function startContentJob(jobId, deps = {}) {
         markDone(trace, "review", summarizeReview(review));
         // R3.5.1 — checkpoint after review completes.
         completedBlocks.add(reviewBlockId);
+        blocksRun += 1;
         await writeJob({
           checkpoint: buildCheckpoint(pipeline, ctx, {
             completedBlocks: [...completedBlocks], cycle: cycles, review, revisions,
@@ -553,6 +701,15 @@ export async function startContentJob(jobId, deps = {}) {
           `[content-worker] Job ${jobId}: YMYL violation flagged — routing to human queue without auto-revision`
         );
         break;
+      }
+
+      // R3.1.10 — the ONLY hand-off point after a review, and deliberately
+      // below the two terminal-verdict breaks above: a pass or a YMYL flag is
+      // one non-LLM insert away from an item, so stopping there would cost a
+      // round trip and buy nothing. Here another full draft+review cycle is
+      // about to start, which is exactly what does not fit.
+      if (cycles < MAX_DRAFT_REVIEW_CYCLES && overBudget()) {
+        return await handOff(reviewBlockId);
       }
 
       if (cycles < MAX_DRAFT_REVIEW_CYCLES) {
@@ -643,8 +800,15 @@ export async function startContentJob(jobId, deps = {}) {
     // Release on EVERY terminal outcome, success or failure. Without this a
     // job that crashed and needs a retry would sit out the full lease TTL for
     // no reason, and a finished job would look busy to the rescue sweep.
+    //
+    // R3.1.10 — a hand-off released the lease itself, BEFORE firing the
+    // self-continue (see handOff). Re-releasing would be a wasted write; it
+    // could not steal the lease back from the receiving invocation (the UPDATE
+    // is scoped to our own owner id), but the write is pointless and its
+    // failure warning would be misleading. If handOff's release did NOT
+    // succeed, this still runs — that is the retry.
     try {
-      await release("content_jobs", jobId, leaseOwner, deps);
+      if (!leaseAlreadyReleased) await release("content_jobs", jobId, leaseOwner, deps);
     } catch (err) {
       console.warn(`[content-worker] lease release failed for job ${jobId}:`, err.message);
     }

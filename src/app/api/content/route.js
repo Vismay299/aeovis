@@ -11,6 +11,16 @@ import { PLAYBOOKS } from "@/lib/content/schemas";
 
 export const dynamic = "force-dynamic";
 
+// R3.1.10 — this route's POST starts a content job with keepAlive() and then
+// returns 201, so the job runs on THIS function's remaining lifetime. With no
+// explicit maxDuration it inherited the platform default (seconds, not
+// minutes) and the job was killed long before contentWorker.js's 150s soft
+// chunk budget could fire a self-continue — so the UI-triggered path hit the
+// one-lifetime-per-cron-day defect sooner than the cron path did. Same 300 as
+// /api/content/worker, for the same reason: a content job runs a full block
+// pipeline and needs the headroom of the route that starts it.
+export const maxDuration = 300;
+
 /** GET /api/content?brand= — recent jobs (Studio's in-flight cards). */
 export async function GET(request) {
   try {

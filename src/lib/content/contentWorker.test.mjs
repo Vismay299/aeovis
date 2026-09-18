@@ -1162,3 +1162,230 @@ test("checkpoint: skipped blocks are marked done in the trace", async () => {
   assert.ok(coordEntry.summary.includes("completed before resume"));
   assert.equal(researchEntry.status, "done", "research marked done from checkpoint");
 });
+
+// ---------------------------------------------------------------------------
+// R3.1.10 — the self-continue: a content job advances at machine speed, not at
+// cron speed.
+//
+// THE FINDING (production, 2026-09-16). The daily batch created six
+// geo_article jobs, ran all six inside that one cron invocation, and every one
+// of them stopped when the function hit maxDuration — researching,
+// benchmarking, drafting, reviewing, none reaching a content_items row.
+// Nothing resumed them until the next DAILY tick, so a six-block pipeline
+// needed six days to produce one draft.
+//
+// These tests drive the mechanism with `chunkBudgetMs: 0`, which makes every
+// invocation hand off after exactly one block — the worst case the platform
+// can impose — and assert that the job still reaches an item, that no block is
+// paid for twice, and that the lease is released BEFORE the self-continue is
+// fired (see handOff's ordering comment: firing first would make the receiver
+// lose the acquire and stall the job until the lease expired).
+// ---------------------------------------------------------------------------
+
+/** deps + recorders for the hand-off: lease release, self-continue, ordering. */
+function withHandOffRecorders(deps) {
+  const events = [];
+  const fired = [];
+  deps.releaseLease = async (table, jobId, owner) => {
+    events.push(`release:${jobId}`);
+    return true;
+  };
+  deps.selfContinue = (jobId) => {
+    events.push(`self-continue:${jobId}`);
+    fired.push(jobId);
+    return { fired: true, reason: null };
+  };
+  return { events, fired };
+}
+
+test("self-continue: a budget hit at a block boundary checkpoints, hands off, and returns a third outcome", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates, items } = makeDeps(llm);
+  const { events, fired } = withHandOffRecorders(deps);
+  deps.chunkBudgetMs = 0; // hand off at the first boundary there is
+
+  const result = await startContentJob("job-sc-1", deps);
+
+  // NOT an item and NOT null — "checkpointed, more work to do" is its own fact.
+  assert.ok(result && result.checkpointed === true, "the hand-off is reported, not silent");
+  assert.equal(result.job_id, "job-sc-1");
+  assert.equal(result.after, "coordinate", "it stopped after the first completed block");
+  assert.equal(result.blocks_run, 1, "real progress was made before handing off");
+  assert.equal(result.self_continue.fired, true);
+  assert.equal(items.length, 0, "no item yet — the job is mid-pipeline");
+
+  // The checkpoint is durable BEFORE the hand-off, or the next invocation
+  // would redo the block we just paid for.
+  const checkpointWrites = jobUpdates.filter((u) => u.checkpoint);
+  assert.equal(checkpointWrites.length, 1);
+  assert.deepEqual(checkpointWrites[0].checkpoint.completedBlocks, ["coordinate"]);
+  assert.ok(checkpointWrites[0].checkpoint.workOrder, "the block's output is in the checkpoint");
+
+  // The job is NOT failed: a hand-off must never look like a failure.
+  const statuses = jobUpdates.map((u) => u.status).filter(Boolean);
+  assert.ok(!statuses.includes("failed"), "a hand-off is not a failure");
+
+  assert.deepEqual(fired, ["job-sc-1"], "exactly one self-continue, naming this job");
+});
+
+test("self-continue: the lease is released BEFORE the request is fired", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps } = makeDeps(llm);
+  const { events } = withHandOffRecorders(deps);
+  deps.chunkBudgetMs = 0;
+
+  await startContentJob("job-sc-2", deps);
+
+  const releaseAt = events.indexOf("release:job-sc-2");
+  const fireAt = events.indexOf("self-continue:job-sc-2");
+  assert.ok(releaseAt >= 0, "the lease is released on the hand-off path");
+  assert.ok(fireAt >= 0, "the self-continue is fired");
+  assert.ok(
+    releaseAt < fireAt,
+    "firing first would let the receiving invocation lose the lease acquire and stall the job " +
+      "until the lease expired — a slower version of the bug this fixes"
+  );
+});
+
+test("self-continue: a job started by the batch reaches an item WITHOUT a second cron day", async () => {
+  // One shared LLM script across the whole chain: if any invocation re-ran a
+  // completed block it would consume a response out of order and the final
+  // assertions would fail.
+  const { llm, prompts } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates, items } = makeDeps(llm);
+  const { fired } = withHandOffRecorders(deps);
+  deps.chunkBudgetMs = 0; // one block per function lifetime — the worst case
+  deps.job = {
+    id: "job-sc-3",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "pending",
+    input: { type: "topic", topic: "home collection economics", source: "daily_batch" },
+    cost_total: 0,
+    checkpoint: null,
+  };
+
+  // Stand in for the route's `?job_id=` branch: every self-continue the worker
+  // fires becomes another invocation, carrying the checkpoint the previous one
+  // persisted. NO cron tick is involved.
+  let result = null;
+  let invocations = 0;
+  while (invocations < 20) {
+    invocations += 1;
+    result = await startContentJob("job-sc-3", deps);
+    if (!result || !result.checkpointed) break;
+    // The receiving invocation reads the row the previous one left behind.
+    const lastCheckpoint = jobUpdates.filter((u) => u.checkpoint).pop().checkpoint;
+    const lastStatus = jobUpdates.map((u) => u.status).filter(Boolean).pop();
+    const lastCost = jobUpdates.map((u) => u.cost_total).filter((c) => c != null).pop();
+    deps.job = { ...deps.job, status: lastStatus, checkpoint: lastCheckpoint, cost_total: lastCost };
+  }
+
+  assert.ok(result && result.id, `the chain produced an item (after ${invocations} invocations)`);
+  assert.equal(items.length, 1, "exactly one content_items row — no duplicate from a re-run");
+  assert.equal(items[0].status, "awaiting_approval");
+  assert.ok(invocations > 1, "the point of the test is that it took several function lifetimes");
+  assert.equal(
+    fired.length,
+    invocations - 1,
+    "every invocation but the last handed off; the last one finished the job"
+  );
+
+  // No block was paid for twice: the scripted LLM had exactly one response per
+  // LLM-backed block, and an extra call would have thrown "fake llm exhausted".
+  assert.equal(prompts.length, 4, "coordinate, research, draft, review — each called once");
+
+  const statuses = jobUpdates.map((u) => u.status).filter(Boolean);
+  assert.ok(!statuses.includes("failed"), "no invocation in the chain failed");
+  assert.equal(statuses[statuses.length - 1], "awaiting_approval");
+});
+
+test("self-continue: a hand-off never happens without at least one block of progress", async () => {
+  // A job whose checkpoint already covers every block it would run this
+  // invocation must NOT hand off — two invocations that each advance zero
+  // blocks would ping-pong the job forever.
+  const { llm } = makeFakeLlm([LI_REVIEW_PASS]);
+  const { deps, items } = makeDeps(llm);
+  const { fired } = withHandOffRecorders(deps);
+  deps.chunkBudgetMs = 0;
+  deps.job = {
+    id: "job-sc-4",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "drafting",
+    input: {},
+    cost_total: 0.02,
+    checkpoint: {
+      pipeline: ["coordinate", "research", "benchmark", "draft", "review"],
+      completedBlocks: ["coordinate", "research", "benchmark", "draft:1"],
+      cycle: 1,
+      review: null,
+      revisions: [],
+      workOrder: LI_WORK_ORDER,
+      researchPack: RESEARCH_PACK,
+      benchmarkNotes: { pack: {} },
+      draft: LI_DRAFT,
+      factCheck: null,
+      critique: "",
+    },
+  };
+
+  const result = await startContentJob("job-sc-4", deps);
+
+  // Only review remained. It ran (one block of progress), the verdict passed,
+  // and the item is one non-LLM insert away — so no hand-off is spent on it.
+  assert.ok(result && result.id, "the job finished rather than handing off");
+  assert.equal(items.length, 1);
+  assert.deepEqual(fired, [], "a terminal verdict is not worth a round trip");
+});
+
+test("self-continue: a mid-loop hand-off after a failing review resumes at the next draft cycle", async () => {
+  const { llm } = makeFakeLlm([LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, jobUpdates, items } = makeDeps(llm);
+  const { fired } = withHandOffRecorders(deps);
+  deps.chunkBudgetMs = 0;
+  deps.job = {
+    id: "job-sc-5",
+    brand: "TestDiag",
+    playbook: "linkedin_post",
+    status: "reviewing",
+    input: {},
+    cost_total: 0.03,
+    checkpoint: {
+      pipeline: ["coordinate", "research", "benchmark", "draft", "review"],
+      completedBlocks: ["coordinate", "research", "benchmark", "draft:1"],
+      cycle: 1,
+      review: null,
+      revisions: [],
+      workOrder: LI_WORK_ORDER,
+      researchPack: RESEARCH_PACK,
+      benchmarkNotes: { pack: {} },
+      draft: LI_DRAFT,
+      factCheck: null,
+      critique: "",
+    },
+  };
+
+  // Script a FAILING review for cycle 1 so another cycle is owed.
+  const { llm: failingLlm } = makeFakeLlm([LI_REVIEW_FAIL]);
+  deps.llm = failingLlm;
+
+  const handOff = await startContentJob("job-sc-5", deps);
+  assert.ok(handOff && handOff.checkpointed, "a failing review with budget left hands off");
+  assert.equal(handOff.after, "review:1", "it stopped after the review it just paid for");
+  assert.deepEqual(fired, ["job-sc-5"]);
+  assert.equal(items.length, 0);
+
+  // The receiving invocation, with room to finish.
+  const lastCheckpoint = jobUpdates.filter((u) => u.checkpoint).pop().checkpoint;
+  assert.ok(lastCheckpoint.review, "the failing review is in the checkpoint");
+  const { llm: secondLlm } = makeFakeLlm([LI_DRAFT, LI_REVIEW_PASS]);
+  deps.llm = secondLlm;
+  deps.chunkBudgetMs = 60_000;
+  deps.job = { ...deps.job, status: "reviewing", checkpoint: lastCheckpoint };
+
+  const item = await startContentJob("job-sc-5", deps);
+  assert.ok(item && item.id, "the resumed invocation finished the job");
+  assert.equal(item.cycle, 2, "it resumed at the SECOND draft cycle, as the checkpoint said");
+  assert.equal(item.revisions.length, 1, "the failed cycle-1 draft was archived exactly once");
+});

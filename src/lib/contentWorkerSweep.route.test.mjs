@@ -46,12 +46,14 @@ let GET = null;
 let contentCronReport = null;
 let brandsForDailyBatch = null;
 let dispatchWithLease = null;
+let contentDirectResumeReport = null;
 try {
   ({
     GET,
     contentCronReport,
     brandsForDailyBatch,
     dispatchWithLease,
+    contentDirectResumeReport,
   } = await import("../app/api/content/worker/route.js"));
 } catch (error) {
   importError = error;
@@ -408,5 +410,188 @@ test("R3.1.8 TEETH — ignoring acquireLease failure and returning HTTP 200 fail
     buggyResult.body.batch_unavailable,
     null,
     "premise: old buggy behavior hid the lease store failure"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R3.1.10 — the `?job_id=` direct-resume branch: the self-continue's receiving
+// end.
+//
+// THE FINDING. A content job had no self-continue, so it advanced one function
+// lifetime per DAILY cron tick: six batch jobs created on 2026-09-16 all
+// stopped at maxDuration mid-pipeline and none reached a content_items row.
+// contentWorker.js now checkpoints, releases its lease and fires a request at
+// this route naming the job; this branch is what answers it.
+//
+// THE TRAP this branch exists to avoid. shouldRescueContentJob (db/content.js)
+// requires a STALE heartbeat and a FREE lease. The invocation that fires the
+// self-continue heartbeated on its very last write, so the sweep below would
+// report the job alive and skip it — correctly for the sweep's purpose and
+// fatally for this one. The direct branch therefore dispatches the named job
+// UNCONDITIONALLY, exactly as /api/scan/worker's does, and never consults the
+// resumable list at all.
+// ---------------------------------------------------------------------------
+
+/** deps that make the direct branch driveable with no database and no network. */
+function directDeps(overrides = {}) {
+  const started = [];
+  const listed = [];
+  const deps = {
+    recordCronTick: async () => {},
+    listResumableContentJobs: async (n) => {
+      listed.push(n);
+      return [];
+    },
+    acquireLease: async (_table, jobId, owner) => ({ id: jobId, lease_owner: owner }),
+    newLeaseOwner: (p) => `${p}_test`,
+    startContentJob: async (jobId, opts) => {
+      started.push({ jobId, leaseOwner: opts?.leaseOwner || null });
+      return null;
+    },
+    waitUntil: () => {},
+    ...overrides,
+  };
+  return { deps, started, listed };
+}
+
+test("R3.1.10 ROUTE — ?job_id= dispatches that job unconditionally, without consulting the sweep", async () => {
+  const { deps, started, listed } = directDeps();
+  const response = await handler()(authed("?job_id=job-self-continued"), deps);
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.mode, "direct-resume", "this is not a sweep and must not be read as one");
+  assert.equal(body.job_id, "job-self-continued");
+  assert.equal(body.dispatched, 1, "the named job was picked up");
+  assert.deepEqual(body.dispatched_ids, ["job-self-continued"]);
+  assert.equal(body.skipped, 0, "measured zero, not absent");
+
+  assert.deepEqual(
+    started.map((s) => s.jobId),
+    ["job-self-continued"],
+    "the named job, and only the named job, was started"
+  );
+  assert.ok(started[0].leaseOwner, "the resuming invocation runs under its own fresh lease");
+  assert.deepEqual(
+    listed,
+    [],
+    "the staleness sweep must NOT run on this path — the job that fired this request has a " +
+      "FRESH heartbeat and would be skipped by shouldRescueContentJob"
+  );
+});
+
+test("R3.1.10 ROUTE — a fresh heartbeat cannot stop a direct resume", async () => {
+  // The exact production shape: the job the self-continue names is one the
+  // rescue sweep would refuse (fresh heartbeat, running status). It must still
+  // be dispatched.
+  const freshJob = {
+    id: "job-fresh",
+    status: "drafting",
+    heartbeat_at: new Date().toISOString(),
+    lease_owner: null,
+  };
+  const { shouldRescueContentJob } = await import("./db/content.js");
+  assert.equal(
+    shouldRescueContentJob(freshJob),
+    false,
+    "premise: the sweep would NOT rescue this job — that is why the direct branch exists"
+  );
+
+  const { deps, started } = directDeps();
+  const response = await handler()(authed("?job_id=job-fresh"), deps);
+  const body = await response.json();
+  assert.equal(body.dispatched, 1);
+  assert.deepEqual(started.map((s) => s.jobId), ["job-fresh"]);
+});
+
+test("R3.1.10 ROUTE — a job already leased by another worker is a skip, not an error", async () => {
+  const { deps, started } = directDeps({ acquireLease: async () => null });
+  const response = await handler()(authed("?job_id=job-held"), deps);
+  const body = await response.json();
+
+  assert.equal(response.status, 200, "losing a race to a concurrent sweep is normal, not a 5xx");
+  assert.equal(body.dispatched, 0, "measured zero — nothing was started");
+  assert.equal(body.skipped, 1);
+  assert.equal(body.reason, "lease_held", "the reason is named, so a zero is readable");
+  assert.deepEqual(started, [], "nothing ran");
+});
+
+test("R3.1.10 ROUTE — a lease store failure is a 500, never a quiet zero", async () => {
+  const { deps, started } = directDeps({
+    acquireLease: async () => {
+      throw new Error("connection refused");
+    },
+  });
+  const response = await handler()(authed("?job_id=job-db-down"), deps);
+  const body = await response.json();
+
+  assert.equal(response.status, 500, "a database fault must reach the platform's own alerting");
+  assert.equal(body.dispatched, 0);
+  assert.equal(body.reason, "lease_acquire_failed");
+  assert.match(body.detail, /connection refused/);
+  assert.deepEqual(started, [], "fail CLOSED — without a proven lease we must not spend budget");
+});
+
+test("R3.1.10 ROUTE — the direct branch is sealed behind the same cron secret as the sweep", async () => {
+  const { deps, started } = directDeps();
+  const response = await handler()(
+    new Request(`${WORKER_URL}?job_id=job-unauthed`),
+    deps
+  );
+  assert.equal(response.status, 401, "an open ?job_id= would be a free burn-the-budget button");
+  assert.deepEqual(started, [], "nothing ran");
+});
+
+test("R3.1.10 ROUTE — the direct-resume response says whether a ledger row was possible", async () => {
+  const { deps } = directDeps();
+  const response = await handler()(authed("?job_id=job-ledger"), deps);
+  const body = await response.json();
+  assert.equal(
+    body.ledger_written,
+    false,
+    "no Supabase is configured in this suite, so no content_runs row could be written — an " +
+      "empty ledger must never be read as an idle system"
+  );
+});
+
+test("R3.1.10 REPORT — contentDirectResumeReport keeps dispatched, skipped and the reason apart", () => {
+  handler();
+  const ok = contentDirectResumeReport({ jobId: "j1", ok: true, ledgerWritten: true });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.dispatched, 1);
+  assert.equal(ok.body.skipped, 0);
+  assert.equal(ok.body.reason, null);
+  assert.equal(ok.body.ledger_written, true);
+
+  const held = contentDirectResumeReport({ jobId: "j2", ok: false, reason: "lease_held" });
+  assert.equal(held.status, 200);
+  assert.equal(held.body.dispatched, 0);
+  assert.deepEqual(held.body.skips, [{ id: "j2", reason: "lease_held", detail: null }]);
+
+  const broken = contentDirectResumeReport({
+    jobId: "j3",
+    ok: false,
+    reason: "lease_acquire_failed",
+    detail: "boom",
+  });
+  assert.equal(broken.status, 500, "only a real fault is a 5xx");
+  assert.equal(broken.body.reason, "lease_acquire_failed");
+});
+
+test("R3.1.10 GUARD — the worker route really has a ?job_id= branch that bypasses the sweep", async () => {
+  const source = await readFile(
+    new URL("../app/api/content/worker/route.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(
+    source,
+    /searchParams\.get\("job_id"\)/,
+    "the self-continue target must exist on this route, or every fired request 404s silently"
+  );
+  const directIndex = source.indexOf('searchParams.get("job_id")');
+  const sweepIndex = source.indexOf("listResumable(MAX_CONCURRENT_RESUMES)");
+  assert.ok(
+    directIndex > 0 && sweepIndex > directIndex,
+    "the direct branch must return before the staleness sweep, which would skip a fresh job"
   );
 });

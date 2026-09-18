@@ -405,9 +405,16 @@ A ──► B ──► C ──► D ──► E
 
 ## C1 — Keep background work alive (`waitUntil`)
 
+> **SHIPPED 2026-09-18 (rebuild task R3.1.5, commit `53995fa`).** C1.1–C1.5 and
+> C1.8 are done; C1.6 is **half done** and C1.7 has **not been run**. The answer
+> chosen is the platform mechanism, recorded in
+> [`docs/decisions/2026-09-18-post-response-keepalive.md`](../decisions/2026-09-18-post-response-keepalive.md).
+> Read that ADR, not this section, for what the code does — this section is the
+> prescription, kept for the record of what was asked for.
+
 | | |
 |---|---|
-| **Why** | **This is the single highest-impact fix in the plan.** Every job advancement is a bare fire-and-forget promise after the HTTP response: `scan/route.js:34`, `scan/worker/route.js:100`, `content/route.js:99`, `scanWorker.js:1091` (scheduler kick) and `:322` (self-continue). Vercel may freeze or recycle the instance the moment the response returns — the promise then never runs. There is no `waitUntil` anywhere in `src/`. |
+| **Why** | **This is the single highest-impact fix in the plan.** Every job advancement is a bare fire-and-forget promise after the HTTP response: `scan/route.js:34`, `scan/worker/route.js:100`, `content/route.js:99`, `scanWorker.js:1091` (scheduler kick) and `:322` (self-continue). Vercel may freeze or recycle the instance the moment the response returns — the promise then never runs. ~~There is no `waitUntil` anywhere in `src/`.~~ **False since 2026-09-18:** `@vercel/functions` is a dependency (`package.json:52`, `^3.9.7`) and `waitUntil` is used through one helper, `src/lib/keepAlive.js:36`, at nine post-response sites. |
 | **Consequence today** | The kick silently dies; the job sits until something else advances it. With the tab closed and a daily cron, that is **up to 24 hours**, and the cron only resumes 3 jobs per invocation. |
 
 - **C1.1** `npm install @vercel/functions`.
@@ -423,6 +430,45 @@ A ──► B ──► C ──► D ──► E
 - **C1.6** Verify `maxDuration = 300` is set on every route that now holds work open: `/api/scan` (has it), `/api/scan/worker` (has it), `/api/content`, `/api/content/worker` (check and add).
 - **C1.7** **Verification is non-trivial and matters more than the code.** Deploy to a preview, `POST /api/scan`, close the tab immediately, and confirm from the Vercel function logs that the chunk continued past the response. Repeat 3×.
 - **C1.8** Add a note in `scanWorker.js`'s header comment that any new fire-and-forget must be wrapped.
+
+### C1 — what actually shipped (2026-09-18, R3.1.5)
+
+Written here because this section is a named anchor on that task and a reader
+who stops at the prescription above would get four things wrong.
+
+- **Not `npm install` + a bare `waitUntil` at each site (C1.1–C1.4).** Exactly
+  one helper, `src/lib/keepAlive.js:36`, owns the import. No route calls
+  `waitUntil` directly. `keepAlive` attaches the rejection handler under a label
+  *before* the cap, so C1.2's "keep the `.catch`" is satisfied inside the helper
+  and each call site drops its own.
+- **Nine sites, not five.** `src/app/api/scan/route.js:142` ·
+  `src/app/api/scan/[job_id]/status/route.js:640` ·
+  `src/app/api/scan/worker/_lib/sweepExecution.js:69` ·
+  `src/app/api/content/worker/route.js:71` · `src/app/api/content/route.js:100` ·
+  `src/app/api/content-items/[id]/decision/route.js:119` and `:138` ·
+  `src/lib/workers/scanWorker.js:3200` and `:1224`.
+- **C1.5 was right to worry and is capped, not uncapped.** The self-continue
+  fetch is wrapped with `maxMs: SELF_CONTINUE_HOLD_MS` = 5000
+  (`src/lib/workers/scanWorker.js:1173`), so the current chunk is not billed for
+  the whole of the next one. The cap releases the platform hold; it does not
+  cancel the fetch.
+- **C1.8 is enforced, not just documented.** `src/lib/keepAlive.test.mjs:69` is a
+  git-grep GUARD that fails if any route or the scan worker kicks background
+  work with a bare `.catch`. Its allowlist of function names is fixed and scoped
+  to `src/app` plus `scanWorker.js`, so a new fire-and-forget under a new name,
+  or anywhere in `src/lib/content/`, still slips past it.
+
+**Still open from this section:**
+
+- **C1.6 is part done.** `/api/scan`, `/api/scan/worker`, `/api/content`
+  (added under R3.1.10, 2026-09-18), `/api/content/worker`,
+  `/api/evidence/retention` and `/api/gsc/worker` declare
+  `export const maxDuration = 300`. `/api/content-items/[id]/decision` and
+  `/api/scan/[job_id]/status` still call `keepAlive` and inherit the platform
+  default, which is the ceiling on how long their work is held.
+- **C1.7 has not been run**, and it is the only check that can prove the platform
+  actually defers the freeze. Nothing in the test suite proves it and nothing
+  can. R3.1.5 is tagged `needs-vercel` for exactly this.
 - **Acceptance:** a scan submitted and immediately abandoned reaches `complete` without any poll or cron intervention.
 
 ## C2 — Cron cadence

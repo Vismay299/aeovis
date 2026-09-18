@@ -6,6 +6,11 @@
 > ratified the vendor on 2026-09-16 — see
 > [§5](#5-the-vendor--ratified-2026-09-16-zeabur) — and it is **not** one of the
 > three this document originally compared.
+> **Amended 2026-09-18:** §2.9 was one of the arguments for §1 and is now
+> **false** — the post-response keepalive gap it described was closed for the
+> Vercel-hosted API pipeline by R3.1.5, which took the *platform* mechanism, not
+> the worker. See [`2026-09-18-post-response-keepalive.md`](./2026-09-18-post-response-keepalive.md).
+> §§1–5 about the probe fleet are unaffected and still LIVE.
 
 **Date:** 2026-09-05 · **Vendor ratified:** 2026-09-16
 **Task:** R1.1.3 (`needs-decision`), depends on R1.1.1
@@ -221,26 +226,49 @@ at the route. The lesson generalises: on a fleet of ephemeral instances,
 **every** piece of state must round-trip through Postgres, including state
 whose only reader is the next line of the same logical operation.
 
-### 2.9 The one that is still open: nothing keeps the work alive after the response
+### 2.9 ~~The one that is still open:~~ CLOSED 2026-09-18 — nothing kept the work alive after the response
 
-`src/app/api/scan/route.js:128` starts the first chunk and returns:
+> **Correction, 2026-09-18 (R3.1.5).** Everything below was true at `95b190d`
+> and is **false now**. It is struck through rather than deleted because it was
+> one of the arguments this ADR's §1 rested on, and a reader auditing that
+> argument needs to see which leg moved. The decision that closed it is
+> [`2026-09-18-post-response-keepalive.md`](./2026-09-18-post-response-keepalive.md):
+> the **platform mechanism** was taken, not the long-lived worker this section
+> argued for. Next is 14.2 so there is no `after()`; `@vercel/functions`
+> `waitUntil` (`package.json:52`, `^3.9.7`) is used through exactly one helper,
+> `src/lib/keepAlive.js:36`, at nine post-response sites — including
+> `src/app/api/scan/route.js:142`, the very line cited below.
+> **§2.9 no longer supports §1.** The fleet decision stands on its own grounds
+> (a real-surface probe needs a persistent browser and minutes of wall clock,
+> §§2.10 and 1); it no longer stands on this.
+
+~~`src/app/api/scan/route.js:128` starts the first chunk and returns:~~
 
 ```js
-runScanChunk(job.id).catch(err => {
+runScanChunk(job.id).catch(err => {   // gone; now keepAlive(() => runScanChunk(job.id), …)
 ```
 
-**There is no `waitUntil` anywhere in this repository.**
-`git grep -n waitUntil -- src/ package.json` returns nothing at `95b190d`, and
-`@vercel/functions` is not a dependency. `docs/plans/production-plan.md` §C1
-identified this as the fix and prescribed it; it was never applied. So today,
+~~**There is no `waitUntil` anywhere in this repository.**~~
+~~`git grep -n waitUntil -- src/ package.json` returns nothing at `95b190d`, and~~
+~~`@vercel/functions` is not a dependency.~~ `docs/plans/production-plan.md` §C1
+identified this as the fix and prescribed it; ~~it was never applied. So today,
 on Vercel, the continuation of a scan past its own HTTP response is
 **unprotected** and is rescued only by §2.3's heartbeat plus §2.4's browser tab
-plus §2.5's daily cron.
+plus §2.5's daily cron.~~ **it was applied on 2026-09-18 in `53995fa`.** §2.3's
+heartbeat, §2.4's poll-driven rescue and §2.5's daily cron all **remain** and
+were deliberately not removed — they are now the backstop rather than the only
+thing between a scan and silent abandonment.
 
-This is the sharpest form of the argument. The platform's own escape hatch for
+~~This is the sharpest form of the argument. The platform's own escape hatch for
 "work that outlives the response" is not in use, and the system stays upright
 on three independent compensations instead. That is not a bug to fix before
-moving the workload — it is the reason to move it.
+moving the workload — it is the reason to move it.~~
+
+**What remains unproven** is narrower than what this section claimed, and it is
+worth stating because the strikethrough above could be over-read: that Vercel
+*actually* holds the instance longer is observable only on a deployed scan and
+is **not** proven by any test in this repository. R3.1.5 stays tagged
+`needs-vercel` for that reason. See the new ADR's *What is NOT verified*.
 
 ### 2.10 And the browser was never going to fit
 
@@ -634,8 +662,12 @@ landed (`docs/runbooks/fleet-dev.md`) and R1.2.6's boot validation landed
 - **The compensations in §2 are not deleted by this ADR.** Checkpointed resume,
   the attempt cap, `scan_runs` and database-owned state remain correct for a
   container and are already mirrored in `worker/src/index.js` and
-  `worker/src/lib/runLedger.js`. §2.9's missing `waitUntil` is a live gap in
-  the *current* Vercel-hosted pipeline and is untouched by this decision.
+  `worker/src/lib/runLedger.js`. ~~§2.9's missing `waitUntil` is a live gap in
+  the *current* Vercel-hosted pipeline and is untouched by this decision.~~
+  **Corrected 2026-09-18:** that gap was closed by R3.1.5 in the Vercel-hosted
+  pipeline (see §2.9 and
+  [`2026-09-18-post-response-keepalive.md`](./2026-09-18-post-response-keepalive.md));
+  it remains untouched by *this* decision, which is about `worker/`.
 - **The fleet has no CI.** `.github/workflows/ci.yml` never enters `worker/`,
   and `npm --prefix worker test` matches no files at `95b190d`. The only
   automated check on the fleet today is the isolation guard, which runs in the
@@ -658,7 +690,11 @@ landed (`docs/runbooks/fleet-dev.md`) and R1.2.6's boot validation landed
 - **Probe volume, cadence or politeness budget.** R1.1.5 and R3.1.
 - **Whether the *existing* API-based scan pipeline moves off Vercel.** It stays
   where it is. This ADR moves real-surface probe execution only.
-- **The `waitUntil` fix (§2.9).** Identified, cited, unowned by this task.
+- ~~**The `waitUntil` fix (§2.9).** Identified, cited, unowned by this task.~~
+  **Owned and closed 2026-09-18 by R3.1.5** — the answer is the platform
+  mechanism, recorded in
+  [`2026-09-18-post-response-keepalive.md`](./2026-09-18-post-response-keepalive.md).
+  It is still not decided *by this ADR*; it is decided by that one.
 
 ## Reversal conditions for §§1–3
 
@@ -716,9 +752,15 @@ greppable strings where it was not.
 
 ```bash
 git ls-files | grep -iE 'dockerfile|fly\.toml|railway|nixpacks|procfile|docker-compose|render\.yaml'   # no output
-git grep -n waitUntil -- src/ package.json                                                             # no output
+git grep -n waitUntil -- src/ package.json                                                             # no output  <- STALE, see below
 grep -c 'FLEET_\|SUPABASE_SERVICE_ROLE_KEY' .env.example                                               # 0
 ```
+
+> **The second command no longer reproduces (2026-09-18, R3.1.5).** It now
+> returns `src/lib/keepAlive.js` and `package.json:52`. The absence it recorded
+> was real at `95b190d` and is the finding R3.1.5 closed; it is annotated rather
+> than edited so the derivation of §2.9 stays readable. The other two still
+> reproduce as written.
 
 ## What is unproven
 

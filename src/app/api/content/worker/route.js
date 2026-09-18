@@ -76,6 +76,52 @@ export async function dispatchWithLease(jobId, label, deps = {}) {
 }
 
 /**
+ * R3.1.10 — the report for a `?job_id=` direct resume (the self-continue's
+ * receiving end). A separate shape from contentCronReport because it answers a
+ * different question: not "what did this sweep do" but "did this ONE named job
+ * get picked up".
+ *
+ * STATUS CODES, same reasoning as the scan worker's direct-resume branch:
+ *   - 200 `dispatched: 1`  — we took the lease and the job is running.
+ *   - 200 `dispatched: 0, reason: "lease_held"` — someone else is already
+ *     working it. Normal and not an error: the self-continue may simply have
+ *     raced a cron sweep. 5xx-ing here would page an operator for a healthy
+ *     outcome.
+ *   - 500 `dispatched: 0, reason: "lease_acquire_failed"` — the lease UPDATE
+ *     itself failed, which is a database fault and the same class of event the
+ *     sweep reports through `batch_unavailable`.
+ *
+ * Nothing retries on this status: the self-continue fetch in contentWorker.js
+ * is fire-and-forget and never reads the response, and Vercel's crons do not
+ * use `?job_id=` at all — so a 500 here can neither loop nor trip the cron.
+ *
+ * `ledger_written` mirrors R3.1.4: it says plainly whether a content_runs row
+ * could have been written, so an empty ledger is never read as an idle system.
+ */
+export function contentDirectResumeReport({
+  jobId,
+  ok = false,
+  reason = null,
+  detail = null,
+  ledgerWritten = false,
+} = {}) {
+  return {
+    status: reason === "lease_acquire_failed" ? 500 : 200,
+    body: {
+      mode: "direct-resume",
+      job_id: jobId,
+      dispatched: ok ? 1 : 0,
+      dispatched_ids: ok ? [jobId] : [],
+      skipped: ok ? 0 : 1,
+      skips: ok ? [] : [{ id: jobId, reason: reason || "unknown", detail }],
+      reason: ok ? null : reason || "unknown",
+      detail,
+      ledger_written: ledgerWritten,
+    },
+  };
+}
+
+/**
  * The daily batch's brand list, decided from the RAW postgrest envelope.
  *
  * R2.8.5, the same class of read R2.8.4 removed from getScansForBrand. The
@@ -215,6 +261,56 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
   if (deps.recordCronTick) await deps.recordCronTick("content-worker");
   else await recordCronTick("content-worker");
 
+  // One resolution of the data client for the whole handler: `deps.supabase`
+  // may legitimately be null (a test asserting the unconfigured path), so the
+  // check is `!== undefined`, not `??`.
+  const client =
+    deps.supabase !== undefined ? deps.supabase : deps.client !== undefined ? deps.client : supabase;
+
+  // ---------------------------------------------------------------------
+  // R3.1.10 — self-continue path. contentWorker.js fires this at itself when
+  // an invocation hits its soft chunk budget with work still to do: resume
+  // THIS SPECIFIC job right now, UNCONDITIONALLY.
+  //
+  // The staleness sweep below deliberately does not cover this case and must
+  // not be consulted. shouldRescueContentJob (src/lib/db/content.js) requires
+  // a STALE heartbeat, and the invocation that fired this request heartbeated
+  // on its very last write — so the sweep would report the job alive and skip
+  // it, correctly for its own purpose and fatally for this one. The lease is
+  // still the single-flight authority: the handing-off invocation released it
+  // before firing, so dispatchWithLease's conditional UPDATE decides whether
+  // this request or a concurrent sweep does the work, never both.
+  // ---------------------------------------------------------------------
+  const directJobId = searchParams.get("job_id");
+  if (directJobId) {
+    try {
+      const res = await dispatchWithLease(directJobId, "direct resume", deps);
+      const { status, body } = contentDirectResumeReport({
+        jobId: directJobId,
+        ok: res.ok,
+        reason: res.reason,
+        detail: res.error?.message || null,
+        ledgerWritten: !!client,
+      });
+      if (!res.ok) {
+        console.warn(
+          `[content-cron] direct resume of job ${directJobId} did not dispatch: ${res.reason}`
+        );
+      }
+      return NextResponse.json(body, { status });
+    } catch (error) {
+      console.error(`[content-cron] Direct resume of job ${directJobId} failed:`, error);
+      const { body } = contentDirectResumeReport({
+        jobId: directJobId,
+        ok: false,
+        reason: "exception",
+        detail: error.message || "error",
+        ledgerWritten: !!client,
+      });
+      return NextResponse.json({ ...body, detail: "Internal Server Error" }, { status: 500 });
+    }
+  }
+
   // R2.8.14: an unconfigured deploy must not answer 200 from a cron that ran
   // nothing — a cron monitor watching status codes would report the system
   // healthy. Reuses the batch_unavailable envelope from R2.8.5 so all
@@ -234,8 +330,6 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
       return NextResponse.json({ ...body, ledger_written: false }, { status });
     }
   }
-
-  const client = deps.supabase !== undefined ? deps.supabase : (deps.client !== undefined ? deps.client : supabase);
 
   try {
     const runBatch = searchParams.get("batch") === "1";
