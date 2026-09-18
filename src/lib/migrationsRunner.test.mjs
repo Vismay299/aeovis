@@ -71,6 +71,7 @@ export function resolve(specifier, context, next) {
   writeFileSync(
     path.join(dir, "pg-stub.mjs"),
     `
+import { pathToFileURL as __toUrl } from "node:url";
 const CATALOG = ${JSON.stringify(catalog)};
 const FAIL_ON = ${JSON.stringify(failOn)};
 const PROBE_TOKEN = ${JSON.stringify(probeTokenValue)};
@@ -80,12 +81,64 @@ const RECORDED = ${JSON.stringify(recorded)};
 export const log = [];
 let txn = 0;
 
+/**
+ * R6.2.6 — the runner's OWN comment lexer, reused rather than reimplemented.
+ *
+ * \`semanticSql\` walks the four PostgreSQL contexts a \`--\` can hide in
+ * (single-quoted strings, quoted identifiers, nestable slash-star blocks,
+ * dollar-quoted bodies), so a header comment cannot be read as a query and a
+ * literal containing "--" cannot be truncated into one. A second lexer here
+ * would be a second thing to get wrong.
+ *
+ * It is loaded from \`process.argv[1]\` — the script actually under test —
+ * and NOT from a fixed path to scripts/setup-supabase.mjs. Importing a SECOND
+ * copy of the runner is fatal: its entrypoint guard sees an argv[1] named
+ * setup-supabase.mjs that does not resolve to itself, prints "Refusing to run"
+ * and exits 1, which kills every sabotagedRunner test. argv[1] is always the
+ * one copy that is allowed to exist.
+ *
+ * The import is DEFERRED to the first query. The runner imports "pg", so this
+ * module is in a cycle with it; awaiting the entry at module scope would
+ * deadlock, whereas by the time any query arrives the entry has finished
+ * evaluating and the dynamic import resolves from cache.
+ */
+let stripper = null;
+async function loadStripper() {
+  if (stripper) return stripper;
+  try {
+    const mod = await import(__toUrl(process.argv[1]).href);
+    stripper = typeof mod.semanticSql === "function" ? mod.semanticSql : () => ({ reliable: false, text: null });
+  } catch {
+    stripper = () => ({ reliable: false, text: null });
+  }
+  return stripper;
+}
+
+/**
+ * The text a probe pattern is allowed to match against: comments removed,
+ * whitespace collapsed. If the lexer cannot read the statement it returns
+ * { reliable: false, text: null } and we fall back to the RAW text — the safe
+ * direction, since an unreadable file must not silently stop being matched.
+ * The statement-start anchors and the params check below are the second tooth
+ * that covers that fallback.
+ */
+async function probeText(sql) {
+  const semanticSql = await loadStripper();
+  const stripped = semanticSql(sql);
+  return stripped && stripped.reliable && typeof stripped.text === "string" ? stripped.text : sql;
+}
+
 class Client {
   constructor() { this.log = log; }
   async connect() {}
   async end() {}
   async query(text, params) {
     const sql = String(text);
+    // Every catalog-probe pattern below matches THIS, never \`sql\`.
+    const probe = await probeText(sql);
+    // R6.2.6 — the runner's catalog probes are all parameterised. A migration
+    // body never is. This is the anchor-independent half of the fix.
+    const parameterised = Array.isArray(params) && params.length > 0;
     if (sql === "BEGIN") { txn++; log.push({ txn, sql: "BEGIN" }); return { rows: [] }; }
     if (sql === "COMMIT") { log.push({ txn, sql: "COMMIT" }); return { rows: [] }; }
     if (sql === "ROLLBACK") { log.push({ txn, sql: "ROLLBACK" }); return { rows: [] }; }
@@ -104,24 +157,28 @@ class Client {
     // own output — same process, same stream — so the transcript records when
     // the database was really consulted relative to what the runner claimed.
     //
-    // Each pattern must be specific enough to NOT match migration SQL (DDL).
-    // Migrations contain their own SELECT 1 FROM pg_constraint / pg_policies
-    // inside DO blocks, so bare "FROM pg_constraint" would false-match. The
-    // runner's catalog queries always JOIN pg_namespace, which migration SQL
-    // never does — that is the discriminator.
-    if (/^SELECT 1 FROM storage\\.buckets WHERE id/.test(sql)) {
+    // R6.2.6 — three things make a pattern here specific enough to NOT match
+    // migration SQL, and all three are needed:
+    //   1. it matches \`probe\`, i.e. the statement with COMMENTS STRIPPED, so a
+    //      header comment quoting the applied-check is not a query;
+    //   2. it is ANCHORED at the statement start, so the shape appearing
+    //      anywhere inside a migration body cannot trigger it; and
+    //   3. it requires \`parameterised\`, because every runner probe binds $1.
+    // Before R6.2.6 only the "JOIN pg_namespace, which migration SQL never
+    // does" discriminator existed, and a comment defeated it outright.
+    if (parameterised && /^SELECT 1 FROM storage\\.buckets WHERE id/.test(probe)) {
       const name = (params && params[0]) || "";
       log.push({ txn, sql: "PROBE", name });
       process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
       return { rows: CATALOG.includes(name) ? [{ "?column?": 1 }] : [] };
     }
-    if (/to_regclass/.test(sql)) {
+    if (parameterised && /^SELECT to_regclass\\(\\$1\\)/.test(probe)) {
       const name = String((params && params[0]) || "").replace("public.", "");
       log.push({ txn, sql: "PROBE", name });
       process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
       return { rows: [{ regclass: CATALOG.includes(name) ? name : null }] };
     }
-    if (/pg_get_function_identity_arguments/.test(sql) && /JOIN pg_namespace/.test(sql)) {
+    if (parameterised && /^SELECT 1 FROM pg_proc\\b/.test(probe) && /pg_get_function_identity_arguments/.test(probe) && /JOIN pg_namespace/.test(probe)) {
       const name = (params && params[0]) || "";
       const sig = (params && params[1]) || "";
       const key = sig ? name + "(" + sig + ")" : name;
@@ -132,7 +189,7 @@ class Client {
       process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
       return { rows: CATALOG.includes(name) || CATALOG.includes(key) ? [{ "?column?": 1 }] : [] };
     }
-    if (/FROM pg_proc/.test(sql) && /JOIN pg_namespace/.test(sql)) {
+    if (parameterised && /^SELECT 1 FROM pg_proc\\b/.test(probe) && /JOIN pg_namespace/.test(probe)) {
       const name = (params && params[0]) || "";
       log.push({ txn, sql: "PROBE", name });
       process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
@@ -140,7 +197,7 @@ class Client {
     }
     // R6.1.12 — column existence via pg_attribute. The runner's query JOINs
     // pg_class and pg_namespace; migration DO blocks use information_schema.
-    if (/FROM pg_attribute/.test(sql) && /JOIN pg_class/.test(sql) && /JOIN pg_namespace/.test(sql)) {
+    if (parameterised && /^SELECT 1 FROM pg_attribute\\b/.test(probe) && /JOIN pg_class/.test(probe) && /JOIN pg_namespace/.test(probe)) {
       const table = (params && params[0]) || "";
       const column = (params && params[1]) || "";
       const name = table + "." + column;
@@ -150,7 +207,7 @@ class Client {
     }
     // R6.1.12 — constraint existence via pg_constraint. The runner's query
     // JOINs pg_namespace; migration DO blocks query pg_constraint directly.
-    if (/FROM pg_constraint/.test(sql) && /JOIN pg_namespace/.test(sql)) {
+    if (parameterised && /^SELECT 1 FROM pg_constraint\\b/.test(probe) && /JOIN pg_namespace/.test(probe)) {
       const name = (params && params[0]) || "";
       log.push({ txn, sql: "PROBE", name });
       process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
@@ -1123,4 +1180,128 @@ test("R6.1.5 — an unedited migration reports no drift at all", () => {
     `nothing changed, so nothing may be said about it. A drift line here means the ` +
       `comparison is reporting a difference that does not exist:\n${r.out}`
   );
+});
+
+/**
+ * R6.2.6 — a migration whose header COMMENT quotes a catalog probe.
+ *
+ * THE FINDING. The stub above used to recognise a catalog probe by regexing the
+ * WHOLE statement text — comments included — for
+ * `FROM pg_attribute ... JOIN pg_class ... JOIN pg_namespace`. Migration text is
+ * handed to `client.query()` whole, header comment and all, so a migration that
+ * merely DOCUMENTED its applied-check in that shape made the stub emit a phantom
+ * `__PROBE` from inside the migration-apply loop — i.e. before the verify banner.
+ * Five of the twenty-one tests in this file went red with no SQL change at all:
+ * both ORDERING scenarios, the "every ✓ is backed by a probe" test, and two of
+ * the three R6.1.7 TEETH tests. Reproduced against HEAD 583dfca by prefixing
+ * 001_initial_schema.sql with one such comment line.
+ *
+ * 021_prompt_results_evidence.sql worked around it by rephrasing its documented
+ * check against information_schema.columns. That workaround is invisible: the
+ * next migration author writes the natural thing and the suite blames them. So
+ * the fix is in the stub — comments stripped with the runner's own lexer,
+ * patterns anchored at the statement start, probes required to carry params —
+ * and this test holds the workaround-free phrasing in a fixture forever.
+ *
+ * Staged in a sandbox rather than added to supabase/migrations: this is a test
+ * fixture, not a schema change, and it must not reach a real database.
+ */
+
+/** A verbatim copy of the runner plus the migration set, with extras appended. */
+function stagedRunner(dir, extraMigrations = []) {
+  mkdirSync(path.join(dir, "scripts"), { recursive: true });
+  const migs = path.join(dir, "supabase", "migrations");
+  mkdirSync(migs, { recursive: true });
+  for (const f of readdirSync(path.join(REPO, "supabase/migrations")).filter((n) => n.endsWith(".sql"))) {
+    writeFileSync(path.join(migs, f), readFileSync(path.join(REPO, "supabase/migrations", f)));
+  }
+  for (const { name, sql } of extraMigrations) writeFileSync(path.join(migs, name), sql);
+  const script = path.join(dir, "scripts", "setup-supabase.mjs");
+  // Same basename, so the runner's entrypoint guard still recognises itself.
+  writeFileSync(script, readFileSync(REAL_RUNNER, "utf8"));
+  return script;
+}
+
+const COMMENT_PROBE_FIXTURE = "099_comment_quotes_catalog_probe.sql";
+const commentProbeSql = readFileSync(
+  path.join(REPO, "src/lib/fixtures/migrationsRunner", COMMENT_PROBE_FIXTURE),
+  "utf8"
+);
+
+test("R6.2.6 — the fixture really does quote the probe shape ONLY inside comments", () => {
+  // Without this the test below could pass because the fixture lost its point.
+  assert.match(
+    commentProbeSql,
+    /pg_attribute[\s\S]*JOIN pg_class[\s\S]*JOIN pg_namespace/,
+    "the fixture must contain the catalog-probe shape at all"
+  );
+  const stripped = semanticSql(commentProbeSql);
+  assert.ok(stripped.reliable, `the fixture must parse: ${stripped.reason}`);
+  assert.ok(
+    !/pg_attribute|pg_proc|to_regclass|pg_constraint|storage\.buckets/.test(stripped.text),
+    `with comments stripped the fixture must contain no catalog-probe shape at all, or it is ` +
+      `testing something else:\n${stripped.text}`
+  );
+});
+
+test("R6.2.6 — a migration that quotes a catalog probe in a comment emits NO phantom probe", () => {
+  const dir = withRegister(makeSandbox({ catalog: FULL_CATALOG }));
+  try {
+    const script = stagedRunner(dir, [{ name: COMMENT_PROBE_FIXTURE, sql: commentProbeSql }]);
+    const { status, stdout, stderr } = runRunner(dir, script);
+    assert.equal(status, 0, `the fixture changes no schema expectation, so the run must pass:\n${stdout}${stderr}`);
+
+    const token = probeToken(dir);
+    const byProbe = auditByProbe(stdout, token);
+    const reported = reportedObjects(stdout);
+    assert.ok(byProbe.probes.length > 0, "the harness must still observe real probes");
+
+    // THE ASSERTION. One probe per reported object and not one more. The phantom
+    // arrived as an extra, so a count that matches is a count with no phantom in
+    // it — and it is checked before the name assertions, because the name the
+    // phantom carried ("." — table + "." + column over absent params) is an
+    // implementation detail that could change while the defect stays.
+    assert.equal(
+      byProbe.probes.length,
+      reported.length,
+      `${byProbe.probes.length} probes reached the database for ${reported.length} reported objects. ` +
+        `An extra probe with a migration on disk that contains no SELECT is a comment being ` +
+        `executed:\n${stdout}`
+    );
+    const phantom = byProbe.probes.filter((p) => !reported.some((r) => r.name === p.name));
+    assert.deepEqual(
+      phantom.map((p) => p.name),
+      [],
+      `these probes correspond to no object the runner verifies; they came out of a comment:\n${stdout}`
+    );
+
+    // And the ordering window is intact: the phantom used to be emitted during
+    // the APPLY loop, which put the first probe before the verify banner and is
+    // what turned the two ORDERING tests red.
+    const banner = auditOrdering(stdout);
+    assert.equal(banner.occurrences, 1, stdout);
+    assert.ok(
+      banner.anchor < byProbe.anchor,
+      `the first probe must still follow the verify banner. Banner at ${banner.anchor}, first probe ` +
+        `at ${byProbe.anchor} — a probe before the banner is a comment being read as a query:\n${stdout}`
+    );
+    assert.deepEqual(byProbe.violations, [], byProbe.before);
+
+    // The other half of the accept: the fixture is a real migration and must be
+    // applied and ledgered, not skipped to dodge the problem.
+    assert.match(
+      stdout,
+      new RegExp(`${COMMENT_PROBE_FIXTURE.replace(/\./g, "\\.")} \\.\\.\\. ok`),
+      `the fixture migration must be applied:\n${stdout}`
+    );
+    const raw = stdout.match(/__QUERY_LOG__(.*?)__END_LOG__/s)?.[1];
+    assert.ok(raw, "the stub must emit its query log");
+    const log = JSON.parse(raw);
+    const insert = log.find((e) => e.sql === "INSERT_LEDGER" && e.file === COMMENT_PROBE_FIXTURE);
+    assert.ok(insert, `the fixture migration must be recorded in the ledger:\n${raw}`);
+    const idx = log.indexOf(insert);
+    assert.equal(log[idx - 1]?.sql, "MIGRATION", "its body must have been executed, not skipped");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

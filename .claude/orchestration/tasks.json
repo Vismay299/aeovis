@@ -3753,10 +3753,32 @@
         "src/components/dashboard/"
       ],
       "phase": "R1",
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
-      "notes": [],
+      "status": "in_verification",
+      "owner": "rebuild-implementer",
+      "evidence": [
+        "src/app/api/scan/[job_id]/evidence/route.js:59",
+        "src/lib/evidenceSignedUrl.js:37",
+        "src/components/dashboard/AnswersView.jsx:37",
+        "src/components/dashboard/AnswersView.jsx:188",
+        "src/services/api.js:795",
+        "src/lib/workers/scanWorker.js:2069",
+        "src/lib/operatorPerimeter.js:65",
+        "src/lib/evidenceSignedUrl.route.test.mjs:120",
+        "src/components/dashboard/answersEvidenceLink.test.mjs:137",
+        "docs/runbooks/probe-evidence.md:33"
+      ],
+      "notes": [
+        {
+          "at": "2026-09-18T21:19:09.691Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-18T21:47:15.947Z",
+          "by": "rebuild-implementer",
+          "text": "GET /api/scan/[job_id]/evidence?result=<prompt_result_id>&kind=screenshot answers 302 to a Storage signed URL with a 120 s expiry (EVIDENCE_SIGNED_URL_TTL_SECONDS, the single place the number lives). The object key is ONLY ever read off a prompt_results row matched by BOTH id and job_id — no caller-supplied string reaches createSignedUrl. NULL/blank id -> 404 plain text; unknown or foreign result -> 404; unknown kind / missing ?result -> 400; unreadable row or unsignable object -> 502 'unknown, not no-evidence'; no Supabase -> 503. Perimeter: the status route's, stated plainly — scans are unauthenticated today, so the path joins the free-scan GET allowlist in operatorPerimeter.js and the enumeration test's 'is that deliberate?' set was updated deliberately. AnswersView renders 'View evidence' only when the row carries a non-empty evidenceScreenshotId plus its own jobId/resultId (evidenceScreenshotHref); scanWorker's finalize now stamps result_id/job_id/evidence_screenshot_id onto the stored results so the dashboard can address its own rows (the prompt_results read path is select('*'), so the new columns were already selected). Tests: 16 new route tests (expiry passed, exact stored key, NULL->404, blank->404, unknown/foreign/malformed result->404, unknown job->404, per-kind column) + 8 new AnswersView/predicate tests; npm test 3060 tests, 0 fail; npm run build clean, route registered dynamic. NOT exercised end to end against live Storage: no probe adapter writes evidence yet (R1.3 unbuilt), so no object exists in probe-evidence and every evidence_screenshot_id in production is NULL — the route was exercised at the real handler with an injected storage client, not against Supabase. Heads-up for the controller: src/lib/migrationsRunner.test.mjs and src/lib/fixtures/migrationsRunner/ are dirty from a CONCURRENT agent (R6.2.6), not from me — they also flipped the 3 baseline R6.1.7 failures to passing."
+        }
+      ],
       "verification": null
     },
     {
@@ -12296,17 +12318,39 @@
       ],
       "phase": "R6",
       "findings": [],
-      "status": "todo",
-      "owner": null,
-      "evidence": [],
+      "status": "done",
+      "owner": "rebuild-test-author",
+      "evidence": [
+        "src/lib/migrationsRunner.test.mjs:85",
+        "src/lib/migrationsRunner.test.mjs:138",
+        "src/lib/migrationsRunner.test.mjs:141",
+        "src/lib/migrationsRunner.test.mjs:160",
+        "src/lib/migrationsRunner.test.mjs:1231",
+        "src/lib/migrationsRunner.test.mjs:1247",
+        "src/lib/fixtures/migrationsRunner/099_comment_quotes_catalog_probe.sql:1"
+      ],
       "notes": [
         {
           "at": "2026-09-18T20:31:28.619Z",
           "by": "controller",
           "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-18T21:19:09.726Z",
+          "by": "rebuild-test-author",
+          "text": "claimed"
+        },
+        {
+          "at": "2026-09-18T21:26:23.094Z",
+          "by": "rebuild-test-author",
+          "text": "Reproduced against HEAD 583dfca: prefixing supabase/migrations/001_initial_schema.sql with a single -- comment quoting the pg_attribute/pg_class/pg_namespace applied-check turned 5 of 21 runner tests red (both ORDERING scenarios, the every-tick-is-backed test, and two of the three R6.1.7 TEETH tests) with no SQL change; migration restored byte-identical.\nFix, all in the pg stub inside makeSandbox: (1) every catalog-probe pattern now matches 'probe' -- the statement with comments stripped by the runner's OWN semanticSql lexer, reused not reimplemented; (2) each pattern is anchored at the statement start (^SELECT 1 FROM pg_attribute etc, ^SELECT to_regclass($1)); (3) a probe must be parameterised, which migration bodies never are.\nThe lexer is loaded by deferred dynamic import of process.argv[1], not from a fixed path to scripts/setup-supabase.mjs. Importing a SECOND copy of the runner is fatal -- its entrypoint guard sees an argv[1] named setup-supabase.mjs that does not resolve to itself, prints 'Refusing to run' and exits 1, which killed all three sabotagedRunner tests when I tried the static import. The import is deferred because the stub is in an import cycle with the runner.\nNew fixture src/lib/fixtures/migrationsRunner/099_comment_quotes_catalog_probe.sql carries 021's original, workaround-free phrasing: the probe shape occurs only inside a -- comment and once more inside a /* */ block, and the file has no executable SELECT. Two new tests: one asserts the fixture is still only-in-comments (semanticSql output contains no probe shape), one stages a verbatim runner copy plus the migration set plus the fixture and asserts probes == reported objects with no unmatched probe, the first probe still follows the verify banner, no verdict precedes it, and the fixture migration is applied ('... ok') and INSERT_LEDGERed after its body executed.\nTeeth: reverting the stub to whole-text matching turns the new test red (3 fail), restoring it green. npm run test:scoring 3004 pass / 0 fail before, 3006 pass / 0 fail after; all 21 pre-existing runner tests still pass; npm test 3006 pass / 0 fail. Nothing committed. No files outside src/lib/migrationsRunner.test.mjs and the new fixture directory were touched."
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "pass",
+        "at": "2026-09-18T21:49:48.671Z",
+        "note": "Verified independently in an isolated replica of the repo (scratchpad copy of scripts/ + supabase/migrations + the test file), so the concurrent R1.5.3 working tree was never touched. REPRODUCED: HEAD:src/lib/migrationsRunner.test.mjs run against a tree whose 001_initial_schema.sql is prefixed with a 3-line -- comment quoting the pg_attribute/JOIN pg_class/JOIN pg_namespace applied-check = 16 pass / 5 FAIL (both ORDERING, every-tick-backed, two R6.1.7 TEETH), exactly the filed signature. The working-tree file on the SAME poisoned tree = 23/23 pass. In the repo: node --test src/lib/migrationsRunner.test.mjs 23/23 (21 pre-existing + 2 new). TEETH: reverting the stub to whole-text unanchored matching (.test(probe)->.test(sql), drop 'parameterised &&', un-anchor all five patterns) turns the new test at :1247 red - the phantom __PROBE is emitted mid-line during the APPLY of the fixture so '099 ... ok' never forms; 22 pass / 1 fail; the other 22 unaffected. git diff --stat src/lib/migrationsRunner.test.mjs unchanged (192 insertions / 11 deletions); no repo file edited by me. IMPORT SOUNDNESS (checked, not accepted on claim): the deferred dynamic import of process.argv[1] at :107 is a module-cache hit, not a second instance - instrumented the staged run and got exactly one 'Connecting to Supabase Postgres...' and no 'Refusing to run'; substituting a fixed path to scripts/setup-supabase.mjs reproduces the entrypoint guard at scripts/setup-supabase.mjs:732 verbatim ('Refusing to run: .../migrunner-*/scripts/setup-supabase.mjs ... does not resolve to ...') and fails 4 tests, so argv[1] is the correct choice, not a hack. LIVENESS of the strip path: replacing both fallbacks with a throw leaves 23/23 green, proving the runner's real semanticSql is what every query is matched against (:138 probe = await probeText(sql)). Conversely, forcing the lexer import to fail also leaves 23/23 green, i.e. the anchors + params requirement are what carry this fixture and the comment-stripping is belt-and-braces; the fallback to RAW text is loud, not fail-soft (an unmatched real probe yields no rows -> runner reports missing objects -> non-zero exit). FIXTURE src/lib/fixtures/migrationsRunner/099_comment_quotes_catalog_probe.sql: probe shape appears in a -- comment (:19-27) AND a /* */ block (:29-31), plus to_regclass in a trailing comment; only executable statement is the CREATE TABLE at :34-38, no SELECT; it is NOT in supabase/migrations (git status clean there, dir ends at 021) and is copied into a temp sandbox only. Evidence citations :85 :138 :141 :160 :1231 :1247 and fixture:1 all resolve to what they claim. SUITES: npm test 3030 pass / 0 fail / 30 skipped; npm run test:scoring same, 0 fail (higher than the implementer's 3006 because the unrelated R1.5.3 tests are in the tree). ONE FOLLOW-UP THOUGHT, not blocking: if a future test ever spawns the runner through a wrapper script, argv[1] stops exporting semanticSql and the comment-stripping half disappears into the catch at :113 without a signal - the anchors would still hold, but a console.warn there would make that degrade visible."
+      }
     },
     {
       "id": "R6.3.1",
