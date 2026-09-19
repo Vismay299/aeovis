@@ -3441,7 +3441,7 @@
       ],
       "phase": "R1",
       "findings": [],
-      "status": "in_verification",
+      "status": "in_progress",
       "owner": "main-session",
       "evidence": [
         "worker/Dockerfile:7",
@@ -3469,9 +3469,18 @@
           "at": "2026-09-19T07:31:23.860Z",
           "by": "main-session",
           "text": "Author: controller (main session); the verifier must be independent. Reproduced, not assumed: running worker/src/clientSmoke.js under Node 20 (via npx node@20) prints the exact production error and exits 1; on Node 22.22.3 it prints \"client smoke ok\" and exits 0. The smoke calls the REAL resolveClient (worker/src/lib/queue.js:60) with placeholder credentials (sk-EXAMPLE-NOT-A-REAL-KEY) and opens no connection. Dockerfile is FROM node:22-bookworm-slim; engines >=22; the lockfile diff is the single root engines line and no dependency moved (checked). \"npm --prefix worker run check\" is now node --check + selftest + client smoke, green locally. The CI fleet job runs on Node 22 and has a new step running the smoke INSIDE the built image, which is the step that would have caught this. There is no Docker on the controller's machine, so the image build is proven only by CI on this commit. The production half of the accept (pod log with pass lines and no WebSocket error; closed probe-fleet rows in scan_runs) is owed after the operator's redeploy.\n"
+        },
+        {
+          "at": "2026-09-19T07:35:49.437Z",
+          "by": "verifier",
+          "text": "rejected: no reason given"
         }
       ],
-      "verification": null
+      "verification": {
+        "verdict": "fail",
+        "at": "2026-09-19T07:35:49.436Z",
+        "note": null
+      }
     },
     {
       "id": "R1.3.1",
