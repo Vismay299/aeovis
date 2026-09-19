@@ -4,7 +4,7 @@
 # Build context is `worker/`, NOT the repo root: nothing here may reach into
 # src/, and src/lib/workerIsolation.test.mjs enforces that in the main suite.
 # A build context that included the root would make violating it possible.
-FROM node:20-bookworm-slim
+FROM node:22-bookworm-slim
 
 # Playwright resolves the browser it needs from the INSTALLED library version,
 # so the browser is fetched after `npm ci` rather than baked in from a version

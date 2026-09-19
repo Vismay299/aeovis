@@ -5,11 +5,12 @@
   "type": "module",
   "description": "Real-surface probe fleet. Runs on a container host, independent of the Next app.",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "start": "node src/index.js",
-    "check": "node --check src/index.js && node src/index.js --selftest",
+    "check": "node --check src/index.js && node src/index.js --selftest && node src/clientSmoke.js",
+    "smoke:client": "node src/clientSmoke.js",
     "test": "node --test \"src/**/*.test.mjs\""
   },
   "dependencies": {

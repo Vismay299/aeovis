@@ -54,18 +54,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node 22, and it must stay in step with worker/Dockerfile and the
+      # "engines" field in worker/package.json. The fleet was deployed on a
+      # node:20 image and never completed a pass: @supabase/supabase-js needs the
+      # native WebSocket that exists only from Node 22, and it throws while the
+      # client is being CONSTRUCTED. See worker/src/clientSmoke.js.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: worker/package-lock.json
 
       - run: npm --prefix worker ci
 
-      # Parses, then starts and completes one pass against stubs. Needs no
-      # database, no browser and no credential — so a broken fleet fails here
-      # rather than on the host.
-      - name: fleet selftest
+      # Parses, starts and completes one pass against stubs, then constructs the
+      # REAL Supabase client with placeholder credentials. Needs no database, no
+      # browser and no credential — so a broken fleet fails here rather than on
+      # the host. The client smoke is the part that was missing: the selftest
+      # never builds a client, so it could not see a runtime that cannot.
+      - name: fleet selftest + client smoke
         run: npm --prefix worker run check
 
       # Builds the deploy image and runs the SAME selftest inside it. This is
@@ -77,6 +84,12 @@ jobs:
 
       - name: selftest inside the image
         run: docker run --rm perceev-fleet:ci node src/index.js --selftest
+
+      # The check that would have caught the dead deploy. The HOST's Node is
+      # whatever setup-node installed; the IMAGE's Node is whatever the
+      # Dockerfile says, and only this step exercises that one.
+      - name: client smoke inside the image
+        run: docker run --rm perceev-fleet:ci node src/clientSmoke.js
 
   build:
     name: build
