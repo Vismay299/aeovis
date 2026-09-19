@@ -12,6 +12,9 @@ import {
   jobStatusForItemStatus,
   normalizeDecision,
   reviewStatuses,
+  jobStatusesBeyondWorker,
+  JOB_STATUSES_BEYOND_WORKER,
+  isBeyondWorker,
 } from "./stages.js";
 import { BLOCKS, BLOCK_SLUGS } from "./agents/blocks.js";
 import { CONTENT_JOB_RUNNING } from "../db/content.js";
@@ -191,3 +194,40 @@ test("jobStatusForItemStatus never invents a job status the worker cannot produc
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// R3.5.7 — "past the worker's hands" is DERIVED from JOB_STAGES, and stages.js
+// says this file proves it agrees with CONTENT_JOB_RUNNING in both directions.
+// It did not, until now. Without this, adding a stage could silently widen what
+// a worker execution is allowed to overwrite.
+// ---------------------------------------------------------------------------
+
+test("R3.5.7 — beyond-worker and CONTENT_JOB_RUNNING partition JOB_STAGES exactly, in both directions", () => {
+  const all = Object.keys(JOB_STAGES).sort();
+  const beyond = jobStatusesBeyondWorker();
+  const running = [...CONTENT_JOB_RUNNING];
+
+  for (const status of running) {
+    assert.equal(beyond.includes(status), false, `"${status}" is worker-owned and must NOT be beyond the worker`);
+    assert.equal(isBeyondWorker(status), false);
+  }
+  for (const status of beyond) {
+    assert.equal(running.includes(status), false, `"${status}" is beyond the worker and must NOT be resumable`);
+    assert.equal(isBeyondWorker(status), true);
+  }
+  assert.deepEqual(
+    [...beyond, ...running].sort(),
+    all,
+    "every job status is exactly one of the two — a status in neither could be both resumed and overwritten"
+  );
+  assert.deepEqual([...JOB_STATUSES_BEYOND_WORKER], beyond, "the frozen list is the derived one, not a second copy");
+});
+
+test("R3.5.7 — awaiting_approval is beyond the worker even though it is not terminal", () => {
+  // The superset matters: awaiting_approval is the status the production damage overwrote.
+  assert.equal(isTerminal("job", "awaiting_approval"), false);
+  assert.equal(isBeyondWorker("awaiting_approval"), true);
+  assert.equal(isBeyondWorker("failed"), true);
+  assert.equal(isBeyondWorker("no-such-status"), false, "an unknown status is not a licence either way");
+});
+

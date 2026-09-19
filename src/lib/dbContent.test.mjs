@@ -12,6 +12,10 @@ import {
   isContentJobAlive,
   shouldRescueContentJob,
   listResumableContentJobs,
+  isDeliveredContentJob,
+  isRewoundContentJob,
+  listRewoundContentJobs,
+  healRewoundContentJob,
   insertContentRun,
   finishContentRun,
   listContentRunsForJob,
@@ -63,6 +67,13 @@ function makeMockClient(tableHandlers) {
         },
         gt(col, val) {
           state.filters.push(["gt", col, val]);
+          return builder;
+        },
+        // R3.5.7 — listRewoundContentJobs / healRewoundContentJob filter with
+        // .not("item_id", "is", null). Recorded like every other filter so a
+        // test can assert the guard really reached the statement.
+        not(col, op, val) {
+          state.filters.push(["not", col, op, val]);
           return builder;
         },
         limit(n) {
@@ -683,3 +694,164 @@ test("R3.5.6 — listResumableContentJobs drops the rewound job and keeps the re
     "a job that already produced an item must not be handed a second invocation"
   );
 });
+
+// ---------------------------------------------------------------------------
+// R3.5.7 — a worker execution must not rewind a delivered job.
+//
+// R3.5.6 stopped the sweep RE-DISPATCHING a rewound row. These pin the write
+// itself: the status guard is evaluated by the database inside the UPDATE, so a
+// second execution cannot put `reviewing` back over `awaiting_approval`, and a
+// row that was already damaged heals to the status it had earned.
+// ---------------------------------------------------------------------------
+
+test("R3.5.7 GUARD — updateContentJob with ifStatusIn puts the precondition INSIDE the UPDATE", async () => {
+  const { client, calls } = makeMockClient({
+    content_jobs: () => ({ data: [{ id: "job-1", status: "reviewing" }], error: null }),
+  });
+
+  const row = await updateContentJob("job-1", { status: "reviewing" }, { client, ifStatusIn: CONTENT_JOB_RUNNING });
+
+  assert.equal(row.status, "reviewing");
+  assert.equal(calls.length, 1, "ONE statement — a read-then-write would leave the race open");
+  assert.equal(calls[0].op, "update");
+  assert.deepEqual(
+    calls[0].filters.find((f) => f[0] === "in"),
+    ["in", "status", CONTENT_JOB_RUNNING],
+    "the status precondition must travel with the UPDATE, not be checked beforehand"
+  );
+});
+
+test("R3.5.7 GUARD — a conditional UPDATE that matches no row is a REFUSAL, not a success and not a throw", async () => {
+  // Zero rows is what Postgres returns when the row has left the worker-owned
+  // statuses — exactly the awaiting_approval row a second execution tried to rewind.
+  const { client } = makeMockClient({ content_jobs: () => ({ data: [], error: null }) });
+
+  const res = await updateContentJob("job-1", { status: "reviewing" }, { client, ifStatusIn: CONTENT_JOB_RUNNING });
+
+  assert.equal(res.refused, true);
+  assert.equal(res.reason, "status_guard");
+  assert.equal(res.attempted_status, "reviewing");
+  assert.deepEqual(res.expected_status_in, CONTENT_JOB_RUNNING);
+  assert.equal(res.status, undefined, "a refusal must not be readable as the row it failed to write");
+});
+
+test("R3.5.7 GUARD — an UNGUARDED write keeps its old behaviour (no ifStatusIn, no status filter)", async () => {
+  const { client, calls } = makeMockClient({
+    content_jobs: () => ({ data: [{ id: "job-1", cost_total: 0.02 }], error: null }),
+  });
+
+  await updateContentJob("job-1", { cost_total: 0.02 }, { client });
+
+  assert.equal(
+    calls[0].filters.some((f) => f[0] === "in"),
+    false,
+    "trace / cost / checkpoint flushes carry no status and must stay unconditional"
+  );
+});
+
+test("R3.5.7 GUARD — in memory, a delivered job's status and item_id survive a second execution's write", async () => {
+  const job = await createContentJob({ brand: "GuardBrand", playbook: "geo_article", input: {} });
+  await updateContentJob(job.id, { status: "awaiting_approval", item_id: "item-first" });
+
+  const res = await updateContentJob(job.id, { status: "reviewing" }, { ifStatusIn: CONTENT_JOB_RUNNING });
+
+  assert.equal(res.refused, true, "THE BUG: this write used to apply and rewind the job");
+  const after = await getContentJob(job.id);
+  assert.equal(after.status, "awaiting_approval", "status untouched");
+  assert.equal(after.item_id, "item-first", "item_id untouched");
+});
+
+test("R3.5.7 SHAPES — delivered and rewound are different rows, and item_id null is neither", () => {
+  // Delivered: past the worker's hands WITH an item. `failed` counts — that is
+  // the state production job 355b0237 was left in.
+  for (const status of ["awaiting_approval", "approved", "published", "rejected", "failed"]) {
+    assert.equal(isDeliveredContentJob({ status, item_id: "i1" }), true, `${status} + item is delivered`);
+    assert.equal(isRewoundContentJob({ status, item_id: "i1" }), false, `${status} is not a rewind`);
+    assert.equal(isDeliveredContentJob({ status, item_id: null }), false, `${status} without an item delivered nothing`);
+  }
+  // Rewound: a worker-owned status WITH an item.
+  for (const status of CONTENT_JOB_RUNNING) {
+    assert.equal(isRewoundContentJob({ status, item_id: "i1" }), true, `${status} + item is the damage shape`);
+    assert.equal(isDeliveredContentJob({ status, item_id: "i1" }), false);
+    assert.equal(isRewoundContentJob({ status, item_id: null }), false, `${status} without an item is LIVE WORK`);
+  }
+  assert.equal(isRewoundContentJob(null), false);
+  assert.equal(isDeliveredContentJob(undefined), false);
+});
+
+test("R3.5.7 HEAL — listRewoundContentJobs asks the database for running status AND a non-null item_id", async () => {
+  const { client, calls } = makeMockClient({
+    content_jobs: () => ({
+      data: [
+        { id: "rewound", status: "reviewing", item_id: "item-1" },
+        // A row the filter should never return; if a lax database did, the
+        // in-process predicate is the second line of defence.
+        { id: "live", status: "drafting", item_id: null },
+      ],
+      error: null,
+    }),
+  });
+
+  const rows = await listRewoundContentJobs(10, { client });
+
+  assert.deepEqual(rows.map((r) => r.id), ["rewound"], "live work must never be listed for healing");
+  assert.deepEqual(calls[0].filters.find((f) => f[0] === "in"), ["in", "status", CONTENT_JOB_RUNNING]);
+  assert.deepEqual(calls[0].filters.find((f) => f[0] === "not"), ["not", "item_id", "is", null]);
+});
+
+test("R3.5.7 HEAL — an unreadable table THROWS; it is never reported as 'nothing to heal'", async () => {
+  const { client } = makeMockClient({
+    content_jobs: () => ({ data: null, error: { message: "permission denied for table content_jobs" } }),
+  });
+  await assert.rejects(() => listRewoundContentJobs(10, { client }), ContentReadError);
+});
+
+test("R3.5.7 HEAL — a rewound row heals to awaiting_approval through a doubly-conditional UPDATE", async () => {
+  const { client, calls } = makeMockClient({
+    content_jobs: () => ({ data: [{ id: "rewound", status: "awaiting_approval" }], error: null }),
+  });
+
+  const out = await healRewoundContentJob({ id: "rewound", status: "reviewing", item_id: "item-1" }, { client });
+
+  assert.equal(out.healed, true);
+  assert.equal(out.reason, "rewound_after_delivery");
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].op, "update");
+  assert.equal(calls[0].values.status, "awaiting_approval");
+  assert.equal("item_id" in calls[0].values, false, "the heal must never touch item_id — it is the evidence");
+  assert.deepEqual(calls[0].filters.find((f) => f[0] === "eq"), ["eq", "id", "rewound"], "one row only");
+  assert.deepEqual(calls[0].filters.find((f) => f[0] === "in"), ["in", "status", CONTENT_JOB_RUNNING]);
+  assert.deepEqual(calls[0].filters.find((f) => f[0] === "not"), ["not", "item_id", "is", null]);
+});
+
+test("R3.5.7 HEAL — a job with NO item is never healed, and the database is not even asked", async () => {
+  const { client, calls } = makeMockClient({
+    content_jobs: () => {
+      throw new Error("the heal must not reach the database for live work");
+    },
+  });
+
+  const out = await healRewoundContentJob({ id: "live", status: "drafting", item_id: null }, { client });
+
+  assert.equal(out.healed, false);
+  assert.equal(out.reason, "not_rewound");
+  assert.equal(calls.length, 0, "stamping awaiting_approval on a job with no draft would fabricate a delivery");
+});
+
+test("R3.5.7 HEAL — losing the race (someone moved the row first) is reported, not counted as a heal", async () => {
+  const { client } = makeMockClient({ content_jobs: () => ({ data: [], error: null }) });
+  const out = await healRewoundContentJob({ id: "rewound", status: "reviewing", item_id: "item-1" }, { client });
+  assert.equal(out.healed, false);
+  assert.equal(out.reason, "no_longer_rewound");
+});
+
+test("R3.5.7 HEAL — a failed heal write is reported with its reason, never swallowed", async () => {
+  const { client } = makeMockClient({
+    content_jobs: () => ({ data: null, error: { message: "deadlock detected" } }),
+  });
+  const out = await healRewoundContentJob({ id: "rewound", status: "reviewing", item_id: "item-1" }, { client });
+  assert.equal(out.healed, false);
+  assert.equal(out.reason, "heal_write_failed");
+  assert.match(out.detail, /deadlock/);
+});
+

@@ -1615,3 +1615,201 @@ test("R3.1.14 budget: the shipped default leaves headroom for one more content b
     "at least 200 s must remain after the budget line for the overshooting block and the hand-off"
   );
 });
+
+// ---------------------------------------------------------------------------
+// R3.5.7 — a worker execution must not rewind a job that already delivered.
+//
+// Production, 2026-09-18: job 355b0237 reached awaiting_approval with an item
+// at 19:17:51; a second execution then wrote a running status back over it, and
+// from then on every sweep re-dispatched it. R3.5.6 broke that loop at the
+// rescue predicate. These pin the two writes that caused it: startContentJob
+// now looks at the row before it spends, and every status write is conditional.
+// ---------------------------------------------------------------------------
+
+const { CONTENT_JOB_RUNNING: RUNNING_STATUSES } = await import("../db/content.js");
+
+/** An LLM that fails the test the moment it is called: a refusal must not spend. */
+function llmThatMustNotRun() {
+  return async () => {
+    throw new Error("the LLM was called for a job that had already delivered — that is the double spend");
+  };
+}
+
+test("R3.5.7 REFUSE — a delivered job is refused with a named outcome: nothing runs, nothing is written", async () => {
+  // `failed` is included on purpose: it is the state 355b0237 was actually left in.
+  for (const status of ["awaiting_approval", "approved", "published", "rejected", "failed"]) {
+    const { deps, jobUpdates, items } = makeDeps(llmThatMustNotRun());
+    deps.job = { ...deps.job, status, item_id: "item-already-there" };
+
+    const out = await startContentJob("job-1", deps);
+
+    assert.deepEqual(
+      out,
+      { refused: true, reason: "already_delivered", job_id: "job-1", status, item_id: "item-already-there" },
+      `status "${status}" + item_id must be a refusal — not null (failure), not an item (success)`
+    );
+    assert.deepEqual(jobUpdates, [], `THE BUG: a "${status}" job was rewound by a status write`);
+    assert.deepEqual(items, [], "and no second item row was written to fight the first");
+  }
+});
+
+test("R3.5.7 REFUSE — item_id alone decides nothing: a job with NO item still runs", async () => {
+  // The refusal must not swallow real work. `pending` with no item is the
+  // ordinary case and is covered by the happy path; this is the edge: a row
+  // whose item_id is null is never "delivered", whatever its status claims.
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, items } = makeDeps(llm);
+  deps.job = { ...deps.job, status: "pending", item_id: null };
+
+  const item = await startContentJob("job-1", deps);
+
+  assert.ok(item && !item.refused, "a job with no item is live work and must run");
+  assert.equal(items.length, 1);
+});
+
+test("R3.5.7 GUARD — every STATUS write is conditional on a worker-owned status; trace/cost writes are not", async () => {
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps } = makeDeps(llm);
+  const writes = [];
+  deps.updateContentJob = async (jobId, updates, writeDeps) => {
+    writes.push({
+      status: updates.status ?? null,
+      ifStatusIn: writeDeps?.ifStatusIn ?? null,
+      ownershipProbe: !!writeDeps?.ownershipProbe,
+    });
+    return { id: jobId, ...updates };
+  };
+
+  await startContentJob("job-1", deps);
+
+  const statusWrites = writes.filter((w) => w.status);
+  assert.ok(statusWrites.length >= 6, "the pipeline writes a status at every stage");
+  for (const w of statusWrites) {
+    assert.deepEqual(
+      w.ifStatusIn,
+      RUNNING_STATUSES,
+      `the write of "${w.status}" went out UNGUARDED — a second execution could rewind a delivered job with it`
+    );
+  }
+  // The ONE no-status write that is guarded is the pre-item ownership check,
+  // which is guarded precisely because it is asking "is this row still ours?".
+  for (const w of writes.filter((x) => !x.status && !x.ownershipProbe)) {
+    assert.equal(w.ifStatusIn, null, "a write with no status cannot rewind a lifecycle and stays unconditional");
+  }
+  assert.equal(writes.filter((x) => x.ownershipProbe).length, 1, "exactly one ownership check per delivered item");
+});
+
+// The test that stood here ("a refused status write is survived loudly") was
+// VACUOUS, and the R3.5.7 verifier caught it: its fixtures let the pipeline
+// succeed, so the catch block never ran and "`failed` never reached the row"
+// passed without the failure write ever being issued. Worse, it blessed the
+// behaviour that turned out to be the bug — carrying on after a refusal. The
+// four tests below each FORCE the path they name.
+
+/** A status-write stub whose refusals start at a chosen point. Records everything. */
+function guardedUpdateStub({ refuseWhen }) {
+  const seen = [];
+  const stub = async (jobId, updates, writeDeps) => {
+    const entry = {
+      status: updates.status ?? null,
+      guarded: Array.isArray(writeDeps?.ifStatusIn),
+      ownershipProbe: !!writeDeps?.ownershipProbe,
+      refused: false,
+    };
+    seen.push(entry);
+    if (entry.guarded && refuseWhen(entry, seen)) {
+      entry.refused = true;
+      return { refused: true, reason: "status_guard", job_id: jobId, attempted_status: entry.status, detail: "row moved" };
+    }
+    return { id: jobId, ...updates };
+  };
+  return { stub, seen };
+}
+
+test("R3.5.7 ABORT — a refused status write STOPS the run: the delivered item is never touched", async () => {
+  // THE VERIFIER'S FINDING. Another execution delivered this job; every guarded
+  // write is now refused. The old code logged and carried on to
+  // insertContentItem, whose (job_id, cycle) upsert overwrote the draft a human
+  // was reading and rewound an approved item — then returned it as a success.
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, items } = makeDeps(llm);
+  const { stub, seen } = guardedUpdateStub({ refuseWhen: () => true });
+  deps.updateContentJob = stub;
+
+  const out = await startContentJob("job-1", deps);
+
+  assert.deepEqual(items, [], "THE BUG: insertContentItem ran and overwrote the delivered item");
+  assert.equal(out?.refused, true, "not an item (a fabricated success) and not null (a failure to retry)");
+  assert.equal(out.reason, "no_longer_ours");
+  assert.equal(out.job_id, "job-1");
+  assert.equal(seen.filter((w) => w.refused).length, 1, "the FIRST refusal ends the run — it does not try again five more times");
+  assert.equal(
+    seen.some((w) => w.status === "failed"),
+    false,
+    "no failure write is even ATTEMPTED: the row belongs to a delivered job, not to a failed one"
+  );
+});
+
+test("R3.5.7 ABORT — delivered out from under us DURING review: the ownership check stops the item write", async () => {
+  // Every status write succeeds ("reviewing" was the last). Then, while the
+  // review LLM call runs, another execution delivers. Only the pre-item
+  // ownership check can see that — without it the upsert goes ahead.
+  const { llm } = makeFakeLlm([LI_WORK_ORDER, RESEARCH_PACK, LI_DRAFT, LI_REVIEW_PASS]);
+  const { deps, items } = makeDeps(llm);
+  const { stub, seen } = guardedUpdateStub({ refuseWhen: (entry) => entry.ownershipProbe });
+  deps.updateContentJob = stub;
+
+  const out = await startContentJob("job-1", deps);
+
+  const probe = seen.find((w) => w.ownershipProbe);
+  assert.ok(probe, "the row's ownership must be asked for immediately before the item write");
+  assert.equal(probe.guarded, true, "and asked of the DATABASE, as a guarded write — not read and then trusted");
+  assert.equal(probe.status, null, "it writes no status: it must not add a step to the lifecycle");
+  assert.deepEqual(items, [], "the item write did not happen");
+  assert.equal(out?.reason, "no_longer_ours");
+  assert.deepEqual(
+    seen.map((w) => w.status).filter(Boolean),
+    ["coordinating", "researching", "benchmarking", "drafting", "reviewing"],
+    "the run got all the way to review before it was stopped — and never wrote awaiting_approval"
+  );
+});
+
+test("R3.5.7 GUARD — a GENUINE mid-pipeline failure writes `failed` THROUGH the guard", async () => {
+  // Unpinned until the verifier mutated it: the failure write at the end of the
+  // catch block could go out unguarded and nothing noticed. The LLM script is
+  // too short on purpose, so the pipeline really throws and the catch really runs.
+  const { llm } = makeFakeLlm([LI_WORK_ORDER]);
+  const { deps } = makeDeps(llm);
+  const { stub, seen } = guardedUpdateStub({ refuseWhen: () => false });
+  deps.updateContentJob = stub;
+
+  const out = await startContentJob("job-1", deps);
+
+  assert.equal(out, null, "a real failure is still null — the refusal outcomes must not swallow it");
+  const failWrite = seen.find((w) => w.status === "failed");
+  assert.ok(failWrite, "the pipeline threw, so a failure write must have been issued");
+  assert.equal(
+    failWrite.guarded,
+    true,
+    "THE SURVIVING MUTATION: an unguarded `failed` write stamps failed over a job that reached the human gate"
+  );
+});
+
+test("R3.5.7 GUARD — when that failure write is REFUSED, `failed` never lands and nothing goes around the guard", async () => {
+  // The run fails for a real reason, but by then the row was delivered by
+  // someone else. `failed` must not overwrite awaiting_approval, and the worker
+  // must not retry the write unguarded to "make sure".
+  const { llm } = makeFakeLlm([LI_WORK_ORDER]);
+  const { deps, items } = makeDeps(llm);
+  const { stub, seen } = guardedUpdateStub({ refuseWhen: (entry) => entry.status === "failed" });
+  deps.updateContentJob = stub;
+
+  const out = await startContentJob("job-1", deps);
+
+  assert.equal(out, null);
+  const failWrites = seen.filter((w) => w.status === "failed");
+  assert.equal(failWrites.length, 1, "asked once, refused once — no second attempt");
+  assert.equal(failWrites[0].guarded, true);
+  assert.equal(failWrites[0].refused, true);
+  assert.deepEqual(items, []);
+});

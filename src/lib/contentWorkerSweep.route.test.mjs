@@ -47,6 +47,7 @@ let contentCronReport = null;
 let brandsForDailyBatch = null;
 let dispatchWithLease = null;
 let contentDirectResumeReport = null;
+let deliveryPrecheck = null;
 try {
   ({
     GET,
@@ -54,6 +55,7 @@ try {
     brandsForDailyBatch,
     dispatchWithLease,
     contentDirectResumeReport,
+    deliveryPrecheck,
   } = await import("../app/api/content/worker/route.js"));
 } catch (error) {
   importError = error;
@@ -923,3 +925,157 @@ test("R3.1.14 GUARD — the sweep loop calls no inline start", async () => {
     "the sweep and the batch loop both hand off by fetch"
   );
 });
+
+// ---------------------------------------------------------------------------
+// R3.5.7 — the sweep HEALS a rewound row and SAYS SO in the response; a direct
+// resume of a delivered job is a named skip.
+//
+// "Reported in the /api/content/worker response, not only logged" is the accept
+// clause: Vercel Hobby keeps runtime logs for one hour, so a heal that only
+// console.warn'd would be invisible by morning.
+// ---------------------------------------------------------------------------
+
+test("R3.5.7 SWEEP — a healed row is in the response envelope, with its id and why", async () => {
+  const healedCalls = [];
+  const { deps } = sweepDeps({
+    listRewoundContentJobs: async () => [{ id: "355b0237", status: "reviewing", item_id: "item-355" }],
+    healRewoundContentJob: async (job) => {
+      healedCalls.push(job.id);
+      return { healed: true, id: job.id, reason: "rewound_after_delivery", detail: 'was "reviewing" with item_id item-355' };
+    },
+  });
+
+  const response = await handler()(authed(), deps);
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(healedCalls, ["355b0237"]);
+  assert.equal(body.healed_count, 1);
+  assert.deepEqual(body.healed_ids, ["355b0237"]);
+  assert.equal(body.healed[0].reason, "rewound_after_delivery");
+  assert.deepEqual(body.heal_failed, []);
+  assert.equal(body.heal_unavailable, null);
+});
+
+test("R3.5.7 SWEEP — a heal that did NOT take is in heal_failed, never counted as healed", async () => {
+  const { deps } = sweepDeps({
+    listRewoundContentJobs: async () => [{ id: "raced", status: "reviewing", item_id: "item-1" }],
+    healRewoundContentJob: async (job) => ({ healed: false, id: job.id, reason: "no_longer_rewound", detail: "moved first" }),
+  });
+
+  const body = await (await handler()(authed(), deps)).json();
+
+  assert.equal(body.healed_count, 0, "a skip is not a success");
+  assert.deepEqual(body.healed_ids, []);
+  assert.equal(body.heal_failed.length, 1);
+  assert.equal(body.heal_failed[0].reason, "no_longer_rewound");
+});
+
+test("R3.5.7 SWEEP — being unable to LOOK for rewound rows is said out loud, and the sweep still dispatches", async () => {
+  const { deps, fired } = sweepDeps({
+    listResumableContentJobs: async () => [{ id: "job-a" }],
+    listRewoundContentJobs: async () => {
+      const err = new Error("permission denied for table content_jobs");
+      err.code = "db_read_failed";
+      throw err;
+    },
+    healRewoundContentJob: async () => {
+      throw new Error("must not be reached when the list could not be read");
+    },
+  });
+
+  const response = await handler()(authed(), deps);
+  const body = await response.json();
+
+  assert.equal(response.status, 200, "maintenance failing must not turn a working dispatch into a 5xx");
+  assert.deepEqual(fired, ["job-a"], "the real work of the sweep is unaffected");
+  assert.equal(body.healed_count, 0);
+  assert.equal(body.heal_unavailable.reason, "db_read_failed", "'could not look' must never read as 'nothing to heal'");
+  assert.match(body.heal_unavailable.detail, /permission denied/);
+});
+
+test("R3.5.7 DIRECT — ?job_id= for a job that already delivered is a 200 SKIP: nothing is leased, nothing runs", async () => {
+  let leased = 0;
+  const { deps, started } = directDeps({
+    getContentJob: async () => ({ id: "355b0237", status: "awaiting_approval", item_id: "item-355" }),
+    acquireLease: async () => {
+      leased += 1;
+      return { id: "355b0237" };
+    },
+  });
+
+  const response = await handler()(authed("?job_id=355b0237"), deps);
+  const body = await response.json();
+
+  assert.equal(response.status, 200, "correctly refusing to double-pay is not an outage");
+  assert.equal(body.dispatched, 0);
+  assert.equal(body.reason, "already_delivered");
+  assert.equal(body.delivery_check, "refused");
+  assert.equal(leased, 0, "no lease is taken for work that will not happen");
+  assert.deepEqual(started, [], "THE BUG: this job used to be re-run and rewound");
+});
+
+test("R3.5.7 DIRECT — a REWOUND job (running status + item) is refused too; the sweep heals it, a resume must not run it", async () => {
+  const { deps, started } = directDeps({
+    getContentJob: async () => ({ id: "rw", status: "reviewing", item_id: "item-1" }),
+  });
+
+  const body = await (await handler()(authed("?job_id=rw"), deps)).json();
+
+  assert.equal(body.dispatched, 0);
+  assert.equal(body.reason, "already_delivered");
+  assert.deepEqual(started, []);
+});
+
+test("R3.5.7 DIRECT — live work (no item) passes the check and is dispatched exactly as before", async () => {
+  const { deps, started } = directDeps({
+    getContentJob: async () => ({ id: "live", status: "drafting", item_id: null }),
+  });
+
+  const body = await (await handler()(authed("?job_id=live"), deps)).json();
+
+  assert.equal(body.dispatched, 1);
+  assert.equal(body.delivery_check, "ok");
+  assert.deepEqual(started.map((s) => s.jobId), ["live"]);
+});
+
+test("R3.5.7 DIRECT — if the row cannot be READ the job is still dispatched, and the response says the check did not run", async () => {
+  // Failing closed here would strand every job behind a flaky read; the worker
+  // re-checks on its own read, and the status guard makes a rewind impossible
+  // regardless. What is NOT acceptable is reporting the check as having passed.
+  const { deps, started } = directDeps({
+    getContentJob: async () => {
+      throw new Error("read timeout");
+    },
+  });
+
+  const body = await (await handler()(authed("?job_id=flaky"), deps)).json();
+
+  assert.equal(body.dispatched, 1);
+  assert.equal(body.delivery_check, "unavailable", "'did not check' must never be reported as 'ok'");
+  assert.deepEqual(started.map((s) => s.jobId), ["flaky"]);
+});
+
+test("R3.5.7 PRECHECK — deliveryPrecheck names all three outcomes", async () => {
+  assert.equal(
+    (await deliveryPrecheck("a", { getContentJob: async () => ({ status: "approved", item_id: "i" }) })).check,
+    "refused"
+  );
+  assert.equal(
+    (await deliveryPrecheck("b", { getContentJob: async () => ({ status: "pending", item_id: null }) })).check,
+    "ok"
+  );
+  assert.equal(
+    (await deliveryPrecheck("c", { getContentJob: async () => null })).check,
+    "ok",
+    "an unknown job is not a delivered one; dispatchWithLease and the worker decide what to do with it"
+  );
+  const unavailable = await deliveryPrecheck("d", {
+    getContentJob: async () => {
+      throw new Error("boom");
+    },
+  });
+  assert.equal(unavailable.check, "unavailable");
+  assert.match(unavailable.detail, /boom/);
+});
+

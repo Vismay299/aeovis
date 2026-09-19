@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { isCronAuthorized } from "@/lib/cronAuth";
 import { recordCronTick } from "@/lib/db/analytics";
 import { supabase } from "@/lib/db";
-import { listResumableContentJobs } from "@/lib/db/content";
+import {
+  listResumableContentJobs,
+  listRewoundContentJobs,
+  healRewoundContentJob,
+  getContentJob,
+  isRewoundContentJob,
+  isDeliveredContentJob,
+} from "@/lib/db/content";
 import { acquireLease, newLeaseOwner } from "@/lib/jobLease";
 import { startContentJob, CONTENT_WORKER_PATH } from "@/lib/content/contentWorker";
 import { createDailyBatchJobs, getDailyBatchSize } from "@/lib/content/dailyBatch";
@@ -17,6 +24,14 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const MAX_CONCURRENT_RESUMES = 3;
+
+/**
+ * R3.5.7 — how many rewound rows one sweep repairs. Each heal is a single
+ * conditional UPDATE (no model spend, no pipeline), so this is bounded only to
+ * keep one pass's work predictable; a larger backlog is healed over the next
+ * few ticks and `healed` in the response shows the progress.
+ */
+const MAX_REWOUND_HEALS = 20;
 
 // Boxed so the shared gate can flip it; one warning per process per route.
 const warnedNoSecret = { value: false };
@@ -123,6 +138,56 @@ export function dispatchBySelfContinue(jobId, label, deps = {}) {
 }
 
 /**
+ * R3.5.7 — may this `?job_id=` request start the job at all?
+ *
+ * startContentJob refuses a delivered job itself (it is the authority, and it
+ * also covers POST /api/content), but it runs fire-and-forget under keepAlive,
+ * so its verdict can never reach this response. The same two predicates are
+ * therefore evaluated HERE, on the row the request names, so the branch can
+ * report a REFUSAL — a named skip, neither `dispatched: 1` nor a 500.
+ *
+ * ITS OWN SEAM, deliberately NOT inside dispatchWithLease: that function's
+ * contract is "take the lease and run", and R3.1.11 pins it by counting the
+ * statements its injected client receives. A read smuggled in there would both
+ * blur that contract and break that count.
+ *
+ * THREE verdicts, because a check that could not run must never look like a
+ * check that passed (standing rule 1):
+ *   - `{ check: "ok" }`          — the row was read and may be resumed.
+ *   - `{ check: "refused" }`     — it already delivered; do not dispatch.
+ *   - `{ check: "unavailable" }` — the row could not be read. We DISPATCH
+ *     anyway (exactly the behaviour before this task) because a transient read
+ *     failure must not strand a job; startContentJob re-checks on its own read
+ *     and refuses there. The response says the check did not run.
+ */
+export async function deliveryPrecheck(jobId, deps = {}) {
+  try {
+    const job = await (deps.getContentJob ?? getContentJob)(jobId, { client: deps.client ?? null });
+    // Both shapes are refused: a row that reached the human gate carrying an
+    // item (delivered), and a row already rewound back into a running status
+    // (the R3.5.6 damage — production's re-dispatch loop came in through here).
+    if (isDeliveredContentJob(job) || isRewoundContentJob(job)) {
+      const detail =
+        `job is "${job.status}" with item_id ${job.item_id} — it already delivered an item, so ` +
+        `running it again would re-pay for a draft that exists and fight its own item row`;
+      console.warn(`[content-cron] direct resume of job ${jobId} REFUSED: ${detail}`);
+      return { check: "refused", reason: "already_delivered", detail };
+    }
+    return { check: "ok", reason: null, detail: null };
+  } catch (err) {
+    console.warn(
+      `[content-cron] job ${jobId}: could not read the row to check whether it already delivered ` +
+        `(${err.message}) — dispatching anyway; startContentJob re-checks on its own read.`
+    );
+    return {
+      check: "unavailable",
+      reason: null,
+      detail: `delivery check did not run: ${err.message || "read failed"}`,
+    };
+  }
+}
+
+/**
  * Take the lease, then run the job IN THIS INVOCATION. Returns the lease owner
  * if we won the job, else null. This is the single-flight gate (D1): before
  * this, the cron fired startContentJob() fire-and-forget with no exclusivity,
@@ -200,8 +265,12 @@ export function contentDirectResumeReport({
   reason = null,
   detail = null,
   ledgerWritten = false,
+  deliveryCheck = "ok",
 } = {}) {
   return {
+    // R3.5.7 — `already_delivered` is a 200 SKIP: nothing ran, nothing failed,
+    // and the row is not lost (the sweep heals it). A 5xx here would page an
+    // operator for the system correctly refusing to double-pay.
     status: reason === "lease_acquire_failed" ? 500 : 200,
     body: {
       mode: "direct-resume",
@@ -213,6 +282,9 @@ export function contentDirectResumeReport({
       reason: ok ? null : reason || "unknown",
       detail,
       ledger_written: ledgerWritten,
+      // "ok" | "refused" | "unavailable" — see deliveryPrecheck. A check that
+      // could not run must not read as one that passed.
+      delivery_check: deliveryCheck,
     },
   };
 }
@@ -299,6 +371,9 @@ export function contentCronReport({
   batchFailed = [],
   batchUnavailable = null,
   selfContinue = [],
+  healed = [],
+  healFailed = [],
+  healUnavailable = null,
   dispatchMode = "self_continue",
 } = {}) {
   const normalizedSkipped = (skippedIds || []).map((s) =>
@@ -334,6 +409,17 @@ export function contentCronReport({
       batch_failed: batchFailed.length,
       batch_failed_brands: batchFailed,
       batch_unavailable: batchUnavailable,
+      // R3.5.7 — the repair stage, IN THE ENVELOPE and not only in console.warn.
+      // `healed` carries one `{ id, reason, detail }` per row put back to
+      // awaiting_approval; `heal_failed` the ones that could not be; and
+      // `heal_unavailable` is ALWAYS present so `healed: []` can be read at all
+      // — null means the damaged-row query ran and found nothing (a measured
+      // zero), an object means it could not run (never looked).
+      healed,
+      healed_count: healed.length,
+      healed_ids: healed.map((h) => h && h.id).filter(Boolean),
+      heal_failed: healFailed,
+      heal_unavailable: healUnavailable,
       dispatch_mode: dispatchMode,
       self_continue: selfContinue,
     },
@@ -407,13 +493,32 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
   const directJobId = searchParams.get("job_id");
   if (directJobId) {
     try {
+      // R3.5.7 — refuse an already-delivered row before taking a lease or
+      // spending anything, and report the refusal as a named skip.
+      const precheck = await (deps.deliveryPrecheck ?? deliveryPrecheck)(directJobId, {
+        ...deps,
+        client,
+      });
+      if (precheck.check === "refused") {
+        const { status, body } = contentDirectResumeReport({
+          jobId: directJobId,
+          ok: false,
+          reason: precheck.reason,
+          detail: precheck.detail,
+          ledgerWritten: !!client,
+          deliveryCheck: precheck.check,
+        });
+        return NextResponse.json(body, { status });
+      }
+
       const res = await dispatchWithLease(directJobId, "direct resume", dispatchDeps);
       const { status, body } = contentDirectResumeReport({
         jobId: directJobId,
         ok: res.ok,
         reason: res.reason,
-        detail: res.error?.message || null,
+        detail: res.error?.message || precheck.detail || null,
         ledgerWritten: !!client,
+        deliveryCheck: precheck.check,
       });
       if (!res.ok) {
         console.warn(
@@ -448,6 +553,13 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
           reason: "db_not_configured",
           detail:
             "The data store is not configured — the content cron cannot resume jobs or create batches.",
+        },
+        // `healed: []` here must not read as "no damaged rows": nothing looked.
+        healUnavailable: {
+          reason: "db_not_configured",
+          detail:
+            "The data store is not configured — rewound content jobs could not be looked for, " +
+            "let alone healed.",
         },
       });
       return NextResponse.json({ ...body, ledger_written: false }, { status });
@@ -490,6 +602,50 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
           };
         }
       }
+    }
+
+    // ------------------------------------------------------------------
+    // 1b. R3.5.7 — SELF-HEAL the rewound rows, before the batch stage below.
+    //
+    // A row in a running status that already carries an item_id delivered and
+    // was then rewound by a second execution. R3.5.6 stopped re-dispatching
+    // such a row, which also removed it from the resume list above
+    // (shouldRescueContentJob refuses it), so nothing was left to REPAIR it: it
+    // stayed stale + running forever and blocked its brand's daily batch until
+    // an operator cleared it by hand.
+    //
+    // ORDER: before the batch, so a brand whose only "live" geo_article job is
+    // a rewound row gets its batch in the SAME pass (createDailyBatchJobs also
+    // ignores item_id rows, so the two fixes do not depend on each other).
+    //
+    // A row with item_id NULL is never healed — see healRewoundContentJob.
+    const healed = [];
+    const healFailed = [];
+    let healUnavailable = null;
+    try {
+      const listRewound = deps.listRewoundContentJobs ?? listRewoundContentJobs;
+      const heal = deps.healRewoundContentJob ?? healRewoundContentJob;
+      const rewound = await listRewound(MAX_REWOUND_HEALS, { client });
+      for (const job of rewound) {
+        const outcome = await heal(job, { client });
+        if (outcome.healed) healed.push(outcome);
+        else healFailed.push(outcome);
+      }
+      if (rewound.length) {
+        console.warn(
+          `[content-cron] ${rewound.length} rewound content job(s) found (running status WITH an ` +
+            `item_id): ${healed.length} healed to awaiting_approval, ${healFailed.length} not.`
+        );
+      }
+    } catch (err) {
+      // A read that could not be performed must never look like "nothing to
+      // heal" (standing rule 1). The sweep itself did run, so the status stays
+      // 200 and this field is what says the repair stage did not.
+      healUnavailable = {
+        reason: err.code || "heal_read_failed",
+        detail: `Could not look for rewound content jobs: ${err.message || "unknown error"}`,
+      };
+      console.error("[content-cron] could not look for rewound content jobs:", err.message);
     }
 
     // 2. Daily batch (opt-in).
@@ -568,6 +724,9 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
       batchFailed,
       batchUnavailable,
       selfContinue: selfContinueResults,
+      healed,
+      healFailed,
+      healUnavailable,
     });
     return NextResponse.json(body, { status });
   } catch (error) {

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { supabase } from "../db.js";
 import { leaseIsFree } from "../jobLease.js";
 import { builtinAgents } from "../content/agents/model.js";
+import { isBeyondWorker } from "../content/stages.js";
 
 /**
  * Error thrown when a content DB read cannot be performed — mirrors
@@ -190,30 +191,92 @@ export async function getContentJob(jobId, deps = {}) {
   return data[0] || null;
 }
 
+/**
+ * R3.5.7 — the refusal envelope of a GUARDED update (`deps.ifStatusIn`).
+ *
+ * NOT null and NOT a row: "the row was not in a status I was allowed to
+ * overwrite" is a third outcome, and a caller that cannot tell it from a
+ * successful write is the bug this task exists for (standing rule 1). The
+ * shape carries everything an operator needs to read the log line.
+ */
+function statusGuardRefusal(jobId, updates, ifStatusIn, detail) {
+  return {
+    refused: true,
+    reason: "status_guard",
+    job_id: jobId,
+    attempted_status: updates?.status ?? null,
+    expected_status_in: ifStatusIn,
+    detail,
+  };
+}
+
+/**
+ * Update one content_jobs row.
+ *
+ * R3.5.7 — `deps.ifStatusIn` makes the write CONDITIONAL: the UPDATE only
+ * touches the row if its CURRENT status is one of the listed ones, and a write
+ * that matched nothing returns the refusal envelope above instead of a row.
+ *
+ * WHY AT THE DB AND NOT A READ-THEN-WRITE. `.in("status", ...)` rides in the
+ * same statement as the UPDATE, so postgres evaluates the precondition and the
+ * write atomically; a read-modify-write would leave a window in which the human
+ * decision route (or another execution) moves the row between our read and our
+ * write, which is exactly the race that produced the rewound rows. It is also
+ * why the guard is not `.eq("status", lastStatus)`: `lastStatus` is what THIS
+ * execution last wrote and starts as null, so the first write of a re-execution
+ * — the one that did the damage in production — would have no precondition at
+ * all.
+ *
+ * The guard is opt-in so every existing caller (the decision route, the publish
+ * step, reviseContentItem) keeps writing unconditionally; it travels in `deps`
+ * rather than a fourth positional argument so no intermediate caller can drop
+ * it by arity.
+ */
 export async function updateContentJob(jobId, updates, deps = {}) {
   const client = resolveClient(deps);
   const hasDb = !!client;
+  const ifStatusIn = Array.isArray(deps?.ifStatusIn) ? deps.ifStatusIn : null;
   // Any update means the worker is alive — stamp on every call.
   const stamped = { ...updates, heartbeat_at: new Date().toISOString() };
 
   if (!hasDb) {
     const memJob = global.memoryContentJobs.get(jobId);
     if (memJob) {
+      if (ifStatusIn && !ifStatusIn.includes(memJob.status)) {
+        return statusGuardRefusal(
+          jobId,
+          updates,
+          ifStatusIn,
+          `the in-memory job is "${memJob.status}" — the write was refused, not applied`
+        );
+      }
       Object.assign(memJob, stamped);
       return memJob;
+    }
+    // A guarded write means "only if the row is still in one of these
+    // statuses"; there is no row, so there is nothing to guard and creating one
+    // would invent the very state the guard exists to protect.
+    if (ifStatusIn) {
+      return statusGuardRefusal(jobId, updates, ifStatusIn, "no such job in memory");
     }
     const created = { id: jobId, ...stamped };
     global.memoryContentJobs.set(jobId, created);
     return created;
   }
 
-  const { data, error } = await client
-    .from("content_jobs")
-    .update(stamped)
-    .eq("id", jobId)
-    .select();
+  let query = client.from("content_jobs").update(stamped).eq("id", jobId);
+  if (ifStatusIn) query = query.in("status", ifStatusIn);
+  const { data, error } = await query.select();
   if (error) throw error;
-  return data[0];
+  if (ifStatusIn && !(data || []).length) {
+    return statusGuardRefusal(
+      jobId,
+      updates,
+      ifStatusIn,
+      "the conditional UPDATE matched no row — the job has left the worker-owned statuses"
+    );
+  }
+  return (data || [])[0];
 }
 
 function queryKeyLower(text) {
@@ -360,6 +423,145 @@ export async function listResumableContentJobs(limit = 5, deps = {}) {
     );
   }
   return (data || []).filter((job) => shouldRescueContentJob(job)).slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
+// R3.5.7 — rewound rows: detect and heal the R3.5.6 damage shape
+//
+// A job row in a RUNNING status that already carries an `item_id` cannot have
+// arrived there legitimately: `item_id` is written by exactly one statement in
+// the pipeline, contentWorker's terminal write, which sets it together with
+// `status: "awaiting_approval"`. So the pair (running status, item_id set) is
+// proof that a second execution wrote a running status over a delivered row.
+//
+// shouldRescueContentJob refuses such a row (that is R3.5.6: it stopped the
+// re-dispatch loop), which also means it never reaches the resume sweep again —
+// so nothing was left to REPAIR it, and the row stayed stale-heartbeat +
+// running forever, blocking the brand's daily batch. These two functions are
+// that repair, driven from the cron sweep.
+// ---------------------------------------------------------------------------
+
+/**
+ * R3.5.7 — this job has DELIVERED and is past the worker's hands: it carries an
+ * item_id and its status is one no worker execution may own (awaiting_approval
+ * and beyond — the list is derived in content/stages.js). The one predicate
+ * shared by startContentJob's refusal and the worker route's `?job_id=` branch,
+ * so the two cannot drift.
+ */
+export function isDeliveredContentJob(job) {
+  return !!job?.item_id && isBeyondWorker(job.status);
+}
+
+/** True for the R3.5.6 damage shape: a running status with an item already delivered. */
+export function isRewoundContentJob(job) {
+  return !!job && !!job.item_id && CONTENT_JOB_RUNNING.includes(job.status);
+}
+
+/**
+ * Rows in the damage shape, for the sweep to heal.
+ *
+ * FAIL-LOUD, like listResumableContentJobs: the returned array means "the
+ * database answered". A read that could not be performed THROWS, because
+ * "nothing to heal" and "we could not look" must not share a wire value — the
+ * cron reports the difference (`heal_unavailable`).
+ *
+ * @throws {ContentReadError} db_not_configured | db_read_failed
+ */
+export async function listRewoundContentJobs(limit = 10, deps = {}) {
+  const client = resolveClient(deps);
+  if (!client) {
+    throw new ContentReadError(
+      "Supabase is not configured — rewound content jobs cannot be read. This is a refusal to " +
+        "look, not a workspace with no damaged rows.",
+      { code: "db_not_configured" }
+    );
+  }
+  const { data, error } = await client
+    .from("content_jobs")
+    .select("id, brand, playbook, status, item_id, heartbeat_at, created_at")
+    .in("status", CONTENT_JOB_RUNNING)
+    .not("item_id", "is", null)
+    .limit(Math.max(limit, 1));
+  if (error) {
+    throw new ContentReadError(
+      `Could not read rewound content jobs: ${error.message || error.code || "unknown database error"}`,
+      { cause: error, code: "db_read_failed" }
+    );
+  }
+  // Belt and braces: the predicate, not the query, is the definition.
+  return (data || []).filter(isRewoundContentJob).slice(0, Math.max(limit, 1));
+}
+
+/**
+ * Put one rewound row back where its terminal write left it:
+ * `awaiting_approval`, progress 100.
+ *
+ * NEVER heals a row with `item_id` null — without a delivered item there is no
+ * evidence a terminal write ever happened, and moving such a row to the human
+ * gate would invent a delivery. That guard is asserted twice: here on the
+ * argument, and in the UPDATE's own `.not("item_id", "is", null)` so a row that
+ * changed underneath us is not healed on stale evidence.
+ *
+ * Race-safe by construction: one conditional UPDATE, whose preconditions (still
+ * running, still has an item) are evaluated by postgres in the same statement.
+ * If a worker execution is somehow still alive on this row, its own status
+ * writes are now guarded the same way (updateContentJob's `ifStatusIn`), so it
+ * cannot rewind the row a second time after the heal.
+ *
+ * Returns `{ healed, id, reason, detail }` and never throws: one unhealable row
+ * must not take down the sweep. The caller reports both outcomes.
+ */
+export async function healRewoundContentJob(job, deps = {}) {
+  const id = job?.id ?? null;
+  if (!isRewoundContentJob(job)) {
+    return {
+      healed: false,
+      id,
+      reason: "not_rewound",
+      detail: `status="${job?.status ?? "none"}" item_id=${job?.item_id ? "set" : "null"} — ` +
+        `only a running status WITH an item_id is the rewind damage shape`,
+    };
+  }
+  const client = resolveClient(deps);
+  if (!client) {
+    return { healed: false, id, reason: "db_not_configured", detail: "no client to write with" };
+  }
+  try {
+    const { data, error } = await client
+      .from("content_jobs")
+      .update({
+        status: "awaiting_approval",
+        progress_pct: 100,
+        heartbeat_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .in("status", CONTENT_JOB_RUNNING)
+      .not("item_id", "is", null)
+      .select();
+    if (error) throw error;
+    if (!(data || []).length) {
+      return {
+        healed: false,
+        id,
+        reason: "no_longer_rewound",
+        detail: "the conditional UPDATE matched no row — someone else moved it first",
+      };
+    }
+    console.warn(
+      `[content-db] healed rewound job ${id}: "${job.status}" + item_id ${job.item_id} → ` +
+        `awaiting_approval. It had already delivered an item; a second execution rewound its ` +
+        `status (R3.5.7).`
+    );
+    return {
+      healed: true,
+      id,
+      reason: "rewound_after_delivery",
+      detail: `was "${job.status}" with item_id ${job.item_id}`,
+    };
+  } catch (err) {
+    console.error(`[content-db] could not heal rewound job ${id}:`, err.message);
+    return { healed: false, id, reason: "heal_write_failed", detail: err.message || "write failed" };
+  }
 }
 
 // ---------------------------------------------------------------------------

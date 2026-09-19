@@ -1,6 +1,8 @@
 import {
   getContentJob,
   updateContentJob,
+  CONTENT_JOB_RUNNING,
+  isDeliveredContentJob,
   insertContentItem,
   getContentItem,
   updateContentItem,
@@ -64,6 +66,38 @@ const MAX_DRAFT_REVIEW_CYCLES = 2;
 
 /** The worker route that accepts `?job_id=` and resumes one named job. */
 export const CONTENT_WORKER_PATH = "/api/content/worker";
+
+/**
+ * R3.5.7 — thrown by writeJob (and the pre-item ownership check) when the
+ * database REFUSES a guarded write: the row has left the worker-owned statuses,
+ * so another execution already delivered this job.
+ *
+ * It is a sentinel, not a failure. The first version of this guard logged the
+ * refusal and carried on, on the premise that "there is nothing for this
+ * execution to do about it". There is: STOP. The R3.5.7 verifier proved that a
+ * refused execution ran on to insertContentItem, whose (job_id, cycle) upsert
+ * overwrote the delivered draft — title, body, and an `approved` item's status
+ * rewound to `awaiting_approval` — while the job row stayed pristine, so nothing
+ * flagged it and startContentJob returned the item as a success. Protecting the
+ * job row while destroying the artifact it exists to produce is worse than the
+ * bug this task closed, because it is quieter.
+ *
+ * Caught ONLY by startContentJob's own catch, which turns it into a named
+ * refusal with no failure write. It must never escape as an unhandled rejection:
+ * the caller is fire-and-forget.
+ */
+export class JobNoLongerOursError extends Error {
+  constructor(jobId, attemptedWrite, detail) {
+    super(
+      `job ${jobId} is no longer in a worker-owned status — refused ${attemptedWrite}` +
+        (detail ? ` (${detail})` : "")
+    );
+    this.name = "JobNoLongerOursError";
+    this.jobId = jobId;
+    this.attemptedWrite = attemptedWrite;
+    this.detail = detail || null;
+  }
+}
 
 /**
  * Soft wall-clock budget for ONE INVOCATION, checked only at block boundaries
@@ -254,13 +288,22 @@ async function withLedger({ jobId, brand, slug, cycle = 1, stats, deps = {} }, f
 /**
  * Run (or resume) one content job for at most one function lifetime.
  *
- * THREE outcomes, and a caller must be able to tell them apart (standing rule 1):
+ * FIVE outcomes, and a caller must be able to tell them apart (standing rule 1):
  *   - a `content_items` row  — the job finished and is awaiting approval;
  *   - `null`                 — the job failed, or was not ours to run (lease);
  *   - `{ checkpointed: true, after, blocks_run, self_continue }` (R3.1.10) —
  *     the job hit its soft chunk budget at a block boundary, persisted a
  *     checkpoint, released its lease and handed itself to a fresh invocation
  *     via CONTENT_WORKER_PATH. Real progress was made and more remains.
+ *   - `{ refused: true, reason: "no_longer_ours", job_id, attempted_write, detail }`
+ *     (R3.5.7) — the database refused a guarded write mid-run: another execution
+ *     delivered the job while this one was working. This run STOPPED before the
+ *     item write; the delivered item was not touched.
+ *   - `{ refused: true, reason: "already_delivered", job_id, status, item_id }`
+ *     (R3.5.7) — the row has an item_id and a status past the worker's hands,
+ *     so it already delivered; nothing ran and nothing was spent. A refusal is
+ *     a SKIP, not a success and not an exception: the `?job_id=` route reports
+ *     it as one.
  *
  * Both live call sites (POST /api/content and the worker route's
  * dispatchWithLease) are fire-and-forget and ignore the return; the shape
@@ -363,7 +406,34 @@ export async function startContentJob(jobId, deps = {}) {
     // costFields() rides on every job write, not just the terminal one — see
     // (b) above: a worker that is killed mid-pipeline still leaves its spend
     // on the row, which is what makes the rescued total a sum.
-    const result = await update(jobId, { ...fields, ...costFields(), agent_trace: trace }, deps);
+    //
+    // R3.5.7 — EVERY STATUS WRITE IS CONDITIONAL. `ifStatusIn` makes the UPDATE
+    // apply only while the row is still in a worker-owned status, so a second
+    // execution can no longer write `reviewing`/`drafting` over a row that has
+    // reached `awaiting_approval` with an item. The precondition is evaluated
+    // by the database inside the same statement (see updateContentJob) — a
+    // read-then-write here would leave the race open. Writes with no `status`
+    // field (trace/cost/checkpoint flushes) stay unconditional: they cannot
+    // rewind a lifecycle.
+    const result = await update(
+      jobId,
+      { ...fields, ...costFields(), agent_trace: trace },
+      fields.status ? { ...deps, ifStatusIn: CONTENT_JOB_RUNNING } : deps
+    );
+    if (result?.refused) {
+      // ABORT. The row is no longer ours, so every further step of this
+      // execution — above all insertContentItem — would be done to a job
+      // someone else already delivered. See JobNoLongerOursError for what
+      // "log and continue" cost. The throw is caught by startContentJob's own
+      // catch and becomes a named refusal; it is not a lost job, because the
+      // job is not lost: it is delivered.
+      console.error(
+        `[content-worker] job ${jobId}: REFUSED the write of status "${fields.status}" — the row ` +
+          `is no longer in a worker-owned status (${CONTENT_JOB_RUNNING.join("|")}). ` +
+          `${result.detail}. Stopping this execution before it can touch the delivered item (R3.5.7).`
+      );
+      throw new JobNoLongerOursError(jobId, `status "${fields.status}"`, result.detail);
+    }
     renew("content_jobs", jobId, leaseOwner, deps).catch((err) =>
       console.warn(`[content-worker] lease renew failed for job ${jobId}:`, err.message)
     );
@@ -460,6 +530,33 @@ export async function startContentJob(jobId, deps = {}) {
   try {
     const job = deps.job || (await (deps.getContentJob || getContentJob)(jobId, deps));
     if (!job) throw new Error(`content job ${jobId} not found`);
+
+    // --- Already delivered? (R3.5.7) ---------------------------------------
+    // A job whose status is past the worker's hands (awaiting_approval and
+    // everything beyond it — the list is DERIVED in stages.js, never a second
+    // copy) AND which carries an item_id has DELIVERED. Re-running it can only
+    // duplicate spend and fight its own content_items row, and the write that
+    // put it back into a running status is exactly the damage R3.5.6 stopped
+    // re-dispatching. Before this check, startContentJob read the row without
+    // ever looking at its status and started the pipeline from the top.
+    //
+    // A FOURTH OUTCOME, deliberately not null and not an item: a refusal is not
+    // a failure and not a success (standing rule 1). The route reports it as a
+    // named skip.
+    if (isDeliveredContentJob(job)) {
+      console.warn(
+        `[content-worker] job ${jobId}: REFUSING to run — status "${job.status}" with item_id ` +
+          `${job.item_id} means it already delivered. Re-running would re-pay for a draft that ` +
+          `exists and fight its own item row (R3.5.7).`
+      );
+      return {
+        refused: true,
+        reason: "already_delivered",
+        job_id: jobId,
+        status: job.status,
+        item_id: job.item_id,
+      };
+    }
 
     // What earlier attempts already spent. From here on every job write adds
     // this execution's spend to it instead of overwriting it.
@@ -778,6 +875,33 @@ export async function startContentJob(jobId, deps = {}) {
       cycles,
     };
 
+    // R3.5.7 — STILL OURS? The last status write ("reviewing") can be minutes
+    // old: the review LLM call and the fact-check sit between it and here. If
+    // another execution delivered this job in that window, the upsert below
+    // would overwrite the draft a human may already be reading. A guarded
+    // write with NO status field asks the database, atomically, whether the row
+    // is still in a worker-owned status; a refusal aborts before the item is
+    // touched. This narrows the window from minutes to the milliseconds between
+    // this statement and the next — it does not close it. What closes it is the
+    // lease (single-flight), and this is the backstop for when the lease lapsed.
+    //
+    // `ownershipProbe: true` is an INERT MARKER: nothing in src/lib/db/content.js
+    // reads it. It exists so a test can tell this write from an ordinary trace
+    // flush. The mechanism is `ifStatusIn`, and only `ifStatusIn`.
+    const stillOurs = await update(
+      jobId,
+      { ...costFields(), agent_trace: trace },
+      { ...deps, ifStatusIn: CONTENT_JOB_RUNNING, ownershipProbe: true }
+    );
+    if (stillOurs?.refused) {
+      console.error(
+        `[content-worker] job ${jobId}: the pre-item ownership check was REFUSED — the row left the ` +
+          `worker-owned statuses while this execution was reviewing (${stillOurs.detail}). ` +
+          `Stopping before the item write (R3.5.7).`
+      );
+      throw new JobNoLongerOursError(jobId, "the item write", stillOurs.detail);
+    }
+
     // 5. Queue for human approval — the gate is mandatory and terminal.
     const item = await (deps.insertContentItem || insertContentItem)({
       job_id: jobId,
@@ -817,6 +941,22 @@ export async function startContentJob(jobId, deps = {}) {
 
     return item;
   } catch (error) {
+    // R3.5.7 — not a failure, and handled BEFORE anything below: no trace is
+    // marked failed and NO failure write is attempted, because the row this
+    // execution would mark is someone else's delivered job. A FIFTH outcome
+    // beside item / null / checkpointed / already_delivered: "stopped, because
+    // the job was delivered out from under us". Never null (that reads as a
+    // failure to retry) and never an item (that is the fabricated success the
+    // verifier caught).
+    if (error instanceof JobNoLongerOursError) {
+      return {
+        refused: true,
+        reason: "no_longer_ours",
+        job_id: jobId,
+        attempted_write: error.attemptedWrite,
+        detail: error.detail,
+      };
+    }
     console.error(`[content-worker] Job ${jobId} failed:`, error);
     // Mark whichever specialist was mid-flight as failed for the theater.
     const active = trace.find((t) => t.status === "working");
@@ -825,13 +965,25 @@ export async function startContentJob(jobId, deps = {}) {
     // or at getContentJob): we do not know what the row already holds, and
     // writing 0 would erase an earlier attempt's spend. Omitting the field
     // leaves the recorded total untouched instead of silently zeroing it.
-    await update(jobId, {
+    //
+    // R3.5.7 — guarded like every other status write (see writeJob): a late
+    // failure must not stamp `failed` over a row that has already reached the
+    // human gate. `refused` here means the row was not ours to mark; it is
+    // reported, never swallowed.
+    const failWrite = await update(jobId, {
       status: "failed",
       progress_pct: 100,
       error_message: error.message || "Unexpected content pipeline error.",
       ...costFields(),
       agent_trace: trace,
-    }, deps);
+    }, { ...deps, ifStatusIn: CONTENT_JOB_RUNNING });
+    if (failWrite?.refused) {
+      console.error(
+        `[content-worker] job ${jobId}: the failure write was REFUSED — the row is no longer in a ` +
+          `worker-owned status (${failWrite.detail}). The job row keeps the status it reached; ` +
+          `this execution's error was: ${error.message || "failed"}`
+      );
+    }
     return null;
   } finally {
     // Release on EVERY terminal outcome, success or failure. Without this a

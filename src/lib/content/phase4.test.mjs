@@ -242,3 +242,46 @@ test("R3.6.3 — custom deps.checkReportQuota overrides the in-memory check", as
   assert.equal(checked, true, "the custom check must be called");
   assert.equal(report.quota_exceeded, true, "999 is over quota");
 });
+
+// R3.5.7 — a REWOUND job (running status + item_id) already delivered; nothing
+// is working it. Counting it as live blocked the brand's whole daily batch until
+// an operator cleared the row by hand.
+
+test("R3.5.7 — a rewound geo job (running status WITH an item_id) does NOT block the brand's batch", async () => {
+  const created = [];
+  const deps = {
+    batchSize: 2,
+    getScansForBrand: async () => [scanWith(ROWS)],
+    listContentItems: async () => [],
+    listContentJobs: async () => [
+      { id: "355b0237", playbook: "geo_article", status: "reviewing", item_id: "item-355", input: {} },
+    ],
+    createContentJob: async (job) => {
+      const rec = { id: `job-${created.length}`, ...job };
+      created.push(rec);
+      return rec;
+    },
+  };
+
+  const jobs = await createDailyBatchJobs("Acme", deps);
+
+  assert.equal(jobs.length, 2, "THE BUG: one damaged row silenced this brand's batch indefinitely");
+});
+
+test("R3.5.7 — a genuinely live geo job (no item yet) STILL blocks, even beside a rewound one", async () => {
+  const deps = {
+    batchSize: 2,
+    getScansForBrand: async () => [scanWith(ROWS)],
+    listContentItems: async () => [],
+    listContentJobs: async () => [
+      { id: "rewound", playbook: "geo_article", status: "reviewing", item_id: "item-1", input: {} },
+      { id: "live", playbook: "geo_article", status: "drafting", item_id: null, input: {} },
+    ],
+    createContentJob: async () => {
+      throw new Error("should not create — the no-pile-up rule must survive the R3.5.7 carve-out");
+    },
+  };
+
+  assert.deepEqual(await createDailyBatchJobs("Acme", deps), []);
+});
+

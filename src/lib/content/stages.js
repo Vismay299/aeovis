@@ -98,6 +98,39 @@ export function isTerminal(status, stages = JOB_STAGES) {
   return !!stages[status]?.terminal;
 }
 
+/**
+ * R3.5.7 — the statuses that are PAST THE WORKER'S HANDS: the human review
+ * gate (`awaiting_approval`) and everything beyond it (`approved`,
+ * `published`, `rejected`, `failed`). A worker execution may neither resume a
+ * job sitting in one of these nor write a status over it.
+ *
+ * DERIVED, never a second hardcoded list. A status is worker-owned iff it is
+ * the open queue (`kind: "open"`) or is produced by a pipeline block
+ * (`blocks`) — which is exactly `CONTENT_JOB_RUNNING` in src/lib/db/content.js,
+ * and stages.test.mjs asserts the two agree in BOTH directions. So adding a
+ * stage to JOB_STAGES can never silently widen what a worker may overwrite.
+ *
+ * Note this is a SUPERSET of `terminal: true` on purpose: `awaiting_approval`
+ * and `approved` are not terminal (a decision or a publish still moves them),
+ * but they are not the worker's to move, and `awaiting_approval` is precisely
+ * the status the R3.5.6 damage overwrote.
+ */
+export function jobStatusesBeyondWorker(stages = JOB_STAGES) {
+  return Object.keys(stages).filter(
+    (status) => stages[status].kind !== "open" && !(stages[status].blocks || []).length
+  );
+}
+
+/** The frozen list, for callers that want it without recomputing. */
+export const JOB_STATUSES_BEYOND_WORKER = Object.freeze(jobStatusesBeyondWorker());
+
+/** True when `status` is past the worker's hands (see jobStatusesBeyondWorker). */
+export function isBeyondWorker(status, stages = JOB_STAGES) {
+  const stage = stages[status];
+  if (!stage) return false; // an unknown status is not a licence to claim it either way
+  return stage.kind !== "open" && !(stage.blocks || []).length;
+}
+
 /** Statuses whose stage is a review gate — the only ones that accept a decision. */
 export function reviewStatuses(stages = ITEM_STAGES) {
   return Object.keys(stages).filter((s) => stages[s].kind === "review");

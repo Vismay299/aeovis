@@ -93,10 +93,34 @@ export async function createDailyBatchJobs(brand, deps = {}) {
 
   // Respect the one-running-job-per-brand+playbook guard: if a geo job is
   // already live, skip this brand today rather than queueing a pile-up.
-  const hasLiveGeoJob = jobs.some(
+  //
+  // R3.5.7 — A REWOUND ROW IS NOT LIVE WORK. A job in a running status that
+  // already carries an `item_id` has DELIVERED; its status was rewound by a
+  // second execution (see shouldRescueContentJob in src/lib/db/content.js).
+  // Nothing is working it — R3.5.6 stopped the re-dispatch loop — so counting it
+  // as live blocked the brand's ENTIRE daily batch until an operator cleared the
+  // row by hand. The cron sweep now heals such rows, and this predicate no
+  // longer depends on the heal having already happened.
+  const geoJobs = jobs.filter(
     (j) => j.playbook === "geo_article" && CONTENT_JOB_RUNNING.includes(j.status)
   );
-  if (hasLiveGeoJob) return [];
+  const rewoundGeoJobs = geoJobs.filter((j) => !!j.item_id);
+  const liveGeoJobs = geoJobs.filter((j) => !j.item_id);
+  if (rewoundGeoJobs.length) {
+    console.warn(
+      `[daily-batch] ${brand}: ignoring ${rewoundGeoJobs.length} rewound geo_article job(s) ` +
+        `(${rewoundGeoJobs.map((j) => `${j.id}:${j.status}`).join(", ")}) — each already delivered ` +
+        `an item, so none of them is live work blocking today's batch (R3.5.7).`
+    );
+  }
+  if (liveGeoJobs.length) {
+    // A skip is not a success (standing rule 1): say which job caused it.
+    console.log(
+      `[daily-batch] ${brand}: skipped — geo_article job ${liveGeoJobs[0].id} is still live ` +
+        `("${liveGeoJobs[0].status}"). No batch created for this brand today.`
+    );
+    return [];
+  }
 
   const gaps = selectGapsForBatch(scan, { alreadyTargeted, limit: batchSize });
 
