@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**245 / 282 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**246 / 284 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -72,7 +72,7 @@ Baseline commit: `5111219`
 - [-] **R0.4.2** Hand-label 60-100 answers as calibration fixtures `needs-secrets` — blocked: needs-secrets
 - [x] **R0.4.3** CI on push; fix the test glob; add .gitattributes — closed at `package.json:11`, `.github/workflows/ci.yml:8`, `.gitattributes:5`, `src/lib/testCoverageGuard.test.mjs:46`, `src/components/perceev/charts/chartMath.test.mjs:309`
 
-## R1 — Real-surface probe fleet  `25/45`
+## R1 — Real-surface probe fleet  `26/47`
 
 *2-3 weeks.* Bots drive perplexity.ai and chatgpt.com, extract the answers buyers actually see, capture screenshots as evidence, report typed outcomes.
 
@@ -104,7 +104,9 @@ Baseline commit: `5111219`
 - [x] **R1.2.18** SECURITY: fleet:dev loads the app env file LAST, so the fleet runs holding the production service-role key — closed at `package.json:18`, `docs/runbooks/fleet-dev.md:44`, `.env.example:242`, `src/lib/fleetConfig.test.mjs:769`, `src/lib/fleetConfig.test.mjs:785`, `src/lib/fleetConfig.test.mjs:818`
 - [-] **R1.2.19** Deploy the fleet to Zeabur: image definition, K3s manifest, CI check `needs-secrets` — blocked: needs-decision
 - [ ] **R1.2.20** Deploy the fleet to Zeabur against the live project, explicitly armed `needs-secrets`
-- [~] **R1.2.21** The deployed fleet never completed a pass: node:20 image cannot construct the Supabase client `needs-secrets` — submitted `worker/Dockerfile:7`, `worker/package.json:8`, `worker/package.json:12`, `worker/src/clientSmoke.js:26`, `worker/src/clientSmoke.js:37`, `worker/src/clientSmoke.js:45`, `worker/src/lib/queue.js:60`, `.github/workflows/ci.yml:64`, `.github/workflows/ci.yml:91`
+- [x] **R1.2.21** The deployed fleet never completed a pass: node:20 image cannot construct the Supabase client `needs-secrets` — closed at `worker/Dockerfile:7`, `worker/package.json:8`, `worker/package.json:12`, `worker/src/clientSmoke.js:26`, `worker/src/clientSmoke.js:37`, `worker/src/lib/queue.js:60`, `.github/workflows/ci.yml:64`, `.github/workflows/ci.yml:91`, `worker/src/config.js:863`
+- [~] **R1.2.22** Every fleet pod is worker-7: the default worker id is the pid, and a container pid is constant
+- [ ] **R1.2.23** Idle fleet passes write ~8,000 scan_runs rows a day and nothing prunes them
 ### R1.3
 
 - [ ] **R1.3.1** Spike: Playwright against perplexity.ai `needs-secrets`

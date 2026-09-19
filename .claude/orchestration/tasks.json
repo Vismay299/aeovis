@@ -3441,7 +3441,7 @@
       ],
       "phase": "R1",
       "findings": [],
-      "status": "in_progress",
+      "status": "done",
       "owner": "main-session",
       "evidence": [
         "worker/Dockerfile:7",
@@ -3449,10 +3449,10 @@
         "worker/package.json:12",
         "worker/src/clientSmoke.js:26",
         "worker/src/clientSmoke.js:37",
-        "worker/src/clientSmoke.js:45",
         "worker/src/lib/queue.js:60",
         ".github/workflows/ci.yml:64",
-        ".github/workflows/ci.yml:91"
+        ".github/workflows/ci.yml:91",
+        "worker/src/config.js:863"
       ],
       "notes": [
         {
@@ -3474,13 +3474,79 @@
           "at": "2026-09-19T07:35:49.437Z",
           "by": "verifier",
           "text": "rejected: no reason given"
+        },
+        {
+          "at": "2026-09-19T07:59:25.342Z",
+          "by": "main-session",
+          "text": "RESUBMIT with the production half, gathered 2026-09-19 ~07:58 UTC. No code changed since your code-half verification. (1) Zeabur rebuilt the service from the push on its own: pod service-6aac35c2758929bf546b8a28-697874655b-swx99, 1/1 Running, age 59 s when the operator listed it, a NEW replica-set hash (the dead node:20 pod was ...-56c8dfc7c4-gjqwh). (2) Operator-pasted pod log, 30 lines, every pass: \"[fleet] claimed 0 — the queue is empty (0 outstanding); there is nothing to do\" followed by \"[fleet] run <uuid> noop (queue_empty) — probe-fleet/idle, probes 0/0, errors recovered 0\". No \"native WebSocket\" line anywhere. (3) Controller's read-only query on production: select ... from scan_runs where runner = 'probe-fleet' -> ONE group: worker_id worker-7, outcome noop, reason queue_empty, n = 126, first_run 2026-09-19 07:36:18 UTC, last_end 07:58:10 UTC, still_open = 0, and the run id 3ff522af-0887-44ac-a027-230a78f618fb from the first line of the operator's log IS in the table. Before the fix the same query returned zero rows against 82 scheduler and 82 reaper rows. So: passes complete, rows are written and CLOSED, the log and the ledger agree on a specific run id. TWO FINDINGS, filed separately, neither claimed here: worker_id is \"worker-7\" on every pod because the default is worker-<pid> and a container's pid under tini is always 7, so rows are attributable to the fleet but not to a specific pod (R1.2.22); and idle noop rows accrue at roughly 8,000 a day with no retention (R1.2.23). The accept says \"attributable to the pod FLEET_WORKER_ID\" — worker-7 IS that pod's FLEET_WORKER_ID as resolved, so the clause is literally met, but judge for yourself whether a non-unique id satisfies its intent.\n"
         }
       ],
       "verification": {
-        "verdict": "fail",
-        "at": "2026-09-19T07:35:49.436Z",
-        "note": null
+        "verdict": "pass",
+        "at": "2026-09-19T08:02:35.468Z",
+        "note": "VERDICT: pass. Both halves of the accept are now met. Exercised as follows.\n\nCODE HALF (re-confirmed unchanged): git diff 154b3a9..HEAD and git diff HEAD over worker/ and .github/ are both EMPTY -- the only commit since my first verification is the ledger commit 4c9adb0, so my code-half findings stand without re-deriving them. Recap of what I originally ran, since that note was LOST by a tool defect (see TOOL DEFECT below): Node 20 via npx node@20 reproduces the exact production string \"Node.js detected but native WebSocket not found ... Ensure you are running Node.js 22+\" and exits 1; Node 22.22.3 exits 0; the smoke calls the REAL resolveClient (queue.js:60, the same function claimBatch/openRun/closeRun reach) with the mandated placeholders and opens NO network connection (proven by running it under a preload trapping net/tls/http/https/dns/fetch/WebSocket -- no trap fired); lockfile diff is the single engines line with no dependency moved; playwright 1.63.0 declares node>=20 so 22 satisfies it; bookworm stayed bookworm so the --with-deps apt set is unchanged; CI run 35429556644 on headSha 154b3a97 is green with \"build the fleet image\" AND \"client smoke inside the image\" both success, the latter running the IMAGE's node, which is the only proof the image builds.\n\nPRODUCTION HALF, judged as reported (I observed nothing in production myself and ran nothing against it). The evidence is specific enough, and it corroborates internally in three independent ways I checked against the shipped code rather than taking on trust:\n (1) The pasted log lines are byte-for-byte producible ONLY by this code path. \"claimed 0 - the queue is empty (0 outstanding); there is nothing to do\" is exactly describeClaim's QUEUE_EMPTY branch at worker/src/lib/queue.js:162. \"run <uuid> noop (queue_empty) - probe-fleet/idle, probes 0/0, errors recovered 0\" is exactly describeRun's template at worker/src/lib/runLedger.js:187-189 with runner=probe-fleet (RUNNERS.FLEET, runLedger.js:67) and phase=idle. Absence of a native-WebSocket line is the point, but the PRESENCE of these two lines is the stronger signal: they are only reachable after the client constructed.\n (2) That second log line is itself evidence of a CLOSED row, not merely an intent to close. index.js:127-141 opens the idle run, awaits closeRun, and logs describeRun on the value closeRun RETURNED -- and normalizeRun throws on a half-closed row (runLedger.js:140). So a printed \"noop (queue_empty)\" line means the close round-tripped from the database. This agrees with the query's still_open = 0 independently.\n (3) The row count is consistent with the poll cadence. 07:36:18 to 07:58:10 is 1312 s; at FLEET_IDLE_POLL_MS=10000 plus the three round trips each pass costs, 1312/10.4 = 126.1 against a reported n = 126. A fabricated count would not land on the cadence.\nAgainst the accept clause by clause: \"pod log shows pass lines with no WebSocket error\" -- met, 30 consecutive passes, and the new replica-set hash confirms this is the rebuilt pod, not the dead ...-56c8dfc7c4-gjqwh one. \"scan_runs holds closed rows with runner probe-fleet\" -- met: 126 rows, outcome noop, reason queue_empty, still_open = 0, where the same query returned ZERO rows before the fix against 82 scheduler and 82 reaper rows. That reversal is the original finding, undone.\n\nRULING ON worker-7 (does NOT block this close). The clause is \"attributable to the pod FLEET_WORKER_ID\", and worker-7 IS that pod's FLEET_WORKER_ID as resolved: config.js:863 defaults workerId to worker-<process.pid>, the env var is unset, and a container's Node under tini is always pid 7. So the clause is literally met. More importantly, attribution to THAT pod does not rest on worker_id at all: run id 3ff522af-0887-44ac-a027-230a78f618fb appears in the operator's pod log AND in the table. A run id is minted per pass by that process, so it ties the ledger to that specific pod's log by a path a shared worker_id cannot dilute -- and there is only one fleet pod, the previous replica set being gone. The non-uniqueness is a genuine defect, but it degrades FUTURE multi-pod attribution rather than this finding, it is filed as R1.2.22, and it is not claimed here. Same for the ~8,000 idle rows a day with no retention (R1.2.23).\n\nHONEST LIMIT, recorded so nobody over-reads this close: all 126 passes were IDLE. This proves the client constructs, the pass loop completes, and rows open and close on the real database. It does NOT prove a pass that claims and probes, because probeBatch still throws (R1.3) and the queue was empty throughout. That is outside this accept, which asked for pass lines and closed probe-fleet rows, and got both.\n\nREGRESSION: no code changed, but the ledger docs did in 4c9adb0, so I re-ran the guards -- workerIsolation + agentSecretsGuard + operatorLedgerGates + docStatus: 27/27 pass, 0 fail. Full root suite: 3096 tests, 3066 pass, 0 fail, 30 skipped. Unchanged from baseline.\n\nEVIDENCE CITATIONS all resolve: Dockerfile:7 FROM node:22-bookworm-slim; package.json:8 engines >=22; package.json:12 the check script including the smoke; clientSmoke.js:26 the resolveClient import, :37 the call; queue.js:60 the resolveClient declaration; ci.yml:64 node-version 22, :91 the in-image smoke step; and the newly added config.js:863, which is indeed the workerId default that explains worker-7.\n\nTOOL DEFECT FOUND WHILE VERIFYING, worth its own task and NOT part of R1.2.21. The verify subcommand ignores --note-file: orchestrate.mjs:381 reads flags.note directly and never calls resolveNote, which submit/amend do. My entire first note was silently discarded -- the ledger recorded \"rejected: no reason given\" and verification.note was null, so the next implementer would have had nothing to work from. It failed soft on an unrecognised flag instead of dying, which is exactly the class of silent degrade the standing rules forbid. Fix: route verify's note through resolveNote(flags) like amend does, and make an unknown flag fatal. I worked around it here by passing the file through --note, so THIS note is on the record."
       }
+    },
+    {
+      "id": "R1.2.22",
+      "subphase": "R1.2",
+      "lane": "infra",
+      "title": "Every fleet pod is worker-7: the default worker id is the pid, and a container pid is constant",
+      "detail": "Found 2026-09-19 from the first real fleet rows in production. worker/src/config.js:863 resolves workerId as FLEET_WORKER_ID ?? `worker-${process.pid}`. Under tini in a container the node process is always pid 7, so every pod, every restart and every replica writes scan_runs.worker_id = worker-7 and claims probe_tasks under the same owner string. worker/k8s/fleet.yaml sets FLEET_WORKER_ID from the pod name, but the ratified host deploys through the Zeabur UI from the Dockerfile and never applies that manifest, so the default is what runs. Consequences: a ledger row cannot be traced to a pod; and if two replicas ever run (Zeabur rolling update, or a scale-up) they share a lease-owner identity, so a lease renew or release scoped to the owner string cannot tell them apart — which is exactly the confusion the lease exists to prevent. Fix: default to the hostname (os.hostname() is the pod name under Kubernetes and unique per pod), keeping the pid as a suffix for the bare-metal case where several workers share a host.",
+      "accept": "With FLEET_WORKER_ID unset, workerId is derived from os.hostname() (plus pid), is stable for the life of the process and differs between two hosts; FLEET_WORKER_ID still wins when set; the config self-description (config.js ~:495) and any doc that says worker-<pid> are updated; a test pins that two different hostnames produce two different ids and that the same pid on two hosts does NOT collide. After deploy, scan_runs rows carry a worker_id containing the pod name.",
+      "deps": [],
+      "tags": [],
+      "anchors": [
+        "worker/src/config.js:863",
+        "worker/src/config.js:495",
+        "worker/k8s/fleet.yaml"
+      ],
+      "phase": "R1",
+      "findings": [],
+      "status": "in_progress",
+      "owner": "rebuild-implementer",
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-19T07:59:25.377Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        },
+        {
+          "at": "2026-09-19T07:59:40.520Z",
+          "by": "rebuild-implementer",
+          "text": "claimed"
+        }
+      ],
+      "verification": null
+    },
+    {
+      "id": "R1.2.23",
+      "subphase": "R1.2",
+      "lane": "data",
+      "title": "Idle fleet passes write ~8,000 scan_runs rows a day and nothing prunes them",
+      "detail": "Measured 2026-09-19 on production: 126 probe-fleet rows in 22 minutes with an empty queue (idlePollMs 10 s, one noop/queue_empty row per pass by design, R1.2.3: an idle container must be distinguishable from a dead one). That is about 8,250 rows a day and 3 million a year from a fleet doing nothing, on a Supabase FREE project (500 MB). The Zeabur scan sweep adds 288 more a day (scheduler + reaper every 10 minutes). No migration, cron or runbook prunes scan_runs. The invariant worth keeping is that an idle fleet is visible; the cost is that visibility is currently paid per pass, forever. Options to weigh: (a) a retention pass in an existing cron that deletes noop rows older than N days while keeping every non-noop row; (b) one OPEN idle row per worker that is heartbeated while idle and closed when work arrives or the process exits, so idleness costs one row per idle stretch instead of one per pass; (c) both. Option (b) changes what the reaper sees, so check reapStaleRuns first.",
+      "accept": "A recorded decision between the options, with the row-rate arithmetic; after it ships, an idle fleet for 24 h adds a bounded, stated number of scan_runs rows (order of tens, not thousands) while an idle fleet remains distinguishable from a dead one in the ledger within one heartbeat window; non-noop rows are never deleted by retention; tests pin both.",
+      "deps": [],
+      "tags": [],
+      "anchors": [
+        "worker/src/index.js:118",
+        "worker/src/lib/runLedger.js:279",
+        "src/app/api/evidence/retention/route.js"
+      ],
+      "phase": "R1",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-19T07:59:40.483Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
     },
     {
       "id": "R1.3.1",
