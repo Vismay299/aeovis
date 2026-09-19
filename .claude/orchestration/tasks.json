@@ -12462,6 +12462,34 @@
       }
     },
     {
+      "id": "R6.1.15",
+      "subphase": "R6.1",
+      "lane": "infra",
+      "title": "orchestrate.mjs verify silently discards --note-file, so a rejection reads 'no reason given'",
+      "detail": "Found by the R1.2.21 verifier, 2026-09-19. The verify command in .claude/orchestration/orchestrate.mjs (~:381) reads flags.note directly and never calls resolveNote(flags), which submit, amend, block and unblock all use and which exists (R6.1.13) precisely to keep a shell from mangling a note. A verifier passing --note-file therefore has its whole note dropped: the ledger records verification.note null and, on a fail, the text 'rejected: no reason given', leaving the next implementer nothing to work from. It fail-softs on a flag it does not understand instead of dying, which is the silent-degrade class the standing rules forbid, inside the tool the protocol depends on. The usage header (~:19) omits --note-file for verify while offering it for submit and amend, so the controller instructed two verifiers to use an unsupported flag. One real note was lost this way on 2026-09-19 and recovered only because the verifier re-read the ledger. Related and worth fixing in the same pass: backticks inside a double-quoted --note are executed by zsh before the CLI sees them (hit by the controller and by a verifier the same day), which is the reason note files exist.",
+      "accept": "verify accepts --note and --note-file through resolveNote exactly as amend does, and the usage header says so; a verify with --note-file records the file's full text in verification.note and in the notes entry (test); ANY unrecognised flag on ANY command is a fatal error naming the flag, not ignored (test covers verify, submit and amend); the orchestration README tells agents to prefer --note-file and says why.",
+      "deps": [],
+      "tags": [],
+      "anchors": [
+        ".claude/orchestration/orchestrate.mjs:381",
+        ".claude/orchestration/orchestrate.mjs:19",
+        ".claude/orchestration/README.md"
+      ],
+      "phase": "R6",
+      "findings": [],
+      "status": "todo",
+      "owner": null,
+      "evidence": [],
+      "notes": [
+        {
+          "at": "2026-09-19T08:04:06.478Z",
+          "by": "controller",
+          "text": "filed mid-rebuild"
+        }
+      ],
+      "verification": null
+    },
+    {
       "id": "R6.2.1",
       "subphase": "R6.2",
       "lane": "docs",

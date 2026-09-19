@@ -8,7 +8,7 @@ Source: The Real-Surface Rebuild (artifact d5db8fa1), 29 Aug 2026
 Companion: The Honesty Gap (artifact bbd113a7) — findings A1-C12, suggestions S1-S30
 Baseline commit: `5111219`
 
-**246 / 284 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
+**246 / 285 closed** · 6 blocked · legend: `[x]` done · `[~]` in flight · `[-]` blocked · `[ ]` open
 
 ## Standing rules
 
@@ -359,7 +359,7 @@ Baseline commit: `5111219`
 - [ ] **R5.4.2** Weekly report integrity `needs-llm`
 - [ ] **R5.4.3** One end-to-end run on a real brand `needs-llm` `needs-secrets`
 
-## R6 — Apparatus & guards  `51/53`
+## R6 — Apparatus & guards  `51/54`
 
 *starts day one, finishes last.* The paper trail and the tests that keep every earlier phase from regressing.
 
@@ -379,6 +379,7 @@ Baseline commit: `5111219`
 - [x] **R6.1.12** The migration runner cannot verify a column, so column-only migrations are checked by proxy — closed at `scripts/setup-supabase.mjs:1`, `src/lib/migrationsRunner.test.mjs:1`
 - [x] **R6.1.13** orchestrate.mjs takes the submit note as a shell argument, so backticks in a note execute and write command output into the ledger — closed at `.claude/orchestration/orchestrate.mjs:121`, `src/lib/orchestrateNotes.test.mjs:1`, `src/lib/evidenceValidation.test.mjs:22`
 - [x] **R6.1.14** The migration verify list checks object COUNT and presence but never that the names match the SQL, so a rename reports an applied migration as missing forever — closed at `src/lib/migrationsLedger.test.mjs:164`, `src/lib/migrationsLedger.test.mjs:274`
+- [ ] **R6.1.15** orchestrate.mjs verify silently discards --note-file, so a rejection reads 'no reason given'
 ### R6.2
 
 - [x] **R6.2.1** docs/OPERATOR_LEDGER.md — closed at `docs/OPERATOR_LEDGER.md:268`, `docs/OPERATOR_LEDGER.md:298`, `docs/OPERATOR_LEDGER.md:405`, `docs/OPERATOR_LEDGER.md:433`, `docs/OPERATOR_LEDGER.md:435`, `docs/OPERATOR_LEDGER.md:473`, `docs/OPERATOR_LEDGER.md:568`, `src/lib/docStatus.test.mjs:161`, `src/lib/rateLimit.js:128`, `scripts/setup-supabase.mjs:485`, `scripts/setup-supabase.mjs:522`, `src/lib/db/analytics.js:672`, `src/lib/workers/scanWorker.js:1643`, `docs/PROD_MIGRATIONS.md:144`
