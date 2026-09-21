@@ -39,6 +39,7 @@ const INDEX_URL = pathToFileURL(path.join(REPO, "worker/src/index.js")).href;
 
 const {
   resolveConfig,
+  defaultWorkerId,
   describeConfig,
   isRequired,
   CONFIG_FIELDS,
@@ -150,7 +151,10 @@ test("absent optional variables take their documented defaults", () => {
   assert.equal(config.heartbeatMs, 30_000);
   assert.equal(config.probeTimeoutMs, 60_000);
   assert.equal(config.canaryIntervalMs, 3_600_000);
-  assert.match(config.workerId, /^worker-\d+$/);
+  // R1.2.22: hostname first, pid as the suffix. NOT /^worker-\d+$/ — that
+  // pattern was the defect: a container pid is a constant (7 under tini), so a
+  // pid-only id is the same string on every pod.
+  assert.match(config.workerId, /^worker-[a-z0-9._-]+-\d+$/);
   assert.deepEqual(config.missing, []);
 
   // FLEET_BATCH_SIZE's documented default is 5 and it is NOT what the fleet
@@ -865,4 +869,120 @@ test("R1.2.17 — selftest in production-carrying shell runs safely with nulled 
   assert.equal(booted.config.supabaseKey, null, "selftest config must never carry production key");
 });
 
+/* ------------------------------------------------------------------ *
+ * R1.2.22 — the default worker id must identify the POD, not the pid.
+ *
+ * Production, 2026-09-19: 126 scan_runs rows, every one worker_id="worker-7".
+ * tini makes the node process pid 7 in every container, so `worker-${pid}` is
+ * one identity shared by every pod, every restart and every replica — a ledger
+ * row cannot be traced back to a container, and two replicas holding the same
+ * lease-owner string defeat the only thing the lease does. The ratified host
+ * (docs/decisions/2026-09-05-worker-host.md) deploys from the Dockerfile via the
+ * Zeabur UI and never applies worker/k8s/fleet.yaml, so the DEFAULT is what runs.
+ * ------------------------------------------------------------------ */
 
+test("R1.2.22 — two hostnames give two different worker ids", () => {
+  const a = resolveConfig({ ...OK }, { hostname: "fleet-worker-abc12", pid: 7 });
+  const b = resolveConfig({ ...OK }, { hostname: "fleet-worker-xyz89", pid: 7 });
+  assert.equal(a.workerId, "worker-fleet-worker-abc12-7");
+  assert.equal(b.workerId, "worker-fleet-worker-xyz89-7");
+  assert.notEqual(a.workerId, b.workerId, "two pods must not share a lease-owner string");
+});
+
+test("R1.2.22 — the SAME pid on two hosts does not collide (the production defect, inverted)", () => {
+  // Both containers are pid 7 under tini. This is the exact pair that produced
+  // 126 identical rows before the fix.
+  const ids = new Set(
+    ["pod-aaaaaaaaaa-11111", "pod-bbbbbbbbbb-22222", "pod-cccccccccc-33333"].map(
+      (h) => resolveConfig({ ...OK }, { hostname: h, pid: 7 }).workerId
+    )
+  );
+  assert.equal(ids.size, 3, "same pid, different hosts must yield distinct ids");
+  for (const id of ids) assert.notEqual(id, "worker-7");
+});
+
+test("R1.2.22 — the same host with two pids also does not collide (several workers per host)", () => {
+  const a = resolveConfig({ ...OK }, { hostname: "bare-metal-box", pid: 4111 });
+  const b = resolveConfig({ ...OK }, { hostname: "bare-metal-box", pid: 4112 });
+  assert.notEqual(a.workerId, b.workerId);
+});
+
+test("R1.2.22 — FLEET_WORKER_ID still wins when set", () => {
+  const cfg = resolveConfig(
+    { ...OK, FLEET_WORKER_ID: "laptop-worker-dev" },
+    { hostname: "some-pod-name", pid: 7 }
+  );
+  assert.equal(cfg.workerId, "laptop-worker-dev", "an operator's explicit id is never overridden");
+});
+
+test("R1.2.22 — the id is stable across repeated resolves in one process", () => {
+  const first = resolveConfig({ ...OK });
+  const second = resolveConfig({ ...OK });
+  const third = resolveConfig({ ...OK }, { strict: false });
+  assert.equal(first.workerId, second.workerId);
+  assert.equal(second.workerId, third.workerId);
+  // And it really is this host + this pid, not a random token: a lease renewed
+  // under a different id than it was claimed under can never be renewed.
+  assert.ok(first.workerId.endsWith(`-${process.pid}`), "the pid stays the suffix");
+});
+
+test("R1.2.22 — a hostile hostname is sanitised and bounded, never thrown on", () => {
+  const cases = [
+    ["pod name with spaces", "worker-pod-name-with-spaces-7"],
+    ["ns/pod:0", "worker-ns-pod-0-7"],
+    ["UPPER-Case-Pod", "worker-upper-case-pod-7"],
+    ["pod'; drop table probe_tasks;--", "worker-pod-drop-table-probe_tasks-7"],
+    ["pod\n\tname", "worker-pod-name-7"],
+    ["---", "worker-unknown-host-7"],
+    ["", "worker-unknown-host-7"],
+    ["   ", "worker-unknown-host-7"],
+  ];
+  for (const [host, expected] of cases) {
+    const cfg = resolveConfig({ ...OK }, { hostname: host, pid: 7 });
+    assert.equal(cfg.workerId, expected, `hostname ${JSON.stringify(host)}`);
+    assert.match(cfg.workerId, /^worker-[a-z0-9._-]+-7$/);
+  }
+
+  // 300 characters, and a non-string, must both produce a usable bounded id.
+  const long = resolveConfig({ ...OK }, { hostname: "h".repeat(300), pid: 7 });
+  assert.match(long.workerId, /^worker-h{63}-7$/);
+  assert.ok(long.workerId.length < 100, "the owner string travels through every RPC and log line");
+
+  for (const weird of [null, undefined, 12345, {}]) {
+    // `undefined` means "not injected" and falls through to os.hostname(); the
+    // rest must degrade to the named unknown, not throw and not silently drop
+    // the host segment.
+    const cfg = resolveConfig({ ...OK }, { hostname: weird, pid: 7 });
+    assert.match(cfg.workerId, /^worker-[a-z0-9._-]+-7$/, String(weird));
+  }
+});
+
+test("R1.2.22 — an unusable hostname says so in the id rather than degrading to a pid", () => {
+  // Rule 1: a path that cannot do its job must not look like one that did. Two
+  // pods would still collide here, so the ledger has to show it.
+  assert.equal(defaultWorkerId("", 7), "worker-unknown-host-7");
+  assert.equal(defaultWorkerId("!!!", 7), "worker-unknown-host-7");
+  assert.notEqual(defaultWorkerId("", 7), "worker-7");
+});
+
+test("R1.2.22 — the self-description and the boot log name the new default", () => {
+  const err = refusal({ ...OK, FLEET_WORKER_ID: "   " });
+  const problem = err.problems.find((p) => p.name === "FLEET_WORKER_ID");
+  assert.ok(problem, "a blank id must still refuse");
+  assert.match(problem.message, /worker-<hostname>-<pid>/);
+  assert.doesNotMatch(problem.message, /worker-<pid>/);
+
+  const cfg = resolveConfig({ ...OK }, { hostname: "fleet-pod-7788", pid: 7 });
+  assert.match(describeConfig(cfg), /workerId=worker-fleet-pod-7788-7/);
+});
+
+test("R1.2.22 — worker/README.md and the fleet runbook no longer document worker-<pid>", async () => {
+  for (const rel of ["worker/README.md", "docs/runbooks/fleet-dev.md"]) {
+    const text = await readFile(path.join(REPO, rel), "utf8");
+    assert.ok(
+      !text.includes("`worker-<pid>`"),
+      `${rel} still documents the pid-only default, which no longer exists`
+    );
+    assert.ok(text.includes("worker-<hostname>-<pid>"), `${rel} must state the real default`);
+  }
+});

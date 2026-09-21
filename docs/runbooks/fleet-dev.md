@@ -72,7 +72,7 @@ FLEET_WORKER_ID=laptop-worker-dev
 | `FLEET_IDLE_POLL_MS` | No | `10000` (10s) | Delay between poll attempts when the queue is empty. |
 | `FLEET_LEASE_MS` | No | `300000` (5m) | Duration task claims are held before becoming reapable. |
 | `FLEET_HEARTBEAT_MS` | No | `30000` (30s) | Interval for in-flight heartbeat ping to `scan_runs`. |
-| `FLEET_WORKER_ID` | No | `worker-<pid>` | Identifier tagged on claims and ledger records. |
+| `FLEET_WORKER_ID` | No | `worker-<hostname>-<pid>` | Identifier tagged on claims and ledger records. The hostname is the pod name under Kubernetes, so each pod is distinguishable; the pid distinguishes several workers on one host (R1.2.22). |
 
 ---
 

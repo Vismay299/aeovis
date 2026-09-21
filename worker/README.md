@@ -60,7 +60,7 @@ acceptance criterion.
 | `FLEET_LEASE_MS` | no | `300000` | 30000–3600000 | How long a claim is held before it can be reaped. |
 | `FLEET_IDLE_POLL_MS` | no | `10000` | 1000–300000 | Gap between polls when the queue was empty. |
 | `FLEET_HEARTBEAT_MS` | no | `30000` | 5000–600000, and ≤ half `FLEET_LEASE_MS` | How often an in-flight run says it is alive. |
-| `FLEET_WORKER_ID` | no | `worker-<pid>` | non-blank | Identity on every claim and heartbeat. |
+| `FLEET_WORKER_ID` | no | `worker-<hostname>-<pid>`, the hostname sanitised to `[a-z0-9._-]` and bounded at 63 chars | non-blank | Identity on every claim and heartbeat. Hostname-first because a container pid is a constant (tini makes it 7), so a pid-only default made every pod `worker-7` — one lease-owner identity for the whole fleet (R1.2.22). |
 | `FLEET_MAX_CONCURRENCY` | no | per surface (**1** for both today) | 1–2, and never above the surface's own ceiling | In-flight probes of one surface, per egress IP. |
 | `FLEET_PROBE_DELAY_MIN_MS` | no | per surface (`perplexity.ai` 20000, `chatgpt.com` 30000) | 0–600000 | Lower bound of the random inter-probe delay. |
 | `FLEET_PROBE_DELAY_MAX_MS` | no | per surface (`perplexity.ai` 45000, `chatgpt.com` 90000) | 0–600000, and **strictly greater** than the minimum | Upper bound of that delay. |

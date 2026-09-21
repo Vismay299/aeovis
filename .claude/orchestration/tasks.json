@@ -3503,9 +3503,22 @@
       ],
       "phase": "R1",
       "findings": [],
-      "status": "in_progress",
+      "status": "in_verification",
       "owner": "rebuild-implementer",
-      "evidence": [],
+      "evidence": [
+        "worker/src/config.js:947",
+        "worker/src/config.js:615",
+        "worker/src/config.js:580",
+        "worker/src/config.js:565",
+        "worker/src/config.js:646",
+        "worker/src/config.js:500",
+        "worker/src/config.js:204",
+        "src/lib/fleetConfig.test.mjs:154",
+        "src/lib/fleetConfig.test.mjs:882",
+        "worker/README.md:63",
+        "docs/runbooks/fleet-dev.md:75",
+        ".env.example:271"
+      ],
       "notes": [
         {
           "at": "2026-09-19T07:59:25.377Z",
@@ -3516,6 +3529,11 @@
           "at": "2026-09-19T07:59:40.520Z",
           "by": "rebuild-implementer",
           "text": "claimed"
+        },
+        {
+          "at": "2026-09-19T08:06:56.722Z",
+          "by": "rebuild-implementer",
+          "text": "R1.2.22 — the default worker id is now hostname-first, so a pod is identifiable.\nFormat: worker-<sanitised-hostname>-<pid>, e.g. worker-fleet-worker-abc12-7. On the dev laptop the boot log now prints workerId=worker-<this-host>-<pid>.\nFLEET_WORKER_ID still wins verbatim when set; worker/k8s/fleet.yaml keeps working unchanged.\nSanitisation (worker/src/config.js:580 sanitiseHostLabel): trim, lowercase, every run of characters outside [a-z0-9._-] collapses to a single '-', collapse repeated '-', strip leading/trailing '-' and '.', slice to 63 chars (the DNS label limit, so a real pod name is never cut), strip a trailing separator again. Both columns are unconstrained text (010_probe_tasks.sql:43 lease_owner, 011_scan_runs.sql:93 worker_id), so this file is the only bound there is.\nIf the hostname is unusable (os.hostname() threw, or sanitised to nothing) the id is worker-unknown-host-<pid> — named out loud rather than silently degrading back to a pid-only string, because two pods would still collide there and the ledger must show it (standing rule 1).\nInjection follows the existing pattern: resolveConfig(env, { strict, hostname, pid }) at worker/src/config.js:646 — same shape as env, defaulted to the real thing, never peeked at once passed. No new pattern, no new dependency beyond node:os (a builtin, not src/; workerIsolation stays green).\nTests: src/lib/fleetConfig.test.mjs — the old /^worker-\\d+$/ default assertion is replaced (line ~154) and 8 new R1.2.22 cases added: two hostnames differ; same pid on three hosts does NOT collide and is never \"worker-7\"; same host two pids differ; FLEET_WORKER_ID overrides; stable across repeated resolves in one process and still ends in this pid; hostile hostnames (spaces, ns/pod:0, uppercase, a SQL-ish string, newline/tab, \"---\", \"\", \"   \", 300 chars, non-strings) sanitised and bounded with nothing thrown; unusable host says unknown-host; blank-id refusal message and describeConfig name the new default; worker/README.md + docs/runbooks/fleet-dev.md no longer document worker-<pid>.\nCounts: node --test src/lib/fleetConfig.test.mjs 77 pass / 0 fail (was 69). Root npm test 3075 pass / 0 fail / 30 skipped (npm run test:scoring is the same suite, also 0 fail). node --test src/lib/workerIsolation.test.mjs 5 pass / 0 fail. npm --prefix worker run check green including the client smoke on Node v22.22.3. npm --prefix worker test still reports 0 tests (pre-existing; the config tests live in src/lib/ by design).\nDocs updated: worker/README.md:63, docs/runbooks/fleet-dev.md:75, .env.example:271-273.\nNOT DONE, operator-owed: the accept clause \"after deploy, scan_runs rows carry a worker_id containing the pod name\" cannot be exercised here. It needs a Zeabur redeploy of the fleet image and then a read of production scan_runs. I touched no production resource and committed nothing.\nOne transient: an early root run showed 1 failure, \"GUARD — a section E table row for a CLOSED task says so\" (an OPERATOR_LEDGER/tasks.json guard, unrelated to this diff); it passed on all three subsequent runs. Flagging it rather than hiding it.\n"
         }
       ],
       "verification": null

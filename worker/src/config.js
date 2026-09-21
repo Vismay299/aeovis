@@ -29,6 +29,10 @@
  * the distinction data rather than discipline.
  */
 
+// node:os only. A Node builtin is not "the web app": the isolation rule
+// (R1.2.1) forbids importing from `src/`, not from the platform.
+import os from "node:os";
+
 /**
  * The consumer surfaces this fleet has (or will have) an adapter for.
  *
@@ -197,7 +201,7 @@ export const CONFIG_FIELDS = Object.freeze([
     name: "FLEET_WORKER_ID",
     required: false,
     kind: "text",
-    fallback: null, // computed: worker-<pid>
+    fallback: null, // computed: worker-<hostname>-<pid> (R1.2.22)
     why: "identity written onto every claim and heartbeat",
   }),
 
@@ -492,7 +496,7 @@ function parseField(field, raw) {
 
 /** Human text for a field's default, used only in messages. */
 function describeFallback(field) {
-  if (field.name === "FLEET_WORKER_ID") return "worker-<pid>";
+  if (field.name === "FLEET_WORKER_ID") return "worker-<hostname>-<pid>";
   // A per-surface field has no scalar default, and "null" is not an answer an
   // operator can act on.
   if (field.fallbackText) return field.fallbackText;
@@ -548,6 +552,81 @@ function isArmedForProduction(env) {
 }
 
 /**
+ * Longest host label kept in a computed worker id.
+ *
+ * `probe_tasks.lease_owner` and `scan_runs.worker_id` are both unconstrained
+ * `text` (supabase/migrations/010_probe_tasks.sql:43, 011_scan_runs.sql:93), so
+ * nothing in the database truncates for us — which is precisely why this file
+ * bounds it. A 300-character hostname would travel through every claim, renew,
+ * complete and heartbeat RPC and into every log line. 63 is the DNS label limit
+ * and therefore the longest a real Kubernetes pod name can be, so the bound
+ * never cuts a legitimate id.
+ */
+const WORKER_ID_HOST_MAX = 63;
+
+/**
+ * Reduce a hostname to the characters an owner string is safe to carry.
+ *
+ * Kept deliberately narrow — lowercase letters, digits, `.`, `_` and `-` — which
+ * is a superset of what a Kubernetes pod name can contain and a subset of what
+ * survives a log line, a JSON payload and a SQL string literal unchanged. Every
+ * other character (spaces, slashes, quotes, control bytes, unicode) collapses to
+ * a single `-`, so a hostile or merely odd hostname becomes ugly, never unsafe
+ * and never an exception.
+ *
+ * Returns "" when nothing usable is left, so the caller can say so rather than
+ * emit `worker--7`.
+ */
+function sanitiseHostLabel(raw) {
+  if (typeof raw !== "string") return "";
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, WORKER_ID_HOST_MAX)
+    .replace(/[-.]+$/g, "");
+}
+
+/**
+ * The worker identity used when `FLEET_WORKER_ID` is not set: `worker-<host>-<pid>`.
+ *
+ * WHY NOT THE PID ALONE (R1.2.22). The previous default was `worker-${pid}`.
+ * Under tini in a container the node process is always pid 7, so every pod,
+ * every restart and every replica wrote `scan_runs.worker_id = "worker-7"` and
+ * claimed `probe_tasks` under that one owner string — 126 production rows on
+ * 2026-09-19, all identical. A ledger row could not be traced to a pod, and two
+ * replicas sharing an owner string defeats the lease: a renew or release scoped
+ * to the owner cannot tell them apart, which is the one thing the lease exists
+ * to do. `worker/k8s/fleet.yaml` sets FLEET_WORKER_ID from the pod name, but the
+ * ratified host (docs/decisions/2026-09-05-worker-host.md) deploys through the
+ * Zeabur UI from the Dockerfile and never applies that manifest, so the DEFAULT
+ * is what actually runs in production. It has to be unique on its own.
+ *
+ * The hostname is the pod name under Kubernetes and unique per pod. The pid stays
+ * as a suffix for the bare-metal case where several workers share one host.
+ *
+ * When the hostname is unusable — `os.hostname()` threw, or sanitised away to
+ * nothing — the id says `unknown-host` out loud rather than silently degrading
+ * back to a pid-only string that looks deliberate. Two pods would still collide
+ * there, so the id must make that visible in the ledger.
+ */
+export function defaultWorkerId(hostname, pid = process.pid) {
+  const host = sanitiseHostLabel(hostname);
+  return `worker-${host || "unknown-host"}-${pid}`;
+}
+
+/** `os.hostname()` without letting a platform failure stop the boot. */
+function safeHostname() {
+  try {
+    return os.hostname();
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Resolve and validate the fleet's configuration.
  *
  * `strict` decides ONLY what a missing credential means — it does not turn
@@ -557,9 +636,14 @@ function isArmedForProduction(env) {
  * not require a database. A malformed FLEET_* value is wrong either way, and
  * `--selftest` is exactly where an operator should find out.
  *
+ * `hostname` and `pid` are injected the same way `env` is — passed in, defaulted
+ * to the real thing, and never read from the platform behind the caller's back
+ * once given. They exist so a test can pin the computed `workerId` (R1.2.22)
+ * without depending on the machine running the suite.
+ *
  * Throws {@link FleetConfigError} listing every problem at once.
  */
-export function resolveConfig(env = process.env, { strict = true } = {}) {
+export function resolveConfig(env = process.env, { strict = true, hostname, pid } = {}) {
   const problems = [];
   const values = {};
   const defaulted = new Set();
@@ -860,7 +944,9 @@ export function resolveConfig(env = process.env, { strict = true } = {}) {
     /** How often an in-flight scan_runs row says it is still alive (R1.2.3). */
     heartbeatMs,
     /** Identity written onto every claim and heartbeat. */
-    workerId: values.FLEET_WORKER_ID ?? `worker-${process.pid}`,
+    workerId:
+      values.FLEET_WORKER_ID ??
+      defaultWorkerId(hostname === undefined ? safeHostname() : hostname, pid === undefined ? process.pid : pid),
     /**
      * The politeness budget for each surface this container drives, keyed by
      * engine id: `{ surface, maxConcurrency, probeDelayMinMs, probeDelayMaxMs,
