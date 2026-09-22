@@ -289,7 +289,7 @@ test("batchSubject — a claim spanning two batches attributes itself to neither
 });
 
 // ---------------------------------------------------------------------------
-// The loop — every pass writes exactly one row
+// One-shot runOnce — the caller owns and closes the pass's row
 // ---------------------------------------------------------------------------
 
 /** The ledger stubs, recording what the loop asked for. */
@@ -358,7 +358,7 @@ test("runOnce — an EMPTY pass still writes a run: 'noop', reason queue_empty, 
   );
   const opened = rec.calls.filter((c) => c.kind === "open");
   const closed = rec.calls.filter((c) => c.kind === "close");
-  assert.equal(opened.length, 1, "exactly one row per pass, including the empty ones");
+  assert.equal(opened.length, 1, "a one-shot empty pass still owns one row");
   assert.equal(closed.length, 1);
   assert.equal(opened[0].phase, "idle");
   assert.equal(opened[0].workerId, "fleet-1");

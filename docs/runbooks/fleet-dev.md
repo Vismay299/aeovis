@@ -137,15 +137,18 @@ Upon successful startup, stdout displays:
 [fleet] config: supabaseUrl=https://... supabaseKey=set engines=perplexity batchSize=2 leaseMs=300000 idlePollMs=10000 heartbeatMs=30000 workerId=laptop-worker-dev probeTimeoutMs=60000 canaryIntervalMs=3600000
 config: budget perplexity (perplexity.ai): concurrency=1 delay=20000-45000ms dailyCap=400 (cap NOT ENFORCED: it is fleet-wide and no shared counter exists)
 config: the budget above is VALIDATED, NOT APPLIED — no probe is paced by it yet (probeBatch has no adapter). The lease arithmetic that bounds batchSize IS enforced.
-[fleet] queue empty: 0 outstanding in scope
-[fleet] run <run-uuid> noop — probe-fleet/idle, probes 0/0, errors recovered 0
+[fleet] idle heartbeat every 30000ms, worst case 40000ms between beats — 9.0x inside the sweep's 360000ms staleness threshold
+[fleet] claimed 0 — the queue is empty (0 outstanding); there is nothing to do
+[fleet] run <run-uuid> OPEN — probe-fleet/idle, started <time>, last heartbeat <time>
 ```
 
 ---
 
 ## 5. Seeding and Testing Probe Tasks
 
-When no scans are actively submitted by web users, the queue reports `queue empty: 0 outstanding in scope` and records an idle pass in `scan_runs`.
+When no scans are actively submitted by web users, the queue reports that zero
+tasks were claimed and keeps one open idle stretch in `scan_runs`, heartbeating
+it until work arrives or the process exits. It does not insert a row per poll.
 
 ### Manually Queuing Tasks for Verification
 

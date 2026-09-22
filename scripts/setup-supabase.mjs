@@ -238,6 +238,16 @@ const EXPECTED_OBJECTS = {
     { kind: "column", name: "prompt_results.evidence_raw_id" },
     { kind: "column", name: "prompt_results.evidence_captured_at" },
   ],
+  // R1.2.23a — scan_runs retention. Both objects matter and for different
+  // reasons: without the FUNCTION the nightly cron calls an RPC that does not
+  // exist and the table keeps growing (the 009 shape — table present, function
+  // absent — is exactly this failure, and 022 shipped in that shape for part of
+  // one afternoon), and without the INDEX each batch sequentially scans the
+  // whole ledger.
+  "022_scan_runs_retention.sql": [
+    { kind: "index", name: "scan_runs_noop_retention_idx" },
+    { kind: "function", name: "prune_noop_scan_runs" },
+  ],
 };
 
 /**

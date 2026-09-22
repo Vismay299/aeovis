@@ -14,10 +14,15 @@
  * fleet being deployable on its own.
  *
  * The claim is real as of R1.2.2: probe_tasks and a lease-based claim settled
- * in Postgres. R1.2.3 adds the scan_runs ledger — every pass of the loop below
- * writes exactly one row, whether it claimed work or not — and R1.3 brings the
- * first real adapter, until when `probeBatch` refuses out loud rather than
- * returning plausible zero-valued rows.
+ * in Postgres. R1.2.3 added the scan_runs ledger, and R1.2.23 changed the
+ * GRANULARITY of what it records without changing what it guarantees: a pass
+ * that claimed work still writes exactly one row, but a stretch of IDLENESS is
+ * one open row heartbeated for as long as it lasts, so two idle polls in three
+ * write nothing at all. An idle fleet is still distinguishable from a dead one
+ * — that is what the heartbeat is for — it just no longer costs ~8,250 rows a
+ * day to say so. See `runOnce` below. R1.3 brings the first real adapter, until
+ * when `probeBatch` refuses out loud rather than returning plausible
+ * zero-valued rows.
  */
 
 import { resolveConfig, describeConfig, FleetConfigError } from "./config.js";
@@ -30,6 +35,8 @@ import {
   batchSubject,
   summarizeBatchRun,
   describeRun,
+  describeIdleHeartbeatPlan,
+  idleHeartbeatPlan,
   normalizeRun,
   FLEET_PHASES,
   RUN_OUTCOMES,
@@ -95,16 +102,215 @@ async function closeOrWarn(close, runId, fields, config) {
 }
 
 /**
+ * Why an idle row stopped being the current one. Lands in the closed row's
+ * detail, because "the fleet got work" and "the pod was told to stop" are
+ * different ends to a stretch of idleness and a reader cannot recover which
+ * from the timestamps.
+ */
+export const IDLE_END_REASONS = Object.freeze({
+  /** A claim succeeded: the stretch ended because there is work now. */
+  WORK_CLAIMED: "work_claimed",
+  /** The run loop exited (SIGTERM, or `once`). Best effort -- see start(). */
+  PROCESS_EXIT: "process_exit",
+  /** A one-shot caller owned the stretch, so the pass closes what it opened. */
+  PASS_ENDED: "pass_ended",
+});
+
+/** What one idle poll did to the ledger. Returned so a caller can assert it. */
+export const IDLE_VERDICTS = Object.freeze({
+  /** The first poll of a stretch: a new open row. */
+  OPENED: "opened",
+  /** The row was heartbeated -- the fleet said "still here, still idle". */
+  BEAT: "beat",
+  /** Inside the beat window, so the ledger was not written at all. */
+  HELD: "held",
+  /** The row was gone from under us (reaped/closed); a fresh one is open. */
+  REOPENED: "reopened",
+});
+
+/**
+ * The state of ONE idle stretch: the open row, and what has happened to it.
+ *
+ * In-process state, deliberately. `worker_id` has been stable per pod since
+ * f288bca (`worker-<hostname>-<pid>`), and the only thing that may heartbeat a
+ * row is the process that opened it -- so the id of the open row belongs in the
+ * same process, and a restart legitimately starts a new stretch rather than
+ * adopting an orphan. There is NO unique index stopping two open idle rows for
+ * one worker; the guard is this object plus the reaper, and a partial unique
+ * index is filed as a follow-up rather than smuggled in here.
+ */
+export function createIdleStretch() {
+  return {
+    /** The open scan_runs row, or null when the fleet is not in an idle stretch. */
+    runId: null,
+    /** ms clock readings, null when there is no open row -- NOT zero. */
+    openedAt: null,
+    lastBeatAt: null,
+    /** Polls this row has seen, beats written to it, rows lost under us. */
+    polls: 0,
+    beats: 0,
+    reopens: 0,
+    /** The claim vocabulary observed during the stretch: queue_empty/all_leased. */
+    reasons: {},
+    lastReason: null,
+    /** Measured on the last poll, or null for NOT MEASURED. Never `?? 0`. */
+    lastOutstanding: null,
+    lastLeasedElsewhere: null,
+  };
+}
+
+/** Back to "no open row" without swapping the object a caller is holding. */
+function resetIdleStretch(stretch) {
+  const fresh = createIdleStretch();
+  for (const key of Object.keys(fresh)) stretch[key] = fresh[key];
+  return stretch;
+}
+
+/** Open the stretch's row and record the id only this process can beat. */
+async function openIdleRow(stretch, verdict, config, deps, nowMs) {
+  const open = deps.openRun || openRun;
+  const row = await open(
+    {
+      phase: FLEET_PHASES.IDLE,
+      workerId: config.workerId,
+      detail: {
+        engines: config.engines,
+        opened_because: verdict,
+        reason: stretch.lastReason,
+        // Non-zero here means the sweep has been closing live idle rows.
+        reopens: stretch.reopens,
+      },
+    },
+    config
+  );
+  stretch.runId = row.id;
+  stretch.openedAt = nowMs;
+  // open_scan_run sets heartbeat_at to now, so the first beat is due one
+  // cadence from HERE, not immediately.
+  stretch.lastBeatAt = nowMs;
+  stretch.polls = 1;
+  stretch.beats = 0;
+  log(describeRun(row));
+  return verdict;
+}
+
+/**
+ * Keep the idle stretch visible: open the row, or beat it, or leave it alone.
+ *
+ * R1.2.23. The heartbeat is driven from the poll loop rather than a timer
+ * because the row only exists WHILE the loop is polling -- the moment a batch is
+ * claimed the stretch is closed, so there is no window where an unbeaten row can
+ * outlive its owner.
+ */
+async function holdIdleRow(stretch, result, config, deps) {
+  const beat = deps.heartbeatRun || heartbeatRun;
+  const nowMs = (deps.now || Date.now)();
+
+  stretch.polls += 1;
+  stretch.lastReason = result.reason;
+  stretch.reasons[result.reason] = (stretch.reasons[result.reason] || 0) + 1;
+  // Measured or NOT MEASURED. A claim that did not report a count must not be
+  // recorded as having counted zero (standing rule 5, on the way in).
+  stretch.lastOutstanding = Number.isFinite(result.outstanding) ? result.outstanding : null;
+  stretch.lastLeasedElsewhere = Number.isFinite(result.leasedElsewhere) ? result.leasedElsewhere : null;
+
+  if (!stretch.runId) return openIdleRow(stretch, IDLE_VERDICTS.OPENED, config, deps, nowMs);
+
+  const beatEveryMs = Number.isFinite(config.heartbeatMs) ? config.heartbeatMs : FALLBACK_HEARTBEAT_MS;
+  if (stretch.lastBeatAt !== null && nowMs - stretch.lastBeatAt < beatEveryMs) {
+    // The poll that writes NOTHING -- the whole saving of R1.2.23. It is not a
+    // silent skip: describeClaim() already logged this poll, the row is already
+    // open and already fresh, and the count reaches the ledger as idle_polls on
+    // the closed row. Nothing is measured here that is not recorded somewhere.
+    return IDLE_VERDICTS.HELD;
+  }
+
+  try {
+    const beaten = await beat(stretch.runId, config);
+    stretch.lastBeatAt = nowMs;
+    stretch.beats += 1;
+    log(
+      `idle run ${stretch.runId} still alive — beat ${stretch.beats} across ${stretch.polls} poll(s), ` +
+        `heartbeat ${beaten.heartbeatAt}`
+    );
+    return IDLE_VERDICTS.BEAT;
+  } catch (err) {
+    // heartbeat_scan_run RAISES when the row is closed or absent, and
+    // heartbeatRun passes that on. That is how this container learns the sweep
+    // closed its idle row as 'reaped' -- the row is gone, so there is nothing to
+    // close, and the only wrong move is to carry on writing nothing: an idle
+    // fleet with no open row is indistinguishable from a dead one.
+    log(
+      `WARNING: idle run ${stretch.runId} could not be heartbeated (${err.message}) — the row was ` +
+        `closed or reaped underneath this container. Opening a fresh idle row so this fleet does ` +
+        `not read as a dead one; if this repeats, the beat cadence is losing to the sweep.`
+    );
+    stretch.reopens += 1;
+    return openIdleRow(stretch, IDLE_VERDICTS.REOPENED, config, deps, nowMs);
+  }
+}
+
+/**
+ * Close the stretch's row with what it measured. Returns the id it closed, or
+ * null when there was no open row.
+ *
+ * A failure to close is logged, never thrown: the caller is on its way to real
+ * work (or out of the process), and an unclosed row is not lost -- it goes stale
+ * and the sweep closes it as 'reaped'.
+ */
+async function closeIdleRow(stretch, endedBecause, config, deps) {
+  const close = deps.closeRun || closeRun;
+  const runId = stretch.runId;
+  if (!runId) return null;
+  const nowMs = (deps.now || Date.now)();
+
+  const fields = {
+    outcome: RUN_OUTCOMES.NOOP,
+    // The claim's own vocabulary -- 'queue_empty' or 'all_leased' -- so a
+    // starved fleet still never reads as a quiet one.
+    reason: stretch.lastReason,
+    // Measured zeroes, not absent counts: this stretch really did look.
+    probesAttempted: 0,
+    probesSucceeded: 0,
+    errorsRecovered: 0,
+    detail: {
+      outstanding: stretch.lastOutstanding,
+      leased_elsewhere: stretch.lastLeasedElsewhere,
+      ended_because: endedBecause,
+      idle_polls: stretch.polls,
+      idle_beats: stretch.beats,
+      idle_reopens: stretch.reopens,
+      idle_reasons: stretch.reasons,
+      idle_ms: stretch.openedAt === null ? null : nowMs - stretch.openedAt,
+    },
+  };
+  // Forget the row BEFORE the write: if the close fails, the one thing this
+  // process must not do is keep beating a row it believes it still owns.
+  resetIdleStretch(stretch);
+  await closeOrWarn(close, runId, fields, config);
+  return runId;
+}
+
+/**
  * One poll: claim, probe, report. Returns how many tasks it handled.
  *
- * EVERY PASS WRITES EXACTLY ONE scan_runs ROW, including the passes that claim
- * nothing. That is the invariant R1.2.3 exists for: an idle container and a
- * dead one leave identical evidence if only busy passes are recorded, and the
- * log line below does not survive the container. An empty pass closes as 'noop'
- * with probes_attempted = 0 -- a measured zero, which is not the same row as no
- * row at all. Standing rule 1.
+ * EVERY UNIT OF WORK WRITES EXACTLY ONE scan_runs ROW, and idleness is a unit of
+ * work. That is the invariant R1.2.3 exists for: an idle container and a dead
+ * one leave identical evidence if only busy passes are recorded, and the log
+ * line below does not survive the container.
+ *
+ * R1.2.23 changed the GRANULARITY of the idle row, not the invariant. The row is
+ * opened on the first idle poll, heartbeated for as long as the idleness lasts,
+ * and closed as 'noop' with probes_attempted = 0 when work arrives or the
+ * process exits -- a measured zero, which is still not the same row as no row at
+ * all. Standing rule 1.
+ *
+ * `idle` is the stretch this pass belongs to. A caller that does not supply one
+ * OWNS ONLY THIS PASS, so this pass closes what it opened: an idle row must
+ * never outlive the thing that can heartbeat it. The long-lived loop in start()
+ * supplies one, which is what makes the stretch span polls.
  */
-export async function runOnce(config, deps = {}) {
+export async function runOnce(config, deps = {}, idle = null) {
   const claim = deps.claimBatch || claimBatch;
   const probe = deps.probeBatch || probeBatch;
   const report = deps.reportBatch || reportBatch;
@@ -124,26 +330,25 @@ export async function runOnce(config, deps = {}) {
     // The idle row. Its reason carries the claim's own vocabulary --
     // 'queue_empty' or 'all_leased' -- so the ledger keeps the distinction the
     // log line makes, and a fleet being starved never reads as a quiet one.
-    const idle = await open(
-      { phase: FLEET_PHASES.IDLE, workerId: config.workerId, detail: { engines: config.engines } },
-      config
-    );
-    const closed = await close(
-      idle.id,
-      {
-        outcome: RUN_OUTCOMES.NOOP,
-        reason: result.reason,
-        // Measured zeroes, not absent counts: this pass really did look.
-        probesAttempted: 0,
-        probesSucceeded: 0,
-        errorsRecovered: 0,
-        detail: { outstanding: result.outstanding, leased_elsewhere: result.leasedElsewhere },
-      },
-      config
-    );
-    log(describeRun(closed));
+    //
+    // A caller that supplied a stretch keeps the row open across polls; one
+    // that did not owns only this pass, so the pass closes what it opened. The
+    // ledger shape is the same either way -- one open row, then one closed noop
+    // row -- which is why `--selftest` still proves R1.2.3 without a loop.
+    if (idle) {
+      await holdIdleRow(idle, result, config, deps);
+      return 0;
+    }
+    const own = createIdleStretch();
+    await holdIdleRow(own, result, config, deps);
+    await closeIdleRow(own, IDLE_END_REASONS.PASS_ENDED, config, deps);
     return 0;
   }
+
+  // Work arrived, so the idle stretch ends here rather than at the next poll:
+  // a batch row and an idle row must never be open for the same worker at once,
+  // or the ledger says this container was in two states.
+  if (idle) await closeIdleRow(idle, IDLE_END_REASONS.WORK_CLAIMED, config, deps);
 
   const batch = result.tasks;
   // A claim is filtered by engine, so it can span batches and jobs; when it
@@ -271,15 +476,26 @@ export async function start(config, deps = {}) {
 
   log(`starting as ${config.workerId}; engines=${config.engines.join(",") || "(none)"}`);
   log(describeConfig(config));
+  // R1.2.23: the idle row is only as safe as the cadence that beats it, so the
+  // margin against the sweep is STATED at boot rather than assumed. A config
+  // that cannot beat fast enough says so here, in the log the operator reads
+  // first, instead of in a ledger full of rows closed as 'reaped'.
+  log(describeIdleHeartbeatPlan(idleHeartbeatPlan(config)));
   // Anything the validator narrowed from a DEFAULT is announced here rather than
   // applied invisibly (R1.2.6). A value the operator SET is never narrowed —
   // resolveConfig refuses instead.
   for (const note of config.adjustments || []) log(`NOTE: ${note}`);
 
+  // ONE stretch for the life of the loop. This is what makes idleness cost one
+  // row per idle stretch instead of one row per poll (R1.2.23): runOnce opens
+  // it on the first idle poll, beats it on later ones, and closes it the moment
+  // a claim succeeds.
+  const idle = createIdleStretch();
+
   while (running) {
     let handled = 0;
     try {
-      handled = await runOnce(config, deps);
+      handled = await runOnce(config, deps, idle);
     } catch (err) {
       // A failed pass must not kill the fleet, but it must be loud. A worker
       // that silently stops claiming looks identical to an empty queue.
@@ -288,6 +504,21 @@ export async function start(config, deps = {}) {
     if (config.once) break;
     if (handled === 0) await sleep(config.idlePollMs);
   }
+
+  // BEST EFFORT, and named as such. SIGTERM reaches the handler above and the
+  // loop finishes its pass, so this normally closes the row properly. A SIGKILL
+  // -- or a grace period shorter than the pass -- skips it, and the row is left
+  // open for the sweep to close as 'reaped'.
+  //
+  // HOW LONG THAT TAKES IS NOT SIX MINUTES. REAP_STALE_AFTER_MS (360000) is the
+  // threshold at which a row becomes ELIGIBLE to be reaped; the sweep that acts
+  // on it runs from /api/scan/worker, which vercel.json schedules at `0 0 * * *`
+  // -- once a day. So the honest bound is "closed here, or reaped at the next
+  // sweep", and an abandoned row can read as open for up to ~24h. R3.1.1 (cron
+  // every 10 minutes) is the task that would make the bound minutes; it is
+  // blocked on an operator decision, and until it lands this comment must not
+  // claim a number the schedule does not deliver.
+  await closeIdleRow(idle, IDLE_END_REASONS.PROCESS_EXIT, config, deps);
 
   log("stopped");
 }

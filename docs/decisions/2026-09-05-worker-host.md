@@ -210,11 +210,13 @@ condition it catches is a function of the execution model.
 *"a chunk that ran and did nothing, a chunk that never ran, a chunk that died
 halfway and a chunk that declined for a good reason all leave the same
 evidence"* (grep `WHAT THIS REPLACES`). This one is **not** an argument against
-functions specifically — `worker/src/lib/runLedger.js` writes the same rows
-from the fleet on purpose, and `worker/README.md` explains why even idle passes
-get a row. It is listed here because it is the cost of *inferring* execution
-from database state, and that inference is unavoidable when the executor
-vanishes with its logs.
+functions specifically — `worker/src/lib/runLedger.js` writes the same evidence
+from the fleet on purpose, and `worker/README.md` explains why even an idle
+stretch gets one open, heartbeated row. R1.2.23 changed that granularity from a
+row per idle poll to a row per idle stretch; it did not remove the evidence. It
+is listed here because it is the cost of *inferring* execution from database
+state, and that inference is unavoidable when the executor vanishes with its
+logs.
 
 ### 2.8 In-process state cannot be process-local, and once was
 

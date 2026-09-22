@@ -340,7 +340,13 @@ until R3.5.4 added the three rows:
 `016_content_items_natural_key`, `017_cost_unmeasured_calls`, `018_gsc_daily`, `019_probe_evidence_bucket`,
 `020_content_items_key_nulls_not_distinct` (applied 2026-09-18 — R3.5.5),
 `021_prompt_results_evidence` (**NOT YET APPLIED** — R1.5.2; five nullable
-`prompt_results.evidence_*` columns, purely additive, no backfill).
+`prompt_results.evidence_*` columns, purely additive, no backfill),
+`022_scan_runs_retention` (**NOT YET APPLIED** — R1.2.23a; one partial index
+`scan_runs_noop_retention_idx` and one function `prune_noop_scan_runs`, purely
+additive. Until it is applied, the nightly `/api/scan-runs/retention` cron
+answers 500 with `deleted: null` and a reason naming the missing function — it
+never reports a silent "0 deleted" — and `scan_runs` keeps growing at the
+~8,250 rows/day measured on 2026-09-22).
 
 `npm run setup:db` applies them in filename order, one transaction per file,
 recording each in the `schema_migrations` ledger. The `BEGIN`, the ledger

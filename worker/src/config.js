@@ -38,9 +38,10 @@ import os from "node:os";
  *
  * Frozen and CHECKED, because `FLEET_ENGINES=gogle` is not a harmless typo: the
  * claim filters `probe_tasks` by engine, so a misspelt surface claims nothing,
- * forever, while every pass writes a perfectly truthful `queue_empty` idle row.
- * An operator reading that ledger sees an idle fleet, not a misconfigured one.
- * Refusing at boot is the only place the two are still distinguishable.
+ * forever, while the worker keeps a perfectly truthful `queue_empty` idle
+ * stretch open and heartbeated. An operator reading that ledger sees an idle
+ * fleet, not a misconfigured one. Refusing at boot is the only place the two
+ * are still distinguishable.
  *
  * `chatgpt` is here before its adapter (R1.4) on purpose: this list is the
  * vocabulary of what may be REQUESTED, and R1.3/R1.4 land the adapters behind

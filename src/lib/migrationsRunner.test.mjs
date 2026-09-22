@@ -275,7 +275,7 @@ function pathToFileUrlString(p) {
   return new URL(`file://${p.replace(/\\/g, "/").replace(/^([A-Za-z]:)/, "/$1")}`).href;
 }
 
-/** Everything 001-019 must leave behind, per the runner's own expectations. */
+/** Everything 001-022 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
   "scans", "brand_prompts", "scan_jobs", "content_events",
   "content_jobs", "content_items", "content_feedback", "brand_briefs", "content_lessons",
@@ -320,6 +320,12 @@ const FULL_CATALOG = [
   "prompt_results.evidence_har_id",
   "prompt_results.evidence_raw_id",
   "prompt_results.evidence_captured_at",
+  // 022_scan_runs_retention.sql (R1.2.23a) — the batched delete the nightly
+  // cron calls, and the partial index that makes each batch a range scan.
+  // scanRunsRetention.js rpc()s the function by name, so its absence is not a
+  // slow prune, it is a prune that fails on the first call.
+  "scan_runs_noop_retention_idx",
+  "prune_noop_scan_runs",
 ];
 
 function withRegister(dir) {

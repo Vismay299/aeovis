@@ -220,7 +220,15 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
   const exempt = routes.filter((r) => isSelfGated(concrete(r)));
   assert.deepEqual(
     exempt.sort(),
-    ["/api/content/worker", "/api/evidence/retention", "/api/gsc/worker", "/api/scan/worker"],
+    [
+      "/api/content/worker",
+      "/api/evidence/retention",
+      "/api/gsc/worker",
+      "/api/scan/worker",
+      // R1.2.23 — the scan_runs retention cron. Carries its own cronAuth gate,
+      // exactly like the four above.
+      "/api/scan-runs/retention",
+    ].sort(),
     "only the cron workers may bypass the perimeter, and each must carry its own gate"
   );
 });

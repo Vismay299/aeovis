@@ -77,6 +77,11 @@ const SELF_GATED = [
   /^\/api\/gsc\/worker\/?$/,
   // R1.5.1 — same cronAuth gate; deletes expired probe evidence daily.
   /^\/api\/evidence\/retention\/?$/,
+  // R1.2.23 — same cronAuth gate; deletes scan_runs' idle `noop` rows daily.
+  // Without this entry the middleware would demand an OPERATOR_TOKEN bearer of
+  // a cron that can only ever present CRON_SECRET, so the pass would 401 every
+  // night and the table would grow while the deployment looked healthy.
+  /^\/api\/scan-runs\/retention\/?$/,
 ];
 
 /** Non-API paths the middleware never sees (see the matcher in middleware.js). */

@@ -241,8 +241,9 @@ test("worker reportBatch — refused ids are surfaced, not swallowed", async () 
 // ---------------------------------------------------------------------------
 
 /**
- * R1.2.3 gave `runOnce` a second obligation: every pass writes exactly one
- * scan_runs row. The real ledger calls need a database, so these loop tests
+ * R1.2.3 gave one-shot `runOnce` a second obligation: the pass writes exactly
+ * one scan_runs row. The long-lived `start` loop now shares one idle-stretch
+ * row across polls (R1.2.23). The real ledger calls need a database, so these loop tests
  * stub them — the LEDGER's own behaviour is proven in src/lib/scanRuns.test.mjs
  * (hermetically) and src/lib/scanRunsLive.test.mjs (against Postgres). What is
  * asserted here is still what it always was: what the LOOP does.

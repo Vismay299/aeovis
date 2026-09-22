@@ -17,6 +17,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/scan-runs/retention",
+      "schedule": "30 3 * * *"
+    },
+    {
       "path": "/api/gsc/worker",
       "schedule": "0 2 * * 1"
     }

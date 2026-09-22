@@ -129,10 +129,10 @@ is read by `claim_probe_tasks` as *no filter*, so a container configured for one
 surface would claim every surface.
 
 **A misspelt engine is a dead surface.** `FLEET_ENGINES=gogle` claims nothing,
-forever, while every pass writes a perfectly honest `queue_empty` idle row — at
-which point an idle fleet and a misconfigured one are indistinguishable in the
-ledger. Boot is the last place they can still be told apart, so the engine
-vocabulary is closed and checked there.
+forever, while the worker keeps a perfectly honest `queue_empty` idle stretch
+open and heartbeated — at which point an idle fleet and a misconfigured one are
+indistinguishable in the ledger. Boot is the last place they can still be told
+apart, so the engine vocabulary is closed and checked there.
 
 **Nothing narrows a value the operator set.** `FLEET_HEARTBEAT_MS` must still
 beat at least twice per lease (R3.3.2's stale sweep depends on it), but where
@@ -176,26 +176,29 @@ unreachable queue and an empty one must not produce the same signal.
 
 ## The ledger (R1.2.3)
 
-**Every pass writes exactly one `scan_runs` row** — including the passes that
-claim nothing. `runLedger.js` calls the three Postgres functions migration 011
-created: `open_scan_run` before the work, `heartbeat_scan_run` on a timer while
-it is in flight, `close_scan_run` after it.
+**Every claimed batch writes exactly one `scan_runs` row. A whole uninterrupted
+idle stretch also writes one row, not one row per poll.** The idle row remains
+open and is heartbeated while the queue stays empty or all work is leased; it
+closes as `noop` when work arrives or the process exits. `runLedger.js` calls the
+three Postgres functions migration 011 created: `open_scan_run`,
+`heartbeat_scan_run`, and `close_scan_run`.
 
-| Pass | phase | outcome | reason | counters |
+| Unit of work | phase | outcome | reason | counters |
 |---|---|---|---|---|
 | claimed a batch, all written | `probe_batch` | `succeeded` | — | attempted / answered-and-landed / errors |
 | claimed a batch, some writes refused | `probe_batch` | `failed` | `lease_lost` | same, refused ones excluded from succeeded |
 | probe threw | `probe_batch` | `failed` | `probe_failed` | attempted, 0 succeeded |
 | report threw | `probe_batch` | `failed` | `report_failed` | attempted, 0 succeeded |
-| queue was empty | `idle` | `noop` | `queue_empty` | 0 / 0 / 0 |
-| every task held by someone else | `idle` | `noop` | `all_leased` | 0 / 0 / 0 |
+| queue stayed empty for an idle stretch | `idle` | open while alive, then `noop` | `queue_empty` | 0 / 0 / 0 on close |
+| every task stayed held by someone else | `idle` | open while alive, then `noop` | `all_leased` | 0 / 0 / 0 on close |
 
 **Why the idle rows.** "The fleet is idle" and "the fleet is dead" leave exactly
-the same evidence if only busy passes are recorded: no rows. The idle row's
-`probes_attempted = 0` is a *measured* zero, and a measured zero is a different
-row from no row at all. The volume that costs — roughly 8.6k rows a day at the
-default poll interval — is stated in migration 011's *THE IDLE ROWS* note, and
-retention is R3.2.3's to decide when it builds the reader.
+the same evidence if only busy passes are recorded: no rows. An open idle row
+with a fresh heartbeat says the fleet is alive; one whose heartbeat stops is
+closed as `reaped` by the sweep. When the stretch closes normally,
+`probes_attempted = 0` is a *measured* zero, and a measured zero is different
+from no row at all. R1.2.23 replaced migration 011's original ~8.6k-rows/day
+per-poll design and added 30-day retention for closed `noop` history.
 
 **Why a blocked probe is not a success.** `probes_succeeded` counts only results
 that both answered *and* landed in the database. A blocked or captcha'd probe

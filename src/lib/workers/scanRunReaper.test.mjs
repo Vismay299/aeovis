@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 /**
  * R3.3.2 — the sweep reaps heartbeat-stale runs (finding S12).
@@ -927,4 +928,120 @@ test("WIRED — the cron sweep calls reapStaleRuns, and the counters reach the r
     "the reap call must sit in a try/catch that answers with reapPassThrew — an uncaught reap " +
       "failure would 500 the whole sweep and throw away the tick that already succeeded"
   );
+});
+
+// ---------------------------------------------------------------------------
+// R1.2.23 — the fleet's long-lived IDLE row meets this reaper
+// ---------------------------------------------------------------------------
+
+/**
+ * Until R1.2.23 the fleet opened and closed an idle row inside a single poll,
+ * so no fleet row was ever open long enough for this sweep to see it. Now an
+ * idle stretch is ONE open row that is heartbeated for as long as the container
+ * stays idle, which puts it squarely in this reaper's listing — the predicate in
+ * listStaleScanRuns filters on neither `runner` nor `phase`, so an open idle row
+ * is exactly as eligible as an open batch row.
+ *
+ * That is the interaction the ledger flagged when it chose option (b), and these
+ * three cases are what make it safe to ship: a beating idle row survives, a
+ * silent one is still reaped (an idle fleet must be distinguishable from a dead
+ * one, and a dead one must still be CLOSED), and the fleet's configured beat
+ * cadence leaves enough margin that the first case is the one that happens.
+ */
+const { REAP_STALE_AFTER_MS: FLEET_REAP_MIRROR, idleHeartbeatPlan } = await import(
+  pathToFileURL(path.join(process.cwd(), "worker/src/lib/runLedger.js")).href
+);
+
+/** An open `probe-fleet` / `idle` row, the shape R1.2.23's stretch writes. */
+function openIdleFleetRow(id, ageMs) {
+  return openRun(id, ageMs, {
+    runner: "probe-fleet",
+    phase: "idle",
+    scan_job_id: null,
+    brand: null,
+    probes_attempted: 0,
+    probes_succeeded: 0,
+    errors_recovered: 0,
+  });
+}
+
+test("R1.2.23 — an OPEN idle fleet row with a fresh heartbeat survives a reap pass", async () => {
+  // One beat ago at the fleet's default cadence, plus a whole idle poll of
+  // slack: the worst case gap the loop can produce between two beats.
+  const beating = openIdleFleetRow("fleet-idle-alive", 30_000 + 10_000);
+  const ledger = makeLedger({ rows: [beating] });
+  const lister = makeLister([beating]);
+
+  const pass = await quietly(() =>
+    reapStaleRuns(NOW, { ...ledger.deps, listStaleRuns: lister.listStaleRuns, reaperId: "reaper-idle-1" })
+  );
+
+  assert.equal(pass.reaped, 0, "a fleet that is beating is ALIVE — reaping it would close a live container's row");
+  assert.equal(pass.considered, 0, "the listing never even returns it: its heartbeat is inside the cutoff");
+  assert.equal(ledger.store.get("fleet-idle-alive").outcome, null, "the idle row is still open for its own fleet to close");
+  assert.equal(ledger.store.get("fleet-idle-alive").ended_at, null);
+  // And the pass still leaves its own measured-zero row, rather than silence.
+  const passRow = findPassRow(ledger);
+  assert.equal(passRow.outcome, RUN_OUTCOMES.NOOP);
+  assert.equal(passRow.reason, REAP_PASS_REASONS.NO_STALE_RUNS);
+});
+
+test("R1.2.23 — the SAME idle row with a stale heartbeat is still reaped: a dead fleet does not stay open forever", async () => {
+  const silent = openIdleFleetRow("fleet-idle-dead", REAP_STALE_AFTER_MS + 60_000);
+  const ledger = makeLedger({ rows: [silent] });
+  const lister = makeLister([silent]);
+
+  const pass = await quietly(() =>
+    reapStaleRuns(NOW, { ...ledger.deps, listStaleRuns: lister.listStaleRuns, reaperId: "reaper-idle-2" })
+  );
+
+  assert.equal(pass.reaped, 1, "phase='idle' buys no immunity — a row nobody is beating has no writer");
+  const row = ledger.store.get("fleet-idle-dead");
+  assert.equal(row.outcome, REAP_OUTCOME);
+  assert.match(row.reason, /^reaped/);
+  assert.equal(row.runner, "probe-fleet", "the reaped row keeps the fleet's own runner, so the loss is attributable");
+  assert.equal(row.phase, "idle");
+  // The measured zeroes the idle stretch wrote survive the reap (COALESCE): a
+  // reaped idle row still says it looked and found nothing, which is the fact
+  // R1.2.3 put there and R1.2.23 must not lose.
+  assert.equal(row.probes_attempted, 0);
+  assert.equal(row.probes_succeeded, 0);
+});
+
+test("R1.2.23 — the fleet's idle beat cadence is inside this reaper's threshold, with the margin stated", () => {
+  assert.equal(
+    FLEET_REAP_MIRROR,
+    REAP_STALE_AFTER_MS,
+    "worker/ may not import src/, so the fleet carries a COPY of this threshold. If the two ever " +
+      "disagree the fleet will believe it is beating fast enough while this sweep closes its live " +
+      "idle row every six minutes."
+  );
+
+  // The shipped defaults: FLEET_HEARTBEAT_MS=30s, FLEET_IDLE_POLL_MS=10s.
+  const plan = idleHeartbeatPlan({ heartbeatMs: 30_000, idlePollMs: 10_000 });
+  assert.equal(plan.beatEveryMs, 30_000);
+  assert.equal(
+    plan.worstCaseGapMs,
+    40_000,
+    "beats are driven by the poll loop, so the worst gap between two beats is one beat interval " +
+      "plus one poll interval"
+  );
+  assert.equal(plan.staleAfterMs, REAP_STALE_AFTER_MS);
+  assert.equal(plan.marginX, 9, "360s / 40s — nine missed beats before this reaper would touch the row");
+  assert.equal(plan.safe, true);
+
+  // A row that beat at the worst-case cadence is not stale by this reaper's own
+  // arithmetic. Asserted through runStaleness rather than by eye.
+  const worst = runStaleness(openIdleFleetRow("worst", plan.worstCaseGapMs), T0);
+  assert.equal(worst.stale, false);
+
+  // And the guard bites: the config layer permits FLEET_IDLE_POLL_MS up to 300s
+  // and FLEET_HEARTBEAT_MS up to 600s, a combination that CANNOT keep an idle
+  // row alive. The fleet must know that at boot rather than discover it as a
+  // reaped row every ten minutes.
+  const reckless = idleHeartbeatPlan({ heartbeatMs: 600_000, idlePollMs: 300_000 });
+  assert.equal(reckless.safe, false);
+  assert.ok(reckless.marginX < 1);
+  const doomed = runStaleness(openIdleFleetRow("doomed", reckless.worstCaseGapMs), T0);
+  assert.equal(doomed.stale, true, "at that cadence the reaper wins the race, which is why boot says so");
 });

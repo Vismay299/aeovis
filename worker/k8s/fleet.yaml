@@ -87,8 +87,9 @@ spec:
             #   value: "true"
           # No liveness/readiness probe: the fleet serves no HTTP and a probe
           # endpoint would be the only reason to add one. Its liveness signal is
-          # the scan_runs ledger — worker/README.md explains why even an idle
-          # pass writes a row. If the process exits, restartPolicy handles it.
+          # the scan_runs ledger — worker/README.md explains why an idle stretch
+          # keeps one open row heartbeated. If the process exits, restartPolicy
+          # handles it.
           securityContext:
             allowPrivilegeEscalation: false
             runAsNonRoot: true

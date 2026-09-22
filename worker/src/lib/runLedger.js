@@ -1,19 +1,29 @@
 /**
  * The scan_runs ledger, from the fleet's side (R1.2.3).
  *
- * One row per PASS of the loop in ../index.js — a claimed batch or an idle
- * poll — opened before the work, heartbeated while it is in flight, closed with
- * an outcome, a reason and measured counters. Migration
+ * One row per UNIT OF WORK in ../index.js — a claimed batch, or a whole IDLE
+ * STRETCH — opened before the work, heartbeated while it is in flight, closed
+ * with an outcome, a reason and measured counters. Migration
  * `supabase/migrations/011_scan_runs.sql` owns the table and the three
  * functions this file calls.
  *
- * WHY A ROW FOR AN IDLE PASS TOO
+ * WHY A ROW FOR IDLENESS TOO
  * Standing rule 1. "The fleet is idle" and "the fleet is dead" produce exactly
- * the same evidence if only busy passes are recorded: no rows. An idle pass
- * writes a run closed as 'noop' with reason 'queue_empty' or 'all_leased' and
- * `probes_attempted = 0` — a MEASURED zero, which is a different row from the
- * one a dead container leaves, namely none. The cost of those rows is stated in
- * migration 011's THE IDLE ROWS note.
+ * the same evidence if only busy passes are recorded: no rows. Idleness writes a
+ * run with reason 'queue_empty' or 'all_leased' and `probes_attempted = 0` — a
+ * MEASURED zero, which is a different row from the one a dead container leaves,
+ * namely none.
+ *
+ * WHY THAT IS NO LONGER ONE ROW PER POLL (R1.2.23)
+ * It used to be: an idle poll opened a row and closed it in the same pass, every
+ * `FLEET_IDLE_POLL_MS`. Measured on production 2026-09-22 that was ~8,250 rows a
+ * day from a fleet doing nothing, on a 500 MB project. The invariant is kept and
+ * the cost is not: one OPEN row per idle stretch, heartbeated while the stretch
+ * lasts, closed when work arrives or the process exits. "Idle and alive" is then
+ * an open row whose `heartbeat_at` moved inside the last beat window, and "dead"
+ * is the same row going quiet until the sweep closes it as 'reaped'. See
+ * REAP_STALE_AFTER_MS below: that heartbeat is what makes the long-lived row
+ * safe, and without it the sweep would close a live fleet's row every 6 minutes.
  *
  * WHY THE OPEN/CLOSE PAIRING IS IN SQL
  * This workspace may not import from src/ (src/lib/workerIsolation.test.mjs
@@ -75,6 +85,81 @@ export const FLEET_PHASES = Object.freeze({
   BATCH: "probe_batch",
   IDLE: "idle",
 });
+
+/**
+ * The sweep's staleness threshold, COPIED (R1.2.23).
+ *
+ * `src/lib/workers/scanWorker.js` owns it: REAP_STALE_AFTER_MS =
+ * RUN_HEARTBEAT_TTL_MS (180 000, db.js's HEARTBEAT_STALE_MS) x REAP_TTL_MULTIPLE
+ * (2) = 360 000 ms. Its listing (`listStaleScanRuns`) filters on neither
+ * `runner` nor `phase`, so from R1.2.23 on — when an idle stretch is ONE row
+ * that stays open for as long as the container is idle — the fleet's idle row is
+ * exactly as reapable as anyone else's open row.
+ *
+ * This workspace may not import src/, so the number lives here twice. It is
+ * CHECKED rather than trusted: src/lib/workers/scanRunReaper.test.mjs asserts
+ * the two constants are equal, because a fleet that believes it is beating fast
+ * enough while the sweep closes its live row every six minutes would look, from
+ * the ledger, exactly like a fleet that keeps dying.
+ */
+export const REAP_STALE_AFTER_MS = 360_000;
+
+/**
+ * How much room the configured cadence leaves before the sweep above would
+ * close a live idle row. PURE, so the boot log can state it and a test can pin
+ * it.
+ *
+ * The idle heartbeat is driven by the POLL LOOP, not by a timer: the loop wakes
+ * every `idlePollMs` and beats when at least `heartbeatMs` has passed since the
+ * last beat. So the worst gap between two beats is one beat interval plus one
+ * poll interval — 40s on the shipped defaults (30s + 10s), against a 360s
+ * threshold: nine missed beats of margin.
+ *
+ * A value that is not a positive finite number is NOT MEASURED, never defaulted
+ * silently: `worstCaseGapMs` and `marginX` come back null and `safe` comes back
+ * false, so a caller cannot read "unknown cadence" as "fine".
+ */
+export function idleHeartbeatPlan(config) {
+  const positive = (v) => (Number.isFinite(v) && v > 0 ? v : null);
+  const beatEveryMs = positive(config?.heartbeatMs);
+  const pollMs = positive(config?.idlePollMs);
+  const worstCaseGapMs = beatEveryMs !== null && pollMs !== null ? beatEveryMs + pollMs : null;
+  const marginX = worstCaseGapMs === null ? null : REAP_STALE_AFTER_MS / worstCaseGapMs;
+  return {
+    beatEveryMs,
+    pollMs,
+    staleAfterMs: REAP_STALE_AFTER_MS,
+    worstCaseGapMs,
+    marginX,
+    // Three whole beat-plus-poll windows have to be missed before the sweep can
+    // act. Fewer than that and one slow database is enough to lose the row.
+    safe: marginX !== null && marginX >= 3,
+  };
+}
+
+/** One sentence for the boot log. An unmeasurable cadence says so out loud. */
+export function describeIdleHeartbeatPlan(plan) {
+  if (plan.worstCaseGapMs === null) {
+    return (
+      `idle heartbeat: NOT MEASURABLE from this config (heartbeatMs=${JSON.stringify(plan.beatEveryMs)}, ` +
+      `idlePollMs=${JSON.stringify(plan.pollMs)}) — an idle run that is not beaten inside ` +
+      `${plan.staleAfterMs}ms is closed as 'reaped' by the sweep, and this container cannot say whether it will be`
+    );
+  }
+  const margin = `${plan.marginX.toFixed(1)}x`;
+  if (!plan.safe) {
+    return (
+      `WARNING: idle heartbeat every ${plan.beatEveryMs}ms with a ${plan.pollMs}ms poll leaves at worst ` +
+      `${plan.worstCaseGapMs}ms between beats, only ${margin} inside the sweep's ${plan.staleAfterMs}ms ` +
+      `staleness threshold — this fleet's OPEN idle row will be reaped while it is alive, and it will ` +
+      `open a fresh one each time. Lower FLEET_HEARTBEAT_MS or FLEET_IDLE_POLL_MS.`
+    );
+  }
+  return (
+    `idle heartbeat every ${plan.beatEveryMs}ms, worst case ${plan.worstCaseGapMs}ms between beats — ` +
+    `${margin} inside the sweep's ${plan.staleAfterMs}ms staleness threshold`
+  );
+}
 
 /**
  * No client is a refusal, never a silently skipped ledger write.

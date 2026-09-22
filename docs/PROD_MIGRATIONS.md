@@ -307,7 +307,14 @@ WITH expected(migration, kind, name) AS (
     -- Unlike 012/013, this migration ships no index that references the new
     -- column, so there is no catalog object whose existence proves the column
     -- was added. The column check below uses pg_attribute directly.
-    ('014_content_job_checkpoints', 'column',     'content_jobs.checkpoint')
+    ('014_content_job_checkpoints', 'column',     'content_jobs.checkpoint'),
+    -- 022_scan_runs_retention.sql (R1.2.23a). Both objects matter, for
+    -- different reasons: without the function the nightly cron has nothing to
+    -- call and scan_runs grows at ~8,250 rows/day; without the index the
+    -- delete sequentially scans the whole ledger every night. A PARTIAL here
+    -- is the 009 shape all over again.
+    ('022_scan_runs_retention', 'index',    'scan_runs_noop_retention_idx'),
+    ('022_scan_runs_retention', 'function', 'prune_noop_scan_runs')
 ),
 checked AS (
   SELECT e.migration, e.kind, e.name,
@@ -1156,6 +1163,74 @@ stores NULL rather than `''` for the same reason.
 
 ---
 
+## `022_scan_runs_retention.sql`
+
+**NOT YET APPLIED to production (`nggyizuwqepxaqnpcqqj`).** Written for
+R1.2.23(a); the operator applies it.
+
+**What is true until it is applied:** `scan_runs` keeps growing. Measured on the
+live project 2026-09-22 — 20,399 `probe-fleet` rows, the twelve most recent one
+per ~10.4 s, all `phase = 'idle'`/`outcome = 'noop'`, i.e. ~8,250 rows/day on a
+FREE 500 MB project. The nightly cron `GET /api/scan-runs/retention` will answer
+**500** with `deleted: null` and a reason naming the missing function. That is
+the intended behaviour: an unapplied migration must not read as "0 rows to
+delete", which is exactly what a healthy, already-pruned table reports.
+
+**No pre-check is owed, and it is safe to run while the fleet is running.** The
+file creates one partial index and one function and nothing else — no `ALTER`,
+no data change, and creating the function deletes nothing. The index build is a
+plain `CREATE INDEX` (not `CONCURRENTLY`, which Postgres refuses inside the
+runner's per-file transaction); at ~20k rows it is milliseconds, shorter than
+one fleet poll.
+
+| Creates | Applied ⇔ |
+|---|---|
+| `scan_runs_noop_retention_idx` — partial index `ON scan_runs (ended_at) WHERE outcome = 'noop'`, the exact shape of the retention delete's predicate | first query below returns **one** row |
+| `prune_noop_scan_runs(p_cutoff timestamptz, p_limit integer)` — deletes at most `p_limit` **closed** `noop` rows that ended before `p_cutoff`, returns the real deleted count | second query below returns **one** row |
+
+```sql
+SELECT indexname, indexdef
+  FROM pg_indexes
+ WHERE schemaname = 'public'
+   AND indexname = 'scan_runs_noop_retention_idx';
+
+SELECT p.proname,
+       pg_get_function_identity_arguments(p.oid) AS identity_args,
+       pg_get_function_result(p.oid)             AS returns,
+       p.prosecdef                               AS security_definer
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname = 'public' AND p.proname = 'prune_noop_scan_runs';
+```
+
+`security_definer` must be `false`: the Next app calls this with the anon key
+and the function must never hold more authority over `scan_runs` than its
+caller.
+
+**Two properties an operator should be able to re-derive without reading JS.**
+Both live in the SQL, not in a call site:
+
+- *Retention can never delete a non-`noop` row.* `outcome = 'noop'` is a literal
+  in the function body, not a parameter — the function takes a cutoff and a
+  batch size and nothing else, so no caller can widen it. Confirm with
+  `SELECT prosrc FROM pg_proc ...` and read the single `DELETE`.
+- *Retention can never delete an OPEN row.* The predicate carries
+  `ended_at IS NOT NULL AND ended_at < p_cutoff`. Age is counted from `ended_at`,
+  not `started_at`, because after R1.2.23(b) one idle row stays open for a
+  worker's whole idle stretch; keyed on `started_at` a 40-day idle row would be
+  deleted the moment it closed.
+
+The function also refuses a cutoff inside the last 7 days, and a `p_limit`
+outside 1...50000, by raising — never by returning 0.
+
+**After applying, confirm the cron exists** in the Vercel project:
+`/api/scan-runs/retention` at `30 3 * * *` (`vercel.json`), half an hour after
+the evidence sweep so the two never share a window. The route is `SELF_GATED`
+in `src/lib/operatorPerimeter.js` and authenticates with `CRON_SECRET` only.
+
+
+---
+
 ## Function signatures — the check the runner cannot make
 
 `scripts/setup-supabase.mjs:382-388` checks functions by **name only**. Two
@@ -1177,14 +1252,17 @@ SELECT p.proname,
                      'renew_probe_lease','complete_probe_tasks',
                      'release_probe_tasks','open_scan_run',
                      'heartbeat_scan_run','close_scan_run',
-                     'claim_scan_job_attempt')
+                     'claim_scan_job_attempt','prune_noop_scan_runs')
  ORDER BY p.proname, identity_args;
 ```
 
-**Expect exactly nine rows, one per name.** Ten or more means an overload.
-`security_definer` must be `false` for all nine — `claim_scan_job_attempt` is
-`SECURITY INVOKER` deliberately (`012_scan_job_attempts.sql:120-123`), so that
-the function never has more authority than the anon key the app calls it with.
+**Expect exactly ten rows, one per name** (nine before `022_scan_runs_retention`
+is applied — `prune_noop_scan_runs` is that file's, and its absence is how you
+tell 022 has not run). Eleven or more means an overload. `security_definer` must
+be `false` for all of them — `claim_scan_job_attempt` is `SECURITY INVOKER`
+deliberately (`012_scan_job_attempts.sql:120-123`), and `prune_noop_scan_runs`
+for the same reason, so that neither function ever has more authority than the
+anon key the app calls it with.
 
 To compare a body against the file, hash it and diff against the migration by
 eye — there is no automated body check anywhere in this repo:

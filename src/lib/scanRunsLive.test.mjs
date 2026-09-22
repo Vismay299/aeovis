@@ -360,7 +360,7 @@ if (GATE.enabled && !(SUPA_URL && SUPA_KEY)) {
   );
 }
 
-test("the fleet writes one scan_runs row per pass — a real batch, and a real idle poll", fleetOpts, async () => {
+test("one-shot fleet passes write one scan_runs row — a real batch and a real idle poll", fleetOpts, async () => {
   const { createClient } = await import("@supabase/supabase-js");
   const supa = createClient(SUPA_URL, SUPA_KEY, { auth: { persistSession: false } });
   const pgc = await connect();
@@ -431,7 +431,7 @@ test("the fleet writes one scan_runs row per pass — a real batch, and a real i
          FROM scan_runs WHERE worker_id = $1 ORDER BY phase`,
       [config.workerId]
     );
-    assert.equal(rows.length, 2, "one row per pass — the idle pass counts");
+    assert.equal(rows.length, 2, "each one-shot caller owns and closes its row");
 
     const batchRow = rows.find((r) => r.phase === "probe_batch");
     assert.ok(batchRow, "the claimed pass must have written a row");
