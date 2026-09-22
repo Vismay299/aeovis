@@ -806,7 +806,7 @@ SELECT 'index', c.relname, NULL::text
  WHERE n.nspname = 'public' AND c.relkind = 'i'
    AND c.relname = 'scan_rate_limits_window_idx'
 UNION ALL
-SELECT 'function', p.proname, pg_get_function_identity_arguments(p.oid)
+SELECT 'function', p.proname, oidvectortypes(p.proargtypes)
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'public' AND p.proname = 'increment_scan_rate_limit'
  ORDER BY 1, 2;

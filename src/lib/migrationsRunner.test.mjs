@@ -178,7 +178,7 @@ class Client {
       process.stdout.write("__PROBE " + PROBE_TOKEN + " " + name + "\\n");
       return { rows: [{ regclass: CATALOG.includes(name) ? name : null }] };
     }
-    if (parameterised && /^SELECT 1 FROM pg_proc\\b/.test(probe) && /pg_get_function_identity_arguments/.test(probe) && /JOIN pg_namespace/.test(probe)) {
+    if (parameterised && /^SELECT 1 FROM pg_proc\\b/.test(probe) && /oidvectortypes/.test(probe) && /JOIN pg_namespace/.test(probe)) {
       const name = (params && params[0]) || "";
       const sig = (params && params[1]) || "";
       const key = sig ? name + "(" + sig + ")" : name;

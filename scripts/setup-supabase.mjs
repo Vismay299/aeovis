@@ -502,14 +502,18 @@ async function objectExists(client, { kind, name, signature }) {
   if (kind === "function") {
     // R6.1.12 — match on signature, not just name. A CREATE OR REPLACE that
     // changed a signature and created an overload reads as present under a
-    // name-only check. pg_get_function_identity_arguments returns the
-    // parenthesised argument types, which is the function's identity.
+    // name-only check. `oidvectortypes(proargtypes)` returns only the input
+    // argument types, which are the function's identity. Do not compare an
+    // unnamed signature such as "uuid, integer" with
+    // pg_get_function_identity_arguments(): that formatter includes parameter
+    // names ("p_job_id uuid, p_max_attempts integer") and caused production's
+    // real 012 function to be reported missing on 2026-09-22.
     const sig = signature || null;
     if (sig) {
       const { rows } = await client.query(
         `SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
           WHERE n.nspname = 'public' AND p.proname = $1
-            AND pg_get_function_identity_arguments(p.oid) = $2 LIMIT 1`,
+            AND oidvectortypes(p.proargtypes) = $2 LIMIT 1`,
         [name, sig]
       );
       return rows.length > 0;
