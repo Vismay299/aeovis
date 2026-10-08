@@ -140,11 +140,11 @@ async function compileComponent(filePath, resolve, reactModule) {
     jsxFragmentPragma: "React.Fragment",
     filePath,
   });
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory(resolve(filePath), module, module.exports, reactModule);
-  return module.exports;
+  factory(resolve(filePath), moduleRecord, moduleRecord.exports, reactModule);
+  return moduleRecord.exports;
 }
 
 const LUCIDE = ["lucide-react", anyNamedExport];

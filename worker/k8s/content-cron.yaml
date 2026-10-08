@@ -1,0 +1,56 @@
+# Content Studio checkpoint rescue every ten minutes.
+# Uses the existing perceev-cron Secret; apply on the same K3s cluster as scan-cron.yaml.
+# Do not add batch=1: this schedule resumes existing work only.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: perceev-content-cron
+  labels:
+    app: perceev-content-cron
+spec:
+  schedule: "*/10 * * * *"
+  # A sweep that has not returned in 4 minutes is not going to; the route's own
+  # maxDuration is 300 s and the next tick is 10 minutes away. Never overlap two
+  # sweeps: the lease makes overlap correct, but the 2 GB box makes it wasteful.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 240
+      template:
+        metadata:
+          labels:
+            app: perceev-content-cron
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: curl
+              image: curlimages/curl:8.10.1
+              envFrom:
+                - secretRef:
+                    name: perceev-cron
+              # Rescue only: never add batch=1, which creates new content jobs.
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -u
+                  out=$(curl -sS --max-time 230 \
+                    -H "Authorization: Bearer ${CRON_SECRET}" \
+                    -w '\n%{http_code}' \
+                    "https://aeo-vis.vercel.app/api/content/worker")
+                  code=$(printf '%s' "$out" | tail -n1)
+                  body=$(printf '%s' "$out" | sed '$d')
+                  echo "content-worker sweep: HTTP ${code}"
+                  echo "${body}" | head -c 2000
+                  echo
+                  [ "${code}" = "200" ]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  memory: 64Mi

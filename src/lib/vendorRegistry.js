@@ -60,10 +60,26 @@ export const VENDORS = Object.freeze(
     },
     { key: "brightdata", env: ["BRIGHTDATA_API_KEY"], required: true },
     { key: "firecrawl", env: ["FIRECRAWL_API_KEY"], required: false },
-    { key: "perplexity", env: ["PERPLEXITY_API_KEY"], required: false },
-    { key: "openai", env: ["OPENAI_API_KEY"], required: false },
+    // These are answer engines behind the shared OpenRouter gateway. Their
+    // model IDs choose the underlying provider; they do not need native vendor
+    // API keys. Keep the same canonical/legacy key pair as the utility LLM.
+    {
+      key: "perplexity",
+      env: [LLM_ENV.apiKey.canonical],
+      legacy: { [LLM_ENV.apiKey.canonical]: [LLM_ENV.apiKey.legacy] },
+      required: false,
+    },
+    {
+      key: "openai",
+      env: [LLM_ENV.apiKey.canonical],
+      legacy: { [LLM_ENV.apiKey.canonical]: [LLM_ENV.apiKey.legacy] },
+      required: false,
+    },
     { key: "gemini", env: ["GEMINI_API_KEY"], required: false },
+    // GSC: service account (legacy) OR customer OAuth connector. Either path
+    // configures GSC; the OAuth path is the self-service customer connector.
     { key: "gsc", env: ["GSC_SERVICE_ACCOUNT_KEY"], required: false },
+    { key: "gsc_oauth", env: ["GSC_GOOGLE_CLIENT_ID", "GSC_GOOGLE_CLIENT_SECRET", "GSC_OAUTH_REDIRECT_URI", "GSC_TOKEN_ENCRYPTION_KEY"], required: false },
     { key: "cron", env: ["CRON_SECRET"], required: true },
   ].map((v) => Object.freeze(v))
 );

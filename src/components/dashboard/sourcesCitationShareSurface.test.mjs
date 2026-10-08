@@ -104,8 +104,8 @@ async function loadProjectModule(file) {
     filePath: file,
   });
 
-  const module = { exports: {} };
-  cache.set(file, module.exports);
+  const moduleRecord = { exports: {} };
+  cache.set(file, moduleRecord.exports);
 
   const deps = new Map();
   for (const specifier of [
@@ -134,9 +134,9 @@ async function loadProjectModule(file) {
 
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory(requireShim, module, module.exports, reactModule);
-  cache.set(file, module.exports);
-  return module.exports;
+  factory(requireShim, moduleRecord, moduleRecord.exports, reactModule);
+  cache.set(file, moduleRecord.exports);
+  return moduleRecord.exports;
 }
 
 async function loadView() {

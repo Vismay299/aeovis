@@ -275,7 +275,7 @@ function pathToFileUrlString(p) {
   return new URL(`file://${p.replace(/\\/g, "/").replace(/^([A-Za-z]:)/, "/$1")}`).href;
 }
 
-/** Everything 001-022 must leave behind, per the runner's own expectations. */
+/** Everything 001-023 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
   "scans", "brand_prompts", "scan_jobs", "content_events",
   "content_jobs", "content_items", "content_feedback", "brand_briefs", "content_lessons",
@@ -326,6 +326,13 @@ const FULL_CATALOG = [
   // slow prune, it is a prune that fails on the first call.
   "scan_runs_noop_retention_idx",
   "prune_noop_scan_runs",
+  // 023_customer_auth_and_tenant_rls.sql — customer tenancy and RLS predicates.
+  "customer_brands",
+  "customer_brand_memberships",
+  "customer_brand_aliases",
+  "customer_brands_website_host_key",
+  "customer_can_access_brand",
+  "customer_can_access_scan",
 ];
 
 function withRegister(dir) {

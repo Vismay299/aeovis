@@ -363,11 +363,11 @@ function loadShellModule() {
       });
       const patchedReact = { ...React, useEffect: makeUseEffectShim(), __esModule: true };
       patchedReact.default = patchedReact;
-      const module = { exports: {} };
+      const moduleRecord = { exports: {} };
       // eslint-disable-next-line no-new-func
       const factory = new Function("require", "module", "exports", "React", code);
-      factory(makeRequireShim(patchedReact), module, module.exports, patchedReact);
-      return module.exports;
+      factory(makeRequireShim(patchedReact), moduleRecord, moduleRecord.exports, patchedReact);
+      return moduleRecord.exports;
     })();
   }
   return shellModulePromise;
@@ -475,12 +475,12 @@ async function renderSidebar(props) {
     );
   };
 
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory(requireShim, module, module.exports, reactModule);
+  factory(requireShim, moduleRecord, moduleRecord.exports, reactModule);
 
-  const Component = module.exports.Sidebar;
+  const Component = moduleRecord.exports.Sidebar;
   assert.equal(typeof Component, "function", "Sidebar.jsx must still export `Sidebar`");
   return renderToStaticMarkup(React.createElement(Component, props));
 }
@@ -640,12 +640,12 @@ async function renderDashboardShell({ scan, history = [] }) {
   const patchedReact = { ...React, useEffect: makeUseEffectShim(), __esModule: true };
   patchedReact.default = patchedReact;
 
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory(makeRequireShim(patchedReact, { history }), module, module.exports, patchedReact);
+  factory(makeRequireShim(patchedReact, { history }), moduleRecord, moduleRecord.exports, patchedReact);
 
-  const Shell = module.exports.default;
+  const Shell = moduleRecord.exports.default;
   assert.equal(typeof Shell, "function", "DashboardShell.jsx must still default-export a component");
 
   const realFetch = globalThis.fetch;

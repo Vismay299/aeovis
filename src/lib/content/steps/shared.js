@@ -12,10 +12,18 @@ import { getFormat } from "../agents/formats.js";
  * Invalid twice → throws with the step named (the worker fails the job
  * with that message, per the plan's step contract).
  */
-export async function callStepLlm({ step, prompt, validate, llm, stats, temperature = 0.3 }) {
+// A chunk starts a step before its 90-second soft limit. Bound all model,
+// JSON and schema-correction retries to 180 seconds, leaving time to save
+// an explicit outcome before the route's 300-second execution ceiling.
+export const CONTENT_STEP_BUDGET_MS = 180000;
+
+export async function callStepLlm({
+  step, prompt, validate, llm, stats, temperature = 0.3,
+  deadlineMs = Date.now() + CONTENT_STEP_BUDGET_MS,
+}) {
   const call = llm || contentLlmJson;
 
-  let out = await call(prompt, { stats, temperature });
+  let out = await call(prompt, { stats, temperature, deadlineMs });
   let result = validate(out);
   if (result.ok) return result.value;
 
@@ -24,7 +32,7 @@ export async function callStepLlm({ step, prompt, validate, llm, stats, temperat
     "\n\n---\nYour previous output was INVALID for these reasons:\n- " +
     result.errors.join("\n- ") +
     "\nReturn the corrected JSON only.";
-  out = await call(retryPrompt, { stats, temperature: Math.min(1, temperature + 0.1) });
+  out = await call(retryPrompt, { stats, temperature: Math.min(1, temperature + 0.1), deadlineMs });
   result = validate(out);
   if (result.ok) return result.value;
 

@@ -89,10 +89,19 @@ test("buildHealthPayload - a missing REQUIRED vendor is 'degraded', never 'ok'",
 });
 
 test("buildHealthPayload - an optional vendor being absent does NOT degrade the deployment", () => {
-  const env = { ...FULL_ENV, FIRECRAWL_API_KEY: "", PERPLEXITY_API_KEY: "" };
+  const env = { ...FULL_ENV, FIRECRAWL_API_KEY: "" };
   const p = buildHealthPayload({ db: { ok: true }, env, now: NOW });
   assert.equal(p.status, "ok");
   assert.deepEqual(p.missing_required, []);
+});
+
+test("vendorFlags - one OpenRouter key configures OpenAI and Perplexity model engines", () => {
+  const flags = vendorFlags({ LLM_API_KEY: "shared-openrouter-key" });
+  assert.equal(flags.llm.configured, true);
+  assert.equal(flags.openai.configured, true);
+  assert.equal(flags.perplexity.configured, true);
+  assert.deepEqual(flags.openai.missing, []);
+  assert.deepEqual(flags.perplexity.missing, []);
 });
 
 // ---------------------------------------------------------------------------
@@ -285,4 +294,3 @@ test("R3.1.7 — positive case: genuinely stored ticks report fresh with calcula
   assert.equal(p.cron["content-worker"].age_ms, 5000);
   assert.equal(p.cron["content-worker"].stale, false);
 });
-

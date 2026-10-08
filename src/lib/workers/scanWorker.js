@@ -64,7 +64,7 @@ import { resolveBrandKey } from "../scoring/brandKey.js";
 import { extractBrandDomain } from "../scoring/citations.js";
 import { resolveSerpGeo } from "../engines/serpGeo.js";
 import { keepAlive } from "../keepAlive.js";
-import { productionAliasBase } from "../selfContinue.js";
+import { productionAliasBase, warnSelfContinueResponse } from "../selfContinue.js";
 import { enrichCitations } from "../analytics/citationEnrich.js";
 import {
   openScanRun,
@@ -1225,7 +1225,9 @@ function defaultSelfContinue(jobId) {
     // Waiting for the response would bill this function for the whole next
     // chunk; not waiting at all let a freeze drop the request unsent.
     keepAlive(
-      fetch(url, init).catch((err) => {
+      fetch(url, { ...init, redirect: "manual" })
+        .then((response) => warnSelfContinueResponse(response, { label: "scan-chunk", jobId }))
+        .catch((err) => {
         console.warn(
           `[scan-chunk] Self-continue fetch failed for job ${jobId} (poll/cron rescue will still pick it up): ${err.message}`
         );

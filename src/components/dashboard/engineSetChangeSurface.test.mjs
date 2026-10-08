@@ -185,12 +185,12 @@ async function renderDashboardShell(props) {
     );
   };
 
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory(requireShim, module, module.exports, patchedReact);
+  factory(requireShim, moduleRecord, moduleRecord.exports, patchedReact);
 
-  const Shell = module.exports.default;
+  const Shell = moduleRecord.exports.default;
   assert.equal(
     typeof Shell,
     "function",

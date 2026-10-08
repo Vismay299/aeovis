@@ -324,7 +324,7 @@ Also environment-shaped and easy to get silently wrong:
 
 ## C. Migrations
 
-`supabase/migrations/` holds twenty-two files (count last checked 2026-09-18; the guard checks names, not this number). They are named individually rather
+`supabase/migrations/` holds twenty-three files (count last checked 2026-10-07; the guard checks names, not this number). They are named individually rather
 than as a range, and `src/lib/docStatus.test.mjs` fails this document if a file
 on disk is missing from the list — the previous revision wrote "`001` … `012`"
 in the same commit that added `013`, and nothing caught it. It happened again
@@ -346,7 +346,11 @@ until R3.5.4 added the three rows:
 additive. Until it is applied, the nightly `/api/scan-runs/retention` cron
 answers 500 with `deleted: null` and a reason naming the missing function — it
 never reports a silent "0 deleted" — and `scan_runs` keeps growing at the
-~8,250 rows/day measured on 2026-09-22).
+~8,250 rows/day measured on 2026-09-22),
+`023_customer_auth_and_tenant_rls` (**NOT YET APPLIED** — customer memberships,
+unique legacy brand aliases, and row-level security. Configure the server-only `SUPABASE_SERVICE_ROLE_KEY`
+before applying it; after application, production server APIs depend on that
+key while customer browser reads are restricted to authenticated memberships).
 
 `npm run setup:db` applies them in filename order, one transaction per file,
 recording each in the `schema_migrations` ledger. The `BEGIN`, the ledger

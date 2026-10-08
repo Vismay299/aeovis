@@ -248,6 +248,14 @@ const EXPECTED_OBJECTS = {
     { kind: "index", name: "scan_runs_noop_retention_idx" },
     { kind: "function", name: "prune_noop_scan_runs" },
   ],
+  "023_customer_auth_and_tenant_rls.sql": [
+    { kind: "table", name: "customer_brands" },
+    { kind: "table", name: "customer_brand_memberships" },
+    { kind: "table", name: "customer_brand_aliases" },
+    { kind: "index", name: "customer_brands_website_host_key" },
+    { kind: "function", name: "customer_can_access_brand" },
+    { kind: "function", name: "customer_can_access_scan" },
+  ],
 };
 
 /**

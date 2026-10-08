@@ -65,6 +65,14 @@ function makeMockClient(tableHandlers) {
           state.filters.push(["in", col, vals]);
           return builder;
         },
+        is(col, val) {
+          state.filters.push(["is", col, val]);
+          return builder;
+        },
+        or(expression) {
+          state.filters.push(["or", expression]);
+          return builder;
+        },
         gt(col, val) {
           state.filters.push(["gt", col, val]);
           return builder;
@@ -80,7 +88,8 @@ function makeMockClient(tableHandlers) {
           state.limitN = n;
           return builder;
         },
-        order(_col, _opts) {
+        order(col, opts) {
+          (state.orders ||= []).push([col, opts]);
           return builder;
         },
         then(resolve, reject) {
@@ -855,3 +864,37 @@ test("R3.5.7 HEAL — a failed heal write is reported with its reason, never swa
   assert.match(out.detail, /deadlock/);
 });
 
+
+test("rescue filters stale, undelivered, unleased jobs before applying the candidate limit", async () => {
+  const nowMs = Date.parse("2026-10-07T12:00:00Z");
+  const stale = "2026-10-07T11:00:00Z";
+  const rows = Array.from({ length: 30 }, (_, i) => ({
+    id: `busy-${i}`, status: "drafting", item_id: null,
+    heartbeat_at: "2026-10-07T11:59:00Z", lease_owner: null, lease_expires_at: null,
+  }));
+  rows.push(
+    { id: "delivered", status: "reviewing", item_id: "item-1", heartbeat_at: stale },
+    { id: "leased", status: "researching", item_id: null, heartbeat_at: stale,
+      lease_owner: "worker", lease_expires_at: "2026-10-07T12:05:00Z" },
+    { id: "recover-1", status: "drafting", item_id: null, heartbeat_at: stale, lease_owner: null },
+    { id: "recover-2", status: "researching", item_id: null, heartbeat_at: stale,
+      lease_owner: "old-worker", lease_expires_at: "2026-10-07T11:05:00Z" }
+  );
+  const { client } = makeMockClient({ content_jobs: (query) => {
+    const selected = rows.filter((row) => query.filters.every(([op, col, value]) => {
+      if (op === "in") return value.includes(row[col]);
+      if (op === "is") return (row[col] ?? null) === value;
+      if (op === "or") return col.split(",").some((clause) => {
+        const [field, predicate, ...rest] = clause.split(".");
+        if (predicate === "is") return row[field] == null;
+        if (row[field] == null) return false;
+        const timestamp = Date.parse(rest.join("."));
+        return predicate === "lte" ? Date.parse(row[field]) <= timestamp : Date.parse(row[field]) < timestamp;
+      });
+      throw new Error(`Unexpected filter ${op}`);
+    }));
+    return { data: selected.slice(0, query.limitN), error: null };
+  } });
+  assert.deepEqual((await listResumableContentJobs(2, { client, nowMs })).map((row) => row.id),
+    ["recover-1", "recover-2"]);
+});

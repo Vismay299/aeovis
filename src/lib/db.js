@@ -9,10 +9,23 @@ import {
 } from "./duplicateScan.js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+// This module is a server-side data layer. Once migrations 023+ remove anon
+// grants, operator APIs and workers must use the server-only service role.
+// Keep the anon fallback for local development and tests only; production
+// refuses to construct a database client when the privileged key is missing.
+const supabaseKey = supabaseServiceRoleKey || (
+  process.env.NODE_ENV === "production" ? null : supabaseAnonKey
+);
 
 // Avoid throwing if env vars are missing during build phase, but we'll need them at runtime
-export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+export const supabase = typeof window === "undefined" && supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    })
+  : null;
 
 // Migration SQL. HISTORICAL: these five ALTERs were folded into
 // supabase/migrations/001_initial_schema.sql (:20-24) long ago, so they are the

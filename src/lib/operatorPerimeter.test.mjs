@@ -42,8 +42,7 @@ test("FREE SCAN — the whole anonymous flow passes with no credentials at all",
     ["POST", "/api/scan"],                                   // start
     ["GET", "/api/scan/8b1f-4c2a-job/status"],               // poll
     ["GET", "/api/scans/by-id/3f2c-scan-id"],                // read the record
-    ["GET", "/api/scans/Italica"],                           // brand history
-    ["GET", "/api/scans/italicatiles.com/latest"],           // dashboard load
+    ["GET", "/api/scans/by-id/3f2c-scan-id"],                // anonymous scan completion read
     ["GET", "/api/scan/8b1f-4c2a-job/evidence"],              // R1.5.3 "View evidence" (?result=... is the query)
     ["GET", "/api/industries"],                              // the scan form's picker
     ["GET", "/api/health"],                                  // uptime monitor
@@ -102,9 +101,30 @@ test("every operator surface is closed to an anonymous caller", () => {
   }
 });
 
+test("customer API reaches its own session-and-membership gate, not the operator token gate", () => {
+  for (const [method, pathname] of [
+    ["GET", "/api/customer/overview"],
+    ["GET", "/api/customer/gsc"],
+    ["POST", "/api/customer/gsc"],
+  ]) {
+    const out = ask(method, pathname, { headers: {} });
+    assert.equal(out.allow, true, `${method} ${pathname} must reach the customer route's auth check`);
+    assert.equal(out.reason, PERIMETER.ALLOW_SELF_GATED);
+  }
+  assert.equal(ask("POST", "/api/customers/invite", { headers: {} }).allow, false,
+    "invitation admin must remain operator-only");
+});
+
 test("GET /api/scan is NOT public — only POST is part of the free-scan flow", () => {
   assert.equal(isPublicRoute("GET", "/api/scan"), false);
   assert.equal(isPublicRoute("POST", "/api/scan"), true);
+});
+
+test("brand-keyed scan history is private while the opaque free-scan result id remains public", () => {
+  assert.equal(isPublicRoute("GET", "/api/scans/by-id/3f2c-scan-id"), true);
+  assert.equal(isPublicRoute("GET", "/api/scans/snitch.com"), false);
+  assert.equal(isPublicRoute("GET", "/api/scans/snitch.com/latest"), false);
+  assert.equal(ask("GET", "/api/scans/snitch.com", { headers: {} }).allow, false);
 });
 
 test("a WRITE to a scan-read path is not public just because the prefix matches", () => {
@@ -208,8 +228,6 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/scan/sample/evidence",
       "/api/scan/sample/status",
       "/api/scans/by-id/sample",
-      "/api/scans/sample",
-      "/api/scans/sample/latest",
     ].sort(),
     "the set of publicly readable API routes changed — is that deliberate?"
   );
@@ -221,6 +239,9 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
   assert.deepEqual(
     exempt.sort(),
     [
+      "/api/customer/gsc",
+      "/api/customer/onboard",
+      "/api/customer/overview",
       "/api/content/worker",
       "/api/evidence/retention",
       "/api/gsc/worker",
@@ -229,7 +250,7 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       // exactly like the four above.
       "/api/scan-runs/retention",
     ].sort(),
-    "only the cron workers may bypass the perimeter, and each must carry its own gate"
+    "only cron workers and customer-authenticated routes may bypass the operator token gate"
   );
 });
 

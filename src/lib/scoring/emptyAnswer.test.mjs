@@ -20,7 +20,7 @@ import { EMPTY_ANSWER, resolveEnabledEngines, summarizeEngineSlice } from "./eng
 
 const ENV = ["ENGINES", "OPENAI_API_KEY", "OPENAI_MODEL"];
 
-function useEnv(t, env) {
+function setTestEnv(t, env) {
   const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
   for (const k of ENV) delete process.env[k];
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
@@ -70,7 +70,7 @@ const QUERY = { text: "best crm for small teams", topic: "General", source: "tes
 
 /** Run one query through the real chatgpt engine def with a mocked transport. */
 async function probeOnce(t, payload) {
-  useEnv(t, { ENGINES: "chatgpt", OPENAI_API_KEY: "sk-test" });
+  setTestEnv(t, { ENGINES: "chatgpt", OPENAI_API_KEY: "sk-test" });
   mockFetch(t, payload);
 
   const engines = resolveEnabledEngines();

@@ -222,6 +222,39 @@ test("resolveEnabledEngines parses comma-separated list", () => {
   else delete process.env.BRIGHTDATA_API_KEY;
 });
 
+test("resolveEnabledEngines accepts one shared OpenRouter key for both model engines", () => {
+  const names = [
+    "ENGINES",
+    "BRIGHTDATA_API_KEY",
+    "OPENAI_API_KEY",
+    "PERPLEXITY_API_KEY",
+    "LLM_API_KEY",
+    "OPENROUTER_API_KEY",
+    "LLM_BASE_URL",
+    "OPENROUTER_BASE_URL",
+  ];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  process.env.ENGINES = "chatgpt,perplexity";
+  delete process.env.BRIGHTDATA_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.PERPLEXITY_API_KEY;
+  process.env.LLM_API_KEY = "shared-openrouter-test-key";
+  delete process.env.OPENROUTER_API_KEY;
+  delete process.env.LLM_BASE_URL;
+  delete process.env.OPENROUTER_BASE_URL;
+  try {
+    assert.deepEqual(
+      resolveEnabledEngines().map((engine) => engine.name),
+      ["chatgpt", "perplexity"]
+    );
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
+});
+
 // ---------------------------------------------------------------------------
 // R3.2.2 — the skip set escapes resolveEnabledEngines instead of dying in it
 // ---------------------------------------------------------------------------

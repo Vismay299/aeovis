@@ -25,8 +25,9 @@
  *     other way to exit non-zero is refusing to start at all — see
  *     vendorsWithChecks — and that prints no table, so it cannot be mistaken
  *     for a verdict.)
- *   - Every call is the cheapest read the vendor offers, with a hard timeout.
- *     Nothing here creates, writes, or spends more than a token or two.
+ *   - Every call is the cheapest practical read the vendor offers, with a hard
+ *     timeout. The shared Perplexity model path needs a 16-token output cap; it
+ *     returns one short word, but a smaller cap is rejected by that API path.
  *
  * Usage:
  *   npm run check:secrets              # reads .env.local
@@ -44,6 +45,7 @@ import { VENDORS as VENDOR_REGISTRY, credentialStatus } from "../src/lib/vendorR
 // R0.1.10 — the client's OWN zone resolver, so this check is on the same code
 // path every probe uses rather than a mirror of it.
 import { resolveBrightDataSerpZone } from "../src/lib/engines/brightdata.js";
+import { getOpenRouterEngineModel, isOpenRouterEngineConfigured } from "../src/lib/engines/openRouterProbe.js";
 import {
   ENGINE_LABELS,
   deployedEngines,
@@ -81,6 +83,31 @@ async function fromResponse(res, okDetail, failContext = "") {
   return { verdict: FAIL, detail: `HTTP ${res.status}${who}${body ? ` — ${body.slice(0, 120)}` : ""}` };
 }
 
+/** Validate an answer engine using the same OpenRouter key, base URL and model selection as scans. */
+async function checkOpenRouterModel(engine) {
+  const base = getLlmBaseUrl();
+  const model = getOpenRouterEngineModel(engine);
+  if (!isOpenRouterEngineConfigured(engine)) {
+    return {
+      verdict: FAIL,
+      detail: `engine ${engine} needs the shared LLM_API_KEY and OpenRouter gateway (${base})`,
+    };
+  }
+  const res = await get(`${base}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${getLlmApiKey()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: "Reply with one word: ready" }],
+      max_tokens: 16,
+    }),
+  });
+  return fromResponse(res, `model ${model} answered through OpenRouter`, `OpenRouter (${base})`);
+}
+
 /**
  * The LIVE half, one function per vendor KEY in the registry.
  *
@@ -93,7 +120,7 @@ async function fromResponse(res, okDetail, failContext = "") {
  * A key missing from this object is not a vendor that quietly gets no check —
  * vendorsWithChecks() below refuses to run and names it.
  */
-const VENDOR_CHECKS = {
+export const VENDOR_CHECKS = {
   // PostgREST select-1: no rows returned, cheapest possible round trip.
   async supabase() {
     const res = await get(`${env("NEXT_PUBLIC_SUPABASE_URL")}/rest/v1/scans?select=id&limit=1`, {
@@ -239,29 +266,7 @@ const VENDOR_CHECKS = {
   },
 
   async perplexity() {
-    const res = await get("https://api.perplexity.ai/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env("PERPLEXITY_API_KEY")}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: env("PERPLEXITY_MODEL") || "sonar",
-        messages: [{ role: "user", content: "hi" }],
-        // Perplexity rejects max_tokens below 16 with a 400, so a 1-token
-        // probe reported FAIL for a working credential — the misleading-script
-        // failure this check exists to prevent.
-        //
-        // ORDERING, measured rather than assumed: Perplexity AUTHENTICATES
-        // FIRST. A bogus key with max_tokens 1 returns 401, not 400. So a 400
-        // here actually proves the key is good — the opposite of what an
-        // earlier version of this comment claimed. Corrected because a
-        // liveness check that misinforms about its own failure modes is the
-        // same defect it exists to catch.
-        max_tokens: 16,
-      }),
-    });
-    return fromResponse(res, "16-token completion");
+    return checkOpenRouterModel("perplexity");
   },
 
   async firecrawl() {
@@ -277,10 +282,7 @@ const VENDOR_CHECKS = {
   },
 
   async openai() {
-    const res = await get("https://api.openai.com/v1/models", {
-      headers: { Authorization: `Bearer ${env("OPENAI_API_KEY")}` },
-    });
-    return fromResponse(res, "model list");
+    return checkOpenRouterModel("chatgpt");
   },
 
   async gemini() {
@@ -349,6 +351,36 @@ const VENDOR_CHECKS = {
       return { verdict: FAIL, detail: `only ${secret.length} chars — use a long random string` };
     }
     return { verdict: PASS, detail: "set (local check only — no call to make)" };
+  },
+
+  // GSC OAuth connector — the self-service customer path. Only checks that
+  // the env vars are present and the encryption key is valid; the actual
+  // Google authorization happens per-workspace at runtime.
+  async gsc_oauth() {
+    const clientId = env("GSC_GOOGLE_CLIENT_ID");
+    const clientSecret = env("GSC_GOOGLE_CLIENT_SECRET");
+    const redirectUri = env("GSC_OAUTH_REDIRECT_URI");
+    const encKey = env("GSC_TOKEN_ENCRYPTION_KEY");
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      const missing = [];
+      if (!clientId) missing.push("GSC_GOOGLE_CLIENT_ID");
+      if (!clientSecret) missing.push("GSC_GOOGLE_CLIENT_SECRET");
+      if (!redirectUri) missing.push("GSC_OAUTH_REDIRECT_URI");
+      return { verdict: UNCONFIGURED, detail: `missing: ${missing.join(", ")}` };
+    }
+
+    if (!encKey || encKey.length !== 64) {
+      return { verdict: FAIL, detail: "GSC_TOKEN_ENCRYPTION_KEY must be 64 hex characters (32 bytes)" };
+    }
+
+    try {
+      Buffer.from(encKey, "hex");
+    } catch {
+      return { verdict: FAIL, detail: "GSC_TOKEN_ENCRYPTION_KEY is not valid hex" };
+    }
+
+    return { verdict: PASS, detail: `client ID ${clientId.slice(0, 12)}…, redirect ${redirectUri}, encryption key set` };
   },
 };
 
@@ -428,11 +460,9 @@ export const VENDORS = vendorsWithChecks();
  *      the sample report — cannot consult isConfigured(). It is bundled into a
  *      client component, so it must never read OPENAI_API_KEY, and in the
  *      browser the value would be undefined anyway. So
- *      ENGINES=aio,chatgpt,perplexity with no OPENAI_API_KEY makes the page
- *      advertise ChatGPT while resolveEnabledEngines (enginePipeline.js:527)
- *      skips it behind a console.warn nobody reads: every scan measures two
- *      engines and every visitor is told three. Only a server-side check sees
- *      both halves. This is that check.
+ *      ENGINES=aio,chatgpt,perplexity with no shared OpenRouter key makes the
+ *      page advertise engines while resolveEnabledEngines skips them. Only a
+ *      server-side check sees both halves. This is that check.
  *
  * It is deliberately NOT a row in VENDORS. That table is a credential table and
  * it now literally IS /api/health's — both read src/lib/vendorRegistry.js — so a
@@ -445,7 +475,7 @@ export const VENDORS = vendorsWithChecks();
  * of its own there (it probes through Bright Data, which IS a vendor row), so
  * inventing one here would fail deployments the fleet would happily run.
  */
-const ENGINE_API_KEY = { aio: null, chatgpt: "OPENAI_API_KEY", perplexity: "PERPLEXITY_API_KEY" };
+const OPENROUTER_ENGINES = new Set(["chatgpt", "perplexity"]);
 
 /** resolveEnabledEngines' own fallback when ENGINES is unset (enginePipeline.js). */
 const FLEET_DEFAULT = "aio";
@@ -489,16 +519,19 @@ function checkEngineAdvertising() {
   }
 
   const advertised = deployedEngines(process.env);
-  const unfunded = advertised.filter((n) => ENGINE_API_KEY[n] && !env(ENGINE_API_KEY[n]));
+  const unfunded = advertised.filter(
+    (name) => OPENROUTER_ENGINES.has(name) && !isOpenRouterEngineConfigured(name)
+  );
   if (unfunded.length) {
     const one = unfunded.length === 1;
     return {
       ok: false,
       line:
         `MISMATCH: the page advertises ${label(unfunded)}, but ` +
-        `${unfunded.map((n) => ENGINE_API_KEY[n]).join(", ")} ${one ? "is" : "are"} not set, so ` +
-        `resolveEnabledEngines skips ${one ? "it" : "them"} on every scan. Set the key, or drop ` +
-        `${one ? "it" : "them"} from ENGINES and NEXT_PUBLIC_ENGINES.`,
+        `the shared LLM_API_KEY / OpenRouter gateway is not ready, so ` +
+        `resolveEnabledEngines skips ${one ? "it" : "them"} on every scan. ` +
+        `Configure the shared key and gateway, or drop ${one ? "it" : "them"} ` +
+        `from ENGINES and NEXT_PUBLIC_ENGINES.`,
     };
   }
 

@@ -1,22 +1,23 @@
 import crypto from "crypto";
 
 /**
- * Google Search Console (Search Analytics) client — service-account auth.
+ * Google Search Console (Search Analytics) client.
  *
- * Auth model: the client adds our service-account email as a Restricted user
- * on their Search Console property (Settings -> Users and permissions). No
- * OAuth flow, no per-client secrets. We sign a JWT with the service account's
- * private key and exchange it for a short-lived access token.
+ * Supports two auth modes:
+ * 1. Service account (legacy): GSC_SERVICE_ACCOUNT_KEY env var. Used by
+ *    operator flows and existing integrations.
+ * 2. OAuth (per-workspace): credentials stored encrypted in
+ *    gsc_oauth_credentials. Used by customer workspaces.
  *
- * Env: GSC_SERVICE_ACCOUNT_KEY — the service account's JSON key, either as
- * raw JSON or base64-encoded (easier to keep on one line in .env.local).
+ * The ingest pipeline calls getAccessTokenForBrand() which resolves the
+ * correct auth mode for each workspace.
  */
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const API_BASE = "https://searchconsole.googleapis.com/webmasters/v3";
 const SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
-let cachedToken = null; // { accessToken, expiresAt }
+let cachedToken = null; // { accessToken, expiresAt } — service account only
 
 export function getGscServiceAccount() {
   const raw = (process.env.GSC_SERVICE_ACCOUNT_KEY || "").trim();
@@ -266,4 +267,90 @@ export async function fetchSearchQueriesForUrl(input, opts = {}) {
     }
   }
   throw lastErr || new Error(`No accessible GSC property found for "${input}".`);
+}
+
+/**
+ * OAuth-aware fetch: uses the workspace's stored OAuth credentials.
+ * Falls back to service account if the connection uses auth_mode='service_account'.
+ *
+ * @param {string} siteUrl - GSC property id
+ * @param {object} opts - fetch options (method, body, etc.)
+ * @param {object} deps - { brandKey, admin, authMode }
+ * @returns {Promise<object>} parsed JSON response
+ */
+export async function gscFetchForBrand(siteUrl, opts = {}, deps = {}) {
+  const { brandKey, admin, authMode } = deps;
+
+  let accessToken;
+  if (authMode === "oauth" && brandKey && admin) {
+    // Use the OAuth flow module to get a valid token.
+    const { getValidAccessToken } = await import("../gsc/oauthFlow.js");
+    accessToken = await getValidAccessToken({ brandKey, admin });
+  } else {
+    accessToken = await getAccessToken();
+  }
+
+  const path = siteUrl.startsWith("/sites/")
+    ? siteUrl
+    : `/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`;
+
+  const res = await fetch(`${API_BASE}${path.startsWith("/") ? path : `/${path}`}`, {
+    ...opts,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...(opts.headers || {}),
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(
+        `GSC access denied for ${brandKey || "service account"}: ${body.slice(0, 200)}`
+      );
+    }
+    throw new Error(`GSC HTTP ${res.status}: ${body.slice(0, 200)}`);
+  }
+
+  return res.json();
+}
+
+/**
+ * OAuth-aware daily query rows fetch (for the ingest pipeline).
+ */
+export async function fetchDailyQueryRowsForBrand(siteUrl, opts = {}, deps = {}) {
+  const { startDate, endDate } = opts;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate || "") || !/^\d{4}-\d{2}-\d{2}$/.test(endDate || "")) {
+    throw new Error(`fetchDailyQueryRowsForBrand needs YYYY-MM-DD startDate/endDate, got ${startDate}..${endDate}`);
+  }
+  const pageSize = Math.min(opts.pageSize || 25000, 25000);
+  const maxRows = opts.maxRows || 250000;
+
+  const rows = [];
+  for (let startRow = 0; ; startRow += pageSize) {
+    const data = await gscFetchForBrand(siteUrl, {
+      method: "POST",
+      body: JSON.stringify({
+        startDate,
+        endDate,
+        dimensions: ["date", "query"],
+        rowLimit: pageSize,
+        startRow,
+      }),
+    }, deps);
+    const page = data.rows || [];
+    for (const r of page) {
+      rows.push({
+        date: r.keys?.[0] || "",
+        query: r.keys?.[1] || "",
+        clicks: r.clicks || 0,
+        impressions: r.impressions || 0,
+        ctr: r.ctr || 0,
+        position: r.position || 0,
+      });
+    }
+    if (page.length < pageSize) return { rows, truncated: false };
+    if (rows.length >= maxRows) return { rows, truncated: true };
+  }
 }

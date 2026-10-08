@@ -147,6 +147,11 @@ export const NEVER_WRITABLE = Object.freeze([
   // R4.1.1 — a customer's own Search Console data.
   "gsc_connections",
   "gsc_daily",
+  // Customer identity and tenant membership: tests must never create or alter
+  // a real account's isolation boundary, even with an explicit opt-in.
+  "customer_brands",
+  "customer_brand_memberships",
+  "customer_brand_aliases",
 ]);
 
 /**
