@@ -458,6 +458,9 @@ async function renderSidebar(props) {
   const modules = new Map([
     ["react", reactModule],
     ["lucide-react", anyNamedExport],
+    // Only navigation transport is substituted; render the link's real DOM
+    // shape while keeping the score reader and Sidebar component under test.
+    ["next/link", { __esModule: true, default: ({ children, ...attributes }) => React.createElement("a", attributes, children) }],
     ["next/navigation", {
       __esModule: true,
       useRouter: () => ({ push() {}, replace() {}, refresh() {}, back() {} }),
