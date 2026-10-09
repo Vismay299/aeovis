@@ -17,7 +17,7 @@ const CURRENT_KEY_VERSION = 1;
 
 function getEncryptionKey() {
   const hex = (process.env.GSC_TOKEN_ENCRYPTION_KEY || "").trim();
-  if (!hex || hex.length !== 64) return null;
+  if (!/^[0-9a-f]{64}$/i.test(hex)) return null;
   try {
     return Buffer.from(hex, "hex");
   } catch {

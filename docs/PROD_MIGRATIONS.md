@@ -320,7 +320,7 @@ WITH expected(migration, kind, name) AS (
     ('023_customer_auth_and_tenant_rls', 'table',    'customer_brands'),
     ('023_customer_auth_and_tenant_rls', 'table',    'customer_brand_memberships'),
     ('023_customer_auth_and_tenant_rls', 'table',    'customer_brand_aliases'),
-    ('023_customer_auth_and_tenant_rls', 'index',    'customer_brands_website_host_key'),
+    ('023_customer_auth_and_tenant_rls', 'index',    'customer_brands_website_host_idx'),
     ('023_customer_auth_and_tenant_rls', 'function', 'customer_can_access_brand'),
     ('023_customer_auth_and_tenant_rls', 'function', 'customer_can_access_scan')
 ),
@@ -1362,3 +1362,41 @@ than none:
   guards that stop `EXPECTED_OBJECTS` going stale again (finding C10).
 - `docs/plans/2026-08-29-rebuild-roadmap.md:13-25` — the eleven standing rules,
   of which rule 4 is the one this file serves.
+
+
+## Customer UAT repairs: migrations 024–026
+
+Apply `024_customer_workspace_ownership.sql`, `025_gsc_customer_oauth.sql`, and
+`026_customer_uat_repairs.sql` in order after 023, before deploying the repaired
+customer routes. The migration runner now verifies their tables and functions.
+Configure the server-only service-role key before applying the customer RLS
+migrations. No production migrations were applied while implementing this fix.
+
+Migration 026 adds nullable `brand_key` ownership to scans and scan jobs. Names,
+aliases, and URLs do not grant access. Historical rows remain unassigned; an
+operator must confirm ownership and assign a workspace explicitly. Legacy GSC
+connections and daily rows also remain unassigned, so 025 can run even when
+operator brand labels have no customer workspace. Independent workspaces may
+use the same website and display name.
+
+GSC activation moves a pending encrypted grant into active credentials only
+after property validation. Activation, generation invalidation, credential
+removal, and job enqueue/cancellation are transactional. Daily data uniqueness
+includes connection generation; batch writes lock and validate the active
+connection. Expired OAuth attempts, including abandoned pending grants, are
+pruned by the daily sync worker. Existing sync leases can be reclaimed after
+expiry. Team invites are redeemed by authenticated users with a matching
+verified email through `accept_customer_team_invites()`.
+
+The previously unapplied 023–025 files were corrected for fresh installations;
+026 also repairs installations that already applied the original files. Review
+any checksum-drift notices before recording an updated migration ledger. The
+026 repair does not infer ownership for historical data.
+
+The customer sync worker commits one bounded 5,000-row page per lease. Migration
+026 stores the date window and row offset and advances the coverage watermark
+only after the final page. Daily scheduling and immediate worker wakeups use
+the durable queue. Customer content review commits feedback, item status, and
+job status together. `npm run check:uat` checks production variable registration
+and the live migration ledger without printing credentials; sensitive variable
+values still require runtime verification after deployment.

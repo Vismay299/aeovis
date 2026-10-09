@@ -12,7 +12,7 @@
 import { supabase } from "../db.js";
 
 function resolveClient(deps) {
-  const client = deps?.client ?? supabase;
+  const client = deps?.client ?? deps?.admin ?? supabase;
   if (!client) {
     throw new Error("Supabase is not configured — GSC data cannot be read or written. This is a refusal, not an empty result.");
   }
@@ -48,7 +48,7 @@ export async function getGscConnection(brand, deps = {}) {
 export async function upsertGscConnection({ brand, siteUrl, brandKey, authMode, credentialId, connectionGeneration }, deps = {}) {
   const row = {
     brand,
-    brand_key: brandKey || brand,
+    brand_key: brandKey || null,
     site_url: siteUrl,
     enabled: true,
     auth_mode: authMode || "service_account",
@@ -77,7 +77,9 @@ export async function recordGscAttempt(brand, outcome, deps = {}) {
   if (outcome.status === "ok" && outcome.ingestedThrough) {
     patch.last_ingested_through = outcome.ingestedThrough;
   }
-  const { error } = await resolveClient(deps).from("gsc_connections").update(patch).eq("brand", brand);
+  let query = resolveClient(deps).from("gsc_connections").update(patch).eq("brand", brand);
+  if (deps.connection) query = query.eq("connection_generation", deps.connection.connection_generation || 1).eq("enabled", true);
+  const { error } = await query;
   if (error) throw new Error(`Failed to record GSC attempt for "${brand}": ${error.message}`, { cause: error });
 }
 
@@ -91,7 +93,11 @@ export async function upsertGscDaily(rows, deps = {}) {
   let written = 0;
   for (let i = 0; i < rows.length; i += GSC_UPSERT_CHUNK) {
     const chunk = rows.slice(i, i + GSC_UPSERT_CHUNK);
-    const { error } = await client.from("gsc_daily").upsert(chunk, { onConflict: "brand,date,query" });
+    const { error } = await client.rpc("write_gsc_generation", {
+      p_brand: deps.connection?.brand || chunk[0].brand,
+      p_generation: deps.connection?.connection_generation || chunk[0].connection_generation || 1,
+      p_rows: chunk,
+    });
     if (error) {
       throw new Error(`Failed to write gsc_daily rows ${i}-${i + chunk.length}: ${error.message}`, { cause: error });
     }

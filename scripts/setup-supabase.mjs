@@ -252,9 +252,32 @@ const EXPECTED_OBJECTS = {
     { kind: "table", name: "customer_brands" },
     { kind: "table", name: "customer_brand_memberships" },
     { kind: "table", name: "customer_brand_aliases" },
-    { kind: "index", name: "customer_brands_website_host_key" },
     { kind: "function", name: "customer_can_access_brand" },
     { kind: "function", name: "customer_can_access_scan" },
+  ],
+  "024_customer_workspace_ownership.sql": [
+    { kind: "table", name: "customer_team_invites" },
+    { kind: "function", name: "create_customer_workspace" },
+    { kind: "function", name: "prevent_last_owner_removal" },
+  ],
+  "025_gsc_customer_oauth.sql": [
+    { kind: "table", name: "gsc_oauth_attempts" },
+    { kind: "table", name: "gsc_oauth_credentials" },
+    { kind: "table", name: "gsc_sync_jobs" },
+    { kind: "index", name: "gsc_daily_brand_key_gen_idx" },
+  ],
+  "026_customer_uat_repairs.sql": [
+    { kind: "column", name: "scans.brand_key" },
+    { kind: "column", name: "scan_jobs.brand_key" },
+    { kind: "index", name: "scan_jobs_one_running_per_workspace" },
+    { kind: "function", name: "activate_customer_gsc" },
+    { kind: "function", name: "disconnect_customer_gsc" },
+    { kind: "function", name: "write_gsc_generation" },
+    { kind: "function", name: "accept_customer_team_invites" },
+    { kind: "function", name: "claim_customer_gsc_job" },
+    { kind: "function", name: "commit_customer_gsc_page" },
+    { kind: "function", name: "enqueue_customer_gsc_syncs" },
+    { kind: "function", name: "decide_customer_content" },
   ],
 };
 

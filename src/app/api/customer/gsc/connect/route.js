@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { findCustomerBrand, getCustomerContext } from "@/lib/supabase/customer";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createOAuthAttempt, isGscOAuthConfigured } from "@/lib/gsc/oauthFlow";
-import { hashValue } from "@/lib/gsc/oauthCrypto";
+import { customerSessionBinding } from "@/lib/supabase/sessionBinding";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +32,9 @@ export async function POST(request) {
   if (!admin) return fail(503, "Server is not configured.");
 
   try {
-    // Hash the session token for binding (using the user's session JWT hash).
-    const sessionHash = hashValue(context.user.id + ":" + context.user.email);
+    // Bind to the verified login session, preserving binding across refreshes.
+    const sessionHash = await customerSessionBinding(context);
+    if (!sessionHash) throw new Error("Your login session expired. Please sign in again.");
 
     const { authorizationUrl } = await createOAuthAttempt({
       userId: context.user.id,

@@ -37,7 +37,7 @@ export async function runBenchmark(ctx, deps = {}) {
   const rows = rowsForQueries(ctx.scan, targetQueries);
 
   const prompt = renderStepPrompt("benchmark", ctx.playbook, {
-    brand: ctx.brand,
+    brand: ctx.input?.brand_name || ctx.brand,
     brief: ctx.brief,
     agent: formatAgentOverlay(ctx.agent),
     work_order: ctx.workOrder,

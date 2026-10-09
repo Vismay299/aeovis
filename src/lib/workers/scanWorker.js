@@ -798,7 +798,7 @@ export async function sourceUnbrandedQueries(brand, url, industry, stats, brandA
   const generate = deps.generateUnbrandedPrompts || generateUnbrandedPrompts;
   const target = deps.promptTarget || resolvePromptTarget();
 
-  const promptKey = resolveBrandKey(brand, url);
+  const promptKey = deps.brandKey || resolveBrandKey(brand, url);
 
   let dbPrompts;
   try {
@@ -812,7 +812,7 @@ export async function sourceUnbrandedQueries(brand, url, industry, stats, brandA
 
   // Legacy migration: older scans stored the pool under the typed brand name.
   // Re-home those rows under the canonical key once, preserving enabled/weight.
-  if ((dbPrompts || []).length === 0 && promptKey !== queryTextKey(brand)) {
+  if (!deps.brandKey && (dbPrompts || []).length === 0 && promptKey !== queryTextKey(brand)) {
     let legacyRows;
     try {
       legacyRows = await getPrompts(brand, true, { strict: true });
@@ -1394,7 +1394,7 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     .filter(Boolean);
 
   const brandAliases = getBrandAliases(brand, url);
-  const promptKey = resolveBrandKey(brand, url);
+  const promptKey = job.brand_key || resolveBrandKey(brand, url);
   const stats = { cost: 0, tokens: 0 };
 
   // R3.4.4 — Worker honors per-brand prompt_target, engines and geo from the
@@ -1418,7 +1418,7 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     newlyGenerated,
     prompt_source: promptSource,
     static_pack_prompts: staticPackPrompts,
-  } = await sourceQueries(brand, url, industry, stats, brandAliases, { ...deps, promptTarget });
+  } = await sourceQueries(brand, url, industry, stats, brandAliases, { ...deps, promptTarget, brandKey: job.brand_key });
 
   // R3.4.1 — register the brand with the scheduler. Here and not in
   // POST /api/scan because this is the one place per job where the canonical
@@ -1597,6 +1597,7 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     competitors,
     competitors_raw: competitorsRaw,
     prompt_key: promptKey,
+    brand_key: job.brand_key || null,
     prompt_source: promptSource,
     static_pack_prompts: staticPackPrompts,
     queries,
@@ -2219,7 +2220,8 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
       // catch, which marks the job failed with the message. The probe rows are
       // already persisted, so a resume re-finalizes rather than re-probing.
       const priorScans = await getScansByDomainFn(url || promptKey);
-      const previous = (priorScans || []).find(
+      const scopedScans = (priorScans || []).filter((row) => (row.brand_key || null) === (checkpoint.brand_key || null));
+      const previous = (scopedScans || []).find(
         (row) => row?.id && row.id !== alreadyStamped?.scan_id
       );
       if (!previous) return [];
@@ -2374,6 +2376,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   const scoringVersion = isMultiEngine ? "v9-multi-engine" : "v8.1-aio-unbranded-plus-presence";
 
   const scanRecord = {
+    ...(checkpoint.brand_key ? { brand_key: checkpoint.brand_key } : {}),
     brand,
     url,
     industry,

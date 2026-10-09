@@ -19,8 +19,8 @@ export async function GET(request) {
   const brand = findCustomerBrand(context.brands, key);
   if (!brand) return fail(404, "That brand is not assigned to your account.");
 
-  const days = Math.min(parseInt(searchParams.get("days") || "30", 10) || 30, 90);
-  const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10) || 100, 1000);
+  const days = Math.max(1, Math.min(parseInt(searchParams.get("days") || "30", 10) || 30, 90));
+  const limit = Math.max(1, Math.min(parseInt(searchParams.get("limit") || "100", 10) || 100, 1000));
   const offset = Math.max(parseInt(searchParams.get("offset") || "0", 10) || 0, 0);
 
   const admin = getSupabaseAdmin();
@@ -44,7 +44,7 @@ export async function GET(request) {
     }
 
     const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate - days);
+    cutoffDate.setDate(cutoffDate.getDate() - days);
     const cutoff = cutoffDate.toISOString().slice(0, 10);
 
     // Query gsc_daily scoped by brand_key and generation.

@@ -55,12 +55,12 @@ test("customer context returns only the authenticated user's assigned brand memb
   assert.equal(findCustomerBrand(context.brands, "offcult.in"), null);
 });
 
-test("legacy scan rows are matched only to the assigned brand or its site host", () => {
-  const brand = { brandKey: "snitch.com", display_name: "Snitch", website_host: "snitch.com", aliases: ["snitch"] };
+test("scan ownership uses workspace keys even when names and websites match", () => {
+  const brand = { brandKey: "workspace-a", display_name: "Snitch", website_host: "snitch.com", aliases: ["snitch"] };
   assert.equal(hostFromUrl("https://www.snitch.com/products/jeans"), "snitch.com");
-  assert.equal(rowBelongsToCustomerBrand({ brand: "Snitch", url: "https://snitch.com" }, brand), true);
-  assert.equal(rowBelongsToCustomerBrand({ brand: "other", url: "https://www.snitch.com/blog" }, brand), true);
-  assert.equal(rowBelongsToCustomerBrand({ brand: "Offcult", url: "https://offcult.in" }, brand), false);
+  assert.equal(rowBelongsToCustomerBrand({ brand_key: "workspace-a", brand: "Snitch" }, brand), true);
+  assert.equal(rowBelongsToCustomerBrand({ brand_key: "workspace-b", brand: "Snitch", url: "https://snitch.com" }, brand), false);
+  assert.equal(rowBelongsToCustomerBrand({ brand: "Snitch", url: "https://snitch.com" }, brand), false);
 });
 
 test("operator provisioning generates opaque UUID keys for new workspaces", () => {
@@ -156,6 +156,6 @@ test("migration removes anonymous table access and scopes customer reads to memb
   assert.match(sql, /GRANT SELECT ON[\s\S]*TO authenticated/);
   assert.match(sql, /CREATE POLICY customer_brand_memberships_read_self[\s\S]*user_id = \(SELECT auth\.uid\(\)\)/);
   assert.match(sql, /customer_can_access_brand\(brand\)/);
-  assert.match(sql, /customer_can_access_scan\(brand, url\)/);
+  assert.match(sql, /customer_can_access_brand\(brand_key\)/);
   assert.doesNotMatch(sql, /CREATE POLICY[^;]+\bTO anon\b/i);
 });

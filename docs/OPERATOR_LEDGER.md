@@ -351,6 +351,12 @@ never reports a silent "0 deleted" — and `scan_runs` keeps growing at the
 unique legacy brand aliases, and row-level security. Configure the server-only `SUPABASE_SERVICE_ROLE_KEY`
 before applying it; after application, production server APIs depend on that
 key while customer browser reads are restricted to authenticated memberships).
+`024_customer_workspace_ownership`, `025_gsc_customer_oauth`, and
+`026_customer_uat_repairs` are also pending production application. Migration
+026 repairs scan ownership, GSC activation/disconnect and generation fencing,
+team invite redemption, and sync job lease recovery. Historical scans/GSC rows
+remain unassigned until an operator confirms ownership. Apply through 026 before
+deploying the repaired customer APIs.
 
 `npm run setup:db` applies them in filename order, one transaction per file,
 recording each in the `schema_migrations` ledger. The `BEGIN`, the ledger

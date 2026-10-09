@@ -16,6 +16,7 @@ function queryKey(t) {
  * "target queries: 3 → visible on 1 since publish" (plan Phase 4).
  */
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { id } = params;
     const item = await getContentItem(id);

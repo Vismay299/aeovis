@@ -27,7 +27,7 @@ export async function runTransform(ctx, blockSlug, deps = {}) {
   }
 
   const prompt = renderStepPrompt("transform", "shared", {
-    brand: ctx.brand,
+    brand: ctx.input?.brand_name || ctx.brand,
     brief: ctx.brief,
     agent: formatAgentOverlay(ctx.agent),
     directive: renderDirective(block, ctx.agent),

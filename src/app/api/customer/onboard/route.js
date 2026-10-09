@@ -2,7 +2,6 @@ import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { getCustomerContext } from "@/lib/supabase/customer";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { planCustomerOnboarding } from "@/lib/customerOnboarding";
 import { normalizeCustomerBrand } from "@/lib/customerProvisioning";
 
 export const dynamic = "force-dynamic";
@@ -47,13 +46,6 @@ export async function POST(request) {
   const admin = getSupabaseAdmin();
   if (!admin) return fail(503, "Customer workspace creation is not configured on this deployment yet.");
 
-  // Check for alias collisions (the host uniqueness is removed, but aliases still matter).
-  const aliasCheck = await findAliasConflict(admin, normalized.value);
-  if (aliasCheck.error) {
-    console.error("[customer] self-service workspace alias check failed:", aliasCheck.error);
-    return fail(500, "Could not check whether this brand already has a workspace.");
-  }
-
   // Use the transactional RPC for workspace creation.
   const { data: rpcResult, error: rpcError } = await admin.rpc("create_customer_workspace", {
     p_brand_key: normalized.value.brand_key,
@@ -81,16 +73,4 @@ export async function POST(request) {
     gsc_available: true,
     gsc_message: "You can connect Google Search Console from your workspace to import search data.",
   }, { status: result.created ? 201 : 200, headers: { "Cache-Control": "no-store" } });
-}
-
-async function findAliasConflict(admin, brand) {
-  const aliases = [...new Set([brand.brand_key, ...(brand.aliases || [])]
-    .map((v) => String(v || "").trim().toLowerCase()).filter(Boolean))];
-  if (!aliases.length) return { error: null, conflict: null };
-  const { data, error } = await admin.from("customer_brand_aliases")
-    .select("alias, brand_key")
-    .in("alias", aliases);
-  if (error) return { error, conflict: null };
-  const row = (data || []).find((c) => c.brand_key !== brand.brand_key);
-  return { error: null, conflict: row || null };
 }

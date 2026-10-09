@@ -3,6 +3,7 @@ import { getPromptsForBrand, upsertPrompts } from "@/lib/db/prompts";
 import { normalizeTopic } from "@/lib/scoring/topics";
 
 export async function GET(request, { params }) {
+  params = await params;
   try {
     // The path param is the canonical pool key (domain-first, resolveBrandKey).
     const { brand } = params;
@@ -26,6 +27,7 @@ export async function GET(request, { params }) {
 }
 
 export async function POST(request, { params }) {
+  params = await params;
   try {
     const { brand } = params;
     const decodedBrand = decodeURIComponent(brand);

@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 
 /** PUT /api/knowledge/[id] — update title/content/active. */
 export async function PUT(request, { params }) {
+  params = await params;
   try {
     const payload = await request.json();
     const updates = {};
@@ -22,6 +23,7 @@ export async function PUT(request, { params }) {
 
 /** DELETE /api/knowledge/[id] */
 export async function DELETE(request, { params }) {
+  params = await params;
   try {
     const ok = await deleteKnowledgeBlock(params.id);
     return NextResponse.json({ deleted: ok });

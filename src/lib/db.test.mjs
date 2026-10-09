@@ -439,3 +439,16 @@ test("dev mode (hasDb=false): updateScanJob on an unknown id creates a minimal r
   assert.ok(created.heartbeat_at);
   global.memoryJobs.delete("brand-new-unseen-id");
 });
+
+
+test("customer scan creation persists its workspace independently of the display name", async () => {
+  let inserted;
+  const { client } = makeMockClient({ scan_jobs: (state) => {
+    inserted = state.values[0];
+    return { data: [inserted], error: null };
+  } });
+  const job = await createScanJob({ brand: "%", url: "https://same.example", brandKey: "workspace-a" }, { client });
+  assert.equal(job.brand_key, "workspace-a");
+  assert.equal(inserted.brand, "%");
+  assert.equal(inserted.brand_key, "workspace-a");
+});

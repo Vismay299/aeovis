@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { findCustomerBrand, getCustomerContext } from "@/lib/supabase/customer";
-import { rowBelongsToCustomerBrand } from "@/lib/customerData";
 
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
@@ -27,10 +26,12 @@ export async function GET(request) {
     const [scansResult, jobsResult, metricsResult, contentResult] = await Promise.all([
       client.from("scans")
         .select("id, brand, url, scanned_at, created_at, visibility_pct, prompts_tracked, prompts_mentioned, platform")
+        .eq("brand_key", brand.brandKey)
         .order("scanned_at", { ascending: false, nullsFirst: false })
         .limit(100),
       client.from("scan_jobs")
         .select("id, brand, url, status, progress_pct, created_at")
+        .eq("brand_key", brand.brandKey)
         .order("created_at", { ascending: false })
         .limit(100),
       client.from("brand_metrics_daily")
@@ -40,6 +41,7 @@ export async function GET(request) {
         .limit(30),
       client.from("content_items")
         .select("id, brand, title, status, updated_at, created_at")
+        .eq("brand", brand.brandKey)
         .order("updated_at", { ascending: false })
         .limit(100),
     ]);
@@ -47,9 +49,9 @@ export async function GET(request) {
     const failed = [scansResult, jobsResult, metricsResult, contentResult].find((result) => result.error);
     if (failed) throw failed.error;
 
-    const scans = (scansResult.data || []).filter((row) => rowBelongsToCustomerBrand(row, brand)).slice(0, 10);
-    const jobs = (jobsResult.data || []).filter((row) => rowBelongsToCustomerBrand(row, brand)).slice(0, 10);
-    const contentItems = (contentResult.data || []).filter((row) => rowBelongsToCustomerBrand(row, brand)).slice(0, 10);
+    const scans = (scansResult.data || []).slice(0, 10);
+    const jobs = (jobsResult.data || []).slice(0, 10);
+    const contentItems = (contentResult.data || []).slice(0, 10);
 
     return NextResponse.json({
       brand: { brand_key: brand.brandKey, display_name: brand.display_name, website: brand.website },

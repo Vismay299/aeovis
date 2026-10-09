@@ -56,6 +56,7 @@ function publicationState(newStatus) {
  * records no URL — see publicationState above.
  */
 export async function POST(request, { params }) {
+  params = await params;
   try {
     const { id } = params;
     const payload = await request.json();

@@ -330,9 +330,13 @@ const FULL_CATALOG = [
   "customer_brands",
   "customer_brand_memberships",
   "customer_brand_aliases",
-  "customer_brands_website_host_key",
   "customer_can_access_brand",
   "customer_can_access_scan",
+  "customer_team_invites", "create_customer_workspace", "prevent_last_owner_removal",
+  "gsc_oauth_attempts", "gsc_oauth_credentials", "gsc_sync_jobs", "gsc_daily_brand_key_gen_idx",
+  "scans.brand_key", "scan_jobs.brand_key", "scan_jobs_one_running_per_workspace",
+  "activate_customer_gsc", "disconnect_customer_gsc", "write_gsc_generation",
+  "accept_customer_team_invites", "claim_customer_gsc_job", "commit_customer_gsc_page", "enqueue_customer_gsc_syncs", "decide_customer_content",
 ];
 
 function withRegister(dir) {

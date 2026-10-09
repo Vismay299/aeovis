@@ -450,3 +450,14 @@ test("R2.8.10 — each write-error code survives to error_message and the three 
       `got ${unique.size} unique from ${messages.length}: ${[...unique].join(" | ")}`
   );
 });
+
+
+test("customer scan ownership is stored on the scan row", async () => {
+  let row;
+  const client = { from: () => ({ insert: (rows) => {
+    row = rows[0];
+    return { select: async () => ({ data: [{ ...row, id: "saved-scan" }], error: null }) };
+  } }) };
+  await insertScan({ ...RECORD, brand_key: "workspace-a" }, { client });
+  assert.equal(row.brand_key, "workspace-a");
+});

@@ -1,16 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { consumeCustomerAuthFragment } from "@/lib/supabase/authLink";
 
 export default function AcceptInvitePage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    consumeCustomerAuthFragment().then(() => setReady(true)).catch((error) => setMessage(error.message));
+  }, []);
 
   async function savePassword(event) {
     event.preventDefault();
+    if (!ready) return;
     setBusy(true);
     setMessage("");
     const supabase = getSupabaseBrowserClient();
@@ -23,6 +29,12 @@ export default function AcceptInvitePage() {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
       setMessage("We could not save that password. Use at least 8 characters and try again.");
+      setBusy(false);
+      return;
+    }
+    const { error: inviteError } = await supabase.rpc("accept_customer_team_invites");
+    if (inviteError) {
+      setMessage("Your password was saved, but workspace access could not be assigned. Please retry.");
       setBusy(false);
       return;
     }
@@ -39,7 +51,7 @@ export default function AcceptInvitePage() {
         <form onSubmit={savePassword} className="customer-auth-form">
           <label htmlFor="password">New password</label>
           <input id="password" type="password" minLength={8} autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
-          <button className="btn btn--primary customer-auth-submit" type="submit" disabled={busy}>{busy ? "Saving…" : "Set password"}</button>
+          <button className="btn btn--primary customer-auth-submit" type="submit" disabled={busy || !ready}>{busy ? "Saving…" : "Set password"}</button>
         </form>
         {message ? <p className="customer-auth-message" role="status">{message}</p> : null}
       </section>

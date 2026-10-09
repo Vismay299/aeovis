@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { findCustomerBrand, getCustomerContext } from "@/lib/supabase/customer";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { createScanJob, hasActiveScanForBrand } from "@/lib/db";
+import { createScanJob } from "@/lib/db";
 import { DuplicateScanError } from "@/lib/duplicateScan";
 import { keepAlive } from "@/lib/keepAlive";
 
@@ -30,15 +30,10 @@ export async function POST(request) {
   const industry = (body?.industry || "").trim();
   const competitors = (body?.competitors || "").trim();
 
-  // Check for duplicate active scan.
-  const hasActive = await hasActiveScanForBrand(brand.display_name);
-  if (hasActive) {
-    return fail(409, "A scan is already running for this workspace. Please wait for it to complete.");
-  }
-
   try {
     const job = await createScanJob({
       brand: brand.display_name,
+      brandKey: brand.brandKey,
       url,
       industry,
       competitors,
@@ -80,19 +75,21 @@ export async function GET(request) {
     const { data: scans, error } = await admin
       .from("scans")
       .select("id, brand, url, scanned_at, created_at, visibility_pct, prompts_tracked, prompts_mentioned, platform, raw_results")
-      .ilike("brand", brand.display_name)
+      .eq("brand_key", brand.brandKey)
       .order("scanned_at", { ascending: false, nullsFirst: false })
       .limit(20);
 
     if (error) throw error;
 
     // Also get scan jobs.
-    const { data: jobs } = await admin
+    const { data: jobs, error: jobsError } = await admin
       .from("scan_jobs")
       .select("id, brand, url, status, progress_pct, created_at, error_message")
-      .ilike("brand", brand.display_name)
+      .eq("brand_key", brand.brandKey)
       .order("created_at", { ascending: false })
       .limit(10);
+
+    if (jobsError) throw jobsError;
 
     return NextResponse.json({
       brand_key: brand.brandKey,

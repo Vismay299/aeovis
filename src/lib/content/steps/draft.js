@@ -9,7 +9,7 @@ import { callStepLlm, formatLessons, formatAgentOverlay } from "./shared.js";
  */
 export async function runDraft(ctx, deps = {}) {
   const prompt = renderStepPrompt("draft", ctx.playbook, {
-    brand: ctx.brand,
+    brand: ctx.input?.brand_name || ctx.brand,
     brief: ctx.brief,
     agent: formatAgentOverlay(ctx.agent),
     lessons: formatLessons(ctx.lessons),

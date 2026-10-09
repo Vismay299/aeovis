@@ -45,6 +45,7 @@ function requireBrandKey(params) {
  * when none exists yet.
  */
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { brandKey, error: brandError } = requireBrandKey(params);
     if (brandError) {
@@ -92,6 +93,7 @@ export async function GET(request, { params }) {
  * (message names the offending field); 500 on a DB failure.
  */
 export async function PUT(request, { params }) {
+  params = await params;
   try {
     const { brandKey, error: brandError } = requireBrandKey(params);
     if (brandError) {

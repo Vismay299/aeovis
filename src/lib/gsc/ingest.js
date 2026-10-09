@@ -17,6 +17,7 @@
 
 import { fetchDailyQueryRows, fetchDailyQueryRowsForBrand } from "../engines/gsc.js";
 import { listGscConnections, recordGscAttempt, upsertGscDaily } from "../db/gsc.js";
+import { getSupabaseAdmin } from "../supabase/admin.js";
 
 export const LAG_DAYS = 2;
 export const OVERLAP_DAYS = 7;
@@ -43,13 +44,13 @@ export function ingestWindow(connection, now = new Date()) {
 }
 
 /** Map API rows to gsc_daily rows. Rows without a date or query are dropped, not coerced. */
-export function toDailyRows(brand, siteUrl, apiRows, ingestedAt, connectionGeneration) {
+export function toDailyRows(brand, siteUrl, apiRows, ingestedAt, connectionGeneration = 1, brandKey = null) {
   const out = [];
   for (const r of apiRows || []) {
     if (!r?.date || !r?.query) continue;
     out.push({
       brand,
-      brand_key: brand,
+      brand_key: brandKey,
       site_url: siteUrl,
       date: r.date,
       query: r.query,
@@ -66,16 +67,17 @@ export function toDailyRows(brand, siteUrl, apiRows, ingestedAt, connectionGener
 
 /** Ingest one connection. Never throws for a GSC/DB failure; returns the outcome. */
 export async function ingestConnection(connection, deps = {}) {
+  deps = { ...deps, connection };
   const now = deps.now ? deps.now() : new Date();
   const at = now.toISOString();
   const upsert = deps.upsertGscDaily ?? upsertGscDaily;
   const record = deps.recordGscAttempt ?? recordGscAttempt;
   const { brand, brand_key: brandKey, site_url: siteUrl, auth_mode: authMode, connection_generation: connGen } = connection;
-  const brandIdentifier = brandKey || brand;
+  const brandIdentifier = brand;
 
   // Choose the appropriate fetch function based on auth mode.
   const fetchRows = authMode === "oauth" && deps.admin
-    ? (siteUrl, opts) => fetchDailyQueryRowsForBrand(siteUrl, opts, { brandKey: brandIdentifier, admin: deps.admin, authMode: "oauth" })
+    ? (siteUrl, opts) => fetchDailyQueryRowsForBrand(siteUrl, opts, { brandKey, admin: deps.admin, authMode: "oauth" })
     : (deps.fetchDailyQueryRows ?? fetchDailyQueryRows);
 
   const window = ingestWindow(connection, now);
@@ -85,8 +87,9 @@ export async function ingestConnection(connection, deps = {}) {
       ingestedThrough: connection.last_ingested_through ?? null };
   } else {
     try {
+      if (authMode === "oauth" && !deps.admin) throw new Error("OAuth credentials are unavailable for this workspace.");
       const { rows, truncated } = await fetchRows(siteUrl, window);
-      const dailyRows = toDailyRows(brandIdentifier, siteUrl, rows, at, connGen);
+      const dailyRows = toDailyRows(brandIdentifier, siteUrl, rows, at, connGen, brandKey);
       const rowsWritten = dailyRows.length ? await upsert(dailyRows, deps) : 0;
       outcome = {
         brand: brandIdentifier, status: "ok", rowsWritten, window, truncated, at, error: null,
@@ -115,14 +118,16 @@ export async function ingestConnection(connection, deps = {}) {
  * cannot be read — that is "ran for nobody", not "nobody is connected".
  */
 export async function runGscIngest(deps = {}) {
+  deps = { ...deps, admin: deps.admin ?? getSupabaseAdmin() };
   const list = deps.listGscConnections ?? listGscConnections;
   const connections = await list(deps);
   const results = [];
   for (const connection of connections) {
+    if (connection.auth_mode === "oauth" || deps.excludeBrands?.has(connection.brand)) continue;
     results.push(await ingestConnection(connection, deps));
   }
   return {
-    connections: connections.length,
+    connections: results.length,
     ok: results.filter((r) => r.status === "ok").length,
     failed: results.filter((r) => r.status === "failed").length,
     rows_written: results.reduce((n, r) => n + r.rowsWritten, 0),

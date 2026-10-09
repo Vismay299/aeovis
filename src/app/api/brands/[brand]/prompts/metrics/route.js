@@ -68,6 +68,7 @@ function parseRangeParam(raw) {
  * failure (message never echoes the raw DB error to the client).
  */
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { brandKey, error: brandError } = requireBrandKey(params);
     if (brandError) {

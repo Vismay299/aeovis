@@ -14,6 +14,7 @@ export const revalidate = 0;
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, no-cache, must-revalidate" };
 
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { brand } = params || {};
     if (!brand) {

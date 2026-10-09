@@ -37,6 +37,7 @@ const JOB_SCAN_LIMIT = 200;
  *   `uncovered` — that is a starting point, not missing data.
  */
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { brand } = params || {};
     if (!brand || !decodeURIComponent(brand).trim()) {

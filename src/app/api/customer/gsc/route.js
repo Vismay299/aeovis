@@ -25,7 +25,7 @@ export async function GET(request) {
     const { data, error } = await context.client
       .from("gsc_connections")
       .select("brand_key, site_url, enabled, auth_mode, connected_at, last_attempt_at, last_status, last_rows_written, last_ingested_through, permission_level, connection_generation")
-      .eq("brand", brand.brandKey)
+      .eq("brand_key", brand.brandKey)
       .maybeSingle();
     if (error) throw error;
     return NextResponse.json({
@@ -57,7 +57,7 @@ export async function DELETE(request) {
   }
 
   try {
-    const result = await disconnectGsc({ brandKey: brand.brandKey, admin });
+    const result = await disconnectGsc({ brandKey: brand.brandKey, userId: context.user.id, admin });
     return NextResponse.json(result);
   } catch (error) {
     console.error(`[gsc-oauth] disconnect failed for ${brand.brandKey}:`, error);

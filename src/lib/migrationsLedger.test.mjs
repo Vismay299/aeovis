@@ -204,19 +204,19 @@ function extractObjectsFromSql(sql) {
   let pendingBucket = false;
   for (const line of joined) {
     // CREATE TABLE [IF NOT EXISTS] <name>
-    const tableMatch = line.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i);
+    const tableMatch = line.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)/i);
     if (tableMatch) {
       add("table", tableMatch[1].toLowerCase());
     }
 
     // CREATE [UNIQUE] INDEX [IF NOT EXISTS] <name>
-    const indexMatch = line.match(/CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/i);
+    const indexMatch = line.match(/CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)/i);
     if (indexMatch) {
       add("index", indexMatch[1].toLowerCase());
     }
 
     // CREATE OR REPLACE FUNCTION <name>
-    const funcMatch = line.match(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(\w+)/i);
+    const funcMatch = line.match(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?(\w+)/i);
     if (funcMatch) {
       add("function", funcMatch[1].toLowerCase());
     }
@@ -225,7 +225,7 @@ function extractObjectsFromSql(sql) {
     // Use matchAll to handle multiple ADD COLUMN clauses on the same joined
     // line (e.g. 013_brand_metrics_sov_state.sql has sov_state and
     // sov_state_reason as two ADD COLUMN clauses separated by a comma).
-    const tableForCol = line.match(/ALTER\s+TABLE\s+(\w+)/i);
+    const tableForCol = line.match(/ALTER\s+TABLE\s+(?:public\.)?(\w+)/i);
     if (tableForCol) {
       const tableName = tableForCol[1].toLowerCase();
       const colRe = /ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)/gi;

@@ -54,10 +54,10 @@ ALTER TABLE public.gsc_connections
   ADD COLUMN IF NOT EXISTS credential_id uuid REFERENCES public.gsc_oauth_credentials(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS auth_mode text DEFAULT 'service_account' CHECK (auth_mode IN ('service_account', 'oauth')),
   ADD COLUMN IF NOT EXISTS connection_generation integer NOT NULL DEFAULT 1,
-  ADD COLUMN IF NOT EXISTS permission_level text;
+  ADD COLUMN IF NOT EXISTS permission_level text,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
--- Backfill brand_key from brand for existing rows.
-UPDATE public.gsc_connections SET brand_key = brand WHERE brand_key IS NULL;
+-- Legacy operator connections remain unassigned. Ownership requires an explicit operator action.
 
 -- 4. GSC sync jobs table (durable, resumable).
 CREATE TABLE IF NOT EXISTS public.gsc_sync_jobs (
@@ -95,8 +95,7 @@ ALTER TABLE public.gsc_daily
   ADD COLUMN IF NOT EXISTS connection_generation integer NOT NULL DEFAULT 1,
   ADD COLUMN IF NOT EXISTS brand_key text REFERENCES public.customer_brands(brand_key) ON DELETE CASCADE;
 
--- Backfill brand_key from brand for existing rows.
-UPDATE public.gsc_daily SET brand_key = brand WHERE brand_key IS NULL;
+-- Legacy data remains unassigned; do not infer tenant ownership from a label.
 
 -- New uniqueness: (brand_key, date, query, connection_generation) prevents mixing
 -- old and new property data when a property is replaced.
@@ -123,7 +122,6 @@ AS $$
   WITH deleted AS (
     DELETE FROM public.gsc_oauth_attempts
      WHERE expires_at < now()
-       AND consumed_at IS NULL
     RETURNING 1
   )
   SELECT count(*)::integer FROM deleted;

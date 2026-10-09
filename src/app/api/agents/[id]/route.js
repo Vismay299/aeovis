@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 /** GET /api/agents/[id] — one agent. */
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const agent = await getAgent(params.id);
     if (!agent) return NextResponse.json({ detail: "Agent not found." }, { status: 404 });
@@ -18,6 +19,7 @@ export async function GET(request, { params }) {
 
 /** PUT /api/agents/[id] — update an agent's config. */
 export async function PUT(request, { params }) {
+  params = await params;
   try {
     const existing = await getAgent(params.id);
     if (!existing) return NextResponse.json({ detail: "Agent not found." }, { status: 404 });
@@ -41,6 +43,7 @@ export async function PUT(request, { params }) {
 
 /** DELETE /api/agents/[id] — remove a custom agent. */
 export async function DELETE(request, { params }) {
+  params = await params;
   try {
     const existing = await getAgent(params.id);
     if (!existing) return NextResponse.json({ detail: "Agent not found." }, { status: 404 });

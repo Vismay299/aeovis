@@ -9,6 +9,7 @@ function fail(status, error) {
 }
 
 export async function GET(request, { params }) {
+  params = await params;
   const scanId = params?.scan_id;
   if (!scanId) return fail(400, "scan_id is required.");
 
@@ -30,18 +31,17 @@ export async function GET(request, { params }) {
     if (error || !scan) return fail(404, "Scan not found.");
 
     // Verify the scan belongs to one of the user's workspaces.
-    const ownsBrand = context.brands.some(
-      (b) => b.display_name?.toLowerCase() === scan.brand?.toLowerCase() ||
-             b.brandKey?.toLowerCase() === scan.brand?.toLowerCase()
-    );
+    const ownsBrand = context.brands.some((b) => b.brandKey === scan.brand_key);
     if (!ownsBrand) return fail(404, "Scan not found.");
 
     // Get prompt results for this scan.
-    const { data: results } = await admin
+    const { data: results, error: resultsError } = await admin
       .from("prompt_results")
-      .select("id, prompt_text, engine, answer_text, citations, visibility_score, brand_mentioned, created_at")
+      .select("id, query, engine, answer_text, answered, mentioned, brand_cited, position, sentiment, raw, created_at")
       .eq("scan_id", scanId)
       .order("created_at", { ascending: true });
+
+    if (resultsError) throw resultsError;
 
     return NextResponse.json({
       scan: {

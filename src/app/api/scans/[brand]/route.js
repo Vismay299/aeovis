@@ -66,6 +66,7 @@ function enrichScanForClient(scan) {
 }
 
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { brand } = params;
     if (!brand) {

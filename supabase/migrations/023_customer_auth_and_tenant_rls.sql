@@ -34,33 +34,15 @@ CREATE TABLE IF NOT EXISTS customer_brand_aliases (
 
 CREATE INDEX IF NOT EXISTS customer_brand_memberships_brand_idx
   ON public.customer_brand_memberships (brand_key, user_id);
-CREATE UNIQUE INDEX IF NOT EXISTS customer_brands_website_host_key
+CREATE INDEX IF NOT EXISTS customer_brands_website_host_idx
   ON public.customer_brands (website_host);
 
 ALTER TABLE public.customer_brands ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_brand_memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customer_brand_aliases ENABLE ROW LEVEL SECURITY;
 
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT lower(btrim(alias))
-      FROM public.customer_brands AS b
-      CROSS JOIN LATERAL unnest(array_append(b.aliases, b.brand_key)) AS aliases(alias)
-     WHERE alias IS NOT NULL AND btrim(alias) <> ''
-     GROUP BY lower(btrim(alias))
-    HAVING count(DISTINCT b.brand_key) > 1
-  ) THEN
-    RAISE EXCEPTION 'Customer brand aliases overlap across tenants; resolve them before applying migration 023.';
-  END IF;
-END $$;
-
-INSERT INTO public.customer_brand_aliases (alias, brand_key)
-SELECT DISTINCT lower(btrim(alias)), b.brand_key
-  FROM public.customer_brands AS b
-  CROSS JOIN LATERAL unnest(array_append(b.aliases, b.brand_key)) AS aliases(alias)
- WHERE alias IS NOT NULL AND btrim(alias) <> ''
-ON CONFLICT (alias) DO NOTHING;
+-- Legacy alias registration remains operator-only. New workspace metadata
+-- may overlap and must never be imported into the authorization registry.
 
 -- These SECURITY DEFINER predicates read membership data without creating an
 -- RLS recursion through customer_brand_memberships. Their result discloses no
@@ -76,10 +58,9 @@ AS $$
     SELECT 1
       FROM public.customer_brand_memberships AS m
       JOIN public.customer_brands AS b ON b.brand_key = m.brand_key
-      JOIN public.customer_brand_aliases AS a ON a.brand_key = b.brand_key
      WHERE m.user_id = (SELECT auth.uid())
        AND b.is_active
-       AND lower(btrim(p_brand)) = a.alias
+       AND p_brand = b.brand_key
   );
 $$;
 
@@ -90,24 +71,11 @@ STABLE
 SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
-  SELECT public.customer_can_access_brand(p_brand)
-      OR EXISTS (
-        SELECT 1
-          FROM public.customer_brand_memberships AS m
-          JOIN public.customer_brands AS b ON b.brand_key = m.brand_key
-         WHERE m.user_id = (SELECT auth.uid())
-           AND b.is_active
-           AND regexp_replace(
-                 lower(split_part(split_part(regexp_replace(coalesce(p_url, ''), '^https?://', '', 'i'), '/', 1), ':', 1)),
-                 '^www\.', ''
-               ) = b.website_host
-      );
+  SELECT public.customer_can_access_brand(p_brand);
 $$;
 
 REVOKE ALL ON FUNCTION public.customer_can_access_brand(text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.customer_can_access_scan(text, text) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.customer_can_access_brand(text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.customer_can_access_scan(text, text) TO authenticated;
 
 -- Remove every existing public/anonymous policy and direct grant. The legacy
 -- Next.js APIs use the server-side service-role client after this migration;
@@ -130,6 +98,8 @@ REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM PUBLIC, anon, authenti
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM PUBLIC, anon, authenticated;
 REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO service_role;
+GRANT EXECUTE ON FUNCTION public.customer_can_access_brand(text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.customer_can_access_scan(text, text) TO authenticated;
 GRANT ALL ON public.customer_brands, public.customer_brand_memberships, public.customer_brand_aliases TO service_role;
 
 -- Public scan creation, workers, and all operator APIs are server mediated.
@@ -194,17 +164,20 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Historical scans remain unassigned until an operator confirms ownership.
+ALTER TABLE public.scans ADD COLUMN IF NOT EXISTS brand_key text REFERENCES public.customer_brands(brand_key);
+ALTER TABLE public.scan_jobs ADD COLUMN IF NOT EXISTS brand_key text REFERENCES public.customer_brands(brand_key);
 ALTER TABLE public.scans ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS customer_read_own_brand ON public.scans;
 CREATE POLICY customer_read_own_brand ON public.scans
   FOR SELECT TO authenticated
-  USING (public.customer_can_access_scan(brand, url));
+  USING (public.customer_can_access_brand(brand_key));
 
 ALTER TABLE public.scan_jobs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS customer_read_own_brand ON public.scan_jobs;
 CREATE POLICY customer_read_own_brand ON public.scan_jobs
   FOR SELECT TO authenticated
-  USING (public.customer_can_access_scan(brand, url));
+  USING (public.customer_can_access_brand(brand_key));
 
 ALTER TABLE public.crawlability_audits ENABLE ROW LEVEL SECURITY;
 GRANT SELECT ON public.crawlability_audits TO authenticated;

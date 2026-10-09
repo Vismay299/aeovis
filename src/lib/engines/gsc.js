@@ -85,6 +85,7 @@ async function getAccessToken() {
     .replace(/=+$/, "");
 
   const res = await fetch(TOKEN_URL, {
+    signal: AbortSignal.timeout(20000),
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -109,6 +110,7 @@ async function gscFetch(path, options = {}) {
   const token = await getAccessToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
+    signal: options.signal || AbortSignal.timeout(30000),
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -224,7 +226,7 @@ export async function fetchDailyQueryRows(siteUrl, opts = {}) {
   const maxRows = opts.maxRows || 250000;
 
   const rows = [];
-  for (let startRow = 0; ; startRow += pageSize) {
+  for (let startRow = opts.startRow || 0, pages = 0; ; startRow += pageSize) {
     const data = await gscFetch(`/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, {
       method: "POST",
       body: JSON.stringify({
@@ -246,8 +248,9 @@ export async function fetchDailyQueryRows(siteUrl, opts = {}) {
         position: r.position || 0,
       });
     }
-    if (page.length < pageSize) return { rows, truncated: false };
-    if (rows.length >= maxRows) return { rows, truncated: true };
+    if (page.length < pageSize) return { rows, truncated: false, nextStartRow: null };
+    pages++;
+    if (rows.length >= maxRows || pages >= (opts.maxPages || Infinity)) return { rows, truncated: true, nextStartRow: startRow + page.length };
   }
 }
 
@@ -282,7 +285,8 @@ export async function gscFetchForBrand(siteUrl, opts = {}, deps = {}) {
   const { brandKey, admin, authMode } = deps;
 
   let accessToken;
-  if (authMode === "oauth" && brandKey && admin) {
+  if (authMode === "oauth") {
+    if (!brandKey || !admin) throw new Error("Workspace OAuth credentials are unavailable.");
     // Use the OAuth flow module to get a valid token.
     const { getValidAccessToken } = await import("../gsc/oauthFlow.js");
     accessToken = await getValidAccessToken({ brandKey, admin });
@@ -296,6 +300,7 @@ export async function gscFetchForBrand(siteUrl, opts = {}, deps = {}) {
 
   const res = await fetch(`${API_BASE}${path.startsWith("/") ? path : `/${path}`}`, {
     ...opts,
+    signal: opts.signal || AbortSignal.timeout(30000),
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
@@ -328,7 +333,7 @@ export async function fetchDailyQueryRowsForBrand(siteUrl, opts = {}, deps = {})
   const maxRows = opts.maxRows || 250000;
 
   const rows = [];
-  for (let startRow = 0; ; startRow += pageSize) {
+  for (let startRow = opts.startRow || 0, pages = 0; ; startRow += pageSize) {
     const data = await gscFetchForBrand(siteUrl, {
       method: "POST",
       body: JSON.stringify({
@@ -350,7 +355,8 @@ export async function fetchDailyQueryRowsForBrand(siteUrl, opts = {}, deps = {})
         position: r.position || 0,
       });
     }
-    if (page.length < pageSize) return { rows, truncated: false };
-    if (rows.length >= maxRows) return { rows, truncated: true };
+    if (page.length < pageSize) return { rows, truncated: false, nextStartRow: null };
+    pages++;
+    if (rows.length >= maxRows || pages >= (opts.maxPages || Infinity)) return { rows, truncated: true, nextStartRow: startRow + page.length };
   }
 }

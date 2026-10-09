@@ -17,7 +17,8 @@
     "fleet:check": "npm --prefix worker run check",
     "fleet:dev": "node --env-file-if-exists=.env.local --env-file-if-exists=.env.fleet.local worker/src/index.js",
     "test": "node --import ./src/lib/liveWriteGuardAuto.mjs --test \"src/**/*.test.mjs\"",
-    "baseline:archive": "node --env-file-if-exists=.env.local scripts/archive-reference-scan.mjs"
+    "baseline:archive": "node --env-file-if-exists=.env.local scripts/archive-reference-scan.mjs",
+    "check:uat": "node --env-file-if-exists=.env.local scripts/check-customer-uat.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -56,7 +57,7 @@
     "framer-motion": "^12.42.0",
     "lenis": "^1.3.25",
     "lucide-react": "^1.22.0",
-    "next": "14.2.35",
+    "next": "15.5.27",
     "react": "^18",
     "react-dom": "^18",
     "sonner": "^2.0.7",
@@ -65,9 +66,16 @@
   },
   "devDependencies": {
     "eslint": "^8",
-    "eslint-config-next": "14.2.35",
+    "eslint-config-next": "15.5.27",
     "pg": "^8.22.0",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1"
+    "postcss": "8.5.29",
+    "tailwindcss": "^3.4.1",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "postcss": "8.5.29",
+    "postcss-selector-parser": "7.1.6",
+    "source-map-js": "1.2.2",
+    "nanoid": "^3.3.20"
   }
 }

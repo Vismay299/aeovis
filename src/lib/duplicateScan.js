@@ -40,7 +40,7 @@ export function isDuplicateScanViolation(error) {
   const code = error.code || error.details?.code;
   if (code !== "23505") return false;
   const haystack = `${error.message || ""} ${error.details || ""} ${error.constraint || ""}`;
-  return haystack.includes(DUPLICATE_SCAN_INDEX);
+  return haystack.includes(DUPLICATE_SCAN_INDEX) || haystack.includes("scan_jobs_one_running_per_workspace");
 }
 
 /**

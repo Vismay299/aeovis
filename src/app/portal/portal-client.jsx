@@ -30,6 +30,12 @@ export default function CustomerPortal() {
   const [inviting, setInviting] = useState(false);
   const [currentUserId, setCurrentUserId] = useState(null);
   const [scanning, setScanning] = useState(false);
+  const [gscCallbackError, setGscCallbackError] = useState("");
+  const [gscAttempt, setGscAttempt] = useState("");
+  const [properties, setProperties] = useState([]);
+  const [propertyId, setPropertyId] = useState("");
+  const [propertyLoading, setPropertyLoading] = useState(false);
+  const [propertySaving, setPropertySaving] = useState(false);
 
   const brand = useMemo(() => brands.find((item) => item.brandKey === brandKey) || null, [brands, brandKey]);
   const isOwner = brand?.role === "owner";
@@ -48,6 +54,13 @@ export default function CustomerPortal() {
       if (!live) return;
       if (!user) {
         router.replace(`/login?next=${encodeURIComponent("/portal")}`);
+        return;
+      }
+      const { error: inviteError } = await supabase.rpc("accept_customer_team_invites");
+      if (inviteError) {
+        setError("Could not check your workspace invitations. Please retry.");
+        setBusy(false);
+        setReady(true);
         return;
       }
       setCurrentUserId(user.id);
@@ -70,7 +83,11 @@ export default function CustomerPortal() {
         ...(Array.isArray(row.customer_brands) ? row.customer_brands[0] : row.customer_brands),
       }));
       setBrands(assigned);
-      setBrandKey((current) => current || assigned[0]?.brandKey || "");
+      const callback = new URL(window.location.href).searchParams;
+      const callbackBrand = assigned.find((item) => item.brandKey === callback.get("brand_key"));
+      setBrandKey((current) => current || callbackBrand?.brandKey || assigned[0]?.brandKey || "");
+      if (callbackBrand?.role === "owner") setGscAttempt(callback.get("gsc_attempt") || "");
+      if (callback.get("gsc_error")) setGscCallbackError(callback.get("gsc_error"));
       setReady(true);
       if (!assigned.length) setBusy(false);
     }
@@ -155,6 +172,52 @@ export default function CustomerPortal() {
     }
   }, [ready, brandKey, isOwner, loadBrandData]);
 
+  useEffect(() => {
+    if (!gscAttempt || !brandKey || !isOwner) return;
+    let live = true;
+    setPropertyLoading(true);
+    setProperties([]);
+    fetch(`/api/customer/gsc/properties?brand_key=${encodeURIComponent(brandKey)}&attempt_id=${encodeURIComponent(gscAttempt)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not load Google properties.");
+        if (live) {
+          const available = (result.properties || []).filter((p) => p.permissionLevel !== "siteUnverifiedUser");
+          setProperties(available);
+          setPropertyId(available[0]?.siteUrl || "");
+        }
+      })
+      .catch((failure) => { if (live) setError(failure.message); })
+      .finally(() => { if (live) setPropertyLoading(false); });
+    return () => { live = false; };
+  }, [gscAttempt, brandKey, isOwner]);
+
+  function closePropertyPicker() {
+    setGscCallbackError("");
+    setGscAttempt("");
+    setProperties([]);
+    const url = new URL(window.location.href);
+    for (const key of ["gsc_attempt", "gsc_connected", "gsc_error"]) url.searchParams.delete(key);
+    window.history.replaceState(null, "", url);
+  }
+
+  async function selectGscProperty(event) {
+    event.preventDefault();
+    setPropertySaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/customer/gsc/property", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brand_key: brandKey, property_id: propertyId, attempt_id: gscAttempt }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not connect this property.");
+      closePropertyPicker();
+      await loadBrandData();
+    } catch (failure) { setError(failure.message); }
+    finally { setPropertySaving(false); }
+  }
+
   async function startGscConnect() {
     if (!brandKey) return;
     try {
@@ -209,7 +272,7 @@ export default function CustomerPortal() {
           {brands.length > 1 ? (
             <label className="customer-brand-picker">
               <span className="sr-only">Choose brand</span>
-              <select value={brandKey} onChange={(event) => setBrandKey(event.target.value)}>
+              <select value={brandKey} onChange={(event) => { closePropertyPicker(); setBrandKey(event.target.value); }}>
                 {brands.map((item) => <option key={item.brandKey} value={item.brandKey}>{item.display_name}</option>)}
               </select>
             </label>
@@ -222,7 +285,7 @@ export default function CustomerPortal() {
         <section className="customer-portal-empty">
           <p className="customer-auth-kicker">WORKSPACE SETUP</p>
           <h1>{error ? "Workspace unavailable." : "Your account is ready."}</h1>
-          <p>{error || "Verify your work email, add Perceev’s Search Console account to your brand property, and finish setting up your workspace."}</p>
+          <p>{error || "Verify your email and finish setting up your workspace."}</p>
           {!error ? <Link href="/onboarding" className="btn btn--primary">Set up my workspace</Link> : null}
         </section>
       ) : (
@@ -236,7 +299,7 @@ export default function CustomerPortal() {
             <span className="customer-portal-status"><i /> UAT workspace</span>
           </div>
 
-          {error ? <p className="customer-portal-alert" role="alert">{error}</p> : null}
+          {error || gscCallbackError ? <p className="customer-portal-alert" role="alert">{error || gscCallbackError}</p> : null}
           {busy ? <p className="customer-portal-state">Loading your brand data…</p> : null}
 
           <section className="customer-portal-metrics" aria-label="Latest scan summary">
@@ -287,7 +350,7 @@ export default function CustomerPortal() {
             </section>
 
             <section className="customer-portal-panel">
-              <div className="customer-portal-panel-heading"><h2>Content Studio</h2><span>{data?.content_items?.length || 0}</span></div>
+              <div className="customer-portal-panel-heading"><h2>Content Studio</h2><Link href={`/portal/content?brand_key=${encodeURIComponent(brandKey)}`}>Create and review drafts</Link><span>{data?.content_items?.length || 0}</span></div>
               {data?.content_items?.length ? (
                 <div className="customer-portal-list">
                   {data.content_items.map((item) => (
@@ -306,6 +369,18 @@ export default function CustomerPortal() {
               <div><h2>Google Search Console</h2><p>Connect your own Google account to import search data for this workspace.</p></div>
               <span className={gsc?.connected ? "customer-gsc-badge is-connected" : "customer-gsc-badge"}>{gsc?.connected ? "Connected" : "Not connected"}</span>
             </div>
+            {gscAttempt && isOwner ? (
+              <form className="customer-gsc-form" onSubmit={selectGscProperty}>
+                <label htmlFor="gsc-property">Choose a Search Console property</label>
+                {propertyLoading ? <p role="status">Loading your Google properties…</p> : properties.length ? (
+                  <select id="gsc-property" value={propertyId} onChange={(event) => setPropertyId(event.target.value)}>
+                    {properties.map((property) => <option key={property.siteUrl} value={property.siteUrl}>{property.siteUrl}</option>)}
+                  </select>
+                ) : <p>No verified properties are available. Verify access in Google Search Console or reconnect another account.</p>}
+                <button className="btn btn--primary" type="submit" disabled={propertyLoading || propertySaving || !properties.length}>{propertySaving ? "Connecting…" : "Connect selected property"}</button>
+                <button className="btn btn--ghost" type="button" disabled={propertySaving} onClick={closePropertyPicker}>Cancel</button>
+              </form>
+            ) : null}
             {gsc?.connected ? (
               <div className="customer-gsc-status">
                 <p>Property: <strong>{gsc.connection?.site_url || "—"}</strong></p>
@@ -315,8 +390,13 @@ export default function CustomerPortal() {
                   <div className="customer-gsc-actions">
                     <button className="btn btn--secondary" type="button" onClick={startGscConnect}>Reconnect</button>
                     <button className="btn btn--ghost" type="button" onClick={async () => {
-                      await fetch(`/api/customer/gsc?brand_key=${encodeURIComponent(brandKey)}`, { method: "DELETE" });
-                      await loadBrandData();
+                      try {
+                        const response = await fetch(`/api/customer/gsc?brand_key=${encodeURIComponent(brandKey)}`, { method: "DELETE" });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error || "Could not disconnect.");
+                        closePropertyPicker();
+                        await loadBrandData();
+                      } catch (failure) { setError(failure.message); }
                     }}>Disconnect</button>
                   </div>
                 ) : null}

@@ -263,6 +263,7 @@ export async function insertScan(scanRecord, deps = {}) {
   // 001 (:12-24); nothing in it is optional-on-some-deployments.
   const scanRow = {
     ...baseRecord,
+    ...(scanRecord.brand_key ? { brand_key: scanRecord.brand_key } : {}),
     scoring_version: scanRecord.scoring_version,
     score_ci_low: scanRecord.score_ci_low,
     score_ci_high: scanRecord.score_ci_high,
@@ -832,7 +833,7 @@ export function isJobAlive(job, nowMs = Date.now()) {
   return Number.isFinite(heartbeatMs) && nowMs - heartbeatMs < HEARTBEAT_STALE_MS;
 }
 
-export async function createScanJob({ brand, url, industry, competitors }, deps = {}) {
+export async function createScanJob({ brand, url, industry, competitors, brandKey }, deps = {}) {
   const client = resolveClient(deps);
   const hasDb = !!client;
 
@@ -840,6 +841,7 @@ export async function createScanJob({ brand, url, industry, competitors }, deps 
   const now = new Date().toISOString();
   const job = {
     id: jobId,
+    ...(brandKey ? { brand_key: brandKey } : {}),
     brand,
     url: url || "",
     industry: industry || "",
@@ -871,10 +873,10 @@ export async function createScanJob({ brand, url, industry, competitors }, deps 
   // Resolve that here: a genuinely live holder is a 409; a dead one is
   // failed and the insert retried exactly once.
   if (error && isDuplicateScanViolation(error)) {
-    const { data: blocking, error: readErr } = await client
-      .from("scan_jobs")
-      .select("id, status, heartbeat_at")
-      .ilike("brand", String(brand || "").trim())
+    let blockingQuery = client.from("scan_jobs").select("id, status, heartbeat_at");
+    blockingQuery = brandKey ? blockingQuery.eq("brand_key", brandKey)
+      : blockingQuery.is("brand_key", null).ilike("brand", String(brand || "").trim());
+    const { data: blocking, error: readErr } = await blockingQuery
       .in("status", SCAN_JOB_RUNNING)
       .limit(20);
     // Never fail-soft here. If we cannot tell whether the holder is alive,

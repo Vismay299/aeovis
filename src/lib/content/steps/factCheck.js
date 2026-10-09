@@ -9,7 +9,7 @@ import { callStepLlm } from "./shared.js";
  */
 export async function runFactCheck(ctx, deps = {}) {
   const prompt = renderStepPrompt("fact_check", "shared", {
-    brand: ctx.brand,
+    brand: ctx.input?.brand_name || ctx.brand,
     draft: ctx.draft,
     research_pack: ctx.researchPack,
     knowledge: ctx.knowledge || "(no knowledge blocks)",

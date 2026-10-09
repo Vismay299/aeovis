@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { findCustomerBrand, getCustomerContext } from "@/lib/supabase/customer";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { listOAuthProperties, getValidAccessToken } from "@/lib/gsc/oauthFlow";
+import { listOAuthProperties } from "@/lib/gsc/oauthFlow";
+
+import { wakeGscWorker } from "@/lib/gsc/syncJobs";
 
 export const dynamic = "force-dynamic";
 
@@ -36,72 +38,34 @@ export async function POST(request) {
 
   const propertyId = String(body?.property_id || "").trim();
   if (!propertyId) return fail(400, "property_id is required.");
+  const attemptId = String(body?.attempt_id || "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(attemptId)) return fail(400, "A pending Google authorization is required.");
 
   const admin = getSupabaseAdmin();
   if (!admin) return fail(503, "Server is not configured.");
 
   try {
     // Verify the user still has access to this property through their own authorization.
-    const properties = await listOAuthProperties({ brandKey: brand.brandKey, admin });
+    const properties = await listOAuthProperties({ brandKey: brand.brandKey, admin, attemptId, userId: context.user.id });
     const chosen = properties.find((p) => p.siteUrl === propertyId);
-    if (!chosen) {
+    if (!chosen || chosen.permissionLevel === "siteUnverifiedUser") {
       return fail(422, "This property is not available through your Google authorization.");
     }
 
     // Verify the property matches the workspace website.
     const propHost = parseHostname(propertyId);
     const workspaceHost = brand.website_host?.toLowerCase().replace(/^www\./, "");
-    if (propHost && workspaceHost && propHost !== workspaceHost && !propHost.endsWith(`.${workspaceHost}`) && !workspaceHost.endsWith(`.${propHost}`)) {
+    if (!propHost || !workspaceHost || propHost !== workspaceHost) {
       return fail(422, `The selected property "${propertyId}" does not match your workspace website (${brand.website}).`);
     }
 
-    // Get the credential ID.
-    const { data: cred } = await admin
-      .from("gsc_oauth_credentials")
-      .select("id")
-      .eq("brand_key", brand.brandKey)
-      .eq("status", "active")
-      .single();
-
-    // Activate the connection. Increment generation if replacing a property.
-    const { data: existingConn } = await admin
-      .from("gsc_connections")
-      .select("connection_generation, site_url")
-      .eq("brand_key", brand.brandKey)
-      .single();
-
-    const isNewProperty = existingConn && existingConn.site_url !== propertyId;
-    const generation = isNewProperty ? (existingConn?.connection_generation || 0) + 1 : (existingConn?.connection_generation || 1);
-
-    const { error: connError } = await admin.from("gsc_connections").upsert({
-      brand: brand.brandKey,
-      brand_key: brand.brandKey,
-      site_url: propertyId,
-      enabled: true,
-      auth_mode: "oauth",
-      credential_id: cred?.id || null,
-      connection_generation: generation,
-      permission_level: chosen.permissionLevel || null,
-    }, { onConflict: "brand" });
-
-    if (connError) throw new Error(`Failed to activate connection: ${connError.message}`);
-
-    // Queue the initial sync job.
-    const { error: syncError } = await admin.from("gsc_sync_jobs").insert({
-      brand_key: brand.brandKey,
-      connection_generation: generation,
-      sync_type: existingConn ? "incremental" : "initial",
+    const { data: generation, error: activationError } = await admin.rpc("activate_customer_gsc", {
+      p_brand_key: brand.brandKey, p_user_id: context.user.id, p_attempt_id: attemptId,
+      p_site_url: propertyId, p_permission: chosen.permissionLevel || null,
     });
+    if (activationError) throw new Error("Could not activate the selected property.", { cause: activationError });
 
-    if (syncError) console.error("[gsc-oauth] sync job enqueue failed:", syncError);
-
-    // Reset the gsc_daily watermark for the new generation if property changed.
-    if (isNewProperty) {
-      await admin.from("gsc_connections")
-        .update({ last_ingested_through: null, last_status: null, last_error: null, last_attempt_at: null })
-        .eq("brand", brand.brandKey);
-    }
-
+    wakeGscWorker(brand.brandKey);
     return NextResponse.json({
       connected: true,
       property_id: propertyId,

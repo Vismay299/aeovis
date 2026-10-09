@@ -111,21 +111,26 @@ export async function POST(request) {
     }
 
     // User doesn't exist yet — create an invite.
-    const { error: inviteError } = await admin.from("customer_team_invites").insert({
+    const { data: invitation, error: inviteError } = await admin.from("customer_team_invites").insert({
       brand_key: brand.brandKey,
       email,
       role,
       invited_by: context.user.id,
-    });
+    }).select("id").single();
     if (inviteError) {
       if (inviteError.code === "23505") return fail(409, "An invite for this email is already pending.");
       throw inviteError;
     }
 
     // Send the Supabase invite email.
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || "";
-    const redirectTo = appUrl ? `${appUrl}/auth/callback?next=/onboarding` : undefined;
-    await admin.auth.admin.inviteUserByEmail(email, redirectTo ? { redirectTo } : undefined);
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || new URL(request.url).origin;
+    const redirectTo = `${appUrl}/auth/callback?next=/auth/accept`;
+    const { error: sendError } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo });
+    if (sendError) {
+      const { error: cleanupError } = await admin.from("customer_team_invites").delete().eq("id", invitation.id);
+      if (cleanupError) console.error("[customer] failed invite cleanup:", cleanupError);
+      throw new Error("Could not send the invitation email.");
+    }
 
     return NextResponse.json({ invited: true, email, role, user_exists: false }, { status: 201 });
   } catch (error) {

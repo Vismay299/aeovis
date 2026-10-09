@@ -20,11 +20,13 @@ export async function GET(request) {
   const brand = findCustomerBrand(context.brands, key);
   if (!brand) return fail(404, "That brand is not assigned to your account.");
 
+  if (brand.role !== "owner") return fail(403, "Only workspace owners can choose Google properties.");
+
   const admin = getSupabaseAdmin();
   if (!admin) return fail(503, "Server is not configured.");
 
   try {
-    const properties = await listOAuthProperties({ brandKey: brand.brandKey, admin });
+    const properties = await listOAuthProperties({ brandKey: brand.brandKey, admin, attemptId: searchParams.get("attempt_id"), userId: context.user.id });
     return NextResponse.json({
       brand_key: brand.brandKey,
       properties,

@@ -64,8 +64,12 @@ AS $$
 DECLARE
   v_existing_brand_key text;
   v_brand_key text;
-  v_aliases text[];
 BEGIN
+  -- Serialize retries for a user and scope the key to that user.
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_user_id::text, 0));
+  IF p_idempotency_key IS NOT NULL THEN
+    p_idempotency_key := p_user_id::text || ':' || p_idempotency_key;
+  END IF;
   -- Idempotency: if this key was already used, return the existing brand.
   IF p_idempotency_key IS NOT NULL THEN
     SELECT brand_key INTO v_existing_brand_key
@@ -82,15 +86,7 @@ BEGIN
   VALUES (p_brand_key, p_display_name, p_website, p_website_host, p_aliases, p_idempotency_key);
   v_brand_key := p_brand_key;
 
-  -- Register aliases.
-  v_aliases := array_remove(p_aliases, NULL);
-  IF array_length(v_aliases, 1) > 0 THEN
-    INSERT INTO public.customer_brand_aliases (alias, brand_key)
-    SELECT lower(btrim(a)), v_brand_key
-      FROM unnest(v_aliases) AS a
-     WHERE btrim(a) <> ''
-    ON CONFLICT (alias) DO NOTHING;
-  END IF;
+  -- Names and domains are metadata, never authorization aliases.
 
   -- Create owner membership.
   INSERT INTO public.customer_brand_memberships (user_id, brand_key, role)

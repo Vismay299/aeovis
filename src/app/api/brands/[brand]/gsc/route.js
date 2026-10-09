@@ -26,6 +26,7 @@ function brandFrom(params) {
 }
 
 export async function GET(_request, { params }, deps = {}) {
+  params = await params;
   const brand = brandFrom(params);
   if (!brand) return NextResponse.json({ error: "Brand is required." }, { status: 400 });
   try {
@@ -59,6 +60,7 @@ export function resolveAccessibleProperty(input, accessibleSites) {
 }
 
 export async function POST(request, { params }, deps = {}) {
+  params = await params;
   const brand = brandFrom(params);
   if (!brand) return NextResponse.json({ error: "Brand is required." }, { status: 400 });
 

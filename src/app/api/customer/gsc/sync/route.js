@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { findCustomerBrand, getCustomerContext } from "@/lib/supabase/customer";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
+import { wakeGscWorker } from "@/lib/gsc/syncJobs";
+
 export const dynamic = "force-dynamic";
 
 function fail(status, error) {
@@ -62,8 +64,10 @@ export async function POST(request) {
       .select("id, status, created_at")
       .single();
 
+    if (jobError?.code === "23505") return NextResponse.json({ queued: false, message: "A sync is already in progress." });
     if (jobError) throw new Error(`Failed to queue sync: ${jobError.message}`);
 
+    wakeGscWorker(job.id);
     return NextResponse.json({ queued: true, job }, { status: 201 });
   } catch (error) {
     console.error(`[gsc-sync] trigger failed for ${brand.brandKey}:`, error);

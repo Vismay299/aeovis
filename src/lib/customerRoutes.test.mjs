@@ -1,0 +1,102 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { register } from "node:module";
+
+register("./customerRoutes.test.hooks.mjs", import.meta.url);
+const listing = await import("../app/api/customer/scan/route.js");
+const report = await import("../app/api/customer/scan/report/[scan_id]/route.js");
+const gscData = await import("../app/api/customer/gsc/data/route.js");
+const contentListing = await import("../app/api/customer/content/route.js");
+const contentItem = await import("../app/api/customer/content/[id]/route.js");
+
+function fixture({ resultError = null } = {}) {
+  const scans = [
+    { id: "scan-a", brand: "%", url: "https://same.example", brand_key: "workspace-a" },
+    { id: "scan-b", brand: "%", url: "https://same.example", brand_key: "workspace-b" },
+    { id: "legacy", brand: "%", url: "https://same.example" },
+  ];
+  const tables = {
+    scans, scan_jobs: scans.map((scan) => ({ ...scan, status: "pending" })),
+    prompt_results: [{ id: "result-a", scan_id: "scan-a", query: "best beans", engine: "chatgpt", answer_text: "An answer", mentioned: true }],
+    gsc_connections: [{ brand_key: "workspace-a", connection_generation: 2, enabled: true }],
+    gsc_daily: [{ brand_key: "workspace-a", connection_generation: 2, date: "2099-01-01", query: "q", clicks: 2, impressions: 20, ctr: 0.1, position: 3 }],
+    content_items: [{ id: "draft-a", brand: "workspace-a", title: "Own draft", body_md: "Private draft" }, { id: "draft-b", brand: "workspace-b", title: "Other draft" }],
+    content_jobs: [{ id: "content-job-a", brand: "workspace-a" }, { id: "content-job-b", brand: "workspace-b" }],
+  };
+  const queries = [];
+  const admin = {
+    from(table) {
+      let rows = tables[table] || [];
+      let error;
+      const finish = (single = false) => ({ data: error ? null : single ? rows[0] || null : rows, error: error || null });
+      const query = {
+        select(columns) {
+          queries.push({ table, columns });
+          if (table === "prompt_results") {
+            error = resultError;
+            if (/prompt_text|visibility_score|brand_mentioned|citations/.test(columns)) error = { message: "unknown column" };
+          }
+          return this;
+        },
+        eq(column, value) { rows = rows.filter((row) => row[column] === value); return this; },
+        ilike() { throw new Error("Customer reads must not authorize by labels or patterns"); },
+        gte(column, value) { assert.match(value, /^\d{4}-\d{2}-\d{2}$/); rows = rows.filter((row) => row[column] >= value); return this; },
+        order() { return this; }, limit(value) { rows = rows.slice(0, value); return this; },
+        range(start, end) { rows = rows.slice(start, end + 1); return this; },
+        single: async () => finish(true), maybeSingle: async () => finish(true),
+        then(resolve, reject) { return Promise.resolve(finish()).then(resolve, reject); },
+      };
+      return query;
+    },
+  };
+  globalThis.customerRouteFixture = {
+    admin, context: { client: admin, user: { id: "owner-a" }, error: null, brands: [{ brandKey: "workspace-a", display_name: "%", website: "https://same.example", role: "owner" }] },
+  };
+  return { queries };
+}
+
+test("customer content listing, draft and export are isolated by workspace", async () => {
+  fixture();
+  const url = "https://app.example.test/api/customer/content?brand_key=workspace-a";
+  const listing = await contentListing.GET(new Request(url));
+  assert.equal(listing.status, 200);
+  const data = await listing.json();
+  assert.deepEqual(data.items.map((row) => row.id), ["draft-a"]);
+  assert.deepEqual(data.jobs.map((row) => row.id), ["content-job-a"]);
+  assert.equal((await contentItem.GET(new Request(url), { params: { id: "draft-b" } })).status, 404);
+  const exported = await contentItem.GET(new Request(url + "&export=markdown"), { params: { id: "draft-a" } });
+  assert.match(await exported.text(), /Private draft/);
+  assert.equal((await contentItem.PATCH(new Request(url, { method: "PATCH", headers: { origin: "https://attacker.example" }, body: "{}" }), { params: { id: "draft-a" } })).status, 403);
+});
+
+test("scan listing cannot expose matching names, websites, or wildcard labels from other workspaces", async () => {
+  fixture();
+  const response = await listing.GET(new Request("https://app.example.test/api/customer/scan"));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.scans.map((scan) => scan.id), ["scan-a"]);
+  assert.deepEqual(body.jobs.map((job) => job.id), ["scan-a"]);
+});
+
+test("scan report rejects another workspace and unassigned historical rows even when names match", async () => {
+  fixture();
+  for (const id of ["scan-b", "legacy"]) {
+    assert.equal((await report.GET(new Request("https://app.example.test/report"), { params: { scan_id: id } })).status, 404);
+  }
+});
+
+test("scan report reads the actual result columns and reports failed queries", async () => {
+  fixture();
+  const response = await report.GET(new Request("https://app.example.test/report"), { params: { scan_id: "scan-a" } });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).results[0].query, "best beans");
+  fixture({ resultError: { message: "DB unavailable" } });
+  assert.equal((await report.GET(new Request("https://app.example.test/report"), { params: { scan_id: "scan-a" } })).status, 500);
+});
+
+test("GSC data returns the active generation with a valid bounded date window", async () => {
+  fixture();
+  const response = await gscData.GET(new Request("https://app.example.test/api/customer/gsc/data?days=30"));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data[0].clicks, 2);
+});
