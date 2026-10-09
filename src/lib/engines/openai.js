@@ -11,6 +11,7 @@ import {
   resolveCost,
   resolveToolFee,
 } from "../llmPricing.js";
+import { isOpenRouterEngineConfigured, probeOpenRouterEngine } from "./openRouterProbe.js";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MAX_RETRIES = 2;
@@ -49,7 +50,7 @@ export function getOpenAiModel(env = process.env) {
 export const COST_STATE = Object.freeze({
   /** Priced from llmPricing, keyed on the model id actually sent. */
   MEASURED: "measured",
-  /** No OPENAI_API_KEY: nothing was called, so nothing was spent OR measured. */
+  /** No native OpenAI key or shared OpenRouter key: no request was made. */
   NOT_CONFIGURED: "not_configured",
   /** The request never succeeded, so there is no completion to price. */
   PROBE_FAILED: "probe_failed",
@@ -88,7 +89,7 @@ function unpricedOutcome(stats, state, detail, error = null) {
 }
 
 export function isChatGptConfigured() {
-  return !!process.env.OPENAI_API_KEY;
+  return !!process.env.OPENAI_API_KEY || isOpenRouterEngineConfigured("chatgpt");
 }
 
 function delay(ms) {
@@ -99,12 +100,30 @@ export async function probeChatGpt(query, options = {}) {
   const stats = options.stats;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    console.warn("[chatgpt] OPENAI_API_KEY not set — skipping");
+    if (isOpenRouterEngineConfigured("chatgpt")) {
+      const result = await probeOpenRouterEngine({
+        engine: "chatgpt",
+        query,
+        stats,
+      });
+      return {
+        text: result.text,
+        citations: result.citations,
+        references: result.references,
+        cost: result.cost,
+        cost_source: result.cost_source,
+        cost_state: result.cost_state,
+        cost_state_detail: result.cost_state_detail,
+        error: result.error,
+        error_kind: result.error_kind,
+      };
+    }
+    console.warn("[chatgpt] no OPENAI_API_KEY or shared OpenRouter LLM_API_KEY — skipping");
     return unpricedOutcome(
       stats,
       COST_STATE.NOT_CONFIGURED,
       "no request was made, so no cost exists to report",
-      "OPENAI_API_KEY not set"
+      "OPENAI_API_KEY or shared OpenRouter LLM_API_KEY not set"
     );
   }
 

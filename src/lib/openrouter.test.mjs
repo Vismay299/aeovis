@@ -750,3 +750,129 @@ test("retry - 408 and 425 are retried, which a private `429 || >=500` rule could
     assert.equal(out.reason, "exhausted_retries");
   }
 });
+
+// Sonar rejects json_object. Text mode plus JSON parsing/retries preserves
+// arbitrary object and array contracts without sending unsupported schemas.
+for (const [shape, result] of [
+  ["object", { ok: true, result: { nested: "caller data" } }],
+  ["array", [{ text: "best tile brands" }, { text: "best wall tiles" }]],
+]) {
+  test(`Sonar JSON mode uses a supported request format and preserves a caller ${shape}`, async () => {
+    const realFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = async (_url, init) => {
+      calls++;
+      const body = JSON.parse(init.body);
+      // The original unsupported json_object request must fail this fake.
+      if (body.response_format?.type !== "text") {
+        return Response.json({ error: { message: "invalid response format" } }, { status: 400 });
+      }
+      assert.match(body.messages.at(-1).content, /Return ONLY the requested valid JSON object or array/);
+      return Response.json({
+        choices: [{ message: { content: JSON.stringify(result) } }],
+        usage: { cost: 0.001, total_tokens: 20 },
+      });
+    };
+    try {
+      await withEnvs({ ...KEYED, LLM_MODEL: "perplexity/sonar" }, async () => {
+        const stats = {};
+        assert.deepEqual(await llmJson("Return requested JSON", { stats }, 0), result);
+        assert.equal(stats.cost, 0.001, "format compatibility must preserve metered spend");
+        assert.equal(calls, 1, "valid JSON output needs no retry");
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+}
+
+test("Sonar malformed JSON retries and returns null without manufacturing data", async () => {
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return Response.json({
+      choices: [{ message: { content: "not JSON" } }], usage: { cost: 0.001 },
+    });
+  };
+  try {
+    await withEnvs({ ...KEYED, LLM_MODEL: "perplexity/sonar" }, async () => {
+      assert.equal(await llmJson("Return JSON", {}, 1), null);
+      assert.equal(calls, 2);
+    });
+  } finally { globalThis.fetch = realFetch; }
+});
+
+for (const model of ["google/gemini-3.8-flash", "openai/gpt-6-luna"]) {
+  test(`${model} retains the existing JSON request and response format`, async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(init.body);
+      assert.deepEqual(body.response_format, { type: "json_object" });
+      assert.equal(body.messages.at(-1).content, "Return JSON");
+      return Response.json({ choices: [{ message: { content: '{"ok":true}' } }], usage: { cost: 0.001 } });
+    };
+    try {
+      await withEnvs({ ...KEYED, LLM_MODEL: model }, async () => {
+        assert.deepEqual(await llmJson("Return JSON", {}, 0), { ok: true });
+      });
+    } finally { globalThis.fetch = realFetch; }
+  });
+}
+
+test("Sonar text mode neither wraps the prompt nor unwraps the answer", async () => {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    assert.equal(body.response_format, undefined);
+    assert.equal(body.messages.at(-1).content, "hello");
+    return Response.json({ choices: [{ message: { content: '{"result":{"ok":true}}' } }], usage: { cost: 0.001 } });
+  };
+  try {
+    await withEnvs(KEYED, async () => {
+      const r = await generateContent("hello", { model: "perplexity/sonar" }, 0);
+      assert.equal(r.text, '{"result":{"ok":true}}');
+    });
+  } finally { globalThis.fetch = realFetch; }
+});
+
+// Regressions for content workers killed while awaiting streamed bodies/retries.
+test("completion timeout remains active after headers until the body finishes", { timeout: 1000 }, async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, { signal }) => ({
+    ok: true,
+    json: () => new Promise((_resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    }),
+  });
+  try {
+    await withEnvs(KEYED, async () => {
+      await assert.rejects(generateContent("test", { timeout: 20 }, 0),
+        (error) => isLlmUnavailable(error) && error.cause?.name === "AbortError");
+    });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("a shared deadline stops retries before a backoff can exceed the worker budget", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response("busy", { status: 503 }); };
+  try {
+    await withEnvs(KEYED, async () => {
+      await assert.rejects(generateContent("test", { deadlineMs: Date.now() + 100 }),
+        (error) => isLlmUnavailable(error) && error.reason === "deadline_exceeded");
+      assert.equal(calls, 1);
+    });
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("an expired deadline never starts another paid request", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error("request must not start"); };
+  try {
+    await withEnvs(KEYED, async () => {
+      await assert.rejects(generateContent("test", { deadlineMs: Date.now() - 1 }),
+        (error) => isLlmUnavailable(error) && error.reason === "deadline_exceeded");
+    });
+  } finally { globalThis.fetch = originalFetch; }
+});

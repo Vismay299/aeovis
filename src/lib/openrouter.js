@@ -50,9 +50,16 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   const isMimo = provider === "mimo";
   const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 
+  const isSonarJson = options.jsonMode && provider === "openrouter" &&
+    /^perplexity\/sonar(?:$|-|:)/.test(model);
   const messages = [];
   if (options.system) messages.push({ role: "system", content: options.system });
-  messages.push({ role: "user", content: prompt });
+  messages.push({
+    role: "user",
+    content: isSonarJson
+      ? `${prompt}\n\nReturn ONLY the requested valid JSON object or array. No prose or code fences.`
+      : prompt,
+  });
 
   const body = {
     model,
@@ -65,7 +72,11 @@ export async function generateContent(prompt, options = {}, retries = 2) {
     else body.max_tokens = maxTokens;
   }
   if (options.jsonMode) {
-    body.response_format = { type: "json_object" };
+    // Sonar rejects json_object and its strict schemas require a task-specific
+    // object shape. Our callers request both arbitrary objects and arrays, so
+    // use its supported text mode with an explicit JSON instruction. llmJson
+    // still parses/validates the response and retries malformed JSON.
+    body.response_format = { type: isSonarJson ? "text" : "json_object" };
   }
   // Paid models: ask OpenRouter to include the real cost in `usage` so the
   // content pipeline's per-item cost cap works off actual spend, not guesses.
@@ -85,9 +96,15 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   // "retried to exhaustion" are different operator stories and must not print
   // the same sentence (R3.6.7); the old message always claimed retries + 1.
   let attempts = 0;
+  let timeBudgetExceeded = false;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const timeoutMs = options.timeout || 30000;
+    const remainingMs = Number.isFinite(options.deadlineMs) ? options.deadlineMs - Date.now() : Infinity;
+    if (remainingMs <= 0) {
+      timeBudgetExceeded = true;
+      break;
+    }
+    const timeoutMs = Math.min(options.timeout || 30000, remainingMs);
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -104,8 +121,8 @@ export async function generateContent(prompt, options = {}, retries = 2) {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
-
+      // Keep the abort timer active while reading the response body too.
+      // Receiving headers does not mean a streamed completion has finished.
       if (!res.ok) {
         const errText = await res.text();
         // R3.6.7. What stood here was
@@ -132,6 +149,7 @@ export async function generateContent(prompt, options = {}, retries = 2) {
       }
 
       const data = await res.json();
+      clearTimeout(timeoutId);
       const text = data?.choices?.[0]?.message?.content || "";
       // Raw and uncoerced on purpose. `|| 0` here would destroy the only
       // evidence resolveCost has that the gateway reported nothing at all,
@@ -177,14 +195,29 @@ export async function generateContent(prompt, options = {}, retries = 2) {
       // by failureKindOf's deliberate default, so a recoverable measurement is
       // never discarded.
       if (!isRetryableFailure(e)) break;
+      if (Number.isFinite(options.deadlineMs) && Date.now() >= options.deadlineMs) {
+        timeBudgetExceeded = true;
+        break;
+      }
       if (attempt < retries) {
-        await wait(1500 * Math.pow(2, attempt));
+        const backoffMs = 1500 * Math.pow(2, attempt);
+        if (Number.isFinite(options.deadlineMs) && Date.now() + backoffMs >= options.deadlineMs) {
+          timeBudgetExceeded = true;
+          break;
+        }
+        await wait(backoffMs);
         continue;
       }
     }
   }
 
   const spent = `${attempts} attempt${attempts === 1 ? "" : "s"}`;
+  if (timeBudgetExceeded) {
+    throw new LlmUnavailableError(
+      `LLM step time budget exceeded after ${spent}; stopped before the worker execution limit`,
+      { reason: "deadline_exceeded", provider, model, cause: lastErr }
+    );
+  }
 
   // A permanent refusal is not an outage, and must not borrow an outage's
   // label. `reason` is the one field callers branch on (it is propagated

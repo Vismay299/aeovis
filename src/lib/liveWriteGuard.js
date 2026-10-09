@@ -147,6 +147,15 @@ export const NEVER_WRITABLE = Object.freeze([
   // R4.1.1 — a customer's own Search Console data.
   "gsc_connections",
   "gsc_daily",
+  // Customer identity and tenant membership: tests must never create or alter
+  // a real account's isolation boundary, even with an explicit opt-in.
+  "customer_brands",
+  "customer_brand_memberships",
+  "customer_brand_aliases",
+  "customer_team_invites",
+  "gsc_oauth_attempts",
+  "gsc_oauth_credentials",
+  "gsc_sync_jobs",
 ]);
 
 /**
@@ -155,6 +164,13 @@ export const NEVER_WRITABLE = Object.freeze([
  * from a mutating one, and "we could not tell" must not resolve to "allow".
  */
 export const WRITING_FUNCTIONS = Object.freeze({
+  create_customer_workspace: ["customer_brands", "customer_brand_memberships"],
+  activate_customer_gsc: ["gsc_oauth_credentials", "gsc_connections", "gsc_sync_jobs", "gsc_oauth_attempts"],
+  disconnect_customer_gsc: ["gsc_oauth_credentials", "gsc_connections", "gsc_sync_jobs", "gsc_oauth_attempts"],
+  write_gsc_generation: ["gsc_daily"],
+  accept_customer_team_invites: ["customer_brand_memberships", "customer_team_invites"],
+  claim_customer_gsc_job: ["gsc_sync_jobs"],
+  prune_expired_gsc_oauth_attempts: ["gsc_oauth_attempts"],
   open_scan_run: ["scan_runs"],
   heartbeat_scan_run: ["scan_runs"],
   close_scan_run: ["scan_runs"],

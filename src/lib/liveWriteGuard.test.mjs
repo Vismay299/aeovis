@@ -293,13 +293,10 @@ test("CUSTOMER TABLES CANNOT BE OPTED INTO — the allow list refuses them at in
 });
 
 test("EVERY NEVER_WRITABLE TABLE IS REFUSED — at install and at both transports, not just the four in the case above", async () => {
-  // R6.5.7. The case above names four tables; the list holds twenty. Measured
-  // before this case existed: deleting `content_lessons` from NEVER_WRITABLE
-  // left the whole suite 23/23 green, so sixteen of the twenty entries were
-  // load-bearing in production and asserted by nothing.
-  // 22 since R4.1.1 added gsc_connections and gsc_daily.
-  assert.equal(NEVER_WRITABLE.length, 22, "the roster changed size — see the classification walk below");
-  assert.equal(new Set(NEVER_WRITABLE).size, 22, "a duplicated entry hides a missing one");
+  // R6.5.7. The case above names four tables; this loop exercises the complete
+  // data roster, including the customer identity and tenant-isolation tables.
+  assert.equal(NEVER_WRITABLE.length, 29, "the roster changed size — see the classification walk below");
+  assert.equal(new Set(NEVER_WRITABLE).size, 29, "a duplicated entry hides a missing one");
   assert.ok(Object.isFrozen(NEVER_WRITABLE), "the roster must not be mutable at runtime");
   for (const t of WRITABLE_BY_OPT_IN) {
     assert.ok(!NEVER_WRITABLE.includes(t), `${t} cannot be both writable by opt-in and never writable`);

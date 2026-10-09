@@ -574,6 +574,7 @@ export async function readRunHistory(jobId, client) {
 }
 
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { job_id } = params;
     if (!job_id) {
@@ -610,6 +611,14 @@ export async function GET(request, { params }) {
         },
         { status: 200, headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } }
       );
+    }
+
+    if (job?.brand_key) {
+      const { getCustomerContext } = await import("@/lib/supabase/customer");
+      const context = await getCustomerContext();
+      if (context.error || !context.brands.some((brand) => brand.brandKey === job.brand_key)) {
+        return NextResponse.json({ detail: "Job not found." }, { status: 404 });
+      }
     }
 
     if (!job) {

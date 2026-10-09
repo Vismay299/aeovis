@@ -71,7 +71,7 @@ export async function runResearch(ctx, deps = {}) {
         : "(no scan answers available — compensate with scraped sources and general knowledge, and flag weakly-supported areas)";
 
   const prompt = renderStepPrompt("research", ctx.playbook, {
-    brand: ctx.brand,
+    brand: ctx.input?.brand_name || ctx.brand,
     brief: ctx.brief,
     agent: formatAgentOverlay(ctx.agent),
     lessons: formatLessons(ctx.lessons),

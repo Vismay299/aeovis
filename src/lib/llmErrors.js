@@ -24,7 +24,7 @@ export class LlmUnavailableError extends Error {
    * `.reason` is the one field callers branch on.
    *
    * @param {string} message human-readable cause
-   * @param {{reason?: "missing_key"|"auth_failed"|"permanent_error"|"exhausted_retries"|"unavailable", provider?: string, model?: string, cause?: unknown}} [meta]
+   * @param {{reason?: "missing_key"|"auth_failed"|"permanent_error"|"exhausted_retries"|"deadline_exceeded"|"unavailable", provider?: string, model?: string, cause?: unknown}} [meta]
    */
   constructor(message, meta = {}) {
     super(message);

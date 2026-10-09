@@ -133,12 +133,12 @@ async function renderDashboardShell(props) {
     );
   };
 
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory(requireShim, module, module.exports, patchedReact);
+  factory(requireShim, moduleRecord, moduleRecord.exports, patchedReact);
 
-  const Shell = module.exports.default;
+  const Shell = moduleRecord.exports.default;
   assert.equal(typeof Shell, "function", "DashboardShell.jsx must default-export a component");
 
   const realFetch = globalThis.fetch;
@@ -400,12 +400,12 @@ test("R2.7.13 ACCEPT — ScoreBand hero score renders em-dash without percent un
     filePath: SCORE_BAND_PATH,
   });
 
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory(() => anyNamedExport, module, module.exports, React);
+  factory(() => anyNamedExport, moduleRecord, moduleRecord.exports, React);
 
-  const ScoreBand = module.exports.ScoreBand;
+  const ScoreBand = moduleRecord.exports.ScoreBand;
   const nullScoreHtml = renderToStaticMarkup(
     React.createElement(ScoreBand, {
       score: null,
@@ -469,12 +469,12 @@ test("R2.7.13 ACCEPT — HomeDashboard safely renders unmeasured scores with em-
     }],
   ]);
 
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory((spec) => modules.get(spec) || anyNamedExport, module, module.exports, React);
+  factory((spec) => modules.get(spec) || anyNamedExport, moduleRecord, moduleRecord.exports, React);
 
-  const HomeDashboard = module.exports.HomeDashboard || module.exports.default;
+  const HomeDashboard = moduleRecord.exports.HomeDashboard || moduleRecord.exports.default;
 
   // Render HomeDashboard with initialData
   const html = renderToStaticMarkup(
@@ -534,12 +534,12 @@ test("R2.7.13 ACCEPT — OverviewView unmeasured KPIs render em-dash without per
     ["./OverviewAnalytics", { __esModule: true, OverviewAnalytics: nullComponent }],
   ]);
 
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory((spec) => modules.get(spec) || anyNamedExport, module, module.exports, React);
+  factory((spec) => modules.get(spec) || anyNamedExport, moduleRecord, moduleRecord.exports, React);
 
-  const OverviewView = module.exports.OverviewView || module.exports.default;
+  const OverviewView = moduleRecord.exports.OverviewView || moduleRecord.exports.default;
 
   const html = renderToStaticMarkup(
     React.createElement(OverviewView, {

@@ -174,9 +174,10 @@ Credentials are referenced here by **variable name only**, never by value:
 - `scripts/setup-supabase.mjs` connects with `DATABASE_URL`, or builds one from
   `SUPABASE_DB_PASSWORD` + `NEXT_PUBLIC_SUPABASE_URL` (optionally
   `SUPABASE_DB_HOST`, `SUPABASE_DB_USER`, `SUPABASE_DB_PORT`).
-- The app reads/writes over PostgREST with the anon key; the fleet uses the
-  service role key. Names only: `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`.
+- Before migration 023, server APIs used the anon key and the fleet used the
+  service role. After 023, trusted server APIs use `SUPABASE_SERVICE_ROLE_KEY`;
+  customer browser reads use the anon key with a Supabase Auth session and RLS.
+  Names only: `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
 
 **Never paste a connection string, a password or a key into this file, into a
 ticket, or into an agent transcript.** If one appears in your terminal, stop and
@@ -314,7 +315,14 @@ WITH expected(migration, kind, name) AS (
     -- delete sequentially scans the whole ledger every night. A PARTIAL here
     -- is the 009 shape all over again.
     ('022_scan_runs_retention', 'index',    'scan_runs_noop_retention_idx'),
-    ('022_scan_runs_retention', 'function', 'prune_noop_scan_runs')
+    ('022_scan_runs_retention', 'function', 'prune_noop_scan_runs'),
+    -- 023_customer_auth_and_tenant_rls.sql
+    ('023_customer_auth_and_tenant_rls', 'table',    'customer_brands'),
+    ('023_customer_auth_and_tenant_rls', 'table',    'customer_brand_memberships'),
+    ('023_customer_auth_and_tenant_rls', 'table',    'customer_brand_aliases'),
+    ('023_customer_auth_and_tenant_rls', 'index',    'customer_brands_website_host_idx'),
+    ('023_customer_auth_and_tenant_rls', 'function', 'customer_can_access_brand'),
+    ('023_customer_auth_and_tenant_rls', 'function', 'customer_can_access_scan')
 ),
 checked AS (
   SELECT e.migration, e.kind, e.name,
@@ -420,10 +428,11 @@ query above to see what is true. When they disagree, the catalog wins.
 
 ## Row-level security and policies — one query for the house rule
 
-Every table since 001 gets `ENABLE ROW LEVEL SECURITY` plus one `Allow anon all
-on <table>` policy. The app holds only the anon key, so **a table with RLS on
-and no policy is invisible to the app** — reads return empty and writes fail,
-which is a silent-wrong-number shape, not a crash.
+Migrations 001–022 enabled row-level security alongside permissive anon policies
+for the original server-side app. Migration 023 removes those grants and
+policies, then installs authenticated, membership-scoped customer reads. After
+023, trusted server writes use the service role; the browser's anon key alone
+cannot read customer data.
 
 ```sql
 SELECT c.relname                                   AS table_name,
@@ -1203,9 +1212,9 @@ SELECT p.proname,
  WHERE n.nspname = 'public' AND p.proname = 'prune_noop_scan_runs';
 ```
 
-`security_definer` must be `false`: the Next app calls this with the anon key
-and the function must never hold more authority over `scan_runs` than its
-caller.
+`security_definer` must be `false`: the Next app calls this through its
+server-only service-role client after migration 023, and the function must
+remain an invoker so it does not gain table-owner authority.
 
 **Two properties an operator should be able to re-derive without reading JS.**
 Both live in the SQL, not in a call site:
@@ -1231,6 +1240,43 @@ in `src/lib/operatorPerimeter.js` and authenticates with `CRON_SECRET` only.
 
 ---
 
+## `023_customer_auth_and_tenant_rls.sql`
+
+**NOT YET APPLIED to production.** This migration enables customer-authenticated
+reads through Supabase Auth and row-level security, removes direct anonymous
+table access, and makes production server APIs depend on the server-only
+`SUPABASE_SERVICE_ROLE_KEY`. Set that variable in the deployment environment
+before applying the migration and deploying the matching application code.
+Never put the service-role key in a browser variable or paste it into a chat.
+
+The catalog query above verifies the customer and alias tables and both access
+predicate functions. Check the RLS policies and the anonymous grants without
+reading customer data:
+
+```sql
+SELECT tablename, policyname, roles, cmd
+  FROM pg_policies
+ WHERE schemaname = 'public'
+   AND policyname LIKE 'customer_%'
+ ORDER BY tablename, policyname;
+
+SELECT has_table_privilege('anon', 'public.scans', 'SELECT') AS anon_can_read_scans,
+       has_table_privilege('authenticated', 'public.scans', 'SELECT') AS customers_have_scan_grant;
+```
+
+After application, expect `anon_can_read_scans = false` and
+`customers_have_scan_grant = true`; the second result is still filtered by the
+`customer_read_own_brand` policy. New self-service accounts can create a new
+workspace only after verifying their email and granting the configured GSC
+service account access to a matching property. A domain already provisioned in
+`customer_brands` remains operator-assigned, preventing a second tenant from
+claiming its existing scan history. Self-service setup also requires the
+verified work email's domain to match the claimed website domain. Existing
+customers are provisioned through the operator invite endpoint.
+
+
+---
+
 ## Function signatures — the check the runner cannot make
 
 `scripts/setup-supabase.mjs:382-388` checks functions by **name only**. Two
@@ -1252,17 +1298,18 @@ SELECT p.proname,
                      'renew_probe_lease','complete_probe_tasks',
                      'release_probe_tasks','open_scan_run',
                      'heartbeat_scan_run','close_scan_run',
-                     'claim_scan_job_attempt','prune_noop_scan_runs')
+                     'claim_scan_job_attempt','prune_noop_scan_runs',
+                     'customer_can_access_brand','customer_can_access_scan')
  ORDER BY p.proname, identity_args;
 ```
 
-**Expect exactly ten rows, one per name** (nine before `022_scan_runs_retention`
-is applied — `prune_noop_scan_runs` is that file's, and its absence is how you
-tell 022 has not run). Eleven or more means an overload. `security_definer` must
-be `false` for all of them — `claim_scan_job_attempt` is `SECURITY INVOKER`
-deliberately (`012_scan_job_attempts.sql:120-123`), and `prune_noop_scan_runs`
-for the same reason, so that neither function ever has more authority than the
-anon key the app calls it with.
+Expect one row per function that has been applied. Before `022`, the list has
+nine rows; `022` adds `prune_noop_scan_runs`; `023` adds the two customer access
+predicates. `customer_can_access_brand` and `customer_can_access_scan` must be
+`SECURITY DEFINER` because their RLS policies consult membership rows without
+recursing through membership RLS. The other functions in this query must remain
+`SECURITY INVOKER`; the customer predicates are separately revoked from
+`PUBLIC` and `anon` by migration 023.
 
 To compare a body against the file, hash it and diff against the migration by
 eye — there is no automated body check anywhere in this repo:
@@ -1315,3 +1362,41 @@ than none:
   guards that stop `EXPECTED_OBJECTS` going stale again (finding C10).
 - `docs/plans/2026-08-29-rebuild-roadmap.md:13-25` — the eleven standing rules,
   of which rule 4 is the one this file serves.
+
+
+## Customer UAT repairs: migrations 024–026
+
+Apply `024_customer_workspace_ownership.sql`, `025_gsc_customer_oauth.sql`, and
+`026_customer_uat_repairs.sql` in order after 023, before deploying the repaired
+customer routes. The migration runner now verifies their tables and functions.
+Configure the server-only service-role key before applying the customer RLS
+migrations. No production migrations were applied while implementing this fix.
+
+Migration 026 adds nullable `brand_key` ownership to scans and scan jobs. Names,
+aliases, and URLs do not grant access. Historical rows remain unassigned; an
+operator must confirm ownership and assign a workspace explicitly. Legacy GSC
+connections and daily rows also remain unassigned, so 025 can run even when
+operator brand labels have no customer workspace. Independent workspaces may
+use the same website and display name.
+
+GSC activation moves a pending encrypted grant into active credentials only
+after property validation. Activation, generation invalidation, credential
+removal, and job enqueue/cancellation are transactional. Daily data uniqueness
+includes connection generation; batch writes lock and validate the active
+connection. Expired OAuth attempts, including abandoned pending grants, are
+pruned by the daily sync worker. Existing sync leases can be reclaimed after
+expiry. Team invites are redeemed by authenticated users with a matching
+verified email through `accept_customer_team_invites()`.
+
+The previously unapplied 023–025 files were corrected for fresh installations;
+026 also repairs installations that already applied the original files. Review
+any checksum-drift notices before recording an updated migration ledger. The
+026 repair does not infer ownership for historical data.
+
+The customer sync worker commits one bounded 5,000-row page per lease. Migration
+026 stores the date window and row offset and advances the coverage watermark
+only after the final page. Daily scheduling and immediate worker wakeups use
+the durable queue. Customer content review commits feedback, item status, and
+job status together. `npm run check:uat` checks production variable registration
+and the live migration ledger without printing credentials; sensitive variable
+values still require runtime verification after deployment.

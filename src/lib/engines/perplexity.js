@@ -14,6 +14,7 @@ import {
   MODEL_PRICES_ENV,
   TOOL_FEES_ENV,
 } from "../llmPricing.js";
+import { isOpenRouterEngineConfigured, probeOpenRouterEngine } from "./openRouterProbe.js";
 
 const PERPLEXITY_CHAT_URL = "https://api.perplexity.ai/chat/completions";
 const PERPLEXITY_SEARCH_URL = "https://api.perplexity.ai/search";
@@ -60,7 +61,7 @@ export function getPerplexityModel(env = process.env) {
 export const COST_STATE = Object.freeze({
   /** Priced from llmPricing, keyed on the model id actually sent. */
   MEASURED: "measured",
-  /** No PERPLEXITY_API_KEY: nothing was called, so nothing was spent OR measured. */
+  /** No native Perplexity key or shared OpenRouter key: no request was made. */
   NOT_CONFIGURED: "not_configured",
   /** The leg never succeeded, so there is no call to price. */
   PROBE_FAILED: "probe_failed",
@@ -183,8 +184,10 @@ export const CITATIONS_STATE_REASON = Object.freeze({
    * until a human fixes the key, not a vendor blip that may clear on its own.
    */
   SEARCH_LEG_REJECTED: "search_leg_rejected",
-  /** No PERPLEXITY_API_KEY, so neither leg was attempted at all. */
+  /** No native Perplexity key or shared OpenRouter key, so no request was made. */
   NOT_CONFIGURED: "perplexity_not_configured",
+  /** Shared OpenRouter call succeeded, but the model did not use web search or return sources. */
+  SEARCH_NOT_USED: "web_search_not_used",
 });
 
 const MAX_DETAIL_CHARS = 200;
@@ -216,7 +219,7 @@ export function hasUnverifiedCitations(row) {
 }
 
 export function isPerplexityConfigured() {
-  return !!process.env.PERPLEXITY_API_KEY;
+  return !!process.env.PERPLEXITY_API_KEY || isOpenRouterEngineConfigured("perplexity");
 }
 
 function detailOf(value) {
@@ -559,7 +562,38 @@ function combineCostStates(answer, search) {
 export async function probePerplexity(query, options = {}) {
   const apiKey = process.env.PERPLEXITY_API_KEY;
   if (!apiKey) {
-    console.warn("[perplexity] PERPLEXITY_API_KEY not set — skipping");
+    if (isOpenRouterEngineConfigured("perplexity")) {
+      const result = await probeOpenRouterEngine({
+        engine: "perplexity",
+        query,
+        stats: options.stats,
+      });
+      const searchObserved = result.search_requests > 0 || result.references.length > 0;
+      const citationsState = searchObserved
+        ? {
+            citations_state: CITATIONS_STATE.VERIFIED,
+            citations_state_reason: null,
+            citations_state_detail: null,
+          }
+        : {
+            citations_state: CITATIONS_STATE.UNVERIFIED,
+            citations_state_reason: CITATIONS_STATE_REASON.SEARCH_NOT_USED,
+            citations_state_detail: "OpenRouter returned no web-search activity or citation references",
+          };
+      return {
+        text: result.text,
+        citations: result.citations,
+        references: result.references,
+        cost: result.cost,
+        cost_source: result.cost_source,
+        cost_state: result.cost_state,
+        cost_state_detail: result.cost_state_detail,
+        error: result.error,
+        error_kind: result.error_kind,
+        ...citationsState,
+      };
+    }
+    console.warn("[perplexity] no PERPLEXITY_API_KEY or shared OpenRouter LLM_API_KEY — skipping");
     noteUnmeasuredCost(options.stats);
     return {
       text: "",
@@ -570,8 +604,8 @@ export async function probePerplexity(query, options = {}) {
       cost: null,
       cost_source: null,
       cost_state: COST_STATE.NOT_CONFIGURED,
-      cost_state_detail: "PERPLEXITY_API_KEY is not set, so no request was made",
-      error: "PERPLEXITY_API_KEY not set",
+      cost_state_detail: "No PERPLEXITY_API_KEY or shared OpenRouter LLM_API_KEY is set, so no request was made",
+      error: "PERPLEXITY_API_KEY or shared OpenRouter LLM_API_KEY not set",
       // A missing key is a config fault, not a blip: nothing will change until
       // a human sets it.
       error_kind: FAILURE_KIND.PERMANENT,

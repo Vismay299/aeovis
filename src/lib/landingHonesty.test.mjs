@@ -1385,8 +1385,8 @@ test("GUARD — engineDriftWarning runs in production, not only here", async () 
 
   // The same check closes the isConfigured() gap deployedEngines() cannot see:
   // an advertised engine with no key is an engine every scan skips.
-  assert.match(script, /OPENAI_API_KEY/, "the advertised-vs-funded check must know chatgpt's key");
-  assert.match(script, /PERPLEXITY_API_KEY/, "and perplexity's");
+  assert.match(script, /LLM_API_KEY/, "the advertised-vs-funded check must know the shared model gateway key");
+  assert.match(script, /isOpenRouterEngineConfigured/, "and validate each engine against the configured OpenRouter model");
 
   // And the operator-facing comment must name the thing that actually runs.
   const envExample = await read(".env.example");

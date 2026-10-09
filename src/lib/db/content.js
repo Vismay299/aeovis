@@ -411,10 +411,20 @@ export async function listResumableContentJobs(limit = 5, deps = {}) {
       { code: "db_not_configured" }
     );
   }
+  const nowMs = deps.nowMs ?? Date.now();
+  const staleIso = new Date(nowMs - CONTENT_HEARTBEAT_STALE_MS).toISOString();
+  const nowIso = new Date(nowMs).toISOString();
+  // Filter BEFORE limiting. Healthy, leased or already-delivered rows used
+  // to fill the first page and hide genuinely stalled work behind it.
   const { data, error } = await client
     .from("content_jobs")
     .select("*")
     .in("status", CONTENT_JOB_RUNNING)
+    .is("item_id", null)
+    .or(`heartbeat_at.is.null,heartbeat_at.lte.${staleIso}`)
+    .or(`lease_owner.is.null,lease_expires_at.is.null,lease_expires_at.lt.${nowIso}`)
+    .order("heartbeat_at", { ascending: true, nullsFirst: true })
+    .order("id", { ascending: true })
     .limit(Math.max(limit * 4, 20));
   if (error) {
     throw new ContentReadError(
@@ -422,7 +432,7 @@ export async function listResumableContentJobs(limit = 5, deps = {}) {
       { cause: error, code: "db_read_failed" }
     );
   }
-  return (data || []).filter((job) => shouldRescueContentJob(job)).slice(0, limit);
+  return (data || []).filter((job) => shouldRescueContentJob(job, nowMs)).slice(0, limit);
 }
 
 // ---------------------------------------------------------------------------

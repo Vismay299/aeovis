@@ -1,29 +1,26 @@
 /**
  * The operator perimeter (R0.1.3, finding S17).
  *
- * Today every /api route is anonymous. POST /api/content starts a paid content
- * pipeline; /api/agents, /api/knowledge, /api/lessons and /api/brand-briefs
- * read and write another business's strategy documents; /api/brands/* returns
- * a customer's measurements. None of it asks who is calling.
+ * Operator APIs use a shared token, customer APIs use Supabase Auth plus a
+ * brand-membership check, and only the deliberately public free-scan flow is
+ * anonymous. Customer route handlers are self-gated; database RLS is the final
+ * tenant boundary.
  *
- * This is a shared-token choke point, not authentication. It is the seam real
- * per-user auth occupies in Phase Z, and it is deliberately shaped so that
- * swapping the token check for a session check touches one function.
+ * The operator token remains an internal control-plane credential. Customer
+ * routes use per-user Supabase Auth and are explicitly listed as self-gated.
  *
  * The rule is an ALLOWLIST, because a denylist silently fails open for every
  * route added after it. Only the anonymous free-scan flow is public:
  *
  *   POST /api/scan                 start a scan
  *   GET  /api/scan/<id>/status     poll it
- *   GET  /api/scans/...            read the result it produced
+ *   GET  /api/scans/by-id/<id>     read the result it produced
  *   GET  /api/industries           the industry picker on the scan form
  *   GET  /api/health               booleans and timestamps only, no customer data
  *
- * Two routes are EXEMPT rather than public: the cron workers carry their own
- * secret gate (src/lib/cronAuth.js) and are called by Vercel cron and by the
- * worker's own self-continue fetch, neither of which holds an operator token.
- * Gating them here would 401 the self-continue call and stall every scan that
- * exceeds one chunk — so they pass through to the gate they already have.
+ * Cron routes are exempt because they carry their own CRON_SECRET gate. The
+ * customer API namespace is also exempt from the operator token, but each
+ * handler must verify the user session and membership before touching data.
  *
  * What this closes to anonymous callers, on purpose: the whole Content OS UI,
  * the agent control plane, knowledge/lessons, and brand analytics. Those are
@@ -44,8 +41,9 @@ const PUBLIC_EXACT = [
 const PUBLIC_PATTERNS = [
   // Poll a scan job you just started.
   { method: "GET", re: /^\/api\/scan\/[^/]+\/status\/?$/ },
-  // Read scan results: /api/scans/<brand>, /<brand>/latest, /by-id/<scanId>.
-  { method: "GET", re: /^\/api\/scans\/[^?]*$/ },
+  // The anonymous scan completion path knows its opaque row UUID. Brand-keyed
+  // scan history and latest-scan reads are operator/customer-only.
+  { method: "GET", re: /^\/api\/scans\/by-id\/[^/]+\/?$/ },
   /**
    * R1.5.3 — "View evidence" in the dashboard: redirect to a signed URL for the
    * screenshot stored against one result of this scan.
@@ -71,10 +69,16 @@ const PUBLIC_PATTERNS = [
  * must already refuse unauthenticated callers by itself.
  */
 const SELF_GATED = [
+  // Customer endpoints authenticate the Supabase session and resolve brand
+  // membership in their route helpers. They must not inherit the shared
+  // operator token, but every handler in this namespace remains self-gated.
+  /^\/api\/customer(?:\/.*)?\/?$/,
   /^\/api\/scan\/worker\/?$/,
   /^\/api\/content\/worker\/?$/,
   // R4.1.1 — refuses without CRON_SECRET via src/lib/cronAuth.js, same as the two above.
   /^\/api\/gsc\/worker\/?$/,
+  // GSC sync worker for OAuth connections — same cronAuth gate.
+  /^\/api\/gsc\/sync-worker\/?$/,
   // R1.5.1 — same cronAuth gate; deletes expired probe evidence daily.
   /^\/api\/evidence\/retention\/?$/,
   // R1.2.23 — same cronAuth gate; deletes scan_runs' idle `noop` rows daily.

@@ -26,6 +26,13 @@ const warnedDevOpen = { value: false };
 export function middleware(request) {
   const { pathname, searchParams } = new URL(request.url);
 
+  if (pathname.startsWith("/api/customer/") && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+    const origin = request.headers.get("origin");
+    if ((origin && origin !== new URL(request.url).origin) || request.headers.get("sec-fetch-site") === "cross-site") {
+      return NextResponse.json({ error: "Cross-site customer requests are not allowed." }, { status: 403 });
+    }
+  }
+
   // Resolved ONCE and reused by the decision and by the disclosure below, so
   // the NODE_ENV the warning names is provably the one that opened the gate.
   const runtimeNodeEnv = resolveNodeEnv(process.env);

@@ -732,11 +732,11 @@ async function loadJsx(filePath, requireShim = () => ({})) {
     jsxFragmentPragma: "React.Fragment",
     filePath,
   });
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory(requireShim, module, module.exports, React);
-  return module.exports;
+  factory(requireShim, moduleRecord, moduleRecord.exports, React);
+  return moduleRecord.exports;
 }
 
 test("R2.7.11 ACCEPT — driving the page-level builder with no engines passes absent and renders not-measured, never a digit or fabricated zero", async () => {

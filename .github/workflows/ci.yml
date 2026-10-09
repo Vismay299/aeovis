@@ -13,6 +13,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  customer-database:
+    name: customer database isolation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: TEST_DATABASE_PASSWORD
+          POSTGRES_DB: customer_uat
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: migrations and actual tenant RLS
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: TEST_DATABASE_PASSWORD
+          PGDATABASE: customer_uat
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f tests/supabase-bootstrap.sql
+          for file in supabase/migrations/*.sql; do
+            psql -X -v ON_ERROR_STOP=1 -f "$file"
+          done
+          psql -X -v ON_ERROR_STOP=1 -f tests/customer-uat.sql
   test:
     name: tests
     runs-on: ubuntu-latest

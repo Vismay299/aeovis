@@ -59,7 +59,7 @@ function plain(detail, status) {
 }
 
 export async function GET(request, context = {}, deps = {}) {
-  const params = context?.params || {};
+  const params = (await context?.params) || {};
   const jobId = params.job_id;
   if (!jobId) return plain("Job ID is required.", 400);
 
@@ -79,6 +79,11 @@ export async function GET(request, context = {}, deps = {}) {
     );
   }
   if (!job) return plain("Job not found.", 404);
+  if (job.brand_key) {
+    const { getCustomerContext } = await import("@/lib/supabase/customer");
+    const context = await getCustomerContext();
+    if (context.error || !context.brands.some((brand) => brand.brandKey === job.brand_key)) return plain("Job not found.", 404);
+  }
 
   const outcome = await (deps.signEvidenceForResult || signEvidenceForResult)(
     { jobId, resultId, kind },

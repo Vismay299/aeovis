@@ -39,8 +39,8 @@ function scanStoreUnavailable(reason) {
     `[scan] REFUSED 503: ${reason} A scan job could only have been created in the ` +
       "in-memory dev store (global.memoryJobs), which is per-process and invisible to every " +
       "worker, status poll and scans row. Refusing rather than returning 201 for a scan that " +
-      "was never persisted; no vendor calls were made. Check that NEXT_PUBLIC_SUPABASE_URL and " +
-      "NEXT_PUBLIC_SUPABASE_ANON_KEY are set on this deployment."
+      "was never persisted; no vendor calls were made. Check that NEXT_PUBLIC_SUPABASE_URL, " +
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY are set on this deployment."
   );
   return NextResponse.json(
     {

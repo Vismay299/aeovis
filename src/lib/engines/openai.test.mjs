@@ -4,10 +4,17 @@ import { probeChatGpt, isChatGptConfigured, COST_STATE, getOpenAiModel } from ".
 import { MODEL_PRICES_ENV, TOOL_FEES_ENV, resetUnpricedAlerts } from "../llmPricing.js";
 
 test("isChatGptConfigured returns false when no key", () => {
-  const old = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  assert.equal(isChatGptConfigured(), false);
-  if (old) process.env.OPENAI_API_KEY = old;
+  const names = ["OPENAI_API_KEY", "LLM_API_KEY", "OPENROUTER_API_KEY", "LLM_BASE_URL", "OPENROUTER_BASE_URL"];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  for (const name of names) delete process.env[name];
+  try {
+    assert.equal(isChatGptConfigured(), false);
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
 });
 
 test("isChatGptConfigured returns true when key is set", () => {
@@ -18,13 +25,60 @@ test("isChatGptConfigured returns true when key is set", () => {
 });
 
 test("probeChatGpt returns error when no API key", async () => {
-  const old = process.env.OPENAI_API_KEY;
+  const names = ["OPENAI_API_KEY", "LLM_API_KEY", "OPENROUTER_API_KEY", "LLM_BASE_URL", "OPENROUTER_BASE_URL"];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  for (const name of names) delete process.env[name];
+  try {
+    const result = await probeChatGpt("best crm for small business");
+    assert.equal(result.text, "");
+    assert.equal(result.citations.length, 0);
+    assert.ok(result.error);
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
+});
+
+test("ChatGPT adapter uses the shared OpenRouter key and configured model", async () => {
+  const originalFetch = globalThis.fetch;
+  const names = ["OPENAI_API_KEY", "LLM_API_KEY", "OPENROUTER_API_KEY", "LLM_BASE_URL", "OPENROUTER_BASE_URL", "OPENROUTER_OPENAI_MODEL"];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   delete process.env.OPENAI_API_KEY;
-  const result = await probeChatGpt("best crm for small business");
-  assert.equal(result.text, "");
-  assert.equal(result.citations.length, 0);
-  assert.ok(result.error);
-  if (old) process.env.OPENAI_API_KEY = old;
+  delete process.env.OPENROUTER_API_KEY;
+  process.env.LLM_API_KEY = "shared-openrouter-test-key";
+  process.env.LLM_BASE_URL = "https://openrouter.ai/api/v1";
+  process.env.OPENROUTER_OPENAI_MODEL = "openai/gpt-6-luna";
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    assert.equal(init.headers.Authorization, "Bearer shared-openrouter-test-key");
+    const body = JSON.parse(init.body);
+    assert.equal(body.model, "openai/gpt-6-luna");
+    assert.equal(body.tools[0].type, "openrouter:web_search");
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "A grounded answer.", annotations: [
+          { type: "url_citation", url: "https://example.com/source", title: "Example source" },
+        ] } }],
+        usage: { cost: 0.0001, prompt_tokens: 12, completion_tokens: 5 },
+      }),
+    };
+  };
+  try {
+    const result = await probeChatGpt("question");
+    assert.equal(result.text, "A grounded answer.");
+    assert.deepEqual(result.citations, ["https://example.com/source"]);
+    assert.equal(result.cost, 0.0001);
+    assert.equal(isChatGptConfigured(), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
 });
 
 test("probeChatGpt parses response with citations", async () => {
@@ -387,7 +441,7 @@ test("R3.6.6 — an unconfigured key is 'nothing ran', not a $0 probe", async ()
     const result = await probeChatGpt("q", { stats });
     assert.equal(result.cost, null);
     assert.equal(result.cost_state, COST_STATE.NOT_CONFIGURED);
-    assert.equal(result.error, "OPENAI_API_KEY not set");
+    assert.equal(result.error, "OPENAI_API_KEY or shared OpenRouter LLM_API_KEY not set");
     assert.equal(stats.cost, 0);
     assert.equal(stats.cost_unmeasured_calls, 1);
   });

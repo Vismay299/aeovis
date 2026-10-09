@@ -12,6 +12,7 @@ export const revalidate = 0;
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, no-cache, must-revalidate" };
 
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { scanId } = params || {};
     if (!scanId || !isValidScanId(scanId)) {
@@ -36,6 +37,13 @@ export async function GET(request, { params }) {
       return NextResponse.json({ detail: "Scan not found." }, { status: 404 });
     }
 
+    if (scan.brand_key) {
+      const { getCustomerContext } = await import("@/lib/supabase/customer");
+      const context = await getCustomerContext();
+      if (context.error || !context.brands.some((brand) => brand.brandKey === scan.brand_key)) {
+        return NextResponse.json({ detail: "Scan not found." }, { status: 404 });
+      }
+    }
     return NextResponse.json(
       { scan: enrichScanForClient(scan) },
       { headers: NO_STORE_HEADERS }

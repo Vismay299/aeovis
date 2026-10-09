@@ -44,6 +44,7 @@ function parseLevelParam(raw) {
  *   (message never echoes the raw DB error to the client).
  */
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { brand } = params || {};
     if (!brand || !decodeURIComponent(brand).trim()) {

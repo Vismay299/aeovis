@@ -72,11 +72,11 @@ async function loadJsx(filePath, requireShim, ReactImpl) {
     jsxFragmentPragma: "React.Fragment",
     filePath,
   });
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
-  factory(requireShim, module, module.exports, ReactImpl);
-  return module.exports;
+  factory(requireShim, moduleRecord, moduleRecord.exports, ReactImpl);
+  return moduleRecord.exports;
 }
 
 async function loadScoreBand() {

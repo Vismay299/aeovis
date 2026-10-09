@@ -101,6 +101,7 @@ const BLOCKED_DOMAIN_MESSAGE =
  *        passes two arguments; this is the same seam scrapeForSummary() uses.
  */
 export async function GET(request, { params }, deps = {}) {
+  params = await params;
   try {
     const { brandKey, error: brandError } = requireBrandKey(params);
     if (brandError) {

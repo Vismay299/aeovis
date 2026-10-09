@@ -50,18 +50,18 @@ async function loadScoreBand() {
     jsxFragmentPragma: "React.Fragment",
     filePath: SCORE_BAND_PATH,
   });
-  const module = { exports: {} };
+  const moduleRecord = { exports: {} };
   // eslint-disable-next-line no-new-func
   const factory = new Function("require", "module", "exports", "React", code);
   factory(
     (specifier) => {
       throw new Error(`ScoreBand.jsx unexpectedly imports "${specifier}"`);
     },
-    module,
-    module.exports,
+    moduleRecord,
+    moduleRecord.exports,
     React
   );
-  return module.exports;
+  return moduleRecord.exports;
 }
 
 const textOf = (html) => html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();

@@ -13,10 +13,17 @@ import {
 } from "./perplexity.js";
 
 test("isPerplexityConfigured returns false when no key", () => {
-  const old = process.env.PERPLEXITY_API_KEY;
-  delete process.env.PERPLEXITY_API_KEY;
-  assert.equal(isPerplexityConfigured(), false);
-  if (old) process.env.PERPLEXITY_API_KEY = old;
+  const names = ["PERPLEXITY_API_KEY", "LLM_API_KEY", "OPENROUTER_API_KEY", "LLM_BASE_URL", "OPENROUTER_BASE_URL"];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  for (const name of names) delete process.env[name];
+  try {
+    assert.equal(isPerplexityConfigured(), false);
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
 });
 
 test("isPerplexityConfigured returns true when key is set", () => {
@@ -27,16 +34,98 @@ test("isPerplexityConfigured returns true when key is set", () => {
 });
 
 test("probePerplexity returns error when no API key", async () => {
-  const old = process.env.PERPLEXITY_API_KEY;
+  const names = ["PERPLEXITY_API_KEY", "LLM_API_KEY", "OPENROUTER_API_KEY", "LLM_BASE_URL", "OPENROUTER_BASE_URL"];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  for (const name of names) delete process.env[name];
+  try {
+    const result = await probePerplexity("best crm for small business");
+    assert.equal(result.text, "");
+    assert.equal(result.citations.length, 0);
+    assert.ok(result.error);
+    // Nothing was asked, so the empty list is not a finding of "no citations".
+    assert.equal(result.citations_state, CITATIONS_STATE.UNVERIFIED);
+    assert.equal(result.citations_state_reason, CITATIONS_STATE_REASON.NOT_CONFIGURED);
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
+});
+
+test("Perplexity adapter uses the shared OpenRouter key and configured model", async () => {
+  const originalFetch = globalThis.fetch;
+  const names = ["PERPLEXITY_API_KEY", "LLM_API_KEY", "OPENROUTER_API_KEY", "LLM_BASE_URL", "OPENROUTER_BASE_URL", "OPENROUTER_PERPLEXITY_MODEL"];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
   delete process.env.PERPLEXITY_API_KEY;
-  const result = await probePerplexity("best crm for small business");
-  assert.equal(result.text, "");
-  assert.equal(result.citations.length, 0);
-  assert.ok(result.error);
-  // Nothing was asked, so the empty list is not a finding of "no citations".
-  assert.equal(result.citations_state, CITATIONS_STATE.UNVERIFIED);
-  assert.equal(result.citations_state_reason, CITATIONS_STATE_REASON.NOT_CONFIGURED);
-  if (old) process.env.PERPLEXITY_API_KEY = old;
+  delete process.env.OPENROUTER_API_KEY;
+  process.env.LLM_API_KEY = "shared-openrouter-test-key";
+  process.env.LLM_BASE_URL = "https://openrouter.ai/api/v1";
+  process.env.OPENROUTER_PERPLEXITY_MODEL = "perplexity/sonar";
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, "https://openrouter.ai/api/v1/chat/completions");
+    assert.equal(init.headers.Authorization, "Bearer shared-openrouter-test-key");
+    const body = JSON.parse(init.body);
+    assert.equal(body.model, "perplexity/sonar");
+    assert.equal(body.tools[0].type, "openrouter:web_search");
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "A cited answer.", annotations: [
+          { type: "url_citation", url: "https://example.com/source", title: "Example source" },
+        ] } }],
+        usage: {
+          cost: 0.0002,
+          prompt_tokens: 14,
+          completion_tokens: 6,
+          server_tool_use: { web_search_requests: 1 },
+        },
+      }),
+    };
+  };
+  try {
+    const result = await probePerplexity("question");
+    assert.equal(result.text, "A cited answer.");
+    assert.deepEqual(result.citations, ["https://example.com/source"]);
+    assert.equal(result.citations_state, CITATIONS_STATE.VERIFIED);
+    assert.equal(result.cost, 0.0002);
+    assert.equal(isPerplexityConfigured(), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
+});
+
+test("shared Perplexity result without observed search stays out of citation-share denominators", async () => {
+  const originalFetch = globalThis.fetch;
+  const names = ["PERPLEXITY_API_KEY", "LLM_API_KEY", "OPENROUTER_API_KEY", "LLM_BASE_URL", "OPENROUTER_BASE_URL"];
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+  delete process.env.PERPLEXITY_API_KEY;
+  delete process.env.OPENROUTER_API_KEY;
+  process.env.LLM_API_KEY = "shared-openrouter-test-key";
+  process.env.LLM_BASE_URL = "https://openrouter.ai/api/v1";
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: "An answer with no source list." } }],
+      usage: { cost: 0.0001, server_tool_use: { web_search_requests: 0 } },
+    }),
+  });
+  try {
+    const result = await probePerplexity("question");
+    assert.equal(result.citations_state, CITATIONS_STATE.UNVERIFIED);
+    assert.equal(result.citations_state_reason, CITATIONS_STATE_REASON.SEARCH_NOT_USED);
+    assert.equal(hasUnverifiedCitations(result), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  }
 });
 
 test("probePerplexity answer + search both OK", async () => {

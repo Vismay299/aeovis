@@ -8,6 +8,7 @@
  * into a horizontal scroller and the groups and footer drop away.
  */
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Plus, LayoutDashboard, MessageSquareText, Users, Link2,
@@ -64,9 +65,9 @@ export const Sidebar = ({
   return (
     <aside data-testid="sidebar" className="side">
       <div className="side__brand">
-        <a href="/" onClick={(e) => { e.preventDefault(); router.push('/'); }}>
+        <Link href="/">
           <Wordmark />
-        </a>
+        </Link>
       </div>
 
       {brand && (

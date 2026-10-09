@@ -27,7 +27,7 @@ export async function runReview(ctx, deps = {}) {
     : "(no independent fact-check block ran in this pipeline)";
 
   const prompt = renderStepPrompt("review", ctx.playbook, {
-    brand: ctx.brand,
+    brand: ctx.input?.brand_name || ctx.brand,
     brief: ctx.brief,
     agent: formatAgentOverlay(ctx.agent),
     format_checklist: formatChecklist || "(no format-specific checklist)",

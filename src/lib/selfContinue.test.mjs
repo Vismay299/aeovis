@@ -225,3 +225,21 @@ test("FIRE — a missing bypass secret on Vercel is warned about at the call sit
     "the operator must be told why the job is about to advance only on cron"
   );
 });
+
+for (const status of [302, 401, 403, 500]) {
+  test(`FIRE — HTTP ${status} is reported and redirects cannot forward worker credentials`, async () => {
+    let request;
+    const { selfContinue, warnings } = harness(
+      { NEXT_PUBLIC_APP_URL: "https://app.example.com", CRON_SECRET: "fake-private-token" },
+      { fetchImpl: async (url, init) => {
+        request = init;
+        return { ok: false, status, text: () => { throw new Error("must not read response body"); } };
+      } }
+    );
+    assert.equal(selfContinue("job-refused").fired, true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(request.redirect, "manual");
+    assert.ok(warnings.some((warning) => warning.includes(`HTTP ${status}`)));
+    assert.ok(warnings.every((warning) => !warning.includes("fake-private-token") && !warning.includes("app.example.com")));
+  });
+}

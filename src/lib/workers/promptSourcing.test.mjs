@@ -271,3 +271,22 @@ test("sourcing — the reused-pool early return also reports provenance", async 
   assert.equal(out.prompt_source, PROMPT_SOURCE.STATIC_INDUSTRY_PACK);
   assert.equal(out.static_pack_prompts, 1);
 });
+
+
+test("customer sourcing isolates prompts by workspace and never migrates another brand's pool", async () => {
+  const calls = [];
+  const result = await sourceUnbrandedQueries(BRAND, URL, "food", {}, ALIASES, {
+    brandKey: "workspace-a", promptTarget: 2,
+    getPromptsForBrand: async (key) => {
+      calls.push(key);
+      return key === "workspace-a" ? [] : makePool(30);
+    },
+    upsertPrompts: async () => { throw new Error("Must not copy legacy prompts"); },
+    generateUnbrandedPrompts: async () => [
+      { text: "best coffee for a cold brew", intent_tier: "informational", weight: 1 },
+      { text: "how to choose coffee beans", intent_tier: "informational", weight: 1 },
+    ],
+  });
+  assert.deepEqual(calls, ["workspace-a"]);
+  assert.equal(result.promptKey, "workspace-a");
+});

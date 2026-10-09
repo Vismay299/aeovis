@@ -107,6 +107,20 @@ test("credentialStatus - a deprecated alias configures the vendor and is reporte
   assert.deepEqual(status.deprecated, ["OPENROUTER_API_KEY"], "and must not look identical to the canonical name");
 });
 
+test("credentialStatus - OpenAI and Perplexity answer engines share the OpenRouter credential", () => {
+  for (const key of ["openai", "perplexity"]) {
+    const vendor = REGISTRY.find((v) => v.key === key);
+    assert.deepEqual(vendor.env, ["LLM_API_KEY"]);
+    assert.equal(credentialStatus(vendor, { LLM_API_KEY: "openrouter-key" }).configured, true);
+    assert.equal(credentialStatus(vendor, { OPENROUTER_API_KEY: "legacy-key" }).configured, true);
+    assert.equal(
+      credentialStatus(vendor, { OPENAI_API_KEY: "native-openai-key", PERPLEXITY_API_KEY: "native-pplx-key" }).configured,
+      false,
+      "native provider keys are not required for engines routed through OpenRouter"
+    );
+  }
+});
+
 test("credentialStatus - health's per-vendor verdict is this function's, unchanged", () => {
   // Not a restatement: it pins that vendorFlags adds `required` and nothing else,
   // so /api/health cannot drift into its own definition of configured.

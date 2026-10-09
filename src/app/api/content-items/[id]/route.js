@@ -6,6 +6,7 @@ export const revalidate = 0;
 
 /** GET /api/content-items/[id] — full item for the Studio item view. */
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { id } = params;
     if (!id) {

@@ -57,7 +57,7 @@ test("toDailyRows drops rows missing a date or query instead of coercing them", 
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0], {
     brand: "x.com", site_url: "sc-domain:x.com", date: "2026-09-01", query: "a",
-    clicks: 3, impressions: 10, ctr: 0.3, position: 2.5, ingested_at: "t",
+    clicks: 3, impressions: 10, ctr: 0.3, position: 2.5, ingested_at: "t", brand_key: null, connection_generation: 1,
   });
 });
 
@@ -139,26 +139,22 @@ test("an unreadable connection list throws — it is not 'no brand connected'", 
   await assert.rejects(() => listGscConnections({ client }), /ECONNREFUSED/);
 });
 
-test("upsertGscDaily chunks on (brand,date,query) and throws on a failed chunk", async () => {
+test("upsertGscDaily fences every chunk by connection generation and throws on a failed chunk", async () => {
   const calls = [];
   let fail = false;
-  const client = {
-    from: (table) => ({
-      upsert: async (rows, opts) => {
-        calls.push({ table, n: rows.length, opts });
-        return fail && calls.length === 2 ? { error: { message: "too big" } } : { error: null };
-      },
-    }),
-  };
-  const rows = Array.from({ length: GSC_UPSERT_CHUNK + 5 }, (_, i) => ({ query: `q${i}` }));
+  const client = { rpc: async (name, args) => {
+    calls.push({ name, args });
+    return fail && calls.length === 2 ? { error: { message: "generation changed" } } : { error: null };
+  } };
+  const rows = Array.from({ length: GSC_UPSERT_CHUNK + 5 }, (_, i) => ({ brand: "workspace-a", connection_generation: 2, query: `q${i}` }));
   assert.equal(await upsertGscDaily(rows, { client }), rows.length);
-  assert.deepEqual(calls.map((c) => c.n), [GSC_UPSERT_CHUNK, 5]);
-  assert.equal(calls[0].table, "gsc_daily");
-  assert.equal(calls[0].opts.onConflict, "brand,date,query");
-
+  assert.deepEqual(calls.map((c) => c.args.p_rows.length), [GSC_UPSERT_CHUNK, 5]);
+  assert.equal(calls[0].name, "write_gsc_generation");
+  assert.equal(calls[0].args.p_brand, "workspace-a");
+  assert.equal(calls[0].args.p_generation, 2);
   calls.length = 0;
   fail = true;
-  await assert.rejects(() => upsertGscDaily(rows, { client }), /too big/);
+  await assert.rejects(() => upsertGscDaily(rows, { client }), /generation changed/);
 });
 
 // ---------------------------------------------------------------------------

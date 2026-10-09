@@ -32,6 +32,7 @@ export const dynamic = "force-dynamic";
  * @param {{ params: { id: string } }} context
  */
 export async function POST(request, { params }) {
+  params = await params;
   try {
     const { id } = params;
     const payload = await request.json().catch(() => ({}));

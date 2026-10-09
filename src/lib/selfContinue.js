@@ -120,6 +120,17 @@ export function buildSelfContinueInit(env = process.env) {
   };
 }
 
+/** Report HTTP refusals without logging URLs, credentials or response bodies. */
+export function warnSelfContinueResponse(response, { label, jobId, logger = console } = {}) {
+  if (response?.ok === false) {
+    logger.warn(
+      `[${label}] self-continue for job ${jobId} was refused with HTTP ${response.status} ` +
+        `(the cron sweep will still pick it up). Check worker authentication, deployment ` +
+        `protection and the target origin. Redirects are not followed.`
+    );
+  }
+}
+
 /**
  * Build the fire-and-forget self-continue function for one worker route.
  *
@@ -167,12 +178,14 @@ export function makeSelfContinue({
 
     try {
       hold(
-        Promise.resolve(doFetch(url, init)).catch((err) => {
-          logger.warn(
-            `[${label}] self-continue fetch failed for job ${jobId} ` +
-              `(the cron sweep will still pick it up): ${err.message}`
-          );
-        }),
+        Promise.resolve(doFetch(url, { ...init, redirect: "manual" }))
+          .then((response) => warnSelfContinueResponse(response, { label, jobId, logger }))
+          .catch((err) => {
+            logger.warn(
+              `[${label}] self-continue fetch failed for job ${jobId} ` +
+                `(the cron sweep will still pick it up): ${err.message}`
+            );
+          }),
         { label: `[${label}] self-continue for job ${jobId}`, maxMs: SELF_CONTINUE_HOLD_MS }
       );
     } catch (err) {

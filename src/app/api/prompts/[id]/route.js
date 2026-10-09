@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { updatePromptStatus } from "@/lib/db/prompts";
 
 export async function PATCH(request, { params }) {
+  params = await params;
   try {
     const { id } = params;
     const { enabled } = await request.json();

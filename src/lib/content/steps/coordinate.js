@@ -57,7 +57,7 @@ export function buildScanContext(ctx) {
 
 export async function runCoordinate(ctx, deps = {}) {
   const prompt = renderStepPrompt("coordinate", ctx.playbook, {
-    brand: ctx.brand,
+    brand: ctx.input?.brand_name || ctx.brand,
     brief: ctx.brief,
     agent: formatAgentOverlay(ctx.agent),
     lessons: formatLessons(ctx.lessons),

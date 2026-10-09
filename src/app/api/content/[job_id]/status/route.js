@@ -7,6 +7,7 @@ export const revalidate = 0;
 
 /** GET /api/content/[job_id]/status — poll a content job (mirrors scan status). */
 export async function GET(request, { params }) {
+  params = await params;
   try {
     const { job_id } = params;
     if (!job_id) {

@@ -30,7 +30,7 @@ export function SiteNav() {
         </div>
         <div className="nav__r">
           <ThemeToggle />
-          <Link className="btn btn--quiet btn--sm" href="/dashboard">Sign in</Link>
+          <Link className="btn btn--quiet btn--sm" href="/login">Sign in</Link>
           <Link className="btn btn--primary btn--sm" href="/scan">Run a free probe</Link>
         </div>
       </div>
