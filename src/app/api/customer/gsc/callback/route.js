@@ -13,7 +13,7 @@ export async function GET(request) {
   const error = searchParams.get("error");
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || new URL(request.url).origin;
-  const portalUrl = `${appUrl}/portal`;
+  const portalUrl = `${appUrl}/portal/search-console`;
 
   // Handle consent denial or errors from Google.
   if (error) {
@@ -30,7 +30,7 @@ export async function GET(request) {
   // Validate the user session.
   const context = await getCustomerContext();
   if (!context.user) {
-    return NextResponse.redirect(`${appUrl}/login?next=${encodeURIComponent("/portal")}`);
+    return NextResponse.redirect(`${appUrl}/login?next=${encodeURIComponent("/portal/search-console")}`);
   }
 
   const admin = getSupabaseAdmin();

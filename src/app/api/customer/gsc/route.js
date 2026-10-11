@@ -24,7 +24,7 @@ export async function GET(request) {
   try {
     const { data, error } = await context.client
       .from("gsc_connections")
-      .select("brand_key, site_url, enabled, auth_mode, connected_at, last_attempt_at, last_status, last_rows_written, last_ingested_through, permission_level, connection_generation")
+      .select("brand_key, site_url, enabled, auth_mode, connected_at, last_attempt_at, last_status, last_error, last_rows_written, last_ingested_through, permission_level, connection_generation")
       .eq("brand_key", brand.brandKey)
       .maybeSingle();
     if (error) throw error;

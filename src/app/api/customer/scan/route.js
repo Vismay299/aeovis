@@ -74,7 +74,7 @@ export async function GET(request) {
   try {
     const { data: scans, error } = await admin
       .from("scans")
-      .select("id, brand, url, scanned_at, created_at, visibility_pct, prompts_tracked, prompts_mentioned, platform, raw_results")
+      .select("id, brand, url, scanned_at, created_at, visibility_pct, prompts_tracked, prompts_mentioned, platform")
       .eq("brand_key", brand.brandKey)
       .order("scanned_at", { ascending: false, nullsFirst: false })
       .limit(20);

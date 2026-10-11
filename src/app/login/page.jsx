@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { Info } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AuthLayout from "@/components/portal/AuthLayout";
 
 export default function CustomerLoginPage() {
   const [email, setEmail] = useState("");
@@ -50,23 +52,34 @@ export default function CustomerLoginPage() {
   }
 
   return (
-    <main className="customer-auth-page">
-      <section className="customer-auth-card" aria-labelledby="login-title">
-        <Link href="/" className="customer-auth-brand">perceev</Link>
-        <p className="customer-auth-kicker">CUSTOMER WORKSPACE</p>
-        <h1 id="login-title">Welcome back.</h1>
-        <p className="customer-auth-copy">Sign in to view your brand’s visibility, scans, content, and Search Console connection.</p>
-        <form onSubmit={signIn} className="customer-auth-form">
-          <label htmlFor="email">Work email</label>
-          <input id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
-          <label htmlFor="password">Password</label>
-          <input id="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
-          <button className="btn btn--primary customer-auth-submit" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
-        </form>
-        <button className="customer-auth-link" type="button" onClick={sendReset}>Forgot your password?</button>
-        {message ? <p className="customer-auth-message" role="status">{message}</p> : null}
-        <p className="customer-auth-invite">New to Perceev? <Link href="/signup">Create a customer account</Link>.</p>
-      </section>
-    </main>
+    <AuthLayout
+      eyebrow="Customer workspace"
+      title="Welcome back."
+      titleId="login-title"
+      subtitle="Sign in to view your brand’s visibility, scans, content, and Search Console connection."
+      footer={<>New to Perceev? <Link href="/signup">Create a customer account</Link>.</>}
+    >
+      <form onSubmit={signIn}>
+        <div className="pv-field">
+          <label className="pv-label" htmlFor="email">Work email</label>
+          <input className="pv-input" id="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+        </div>
+        <div className="pv-field">
+          <label className="pv-label" htmlFor="password">Password</label>
+          <input className="pv-input" id="password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
+        </div>
+        <button className="pv-btn pv-btn--primary pv-btn--block" type="submit" disabled={busy}>
+          {busy ? <span className="pv-spinner" aria-hidden="true" /> : null}
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+      <button className="pv-auth-link" type="button" onClick={sendReset}>Forgot your password?</button>
+      {message ? (
+        <div className="pv-banner pv-banner--info" role="status">
+          <Info aria-hidden="true" />
+          <div className="pv-banner__body">{message}</div>
+        </div>
+      ) : null}
+    </AuthLayout>
   );
 }
