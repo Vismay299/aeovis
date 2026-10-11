@@ -14,9 +14,9 @@ import {
 } from "./reportData";
 import "./scans.css";
 
-/** One row per engine with its score. Renders nothing when engine_scores is unusable. */
-export function EngineScoresCard({ engineScores }) {
-  const rows = readEngineScores(engineScores);
+/** One row per engine with its measured visibility. */
+export function EngineScoresCard({ engineScores, engines }) {
+  const rows = readEngineScores(engineScores, engines);
   if (!rows.length) return null;
   return (
     <Card title="By engine" description="How often each engine's answers named your brand.">

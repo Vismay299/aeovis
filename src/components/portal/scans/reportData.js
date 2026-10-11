@@ -49,13 +49,22 @@ export function platformLabel(platform) {
 }
 
 /**
- * engine_scores -> [{ name, pct }] sorted high to low. Accepts an object keyed
- * by engine (what aggregate.js writes) or an array of { engine|name, score }.
- * Returns [] when nothing usable is present.
+ * Per-engine visibility -> [{ name, pct }] sorted high to low. Current workers
+ * write summaries under engines; older scans only carry engine_scores.
+ * An unmeasured current slice stays absent rather than using a legacy score.
  */
-export function readEngineScores(engineScores) {
+export function readEngineScores(engineScores, engines) {
   const rows = [];
-  if (isRecord(engineScores)) {
+  if (isRecord(engines) || Array.isArray(engines)) {
+    const entries = Array.isArray(engines)
+      ? engines.map((slice) => [slice?.engine || slice?.name, slice])
+      : Object.entries(engines);
+    entries.forEach(([name, slice]) => {
+      if (!name || !isRecord(slice)) return;
+      const pct = finiteNumber(slice.visibility_pct);
+      if (pct !== null) rows.push({ name: String(name), pct });
+    });
+  } else if (isRecord(engineScores)) {
     Object.entries(engineScores).forEach(([name, value]) => {
       const pct = finiteNumber(value);
       if (pct !== null) rows.push({ name, pct });

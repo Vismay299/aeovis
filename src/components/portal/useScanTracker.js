@@ -49,6 +49,9 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // Overview can lag behind a status poll. Never resurrect a scan that has
+  // already finished or returned 404 during this workspace session.
+  const settledJobIds = useRef(new Set());
 
   const onFinishedRef = useRef(onFinished);
   onFinishedRef.current = onFinished;
@@ -57,6 +60,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
 
   // A different workspace is a different scan.
   useEffect(() => {
+    settledJobIds.current = new Set();
     setJob(null);
     setProgress(initialScanProgress());
     setQuietMs(null);
@@ -68,12 +72,16 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
   // Adopt a scan that is already running (started in another tab, by a
   // teammate, or before a reload) as soon as the overview reports it.
   useEffect(() => {
-    if (job) return;
-    const running = (jobs || []).find((candidate) => ACTIVE_SCAN_STATUSES.includes(candidate.status));
+    if (job && ACTIVE_SCAN_STATUSES.includes(job.status)) return;
+    const running = (jobs || []).find((candidate) =>
+      ACTIVE_SCAN_STATUSES.includes(candidate.status) && !settledJobIds.current.has(candidate.id),
+    );
     if (!running) return;
     setJob({ id: running.id, status: running.status, created_at: running.created_at });
-    setProgress((prev) =>
-      applyScanReading(prev.stage < 0 ? beginScanProgress() : prev, {
+    setFinished(null);
+    setQuietMs(null);
+    setProgress(
+      applyScanReading(beginScanProgress(), {
         stage: Math.max(0, scanStageIndex(running.status)),
         progressPct: running.progress_pct,
       }),
@@ -94,8 +102,10 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
         if (!live) return;
         if (response.status === 404) {
           // Gone, or not this account's: stop tracking rather than spin forever.
+          settledJobIds.current.add(jobId);
           setJob(null);
           setProgress(initialScanProgress());
+          setQuietMs(null);
           return;
         }
         const body = await response.json().catch(() => null);
@@ -105,6 +115,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
         } else {
           setQuietMs(typeof body.execution?.quiet_ms === "number" ? body.execution.quiet_ms : null);
           if (body.status === "complete") {
+            settledJobIds.current.add(jobId);
             setProgress((prev) => applyScanReading(prev, { stage: SCAN_STAGES.length, progressPct: 100 }));
             setJob((prev) => (prev ? { ...prev, status: "complete" } : prev));
             setFinished({ status: "complete", jobId, resultId: body.result_id || null, at: Date.now() });
@@ -112,6 +123,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
             return;
           }
           if (body.status === "failed") {
+            settledJobIds.current.add(jobId);
             setJob((prev) => (prev ? { ...prev, status: "failed" } : prev));
             setFinished({ status: "failed", jobId, error: body.error_message || null, at: Date.now() });
             onFinishedRef.current?.();

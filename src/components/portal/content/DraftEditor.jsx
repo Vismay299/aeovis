@@ -166,7 +166,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
               className="pv-content-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              readOnly={!editable}
+              readOnly={!editable || saving || Boolean(deciding)}
               maxLength={300}
               placeholder="Untitled draft"
               aria-label="Draft title"
@@ -200,7 +200,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
                 className="pv-content-textarea"
                 value={body}
                 onChange={(event) => setBody(event.target.value)}
-                readOnly={!editable}
+                readOnly={!editable || saving || Boolean(deciding)}
                 spellCheck
                 placeholder="Start writing in Markdown…"
                 aria-label="Draft body"

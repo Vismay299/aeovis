@@ -58,7 +58,7 @@ export default function ScanReportPage() {
   const scan = report?.scan || null;
   const results = useMemo(() => (Array.isArray(report?.results) ? report.results : []), [report]);
 
-  const engineRows = useMemo(() => (scan ? readEngineScores(scan.engine_scores) : []), [scan]);
+  const engineRows = useMemo(() => (scan ? readEngineScores(scan.engine_scores, scan.engines) : []), [scan]);
   const competitorRows = useMemo(
     () => (scan ? readCompetitors({ competitors: scan.competitors, engines: scan.engines, brand: scan.brand }).rows : []),
     [scan],
@@ -137,7 +137,7 @@ export default function ScanReportPage() {
 
         {scan && (showEngines || showCompetitors) ? (
           <div className={showEngines && showCompetitors ? "pv-scans-split" : "pv-stack"}>
-            {showEngines ? <EngineScoresCard engineScores={scan.engine_scores} /> : null}
+            {showEngines ? <EngineScoresCard engineScores={scan.engine_scores} engines={scan.engines} /> : null}
             {showCompetitors ? (
               <CompetitorsCard competitors={scan.competitors} engines={scan.engines} brand={scan.brand} />
             ) : null}
