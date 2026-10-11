@@ -1,0 +1,382 @@
+/* ==============================================================
+   Customer sign-in surfaces (login, signup, onboarding, invite,
+   password reset). Scoped under .pv-auth, which carries
+   data-theme="light": these pages are always light.
+
+   Desktop (>= 960px): split screen. Left column is the form on a
+   white surface; right column is a product showcase on paper.
+   Below 960px the showcase is hidden and the form sits in a white
+   card on the paper background.
+
+   Colours come from the tokens in globals.css. Nothing here
+   hardcodes a palette.
+   ============================================================== */
+
+.pv-auth {
+  display: grid;
+  grid-template-columns: minmax(0, 45%) minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink-1);
+  color-scheme: light;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.pv-auth *:focus-visible {
+  outline: 2px solid var(--brand-lift);
+  outline-offset: 2px;
+}
+
+.pv-auth a { color: inherit; }
+
+/* ── left: form column ───────────────────────────────────────── */
+.pv-auth-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 28px 48px 24px;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.pv-auth-top { display: flex; align-items: center; }
+
+.pv-auth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px 2px 0;
+  color: var(--ink-1);
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -.05em;
+  text-decoration: none;
+}
+
+.pv-auth-brand i {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-lift) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18);
+}
+
+.pv-auth-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+.pv-auth-form {
+  width: 100%;
+  max-width: 400px;
+}
+
+.pv-auth-eyebrow {
+  margin: 0 0 10px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.pv-auth-title {
+  margin: 0;
+  color: var(--ink-1);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -.025em;
+  text-wrap: balance;
+}
+
+.pv-auth-subtitle {
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.pv-auth-fields {
+  display: grid;
+  gap: 18px;
+  margin-top: 28px;
+}
+
+/* Controls are a touch taller on sign-in surfaces than in the app shell. */
+.pv-auth .pv-input,
+.pv-auth .pv-btn {
+  min-height: 40px;
+}
+
+.pv-auth .pv-input {
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+.pv-auth .pv-btn {
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+.pv-auth .pv-btn--primary:hover:not(:disabled) {
+  background: var(--brand-lift);
+}
+
+.pv-auth-fields .pv-banner {
+  margin: 0;
+}
+
+.pv-auth .pv-banner a {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pv-auth .pv-banner a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.pv-auth-fields form {
+  display: grid;
+  gap: 18px;
+}
+
+.pv-auth-fields form .pv-btn {
+  margin-top: 4px;
+}
+
+.pv-auth-fields form .pv-spinner {
+  width: 13px;
+  height: 13px;
+}
+
+/* Secondary text action (e.g. "Forgot your password?"), styled as a link. */
+.pv-auth-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: 600 13px/1.4 var(--font-sans);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.pv-auth-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.pv-auth-fields a:not(.pv-btn) {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pv-auth-fields a:not(.pv-btn):hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.pv-auth-note {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pv-auth-note a {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.pv-auth-note a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.pv-auth-loading {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+.pv-auth-legal {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.pv-auth-legal a {
+  color: var(--ink-3);
+  text-decoration: none;
+}
+
+.pv-auth-legal a:hover { color: var(--ink-1); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ── right: showcase column ──────────────────────────────────── */
+.pv-auth-showcase {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 60% at 70% 30%, var(--brand-tint) 0%, transparent 70%),
+    var(--paper);
+}
+
+.pv-auth-showcase-inner {
+  display: grid;
+  gap: 28px;
+  width: 100%;
+  max-width: 480px;
+  padding: 64px 48px;
+}
+
+.pv-auth-pitch {
+  margin: 0;
+  color: var(--ink-1);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -.025em;
+  text-wrap: balance;
+}
+
+.pv-auth-values {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pv-auth-value {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.pv-auth-value-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--brand);
+}
+
+.pv-auth-value-icon svg { width: 16px; height: 16px; }
+
+/* Illustrative answer card. Decorative only; no real data. */
+.pv-auth-card {
+  padding: 20px 20px 18px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+
+.pv-auth-card-head {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.pv-auth-card-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--sunken);
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .02em;
+}
+
+.pv-auth-card-question {
+  margin: 0 0 16px;
+  color: var(--ink-1);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: -.01em;
+}
+
+.pv-auth-card-rows {
+  display: grid;
+  gap: 12px;
+}
+
+.pv-auth-card-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.pv-auth-card-row.is-own { color: var(--ink-1); font-weight: 600; }
+
+.pv-auth-card-bar {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--sunken);
+  overflow: hidden;
+}
+
+.pv-auth-card-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+
+.pv-auth-card-row.is-own .pv-auth-card-bar span {
+  background: linear-gradient(90deg, var(--brand) 0%, var(--brand-lift) 100%);
+}
+
+/* ── below 960px: single column, form in a white card ─────────── */
+@media (max-width: 959.98px) {
+  .pv-auth {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pv-auth-showcase {
+    display: none;
+  }
+
+  .pv-auth-panel {
+    min-height: 100vh;
+    padding: 20px 16px 20px;
+    border-right: 0;
+    background: var(--paper);
+  }
+
+  .pv-auth-main {
+    align-items: flex-start;
+    padding: 24px 0 32px;
+  }
+
+  .pv-auth-form {
+    max-width: 440px;
+    margin: 0 auto;
+    padding: 28px 24px 24px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow-2);
+  }
+
+  .pv-auth-title { font-size: 26px; }
+
+  .pv-auth-legal { text-align: center; }
+}

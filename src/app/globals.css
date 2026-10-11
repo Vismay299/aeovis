@@ -289,8 +289,13 @@
 
 /* ═══════════════════════════════════════════════════════════════
    TOKENS · light is the base palette
+
+   [data-theme="light"] on any element re-declares the light palette
+   for its subtree, so a surface that must stay light (the customer
+   portal and its sign-in pages) does so even inside a dark root.
    ═══════════════════════════════════════════════════════════════ */
-:root {
+:root,
+[data-theme="light"] {
   --paper:   #F7F7FA;
   --surface: #FFFFFF;
   --sunken:  #EFEFF4;

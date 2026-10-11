@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Info } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import AuthLayout from "@/components/portal/AuthLayout";
 
 export default function CustomerOnboardingPage() {
   const router = useRouter();
@@ -70,26 +72,48 @@ export default function CustomerOnboardingPage() {
   }
 
   if (busy) {
-    return <main className="customer-auth-page"><p className="customer-portal-state">Loading workspace setup…</p></main>;
+    return (
+      <AuthLayout
+        eyebrow="Workspace setup"
+        title="Set up your workspace"
+        titleId="onboarding-title"
+        subtitle="Tell us which brand to track. You can change this later."
+      >
+        <p className="pv-auth-loading">Loading workspace setup…</p>
+      </AuthLayout>
+    );
   }
 
   return (
-    <main className="customer-auth-page">
-      <section className="customer-auth-card customer-onboarding-card" aria-labelledby="onboarding-title">
-        <Link href="/" className="customer-auth-brand">perceev</Link>
-        <p className="customer-auth-kicker">WORKSPACE SETUP</p>
-        <h1 id="onboarding-title">Create your workspace.</h1>
-        <p className="customer-auth-copy">Enter your brand name and website to set up an isolated workspace. You can connect Google Search Console later from your workspace.</p>
-        <form onSubmit={createWorkspace} className="customer-auth-form">
-          <label htmlFor="brand-name">Company or brand name</label>
-          <input id="brand-name" autoComplete="organization" maxLength={120} required value={brandName} onChange={(event) => setBrandName(event.target.value)} />
-          <label htmlFor="website">Website</label>
-          <input id="website" type="url" autoComplete="url" required value={website} onChange={(event) => setWebsite(event.target.value)} placeholder="https://example.com" />
-          <button className="btn btn--primary customer-auth-submit" type="submit" disabled={saving}>{saving ? "Creating workspace…" : "Create workspace"}</button>
-        </form>
-        {message ? <p className="customer-auth-message" role="status">{message}</p> : null}
-        <p className="customer-auth-invite">Already invited to a workspace? <Link href="/portal">Open your workspace</Link>.</p>
-      </section>
-    </main>
+    <AuthLayout
+      eyebrow="Workspace setup"
+      title="Set up your workspace"
+      titleId="onboarding-title"
+      subtitle="Tell us which brand to track. You can change this later."
+      footer={<>Already invited to a workspace? <Link href="/portal">Open your workspace</Link>.</>}
+    >
+      <form onSubmit={createWorkspace}>
+        <div className="pv-field">
+          <label className="pv-label" htmlFor="brand-name">Company or brand name</label>
+          <input className="pv-input" id="brand-name" autoComplete="organization" maxLength={120} required value={brandName} onChange={(event) => setBrandName(event.target.value)} />
+          <span className="pv-hint">The brand whose visibility in AI answers you want to track.</span>
+        </div>
+        <div className="pv-field">
+          <label className="pv-label" htmlFor="website">Website</label>
+          <input className="pv-input" id="website" type="url" autoComplete="url" required value={website} onChange={(event) => setWebsite(event.target.value)} placeholder="https://example.com" />
+          <span className="pv-hint">Your main site. You can connect Google Search Console later from your workspace.</span>
+        </div>
+        <button className="pv-btn pv-btn--primary pv-btn--block" type="submit" disabled={saving}>
+          {saving ? <span className="pv-spinner" aria-hidden="true" /> : null}
+          {saving ? "Creating workspace…" : "Create workspace"}
+        </button>
+      </form>
+      {message ? (
+        <div className="pv-banner pv-banner--info" role="status">
+          <Info aria-hidden="true" />
+          <div className="pv-banner__body">{message}</div>
+        </div>
+      ) : null}
+    </AuthLayout>
   );
 }

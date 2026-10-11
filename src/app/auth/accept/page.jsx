@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Info } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { consumeCustomerAuthFragment } from "@/lib/supabase/authLink";
+import AuthLayout from "@/components/portal/AuthLayout";
 
 export default function AcceptInvitePage() {
   const [password, setPassword] = useState("");
@@ -42,19 +43,29 @@ export default function AcceptInvitePage() {
   }
 
   return (
-    <main className="customer-auth-page">
-      <section className="customer-auth-card" aria-labelledby="accept-title">
-        <Link href="/" className="customer-auth-brand">perceev</Link>
-        <p className="customer-auth-kicker">YOUR CUSTOMER WORKSPACE</p>
-        <h1 id="accept-title">Set your password.</h1>
-        <p className="customer-auth-copy">Choose a password to finish setting up your Perceev account.</p>
-        <form onSubmit={savePassword} className="customer-auth-form">
-          <label htmlFor="password">New password</label>
-          <input id="password" type="password" minLength={8} autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
-          <button className="btn btn--primary customer-auth-submit" type="submit" disabled={busy || !ready}>{busy ? "Saving…" : "Set password"}</button>
-        </form>
-        {message ? <p className="customer-auth-message" role="status">{message}</p> : null}
-      </section>
-    </main>
+    <AuthLayout
+      eyebrow="Your customer workspace"
+      title="Set your password."
+      titleId="accept-title"
+      subtitle="Choose a password to finish setting up your Perceev account."
+    >
+      <form onSubmit={savePassword}>
+        <div className="pv-field">
+          <label className="pv-label" htmlFor="password">New password</label>
+          <input className="pv-input" id="password" type="password" minLength={8} autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
+          <span className="pv-hint">At least 8 characters.</span>
+        </div>
+        <button className="pv-btn pv-btn--primary pv-btn--block" type="submit" disabled={busy || !ready}>
+          {busy ? <span className="pv-spinner" aria-hidden="true" /> : null}
+          {busy ? "Saving…" : "Set password"}
+        </button>
+      </form>
+      {message ? (
+        <div className="pv-banner pv-banner--info" role="status">
+          <Info aria-hidden="true" />
+          <div className="pv-banner__body">{message}</div>
+        </div>
+      ) : null}
+    </AuthLayout>
   );
 }

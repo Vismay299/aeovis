@@ -13,11 +13,13 @@ export async function GET(request) {
   const ctx = await customerRouteContext(request);
   if (ctx.response) return ctx.response;
   const [items, jobs] = await Promise.all([
-    ctx.client.from("content_items").select("id,title,status,updated_at").eq("brand", ctx.brand.brandKey).order("updated_at", { ascending: false }).limit(30),
-    ctx.client.from("content_jobs").select("id,status,progress_pct,item_id,error_message,created_at").eq("brand", ctx.brand.brandKey).order("created_at", { ascending: false }).limit(10),
+    ctx.client.from("content_items").select("id,title,status,playbook,created_at,updated_at").eq("brand", ctx.brand.brandKey).order("updated_at", { ascending: false }).limit(30),
+    ctx.client.from("content_jobs").select("id,playbook,status,progress_pct,item_id,error_message,input,agent_trace,created_at").eq("brand", ctx.brand.brandKey).order("created_at", { ascending: false }).limit(10),
   ]);
   if (items.error || jobs.error) return json({ error: "Could not load Content Studio." }, 503);
-  return json({ items: items.data || [], jobs: jobs.data || [] });
+  // The composer's brief is the customer's own text and is not needed for progress.
+  const jobRows = (jobs.data || []).map((job) => ({ ...job, input: { query: typeof job.input?.query === "string" ? job.input.query : "" } }));
+  return json({ items: items.data || [], jobs: jobRows });
 }
 
 export async function POST(request) {
