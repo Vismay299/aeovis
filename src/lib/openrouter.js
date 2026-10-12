@@ -90,6 +90,14 @@ export async function generateContent(prompt, options = {}, retries = 2) {
   if (isMimo) {
     body.thinking = { type: "disabled" };
   }
+  // OpenRouter reasoning models (e.g. google/gemini-3.8-flash) think by default
+  // and cannot switch it off. On the prompt-gen call that measured ~7,000
+  // hidden reasoning tokens and 64-100s against a 25s timeout, so every scan
+  // aborted at sourcing. Utility callers ask for the smallest effort the model
+  // accepts (12s on the same call); models without reasoning ignore the field.
+  if (isOpenRouter && options.reasoningEffort) {
+    body.reasoning = { effort: options.reasoningEffort };
+  }
 
   let lastErr = null;
   // COUNTED, not inferred from `retries`. "Refused on the first call" and
