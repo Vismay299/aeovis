@@ -30,6 +30,10 @@ export async function llmJson(prompt, options = {}, jsonRetries = 2) {
         ? prompt
         : prompt + "\n\nReturn ONLY valid JSON. No prose, no code fences.";
     const { text } = await generateContent(p, {
+      // Structured utility output does not need long hidden reasoning, and on
+      // reasoning models it is what made prompt-gen time out. Content steps
+      // opt out via contentLlmJson below.
+      reasoningEffort: "minimal",
       ...options,
       jsonMode: true,
       temperature: Math.min(1, baseTemperature + i * 0.1),
@@ -60,6 +64,8 @@ export async function contentLlmJson(prompt, options = {}, jsonRetries = 2) {
       // Long-form drafting needs headroom; callers can still override.
       timeout: 120000,
       max_tokens: 8000,
+      // Drafting quality benefits from the model's default reasoning.
+      reasoningEffort: null,
       ...options,
     },
     jsonRetries

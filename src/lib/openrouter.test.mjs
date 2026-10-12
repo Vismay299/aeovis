@@ -876,3 +876,53 @@ test("an expired deadline never starts another paid request", async () => {
     });
   } finally { globalThis.fetch = originalFetch; }
 });
+
+// ---------------------------------------------------------------------------
+// Reasoning effort. google/gemini-3.8-flash reasons by default and refuses
+// `reasoning.enabled:false`; on the prompt-gen call it spent ~7,000 hidden
+// tokens and 64-100s against a 25s timeout, so every customer scan aborted at
+// sourcing with "exhausted_retries ... This operation was aborted".
+// ---------------------------------------------------------------------------
+
+test("OpenRouter sends reasoning effort only when a caller asks for it", async () => {
+  const env = { LLM_BASE_URL: "https://openrouter.ai/api/v1", LLM_MODEL: "z-ai/glm-5.2:free" };
+  const asked = await captureRequest(env, { reasoningEffort: "minimal" });
+  assert.deepEqual(asked.body.reasoning, { effort: "minimal" });
+  const plain = await captureRequest(env, {});
+  assert.equal(plain.body.reasoning, undefined);
+});
+
+test("MiMo never receives the OpenRouter reasoning field", async () => {
+  resetLlmConfigWarnings();
+  const { body } = await captureRequest(
+    {
+      LLM_BASE_URL: "https://api.xiaomimimo.com/v1",
+      LLM_MODEL: "MiMo-VL-7B-RL",
+      LLM_MODEL_PRICES: '{"MiMo-VL-7B-RL":{"input":0.3,"output":1.2}}',
+    },
+    { reasoningEffort: "minimal" }
+  );
+  assert.equal(body.reasoning, undefined);
+  assert.deepEqual(body.thinking, { type: "disabled" });
+});
+
+test("llmJson (prompt-gen, extraction) asks for minimal reasoning", async () => {
+  const realFetch = globalThis.fetch;
+  let body = null;
+  globalThis.fetch = async (_u, init) => {
+    body = JSON.parse(init.body);
+    return Response.json({
+      choices: [{ message: { content: "[]" } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    });
+  };
+  try {
+    await withEnvs(
+      { ...KEYED, LLM_BASE_URL: "https://openrouter.ai/api/v1", LLM_MODEL: "z-ai/glm-5.2:free" },
+      () => llmJson("hello", {}, 0)
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  assert.deepEqual(body.reasoning, { effort: "minimal" });
+});
