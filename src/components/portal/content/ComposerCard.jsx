@@ -28,7 +28,8 @@ export default function ComposerCard({ brandKey, topicRef, onCreated, onUnauthor
       await contentRequest("/api/customer/content", {
         brandKey,
         method: "POST",
-        body: { query, brief: brief.trim(), playbook, agent_id: selectedAgent?.id },
+        body: { query, brief: brief.trim(), playbook: selectedAgent?.base || playbook,
+          agent_id: selectedAgent?.id, template_slug: selectedAgent?.is_template ? selectedAgent.slug : undefined },
       });
       setTopic("");
       setBrief("");

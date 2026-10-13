@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 import { usePortal } from "../PortalShell";
-import { Banner, Button, PageHeader, SkeletonRows } from "../ui";
+import { Banner, Button, Card, PageHeader, SkeletonRows } from "../ui";
 import { CONTENT_JOB_ACTIVE } from "../status";
 import { contentRequest } from "./shared";
 import ComposerCard from "./ComposerCard";
@@ -33,7 +33,7 @@ export default function ContentStudio() {
   const selectedId = searchParams.get("item") || "";
   const focusRequested = searchParams.get("new") === "1";
 
-  const [studioTab, setStudioTab] = useState("drafts");
+  const [studioTab, setStudioTab] = useState(() => selectedId || focusRequested ? "drafts" : "workspace");
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [items, setItems] = useState(null);
   const [jobs, setJobs] = useState(null);
@@ -42,13 +42,16 @@ export default function ContentStudio() {
   const topicRef = useRef(null);
   const previousActive = useRef(new Map()); // job id -> topic, for jobs seen running
   const dirtyRef = useRef(false);
+  const loadGeneration = useRef(0);
 
   const hasActive = useMemo(() => (jobs || []).some(isActive), [jobs]);
 
   const load = useCallback(async () => {
     if (!brandKey) return;
+    const generation = ++loadGeneration.current;
     try {
       const data = await contentRequest("/api/customer/content", { brandKey });
+      if (generation !== loadGeneration.current) return;
       const nextJobs = data.jobs || [];
       setItems(data.items || []);
       setJobs(nextJobs);
@@ -72,6 +75,7 @@ export default function ContentStudio() {
         refreshOverview();
       }
     } catch (err) {
+      if (generation !== loadGeneration.current) return;
       if (err.status === 401) {
         redirectToLogin();
         return;
@@ -84,7 +88,7 @@ export default function ContentStudio() {
 
   // A different workspace starts from a clean slate.
   useEffect(() => {
-    setStudioTab("drafts");
+    setStudioTab("workspace");
     setSelectedAgent(null);
     setItems(null);
     setJobs(null);
@@ -95,21 +99,26 @@ export default function ContentStudio() {
   // Poll fast while a job is running, slowly otherwise.
   useEffect(() => {
     if (!brandKey) return undefined;
+    const generation = loadGeneration;
     load();
     const timer = setInterval(load, hasActive ? POLL_ACTIVE_MS : POLL_IDLE_MS);
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); generation.current++; };
   }, [brandKey, hasActive, load]);
 
   const focusComposer = useCallback(() => {
-    const field = topicRef.current;
-    if (!field) return;
-    field.focus();
-    field.scrollIntoView({ block: "center", behavior: "smooth" });
+    setStudioTab("drafts");
+    requestAnimationFrame(() => {
+      const field = topicRef.current;
+      if (!field) return;
+      field.focus();
+      field.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
   }, []);
 
   useEffect(() => {
     if (focusRequested) focusComposer();
-  }, [focusRequested, focusComposer]);
+    else if (selectedId) setStudioTab("drafts");
+  }, [focusRequested, selectedId, brandKey, focusComposer]);
 
   const setUrlParams = useCallback((changes) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -158,12 +167,14 @@ export default function ContentStudio() {
       ) : null}
 
       <div className="pv-content-tabs" role="tablist" aria-label="Content Studio views">
-        {[ ["drafts", "Drafts"], ["agents", "Agents & crew canvas"], ["workflow", "Workflow"] ].map(([key, label]) => (
+        {[ ["workspace", "Workspace & canvas"], ["drafts", "Drafts"], ["agents", "Agents & crew canvas"] ].map(([key, label]) => (
           <button key={key} role="tab" aria-selected={studioTab === key} onClick={() => setStudioTab(key)}>{label}</button>
         ))}
       </div>
-      {studioTab === "agents" ? <AgentsPanel brand={brandKey} customer apiBase="/api/customer/agents" onRun={(agent) => { setSelectedAgent(agent); setStudioTab("drafts"); }} /> : null}
-      {studioTab === "workflow" ? <div className="pv-studio-canvas"><AgentCanvas run={{ status: jobs?.find(isActive)?.status, query: jobs?.find(isActive)?.input?.query }} /><p>Research → benchmark → draft → review → your approval. Configure the steps in Agents & crew canvas. Content is never published automatically.</p></div> : null}
+      {studioTab === "workspace" ? <Card title="Content workflow" description="Research, draft and review, with your approval before anything is published.">
+        <AgentCanvas run={{ status: jobs?.find(isActive)?.status, query: jobs?.find(isActive)?.input?.query }} />
+      </Card> : null}
+      {studioTab === "workspace" || studioTab === "agents" ? <section className="pv-studio-agents" aria-label="Workspace agents"><AgentsPanel key={brandKey} brand={brandKey} customer apiBase="/api/customer/agents" onRun={(agent) => { setSelectedAgent(agent); focusComposer(); }} /></section> : null}
       <div hidden={studioTab !== "drafts"} className="pv-grid pv-grid--main-side pv-content-layout">
         <div className="pv-content-main">
           {notices.length ? (

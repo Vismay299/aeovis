@@ -96,4 +96,4 @@
 .pv-content-tabs button { padding:10px 16px; border:1px solid var(--border-1); border-radius:8px; background:var(--bg-1); color:var(--text-2); cursor:pointer; }
 .pv-content-tabs button[aria-selected="true"] { background:var(--accent-soft); color:var(--accent-text); border-color:var(--accent-border); }
 .pv-content-layout[hidden] { display:none; }
-.pv-studio-canvas { overflow:auto; border:1px solid var(--border-1); border-radius:12px; padding:24px; background:var(--bg-1); }
+.pv-studio-agents { margin-block: 24px; min-width: 0; }

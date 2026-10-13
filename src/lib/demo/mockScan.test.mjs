@@ -20,3 +20,13 @@ test("mock scan completes real checkpoint/scoring lifecycle on four engines with
   const again = await runMockScan();
   assert.equal(again.answer_count, 120, "each simulation has isolated persistence");
 });
+
+test("workspace simulations use their brand and domain without mixing the Italica fixture",async(t)=>{
+  t.mock.method(globalThis,"fetch",async()=>{throw new Error("Simulation attempted network I/O");});
+  const result=await runMockScan({brand:"Trace",url:"https://tracyourstory.xyz/"});
+  assert.equal(result.answer_count,120);
+  assert.ok(result.results.some(row=>row.raw.text.includes("Trace")));
+  assert.ok(result.results.every(row=>!row.query.includes("tile")));
+  for(const row of result.results) for(const ref of row.raw.references) assert.equal(ref.domain,"tracyourstory.xyz");
+  for(const engine of Object.values(result.scan.engines)) assert.equal(engine.share_of_ai_pct,33.3);
+});

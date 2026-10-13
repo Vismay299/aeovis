@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Plus, Pencil, Play, Sparkles } from "lucide-react";
 import { Card } from "@/components/perceev/Card";
 import { Badge } from "@/components/perceev/Badge";
@@ -29,7 +29,7 @@ function AgentCard({ agent, onEdit, onRun }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-1)" }}>{agent.name}</span>
-            {agent.is_builtin && <Badge variant="muted">built-in</Badge>}
+            {agent.is_builtin && <Badge variant="muted">{agent.is_template ? "starter" : "built-in"}</Badge>}
           </div>
           <div style={{ display: "flex", gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
             <Badge variant="neutral">{agent.format}</Badge>
@@ -59,30 +59,41 @@ function AgentCard({ agent, onEdit, onRun }) {
  */
 export function AgentsPanel({ brand, onRun, apiBase = "/api/agents", customer = false }) {
   const [agents, setAgents] = useState(null);
+  const [templates, setTemplates] = useState([]);
   const [formats, setFormats] = useState([]);
   const [blocks, setBlocks] = useState([]);
   const [defaultPipelines, setDefaultPipelines] = useState(null);
   const [editing, setEditing] = useState(null); // agent object, or {} for new
   const [error, setError] = useState(null);
+  const requestGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
+    const generation = ++requestGeneration.current;
     try {
       const res = await fetch(`${apiBase}?${customer ? "brand_key" : "brand"}=${encodeURIComponent(brand || "")}`, { cache: "no-store" });
       if (!res.ok) throw new Error(((await res.json()).error || "Failed to load agents") || "Failed to load agents");
       const data = await res.json();
+      if (generation !== requestGeneration.current) return;
       setError(null);
       setAgents(data.agents || []);
+      setTemplates(data.templates || []);
       setFormats(data.formats || []);
       setBlocks(data.blocks || []);
       setDefaultPipelines(data.default_pipelines || null);
     } catch (e) {
+      if (generation !== requestGeneration.current) return;
       setError(e.message);
       setAgents([]);
     }
   }, [brand, apiBase, customer]);
 
   useEffect(() => {
+    const generation = requestGeneration;
+    setEditing(null);
+    setAgents(null);
+    setTemplates([]);
     refresh();
+    return () => { generation.current++; };
   }, [refresh]);
 
   if (editing) {
@@ -132,7 +143,15 @@ export function AgentsPanel({ brand, onRun, apiBase = "/api/agents", customer = 
 
       {error && <div style={{ fontSize: "12px", color: "var(--crit)", marginBottom: "var(--space-3)" }}>{error}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "var(--space-4)" }}>
+      {templates.length ? <section aria-label="Starter agents" style={{ marginBottom: "var(--space-5)" }}>
+        <h3 style={{ marginBottom: "var(--space-3)" }}>Starter agents</h3>
+        <p style={{ marginBottom: "var(--space-4)", color: "var(--text-2)" }}>Run a starter, or configure its format and crew to save your own agent for this workspace.</p>
+        <div className="pv-grid pv-grid--2">
+          {templates.map((agent) => <AgentCard key={agent.slug} agent={agent} onEdit={setEditing} onRun={onRun} />)}
+        </div>
+      </section> : null}
+      {agents.length > 0 ? <h3 style={{ marginBottom: "var(--space-3)" }}>Saved agents</h3> : null}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 300px), 1fr))", gap: "var(--space-4)" }}>
         {agents.map((a) => (
           <AgentCard key={a.id} agent={a} onEdit={setEditing} onRun={onRun} />
         ))}

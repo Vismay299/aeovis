@@ -152,6 +152,13 @@ export function builtinAgents() {
   ];
 }
 
+/** Read-only starters. Saving a configuration explicitly creates a tenant agent. */
+export function starterAgentsForWorkspace(brand, saved = []) {
+  return builtinAgents()
+    .filter((template) => !saved.some((agent) => agent.is_builtin && agent.slug === template.slug))
+    .map((template) => ({ ...template, brand, is_template: true }));
+}
+
 /** The default agent for a base pipeline, used when a job has no agent set. */
 export function defaultAgentForBase(base) {
   return base === "linkedin_post"

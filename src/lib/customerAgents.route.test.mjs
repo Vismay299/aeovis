@@ -5,6 +5,7 @@ register("./customerRoutes.test.hooks.mjs", import.meta.url);
 const agents = await import("../app/api/customer/agents/route.js");
 const agentItem = await import("../app/api/customer/agents/[id]/route.js");
 const content = await import("../app/api/customer/content/route.js");
+const mockScan = await import("../app/api/customer/scan/mock/route.js");
 
 function fixture() {
   const rows = [{id:"own",brand:"workspace-a",name:"Own agent",format:"comparison",base:"geo_article",active:true}, {id:"other",brand:"workspace-b",name:"Other agent",format:"article",base:"geo_article",active:true}];
@@ -14,7 +15,7 @@ function fixture() {
     let mutation;
     const finish = (single) => {
       if (mutation) {
-        writes.push({table, operation:mutation.kind, ids:selected.map(row=>row.id)});
+        writes.push({table, operation:mutation.kind, ids:selected.map(row=>row.id), payload:mutation.data});
         if(mutation.kind==="update") selected.forEach(row=>Object.assign(row,mutation.data));
         if(mutation.kind==="insert") selected=mutation.data;
       }
@@ -23,7 +24,8 @@ function fixture() {
     return {
       select(){return this;},order(){return this;},limit(){return this;},
       eq(key,value){selected=selected.filter(row=>row[key]===value);return this;},
-      ilike(){throw new Error("Opaque workspace keys must not use pattern matching");},
+      ilike(key,value){if(table!=="content_jobs")throw new Error("Opaque workspace keys must not use pattern matching");return this.eq(key,value);},
+      in(key,values){selected=selected.filter(row=>values.includes(row[key]));return this;},
       insert(data){mutation={kind:"insert",data};return this;},
       update(data){mutation={kind:"update",data};return this;},delete(){mutation={kind:"delete"};return this;},
       maybeSingle:async()=>finish(true),single:async()=>finish(true),
@@ -42,7 +44,49 @@ test("customer agent reads are scoped and opening an empty list does not seed wr
   const data=await response.json();
   assert.deepEqual(data.agents.map(agent=>agent.id),["own"]);
   assert.ok(data.blocks.some(block=>block.slug==="draft"));
+  assert.deepEqual(data.templates.map(agent=>agent.slug),["geo-citation-writer","linkedin-cxo"]);
+  assert.ok(data.templates.every(agent=>agent.brand==="workspace-a" && agent.is_template && !agent.id));
   assert.equal(writes.length,0);
+});
+
+test("tenant mock scans use authorized workspace facts, make no vendor calls and save no live rows",async(t)=>{
+  const {writes}=fixture();
+  t.mock.method(globalThis,"fetch",async()=>{throw new Error("Mock scan attempted network I/O");});
+  const response=await mockScan.POST(request("POST",{brand_key:"workspace-a",brand:"Forged brand",url:"https://forged.example"},"scan/mock"));
+  assert.equal(response.status,200);
+  const data=await response.json();
+  assert.equal(data.simulation,true);
+  assert.equal(data.answer_count,120);
+  assert.ok(data.results.some(row=>row.raw.text.includes("Italica")));
+  assert.ok(data.results.every(row=>!row.raw.text.includes("Forged brand")));
+  assert.equal(writes.length,0);
+  assert.equal((await mockScan.POST(request("POST",{brand_key:"workspace-b"},"scan/mock"))).status,404);
+  globalThis.customerRouteFixture.context.user=null;
+  assert.equal((await mockScan.POST(request("POST",{brand_key:"workspace-a"},"scan/mock"))).status,401);
+});
+
+test("unknown starter agents cannot create a job",async()=>{
+  const {writes}=fixture();
+  const response=await content.POST(request("POST",{brand_key:"workspace-a",query:"A topic",template_slug:"other-workspace-agent"},"content"));
+  assert.equal(response.status,400);
+  assert.equal(writes.length,0);
+});
+
+test("starter runs create the selected pipeline snapshot in the authorized tenant without a fake agent ID",async(t)=>{
+  let calls=0;
+  t.mock.method(globalThis,"fetch",async()=>{calls++;throw new Error("Route test attempted network I/O");});
+  for(const [slug,base] of [["geo-citation-writer","geo_article"],["linkedin-cxo","linkedin_post"]]) {
+    const {writes}=fixture();
+    const response=await content.POST(request("POST",{brand_key:"workspace-a",query:"A topic",template_slug:slug,brand:"workspace-b",playbook:"geo_article"},"content"));
+    assert.equal(response.status,201);
+    const job=writes.find(write=>write.table==="content_jobs").payload[0];
+    assert.equal(job.brand,"workspace-a");
+    assert.equal(job.playbook,base);
+    assert.equal(job.agent_snapshot.slug,slug);
+    assert.equal(job.agent_id,null);
+  }
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,0);
 });
 test("agent creation uses the authorized workspace and cannot forge built-in status",async()=>{
   const {writes}=fixture();

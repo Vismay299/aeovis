@@ -60,3 +60,25 @@ Pre-existing legal-page and legal-link edits were preserved outside this commit.
   smoke test, not evidence of healthy live Google collection.
 - GitHub CI build, fleet and customer database isolation passed. Its first unit
   test run found the missing status marker on this document; corrected here.
+
+## Tenant correction after signed-in review
+
+The user reported missing functionality after login. Signed-in review of the
+trace workspace reproduced the empty agent roster and draft-first Studio.
+The mock-scan entry navigated away to the public demo. The earlier public demo
+and unauthenticated checks were insufficient acceptance evidence for tenants.
+
+- Tenant Scans now embeds the same runnable simulation/report component as the
+  public demo. Its authenticated endpoint derives brand facts from the authorized
+  workspace and runs entirely in isolated memory, outside customer history.
+- Studio opens on the workspace canvas and agent roster. Draft links and the
+  New draft action still open the composer/editor directly.
+- Read-only starter agents are present without privileged writes on GET. They
+  can run with a validated template snapshot or be configured and explicitly
+  saved as a customer agent. Saved agents remain scoped by workspace.
+- Workspace changes reset the roster and ignore older responses; a simulation
+  is aborted/reset when its tenant component is unmounted.
+- Regression coverage renders the actual tenant pages, checks simulation
+  isolation/authorization and validates both starter pipeline snapshots.
+- Search Console was inspected while signed in; this account is not connected
+  to Google. No new Google authorization was granted during this review.

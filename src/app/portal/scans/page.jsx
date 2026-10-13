@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Play, Radar } from "lucide-react";
 import { usePortal } from "@/components/portal/PortalShell";
 import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
+import MockScanPanel from "@/components/portal/scans/MockScanPanel";
 import {
   Banner, Button, Card, EmptyState, PageHeader, ProgressBar, SkeletonRows,
   formatDate, formatPct,
@@ -131,9 +131,9 @@ export default function ScansPage() {
         )}
       />
 
-      <p><Link href="/demo">Try a mock scan</Link> — preview the workflow with clearly labelled simulated answers.</p>
       <div className="pv-stack">
         <ScanProgressCard showIdle={false} />
+        {brandKey ? <MockScanPanel key={brandKey} brandKey={brandKey} brandName={brand?.display_name || "this workspace"} onUnauthorized={redirectToLogin} /> : null}
 
         {error ? (
           <Banner

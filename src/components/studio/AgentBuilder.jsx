@@ -131,7 +131,7 @@ export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, 
         <h3 style={{ fontFamily: "var(--font-sans)", fontSize: "17px", fontWeight: 600, color: "var(--text-1)" }}>
           {isEdit ? `Edit ${agent.name}` : "New agent"}
         </h3>
-        {isBuiltin && <Badge variant="muted">built-in</Badge>}
+        {isBuiltin && <Badge variant="muted">{agent.is_template ? "Starter · saves as your own agent" : "built-in"}</Badge>}
       </div>
 
       <Card variant="flush" style={{ padding: "var(--space-6)", display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { customerRouteContext } from "@/lib/supabase/customerRoute";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { insertAgent } from "@/lib/db/content";
-import { normalizeAgent } from "@/lib/content/agents/model";
+import { normalizeAgent, starterAgentsForWorkspace } from "@/lib/content/agents/model";
 import { FORMATS } from "@/lib/content/agents/formats";
 import { CREW } from "@/lib/content/agents/crew";
 import { BLOCKS, DEFAULT_PIPELINES } from "@/lib/content/agents/blocks";
@@ -19,7 +19,7 @@ export async function GET(request) {
     const result = await ctx.client.from("content_agents").select("*").eq("brand", ctx.brand.brandKey).order("created_at", { ascending: true });
     if (result.error) throw result.error;
     const agents = result.data || [];
-    return json({ agents, formats: Object.values(FORMATS), blocks: Object.values(BLOCKS), crew: CREW, default_pipelines: DEFAULT_PIPELINES });
+    return json({ agents, templates: starterAgentsForWorkspace(ctx.brand.brandKey, agents), formats: Object.values(FORMATS), blocks: Object.values(BLOCKS), crew: CREW, default_pipelines: DEFAULT_PIPELINES });
   } catch { return json({ error: "Could not load agents." }, 503); }
 }
 

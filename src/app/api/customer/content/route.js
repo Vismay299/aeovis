@@ -5,6 +5,7 @@ import { createContentJob, hasActiveContentJobForBrand } from "@/lib/db/content"
 import { startContentJob } from "@/lib/content/contentWorker";
 import { keepAlive } from "@/lib/keepAlive";
 import { PLAYBOOKS } from "@/lib/content/schemas";
+import { starterAgentsForWorkspace } from "@/lib/content/agents/model";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 const json = (value, status = 200) => NextResponse.json(value, { status, headers: { "Cache-Control": "no-store" } });
@@ -35,6 +36,10 @@ export async function POST(request) {
     if (result.error) return json({ error: "Could not load the selected agent." }, 503);
     if (!result.data || result.data.active === false) return json({ error: "Agent not found or inactive." }, 404);
     agent = result.data;
+    playbook = agent.base;
+  } else if (body.template_slug) {
+    agent = starterAgentsForWorkspace(ctx.brand.brandKey).find((template) => template.slug === body.template_slug);
+    if (!agent) return json({ error: "Starter agent not found." }, 400);
     playbook = agent.base;
   }
   if (!query || query.length > 300 || brief.length > 8000 || !PLAYBOOKS.includes(playbook)) return json({ error: "Provide a topic up to 300 characters and a valid format." }, 400);
