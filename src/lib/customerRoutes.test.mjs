@@ -100,6 +100,21 @@ test("scan report rejects another workspace and unassigned historical rows even 
   }
 });
 
+test("scan history exposes measured engine names and collection warnings without returning summaries", async () => {
+  const { tables, queries } = fixture();
+  tables.scans[0].engine_summaries = { aio: { data_source_issue: true, error_rate_pct: 50 }, chatgpt: { error_rate_pct: 0 }, gemini: {}, perplexity: {} };
+  const response = await listing.GET(new Request("https://app.example.test/api/customer/scan"));
+  const { scans } = await response.json();
+  assert.deepEqual(scans[0].platform, ["aio", "chatgpt", "gemini", "perplexity"]);
+  assert.equal(scans[0].collection_partial, true);
+  assert.equal(scans[0].engine_summaries, undefined);
+  assert.match(queries.find((query) => query.table === "scans").columns, /engine_summaries:raw_results->engines/);
+  tables.scans[0].engine_summaries = [{ engine: "aio", error_rate_pct: 0 }, { engine: "chatgpt", error_rate_pct: 0 }];
+  const clean = await (await listing.GET(new Request("https://app.example.test/api/customer/scan"))).json();
+  assert.equal(clean.scans[0].collection_partial, false);
+  assert.deepEqual(clean.scans[0].platform, ["aio", "chatgpt"]);
+});
+
 test("scan report reads the actual result columns and reports failed queries", async () => {
   fixture();
   const response = await report.GET(new Request("https://app.example.test/report"), { params: { scan_id: "scan-a" } });

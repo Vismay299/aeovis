@@ -74,7 +74,7 @@ export async function GET(request) {
   try {
     const { data: scans, error } = await admin
       .from("scans")
-      .select("id, brand, url, scanned_at, created_at, visibility_pct, prompts_tracked, prompts_mentioned, platform")
+      .select("id, brand, url, scanned_at, created_at, visibility_pct, prompts_tracked, prompts_mentioned, platform, engine_summaries:raw_results->engines")
       .eq("brand_key", brand.brandKey)
       .order("scanned_at", { ascending: false, nullsFirst: false })
       .limit(20);
@@ -93,7 +93,14 @@ export async function GET(request) {
 
     return NextResponse.json({
       brand_key: brand.brandKey,
-      scans: scans || [],
+      scans: (scans || []).map(({ engine_summaries, ...row }) => {
+        const summaries = engine_summaries && typeof engine_summaries === "object" ? engine_summaries : null;
+        const names = Array.isArray(summaries) ? summaries.map((slice) => slice?.engine || slice?.name).filter(Boolean) : summaries ? Object.keys(summaries) : [];
+        const slices = summaries ? Object.values(summaries) : [];
+        return { ...row, platform: names.length ? names : row.platform,
+          collection_partial: slices.some((slice) => slice?.data_source_issue === true || typeof slice?.error_rate_pct === "number" && slice.error_rate_pct > 0),
+        };
+      }),
       jobs: jobs || [],
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

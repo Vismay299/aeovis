@@ -108,7 +108,10 @@ and unauthenticated checks were insufficient acceptance evidence for tenants.
   The rebuilt staging scan passed prompt sourcing with a successful website
   scrape and Google seeding. Its later chunks resume on the existing live alias,
   so that run spans deployments and cannot establish clean live acceptance.
-- Automated verification: 3,199 passed, zero failed, 30 skipped live tests;
+- Scan history now derives the engine labels from stored multi-engine summaries
+  and flags partial collection. It does not return those summaries or raw answers
+  in the listing DTO.
+- Automated verification: 3,200 passed, zero failed, 30 skipped live tests;
   production build passed. CI separately verified tests, build, worker fleet
   and customer database isolation. Desktop and 390px tenant layouts were checked;
   the mobile document width remained 390px.
