@@ -1,5 +1,8 @@
 # Light design unification — 13 October 2026
 
+> <!-- doc-status -->
+> **Status: LIVE.** Current UI implementation and validation evidence. Visual authority remains [DESIGN.md](../../DESIGN.md); live scan acceptance is incomplete.
+
 The user selected one shared light design across the website, scans, reports,
 Content Studio and demos. This replaces the former dark visual direction.
 
@@ -42,5 +45,18 @@ Content Studio and demos. This replaces the former dark visual direction.
 These results validate the local UI and isolated simulation. They do not establish
 healthy live provider collection or authenticated customer CRUD/generation/report
 UAT. The blockers and required checks in
-`2026-10-13-scan-and-studio-repair.md` still apply. No PR or deployment was made.
+`2026-10-13-scan-and-studio-repair.md` still apply. No PR was created.
 Pre-existing legal-page and legal-link edits were preserved outside this commit.
+
+## Publication authorized by the user
+
+- Pushed the tested commits to `main` and `codex/repair-scans-content-studio`.
+- Production deployment `dpl_7r8ozERvHaw1esQWVqU4Ti8Mz8ch` reached Ready at
+  `https://perceev.xyz` with application commit `0da312c`.
+- Registered production `ENGINES` and `NEXT_PUBLIC_ENGINES` as
+  `aio,chatgpt,gemini,perplexity` before the production build.
+- Production variable registration and migration ledger passed `check:uat`.
+- The live public demo completed 120 simulated answers. This is a simulation
+  smoke test, not evidence of healthy live Google collection.
+- GitHub CI build, fleet and customer database isolation passed. Its first unit
+  test run found the missing status marker on this document; corrected here.
