@@ -4,6 +4,8 @@ import path from "node:path";
 import React from "react";
 import { compileJsx, renderToHtml } from "../../lib/renderHarness.mjs";
 import * as reportData from "./scans/reportData.js";
+import * as contentShared from "./content/shared.js";
+import { FORMATS } from "../../lib/content/agents/formats.js";
 
 const here = import.meta.dirname;
 const context = { brandKey: "workspace-trace", brand: { display_name: "trace" }, refreshOverview() {}, redirectToLogin() {}, scan: { start() {} } };
@@ -50,4 +52,14 @@ test("tenant Scans renders a runnable mock inside the tenant page rather than li
   assert.match(html, /Test the scan and report workflow for trace/);
   assert.match(html, /Simulation only/);
   assert.doesNotMatch(html, /href="\/demo"/);
+});
+
+test("a selected FAQ agent shows its output format rather than the base article pipeline", async () => {
+  const composer = await compileJsx(path.join(here,"content/ComposerCard.jsx"),{
+    modules:new Map([["react",React],["../ui",await primitives()],["./shared",contentShared],["@/lib/content/agents/formats",{FORMATS}]]),
+    autoNull:["lucide-react"],
+  });
+  const html=renderToHtml(composer.default,{brandKey:"workspace-trace",selectedAgent:{id:"own-agent",name:"FAQ Writer",format:"faq",base:"geo_article"}});
+  assert.match(html,/<option[^>]*>FAQ page<\/option>/);
+  assert.doesNotMatch(html,/<option[^>]*>Article \(GEO\)<\/option>/);
 });

@@ -2,6 +2,7 @@
  * Shared helpers for the Content Studio portal page: the customer API client,
  * playbook labels and small text utilities. No React here.
  */
+import { FORMATS } from "../../../lib/content/agents/formats.js";
 
 export const cx = (...parts) => parts.filter(Boolean).join(" ");
 
@@ -10,7 +11,8 @@ export const PLAYBOOK_OPTIONS = [
   { value: "linkedin_post", label: "LinkedIn post" },
 ];
 
-export function playbookLabel(value) {
+export function playbookLabel(value, format) {
+  if (FORMATS[format]) return FORMATS[format].label;
   return PLAYBOOK_OPTIONS.find((option) => option.value === value)?.label || "";
 }
 

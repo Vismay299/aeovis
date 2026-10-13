@@ -47,7 +47,7 @@ export default function DraftsLibrary({ items, onOpen }) {
         <div className="pv-list">
           {visible.map((item) => {
             const status = contentItemStatus(item.status);
-            const meta = [playbookLabel(item.playbook), `Updated ${formatRelative(item.updated_at)}`].filter(Boolean).join(" · ");
+            const meta = [playbookLabel(item.playbook, item.agent_format), `Updated ${formatRelative(item.updated_at)}`].filter(Boolean).join(" · ");
             return (
               <button key={item.id} type="button" className="pv-list__row pv-content-row" onClick={() => onOpen(item.id)}>
                 <span className="pv-list__main">

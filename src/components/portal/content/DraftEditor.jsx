@@ -174,7 +174,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
             <div className="pv-row">
               <Badge tone={status.tone} dot>{status.label}</Badge>
               <span className="pv-muted pv-content-meta">
-                {[playbookLabel(item.playbook), `Updated ${formatRelative(item.updated_at)}`].filter(Boolean).join(" · ")}
+                {[playbookLabel(item.playbook, item.agent_snapshot?.format), `Updated ${formatRelative(item.updated_at)}`].filter(Boolean).join(" · ")}
               </span>
             </div>
           </div>

@@ -52,7 +52,7 @@ function fixture({ resultError = null } = {}) {
   globalThis.customerRouteFixture = {
     admin, context: { client: admin, user: { id: "owner-a" }, error: null, brands: [{ brandKey: "workspace-a", display_name: "%", website: "https://same.example", role: "owner" }] },
   };
-  return { queries };
+  return { queries, tables };
 }
 
 test("customer content listing, draft and export are isolated by workspace", async () => {
@@ -67,6 +67,21 @@ test("customer content listing, draft and export are isolated by workspace", asy
   const exported = await contentItem.GET(new Request(url + "&export=markdown"), { params: { id: "draft-a" } });
   assert.match(await exported.text(), /Private draft/);
   assert.equal((await contentItem.PATCH(new Request(url, { method: "PATCH", headers: { origin: "https://attacker.example" }, body: "{}" }), { params: { id: "draft-a" } })).status, 403);
+});
+
+test("content lists expose the selected output format without leaking snapshot instructions or brief", async () => {
+  const {tables}=fixture();
+  const snapshot={name:"FAQ Writer",format:"faq",custom_instructions:"Private instructions"};
+  tables.content_jobs[0].agent_snapshot=snapshot;
+  tables.content_jobs[0].input={query:"A topic",brief:"Private brief"};
+  tables.content_items[0].agent_snapshot=snapshot;
+  const response=await contentListing.GET(new Request("https://app.example.test/api/customer/content?brand_key=workspace-a"));
+  const body=await response.json();
+  assert.equal(body.jobs[0].agent_format,"faq");
+  assert.equal(body.items[0].agent_format,"faq");
+  assert.deepEqual(body.jobs[0].input,{query:"A topic"});
+  assert.ok(!JSON.stringify(body).includes("Private instructions"));
+  assert.ok(!JSON.stringify(body).includes("Private brief"));
 });
 
 test("scan listing cannot expose matching names, websites, or wildcard labels from other workspaces", async () => {

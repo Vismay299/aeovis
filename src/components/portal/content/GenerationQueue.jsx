@@ -42,7 +42,7 @@ function ActiveJob({ job }) {
       </div>
       <div className="pv-content-job__meta">
         <Badge tone="brand" live>{stage?.label || "Queued"}</Badge>
-        {playbookLabel(job.playbook) ? <span>{playbookLabel(job.playbook)}</span> : null}
+        {playbookLabel(job.playbook, job.agent_format) ? <span>{playbookLabel(job.playbook, job.agent_format)}</span> : null}
       </div>
       <ProgressBar value={job.progress_pct} active label={`Progress for ${topic}`} />
       <div className="pv-content-steps">

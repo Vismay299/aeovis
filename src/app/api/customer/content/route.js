@@ -14,13 +14,17 @@ export async function GET(request) {
   const ctx = await customerRouteContext(request);
   if (ctx.response) return ctx.response;
   const [items, jobs] = await Promise.all([
-    ctx.client.from("content_items").select("id,title,status,playbook,created_at,updated_at").eq("brand", ctx.brand.brandKey).order("updated_at", { ascending: false }).limit(30),
-    ctx.client.from("content_jobs").select("id,playbook,status,progress_pct,item_id,error_message,input,agent_trace,created_at").eq("brand", ctx.brand.brandKey).order("created_at", { ascending: false }).limit(10),
+    ctx.client.from("content_items").select("id,title,status,playbook,agent_snapshot,created_at,updated_at").eq("brand", ctx.brand.brandKey).order("updated_at", { ascending: false }).limit(30),
+    ctx.client.from("content_jobs").select("id,playbook,status,progress_pct,item_id,error_message,input,agent_snapshot,agent_trace,created_at").eq("brand", ctx.brand.brandKey).order("created_at", { ascending: false }).limit(10),
   ]);
   if (items.error || jobs.error) return json({ error: "Could not load Content Studio." }, 503);
   // The composer's brief is the customer's own text and is not needed for progress.
-  const jobRows = (jobs.data || []).map((job) => ({ ...job, input: { query: typeof job.input?.query === "string" ? job.input.query : "" } }));
-  return json({ items: items.data || [], jobs: jobRows });
+  const labelAgent = ({ agent_snapshot, ...row }) => ({ ...row,
+    agent_name: typeof agent_snapshot?.name === "string" ? agent_snapshot.name : null,
+    agent_format: typeof agent_snapshot?.format === "string" ? agent_snapshot.format : null,
+  });
+  const jobRows = (jobs.data || []).map((job) => ({ ...labelAgent(job), input: { query: typeof job.input?.query === "string" ? job.input.query : "" } }));
+  return json({ items: (items.data || []).map(labelAgent), jobs: jobRows });
 }
 
 export async function POST(request) {
