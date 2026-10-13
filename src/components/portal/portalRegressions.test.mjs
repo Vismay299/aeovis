@@ -148,12 +148,16 @@ async function draftLifecycle(t, request) {
   });
   const ui = Object.fromEntries(["Badge", "Banner", "Button", "Skeleton", "Tabs"].map((key) => [key, noop]));
   ui.formatRelative = () => "just now";
+  const review = await compileJsx(path.join(here, "content/ReviewFindings.jsx"), {
+    modules: new Map([["react", lifecycle.react], ["../ui", ui]]),
+  });
   const { default: DraftEditor } = await compileJsx(path.join(here, "content/DraftEditor.jsx"), {
     modules: new Map([
       ["react", lifecycle.react], ["../ui", ui],
       ["./shared", { contentRequest: request, countWords: () => 1, readingMinutes: () => 1, cx: (...parts) => parts.filter(Boolean).join(" "), playbookLabel: () => "" }],
       ["../status", { contentItemStatus: () => ({ label: "Needs review" }) }],
       ["@/components/studio/Markdown", { Markdown: noop }],
+      ["./ReviewFindings", review],
     ]),
     autoNull: ["lucide-react"],
   });

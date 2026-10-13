@@ -6,6 +6,7 @@ import { Markdown } from "@/components/studio/Markdown";
 import { Badge, Banner, Button, Skeleton, Tabs, formatRelative } from "../ui";
 import { contentItemStatus } from "../status";
 import { contentRequest, countWords, cx, playbookLabel, readingMinutes } from "./shared";
+import ReviewFindings from "./ReviewFindings";
 
 /** Statuses the customer API accepts edits for (PATCH). */
 const EDITABLE_STATUSES = ["draft", "awaiting_approval", "approved", "rejected"];
@@ -194,6 +195,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
             </div>
           ) : null}
 
+          <ReviewFindings rubric={item.rubric} />
           <div className={cx("pv-content-panes", mode === "split" && "pv-content-panes--split")}>
             {mode !== "preview" ? (
               <textarea

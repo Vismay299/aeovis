@@ -82,3 +82,38 @@ and unauthenticated checks were insufficient acceptance evidence for tenants.
   isolation/authorization and validates both starter pipeline snapshots.
 - Search Console was inspected while signed in; this account is not connected
   to Google. No new Google authorization was granted during this review.
+
+## Authenticated tenant acceptance and deployment configuration
+
+- Signed in to the trace workspace using the account supplied by the user.
+  The production-environment staging build opens Studio on the canvas, exposes
+  two runnable starter agents, and loads saved customer agents.
+- Created and updated a six-specialist FAQ agent through the tenant builder.
+  Its format, target length, custom instructions and added Fact-Checker persisted.
+  The selected format now appears consistently in the composer, queue and library.
+- Tenant mock scans completed 30 questions × four engines = 120 simulated
+  answers inside Scans. They did not create scan history or use provider calls.
+- A real draft initially failed its Writer deadline. Replaying the same prompt
+  locally with low reasoning effort completed in 14 seconds. Bounded content
+  reasoning and explicit format/length precedence are now used by the real
+  markdown skills. Two isolated local pipeline runs reached human review.
+- A fresh tenant draft reached `awaiting_approval`; the editor loaded its
+  633-word FAQ, saved a title edit, and rendered linked sources in Preview.
+  No approval or publication was performed. Generation review findings are now
+  displayed in the tenant editor, including failed checks and sensitive claims;
+  the checks explicitly describe the generated version, not later human edits.
+- Real scan testing found production's utility model was `openrouter/free`
+  and Bright Data rejected its token. Updated production's utility/content
+  model settings and Bright Data credential from the working local configuration.
+  The rebuilt staging scan passed prompt sourcing with a successful website
+  scrape and Google seeding. Its later chunks resume on the existing live alias,
+  so that run spans deployments and cannot establish clean live acceptance.
+- Automated verification: 3,199 passed, zero failed, 30 skipped live tests;
+  production build passed. CI separately verified tests, build, worker fleet
+  and customer database isolation. Desktop and 390px tenant layouts were checked;
+  the mobile document width remained 390px.
+
+Localhost authenticated reads and simulation were tested, but real customer
+CRUD/generation used production-environment staging because the local server
+does not have an admin key. Live Google collection acceptance remains open;
+the in-memory mock is not a substitute. No PR has been created.

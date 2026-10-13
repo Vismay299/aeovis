@@ -97,3 +97,10 @@
 .pv-content-tabs button[aria-selected="true"] { background:var(--accent-soft); color:var(--accent-text); border-color:var(--accent-border); }
 .pv-content-layout[hidden] { display:none; }
 .pv-studio-agents { margin-block: 24px; min-width: 0; }
+.pv-content-review { padding: 16px 24px 0; color: var(--ink-2); overflow-wrap: anywhere; }
+.pv-content-review__note { font-size: 12.5px; color: var(--ink-3); margin: 10px 0; }
+.pv-content-review summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.pv-content-review li { margin-block: 12px; font-size: 13px; line-height: 1.6; }
+.pv-content-review li p { margin: 4px 0 0; }
+.pv-content-review__critique { white-space: pre-wrap; font-size: 13px; line-height: 1.6; }
+@media (max-width: 560px) { .pv-content-review { padding-inline: 16px; } }

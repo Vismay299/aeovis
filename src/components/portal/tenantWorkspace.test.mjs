@@ -63,3 +63,34 @@ test("a selected FAQ agent shows its output format rather than the base article 
   assert.match(html,/<option[^>]*>FAQ page<\/option>/);
   assert.doesNotMatch(html,/<option[^>]*>Article \(GEO\)<\/option>/);
 });
+
+test("tenant generation review exposes failed checks even with a high overall score", async () => {
+  const component = await compileJsx(path.join(here, "content/ReviewFindings.jsx"), {
+    modules: new Map([["react", React], ["../ui", await primitives()]]),
+  });
+  const html = renderToHtml(component.default, { rubric: {
+    verdict: "fail", weighted_total: 0.88, below_threshold: true,
+    violations: [{ rule: "facts_vs_research", detail: "Unsupported product claim <script>bad</script>" }],
+    critique: "Remove the unsupported promise.",
+  } });
+  assert.match(html, /Generated draft needs corrections/);
+  assert.match(html, /88 \/ 100/);
+  assert.match(html, /Reviewer findings \(1\)/);
+  assert.match(html, /Remove the unsupported promise/);
+  assert.match(html, /Review any later edits separately/);
+  assert.match(html, /&lt;script&gt;bad&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /Generated draft passed|<script>/);
+});
+
+test("tenant generation review distinguishes a pass, a sensitive-claims flag and an absent review", async () => {
+  const component = await compileJsx(path.join(here, "content/ReviewFindings.jsx"), {
+    modules: new Map([["react", React], ["../ui", await primitives()]]),
+  });
+  const passed = renderToHtml(component.default, { rubric: { verdict: "pass", weighted_total: 0.95 } });
+  assert.match(passed, /Generated draft passed automated review/);
+  assert.match(passed, /Your review is still required/);
+  const flagged = renderToHtml(component.default, { rubric: { verdict: "pass", ymyl_violation: true } });
+  assert.match(flagged, /Sensitive claims flagged/);
+  assert.doesNotMatch(flagged, /Generated draft passed/);
+  assert.equal(renderToHtml(component.default, {}), "");
+});
