@@ -105,7 +105,7 @@ export function AgentsPanel({ brand, onRun, apiBase = "/api/agents", customer = 
         formats={formats}
         blocks={blocks}
         defaultPipelines={defaultPipelines}
-        agent={editing.id ? editing : null}
+        agent={editing}
         onCancel={() => setEditing(null)}
         onSaved={() => {
           setEditing(null);
