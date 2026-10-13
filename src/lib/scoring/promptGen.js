@@ -15,6 +15,10 @@ import { llmJson } from "../llm.js";
 import { getLlmBaseUrl, getLlmModel } from "../llmConfig.js";
 import { INDUSTRY_PROMPTS } from "../../data/industries.js";
 
+// Bound all generation passes and their JSON/transport retries together.
+export const PROMPT_GENERATION_BUDGET_MS = 120000;
+export const PROMPT_GENERATION_CALL_TIMEOUT_MS = 60000;
+
 const INTENT_TIERS = ["informational", "commercial", "comparison", "problem_aware"];
 
 /**
@@ -113,7 +117,7 @@ function buildGenPrompt({ brand, website, industryHint, websiteSnippet, need, av
   }
 
   return `You are building a measurement instrument. Each query you write will be sent to
-an AI assistant (Google AI Overviews, ChatGPT, Perplexity), and we will check WHICH
+an AI assistant (Google AI Overviews, ChatGPT, Gemini, Perplexity), and we will check WHICH
 VENDOR BRANDS the assistant names in its answer. A query is only useful to us if a
 real assistant would answer it by naming specific companies, brands, or products.
 
@@ -636,6 +640,9 @@ export async function generateUnbrandedPrompts(
     );
   }
 
+  const deadlineMs = Date.now() + PROMPT_GENERATION_BUDGET_MS;
+  const generationOptions = { stats, timeout: PROMPT_GENERATION_CALL_TIMEOUT_MS, deadlineMs, max_tokens: 8000, temperature: 0.85 };
+
   // Pass 1
   const prompt1 = buildGenPrompt({
     brand,
@@ -645,7 +652,7 @@ export async function generateUnbrandedPrompts(
     need: count + 10,
     seedQueries,
   });
-  const result1 = await llmJsonFn(prompt1, { stats, timeout: 25000, temperature: 0.85 });
+  const result1 = await llmJsonFn(prompt1, generationOptions);
   if (Array.isArray(result1)) result1.forEach(add);
 
   // Pass 2 (only if short)
@@ -659,7 +666,7 @@ export async function generateUnbrandedPrompts(
       avoid: collected.map((c) => c.text),
       seedQueries,
     });
-    const result2 = await llmJsonFn(prompt2, { stats, timeout: 25000, temperature: 0.85 });
+    const result2 = await llmJsonFn(prompt2, generationOptions);
     if (Array.isArray(result2)) result2.forEach(add);
   }
 

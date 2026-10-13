@@ -142,3 +142,18 @@ test("generateUnbrandedPrompts - throws a clear error when it cannot reach count
     }
   );
 });
+
+
+test("generation passes share a bounded deadline and allow slow reasoning models to return full prompt sets", async () => {
+  const optionsSeen = [];
+  await generateUnbrandedPrompts(brand, website, "saas", {}, 30, {
+    scrapeForSummary: async () => "Project management software",
+    fetchPeopleAlsoAsk: async () => [], fetchAutocomplete: async () => [],
+    llmJson: async (_prompt, options) => { optionsSeen.push(options); return makeItems(`pass ${optionsSeen.length}`, optionsSeen.length === 1 ? 10 : 30); },
+  });
+  assert.equal(optionsSeen.length, 2);
+  assert.equal(optionsSeen[0].deadlineMs, optionsSeen[1].deadlineMs);
+  assert.equal(optionsSeen[0].timeout, 60000);
+  assert.equal(optionsSeen[0].max_tokens, 8000);
+  assert.ok(optionsSeen[0].deadlineMs <= Date.now() + 120000);
+});

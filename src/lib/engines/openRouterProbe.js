@@ -16,11 +16,13 @@ const WEB_SEARCH_TOOL = "openrouter:web_search";
 export const DEFAULT_OPENROUTER_MODELS = Object.freeze({
   chatgpt: "openai/gpt-6-luna",
   perplexity: "perplexity/sonar",
+  gemini: "google/gemini-3.8-flash",
 });
 
 const MODEL_ENV = Object.freeze({
   chatgpt: ["OPENROUTER_OPENAI_MODEL", "OPENAI_MODEL"],
   perplexity: ["OPENROUTER_PERPLEXITY_MODEL", "PERPLEXITY_MODEL"],
+  gemini: ["OPENROUTER_GEMINI_MODEL", "GEMINI_MODEL"],
 });
 
 /** The provider model chosen for an answer engine; model ids stay configurable per deployment. */
@@ -137,6 +139,10 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
   // if the configured gateway cannot report a cost for this model.
   assertModelPriceable(model, "openrouter");
 
+  // Sonar searches natively and does not support function/tool calling.
+  // Sending server tools filters out its only endpoint with HTTP 404.
+  const nativeSonar = engine === "perplexity" && /^perplexity\/sonar(?:$|-|:)/.test(model);
+
   let lastError = null;
   const attempts = MAX_RETRIES + 1;
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -154,7 +160,7 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
         body: JSON.stringify({
           model,
           messages: [{ role: "user", content: query }],
-          tools: [
+          ...(nativeSonar ? {} : { tools: [
             {
               type: WEB_SEARCH_TOOL,
               parameters: {
@@ -164,8 +170,9 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
               },
             },
           ],
-          max_tool_calls: 1,
-          max_tokens: 900,
+          max_tool_calls: 1 }),
+          max_tokens: nativeSonar ? 900 : 2500,
+          ...(!nativeSonar ? { reasoning: { effort: "minimal" } } : {}),
           usage: { include: true },
         }),
         signal: controller.signal,
@@ -181,6 +188,9 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
       const cost = measuredCost(model, usage);
       addStats(stats, usage, cost);
       const references = extractOpenRouterReferences(data);
+      if (!textFromMessage(message) && references.length === 0) {
+        throw new Error(`OpenRouter returned an empty answer (finish reason: ${data?.choices?.[0]?.finish_reason || "unknown"})`);
+      }
       return {
         text: textFromMessage(message),
         citations: references.map((item) => normalizeUrl(item.href)).filter(Boolean),

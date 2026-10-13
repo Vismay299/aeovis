@@ -2,6 +2,7 @@ import { brightDataSearch, extractBrightDataAiOverview, extractBrightDataOrganic
 import { resolveSerpQueryCost } from "../llmPricing.js";
 import { probeChatGpt, isChatGptConfigured } from "../engines/openai.js";
 import { probePerplexity, isPerplexityConfigured, hasUnverifiedCitations } from "../engines/perplexity.js";
+import { probeOpenRouterEngine, isOpenRouterEngineConfigured } from "../engines/openRouterProbe.js";
 import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
 import { detectMention, judgeBrandsSymmetric } from "./judge.js";
@@ -79,6 +80,7 @@ export function domainMatches(candidateDomain, target) {
 async function probeAio(query, brand, brandAliases, brandDomain, competitors, stats, options = {}) {
   const result = {
     engine: "aio",
+    measurement_method: "google_serp",
     prompt: query.text,
     is_branded_query: isBrandedQuery(query.text, brandAliases),
     topic: query.topic || "General",
@@ -223,6 +225,8 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   };
 
   const probeResult = await probeFn(query.text, { stats });
+  result.measurement_method = "model_api";
+  result.model_used = probeResult.model || probeResult.model_used || null;
 
   // Copied ONCE, here, before the first return can skip it.
   //
@@ -1030,6 +1034,7 @@ export function summarizeEngineSlice(results, engineName) {
 export const ENGINE_WEIGHTS = {
   aio: 1,
   chatgpt: 1,
+  gemini: 1,
   perplexity: 1,
 };
 
@@ -1437,6 +1442,26 @@ function describeDegradedSlice(slice) {
 }
 
 const ENGINE_REGISTRY = [
+  {
+    name: "gemini",
+    label: "Gemini",
+    isConfigured: () => isOpenRouterEngineConfigured("gemini"),
+    probe: async (query, brand, brandAliases, brandDomain, competitors, stats) =>
+      probeTextEngine(
+        { name: "gemini", probe: async (prompt, options) => {
+          const result = await probeOpenRouterEngine({ engine: "gemini", query: prompt, stats: options?.stats });
+          const observed = !result.error && (result.search_requests > 0 || result.references.length > 0);
+          return {
+            ...result,
+            citations_state: observed ? "verified" : "unverified",
+            citations_state_reason: observed ? null : "web_search_not_used",
+            citations_state_detail: observed ? null : "No web-search activity or citation references were returned",
+          };
+        } },
+        query, brand, brandAliases, brandDomain, competitors, stats
+      ),
+    concurrency: 4,
+  },
   {
     name: "aio",
     label: "Google AIO",

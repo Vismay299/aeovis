@@ -35,6 +35,7 @@
 export const ENGINE_LABELS = Object.freeze({
   aio: "Google AI Overview",
   chatgpt: "ChatGPT",
+  gemini: "Gemini",
   perplexity: "Perplexity",
 });
 

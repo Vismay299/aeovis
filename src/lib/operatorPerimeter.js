@@ -32,6 +32,8 @@
 
 /** Exact-match public routes, by method. */
 const PUBLIC_EXACT = [
+  // Fixed simulation; no user data, vendor calls or durable writes.
+  { method: "POST", path: "/api/demo/scan" },
   { method: "POST", path: "/api/scan" },
   { method: "GET", path: "/api/industries" },
   { method: "GET", path: "/api/health" },

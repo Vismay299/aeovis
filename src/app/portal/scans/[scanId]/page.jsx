@@ -8,7 +8,7 @@ import {
   Banner, Button, Card, EmptyState, PageHeader, Skeleton, SkeletonRows, Stat, formatDate,
 } from "@/components/portal/ui";
 import { CompetitorsCard, EngineScoresCard, QuestionsCard } from "@/components/portal/scans/ReportCards";
-import { finiteNumber, readCompetitors, readEngineScores, roundedPct } from "@/components/portal/scans/reportData";
+import { engineLabel, finiteNumber, readCompetitors, readEngineScores, roundedPct } from "@/components/portal/scans/reportData";
 import "@/components/portal/scans/scans.css";
 
 function KpiSkeleton() {
@@ -113,6 +113,11 @@ export default function ScanReportPage() {
           </Banner>
         ) : null}
 
+        {scan && Object.values(scan.engines || {}).some((engine) => engine?.data_source_issue || engine?.insufficient_sample) ? (
+          <Banner tone="warning" title="Some engines could not be measured">
+            {Object.entries(scan.engines || {}).filter(([, engine]) => engine?.data_source_issue || engine?.insufficient_sample).map(([key]) => engineLabel(key)).join(", ")} did not produce enough reliable answers. The overall visibility score excludes engines with collection failures; run another scan once collection recovers.
+          </Banner>
+        ) : null}
         <div className="pv-grid pv-grid--4">
           {loading ? (
             <>

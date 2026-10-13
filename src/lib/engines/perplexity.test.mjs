@@ -67,7 +67,7 @@ test("Perplexity adapter uses the shared OpenRouter key and configured model", a
     assert.equal(init.headers.Authorization, "Bearer shared-openrouter-test-key");
     const body = JSON.parse(init.body);
     assert.equal(body.model, "perplexity/sonar");
-    assert.equal(body.tools[0].type, "openrouter:web_search");
+    assert.equal(body.tools, undefined, "Sonar performs native search and rejects tool routing");
     return {
       ok: true,
       json: async () => ({

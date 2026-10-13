@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Play, Radar } from "lucide-react";
@@ -130,6 +131,7 @@ export default function ScansPage() {
         )}
       />
 
+      <p><Link href="/demo">Try a mock scan</Link> — preview the workflow with clearly labelled simulated answers.</p>
       <div className="pv-stack">
         <ScanProgressCard showIdle={false} />
 

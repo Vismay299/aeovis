@@ -233,12 +233,14 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
   );
 
   const publicPost = routes.filter((r) => isPublicRoute("POST", concrete(r)));
-  assert.deepEqual(publicPost.map(concrete), ["/api/scan"], "only POST /api/scan may be publicly writable");
+  assert.deepEqual(publicPost.map(concrete).sort(), ["/api/demo/scan", "/api/scan"], "only a real scan and the isolated fixed simulation may be public POST routes");
 
   const exempt = routes.filter((r) => isSelfGated(concrete(r)));
   assert.deepEqual(
     exempt.sort(),
     [
+      "/api/customer/agents",
+      "/api/customer/agents/[id]",
       "/api/customer/content",
     "/api/customer/content/[id]",
     "/api/customer/gsc",

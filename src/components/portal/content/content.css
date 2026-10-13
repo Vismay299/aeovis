@@ -91,3 +91,9 @@
   .pv-content-editor__actions { width: 100%; justify-content: stretch; }
   .pv-content-editor__actions > * { flex: 1 1 auto; justify-content: center; }
 }
+
+.pv-content-tabs { display:flex; gap:8px; margin-bottom:24px; flex-wrap:wrap; }
+.pv-content-tabs button { padding:10px 16px; border:1px solid var(--border-1); border-radius:8px; background:var(--bg-1); color:var(--text-2); cursor:pointer; }
+.pv-content-tabs button[aria-selected="true"] { background:var(--accent-soft); color:var(--accent-text); border-color:var(--accent-border); }
+.pv-content-layout[hidden] { display:none; }
+.pv-studio-canvas { overflow:auto; border:1px solid var(--border-1); border-radius:12px; padding:24px; background:var(--bg-1); }

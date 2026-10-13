@@ -44,7 +44,7 @@ function intentLabel(intent) {
   return INTENT_LABELS[intent] || intent.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const ENGINE_SHORT = { aio: "AIO", chatgpt: "GPT", perplexity: "PPX" };
+const ENGINE_SHORT = { aio: "AIO", chatgpt: "GPT", gemini: "GEM", perplexity: "PPX" };
 
 function engineShortLabel(engine) {
   return ENGINE_SHORT[engine] || String(engine || "").slice(0, 3).toUpperCase();

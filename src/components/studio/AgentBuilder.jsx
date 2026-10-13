@@ -58,7 +58,7 @@ const EMPHASIS_DIMS = {
  * asks for: what (format), where (channel), how (length, design rules, custom
  * instructions, format config), and focus (rubric emphasis).
  */
-export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, onSaved, onCancel, onDeleted }) {
+export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, onSaved, onCancel, onDeleted, apiBase = "/api/agents", customer = false, onPersist, onRemove }) {
   const [form, setForm] = useState(() => ({
     name: agent?.name || "",
     emoji: agent?.emoji || "🤖",
@@ -106,14 +106,15 @@ export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, 
     setSaving(true);
     setError(null);
     try {
-      const url = isEdit ? `/api/agents/${agent.id}` : "/api/agents";
+      if (onPersist) { onSaved?.(await onPersist(form)); return; }
+      const url = isEdit ? `${apiBase}/${agent.id}` : apiBase;
       const res = await fetch(url, {
         method: isEdit ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand, ...form }),
+        body: JSON.stringify({ ...form, [customer ? "brand_key" : "brand"]: brand }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "Save failed");
+      if (!res.ok) throw new Error(data.error || data.detail || "Save failed");
       onSaved?.(data.agent);
     } catch (e) {
       setError(e.message);
@@ -126,7 +127,9 @@ export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, 
     if (!isEdit) return;
     setSaving(true);
     try {
-      await fetch(`/api/agents/${agent.id}`, { method: "DELETE" });
+      if (onRemove) { await onRemove(agent.id); onDeleted?.(agent.id); return; }
+      const res = await fetch(`${apiBase}/${agent.id}${customer ? `?brand_key=${encodeURIComponent(brand)}` : ""}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json()).error || "Delete failed");
       onDeleted?.(agent.id);
     } catch (e) {
       setError(e.message);

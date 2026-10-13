@@ -1312,7 +1312,7 @@ test("GUARD — the ENGINE_NOTE exemption parses the dictionary, and refuses wha
     "an emptied dictionary is a scan that covered nothing, and must say so"
   );
   assert.throws(
-    () => withoutEngineNoteDictionary(pageShaped("  Gemini: 'a note for an engine this file does not know',"), labels),
+    () => withoutEngineNoteDictionary(pageShaped("  UnknownEngine: 'a note for an engine this file does not know',"), labels),
     /not a known engine label/,
     "a key that is not a label is either dead or a hiding place"
   );

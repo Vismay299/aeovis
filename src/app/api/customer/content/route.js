@@ -28,13 +28,21 @@ export async function POST(request) {
   if (ctx.response) return ctx.response;
   const query = typeof body.query === "string" ? body.query.trim() : "";
   const brief = typeof body.brief === "string" ? body.brief.trim() : "";
-  const playbook = body.playbook || "geo_article";
+  let playbook = body.playbook || "geo_article";
+  let agent = null;
+  if (body.agent_id) {
+    const result = await ctx.client.from("content_agents").select("*").eq("id", body.agent_id).eq("brand", ctx.brand.brandKey).maybeSingle();
+    if (result.error) return json({ error: "Could not load the selected agent." }, 503);
+    if (!result.data || result.data.active === false) return json({ error: "Agent not found or inactive." }, 404);
+    agent = result.data;
+    playbook = agent.base;
+  }
   if (!query || query.length > 300 || brief.length > 8000 || !PLAYBOOKS.includes(playbook)) return json({ error: "Provide a topic up to 300 characters and a valid format." }, 400);
   const admin = getSupabaseAdmin();
   if (!admin) return json({ error: "Content generation is not configured." }, 503);
   try {
     if (await hasActiveContentJobForBrand(ctx.brand.brandKey, { playbook, query }, { client: admin })) return json({ error: "This topic is already being generated." }, 409);
-    const job = await createContentJob({ brand: ctx.brand.brandKey, playbook, input: {
+    const job = await createContentJob({ brand: ctx.brand.brandKey, playbook, agent_id: agent?.id, agent_snapshot: agent, input: {
       query, brief, brand_name: ctx.brand.display_name, url: ctx.brand.website,
     } }, { client: admin });
     keepAlive(() => startContentJob(job.id), { label: "customer-content" });

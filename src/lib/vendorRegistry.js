@@ -75,7 +75,7 @@ export const VENDORS = Object.freeze(
       legacy: { [LLM_ENV.apiKey.canonical]: [LLM_ENV.apiKey.legacy] },
       required: false,
     },
-    { key: "gemini", env: ["GEMINI_API_KEY"], required: false },
+    { key: "gemini", env: [LLM_ENV.apiKey.canonical], legacy: { [LLM_ENV.apiKey.canonical]: [LLM_ENV.apiKey.legacy] }, required: false },
     // GSC: service account (legacy) OR customer OAuth connector. Either path
     // configures GSC; the OAuth path is the self-service customer connector.
     { key: "gsc", env: ["GSC_SERVICE_ACCOUNT_KEY"], required: false },

@@ -286,10 +286,7 @@ export const VENDOR_CHECKS = {
   },
 
   async gemini() {
-    const res = await get(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(env("GEMINI_API_KEY"))}`
-    );
-    return fromResponse(res, "model list");
+    return checkOpenRouterModel("gemini");
   },
 
   // This check WAS offline-only, justified by a comment claiming that signing
@@ -475,7 +472,7 @@ export const VENDORS = vendorsWithChecks();
  * of its own there (it probes through Bright Data, which IS a vendor row), so
  * inventing one here would fail deployments the fleet would happily run.
  */
-const OPENROUTER_ENGINES = new Set(["chatgpt", "perplexity"]);
+const OPENROUTER_ENGINES = new Set(["chatgpt", "gemini", "perplexity"]);
 
 /** resolveEnabledEngines' own fallback when ENGINES is unset (enginePipeline.js). */
 const FLEET_DEFAULT = "aio";

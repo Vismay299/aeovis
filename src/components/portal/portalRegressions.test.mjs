@@ -233,3 +233,20 @@ test("the report renders its By engine card from the actual worker payload shape
   assert.match(html, /42%/);
   assert.match(html, /0%/);
 });
+
+
+test("a failed engine is visibly unmeasured even when an older score field contains a number", async () => {
+  const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const html = renderToHtml(cards.EngineScoresCard, { engineScores: { aio: 73 }, engines: { aio: { visibility_pct: 73, non_branded_queries: 30, non_branded_with_answer: 7, errored_queries: 26, data_source_issue: true } } });
+  const text = textOf(html);
+  assert.ok(text.includes("Collection incomplete"));
+  assert.ok(text.includes("7 of 30 questions answered"));
+  assert.ok(text.includes("26 collection errors"));
+  assert.ok(!text.includes("73%"));
+});
+
+
+test("failed engine slices remain in the report even when their visibility is correctly null",()=>{
+  assert.deepEqual(reportData.readEngineScores(null,{aio:{visibility_pct:null,data_source_issue:true}}),[{name:"aio",pct:null}]);
+});

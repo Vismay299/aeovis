@@ -64,7 +64,7 @@ the UI can mark the point where a tracked set changed.
   system in `src/app/globals.css` (shadcn HSL vars stay mapped)
 - **Supabase** (Postgres) — schema in `supabase/migrations/`
 - **Engines**: Google AI Overview via Bright Data SERP · ChatGPT via the OpenAI
-  Responses API with `web_search` · Perplexity `sonar`
+  Responses API with `web_search` · grounded Gemini via OpenRouter · Perplexity `sonar` (native search)
 - **Utility LLM**: a free model on any OpenAI-compatible gateway (`LLM_BASE_URL`)
   for prompt generation, competitor extraction, and classification chores
 - **Content OS**: a paid model (`CONTENT_MODEL`) with a hard per-item cost cap
@@ -88,12 +88,13 @@ SUPABASE_DB_PASSWORD=...
 # optional: SUPABASE_DB_HOST / SUPABASE_DB_PORT / DATABASE_URL
 
 # --- Engines (comma-separated; unconfigured engines are skipped) ---
-ENGINES=aio,chatgpt,perplexity
-NEXT_PUBLIC_ENGINES=aio,chatgpt,perplexity
+ENGINES=aio,chatgpt,gemini,perplexity
+NEXT_PUBLIC_ENGINES=aio,chatgpt,gemini,perplexity
 BRIGHTDATA_API_KEY=...        # Google AI Overview
 BRIGHTDATA_SERP_ZONE=...      # optional; auto-discovered when omitted
 OPENROUTER_OPENAI_MODEL=openai/gpt-6-luna
 OPENROUTER_PERPLEXITY_MODEL=perplexity/sonar
+OPENROUTER_GEMINI_MODEL=google/gemini-3.8-flash
 
 # --- Utility LLM (prompt gen, competitor extraction, classification) ---
 # Provider-neutral: any OpenAI-compatible gateway. The model id must be valid
@@ -227,3 +228,17 @@ src/
 supabase/migrations/
 docs/plans/       Dated implementation plans
 ```
+
+## Local product acceptance
+
+Open `/demo` to run a clearly labelled mock scan and configure a demo agent
+on the crew canvas. Mock answers never enter customer history or call vendors.
+
+`node scripts/verify-local-product.mjs` runs the real scan worker and scoring
+against fixed four-engine fixtures.
+`node --env-file=.env.local scripts/verify-local-product.mjs --live --content`
+runs a 30-question Italica scan on all four configured providers and a real
+content pipeline to human review. This uses provider credits; all persistence
+is isolated in memory and the result is saved to `/tmp/aeo-local-acceptance.json`.
+Customer browser testing additionally requires a signed-in local customer session
+and `SUPABASE_SERVICE_ROLE_KEY` in the local server environment.

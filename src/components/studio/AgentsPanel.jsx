@@ -57,7 +57,7 @@ function AgentCard({ agent, onEdit, onRun }) {
  * Agents tab — the roster of custom agents. List, create, edit, and launch a
  * run. This is where "what we want to do, where, how" lives.
  */
-export function AgentsPanel({ brand, onRun }) {
+export function AgentsPanel({ brand, onRun, apiBase = "/api/agents", customer = false }) {
   const [agents, setAgents] = useState(null);
   const [formats, setFormats] = useState([]);
   const [blocks, setBlocks] = useState([]);
@@ -67,9 +67,10 @@ export function AgentsPanel({ brand, onRun }) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch(`/api/agents?brand=${encodeURIComponent(brand || "")}`, { cache: "no-store" });
-      if (!res.ok) throw new Error((await res.json()).detail || "Failed to load agents");
+      const res = await fetch(`${apiBase}?${customer ? "brand_key" : "brand"}=${encodeURIComponent(brand || "")}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(((await res.json()).error || "Failed to load agents") || "Failed to load agents");
       const data = await res.json();
+      setError(null);
       setAgents(data.agents || []);
       setFormats(data.formats || []);
       setBlocks(data.blocks || []);
@@ -78,7 +79,7 @@ export function AgentsPanel({ brand, onRun }) {
       setError(e.message);
       setAgents([]);
     }
-  }, [brand]);
+  }, [brand, apiBase, customer]);
 
   useEffect(() => {
     refresh();
@@ -88,6 +89,8 @@ export function AgentsPanel({ brand, onRun }) {
     return (
       <AgentBuilder
         brand={brand}
+        apiBase={apiBase}
+        customer={customer}
         formats={formats}
         blocks={blocks}
         defaultPipelines={defaultPipelines}

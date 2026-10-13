@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Banner, Button, Card } from "../ui";
 import { PLAYBOOK_OPTIONS, contentRequest, cx } from "./shared";
@@ -9,9 +9,10 @@ const TOPIC_MAX = 300;
 const BRIEF_MAX = 8000;
 
 /** "Create a draft": topic, format and the facts the draft must use. */
-export default function ComposerCard({ brandKey, topicRef, onCreated, onUnauthorized }) {
+export default function ComposerCard({ brandKey, topicRef, onCreated, onUnauthorized, selectedAgent, onClearAgent, initialTopic = "" }) {
   const id = useId();
-  const [topic, setTopic] = useState("");
+  const [topic, setTopic] = useState(initialTopic.slice(0, TOPIC_MAX));
+  useEffect(() => { if (initialTopic) setTopic(initialTopic.slice(0, TOPIC_MAX)); }, [initialTopic]);
   const [brief, setBrief] = useState("");
   const [playbook, setPlaybook] = useState("geo_article");
   const [busy, setBusy] = useState(false);
@@ -27,7 +28,7 @@ export default function ComposerCard({ brandKey, topicRef, onCreated, onUnauthor
       await contentRequest("/api/customer/content", {
         brandKey,
         method: "POST",
-        body: { query, brief: brief.trim(), playbook },
+        body: { query, brief: brief.trim(), playbook, agent_id: selectedAgent?.id },
       });
       setTopic("");
       setBrief("");
@@ -42,6 +43,7 @@ export default function ComposerCard({ brandKey, topicRef, onCreated, onUnauthor
 
   return (
     <Card title="Create a draft">
+      {selectedAgent ? <Banner title={`Run ${selectedAgent.name}`} action={<Button size="sm" variant="secondary" onClick={onClearAgent}>Use default</Button>}>{selectedAgent.format} · {selectedAgent.channel}</Banner> : null}
       <form className="pv-content-form" onSubmit={submit}>
         {error ? <Banner tone="error" onDismiss={() => setError("")}>{error}</Banner> : null}
 
@@ -67,7 +69,7 @@ export default function ComposerCard({ brandKey, topicRef, onCreated, onUnauthor
 
         <div className="pv-field">
           <label className="pv-label" htmlFor={`${id}-format`}>Format</label>
-          <select id={`${id}-format`} className="pv-select" value={playbook} onChange={(event) => setPlaybook(event.target.value)}>
+          <select id={`${id}-format`} className="pv-select" value={selectedAgent?.base || playbook} disabled={Boolean(selectedAgent)} onChange={(event) => setPlaybook(event.target.value)}>
             {PLAYBOOK_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}

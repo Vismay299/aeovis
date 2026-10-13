@@ -62,7 +62,7 @@ export function readEngineScores(engineScores, engines) {
     entries.forEach(([name, slice]) => {
       if (!name || !isRecord(slice)) return;
       const pct = finiteNumber(slice.visibility_pct);
-      if (pct !== null) rows.push({ name: String(name), pct });
+      if (pct !== null || slice.data_source_issue === true || slice.insufficient_sample === true) rows.push({ name: String(name), pct });
     });
   } else if (isRecord(engineScores)) {
     Object.entries(engineScores).forEach(([name, value]) => {
@@ -77,7 +77,7 @@ export function readEngineScores(engineScores, engines) {
       if (name && pct !== null) rows.push({ name: String(name), pct });
     });
   }
-  return rows.sort((a, b) => b.pct - a.pct);
+  return rows.sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
 }
 
 /** Per-engine slices: engines is an object keyed by engine (or an array with .engine). */

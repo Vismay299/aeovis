@@ -186,19 +186,33 @@ export async function resolveBrief(brand, input, deps = {}) {
   const upsert = deps.upsertBrandBrief || upsertBrandBrief;
 
   const stored = await get(brand);
-  if (stored?.brief) return stored.brief;
+  // The request brief must reach EVERY step, including draft and review. It is
+  // run-specific, so never persist it over the workspace's durable brand brief.
+  const requestFacts = typeof input?.brief === "string" ? input.brief.trim() : "";
+  const withRequest = (brief) => requestFacts ? { ...brief, request_facts: requestFacts } : brief;
+  const legacyHealthcareSeed = stored?.brief && input?.brand_profile !== "healthcare-cxo" &&
+    stored.brief.one_liner === `${brand} — ${HEALTHCARE_CXO_BRIEF.one_liner}` &&
+    Object.entries(HEALTHCARE_CXO_BRIEF).every(([key, value]) =>
+      key === "one_liner" || JSON.stringify(stored.brief[key]) === JSON.stringify(value)
+    );
+  // Only replace the exact old automatically seeded preset. A customer-edited
+  // healthcare brief (even one field changed) remains their source of truth.
+  if (stored?.brief && !legacyHealthcareSeed) return withRequest(stored.brief);
 
-  const preset =
-    input?.brand_profile === "healthcare-cxo" || !input?.brand_profile
-      ? HEALTHCARE_CXO_BRIEF
-      : HEALTHCARE_CXO_BRIEF; // single shipped preset in v1
-  const seeded = { ...preset, one_liner: `${brand} — ${preset.one_liner}` };
+  const preset = input?.brand_profile === "healthcare-cxo"
+    ? HEALTHCARE_CXO_BRIEF
+    : {
+        one_liner: input?.brand_name || brand,
+        website: input?.url || "",
+        tone_rules: ["Use clear, factual language.", "Do not invent product claims, prices, certifications or customer results."],
+      };
+  const seeded = { ...preset };
   try {
     await upsert(brand, seeded);
   } catch (err) {
     console.warn("[content-worker] brief seed persist failed:", err.message);
   }
-  return seeded;
+  return withRequest(seeded);
 }
 
 /** The agent config a job runs under: its snapshot, else the base default. */

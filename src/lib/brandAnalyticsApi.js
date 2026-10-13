@@ -15,7 +15,7 @@
 // GET /metrics — query param parsing + summary calc
 // ---------------------------------------------------------------------------
 
-export const VALID_ENGINES = ["aio", "chatgpt", "perplexity", "all"];
+export const VALID_ENGINES = ["aio", "chatgpt", "gemini", "perplexity", "all"];
 
 /**
  * Defensive cap on GET /metrics series length (plan.md P0.4: "no pagination

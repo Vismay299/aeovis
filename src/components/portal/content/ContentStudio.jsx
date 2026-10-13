@@ -12,6 +12,8 @@ import GenerationQueue from "./GenerationQueue";
 import DraftsLibrary from "./DraftsLibrary";
 import DraftEditor from "./DraftEditor";
 import "./content.css";
+import { AgentsPanel } from "@/components/studio/AgentsPanel";
+import { AgentCanvas } from "@/components/studio/AgentCanvas";
 
 const POLL_ACTIVE_MS = 4000;
 const POLL_IDLE_MS = 20000;
@@ -31,6 +33,8 @@ export default function ContentStudio() {
   const selectedId = searchParams.get("item") || "";
   const focusRequested = searchParams.get("new") === "1";
 
+  const [studioTab, setStudioTab] = useState("drafts");
+  const [selectedAgent, setSelectedAgent] = useState(null);
   const [items, setItems] = useState(null);
   const [jobs, setJobs] = useState(null);
   const [listError, setListError] = useState("");
@@ -80,6 +84,8 @@ export default function ContentStudio() {
 
   // A different workspace starts from a clean slate.
   useEffect(() => {
+    setStudioTab("drafts");
+    setSelectedAgent(null);
     setItems(null);
     setJobs(null);
     setNotices([]);
@@ -151,7 +157,14 @@ export default function ContentStudio() {
         </Banner>
       ) : null}
 
-      <div className="pv-grid pv-grid--main-side pv-content-layout">
+      <div className="pv-content-tabs" role="tablist" aria-label="Content Studio views">
+        {[ ["drafts", "Drafts"], ["agents", "Agents & crew canvas"], ["workflow", "Workflow"] ].map(([key, label]) => (
+          <button key={key} role="tab" aria-selected={studioTab === key} onClick={() => setStudioTab(key)}>{label}</button>
+        ))}
+      </div>
+      {studioTab === "agents" ? <AgentsPanel brand={brandKey} customer apiBase="/api/customer/agents" onRun={(agent) => { setSelectedAgent(agent); setStudioTab("drafts"); }} /> : null}
+      {studioTab === "workflow" ? <div className="pv-studio-canvas"><AgentCanvas run={{ status: jobs?.find(isActive)?.status, query: jobs?.find(isActive)?.input?.query }} /><p>Research → benchmark → draft → review → your approval. Configure the steps in Agents & crew canvas. Content is never published automatically.</p></div> : null}
+      <div hidden={studioTab !== "drafts"} className="pv-grid pv-grid--main-side pv-content-layout">
         <div className="pv-content-main">
           {notices.length ? (
             <div className="pv-content-notices">
@@ -195,6 +208,9 @@ export default function ContentStudio() {
 
         <div className="pv-stack">
           <ComposerCard
+            initialTopic={searchParams.get("topic") || ""}
+            selectedAgent={selectedAgent}
+            onClearAgent={() => setSelectedAgent(null)}
             topicRef={topicRef}
             brandKey={brandKey}
             onCreated={refreshAll}

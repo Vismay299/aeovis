@@ -100,20 +100,20 @@ const NODES = [
     x: 758,
     blurb: () => 'Approve, or send back with a note. Nothing ships without it.',
     state: 'Human gate',
-    detail: 'The one step no agent can take. Approve the draft and it publishes; send it back and the writer picks it up again with your note attached.',
+    detail: 'The one step no agent can take. Approve the draft, then export and publish it; send it back and the writer picks it up again with your note attached.',
     rows: (r) => [
-      ['Status', r.statusLabel || 'Waiting on you'],
-      ['Blocks', 'Publish & measure'],
+      ['Status', r.statusLabel || (r.status ? r.status : 'No active run')],
+      ['Blocks', 'Export & measure'],
     ],
   },
   {
     key: 'measure',
-    title: 'Publish & measure',
+    title: 'Export & measure',
     icon: Clock,
     x: 944,
-    blurb: () => 'Ships, then watches this question next reading.',
+    blurb: () => 'Export the approved draft, publish, then rescan.',
     state: 'Measure',
-    detail: 'Ships the approved page, then watches this exact question on the next reading. If it flips from the rival to you, the run is what moved it.',
+    detail: 'Export the approved draft and publish it to your website. Run another scan against the same buyer questions to compare visibility and citations; a change alone does not prove which edit caused it.',
     rows: () => [
       ['Runs after', 'Your approval'],
       ['Watches', 'The question that triggered it'],
@@ -131,10 +131,12 @@ const EDGES = [
 ];
 
 export function AgentCanvas({ run = {}, title = 'Content run' }) {
+  const hasRun = Boolean(run.status);
   const reached = STAGE_ORDER[run.status] ?? 0;
   const [selected, setSelected] = useState('editor');
 
   const stateOf = (i) => {
+    if (!hasRun) return 'planned';
     if (i === 4) return reached >= 4 && reached < 5 ? 'human' : reached >= 5 ? 'done' : 'queued';
     if (i < reached) return 'done';
     if (i === reached) return 'live';
@@ -203,7 +205,7 @@ export function AgentCanvas({ run = {}, title = 'Content run' }) {
                   </span>
                   <p>{n.blurb(run)}</p>
                   <span className="cvn__st">
-                    {s === 'human' ? 'Waiting on you' : s === 'done' ? 'Done' : s === 'live' ? 'Running' : 'Queued'}
+                    {s === 'human' ? 'Waiting on you' : s === 'done' ? 'Done' : s === 'live' ? 'Running' : s === 'planned' ? 'Workflow step' : 'Queued'}
                   </span>
                   {i > 0 && <span className="cvn__p cvn__p--in" />}
                   {i < NODES.length - 1 && <span className="cvn__p cvn__p--out" />}
