@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Banner, Button, Card } from "../ui";
 import { PLAYBOOK_OPTIONS, contentRequest, cx } from "./shared";
+import { FORMATS } from "@/lib/content/agents/formats";
 
 const TOPIC_MAX = 300;
 const BRIEF_MAX = 8000;
@@ -71,7 +72,7 @@ export default function ComposerCard({ brandKey, topicRef, onCreated, onUnauthor
         <div className="pv-field">
           <label className="pv-label" htmlFor={`${id}-format`}>Format</label>
           <select id={`${id}-format`} className="pv-select" value={selectedAgent?.base || playbook} disabled={Boolean(selectedAgent)} onChange={(event) => setPlaybook(event.target.value)}>
-            {PLAYBOOK_OPTIONS.map((option) => (
+            {selectedAgent ? <option value={selectedAgent.base}>{FORMATS[selectedAgent.format]?.label || selectedAgent.format}</option> : PLAYBOOK_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
