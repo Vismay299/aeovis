@@ -111,7 +111,15 @@ and unauthenticated checks were insufficient acceptance evidence for tenants.
 - Scan history now derives the engine labels from stored multi-engine summaries
   and flags partial collection. It does not return those summaries or raw answers
   in the listing DTO.
-- Automated verification: 3,200 passed, zero failed, 30 skipped live tests;
+- Per-question collection failures are labelled separately from a genuine
+  no-answer response. Only collected answers populate the missing-brand filter
+  and content-gap action; questions without usable answers have their own filter.
+- Production's old gateway key exhausted its $1 total limit during live UAT.
+  Replaced it with the existing working local application key after checking
+  that it had $1.70 remaining and was not a management key. No spending limit
+  was raised and no credits were purchased. A new live acceptance is required
+  after that credential rebuild; earlier denied answers remain unmeasured.
+- Automated verification: 3,201 passed, zero failed, 30 skipped live tests;
   production build passed. CI separately verified tests, build, worker fleet
   and customer database isolation. Desktop and 390px tenant layouts were checked;
   the mobile document width remained 390px.

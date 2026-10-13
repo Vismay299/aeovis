@@ -152,7 +152,12 @@ export function groupQuestions(results) {
 /** Does this question count as "naming you" for the chosen engine filter? */
 export function questionNamesBrand(question, engine) {
   const rows = engine === "all" ? question.rows : question.rows.filter((row) => row.engine === engine);
-  return rows.some((row) => row.mentioned === true);
+  return rows.some((row) => row.answered === true && !row.raw?.error && row.mentioned === true);
+}
+
+export function questionHasAnswer(question, engine) {
+  const rows = engine === "all" ? question.rows : question.rows.filter((row) => row.engine === engine);
+  return rows.some((row) => row.answered === true && !row.raw?.error);
 }
 
 export function engineOptions(results) {

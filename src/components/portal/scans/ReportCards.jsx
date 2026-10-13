@@ -8,6 +8,7 @@ import {
   engineOptions,
   finiteNumber,
   groupQuestions,
+  questionHasAnswer,
   questionNamesBrand,
   readCompetitors,
   readEngineScores,
@@ -88,6 +89,7 @@ export function CompetitorsCard({ competitors, engines, brand }) {
 }
 
 function AnswerBlock({ row }) {
+  const failed = Boolean(row.raw?.error);
   const text = typeof row.answer_text === "string" && row.answer_text.trim() ? row.answer_text : "";
   const position = finiteNumber(row.position);
   return (
@@ -95,11 +97,11 @@ function AnswerBlock({ row }) {
       <div className="pv-scans-answer__head">
         <span className="pv-scans-answer__engine">{engineLabel(row.engine)}</span>
         {row.raw?.measurement_method === "model_api" ? <Badge>Model API</Badge> : null}
-        {position !== null ? <Badge>#{position}</Badge> : null}
-        {row.brand_cited ? <Badge tone="brand">Cited</Badge> : null}
+        {!failed && row.answered === true && position !== null ? <Badge>#{position}</Badge> : null}
+        {!failed && row.answered === true && row.brand_cited ? <Badge tone="brand">Cited</Badge> : null}
       </div>
       <p className={`pv-scans-answer__text${text ? "" : " is-empty"}`}>
-        {text || (row.answered === false ? "The engine did not return an answer." : "No answer text was recorded.")}
+        {failed ? "Collection failed. This answer was not measured." : text || (row.answered === false ? "The engine did not return an answer." : "No answer text was recorded.")}
       </p>
     </div>
   );
@@ -110,6 +112,7 @@ function EngineBadges({ rows }) {
   return rows.flatMap((row, index) => {
     const label = engineLabel(row.engine);
     const key = `${row.engine || "engine"}-${index}`;
+    if (row.raw?.error) return [<Badge key={`${key}-status`} tone="warn">{label}: Collection failed</Badge>];
     const position = finiteNumber(row.position);
     const badges = [
       row.answered === false
@@ -148,7 +151,7 @@ function QuestionRow({ question, engine }) {
       </button>
       {open ? (
         <div id={id} className="pv-scans-q__answers">
-          {rows.some((row) => row.answered === true && row.mentioned === false && row.brand_cited !== true) ? <a href={`/portal/content?new=1&topic=${encodeURIComponent(question.query)}`}>Create content for this gap →</a> : null}
+          {rows.some((row) => row.answered === true && !row.raw?.error && row.mentioned === false && row.brand_cited !== true) ? <a href={`/portal/content?new=1&topic=${encodeURIComponent(question.query)}`}>Create content for this gap →</a> : null}
           {rows.map((row, index) => (
             <AnswerBlock key={`${row.id || row.engine || "row"}-${index}`} row={row} />
           ))}
@@ -174,16 +177,18 @@ export function QuestionsCard({ results }) {
     [questions, engine],
   );
   const naming = scoped.filter((q) => questionNamesBrand(q, engine));
-  const notNaming = scoped.filter((q) => !questionNamesBrand(q, engine));
+  const notNaming = scoped.filter((q) => questionHasAnswer(q, engine) && !questionNamesBrand(q, engine));
+  const noAnswers = scoped.filter((q) => !questionHasAnswer(q, engine));
 
   const needle = search.trim().toLowerCase();
-  const visible = (view === "naming" ? naming : view === "missing" ? notNaming : scoped)
+  const visible = (view === "naming" ? naming : view === "missing" ? notNaming : view === "unanswered" ? noAnswers : scoped)
     .filter((q) => !needle || q.query.toLowerCase().includes(needle));
 
   const tabs = [
     { value: "all", label: "All", count: scoped.length },
     { value: "naming", label: "Naming you", count: naming.length },
     { value: "missing", label: "Not naming you", count: notNaming.length },
+    { value: "unanswered", label: "No answers", count: noAnswers.length },
   ];
 
   const clear = () => { setSearch(""); setView("all"); setEngine("all"); };

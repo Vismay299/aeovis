@@ -254,3 +254,23 @@ test("a failed engine is visibly unmeasured even when an older score field conta
 test("failed engine slices remain in the report even when their visibility is correctly null",()=>{
   assert.deepEqual(reportData.readEngineScores(null,{aio:{visibility_pct:null,data_source_issue:true}}),[{name:"aio",pct:null}]);
 });
+
+test("collection failures are not counted as measured missing-brand answers", async () => {
+  const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const results = [
+    { query: "named brand", engine: "chatgpt", answered: true, mentioned: true },
+    { query: "measured gap", engine: "chatgpt", answered: true, mentioned: false },
+    { query: "failed capture", engine: "chatgpt", answered: true, mentioned: true, raw: { error: "Provider key limit exceeded" } },
+    { query: "natural absence", engine: "aio", answered: false, mentioned: false },
+  ];
+  const text = textOf(renderToHtml(cards.QuestionsCard, { results }));
+  assert.match(text, /Naming you 1/);
+  assert.match(text, /Not naming you 1/);
+  assert.match(text, /No answers 2/);
+  assert.match(text, /ChatGPT: Collection failed/);
+  assert.match(text, /Google AI Overviews: No answer/);
+  const failed = reportData.groupQuestions(results)[2];
+  assert.equal(reportData.questionNamesBrand(failed, "all"), false);
+  assert.equal(reportData.questionHasAnswer(failed, "all"), false);
+});
