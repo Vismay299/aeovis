@@ -32,7 +32,7 @@ export async function llmJson(prompt, options = {}, jsonRetries = 2) {
     const { text } = await generateContent(p, {
       // Structured utility output does not need long hidden reasoning, and on
       // reasoning models it is what made prompt-gen time out. Content steps
-      // opt out via contentLlmJson below.
+      // use their own, larger effort via contentLlmJson below.
       reasoningEffort: "minimal",
       ...options,
       jsonMode: true,
@@ -64,8 +64,11 @@ export async function contentLlmJson(prompt, options = {}, jsonRetries = 2) {
       // Long-form drafting needs headroom; callers can still override.
       timeout: 120000,
       max_tokens: 8000,
-      // Drafting quality benefits from the model's default reasoning.
-      reasoningEffort: null,
+      // Unbounded default reasoning exhausted the entire 180 s Writer step
+      // on the deployed content model. Low effort retains reasoning while
+      // leaving room for the actual draft and schema correction. The same
+      // failed FAQ prompt completed in 14 s with this setting.
+      reasoningEffort: "low",
       ...options,
     },
     jsonRetries

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { robustJsonParse, generateContent, getLlmModel } from "./openrouter.js";
 import { getLlmBaseUrl, getLlmProvider, resetLlmConfigWarnings } from "./llmConfig.js";
-import { llmJson } from "./llm.js";
+import { llmJson, contentLlmJson } from "./llm.js";
 import { isLlmUnavailable } from "./llmErrors.js";
 import { isUnpricedModel, resetUnpricedAlerts } from "./llmPricing.js";
 
@@ -925,4 +925,32 @@ test("llmJson (prompt-gen, extraction) asks for minimal reasoning", async () => 
     globalThis.fetch = realFetch;
   }
   assert.deepEqual(body.reasoning, { effort: "minimal" });
+});
+
+test("content JSON uses bounded reasoning through malformed-output retries and tracks paid usage", async () => {
+  const realFetch = globalThis.fetch;
+  const bodies = [];
+  const stats = { cost: 0, tokens: 0 };
+  globalThis.fetch = async (_u, init) => {
+    bodies.push(JSON.parse(init.body));
+    return Response.json({
+      choices: [{ message: { content: bodies.length === 1 ? "not JSON" : '{"title":"Reviewable FAQ"}' } }],
+      usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.002 },
+    });
+  };
+  try {
+    const output = await withEnvs(
+      { ...KEYED, LLM_BASE_URL: "https://openrouter.ai/api/v1", CONTENT_MODEL: "openai/gpt-6-luna" },
+      () => contentLlmJson("Draft the FAQ", { stats, deadlineMs: Date.now() + 1000 }, 1)
+    );
+    assert.deepEqual(output, { title: "Reviewable FAQ" });
+    assert.equal(bodies.length, 2);
+    for (const body of bodies) {
+      assert.equal(body.model, "openai/gpt-6-luna");
+      assert.deepEqual(body.reasoning, { effort: "low" });
+      assert.deepEqual(body.response_format, { type: "json_object" });
+    }
+    assert.equal(stats.cost, 0.004);
+    assert.equal(stats.tokens, 60);
+  } finally { globalThis.fetch = realFetch; }
 });
