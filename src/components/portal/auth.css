@@ -1,7 +1,7 @@
 /* ==============================================================
    Customer sign-in surfaces (login, signup, onboarding, invite,
    password reset). Scoped under .pv-auth, which carries
-   data-theme="light": these pages are always light.
+   the shared light root palette used throughout the product.
 
    Desktop (>= 960px): split screen. Left column is the form on a
    white surface; right column is a product showcase on paper.

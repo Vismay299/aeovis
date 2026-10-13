@@ -1,5 +1,5 @@
 /**
- * The status chip: 24px, mono, uppercase, with an optional LED dot.
+ * The shared status chip: 24px, sentence case, with an optional status dot.
  *
  * Semantic variants are reserved for states that genuinely are good, caution
  * or critical. A rival never takes one — losing a question is not an error.

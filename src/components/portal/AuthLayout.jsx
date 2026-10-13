@@ -46,7 +46,7 @@ function AnswerCard() {
 
 export default function AuthLayout({ eyebrow, title, titleId, subtitle, children, footer }) {
   return (
-    <div className="pv-auth" data-theme="light">
+    <div className="pv-auth">
       <div className="pv-auth-panel">
         <div className="pv-auth-top">
           <Link href="/" className="pv-auth-brand">

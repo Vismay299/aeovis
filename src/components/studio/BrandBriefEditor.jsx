@@ -7,43 +7,22 @@ import { Badge } from "@/components/perceev/Badge";
 import { Button } from "@/components/perceev/Button";
 import { Input } from "@/components/perceev/Input";
 
-const areaStyle = {
-  width: "100%",
-  background: "var(--bg-1)",
-  border: "1px solid var(--border-2)",
-  borderRadius: "var(--radius-1)",
-  padding: "10px 14px",
-  fontFamily: "var(--font-sans)",
-  fontSize: "13px",
-  color: "var(--text-1)",
-  outline: "none",
-  resize: "vertical",
-  boxSizing: "border-box",
-  lineHeight: 1.5,
-};
 
-const labelStyle = {
-  display: "block",
-  fontFamily: "var(--font-mono)",
-  fontSize: "10px",
-  fontWeight: 500,
-  textTransform: "uppercase",
-  letterSpacing: "0.12em",
-  color: "var(--text-2)",
-  marginBottom: "var(--space-2)",
-};
+
+
 
 function ListField({ label, hint, value, onChange, rows = 3, testId }) {
   return (
     <div>
-      <label style={labelStyle}>{label}</label>
+      <label className="lbl" htmlFor={testId}>{label}</label>
       <textarea
         data-testid={testId}
+        id={testId}
         value={(value || []).join("\n")}
         onChange={(e) => onChange(e.target.value.split("\n"))}
         onBlur={(e) => onChange(e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))}
         rows={rows}
-        style={areaStyle}
+        className="inp"
         placeholder={hint}
       />
       {hint && <div style={{ fontSize: "11px", color: "var(--text-3)", marginTop: "4px" }}>{hint}</div>}
@@ -54,8 +33,8 @@ function ListField({ label, hint, value, onChange, rows = 3, testId }) {
 /**
  * Brand Brief editor — the block-structured form (locked decision #8):
  * one-liner, vertical/personas, priority topics, money pages, competitors,
- * tone rules, platforms, win definition. Seeded from healthcare-cxo on
- * first use.
+ * tone rules, platforms and win definition. Starts from a neutral brief
+ * until the workspace saves its brand facts.
  */
 export function BrandBriefEditor({ brand }) {
   const [brief, setBrief] = useState(null);
@@ -118,23 +97,24 @@ export function BrandBriefEditor({ brand }) {
   }
 
   return (
-    <Card style={{ padding: "var(--space-7)" }} data-testid="studio-brief-editor">
+    <Card variant="flush" style={{ padding: "var(--space-7)" }} data-testid="studio-brief-editor">
       <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}>
         <h3 style={{ fontFamily: "var(--font-sans)", fontSize: "17px", fontWeight: 600, color: "var(--text-1)" }}>
           Brand brief — {brand}
         </h3>
-        {seeded && <Badge variant="moderate">seeded from healthcare-cxo — save to persist</Badge>}
+        {seeded && <Badge variant="moderate">Starter brief — save your brand facts</Badge>}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
         <div>
-          <label style={labelStyle}>One-liner (what they sell)</label>
+          <label className="lbl" htmlFor="brief-one-liner">One-liner (what they sell)</label>
           <textarea
+            id="brief-one-liner"
             data-testid="brief-one-liner"
             value={brief.one_liner || ""}
             onChange={(e) => set("one_liner", e.target.value)}
             rows={2}
-            style={areaStyle}
+            className="inp"
           />
         </div>
 
@@ -144,7 +124,7 @@ export function BrandBriefEditor({ brand }) {
           label="Vertical"
           value={brief.vertical || ""}
           onChange={(e) => set("vertical", e.target.value)}
-          placeholder="healthcare"
+          placeholder="e.g. building materials"
         />
 
         <ListField
@@ -197,13 +177,14 @@ export function BrandBriefEditor({ brand }) {
         />
 
         <div>
-          <label style={labelStyle}>Definition of a win</label>
+          <label className="lbl" htmlFor="brief-win-definition">Definition of a win</label>
           <textarea
+            id="brief-win-definition"
             data-testid="brief-win"
             value={brief.win_definition || ""}
             onChange={(e) => set("win_definition", e.target.value)}
             rows={2}
-            style={areaStyle}
+            className="inp"
             placeholder="cited URL vs mention vs approval"
           />
         </div>

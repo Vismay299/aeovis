@@ -1,0 +1,66 @@
+/* One set of primitives for public pages, reports, Studio and the portal.
+   Existing class names are compatibility adapters, not separate themes. */
+.btn, .pv-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: var(--control-height); padding: 0 16px;
+  border: 1px solid transparent; border-radius: var(--r-sm);
+  font: 600 14px/1.2 var(--font-sans); letter-spacing: -.01em;
+  text-decoration: none; white-space: nowrap; cursor: pointer;
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast), color var(--t-fast);
+}
+.btn svg, .pv-btn svg { width: 16px; height: 16px; flex: none; }
+.btn:disabled, .pv-btn:disabled, .pv-btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.btn--primary, .pv-btn--primary { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
+.btn--primary:hover:not(:disabled), .pv-btn--primary:hover:not(:disabled) { background: var(--brand-lift); border-color: var(--brand-lift); }
+.btn--ghost, .pv-btn--secondary { background: var(--surface); color: var(--ink-1); border-color: var(--line-strong); }
+.btn--ghost:hover:not(:disabled), .pv-btn--secondary:hover:not(:disabled) { background: var(--sunken); }
+.btn--quiet, .pv-btn--ghost { background: transparent; color: var(--ink-2); }
+.btn--quiet:hover:not(:disabled), .pv-btn--ghost:hover:not(:disabled) { background: var(--sunken); color: var(--ink-1); }
+.btn--danger, .pv-btn--danger { background: var(--crit-tint); color: var(--crit); border-color: var(--crit); }
+.btn--onbrand { background: var(--on-brand); color: var(--brand); border-color: var(--on-brand); }
+.btn--sm, .pv-btn--sm { min-height: var(--control-height-sm); padding: 0 12px; font-size: 13px; }
+.btn--lg { min-height: var(--control-height-lg); padding: 0 22px; font-size: 15px; }
+.pv-btn--block { width: 100%; }
+
+.card, .panel, .pv-card {
+  min-width: 0; background: var(--surface); color: var(--ink-1);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  box-shadow: 0 1px 2px rgba(14, 16, 23, .04);
+}
+.card--flat { box-shadow: none; }
+.card--lift { box-shadow: var(--shadow-2); }
+.panel__h, .pv-card__header { padding: 18px 20px 0; gap: 12px; }
+.panel__h { padding-bottom: 16px; }
+.panel__h b, .pv-card__title { font-size: 15px; font-weight: 650; letter-spacing: -.015em; }
+.panel__b, .pv-card__body { padding: 16px 20px 20px; }
+.panel__b--flush { padding: 0; }
+
+.chip, .pv-badge {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 2px 8px;
+  border: 1px solid var(--line); border-radius: var(--r-xs);
+  background: var(--paper); color: var(--ink-2);
+  font: 600 12px/1.35 var(--font-sans); letter-spacing: normal;
+  text-transform: none; white-space: nowrap;
+}
+.chip--you, .pv-badge--brand { background: var(--brand-tint); color: var(--brand); border-color: var(--brand-line); }
+.chip--good, .pv-badge--good { background: var(--good-tint); color: var(--good); border-color: transparent; }
+.chip--warn, .pv-badge--warn { background: var(--warn-tint); color: var(--warn); border-color: transparent; }
+.chip--crit, .pv-badge--crit { background: var(--crit-tint); color: var(--crit); border-color: transparent; }
+.chip__led, .pv-badge__dot { width: 5px; height: 5px; flex: none; border-radius: 50%; background: currentColor; }
+.pv-badge--live .pv-badge__dot { animation: pv-pulse 1.5s ease-in-out infinite; }
+
+.inp, .pv-input, .pv-select, .pv-textarea {
+  width: 100%; min-width: 0; min-height: var(--control-height); padding: 8px 12px;
+  background: var(--surface); color: var(--ink-1);
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  font: 400 14px/1.5 var(--font-sans);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.inp::placeholder, .pv-input::placeholder, .pv-textarea::placeholder { color: var(--ink-4); }
+.inp:focus, .pv-input:focus, .pv-select:focus, .pv-textarea:focus {
+  outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint);
+}
+textarea.inp, .pv-textarea { min-height: 96px; resize: vertical; }
+.lbl, .pv-label { display: block; color: var(--ink-2); font: 600 13px/1.5 var(--font-sans); margin-bottom: 7px; }
+
+.inp--sm { min-height: var(--control-height-sm); padding: 4px 8px; font-size: 13px; }

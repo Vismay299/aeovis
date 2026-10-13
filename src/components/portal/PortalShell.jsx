@@ -4,8 +4,7 @@
  * Customer portal shell: auth + workspace membership, the light sidebar, and
  * one shared data context every /portal page reads through usePortal().
  *
- * The shell always renders data-theme="light" — the portal stays light even
- * when the OS or the operator dashboard's toggle asks for dark.
+ * The shell inherits the same light root palette as the public website.
  */
 
 import Link from "next/link";
@@ -212,7 +211,7 @@ export default function PortalShell({ children }) {
 
   if (phase === "loading") {
     return (
-      <div className="pv-center" data-theme="light">
+      <div className="pv-center">
         <TopLoadingBar show />
         <div className="pv-row pv-muted"><Spinner label="Loading your workspace" /> Loading your workspace…</div>
       </div>
@@ -221,7 +220,7 @@ export default function PortalShell({ children }) {
 
   if (phase === "error" || !brands.length) {
     return (
-      <div className="pv-center" data-theme="light">
+      <div className="pv-center">
         <Card
           title={phase === "error" ? "Workspace unavailable" : "Your account is ready"}
           description={phase === "error" ? bootError : "Finish setting up your workspace to start tracking how AI engines talk about your brand."}
@@ -259,7 +258,7 @@ export function PortalFrame({ children }) {
   const isActive = (item) => (item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`));
 
   return (
-    <div className="pv-app" data-theme="light">
+    <div className="pv-app">
       <aside className="pv-sidebar" aria-label="Workspace navigation">
         <Link href="/portal" className="pv-sidebar__logo"><i aria-hidden="true" />perceev</Link>
 

@@ -5,7 +5,6 @@
    them reachable from a class name. See docs/design/DESIGN-SYSTEM.md. */
 
 module.exports = {
-    darkMode: ["class", '[data-theme="dark"]'],
     content: [
     "./src/pages/**/*.{js,jsx,ts,tsx}",
     "./src/components/**/*.{js,jsx,ts,tsx}",

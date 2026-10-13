@@ -9,7 +9,7 @@ import { AgentBuilder } from "./AgentBuilder";
 
 function AgentCard({ agent, onEdit, onRun }) {
   return (
-    <Card style={{ padding: "var(--space-5)" }} data-testid="agent-card">
+    <Card variant="flush" style={{ padding: "var(--space-5)" }} data-testid="agent-card">
       <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-3)" }}>
         <div
           style={{

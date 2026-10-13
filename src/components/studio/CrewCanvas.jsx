@@ -155,16 +155,9 @@ export function CrewCanvas({ blocks, pipeline, blockConfig, onChange, onConfigCh
                       }
                       placeholder={spec.label}
                       title={spec.label}
-                      style={{
-                        width: "92px",
-                        background: "var(--bg-0)",
-                        border: "1px solid var(--border-1)",
-                        borderRadius: "3px",
-                        padding: "2px 6px",
-                        fontSize: "10px",
-                        color: "var(--text-1)",
-                        outline: "none",
-                      }}
+                      className="inp inp--sm"
+                      aria-label={spec.label}
+                      style={{ width: "120px" }}
                     />
                   ))}
               </div>

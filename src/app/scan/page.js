@@ -19,7 +19,6 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { Wordmark } from '@/components/landing/SiteNav';
-import { ThemeToggle } from '@/components/perceev/ThemeToggle';
 import { runScan, saveScan, fetchIndustries, loadScan, clearScan } from '@/services/api';
 import {
   initialScanProgress,
@@ -165,7 +164,6 @@ export default function Scan() {
             {scanning ? 'Probe running' : 'New probe'}
           </span>
           <div className="nav__r">
-            <ThemeToggle />
           </div>
         </div>
       </header>

@@ -98,14 +98,15 @@ test("GUARD — exactly one design authority is LIVE", async () => {
   assert.deepEqual(live, ["DESIGN.md"], `exactly one design doc may be LIVE, found: ${live}`);
 });
 
-test("GUARD — the live design doc is the one the code actually implements", async () => {
-  // Not a matter of taste: whichever document's tokens appear in the shipped
-  // components IS the authority, and the header must agree.
-  const chartMath = await readFile(path.join(REPO, "src/components/perceev/charts/chartMath.js"), "utf8");
-  assert.match(chartMath, /--steel-1/, "the shipped ramp should use the Signal Box tokens");
+test("GUARD — the live design doc matches the shared light implementation", async () => {
   const design = await readFile(path.join(REPO, "DESIGN.md"), "utf8");
   assert.match(design, /\*\*Status: LIVE\.\*\*/);
-  assert.match(design, /Signal Box/i);
+  assert.match(design, /one light interface/i);
+  const layout = await readFile(path.join(REPO, "src/app/layout.js"), "utf8");
+  assert.match(layout, /data-theme="light"/);
+  const css = await readFile(path.join(REPO, "src/app/globals.css"), "utf8");
+  assert.match(css, /--paper:\s*#F7F7FA/i);
+  assert.doesNotMatch(css, /prefers-color-scheme|data-theme="dark"/);
 });
 
 test("GUARD — the close rule is written down where plans are read", async () => {

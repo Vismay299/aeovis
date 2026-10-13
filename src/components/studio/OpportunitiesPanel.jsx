@@ -132,17 +132,9 @@ function GapCard({ gap, agents, onLaunch }) {
           value={agentId}
           onChange={(e) => setAgentId(e.target.value)}
           data-testid="opportunity-agent"
-          style={{
-            flex: 1,
-            background: "var(--bg-1)",
-            border: "1px solid var(--border-2)",
-            borderRadius: "var(--radius-1)",
-            padding: "8px 10px",
-            fontFamily: "var(--font-sans)",
-            fontSize: "12px",
-            color: "var(--text-1)",
-            outline: "none",
-          }}
+          className="inp"
+          aria-label="Agent for this opportunity"
+          style={{ flex: 1 }}
         >
           {agents.map((a) => (
             <option key={a.id} value={a.id}>

@@ -8,7 +8,6 @@ export { Tabs } from "./Tabs";
 export { Alert } from "./Alert";
 export { Skeleton } from "./Skeleton";
 export { Sidebar } from "./Sidebar";
-export { ThemeToggle } from "./ThemeToggle";
 export { TrendChart, RankTable, PerformanceMatrix, Donut, DeltaChip } from "./charts";
 
 /* Charts shared with the landing page. `--you` is indigo in all of them. */

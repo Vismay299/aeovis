@@ -3,8 +3,7 @@
 import Link from 'next/link';
 import { Wordmark } from '@/components/landing/SiteNav';
 
-/* The navy block is its own ground: labels there take the navy inks, never
-   the page inks, which are tuned for paper. Handled in globals.css. */
+/* Website footer uses the shared light page and surface tokens. */
 
 export function SiteFooter() {
   return (
@@ -27,9 +26,9 @@ export function SiteFooter() {
           </div>
           <div>
             <h5>Company</h5>
-            <a href="#work">What it does</a>
-            <a href="#evidence">Evidence</a>
-            <a href="#gap">The gap</a>
+            <Link href="/#work">What it does</Link>
+            <Link href="/#evidence">Evidence</Link>
+            <Link href="/#gap">The gap</Link>
             <Link href="/scan">Run a probe</Link>
           </div>
           <div>

@@ -15,20 +15,7 @@ const TYPE_META = {
   glossary: { label: "Glossary", icon: BookA, blurb: "Terminology agents must use exactly." },
 };
 
-const areaStyle = {
-  width: "100%",
-  background: "var(--bg-1)",
-  border: "1px solid var(--border-2)",
-  borderRadius: "var(--radius-1)",
-  padding: "10px 14px",
-  fontFamily: "var(--font-sans)",
-  fontSize: "13px",
-  color: "var(--text-1)",
-  outline: "none",
-  resize: "vertical",
-  boxSizing: "border-box",
-  lineHeight: 1.5,
-};
+
 
 /**
  * Knowledge blocks — the stackable context layer. Every agent inherits the
@@ -138,7 +125,7 @@ export function KnowledgePanel({ brand }) {
       {error && <div style={{ fontSize: "12px", color: "var(--crit)" }}>{error}</div>}
 
       {adding && (
-        <Card style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }} data-testid="knowledge-form">
+        <Card variant="flush" style={{ padding: "var(--space-5)", display: "flex", flexDirection: "column", gap: "var(--space-4)" }} data-testid="knowledge-form">
           <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
             <div style={{ minWidth: "200px", flex: 1 }}>
               <Select label="Type" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} data-testid="knowledge-type">
@@ -168,15 +155,16 @@ export function KnowledgePanel({ brand }) {
             />
           ) : (
             <div>
-              <label style={{ display: "block", fontFamily: "var(--font-mono)", fontSize: "10px", fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text-2)", marginBottom: "var(--space-2)" }}>
+              <label className="lbl" htmlFor="knowledge-content">
                 Content
               </label>
               <textarea
+                id="knowledge-content"
                 data-testid="knowledge-content"
                 value={form.content}
                 onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
                 rows={4}
-                style={areaStyle}
+                className="inp"
                 placeholder={
                   form.type === "banned_claims"
                     ? "One rule per line: Never claim NABL accreditation for the Pune lab."
@@ -198,7 +186,7 @@ export function KnowledgePanel({ brand }) {
       )}
 
       {blocks.length === 0 && !adding && (
-        <Card style={{ padding: "var(--space-8)", textAlign: "center" }}>
+        <Card variant="flush" style={{ padding: "var(--space-8)", textAlign: "center" }}>
           <p style={{ fontSize: "13px", color: "var(--text-3)", lineHeight: 1.6 }}>
             No knowledge blocks yet. Pin your pricing page, paste ground-truth facts, and list banned
             claims — every agent will ground its drafts in them.

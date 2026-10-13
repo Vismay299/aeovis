@@ -307,14 +307,14 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
       {/* Tab content */}
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
         {tab === "draft" && (
-          <Card style={{ padding: "var(--space-7)", maxWidth: "760px" }} data-testid="studio-draft-body">
+          <Card variant="flush" style={{ padding: "var(--space-7)", maxWidth: "760px" }} data-testid="studio-draft-body">
             <Markdown>{item.body_md}</Markdown>
           </Card>
         )}
 
         {tab === "research" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)", maxWidth: "760px" }}>
-            <Card style={{ padding: "var(--space-5)" }}>
+            <Card variant="flush" style={{ padding: "var(--space-5)" }}>
               <div style={{ ...monoLabel, marginBottom: "var(--space-3)" }}>Sources ({(research.sources || []).length})</div>
               {(research.sources || []).map((s, i) => (
                 <div key={i} style={{ marginBottom: "var(--space-3)" }}>
@@ -333,7 +333,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
                 </div>
               ))}
             </Card>
-            <Card style={{ padding: "var(--space-5)" }}>
+            <Card variant="flush" style={{ padding: "var(--space-5)" }}>
               <div style={{ ...monoLabel, marginBottom: "var(--space-3)" }}>Stats ({(research.stats || []).length})</div>
               {(research.stats || []).map((s, i) => (
                 <div key={i} style={{ fontSize: "13px", color: "var(--text-1)", marginBottom: "var(--space-2)" }}>
@@ -348,7 +348,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
               )}
             </Card>
             {(research.quotes || []).length > 0 && (
-              <Card style={{ padding: "var(--space-5)" }}>
+              <Card variant="flush" style={{ padding: "var(--space-5)" }}>
                 <div style={{ ...monoLabel, marginBottom: "var(--space-3)" }}>Quotes</div>
                 {research.quotes.map((q, i) => (
                   <blockquote key={i} style={{ borderLeft: "3px solid var(--accent)", paddingLeft: "var(--space-3)", margin: "0 0 var(--space-3)", fontSize: "13px", color: "var(--text-2)", fontStyle: "italic" }}>
@@ -361,7 +361,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
               </Card>
             )}
             {(research.angles || []).length > 0 && (
-              <Card style={{ padding: "var(--space-5)" }}>
+              <Card variant="flush" style={{ padding: "var(--space-5)" }}>
                 <div style={{ ...monoLabel, marginBottom: "var(--space-3)" }}>Angles</div>
                 <ul style={{ paddingLeft: "20px" }}>
                   {research.angles.map((a, i) => (
@@ -371,7 +371,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
               </Card>
             )}
             {(research.unsupported_subqueries || []).length > 0 && (
-              <Card style={{ padding: "var(--space-5)", border: "1px solid var(--warn-border)" }}>
+              <Card variant="flush" style={{ padding: "var(--space-5)", border: "1px solid var(--warn-border)" }}>
                 <div style={{ ...monoLabel, color: "var(--warn)", marginBottom: "var(--space-3)" }}>Unsupported areas (no evidence found)</div>
                 <ul style={{ paddingLeft: "20px" }}>
                   {research.unsupported_subqueries.map((u, i) => (
@@ -386,7 +386,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
         {tab === "benchmark" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)", maxWidth: "760px" }}>
             {workOrder && (
-              <Card style={{ padding: "var(--space-5)" }}>
+              <Card variant="flush" style={{ padding: "var(--space-5)" }}>
                 <div style={{ ...monoLabel, marginBottom: "var(--space-3)" }}>Work order</div>
                 <div style={{ fontSize: "13px", color: "var(--text-1)", marginBottom: "var(--space-2)" }}>
                   <strong>Angle:</strong> {workOrder.angle}
@@ -408,7 +408,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
                 )}
               </Card>
             )}
-            <Card style={{ padding: "var(--space-5)" }}>
+            <Card variant="flush" style={{ padding: "var(--space-5)" }}>
               <div style={{ ...monoLabel, marginBottom: "var(--space-3)" }}>
                 {item.playbook === "geo_article" ? "Citation teardown" : "Channel pack"}
               </div>
@@ -455,7 +455,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
 
         {tab === "rubric" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)", maxWidth: "760px" }}>
-            <Card style={{ padding: "var(--space-5)" }}>
+            <Card variant="flush" style={{ padding: "var(--space-5)" }}>
               <div style={{ ...monoLabel, marginBottom: "var(--space-4)" }}>
                 Per-dimension scores · weighted total {rubric.weighted_total ?? "—"} · verdict {rubric.verdict || "—"}
               </div>
@@ -466,7 +466,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
               </div>
             </Card>
             {(rubric.violations || []).length > 0 && (
-              <Card style={{ padding: "var(--space-5)" }}>
+              <Card variant="flush" style={{ padding: "var(--space-5)" }}>
                 <div style={{ ...monoLabel, marginBottom: "var(--space-3)" }}>Violations</div>
                 {(rubric.violations || []).map((v, i) => (
                   <div key={i} style={{ marginBottom: "var(--space-3)", display: "flex", gap: "var(--space-2)", alignItems: "flex-start" }}>
@@ -477,7 +477,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
               </Card>
             )}
             {rubric.critique && (
-              <Card style={{ padding: "var(--space-5)" }}>
+              <Card variant="flush" style={{ padding: "var(--space-5)" }}>
                 <div style={{ ...monoLabel, marginBottom: "var(--space-3)" }}>Reviewer critique</div>
                 <div style={{ fontSize: "13px", color: "var(--text-2)", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{rubric.critique}</div>
               </Card>
@@ -493,7 +493,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
               </div>
             )}
             {[...(item.revisions || [])].reverse().map((rev, i) => (
-              <Card key={i} style={{ padding: "var(--space-5)" }}>
+              <Card key={i} variant="flush" style={{ padding: "var(--space-5)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
                   <Badge variant="muted">rev {rev.revision}</Badge>
                   {rev.source === "human_feedback" && <Badge variant="accent">human feedback</Badge>}
@@ -538,19 +538,8 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
             onChange={(e) => setComment(e.target.value)}
             placeholder="Comment — required for request-changes / reject; every comment becomes a stored lesson for future drafts."
             rows={2}
-            style={{
-              width: "100%",
-              background: "var(--bg-1)",
-              border: "1px solid var(--border-2)",
-              borderRadius: "var(--radius-1)",
-              padding: "10px 14px",
-              fontFamily: "var(--font-sans)",
-              fontSize: "13px",
-              color: "var(--text-1)",
-              outline: "none",
-              resize: "vertical",
-              boxSizing: "border-box",
-            }}
+            className="inp"
+            aria-label="Review comment"
           />
           <div style={{ display: "flex", gap: "var(--space-3)" }}>
             <Button

@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { ThemeToggle } from '@/components/perceev/ThemeToggle';
 
 export function Wordmark({ className = '', style }) {
   return (
@@ -24,12 +23,11 @@ export function SiteNav() {
       <div className="shell nav__in">
         <Link href="/" aria-label="Perceev home"><Wordmark /></Link>
         <div className="nav__links">
-          <a href="#gap">The gap</a>
-          <a href="#work">What it does</a>
-          <a href="#evidence">Evidence</a>
+          <Link href="/#gap">The gap</Link>
+          <Link href="/#work">What it does</Link>
+          <Link href="/#evidence">Evidence</Link>
         </div>
         <div className="nav__r">
-          <ThemeToggle />
           <Link className="btn btn--quiet btn--sm" href="/login">Sign in</Link>
           <Link className="btn btn--primary btn--sm" href="/scan">Run a free probe</Link>
         </div>

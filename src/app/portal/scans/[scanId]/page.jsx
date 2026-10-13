@@ -114,7 +114,7 @@ export default function ScanReportPage() {
         ) : null}
 
         {scan && Object.values(scan.engines || {}).some((engine) => engine?.data_source_issue || engine?.insufficient_sample) ? (
-          <Banner tone="warning" title="Some engines could not be measured">
+          <Banner tone="warn" title="Some engines could not be measured">
             {Object.entries(scan.engines || {}).filter(([, engine]) => engine?.data_source_issue || engine?.insufficient_sample).map(([key]) => engineLabel(key)).join(", ")} did not produce enough reliable answers. The overall visibility score excludes engines with collection failures; run another scan once collection recovers.
           </Banner>
         ) : null}

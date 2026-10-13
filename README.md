@@ -9,8 +9,8 @@ which rivals the engines name instead, which sources they cite, and where the
 gaps are. An agent-driven Content Studio turns those gaps into drafted content
 behind a mandatory human approval gate.
 
-> Design and product authority live in [`DESIGN.md`](DESIGN.md) (the dark
-> "Results Night" visual world) and [`PRODUCT.md`](PRODUCT.md). Active
+> Design and product authority live in [`DESIGN.md`](DESIGN.md) (the shared
+> light visual system) and [`PRODUCT.md`](PRODUCT.md). Active
 > engineering plan: [`docs/plans/plan.md`](docs/plans/plan.md).
 
 ---

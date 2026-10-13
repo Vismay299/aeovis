@@ -62,7 +62,8 @@ on the homepage with existing case history.
 ## Brand Commitments
 
 - Name: Perceev; lowercase wordmark "perceev".
-- USER-PINNED (binding): the interface is dark mode.
+- USER-PINNED (binding, 13 October 2026): the website, scans, reports, Studio,
+  customer portal and demos share one light design system. No dark/system toggle.
 - Taste reference volunteered by user: impeccable.style (premium dark, restrained
   metallic accent, thin large display type). Reference, not a clone target.
 

@@ -4,7 +4,6 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, FlaskConical, Loader2, Download, ShieldAlert } from "lucide-react";
 import { Sidebar } from "@/components/perceev/Sidebar";
-import { ThemeToggle } from "@/components/perceev/ThemeToggle";
 import { ScoreBand } from "@/components/dashboard/ScoreBand";
 import { ProvenanceStrip } from "@/components/dashboard/ProvenanceStrip";
 import { OverviewView } from "@/components/dashboard/OverviewView";
@@ -898,7 +897,6 @@ export default function DashboardShell({ scan, scanId, error = null }) {
               </span>
             </span>
           )}
-          <ThemeToggle />
           <button
             type="button"
             data-print="hide"

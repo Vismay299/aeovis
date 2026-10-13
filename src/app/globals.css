@@ -1,21 +1,6 @@
-/* ==============================================================
-   PERCEEV — product design system
-
-   Ported from design-options/prototype.src.html. The prototype is
-   the source of truth for markup and CSS; docs/design/DESIGN-SYSTEM.md
-   describes it. When this file and the prototype disagree, the
-   prototype wins — every value here was read out of it.
-
-   Light is the base palette. Dark is a full second theme, reached
-   either by the OS or by an explicit [data-theme] stamp. There are
-   three viewer states, not two — see § theming contract.
-
-   The "Signal Box" world this replaces (dark-only, railway
-   interlocking, 14-segment digits) was rejected on 2026-08-16.
-   Its token names survive at the bottom of :root as an alias layer
-   so surfaces not yet ported render in the new palette rather than
-   black-on-black. Aliases retire as each surface is rebuilt.
-   ============================================================== */
+/* Perceev's shared light design system. DESIGN.md governs visual direction.
+   Tokens live here; primitives.css owns shared controls and surfaces.
+   Compatibility aliases are retained only for live legacy report components. */
 
 @font-face {
   font-family: 'Archivo';
@@ -47,255 +32,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Customer login and self-service UAT workspace */
-.customer-auth-page,
-.customer-portal-page {
-  min-height: 100vh;
-  background: var(--paper);
-  color: var(--ink-1);
-  font-family: var(--font-sans);
-}
-
-.customer-auth-page {
-  display: grid;
-  place-items: center;
-  padding: 32px 20px;
-}
-
-.customer-auth-card {
-  width: min(100%, 440px);
-  padding: clamp(28px, 6vw, 48px);
-  border: 1px solid var(--line);
-  border-radius: var(--r-xl);
-  background: var(--surface);
-  box-shadow: var(--shadow-2);
-}
-
-.customer-auth-brand {
-  display: inline-block;
-  color: var(--ink-1);
-  font-size: 21px;
-  font-weight: 750;
-  letter-spacing: -.055em;
-  text-decoration: none;
-}
-
-.customer-auth-kicker {
-  margin: 32px 0 8px;
-  color: var(--brand);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: .12em;
-}
-
-.customer-auth-card h1,
-.customer-portal-heading h1,
-.customer-portal-empty h1 {
-  margin: 0;
-  font-size: clamp(28px, 5vw, 38px);
-  font-weight: 650;
-  letter-spacing: -.05em;
-  line-height: 1.1;
-}
-
-.customer-auth-copy,
-.customer-portal-empty > p:last-child {
-  margin: 12px 0 24px;
-  color: var(--ink-2);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.customer-auth-form {
-  display: grid;
-  gap: 9px;
-}
-
-.customer-auth-form label,
-.customer-gsc-form label {
-  margin-top: 6px;
-  color: var(--ink-2);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.customer-auth-form input,
-.customer-gsc-form input,
-.customer-brand-picker select {
-  width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--ink-1);
-  font: inherit;
-}
-
-.customer-auth-form input:focus,
-.customer-gsc-form input:focus,
-.customer-brand-picker select:focus {
-  outline: 2px solid var(--brand-lift);
-  outline-offset: 2px;
-}
-
-.customer-auth-submit {
-  width: 100%;
-  min-height: 44px;
-  margin-top: 10px;
-  justify-content: center;
-}
-
-.customer-auth-link {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--brand);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.customer-auth-card > .customer-auth-link { margin-top: 18px; }
-
-.customer-auth-message,
-.customer-portal-alert {
-  padding: 12px 14px;
-  border: 1px solid var(--crit);
-  border-radius: var(--r-sm);
-  background: var(--crit-tint);
-  color: var(--ink-1);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.customer-auth-message a { color: var(--brand); }
-
-.customer-auth-invite {
-  margin: 22px 0 0;
-  padding-top: 18px;
-  border-top: 1px solid var(--line-soft);
-  color: var(--ink-3);
-  font-size: 12px;
-  line-height: 1.55;
-}
-
-.customer-portal-page { padding: 0 0 64px; }
-
-.customer-portal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 68px;
-  padding: 0 clamp(20px, 5vw, 64px);
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.customer-portal-header .customer-auth-brand { font-size: 19px; }
-.customer-portal-header-actions { display: flex; align-items: center; gap: 18px; }
-.customer-portal-brand-label { color: var(--ink-2); font-size: 13px; font-weight: 600; }
-.customer-brand-picker { width: min(260px, 42vw); }
-.customer-brand-picker select { min-height: 38px; padding: 6px 10px; font-size: 13px; }
-
-.customer-portal-content {
-  width: min(1180px, calc(100% - 40px));
-  margin: 0 auto;
-}
-
-.customer-portal-heading {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 44px 0 28px;
-}
-
-.customer-portal-heading .customer-auth-kicker { margin: 0 0 9px; }
-.customer-portal-heading h1 { font-size: clamp(30px, 5vw, 44px); }
-.customer-portal-heading a { display: inline-block; margin-top: 8px; color: var(--ink-3); font-size: 13px; }
-
-.customer-portal-status,
-.customer-gsc-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 10px;
-  border: 1px solid var(--brand-line);
-  border-radius: var(--r-pill);
-  background: var(--brand-tint);
-  color: var(--brand);
-  font-size: 11px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.customer-portal-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand-lift); }
-.customer-portal-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.customer-portal-card,
-.customer-portal-panel {
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-1);
-}
-
-.customer-portal-card { display: grid; gap: 9px; min-height: 150px; padding: 20px; }
-.customer-portal-card > span { color: var(--ink-3); font-size: 12px; font-weight: 600; }
-.customer-portal-card strong { font-size: clamp(22px, 3vw, 30px); font-weight: 650; letter-spacing: -.04em; }
-.customer-portal-score strong { color: var(--brand); font-size: clamp(38px, 5vw, 50px); }
-.customer-portal-card small { overflow: hidden; color: var(--ink-3); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.customer-good { color: var(--good); }
-.customer-muted { color: var(--ink-3); }
-
-.customer-portal-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
-.customer-portal-panel { min-width: 0; padding: 20px; }
-.customer-portal-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.customer-portal-panel-heading h2 { margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.02em; }
-.customer-portal-panel-heading > span { color: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
-.customer-portal-list { margin-top: 15px; border-top: 1px solid var(--line-soft); }
-.customer-portal-list-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--line-soft); }
-.customer-portal-list-row > div { display: grid; gap: 4px; min-width: 0; }
-.customer-portal-list-row strong { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.customer-portal-list-row small { color: var(--ink-3); font-size: 10px; }
-.customer-portal-list-row > b { flex: 0 0 auto; color: var(--brand); font-family: var(--font-mono); font-size: 12px; }
-.customer-portal-pill { max-width: 120px; overflow: hidden; padding: 5px 8px; border-radius: var(--r-pill); background: var(--sunken); color: var(--ink-2) !important; font: 600 10px var(--font-mono) !important; text-overflow: ellipsis; white-space: nowrap; }
-.customer-portal-empty-copy,
-.customer-portal-state { margin: 20px 0 4px; color: var(--ink-3); font-size: 13px; }
-.customer-portal-gsc { margin-top: 14px; }
-.customer-portal-gsc .customer-portal-panel-heading { align-items: center; }
-.customer-portal-gsc .customer-portal-panel-heading p { max-width: 680px; margin: 6px 0 0; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
-.customer-gsc-badge.is-connected { border-color: #b6dfd0; background: var(--good-tint); color: var(--good); }
-.customer-gsc-instruction { margin: 18px 0 0; color: var(--ink-2); font-size: 12px; line-height: 1.6; }
-.customer-gsc-instruction code { padding: 3px 6px; border-radius: 4px; background: var(--sunken); font-family: var(--font-mono); overflow-wrap: anywhere; }
-.customer-gsc-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px 12px; margin-top: 16px; }
-.customer-gsc-form label { grid-column: 1 / -1; margin: 0; }
-.customer-gsc-form button { min-height: 44px; white-space: nowrap; }
-.customer-portal-empty { width: min(620px, calc(100% - 40px)); margin: 12vh auto 0; padding: 34px; border: 1px solid var(--line); border-radius: var(--r-xl); background: var(--surface); }
-.customer-portal-empty .customer-auth-kicker { margin-top: 0; }
-.customer-portal-empty > p:last-child { margin-bottom: 0; }
-
-@media (max-width: 720px) {
-  .customer-portal-heading { align-items: flex-start; flex-direction: column; }
-  .customer-portal-metrics { grid-template-columns: 1fr; }
-  .customer-portal-card { min-height: 125px; }
-  .customer-portal-columns { grid-template-columns: 1fr; }
-  .customer-portal-gsc .customer-portal-panel-heading { align-items: flex-start; flex-direction: column; }
-  .customer-gsc-form { grid-template-columns: 1fr; }
-  .customer-gsc-form label { grid-column: 1; }
-  .customer-portal-header-actions { gap: 10px; }
-}
-
 /* ═══════════════════════════════════════════════════════════════
    TOKENS · light is the base palette
 
-   [data-theme="light"] on any element re-declares the light palette
-   for its subtree, so a surface that must stay light (the customer
-   portal and its sign-in pages) does so even inside a dark root.
+   The root defines the product palette for every surface.
    ═══════════════════════════════════════════════════════════════ */
-:root,
-[data-theme="light"] {
+:root {
   --paper:   #F7F7FA;
   --surface: #FFFFFF;
   --sunken:  #EFEFF4;
@@ -323,12 +65,6 @@
   --card-brand-soft: #C7C4F6;
   --card-brand-line: rgba(255, 255, 255, .22);
 
-  --navy:      #0C0E18;
-  --navy-ink:  #E9EAF2;
-  --navy-dim:  #949AB0;
-  --navy-line: #1E2231;
-  --brand-on-navy: #A9A4FF;
-
   /* semantic hues are darkened until they clear AA as text on their own
      tint and on the surface — a status colour nobody can read is decor */
   --good: #0B7552;  --good-tint: #E4F4EE;  --on-good: #FFFFFF;
@@ -350,6 +86,13 @@
 
   --r-xs: 5px; --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px; --r-pill: 999px;
 
+  --control-height: 40px;
+  --control-height-sm: 32px;
+  --control-height-lg: 48px;
+  --pv-control: var(--control-height);
+  --pv-radius: var(--r-sm);
+  --pv-radius-lg: var(--r-md);
+
   --shell: 1200px;
   --pad: clamp(20px, 4vw, 48px);
 
@@ -367,8 +110,7 @@
   /* ────────────────────────────────────────────────────────────
      Compatibility layer. The rejected world's token names, each
      re-pointed at its nearest role in this palette. These are
-     var() references, so they follow the theme automatically —
-     nothing below needs restating in the dark blocks.
+     var() references into the single light palette.
      ──────────────────────────────────────────────────────────── */
   --panel-0: var(--paper);
   --panel-1: var(--surface);
@@ -563,168 +305,6 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   THEMING CONTRACT — three viewer states, not two.
-
-   "System" (the default) stamps nothing on the root, so only
-   prefers-color-scheme separates light from dark there. The
-   :not([data-theme="light"]) guard lets an explicit light choice
-   beat a dark OS; the third block lets an explicit dark choice
-   beat a light OS.
-
-   Only raw values are restated below. Every alias above is a var()
-   reference and follows automatically.
-   ═══════════════════════════════════════════════════════════════ */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper:   #0A0C12;
-    --surface: #12151F;
-    --sunken:  #07090E;
-    --raised:  #171B26;
-
-    --ink-1: #EDEEF3;
-    --ink-2: #AEB4C4;
-    --ink-3: #8F96AB;
-    --ink-4: #7C8398;
-
-    --line:        #1F2432;
-    --line-soft:   #171B25;
-    --line-strong: #2C3242;
-
-    --brand:      #7F79FF;
-    --brand-lift: #A29CFF;
-    --brand-tint: #171734;
-    --brand-line: #32307B;
-    --on-brand:   #0A0A18;
-
-    --card-brand:      #2A24A8;
-    --card-brand-ink:  #F2F1FF;
-    --card-brand-soft: #A9A5EE;
-    --card-brand-line: rgba(255, 255, 255, .16);
-
-    --navy:      #06080F;
-    --navy-ink:  #E9EAF2;
-    --navy-dim:  #8F96AB;
-    --navy-line: #171B27;
-    --brand-on-navy: #A9A4FF;
-
-    --good: #3DBF93;  --good-tint: #0C2620;  --on-good: #04231A;
-    --warn: #D9A445;  --warn-tint: #2A1F0B;
-    --crit: #E97070;  --crit-tint: #2B1315;
-
-    --you:     #7F79FF;
-    --rival-1: #737A94;
-    --rival-2: #515770;
-    --rival-3: #3B4054;
-    --none:    #262B38;
-
-    --shadow-1: 0 1px 2px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .05);
-    --shadow-2: 0 2px 4px rgba(0, 0, 0, .4), 0 10px 24px -8px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .055);
-    --shadow-3: 0 4px 8px rgba(0, 0, 0, .4), 0 28px 56px -16px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .06);
-
-    /* the amber and crit hues invert lightness here, so anything sitting
-       on them takes the dark ink rather than a hard-coded white */
-    --lamp-amber-fg: #2A1F0B;
-    --lamp-red-fg: #2B1315;
-    --text-inverse: var(--paper);
-
-    --background: 225 29% 5%;
-    --foreground: 230 20% 94%;
-    --card: 226 27% 10%;
-    --card-foreground: 230 20% 94%;
-    --popover: 226 27% 10%;
-    --popover-foreground: 230 20% 94%;
-    --primary: 243 100% 74%;
-    --primary-foreground: 240 41% 6%;
-    --secondary: 224 25% 12%;
-    --secondary-foreground: 230 20% 94%;
-    --muted: 224 25% 12%;
-    --muted-foreground: 225 14% 62%;
-    --accent-shadcn: 224 25% 12%;
-    --accent-shadcn-foreground: 230 20% 94%;
-    --destructive: 0 73% 68%;
-    --destructive-foreground: 240 41% 6%;
-    --border: 224 23% 16%;
-    --input: 224 20% 22%;
-    --ring: 243 100% 74%;
-
-    color-scheme: dark;
-  }
-}
-
-:root[data-theme="dark"] {
-  --paper:   #0A0C12;
-  --surface: #12151F;
-  --sunken:  #07090E;
-  --raised:  #171B26;
-
-  --ink-1: #EDEEF3;
-  --ink-2: #AEB4C4;
-  --ink-3: #8F96AB;
-  --ink-4: #7C8398;
-
-  --line:        #1F2432;
-  --line-soft:   #171B25;
-  --line-strong: #2C3242;
-
-  --brand:      #7F79FF;
-  --brand-lift: #A29CFF;
-  --brand-tint: #171734;
-  --brand-line: #32307B;
-  --on-brand:   #0A0A18;
-
-  --card-brand:      #2A24A8;
-  --card-brand-ink:  #F2F1FF;
-  --card-brand-soft: #A9A5EE;
-  --card-brand-line: rgba(255, 255, 255, .16);
-
-  --navy:      #06080F;
-  --navy-ink:  #E9EAF2;
-  --navy-dim:  #8F96AB;
-  --navy-line: #171B27;
-  --brand-on-navy: #A9A4FF;
-
-  --good: #3DBF93;  --good-tint: #0C2620;  --on-good: #04231A;
-  --warn: #D9A445;  --warn-tint: #2A1F0B;
-  --crit: #E97070;  --crit-tint: #2B1315;
-
-  --you:     #7F79FF;
-  --rival-1: #737A94;
-  --rival-2: #515770;
-  --rival-3: #3B4054;
-  --none:    #262B38;
-
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .05);
-  --shadow-2: 0 2px 4px rgba(0, 0, 0, .4), 0 10px 24px -8px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .055);
-  --shadow-3: 0 4px 8px rgba(0, 0, 0, .4), 0 28px 56px -16px rgba(0, 0, 0, .8), 0 0 0 1px rgba(255, 255, 255, .06);
-
-  --lamp-amber-fg: #2A1F0B;
-  --lamp-red-fg: #2B1315;
-  --text-inverse: var(--paper);
-
-  --background: 225 29% 5%;
-  --foreground: 230 20% 94%;
-  --card: 226 27% 10%;
-  --card-foreground: 230 20% 94%;
-  --popover: 226 27% 10%;
-  --popover-foreground: 230 20% 94%;
-  --primary: 243 100% 74%;
-  --primary-foreground: 240 41% 6%;
-  --secondary: 224 25% 12%;
-  --secondary-foreground: 230 20% 94%;
-  --muted: 224 25% 12%;
-  --muted-foreground: 225 14% 62%;
-  --accent-shadcn: 224 25% 12%;
-  --accent-shadcn-foreground: 230 20% 94%;
-  --destructive: 0 73% 68%;
-  --destructive-foreground: 240 41% 6%;
-  --border: 224 23% 16%;
-  --input: 224 20% 22%;
-  --ring: 243 100% 74%;
-
-  color-scheme: dark;
-}
-
-/* ═══════════════════════════════════════════════════════════════
    RESET
    ═══════════════════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box }
@@ -733,14 +313,13 @@ html { scroll-behavior: smooth; -webkit-text-size-adjust: 100% }
 
 body {
   margin: 0;
-  /* the viewer paints its own ground behind the page: a transparent
-     body borrows the host theme */
+  /* Explicit ground keeps the product independent of the host appearance. */
   background: var(--paper);
   color: var(--ink-2);
   font-family: var(--font-sans);
   font-variation-settings: 'wdth' 100;
-  font-size: 17px;
-  line-height: 1.65;
+  font-size: 14px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -806,52 +385,10 @@ h4 { font-size: 17px; letter-spacing: -.018em; line-height: 1.3 }
 /* ═══════════════════════════════════════════════════════════════
    PRIMITIVES
    ═══════════════════════════════════════════════════════════════ */
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
-  height: 46px; padding: 0 22px; border: 1px solid transparent; border-radius: var(--r-pill);
-  font-size: 15px; font-weight: 600; letter-spacing: -.01em; cursor: pointer;
-  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast);
-  white-space: nowrap;
-}
-.btn:hover { transform: translateY(-1px) }
-.btn:active { transform: translateY(0) }
-.btn:disabled { opacity: .55; cursor: not-allowed; transform: none }
-.btn--primary { background: var(--brand); color: var(--on-brand); border-color: var(--brand) }
-.btn--primary:hover:not(:disabled) { background: var(--brand-lift); border-color: var(--brand-lift) }
-.btn--ghost { background: var(--surface); color: var(--ink-1); border-color: var(--line-strong) }
-.btn--ghost:hover:not(:disabled) { border-color: var(--ink-3) }
-.btn--quiet { background: transparent; color: var(--ink-2); border-color: transparent }
-.btn--quiet:hover:not(:disabled) { background: var(--sunken); color: var(--ink-1) }
-.btn--onbrand { background: var(--card-brand-ink); color: var(--card-brand); border-color: var(--card-brand-ink) }
-/* destructive actions only — never a rival, never a low score */
-.btn--danger { background: var(--crit); color: var(--surface); border-color: var(--crit) }
-.btn--danger:hover:not(:disabled) { filter: brightness(1.08) }
-.btn--sm { height: 36px; padding: 0 15px; font-size: 14px }
-.btn--lg { height: 52px; padding: 0 26px; font-size: 16px }
-
-.chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 24px; padding: 0 9px; border-radius: var(--r-xs);
-  font-family: var(--font-mono); font-size: 10.5px; font-weight: 500;
-  letter-spacing: .08em; text-transform: uppercase; white-space: nowrap;
-  background: var(--sunken); color: var(--ink-3); border: 1px solid var(--line);
-}
-.chip--you  { background: var(--brand-tint); color: var(--brand); border-color: var(--brand-line) }
-.chip--good { background: var(--good-tint);  color: var(--good);  border-color: transparent }
-.chip--warn { background: var(--warn-tint);  color: var(--warn);  border-color: transparent }
-.chip--crit { background: var(--crit-tint);  color: var(--crit);  border-color: transparent }
-.chip__led { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none }
-
-.card {
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
-}
-.card--flat { box-shadow: none }
-.card--lift { border-color: transparent; box-shadow: var(--shadow-2) }
-
 .field {
   display: flex; align-items: center; gap: 8px;
   background: var(--surface); border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill); padding: 5px 5px 5px 18px;
+  border-radius: var(--r-sm); padding: 5px 5px 5px 14px;
   transition: border-color var(--t-fast);
 }
 .field:focus-within { border-color: var(--brand) }
@@ -863,19 +400,6 @@ h4 { font-size: 17px; letter-spacing: -.018em; line-height: 1.3 }
 }
 .field input::placeholder { color: var(--ink-4) }
 .field--block { border-radius: var(--r-md); padding: 5px 5px 5px 14px }
-
-/* a plain labelled input, for forms that are not the one-shot hero field */
-.inp {
-  width: 100%; min-width: 0; height: 46px; padding: 0 14px;
-  background: var(--surface); color: var(--ink-1);
-  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
-  transition: border-color var(--t-fast);
-  font-size: 15px;
-}
-.inp:focus { outline: 0; border-color: var(--brand) }
-.inp::placeholder { color: var(--ink-4) }
-textarea.inp { height: auto; padding: 11px 14px; line-height: 1.55; resize: vertical }
-.lbl { display: block; font-size: 13px; font-weight: 500; color: var(--ink-3); margin-bottom: 7px }
 
 /* ═══════════════════════════════════════════════════════════════
    MOTION
@@ -926,14 +450,7 @@ textarea.inp { height: auto; padding: 11px 14px; line-height: 1.55; resize: vert
 .nav__links a:hover { background: var(--sunken); color: var(--ink-1) }
 .nav__r { margin-left: auto; display: flex; align-items: center; gap: 10px }
 
-/* the theme control is product chrome, so it takes product tokens */
-.themebtn {
-  display: grid; place-items: center; width: 36px; height: 36px; flex: none;
-  border-radius: var(--r-pill); cursor: pointer;
-  background: transparent; color: var(--ink-3); border: 1px solid var(--line);
-  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
-}
-.themebtn:hover { background: var(--sunken); color: var(--ink-1); border-color: var(--line-strong) }
+
 
 /* ═══════════════════════════════════════════════════════════════
    LANDING
@@ -1134,25 +651,24 @@ mark.lit-rival { background: var(--sunken); color: var(--ink-2); font-weight: 60
 .faq details p { padding-bottom: 24px; color: var(--ink-3); font-size: 16px; max-width: 70ch }
 
 /* closing block + footer */
-.close { background: var(--navy); color: var(--navy-dim) }
-.close h2 { color: var(--navy-ink); max-width: 18ch; margin: 18px auto 18px; text-align: center }
+.close { background: var(--surface); color: var(--ink-3) }
+.close h2 { color: var(--ink-1); max-width: 18ch; margin: 18px auto 18px; text-align: center }
 .close p { max-width: 50ch; margin: 0 auto 30px; text-align: center }
 .close__in { text-align: center; padding-block: clamp(60px, 8vw, 110px) }
-.close .field { background: rgba(255, 255, 255, .06); border-color: var(--navy-line); margin-inline: auto; max-width: 430px }
-.close .field input { color: var(--navy-ink) }
-.close .field input::placeholder { color: var(--navy-dim) }
+.close .field { background: var(--surface); border-color: var(--line-strong); margin-inline: auto; max-width: 430px }
+.close .field input { color: var(--ink-1) }
+.close .field input::placeholder { color: var(--ink-3) }
 
-.foot { background: var(--navy); color: var(--navy-dim); padding-block: 44px 26px; border-top: 1px solid var(--navy-line) }
+.foot { background: var(--surface); color: var(--ink-3); padding-block: 44px 26px; border-top: 1px solid var(--line) }
 .foot__g { display: grid; grid-template-columns: 1.7fr repeat(3, 1fr); gap: 30px; padding-bottom: 32px }
-.foot__g h5 { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--navy-dim); margin: 0 0 14px; font-weight: 500 }
-.foot__g a { display: block; font-size: 14.5px; color: var(--navy-ink); opacity: .72; padding-block: 5px; transition: opacity var(--t-fast) }
+.foot__g h5 { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 14px; font-weight: 500 }
+.foot__g a { display: block; font-size: 14.5px; color: var(--ink-1); opacity: .72; padding-block: 5px; transition: opacity var(--t-fast) }
 .foot__g a:hover { opacity: 1 }
-.foot__b { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 20px; border-top: 1px solid var(--navy-line) }
-.foot .wordmark { color: var(--navy-ink) }
-/* the navy blocks are their own ground — labels there take the navy inks,
-   never the page inks, which are tuned for paper */
-.foot .tag, .close .tag { color: var(--navy-dim) }
-.close .tag--brand { color: var(--brand-on-navy) }
+.foot__b { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 20px; border-top: 1px solid var(--line) }
+.foot .wordmark { color: var(--ink-1) }
+/* Website sections inherit the shared light palette. */
+.foot .tag, .close .tag { color: var(--ink-3) }
+.close .tag--brand { color: var(--brand) }
 
 @media (max-width: 960px) {
   .hero__grid, .work, .ev { grid-template-columns: 1fr; gap: 34px }
@@ -1163,7 +679,7 @@ mark.lit-rival { background: var(--sunken); color: var(--ink-2); font-weight: 60
 }
 
 @media (max-width: 620px) {
-  /* the nav keeps the theme control and the one action; the secondary
+  /* the nav keeps the primary action; the secondary
      action is what pushes the row past a 375px viewport */
   .nav__r .btn--quiet { display: none }
   .gauge { grid-template-columns: 1fr 62px; row-gap: 10px }
@@ -1280,11 +796,8 @@ mark.lit-rival { background: var(--sunken); color: var(--ink-2); font-weight: 60
 .stat__d { font-family: var(--font-mono); font-size: 11px; margin-top: 10px; display: flex; align-items: center; gap: 5px }
 .up { color: var(--good) } .dn { color: var(--crit) } .flat { color: var(--ink-4) }
 
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); min-width: 0 }
-.panel__h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap }
-.panel__h b { font-size: 14px; font-weight: 600; color: var(--ink-1) }
+.panel__h { display: flex; align-items: center; border-bottom: 1px solid var(--line-soft); flex-wrap: wrap }
 .panel__h .tag { margin-left: auto }
-.panel__b { padding: 16px }
 .panel__b--flush { padding: 0 }
 /* wide content scrolls inside its own container; the body never scrolls sideways */
 .panel__b--scroll { overflow-x: auto }
@@ -1464,8 +977,7 @@ mark.lit-rival { background: var(--sunken); color: var(--ink-2); font-weight: 60
   background: var(--sunken); color: var(--ink-4); border: 2px solid var(--surface);
   position: relative; z-index: 1; font-family: var(--font-mono); font-size: 11px; font-weight: 600;
 }
-/* --good flips from dark to light between themes, so the glyph on top of
-   it needs a paired token rather than a hard-coded white */
+/* Status glyphs use their semantic foreground token. */
 .stage.done .stage__d { background: var(--good); color: var(--on-good) }
 .stage.now  .stage__d { background: var(--brand); color: var(--on-brand) }
 .stage h4 { margin-bottom: 3px }

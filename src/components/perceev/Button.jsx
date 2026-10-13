@@ -1,5 +1,5 @@
 /**
- * The button. A 46px pill that lifts 1px on hover and nothing more.
+ * Button adapter for the shared light product primitives.
  *
  * The variant names are the ones this codebase already calls with; they map
  * onto the design system's `.btn--*` modifiers. See docs/design/DESIGN-SYSTEM.md.

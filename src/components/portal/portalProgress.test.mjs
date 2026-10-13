@@ -129,9 +129,12 @@ test("ScanProgressCard: a stalled scan says it resumes on its own", async () => 
   assert.match(text, /Taking longer than usual/);
 });
 
-test("the portal is pinned light: tokens re-declare under [data-theme=light] and the shell stamps it", async () => {
+test("the portal inherits the shared light root instead of carrying an independent theme", async () => {
   const css = await readFile(path.join(here, "../../app/globals.css"), "utf8");
-  assert.match(css, /:root,\s*\n\[data-theme="light"\] \{\s*\n\s*--paper:/);
+  const layout = await readFile(path.join(here, "../../app/layout.js"), "utf8");
+  assert.match(css, /:root \{\s*\n\s*--paper:/);
+  assert.match(layout, /<html[^>]*data-theme="light"[^>]*>/);
+  assert.ok(!css.includes("prefers-color-scheme"));
   const shell = await readFile(path.join(here, "PortalShell.jsx"), "utf8");
-  assert.match(shell, /className="pv-app" data-theme="light"/);
+  assert.ok(!shell.includes('data-theme='));
 });

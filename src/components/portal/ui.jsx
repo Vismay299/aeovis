@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Customer portal primitives. Styling lives in ./portal.css (pv-* classes);
- * these components only arrange markup so every portal page reads the same.
+ * Shared workspace compositions. Primitive styling lives in the design system;
+ * portal.css supplies layouts used by the customer portal and public demo.
  */
 
 import Link from "next/link";

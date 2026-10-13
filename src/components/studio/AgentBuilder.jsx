@@ -11,28 +11,13 @@ import { CrewCanvas } from "./CrewCanvas";
 
 const labelStyle = {
   display: "block",
-  fontFamily: "var(--font-mono)",
-  fontSize: "10px",
-  fontWeight: 500,
-  textTransform: "uppercase",
-  letterSpacing: "0.12em",
-  color: "var(--text-2)",
-  marginBottom: "var(--space-2)",
-};
-
-const areaStyle = {
-  width: "100%",
-  background: "var(--bg-1)",
-  border: "1px solid var(--border-2)",
-  borderRadius: "var(--radius-1)",
-  padding: "10px 14px",
   fontFamily: "var(--font-sans)",
   fontSize: "13px",
-  color: "var(--text-1)",
-  outline: "none",
-  resize: "vertical",
-  boxSizing: "border-box",
-  lineHeight: 1.5,
+  fontWeight: 600,
+  textTransform: "none",
+  letterSpacing: "normal",
+  color: "var(--text-2)",
+  marginBottom: "var(--space-2)",
 };
 
 const CHANNELS = ["website", "blog", "linkedin", "x", "newsletter", "other"];
@@ -149,16 +134,17 @@ export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, 
         {isBuiltin && <Badge variant="muted">built-in</Badge>}
       </div>
 
-      <Card style={{ padding: "var(--space-6)", display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
+      <Card variant="flush" style={{ padding: "var(--space-6)", display: "flex", flexDirection: "column", gap: "var(--space-6)" }}>
         {/* Identity */}
         <div style={{ display: "flex", gap: "var(--space-4)", alignItems: "flex-end" }}>
           <div style={{ width: "72px" }}>
             <label style={labelStyle}>Icon</label>
             <input
+              aria-label="Agent icon"
               data-testid="agent-emoji"
               value={form.emoji}
               onChange={(e) => set("emoji", e.target.value.slice(0, 4))}
-              style={{ ...areaStyle, textAlign: "center", fontSize: "24px", padding: "6px" }}
+              className="inp" style={{ textAlign: "center", fontSize: "24px", padding: "6px" }}
             />
           </div>
           <Input
@@ -174,11 +160,12 @@ export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, 
         <div>
           <label style={labelStyle}>What it does (one line)</label>
           <textarea
+            aria-label="What it does (one line)"
             data-testid="agent-description"
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
             rows={2}
-            style={areaStyle}
+            className="inp"
             placeholder="Ranked, scannable lists optimized to get lifted item-by-item by AI engines."
           />
         </div>
@@ -270,12 +257,13 @@ export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, 
         <div>
           <label style={labelStyle}>Design rules (one per line — added to the brand brief's tone rules)</label>
           <textarea
+            aria-label="Design rules"
             data-testid="agent-design-rules"
             value={(form.design_rules || []).join("\n")}
             onChange={(e) => set("design_rules", e.target.value.split("\n"))}
             onBlur={(e) => set("design_rules", e.target.value.split("\n").map((s) => s.trim()).filter(Boolean))}
             rows={3}
-            style={areaStyle}
+            className="inp"
             placeholder={"Bold each item name\nNo fluff intros\nOne sentence per idea"}
           />
         </div>
@@ -283,11 +271,12 @@ export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, 
         <div>
           <label style={labelStyle}>Custom instructions (freeform — overrides defaults on conflict)</label>
           <textarea
+            aria-label="Custom instructions"
             data-testid="agent-custom-instructions"
             value={form.custom_instructions}
             onChange={(e) => set("custom_instructions", e.target.value)}
             rows={3}
-            style={areaStyle}
+            className="inp"
             placeholder="Always end with a note that prices change quarterly. Never recommend a specific competitor by name."
           />
         </div>
@@ -303,6 +292,7 @@ export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, 
                   <span style={{ fontSize: "12px", color: "var(--text-2)", width: "160px", flexShrink: 0 }}>{dimLabel}</span>
                   <input
                     type="range"
+                    aria-label={dimLabel}
                     min="0.5"
                     max="2"
                     step="0.1"
