@@ -50,7 +50,15 @@ where the format calls for them, cited stats — but the shape is the agent's.
 
 {{critique}}
 
-## The GEO levers (encode all of them)
+## The GEO levers (plain-article defaults; adapt to the selected format)
+
+The agent's output structure and target length take precedence over every
+plain-article rule below and over a conflicting benchmark structure. For an
+FAQ, put each question directly in an H2 and follow it with one answer of
+at most 60 words. Do not nest the answers in H3s under article sections, add
+standalone article passages, or append a second FAQ tail. For other formats,
+apply only the compatible GEO levers; never stretch a short format into
+134–167-word article passages. Preserve the source and factuality rules.
 
 1. **Answer-first passages.** Each section opens with the direct answer to
    its sub-query in the **first 40–60 words** — a self-contained passage an
@@ -90,7 +98,8 @@ where the format calls for them, cited stats — but the shape is the agent's.
   where the brief says so.
 - No filler ("in today's fast-paced world"), no AI-tells ("delve",
   "game-changer"), no unverifiable superlatives ("best-in-class").
-- 900–1600 words unless the benchmark directive demands otherwise.
+- Obey the agent's target length. Use 900–1600 words only for a plain article
+  with no configured target length and no benchmark length directive.
 
 ## Output — return ONLY this JSON
 

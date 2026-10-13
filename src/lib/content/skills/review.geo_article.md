@@ -81,7 +81,14 @@ Would an expert in the brief's vertical read this as written by a peer?
 Obeys the brief's `tone_rules` and persona targeting.
 
 ### 5. channel_checklist — weight 0.15, floor 0.60 (GEO structure)
-Check mechanically:
+For a non-article agent, score its format checklist and configured target
+length. Do not require article-only passages, definitions, tables or section
+lengths that conflict with that format. An FAQ's ≤60-word answer must never
+lose points for not being a 134–167-word article passage. The list below
+applies to plain articles; compatible source and answer-first rules still
+apply to every format.
+
+For a plain article, check mechanically:
 - [ ] Each section opens with the direct answer in the first 40–60 words
 - [ ] Core passages ~134–167 words
 - [ ] Strongest self-contained answer in the first 30% of the page
