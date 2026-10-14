@@ -353,6 +353,12 @@
   animation: pv-indeterminate 1.3s ease-in-out infinite;
 }
 
+/* an unmeasured result: a still, hatched rail, so it reads differently from a
+   measured 0% (a real bar drawn empty) and never looks like it is loading */
+.pv-progress--unmeasured {
+  background: repeating-linear-gradient(135deg, var(--line-strong) 0 1px, var(--sunken) 1px 6px);
+}
+
 .pv-progress--good .pv-progress__fill { background: var(--good); }
 .pv-progress--crit .pv-progress__fill { background: var(--crit); }
 

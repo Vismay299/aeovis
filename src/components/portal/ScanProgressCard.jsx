@@ -94,7 +94,7 @@ export function ScanProgressCard({ showIdle = true }) {
         </div>
       </div>
       <div className="pv-card__body" style={{ display: "grid", gap: 18 }}>
-        <ProgressBar value={percent} active size="lg" label="Scan progress" />
+        <ProgressBar value={percent} active indeterminate size="lg" label="Scan progress" />
         <StageSteps steps={SCAN_STAGES} current={scan.stageIndex} />
         {scan.notice ? <Banner tone="info" onDismiss={scan.dismiss}>{scan.notice}</Banner> : null}
         {scan.stalled ? (

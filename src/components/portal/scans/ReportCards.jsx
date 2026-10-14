@@ -34,7 +34,7 @@ export function EngineScoresCard({ engineScores, engines }) {
               <span className="pv-scans-rows__name">{engineLabel(row.name)}</span>
               <span className="pv-scans-rows__value">{formatPct(score)}</span>
             </div>
-            <ProgressBar value={score} indeterminate={false} size="sm" label={`${engineLabel(row.name)} score`} />
+            <ProgressBar value={score} size="sm" label={`${engineLabel(row.name)} score`} />
           {partial ? <p role="status">{incomplete ? "Collection incomplete" : "Partial collection"} · {summary.non_branded_with_answer ?? "—"} of {summary.non_branded_queries ?? "—"} questions answered · {summary.errored_queries ?? "—"} collection errors.{incomplete ? " Visibility is not assessed for this engine." : ""}</p> : null}
           {smallSample ? <p role="status">Limited scoring sample · {summary.eliciting_queries ?? "—"} answers named a tracked brand. {score === null ? "Visibility is not assessed for this engine." : "Treat this score as low confidence."}</p> : null}
           </div>

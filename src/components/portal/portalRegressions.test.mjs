@@ -290,14 +290,24 @@ test("healthy low-sample answers keep their measured score and do not appear as 
   assert.doesNotMatch(text, /Collection incomplete|collection errors/);
 });
 
-test("an unmeasured engine row does not animate an endless loading bar", async () => {
+test("an unmeasured engine row draws a still 'not measured' rail, not a loading sweep", async () => {
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
   const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
   const html = renderToHtml(cards.EngineScoresCard, { engines: {
     aio: { visibility_pct: null, data_source_issue: true, non_branded_queries: 30, non_branded_with_answer: 0, errored_queries: 30 },
-    chatgpt: { visibility_pct: 0 },
   } });
   assert.match(html, /By engine/);
-  assert.match(html, /0%/);
   assert.doesNotMatch(html, /pv-progress--indeterminate/, "an unmeasured engine must not run a loading sweep forever");
+  assert.match(html, /pv-progress--unmeasured/, "and must not read as a measured 0% bar");
+  assert.match(html, /aria-label="Google AI Overviews score: not measured"/);
+  assert.doesNotMatch(html, /pv-progress__fill/, "an unmeasured bar draws no fill");
+  assert.doesNotMatch(html, /aria-valuenow/);
+});
+
+test("a history bar is pending only when the score is unwritten, not when collection failed", () => {
+  assert.equal(reportData.scanVisibilityState({ visibility_pct: 42 }), "measured");
+  assert.equal(reportData.scanVisibilityState({ visibility_pct: 0 }), "measured");
+  assert.equal(reportData.scanVisibilityState({ visibility_pct: null, collection_partial: true }), "unmeasured");
+  assert.equal(reportData.scanVisibilityState({ visibility_pct: null, collection_partial: false }), "pending");
+  assert.equal(reportData.scanVisibilityState({}), "pending");
 });

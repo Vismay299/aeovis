@@ -49,6 +49,18 @@ export function platformLabel(platform) {
 }
 
 /**
+ * How a history row draws its visibility bar. A real number is measured; a null
+ * score on a collection that itself failed is a settled "not measured"; a null
+ * score on an intact collection has simply not been written yet, so it stays
+ * pending rather than reading as a finished result.
+ * Returns "measured" | "unmeasured" | "pending".
+ */
+export function scanVisibilityState(scan) {
+  if (finiteNumber(scan?.visibility_pct) !== null) return "measured";
+  return scan?.collection_partial === true ? "unmeasured" : "pending";
+}
+
+/**
  * Per-engine visibility -> [{ name, pct }] sorted high to low. Current workers
  * write summaries under engines; older scans only carry engine_scores.
  * An unmeasured current slice stays absent rather than using a legacy score.
