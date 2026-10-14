@@ -113,3 +113,33 @@ test("matchCompetitorsBack - denominator is nonBrandedWithAio only, tolerates mi
   assert.ok(orientBell, "user competitor kept at zero signal");
   assert.equal(orientBell.prompts, 0);
 });
+
+test("rival discovery samples every measured engine and allows software alternatives", async () => {
+  let prompt = "";
+  const results = ["aio", "chatgpt", "gemini", "perplexity"].flatMap((engine) => Array.from({ length: 30 }, (_, index) => ({
+    engine, is_branded_query: false, aio_present: true,
+    aio_text: `${engine} evidence ${index}: Rival${engine} is a software alternative. ` + "x".repeat(16000),
+    aio_references: [],
+  })));
+  results.push({ engine: "chatgpt", is_branded_query: false, aio_present: true, error: "failed capture", aio_text: "UNTRUSTED FAILED EVIDENCE" });
+  await extractCompetitors({ results, brand: "Trace", brandUrl: "https://trace.example", deps: { llmJson: async (value) => { prompt = value; return []; } } });
+  for (const engine of ["aio", "chatgpt", "gemini", "perplexity"]) {
+    assert.ok(prompt.includes(`[${engine}]`));
+    assert.ok(prompt.includes(`${engine} evidence 0`));
+    assert.ok(prompt.includes(`${engine} evidence 29`));
+  }
+  assert.match(prompt, /A software brand can have software competitors/);
+  assert.doesNotMatch(prompt, /Exclude tools, marketplaces-as-tools|UNTRUSTED FAILED EVIDENCE/);
+  const evidence = prompt.split("---\n")[1].split("\n---")[0];
+  assert.ok(evidence.length <= 12000);
+});
+
+test("the discovery cap keeps the most observed rivals and every explicitly configured rival", async () => {
+  const results = Array.from({ length: 3 }, (_, index) => ({
+    aio_present: true, is_branded_query: false, aio_text: `CommonBrand${index === 0 ? " and RareBrand" : ""} provide services.`, aio_references: [],
+  }));
+  const rivals = await extractCompetitors({ results, brand: "OurBrand", brandUrl: "https://ours.example", userCompetitors: ["UserChoice"], max: 1,
+    deps: { llmJson: async () => [{ name: "RareBrand" }, { name: "CommonBrand" }] },
+  });
+  assert.deepEqual(rivals.map((c) => c.name), ["CommonBrand", "UserChoice"]);
+});

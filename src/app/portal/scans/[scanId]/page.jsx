@@ -8,7 +8,7 @@ import {
   Banner, Button, Card, EmptyState, PageHeader, Skeleton, SkeletonRows, Stat, formatDate,
 } from "@/components/portal/ui";
 import { CompetitorsCard, EngineScoresCard, QuestionsCard } from "@/components/portal/scans/ReportCards";
-import { engineLabel, finiteNumber, readCompetitors, readEngineScores, roundedPct } from "@/components/portal/scans/reportData";
+import { finiteNumber, readCompetitors, readEngineScores, roundedPct } from "@/components/portal/scans/reportData";
 import "@/components/portal/scans/scans.css";
 
 function KpiSkeleton() {
@@ -113,9 +113,9 @@ export default function ScanReportPage() {
           </Banner>
         ) : null}
 
-        {scan && Object.values(scan.engines || {}).some((engine) => engine?.data_source_issue || engine?.insufficient_sample) ? (
-          <Banner tone="warn" title="Some engines could not be measured">
-            {Object.entries(scan.engines || {}).filter(([, engine]) => engine?.data_source_issue || engine?.insufficient_sample).map(([key]) => engineLabel(key)).join(", ")} did not produce enough reliable answers. The overall visibility score excludes engines with collection failures; run another scan once collection recovers.
+        {scan && Object.values(scan.engines || {}).some((engine) => engine?.data_source_issue || engine?.insufficient_sample || Number(engine?.errored_queries) > 0) ? (
+          <Banner tone="warn" title="Collection or sample needs attention">
+            Some answers could not be collected or did not name enough tracked brands for a reliable score. Review each engine's coverage and sample notes before using these results.
           </Banner>
         ) : null}
         <div className="pv-grid pv-grid--4">

@@ -57,9 +57,9 @@ export async function GET(request, { params }) {
         engines: scan.raw_results?.engines || null,
         engine_scores: scan.raw_results?.engine_scores || null,
         competitors: scan.raw_results?.competitors || [],
-        share_of_voice_pct: scan.raw_results?.share_of_voice_pct || null,
-        win_rate_pct: scan.raw_results?.win_rate_pct || null,
-        brand_citation_share_pct: scan.raw_results?.brand_citation_share_pct || null,
+        share_of_voice_pct: scan.raw_results?.share_of_voice_pct ?? null,
+        win_rate_pct: scan.raw_results?.win_rate_pct ?? null,
+        brand_citation_share_pct: scan.raw_results?.brand_citation_share_pct ?? null,
       },
       results: results || [],
     }, { headers: { "Cache-Control": "no-store" } });

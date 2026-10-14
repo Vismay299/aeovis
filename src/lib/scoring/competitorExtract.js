@@ -34,10 +34,10 @@ function normalizeNameKey(name) {
 }
 
 function buildExtractionPrompt({ brand, text, domains }) {
-  return `You are analyzing Google AI Overview answers to find real competitor / alternative
+  return `You are analyzing AI-engine answers to find real competitor / alternative
 companies or products mentioned alongside "${brand}".
 
-AI Overview text (from multiple unbranded searches, concatenated):
+Answer evidence (sampled across engines and unbranded searches):
 ---
 ${text}
 ---
@@ -47,7 +47,9 @@ Cited domains seen in these results: ${domains.length ? domains.join(", ") : "(n
 Rules:
 - Only list real company/product/brand names, never the brand "${brand}" itself.
 - Do NOT list generic words like "software", "platform", "tool", "solution", "service".
-- Exclude tools, marketplaces-as-tools, media sites, and software products; only direct competitors that sell what ${brand} sells.
+- Include software products, tools and platforms when they are alternatives for the same buyer need. A software brand can have software competitors.
+- Exclude media sites and guides used only as information sources. Include a marketplace only when it is a direct alternative for this category.
+- Each name must appear in the answer evidence. Do not invent names or infer a company solely from a cited domain.
 - If you can infer the competitor's website domain from context or the cited domains list, include it.
 - Return at most 15 names, most relevant first.
 
@@ -55,9 +57,36 @@ Return ONLY valid JSON, no commentary, in this exact shape:
 [{"name": "...", "domain": "..."}]`;
 }
 
+/** Give every measured engine evidence space; early Google rows cannot fill the whole budget. */
+function sampledAnswerText(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    if (!row.aio_text?.trim()) continue;
+    const engine = row.engine || "aio";
+    if (!groups.has(engine)) groups.set(engine, []);
+    groups.get(engine).push(row);
+  }
+  if (!groups.size) return "";
+  const budget = Math.floor(MAX_TEXT_CHARS / groups.size);
+  return [...groups].map(([engine, answers]) => {
+    const count = Math.min(6, answers.length);
+    const header = `[${engine}]\n`;
+    const perAnswer = Math.max(1, Math.floor((budget - header.length - count * 2) / count));
+    const snippets = Array.from({ length: count }, (_, index) => {
+      const position = count === 1 ? 0 : Math.round(index * (answers.length - 1) / (count - 1));
+      const text = answers[position].aio_text.trim();
+      // Vendor names often sit in recommendation headings/list entries. Keep
+      // those exact lines before long explanatory prose consumes the excerpt.
+      const outline = text.split("\n").filter((line) => /^\s*(?:#{1,6}\s|[-*]\s|\d+[.)]\s)/.test(line)).join("\n");
+      return (outline ? `${outline}\n${text}` : text).slice(0, perAnswer);
+    });
+    return (header + snippets.join("\n\n")).slice(0, budget);
+  }).join("\n").slice(0, MAX_TEXT_CHARS);
+}
+
 /**
  * Discovers competitor/alternative names via one batched LLM call over all
- * non-branded AIO text + cited domains, merges with any user-supplied
+ * sampled non-branded answer text across engines + cited domains, merges with any user-supplied
  * names, then scores each against the non-branded-with-AIO pool.
  */
 export async function extractCompetitors({
@@ -73,12 +102,10 @@ export async function extractCompetitors({
   const brandDomain = extractBrandDomain(brandUrl);
   const brandAliases = getBrandAliases(brand, brandUrl);
 
-  const nonBrandedWithAio = results.filter((r) => !r.is_branded_query && r.aio_present);
+  const nonBrandedWithAio = results.filter((r) => !r.is_branded_query && r.aio_present && !r.error);
 
-  const textParts = [];
   const domainSet = new Set();
   for (const r of nonBrandedWithAio) {
-    if (r.aio_text) textParts.push(r.aio_text);
     (r.aio_references || []).forEach((ref) => {
       const domain = ref.domain || extractBrandDomain(ref.href);
       if (!domain) return;
@@ -86,13 +113,13 @@ export async function extractCompetitors({
       domainSet.add(domain);
     });
   }
-  const joinedText = textParts.join("\n").slice(0, MAX_TEXT_CHARS);
+  const joinedText = sampledAnswerText(nonBrandedWithAio);
   const domains = Array.from(domainSet);
 
   let discovered = [];
   if (joinedText.trim() || domains.length) {
     const prompt = buildExtractionPrompt({ brand, text: joinedText, domains });
-    const parsed = await llmJsonFn(prompt, { stats, timeout: 25000 });
+    const parsed = await llmJsonFn(prompt, { stats, timeout: 25000, max_tokens: 2400 });
     if (Array.isArray(parsed)) {
       discovered = parsed
         .filter((c) => c && typeof c.name === "string" && c.name.trim())
@@ -133,8 +160,14 @@ export async function extractCompetitors({
     }
   });
 
-  const competitorObjects = Array.from(merged.values()).slice(0, max + userCompetitors.length);
-  return matchCompetitorsBack(nonBrandedWithAio, competitorObjects, brand);
+  // Rank by observed mentions before capping discovery, retaining every user
+  // choice even when a discovered rival has more mentions.
+  const scored = matchCompetitorsBack(nonBrandedWithAio, Array.from(merged.values()), brand);
+  const selected = new Set([
+    ...scored.filter((c) => c.source === "user"),
+    ...scored.filter((c) => c.source !== "user").slice(0, max),
+  ]);
+  return scored.filter((c) => selected.has(c));
 }
 
 /**

@@ -128,3 +128,42 @@ Localhost authenticated reads and simulation were tested, but real customer
 CRUD/generation used production-environment staging because the local server
 does not have an admin key. Live Google collection acceptance remains open;
 the in-memory mock is not a substitute. No PR has been created.
+
+## Final capture and scoring checks — 14 October
+
+- Live scan `7faf2a1d-f550-4f16-ae3c-9b3f63c54f57` collected 30 of 30
+  unbranded answers from each of ChatGPT, Gemini and Perplexity, with zero
+  collection errors for those engines. Google collected 15 of 30 unbranded
+  answers and recorded 16 collection errors overall, including its branded
+  checks. Bright Data's enhanced AI Overview requests still report unavailable
+  cookies. Two standard SERP probes did not contain genuine AI Overviews;
+  neither was substituted for a successful capture.
+- The capture exposed a scoring defect: the extraction prompt excluded software
+  competitors, early Google answers exhausted the text budget, and discovery
+  was capped before counting observed mentions. Extraction now permits direct
+  software alternatives, shares evidence space across engines, preserves vendor
+  headings, excludes failed captures, and caps discovered rivals after scoring.
+- An isolated local rerank of the actual captured answers found scoring pools
+  of 5 Google, 8 ChatGPT, 15 Gemini and 9 Perplexity answers, all above the
+  minimum. The brand's visibility remained a measured zero. That extraction
+  cost $0.00534075; it did not repeat provider queries or rewrite the customer's
+  historical report. Three unverified Gemini citation lists remained excluded
+  from the citation-share denominator.
+- Reports now distinguish a limited scoring sample from failed collection.
+  Healthy captures no longer say collection failed merely because few answers
+  name a tracked brand. Partial collection retains its error count, and actual
+  zero percentages survive the customer report DTO.
+- Final local verification: 3,205 tests passed, zero failed, 30 live tests skipped;
+  production build and lint passed, with two existing OpportunitiesPanel hook
+  warnings. These checks do not establish fresh live collection under the final
+  extraction changes.
+- The user explicitly chose to retain the existing **$4 total gateway limit**.
+  Its remaining allowance is below the approximately $1.58 consumed by the full
+  four-engine acceptance scan. No limit increase or credit purchase was made,
+  and another full paid scan was not started.
+
+Overall live acceptance remains incomplete because Google collection has not
+recovered and the final extraction changes have not had a fresh full live scan.
+Historical reports remain snapshots of their original runs. The fixes can be
+reviewed on the live tenant pages, but the user's PR gate remains unsatisfied;
+no PR has been created.

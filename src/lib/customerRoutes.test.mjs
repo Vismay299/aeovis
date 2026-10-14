@@ -130,3 +130,13 @@ test("GSC data returns the active generation with a valid bounded date window", 
   assert.equal(response.status, 200);
   assert.equal((await response.json()).data[0].clicks, 2);
 });
+
+test("customer report preserves measured zero percentages instead of replacing them with unknown", async () => {
+  const { tables } = fixture();
+  tables.scans[0].raw_results = { share_of_voice_pct: 0, win_rate_pct: 0, brand_citation_share_pct: 0 };
+  const response = await report.GET(new Request("https://app.example.test/report"), { params: { scan_id: "scan-a" } });
+  const { scan } = await response.json();
+  assert.equal(scan.share_of_voice_pct, 0);
+  assert.equal(scan.win_rate_pct, 0);
+  assert.equal(scan.brand_citation_share_pct, 0);
+});

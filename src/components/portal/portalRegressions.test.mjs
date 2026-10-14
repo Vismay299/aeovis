@@ -274,3 +274,18 @@ test("collection failures are not counted as measured missing-brand answers", as
   assert.equal(reportData.questionNamesBrand(failed, "all"), false);
   assert.equal(reportData.questionHasAnswer(failed, "all"), false);
 });
+
+test("healthy low-sample answers keep their measured score and do not appear as collection failures", async () => {
+  const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const text = textOf(renderToHtml(cards.EngineScoresCard, { engines: {
+    gemini: { visibility_pct: 0, data_source_issue: false, insufficient_sample: true, eliciting_queries: 4, non_branded_queries: 30, non_branded_with_answer: 30, errored_queries: 0 },
+    chatgpt: { visibility_pct: null, data_source_issue: false, insufficient_sample: true, eliciting_queries: 0, non_branded_queries: 30, non_branded_with_answer: 30, errored_queries: 0 },
+  } }));
+  assert.match(text, /0%/);
+  assert.match(text, /Limited scoring sample · 4 answers named a tracked brand/);
+  assert.match(text, /Treat this score as low confidence/);
+  assert.match(text, /Limited scoring sample · 0 answers named a tracked brand/);
+  assert.match(text, /Visibility is not assessed/);
+  assert.doesNotMatch(text, /Collection incomplete|collection errors/);
+});
