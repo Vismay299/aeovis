@@ -33,9 +33,9 @@ export function SiteFooter() {
           </div>
           <div>
             <h5>Legal</h5>
-            <a href="#">Privacy</a>
-            <a href="#">Terms</a>
-            <a href="#">Data handling</a>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
+            <Link href="/privacy#google-search-console-data">Data handling</Link>
           </div>
         </div>
         <div className="foot__b">

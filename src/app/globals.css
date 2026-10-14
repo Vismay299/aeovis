@@ -687,6 +687,46 @@ mark.lit-rival { background: var(--sunken); color: var(--ink-2); font-weight: 60
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   LEGAL — privacy and terms
+   ═══════════════════════════════════════════════════════════════ */
+/* stays below .shell and .tag so the page width and the eyebrow win
+   on source order, not just specificity */
+.legal-page {
+  max-width: 820px;
+  padding-top: clamp(52px, 8vw, 100px);
+  padding-bottom: clamp(64px, 10vw, 120px);
+  line-height: 1.7;
+}
+
+.legal-page h1 {
+  margin: 16px 0 8px;
+  font-size: clamp(38px, 7vw, 64px);
+  line-height: 1.05;
+  letter-spacing: -.055em;
+}
+
+.legal-page h2 {
+  margin: 42px 0 10px;
+  font-size: clamp(20px, 3vw, 26px);
+  line-height: 1.2;
+  letter-spacing: -.035em;
+  /* the sticky nav is 66px tall; keep an anchored heading clear of it */
+  scroll-margin-top: 90px;
+}
+
+/* :where() keeps this at the same weight as the old .legal-page p, so it
+   no longer overrides the .tag eyebrow or the __updated modifier */
+.legal-page p:where(:not(.tag)) {
+  max-width: 72ch;
+  color: var(--ink-2);
+  font-size: 15px;
+}
+
+.legal-page a { color: var(--brand); text-underline-offset: 3px; }
+.legal-page .legal-page__updated { color: var(--ink-3); font-size: 13px; }
+.legal-page__back { margin-top: 48px; }
+
+/* ═══════════════════════════════════════════════════════════════
    SCAN
    ═══════════════════════════════════════════════════════════════ */
 .scan { min-height: 100vh; display: grid; place-items: center; padding: 70px 20px 110px; background: var(--paper) }
