@@ -50,14 +50,14 @@ export function platformLabel(platform) {
 
 /**
  * How a history row draws its visibility bar. A real number is measured; a null
- * score on a collection that itself failed is a settled "not measured"; a null
- * score on an intact collection has simply not been written yet, so it stays
- * pending rather than reading as a finished result.
+ * score on a finalized scan (scanned_at) or a failed collection is settled
+ * "not measured". Healthy collections can also finish without a score when
+ * no answer names a tracked brand. Only an unfinished scan stays pending.
  * Returns "measured" | "unmeasured" | "pending".
  */
 export function scanVisibilityState(scan) {
   if (finiteNumber(scan?.visibility_pct) !== null) return "measured";
-  return scan?.collection_partial === true ? "unmeasured" : "pending";
+  return scan?.scanned_at || scan?.collection_partial === true ? "unmeasured" : "pending";
 }
 
 /**

@@ -304,10 +304,41 @@ test("an unmeasured engine row draws a still 'not measured' rail, not a loading 
   assert.doesNotMatch(html, /aria-valuenow/);
 });
 
-test("a history bar is pending only when the score is unwritten, not when collection failed", () => {
+test("a history bar is pending only before finalization, not when collection failed", () => {
   assert.equal(reportData.scanVisibilityState({ visibility_pct: 42 }), "measured");
   assert.equal(reportData.scanVisibilityState({ visibility_pct: 0 }), "measured");
   assert.equal(reportData.scanVisibilityState({ visibility_pct: null, collection_partial: true }), "unmeasured");
   assert.equal(reportData.scanVisibilityState({ visibility_pct: null, collection_partial: false }), "pending");
   assert.equal(reportData.scanVisibilityState({}), "pending");
+});
+
+test("a completed healthy scan with no elicited brands renders an unmeasured history bar", async () => {
+  const { summarizeEngineSlice, summarizeEngineResults, computeHeadline } = await import("../../lib/scoring/enginePipeline.js");
+  const results = Array.from({ length: 30 }, (_, i) => ({
+    query: `unbranded question ${i}`, is_branded_query: false,
+    answer_present: true, error: null, text: "An answer without vendor names",
+    visible: false, brand_mentioned_in_text: false, brand_cited: false,
+    brands: [
+      { name: "Self", is_self: true, mentioned: false },
+      { name: "Rival", is_self: false, mentioned: false },
+    ],
+  }));
+  const engines = Object.fromEntries(["aio", "chatgpt", "perplexity", "gemini"].map((name) => [name, summarizeEngineSlice(results, name)]));
+  const { summary } = summarizeEngineResults({ results, engines, headline: computeHeadline(Object.values(engines)) });
+  const scan = {
+    visibility_pct: summary.visibility_pct,
+    scanned_at: "2026-10-14T10:00:00Z",
+    collection_partial: Object.values(engines).some((slice) => slice.data_source_issue === true || slice.error_rate_pct > 0),
+  };
+  assert.equal(scan.visibility_pct, null);
+  assert.equal(scan.collection_partial, false);
+  assert.equal(reportData.scanVisibilityState(scan), "unmeasured");
+  const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
+  const html = renderToHtml(ui.ProgressBar, {
+    value: scan.visibility_pct, indeterminate: reportData.scanVisibilityState(scan) === "pending",
+    size: "sm", label: "AI visibility",
+  });
+  assert.match(html, /aria-label="AI visibility: not measured"/);
+  assert.match(html, /pv-progress--unmeasured/);
+  assert.doesNotMatch(html, /pv-progress--indeterminate|pv-progress__fill/);
 });
