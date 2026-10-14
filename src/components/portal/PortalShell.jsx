@@ -300,7 +300,7 @@ export function PortalFrame({ children }) {
         {scan.active && !pathname.startsWith("/portal/scans") && pathname !== "/portal" ? (
           <Link href="/portal/scans" className="pv-sidebar__scan">
             <b><span>Scan running</span><span className="pv-num">{scan.percent === null ? "—" : `${Math.round(scan.percent)}%`}</span></b>
-            <ProgressBar value={scan.percent} active size="sm" label="Scan progress" />
+            <ProgressBar value={scan.percent} active indeterminate size="sm" label="Scan progress" />
             <span>{scan.stage?.label || "Starting"}…</span>
           </Link>
         ) : null}

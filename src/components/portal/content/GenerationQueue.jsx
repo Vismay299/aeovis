@@ -44,7 +44,7 @@ function ActiveJob({ job }) {
         <Badge tone="brand" live>{stage?.label || "Queued"}</Badge>
         {playbookLabel(job.playbook, job.agent_format) ? <span>{playbookLabel(job.playbook, job.agent_format)}</span> : null}
       </div>
-      <ProgressBar value={job.progress_pct} active label={`Progress for ${topic}`} />
+      <ProgressBar value={job.progress_pct} active indeterminate label={`Progress for ${topic}`} />
       <div className="pv-content-steps">
         <StageSteps steps={CONTENT_JOB_STAGES} current={contentJobStageIndex(job.status)} />
       </div>

@@ -4,7 +4,8 @@
  * The portal used to print a running scan as "generating_prompts · 10%" in a
  * list row, never polled the job, and rendered dark whenever the OS was dark.
  * These tests pin what replaced that:
- *   1. the bar never draws "unknown" as 0% — it sweeps and says "In progress",
+ *   1. an unknown value is a still "not measured" rail; the sweep is opt-in and
+ *      never draws "unknown" as 0%,
  *   2. the stepper marks finished stages done and the running one current,
  *   3. the progress card shows the live percentage and stage name,
  *   4. the tracker polls the status route that also rescues stalled chunks,
@@ -38,11 +39,25 @@ async function loadTracker() {
   });
 }
 
-test("ProgressBar: an unknown value sweeps and is never announced as 0%", async () => {
+test("ProgressBar: a bare unknown value is a still 'not measured' rail, not a sweep", async () => {
   const { ProgressBar } = await loadUi();
-  const html = renderToHtml(ProgressBar, { value: null, label: "Scan progress" });
+  const html = renderToHtml(ProgressBar, { value: null, label: "ChatGPT score" });
+  assert.doesNotMatch(html, /pv-progress--indeterminate/, "the sweep must be opt-in");
+  assert.match(html, /pv-progress--unmeasured/, "an unmeasured bar must read differently from a measured 0%");
+  assert.doesNotMatch(html, /pv-progress__fill/, "an unmeasured bar draws no fill");
+  assert.match(html, /role="img"/);
+  assert.match(html, /aria-label="ChatGPT score: not measured"/);
+  assert.doesNotMatch(html, /aria-valuenow/);
+  assert.doesNotMatch(textOf(html), /0%/);
+});
+
+test("ProgressBar: only an explicit indeterminate sweeps, and is never announced as 0%", async () => {
+  const { ProgressBar } = await loadUi();
+  const html = renderToHtml(ProgressBar, { value: null, indeterminate: true, label: "Scan progress" });
   assert.match(html, /pv-progress--indeterminate/);
+  assert.match(html, /role="progressbar"/);
   assert.match(html, /aria-valuetext="In progress"/);
+  assert.doesNotMatch(html, /pv-progress--unmeasured/);
   assert.doesNotMatch(html, /aria-valuenow/);
   assert.doesNotMatch(textOf(html), /0%/);
 });

@@ -120,21 +120,38 @@ export function EmptyState({ icon: Icon, title, children, action }) {
 }
 
 /**
- * Determinate progress bar. `value` is 0–100; null/undefined draws the
- * indeterminate sweep (we do not know yet — never shown as 0%).
+ * Progress bar. `value` is 0–100 and draws a determinate fill.
+ *
+ * A null/unknown value is a finished "not measured" rail by default: a still,
+ * hatched rail announced as "not measured" — never drawn as a live 0%. Pass
+ * `indeterminate` only while a run is still underway and no reading has
+ * arrived, to draw the animated sweep ("In progress") instead.
+ *
  * `active` adds a moving sheen so a bar waiting on its next reading looks alive.
  */
-export function ProgressBar({ value, active = false, size = "md", tone, label = "Progress" }) {
+export function ProgressBar({ value, active = false, indeterminate = false, size = "md", tone, label = "Progress" }) {
   const known = typeof value === "number" && Number.isFinite(value);
   const pct = known ? Math.min(100, Math.max(0, value)) : null;
+  const sizeClass = size === "sm" ? "pv-progress--sm" : size === "lg" ? "pv-progress--lg" : null;
+  const toneClass = tone ? `pv-progress--${tone}` : null;
+
+  if (!known && !indeterminate) {
+    return (
+      <div
+        className={cx("pv-progress", "pv-progress--unmeasured", sizeClass, toneClass)}
+        role="img"
+        aria-label={`${label}: not measured`}
+      />
+    );
+  }
+
   return (
     <div
       className={cx(
         "pv-progress",
-        size === "sm" && "pv-progress--sm",
-        size === "lg" && "pv-progress--lg",
+        sizeClass,
+        toneClass,
         !known && "pv-progress--indeterminate",
-        tone && `pv-progress--${tone}`,
         active && known && "is-active",
       )}
       role="progressbar"

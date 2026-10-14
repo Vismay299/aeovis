@@ -10,7 +10,7 @@ import {
   Badge, Banner, Button, Card, EmptyState, PageHeader, ProgressBar, SkeletonRows,
   formatDate, formatPct,
 } from "@/components/portal/ui";
-import { platformLabel } from "@/components/portal/scans/reportData";
+import { platformLabel, scanVisibilityState } from "@/components/portal/scans/reportData";
 import "@/components/portal/scans/scans.css";
 
 const FAILED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -25,6 +25,7 @@ function ScanRow({ scan, onOpen }) {
   const visibility = finiteOrNull(scan.visibility_pct);
   const tracked = finiteOrNull(scan.prompts_tracked);
   const mentioned = finiteOrNull(scan.prompts_mentioned);
+  const pending = scanVisibilityState(scan) === "pending";
   const label = `Open scan from ${formatDate(scan.scanned_at || scan.created_at, { withTime: true })}`;
 
   return (
@@ -44,7 +45,7 @@ function ScanRow({ scan, onOpen }) {
       <td>
         <div className="pv-scans-vis">
           <span className="pv-scans-vis__bar">
-            <ProgressBar value={visibility} size="sm" label="AI visibility" />
+            <ProgressBar value={visibility} indeterminate={pending} size="sm" label="AI visibility" />
           </span>
           <span className={`pv-scans-vis__value${visibility === null ? " is-empty" : ""}`}>
             {formatPct(visibility)}
