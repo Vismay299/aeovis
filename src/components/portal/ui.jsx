@@ -120,20 +120,23 @@ export function EmptyState({ icon: Icon, title, children, action }) {
 }
 
 /**
- * Determinate progress bar. `value` is 0–100; null/undefined draws the
- * indeterminate sweep (we do not know yet — never shown as 0%).
+ * Progress bar. `value` is 0–100; null/undefined draws the indeterminate sweep
+ * (we do not know yet — never shown as 0%). Pass `indeterminate={false}` where a
+ * null value is a finished "not measured" result rather than a pending reading,
+ * so the rail stays still instead of sweeping forever.
  * `active` adds a moving sheen so a bar waiting on its next reading looks alive.
  */
-export function ProgressBar({ value, active = false, size = "md", tone, label = "Progress" }) {
+export function ProgressBar({ value, active = false, indeterminate, size = "md", tone, label = "Progress" }) {
   const known = typeof value === "number" && Number.isFinite(value);
   const pct = known ? Math.min(100, Math.max(0, value)) : null;
+  const sweeping = !known && indeterminate !== false;
   return (
     <div
       className={cx(
         "pv-progress",
         size === "sm" && "pv-progress--sm",
         size === "lg" && "pv-progress--lg",
-        !known && "pv-progress--indeterminate",
+        sweeping && "pv-progress--indeterminate",
         tone && `pv-progress--${tone}`,
         active && known && "is-active",
       )}
@@ -142,9 +145,11 @@ export function ProgressBar({ value, active = false, size = "md", tone, label = 
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={known ? Math.round(pct) : undefined}
-      aria-valuetext={known ? `${Math.round(pct)}%` : "In progress"}
+      aria-valuetext={known ? `${Math.round(pct)}%` : sweeping ? "In progress" : "Not measured"}
     >
-      <span className="pv-progress__fill" style={known ? { transform: `scaleX(${pct / 100})` } : undefined} />
+      {known || sweeping ? (
+        <span className="pv-progress__fill" style={known ? { transform: `scaleX(${pct / 100})` } : undefined} />
+      ) : null}
     </div>
   );
 }

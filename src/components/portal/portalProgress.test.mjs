@@ -47,6 +47,15 @@ test("ProgressBar: an unknown value sweeps and is never announced as 0%", async 
   assert.doesNotMatch(textOf(html), /0%/);
 });
 
+test("ProgressBar: an unmeasured result stays still instead of sweeping forever", async () => {
+  const { ProgressBar } = await loadUi();
+  const html = renderToHtml(ProgressBar, { value: null, indeterminate: false, label: "ChatGPT score" });
+  assert.doesNotMatch(html, /pv-progress--indeterminate/, "a finished 'not measured' value must not animate");
+  assert.doesNotMatch(html, /pv-progress__fill/);
+  assert.match(html, /aria-valuetext="Not measured"/);
+  assert.doesNotMatch(html, /aria-valuenow/);
+});
+
 test("ProgressBar: a known value fills to that fraction and is announced", async () => {
   const { ProgressBar } = await loadUi();
   const html = renderToHtml(ProgressBar, { value: 42, active: true });

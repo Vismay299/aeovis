@@ -289,3 +289,15 @@ test("healthy low-sample answers keep their measured score and do not appear as 
   assert.match(text, /Visibility is not assessed/);
   assert.doesNotMatch(text, /Collection incomplete|collection errors/);
 });
+
+test("an unmeasured engine row does not animate an endless loading bar", async () => {
+  const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const html = renderToHtml(cards.EngineScoresCard, { engines: {
+    aio: { visibility_pct: null, data_source_issue: true, non_branded_queries: 30, non_branded_with_answer: 0, errored_queries: 30 },
+    chatgpt: { visibility_pct: 0 },
+  } });
+  assert.match(html, /By engine/);
+  assert.match(html, /0%/);
+  assert.doesNotMatch(html, /pv-progress--indeterminate/, "an unmeasured engine must not run a loading sweep forever");
+});

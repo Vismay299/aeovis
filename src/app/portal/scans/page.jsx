@@ -44,7 +44,7 @@ function ScanRow({ scan, onOpen }) {
       <td>
         <div className="pv-scans-vis">
           <span className="pv-scans-vis__bar">
-            <ProgressBar value={visibility} size="sm" label="AI visibility" />
+            <ProgressBar value={visibility} indeterminate={false} size="sm" label="AI visibility" />
           </span>
           <span className={`pv-scans-vis__value${visibility === null ? " is-empty" : ""}`}>
             {formatPct(visibility)}
