@@ -502,7 +502,13 @@ test("runFinalizePhase — multi-engine: reconstructs results from `raw` and mat
   assert.deepEqual(record.engines.chatgpt, expectedChatgpt);
   assert.equal(record.visibility_index_pct, expectedHeadline.visibility_index_pct);
   assert.equal(record.engines_counted, expectedHeadline.engines_counted);
-  assert.deepEqual(record.summary_stats, expectedWrapped.summary);
+  // R03.3a — summary_stats now ALWAYS carries the versioned terminal collection
+  // outcome (the same field the status route, report and history read back).
+  // This assertion is about scoring fidelity, so it compares every summary field
+  // except that one added key, and then checks the key is the expected vocabulary.
+  const { terminal_outcome: multiOutcome, ...multiSummaryStats } = record.summary_stats;
+  assert.deepEqual(multiSummaryStats, expectedWrapped.summary);
+  assert.equal(multiOutcome.version, "r03-v1", "the scan carries the R03 terminal-outcome vocabulary");
   assert.equal(record.scoring_version, "v9-multi-engine");
   assert.equal(record.platform, "multi");
 });
@@ -529,7 +535,10 @@ test("runFinalizePhase — single engine (aio only): uses summarizeAioResults di
   assert.equal(record.engines, undefined, "single-engine records must not carry the engines map");
 
   const expected = summarizeAioResults(raws).summary;
-  assert.deepEqual(record.summary_stats, expected);
+  // R03.3a — summary_stats always carries terminal_outcome now; compare the rest.
+  const { terminal_outcome: singleOutcome, ...singleSummaryStats } = record.summary_stats;
+  assert.deepEqual(singleSummaryStats, expected);
+  assert.equal(singleOutcome.version, "r03-v1");
   assert.equal(record.visibility_pct, expected.visibility_pct);
 });
 

@@ -75,6 +75,9 @@ import {
   RUN_OUTCOMES,
   RUNNERS,
 } from "../scanRuns.js";
+// R03.3a — the honest terminal collection outcome, derived from the persisted
+// rows and never from how many rows the loop processed.
+import { deriveScanOutcome, buildScorePlan } from "../scanOutcome.js";
 
 const MAX_SOURCING_ATTEMPTS = 3;
 // R2.10.1 — shared with the landing page so the advertised prompt count and
@@ -2365,6 +2368,34 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     summary = single.summary;
   }
 
+  // R03.3a — THE TERMINAL COLLECTION OUTCOME, from the persisted rows.
+  //
+  // The finalizer used to end every scan with `status: "complete"` because it
+  // had finished PROCESSING rows — even when every row was an error (A07). The
+  // headline above is a scoring artifact; it answers "how did the brand do in
+  // the answers we got", not "did we get any answers". This reads the frozen
+  // work matrix and the persisted observation rows and answers the second
+  // question, so a scan that measured nothing cannot finalize as `complete`.
+  //
+  // The frozen engine set, not `engineNames` post-fallback: a surface that was
+  // planned and then became unavailable must still appear as not-attempted work
+  // rather than vanish from the denominator (R03.3b / R03.1b).
+  const planEngines = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : engineNames;
+  const scoringRows = allRows.filter((r) => !r.is_branded_query && !r.raw?.is_branded_query);
+  const diagnosticRows = allRows.filter((r) => r.is_branded_query || r.raw?.is_branded_query);
+  const terminalOutcome = deriveScanOutcome({
+    plan: buildScorePlan({ prompts: unbrandedTexts || [], engines: planEngines }),
+    rows: scoringRows,
+    diagnostics: diagnosticRows,
+    blocked: checkpoint.blocked || null,
+    engineNames: planEngines,
+  });
+  console.log(
+    `[scan-chunk] Job ${jobId}: collection outcome ${terminalOutcome.outcome} ` +
+      `(${terminalOutcome.outcome_reason}) — planned ${terminalOutcome.counts.planned}, ` +
+      `valid ${terminalOutcome.counts.valid}, failed ${terminalOutcome.counts.failed}, ` +
+      `not-attempted ${terminalOutcome.counts.not_attempted}.`
+  );
 
   // Hash the unbranded set only (frozen at sourcing time), so prompt-set
   // identity is stable/comparable across scans regardless of branded seeds.
@@ -2446,7 +2477,18 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     // reads below, and a scan-shape field has no business in a metrics row.
     // Omitted entirely when nothing changed, so the key's PRESENCE is the
     // signal and a clean scan carries no marker.
-    summary_stats: engineSetChange ? { ...summary, engine_set_change: engineSetChange } : summary,
+    //
+    // R03.3a/R03.4a — terminal_outcome ALWAYS rides here, and here only,
+    // because db.js's raw_results allowlist drops any new top-level field
+    // (the same trap the engine-set marker above documents). It is the single
+    // versioned collection outcome that the status payload, the persisted
+    // report, history and export all read back through
+    // terminalOutcomeFromRecord, so those surfaces cannot disagree.
+    summary_stats: {
+      ...summary,
+      terminal_outcome: terminalOutcome,
+      ...(engineSetChange ? { engine_set_change: engineSetChange } : {}),
+    },
   };
 
   if (isMultiEngine) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getScansForBrand } from "@/lib/db";
+import { terminalOutcomeFromRecord } from "@/lib/scanOutcome";
 
 // Scan history must always be fresh. Without this, Next 14 statically caches
 // the handler (it never reads `request`), so newly-saved scans never appear.
@@ -60,6 +61,9 @@ function enrichScanForClient(scan) {
       raw.data_source_issue ?? summary_stats?.data_source_issue ?? false,
     insufficient_sample:
       raw.insufficient_sample ?? summary_stats?.insufficient_sample ?? false,
+    // R03.4a — history carries the same versioned terminal outcome as the
+    // status endpoint and the single-scan report (see _lib/scanRow.js).
+    terminal_outcome: terminalOutcomeFromRecord(scan),
     query_source: scan.query_source ?? raw.query_source ?? null,
     seeds: raw.seeds ?? [],
   };

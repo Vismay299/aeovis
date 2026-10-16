@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase, getScanJob, HEARTBEAT_STALE_MS } from "@/lib/db";
 import { normalizeRun } from "@/lib/scanRuns";
+import { terminalOutcomeFromRecord } from "@/lib/scanOutcome";
 import { runScanChunk } from "@/lib/workers/scanWorker";
 import { keepAlive } from "@/lib/keepAlive";
 
@@ -667,6 +668,16 @@ export async function GET(request, { params }) {
         error_message: job.error_message,
         created_at: job.created_at,
         run_record: job.run_record,
+        // R03.4a — the SAME versioned collection outcome the persisted report,
+        // history and export carry, read back through the one shared reader so a
+        // status poll and a finished report for the same scan cannot disagree on
+        // the outcome or on any counter. `run_record.summary_stats.terminal_outcome`
+        // is written once, by the finalizer; this is that record, unchanged.
+        //
+        // `status` above remains the EXECUTION lifecycle (the worker finished or
+        // not). The collection outcome is a separate axis on purpose: A07 was a
+        // "complete" execution being read as a successful measurement.
+        terminal_outcome: terminalOutcomeFromRecord(job.run_record),
         // R3.2.3 — what the ledger says actually executed.
         //
         // `history_known: false` means this whole block is an admitted absence.
