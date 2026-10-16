@@ -1,0 +1,44 @@
+{
+  "fixture": "synthetic-branded-diagnostics",
+  "version": 1,
+  "origin": "synthetic",
+  "tag": "branded_diagnostic",
+  "scoring_purpose": "branded_diagnostic",
+  "brands": { "tracked": "Acme Tiles", "competitor": "Rival Tiles" },
+  "excluded_from": [
+    "unbranded_panel",
+    "mention_rate_denominator",
+    "citation_rate_denominator",
+    "recommendation_rate_denominator"
+  ],
+  "diagnostics": [
+    {
+      "id": "branded-diagnostic-01",
+      "text": "which tile maker does Acme Tiles itself recommend for bathroom floors",
+      "surface": "chatgpt",
+      "tags": ["branded", "self_leading", "diagnostic_only"],
+      "expected_treatment": "diagnostic"
+    },
+    {
+      "id": "branded-diagnostic-02",
+      "text": "is Acme Tiles better than Rival Tiles for large bathrooms",
+      "surface": "aio",
+      "tags": ["branded", "head_to_head", "diagnostic_only"],
+      "expected_treatment": "diagnostic"
+    },
+    {
+      "id": "branded-diagnostic-03",
+      "text": "why do people complain about Acme Tiles delivery times",
+      "surface": "perplexity",
+      "tags": ["branded", "reputation_risk", "negative_first", "diagnostic_only"],
+      "expected_treatment": "diagnostic"
+    },
+    {
+      "id": "branded-diagnostic-04",
+      "text": "Acme or Rival tiles for a rental flat refresh",
+      "surface": "gemini",
+      "tags": ["branded", "short_form", "ambiguous_intent", "diagnostic_only"],
+      "expected_treatment": "diagnostic"
+    }
+  ]
+}

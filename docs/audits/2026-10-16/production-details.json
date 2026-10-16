@@ -1,0 +1,543 @@
+{
+  "audit_date": "2026-10-16",
+  "checked_at_utc": "2026-10-15T18:52:04.912Z",
+  "local_credential_presence": {
+    "NEXT_PUBLIC_SUPABASE_URL": true,
+    "SUPABASE_DB_HOST": true,
+    "SUPABASE_DB_PASSWORD": true,
+    "SUPABASE_SERVICE_ROLE_KEY": false,
+    "LLM_API_KEY": true,
+    "OPENROUTER_API_KEY": false,
+    "BRIGHTDATA_API_KEY": true,
+    "OPENAI_API_KEY": false,
+    "PERPLEXITY_API_KEY": false,
+    "CRON_SECRET": false,
+    "OPERATOR_TOKEN": true
+  },
+  "latest_collection_details": [
+    {
+      "engine": "aio",
+      "is_branded_query": false,
+      "recorded": 11,
+      "answered": 0,
+      "no_answer": 0,
+      "category": "cookie_pool_unavailable"
+    },
+    {
+      "engine": "aio",
+      "is_branded_query": false,
+      "recorded": 18,
+      "answered": 18,
+      "no_answer": 0,
+      "category": "no_error"
+    },
+    {
+      "engine": "aio",
+      "is_branded_query": false,
+      "recorded": 1,
+      "answered": 0,
+      "no_answer": 0,
+      "category": "other_error"
+    },
+    {
+      "engine": "aio",
+      "is_branded_query": true,
+      "recorded": 3,
+      "answered": 1,
+      "no_answer": 2,
+      "category": "no_error"
+    },
+    {
+      "engine": "aio",
+      "is_branded_query": true,
+      "recorded": 1,
+      "answered": 0,
+      "no_answer": 0,
+      "category": "other_error"
+    },
+    {
+      "engine": "chatgpt",
+      "is_branded_query": false,
+      "recorded": 30,
+      "answered": 0,
+      "no_answer": 0,
+      "category": "credential_rejected"
+    },
+    {
+      "engine": "chatgpt",
+      "is_branded_query": true,
+      "recorded": 4,
+      "answered": 0,
+      "no_answer": 0,
+      "category": "credential_rejected"
+    },
+    {
+      "engine": "gemini",
+      "is_branded_query": false,
+      "recorded": 30,
+      "answered": 0,
+      "no_answer": 0,
+      "category": "credential_rejected"
+    },
+    {
+      "engine": "gemini",
+      "is_branded_query": true,
+      "recorded": 4,
+      "answered": 0,
+      "no_answer": 0,
+      "category": "credential_rejected"
+    },
+    {
+      "engine": "perplexity",
+      "is_branded_query": false,
+      "recorded": 30,
+      "answered": 0,
+      "no_answer": 0,
+      "category": "credential_rejected"
+    },
+    {
+      "engine": "perplexity",
+      "is_branded_query": true,
+      "recorded": 4,
+      "answered": 0,
+      "no_answer": 0,
+      "category": "credential_rejected"
+    }
+  ],
+  "latest_surface_evidence": [
+    {
+      "engine": "aio",
+      "method": "google_serp",
+      "model": null,
+      "pairs": 170,
+      "search_telemetry_present": 0,
+      "search_used": 0,
+      "screenshot_evidence": 0
+    },
+    {
+      "engine": "chatgpt",
+      "method": "model_api",
+      "model": null,
+      "pairs": 170,
+      "search_telemetry_present": 0,
+      "search_used": 0,
+      "screenshot_evidence": 0
+    },
+    {
+      "engine": "gemini",
+      "method": "model_api",
+      "model": "google/gemini-3.8-flash",
+      "pairs": 170,
+      "search_telemetry_present": 0,
+      "search_used": 0,
+      "screenshot_evidence": 0
+    },
+    {
+      "engine": "perplexity",
+      "method": "model_api",
+      "model": null,
+      "pairs": 170,
+      "search_telemetry_present": 0,
+      "search_used": 0,
+      "screenshot_evidence": 0
+    }
+  ],
+  "latest_query_sample": [
+    {
+      "query": "best tools for founders to share daily progress",
+      "topic": "tech_founder_ghostwriting",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 0,
+      "answered": false,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "best social media scheduler for software startups",
+      "topic": "founder_storytelling_services",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 0,
+      "answered": false,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "lex vs typeshare for technical founders",
+      "topic": "voice_cloning_text",
+      "source": "llm_generated",
+      "intent": "comparison",
+      "answer_characters": 0,
+      "answered": false,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "top linkedin content generators for engineers",
+      "topic": "engineer_social_presence",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 0,
+      "answered": false,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "top ai ghostwriting software for tech founders",
+      "topic": "tech_founder_ghostwriting",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 0,
+      "answered": false,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "best automated technical storytelling software",
+      "topic": "tech_founder_ghostwriting",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 1456,
+      "answered": true,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "best ai writing assistant with factual source citations",
+      "topic": "fact_based_ai_writing",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 1584,
+      "answered": true,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "best automated release notes to marketing post generators",
+      "topic": "release_marketing_automation",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 0,
+      "answered": false,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "buffer vs authoredin for linkedin growth",
+      "topic": "engineer_social_presence",
+      "source": "llm_generated",
+      "intent": "comparison",
+      "answer_characters": 3200,
+      "answered": true,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "otter ai vs whisper for turning meetings into posts",
+      "topic": "work_mining_content",
+      "source": "llm_generated",
+      "intent": "comparison",
+      "answer_characters": 0,
+      "answered": false,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "best tools to build engineering social presence automatically",
+      "topic": "engineer_social_presence",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 1780,
+      "answered": true,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "best software to turn slack messages into social posts",
+      "topic": "work_mining_content",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 0,
+      "answered": false,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "top software to convert pull requests into release announcements",
+      "topic": "dev_to_content_automation",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 0,
+      "answered": false,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "best dev marketing platforms to showcase weekly shipped features",
+      "topic": "release_marketing_automation",
+      "source": "llm_generated",
+      "intent": "commercial",
+      "answer_characters": 4382,
+      "answered": true,
+      "mentioned": false,
+      "brand_cited": false
+    },
+    {
+      "query": "hypefury vs tweet hunter vs taplio comparison",
+      "topic": "tech_founder_ghostwriting",
+      "source": "llm_generated",
+      "intent": "comparison",
+      "answer_characters": 2086,
+      "answered": true,
+      "mentioned": false,
+      "brand_cited": false
+    }
+  ],
+  "content_outcomes": [
+    {
+      "status": "approved",
+      "items": 1
+    },
+    {
+      "status": "awaiting_approval",
+      "items": 38
+    }
+  ],
+  "gsc_status": [
+    {
+      "connections": 0,
+      "daily_rows": 0,
+      "latest_date": null
+    }
+  ],
+  "rls_status": [
+    {
+      "relname": "brand_briefs",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "brand_metrics_daily",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "brand_prompts",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "citations",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "content_agents",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "content_events",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "content_feedback",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "content_items",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "content_jobs",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "content_lessons",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "content_runs",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "crawlability_audits",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "customer_brand_aliases",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "customer_brand_memberships",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "customer_brands",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "customer_team_invites",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "gsc_connections",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "gsc_daily",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "gsc_oauth_attempts",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "gsc_oauth_credentials",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "gsc_sync_jobs",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "knowledge_blocks",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "probe_tasks",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "prompt_results",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "result_brands",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "scan_jobs",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "scan_rate_limits",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "scan_runs",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "scan_schedules",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "scans",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "schema_migrations",
+      "relrowsecurity": false
+    },
+    {
+      "relname": "system_heartbeats",
+      "relrowsecurity": true
+    },
+    {
+      "relname": "topics",
+      "relrowsecurity": true
+    }
+  ],
+  "production_health": {
+    "http_status": 200,
+    "payload": {
+      "status": "ok",
+      "checked_at": "2026-10-15T18:52:14.372Z",
+      "db": {
+        "ok": true,
+        "latency_ms": 860,
+        "error": null
+      },
+      "vendors": {
+        "supabase": {
+          "configured": true,
+          "required": true,
+          "missing": [],
+          "deprecated": []
+        },
+        "llm": {
+          "configured": true,
+          "required": true,
+          "missing": [],
+          "deprecated": []
+        },
+        "brightdata": {
+          "configured": true,
+          "required": true,
+          "missing": [],
+          "deprecated": []
+        },
+        "firecrawl": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "perplexity": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "openai": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "gemini": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "gsc": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "gsc_oauth": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "cron": {
+          "configured": true,
+          "required": true,
+          "missing": [],
+          "deprecated": []
+        }
+      },
+      "missing_required": [],
+      "environment": {
+        "node_env": "production",
+        "vercel_env": "production",
+        "effective": "production",
+        "agrees": true,
+        "verdict": "agreed",
+        "detail": null
+      },
+      "cron": {
+        "content-worker": {
+          "last_tick_at": "2026-10-15T18:50:01.858+00:00",
+          "age_ms": 132514,
+          "stale": false
+        },
+        "scan-worker": {
+          "last_tick_at": "2026-10-15T18:50:02.569+00:00",
+          "age_ms": 131803,
+          "stale": false
+        }
+      }
+    }
+  }
+}

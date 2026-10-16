@@ -1,0 +1,10 @@
+[scan-chunk] Registered scan_schedules row for "italicatiles.com" (enabled: false — scheduling is opt-in).
+[scan-chunk] Prepared 30 queries (30 unbranded, 0 brand-presence)
+[scan-chunk] Competitors: Example Rival One(—/simulation), Example Rival Two(—/simulation)
+[scan-chunk] Re-judged 120/120 rows against a roster of 3 (roster_source=configured)
+[scan-chunk] run run-1 succeeded (complete) — scan-chunk/sourcing, probes 120/120, errors recovered 0
+(node:6932) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/Vismay/AppData/Local/Temp/perceev-verification-20261016/src/lib/demo/mockScan.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to \\?\C:\Users\Vismay\AppData\Local\Temp\perceev-verification-20261016\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+PASS: mock local acceptance. 120 answers. Output: J:\My Drive\Projects\AEO\docs\audits\2026-10-16\mock-acceptance.json

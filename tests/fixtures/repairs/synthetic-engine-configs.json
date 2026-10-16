@@ -1,0 +1,70 @@
+{
+  "fixture": "synthetic-engine-configs",
+  "version": 1,
+  "origin": "synthetic",
+  "credential_example": "sk-example-not-a-real-key",
+  "note": "Configuration identity only. The credential value here is a placeholder; no real key is stored in this repository.",
+  "configs": [
+    {
+      "id": "engine-config-aio",
+      "engine": "aio",
+      "label": "Google AI Overview",
+      "adapter": "src/lib/engines/brightdata.js",
+      "parser": "src/lib/engines/googlePayload.js",
+      "surface": "google_serp",
+      "gateway": "brightdata",
+      "model": "google-serp-aio",
+      "credential_variable": "BRIGHTDATA_API_KEY",
+      "credential_value": "sk-example-not-a-real-key",
+      "zone_variable": "BRIGHTDATA_SERP_ZONE",
+      "fallback": "none",
+      "location_control": "supported",
+      "claimed_status": "proposed"
+    },
+    {
+      "id": "engine-config-chatgpt",
+      "engine": "chatgpt",
+      "label": "ChatGPT",
+      "adapter": "src/lib/engines/openai.js",
+      "parser": null,
+      "surface": "chatgpt_api",
+      "gateway": "openai",
+      "model": "gpt-4o-mini",
+      "credential_variable": "OPENAI_API_KEY",
+      "credential_value": "sk-example-not-a-real-key",
+      "fallback": "openrouter",
+      "location_control": "unsupported",
+      "claimed_status": "proposed"
+    },
+    {
+      "id": "engine-config-gemini",
+      "engine": "gemini",
+      "label": "Gemini",
+      "adapter": "src/lib/engines/geminiPipeline.js",
+      "parser": null,
+      "surface": "gemini_api",
+      "gateway": "openrouter",
+      "model": "google/gemini-flash",
+      "credential_variable": "OPENROUTER_API_KEY",
+      "credential_value": "sk-example-not-a-real-key",
+      "fallback": "none",
+      "location_control": "unknown",
+      "claimed_status": "proposed"
+    },
+    {
+      "id": "engine-config-perplexity",
+      "engine": "perplexity",
+      "label": "Perplexity",
+      "adapter": "src/lib/engines/perplexity.js",
+      "parser": null,
+      "surface": "perplexity_api",
+      "gateway": "perplexity",
+      "model": "sonar",
+      "credential_variable": "PERPLEXITY_API_KEY",
+      "credential_value": "sk-example-not-a-real-key",
+      "fallback": "none",
+      "location_control": "supported",
+      "claimed_status": "proposed"
+    }
+  ]
+}

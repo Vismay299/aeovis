@@ -114,6 +114,12 @@ export async function probeChatGpt(query, options = {}) {
         cost_source: result.cost_source,
         cost_state: result.cost_state,
         cost_state_detail: result.cost_state_detail,
+        model: result.model,
+        requested_model: result.requested_model,
+        returned_model: result.returned_model,
+        provider_request_id: result.provider_request_id,
+        search_requests: result.search_requests,
+        usage: result.usage,
         error: result.error,
         error_kind: result.error_kind,
       };
@@ -307,6 +313,12 @@ export async function probeChatGpt(query, options = {}) {
         cost_source: costSource,
         cost_state: costState,
         cost_state_detail: costStateDetail,
+        model: resJson?.model || model,
+        requested_model: model,
+        returned_model: resJson?.model || null,
+        provider_request_id: resJson?.id || null,
+        search_requests: 1,
+        usage: resJson?.usage || null,
         error: null,
       };
     } catch (e) {

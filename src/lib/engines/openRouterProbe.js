@@ -191,12 +191,16 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
       if (!textFromMessage(message) && references.length === 0) {
         throw new Error(`OpenRouter returned an empty answer (finish reason: ${data?.choices?.[0]?.finish_reason || "unknown"})`);
       }
+      const returnedModel = data?.model || model;
       return {
         text: textFromMessage(message),
         citations: references.map((item) => normalizeUrl(item.href)).filter(Boolean),
         references,
         usage,
-        model,
+        model: returnedModel,
+        requested_model: model,
+        returned_model: returnedModel,
+        provider_request_id: data?.id || null,
         search_requests: Number(usage?.server_tool_use?.web_search_requests) || 0,
         ...cost,
         error: null,

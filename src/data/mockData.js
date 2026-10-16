@@ -32,6 +32,12 @@
 import { DEFAULT_UNBRANDED_TARGET } from '../lib/scoring/promptSetSize.js';
 import { ENGINE_LABELS, deployedEngines } from '../lib/engines/deployedEngines.js';
 import { ROSTER_SOURCE } from '../lib/scoring/rosterContinuity.js';
+import { METRIC_CONTRACT_VERSION } from '../lib/scoring/metricContract.js';
+import {
+  SAMPLE_FIXED_TIMESTAMP,
+  SAMPLE_SURFACES,
+  buildSampleManifest,
+} from '../lib/sampleIsolation.js';
 
 const YOU = 'you';
 const R1 = 'r1';   /* NorthPeak */
@@ -365,6 +371,8 @@ export function buildMockResult(brand, website) {
       presence_rate_pct: presenceRatePct,
       data_source_issue: false,
       insufficient_sample: false,
+      metric_contract_version: METRIC_CONTRACT_VERSION,
+      metrics: {},
 
       // Backward compatibility for existing landing / gauge consumers
       visible: visibleCount,
@@ -431,7 +439,13 @@ export function buildMockResult(brand, website) {
     promptsAnalyzed: total,
     promptsTracked: total,
     competitorsFound: rivals.length,
-    scanTimestamp: new Date().toISOString(),
+    scanTimestamp: SAMPLE_FIXED_TIMESTAMP,
+    scanned_at: SAMPLE_FIXED_TIMESTAMP,
+    isSample: true,
+    sample: true,
+    illustrative: true,
+    engines_counted: ENGINE_KEYS.length,
+    enginesCounted: ENGINE_KEYS.length,
     scoringVersion: 'demo-1',
 
     /* `engines` is what flips the shell into multi-engine index mode. */
@@ -468,4 +482,4 @@ export function buildMockResult(brand, website) {
 
 export const SAMPLE_RESULT = buildMockResult('Brightwave', 'brightwave.io');
 
-export { ENGINE_LABEL, SET as DEMO_SET };
+export { ENGINE_LABEL, SET as DEMO_SET, buildSampleManifest, SAMPLE_SURFACES, SAMPLE_FIXED_TIMESTAMP };

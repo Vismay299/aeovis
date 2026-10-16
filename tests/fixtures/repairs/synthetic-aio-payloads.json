@@ -1,0 +1,33 @@
+{
+  "fixture": "synthetic-aio-payloads",
+  "version": 1,
+  "origin": "synthetic",
+  "note": "Two payloads in the Google SERP shape the production parser accepts, one carrying an AI Overview and one that is a valid SERP without one. Both are synthetic; no provider response body is stored here.",
+  "parser": "src/lib/engines/googlePayload.js",
+  "expected": {
+    "aio_present": { "serp_state": "valid_serp", "aio_present": true },
+    "no_aio": { "serp_state": "valid_serp", "aio_present": false }
+  },
+  "aio_present": {
+    "general": { "query": "best vitrified tiles for a bathroom" },
+    "organic": [{ "position": 1, "title": "Top tiles for wet rooms", "link": "https://tiles.example/top" }],
+    "ai_overview": {
+      "texts": [
+        { "snippet": "Acme Tiles is among the larger vitrified tile makers.", "reference_indexes": [0, 1] },
+        { "snippet": "Rival Tiles is also frequently recommended for bathrooms.", "reference_indexes": [1] }
+      ],
+      "references": [
+        { "href": "https://acme.example/collections", "title": "Acme collections", "source": "acme.example" },
+        { "href": "https://rival.example/", "title": "Rival", "source": "rival.example" }
+      ]
+    }
+  },
+  "no_aio": {
+    "general": { "query": "how to lay vitrified tiles" },
+    "organic": [
+      { "position": 1, "title": "A guide to laying vitrified tiles", "link": "https://tiles.example/guide" },
+      { "position": 2, "title": "Tile adhesive basics", "link": "https://tiles.example/adhesive" }
+    ],
+    "people_also_ask": [{ "question": "how long do tiles take to set", "link": "https://tiles.example/setting" }]
+  }
+}
