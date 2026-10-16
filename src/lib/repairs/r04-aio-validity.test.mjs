@@ -8,25 +8,29 @@ import {
 } from "../engines/googlePayload.js";
 import { brightDataSearch, isBrightDataParseError } from "../engines/brightdata.js";
 import { resolveEnabledEngines } from "../scoring/enginePipeline.js";
+import { buildScorePlan, deriveScanOutcome } from "../scanOutcome.js";
 
 /**
- * R04 — the three defects that survived the first review round, each one a way
- * for an unmeasured or unreadable Overview to pass as a measurement.
+ * R04 — the defects behind the reviewer's five reproductions, each one a way
+ * for an unmeasured or unreadable capture to pass as a measurement. Every fixture
+ * below is one of the reviewer's payloads, run end to end: adapter → actual
+ * engine probe → JSON serialization → terminal outcome, because every one of
+ * them parsed, probed and derived "correctly" in isolation while the chain
+ * still reported a fully valid no-AIO observation and 100% collection.
  *
- *   1. A malformed `ai_overview` (an empty object, an array, `true`, a number, an
- *      empty string) parsed as a valid SERP with no AIO, so a broken capture was
- *      counted as 100% collection and read as "Google showed no Overview".
- *   2. The validation metadata was only attached to rows that carried text or
- *      citations. A valid no-AIO row has neither, so the one row that has to
- *      prove it was measured carried no SERP state, no parser version and no
- *      evidence id — "there was no Overview" was indistinguishable from "we never
- *      read one", which is A01 at the data layer.
- *   3. A block carrying both a heading and a snippet yielded only one of them, so
- *      a brand named in the heading disappeared from the measurement.
+ *   1. An absent Overview (`ai_overview: null`) with no other SERP evidence, and
+ *      an empty object section (`{general:{}}`), parsed as a valid SERP with no
+ *      AIO: asserted absence with nothing backing it, counted as a measurement.
+ *   2. An Overview with a familiar key but nothing readable in it (`{texts:null}`,
+ *      `{references:"not-an-array"}`, `{texts:[{unrecognized_field:…}]}`) was
+ *      read as AIO *present* — and the probe then extracted nothing and wrote it
+ *      absent, so the stored row contradicted the parse while still collecting.
+ *   3. The metadata only reached rows that carried text or citations, so the
+ *      valid no-AIO rows — the ones that must prove they were measured — carried
+ *      no SERP state, no parser version and no evidence id.
  *
  * Everything here is synthetic (`.example` hosts, Acme/Rival) and offline: the
- * transport cases swap in a fetch stub and pin the zone, exactly as the rest of
- * this repair's cases do.
+ * transport cases swap in a fetch stub and pin the zone.
  */
 
 const ENV = ["BRIGHTDATA_API_KEY", "BRIGHTDATA_SERP_ZONE", "BRIGHTDATA_ZONE_TTL_MS", "ENGINES", "SERP_GEO"];
@@ -88,8 +92,110 @@ function noAioSerp() {
 }
 
 /* ------------------------------------------------------------------ *
- * 1. An unreadable Overview is unknown, never absence
+ * 1. The reviewer's five reproductions, end to end
  * ------------------------------------------------------------------ */
+
+/** The five payloads, exactly as the review exercised them. */
+const REVIEW_FIXTURES = [
+  ["empty general object", { general: {} }],
+  ["lone explicit absent Overview", { ai_overview: null }],
+  [
+    "null texts",
+    {
+      general: { query: "buyer question" },
+      organic: [{ position: 1, title: "A tiles shop", link: "https://tiles.example/a" }],
+      ai_overview: { texts: null },
+    },
+  ],
+  [
+    "non-array references",
+    {
+      general: { query: "buyer question" },
+      organic: [{ position: 1, title: "A tiles shop", link: "https://tiles.example/a" }],
+      ai_overview: { references: "not-an-array" },
+    },
+  ],
+  [
+    "foreign block text",
+    {
+      general: { query: "buyer question" },
+      organic: [{ position: 1, title: "A tiles shop", link: "https://tiles.example/a" }],
+      ai_overview: { texts: [{ unrecognized_field: "not answer text" }] },
+    },
+  ],
+];
+
+test("R04-08 — the five review reproductions never reach a measured observation", async (t) => {
+  pinAioEnv(t);
+
+  // Parser first: none may be collected, and none with a present-but-unreadable
+  // Overview may be read as absent.
+  for (const [label, serp] of REVIEW_FIXTURES) {
+    const out = parseGoogleSerp(serp);
+    assert.notEqual(
+      out.serp_state,
+      SERP_STATE.VALID_SERP,
+      `${label}: an unreadable capture is not a measurement`
+    );
+    assert.equal(out.aio_present, null, `${label}: AIO presence is indeterminate, never absent`);
+    assert.equal(out.blocks.length, 0, `${label}: unreadable content produces no invented text`);
+  }
+
+  // Then the whole chain the review exercised — adapter, the actual enabled AIO
+  // engine probe, JSON serialization, terminal outcome. The adapter sends the
+  // Google query on the wire, not the fixture label, so the stub serves the
+  // payloads in request order — one refused capture per probe, in the same order
+  // as the five fixtures above. Each probe in turn must fail as a refused
+  // collection attempt rather than as a no-AIO observation, and the outcome
+  // derivation over those refused rows can never read as healthy.
+  const fixtures = REVIEW_FIXTURES.map(([, serp]) => serp);
+  let calls = 0;
+  mockFetch(t, async () => {
+    const serp = fixtures[Math.min(calls, fixtures.length - 1)];
+    calls += 1;
+    return envelope(serp);
+  });
+
+  const aio = aioEngine();
+  const probeRows = [];
+  for (const [i, [label]] of REVIEW_FIXTURES.entries()) {
+    const row = persisted(
+      await aio.probe({ text: `buyer question ${i}`, topic: "General", source: "test" }, "Acme", ["Acme"], "acme.example", ["Rival"], null)
+    );
+    probeRows.push(row);
+    assert.ok(row.error, `${label}: the probe must record a refused collection attempt`);
+    assert.equal(row.answer_present ?? false, false, `${label}: it must not be an answer`);
+    assert.equal(row.aio_present ?? false, false, `${label}: it must not be a measured absence either`);
+  }
+  // The adapter retries a refused capture once before giving up (attempts: 2 by
+  // default), so five probes make more than five requests. What matters is that
+  // every request served a review payload and every one was refused: no attempt
+  // at any of them produced a measurement.
+  assert.equal(calls, 10, "each review payload was attempted and retried, and nothing else was fetched");
+
+  const plan = buildScorePlan({
+    prompts: REVIEW_FIXTURES.map((_, i) => ({ text: `buyer question ${i}` })),
+    engines: ["aio"],
+  });
+  const outcome = deriveScanOutcome({
+    plan,
+    rows: probeRows.map((row, i) => ({
+      engine: "aio",
+      query: `buyer question ${i}`,
+      answered: false,
+      raw: row,
+    })),
+    engineNames: ["aio"],
+  });
+  assert.notEqual(outcome.outcome, "complete", "five unreadable captures can never be a complete scan");
+  assert.equal(outcome.counts.valid, 0, "no valid observation exists to collect");
+  assert.equal(outcome.outcome, "failed", "an all-refused collection fails rather than completing");
+  assert.equal(
+    outcome.metrics.collection_completion_pct,
+    0,
+    "and collection completion is a measured zero, not 100%"
+  );
+});
 
 const UNREADABLE_AIO = [
   [{}, "an empty object"],

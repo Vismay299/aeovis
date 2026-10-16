@@ -150,21 +150,65 @@ function valueType(value) {
 /**
  * Does this section carry a value the section actually ships?
  *
- * A list section must be an array (empty is fine — that is a genuine
- * zero-result SERP). An object section must be a non-null, non-array object.
- * `ai_overview` is the exception in both directions: Bright Data has been
- * observed shipping it as a bare string, and null/false there is how "no
- * overview" is expressed — reading that as a broken section would flag every
- * ordinary no-AIO SERP.
+ * A list section must be an array AND it must carry something readable: a list
+ * of results is the SERP's content, and an object with no readable field in it —
+ * not even a query in `general` or metadata elsewhere — has named a section but
+ * shipped no evidence. `{general:{}}` used to pass on the key alone and let a
+ * payload containing nothing at all through as a measured SERP. An empty ARRAY
+ * is different: that is a genuine zero-result capture, and it stays valid.
+ * `ai_overview` null/false is how "no overview" is expressed, but only alongside
+ * other SERP evidence — a lone absent Overview is asserted absence with nothing
+ * backing it, and the shape stage refuses it below. A non-empty AIO string is
+ * itself readable evidence.
  */
 function sectionUsable(key, value) {
   if (key === "ai_overview") {
-    if (value === null || value === undefined || value === false) return true;
+    if (value === null || value === undefined || value === false) return false;
     if (typeof value === "string") return Boolean(value.trim());
     return typeof value === "object" && !Array.isArray(value);
   }
-  if (SERP_LIST_SECTIONS.has(key)) return Array.isArray(value);
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+  if (SERP_LIST_SECTIONS.has(key)) {
+    if (!Array.isArray(value)) return false;
+    return value.length === 0 || value.some((item) => sectionItemUsable(item));
+  }
+  return value !== null && typeof value === "object" && !Array.isArray(value) &&
+    Object.values(value).some((field) => fieldUsable(field));
+}
+
+/**
+ * Is one item of a list section readable evidence, or an empty shell?
+ *
+ * A result entry that is a non-empty string, a number, or an object with at
+ * least one scalar field (a title, a link, a position) is content. `{}` and
+ * `[{}]` in a list is the list analogue of an empty object section: the key is
+ * present and the capture is not.
+ */
+function sectionItemUsable(item) {
+  if (item === null || item === undefined) return false;
+  if (typeof item === "string") return Boolean(item.trim());
+  if (typeof item === "number" || typeof item === "boolean") return true;
+  if (typeof item !== "object" || Array.isArray(item)) return false;
+  return Object.values(item).some((field) => fieldUsable(field));
+}
+
+/**
+ * Is one field inside an object section readable?
+ *
+ * `object_field: {}` contributes no evidence, but neither does it disqualify a
+ * sibling that does: the section check is "some readable field", because a real
+ * `general: {query, gl}` block next to an empty sibling is still a SERP. Nested
+ * arrays count when they carry a readable item, so `organic: [{}]` differs from
+ * `organic: []` (genuine zero results) and from `organic: [{title, link}]`.
+ */
+function fieldUsable(field) {
+  if (field === null || field === undefined || field === false) return false;
+  if (typeof field === "string") return Boolean(field.trim());
+  if (typeof field === "number" || typeof field === "boolean") return true;
+  if (Array.isArray(field)) return field.some((item) => sectionItemUsable(item));
+  if (typeof field === "object") {
+    return Object.values(field).some((nested) => fieldUsable(nested));
+  }
+  return false;
 }
 
 /**
@@ -357,23 +401,49 @@ function blockOwnText(node) {
 /**
  * Can this `ai_overview` value be read at all, and does it assert presence?
  *
- * Present-but-unreadable is neither of the two answers the metric needs. `null`
- * and `false` are the vendor's explicit no-Overview signals; a non-empty string
- * or an object carrying at least one Overview field is an Overview. Everything
- * else — an empty object, an array, a bare `true`, a number, `""` — is a shape we
- * cannot read, and reading those as absence is exactly how a malformed payload
- * came to look like a healthy no-AIO observation (A01/A10).
+ * `null` and `false` are the vendor's explicit no-Overview signals, but only
+ * when they arrive alongside other affirmative SERP evidence (which the SERP
+ * shape stage enforces); a lone absent Overview is not a measurement. A
+ * non-empty string asserts an Overview; an object asserts one only when at
+ * least one of its content fields carries a readable value, not merely when the
+ * key is present. Everything else is a shape we cannot read.
+ *
+ * Reading present-but-unreadable as absence is how a malformed capture came to
+ * look like a healthy no-AIO observation (A01/A10). Reading it as presence is
+ * the same defect one door down: the probe then extracts nothing and writes
+ * `aio_present: false` over the parser's `true`, so the stored row contradicts
+ * the parse. Either way the answer is not "false"; it is unknown, and the
+ * payload may not be collected.
  */
-const AIO_CONTENT_FIELDS = [
-  "texts",
-  "text_blocks",
-  "paragraphs",
-  "text",
-  "snippet",
-  "references",
-  "sources",
-  "citations",
-];
+const AIO_TEXT_FIELDS = ["texts", "text_blocks", "paragraphs", "text", "snippet"];
+const AIO_REF_FIELDS = ["references", "sources", "citations"];
+
+const isNonEmptyString = (value) => typeof value === "string" && Boolean(value.trim());
+
+function aioContentHasReadableText(value) {
+  if (isNonEmptyString(value)) return true;
+  if (Array.isArray(value)) {
+    return value.some((item) =>
+      typeof item === "string"
+        ? Boolean(item.trim())
+        : item && typeof item === "object" &&
+          (BLOCK_TEXT_FIELDS.some((field) => isNonEmptyString(item[field])) ||
+            ["list", "text_blocks", "paragraphs"].some((field) => Array.isArray(item[field])))
+    );
+  }
+  if (value && typeof value === "object") {
+    return AIO_TEXT_FIELDS.some((field) => aioContentHasReadableText(value[field]));
+  }
+  return false;
+}
+
+function aioContentHasReadableRefs(value) {
+  if (Array.isArray(value)) return true;
+  if (value && typeof value === "object") {
+    return AIO_REF_FIELDS.some((field) => Array.isArray(value[field]));
+  }
+  return false;
+}
 
 function aioReadability(aio) {
   if (aio === null || aio === undefined || aio === false) {
@@ -385,14 +455,24 @@ function aioReadability(aio) {
       : { readable: false, valueType: "empty string" };
   }
   if (typeof aio === "object" && !Array.isArray(aio)) {
-    const hasContent = AIO_CONTENT_FIELDS.some((field) =>
-      Object.prototype.hasOwnProperty.call(aio, field)
-    );
-    return hasContent
+    // Presence is asserted by READABLE content, not by a familiar key:
+    // `ai_overview: {}` is an empty object any shape check would pass, and
+    // `{texts: null}` or `{references: "not-an-array"}` is an Overview whose
+    // every extraction path finds nothing to read. Either way there is no
+    // measurement to take — presence says true and the probe writes false, and
+    // that contradiction is exactly what this function exists to refuse.
+    const asserted = aioContentHasReadableText(aio) || aioContentHasReadableRefs(aio);
+    return asserted
       ? { readable: true, present: true, valueType: "object" }
-      : { readable: false, valueType: "empty object" };
+      : { readable: false, valueType: hasAioContentKey(aio) ? "unreadable aio object" : "empty object" };
   }
   return { readable: false, valueType: valueType(aio) };
+}
+
+function hasAioContentKey(aio) {
+  return [...AIO_TEXT_FIELDS, ...AIO_REF_FIELDS].some((field) =>
+    Object.prototype.hasOwnProperty.call(aio, field)
+  );
 }
 
 function classifyReferenceUrl(href) {
@@ -775,7 +855,17 @@ export function parseGoogleSerp(raw, options = {}) {
   for (const key of SERP_SECTION_KEYS) {
     if (!Object.prototype.hasOwnProperty.call(serp, key)) continue;
     if (sectionUsable(key, serp[key])) recognized.push(key);
-    else unusable.push({ section: key, type: valueType(serp[key]) });
+    else {
+      const entry = { section: key, type: valueType(serp[key]) };
+      // An explicit absent-AIO signal (null/false) is the absence verdict being
+      // recorded, not a section arriving broken: it can never establish a SERP
+      // on its own (sectionUsable returns false for it), but once a sibling has
+      // established one it must not read as a defect in the capture either.
+      if (key === "ai_overview" && (serp[key] === null || serp[key] === false)) {
+        entry.absentSignal = true;
+      }
+      unusable.push(entry);
+    }
   }
 
   if (recognized.length === 0) {
@@ -804,8 +894,14 @@ export function parseGoogleSerp(raw, options = {}) {
 
   // A readable section made the payload a SERP, so an unreadable sibling is a
   // defect in the CAPTURE, not a verdict about it: recorded, and never allowed
-  // to promote the unreadable value into a measurement.
+  // to promote the unreadable value into a measurement. The one exception is an
+  // explicit absent-AIO signal (null/false): that is the absence verdict being
+  // recorded, not a section arriving broken, so emitting an error for it would
+  // read as "no Overview, ALTHOUGH something is wrong" on every ordinary no-AIO
+  // SERP. The `unusable_sections` audit trail on the result still names every
+  // section that was recognised, so nothing is hidden by this.
   for (const u of unusable) {
+    if (u.section === "ai_overview" && u.absentSignal === true) continue;
     errors.push({
       stage: PARSE_STAGE.SERP_SHAPE,
       code: "serp_section_unusable",
