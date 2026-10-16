@@ -112,7 +112,8 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
 
   try {
     const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true, geo: options.geo });
-    const { text, citations, references } = extractBrightDataAiOverview(data);
+    const { text, citations, references, per_field_quality, citations_verified_empty, parser_version, evidence_id } =
+      extractBrightDataAiOverview(data);
     const organic = extractBrightDataOrganic(data);
     result.organic = organic;
     if (brandDomain && organic.length > 0) {
@@ -131,6 +132,20 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
       result.answer_present = true;
       result.aio_present = true;
       result.text = text || "";
+
+      // R04.5a — the validated parse result travels with the observation, because
+      // a row that cannot say which parser version measured it, or which fields
+      // came back complete, is not auditable evidence: `per_field_quality` is
+      // what separates "the AIO carried no text" from "we could not read its
+      // text", and those two must never look the same in storage.
+      //
+      // Left OFF the row when absent rather than defaulted: the raw-payload
+      // branch never went through the parser, so there is no quality to report
+      // for it, and a default here would invent one.
+      if (per_field_quality !== undefined) result.per_field_quality = per_field_quality;
+      if (citations_verified_empty !== undefined) result.citations_verified_empty = citations_verified_empty;
+      if (parser_version !== undefined) result.parser_version = parser_version;
+      if (evidence_id !== undefined) result.evidence_id = evidence_id;
 
       if (citations?.length) result.citations = citations;
       if (references?.length) {

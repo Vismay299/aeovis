@@ -13,7 +13,7 @@ import {
   isRetryableProviderFailure,
   sanitizeProviderText,
 } from "../engines/providerFailure.js";
-import { ATTEMPT_DISPOSITION, planRetry } from "../attemptPolicy.js";
+import { ATTEMPT_DISPOSITION, RETRY_REASON, planRetry } from "../attemptPolicy.js";
 import { isValidMeasurement } from "../engines/providerReadiness.js";
 
 /**
@@ -111,6 +111,58 @@ test("R01-05 — retry eligibility stays the shared classifier's verdict, narrow
   assert.equal(classifyHttpStatus(429), FAILURE_KIND.TRANSIENT, "the status alone is retryable");
   assert.equal(narrowed.kind, PROVIDER_FAILURE.SPEND_LIMIT);
   assert.equal(narrowed.retryable, false, "a spent key is not throttling");
+});
+
+test("R01-05 — the classifier's non-retryable verdict survives planRetry even when the kind reads retryable", () => {
+  // The reviewer's fixture: a 401 whose body claims throttling. The kind comes
+  // from the allowlisted code, the retry verdict from the STATUS, and the two
+  // disagree — the classifier resolves that against a retry, and the decision
+  // layer must carry that resolution rather than re-derive it from the kind.
+  const contradictory = classifyProviderFailure({
+    provider: "openrouter",
+    status: 401,
+    body: { error: { code: "rate_limit_exceeded" } },
+    nowMs: NOW,
+  });
+  assert.equal(contradictory.kind, PROVIDER_FAILURE.RATE_LIMIT, "the allowlisted code still names the cause");
+  assert.equal(contradictory.retryable, false, "a 401 is a refusal whatever its body claims to be");
+  assert.equal(isRetryableProviderFailure(contradictory.kind), true, "...and the kind table alone would have retried it");
+
+  const decision = planRetry({ failure: contradictory, attemptNumber: 1, nowMs: NOW, deadlineMs: NOW + 600_000 });
+  assert.equal(decision.retry, false, "the verdict decides, not the kind");
+  assert.equal(decision.next_attempt, null);
+  assert.equal(decision.delay_ms, null);
+  assert.equal(decision.terminal, true);
+  assert.equal(decision.reason, RETRY_REASON.PERMANENT_FAILURE);
+
+  // The same in the other direction: the code narrows a status that on its own
+  // is retryable, and an observed reset time does not undo the narrowing.
+  const spentKey = classifyProviderFailure({
+    provider: "openai",
+    status: 429,
+    headers: { "retry-after": "600" },
+    body: { error: { code: "insufficient_quota" } },
+    nowMs: NOW,
+  });
+  assert.equal(classifyHttpStatus(429), FAILURE_KIND.TRANSIENT, "the status alone is retryable");
+  assert.equal(spentKey.retryable, false);
+
+  const noRetry = planRetry({ failure: spentKey, attemptNumber: 1, nowMs: NOW, deadlineMs: NOW + 3_600_000 });
+  assert.equal(noRetry.retry, false, "a quota that resets later is still not retried inside this scan");
+  assert.equal(noRetry.retry_after_ms, 600_000, "the provider's reset time is reported to the operator regardless");
+  assert.equal(noRetry.circuit_action.action, "open", "...and the dependents on that credential stop");
+  assert.equal(isRetryableProviderFailure(spentKey.kind), false);
+
+  // The kind table answers only where no verdict travelled with the failure —
+  // an adapter carrier need not have been through the classifier.
+  const unclassified = planRetry({
+    failure: { kind: PROVIDER_FAILURE.TRANSIENT },
+    attemptNumber: 1,
+    nowMs: NOW,
+    deadlineMs: NOW + 600_000,
+  });
+  assert.equal(unclassified.retry, true);
+  assert.equal(unclassified.reason, RETRY_REASON.TRANSIENT_FAILURE);
 });
 
 test("R01-06 — a key/credit limit is budget-blocked, not temporary throttling", () => {

@@ -112,7 +112,8 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
     // the error rate. Use 60s (matches brightdata.js default) so real responses
     // land. Retries are handled inside brightDataSearch.
     const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true });
-    const { text, citations, references } = extractBrightDataAiOverview(data);
+    const { text, citations, references, per_field_quality, citations_verified_empty, parser_version, evidence_id } =
+      extractBrightDataAiOverview(data);
     const organic = extractBrightDataOrganic(data);
     result.organic = organic;
     result.organic_position = organic.map((o) => o.domain);
@@ -132,6 +133,14 @@ async function probeQueryOnce(query, brand, brandAliases, brandDomain, competito
     if (hasText || hasCitations) {
       result.aio_present = true;
       result.aio_text = text || "";
+
+      // R04.5a — same wiring as enginePipeline's probe: the validated parser
+      // result and its per-field quality reach the stored row, and are omitted
+      // rather than defaulted when the payload never went through the parser.
+      if (per_field_quality !== undefined) result.per_field_quality = per_field_quality;
+      if (citations_verified_empty !== undefined) result.citations_verified_empty = citations_verified_empty;
+      if (parser_version !== undefined) result.parser_version = parser_version;
+      if (evidence_id !== undefined) result.evidence_id = evidence_id;
 
       if (citations?.length) {
         result.aio_citations = citations;

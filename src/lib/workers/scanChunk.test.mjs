@@ -509,6 +509,13 @@ test("runFinalizePhase — multi-engine: reconstructs results from `raw` and mat
   const { terminal_outcome: multiOutcome, ...multiSummaryStats } = record.summary_stats;
   assert.deepEqual(multiSummaryStats, expectedWrapped.summary);
   assert.equal(multiOutcome.version, "r03-v1", "the scan carries the R03 terminal-outcome vocabulary");
+  // FINDING P2 at the persisted finalize boundary: the plan spans aio + chatgpt
+  // (12 valid rows) but the AIO trigger denominator is the 6 Google SERPs only,
+  // so the persisted outcome cannot publish the old diluted 6/12=50%.
+  assert.equal(multiOutcome.counts.valid, 12, "collection completion stays whole-plan");
+  assert.equal(multiOutcome.metrics.aio_trigger.valid_serps, 6, "trigger denominator is the Google surface, not all 12 rows");
+  assert.equal(multiOutcome.metrics.aio_trigger.aio_present, 6);
+  assert.equal(multiOutcome.metrics.aio_trigger.trigger_rate_pct, 100, "6/6 Google AIO -> 100%");
   assert.equal(record.scoring_version, "v9-multi-engine");
   assert.equal(record.platform, "multi");
 });

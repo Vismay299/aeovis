@@ -384,3 +384,79 @@ test("R01-12 — a health payload carrying readiness stays dispatch-free, and a 
   assert.equal(anonymous.provider_readiness, null);
   assert.equal(anonymous.status, "ok");
 });
+
+test("R01-11 — an already-expired deadline refuses before any dispatch", async () => {
+  const probe = scriptedProbe([{ valid: true, answer: "fixture answer" }]);
+
+  const result = await runCanary({
+    engine: "chatgpt",
+    env: { OPENAI_API_KEY: FAKE },
+    probe,
+    // The clock is already past the deadline, the reviewer's exact shape.
+    now: () => 10_000,
+    deadlineMs: 9_999,
+  });
+
+  assert.equal(probe.calls, 0, "a canary cannot dispatch once its own deadline has passed");
+  assert.equal(result.requests, 0);
+  assert.equal(result.dispatched, false);
+  assert.equal(result.attempts.length, 0, "no dispatch means no attempt to record");
+  assert.equal(result.canary.deadline_exceeded, true);
+  assert.equal(result.canary.outcome, "failed");
+  assert.equal(result.canary.kind, PROVIDER_FAILURE.TIMEOUT);
+  assert.notEqual(result.readiness, READINESS.READY, "no ready canary may exist outside its deadline");
+  assert.equal(result.canary.charge.cost_state, "not_dispatched", "nothing left the process, so nothing can be billed");
+});
+
+test("R01-11 — a measurement that lands after the deadline is rejected, not reported ready", async () => {
+  const state = { at: NOW_MS };
+  let calls = 0;
+  const probe = async () => {
+    calls += 1;
+    // The probe answers affirmatively, but only after consuming more than the
+    // whole budget: a fast resolution can win the deadline race, and this is the
+    // result that must not become current readiness.
+    state.at = NOW_MS + 5_000;
+    return { valid: true, answer: "late fixture answer" };
+  };
+
+  const result = await runCanary({
+    engine: "chatgpt",
+    env: SHARED_GATEWAY_ENV,
+    probe,
+    now: () => state.at,
+    deadlineMs: NOW_MS + 1_000,
+  });
+
+  assert.equal(calls, 1, "the late call did happen and is recorded");
+  assert.equal(result.observation, null, "a late answer is not a current measurement");
+  assert.notEqual(result.readiness, READINESS.READY);
+  assert.equal(result.canary.deadline_exceeded, true);
+  assert.equal(result.canary.kind, PROVIDER_FAILURE.TIMEOUT);
+});
+
+test("R01-10 — a backoff that overruns the deadline earns no further dispatch", async () => {
+  const state = { at: NOW_MS };
+  const probe = scriptedProbe([{ valid: false, failure: { status: 503, body: "upstream exploded" } }]);
+
+  const result = await runCanary({
+    engine: "chatgpt",
+    env: SHARED_GATEWAY_ENV,
+    probe,
+    now: () => state.at,
+    // The injected backoff lands the clock PAST the deadline, the way a real
+    // delay plus scheduling slop can, so the retry must be refused even though
+    // the policy believed the delay fit.
+    sleep: async (ms) => {
+      state.at += ms + 500;
+    },
+    deadlineMs: NOW_MS + 1_200,
+    policy: { max_attempts: 5, base_delay_ms: 1_000, cap_delay_ms: 30_000, jitter_ratio: 0, seed: 7 },
+  });
+
+  assert.equal(probe.calls, 1, "one dispatch, then the deadline — never a second request");
+  assert.equal(result.requests, 1);
+  assert.equal(result.canary.deadline_exceeded, true);
+  assert.equal(result.attempts[0].kind, PROVIDER_FAILURE.TRANSIENT);
+  assert.notEqual(result.readiness, READINESS.READY);
+});

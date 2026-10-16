@@ -86,6 +86,97 @@ test("R02-02 — a permanent credential rejection never retries the question, an
   const later = planRetry({ policy: FLAT, failure, attemptNumber: 2, nowMs: NOW_MS, deadlineMs: DEADLINE_MS });
   assert.equal(later.reason, RETRY_REASON.PERMANENT_FAILURE);
   assert.equal(later.retry, false);
+
+  // A status and a code can contradict each other, and the classifier settles
+  // that against a retry. The kind still comes from the allowlisted code, so a
+  // policy reading `kind` alone would find several of these "retryable" and
+  // re-ask a provider that already refused.
+  const contradictions = [
+    { status: 401, code: "rate_limit_exceeded", kind: PROVIDER_FAILURE.RATE_LIMIT },
+    { status: 403, code: "rate_limit_exceeded", kind: PROVIDER_FAILURE.RATE_LIMIT },
+    { status: 400, code: "service_unavailable", kind: PROVIDER_FAILURE.TRANSIENT },
+    { status: 429, code: "insufficient_quota", kind: PROVIDER_FAILURE.SPEND_LIMIT },
+  ];
+  for (const { status, code, kind } of contradictions) {
+    const classified = classifyProviderFailure({
+      provider: "openrouter",
+      status,
+      body: { error: { code } },
+      nowMs: NOW_MS,
+    });
+    assert.equal(classified.kind, kind, `HTTP ${status} + ${code}`);
+    assert.equal(classified.retryable, false, `HTTP ${status} + ${code} is explicitly not retryable`);
+
+    const verdict = planRetry({ policy: FLAT, failure: classified, attemptNumber: 1, nowMs: NOW_MS, deadlineMs: DEADLINE_MS });
+    assert.equal(verdict.retry, false, `HTTP ${status} + ${code} must not repeat the question`);
+    assert.equal(verdict.next_attempt, null);
+    assert.equal(verdict.terminal, true);
+    assert.equal(verdict.reason, RETRY_REASON.PERMANENT_FAILURE);
+  }
+
+  // The kind table is only the default for a failure that carries no verdict,
+  // which is the one case a policy is allowed to answer for itself.
+  const noVerdict = planRetry({
+    policy: FLAT,
+    failure: { kind: PROVIDER_FAILURE.TRANSIENT },
+    attemptNumber: 1,
+    nowMs: NOW_MS,
+    deadlineMs: DEADLINE_MS,
+  });
+  assert.equal(noVerdict.retry, true);
+});
+
+test("R02-02 — classifier → retry policy → canary: a contradictory permanent response is requested once, not three times", async () => {
+  // The composition the audit's number comes from: runCanary classifies each
+  // attempt and asks planRetry whether another is allowed. A canary that
+  // re-derived retryability from the kind would spend three calls on a 401,
+  // which is how one revoked credential became 34 identical rejections per
+  // engine.
+  const clock = { at: NOW_MS };
+  const canaryPolicy = { max_attempts: 3, base_delay_ms: 0, cap_delay_ms: 0, jitter_ratio: 0, seed: 0 };
+  const env = { LLM_API_KEY: FAKE, LLM_BASE_URL: "https://openrouter.ai/api/v1" };
+  const run = (probe, policy) =>
+    runCanary({
+      engine: "chatgpt",
+      env,
+      probe,
+      now: () => clock.at,
+      sleep: async (ms) => {
+        clock.at += ms;
+      },
+      deadlineMs: NOW_MS + 600_000,
+      policy,
+    });
+
+  const contradiction = { status: 401, body: { error: { code: "rate_limit_exceeded" } } };
+  const refusing = async () => {
+    refusing.calls += 1;
+    return { valid: false, failure: contradiction };
+  };
+  refusing.calls = 0;
+
+  const result = await run(refusing, canaryPolicy);
+  assert.equal(refusing.calls, 1, "a response the classifier rejected for retry is requested exactly once");
+  assert.equal(result.requests, 1);
+  assert.equal(result.observation, null);
+  assert.equal(result.canary.kind, PROVIDER_FAILURE.RATE_LIMIT, "the contradictory pair is still named as the kind it claimed");
+  assert.equal(result.canary.failure.retryable, false, "the verdict that stopped the loop is on the record");
+  assert.equal(result.canary.attempt_history[0].retryable, false);
+  assert.equal(result.canary.attempt_history[0].stop_reason, RETRY_REASON.PERMANENT_FAILURE);
+
+  // The control: the same composition still retries a failure the classifier
+  // allows, so the count above is the verdict's doing and not a canary that
+  // could never retry anything.
+  const transient = async () => {
+    transient.calls += 1;
+    return { valid: false, failure: { status: 503 } };
+  };
+  transient.calls = 0;
+
+  const retried = await run(transient, { ...canaryPolicy, max_attempts: 2 });
+  assert.equal(transient.calls, 2, "an allowed transient failure is retried up to the attempt ceiling");
+  assert.equal(retried.canary.kind, PROVIDER_FAILURE.TRANSIENT);
+  assert.equal(retried.canary.attempt_history.at(-1).stop_reason, RETRY_REASON.ATTEMPTS_EXHAUSTED);
 });
 
 test("R02-03 — a valid no-AIO answer is terminal, and nothing can retry it to force an overview", () => {

@@ -211,11 +211,25 @@ export function planRetry({
     };
   }
 
-  // Only a TYPED transient failure retries. A permanent refusal emits a circuit
-  // action instead, because the correct response to a revoked key is to stop
-  // the dependent engines, not to ask the same question twice more.
-  const retryKind = failure ? isRetryableProviderFailure(failure.kind) : false;
-  if (!failure || !retryKind) {
+  // The classifier's verdict is AUTHORITATIVE and the kind table is the default
+  // only for a failure that travelled without one. `classifyProviderFailure`
+  // NARROWS retryability by the HTTP status as well as the kind — a 401 whose
+  // body says "rate_limit_exceeded" classifies as `rate_limit` and is still
+  // explicitly not retryable — so answering from `kind` alone would discard the
+  // narrowing and re-ask a credential the provider already refused, which is the
+  // audit's "34 identical credential errors per engine" deliberately rebuilt
+  // here. The kind default stays as the fallback because a failure carrier from
+  // an adapter need not have been through the classifier.
+  const retryable = failure
+    ? typeof failure.retryable === "boolean"
+      ? failure.retryable
+      : isRetryableProviderFailure(failure.kind)
+    : false;
+
+  // Nothing retryable: a permanent refusal emits a circuit action instead,
+  // because the correct response to a revoked key is to stop the dependent
+  // engines, not to ask the same question twice more.
+  if (!retryable) {
     return {
       ...base,
       terminal: true,

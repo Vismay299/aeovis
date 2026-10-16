@@ -99,6 +99,30 @@ export const BLOCK_REASONS = Object.freeze({
   SPEND_CAP_PER_DAY: "spend_cap_per_day",
 });
 
+/**
+ * The engine names that return a real Google SERP. The AIO trigger rate is a
+ * Google-search metric (section D: AIO-present / valid SERPs), so its
+ * population is the valid collection on THESE surfaces only — a text model's
+ * answered row is not a SERP and never carries an AI Overview. Exported so a
+ * caller and its tests share one definition instead of re-typing "aio".
+ */
+export const GOOGLE_SURFACE_ENGINES = Object.freeze(["aio"]);
+
+/** True when an engine name belongs to the Google SERP surface. */
+export function isGoogleSurface(engine) {
+  return GOOGLE_SURFACE_ENGINES.includes(String(engine || "").toLowerCase());
+}
+
+/**
+ * Why an AIO trigger rate is null instead of a number. "Not planned" (a
+ * text-model-only scan) and "not collected" (the Google surface was planned but
+ * produced no valid SERP) are different facts, and neither is a measured zero.
+ */
+export const AIO_TRIGGER_REASONS = Object.freeze({
+  SURFACE_NOT_PLANNED: "google_surface_not_planned",
+  SURFACE_NOT_COLLECTED: "google_surface_not_collected",
+});
+
 /** A measured count rounds for display only; the counts themselves stay exact. */
 function round1(n) {
   return Math.round(n * 10) / 10;
@@ -291,19 +315,20 @@ export function deriveScanOutcome({
 
   const counts = { answered: 0, valid_no_aio: 0, failed: 0 };
   const failedReasons = {};
-  const aioPresent = { count: 0 };
   const perEngine = new Map();
 
   for (const [key, row] of firstByKey) {
     const { engine } = planIndex.get(key);
     const { disposition, reason } = classifyObservation(row);
     counts[disposition] += 1;
-    if (disposition === DISPOSITIONS.ANSWERED && hasAio(row)) aioPresent.count += 1;
     if (disposition === DISPOSITIONS.FAILED && reason) {
       failedReasons[reason] = (failedReasons[reason] || 0) + 1;
     }
-    const e = perEngine.get(engine) || { answered: 0, valid_no_aio: 0, failed: 0 };
+    // AIO presence is tallied PER ENGINE: the Google trigger denominator is one
+    // surface, so a single scan-wide flag across engines would mix populations.
+    const e = perEngine.get(engine) || { answered: 0, valid_no_aio: 0, failed: 0, aio_present: 0 };
     e[disposition] += 1;
+    if (disposition === DISPOSITIONS.ANSWERED && hasAio(row)) e.aio_present += 1;
     perEngine.set(engine, e);
   }
 
@@ -345,13 +370,50 @@ export function deriveScanOutcome({
   // completion percentage to publish — not 0, and certainly not 100.
   const completionPct = planned > 0 ? round1((valid / planned) * 100) : null;
 
-  // AIO trigger is AIO-present / valid SERPs. Valid no-AIO is valid collection
-  // with a zero trigger; a zero trigger is not the same as a missing headline,
-  // so the conditional headline is null only when there is nothing to condition
-  // on.
-  const validSerps = valid;
-  const triggerRate = validSerps > 0 ? round1((aioPresent.count / validSerps) * 100) : null;
-  const conditionalHeadline = validSerps > 0 && aioPresent.count > 0 ? triggerRate : null;
+  // The AIO trigger is a GOOGLE-SERP metric (section D: AIO-present / valid
+  // SERPs). Its population is the Google surface ONLY: on a multi-engine plan a
+  // chatgpt/perplexity/gemini answer is not a SERP, so counting every engine's
+  // valid rows as the denominator diluted a real 2/2=100% Google trigger to
+  // 2/8=25% (finding P2). Collection completion above stays whole-plan.
+  let googlePlanned = 0;
+  const googleSurfaceNames = new Set();
+  for (const entry of planIndex.values()) {
+    if (!isGoogleSurface(entry.engine)) continue;
+    googlePlanned += 1;
+    googleSurfaceNames.add(entry.engine);
+  }
+
+  let googleValidSerps = 0;
+  let googleAioPresent = 0;
+  const surfaces = {};
+  for (const name of googleSurfaceNames) {
+    const e = perEngine.get(name) || { answered: 0, valid_no_aio: 0, failed: 0, aio_present: 0 };
+    const surfaceValid = e.answered + e.valid_no_aio;
+    const surfaceAio = e.aio_present || 0;
+    googleValidSerps += surfaceValid;
+    googleAioPresent += surfaceAio;
+    surfaces[name] = {
+      valid_serps: surfaceValid,
+      aio_present: surfaceAio,
+      trigger_rate_pct: surfaceValid > 0 ? round1((surfaceAio / surfaceValid) * 100) : null,
+    };
+  }
+
+  // A rate needs a measured population. When the Google surface produced no
+  // valid SERP — it was never planned (a text-model-only scan) or was planned
+  // but never collected — the trigger is UNAVAILABLE with a reason, never a
+  // measured zero: "Google had no AIO" is a different fact from "we did not
+  // look", and `?? 0` would erase the difference.
+  const googleObserved = googleValidSerps > 0;
+  const triggerAvailable = googleObserved;
+  const triggerReason = googleObserved
+    ? null
+    : googlePlanned > 0
+      ? AIO_TRIGGER_REASONS.SURFACE_NOT_COLLECTED
+      : AIO_TRIGGER_REASONS.SURFACE_NOT_PLANNED;
+  const validSerps = googleValidSerps;
+  const triggerRate = googleObserved ? round1((googleAioPresent / googleValidSerps) * 100) : null;
+  const conditionalHeadline = googleObserved && googleAioPresent > 0 ? triggerRate : null;
 
   // A blocked or zero-work scan measured no mentions. Its mention rate is
   // UNKNOWN, never a measured zero — provider failures never mean brand absence.
@@ -413,9 +475,15 @@ export function deriveScanOutcome({
       mention_measured: mentionMeasured,
       aio_trigger: {
         valid_serps: validSerps,
-        aio_present: aioPresent.count,
+        aio_present: googleAioPresent,
         trigger_rate_pct: triggerRate,
+        available: triggerAvailable,
+        reason: triggerReason,
         conditional_headline: conditionalHeadline,
+        // Per-surface breakdown so a mixed-engine scan shows WHICH Google SERP
+        // surface the rate came from; the headline counters above stay Google-
+        // aggregate so existing readers keep working unchanged.
+        surfaces: { ...surfaces },
       },
     },
     engines: engineSummaries,
@@ -462,7 +530,10 @@ export function legacyTerminalOutcome() {
         valid_serps: null,
         aio_present: null,
         trigger_rate_pct: null,
+        available: null,
+        reason: null,
         conditional_headline: null,
+        surfaces: {},
       },
     },
     engines: [],
@@ -484,7 +555,14 @@ export function terminalOutcomeWire(outcome) {
     equation: { ...outcome.equation },
     metrics: {
       ...outcome.metrics,
-      aio_trigger: { ...outcome.metrics.aio_trigger },
+      aio_trigger: {
+        ...outcome.metrics.aio_trigger,
+        // Copy the nested per-surface map too, so the wire projection shares no
+        // mutable reference with the derived object it came from.
+        surfaces: Object.fromEntries(
+          Object.entries(outcome.metrics.aio_trigger.surfaces || {}).map(([name, s]) => [name, { ...s }])
+        ),
+      },
     },
     engines: outcome.engines.map((e) => ({ ...e })),
     ...(outcome.legacy ? { legacy: true } : {}),

@@ -69,6 +69,15 @@ export class BrightDataParseError extends Error {
     this.name = "BrightDataParseError";
     this.reason = meta.reason || "malformed";
     this.serp_state = meta.serp_state ?? meta.reason ?? null;
+    /**
+     * What the parser said about AI Overview PRESENCE, carried on the error.
+     *
+     * `null` on every failure, and that is the point: a payload that could not
+     * be validated must not reach a caller with a readable boolean it could
+     * mistake for "no AI Overview was seen". Null here means unknown, never
+     * absent — the same rule SERP_STATE applies to the parser result.
+     */
+    this.aio_present = meta.aio_present ?? null;
     this.evidence = meta.evidence ?? null;
     if (meta.attempts !== undefined) this.attempts = meta.attempts;
     if (meta.cause !== undefined) this.cause = meta.cause;
@@ -248,17 +257,46 @@ export async function resolveBrightDataSerpZone(apiKey = getBrightDataApiKey(), 
   // R04.4a — the lookup runs under its own deadline, capped by whatever is left
   // of the caller's overall budget so a probe near its lease end cannot spend
   // the remainder waiting on a control-plane call.
+  //
+  // THE TIMER IS ARMED FOR THE WHOLE LOOKUP, NOT JUST THE HEADERS. It used to be
+  // cleared in a `finally` that ended the moment `fetch()` resolved, with
+  // `await res.json()` sitting BELOW it — so a control plane that sent headers
+  // and then stalled its body held the probe open indefinitely: measured on a
+  // local server, a 150ms lookup timeout resolved successfully after 616ms
+  // against a body delayed by 600ms, and `zoneLookupTimeoutMs` bounded nothing.
+  // Fetching, reading, decoding and the abort-to-typed-error conversion are all
+  // inside this try for that reason; anything that waits on the network belongs
+  // under the timer.
   const lookupTimeoutMs = zoneLookupTimeoutMs(options);
   const controller = new AbortController();
   const timer = lookupTimeoutMs > 0 ? setTimeout(() => controller.abort(), lookupTimeoutMs) : null;
 
-  let res;
+  let zones;
   try {
-    res = await fetch("https://api.brightdata.com/zone/get_all_zones", {
+    const res = await fetch("https://api.brightdata.com/zone/get_all_zones", {
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: controller.signal,
     });
+
+    if (!res.ok) {
+      // A re-check that could not be COMPLETED is not evidence the zone died, so
+      // the cached name is kept -- but its timestamp is NOT refreshed, so the very
+      // next call retries the lookup instead of trusting an unverified name for
+      // another full TTL. The rejected alternative was a grace window that keeps
+      // serving the stale name through an API outage: that is precisely the
+      // fail-soft this task removes, and it would hide a dead zone for as long as
+      // the control plane stayed unreachable.
+      throw new BrightDataZoneError(`Bright Data zone lookup failed: HTTP ${res.status}`, {
+        reason: "lookup_failed",
+        zone: staleName,
+      });
+    }
+
+    zones = await res.json();
   } catch (err) {
+    // Already typed by the branch above: re-wrapping it would bury the real
+    // cause under "BrightDataZoneError: ...".
+    if (isBrightDataZoneError(err)) throw err;
     // A lookup that did not COMPLETE is not evidence the zone died, so the
     // cached name is kept (its timestamp untouched) — and the failure is typed
     // so the caller records a configuration error rather than dispatching a
@@ -271,21 +309,6 @@ export async function resolveBrightDataSerpZone(apiKey = getBrightDataApiKey(), 
     if (timer) clearTimeout(timer);
   }
 
-  if (!res.ok) {
-    // A re-check that could not be COMPLETED is not evidence the zone died, so
-    // the cached name is kept -- but its timestamp is NOT refreshed, so the very
-    // next call retries the lookup instead of trusting an unverified name for
-    // another full TTL. The rejected alternative was a grace window that keeps
-    // serving the stale name through an API outage: that is precisely the
-    // fail-soft this task removes, and it would hide a dead zone for as long as
-    // the control plane stayed unreachable.
-    throw new BrightDataZoneError(`Bright Data zone lookup failed: HTTP ${res.status}`, {
-      reason: "lookup_failed",
-      zone: staleName,
-    });
-  }
-
-  const zones = await res.json();
   const activeSerpZone = (zones || []).find(
     (z) => z.type === "serp" && z.status === "active"
   );
@@ -539,6 +562,11 @@ function parseErrorFrom(parsed) {
     {
       reason: state,
       serp_state: state,
+      // Readable off the thrown error rather than only off the evidence blob:
+      // "this capture failed to validate, so the AIO state is UNKNOWN" is the
+      // contract a caller records, and a caller should not have to know that
+      // the parser's aio_present lives one field deeper.
+      aio_present: parsed ? parsed.aio_present : null,
       evidence: parsed
         ? {
             ...parsed.evidence,
@@ -757,15 +785,50 @@ export async function brightDataSearch(query, options = {}) {
         throw parseError;
       }
 
-      const result = normalizeBrightDataResponse(data);
-      return attachBrightDataEvidence(result, {
-        parser_version: parsed.parser_version || GOOGLE_PAYLOAD_PARSER_VERSION,
+      // R04 — THE VALIDATED PARSE RESULT IS RETURNED, NOT THROWN AWAY.
+      //
+      // This used to be `return normalizeBrightDataResponse(data)`: the parser
+      // had just computed blocks, safety-checked references and per-field
+      // quality, and every one of them was dropped on the floor. probeAio then
+      // re-derived an overview from the RAW payload through
+      // extractBrightDataAiOverview, which reconstructs exactly the unvalidated
+      // fields — so a `javascript:` reference the parser had rejected reappeared
+      // in the persisted probe row, and no quality ever reached persistence.
+      //
+      // The transport still hands back the SERP itself, because callers read
+      // `organic` / `ai_overview` off it, and the validation rides with it:
+      //
+      //   `__brightdata` (below, NON-ENUMERABLE) keeps the A10 signal intact —
+      //   Object.keys(returned) is still the SERP's own keys.
+      //   `serp_validation` (ENUMERABLE, here) is what survives the
+      //   JSON.stringify that prompt_results.raw performs. The non-enumerable
+      //   copy does not survive it, which is how the evidence identity and the
+      //   quality were lost between the probe and the database row.
+      const validation = {
         serp_state: parsed.serp_state,
         aio_present: parsed.aio_present,
+        parser_version: parsed.parser_version || GOOGLE_PAYLOAD_PARSER_VERSION,
         evidence_id: parsed.evidence?.evidence_id ?? null,
         provider_request_id: parsed.evidence?.provider_request_id ?? null,
-        attempts: attemptsEvidence,
-      });
+        per_field_quality: parsed.per_field_quality,
+        citations_verified_empty: parsed.citations_verified_empty,
+        text: parsed.text,
+        blocks: parsed.blocks,
+        citations: parsed.citations,
+        references: parsed.references,
+        errors: parsed.errors,
+      };
+
+      const result = normalizeBrightDataResponse(data);
+      if (result && typeof result === "object") {
+        try {
+          result.serp_validation = validation;
+        } catch {
+          // A frozen payload keeps its data; the non-enumerable copy below still
+          // carries the identity, and the error path is unaffected.
+        }
+      }
+      return attachBrightDataEvidence(result, { ...validation, attempts: attemptsEvidence });
     } catch (err) {
       lastErr = err;
 
@@ -824,7 +887,46 @@ function extractSnippetsFromBlock(block) {
   return out.filter(Boolean);
 }
 
+/**
+ * The AI Overview, as the parser validated it when the transport carried a
+ * parse result, and reconstructed from the raw payload otherwise.
+ *
+ * WHY THE VALIDATED BRANCH EXISTS (R04). This function is the ONLY extraction
+ * path the AIO engine has: probeAio calls it and copies its text, citations and
+ * references straight into the row that is persisted verbatim in
+ * prompt_results.raw. Rebuilding the overview from `data.ai_overview` here
+ * therefore re-derived the fields the parser had just rejected — with one
+ * `javascript:alert(1)` and one https reference, parseGoogleSerp returned one
+ * reference and this returned both, so the rejected href was back in the
+ * persisted probe row. Reading the parser's verdict HERE is what makes the
+ * validated output reach production; recomputing it anywhere downstream would
+ * put the hole back.
+ *
+ * The extended keys (per_field_quality, parser_version, evidence_id) exist only
+ * on the validated branch. A caller that hands this function a raw payload
+ * still gets exactly the three-key shape it always got — the direct-call
+ * contract other suites pin — because there is no validated quality to report
+ * for a payload that never went through the parser.
+ */
 export function extractBrightDataAiOverview(data) {
+  const validated = data?.serp_validation;
+  if (validated && Array.isArray(validated.blocks)) {
+    return {
+      text: typeof validated.text === "string" ? validated.text : "",
+      citations: Array.isArray(validated.citations) ? validated.citations : [],
+      references: (validated.references || []).map((ref) => ({
+        href: ref.href,
+        title: ref.title || "",
+        source: ref.source || "",
+      })),
+      per_field_quality: validated.per_field_quality,
+      citations_verified_empty: validated.citations_verified_empty ?? false,
+      aio_present: validated.aio_present,
+      parser_version: validated.parser_version,
+      evidence_id: validated.evidence_id,
+    };
+  }
+
   const ao = data?.ai_overview;
   if (!ao) return { text: "", citations: [], references: [] };
 

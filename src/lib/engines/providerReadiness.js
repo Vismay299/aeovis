@@ -39,8 +39,8 @@ import { createHash } from "node:crypto";
 import { VENDORS, credentialStatus } from "../vendorRegistry.js";
 import { getLlmBaseUrl, getLlmProvider } from "../llmConfig.js";
 import { getOpenRouterEngineModel, isOpenRouterEngineConfigured } from "./openRouterProbe.js";
-import { getOpenAiModel } from "./openai.js";
-import { getPerplexityModel } from "./perplexity.js";
+import { OPENAI_PROVIDER, getOpenAiModel } from "./openai.js";
+import { PERPLEXITY_PROVIDER, getPerplexityModel } from "./perplexity.js";
 import { resolveSerpGeo } from "./serpGeo.js";
 import { PROVIDER_FAILURE, classifyProviderFailure, operatorActionFor } from "./providerFailure.js";
 import { DEFAULT_RETRY_POLICY, planRetry, reconcileCost } from "../attemptPolicy.js";
@@ -84,6 +84,13 @@ export const LOCATION_STATE = Object.freeze({
  * fallback at all — it reads GEMINI_API_KEY and returns "not configured"
  * without it. Readiness therefore asks the ADAPTER's question per surface, and
  * `direct_variables` records the native keys the adapter's own predicate reads.
+ *
+ * `provider` names the vendor the NATIVE adapter actually calls, and is taken
+ * from the adapter module's own constant so the two cannot drift; `gateway`
+ * names the shared gateway a surface MAY fall back to (null when it has none).
+ * A route's provider is chosen from the selected route, never hard-coded per
+ * surface: ChatGPT's native probe calls api.openai.com, so its provider is
+ * `openai`, and only its shared route is OpenRouter.
  */
 export const ENGINE_SURFACES = Object.freeze({
   aio: Object.freeze({
@@ -95,7 +102,7 @@ export const ENGINE_SURFACES = Object.freeze({
   }),
   chatgpt: Object.freeze({
     label: "ChatGPT",
-    provider: "openrouter",
+    provider: OPENAI_PROVIDER,
     required_groups: Object.freeze([
       Object.freeze({ env: Object.freeze(["OPENAI_API_KEY"]) }),
       Object.freeze({ registry: "openai" }),
@@ -105,7 +112,7 @@ export const ENGINE_SURFACES = Object.freeze({
   }),
   perplexity: Object.freeze({
     label: "Perplexity",
-    provider: "openrouter",
+    provider: PERPLEXITY_PROVIDER,
     required_groups: Object.freeze([
       Object.freeze({ env: Object.freeze(["PERPLEXITY_API_KEY"]) }),
       Object.freeze({ registry: "perplexity" }),
@@ -173,16 +180,89 @@ function directKeyPresent(engine, env) {
   return surface.direct_variables.length > 0 && surface.direct_variables.every((name) => present(env, name));
 }
 
+/** The variable that actually CARRIES a registry route's credential, canonical first, then alias. */
+function effectiveRegistryNames(vendor, env) {
+  const names = [];
+  for (const name of vendor.env) {
+    if (present(env, name)) {
+      names.push(name);
+      continue;
+    }
+    const alias = (vendor.legacy?.[name] || []).find((candidate) => present(env, candidate));
+    if (alias) names.push(alias);
+  }
+  return names;
+}
+
+/** The effective variable names of one credential route, once it is satisfied. */
+function groupCredentialNames(group, env) {
+  if (group.registry) {
+    const vendor = registryEntry(group.registry);
+    return vendor ? effectiveRegistryNames(vendor, env) : [];
+  }
+  return group.env.filter((name) => present(env, name));
+}
+
 /**
- * One-way digests of the credentials a surface would use, so a rotation is
- * detectable without the value ever being stored, logged or printed.
+ * The single route the adapter would take for `engine`, and the effective
+ * credential variables that route actually uses.
+ *
+ * Provider, model, gateway and credential all come from THIS selection, so the
+ * plan, `config_version` and the circuit describe the endpoint that will really
+ * be called. A native key is not the shared gateway, and a deprecated alias the
+ * adapter still accepts is not "unconfigured" merely because the canonical name
+ * it renames is absent.
+ */
+function resolveRoute(engine, env) {
+  const surface = ENGINE_SURFACES[engine];
+  if (!surface) return { adapter: null, provider: null, gateway: null, model: null, credential_names: [] };
+
+  if (directKeyPresent(engine, env) || !surface.gateway) {
+    // Native path. The credential is the direct variable when the surface has
+    // one (ChatGPT, Perplexity, Gemini) and otherwise the registry route the
+    // adapter reads (Bright Data) — never a second, separately maintained list.
+    const direct = surface.direct_variables.filter((name) => present(env, name));
+    const credentialNames = direct.length
+      ? direct
+      : (surface.required_groups.map((group) => groupCredentialNames(group, env)).find((names) => names.length) ?? []);
+    return {
+      adapter: "vendor_api",
+      provider: surface.provider,
+      gateway: null,
+      model: resolvedModel(engine, env),
+      credential_names: credentialNames,
+    };
+  }
+
+  // Shared-gateway path: the gateway that will be called, not a hard-coded
+  // surface label. The credential is the registry route's effective variable, so
+  // a legacy alias is fingerprinted under the name that actually carries it.
+  const registryGroup = surface.required_groups.find((group) => group.registry);
+  return {
+    adapter: "shared_gateway",
+    provider: getLlmProvider(getLlmBaseUrl(env)),
+    gateway: surface.gateway,
+    model: resolvedModel(engine, env),
+    credential_names: registryGroup ? groupCredentialNames(registryGroup, env) : [],
+  };
+}
+
+/**
+ * One-way digests of the credentials the SELECTED route would use, so a rotation
+ * is detectable without the value ever being stored, logged or printed.
+ *
+ * The names come from `resolveRoute`, not from `credentialNamesFor`: the adapter
+ * accepts a canonical name OR its deprecated alias, and it is the variable that
+ * actually carries the value that must be fingerprinted. Canonical names alone
+ * made a legacy-only deployment read as unconfigured and could not see the alias
+ * rotate, so two different legacy-key accounts shared one unidentified circuit.
  *
  * Returns the NAME of each variable alongside its digest, because an operator
  * needs to know which variable moved without being told what it moved to.
  */
 export function credentialFingerprint(engine, env = {}) {
   const parts = [];
-  for (const name of credentialNamesFor(engine)) {
+  for (const name of resolveRoute(engine, env).credential_names) {
     if (!present(env, name)) continue;
     const digest = createHash("sha256").update(`${name}:${String(env[name])}`).digest("hex").slice(0, 16);
     parts.push(`${name}#${digest}`);
@@ -197,20 +277,21 @@ export function credentialFingerprint(engine, env = {}) {
  *
  * R01-14 turns on this string. A rotation changes the digest, so a stored
  * canary's `config_version` no longer matches and its result is HISTORICAL —
- * reported as history rather than as current readiness.
+ * reported as history rather than as current readiness. The provider in the
+ * string is the SELECTED route's, so a native key and the shared gateway cannot
+ * share a version.
  */
 export function configVersion(engine, env = {}) {
   const surface = ENGINE_SURFACES[engine];
   if (!surface) return null;
-  const fingerprint = credentialFingerprint(engine, env);
-  const route = directKeyPresent(engine, env) ? "direct" : "gateway";
+  const route = resolveRoute(engine, env);
   return [
     "v1",
-    surface.provider,
-    route,
-    surface.gateway ? getLlmProvider(getLlmBaseUrl(env)) : "n/a",
-    resolvedModel(engine, env) || "unknown-model",
-    fingerprint || "unconfigured",
+    route.provider || "unknown-provider",
+    route.adapter === "shared_gateway" ? "gateway" : "direct",
+    route.gateway || "n/a",
+    route.model || "unknown-model",
+    credentialFingerprint(engine, env) || "unconfigured",
   ].join(":");
 }
 
@@ -245,9 +326,9 @@ const GATEWAY_MODEL_RE = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
  * @returns {{provider: string|null, account: string|null}}
  */
 export function circuitIdentity(engine, env = {}) {
-  const surface = ENGINE_SURFACES[engine];
+  const route = resolveRoute(engine, env);
   return {
-    provider: surface?.provider ?? null,
+    provider: route.provider ?? null,
     account: credentialFingerprint(engine, env),
   };
 }
@@ -322,22 +403,24 @@ export function validateEngineConfig(engine, env = {}) {
  */
 export function planEngineCanary(engine, env = {}) {
   const surface = ENGINE_SURFACES[engine];
+  const route = resolveRoute(engine, env);
+  const gatewayUsed = route.adapter === "shared_gateway" ? route.provider : null;
   const empty = {
     engine,
     dispatch: false,
-    adapter: null,
-    provider: surface?.provider ?? null,
-    gateway: surface?.gateway ?? null,
-    model: null,
+    adapter: route.adapter,
+    provider: route.provider,
+    gateway: gatewayUsed,
+    model: route.model,
     geo: engine === "aio" ? resolveSerpGeo(env) : null,
     config_version: null,
     config_identity: {
-      provider: surface?.provider ?? null,
-      adapter: null,
-      gateway: surface?.gateway ?? null,
-      model: null,
-      credential_variables: credentialNamesFor(engine),
-      credential_fingerprint: null,
+      provider: route.provider,
+      adapter: route.adapter,
+      gateway: gatewayUsed,
+      model: route.model,
+      credential_variables: route.credential_names,
+      credential_fingerprint: credentialFingerprint(engine, env),
     },
     dispatch_plan: [],
     provider_requests: 0,
@@ -368,15 +451,12 @@ export function planEngineCanary(engine, env = {}) {
     };
   }
 
-  const adapter = directKeyPresent(engine, env) || !surface.gateway ? "vendor_api" : "shared_gateway";
-
-  if (adapter === "shared_gateway") {
-    const gateway = getLlmProvider(getLlmBaseUrl(env));
-    const model = resolvedModel(engine, env);
+  if (route.adapter === "shared_gateway") {
+    const gateway = route.provider;
+    const model = route.model;
     if (gateway !== "openrouter") {
       return {
         ...empty,
-        model,
         refusal: {
           reason: "unsupported_gateway",
           detail: `${surface.label} would be routed through "${gateway}", which does not implement the shared answer-engine contract`,
@@ -387,7 +467,6 @@ export function planEngineCanary(engine, env = {}) {
     if (!model || !GATEWAY_MODEL_RE.test(model)) {
       return {
         ...empty,
-        model,
         refusal: {
           reason: "unsupported_model",
           detail: `${surface.label} is configured with model "${model || "(none)"}" on the "${gateway}" gateway, which needs a provider/model id`,
@@ -398,40 +477,19 @@ export function planEngineCanary(engine, env = {}) {
     return {
       ...empty,
       dispatch: true,
-      adapter,
-      model,
       config_version: configVersion(engine, env),
-      config_identity: {
-        provider: surface.provider,
-        adapter,
-        gateway,
-        model,
-        credential_variables: credentialNamesFor(engine),
-        credential_fingerprint: credentialFingerprint(engine, env),
-      },
-      dispatch_plan: [{ adapter, provider: surface.provider }],
+      dispatch_plan: [{ adapter: route.adapter, provider: route.provider }],
     };
   }
 
   // A native-key path. The gateway is not consulted at all here — a missing
   // direct key is handled by `routeSatisfied`, and an engine routed natively
   // must not be refused for a gateway problem it will never encounter.
-  const model = resolvedModel(engine, env);
   return {
     ...empty,
     dispatch: true,
-    adapter,
-    model,
     config_version: configVersion(engine, env),
-    config_identity: {
-      provider: surface.provider,
-      adapter,
-      gateway: null,
-      model,
-      credential_variables: credentialNamesFor(engine),
-      credential_fingerprint: credentialFingerprint(engine, env),
-    },
-    dispatch_plan: [{ adapter, provider: surface.provider }],
+    dispatch_plan: [{ adapter: route.adapter, provider: route.provider }],
   };
 }
 
@@ -587,16 +645,25 @@ export async function runCanary({
     attemptNumber += 1;
     const attemptStartedAt = now();
     const remainingMs = deadline - attemptStartedAt;
+
+    // A canary that cannot finish inside its own deadline is not current
+    // readiness evidence, so it is not dispatched at all. Checked before EVERY
+    // attempt — including one after a backoff, whose sleep may have carried the
+    // clock past the deadline even when the retry policy believed it fit.
+    if (remainingMs <= 0) {
+      elapsed = true;
+      lastClassification = lastClassification ?? deadlineClassification(plan, remainingMs);
+      break;
+    }
+
     const outcome = await runWithinDeadline({ probe, engine, query, remainingMs });
     const attemptEndedAt = now();
 
-    if (outcome.deadline_exceeded) {
-      lastClassification = classifyProviderFailure({
-        provider: plan.provider,
-        error: Object.assign(new Error(`canary exceeded its deadline after ${remainingMs}ms`), {
-          name: "TimeoutError",
-        }),
-      });
+    // The result must land inside the deadline to count. The probe is invoked
+    // ahead of the deadline timer, so a fast result can win the race after
+    // expiry; rejecting it here keeps a late observation from becoming readiness.
+    if (outcome.deadline_exceeded || attemptEndedAt > deadline) {
+      lastClassification = deadlineClassification(plan, deadline - attemptEndedAt);
       attempts.push(attemptRecord({ attemptNumber, attemptStartedAt, attemptEndedAt, classification: lastClassification }));
       elapsed = true;
       break;
@@ -667,12 +734,12 @@ export async function runCanary({
     },
     attempt_history: attempts,
     failure: lastClassification,
-    charge: reconcileCost({ dispatched: true, cost: null }),
+    charge: reconcileCost({ dispatched: attempts.length > 0, cost: null }),
   };
 
   return {
     engine,
-    dispatched: true,
+    dispatched: attempts.length > 0,
     requests: attempts.length,
     attempts,
     observation,
@@ -683,6 +750,16 @@ export async function runCanary({
     ended_at: endedAt,
     charge: canary.charge,
   };
+}
+
+/** The timeout failure a canary carries when its deadline is reached without a measurement. */
+function deadlineClassification(plan, remainingMs) {
+  return classifyProviderFailure({
+    provider: plan.provider,
+    error: Object.assign(new Error(`canary exceeded its deadline with ${remainingMs}ms remaining`), {
+      name: "TimeoutError",
+    }),
+  });
 }
 
 function iso(ms) {

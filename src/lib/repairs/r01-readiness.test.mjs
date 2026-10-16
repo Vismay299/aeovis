@@ -6,13 +6,17 @@ import {
   READINESS,
   READY_TTL_MS,
   buildProviderReadiness,
+  circuitIdentity,
   configVersion,
+  credentialFingerprint,
   credentialNamesFor,
   planEngineCanary,
   readinessForEngine,
   runCanary,
   validateEngineConfig,
 } from "../engines/providerReadiness.js";
+import { OPENAI_PROVIDER } from "../engines/openai.js";
+import { PERPLEXITY_PROVIDER } from "../engines/perplexity.js";
 
 /**
  * R01-01/R01-02/R01-03/R01-14 — readiness is not the same question as "is a
@@ -246,4 +250,92 @@ test("R01-03 — an unknown engine is refused as unsupported, never reported as 
   });
   assert.deepEqual(aggregate.summary.blocked, ["shopping"]);
   assert.match(aggregate.degraded_reason, /not an offered surface/);
+});
+
+test("R01-14 — a deprecated credential alias is the effective account, and rotating it invalidates the old read", async () => {
+  const envA = { OPENROUTER_API_KEY: "EXAMPLE-LEGACY-A", LLM_BASE_URL: "https://openrouter.ai/api/v1" };
+  const envB = { OPENROUTER_API_KEY: "EXAMPLE-LEGACY-B", LLM_BASE_URL: "https://openrouter.ai/api/v1" };
+
+  // The adapter accepts the alias, so the identity must name and see the
+  // variable that actually carries the value — a legacy-only deployment is not
+  // "unconfigured".
+  assert.match(credentialFingerprint("chatgpt", envA), /^OPENROUTER_API_KEY#/);
+  assert.notEqual(configVersion("chatgpt", envA), configVersion("chatgpt", envB));
+  assert.match(configVersion("chatgpt", envA), /OPENROUTER_API_KEY#/);
+  assert.doesNotMatch(configVersion("chatgpt", envA), /EXAMPLE-LEGACY-A/, "the version never carries the value");
+
+  // Two different legacy-key accounts must not collapse into one unidentified
+  // circuit, or the first one's failure would block the second.
+  assert.notEqual(circuitIdentity("chatgpt", envA).account, circuitIdentity("chatgpt", envB).account);
+  assert.equal(circuitIdentity("chatgpt", envA).provider, "openrouter");
+
+  // The rotation is what makes the previous result historical, not ready.
+  const clock = { at: NOW_MS };
+  const run = await runCanary({
+    engine: "chatgpt",
+    env: envA,
+    probe: countingProbe(),
+    now: () => clock.at,
+    deadlineMs: NOW_MS + 60_000,
+  });
+  assert.equal(run.readiness, READINESS.READY);
+
+  const afterRotation = readinessForEngine({ engine: "chatgpt", env: envB, canary: run.canary, now: NOW });
+  assert.equal(afterRotation.readiness, READINESS.UNVERIFIED, "B has never been verified");
+  assert.equal(afterRotation.historical, true);
+  assert.equal(afterRotation.reason, "config_changed");
+  assert.equal(afterRotation.last_success_at, null, "the old success is not current readiness");
+});
+
+test("R01-14 — the canonical credential name outranks its alias in the effective identity", () => {
+  const canonical = {
+    LLM_API_KEY: "EXAMPLE-CANONICAL",
+    OPENROUTER_API_KEY: "EXAMPLE-IGNORED-ALIAS",
+    LLM_BASE_URL: "https://openrouter.ai/api/v1",
+  };
+
+  // The adapter reads canonical first, so the fingerprint must too; the alias is
+  // present but is NOT the account that will be called.
+  assert.match(credentialFingerprint("chatgpt", canonical), /^LLM_API_KEY#/);
+  assert.doesNotMatch(credentialFingerprint("chatgpt", canonical), /OPENROUTER_API_KEY/);
+  assert.match(configVersion("chatgpt", canonical), /:LLM_API_KEY#/);
+});
+
+test("R01-14 — provider identity follows the selected route, native versus shared", () => {
+  const sharedEnv = SHARED_GATEWAY_ENV;
+
+  // The native probe calls api.openai.com, so its provider is the adapter's own
+  // OpenAI constant — not the shared gateway's.
+  const chatNative = planEngineCanary("chatgpt", { OPENAI_API_KEY: FAKE });
+  assert.equal(chatNative.adapter, "vendor_api");
+  assert.equal(chatNative.provider, OPENAI_PROVIDER);
+  assert.equal(chatNative.circuit_identity.provider, OPENAI_PROVIDER);
+  assert.equal(chatNative.gateway, null, "a native route consults no gateway");
+  assert.equal(chatNative.config_identity.provider, OPENAI_PROVIDER);
+
+  const chatShared = planEngineCanary("chatgpt", sharedEnv);
+  assert.equal(chatShared.adapter, "shared_gateway");
+  assert.equal(chatShared.provider, "openrouter");
+  assert.equal(chatShared.circuit_identity.provider, "openrouter");
+  assert.equal(chatShared.config_identity.provider, "openrouter");
+
+  // The same for Perplexity, whose native probe calls api.perplexity.ai.
+  const pplxNative = planEngineCanary("perplexity", { PERPLEXITY_API_KEY: FAKE });
+  assert.equal(pplxNative.adapter, "vendor_api");
+  assert.equal(pplxNative.provider, PERPLEXITY_PROVIDER);
+  const pplxShared = planEngineCanary("perplexity", sharedEnv);
+  assert.equal(pplxShared.adapter, "shared_gateway");
+  assert.equal(pplxShared.provider, "openrouter");
+
+  // A native route is a different identity from the shared one: different
+  // provider, different account, different config version.
+  assert.notEqual(chatNative.config_version, chatShared.config_version);
+  assert.notEqual(chatNative.circuit_identity.account, chatShared.circuit_identity.account);
+
+  // The native branch takes precedence when both credentials are set, which is
+  // the branch src/lib/engines/openai.js takes.
+  const both = planEngineCanary("chatgpt", { ...sharedEnv, OPENAI_API_KEY: FAKE });
+  assert.equal(both.adapter, "vendor_api");
+  assert.equal(both.provider, OPENAI_PROVIDER);
+  assert.match(both.config_identity.credential_fingerprint, /^OPENAI_API_KEY#/);
 });

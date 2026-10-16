@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { normalizeUrl } from "../scoring/citations.js";
 
 /**
@@ -75,7 +74,8 @@ export const FIELD_QUALITY = Object.freeze({
 const SAFE_URL_SCHEMES = new Set(["http:", "https:"]);
 
 /**
- * Section keys that are affirmative evidence of a Google SERP.
+ * Section keys that are affirmative evidence of a Google SERP, SPLIT BY THE
+ * SHAPE each one ships in.
  *
  * The union is deliberately the observed shape, not one key: a no-AIO SERP is
  * often organic-only, a PAA-only probe carries people_also_ask, and the AIO
@@ -83,6 +83,17 @@ const SAFE_URL_SCHEMES = new Set(["http:", "https:"]);
  * those three as unknown_schema — the same failure A01 is about, arriving on a
  * different key. A single member is enough; there is no "looks like Google"
  * score.
+ *
+ * THE SHAPE IS PART OF THE EVIDENCE, and that is the half this list used to be
+ * missing. Presence of a key alone is satisfied by `{organic: null}`,
+ * `{organic: "not-an-array"}` and `{general: null}` — none of which is a Google
+ * SERP, all of which used to parse as `ok: true` / `valid_no_aio`, i.e. a false
+ * healthy no-AIO observation manufactured out of an unreadable payload (A10
+ * re-entering through A01). Conversely an EMPTY ARRAY is evidence: a real Google
+ * page with no results still carries `organic`, with the right type, and
+ * treating "no results" as failure would recreate A01 from the other side. The
+ * distinction is between a shape RECOGNISABLE as a Google SERP and a shape that
+ * merely carries a familiar key.
  */
 const SERP_SECTION_KEYS = [
   "general",
@@ -110,6 +121,52 @@ const SERP_SECTION_KEYS = [
   "pagination",
 ];
 
+/** The sections that are lists of results or questions. */
+const SERP_LIST_SECTIONS = new Set([
+  "organic",
+  "people_also_ask",
+  "related_questions",
+  "related_searches",
+  "top_stories",
+  "local_results",
+  "news_results",
+  "discussions_and_forums",
+  "perspectives",
+  "shopping_results",
+  "images",
+  "videos",
+  "inline_images",
+  "inline_videos",
+  "twitter_results",
+]);
+
+/** How a value reads once we know it is not what its section ships in. */
+function valueType(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return `array(${value.length})`;
+  return typeof value;
+}
+
+/**
+ * Does this section carry a value the section actually ships?
+ *
+ * A list section must be an array (empty is fine — that is a genuine
+ * zero-result SERP). An object section must be a non-null, non-array object.
+ * `ai_overview` is the exception in both directions: Bright Data has been
+ * observed shipping it as a bare string, and null/false there is how "no
+ * overview" is expressed — reading that as a broken section would flag every
+ * ordinary no-AIO SERP.
+ */
+function sectionUsable(key, value) {
+  if (key === "ai_overview") {
+    if (value === null || value === undefined || value === false) return true;
+    if (typeof value === "string") return Boolean(value.trim());
+    return typeof value === "object" && !Array.isArray(value);
+  }
+  if (SERP_LIST_SECTIONS.has(key)) return Array.isArray(value);
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 /**
  * Strings that mean Google (or the proxy) asked a human to prove itself. Checked
  * only against HTML-looking bodies: a JSON SERP whose text happens to contain
@@ -131,6 +188,110 @@ const ACCESS_PATTERNS = [
   /\/sorry\//i,
 ];
 
+/* ===========================================================================
+ * SHA-256, hand-rolled.
+ *
+ * WHY THIS IS HERE AT ALL. This module is imported by brightdata.js, which
+ * enginePipeline.js imports, which DashboardShell.jsx imports — so the shared
+ * parser is bundled for the BROWSER, and a static crypto import from the Node
+ * standard library there does not degrade the bundle, it fails it:
+ * `UnhandledSchemeError: Reading from "node:crypto" is not handled by plugins`,
+ * raised while building /dashboard/page.js. The parser is shared with the
+ * server and nothing about parsing needs a runtime-specific primitive, so the
+ * dependency is removed HERE rather than split into two copies of the parser
+ * (which is exactly how the transport and the meaning of a payload drifted
+ * apart before, see the module header).
+ *
+ * WHY IT IS SHA-256 AND NOT SOMETHING CHEAPER. `evidence_id` is a derived
+ * identity that is already written into persisted evidence records, so it has
+ * to keep producing the SAME digest the server-side hash produced. A 32-bit
+ * string hash would be shorter, faster and would silently orphan every stored
+ * id. R04-03 pins the digest against node:crypto in the test suite, which is
+ * the only place a Node built-in is allowed to appear.
+ *
+ * `TextEncoder` utf8-encodes, which is what node:crypto's string default did,
+ * so a payload with non-ASCII text hashes to the same id it always did.
+ * ======================================================================== */
+
+const SHA256_K = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]);
+
+/** The lowercase hex digest of `text` read as utf8. */
+function sha256Hex(text) {
+  const bytes = new TextEncoder().encode(String(text));
+  const bitLength = bytes.length * 8;
+  // One 0x80 byte, then zeroes, then the 64-bit big-endian bit length.
+  const padded = new Uint8Array((((bytes.length + 8) >> 6) + 1) << 6);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+  const view = new DataView(padded.buffer);
+  view.setUint32(padded.length - 8, Math.floor(bitLength / 4294967296));
+  view.setUint32(padded.length - 4, bitLength >>> 0);
+
+  const w = new Uint32Array(64);
+  const h = new Uint32Array([
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+  ]);
+
+  for (let offset = 0; offset < padded.length; offset += 64) {
+    for (let i = 0; i < 16; i++) w[i] = view.getUint32(offset + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const x = w[i - 15];
+      const y = w[i - 2];
+      const s0 = ((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3);
+      const s1 = ((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10);
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+
+    let a = h[0];
+    let b = h[1];
+    let c = h[2];
+    let d = h[3];
+    let e = h[4];
+    let f = h[5];
+    let g = h[6];
+    let hh = h[7];
+
+    for (let i = 0; i < 64; i++) {
+      const S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+      const ch = (e & f) ^ (~e & g);
+      const temp1 = (hh + S1 + ch + SHA256_K[i] + w[i]) >>> 0;
+      const S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+      const maj = (a & b) ^ (a & c) ^ (b & c);
+      const temp2 = (S0 + maj) >>> 0;
+
+      hh = g;
+      g = f;
+      f = e;
+      e = (d + temp1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) >>> 0;
+    }
+
+    h[0] = (h[0] + a) >>> 0;
+    h[1] = (h[1] + b) >>> 0;
+    h[2] = (h[2] + c) >>> 0;
+    h[3] = (h[3] + d) >>> 0;
+    h[4] = (h[4] + e) >>> 0;
+    h[5] = (h[5] + f) >>> 0;
+    h[6] = (h[6] + g) >>> 0;
+    h[7] = (h[7] + hh) >>> 0;
+  }
+
+  return Array.from(h, (word) => word.toString(16).padStart(8, "0")).join("");
+}
+
 /** A stable, derived identity for a payload — never the payload itself. */
 function evidenceId(raw) {
   let serialized;
@@ -139,7 +300,7 @@ function evidenceId(raw) {
   } catch {
     serialized = String(raw);
   }
-  return "bd_" + createHash("sha256").update(serialized ?? "").digest("hex").slice(0, 24);
+  return "bd_" + sha256Hex(serialized ?? "").slice(0, 24);
 }
 
 /**
@@ -329,6 +490,11 @@ function makeResult(serp_state, fields) {
     ok,
     serp_state,
     aio_present: fields.aio_present ?? null,
+    // The answer text, joined from the blocks in reading order. Carried here so
+    // the extraction path reads the parser's text instead of re-joining the
+    // blocks itself: a second join is a second rule for what the text is, and
+    // the AIO engine's `answer_present` hangs off it.
+    text: fields.text ?? "",
     blocks: fields.blocks ?? [],
     citations: fields.citations ?? [],
     references: fields.references ?? [],
@@ -341,6 +507,26 @@ function makeResult(serp_state, fields) {
     parser_version: GOOGLE_PAYLOAD_PARSER_VERSION,
     evidence: fields.evidence,
   };
+}
+
+/**
+ * The payload's own failure state, when it states one.
+ *
+ * A capture that reports its own failure is not a SERP with no AI Overview; it
+ * is a capture that produced nothing, and the two are indistinguishable once
+ * the failure is read as output. `{search_metadata: {status: "Error"}}` used to
+ * do exactly that: one familiar key, `ok: true`, `aio_present: false`. Typed as
+ * a provider failure rather than an unknown schema because the transport
+ * succeeded and the answer did not — that is retryable and can never be filed
+ * as brand absence (R04-11's distinction, on a different door).
+ */
+function serpFailureReason(serp) {
+  const meta = serp.search_metadata;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return null;
+  const status = typeof meta.status === "string" ? meta.status.trim().toLowerCase() : "";
+  if (status !== "error") return null;
+  const detail = firstNonEmpty([meta.error, meta.message]);
+  return `Google SERP reported status "Error"${detail ? `: ${detail}` : ""}`;
 }
 
 /**
@@ -507,21 +693,61 @@ export function parseGoogleSerp(raw, options = {}) {
   evidence.shape = shapeOf(serp);
 
   // --- stage: SERP_SHAPE --------------------------------------------------
-  const recognized = SERP_SECTION_KEYS.filter(
-    (key) => Object.prototype.hasOwnProperty.call(serp, key)
-  );
+  // A payload that states its own failure is checked BEFORE the section scan:
+  // "Google said Error" and "Google returned a SERP" must not be told apart by
+  // whose key happened to be present.
+  const failure = serpFailureReason(serp);
+  if (failure) {
+    return makeResult(SERP_STATE.PROVIDER_FAILURE, {
+      stage: PARSE_STAGE.ENVELOPE,
+      errors: [{ stage: PARSE_STAGE.ENVELOPE, code: "serp_error_status", message: failure }],
+      evidence,
+    });
+  }
+
+  const recognized = [];
+  const unusable = [];
+  for (const key of SERP_SECTION_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(serp, key)) continue;
+    if (sectionUsable(key, serp[key])) recognized.push(key);
+    else unusable.push({ section: key, type: valueType(serp[key]) });
+  }
+
   if (recognized.length === 0) {
+    // Two different nothings, named separately: a payload with none of our keys
+    // (a vendor shape change) and a payload with our keys carrying values we
+    // cannot read. Both are unknown_schema — neither is absence.
+    const onlyNames = unusable.length > 0;
     return makeResult(SERP_STATE.UNKNOWN_SCHEMA, {
       stage: PARSE_STAGE.SERP_SHAPE,
       errors: [
         {
           stage: PARSE_STAGE.SERP_SHAPE,
-          code: "unrecognised_google_serp",
-          message: "no recognised Google SERP section was present",
+          code: onlyNames ? "serp_section_unusable" : "unrecognised_google_serp",
+          message: onlyNames
+            ? `no recognised Google SERP section carried a readable value: ${unusable
+                .map((u) => `${u.section} is ${u.type}`)
+                .join(", ")}`
+            : "no recognised Google SERP section was present",
           recognized_sections: [],
+          unusable_sections: unusable,
         },
       ],
       evidence,
+    });
+  }
+
+  // A readable section made the payload a SERP, so an unreadable sibling is a
+  // defect in the CAPTURE, not a verdict about it: recorded, and never allowed
+  // to promote the unreadable value into a measurement.
+  for (const u of unusable) {
+    errors.push({
+      stage: PARSE_STAGE.SERP_SHAPE,
+      code: "serp_section_unusable",
+      section: u.section,
+      message:
+        `section "${u.section}" arrived as ${u.type}, which is not a shape this parser can read; ` +
+        `the SERP verdict rests on ${recognized.join(", ")}`,
     });
   }
 
@@ -593,6 +819,7 @@ export function parseGoogleSerp(raw, options = {}) {
   return makeResult(SERP_STATE.VALID_SERP, {
     stage: PARSE_STAGE.CITATIONS,
     aio_present: aioPresent,
+    text,
     blocks,
     citations: entries.map((e) => e.normalized),
     references: entries,

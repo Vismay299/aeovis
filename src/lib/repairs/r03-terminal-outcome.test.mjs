@@ -31,6 +31,7 @@ import {
   DISPOSITIONS,
   OUTCOME_REASONS,
   BLOCK_REASONS,
+  AIO_TRIGGER_REASONS,
   buildScorePlan,
   buildWorkMatrix,
   classifyObservation,
@@ -129,7 +130,11 @@ test("R03-02 — thirty valid no-AIO SERPs are complete collection with a zero t
   assert.equal(outcome.outcome, COLLECTION_OUTCOMES.COMPLETE, "no-AIO is valid collection, not failure (A01)");
   assert.equal(outcome.counts.valid_no_aio, 30);
   assert.equal(outcome.counts.valid, 30);
+  assert.equal(outcome.metrics.aio_trigger.valid_serps, 30, "the trigger denominator is the Google surface's valid SERPs");
+  assert.equal(outcome.metrics.aio_trigger.aio_present, 0);
   assert.equal(outcome.metrics.aio_trigger.trigger_rate_pct, 0, "a measured zero trigger, not unknown");
+  assert.equal(outcome.metrics.aio_trigger.available, true, "a measured zero is AVAILABLE — it is not the same fact as unknown");
+  assert.equal(outcome.metrics.aio_trigger.reason, null, "a measured zero needs no unavailability reason");
   assert.equal(
     outcome.metrics.aio_trigger.conditional_headline,
     null,
@@ -202,6 +207,51 @@ test("R03-06 — 30 unbranded plus four diagnostics across four engines keeps 12
   assert.equal(outcome.counts.planned, 120, "diagnostics do not inflate the scoring denominator");
   assert.equal(outcome.counts.diagnostics, 16, "diagnostics are counted, but separately");
   assert.notEqual(outcome.counts.planned, matrix.scoring.length + matrix.diagnostics.length, "the two pools are not summed");
+
+  // FINDING P2 — the AIO trigger population is the Google surface ONLY. Every
+  // engine answers here (Google with an AI Overview, the three text models
+  // without), so a scan-wide denominator would read 30/120 and dilute a real
+  // 100% Google trigger; collection completion must stay whole-plan.
+  const everyEngineValid = matrix.scoring.map((p) =>
+    p.engine === "aio" ? answeredRow(p.engine, p.query, { aio: true }) : answeredRow(p.engine, p.query)
+  );
+  const mixed = deriveScanOutcome({ plan: matrix.scoring, rows: everyEngineValid, engineNames: engines });
+  assert.equal(mixed.counts.valid, 120, "collection completion is still measured over the whole four-engine plan");
+  assert.equal(mixed.metrics.collection_completion_pct, 100);
+  assert.equal(mixed.metrics.aio_trigger.valid_serps, 30, "only the 30 Google SERPs are the trigger denominator, not all 120 valid rows");
+  assert.equal(mixed.metrics.aio_trigger.aio_present, 30);
+  assert.equal(mixed.metrics.aio_trigger.trigger_rate_pct, 100, "30/30 Google AIO -> 100%, not diluted by the text engines");
+  assert.equal(mixed.metrics.aio_trigger.available, true);
+  assert.equal(mixed.metrics.aio_trigger.reason, null);
+  assert.equal(mixed.metrics.aio_trigger.surfaces.aio.valid_serps, 30, "the per-surface breakdown names the Google surface explicitly");
+  assert.equal(mixed.metrics.aio_trigger.surfaces.aio.trigger_rate_pct, 100);
+  assertEquation(mixed);
+
+  // The reviewer's exact reproduction: two prompts x four engines, every call
+  // valid, both Google SERPs carrying AIO. The old code published valid_serps:8,
+  // aio_present:2, trigger_rate_pct:25 for a Google trigger that is really 2/2.
+  const reproPlan = buildScorePlan({ prompts: prompts(2), engines });
+  const reproRows = reproPlan.map((p) =>
+    p.engine === "aio" ? answeredRow(p.engine, p.query, { aio: true }) : answeredRow(p.engine, p.query)
+  );
+  const repro = deriveScanOutcome({ plan: reproPlan, rows: reproRows, engineNames: engines });
+  assert.equal(repro.counts.valid, 8, "the whole-plan population really is 8 valid observations");
+  assert.equal(repro.metrics.aio_trigger.valid_serps, 2, "…but the Google trigger denominator is 2");
+  assert.equal(repro.metrics.aio_trigger.aio_present, 2);
+  assert.equal(repro.metrics.aio_trigger.trigger_rate_pct, 100, "2/2 = 100%, not the old 25%");
+  assert.notEqual(repro.metrics.aio_trigger.trigger_rate_pct, 25);
+
+  // A text-model-only plan has NO Google surface at all: the trigger is
+  // UNAVAILABLE with a reason, never a measured zero.
+  const textPlan = buildScorePlan({ prompts: prompts(30), engines: ["chatgpt", "perplexity", "gemini"] });
+  const textOnly = deriveScanOutcome({ plan: textPlan, rows: textPlan.map((p) => answeredRow(p.engine, p.query)) });
+  assert.equal(textOnly.counts.valid, 90, "the text engines collected validly");
+  assert.equal(textOnly.metrics.aio_trigger.valid_serps, 0);
+  assert.equal(textOnly.metrics.aio_trigger.trigger_rate_pct, null, "no Google surface -> null, never 0");
+  assert.notEqual(textOnly.metrics.aio_trigger.trigger_rate_pct, 0);
+  assert.equal(textOnly.metrics.aio_trigger.available, false, "unavailable is distinct from a measured zero");
+  assert.equal(textOnly.metrics.aio_trigger.reason, AIO_TRIGGER_REASONS.SURFACE_NOT_PLANNED);
+  assert.deepEqual(textOnly.metrics.aio_trigger.surfaces, {}, "no Google surface means no per-surface entry");
 });
 
 test("R03-07 — a duplicate observation counts once in planned/valid while attempts may rise", () => {
@@ -375,6 +425,16 @@ test("R03-18 — the status endpoint and the final report for one scan return on
   assert.deepEqual(reportSide, statusSide, "one vocabulary, identical counters — diagnostics included");
   assert.equal(statusSide.outcome, COLLECTION_OUTCOMES.PARTIAL);
   assert.deepEqual(statusSide.counts, reportSide.counts);
+
+  // FINDING P2 persisted/API agreement: the Google-only AIO trigger (5 valid aio
+  // SERPs, 5 with AIO; the 5 chatgpt failures are NOT in this denominator) must
+  // survive the persistence round trip identically on both surfaces.
+  assert.equal(reportSide.metrics.aio_trigger.valid_serps, 5, "the trigger denominator is the Google surface, and it persists");
+  assert.equal(reportSide.metrics.aio_trigger.aio_present, 5);
+  assert.equal(reportSide.metrics.aio_trigger.trigger_rate_pct, 100);
+  assert.equal(reportSide.metrics.aio_trigger.available, true);
+  assert.deepEqual(reportSide.metrics.aio_trigger, statusSide.metrics.aio_trigger);
+  assert.equal(reportSide.metrics.aio_trigger.surfaces.aio.valid_serps, 5, "the per-surface map survives the wire projection too");
 
   // And the code actually shares the reader rather than reimplementing it: a
   // re-derived copy is exactly how the two surfaces drift apart over time.
