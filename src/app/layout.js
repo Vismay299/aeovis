@@ -4,9 +4,13 @@ import "@/components/portal/portal.css";
 import { Toaster } from "sonner";
 
 export const metadata = {
+  metadataBase: new URL("https://perceev.com"),
   title: "Perceev | Answer Engine Intelligence",
   description:
     "AI is answering your buyers. Perceev asks the answer engines unbranded buyer questions and reports which brand each answer names.",
+  alternates: {
+    canonical: "/",
+  },
 };
 
 export default function RootLayout({ children }) {

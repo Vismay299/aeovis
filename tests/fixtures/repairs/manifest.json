@@ -14,8 +14,14 @@
     {
       "path": "src/lib/repairs/r21-harness.test.mjs",
       "repair": "R21",
-      "cases": ["R21-01", "R21-02", "R21-03", "R21-04", "R21-05", "R21-06"],
+      "cases": ["R21-01", "R21-02", "R21-03", "R21-04", "R21-05", "R21-06", "R21-07", "R21-08", "R21-10", "R21-11", "R21-17"],
       "note": "The R21 cases the runner owns. Collected by src/lib/repairs/*.test.mjs, so the runner can dispatch it."
+    },
+    {
+      "path": "src/lib/repairs/r20-public-site.test.mjs",
+      "repair": "R20",
+      "cases": ["R20-01", "R20-02", "R20-03", "R20-04", "R20-05", "R20-06", "R20-07"],
+      "note": "Public website foundation: canonicals, sitemap, robots, host policy, and marketing claims."
     }
   ],
   "fixtures": [

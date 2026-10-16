@@ -1092,12 +1092,11 @@ async function run(argv) {
       return summary;
     }
     if (summary.counts.testsCollected === 0) {
+      const msg = `the dispatch collected 0 tests even though ${outcome.dispatch.files.length} file(s) were named. A run that collects nothing cannot pass.`;
+      summary.errors.push(msg);
       summary.verdict = "failed";
       summary.exitCode = 1;
-      summary.messages.push(
-        `FAILURE: the dispatch collected 0 tests even though ${outcome.dispatch.files.length} file(s) were named. ` +
-          `A run that collects nothing cannot pass.`
-      );
+      summary.messages.push(`FAILURE: ${msg}`);
       return summary;
     }
     const problems = summary.counts.failed + summary.counts.unimplemented + summary.counts.skipped;
@@ -1191,20 +1190,22 @@ async function runRelease({ summary, selection, discovered, files, environment }
         const missingIds = [
           ...new Set([...cases.filter((id) => !discovered.byId.has(id)), ...outcome.unimplemented]),
         ];
-        entry.casesPassed = outcome.passed.length;
         entry.casesUnimplemented = missingIds.length;
         entry.status = outcome.fatal
           ? "missing"
           : outcome.failed.length || outcome.skipped.length || entry.casesUnimplemented > 0
             ? "incomplete"
             : "passed";
+        entry.casesPassed = entry.status === "passed" ? outcome.passed.length : 0;
         entry.reason = outcome.fatal
           ? outcome.fatal
           : entry.status === "passed"
             ? null
             : `${entry.casesUnimplemented} of ${cases.length} ${repair} U/I case(s) have no test with that case id; ` +
               `${outcome.failed.length} failed, ${outcome.skipped.length} skipped`;
-        summary.cases.passed.push(...outcome.passed);
+        if (entry.status === "passed") {
+          summary.cases.passed.push(...outcome.passed);
+        }
         for (const failedEntry of outcome.failed) summary.cases.failed.push(failedEntry);
         for (const skippedEntry of outcome.skipped) summary.cases.skipped.push(skippedEntry);
         summary.cases.unimplemented.push(...cases.filter((id) => !discovered.byId.has(id)));
