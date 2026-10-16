@@ -922,6 +922,7 @@ export function extractBrightDataAiOverview(data) {
       per_field_quality: validated.per_field_quality,
       citations_verified_empty: validated.citations_verified_empty ?? false,
       aio_present: validated.aio_present,
+      serp_state: validated.serp_state,
       parser_version: validated.parser_version,
       evidence_id: validated.evidence_id,
     };

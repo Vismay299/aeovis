@@ -330,6 +330,71 @@ function firstNonEmpty(values) {
   return "";
 }
 
+/**
+ * A block's own text, in reading order, with nothing dropped.
+ *
+ * A block carrying both a heading and a snippet used to yield only the first of
+ * them (`firstNonEmpty`), so a brand named in the heading disappeared from the
+ * measurement: a mention missed because the block happened to have more than one
+ * text field, which is the ordinary case for an AI Overview's titled sections.
+ * Headings come first because that is where a reader starts; a string repeated in
+ * two fields is kept once, so a vendor echoing itself does not lengthen the text.
+ */
+const BLOCK_TEXT_FIELDS = ["heading", "header", "title", "text", "snippet"];
+
+function blockOwnText(node) {
+  const parts = [];
+  for (const field of BLOCK_TEXT_FIELDS) {
+    const value = node[field];
+    if (typeof value !== "string") continue;
+    const text = value.trim();
+    if (!text || parts.includes(text)) continue;
+    parts.push(text);
+  }
+  return parts.join("\n");
+}
+
+/**
+ * Can this `ai_overview` value be read at all, and does it assert presence?
+ *
+ * Present-but-unreadable is neither of the two answers the metric needs. `null`
+ * and `false` are the vendor's explicit no-Overview signals; a non-empty string
+ * or an object carrying at least one Overview field is an Overview. Everything
+ * else — an empty object, an array, a bare `true`, a number, `""` — is a shape we
+ * cannot read, and reading those as absence is exactly how a malformed payload
+ * came to look like a healthy no-AIO observation (A01/A10).
+ */
+const AIO_CONTENT_FIELDS = [
+  "texts",
+  "text_blocks",
+  "paragraphs",
+  "text",
+  "snippet",
+  "references",
+  "sources",
+  "citations",
+];
+
+function aioReadability(aio) {
+  if (aio === null || aio === undefined || aio === false) {
+    return { readable: true, present: false, valueType: valueType(aio) };
+  }
+  if (typeof aio === "string") {
+    return aio.trim()
+      ? { readable: true, present: true, valueType: "string" }
+      : { readable: false, valueType: "empty string" };
+  }
+  if (typeof aio === "object" && !Array.isArray(aio)) {
+    const hasContent = AIO_CONTENT_FIELDS.some((field) =>
+      Object.prototype.hasOwnProperty.call(aio, field)
+    );
+    return hasContent
+      ? { readable: true, present: true, valueType: "object" }
+      : { readable: false, valueType: "empty object" };
+  }
+  return { readable: false, valueType: valueType(aio) };
+}
+
 function classifyReferenceUrl(href) {
   const raw = typeof href === "string" ? href.trim() : "";
   if (!raw) return { ok: false, code: "missing_url" };
@@ -401,7 +466,7 @@ function extractBlocks(ao) {
     if (typeof node !== "object") return;
 
     const indexes = blockReferenceIndexes(node);
-    const own = firstNonEmpty([node.snippet, node.text, node.header]);
+    const own = blockOwnText(node);
     if (own) {
       blocks.push({ text: own, reference_indexes: indexes, kind: node.list ? "list" : "block" });
     }
@@ -427,7 +492,7 @@ function extractBlocks(ao) {
       ao.paragraphs.forEach(visit);
       return blocks;
     }
-    const own = firstNonEmpty([ao.text, ao.snippet]);
+    const own = blockOwnText(ao);
     if (own) blocks.push({ text: own, reference_indexes: blockReferenceIndexes(ao), kind: "text" });
   }
   return blocks;
@@ -753,7 +818,30 @@ export function parseGoogleSerp(raw, options = {}) {
 
   // --- stage: AIO ---------------------------------------------------------
   const aio = Object.prototype.hasOwnProperty.call(serp, "ai_overview") ? serp.ai_overview : null;
-  const aioPresent = aio !== null && aio !== undefined && aio !== false;
+  const readability = aioReadability(aio);
+  if (!readability.readable) {
+    // An Overview that is PRESENT but unreadable is not absence, and it is not
+    // collection either: the AIO state stays indeterminate, so this payload may
+    // not be counted as a valid observation (R04.1b). A sibling section being
+    // recognisable is what used to let this through — the SERP shape was fine and
+    // the Overview was quietly read as "no AIO", which is A01/A10 one layer up.
+    // Typed unknown_schema with `aio_present: null`, which is also what the drift
+    // alert watches, so the shape is reported for repair instead of guessed at.
+    return makeResult(SERP_STATE.UNKNOWN_SCHEMA, {
+      stage: PARSE_STAGE.AIO,
+      aio_present: null,
+      errors: [
+        {
+          stage: PARSE_STAGE.AIO,
+          code: "aio_section_unreadable",
+          value_type: readability.valueType,
+          message: `ai_overview was present as ${readability.valueType} carrying no readable Overview field, so AIO presence is unknown rather than absent`,
+        },
+      ],
+      evidence,
+    });
+  }
+  const aioPresent = readability.present;
 
   // --- stage: BLOCKS + CITATIONS -----------------------------------------
   const blocks = aioPresent ? extractBlocks(aio) : [];
@@ -918,7 +1006,15 @@ export function buildParserDriftAlert(result) {
  */
 export function summarizeSerpCollection(results = []) {
   const planned = results.length;
-  const valid = results.filter((r) => r.serp_state === SERP_STATE.VALID_SERP);
+  const validSerps = results.filter((r) => r.serp_state === SERP_STATE.VALID_SERP);
+  // Belt and braces on the one number that must never flatter: a valid SERP whose
+  // AIO state is indeterminate is not a measurement. It is neither no-AIO nor
+  // present, so it cannot be collected. Without this, one code path that kept
+  // `serp_state: valid_serp` beside `aio_present: null` would report a malformed
+  // Overview as 100% collection — the defect this repair exists to remove,
+  // reappearing as arithmetic rather than as a classification.
+  const valid = validSerps.filter((r) => r.aio_present === true || r.aio_present === false);
+  const unmeasurable = validSerps.length - valid.length;
   const aioPresent = valid.filter((r) => r.aio_present === true).length;
   const conditionalAvailable = aioPresent > 0;
   return {
@@ -926,6 +1022,7 @@ export function summarizeSerpCollection(results = []) {
     valid_serp: valid.length,
     valid_no_aio: valid.filter((r) => r.aio_present === false).length,
     aio_present: aioPresent,
+    unmeasurable,
     failed: planned - valid.length,
     collection_pct: planned > 0 ? (valid.length / planned) * 100 : null,
     collection_complete: planned > 0 && valid.length === planned,
