@@ -1,5 +1,12 @@
 import { generateContent } from "../gemini.js";
 import { getBrandAliases } from "./aliases.js";
+import {
+  judgeBrandsSymmetricV2,
+  classifyEntityRelationshipAndSentiment,
+  extractListRank,
+  RELATIONSHIP,
+  JUDGE_VERSION,
+} from "./judgeRelationship.js";
 
 const POSITIVE_WORDS = [
   "best", "great", "excellent", "top", "lead", "leading", "recommend", "recommended",
@@ -295,34 +302,32 @@ export function judgeDeterministic(text, brand, website, competitors = []) {
  * for the (separately dead, pre-existing) pattern this deliberately does not
  * extend.
  */
-export function judgeBrandsSymmetric(text, brands) {
-  const roster = brands || [];
-
-  const withIndex = roster.map((b) => ({
-    name: b.name,
-    isSelf: !!b.isSelf,
-    aliases: b.aliases,
-    index: findFirstMentionIndex(text, b.aliases),
+export function judgeBrandsSymmetric(text, brands, options = {}) {
+  const v2Results = judgeBrandsSymmetricV2(text, brands, options);
+  return v2Results.map((r) => ({
+    name: r.name,
+    is_self: r.is_self,
+    mentioned: r.mentioned,
+    position: r.first_mention_order,
+    first_mention_order: r.first_mention_order,
+    relationship: r.relationship,
+    list_rank: r.list_rank,
+    list_rank_reason: r.list_rank_reason,
+    sentiment: r.sentiment_score,
+    sentiment_label: r.sentiment,
+    spans: r.spans,
+    judge_method: r.judge_method,
+    judge_version: r.judge_version,
   }));
-
-  const positionByOriginalIndex = new Map();
-  withIndex
-    .map((b, i) => ({ i, index: b.index }))
-    .filter((b) => b.index !== -1)
-    .sort((a, b) => a.index - b.index)
-    .forEach((b, rank) => positionByOriginalIndex.set(b.i, rank + 1));
-
-  return withIndex.map((b, i) => {
-    const mentioned = b.index !== -1;
-    return {
-      name: b.name,
-      is_self: b.isSelf,
-      mentioned,
-      position: mentioned ? positionByOriginalIndex.get(i) : null,
-      sentiment: mentioned ? detectSentimentScore(text, b.aliases) : null,
-    };
-  });
 }
+
+export {
+  judgeBrandsSymmetricV2,
+  classifyEntityRelationshipAndSentiment,
+  extractListRank,
+  RELATIONSHIP,
+  JUDGE_VERSION,
+};
 
 /**
  * Checks if a response needs LLM verification due to ambiguity (e.g. partial matches or substring match without word boundaries).

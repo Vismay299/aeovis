@@ -1,0 +1,49 @@
+{
+  "fixture": "synthetic-prompts",
+  "version": 1,
+  "origin": "synthetic",
+  "branding": {
+    "policy": "unbranded",
+    "forbidden_terms": ["acme", "rival"]
+  },
+  "panel": {
+    "id": "panel-unbranded-30",
+    "version": "v1",
+    "intent": "unbranded",
+    "scoring_purpose": "unbranded_discovery",
+    "market": { "country": "IN", "language": "en" },
+    "surfaces": ["aio", "chatgpt", "gemini", "perplexity"]
+  },
+  "prompts": [
+    { "id": "unbranded-01", "text": "which vitrified tile is best for a bathroom floor", "intent": "comparison" },
+    { "id": "unbranded-02", "text": "how do I choose between matte and glossy tiles for a small bathroom", "intent": "comparison" },
+    { "id": "unbranded-03", "text": "what thickness of tile is suitable for a balcony", "intent": "specification" },
+    { "id": "unbranded-04", "text": "is it worth paying more for large-format tiles in a living room", "intent": "recommendation" },
+    { "id": "unbranded-05", "text": "how much does floor tiling cost per square foot in India", "intent": "price" },
+    { "id": "unbranded-06", "text": "which grout is best for wet areas", "intent": "comparison" },
+    { "id": "unbranded-07", "text": "compare porcelain and ceramic tiles for a kitchen backsplash", "intent": "comparison" },
+    { "id": "unbranded-08", "text": "how long should I wait before walking on new floor tiles", "intent": "how_to" },
+    { "id": "unbranded-09", "text": "what is the best way to clean tile grout in a rental flat", "intent": "how_to" },
+    { "id": "unbranded-10", "text": "do I need waterproofing under bathroom tiles", "intent": "specification" },
+    { "id": "unbranded-11", "text": "which tile finish is less slippery when wet", "intent": "comparison" },
+    { "id": "unbranded-12", "text": "how do I fix hollow sounds in floor tiles", "intent": "repair" },
+    { "id": "unbranded-13", "text": "can I lay tiles over old floor tiles", "intent": "how_to" },
+    { "id": "unbranded-14", "text": "what is the difference between rectified and non-rectified tiles", "intent": "definition" },
+    { "id": "unbranded-15", "text": "best tile design for a 100 square foot bedroom", "intent": "recommendation" },
+    { "id": "unbranded-16", "text": "how many tiles do I need for a 10 by 12 room", "intent": "quantity" },
+    { "id": "unbranded-17", "text": "is vitrified tile good for outdoor steps", "intent": "recommendation" },
+    { "id": "unbranded-18", "text": "which tile size makes a narrow hallway look wider", "intent": "design" },
+    { "id": "unbranded-19", "text": "what should I check in a tiling contractor quote", "intent": "buying" },
+    { "id": "unbranded-20", "text": "how do I remove cement residue from new tiles", "intent": "how_to" },
+    { "id": "unbranded-21", "text": "which wall tile pattern suits an open kitchen", "intent": "design" },
+    { "id": "unbranded-22", "text": "are anti-skid tiles necessary in a shower area", "intent": "specification" },
+    { "id": "unbranded-23", "text": "how do I compare tile samples from two shops", "intent": "buying" },
+    { "id": "unbranded-24", "text": "what causes tile cracking after installation", "intent": "repair" },
+    { "id": "unbranded-25", "text": "which colour tile hides daily dust in a living room", "intent": "design" },
+    { "id": "unbranded-26", "text": "how soon can I install kitchen cabinets after tiling", "intent": "how_to" },
+    { "id": "unbranded-27", "text": "is epoxy grout better than cement grout for a balcony", "intent": "comparison" },
+    { "id": "unbranded-28", "text": "what is the recommended expansion gap for tiled floors", "intent": "specification" },
+    { "id": "unbranded-29", "text": "which tile adhesive is suitable for wall tiling", "intent": "comparison" },
+    { "id": "unbranded-30", "text": "how do I check whether a tile shop quotes per box or per tile", "intent": "buying" }
+  ]
+}

@@ -10,12 +10,25 @@ import { countBrandsElicited } from "./promptQuality.js";
 import { extractBrandDomain } from "./citations.js";
 import { measuredNumberOrNull, ratioPctOrNull } from "./measuredNumber.js";
 import {
+  ELIGIBILITY_POLICY_V1,
+  METRIC_CONTRACT_VERSION,
+  METRIC_IDS,
+  METRIC_REASONS,
+  METRIC_UNITS,
+  compareMetrics,
+  createMetric,
+  logicalObservationKey,
+  measurementContext,
+  reduceObservations,
+} from "./metricContract.js";
+import {
   AIO_CONCURRENCY,
   AIO_ERROR_RATE_LIMIT_PCT,
   AIO_MIN_NON_BRANDED_COVERAGE,
   AIO_MIN_NON_BRANDED_WITH_AIO,
 } from "./aioConstants.js";
 import { ENGINE_LABELS, formatEngineList } from "../engines/deployedEngines.js";
+import { createObservationEnvelope, SEARCH_STATE } from "../provenance.js";
 
 const CHATGPT_CONCURRENCY = 4;
 const PERPLEXITY_CONCURRENCY = 4;
@@ -251,6 +264,27 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   const probeResult = await probeFn(query.text, { stats });
   result.measurement_method = "model_api";
   result.model_used = probeResult.model || probeResult.model_used || null;
+  result.requested_model = probeResult.requested_model || probeResult.model || null;
+  result.returned_model = probeResult.returned_model || probeResult.model || null;
+  result.provider_request_id = probeResult.provider_request_id || null;
+  result.search_requests = probeResult.search_requests !== undefined ? probeResult.search_requests : null;
+  result.search_used =
+    probeResult.search_requests > 0
+      ? SEARCH_STATE.OBSERVED_USED
+      : (probeResult.search_requests === 0 ? SEARCH_STATE.OBSERVED_NOT_USED : SEARCH_STATE.UNKNOWN);
+  result.provenance = createObservationEnvelope({
+    surface: engineName,
+    gateway: "openrouter",
+    method: "model_api",
+    requested_model: result.requested_model,
+    returned_model: result.returned_model,
+    provider_request_id: result.provider_request_id,
+    search_requests: result.search_requests,
+    cost: probeResult.cost,
+    cost_source: probeResult.cost_source,
+    cost_state: probeResult.cost_state,
+    cost_state_detail: probeResult.cost_state_detail,
+  });
 
   // Copied ONCE, here, before the first return can skip it.
   //
@@ -759,6 +793,326 @@ function resolveEngineMeasurementState({
   return { state: MEASURED, state_reason: null };
 }
 
+// ---------------------------------------------------------------------------
+// R05 — the metric contract, applied to a probe row
+//
+// Everything below turns probe rows into metric DTOs from ./metricContract.js.
+// The rules (what a denominator is, when a value may be headlined, when two
+// values are comparable) live in that module; what lives here is only the part
+// that knows what a probe row looks like.
+//
+// THE ONE THING TO KEEP IN MIND WHILE READING THIS: a row's `visible` flag is
+// "named OR cited", `brand_mentioned_in_text` is the text half alone, and
+// `brand_cited` is the citation half alone. Those three are three DIFFERENT
+// metrics with three different denominators, and collapsing them is how A03 lost
+// a citation-only appearance (it was dropped by a filter that only knew about
+// text) and how A04 let a roster change move a self rate (the filter's
+// denominator was the roster's business). The denominators here are the declared
+// eligible panel for the self metrics and the observed-citation pool for the
+// citation metric — never "answers that happened to name a tracked rival".
+// ---------------------------------------------------------------------------
+
+/** The prompt ID a row belongs to. Distinct prompt IDs are what the sample gate counts. */
+function promptIdentityOf(row) {
+  const id = row?.prompt_id ?? row?.promptId ?? row?.query ?? row?.prompt;
+  return id === null || id === undefined ? null : String(id);
+}
+
+/**
+ * The replicate index of a row. Absent means "the one and only observation of
+ * this prompt", which is replicate 1 — not a replicate, and therefore eligible to
+ * count toward the distinct-prompt minimum.
+ */
+function replicateIndexOf(row) {
+  return measuredNumberOrNull(row?.replicate) ?? 1;
+}
+
+/** The logical observation a row is a delivery OF (v1 policy: attempts are children). */
+function observationKeyOf(row) {
+  return logicalObservationKey({
+    promptId: promptIdentityOf(row),
+    surface: row?.engine ?? null,
+    market: row?.market ?? row?.geo ?? null,
+    language: row?.language ?? null,
+    replicate: replicateIndexOf(row),
+    scheduledTime: row?.scheduled_time ?? row?.scheduledTime ?? null,
+    purpose: row?.scoring_purpose ?? "scoring",
+  });
+}
+
+/**
+ * Did this answer carry text at all? A citation-only AIO (references and no
+ * overview text) cannot be counted as a NON-mention: nobody read a sentence that
+ * failed to name the brand. Such a row is excluded from the mention metric with
+ * its reason, rather than counted as absence (R04-06's partial capture).
+ */
+function hasObservedAnswerText(row) {
+  return typeof row?.text === "string" && row.text.trim() !== "";
+}
+
+/**
+ * The self brand's recommendation reading for one answer, from the label it
+ * carries. An explicit relationship label (R08's vocabulary) is preferred over
+ * the numeric sentiment, and a numeric sentiment of 50 (neutral) is NOT a
+ * positive recommendation — "mentioned" and "recommended" are different
+ * measurements, which is the whole point of counting them apart.
+ *
+ * An unmentioned brand is an observed non-recommendation (`observed: true`,
+ * `positive: false`): the answer was read and did not recommend it. A row with no
+ * self entry at all is NOT observed, because no judgment ran on it.
+ */
+const RECOMMENDED_LABELS = new Set(["recommended", "positive", "top_pick", "recommends"]);
+const POSITIVE_SENTIMENT_FLOOR = 50;
+
+function selfRecommendationOf(row) {
+  const self = (row?.brands || []).find((b) => b && (b.is_self ?? b.isSelf));
+  if (!self) return { observed: false, positive: false };
+
+  const explicit = self.relationship ?? self.recommendation ?? null;
+  if (explicit !== null && explicit !== undefined && String(explicit).trim() !== "") {
+    return { observed: true, positive: RECOMMENDED_LABELS.has(String(explicit).trim().toLowerCase()) };
+  }
+
+  const sentiment = measuredNumberOrNull(self.sentiment);
+  if (sentiment === null) return { observed: true, positive: false };
+  return { observed: true, positive: sentiment > POSITIVE_SENTIMENT_FLOOR };
+}
+
+/** The tracked rivals this slice was judged against, sorted so the version is stable. */
+function trackedRivalNames(rows) {
+  const names = new Set();
+  for (const row of rows || []) {
+    for (const brand of row?.brands || []) {
+      if (brand && !(brand.is_self ?? brand.isSelf) && brand.name) names.add(String(brand.name));
+    }
+  }
+  return Array.from(names).sort();
+}
+
+/** First/last collection time the rows carry, or null when they carry none. */
+function rowsCollectionWindow(rows) {
+  let start = null;
+  let end = null;
+  for (const row of rows || []) {
+    const at = row?.collected_at ?? row?.collectedAt ?? row?.observation_time ?? null;
+    if (!at) continue;
+    if (start === null || at < start) start = at;
+    if (end === null || at > end) end = at;
+  }
+  return start === null ? null : { start, end };
+}
+
+/**
+ * One metric from one pool of rows, THROUGH the contract — so the counting, the
+ * gate and the reason vocabulary cannot drift between the slice, the stored row
+ * and the rollup.
+ */
+function metricFromRows({
+  metricId,
+  rows,
+  valueOf,
+  exclusionOf = null,
+  unknownReason = null,
+  zeroReason = METRIC_REASONS.BRAND_NOT_VISIBLE,
+  conditional = false,
+  collection = null,
+  context,
+  unit = METRIC_UNITS.PERCENT,
+  policy = ELIGIBILITY_POLICY_V1,
+}) {
+  const observations = (rows || []).map((row) => ({
+    key: observationKeyOf(row),
+    promptId: promptIdentityOf(row),
+    replicate: replicateIndexOf(row),
+    value: valueOf(row),
+    exclusion: exclusionOf ? exclusionOf(row) : null,
+  }));
+
+  const counts = reduceObservations(observations, {
+    policy,
+    promptIdOf: (o) => o.promptId,
+    replicateOf: (o) => o.replicate,
+    valueOf: (o) => o.value,
+  });
+
+  return createMetric({
+    metricId,
+    unit,
+    numerator: counts.numerator,
+    denominator: counts.denominator,
+    eligiblePromptIds: counts.eligiblePromptIds,
+    replicateObservations: counts.replicateObservations,
+    duplicateObservations: counts.duplicates,
+    unkeyedObservations: counts.unkeyed,
+    exclusions: counts.exclusions,
+    unknownReason,
+    zeroReason,
+    conditional,
+    collection,
+    context,
+    policy,
+  });
+}
+
+/** Distinct prompt IDs across a pool of rows, for a metric counted from totals. */
+function distinctPromptIds(rows) {
+  const ids = new Set();
+  for (const row of rows || []) {
+    const id = promptIdentityOf(row);
+    if (id !== null) ids.add(id);
+  }
+  return Array.from(ids);
+}
+
+/**
+ * The R05 metric set for one engine slice.
+ *
+ * `panel` is the DECLARED eligible panel — every answered non-branded prompt —
+ * and it is the denominator of the self metrics. It is deliberately not
+ * `elicitingPool`: that pool is derived from the tracked-rival roster, and using
+ * it for a self rate is exactly what made a score move when a never-mentioned
+ * rival was added or removed (A04). The conditional metrics keep the eliciting
+ * pool, because "when they named someone, how often was it us" is a real question
+ * — it is just not the same question as "how often did they name us".
+ */
+function buildSliceMetrics({
+  engineName,
+  nonBranded,
+  panel,
+  elicitingPool,
+  selfMentions,
+  allMentions,
+  hasRivalRoster,
+  rivalRoster,
+  citationTelemetryObserved,
+  policy = ELIGIBILITY_POLICY_V1,
+  options = {},
+}) {
+  const planned = nonBranded.length;
+  const collection = { valid: panel.length, planned };
+  const window = rowsCollectionWindow(panel);
+
+  const contextFor = (rosterVersion) =>
+    measurementContext({
+      panelVersion: options.panelVersion ?? options.panel_version ?? null,
+      surfaceVersion: options.surfaceVersion ?? options.surface_version ?? null,
+      market: options.market ?? null,
+      modelPolicyVersion: options.modelPolicyVersion ?? options.model_policy_version ?? null,
+      metricVersion: METRIC_CONTRACT_VERSION,
+      policyVersion: policy.version,
+      rosterVersion,
+      engineCohort: [engineName],
+      window,
+    });
+
+  // The self metrics. No roster version: they are counted over the declared panel
+  // and must not depend on which rivals are tracked.
+  const selfContext = contextFor(null);
+  const conditionalContext = contextFor(hasRivalRoster ? rivalRoster.join("|") : null);
+  const elicitingIds = distinctPromptIds(elicitingPool);
+
+  const metrics = {
+    [METRIC_IDS.EXPOSURE]: metricFromRows({
+      metricId: METRIC_IDS.EXPOSURE,
+      rows: panel,
+      valueOf: (r) => r.visible === true,
+      context: selfContext,
+      collection,
+      policy,
+    }),
+    [METRIC_IDS.MENTION]: metricFromRows({
+      metricId: METRIC_IDS.MENTION,
+      rows: panel,
+      valueOf: (r) => (hasObservedAnswerText(r) ? r.brand_mentioned_in_text === true : null),
+      exclusionOf: () => METRIC_REASONS.TEXT_NOT_OBSERVED,
+      context: selfContext,
+      collection,
+      policy,
+    }),
+    [METRIC_IDS.CITATION]: metricFromRows({
+      metricId: METRIC_IDS.CITATION,
+      rows: panel,
+      /**
+       * Rows whose citation list was never observed contribute NEITHER side of
+       * the ratio: they are excluded with their own reason rather than counted
+       * as a confirmed "did not cite us" (the shape R2.2.2 fixed one layer down
+       * and R05-12 restates at the metric).
+       */
+      valueOf: (r) => (hasUnverifiedCitations(r) ? null : r.brand_cited === true),
+      exclusionOf: () => METRIC_REASONS.CITATION_LIST_UNOBSERVED,
+      zeroReason: METRIC_REASONS.BRAND_NOT_CITED,
+      /**
+       * Every citation list observed was empty of the brand's domain is a
+       * measurement (a real 0). NO list observed at all is not: nobody could
+       * look, so the reading is unknown rather than an uncited zero.
+       */
+      unknownReason:
+        panel.length === 0 || citationTelemetryObserved ? null : METRIC_REASONS.CITATION_TELEMETRY_ABSENT,
+      context: selfContext,
+      collection,
+      policy,
+    }),
+    [METRIC_IDS.RECOMMENDATION]: metricFromRows({
+      metricId: METRIC_IDS.RECOMMENDATION,
+      rows: panel,
+      valueOf: (r) => {
+        const reading = selfRecommendationOf(r);
+        return reading.observed ? reading.positive : null;
+      },
+      exclusionOf: () => METRIC_REASONS.NO_RECOMMENDATION_JUDGMENT,
+      unknownReason: METRIC_REASONS.NO_RECOMMENDATION_JUDGMENT,
+      context: selfContext,
+      collection,
+      policy,
+    }),
+    [METRIC_IDS.CONDITIONAL_VENDOR_SHARE]: createMetric({
+      metricId: METRIC_IDS.CONDITIONAL_VENDOR_SHARE,
+      numerator: allMentions === 0 ? null : selfMentions,
+      denominator: allMentions,
+      eligiblePromptIds: elicitingIds,
+      unknownReason: METRIC_REASONS.ELICITING_POOL_EMPTY,
+      conditional: true,
+      collection,
+      context: conditionalContext,
+      policy,
+    }),
+    [METRIC_IDS.SHARE_OF_VOICE]: createMetric({
+      metricId: METRIC_IDS.SHARE_OF_VOICE,
+      numerator: hasRivalRoster ? selfMentions : null,
+      denominator: allMentions,
+      eligiblePromptIds: hasRivalRoster ? elicitingIds : [],
+      unknownReason: hasRivalRoster ? METRIC_REASONS.ELICITING_POOL_EMPTY : METRIC_REASONS.SELF_ONLY_ROSTER,
+      conditional: true,
+      collection,
+      context: conditionalContext,
+      policy,
+    }),
+    [METRIC_IDS.COMPLETION]: metricFromRows({
+      metricId: METRIC_IDS.COMPLETION,
+      rows: nonBranded,
+      valueOf: (r) => r.answer_present === true,
+      context: selfContext,
+      policy,
+    }),
+  };
+
+  // The AIO trigger rate is only a measurement on a SERP surface: a text engine
+  // has no overview to trigger, and reporting its 0% would be a reading nobody
+  // took.
+  if (engineName === "aio") {
+    metrics[METRIC_IDS.TRIGGER] = metricFromRows({
+      metricId: METRIC_IDS.TRIGGER,
+      rows: panel,
+      valueOf: (r) => r.aio_present === true,
+      context: selfContext,
+      collection,
+      policy,
+    });
+  }
+
+  return metrics;
+}
+
 /**
  * Engine-aware summary over a slice of results from one engine.
  * Mirrors summarizeAioResults logic exactly to keep denominators consistent.
@@ -770,8 +1124,17 @@ function resolveEngineMeasurementState({
  * runMultiEngineScan's own (in-process, single-call) use below can't serve.
  * Keep this the ONLY implementation; a second copy is exactly the drift risk
  * this export closes off.
+ *
+ * @param {object[]} results  the probe rows for this engine.
+ * @param {string} engineName  "aio", "chatgpt", "gemini", "perplexity".
+ * @param {object} [options]  the R05 measurement identity the metrics are built
+ *   under: `{ panelVersion, surfaceVersion, market, modelPolicyVersion }`. Only
+ *   the caller knows these, so a field it does not supply stays NULL on the
+ *   metric — and a comparison against a reading that lacks one is refused rather
+ *   than assumed compatible. Omitting the whole argument is safe: the slice's
+ *   legacy fields and its state are unchanged either way.
  */
-export function summarizeEngineSlice(results, engineName) {
+export function summarizeEngineSlice(results, engineName, options = {}) {
   const total = results.length;
   const errored = results.filter((r) => r.error).length;
   const withAnswer = results.filter((r) => r.answer_present);
@@ -976,10 +1339,33 @@ export function summarizeEngineSlice(results, engineName) {
   // actually produce a mention. 56 answered prompts of which only 16 name any
   // vendor is a sample of 16, and reporting it as adequate is how a score gets
   // presented with false confidence.
+  //
+  // R05 KEEPS THIS FLAG AND STOPS LETTING IT BE DECORATIVE. It is true here
+  // exactly when the metric's ACTUAL conditional denominator is thin, and the
+  // contract now refuses to headline a value whose own denominator is under the
+  // v1 minimum (see buildSliceMetrics / qualificationOf). The flag itself is
+  // unchanged, because two of its consumers (the dashboard chip and
+  // summarizeEngineResults' any-engine flag) read it as written.
   const insufficientSample =
     engineName === "aio"
       ? elicitingPool.length < AIO_MIN_NON_BRANDED_WITH_AIO
       : elicitingPool.length < 5;
+
+  // R05 — the versioned metric set. See the comment above it for why the self
+  // metrics are counted over the declared panel and the conditional ones over the
+  // eliciting pool.
+  const metrics = buildSliceMetrics({
+    engineName,
+    nonBranded,
+    panel: nonBrandedWithAnswer,
+    elicitingPool,
+    selfMentions,
+    allMentions,
+    hasRivalRoster,
+    rivalRoster: trackedRivalNames(nonBrandedWithAnswer),
+    citationTelemetryObserved: citationPool.length > 0,
+    options,
+  });
 
   // R2.1.1 — say which of the four states this slice is in, and stop reporting
   // a number in the two states where there isn't one. visibilityPct is 0 by
@@ -1044,6 +1430,13 @@ export function summarizeEngineSlice(results, engineName) {
     presence_rate_pct: presenceRatePct,
     data_source_issue: dataSourceIssue,
     insufficient_sample: insufficientSample,
+    // R05 — the versioned metric DTOs, and the version of the contract they were
+    // built under. `share_of_ai_pct` above stays the CONDITIONAL index it has
+    // always been (self appearances among answers that named a vendor); the
+    // unconditional self rates live in `metrics`, where a roster change cannot
+    // reach them.
+    metric_contract_version: METRIC_CONTRACT_VERSION,
+    metrics,
   };
 }
 
@@ -1070,11 +1463,163 @@ export const ENGINE_WEIGHTS = {
 export const HEADLINE_MIN_NON_BRANDED_ANSWERS = 5;
 
 /**
- * Computes the headline "AI Visibility Index" — weighted mean of per-engine
- * share_of_ai across engines that produced ≥5 non-branded answers.
+ * The measurement identity a headline was produced under, from whatever the
+ * caller knows. Every field may be null, and a null is NOT a default: a
+ * comparison against a record that does not carry its panel/surface/market has
+ * nothing to compare (see compareHeadlines / checkComparability). Threading the
+ * real values in is the caller's job — this function only refuses to invent them.
  */
-export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS) {
-  const eligible = engineSummaries.filter(
+function headlineContext({ policy, options, cohort }) {
+  return measurementContext({
+    panelVersion: options?.panelVersion ?? options?.panel_version ?? null,
+    surfaceVersion: options?.surfaceVersion ?? options?.surface_version ?? null,
+    market: options?.market ?? null,
+    modelPolicyVersion: options?.modelPolicyVersion ?? options?.model_policy_version ?? null,
+    metricVersion: METRIC_CONTRACT_VERSION,
+    policyVersion: policy.version,
+    engineCohort: cohort,
+  });
+}
+
+/**
+ * The index metric behind a blended headline: the counted engines' exposure
+ * metrics pooled into ONE denominator, with the union of their prompt IDs.
+ *
+ * Pooling rather than averaging is what makes the gate mean anything: the v1
+ * distinct-prompt minimum and 95% collection gate are read off this metric's OWN
+ * denominator — the answers the index was actually counted over — and not off the
+ * larger pool of answers that happened to come back (A02's defect, exactly).
+ */
+function headlineMetricFor(eligible, { policy, options, cohort }) {
+  const context = headlineContext({ policy, options, cohort });
+  const metricSlices = eligible
+    .map((s) => s?.metrics?.[METRIC_IDS.EXPOSURE])
+    .filter((m) => m && typeof m === "object");
+
+  if (metricSlices.length === 0) {
+    /**
+     * A slice written before R05 carries no metric DTO, so the denominator, the
+     * distinct-prompt count and the collection completion behind its number
+     * cannot be established. That is a refusal with a reason — never a silent
+     * pass for a historical figure wearing a new gate's name.
+     */
+    return createMetric({
+      metricId: METRIC_IDS.EXPOSURE,
+      numerator: null,
+      denominator: null,
+      unknownReason: METRIC_REASONS.LEGACY_RECORD,
+      context,
+      policy,
+    });
+  }
+
+  let numerator = 0;
+  let denominator = 0;
+  let valid = 0;
+  let planned = 0;
+  let replicateObservations = 0;
+  let duplicateObservations = 0;
+  let collectionComplete = true;
+  const promptIds = new Set();
+  const exclusionCounts = new Map();
+
+  for (const metric of metricSlices) {
+    const n = measuredNumberOrNull(metric.numerator);
+    const d = measuredNumberOrNull(metric.denominator);
+    if (n !== null) numerator += n;
+    if (d !== null) denominator += d;
+
+    const replicates = measuredNumberOrNull(metric.replicate_observations);
+    if (replicates !== null) replicateObservations += replicates;
+    const duplicates = measuredNumberOrNull(metric.duplicate_observations);
+    if (duplicates !== null) duplicateObservations += duplicates;
+
+    for (const id of metric.eligible_prompt_ids || []) promptIds.add(String(id));
+    for (const exclusion of metric.exclusions || []) {
+      const prior = measuredNumberOrNull(exclusionCounts.get(exclusion.reason));
+      exclusionCounts.set(exclusion.reason, prior === null ? exclusion.count : prior + exclusion.count);
+    }
+
+    const countedValid = measuredNumberOrNull(metric.collection?.valid);
+    const countedPlanned = measuredNumberOrNull(metric.collection?.planned);
+    if (countedValid === null || countedPlanned === null) collectionComplete = false;
+    else {
+      valid += countedValid;
+      planned += countedPlanned;
+    }
+  }
+
+  return createMetric({
+    metricId: METRIC_IDS.EXPOSURE,
+    numerator,
+    denominator,
+    eligiblePromptIds: Array.from(promptIds),
+    replicateObservations,
+    duplicateObservations,
+    exclusions: Array.from(exclusionCounts.entries()).map(([reason, count]) => ({ reason, count })),
+    // One engine that cannot state its planned/valid pair makes the whole gate
+    // unverifiable, and an unverifiable gate refuses (COLLECTION_UNVERIFIED)
+    // rather than passing on the engines that did report.
+    collection: collectionComplete ? { valid, planned } : null,
+    context,
+    policy,
+  });
+}
+
+/**
+ * The headline object, assembled in ONE place so the raw index and the qualified
+ * headline can never be confused for each other.
+ *
+ * TWO NUMBERS, ON PURPOSE (R05-05). `visibility_index_pct` is the raw exploratory
+ * index — what it has always been, still persisted where it always was, still
+ * shown as an exploratory reading when the gates are not met. `headline_pct` is
+ * the QUALIFIED headline and is null below a gate, with `headline_reason` naming
+ * which gate failed. A surface that prints a headline reads the second.
+ */
+function headlineResult({ index, eligible, excludedEngines, metric }) {
+  return {
+    visibility_index_pct: index,
+    engines_counted: eligible.length,
+    counted_engines: eligible.map((s) => s.engine),
+    excluded_engines: excludedEngines,
+    /** True when the index was blended over fewer engines than ran. */
+    reweighted: excludedEngines.length > 0,
+    metric_contract_version: METRIC_CONTRACT_VERSION,
+    metric,
+    qualified: metric.qualified,
+    headline_pct: metric.qualified_pct,
+    headline_state: metric.qualified_state,
+    headline_reason: metric.qualified_reason,
+    distinct_eligible_prompts: metric.distinct_eligible_prompts,
+    eligible_prompt_ids: metric.eligible_prompt_ids,
+    valid_collection_pct: metric.valid_collection_pct,
+    collection: metric.collection,
+    replicate_observations: metric.replicate_observations,
+    policy_version: metric.policy.version,
+    context: metric.context,
+  };
+}
+
+/**
+ * Computes the headline "AI Visibility Index" — weighted mean of per-engine
+ * share_of_ai across engines that produced ≥5 non-branded answers, plus the R05
+ * qualified headline over the same engines.
+ *
+ * @param {object[]} engineSummaries  per-engine slices (summarizeEngineSlice).
+ * @param {object} [weights]  relative engine weights. RENORMALIZED over the
+ *   eligible engines, which is why `reweighted` is reported: a blend over fewer
+ *   engines is a different index, and a comparison against an older, wider one is
+ *   suppressed rather than presented as movement (R05-17).
+ * @param {object} [options]  `{ policy, panelVersion, surfaceVersion, market }` —
+ *   the measurement identity, threaded from the scan. A missing field stays null
+ *   and makes a comparison refuse.
+ */
+export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS, options = {}) {
+  const slices = (Array.isArray(engineSummaries) ? engineSummaries : []).filter(
+    (s) => s && typeof s === "object"
+  );
+
+  const eligible = slices.filter(
     (s) =>
       !s.data_source_issue &&
       s.non_branded_with_answer >= HEADLINE_MIN_NON_BRANDED_ANSWERS &&
@@ -1086,19 +1631,69 @@ export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS) {
       // prompts cleanly and still elicit no vendor at all.
       isMeasuredEngineSlice(s)
   );
+
+  const policy = options.policy ?? ELIGIBILITY_POLICY_V1;
+
+  // Why the blend is narrower than the scan: named, with the slice's own state as
+  // the reason, so "the index counts 1 of 2 engines" is explainable from the
+  // headline object rather than only from a banner computed elsewhere.
+  const excludedEngines = slices
+    .filter((s) => measuredNumberOrNull(s.non_branded_queries) > 0 && !eligible.includes(s))
+    .map((s) => ({
+      engine: s.engine,
+      state: s.state ?? null,
+      state_reason: s.state_reason ?? null,
+    }));
+
   if (eligible.length === 0) {
-    return { visibility_index_pct: null, engines_counted: 0 };
+    const none = createMetric({
+      metricId: METRIC_IDS.EXPOSURE,
+      numerator: null,
+      denominator: null,
+      unknownReason: METRIC_REASONS.NO_ELIGIBLE_OBSERVATIONS,
+      context: headlineContext({ policy, options, cohort: [] }),
+      policy,
+    });
+    return headlineResult({ index: null, eligible, excludedEngines, metric: none });
   }
-  const totalWeight = eligible.reduce(
-    (acc, s) => acc + (weights[s.engine] ?? 1),
-    0
-  );
+
+  const totalWeight = eligible.reduce((acc, s) => acc + (weights[s.engine] ?? 1), 0);
   const weightedSum = eligible.reduce(
     (acc, s) => acc + s.share_of_ai_pct * (weights[s.engine] ?? 1),
     0
   );
   const mean = Math.round((weightedSum / totalWeight) * 10) / 10;
-  return { visibility_index_pct: mean, engines_counted: eligible.length };
+
+  const metric = headlineMetricFor(eligible, {
+    policy,
+    options,
+    cohort: eligible.map((s) => s.engine),
+  });
+
+  return headlineResult({ index: mean, eligible, excludedEngines, metric });
+}
+
+/**
+ * R05.4a — may two readings be compared at all?
+ *
+ * Accepts a scan summary (or a headline, or a metric DTO) from each side and
+ * answers with the contract's verdict: a delta only when panel, surface, market,
+ * model policy, eligibility policy, metric version AND the counted engine cohort
+ * all match, otherwise `comparable: false` with the specific boundary reason and
+ * the sentence that explains it. A changed cohort is its own boundary because a
+ * reweighted blend is a different index — presenting it as movement in this one
+ * is the "silently comparable historical headline" R05-17 is about.
+ *
+ * @returns {{comparable: boolean, delta_pct: number|null, boundary_reason: string|null, detail: string|null, changed: object[]}}
+ */
+export function compareHeadlines(current, previous) {
+  return compareMetrics(metricOfReading(current), metricOfReading(previous));
+}
+
+/** A summary, a headline or a metric, as the metric DTO the comparison needs. */
+function metricOfReading(reading) {
+  if (!reading || typeof reading !== "object") return null;
+  return reading.metric ?? reading.headline_metric ?? reading;
 }
 
 /**
@@ -1874,6 +2469,34 @@ export function summarizeEngineResults(scanOutput) {
         min_non_branded_coverage: AIO_MIN_NON_BRANDED_COVERAGE,
         min_non_branded_with_aio: AIO_MIN_NON_BRANDED_WITH_AIO,
       },
+      // --- R05 — the versioned metric contract, on the persisted summary -----
+      //
+      // NOTHING ABOVE THIS LINE CHANGED MEANING, and that is deliberate. Every
+      // legacy column keeps the value it had, because history, trend deltas and
+      // the engine chips are pinned to them by tests owned outside this repair.
+      // What these fields add is the part that was missing: the qualified
+      // headline, the metric DTOs it was read from, and the measurement identity a
+      // comparison needs. They ride inside `summary_stats`, which scanWorker
+      // spreads onto the persisted record verbatim, so the API, the report and an
+      // export all read back the SAME object rather than each re-deriving it.
+      metric_contract_version: METRIC_CONTRACT_VERSION,
+      headline_metric: headline?.metric ?? null,
+      /** The qualified headline. Null below the v1 gates, with `headline_reason`. */
+      headline_pct: headline?.headline_pct ?? null,
+      headline_state: headline?.headline_state ?? null,
+      headline_reason: headline?.headline_reason ?? null,
+      headline_qualified: headline?.qualified === true,
+      /** The raw exploratory index, named so it cannot be mistaken for the above. */
+      exploratory_index_pct: headline?.visibility_index_pct ?? null,
+      distinct_eligible_prompts: headline?.distinct_eligible_prompts ?? null,
+      valid_collection_pct: headline?.valid_collection_pct ?? null,
+      counted_engines: headline?.counted_engines ?? [],
+      excluded_engines: headline?.excluded_engines ?? [],
+      headline_reweighted: headline?.reweighted === true,
+      measurement_context: headline?.context ?? null,
+      // The primary slice's metric set — the same DTOs the per-engine surfaces
+      // render, so a scan-level reader never has to open `engines` to find them.
+      metrics: aioSummary.metrics ?? Object.values(engines || {}).find((s) => s?.metrics)?.metrics ?? null,
     },
     engines,
     headline,

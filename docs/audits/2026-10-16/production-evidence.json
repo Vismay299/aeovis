@@ -1,0 +1,3055 @@
+{
+  "audit_date": "2026-10-16",
+  "checked_at_utc": "2026-10-15T18:49:30.334Z",
+  "local_credential_presence": {
+    "NEXT_PUBLIC_SUPABASE_URL": true,
+    "SUPABASE_DB_HOST": true,
+    "SUPABASE_DB_PASSWORD": true,
+    "SUPABASE_SERVICE_ROLE_KEY": false,
+    "LLM_API_KEY": true,
+    "OPENROUTER_API_KEY": false,
+    "BRIGHTDATA_API_KEY": true,
+    "OPENAI_API_KEY": false,
+    "PERPLEXITY_API_KEY": false,
+    "CRON_SECRET": false,
+    "OPERATOR_TOKEN": true
+  },
+  "tables": [
+    {
+      "table_name": "brand_briefs"
+    },
+    {
+      "table_name": "brand_metrics_daily"
+    },
+    {
+      "table_name": "brand_prompts"
+    },
+    {
+      "table_name": "citations"
+    },
+    {
+      "table_name": "content_agents"
+    },
+    {
+      "table_name": "content_events"
+    },
+    {
+      "table_name": "content_feedback"
+    },
+    {
+      "table_name": "content_items"
+    },
+    {
+      "table_name": "content_jobs"
+    },
+    {
+      "table_name": "content_lessons"
+    },
+    {
+      "table_name": "content_runs"
+    },
+    {
+      "table_name": "crawlability_audits"
+    },
+    {
+      "table_name": "customer_brand_aliases"
+    },
+    {
+      "table_name": "customer_brand_memberships"
+    },
+    {
+      "table_name": "customer_brands"
+    },
+    {
+      "table_name": "customer_team_invites"
+    },
+    {
+      "table_name": "gsc_connections"
+    },
+    {
+      "table_name": "gsc_daily"
+    },
+    {
+      "table_name": "gsc_oauth_attempts"
+    },
+    {
+      "table_name": "gsc_oauth_credentials"
+    },
+    {
+      "table_name": "gsc_sync_jobs"
+    },
+    {
+      "table_name": "knowledge_blocks"
+    },
+    {
+      "table_name": "probe_tasks"
+    },
+    {
+      "table_name": "prompt_results"
+    },
+    {
+      "table_name": "result_brands"
+    },
+    {
+      "table_name": "scan_jobs"
+    },
+    {
+      "table_name": "scan_rate_limits"
+    },
+    {
+      "table_name": "scan_runs"
+    },
+    {
+      "table_name": "scan_schedules"
+    },
+    {
+      "table_name": "scans"
+    },
+    {
+      "table_name": "schema_migrations"
+    },
+    {
+      "table_name": "system_heartbeats"
+    },
+    {
+      "table_name": "topics"
+    }
+  ],
+  "scans": [
+    {
+      "id": "699eda4b-dc9f-415a-9827-7618003ec086",
+      "brand": "trace",
+      "url": "https://tracyourstory.xyz",
+      "scanned_at": "2026-10-14T16:20:17.656Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 0,
+      "visibility_pct": "0",
+      "engines": {
+        "aio": {
+          "state": "measured_zero",
+          "engine": "aio",
+          "top_rivals": [
+            {
+              "name": "Guideflow",
+              "mentions": 2,
+              "share_pct": 33.3
+            },
+            {
+              "name": "Arcade",
+              "mentions": 1,
+              "share_pct": 16.7
+            },
+            {
+              "name": "Supademo",
+              "mentions": 1,
+              "share_pct": 16.7
+            },
+            {
+              "name": "Storylane",
+              "mentions": 1,
+              "share_pct": 16.7
+            },
+            {
+              "name": "CodeWords",
+              "mentions": 1,
+              "share_pct": 16.7
+            }
+          ],
+          "coverage_pct": 60,
+          "dead_prompts": 15,
+          "state_reason": "brand_not_visible",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 38.2,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 13,
+          "share_of_ai_pct": 0,
+          "visible_branded": 1,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 3,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": 0,
+          "branded_with_answer": 1,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 19,
+          "visible_non_branded": 0,
+          "citation_denominator": 18,
+          "elicitation_rate_pct": 16.7,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 6,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 18,
+          "citations_unverified_count": 0
+        },
+        "gemini": {
+          "state": "failed",
+          "engine": "gemini",
+          "top_rivals": [],
+          "coverage_pct": 0,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 100,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 34,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 0,
+          "visible_non_branded": 0,
+          "citation_denominator": 0,
+          "elicitation_rate_pct": null,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 0,
+          "citations_unverified_count": 0
+        },
+        "chatgpt": {
+          "state": "failed",
+          "engine": "chatgpt",
+          "top_rivals": [],
+          "coverage_pct": 0,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 100,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 34,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 0,
+          "visible_non_branded": 0,
+          "citation_denominator": 0,
+          "elicitation_rate_pct": null,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 0,
+          "citations_unverified_count": 0
+        },
+        "perplexity": {
+          "state": "failed",
+          "engine": "perplexity",
+          "top_rivals": [],
+          "coverage_pct": 0,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 100,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 34,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 0,
+          "visible_non_branded": 0,
+          "citation_denominator": 0,
+          "elicitation_rate_pct": null,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 0,
+          "citations_unverified_count": 0
+        }
+      },
+      "summary_stats": {
+        "state": "measured_zero",
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "state_reason": "brand_not_visible",
+        "total_queries": 34,
+        "error_rate_pct": 38.2,
+        "visibility_pct": 0,
+        "branded_queries": 4,
+        "errored_queries": 13,
+        "share_of_ai_pct": 0,
+        "visible_branded": 1,
+        "aio_coverage_pct": 60,
+        "branded_with_aio": 1,
+        "mention_rate_pct": 0,
+        "queries_with_aio": 19,
+        "cited_non_branded": 0,
+        "data_source_issue": true,
+        "presence_rate_pct": 0,
+        "citation_share_pct": 0,
+        "share_of_voice_pct": 0,
+        "insufficient_sample": true,
+        "non_branded_queries": 30,
+        "visible_non_branded": 0,
+        "citation_denominator": 18,
+        "non_branded_with_aio": 18,
+        "mentioned_non_branded": 0,
+        "branded_visibility_pct": 100,
+        "citations_unverified_count": 0
+      }
+    },
+    {
+      "id": "3f5febc1-a30a-40a4-aac5-1b5540d9f5b3",
+      "brand": "trace",
+      "url": "https://tracyourstory.xyz",
+      "scanned_at": "2026-10-14T07:06:28.321Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 0,
+      "visibility_pct": null,
+      "engines": {
+        "aio": {
+          "state": "failed",
+          "engine": "aio",
+          "top_rivals": [
+            {
+              "name": "Arcade",
+              "mentions": 1,
+              "share_pct": 25
+            },
+            {
+              "name": "Supademo",
+              "mentions": 1,
+              "share_pct": 25
+            },
+            {
+              "name": "Guideflow",
+              "mentions": 1,
+              "share_pct": 25
+            },
+            {
+              "name": "Storylane",
+              "mentions": 1,
+              "share_pct": 25
+            }
+          ],
+          "coverage_pct": 10,
+          "dead_prompts": 2,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 88.2,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 30,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 1,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": 0,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 3,
+          "visible_non_branded": 0,
+          "citation_denominator": 3,
+          "elicitation_rate_pct": 33.3,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 4,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 3,
+          "citations_unverified_count": 0
+        },
+        "gemini": {
+          "state": "failed",
+          "engine": "gemini",
+          "top_rivals": [],
+          "coverage_pct": 0,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 100,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 34,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 0,
+          "visible_non_branded": 0,
+          "citation_denominator": 0,
+          "elicitation_rate_pct": null,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 0,
+          "citations_unverified_count": 0
+        },
+        "chatgpt": {
+          "state": "failed",
+          "engine": "chatgpt",
+          "top_rivals": [],
+          "coverage_pct": 26.7,
+          "dead_prompts": 8,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 76.5,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 26,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 8,
+          "visible_non_branded": 0,
+          "citation_denominator": 8,
+          "elicitation_rate_pct": 0,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 8,
+          "citations_unverified_count": 0
+        },
+        "perplexity": {
+          "state": "failed",
+          "engine": "perplexity",
+          "top_rivals": [],
+          "coverage_pct": 0,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 100,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 34,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 0,
+          "visible_non_branded": 0,
+          "citation_denominator": 0,
+          "elicitation_rate_pct": null,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 0,
+          "citations_unverified_count": 0
+        }
+      },
+      "summary_stats": {
+        "state": "failed",
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "state_reason": "high_error_rate",
+        "total_queries": 34,
+        "error_rate_pct": 88.2,
+        "visibility_pct": null,
+        "branded_queries": 4,
+        "errored_queries": 30,
+        "share_of_ai_pct": null,
+        "visible_branded": 0,
+        "aio_coverage_pct": 10,
+        "branded_with_aio": 0,
+        "mention_rate_pct": 0,
+        "queries_with_aio": 3,
+        "cited_non_branded": 0,
+        "data_source_issue": true,
+        "presence_rate_pct": 0,
+        "citation_share_pct": 0,
+        "share_of_voice_pct": 0,
+        "insufficient_sample": true,
+        "non_branded_queries": 30,
+        "visible_non_branded": 0,
+        "citation_denominator": 3,
+        "non_branded_with_aio": 3,
+        "mentioned_non_branded": 0,
+        "branded_visibility_pct": null,
+        "citations_unverified_count": 0
+      }
+    },
+    {
+      "id": "7faf2a1d-f550-4f16-ae3c-9b3f63c54f57",
+      "brand": "trace",
+      "url": "https://tracyourstory.xyz",
+      "scanned_at": "2026-10-13T18:48:27.836Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 0,
+      "visibility_pct": "0",
+      "engines": {
+        "aio": {
+          "state": "measured_zero",
+          "engine": "aio",
+          "top_rivals": [
+            {
+              "name": "Arcade",
+              "mentions": 1,
+              "share_pct": 10
+            },
+            {
+              "name": "Supademo",
+              "mentions": 1,
+              "share_pct": 10
+            },
+            {
+              "name": "Guideflow",
+              "mentions": 1,
+              "share_pct": 10
+            },
+            {
+              "name": "Storylane",
+              "mentions": 1,
+              "share_pct": 10
+            },
+            {
+              "name": "Automated Release Notes",
+              "mentions": 1,
+              "share_pct": 10
+            },
+            {
+              "name": "PersonaBox",
+              "mentions": 1,
+              "share_pct": 10
+            },
+            {
+              "name": "ReleaseNotes.io",
+              "mentions": 1,
+              "share_pct": 10
+            },
+            {
+              "name": "Announcify",
+              "mentions": 1,
+              "share_pct": 10
+            },
+            {
+              "name": "MindBacklog",
+              "mentions": 1,
+              "share_pct": 10
+            },
+            {
+              "name": "CodeWords",
+              "mentions": 1,
+              "share_pct": 10
+            }
+          ],
+          "coverage_pct": 50,
+          "dead_prompts": 12,
+          "state_reason": "brand_not_visible",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 47.1,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 16,
+          "share_of_ai_pct": 0,
+          "visible_branded": 1,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 3,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": 0,
+          "branded_with_answer": 1,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 16,
+          "visible_non_branded": 0,
+          "citation_denominator": 15,
+          "elicitation_rate_pct": 20,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 10,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 15,
+          "citations_unverified_count": 0
+        },
+        "gemini": {
+          "state": "measured_zero",
+          "engine": "gemini",
+          "top_rivals": [
+            {
+              "name": "Arcade",
+              "mentions": 2,
+              "share_pct": 33.3
+            },
+            {
+              "name": "PersonaBox",
+              "mentions": 2,
+              "share_pct": 33.3
+            },
+            {
+              "name": "Supademo",
+              "mentions": 1,
+              "share_pct": 16.7
+            },
+            {
+              "name": "ReleaseNotes.io",
+              "mentions": 1,
+              "share_pct": 16.7
+            }
+          ],
+          "coverage_pct": 100,
+          "dead_prompts": 26,
+          "state_reason": "brand_not_visible",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 0,
+          "visible_branded": 4,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 4,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": 0,
+          "branded_with_answer": 4,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 0,
+          "citation_denominator": 27,
+          "elicitation_rate_pct": 13.3,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 6,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 30,
+          "citations_unverified_count": 3
+        },
+        "chatgpt": {
+          "state": "not_assessed",
+          "engine": "chatgpt",
+          "top_rivals": [],
+          "coverage_pct": 100,
+          "dead_prompts": 30,
+          "state_reason": "empty_eliciting_pool",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": null,
+          "visible_branded": 4,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 4,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 0,
+          "citation_denominator": 30,
+          "elicitation_rate_pct": 0,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 30,
+          "citations_unverified_count": 0
+        },
+        "perplexity": {
+          "state": "measured_zero",
+          "engine": "perplexity",
+          "top_rivals": [
+            {
+              "name": "Automated Release Notes",
+              "mentions": 1,
+              "share_pct": 50
+            },
+            {
+              "name": "ReleaseNotes.io",
+              "mentions": 1,
+              "share_pct": 50
+            }
+          ],
+          "coverage_pct": 100,
+          "dead_prompts": 29,
+          "state_reason": "brand_not_visible",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 0,
+          "visible_branded": 4,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 1,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": 0,
+          "branded_with_answer": 4,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 0,
+          "citation_denominator": 30,
+          "elicitation_rate_pct": 3.3,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 2,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 30,
+          "citations_unverified_count": 0
+        }
+      },
+      "summary_stats": {
+        "state": "measured_zero",
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "state_reason": "brand_not_visible",
+        "total_queries": 34,
+        "error_rate_pct": 47.1,
+        "visibility_pct": 0,
+        "branded_queries": 4,
+        "errored_queries": 16,
+        "share_of_ai_pct": 0,
+        "visible_branded": 1,
+        "aio_coverage_pct": 50,
+        "branded_with_aio": 1,
+        "mention_rate_pct": 0,
+        "queries_with_aio": 16,
+        "cited_non_branded": 0,
+        "data_source_issue": false,
+        "presence_rate_pct": 0,
+        "citation_share_pct": 0,
+        "share_of_voice_pct": 0,
+        "insufficient_sample": true,
+        "non_branded_queries": 30,
+        "visible_non_branded": 0,
+        "citation_denominator": 15,
+        "non_branded_with_aio": 15,
+        "mentioned_non_branded": 0,
+        "branded_visibility_pct": 100,
+        "citations_unverified_count": 0
+      }
+    },
+    {
+      "id": "1ee243a8-81f3-490c-91cf-78f83f8e8770",
+      "brand": "trace",
+      "url": "https://tracyourstory.xyz",
+      "scanned_at": "2026-10-13T18:13:23.132Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 0,
+      "visibility_pct": null,
+      "engines": {
+        "aio": {
+          "state": "failed",
+          "engine": "aio",
+          "top_rivals": [],
+          "coverage_pct": 33.3,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 61.8,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 21,
+          "share_of_ai_pct": null,
+          "visible_branded": 2,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 10,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 2,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 12,
+          "visible_non_branded": 0,
+          "citation_denominator": 10,
+          "elicitation_rate_pct": 100,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 10,
+          "citations_unverified_count": 0
+        },
+        "gemini": {
+          "state": "failed",
+          "engine": "gemini",
+          "top_rivals": [],
+          "coverage_pct": 0,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 100,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 34,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 0,
+          "visible_non_branded": 0,
+          "citation_denominator": 0,
+          "elicitation_rate_pct": null,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 0,
+          "citations_unverified_count": 0
+        },
+        "chatgpt": {
+          "state": "failed",
+          "engine": "chatgpt",
+          "top_rivals": [],
+          "coverage_pct": 0,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 100,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 34,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 0,
+          "visible_non_branded": 0,
+          "citation_denominator": 0,
+          "elicitation_rate_pct": null,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 0,
+          "citations_unverified_count": 0
+        },
+        "perplexity": {
+          "state": "failed",
+          "engine": "perplexity",
+          "top_rivals": [],
+          "coverage_pct": 0,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 100,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 34,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 0,
+          "visible_non_branded": 0,
+          "citation_denominator": 0,
+          "elicitation_rate_pct": null,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 0,
+          "citations_unverified_count": 0
+        }
+      },
+      "summary_stats": {
+        "state": "failed",
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "state_reason": "high_error_rate",
+        "total_queries": 34,
+        "error_rate_pct": 61.8,
+        "visibility_pct": null,
+        "branded_queries": 4,
+        "errored_queries": 21,
+        "share_of_ai_pct": null,
+        "visible_branded": 2,
+        "aio_coverage_pct": 33.3,
+        "branded_with_aio": 2,
+        "mention_rate_pct": 0,
+        "queries_with_aio": 12,
+        "cited_non_branded": 0,
+        "data_source_issue": true,
+        "presence_rate_pct": 0,
+        "citation_share_pct": 0,
+        "share_of_voice_pct": null,
+        "insufficient_sample": true,
+        "non_branded_queries": 30,
+        "visible_non_branded": 0,
+        "citation_denominator": 10,
+        "non_branded_with_aio": 10,
+        "mentioned_non_branded": 0,
+        "branded_visibility_pct": 100,
+        "citations_unverified_count": 0
+      }
+    },
+    {
+      "id": "86c96457-bc6b-4a49-97a7-97f0e005d334",
+      "brand": "trace",
+      "url": "https://tracyourstory.xyz",
+      "scanned_at": "2026-10-13T18:01:17.077Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 0,
+      "visibility_pct": "0",
+      "engines": {
+        "aio": {
+          "state": "failed",
+          "engine": "aio",
+          "top_rivals": [],
+          "coverage_pct": 30,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 73.5,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 25,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 9,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 9,
+          "visible_non_branded": 0,
+          "citation_denominator": 9,
+          "elicitation_rate_pct": 100,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 9,
+          "citations_unverified_count": 0
+        },
+        "gemini": {
+          "state": "measured_zero",
+          "engine": "gemini",
+          "top_rivals": [],
+          "coverage_pct": 93.3,
+          "dead_prompts": 0,
+          "state_reason": "brand_not_visible",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 17.6,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 6,
+          "share_of_ai_pct": 0,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 28,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 28,
+          "visible_non_branded": 0,
+          "citation_denominator": 23,
+          "elicitation_rate_pct": 100,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 28,
+          "citations_unverified_count": 5
+        },
+        "chatgpt": {
+          "state": "measured_zero",
+          "engine": "chatgpt",
+          "top_rivals": [],
+          "coverage_pct": 100,
+          "dead_prompts": 0,
+          "state_reason": "brand_not_visible",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 0,
+          "visible_branded": 4,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 30,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 4,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 0,
+          "citation_denominator": 30,
+          "elicitation_rate_pct": 100,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 30,
+          "citations_unverified_count": 0
+        },
+        "perplexity": {
+          "state": "failed",
+          "engine": "perplexity",
+          "top_rivals": [],
+          "coverage_pct": 0,
+          "dead_prompts": 0,
+          "state_reason": "high_error_rate",
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 100,
+          "visibility_pct": null,
+          "branded_queries": 4,
+          "errored_queries": 34,
+          "share_of_ai_pct": null,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": true,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 0,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 0,
+          "visible_non_branded": 0,
+          "citation_denominator": 0,
+          "elicitation_rate_pct": null,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 0,
+          "citations_unverified_count": 0
+        }
+      },
+      "summary_stats": {
+        "state": "failed",
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "state_reason": "high_error_rate",
+        "total_queries": 34,
+        "error_rate_pct": 73.5,
+        "visibility_pct": 0,
+        "branded_queries": 4,
+        "errored_queries": 25,
+        "share_of_ai_pct": null,
+        "visible_branded": 0,
+        "aio_coverage_pct": 30,
+        "branded_with_aio": 0,
+        "mention_rate_pct": 0,
+        "queries_with_aio": 9,
+        "cited_non_branded": 0,
+        "data_source_issue": true,
+        "presence_rate_pct": 0,
+        "citation_share_pct": 0,
+        "share_of_voice_pct": null,
+        "insufficient_sample": true,
+        "non_branded_queries": 30,
+        "visible_non_branded": 0,
+        "citation_denominator": 9,
+        "non_branded_with_aio": 9,
+        "mentioned_non_branded": 0,
+        "branded_visibility_pct": null,
+        "citations_unverified_count": 0
+      }
+    },
+    {
+      "id": "f63f8885-0140-4640-92dc-9a118306195a",
+      "brand": "Italica",
+      "url": "https://italicatiles.com",
+      "scanned_at": "2026-09-16T03:49:11.491Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 0,
+      "visibility_pct": "0",
+      "engines": null,
+      "summary_stats": {
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "total_queries": 34,
+        "error_rate_pct": 5.9,
+        "visibility_pct": 0,
+        "branded_queries": 4,
+        "errored_queries": 2,
+        "share_of_ai_pct": 0,
+        "visible_branded": 3,
+        "aio_coverage_pct": 86.7,
+        "branded_with_aio": 3,
+        "mention_rate_pct": 0,
+        "queries_with_aio": 29,
+        "cited_non_branded": 0,
+        "data_source_issue": false,
+        "presence_rate_pct": 0,
+        "citation_share_pct": 0,
+        "share_of_voice_pct": 0,
+        "insufficient_sample": false,
+        "non_branded_queries": 30,
+        "visible_non_branded": 0,
+        "non_branded_with_aio": 26,
+        "rank_not_cited_count": 0,
+        "mentioned_non_branded": 0,
+        "branded_visibility_pct": 100
+      }
+    },
+    {
+      "id": "00f6c4d2-2577-429d-9f13-713ebb34ae89",
+      "brand": "zouk",
+      "url": "https://zouk.co.in/",
+      "scanned_at": "2026-07-30T17:29:09.013Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 8,
+      "visibility_pct": "29.6",
+      "engines": {
+        "aio": {
+          "engine": "aio",
+          "top_rivals": [],
+          "coverage_pct": 90,
+          "dead_prompts": 0,
+          "self_mentions": 8,
+          "total_queries": 34,
+          "error_rate_pct": 5.9,
+          "visibility_pct": 29.6,
+          "branded_queries": 4,
+          "errored_queries": 2,
+          "share_of_ai_pct": 29.6,
+          "visible_branded": 3,
+          "cited_non_branded": 3,
+          "data_source_issue": false,
+          "eliciting_queries": 27,
+          "presence_rate_pct": 26.7,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 3,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 30,
+          "visible_non_branded": 8,
+          "elicitation_rate_pct": 100,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 8,
+          "mentioned_non_branded": 8,
+          "non_branded_with_answer": 27
+        },
+        "perplexity": {
+          "engine": "perplexity",
+          "top_rivals": [],
+          "coverage_pct": 100,
+          "dead_prompts": 0,
+          "self_mentions": 4,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 16.7,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 16.7,
+          "visible_branded": 4,
+          "cited_non_branded": 3,
+          "data_source_issue": false,
+          "eliciting_queries": 30,
+          "presence_rate_pct": 16.7,
+          "share_of_voice_pct": null,
+          "branded_with_answer": 4,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 5,
+          "elicitation_rate_pct": 100,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 4,
+          "mentioned_non_branded": 4,
+          "non_branded_with_answer": 30
+        }
+      },
+      "summary_stats": {
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "total_queries": 34,
+        "error_rate_pct": 5.9,
+        "visibility_pct": 29.6,
+        "branded_queries": 4,
+        "errored_queries": 2,
+        "share_of_ai_pct": 29.6,
+        "visible_branded": 3,
+        "aio_coverage_pct": 90,
+        "branded_with_aio": 3,
+        "mention_rate_pct": 29.6,
+        "queries_with_aio": 30,
+        "cited_non_branded": 3,
+        "data_source_issue": false,
+        "presence_rate_pct": 26.7,
+        "citation_share_pct": 11.1,
+        "insufficient_sample": false,
+        "non_branded_queries": 30,
+        "visible_non_branded": 8,
+        "non_branded_with_aio": 27,
+        "mentioned_non_branded": 8,
+        "branded_visibility_pct": 100
+      }
+    },
+    {
+      "id": "f1ef17a5-3517-4c3f-97a4-682586281343",
+      "brand": "Italica",
+      "url": "https://italicatiles.com",
+      "scanned_at": "2026-07-30T16:40:37.873Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 0,
+      "visibility_pct": "0",
+      "engines": {
+        "aio": {
+          "engine": "aio",
+          "top_rivals": [],
+          "coverage_pct": 86.7,
+          "dead_prompts": 0,
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 11.8,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 4,
+          "share_of_ai_pct": 0,
+          "visible_branded": 2,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 26,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": 0,
+          "branded_with_answer": 3,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 29,
+          "visible_non_branded": 0,
+          "elicitation_rate_pct": 100,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 26
+        },
+        "perplexity": {
+          "engine": "perplexity",
+          "top_rivals": [],
+          "coverage_pct": 100,
+          "dead_prompts": 0,
+          "self_mentions": 1,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 3.3,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 3.3,
+          "visible_branded": 4,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 30,
+          "presence_rate_pct": 3.3,
+          "share_of_voice_pct": 100,
+          "branded_with_answer": 4,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 1,
+          "elicitation_rate_pct": 100,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 1,
+          "mentioned_non_branded": 1,
+          "non_branded_with_answer": 30
+        }
+      },
+      "summary_stats": {
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "total_queries": 34,
+        "error_rate_pct": 11.8,
+        "visibility_pct": 0,
+        "branded_queries": 4,
+        "errored_queries": 4,
+        "share_of_ai_pct": 0,
+        "visible_branded": 2,
+        "aio_coverage_pct": 86.7,
+        "branded_with_aio": 3,
+        "mention_rate_pct": 0,
+        "queries_with_aio": 29,
+        "cited_non_branded": 0,
+        "data_source_issue": false,
+        "presence_rate_pct": 0,
+        "citation_share_pct": 0,
+        "insufficient_sample": false,
+        "non_branded_queries": 30,
+        "visible_non_branded": 0,
+        "non_branded_with_aio": 26,
+        "mentioned_non_branded": 0,
+        "branded_visibility_pct": 66.7
+      }
+    },
+    {
+      "id": "a65c56e5-b69a-49e6-85bc-1a15dc958741",
+      "brand": "Italica",
+      "url": "https://italicatiles.com",
+      "scanned_at": "2026-07-30T16:33:37.884Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 0,
+      "visibility_pct": "0",
+      "engines": {
+        "aio": {
+          "engine": "aio",
+          "top_rivals": [],
+          "coverage_pct": 90,
+          "dead_prompts": 27,
+          "self_mentions": 0,
+          "total_queries": 34,
+          "error_rate_pct": 8.8,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 3,
+          "share_of_ai_pct": 0,
+          "visible_branded": 2,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 0,
+          "presence_rate_pct": 0,
+          "share_of_voice_pct": 0,
+          "branded_with_answer": 3,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 30,
+          "visible_non_branded": 0,
+          "elicitation_rate_pct": 0,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 27
+        },
+        "perplexity": {
+          "engine": "perplexity",
+          "top_rivals": [],
+          "coverage_pct": 100,
+          "dead_prompts": 29,
+          "self_mentions": 1,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 100,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 100,
+          "visible_branded": 4,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "eliciting_queries": 1,
+          "presence_rate_pct": 3.3,
+          "share_of_voice_pct": 100,
+          "branded_with_answer": 4,
+          "insufficient_sample": true,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 1,
+          "elicitation_rate_pct": 3.3,
+          "rank_not_cited_count": 0,
+          "total_brand_mentions": 1,
+          "mentioned_non_branded": 1,
+          "non_branded_with_answer": 30
+        }
+      },
+      "summary_stats": {
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "total_queries": 34,
+        "error_rate_pct": 8.8,
+        "visibility_pct": 0,
+        "branded_queries": 4,
+        "errored_queries": 3,
+        "share_of_ai_pct": 0,
+        "visible_branded": 2,
+        "aio_coverage_pct": 90,
+        "branded_with_aio": 3,
+        "mention_rate_pct": 0,
+        "queries_with_aio": 30,
+        "cited_non_branded": 0,
+        "data_source_issue": false,
+        "presence_rate_pct": 0,
+        "citation_share_pct": 0,
+        "insufficient_sample": true,
+        "non_branded_queries": 30,
+        "visible_non_branded": 0,
+        "non_branded_with_aio": 27,
+        "mentioned_non_branded": 0,
+        "branded_visibility_pct": 66.7
+      }
+    },
+    {
+      "id": "36a91fbb-fdc0-4d9f-a003-8723dfcf374d",
+      "brand": "Italica",
+      "url": "https://italicatiles.com",
+      "scanned_at": "2026-07-24T06:03:24.781Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 0,
+      "visibility_pct": "0",
+      "engines": {
+        "aio": {
+          "engine": "aio",
+          "coverage_pct": 86.7,
+          "total_queries": 34,
+          "error_rate_pct": 11.8,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 4,
+          "share_of_ai_pct": 0,
+          "visible_branded": 0,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "presence_rate_pct": 0,
+          "branded_with_answer": 3,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 29,
+          "visible_non_branded": 0,
+          "rank_not_cited_count": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 26
+        },
+        "perplexity": {
+          "engine": "perplexity",
+          "coverage_pct": 100,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 0,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 0,
+          "visible_branded": 4,
+          "cited_non_branded": 0,
+          "data_source_issue": false,
+          "presence_rate_pct": 0,
+          "branded_with_answer": 4,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 0,
+          "rank_not_cited_count": 0,
+          "mentioned_non_branded": 0,
+          "non_branded_with_answer": 30
+        }
+      },
+      "summary_stats": {
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "total_queries": 34,
+        "error_rate_pct": 11.8,
+        "visibility_pct": 0,
+        "branded_queries": 4,
+        "errored_queries": 4,
+        "share_of_ai_pct": 0,
+        "visible_branded": 0,
+        "aio_coverage_pct": 86.7,
+        "branded_with_aio": 3,
+        "mention_rate_pct": 0,
+        "queries_with_aio": 29,
+        "cited_non_branded": 0,
+        "data_source_issue": false,
+        "presence_rate_pct": 0,
+        "citation_share_pct": 0,
+        "insufficient_sample": false,
+        "non_branded_queries": 30,
+        "visible_non_branded": 0,
+        "non_branded_with_aio": 26,
+        "mentioned_non_branded": 0,
+        "branded_visibility_pct": 0
+      }
+    },
+    {
+      "id": "70f27a9d-1881-4876-8311-faa5d2c7b46f",
+      "brand": "P03 Verify Retry",
+      "url": "wikipedia.org",
+      "scanned_at": "2026-07-23T21:54:37.050Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 4,
+      "visibility_pct": "22.2",
+      "engines": {
+        "aio": {
+          "engine": "aio",
+          "coverage_pct": 60,
+          "total_queries": 34,
+          "error_rate_pct": 32.4,
+          "visibility_pct": 22.2,
+          "branded_queries": 4,
+          "errored_queries": 11,
+          "share_of_ai_pct": 22.2,
+          "visible_branded": 2,
+          "cited_non_branded": 3,
+          "data_source_issue": false,
+          "presence_rate_pct": 13.3,
+          "branded_with_answer": 4,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 22,
+          "visible_non_branded": 4,
+          "rank_not_cited_count": 0,
+          "mentioned_non_branded": 3,
+          "non_branded_with_answer": 18
+        },
+        "perplexity": {
+          "engine": "perplexity",
+          "coverage_pct": 100,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 30,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 30,
+          "visible_branded": 2,
+          "cited_non_branded": 8,
+          "data_source_issue": false,
+          "presence_rate_pct": 30,
+          "branded_with_answer": 4,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 9,
+          "rank_not_cited_count": 0,
+          "mentioned_non_branded": 4,
+          "non_branded_with_answer": 30
+        }
+      },
+      "summary_stats": {
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "total_queries": 34,
+        "error_rate_pct": 32.4,
+        "visibility_pct": 22.2,
+        "branded_queries": 4,
+        "errored_queries": 11,
+        "share_of_ai_pct": 22.2,
+        "visible_branded": 2,
+        "aio_coverage_pct": 60,
+        "branded_with_aio": 4,
+        "mention_rate_pct": 16.7,
+        "queries_with_aio": 22,
+        "cited_non_branded": 3,
+        "data_source_issue": false,
+        "presence_rate_pct": 13.3,
+        "citation_share_pct": 16.7,
+        "insufficient_sample": false,
+        "non_branded_queries": 30,
+        "visible_non_branded": 4,
+        "non_branded_with_aio": 18,
+        "mentioned_non_branded": 3,
+        "branded_visibility_pct": 50
+      }
+    },
+    {
+      "id": "cf09c378-f607-4b06-aaae-9df6f880c191",
+      "brand": "italica",
+      "url": "https://italicatiles.com/",
+      "scanned_at": "2026-07-23T05:44:23.861Z",
+      "prompts_tracked": 30,
+      "prompts_mentioned": 2,
+      "visibility_pct": "6.9",
+      "engines": {
+        "aio": {
+          "engine": "aio",
+          "coverage_pct": 96.7,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 6.9,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 6.9,
+          "visible_branded": 3,
+          "cited_non_branded": 2,
+          "data_source_issue": false,
+          "presence_rate_pct": 6.7,
+          "branded_with_answer": 4,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 33,
+          "visible_non_branded": 2,
+          "rank_not_cited_count": 0,
+          "mentioned_non_branded": 1,
+          "non_branded_with_answer": 29
+        },
+        "perplexity": {
+          "engine": "perplexity",
+          "coverage_pct": 100,
+          "total_queries": 34,
+          "error_rate_pct": 0,
+          "visibility_pct": 10,
+          "branded_queries": 4,
+          "errored_queries": 0,
+          "share_of_ai_pct": 10,
+          "visible_branded": 4,
+          "cited_non_branded": 2,
+          "data_source_issue": false,
+          "presence_rate_pct": 10,
+          "branded_with_answer": 4,
+          "insufficient_sample": false,
+          "non_branded_queries": 30,
+          "queries_with_answer": 34,
+          "visible_non_branded": 3,
+          "rank_not_cited_count": 0,
+          "mentioned_non_branded": 1,
+          "non_branded_with_answer": 30
+        }
+      },
+      "summary_stats": {
+        "thresholds": {
+          "error_rate_limit_pct": 50,
+          "min_non_branded_coverage": 0.15,
+          "min_non_branded_with_aio": 5
+        },
+        "total_queries": 34,
+        "error_rate_pct": 0,
+        "visibility_pct": 6.9,
+        "branded_queries": 4,
+        "errored_queries": 0,
+        "share_of_ai_pct": 6.9,
+        "visible_branded": 3,
+        "aio_coverage_pct": 96.7,
+        "branded_with_aio": 4,
+        "mention_rate_pct": 3.4,
+        "queries_with_aio": 33,
+        "cited_non_branded": 2,
+        "data_source_issue": false,
+        "presence_rate_pct": 6.7,
+        "citation_share_pct": 6.9,
+        "insufficient_sample": false,
+        "non_branded_queries": 30,
+        "visible_non_branded": 2,
+        "non_branded_with_aio": 29,
+        "mentioned_non_branded": 1,
+        "branded_visibility_pct": 75
+      }
+    }
+  ],
+  "recent_jobs": [
+    {
+      "id": "0a5e6fe0-8ff7-44bf-bf65-bc46cf66a3c3",
+      "result_id": "699eda4b-dc9f-415a-9827-7618003ec086",
+      "status": "complete",
+      "created_at": "2026-10-14T16:12:18.555Z",
+      "heartbeat_at": "2026-10-14T16:20:27.929Z",
+      "attempts": 0,
+      "engines": [
+        "aio",
+        "chatgpt",
+        "gemini",
+        "perplexity"
+      ],
+      "prompt_target": 30,
+      "checkpoint_queries": 34,
+      "geo": "in",
+      "failure_category": null
+    },
+    {
+      "id": "9ab58bc2-f209-4265-a954-c75bc273e623",
+      "result_id": "3f5febc1-a30a-40a4-aac5-1b5540d9f5b3",
+      "status": "complete",
+      "created_at": "2026-10-14T07:02:52.917Z",
+      "heartbeat_at": "2026-10-14T07:06:36.450Z",
+      "attempts": 0,
+      "engines": [
+        "aio",
+        "chatgpt",
+        "gemini",
+        "perplexity"
+      ],
+      "prompt_target": 30,
+      "checkpoint_queries": 34,
+      "geo": "in",
+      "failure_category": null
+    },
+    {
+      "id": "01deeb0c-09b1-498e-b7bd-489a31f6c55d",
+      "result_id": "7faf2a1d-f550-4f16-ae3c-9b3f63c54f57",
+      "status": "complete",
+      "created_at": "2026-10-13T18:38:52.410Z",
+      "heartbeat_at": "2026-10-13T18:48:43.736Z",
+      "attempts": 0,
+      "engines": [
+        "aio",
+        "chatgpt",
+        "gemini",
+        "perplexity"
+      ],
+      "prompt_target": 30,
+      "checkpoint_queries": 34,
+      "geo": "in",
+      "failure_category": null
+    },
+    {
+      "id": "6f231b37-345a-43e9-9faf-d35b095e5f42",
+      "result_id": "1ee243a8-81f3-490c-91cf-78f83f8e8770",
+      "status": "complete",
+      "created_at": "2026-10-13T18:07:52.446Z",
+      "heartbeat_at": "2026-10-13T18:13:32.084Z",
+      "attempts": 0,
+      "engines": [
+        "aio",
+        "chatgpt",
+        "gemini",
+        "perplexity"
+      ],
+      "prompt_target": 30,
+      "checkpoint_queries": 34,
+      "geo": "in",
+      "failure_category": null
+    },
+    {
+      "id": "916d7314-08c3-4f8f-8348-90588b6b3d0f",
+      "result_id": "86c96457-bc6b-4a49-97a7-97f0e005d334",
+      "status": "complete",
+      "created_at": "2026-10-13T17:54:27.067Z",
+      "heartbeat_at": "2026-10-13T18:02:41.976Z",
+      "attempts": 0,
+      "engines": [
+        "aio",
+        "chatgpt",
+        "gemini",
+        "perplexity"
+      ],
+      "prompt_target": 30,
+      "checkpoint_queries": 34,
+      "geo": "in",
+      "failure_category": null
+    },
+    {
+      "id": "1be08dd3-e22a-40cb-a0ef-8a2ed4218a36",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-13T17:47:29.921Z",
+      "heartbeat_at": "2026-10-13T17:49:34.031Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "610d488a-e2fe-4c46-8192-cac0fecaaf53",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-13T04:05:44.245Z",
+      "heartbeat_at": "2026-10-13T04:07:16.323Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "0bef011b-7112-407c-8bfb-da25a38df006",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-12T07:44:05.596Z",
+      "heartbeat_at": "2026-10-12T07:46:18.481Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "b80578cf-55fe-4a0c-bd5d-8ca73afe934b",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-12T07:15:13.947Z",
+      "heartbeat_at": "2026-10-12T07:17:21.098Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "08a35fb0-e580-491d-9a5e-68a52f6e98d0",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-12T07:01:13.737Z",
+      "heartbeat_at": "2026-10-12T07:02:38.328Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "32bf4243-b2c9-4eae-9bb0-3253939979ed",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-12T06:41:00.957Z",
+      "heartbeat_at": "2026-10-12T06:42:24.926Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "3bbe96b3-b3d6-427f-9103-0039a4a042a2",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-11T12:26:07.328Z",
+      "heartbeat_at": "2026-10-11T12:27:30.665Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "19456983-18e2-4688-a048-cc158a4e2866",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-11T12:15:55.804Z",
+      "heartbeat_at": "2026-10-11T12:17:18.245Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "083942cb-721a-4798-95e1-ad57ae1261be",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-11T11:40:16.000Z",
+      "heartbeat_at": "2026-10-11T11:41:39.987Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "7cde5ca1-392b-4674-8cad-49fbdaf2f731",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-10-07T10:05:00.285Z",
+      "heartbeat_at": "2026-10-07T10:06:12.867Z",
+      "attempts": 0,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "other_failure"
+    },
+    {
+      "id": "e00af0d1-8157-491e-b18b-ef5dbb45d72f",
+      "result_id": "f63f8885-0140-4640-92dc-9a118306195a",
+      "status": "complete",
+      "created_at": "2026-09-16T03:42:59.124Z",
+      "heartbeat_at": "2026-09-16T03:50:39.963Z",
+      "attempts": 0,
+      "engines": [
+        "aio"
+      ],
+      "prompt_target": 30,
+      "checkpoint_queries": 34,
+      "geo": "in",
+      "failure_category": null
+    },
+    {
+      "id": "8e25a0fe-660f-40e8-a809-3c2c9df0969a",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-09-15T13:54:12.792Z",
+      "heartbeat_at": "2026-09-16T00:29:58.317Z",
+      "attempts": 3,
+      "engines": [
+        "aio"
+      ],
+      "prompt_target": 30,
+      "checkpoint_queries": 34,
+      "geo": "in",
+      "failure_category": "max_attempts"
+    },
+    {
+      "id": "04869d3b-d682-4b53-8dc1-7574402fd5af",
+      "result_id": null,
+      "status": "failed",
+      "created_at": "2026-09-03T06:57:46.815Z",
+      "heartbeat_at": "2026-09-17T00:29:58.200Z",
+      "attempts": 3,
+      "engines": null,
+      "prompt_target": null,
+      "checkpoint_queries": null,
+      "geo": null,
+      "failure_category": "max_attempts"
+    },
+    {
+      "id": "97b834c7-7a41-41fd-9d83-351f015a7332",
+      "result_id": "00f6c4d2-2577-429d-9f13-713ebb34ae89",
+      "status": "complete",
+      "created_at": "2026-07-30T17:13:20.112Z",
+      "heartbeat_at": "2026-07-30T17:29:24.255Z",
+      "attempts": 0,
+      "engines": [
+        "aio",
+        "perplexity"
+      ],
+      "prompt_target": null,
+      "checkpoint_queries": 34,
+      "geo": null,
+      "failure_category": null
+    },
+    {
+      "id": "3a0059c2-07c5-415e-86c8-07ffd64ce1c8",
+      "result_id": "f1ef17a5-3517-4c3f-97a4-682586281343",
+      "status": "complete",
+      "created_at": "2026-07-30T16:36:07.786Z",
+      "heartbeat_at": "2026-07-30T16:40:52.909Z",
+      "attempts": 0,
+      "engines": [
+        "aio",
+        "perplexity"
+      ],
+      "prompt_target": null,
+      "checkpoint_queries": 34,
+      "geo": null,
+      "failure_category": null
+    }
+  ],
+  "collection": [
+    {
+      "scan_id": "00f6c4d2-2577-429d-9f13-713ebb34ae89",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 30,
+      "errors": 2,
+      "no_answer": 2,
+      "first_result_at": "2026-07-30T17:29:09.013Z",
+      "last_result_at": "2026-07-30T17:29:09.013Z"
+    },
+    {
+      "scan_id": "00f6c4d2-2577-429d-9f13-713ebb34ae89",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-07-30T17:29:09.013Z",
+      "last_result_at": "2026-07-30T17:29:09.013Z"
+    },
+    {
+      "scan_id": "1ee243a8-81f3-490c-91cf-78f83f8e8770",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 12,
+      "errors": 21,
+      "no_answer": 1,
+      "first_result_at": "2026-10-13T18:08:58.795Z",
+      "last_result_at": "2026-10-13T18:12:55.605Z"
+    },
+    {
+      "scan_id": "1ee243a8-81f3-490c-91cf-78f83f8e8770",
+      "engine": "chatgpt",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 0,
+      "errors": 34,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T18:12:57.044Z",
+      "last_result_at": "2026-10-13T18:13:02.291Z"
+    },
+    {
+      "scan_id": "1ee243a8-81f3-490c-91cf-78f83f8e8770",
+      "engine": "gemini",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 0,
+      "errors": 34,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T18:13:03.424Z",
+      "last_result_at": "2026-10-13T18:13:09.798Z"
+    },
+    {
+      "scan_id": "1ee243a8-81f3-490c-91cf-78f83f8e8770",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 0,
+      "errors": 34,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T18:13:10.846Z",
+      "last_result_at": "2026-10-13T18:13:21.348Z"
+    },
+    {
+      "scan_id": "36a91fbb-fdc0-4d9f-a003-8723dfcf374d",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 29,
+      "errors": 4,
+      "no_answer": 1,
+      "first_result_at": "2026-07-24T06:03:24.781Z",
+      "last_result_at": "2026-07-24T06:03:24.781Z"
+    },
+    {
+      "scan_id": "36a91fbb-fdc0-4d9f-a003-8723dfcf374d",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-07-24T06:03:24.781Z",
+      "last_result_at": "2026-07-24T06:03:24.781Z"
+    },
+    {
+      "scan_id": "3f5febc1-a30a-40a4-aac5-1b5540d9f5b3",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 3,
+      "errors": 30,
+      "no_answer": 1,
+      "first_result_at": "2026-10-14T07:03:28.816Z",
+      "last_result_at": "2026-10-14T07:05:40.647Z"
+    },
+    {
+      "scan_id": "3f5febc1-a30a-40a4-aac5-1b5540d9f5b3",
+      "engine": "chatgpt",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 8,
+      "errors": 26,
+      "no_answer": 0,
+      "first_result_at": "2026-10-14T07:05:54.673Z",
+      "last_result_at": "2026-10-14T07:06:10.906Z"
+    },
+    {
+      "scan_id": "3f5febc1-a30a-40a4-aac5-1b5540d9f5b3",
+      "engine": "gemini",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 0,
+      "errors": 34,
+      "no_answer": 0,
+      "first_result_at": "2026-10-14T07:06:11.880Z",
+      "last_result_at": "2026-10-14T07:06:18.885Z"
+    },
+    {
+      "scan_id": "3f5febc1-a30a-40a4-aac5-1b5540d9f5b3",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 0,
+      "errors": 34,
+      "no_answer": 0,
+      "first_result_at": "2026-10-14T07:06:19.922Z",
+      "last_result_at": "2026-10-14T07:06:26.679Z"
+    },
+    {
+      "scan_id": "699eda4b-dc9f-415a-9827-7618003ec086",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 19,
+      "errors": 13,
+      "no_answer": 2,
+      "first_result_at": "2026-10-14T16:14:16.474Z",
+      "last_result_at": "2026-10-14T16:19:49.349Z"
+    },
+    {
+      "scan_id": "699eda4b-dc9f-415a-9827-7618003ec086",
+      "engine": "chatgpt",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 0,
+      "errors": 34,
+      "no_answer": 0,
+      "first_result_at": "2026-10-14T16:19:50.882Z",
+      "last_result_at": "2026-10-14T16:19:58.021Z"
+    },
+    {
+      "scan_id": "699eda4b-dc9f-415a-9827-7618003ec086",
+      "engine": "gemini",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 0,
+      "errors": 34,
+      "no_answer": 0,
+      "first_result_at": "2026-10-14T16:19:59.032Z",
+      "last_result_at": "2026-10-14T16:20:08.074Z"
+    },
+    {
+      "scan_id": "699eda4b-dc9f-415a-9827-7618003ec086",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 0,
+      "errors": 34,
+      "no_answer": 0,
+      "first_result_at": "2026-10-14T16:20:08.649Z",
+      "last_result_at": "2026-10-14T16:20:16.012Z"
+    },
+    {
+      "scan_id": "70f27a9d-1881-4876-8311-faa5d2c7b46f",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 22,
+      "errors": 11,
+      "no_answer": 1,
+      "first_result_at": "2026-07-23T21:54:37.050Z",
+      "last_result_at": "2026-07-23T21:54:37.050Z"
+    },
+    {
+      "scan_id": "70f27a9d-1881-4876-8311-faa5d2c7b46f",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-07-23T21:54:37.050Z",
+      "last_result_at": "2026-07-23T21:54:37.050Z"
+    },
+    {
+      "scan_id": "7faf2a1d-f550-4f16-ae3c-9b3f63c54f57",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 16,
+      "errors": 16,
+      "no_answer": 2,
+      "first_result_at": "2026-10-13T18:39:31.187Z",
+      "last_result_at": "2026-10-13T18:43:07.824Z"
+    },
+    {
+      "scan_id": "7faf2a1d-f550-4f16-ae3c-9b3f63c54f57",
+      "engine": "chatgpt",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T18:43:21.906Z",
+      "last_result_at": "2026-10-13T18:44:56.629Z"
+    },
+    {
+      "scan_id": "7faf2a1d-f550-4f16-ae3c-9b3f63c54f57",
+      "engine": "gemini",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T18:45:15.663Z",
+      "last_result_at": "2026-10-13T18:47:34.494Z"
+    },
+    {
+      "scan_id": "7faf2a1d-f550-4f16-ae3c-9b3f63c54f57",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T18:47:39.665Z",
+      "last_result_at": "2026-10-13T18:48:25.558Z"
+    },
+    {
+      "scan_id": "86c96457-bc6b-4a49-97a7-97f0e005d334",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 9,
+      "errors": 25,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T17:55:28.008Z",
+      "last_result_at": "2026-10-13T17:57:05.396Z"
+    },
+    {
+      "scan_id": "86c96457-bc6b-4a49-97a7-97f0e005d334",
+      "engine": "chatgpt",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T17:57:19.260Z",
+      "last_result_at": "2026-10-13T17:58:46.226Z"
+    },
+    {
+      "scan_id": "86c96457-bc6b-4a49-97a7-97f0e005d334",
+      "engine": "gemini",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 28,
+      "errors": 6,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T17:59:00.271Z",
+      "last_result_at": "2026-10-13T18:01:06.804Z"
+    },
+    {
+      "scan_id": "86c96457-bc6b-4a49-97a7-97f0e005d334",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 0,
+      "errors": 34,
+      "no_answer": 0,
+      "first_result_at": "2026-10-13T18:01:08.352Z",
+      "last_result_at": "2026-10-13T18:01:14.501Z"
+    },
+    {
+      "scan_id": "a65c56e5-b69a-49e6-85bc-1a15dc958741",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 30,
+      "errors": 3,
+      "no_answer": 1,
+      "first_result_at": "2026-07-30T16:33:37.884Z",
+      "last_result_at": "2026-07-30T16:33:37.884Z"
+    },
+    {
+      "scan_id": "a65c56e5-b69a-49e6-85bc-1a15dc958741",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-07-30T16:33:37.884Z",
+      "last_result_at": "2026-07-30T16:33:37.884Z"
+    },
+    {
+      "scan_id": "cf09c378-f607-4b06-aaae-9df6f880c191",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 33,
+      "errors": 0,
+      "no_answer": 1,
+      "first_result_at": "2026-07-23T05:44:23.861Z",
+      "last_result_at": "2026-07-23T05:44:23.861Z"
+    },
+    {
+      "scan_id": "cf09c378-f607-4b06-aaae-9df6f880c191",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-07-23T05:44:23.861Z",
+      "last_result_at": "2026-07-23T05:44:23.861Z"
+    },
+    {
+      "scan_id": "f1ef17a5-3517-4c3f-97a4-682586281343",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 29,
+      "errors": 4,
+      "no_answer": 1,
+      "first_result_at": "2026-07-30T16:40:37.873Z",
+      "last_result_at": "2026-07-30T16:40:37.873Z"
+    },
+    {
+      "scan_id": "f1ef17a5-3517-4c3f-97a4-682586281343",
+      "engine": "perplexity",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 34,
+      "errors": 0,
+      "no_answer": 0,
+      "first_result_at": "2026-07-30T16:40:37.873Z",
+      "last_result_at": "2026-07-30T16:40:37.873Z"
+    },
+    {
+      "scan_id": "f63f8885-0140-4640-92dc-9a118306195a",
+      "engine": "aio",
+      "persisted_pairs": 34,
+      "unbranded_pairs": 30,
+      "answered": 29,
+      "errors": 2,
+      "no_answer": 3,
+      "first_result_at": "2026-09-16T03:43:47.099Z",
+      "last_result_at": "2026-09-16T03:49:07.909Z"
+    }
+  ],
+  "failure_categories": [
+    {
+      "engine": "aio",
+      "category": "cookie_pool_unavailable",
+      "pairs": 85
+    },
+    {
+      "engine": "aio",
+      "category": "credential_rejected",
+      "pairs": 16
+    },
+    {
+      "engine": "aio",
+      "category": "timeout_or_abort",
+      "pairs": 3
+    },
+    {
+      "engine": "aio",
+      "category": "other_provider_error",
+      "pairs": 3
+    },
+    {
+      "engine": "chatgpt",
+      "category": "key_spend_limit",
+      "pairs": 60
+    },
+    {
+      "engine": "chatgpt",
+      "category": "credential_rejected",
+      "pairs": 34
+    },
+    {
+      "engine": "gemini",
+      "category": "key_spend_limit",
+      "pairs": 74
+    },
+    {
+      "engine": "gemini",
+      "category": "credential_rejected",
+      "pairs": 34
+    },
+    {
+      "engine": "perplexity",
+      "category": "key_spend_limit",
+      "pairs": 102
+    },
+    {
+      "engine": "perplexity",
+      "category": "credential_rejected",
+      "pairs": 34
+    }
+  ],
+  "latest_job_matrix": [
+    {
+      "id": "01deeb0c-09b1-498e-b7bd-489a31f6c55d",
+      "status": "complete",
+      "engine": "aio",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 16,
+      "answered": 16
+    },
+    {
+      "id": "01deeb0c-09b1-498e-b7bd-489a31f6c55d",
+      "status": "complete",
+      "engine": "chatgpt",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 0,
+      "answered": 34
+    },
+    {
+      "id": "01deeb0c-09b1-498e-b7bd-489a31f6c55d",
+      "status": "complete",
+      "engine": "gemini",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 0,
+      "answered": 34
+    },
+    {
+      "id": "01deeb0c-09b1-498e-b7bd-489a31f6c55d",
+      "status": "complete",
+      "engine": "perplexity",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 0,
+      "answered": 34
+    },
+    {
+      "id": "0a5e6fe0-8ff7-44bf-bf65-bc46cf66a3c3",
+      "status": "complete",
+      "engine": "aio",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 13,
+      "answered": 19
+    },
+    {
+      "id": "0a5e6fe0-8ff7-44bf-bf65-bc46cf66a3c3",
+      "status": "complete",
+      "engine": "chatgpt",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 34,
+      "answered": 0
+    },
+    {
+      "id": "0a5e6fe0-8ff7-44bf-bf65-bc46cf66a3c3",
+      "status": "complete",
+      "engine": "gemini",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 34,
+      "answered": 0
+    },
+    {
+      "id": "0a5e6fe0-8ff7-44bf-bf65-bc46cf66a3c3",
+      "status": "complete",
+      "engine": "perplexity",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 34,
+      "answered": 0
+    },
+    {
+      "id": "6f231b37-345a-43e9-9faf-d35b095e5f42",
+      "status": "complete",
+      "engine": "aio",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 21,
+      "answered": 12
+    },
+    {
+      "id": "6f231b37-345a-43e9-9faf-d35b095e5f42",
+      "status": "complete",
+      "engine": "chatgpt",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 34,
+      "answered": 0
+    },
+    {
+      "id": "6f231b37-345a-43e9-9faf-d35b095e5f42",
+      "status": "complete",
+      "engine": "gemini",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 34,
+      "answered": 0
+    },
+    {
+      "id": "6f231b37-345a-43e9-9faf-d35b095e5f42",
+      "status": "complete",
+      "engine": "perplexity",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 34,
+      "answered": 0
+    },
+    {
+      "id": "8e25a0fe-660f-40e8-a809-3c2c9df0969a",
+      "status": "failed",
+      "engine": "aio",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 2,
+      "answered": 30
+    },
+    {
+      "id": "916d7314-08c3-4f8f-8348-90588b6b3d0f",
+      "status": "complete",
+      "engine": "aio",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 25,
+      "answered": 9
+    },
+    {
+      "id": "916d7314-08c3-4f8f-8348-90588b6b3d0f",
+      "status": "complete",
+      "engine": "chatgpt",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 0,
+      "answered": 34
+    },
+    {
+      "id": "916d7314-08c3-4f8f-8348-90588b6b3d0f",
+      "status": "complete",
+      "engine": "gemini",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 6,
+      "answered": 28
+    },
+    {
+      "id": "916d7314-08c3-4f8f-8348-90588b6b3d0f",
+      "status": "complete",
+      "engine": "perplexity",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 34,
+      "answered": 0
+    },
+    {
+      "id": "97b834c7-7a41-41fd-9d83-351f015a7332",
+      "status": "complete",
+      "engine": "aio",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 2,
+      "answered": 30
+    },
+    {
+      "id": "97b834c7-7a41-41fd-9d83-351f015a7332",
+      "status": "complete",
+      "engine": "perplexity",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 0,
+      "answered": 34
+    },
+    {
+      "id": "9ab58bc2-f209-4265-a954-c75bc273e623",
+      "status": "complete",
+      "engine": "aio",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 30,
+      "answered": 3
+    },
+    {
+      "id": "9ab58bc2-f209-4265-a954-c75bc273e623",
+      "status": "complete",
+      "engine": "chatgpt",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 26,
+      "answered": 8
+    },
+    {
+      "id": "9ab58bc2-f209-4265-a954-c75bc273e623",
+      "status": "complete",
+      "engine": "gemini",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 34,
+      "answered": 0
+    },
+    {
+      "id": "9ab58bc2-f209-4265-a954-c75bc273e623",
+      "status": "complete",
+      "engine": "perplexity",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 34,
+      "answered": 0
+    },
+    {
+      "id": "e00af0d1-8157-491e-b18b-ef5dbb45d72f",
+      "status": "complete",
+      "engine": "aio",
+      "expected": 34,
+      "persisted": 34,
+      "never_persisted": 0,
+      "failed": 2,
+      "answered": 29
+    }
+  ],
+  "schedules": [
+    {
+      "enabled": false,
+      "schedules": 2
+    }
+  ],
+  "jobs_by_state": [
+    {
+      "status": "complete",
+      "jobs": 31,
+      "heartbeat_older_than_day": 11
+    },
+    {
+      "status": "failed",
+      "jobs": 66,
+      "heartbeat_older_than_day": 19
+    }
+  ],
+  "content_jobs_by_state": [
+    {
+      "status": "approved",
+      "jobs": 1,
+      "heartbeat_older_than_day": 0
+    },
+    {
+      "status": "awaiting_approval",
+      "jobs": 36,
+      "heartbeat_older_than_day": 35
+    },
+    {
+      "status": "failed",
+      "jobs": 64,
+      "heartbeat_older_than_day": 53
+    }
+  ],
+  "policy_summary": [
+    {
+      "tablename": "brand_briefs",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "brand_metrics_daily",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "brand_prompts",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "citations",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "content_agents",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "content_events",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "content_feedback",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "content_items",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "content_jobs",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "content_lessons",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "content_runs",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "crawlability_audits",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(domain)",
+      "with_check": null
+    },
+    {
+      "tablename": "customer_brand_memberships",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "(user_id = ( SELECT auth.uid() AS uid))",
+      "with_check": null
+    },
+    {
+      "tablename": "customer_brands",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "(EXISTS ( SELECT 1\n   FROM customer_brand_memberships m\n  WHERE ((m.brand_key = customer_brands.brand_key) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND customer_brands.is_active)))",
+      "with_check": null
+    },
+    {
+      "tablename": "customer_team_invites",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "(EXISTS ( SELECT 1\n   FROM customer_brand_memberships m\n  WHERE ((m.brand_key = customer_team_invites.brand_key) AND (m.user_id = ( SELECT auth.uid() AS uid)) AND (m.role = 'owner'::text))))",
+      "with_check": null
+    },
+    {
+      "tablename": "gsc_connections",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand_key)",
+      "with_check": null
+    },
+    {
+      "tablename": "gsc_daily",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand_key)",
+      "with_check": null
+    },
+    {
+      "tablename": "knowledge_blocks",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "prompt_results",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "result_brands",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "scan_jobs",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand_key)",
+      "with_check": null
+    },
+    {
+      "tablename": "scan_runs",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "scan_schedules",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    },
+    {
+      "tablename": "scans",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand_key)",
+      "with_check": null
+    },
+    {
+      "tablename": "topics",
+      "roles": "{authenticated}",
+      "cmd": "SELECT",
+      "qual": "customer_can_access_brand(brand)",
+      "with_check": null
+    }
+  ],
+  "normalized_coverage": [
+    {
+      "prompt_results": 1818,
+      "citations": 8566,
+      "result_brands": 1863,
+      "daily_metrics": 58
+    }
+  ],
+  "execution_ledger": [
+    {
+      "runner": "reaper",
+      "phase": "reap",
+      "outcome": "noop",
+      "reason": "no_stale_runs",
+      "runs": 1014,
+      "attempted": null,
+      "succeeded": null
+    },
+    {
+      "runner": "scheduler",
+      "phase": "tick",
+      "outcome": "noop",
+      "reason": "no_schedules_due",
+      "runs": 1014,
+      "attempted": null,
+      "succeeded": null
+    },
+    {
+      "runner": "probe-fleet",
+      "phase": "idle",
+      "outcome": "noop",
+      "reason": "queue_empty",
+      "runs": 9,
+      "attempted": 0,
+      "succeeded": 0
+    },
+    {
+      "runner": "scan-chunk",
+      "phase": "sourcing",
+      "outcome": "failed",
+      "reason": "chunk_failed",
+      "runs": 9,
+      "attempted": null,
+      "succeeded": null
+    },
+    {
+      "runner": "scan-chunk",
+      "phase": "sourcing",
+      "outcome": "succeeded",
+      "reason": "checkpointed",
+      "runs": 5,
+      "attempted": 106,
+      "succeeded": 39
+    },
+    {
+      "runner": "scan-chunk",
+      "phase": "probing",
+      "outcome": "succeeded",
+      "reason": "complete",
+      "runs": 5,
+      "attempted": 306,
+      "succeeded": 63
+    },
+    {
+      "runner": "scan-chunk",
+      "phase": "probing",
+      "outcome": "succeeded",
+      "reason": "checkpointed",
+      "runs": 5,
+      "attempted": 268,
+      "succeeded": 135
+    },
+    {
+      "runner": "probe-fleet",
+      "phase": "idle",
+      "outcome": null,
+      "reason": null,
+      "runs": 1,
+      "attempted": null,
+      "succeeded": null
+    }
+  ],
+  "production_health": {
+    "http_status": 200,
+    "payload": {
+      "status": "ok",
+      "checked_at": "2026-10-15T18:49:48.623Z",
+      "db": {
+        "ok": true,
+        "latency_ms": 827,
+        "error": null
+      },
+      "vendors": {
+        "supabase": {
+          "configured": true,
+          "required": true,
+          "missing": [],
+          "deprecated": []
+        },
+        "llm": {
+          "configured": true,
+          "required": true,
+          "missing": [],
+          "deprecated": []
+        },
+        "brightdata": {
+          "configured": true,
+          "required": true,
+          "missing": [],
+          "deprecated": []
+        },
+        "firecrawl": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "perplexity": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "openai": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "gemini": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "gsc": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "gsc_oauth": {
+          "configured": true,
+          "required": false,
+          "missing": [],
+          "deprecated": []
+        },
+        "cron": {
+          "configured": true,
+          "required": true,
+          "missing": [],
+          "deprecated": []
+        }
+      },
+      "missing_required": [],
+      "environment": {
+        "node_env": "production",
+        "vercel_env": "production",
+        "effective": "production",
+        "agrees": true,
+        "verdict": "agreed",
+        "detail": null
+      },
+      "cron": {
+        "scan-worker": {
+          "last_tick_at": "2026-10-15T18:40:01.358+00:00",
+          "age_ms": 587265,
+          "stale": false
+        },
+        "content-worker": {
+          "last_tick_at": "2026-10-15T18:40:01.966+00:00",
+          "age_ms": 586657,
+          "stale": false
+        }
+      }
+    }
+  }
+}

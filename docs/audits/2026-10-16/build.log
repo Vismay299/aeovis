@@ -1,0 +1,118 @@
+
+> next-app@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.27
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 18.3s
+   Linting and checking validity of types ...
+
+./src/components/dashboard/OpportunitiesPanel.jsx
+53:6  Warning: React Hook useEffect has a missing dependency: 'sortedGaps'. Either include it or remove the dependency array.  react-hooks/exhaustive-deps
+53:21  Warning: React Hook useEffect has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked.  react-hooks/exhaustive-deps
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+   Collecting page data ...
+   Generating static pages (0/19) ...
+   Generating static pages (4/19) 
+   Generating static pages (9/19) 
+   Generating static pages (14/19) 
+ ✓ Generating static pages (19/19)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    8.03 kB         128 kB
+├ ○ /_not-found                            996 B         104 kB
+├ ƒ /api/agents                            278 B         103 kB
+├ ƒ /api/agents/[id]                       278 B         103 kB
+├ ƒ /api/brand-briefs                      278 B         103 kB
+├ ƒ /api/brands/[brand]/citations          278 B         103 kB
+├ ƒ /api/brands/[brand]/coverage           278 B         103 kB
+├ ƒ /api/brands/[brand]/crawlability       278 B         103 kB
+├ ƒ /api/brands/[brand]/gaps               278 B         103 kB
+├ ƒ /api/brands/[brand]/gsc                278 B         103 kB
+├ ƒ /api/brands/[brand]/metrics            278 B         103 kB
+├ ƒ /api/brands/[brand]/prompts            278 B         103 kB
+├ ƒ /api/brands/[brand]/prompts/metrics    278 B         103 kB
+├ ƒ /api/brands/[brand]/schedule           278 B         103 kB
+├ ƒ /api/content                           278 B         103 kB
+├ ƒ /api/content-events                    278 B         103 kB
+├ ƒ /api/content-items                     278 B         103 kB
+├ ƒ /api/content-items/[id]                278 B         103 kB
+├ ƒ /api/content-items/[id]/decision       278 B         103 kB
+├ ƒ /api/content-items/[id]/lift           278 B         103 kB
+├ ƒ /api/content-items/[id]/publish        278 B         103 kB
+├ ƒ /api/content/[job_id]/status           278 B         103 kB
+├ ƒ /api/content/report                    278 B         103 kB
+├ ƒ /api/content/worker                    278 B         103 kB
+├ ƒ /api/customer/agents                   278 B         103 kB
+├ ƒ /api/customer/agents/[id]              278 B         103 kB
+├ ƒ /api/customer/content                  278 B         103 kB
+├ ƒ /api/customer/content/[id]             278 B         103 kB
+├ ƒ /api/customer/gsc                      278 B         103 kB
+├ ƒ /api/customer/gsc/callback             278 B         103 kB
+├ ƒ /api/customer/gsc/connect              278 B         103 kB
+├ ƒ /api/customer/gsc/data                 278 B         103 kB
+├ ƒ /api/customer/gsc/properties           278 B         103 kB
+├ ƒ /api/customer/gsc/property             278 B         103 kB
+├ ƒ /api/customer/gsc/sync                 278 B         103 kB
+├ ƒ /api/customer/onboard                  278 B         103 kB
+├ ƒ /api/customer/overview                 278 B         103 kB
+├ ƒ /api/customer/scan                     278 B         103 kB
+├ ƒ /api/customer/scan/mock                278 B         103 kB
+├ ƒ /api/customer/scan/report/[scan_id]    278 B         103 kB
+├ ƒ /api/customer/team                     278 B         103 kB
+├ ƒ /api/customers/invite                  278 B         103 kB
+├ ƒ /api/demo/scan                         278 B         103 kB
+├ ƒ /api/evidence/retention                278 B         103 kB
+├ ƒ /api/gsc/sync-worker                   278 B         103 kB
+├ ƒ /api/gsc/worker                        278 B         103 kB
+├ ƒ /api/health                            278 B         103 kB
+├ ƒ /api/history                           278 B         103 kB
+├ ƒ /api/industries                        278 B         103 kB
+├ ƒ /api/internal/probe-results            278 B         103 kB
+├ ƒ /api/knowledge                         278 B         103 kB
+├ ƒ /api/knowledge/[id]                    278 B         103 kB
+├ ƒ /api/lessons                           278 B         103 kB
+├ ƒ /api/opportunities                     278 B         103 kB
+├ ƒ /api/prompts/[id]                      278 B         103 kB
+├ ƒ /api/scan                              278 B         103 kB
+├ ƒ /api/scan-runs/retention               278 B         103 kB
+├ ƒ /api/scan/[job_id]/evidence            278 B         103 kB
+├ ƒ /api/scan/[job_id]/status              278 B         103 kB
+├ ƒ /api/scan/worker                       278 B         103 kB
+├ ƒ /api/scans/[brand]                     278 B         103 kB
+├ ƒ /api/scans/[brand]/latest              278 B         103 kB
+├ ƒ /api/scans/by-id/[scanId]              278 B         103 kB
+├ ○ /auth/accept                         2.28 kB         174 kB
+├ ƒ /auth/callback                         278 B         103 kB
+├ ○ /auth/reset                          2.14 kB         174 kB
+├ ○ /dashboard                             550 B         227 kB
+├ ƒ /dashboard/[brand]                     623 B         227 kB
+├ ƒ /dashboard/[brand]/[scanId]            488 B         227 kB
+├ ○ /demo                                11.2 kB         126 kB
+├ ○ /login                               2.22 kB         174 kB
+├ ○ /onboarding                          2.49 kB         174 kB
+├ ƒ /portal                              6.09 kB         186 kB
+├ ƒ /portal/content                      10.3 kB         202 kB
+├ ƒ /portal/scans                        5.37 kB         185 kB
+├ ƒ /portal/scans/[scanId]               5.25 kB         185 kB
+├ ƒ /portal/search-console               5.42 kB         185 kB
+├ ƒ /portal/team                          2.4 kB         182 kB
+├ ○ /privacy                             1.09 kB         107 kB
+├ ○ /scan                                3.64 kB         133 kB
+├ ○ /signup                              2.06 kB         174 kB
+└ ○ /terms                               1.09 kB         107 kB
++ First Load JS shared by all             103 kB
+  ├ chunks/1255-5cd2fe06309409a0.js      46.5 kB
+  ├ chunks/4bd1b696-f785427dddbba9fb.js  54.2 kB
+  └ other shared chunks (total)          2.08 kB
+
+
+ƒ Middleware                             35.7 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

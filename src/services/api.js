@@ -1,16 +1,29 @@
 import { extractBrandDomain, aggregateTopDomains, computeCompetitorCitationShare } from "../lib/scoring/citations.js";
 import { buildCompetitorLeaderboard } from "../lib/scoring/coMentions.js";
+import { isSampleRecord, assertSampleNotMutated } from "../lib/sampleIsolation.js";
+
+export const SAMPLE_STORAGE_KEY = "aeo_sample_scan_v1";
+export const REAL_STORAGE_KEY = "aeo_last_scan";
 
 export function saveScan(result) {
   try {
-    sessionStorage.setItem("aeo_last_scan", JSON.stringify(result));
+    if (result && (result.isSample || result.sample)) {
+      sessionStorage.setItem(SAMPLE_STORAGE_KEY, JSON.stringify({ ...result, sample_version: "v1" }));
+      return;
+    }
+    sessionStorage.setItem(REAL_STORAGE_KEY, JSON.stringify(result));
   } catch {}
 }
 
 export function loadScan() {
   try {
-    const raw = sessionStorage.getItem("aeo_last_scan");
-    return raw ? JSON.parse(raw) : null;
+    const realRaw = sessionStorage.getItem(REAL_STORAGE_KEY);
+    if (realRaw) {
+      const parsed = JSON.parse(realRaw);
+      if (parsed && !parsed.isSample && !parsed.sample) return parsed;
+    }
+    const sampleRaw = sessionStorage.getItem(SAMPLE_STORAGE_KEY);
+    return sampleRaw ? JSON.parse(sampleRaw) : null;
   } catch {
     return null;
   }
@@ -18,7 +31,13 @@ export function loadScan() {
 
 export function clearScan() {
   try {
-    sessionStorage.removeItem("aeo_last_scan");
+    sessionStorage.removeItem(REAL_STORAGE_KEY);
+  } catch {}
+}
+
+export function clearSampleHandoff() {
+  try {
+    sessionStorage.removeItem(SAMPLE_STORAGE_KEY);
   } catch {}
 }
 
@@ -387,6 +406,9 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
         data.shareOfVoicePct ??
         (data.raw_results || {}).share_of_voice_pct ??
         null,
+      isSample: Boolean(data.isSample ?? data.sample),
+      sample: Boolean(data.isSample ?? data.sample),
+      illustrative: Boolean(data.illustrative ?? data.isSample),
     };
   }
 
@@ -656,7 +678,10 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
      * as an em dash plus a "no collection time" chip. See format.js/relativeTime
      * and DashboardShell's timestamp cell.
      */
-    scanTimestamp: data.scanned_at ?? data.scanTimestamp ?? null,
+    scanTimestamp:
+      (data.isSample || raw.isSample || data.sample || raw.sample)
+        ? (data.scanned_at ?? data.scanTimestamp ?? raw.scanned_at ?? raw.scanTimestamp ?? "2026-10-15T12:00:00.000Z")
+        : (data.scanned_at ?? data.scanTimestamp ?? null),
     // R2.7.4 — the window the answers were collected in, first to last probe
     // write. Distinct from scanTimestamp, which is when finalize ran; on a
     // chunked or crash-resumed scan those can be hours apart. Null on scans
@@ -718,7 +743,12 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
      * enginePipeline to distinguish absent from zero — filed separately, not
      * smuggled in here.
      */
-    enginesCounted: data.engines_counted ?? raw.engines_counted ?? 0,
+    enginesCounted:
+      data.engines_counted ??
+      raw.engines_counted ??
+      ((data.isSample || raw.isSample || data.sample || raw.sample)
+        ? (data.engines ? Object.keys(data.engines).length : (raw.engines ? Object.keys(raw.engines).length : (isMultiEngine ? 4 : 1)))
+        : 0),
     isMultiEngine,
     perEngineSummaries: (data.engines || raw.engines) || null,
     summary: generateSummary(
@@ -741,6 +771,9 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     nonBrandedResults: nonBranded.map(mapPromptForUi),
     brandedResults: branded.map(mapPromptForUi),
     brandPresenceResults: brandPresence.map(mapPromptForUi),
+    isSample: Boolean(data.isSample ?? raw.isSample ?? data.sample ?? raw.sample),
+    sample: Boolean(data.isSample ?? raw.isSample ?? data.sample ?? raw.sample),
+    illustrative: Boolean(data.illustrative ?? raw.illustrative ?? data.isSample ?? raw.isSample),
   };
 }
 
@@ -1019,6 +1052,12 @@ export async function getContentEvents(brand) {
 }
 
 export async function addContentEvent({ brand, url, publishDate }) {
+  if (isSampleRecord({ brand })) {
+    throw Object.assign(new Error("Cannot add content event on sample demonstration data: action refused"), {
+      code: "SAMPLE_MUTATION_FORBIDDEN",
+      isSample: true,
+    });
+  }
   try {
     const res = await fetch("/api/content-events", {
       method: "POST",

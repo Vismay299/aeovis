@@ -1,0 +1,30 @@
+{
+  "audit_date": "2026-10-16",
+  "source_commit": "a2c97ddf12e332807c960e776eeae8de4550a210",
+  "workspace_index_entries": 889,
+  "fresh_main_index_entries": 889,
+  "different_index_entries": 0,
+  "latest_github_production_deployment": {"id":7064392409,"sha":"a2c97ddf12e332807c960e776eeae8de4550a210","created_at_utc":"2026-10-14T11:45:16Z"},
+  "public_site_checks": [
+    {"url":"https://perceev.xyz/","http_status":200,"canonical_found":false},
+    {"url":"https://perceev.xyz/robots.txt","http_status":404},
+    {"url":"https://perceev.xyz/sitemap.xml","http_status":404},
+    {"url":"https://aeo-vis.vercel.app/robots.txt","http_status":404},
+    {"url":"https://aeo-vis.vercel.app/sitemap.xml","http_status":404}
+  ],
+  "browser_observations": [
+    "Landing page promises 30 unbranded questions on Google AI Overview, ChatGPT, Gemini, and Perplexity.",
+    "Opening the fictional Brightwave sample displays a 43% headline, zero engines counted, and a fresh timestamp; the sample banner is absent.",
+    "Sample answers are distributed 8/8/7/7 across engines, rather than the same 30 questions on every engine.",
+    "An anonymous request for the latest tenant-owned scan is intentionally denied with 404; the legacy dashboard renders that denial as No report yet."
+  ],
+  "validation": {
+    "clean_unit_suite": {"tests":3239,"passed":3209,"failed":0,"skipped":30},
+    "production_build":"passed",
+    "build_warnings":"Two existing React hook dependency warnings in OpportunitiesPanel.jsx",
+    "mock_acceptance":{"prompts":30,"engines":4,"answer_rows":120,"passed":true},
+    "adversarial_cases_reproduced":11,
+    "paid_live_provider_probes_this_audit":0,
+    "production_mutations_this_audit":0
+  }
+}

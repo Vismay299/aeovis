@@ -1,0 +1,63 @@
+(node:24512) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/Vismay/AppData/Local/Temp/perceev-verification-20261016/src/lib/liveWriteGuard.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to \\?\C:\Users\Vismay\AppData\Local\Temp\perceev-verification-20261016\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ R6.4.8 — the edge manifest meets its floor (24.2791ms)
+✔ R6.4.8 — the tripwire fires on ee5504e, the commit that falsified gemini.md (186.2595ms)
+[doc-staleness] Tripwire fired on 40 edge(s). These cited source files changed after their doc was last touched:
+  docs/vendors/brightdata.md → src/lib/engines/brightdata.js (changed since bf332fe)
+  docs/vendors/brightdata.md → src/lib/engines/serpGeo.js (changed since bf332fe)
+  docs/vendors/brightdata.md → scripts/check-secrets.mjs (changed since bf332fe)
+  docs/vendors/chatgpt.md → src/lib/engines/openai.js (changed since 2b9890a)
+  docs/vendors/chatgpt.md → src/lib/engines/deployedEngines.js (changed since 2b9890a)
+  docs/vendors/chatgpt.md → src/lib/scoring/emptyAnswer.test.mjs (changed since 2b9890a)
+  docs/vendors/firecrawl.md → vercel.json (changed since 8f8536e)
+  docs/vendors/firecrawl.md → scripts/check-secrets.mjs (changed since 8f8536e)
+  docs/vendors/firecrawl.md → src/lib/health.js (changed since 8f8536e)
+  docs/vendors/gemini.md → src/lib/gemini.js (changed since b35e387)
+  docs/vendors/gemini.md → src/lib/engines/deployedEngines.js (changed since b35e387)
+  docs/vendors/gemini.md → package.json (changed since b35e387)
+  docs/vendors/gemini.md → src/lib/geminiAbort.test.mjs (changed since b35e387)
+  docs/vendors/gemini.md → src/lib/health.js (changed since b35e387)
+  docs/vendors/gemini.md → src/lib/prompts.js (changed since b35e387)
+  docs/vendors/gemini.md → src/lib/openrouter.test.mjs (changed since b35e387)
+  docs/vendors/gsc.md → src/lib/engines/gsc.js (changed since 7c12ec3)
+  docs/vendors/gsc.md → src/lib/gsc/ingest.js (changed since 7c12ec3)
+  docs/vendors/gsc.md → src/lib/db/gsc.js (changed since 7c12ec3)
+  docs/vendors/gsc.md → vercel.json (changed since 7c12ec3)
+  docs/vendors/gsc.md → src/app/api/brands/[brand]/gsc/route.js (changed since 7c12ec3)
+  docs/vendors/gsc.md → src/lib/vendorRegistry.js (changed since 7c12ec3)
+  docs/vendors/mimo.md → src/lib/openrouter.js (changed since 0b2e68b)
+  docs/vendors/mimo.md → src/lib/llmPricing.js (changed since 0b2e68b)
+  docs/vendors/mimo.md → src/lib/llm.js (changed since 0b2e68b)
+  docs/vendors/mimo.md → scripts/check-secrets.mjs (changed since 0b2e68b)
+  docs/vendors/mimo.md → src/lib/openrouter.test.mjs (changed since 0b2e68b)
+  docs/vendors/mimo.md → src/lib/health.js (changed since 0b2e68b)
+  docs/vendors/perplexity.md → src/lib/engines/perplexity.js (changed since 6c8193b)
+  docs/vendors/perplexity.md → worker/README.md (changed since 6c8193b)
+  docs/vendors/perplexity.md → src/lib/engines/serpGeo.js (changed since 6c8193b)
+  docs/vendors/README.md → src/lib/engines/serp.js (changed since b35e387)
+  docs/vendors/README.md → src/lib/engines/gsc.js (changed since b35e387)
+  docs/vendors/README.md → src/lib/health.js (changed since b35e387)
+  docs/vendors/README.md → src/lib/db.js (changed since b35e387)
+  docs/vendors/README.md → src/lib/docStatus.test.mjs (changed since b35e387)
+  docs/vendors/README.md → src/lib/scoring/asyncJob.test.mjs (changed since b35e387)
+  docs/vendors/README.md → package.json (changed since b35e387)
+  docs/vendors/suggestqueries.md → src/lib/engines/serp.js (changed since 9f1b02f)
+  docs/vendors/suggestqueries.md → scripts/check-secrets.mjs (changed since 9f1b02f)
+✔ R6.4.8 — the tripwire fires on the live state, proving it works (7487.1551ms)
+(node:24048) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///C:/Users/Vismay/AppData/Local/Temp/perceev-verification-20261016/src/lib/liveWriteGuard.js is not specified and it doesn't parse as CommonJS.
+Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+To eliminate this warning, add "type": "module" to \\?\C:\Users\Vismay\AppData\Local\Temp\perceev-verification-20261016\package.json.
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ implicit invite fragments are removed before the PKCE client receives the session (1.4077ms)
+✔ incomplete or expired invite fragments are cleared and rejected (0.8876ms)
+✔ server-exchanged links use their existing cookie session (0.2385ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7934.4229

@@ -1,0 +1,42 @@
+{
+  "fixture": "synthetic-tenant-workspaces",
+  "version": 1,
+  "origin": "synthetic",
+  "note": "Two disposable QA workspaces. The ids are shaped like UUIDs so storage and RLS tests accept them, and are not ids of any real workspace.",
+  "workspaces": [
+    {
+      "id": "0f1e2d3c-4b5a-4c6d-8e7f-100000000001",
+      "brand_key": "qa-tenant-a",
+      "display_name": "Acme Tiles (synthetic)",
+      "website": "https://acme.example",
+      "role": "owner",
+      "member_user": "qa-user-a",
+      "market": { "country": "IN", "language": "en" }
+    },
+    {
+      "id": "0f1e2d3c-4b5a-4c6d-8e7f-100000000002",
+      "brand_key": "qa-tenant-b",
+      "display_name": "Rival Tiles (synthetic)",
+      "website": "https://rival.example",
+      "role": "owner",
+      "member_user": "qa-user-b",
+      "market": { "country": "IN", "language": "en" }
+    }
+  ],
+  "cross_tenant_probes": [
+    {
+      "id": "probe-b-reads-a",
+      "actor": "qa-tenant-b",
+      "target": "qa-tenant-a",
+      "operation": "read",
+      "expected": "denied_without_disclosure"
+    },
+    {
+      "id": "probe-b-writes-a",
+      "actor": "qa-tenant-b",
+      "target": "qa-tenant-a",
+      "operation": "write",
+      "expected": "denied"
+    }
+  ]
+}
