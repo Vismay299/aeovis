@@ -39,6 +39,7 @@ import {
   legacyTerminalOutcome,
   terminalOutcomeFromRecord,
 } from "../scanOutcome.js";
+import { runProbingPhase } from "../workers/scanWorker.js";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const STATUS_ROUTE = path.join(REPO, "src/app/api/scan/[job_id]/status/route.js");
@@ -316,6 +317,31 @@ test("R03-11 — a frozen engine that loses its configuration is blocked/not-att
     !outcome.engines.some((e) => !frozen.includes(e.name)),
     "an engine that was never part of the scan must not appear"
   );
+});
+
+test("R03-11 — the worker never dispatches a newly enabled surface when every frozen surface disappears", async () => {
+  let dispatches = 0;
+  const checkpoint = {
+    brand: "Example",
+    url: "https://example.com",
+    competitors: [],
+    queries: [{ text: "question 0" }],
+    engines: ["gemini"],
+  };
+  const result = await runProbingPhase("frozen-surface-job", checkpoint, {
+    resolveEnabledEngines: () => [{
+      name: "chatgpt",
+      concurrency: 1,
+      probe: async () => { dispatches += 1; throw new Error("unexpected substituted dispatch"); },
+    }],
+    getCompletedPairsForJob: async () => new Set(),
+    updateScanJob: async () => {},
+  });
+  assert.equal(dispatches, 0);
+  assert.equal(result.budgetHit, false);
+  assert.equal(result.checkpoint.engine_set_change.state, "shrank");
+  assert.equal(result.checkpoint.blocked.reason, BLOCK_REASONS.ENGINE_NOT_REGISTERED);
+  assert.deepEqual(result.checkpoint.engines, ["gemini"]);
 });
 
 test("R03-12 — one engine healthy and three failing yields partial, keeping all four engines and their outcomes", () => {

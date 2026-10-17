@@ -1852,16 +1852,13 @@ function engineDisplayLabel(name) {
  */
 export const ENGINE_SET_STATES = Object.freeze({
   /**
-   * Some frozen engines still resolve, fewer than were frozen. The index is
-   * real; it is blended over fewer engines than the scan was started with,
-   * which is why `engines_counted` fell.
+   * At least one frozen engine stopped resolving. The original work matrix
+   * remains intact; if none survive, there is no measured index.
    */
   SHRANK: "shrank",
   /**
-   * NO frozen engine resolved (or rows exist from engines that were never
-   * frozen), so the scan was answered by a DIFFERENT set than the one it was
-   * frozen with. Strictly worse than SHRANK: a frozen engine set is the whole
-   * reason two scans of one brand are comparable, and this one is not.
+   * Persisted rows exist from an engine outside the frozen set. Current
+   * dispatch does not create these; older in-flight scans may still carry them.
    */
   REFROZEN: "refrozen",
 });
@@ -1887,17 +1884,16 @@ function asEngineRefs(names) {
  *
  * R3.2.5 (finding B3). `checkpoint.engines` is frozen at sourcing time so a
  * mid-scan env change cannot re-pick a running scan's engines. R3.2.2 made the
- * two ways that promise gets broken VISIBLE TO AN OPERATOR — they land in
- * `scan_runs.detail.skips` as `engine_not_registered` and
- * `engine_set_fallback`. Nothing made them visible to the SCAN. The headline
+ * missing frozen engines VISIBLE TO AN OPERATOR in
+ * `scan_runs.detail.skips` as `engine_not_registered`. Nothing made them visible to the SCAN. The headline
  * was blended over fewer engines, `scans.engines_counted` dropped, and the scan
  * record carried no reason for either: the number moved and the explanation
  * existed only in a ledger nobody rendering a dashboard reads. That is the same
  * class R2.2.6 closed for a degraded engine, one step earlier — there the
  * engine answered badly, here it is gone.
  *
- * TWO STATES, KEPT APART ON PURPOSE. "Fewer engines than I promised" and "a
- * different set than I promised" cost the reader different things, and
+ * TWO STATES, KEPT APART ON PURPOSE. "Fewer engines than I promised" and "rows
+ * from an engine I did not promise" cost the reader different things, and
  * collapsing them would tell someone whose scan is no longer comparable to its
  * own history that it merely counts one engine fewer.
  *
@@ -1957,7 +1953,7 @@ export function describeEngineSetChange({
   ]);
 
   let state;
-  if (resolved.length === 0 || substituted.length > 0) {
+  if (substituted.length > 0) {
     state = ENGINE_SET_STATES.REFROZEN;
   } else if (dropped.length > 0) {
     state = ENGINE_SET_STATES.SHRANK;
@@ -1981,13 +1977,15 @@ export function describeEngineSetChange({
   const detail =
     state === ENGINE_SET_STATES.SHRANK
       ? `This scan was frozen onto ${frozenLabels} when it started. ${droppedLabels} stopped being ` +
-        `registered before it finished, so ${one ? "it was" : "they were"} never probed and ` +
-        `${one ? "is" : "are"} not in the AI Visibility Index. The index is blended over ` +
-        `${resolved.length} of the ${frozenNames.length} engines this scan was frozen with ` +
-        `(${resolvedLabels}), which is why the engines counted fell. Re-run the scan to bring ` +
-        `${droppedLabels} back.`
+        `registered before it finished, so ${one ? "it was" : "they were"} never probed. ` +
+        (resolved.length === 0
+          ? `No frozen engine remained, so no AI Visibility Index was measured. `
+          : `The index is blended over ${resolved.length} of the ${frozenNames.length} engines ` +
+            `this scan was frozen with (${resolvedLabels}), which is why the engines counted fell. `) +
+        `Re-run the scan to bring ${droppedLabels} back.`
       : `This scan was frozen onto ${frozenLabels} when it started, and ` +
-        `${resolved.length === 0 ? "none of those engines still resolved" : `${droppedLabels} stopped resolving`} ` +
+        `${dropped.length === 0 ? "its frozen engines were still registered" :
+          resolved.length === 0 ? "none of those engines still resolved" : `${droppedLabels} stopped resolving`} ` +
         `before it finished. It was answered by ` +
         `${substitutedLabels || "the engine set configured when it finished"} instead. A frozen ` +
         `engine set is what makes two scans of the same brand comparable, so this reading cannot ` +
@@ -2185,7 +2183,7 @@ export function resolveEnabledEngines(options = {}) {
     enabled.push(def);
   }
 
-  if (enabled.length === 0) {
+  if (enabled.length === 0 && options.allowFallback !== false) {
     const aioDef = ENGINE_REGISTRY.find((e) => e.name === "aio");
     if (aioDef.isConfigured()) {
       // Substituting a DIFFERENT engine set than the one that was asked for. The

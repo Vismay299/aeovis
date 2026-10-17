@@ -1371,7 +1371,7 @@ test("runScanChunk — an engine frozen into the checkpoint but no longer regist
   assert.equal(row.probes_attempted, 2, "only the surviving engine's pairs were attempted");
 });
 
-test("runScanChunk — when NO frozen engine resolves, the silent substitution is its own reason", async () => {
+test("runScanChunk — when no frozen engine resolves, no substitute is dispatched", async () => {
   const ledger = makeLedger();
   const backend = makeBackend();
   const queries = makeQueries(1);
@@ -1397,14 +1397,13 @@ test("runScanChunk — when NO frozen engine resolves, the silent substitution i
   }
 
   const row = soleRow(ledger);
-  const fallback = skipEntry(row, CHUNK_SKIP_REASONS.ENGINE_SET_FALLBACK);
-  assert.ok(fallback, "answering the scan with a different engine set is a decision, not a detail");
-  assert.deepEqual(fallback.sample, ["perplexity,chatgpt"]);
   assert.equal(
     skipEntry(row, CHUNK_SKIP_REASONS.ENGINE_NOT_REGISTERED).count,
     2,
     "…and each individual engine that went missing is still counted"
   );
+  assert.equal(row.probes_attempted, 0, "the newly enabled AIO surface was never in the frozen matrix");
+  assert.equal(backend.jobs.get(job.id).run_record.summary_stats.terminal_outcome.outcome, "blocked");
 });
 
 // ---------------------------------------------------------------------------
@@ -1492,13 +1491,13 @@ test("runSourcingPhase — a typo in ENGINES and a missing API key are DIFFERENT
     "collapsing these two loses the only actionable part of the record"
   );
 
-  // …and this is why the recording has to happen HERE. The checkpoint keeps only
-  // the survivors, so after this line the dropped names exist nowhere.
-  assert.deepEqual(checkpoint.engines, ["aio"], "the frozen set cannot reveal what was dropped");
+  // The checkpoint now retains the requested work matrix, including names the
+  // resolver could not dispatch. The skip reasons still explain how to recover.
+  assert.deepEqual(checkpoint.engines, ["aio", "chatgpt", "notanengine"]);
   assert.equal(summarizeSkips(tally).skips_total, 2);
 });
 
-test("runSourcingPhase — the default-to-aio substitution is a decision, with its own reason", async () => {
+test("runSourcingPhase — unavailable requested engines are frozen without an AIO substitution", async () => {
   const queries = makeQueries(1);
   const tally = createChunkTally();
 
@@ -1512,17 +1511,10 @@ test("runSourcingPhase — the default-to-aio substitution is a decision, with i
       )
   );
 
-  // Nobody asked for aio. The scan runs on it anyway and finalizes clean, which
-  // is precisely why a bare console.warn was not enough.
-  assert.deepEqual(checkpoint.engines, ["aio"]);
+  // Nobody asked for aio, so the frozen matrix keeps the requested engines.
+  assert.deepEqual(checkpoint.engines, ["chatgpt", "perplexity"]);
   const defaulted = tally.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.ENGINE_SET_DEFAULTED);
-  assert.ok(defaulted, "answering a scan with an engine set nobody requested is a recordable decision");
-  assert.equal(defaulted.count, 1, "announced once, not once per dropped engine");
-  assert.deepEqual(defaulted.sample, ["chatgpt,perplexity"], "and it names the set that was asked for");
-
-  // Distinct from the checkpoint-level fallback, which is a different failure at
-  // a different time: that one substitutes for a FROZEN set mid-scan.
-  assert.notEqual(CHUNK_SKIP_REASONS.ENGINE_SET_DEFAULTED, CHUNK_SKIP_REASONS.ENGINE_SET_FALLBACK);
+  assert.equal(defaulted, undefined, "strict sourcing cannot substitute AIO");
   assert.equal(tally.skips.find((s) => s.reason === CHUNK_SKIP_REASONS.ENGINE_NOT_CONFIGURED).count, 2);
 });
 
@@ -1589,8 +1581,8 @@ test("runScanChunk — the engines ENGINES asked for and did not get are on the 
   assert.ok(row.detail.skips_total >= 2, "the count is exact and includes both");
   assert.deepEqual(
     backend.jobs.get(job.id).checkpoint.engines,
-    ["aio"],
-    "sanity: the scan really did run on one engine after being asked for three"
+    ["aio", "chatgpt", "notanengine"],
+    "the original three requested surfaces remain in the work matrix"
   );
 });
 

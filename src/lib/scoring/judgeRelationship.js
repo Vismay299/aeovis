@@ -241,6 +241,12 @@ export function classifyEntityRelationshipAndSentiment(text, brand, aliases, opt
     relationship = RELATIONSHIP.COMPARED;
     sentiment = "neutral";
     sentimentScore = 50;
+  } else if (hasNegativeWords && !hasPositiveWords && !isLitotes && !isDirectlyRecommended) {
+    // A negative review can follow the mention without the narrow "X is poor"
+    // grammar above ("X has been slow and a poor experience"). Keep the
+    // relationship label independent, but do not turn that sentiment neutral.
+    sentiment = "negative";
+    sentimentScore = 0;
   }
 
   const { list_rank, reason: list_rank_reason } = extractListRank(text, brand, aliases);

@@ -487,11 +487,17 @@ test("runFinalizePhase — multi-engine: reconstructs results from `raw` and mat
   const rebuiltAio = record.results.filter((r) => r.engine === "aio");
   assert.deepEqual(rebuiltAio.map((r) => r.prompt).sort(), aioRaws.map((r) => r.prompt).sort());
 
-  // Direct comparison against independently-computed summaries over the SAME
-  // per-engine raw arrays (the exact scoring-fidelity requirement).
-  const expectedAio = summarizeEngineSlice(aioRaws, "aio");
-  const expectedChatgpt = summarizeEngineSlice(chatgptRaws, "chatgpt");
-  const expectedHeadline = computeHeadline([expectedAio, expectedChatgpt]);
+  // Finalize re-judges each row against the complete roster before scoring.
+  // Recompute from those finalized rows and the frozen measurement identity.
+  const metricContext = {
+    panelVersion: record.prompt_set_hash,
+    surfaceVersion: "surface-policy-v1",
+    market: checkpoint.geo ?? null,
+    modelPolicyVersion: checkpoint.model_policy_version ?? null,
+  };
+  const expectedAio = summarizeEngineSlice(record.results.filter((r) => r.engine === "aio"), "aio", metricContext);
+  const expectedChatgpt = summarizeEngineSlice(record.results.filter((r) => r.engine === "chatgpt"), "chatgpt", metricContext);
+  const expectedHeadline = computeHeadline([expectedAio, expectedChatgpt], undefined, metricContext);
   const expectedWrapped = summarizeEngineResults({
     results: record.results,
     engines: { aio: expectedAio, chatgpt: expectedChatgpt },
