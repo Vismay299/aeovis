@@ -1,5 +1,8 @@
 # Perceev: product, collection, scoring, and AI visibility audit
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** Snapshot of the 16 October 2026 audit; current repair status is tracked in the linked backlog and code.
+
 **Audit date: 16 October 2026, Asia/Kolkata.**
 
 **Verdict:** Perceev has useful engineering foundations, but its measurements are not dependable enough to support a promise that it improves clients' AI rankings. The immediate issue is successful answer collection, followed by metric correctness and a working measure → change → publish → observe loop. Adding more agents or generating more articles should follow those repairs.
