@@ -428,7 +428,9 @@ function aioContentHasReadableText(value) {
         ? Boolean(item.trim())
         : item && typeof item === "object" &&
           (BLOCK_TEXT_FIELDS.some((field) => isNonEmptyString(item[field])) ||
-            ["list", "text_blocks", "paragraphs"].some((field) => Array.isArray(item[field])))
+            ["list", "text_blocks", "paragraphs"].some(
+              (field) => Array.isArray(item[field]) && aioContentHasReadableText(item[field])
+            ))
     );
   }
   if (value && typeof value === "object") {
@@ -437,10 +439,19 @@ function aioContentHasReadableText(value) {
   return false;
 }
 
+function refEntryReadable(ref) {
+  if (typeof ref === "string") return Boolean(ref.trim());
+  if (typeof ref === "number" || typeof ref === "boolean") return true;
+  if (!ref || typeof ref !== "object" || Array.isArray(ref)) return false;
+  return Object.values(ref).some(
+    (field) => isNonEmptyString(field) || typeof field === "number" || typeof field === "boolean"
+  );
+}
+
 function aioContentHasReadableRefs(value) {
-  if (Array.isArray(value)) return true;
+  if (Array.isArray(value)) return value.some(refEntryReadable);
   if (value && typeof value === "object") {
-    return AIO_REF_FIELDS.some((field) => Array.isArray(value[field]));
+    return AIO_REF_FIELDS.some((field) => Array.isArray(value[field]) && value[field].some(refEntryReadable));
   }
   return false;
 }
@@ -985,6 +996,36 @@ export function parseGoogleSerp(raw, options = {}) {
   });
 
   const text = blocks.map((b) => b.text).filter(Boolean).join("\n").trim();
+  // THE POST-EXTRACTION INVARIANT. Readability is predicted BEFORE extraction,
+  // and the extractor is stricter than the predictor: an object-valued `texts`
+  // asserts presence through the readability helper but yields no block from
+  // extractBlocks, and an unsafe-only reference list asserts presence through
+  // the ref helper but yields zero validated entries after the safety check.
+  // Either way the parser would otherwise hand the probe `aio_present: true`
+  // beside an empty extraction, and the probe writes that as `aio_present:
+  // false` with no error — a measured absence manufactured out of an Overview
+  // whose content could not be read. An asserted Overview that extracts to zero
+  // blocks AND zero validated references is therefore unknown, not absent: the
+  // payload is refused so the row carries an error, and neither the collection
+  // count nor the trigger rate can mistake it for a measurement. A genuine
+  // reference-only Overview is untouched — it carries at least one validated
+  // citation, so it still measures.
+  if (aioPresent && !text && entries.length === 0) {
+    return makeResult(SERP_STATE.UNKNOWN_SCHEMA, {
+      stage: PARSE_STAGE.BLOCKS,
+      aio_present: null,
+      errors: [
+        ...errors,
+        {
+          stage: PARSE_STAGE.BLOCKS,
+          code: "aio_extraction_empty",
+          message:
+            "ai_overview asserted an Overview but extracted zero readable blocks and zero validated references, so AIO presence is unknown rather than absent",
+        },
+      ],
+      evidence,
+    });
+  }
   // A reference-only Overview yields citations but no measurable text: the text
   // quality is PARTIAL, never complete, so no mention measurement may be taken
   // from it (R04-06).

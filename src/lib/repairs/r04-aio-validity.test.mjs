@@ -240,6 +240,168 @@ test("R04-08 — an ai_overview that is present but unreadable is unknown, never
   assert.equal(zeroResults.aio_present, false);
 });
 
+test("R04-08 — empty AIO content is unreadable, never a measurement", () => {
+  const EMPTY_CONTENT_AIO = [
+    [{ texts: [] }, "empty texts array"],
+    [{ references: [] }, "empty references with no text"],
+    [{ references: [{}] }, "reference entries with nothing readable"],
+    [{ texts: [{}] }, "text blocks with nothing readable"],
+    [{ texts: ["   "] }, "whitespace-only text"],
+    [{ texts: [{ text: "   " }] }, "whitespace-only block text"],
+    [{ texts: [{ foreign_field: "not answer text" }] }, "foreign block fields"],
+  ];
+
+  for (const [aio, label] of EMPTY_CONTENT_AIO) {
+    const out = parseGoogleSerp({ ...noAioSerp(), ai_overview: aio });
+    assert.equal(
+      out.serp_state,
+      SERP_STATE.UNKNOWN_SCHEMA,
+      `${label}: an Overview with no readable content is not a measurement`
+    );
+    assert.equal(out.aio_present, null, `${label}: presence is UNKNOWN, not absent`);
+    const error = out.errors.find((e) => e.code === "aio_section_unreadable");
+    assert.ok(error, `${label}: the unreadable section must be named, got ${JSON.stringify(out.errors)}`);
+    assert.equal(out.blocks.length, 0, `${label}: no text may be invented for it`);
+  }
+
+  // The honest measured cases stay measured: a null texts field beside real
+  // references is reference-only presence, and real text beside an empty
+  // references list is text presence — neither is an empty shape.
+  const refOnly = parseGoogleSerp({
+    ...noAioSerp(),
+    ai_overview: { texts: null, references: [{ href: "https://acme.example/proof", title: "Proof" }] },
+  });
+  assert.equal(refOnly.serp_state, SERP_STATE.VALID_SERP, "texts:null with real references is a measured Overview");
+  assert.equal(refOnly.aio_present, true);
+
+  const textEmptyRefs = parseGoogleSerp({
+    ...noAioSerp(),
+    ai_overview: { texts: [{ snippet: "Acme is good." }], references: [] },
+  });
+  assert.equal(textEmptyRefs.serp_state, SERP_STATE.VALID_SERP, "real text with empty references is a measured Overview");
+  assert.equal(textEmptyRefs.aio_present, true);
+  assert.equal(textEmptyRefs.blocks.length, 1);
+});
+
+test("R04-08 — an asserted Overview that extracts to nothing is refused, never measured as absent", async (t) => {
+  pinAioEnv(t);
+
+  // The review thread's four fixtures: each is accepted as an Overview shape
+  // but extracts to zero readable blocks and zero validated references. The
+  // probe used to rewrite that empty extraction as measured absence.
+  const THREAD_FIXTURES = [
+    ["empty references", { references: [] }],
+    ["unsafe-only reference", { references: [{ href: "javascript:alert(1)" }] }],
+    ["nested empty list", { texts: [{ list: [] }] }],
+    ["object-valued texts", { texts: { text: "Acme" } }],
+  ];
+
+  for (const [label, aio] of THREAD_FIXTURES) {
+    const out = parseGoogleSerp({ ...noAioSerp(), ai_overview: aio });
+    assert.notEqual(
+      out.serp_state,
+      SERP_STATE.VALID_SERP,
+      `${label}: an Overview with nothing extractable is not a measurement`
+    );
+    assert.equal(out.aio_present, null, `${label}: presence is UNKNOWN, not absent`);
+    assert.equal(out.blocks.length, 0, `${label}: no text may be invented for it`);
+  }
+
+  // The full chain the thread exercised: parser presence, stored presence and
+  // collection validity must agree — none may read as measured absence.
+  const fixtures = THREAD_FIXTURES.map(([, aio]) => ({ ...noAioSerp(), ai_overview: aio }));
+  let calls = 0;
+  mockFetch(t, async () => {
+    const serp = fixtures[Math.min(calls, fixtures.length - 1)];
+    calls += 1;
+    return envelope(serp);
+  });
+
+  const aio = aioEngine();
+  const probeRows = [];
+  for (const [i, [label]] of THREAD_FIXTURES.entries()) {
+    const row = persisted(
+      await aio.probe({ text: `buyer question ${i}`, topic: "General", source: "test" }, "Acme", ["Acme"], "acme.example", ["Rival"], null)
+    );
+    probeRows.push(row);
+    assert.ok(row.error, `${label}: the probe must record a refused collection attempt`);
+    assert.equal(row.answer_present ?? false, false, `${label}: it must not be an answer`);
+    assert.equal(row.aio_present ?? false, false, `${label}: it must not be a measured absence either`);
+  }
+  assert.equal(calls, 8, "each thread payload was attempted and retried, and nothing else was fetched");
+
+  const plan = buildScorePlan({
+    prompts: THREAD_FIXTURES.map((_, i) => ({ text: `buyer question ${i}` })),
+    engines: ["aio"],
+  });
+  const outcome = deriveScanOutcome({
+    plan,
+    rows: probeRows.map((row, i) => ({
+      engine: "aio",
+      query: `buyer question ${i}`,
+      answered: false,
+      raw: row,
+    })),
+    engineNames: ["aio"],
+  });
+  assert.notEqual(outcome.outcome, "complete", "four unextractable captures can never be a complete scan");
+  assert.equal(outcome.counts.valid, 0, "no valid observation exists to collect");
+  assert.equal(outcome.outcome, "failed", "an all-refused collection fails rather than completing");
+  assert.equal(
+    outcome.metrics.collection_completion_pct,
+    0,
+    "and collection completion is a measured zero, not 100%"
+  );
+});
+
+test("R04-08 — generated AIO shapes never let parser presence contradict the extraction", () => {
+  const textPayloads = [
+    null,
+    [],
+    [{}],
+    [{ list: [] }],
+    [{ list: [{ snippet: "Nested answer." }] }],
+    [{ text_blocks: [{ snippet: "Deep answer." }] }],
+    [{ paragraphs: [{ text: "Deep answer." }] }],
+    [{ snippet: "Flat answer." }],
+    "A bare string answer.",
+  ];
+  const refPayloads = [
+    undefined,
+    [],
+    [{ href: "https://acme.example/proof" }],
+    [{ href: "javascript:alert(1)" }],
+  ];
+
+  for (const texts of textPayloads) {
+    for (const references of refPayloads) {
+      const aio = {};
+      if (texts !== undefined) aio.texts = texts;
+      if (references !== undefined) aio.references = references;
+      const out = parseGoogleSerp({ ...noAioSerp(), ai_overview: aio });
+      const extracted = out.blocks.length > 0 || out.references.length > 0;
+      assert.ok(
+        !(out.serp_state === SERP_STATE.VALID_SERP && out.aio_present === true && !extracted),
+        `parser presence must never contradict the extraction for ${JSON.stringify(aio)}`
+      );
+    }
+  }
+
+  // The nested and bare-string shapes that DO carry an answer stay measured.
+  const nested = parseGoogleSerp({
+    ...noAioSerp(),
+    ai_overview: { texts: [{ list: [{ snippet: "Nested answer." }] }] },
+  });
+  assert.equal(nested.serp_state, SERP_STATE.VALID_SERP, "a nested list answer is a measured Overview");
+  assert.equal(nested.aio_present, true);
+  assert.equal(nested.blocks.length, 1, "the parent block with no own text yields only its nested item");
+  assert.equal(nested.blocks[0].text, "Nested answer.");
+
+  const bareString = parseGoogleSerp({ ...noAioSerp(), ai_overview: "A bare string answer." });
+  assert.equal(bareString.serp_state, SERP_STATE.VALID_SERP, "a non-empty string Overview is a measured Overview");
+  assert.equal(bareString.aio_present, true);
+});
+
 test("R04-08 — the adapter refuses an unreadable Overview on its final attempt", async (t) => {
   pinAioEnv(t);
   mockFetch(t, async () => envelope({ ...noAioSerp(), ai_overview: {} }));
