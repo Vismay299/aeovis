@@ -1,0 +1,141 @@
+{
+  "audit_date": "2026-10-16",
+  "source_commit": "a2c97ddf12e332807c960e776eeae8de4550a210",
+  "network": "forbidden",
+  "checks": [
+    {
+      "id": "A01",
+      "title": "30 successful SERPs without an AIO are classified as collection failure",
+      "reproduced": true,
+      "evidence": {
+        "state": "failed",
+        "reason": "low_coverage",
+        "errors": 0
+      }
+    },
+    {
+      "id": "A02",
+      "title": "One eliciting answer can produce a 100% headline despite insufficient_sample",
+      "reproduced": true,
+      "evidence": {
+        "answered": 30,
+        "eliciting": 1,
+        "insufficient_sample": true,
+        "visibility_index_pct": 100,
+        "engines_counted": 1
+      }
+    },
+    {
+      "id": "A03",
+      "title": "A citation-only brand appearance is discarded from visibility by the eliciting filter",
+      "reproduced": true,
+      "evidence": {
+        "cited": 1,
+        "visible": 0,
+        "score": 0
+      }
+    },
+    {
+      "id": "A04",
+      "title": "Changing roster metadata changes 20% to 100% with identical answers and self appearances",
+      "reproduced": true,
+      "evidence": {
+        "before": 20,
+        "after": 100,
+        "unchanged_self_appearances": 6,
+        "unchanged_answers": 30
+      }
+    },
+    {
+      "id": "A05",
+      "title": "First textual mention gives rank 1 even when that sentence rejects the brand",
+      "reproduced": true,
+      "evidence": {
+        "answer": "Avoid Acme. Rival is the best choice.",
+        "judgment": [
+          {
+            "name": "Acme",
+            "is_self": true,
+            "mentioned": true,
+            "position": 1,
+            "sentiment": 50
+          },
+          {
+            "name": "Rival",
+            "is_self": false,
+            "mentioned": true,
+            "position": 2,
+            "sentiment": 50
+          }
+        ]
+      }
+    },
+    {
+      "id": "A06",
+      "title": "Normalizing a sample removes its sample marker and defaults counted engines to zero",
+      "reproduced": true,
+      "evidence": {
+        "sample_marker_before": true,
+        "sample_marker_after": null,
+        "engines_counted": 0,
+        "score": 43,
+        "raw_rows": 30
+      }
+    },
+    {
+      "id": "A07",
+      "title": "A scan with 120 errors and zero answers still becomes complete",
+      "reproduced": true,
+      "evidence": {
+        "status": "complete",
+        "persisted": 120,
+        "answers": 0,
+        "provider_attempts": 120
+      }
+    },
+    {
+      "id": "A08",
+      "title": "Resuming probing never retries persisted failed prompt-engine pairs",
+      "reproduced": true,
+      "evidence": {
+        "persisted_failed_pairs": 120,
+        "retries_on_resume": 0
+      }
+    },
+    {
+      "id": "A09",
+      "title": "Current visible/answered result rows cannot power the legacy prompt_score lift calculation",
+      "reproduced": true,
+      "evidence": {
+        "related_prompts": [
+          "best software"
+        ],
+        "current_score": null,
+        "previous_score": null,
+        "lift": null
+      }
+    },
+    {
+      "id": "A10",
+      "title": "The final malformed SERP payload is returned instead of raising a parse error",
+      "reproduced": true,
+      "evidence": {
+        "returned_keys": [
+          "unexpected_shape"
+        ],
+        "extracted_overview": "",
+        "parse_error_raised": false
+      }
+    },
+    {
+      "id": "A11",
+      "title": "The ChatGPT gateway wrapper discards model identity and web-search usage",
+      "reproduced": true,
+      "evidence": {
+        "answered": true,
+        "model_after_wrapper": null,
+        "search_requests_after_wrapper": null
+      }
+    }
+  ]
+}
