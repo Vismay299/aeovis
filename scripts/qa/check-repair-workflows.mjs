@@ -26,8 +26,8 @@ async function rpc(name, values) {
   const entries = Object.entries(values);
   const r = await q(
     `select ${name}(${entries.map(([k], i) => `${k}=>$${i + 1}`).join(",")}) result`,
-    entries.map(([, v]) =>
-      v && typeof v === "object" ? JSON.stringify(v) : v,
+    entries.map(([key, v]) =>
+      name === "set_probe_rollout" && key === "p_brands" ? v : v && typeof v === "object" ? JSON.stringify(v) : v,
     ),
   );
   return r.rows[0].result;
@@ -420,6 +420,35 @@ try {
       ).rows.length,
       0,
     );
+  });
+  await test("R02-D: paused rollout admits one owned QA workspace and bounded canaries; rollback blocks new attempts but accepts in-flight settlement", async()=>{
+    const jobA=id(),jobB=id(),prefix=`rollout-${id()}`;
+    await q("insert into scan_jobs(id,brand,brand_key,status) values($1,$2,$2,'complete'),($3,$4,$4,'complete')",[jobA,brand,jobB,other]);
+    await q("update scan_jobs set checkpoint=jsonb_build_object('prompt_key',brand_key) where id=any($1::uuid[])",[[jobA,jobB]]);
+    const seed=async (suffix,job,purpose="scan")=>{
+      const observation=`${prefix}-${suffix}`;
+      await rpc("seed_probe_observations",{p_rows:[{id:observation,job_id:job,purpose,engine:"chatgpt",query:`QA rollout ${suffix}`,context:purpose==="canary"?{budget_scope:`${prefix}-${suffix}`,max_requests:1,request_units:1}:{},config_version:"qa-fixture",circuit_key:observation,deadline_at:new Date(Date.now()+600_000).toISOString()}]});
+      return observation;
+    };
+    const a=await seed("a",jobA),b=await seed("b",jobB),canary=await seed("canary",null,"canary"),stopped=await seed("stopped",null,"canary");
+    const claim=o=>rpc("claim_probe_dispatch",{p_id:o,p_reserve:0.1,p_scan_cap:1,p_day_cap:null,p_lease_seconds:120});
+    try{
+      await rpc("set_probe_rollout",{p_paused:true,p_canaries:true,p_brands:[brand]});
+      const allowed=await claim(a),denied=await claim(b),canaryClaim=await claim(canary);
+      assert.equal(allowed.granted,true);assert.equal(canaryClaim.granted,true);assert.equal(denied.granted,false);assert.equal(denied.reason,"dispatch_paused");
+      assert.equal((await q("select attempt_count from probe_observations where id=$1",[b])).rows[0].attempt_count,0);
+      await rpc("set_probe_rollout",{p_paused:true,p_canaries:false,p_brands:[]});
+      assert.equal((await claim(stopped)).granted,false);
+      const saved=await rpc("finish_probe_dispatch",{p_id:a,p_token:allowed.lease_token,p_result:{engine:"chatgpt",text:"QA fixture",answer_present:true,brand_mentioned_in_text:false,brand_cited:false,is_branded_query:false,brands:[],cost:0},p_state:"answered",p_failure:null,p_next_at:null});
+      assert.equal(saved.accepted,true);
+      await assert.rejects(()=>asUser(actor,"select set_probe_rollout(false,false,'{}')"),/permission denied/);
+      await assert.rejects(()=>rpc("set_probe_rollout",{p_paused:true,p_canaries:false,p_brands:[brand,other]}),/invalid owned rollout scope/);
+    }finally{await rpc("set_probe_rollout",{p_paused:false,p_canaries:false,p_brands:[]});}
+  });
+  await test("R04-D: private evidence bucket accepts JSON and the read-only storage contract is present", async()=>{
+    const bucket=(await q("select public,allowed_mime_types from storage.buckets where id='probe-evidence'")).rows[0];
+    assert.equal(bucket.public,false);assert.ok(bucket.allowed_mime_types.includes("application/json"));
+    assert.equal((await q("select measurement_storage_ready() ready")).rows[0].ready,true);
   });
   const manifest = {
     suite: "real-postgresql-repair-workflows",

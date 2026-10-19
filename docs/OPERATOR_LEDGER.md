@@ -324,7 +324,7 @@ Also environment-shaped and easy to get silently wrong:
 
 ## C. Migrations
 
-`028_measurement_evidence`, `029_repair_workflow`, `030_scan_finalize_identity`, `031_content_check_budget`, `032_durable_schedule_windows`, `033_atomic_scan_materialization` are implemented and verified in isolated QA; production application is unverified. Apply all additive migrations before deploying this branch.
+`028_measurement_evidence`, `029_repair_workflow`, `030_scan_finalize_identity`, `031_content_check_budget`, `032_durable_schedule_windows`, `033_atomic_scan_materialization`, `034_measurement_storage_contract`, `035_scoped_provider_rollout` are implemented and verified in isolated QA. Hosted application and qualification results are tracked in the current P0 release evidence. Apply all additive migrations before deploying this branch.
 
 
 `027_durable_probe_dispatch` is implemented and tested on disposable PostgreSQL;

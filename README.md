@@ -181,6 +181,8 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `031_content_check_budget` | Shared paid-check reservations, fenced completion, and approval guards. |
 | `032_durable_schedule_windows` | Atomic scheduled-window enqueue, bounded catch-up, overlap and finalization records. |
 | `033_atomic_scan_materialization` | Transactional report links, citations, brand judgments, daily rollups and terminal job state. |
+| `034_measurement_storage_contract` | Private JSON response capture MIME support and a read-only storage contract check. |
+| `035_scoped_provider_rollout` | Fenced pause/rollback with one owned QA workspace and bounded canaries allowed during qualification. |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

@@ -1,7 +1,7 @@
 # P0 implementation status, 19 October 2026
 
 > <!-- doc-status -->
-> **Status: LIVE.** Code and acceptance ledger for the P0 dispatch PR; production rollout and live qualification remain open.
+> **Status: ARCHIVED.** PR #9 implementation snapshot. Current hosted execution is tracked in [P0 release qualification](./P0-RELEASE-QUALIFICATION.md).
 
 This supplements [REPAIR-BACKLOG.md](./REPAIR-BACKLOG.md). Merged main baseline:
 `c5530c9` (PRs #6/#7/#8). The new branch connects the previously standalone

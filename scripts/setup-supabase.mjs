@@ -59,6 +59,13 @@ ALTER TABLE schema_migrations
  * the state 009 was found in.
  */
 const EXPECTED_OBJECTS = {
+  "035_scoped_provider_rollout.sql": [
+    {kind:"function",name:"set_probe_rollout"},
+    {kind:"column",name:"probe_dispatch_control.brand_allowlist"},
+  ],
+  "034_measurement_storage_contract.sql": [
+    {kind:"function",name:"measurement_storage_ready"},
+  ],
   "028_measurement_evidence.sql": [
     {kind:"table",name:"measurement_evidence"},
     {kind:"table",name:"measurement_incidents"},

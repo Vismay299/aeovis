@@ -167,6 +167,7 @@ export const NEVER_WRITABLE = Object.freeze([
  * from a mutating one, and "we could not tell" must not resolve to "allow".
  */
 export const WRITING_FUNCTIONS = Object.freeze({
+  set_probe_rollout:["probe_dispatch_control"],
   record_measurement_incident:["measurement_incidents"],append_repair_artifact:["repair_artifacts","repair_artifact_heads"],
   decide_checked_content:["content_items","content_feedback","content_jobs"],record_verified_publication:["content_items","content_jobs","content_events","repair_artifacts"],
   claim_content_check:["content_check_claims"],finish_content_check:["content_check_claims","content_items","content_jobs"],

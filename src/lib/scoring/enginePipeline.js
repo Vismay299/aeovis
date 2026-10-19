@@ -7,6 +7,7 @@ import { probeOpenRouterEngine, isOpenRouterEngineConfigured } from "../engines/
 import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
 import { detectMention, judgeBrandsSymmetric } from "./judge.js";
+import { applyEntityEvidence, ENTITY_RESOLUTION_VERSION } from "./entityEvidence.js";
 import { countBrandsElicited } from "./promptQuality.js";
 import { extractBrandDomain } from "./citations.js";
 import { measuredNumberOrNull, ratioPctOrNull } from "./measuredNumber.js";
@@ -209,7 +210,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     console.warn(`[aio] Query failed: "${query.text}" — ${result.error}`);
   }
 
-  return result;
+  return applyEntityEvidence(result, {brand, website:brandDomain, aliases:brandAliases});
 }
 
 /**
@@ -357,7 +358,7 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
     result.error_kind = probeResult.error_kind;
     result.provider_failure = probeResult.provider_failure;
     console.warn(`[${engineName}] Query failed: "${query.text}" — ${probeResult.error}`);
-    return result;
+    return applyEntityEvidence(result, {brand, website:brandDomain, aliases:brandAliases});
   }
 
   result.text = probeResult.text || "";
@@ -402,7 +403,7 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   // known until the answer text exists and has been scanned.
   result.visible = result.brand_mentioned_in_text || result.brand_cited;
 
-  return result;
+  return applyEntityEvidence(result, {brand, website:brandDomain, aliases:brandAliases});
 }
 
 function findCompetitorsInText(text, competitors) {
@@ -1030,7 +1031,7 @@ function buildSliceMetrics({
       panelVersion: options.panelVersion ?? options.panel_version ?? null,
       surfaceVersion: options.surfaceVersion ?? options.surface_version ?? null,
       market: options.market ?? null,
-      modelPolicyVersion: options.modelPolicyVersion ?? options.model_policy_version ?? null,
+      modelPolicyVersion: panel.some(r=>r.entity_evidence?.version===ENTITY_RESOLUTION_VERSION) ? `${options.modelPolicyVersion ?? options.model_policy_version ?? "unknown"}|${ENTITY_RESOLUTION_VERSION}` : options.modelPolicyVersion ?? options.model_policy_version ?? null,
       metricVersion: METRIC_CONTRACT_VERSION,
       policyVersion: policy.version,
       rosterVersion,
@@ -1050,7 +1051,7 @@ function buildSliceMetrics({
     [METRIC_IDS.EXPOSURE]: metricFromRows({
       metricId: METRIC_IDS.EXPOSURE,
       rows: panel,
-      valueOf: (r) => r.visible === true,
+      valueOf: (r) => r.entity_evidence?.mention_state === "ambiguous" && !r.brand_cited ? null : r.visible === true,
       context: selfContext,
       collection,
       policy,
@@ -1058,7 +1059,7 @@ function buildSliceMetrics({
     [METRIC_IDS.MENTION]: metricFromRows({
       metricId: METRIC_IDS.MENTION,
       rows: panel,
-      valueOf: (r) => (hasObservedAnswerText(r) ? r.brand_mentioned_in_text === true : null),
+      valueOf: (r) => (hasObservedAnswerText(r) && r.entity_evidence?.mention_state !== "ambiguous" ? r.brand_mentioned_in_text === true : null),
       exclusionOf: () => METRIC_REASONS.TEXT_NOT_OBSERVED,
       context: selfContext,
       collection,
@@ -1091,6 +1092,7 @@ function buildSliceMetrics({
       metricId: METRIC_IDS.RECOMMENDATION,
       rows: recommendationPanel,
       valueOf: (r) => {
+        if(r.entity_evidence?.mention_state === "ambiguous")return null;
         const reading = selfRecommendationOf(r);
         return reading.observed ? reading.positive : null;
       },
@@ -1147,6 +1149,12 @@ function buildSliceMetrics({
     });
   }
 
+  if(panel.some(r=>r.entity_evidence?.mention_state === "ambiguous"))for(const id of [METRIC_IDS.EXPOSURE,METRIC_IDS.MENTION,METRIC_IDS.RECOMMENDATION]){
+    const metric=metrics[id];metric.qualified_pct=null;metric.qualified=false;metric.qualified_reason="entity_resolution_incomplete";metric.qualified_state="insufficient";
+  }
+  if(panel.some(r=>r.entity_evidence?.version===ENTITY_RESOLUTION_VERSION) && panel.some(r=>r.entity_evidence?.version!==ENTITY_RESOLUTION_VERSION))for(const metric of Object.values(metrics)){
+    metric.qualified_pct=null;metric.qualified=false;metric.qualified_reason="entity_resolution_policy_mixed";metric.qualified_state="insufficient";
+  }
   if(options.panelApproved===false)for(const metric of Object.values(metrics)){
     metric.qualified_pct=null;metric.qualified=false;metric.qualified_reason="panel_not_reviewed";
   }
@@ -1535,6 +1543,8 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
   const metricSlices = eligible
     .map((s) => s?.metrics?.[METRIC_IDS.EXPOSURE])
     .filter((m) => m && typeof m === "object");
+  const hasEntityPolicy=metricSlices.some(m=>m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`));
+  if(hasEntityPolicy)context.model_policy_version=`${context.model_policy_version || "unknown"}|${ENTITY_RESOLUTION_VERSION}`;
 
   if (metricSlices.length === 0) {
     /**
@@ -1608,6 +1618,8 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
     context,
     policy,
   });
+  if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_incomplete")){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_incomplete";metric.qualified_state="insufficient";}
+  if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_policy_mixed") || (hasEntityPolicy && metricSlices.some(m=>!m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`)))){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_policy_mixed";metric.qualified_state="insufficient";}
   if(options?.panelApproved===false){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="panel_not_reviewed";metric.qualified_state="insufficient";}
   return metric;
 }

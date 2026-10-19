@@ -1425,5 +1425,7 @@ See [the rollout and rollback runbook](runbooks/p0-provider-dispatch.md).
 - `031_content_check_budget.sql`: Shared paid-check reservations, fenced completion, and approval guards.
 - `032_durable_schedule_windows.sql`: Atomic scheduled-window enqueue, bounded catch-up, overlap and finalization records.
 - `033_atomic_scan_materialization.sql`: Transactional report links, citations, brand judgments, daily rollups and terminal job state.
+- `034_measurement_storage_contract.sql`: Private JSON evidence upload MIME support; verify the read-only `measurement_storage_ready` function exists in `pg_proc` and the `storage.buckets` row remains private with `application/json` in its allowlist.
+- `035_scoped_provider_rollout.sql`: `probe_dispatch_control.brand_allowlist` and service-only `set_probe_rollout` control one owned QA workspace and deliberate canaries during a dispatch pause; the claim path retains all existing lease, circuit and budget checks.
 
 Verified against disposable PostgreSQL, not production. Deploy the migrations before the worker and routes. Rollback pauses dispatch and disables new workflow actions while preserving historical attempts, immutable artifact versions, and evidence. Never drop these tables to roll back an application build.
