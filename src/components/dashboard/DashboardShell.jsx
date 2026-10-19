@@ -747,7 +747,9 @@ export default function DashboardShell({ scan, scanId, error = null }) {
      replaces the whole view, so OverviewView (the only consumer of this value)
      is not rendered and a second arm for it would be a dead line. */
   const interpretation =
-    tier == null
+    result.headlineQualified === false && Number.isFinite(result.headlineMetric?.value_pct)
+      ? "The collected observations are exploratory. The sample or collection coverage does not meet the headline requirements, so no headline verdict is shown."
+      : tier == null
       ? "This scan produced no visibility score, so there is no verdict to interpret. The reading is not a zero — nothing was measured. Retry the scan, or add more high-intent queries."
       : {
           strong:

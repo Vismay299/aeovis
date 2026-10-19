@@ -142,3 +142,14 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
         run: npm run build
+
+      - name: public site HTTP contracts
+        run: |
+          node node_modules/next/dist/bin/next start -p 3328 > /tmp/perceev-next.log 2>&1 &
+          site_pid=$!
+          trap 'if kill -0 "$site_pid" 2>/dev/null; then kill "$site_pid"; fi' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3328/robots.txt > /dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/qa/check-public-site.mjs http://127.0.0.1:3328

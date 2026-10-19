@@ -762,7 +762,9 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
         : 0),
     isMultiEngine,
     perEngineSummaries: (data.engines || raw.engines) || null,
-    summary: generateSummary(
+    summary: headline && !headline.qualified && Number.isFinite(headline.metric?.value_pct)
+      ? "The collected observations are exploratory; the sample or collection coverage does not meet the headline requirements."
+      : generateSummary(
       brand,
       headline ? headline.value : isMultiEngine
         ? (data.visibility_index_pct ?? raw.visibility_index_pct ?? visibilityPct)

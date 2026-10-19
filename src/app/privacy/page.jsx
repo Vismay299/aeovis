@@ -3,6 +3,9 @@ import LegalPage, { LegalContact } from "@/components/legal/LegalPage";
 export const metadata = {
   title: "Privacy Policy | Perceev",
   description: "How Perceev handles account, workspace, and Google Search Console data.",
+  alternates: {
+    canonical: "/privacy",
+  },
 };
 
 export default function PrivacyPage() {

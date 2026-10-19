@@ -4,6 +4,9 @@ import LegalPage, { LegalContact } from "@/components/legal/LegalPage";
 export const metadata = {
   title: "Terms of Service | Perceev",
   description: "Terms for using the Perceev website and customer workspace.",
+  alternates: {
+    canonical: "/terms",
+  },
 };
 
 export default function TermsPage() {

@@ -691,6 +691,7 @@ function dispatch({ files, caseIds, environment, depth }) {
     env: child,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
+    timeout: Math.max(1, Number(process.env.PERCEEV_REPAIR_CHILD_TIMEOUT_MS) || 120_000),
   });
   return {
     argv,
@@ -701,6 +702,8 @@ function dispatch({ files, caseIds, environment, depth }) {
     namePattern,
     clearedEnv: cleared,
     childExitCode: run.status,
+    childSignal: run.signal ?? null,
+    childError: run.error?.message ?? null,
     durationMs: Date.now() - started,
     tap: run.stdout ?? "",
     stderrLines: (run.stderr ?? "").split("\n").filter(Boolean).slice(0, 40),
@@ -808,6 +811,12 @@ function executeOfflineSuite({ cases, files, discovered, environment, depth }) {
       `dispatched file(s) failed at the file level, before their tests could be attributed: ${entryFailures.join(", ")}`
     );
   }
+  if (dispatched.childExitCode !== 0 || dispatched.childSignal || dispatched.childError || entryFailures.length) {
+    result.fatal = dispatched.childError || (dispatched.childSignal
+      ? `test subprocess terminated by ${dispatched.childSignal}`
+      : `test subprocess failed (exit ${dispatched.childExitCode}); failed files: ${entryFailures.join(", ") || "see TAP"}`);
+    result.passed = [];
+  }
   return result;
 }
 
@@ -816,17 +825,8 @@ function executeOfflineSuite({ cases, files, discovered, environment, depth }) {
 // ---------------------------------------------------------------------------
 
 async function shortSha() {
-  try {
-    const head = (await readFile(path.join(REPO, ".git/HEAD"), "utf8")).trim();
-    const match = /^ref:\s*(.+)$/.exec(head);
-    if (match) {
-      const ref = (await readFile(path.join(REPO, ".git", match[1]), "utf8")).trim();
-      return ref.slice(0, 7);
-    }
-    return head.slice(0, 7);
-  } catch {
-    return "local";
-  }
+  const git = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], { cwd: REPO, encoding: "utf8" });
+  return git.status === 0 ? git.stdout.trim() : "local";
 }
 
 function printableSummary(summary) {
@@ -1092,12 +1092,11 @@ async function run(argv) {
       return summary;
     }
     if (summary.counts.testsCollected === 0) {
+      const msg = `the dispatch collected 0 tests even though ${outcome.dispatch.files.length} file(s) were named. A run that collects nothing cannot pass.`;
+      summary.errors.push(msg);
       summary.verdict = "failed";
       summary.exitCode = 1;
-      summary.messages.push(
-        `FAILURE: the dispatch collected 0 tests even though ${outcome.dispatch.files.length} file(s) were named. ` +
-          `A run that collects nothing cannot pass.`
-      );
+      summary.messages.push(`FAILURE: ${msg}`);
       return summary;
     }
     const problems = summary.counts.failed + summary.counts.unimplemented + summary.counts.skipped;
@@ -1191,20 +1190,22 @@ async function runRelease({ summary, selection, discovered, files, environment }
         const missingIds = [
           ...new Set([...cases.filter((id) => !discovered.byId.has(id)), ...outcome.unimplemented]),
         ];
-        entry.casesPassed = outcome.passed.length;
         entry.casesUnimplemented = missingIds.length;
         entry.status = outcome.fatal
           ? "missing"
           : outcome.failed.length || outcome.skipped.length || entry.casesUnimplemented > 0
             ? "incomplete"
             : "passed";
+        entry.casesPassed = entry.status === "passed" ? outcome.passed.length : 0;
         entry.reason = outcome.fatal
           ? outcome.fatal
           : entry.status === "passed"
             ? null
             : `${entry.casesUnimplemented} of ${cases.length} ${repair} U/I case(s) have no test with that case id; ` +
               `${outcome.failed.length} failed, ${outcome.skipped.length} skipped`;
-        summary.cases.passed.push(...outcome.passed);
+        if (entry.status === "passed") {
+          summary.cases.passed.push(...outcome.passed);
+        }
         for (const failedEntry of outcome.failed) summary.cases.failed.push(failedEntry);
         for (const skippedEntry of outcome.skipped) summary.cases.skipped.push(skippedEntry);
         summary.cases.unimplemented.push(...cases.filter((id) => !discovered.byId.has(id)));
