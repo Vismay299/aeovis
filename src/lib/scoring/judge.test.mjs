@@ -192,9 +192,13 @@ test('judgeBrandsSymmetric - position is scoped to the tracked roster only, unaf
 });
 
 test('judgeBrandsSymmetric - empty/missing text or roster does not throw', () => {
-  assert.deepEqual(judgeBrandsSymmetric("", [{ name: "Acme", aliases: ["Acme"], isSelf: true }]), [
-    { name: "Acme", is_self: true, mentioned: false, position: null, sentiment: null },
-  ]);
+  const [empty] = judgeBrandsSymmetric("", [{ name: "Acme", aliases: ["Acme"], isSelf: true }]);
+  assert.equal(empty.name, "Acme");
+  assert.equal(empty.is_self, true);
+  assert.equal(empty.mentioned, false);
+  assert.equal(empty.position, null);
+  assert.equal(empty.sentiment, null);
+  assert.equal(empty.list_rank_reason, "empty_text");
   assert.deepEqual(judgeBrandsSymmetric("Acme is great.", []), []);
   assert.deepEqual(judgeBrandsSymmetric("Acme is great.", undefined), []);
 });

@@ -1,5 +1,8 @@
 # Repair backlog: implementation tasks, test cases, and release acceptance
 
+> <!-- doc-status -->
+> **Status: LIVE.** Acceptance plan for the repairs identified by the 16 October 2026 audit.
+
 Updated: **16 October 2026, Asia/Kolkata**. Audited source baseline: `a2c97ddf12e332807c960e776eeae8de4550a210`.
 
 This replaces the short backlog with an execution specification for the same 21 repairs. **Everything below is planned work.** Expanding this document does not implement a repair, create the proposed test files, or establish a new test pass. The audit's executed evidence remains 3,209 passing tests, 30 skipped tests, a successful build, 120 isolated mock answers, and 11 reproduced unwanted behaviors. See [the audit](./AUDIT.md) and [reproduction evidence](./adversarial-results.json).

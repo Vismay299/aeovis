@@ -19,9 +19,9 @@ import {
  *   (a) SHRANK    — a frozen engine stops being registered, is never probed,
  *                   and the index is blended over the engines that remain.
  *                   `scans.engines_counted` falls with no reason attached.
- *   (b) REFROZEN  — NO frozen engine resolves, so the scan is answered by
- *                   today's set instead. Strictly worse: the frozen set is the
- *                   only reason two scans of one brand are comparable.
+ *   (b) REFROZEN  — persisted rows from a surface outside the frozen set,
+ *                   possible on historical scans made before dispatch was
+ *                   fenced to the frozen work matrix.
  *
  * R3.2.2 put both in `scan_runs.detail.skips`, which an operator reads and a
  * dashboard does not. These tests drive an engine out of the registry BETWEEN
@@ -233,29 +233,22 @@ test("R3.2.5 — a frozen engine driven out mid-scan lands on the SCAN RECORD, n
   assert.equal(chunkTwo.checkpoint.engine_set_change.state, ENGINE_SET_STATES.SHRANK);
 });
 
-test("R3.2.5 — a scan refrozen onto a different set says REFROZEN, not merely SHRANK", async () => {
+test("R3.2.5 — losing every frozen engine never substitutes today's set", async () => {
   const { saved } = await scanWithRegistryChange({
     frozen: ["aio", "perplexity"],
     registryBefore: ["aio", "perplexity"],
-    // Every frozen engine is gone; probing falls back to today's set.
+    // Every frozen engine is gone; today's set must not be probed instead.
     registryAfter: ["chatgpt"],
   });
 
   const change = saved.summary_stats.engine_set_change;
-  assert.ok(change, "a scan answered by a set it was never frozen with cannot be silent");
-  assert.equal(
-    change.state,
-    ENGINE_SET_STATES.REFROZEN,
-    "no frozen engine resolved — this is the worse event and must not read as a shrink"
-  );
+  assert.ok(change, "a scan whose frozen engines vanished cannot be silent");
+  assert.equal(change.state, ENGINE_SET_STATES.SHRANK);
   assert.deepEqual(change.resolved_engines, [], "nothing frozen survived");
-  assert.deepEqual(
-    change.substituted_engines.map((e) => e.engine),
-    ["chatgpt"],
-    "the record must name the set that answered instead"
-  );
-  assert.match(change.title, /not comparable/i, "comparability is what a refreeze costs");
-  assert.match(change.detail, /ChatGPT/, "the substituted set is named in prose");
+  assert.deepEqual(change.substituted_engines, []);
+  assert.equal(saved.engines_counted, 0);
+  assert.equal(saved.summary_stats.terminal_outcome.outcome, "blocked");
+  assert.match(change.detail, /No frozen engine remained/);
 });
 
 test("R3.2.5 — a scan where every frozen engine resolved carries NO marker", async () => {
@@ -298,13 +291,14 @@ test("R3.2.5 — finalize catches a refreeze from the ROWS even with no checkpoi
   const backend = makeBackend();
   const jobId = "job-r325-evidence";
 
-  await runProbingPhase(
-    jobId,
-    baseCheckpoint(["aio", "perplexity"]),
-    { ...backend.deps, resolveEnabledEngines: () => ["chatgpt"].map(fakeEngine) },
-    Date.now(),
-    {}
-  );
+  // A legacy persisted row may predate the frozen-dispatch guard. Recreate
+  // that historical evidence directly; the current worker must not make it.
+  const unexpected = probeResult("chatgpt", QUERIES[0], true);
+  await backend.deps.upsertPromptResults([{
+    job_id: jobId, brand: "acme.com", query: QUERIES[0].text,
+    engine: "chatgpt", answered: true, mentioned: true,
+    raw: unexpected,
+  }]);
 
   // Strip the stamp: finalize must reach the same verdict from the rows alone.
   const stripped = baseCheckpoint(["aio", "perplexity"]);
@@ -442,12 +436,11 @@ test("describeEngineSetChange never counts 'I did not look' as 'nothing was prob
   assert.equal(notLooked, null);
   assert.equal(lookedFoundNone, null);
 
-  // An empty scan whose engine really is gone is still a drop — and with one
-  // frozen engine gone, nothing resolved, so it is a refreeze.
+  // An empty scan whose engine really is gone is a drop, not a substitution.
   const gone = describeEngineSetChange({ frozen: ["aio"], registered: [], probed: [] });
-  assert.equal(gone.state, ENGINE_SET_STATES.REFROZEN);
+  assert.equal(gone.state, ENGINE_SET_STATES.SHRANK);
   assert.deepEqual(gone.substituted_engines, [], "no substitute was observed, so none is claimed");
-  assert.match(gone.detail, /engine set configured when it finished/);
+  assert.match(gone.detail, /No frozen engine remained/);
 });
 
 // ---------------------------------------------------------------------------
@@ -456,13 +449,11 @@ test("describeEngineSetChange never counts 'I did not look' as 'nothing was prob
 // ---------------------------------------------------------------------------
 
 test("R3.2.9 — a refrozen scan summarizes the rows that actually exist, not the frozen list that produced none", async () => {
-  // Frozen engines: ["aio", "perplexity"]. None of them resolve at probing
-  // time, so the scan falls back to today's set: ["chatgpt"]. ChatGPT
-  // produces rows. Finalize must summarize chatgpt's rows, not the empty
-  // slices for aio and perplexity.
+  // Historical scans may already contain substituted rows from the old
+  // fallback. New probing must never create them, but finalize still needs to
+  // read the evidence that was already persisted.
   //
-  // Use 8 queries (not 6) so that after chunk 1's budget cuts aio short
-  // (2 rows), chunk 2 produces enough chatgpt rows (6) to pass
+  // Use 8 queries (not 6) so that the legacy chatgpt rows pass
   // HEADLINE_MIN_NON_BRANDED_ANSWERS (5) and be eligible in computeHeadline.
   const MORE_QUERIES = [
     ...QUERIES,
@@ -517,7 +508,16 @@ test("R3.2.9 — a refrozen scan summarizes the rows that actually exist, not th
     {}
   );
 
-  // Finalize — must summarize chatgpt's rows, not the frozen list.
+  // Simulate six legacy rows written by a pre-guard worker. The current worker
+  // above must have dispatched none of these.
+  assert.equal(backend.rows.filter((r) => r.engine === "chatgpt").length, 0);
+  await backend.deps.upsertPromptResults(MORE_QUERIES.slice(2).map((query) => ({
+    job_id: jobId, brand: "acme.com", query: query.text, engine: "chatgpt",
+    answered: true, mentioned: query.text.includes("best"),
+    raw: probeResult("chatgpt", query, query.text.includes("best")),
+  })));
+
+  // Finalize — must summarize those historical rows, not only the frozen list.
   const job = await runFinalizePhase(jobId, chunkTwo.checkpoint, {
     ...backend.deps,
     resolveEnabledEngines: () => ["chatgpt"].map(fakeEngine),

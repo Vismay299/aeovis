@@ -75,6 +75,11 @@ import {
   RUN_OUTCOMES,
   RUNNERS,
 } from "../scanRuns.js";
+// R03.3a — the honest terminal collection outcome, derived from the persisted
+// rows and never from how many rows the loop processed.
+import { deriveScanOutcome, buildScorePlan, BLOCK_REASONS } from "../scanOutcome.js";
+import { SURFACE_POLICY_VERSION, METRIC_IDS } from "../scoring/metricContract.js";
+import { configVersion } from "../engines/providerReadiness.js";
 
 const MAX_SOURCING_ATTEMPTS = 3;
 // R2.10.1 — shared with the landing page so the advertised prompt count and
@@ -219,8 +224,6 @@ export function createChunkTally() {
 export const CHUNK_SKIP_REASONS = Object.freeze({
   /** A checkpoint-frozen engine that no longer resolves against the live registry. */
   ENGINE_NOT_REGISTERED: "engine_not_registered",
-  /** NONE of the frozen engines resolve, so the chunk probed today's set instead. */
-  ENGINE_SET_FALLBACK: "engine_set_fallback",
   /** A probe returned carrying `error`: the row is still written, the answer is not real. */
   PROBE_ERROR: "probe_error",
   /** The prompt set was used for this scan but could not be persisted for the next one. */
@@ -1587,8 +1590,20 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
   // freeze — is the last moment at which recording it is possible at all.
   const enabledEngineNames = resolveEngines({
     engines: enginesConfig,
+    allowFallback: false,
     onSkip: (kind, engineName) => recordEngineResolutionSkip(tally, kind, engineName),
   }).map((e) => e.name);
+  const requestedConfig = enginesConfig || process.env.ENGINES || null;
+  const requestedEngineNames = requestedConfig
+    ? [...new Set(String(requestedConfig).split(",").map((name) => name.trim().toLowerCase()).filter(Boolean))]
+    : [];
+  // Freeze what the schedule/operator asked to measure. The resolver may drop
+  // an unavailable engine or default to AIO; neither is permission to erase
+  // planned work or silently replace the requested surface.
+  const frozenEngineNames = requestedEngineNames.length ? requestedEngineNames : enabledEngineNames;
+  const modelPolicyVersion = crypto.createHash("sha256")
+    .update(JSON.stringify(frozenEngineNames.map((name) => [name, configVersion(name, process.env)])))
+    .digest("hex");
 
   return {
     brand,
@@ -1602,7 +1617,8 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     static_pack_prompts: staticPackPrompts,
     queries,
     unbranded_texts: unbrandedQueries.map((q) => q.text.toLowerCase().trim()),
-    engines: enabledEngineNames,
+    engines: frozenEngineNames,
+    model_policy_version: `provider-config-v1:${modelPolicyVersion}`,
     geo,
     prompt_target: promptTarget,
     // R3.7.2 — `website_scrape` rides the checkpoint alongside cost/tokens so a
@@ -1658,7 +1674,7 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
   const brandAliases = getBrandAliases(brand, url);
   const brandDomain = extractBrandDomain(url);
 
-  const allEngineDefs = resolveEngines();
+  const allEngineDefs = resolveEngines({ allowFallback: false });
   const frozenNames = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : null;
   const filtered = frozenNames ? allEngineDefs.filter((e) => frozenNames.includes(e.name)) : allEngineDefs;
 
@@ -1673,31 +1689,21 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
   // 'succeeded', and the fact that a whole engine had been dropped existed only
   // as the difference between two array lengths inside one stack frame.
   const registered = new Set(allEngineDefs.map((e) => e.name));
+  const unavailableFrozen = (frozenNames || []).filter((name) => !registered.has(name));
   for (const name of frozenNames || []) {
     if (registered.has(name)) continue;
     recordSkip(tally, CHUNK_SKIP_REASONS.ENGINE_NOT_REGISTERED, name);
     console.warn(
       `[scan-chunk] Job ${jobId}: engine "${name}" was frozen into this scan's checkpoint but is no ` +
-        `longer registered — it will NOT be probed, and this scan's headline is blended over the ` +
-        `engines that remain. Recorded on the run as ${CHUNK_SKIP_REASONS.ENGINE_NOT_REGISTERED}.`
+        `longer registered — it will NOT be probed, and its planned work remains not-attempted. ` +
+        `Recorded on the run as ${CHUNK_SKIP_REASONS.ENGINE_NOT_REGISTERED}.`
     );
   }
 
-  // Defensive fallback only: if none of the checkpoint-frozen engine names
-  // resolve against the live registry any more (e.g. env fully reconfigured
-  // mid-scan), fall back to whatever's enabled today rather than stalling
-  // the job forever on an empty engine list. That fallback silently changes
-  // WHICH questions this scan is answered by, so it is recorded as its own
-  // reason rather than hiding among the per-engine drops above.
-  const engineDefs = filtered.length > 0 ? filtered : allEngineDefs;
-  if (frozenNames && filtered.length === 0) {
-    recordSkip(tally, CHUNK_SKIP_REASONS.ENGINE_SET_FALLBACK, frozenNames.join(","));
-    console.warn(
-      `[scan-chunk] Job ${jobId}: NONE of the checkpoint-frozen engines (${frozenNames.join(", ")}) ` +
-        `resolve any more — probing today's set (${allEngineDefs.map((e) => e.name).join(", ") || "none"}) ` +
-        `instead. This scan is no longer comparable to the set it was started with.`
-    );
-  }
+  // The frozen work matrix is the scan's identity. If every frozen engine is
+  // unavailable, finalize the missing work as not-attempted under the original
+  // names; probing a newly enabled surface would manufacture a different scan.
+  const engineDefs = filtered;
 
   // R3.2.5 — THE SAME TWO EVENTS, ON THE CHECKPOINT, SO THE SCAN CAN SAY SO.
   //
@@ -1725,12 +1731,7 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
     // Probing does not know which rows are persisted; finalize does and passes
     // them. `probed` is deliberately omitted rather than guessed at.
     priorDropped: (checkpoint.engine_set_change?.dropped_engines || []).map((e) => e.engine),
-    priorSubstituted: [
-      ...(checkpoint.engine_set_change?.substituted_engines || []).map((e) => e.engine),
-      // The fallback above IS the substitution: this chunk is about to probe
-      // today's set in place of the frozen one.
-      ...(frozenNames && filtered.length === 0 ? allEngineDefs.map((e) => e.name) : []),
-    ],
+    priorSubstituted: (checkpoint.engine_set_change?.substituted_engines || []).map((e) => e.engine),
   });
   if (engineSetChange) {
     console.warn(
@@ -1751,9 +1752,18 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
     tokens: checkpoint.stats?.tokens || 0,
     cost_unmeasured_calls: checkpoint.stats?.cost_unmeasured_calls || 0,
   };
-  let workingCheckpoint = engineSetChange
-    ? { ...checkpoint, engine_set_change: engineSetChange }
-    : checkpoint;
+  let workingCheckpoint = {
+    ...checkpoint,
+    ...(engineSetChange ? { engine_set_change: engineSetChange } : {}),
+    ...(unavailableFrozen.length && !checkpoint.blocked
+      ? {
+          blocked: {
+            reason: BLOCK_REASONS.ENGINE_NOT_REGISTERED,
+            detail: `Frozen engine unavailable: ${unavailableFrozen.join(", ")}`,
+          },
+        }
+      : {}),
+  };
   let progressPct = Math.min(85, 25 + Math.round((doneCount / totalPairs) * 60));
 
   // R3.6.2 — spend caps resolved once per chunk, before the probe loop.
@@ -1776,6 +1786,7 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       }
       if (perScanCap != null && stats.cost >= perScanCap) {
         spendCapReached = CHUNK_SKIP_REASONS.SPEND_CAP_PER_SCAN;
+        workingCheckpoint.blocked = { reason: BLOCK_REASONS.SPEND_CAP_PER_SCAN, detail: "Per-scan spend cap reached" };
         console.warn(
           `[scan-chunk] Job ${jobId}: per-scan spend cap $${perScanCap.toFixed(4)} reached ` +
             `(current $${stats.cost.toFixed(4)}). Halting new spend.`
@@ -1785,6 +1796,7 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       }
       if (perDayCap != null && dailySpend >= perDayCap) {
         spendCapReached = CHUNK_SKIP_REASONS.SPEND_CAP_PER_DAY;
+        workingCheckpoint.blocked = { reason: BLOCK_REASONS.SPEND_CAP_PER_DAY, detail: "Daily spend cap reached" };
         console.warn(
           `[scan-chunk] Job ${jobId}: daily spend cap $${perDayCap.toFixed(4)} reached ` +
             `(rolling $${dailySpend.toFixed(4)}). Halting new spend.`
@@ -2081,7 +2093,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   });
   const brandDomain = extractBrandDomain(url);
 
-  const allEngineDefs = resolveEngines();
+  const allEngineDefs = resolveEngines({ allowFallback: false });
   let engineNames = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : allEngineDefs.map((e) => e.name);
   const isMultiEngine = engineNames.length > 1;
 
@@ -2345,33 +2357,73 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   let summary;
   let engineSummaries = null;
   let headline = null;
-  let visibilityIndexPct = null;
   let enginesCounted = 0;
+  const promptTexts = [...(unbrandedTexts || [])].sort();
+  const prompt_set_hash = crypto.createHash("sha256").update(promptTexts.join("|")).digest("hex");
+  const prompt_set_id = prompt_set_hash.slice(0, 16);
+  const metricContext = {
+    plannedQueries: unbrandedTexts || [],
+    panelVersion: prompt_set_hash,
+    surfaceVersion: SURFACE_POLICY_VERSION,
+    market: checkpoint.geo ?? null,
+    // A model-policy identity must be frozen at sourcing. If an older job
+    // lacks one, comparison stays unavailable instead of inventing it now.
+    modelPolicyVersion: checkpoint.model_policy_version ?? null,
+  };
 
   if (isMultiEngine) {
     engineSummaries = {};
     for (const name of engineNames) {
       const sliceResults = results.filter((r) => r.engine === name);
-      engineSummaries[name] = summarizeEngineSlice(sliceResults, name);
+      engineSummaries[name] = summarizeEngineSlice(sliceResults, name, metricContext);
     }
-    headline = computeHeadlineFn(Object.values(engineSummaries));
+    headline = computeHeadlineFn(Object.values(engineSummaries), undefined, metricContext);
     const multiSummary = summarizeMulti({ results, engines: engineSummaries, headline });
     summary = multiSummary.summary;
     engineSummaries = multiSummary.engines;
-    visibilityIndexPct = headline.visibility_index_pct;
     enginesCounted = headline.engines_counted;
   } else {
     const single = summarizeAio(results);
-    summary = single.summary;
+    const slice = summarizeEngineSlice(results, engineNames[0] || "aio", metricContext);
+    headline = computeHeadlineFn([slice], undefined, metricContext);
+    const qualified = summarizeMulti({ results, engines: { [slice.engine]: slice }, headline }).summary;
+    summary = { ...single.summary, ...Object.fromEntries(Object.entries(qualified).filter(([key]) =>
+      ["metric_contract_version", "headline_metric", "headline_pct", "headline_state", "headline_reason",
+        "headline_qualified", "exploratory_index_pct", "distinct_eligible_prompts", "valid_collection_pct",
+        "counted_engines", "excluded_engines", "headline_reweighted", "measurement_context", "metrics"].includes(key))) };
   }
 
+  // R03.3a — THE TERMINAL COLLECTION OUTCOME, from the persisted rows.
+  //
+  // The finalizer used to end every scan with `status: "complete"` because it
+  // had finished PROCESSING rows — even when every row was an error (A07). The
+  // headline above is a scoring artifact; it answers "how did the brand do in
+  // the answers we got", not "did we get any answers". This reads the frozen
+  // work matrix and the persisted observation rows and answers the second
+  // question, so a scan that measured nothing cannot finalize as `complete`.
+  //
+  // The frozen engine set, not `engineNames` post-fallback: a surface that was
+  // planned and then became unavailable must still appear as not-attempted work
+  // rather than vanish from the denominator (R03.3b / R03.1b).
+  const planEngines = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : engineNames;
+  const scoringRows = allRows.filter((r) => !r.is_branded_query && !r.raw?.is_branded_query);
+  const diagnosticRows = allRows.filter((r) => r.is_branded_query || r.raw?.is_branded_query);
+  const terminalOutcome = deriveScanOutcome({
+    plan: buildScorePlan({ prompts: unbrandedTexts || [], engines: planEngines }),
+    rows: scoringRows,
+    diagnostics: diagnosticRows,
+    blocked: checkpoint.blocked || null,
+    engineNames: planEngines,
+  });
+  console.log(
+    `[scan-chunk] Job ${jobId}: collection outcome ${terminalOutcome.outcome} ` +
+      `(${terminalOutcome.outcome_reason}) — planned ${terminalOutcome.counts.planned}, ` +
+      `valid ${terminalOutcome.counts.valid}, failed ${terminalOutcome.counts.failed}, ` +
+      `not-attempted ${terminalOutcome.counts.not_attempted}.`
+  );
 
   // Hash the unbranded set only (frozen at sourcing time), so prompt-set
   // identity is stable/comparable across scans regardless of branded seeds.
-  const promptTexts = [...(unbrandedTexts || [])].sort();
-  const prompt_set_hash = crypto.createHash("sha256").update(promptTexts.join("|")).digest("hex");
-  const prompt_set_id = prompt_set_hash.slice(0, 16);
-
   const platform = isMultiEngine ? "multi" : "google_ai_overview";
   const scoringVersion = isMultiEngine ? "v9-multi-engine" : "v8.1-aio-unbranded-plus-presence";
 
@@ -2446,14 +2498,28 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     // reads below, and a scan-shape field has no business in a metrics row.
     // Omitted entirely when nothing changed, so the key's PRESENCE is the
     // signal and a clean scan carries no marker.
-    summary_stats: engineSetChange ? { ...summary, engine_set_change: engineSetChange } : summary,
+    //
+    // R03.3a/R03.4a — terminal_outcome ALWAYS rides here, and here only,
+    // because db.js's raw_results allowlist drops any new top-level field
+    // (the same trap the engine-set marker above documents). It is the single
+    // versioned collection outcome that the status payload, the persisted
+    // report, history and export all read back through
+    // terminalOutcomeFromRecord, so those surfaces cannot disagree.
+    summary_stats: {
+      ...summary,
+      terminal_outcome: terminalOutcome,
+      ...(engineSetChange ? { engine_set_change: engineSetChange } : {}),
+    },
   };
 
   if (isMultiEngine) {
     scanRecord.engines = engineSummaries;
-    scanRecord.visibility_index_pct = visibilityIndexPct;
+    scanRecord.visibility_index_pct = headline.headline_pct;
     scanRecord.engines_counted = enginesCounted;
   }
+  // Existing report/history consumers read this column. Raw scores remain in
+  // summary_stats.exploratory_index_pct; a refused headline stays null here.
+  scanRecord.visibility_pct = headline.headline_pct;
 
   // Fail-loud, crash-recoverable: if a PREVIOUS finalize attempt already got
   // as far as stamping scan_id onto these rows (stampScanIdForJob is
@@ -2643,9 +2709,12 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     dateOnly,
     scanId: savedScanId,
     promptSetId: prompt_set_id,
-    summary,
-    engineSummaries,
-    headline,
+    summary: { ...summary, visibility_pct: headline.headline_pct, share_of_ai_pct: headline.headline_pct },
+    engineSummaries: engineSummaries && Object.fromEntries(Object.entries(engineSummaries).map(([name, slice]) => {
+      const value = slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_pct ?? null;
+      return [name, { ...slice, visibility_pct: value, share_of_ai_pct: value }];
+    })),
+    headline: { ...headline, visibility_index_pct: headline.headline_pct },
     promptResultRows: allRows,
     brandJudgmentRows,
   });

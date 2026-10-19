@@ -487,11 +487,18 @@ test("runFinalizePhase — multi-engine: reconstructs results from `raw` and mat
   const rebuiltAio = record.results.filter((r) => r.engine === "aio");
   assert.deepEqual(rebuiltAio.map((r) => r.prompt).sort(), aioRaws.map((r) => r.prompt).sort());
 
-  // Direct comparison against independently-computed summaries over the SAME
-  // per-engine raw arrays (the exact scoring-fidelity requirement).
-  const expectedAio = summarizeEngineSlice(aioRaws, "aio");
-  const expectedChatgpt = summarizeEngineSlice(chatgptRaws, "chatgpt");
-  const expectedHeadline = computeHeadline([expectedAio, expectedChatgpt]);
+  // Finalize re-judges each row against the complete roster before scoring.
+  // Recompute from those finalized rows and the frozen measurement identity.
+  const metricContext = {
+    plannedQueries: checkpoint.unbranded_texts,
+    panelVersion: record.prompt_set_hash,
+    surfaceVersion: "surface-policy-v1",
+    market: checkpoint.geo ?? null,
+    modelPolicyVersion: checkpoint.model_policy_version ?? null,
+  };
+  const expectedAio = summarizeEngineSlice(record.results.filter((r) => r.engine === "aio"), "aio", metricContext);
+  const expectedChatgpt = summarizeEngineSlice(record.results.filter((r) => r.engine === "chatgpt"), "chatgpt", metricContext);
+  const expectedHeadline = computeHeadline([expectedAio, expectedChatgpt], undefined, metricContext);
   const expectedWrapped = summarizeEngineResults({
     results: record.results,
     engines: { aio: expectedAio, chatgpt: expectedChatgpt },
@@ -500,9 +507,23 @@ test("runFinalizePhase — multi-engine: reconstructs results from `raw` and mat
 
   assert.deepEqual(record.engines.aio, expectedAio);
   assert.deepEqual(record.engines.chatgpt, expectedChatgpt);
-  assert.equal(record.visibility_index_pct, expectedHeadline.visibility_index_pct);
+  assert.equal(record.visibility_index_pct, expectedHeadline.headline_pct);
+  assert.equal(record.summary_stats.exploratory_index_pct, expectedHeadline.visibility_index_pct);
   assert.equal(record.engines_counted, expectedHeadline.engines_counted);
-  assert.deepEqual(record.summary_stats, expectedWrapped.summary);
+  // R03.3a — summary_stats now ALWAYS carries the versioned terminal collection
+  // outcome (the same field the status route, report and history read back).
+  // This assertion is about scoring fidelity, so it compares every summary field
+  // except that one added key, and then checks the key is the expected vocabulary.
+  const { terminal_outcome: multiOutcome, ...multiSummaryStats } = record.summary_stats;
+  assert.deepEqual(multiSummaryStats, expectedWrapped.summary);
+  assert.equal(multiOutcome.version, "r03-v1", "the scan carries the R03 terminal-outcome vocabulary");
+  // FINDING P2 at the persisted finalize boundary: the plan spans aio + chatgpt
+  // (12 valid rows) but the AIO trigger denominator is the 6 Google SERPs only,
+  // so the persisted outcome cannot publish the old diluted 6/12=50%.
+  assert.equal(multiOutcome.counts.valid, 12, "collection completion stays whole-plan");
+  assert.equal(multiOutcome.metrics.aio_trigger.valid_serps, 6, "trigger denominator is the Google surface, not all 12 rows");
+  assert.equal(multiOutcome.metrics.aio_trigger.aio_present, 6);
+  assert.equal(multiOutcome.metrics.aio_trigger.trigger_rate_pct, 100, "6/6 Google AIO -> 100%");
   assert.equal(record.scoring_version, "v9-multi-engine");
   assert.equal(record.platform, "multi");
 });
@@ -529,8 +550,13 @@ test("runFinalizePhase — single engine (aio only): uses summarizeAioResults di
   assert.equal(record.engines, undefined, "single-engine records must not carry the engines map");
 
   const expected = summarizeAioResults(raws).summary;
-  assert.deepEqual(record.summary_stats, expected);
-  assert.equal(record.visibility_pct, expected.visibility_pct);
+  // R03.3a — summary_stats always carries terminal_outcome now; compare the rest.
+  const { terminal_outcome: singleOutcome, ...singleSummaryStats } = record.summary_stats;
+  for (const [key, value] of Object.entries(expected)) assert.deepEqual(singleSummaryStats[key], value, key);
+  assert.equal(singleSummaryStats.headline_qualified, false);
+  assert.equal(singleSummaryStats.exploratory_index_pct, expected.visibility_pct);
+  assert.equal(singleOutcome.version, "r03-v1");
+  assert.equal(record.visibility_pct, null, "six prompts cannot qualify a headline");
 });
 
 test("runFinalizePhase — insertScan throws => the error propagates (never swallowed)", async () => {

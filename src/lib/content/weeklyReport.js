@@ -1,6 +1,7 @@
 import { contentLlmJson } from "../llm.js";
 import { getScansForBrand } from "../db.js";
 import { listContentItems } from "../db/content.js";
+import { scanHeadline } from "../scoring/scanHeadline.js";
 
 // ---------------------------------------------------------------------------
 // R3.6.3 — Report quota: one report per brand per day.
@@ -65,6 +66,7 @@ function pct(n) {
 }
 
 function scanMetrics(scan) {
+  const headline = scanHeadline(scan);
   const raw = scan?.raw_results || {};
   const summary = raw.summary_stats || {};
   const engines = raw.engines || {};
@@ -75,7 +77,7 @@ function scanMetrics(scan) {
   return {
     scanned_at: scan?.scanned_at,
     visibility_index_pct:
-      pct(raw.visibility_index_pct) ?? pct(scan?.visibility_pct) ?? null,
+      headline ? headline.value : (pct(raw.visibility_index_pct) ?? pct(scan?.visibility_pct) ?? null),
     share_of_ai_pct: pct(summary.share_of_ai_pct ?? scan?.visibility_pct),
     aio_coverage_pct: pct(summary.aio_coverage_pct),
     citation_share_pct: pct(summary.citation_share_pct),

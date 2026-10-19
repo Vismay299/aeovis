@@ -61,9 +61,9 @@ test("formatTimestamp — missing or unparseable renders an em dash", () => {
 
 test("GUARD — nothing may stamp a missing scanTimestamp with the current clock", async () => {
   const source = await readFile(path.join(REPO, "src/services/api.js"), "utf8");
-  const line = source
-    .split("\n")
-    .find((l) => l.includes("scanTimestamp:") && !l.trim().startsWith("*"));
+  const lines = source.split("\n");
+  const index = lines.findIndex((l) => l.includes("scanTimestamp:") && !l.trim().startsWith("*"));
+  const line = index < 0 ? null : lines.slice(index, index + 5).join("\n");
 
   assert.ok(line, "normalizeResult must still assign scanTimestamp");
   assert.ok(

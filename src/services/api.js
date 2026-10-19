@@ -1,6 +1,7 @@
 import { extractBrandDomain, aggregateTopDomains, computeCompetitorCitationShare } from "../lib/scoring/citations.js";
 import { buildCompetitorLeaderboard } from "../lib/scoring/coMentions.js";
 import { isSampleRecord, assertSampleNotMutated } from "../lib/sampleIsolation.js";
+import { scanHeadline } from "../lib/scoring/scanHeadline.js";
 
 export const SAMPLE_STORAGE_KEY = "aeo_sample_scan_v1";
 export const REAL_STORAGE_KEY = "aeo_last_scan";
@@ -332,6 +333,13 @@ function buildProbeSources(isMultiEngine, data, raw) {
 }
 
 export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
+  const headline = scanHeadline(data);
+  const headlineFields = headline ? {
+    headlinePct: headline.value, headlineQualified: headline.qualified,
+    headlineState: headline.state, headlineReason: headline.reason,
+    exploratoryIndexPct: headline.exploratory, headlineMetric: headline.metric,
+    metricContractVersion: data.summary_stats?.metric_contract_version ?? data.raw_results?.summary_stats?.metric_contract_version,
+  } : {};
   if (isAlreadyNormalized(data)) {
     const competitorsRaw = data.competitorsRaw ?? data.competitors_raw ?? "";
     const rawResults = data.rawResults ?? data.results ?? [];
@@ -375,6 +383,8 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
 
     return {
       ...data,
+      ...headlineFields,
+      ...(headline ? { visibilityScore: headline.value, visibilityIndexPct: headline.value, shareOfAiPct: headline.value } : {}),
       brand,
       website,
       competitors,
@@ -637,9 +647,10 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     industry: data.industry ?? "",
     // See the note on the already-normalized branch above.
     rosterSource: data.roster_source ?? raw.roster_source ?? null,
-    visibilityScore: visibilityPct,
+    ...headlineFields,
+    visibilityScore: headline ? headline.value : visibilityPct,
     /** Hero metric — same value as visibilityScore, named for the "Share of AI answers" hero. */
-    shareOfAiPct,
+    shareOfAiPct: headline ? headline.value : shareOfAiPct,
     shareOfVoicePct,
     share_of_voice_pct: shareOfVoicePct,
     presenceRatePct,
@@ -727,7 +738,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     engineScores: buildEngineScores(isMultiEngine, data, raw, visibilityPct),
     probeSources: buildProbeSources(isMultiEngine, data, raw),
     serpCoveragePct: aioCoveragePct,
-    visibilityIndexPct: data.visibility_index_pct ?? raw.visibility_index_pct ?? null,
+    visibilityIndexPct: headline ? headline.value : (data.visibility_index_pct ?? raw.visibility_index_pct ?? null),
     /**
      * R2.1.2 — this `?? 0` STAYS, and the guard test allows it by name.
      *
@@ -753,7 +764,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     perEngineSummaries: (data.engines || raw.engines) || null,
     summary: generateSummary(
       brand,
-      isMultiEngine
+      headline ? headline.value : isMultiEngine
         ? (data.visibility_index_pct ?? raw.visibility_index_pct ?? visibilityPct)
         : visibilityPct,
       aioCoveragePct,

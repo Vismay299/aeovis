@@ -29,6 +29,7 @@ import {
 } from "./aioConstants.js";
 import { ENGINE_LABELS, formatEngineList } from "../engines/deployedEngines.js";
 import { createObservationEnvelope, SEARCH_STATE } from "../provenance.js";
+import { scanHeadline } from "./scanHeadline.js";
 
 const CHATGPT_CONCURRENCY = 4;
 const PERPLEXITY_CONCURRENCY = 4;
@@ -125,8 +126,32 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
 
   try {
     const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true, geo: options.geo });
-    const { text, citations, references } = extractBrightDataAiOverview(data);
+    const {
+      text,
+      citations,
+      references,
+      per_field_quality,
+      citations_verified_empty,
+      parser_version,
+      evidence_id,
+      serp_state,
+    } = extractBrightDataAiOverview(data);
     const organic = extractBrightDataOrganic(data);
+
+    // R04.5a — the validated parse result travels with EVERY observation, not only
+    // the ones that carried text or citations. A valid no-AIO row has neither, and
+    // that is exactly the row which has to prove it was measured: without the SERP
+    // state, the parser version and the captured evidence id, storage cannot tell
+    // "there was no Overview" from "we never read one" — A01 at the data layer, and
+    // it made the no-AIO rows the least auditable rows in the scan. Absent values
+    // are left off rather than defaulted: the raw-payload branch never went through
+    // the parser, so it has no quality or evidence to report and a default here
+    // would invent one.
+    if (serp_state !== undefined) result.serp_state = serp_state;
+    if (per_field_quality !== undefined) result.per_field_quality = per_field_quality;
+    if (citations_verified_empty !== undefined) result.citations_verified_empty = citations_verified_empty;
+    if (parser_version !== undefined) result.parser_version = parser_version;
+    if (evidence_id !== undefined) result.evidence_id = evidence_id;
     result.organic = organic;
     if (brandDomain && organic.length > 0) {
       const brandPos = organic.findIndex(
@@ -648,6 +673,16 @@ export const NO_MEASUREMENT_TEXT = "—";
  * }}
  */
 export function describeScanMeasurement(row, { key = "visibility_pct" } = {}) {
+  const headline = (key === "visibility_pct" || key === "visibility_index_pct") ? scanHeadline(row) : null;
+  if (headline) {
+    return {
+      measured: headline.qualified, measuredZero: headline.value === 0,
+      pct: headline.value, text: headline.value === null ? NO_MEASUREMENT_TEXT : `${headline.value}%`,
+      state: headline.state, reason: headline.reason,
+      label: headline.qualified ? (headline.value === 0 ? ENGINE_MEASURED_ZERO_LABEL : null) : "Insufficient evidence",
+      detail: headline.qualified ? null : "The sample does not meet the headline requirements. Raw readings are exploratory.",
+    };
+  }
   const raw = row && typeof row === "object" ? row[key] : undefined;
   const pct = Number.isFinite(raw) ? raw : null;
   const { state, reason } = readScanStateFields(row);
@@ -791,7 +826,7 @@ function resolveEngineMeasurementState({
 /** The prompt ID a row belongs to. Distinct prompt IDs are what the sample gate counts. */
 function promptIdentityOf(row) {
   const id = row?.prompt_id ?? row?.promptId ?? row?.query ?? row?.prompt;
-  return id === null || id === undefined ? null : String(id);
+  return id === null || id === undefined ? null : String(id).trim().toLowerCase();
 }
 
 /**
@@ -964,8 +999,18 @@ function buildSliceMetrics({
   policy = ELIGIBILITY_POLICY_V1,
   options = {},
 }) {
-  const planned = nonBranded.length;
-  const collection = { valid: panel.length, planned };
+  const plannedQueries = Array.isArray(options.plannedQueries)
+    ? new Set(options.plannedQueries.map((q) => String(q).trim().toLowerCase()))
+    : null;
+  const inPlan = (row) => !plannedQueries || plannedQueries.has(String(row.query ?? row.prompt ?? "").trim().toLowerCase());
+  nonBranded = nonBranded.filter(inPlan);
+  panel = panel.filter((r) => inPlan(r) && !r.error);
+  elicitingPool = elicitingPool.filter((r) => inPlan(r) && !r.error);
+  const unique = [...new Map(nonBranded.map((r) => [observationKeyOf(r), r])).values()];
+  const validRows = unique.filter((r) => !r.error && (r.answer_present === true ||
+    (engineName === "aio" && r.serp_state === "valid_serp")));
+  const planned = plannedQueries ? plannedQueries.size : unique.length;
+  const collection = { valid: validRows.length, planned };
   const window = rowsCollectionWindow(panel);
 
   const contextFor = (rosterVersion) =>
@@ -1063,10 +1108,12 @@ function buildSliceMetrics({
       context: conditionalContext,
       policy,
     }),
-    [METRIC_IDS.COMPLETION]: metricFromRows({
+    [METRIC_IDS.COMPLETION]: createMetric({
       metricId: METRIC_IDS.COMPLETION,
-      rows: nonBranded,
-      valueOf: (r) => r.answer_present === true,
+      numerator: collection.valid,
+      denominator: collection.planned,
+      eligiblePromptIds: distinctPromptIds(validRows),
+      collection,
       context: selfContext,
       policy,
     }),
@@ -1078,7 +1125,7 @@ function buildSliceMetrics({
   if (engineName === "aio") {
     metrics[METRIC_IDS.TRIGGER] = metricFromRows({
       metricId: METRIC_IDS.TRIGGER,
-      rows: panel,
+      rows: validRows,
       valueOf: (r) => r.aio_present === true,
       context: selfContext,
       collection,
@@ -1466,7 +1513,7 @@ function headlineContext({ policy, options, cohort }) {
  * denominator — the answers the index was actually counted over — and not off the
  * larger pool of answers that happened to come back (A02's defect, exactly).
  */
-function headlineMetricFor(eligible, { policy, options, cohort }) {
+function headlineMetricFor(eligible, { policy, options, cohort, slices = eligible }) {
   const context = headlineContext({ policy, options, cohort });
   const metricSlices = eligible
     .map((s) => s?.metrics?.[METRIC_IDS.EXPOSURE])
@@ -1516,8 +1563,12 @@ function headlineMetricFor(eligible, { policy, options, cohort }) {
       exclusionCounts.set(exclusion.reason, prior === null ? exclusion.count : prior + exclusion.count);
     }
 
-    const countedValid = measuredNumberOrNull(metric.collection?.valid);
-    const countedPlanned = measuredNumberOrNull(metric.collection?.planned);
+  }
+  // Collection is over every offered surface, including excluded/missing engines.
+  for (const slice of slices) {
+    const metric = slice?.metrics?.[METRIC_IDS.EXPOSURE];
+    const countedValid = measuredNumberOrNull(metric?.collection?.valid);
+    const countedPlanned = measuredNumberOrNull(metric?.collection?.planned);
     if (countedValid === null || countedPlanned === null) collectionComplete = false;
     else {
       valid += countedValid;
@@ -1644,6 +1695,7 @@ export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS, optio
     policy,
     options,
     cohort: eligible.map((s) => s.engine),
+    slices,
   });
 
   return headlineResult({ index: mean, eligible, excludedEngines, metric });
@@ -1828,16 +1880,13 @@ function engineDisplayLabel(name) {
  */
 export const ENGINE_SET_STATES = Object.freeze({
   /**
-   * Some frozen engines still resolve, fewer than were frozen. The index is
-   * real; it is blended over fewer engines than the scan was started with,
-   * which is why `engines_counted` fell.
+   * At least one frozen engine stopped resolving. The original work matrix
+   * remains intact; if none survive, there is no measured index.
    */
   SHRANK: "shrank",
   /**
-   * NO frozen engine resolved (or rows exist from engines that were never
-   * frozen), so the scan was answered by a DIFFERENT set than the one it was
-   * frozen with. Strictly worse than SHRANK: a frozen engine set is the whole
-   * reason two scans of one brand are comparable, and this one is not.
+   * Persisted rows exist from an engine outside the frozen set. Current
+   * dispatch does not create these; older in-flight scans may still carry them.
    */
   REFROZEN: "refrozen",
 });
@@ -1863,17 +1912,16 @@ function asEngineRefs(names) {
  *
  * R3.2.5 (finding B3). `checkpoint.engines` is frozen at sourcing time so a
  * mid-scan env change cannot re-pick a running scan's engines. R3.2.2 made the
- * two ways that promise gets broken VISIBLE TO AN OPERATOR — they land in
- * `scan_runs.detail.skips` as `engine_not_registered` and
- * `engine_set_fallback`. Nothing made them visible to the SCAN. The headline
+ * missing frozen engines VISIBLE TO AN OPERATOR in
+ * `scan_runs.detail.skips` as `engine_not_registered`. Nothing made them visible to the SCAN. The headline
  * was blended over fewer engines, `scans.engines_counted` dropped, and the scan
  * record carried no reason for either: the number moved and the explanation
  * existed only in a ledger nobody rendering a dashboard reads. That is the same
  * class R2.2.6 closed for a degraded engine, one step earlier — there the
  * engine answered badly, here it is gone.
  *
- * TWO STATES, KEPT APART ON PURPOSE. "Fewer engines than I promised" and "a
- * different set than I promised" cost the reader different things, and
+ * TWO STATES, KEPT APART ON PURPOSE. "Fewer engines than I promised" and "rows
+ * from an engine I did not promise" cost the reader different things, and
  * collapsing them would tell someone whose scan is no longer comparable to its
  * own history that it merely counts one engine fewer.
  *
@@ -1933,7 +1981,7 @@ export function describeEngineSetChange({
   ]);
 
   let state;
-  if (resolved.length === 0 || substituted.length > 0) {
+  if (substituted.length > 0) {
     state = ENGINE_SET_STATES.REFROZEN;
   } else if (dropped.length > 0) {
     state = ENGINE_SET_STATES.SHRANK;
@@ -1957,13 +2005,15 @@ export function describeEngineSetChange({
   const detail =
     state === ENGINE_SET_STATES.SHRANK
       ? `This scan was frozen onto ${frozenLabels} when it started. ${droppedLabels} stopped being ` +
-        `registered before it finished, so ${one ? "it was" : "they were"} never probed and ` +
-        `${one ? "is" : "are"} not in the AI Visibility Index. The index is blended over ` +
-        `${resolved.length} of the ${frozenNames.length} engines this scan was frozen with ` +
-        `(${resolvedLabels}), which is why the engines counted fell. Re-run the scan to bring ` +
-        `${droppedLabels} back.`
+        `registered before it finished, so ${one ? "it was" : "they were"} never probed. ` +
+        (resolved.length === 0
+          ? `No frozen engine remained, so no AI Visibility Index was measured. `
+          : `The index is blended over ${resolved.length} of the ${frozenNames.length} engines ` +
+            `this scan was frozen with (${resolvedLabels}), which is why the engines counted fell. `) +
+        `Re-run the scan to bring ${droppedLabels} back.`
       : `This scan was frozen onto ${frozenLabels} when it started, and ` +
-        `${resolved.length === 0 ? "none of those engines still resolved" : `${droppedLabels} stopped resolving`} ` +
+        `${dropped.length === 0 ? "its frozen engines were still registered" :
+          resolved.length === 0 ? "none of those engines still resolved" : `${droppedLabels} stopped resolving`} ` +
         `before it finished. It was answered by ` +
         `${substitutedLabels || "the engine set configured when it finished"} instead. A frozen ` +
         `engine set is what makes two scans of the same brand comparable, so this reading cannot ` +
@@ -2161,7 +2211,7 @@ export function resolveEnabledEngines(options = {}) {
     enabled.push(def);
   }
 
-  if (enabled.length === 0) {
+  if (enabled.length === 0 && options.allowFallback !== false) {
     const aioDef = ENGINE_REGISTRY.find((e) => e.name === "aio");
     if (aioDef.isConfigured()) {
       // Substituting a DIFFERENT engine set than the one that was asked for. The

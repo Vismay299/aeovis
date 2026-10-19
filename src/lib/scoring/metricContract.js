@@ -382,8 +382,12 @@ export function dedupeObservations(observations = [], { keyOf = (o) => o?.key } 
  */
 export function reduceObservations(
   observations = [],
-  { keyOf, promptIdOf, replicateOf, valueOf, policy = ELIGIBILITY_POLICY_V1 } = {}
+  options = {}
 ) {
+  const { keyOf, promptIdOf, replicateOf, policy = ELIGIBILITY_POLICY_V1 } = options;
+  // A plain options object inherits Object.prototype.valueOf. Treat only an
+  // explicitly supplied mapper as a mapper; otherwise read observation.value.
+  const valueOf = Object.hasOwn(options, "valueOf") ? options.valueOf : null;
   const { unique, duplicates, unkeyed } = dedupeObservations(observations, {
     keyOf: keyOf ?? ((o) => o?.key),
   });
