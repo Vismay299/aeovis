@@ -59,6 +59,38 @@ ALTER TABLE schema_migrations
  * the state 009 was found in.
  */
 const EXPECTED_OBJECTS = {
+  "028_measurement_evidence.sql": [
+    {kind:"table",name:"measurement_evidence"},
+    {kind:"table",name:"measurement_incidents"},
+    {kind:"function",name:"record_measurement_incident"},
+  ],
+  "029_repair_workflow.sql": [
+    {kind:"table",name:"repair_artifacts"},
+    {kind:"table",name:"repair_artifact_heads"},
+    {kind:"function",name:"append_repair_artifact"},
+    {kind:"function",name:"decide_checked_content"},
+    {kind:"function",name:"record_verified_publication"},
+    {kind:"function",name:"repair_content_hash"},
+  ],
+  "030_scan_finalize_identity.sql": [
+    {kind:"column",name:"scans.origin_job_id"},
+    {kind:"constraint",name:"scans_origin_job_key"},
+  ],
+  "031_content_check_budget.sql": [
+    {kind:"table",name:"content_check_claims"},
+    {kind:"function",name:"claim_content_check"},
+    {kind:"function",name:"finish_content_check"},
+  ],
+  "032_durable_schedule_windows.sql": [
+    {kind:"table",name:"measurement_windows"},
+    {kind:"function",name:"enqueue_measurement_window"},
+    {kind:"column",name:"scan_jobs.panel_snapshot"},
+    {kind:"column",name:"scan_jobs.measurement_context"},
+  ],
+  "033_atomic_scan_materialization.sql": [
+    {kind:"function",name:"materialize_scan_report"},
+  ],
+
   "027_durable_probe_dispatch.sql": [
     { kind: "table", name: "probe_observations" },
     { kind: "table", name: "probe_dispatch_control" },

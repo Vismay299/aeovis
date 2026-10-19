@@ -216,7 +216,8 @@ test("worker runs a custom crew: transforms + fact-check between Writer and Edit
 
   // Fact-check findings landed in the rubric violations.
   assert.ok(items[0].rubric.violations.some((v) => v.rule === "fact_check:overstated"));
-  assert.equal(items[0].rubric.fact_check.passed, true);
+  assert.equal(items[0].rubric.fact_check.passed, false, "a model verdict cannot qualify this fixture without captured sources");
+  assert.ok(items[0].rubric.violations.some(v=>v.rule==="fact_check:missing_evidence"));
 
   // Review prompt saw the fact-check findings and the knowledge.
   const reviewPrompt = prompts[6];

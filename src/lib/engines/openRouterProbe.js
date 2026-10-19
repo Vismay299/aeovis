@@ -124,7 +124,7 @@ function addStats(stats, usage, cost) {
  * ChatGPT and Perplexity model calls behind the single LLM_API_KEY used by the
  * utility/content LLM, while retaining engine-specific model ids and citations.
  */
-export async function probeOpenRouterEngine({ engine, query, stats, model = getOpenRouterEngineModel(engine), durableDispatch = false, deadlineAt = null }) {
+export async function probeOpenRouterEngine({ engine, query, stats, model = getOpenRouterEngineModel(engine), durableDispatch = false, deadlineAt = null, measurementContext = null, captureEvidence = null }) {
   const apiKey = getLlmApiKey();
   const baseUrl = getLlmBaseUrl();
   const provider = getLlmProvider(baseUrl);
@@ -167,7 +167,7 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
               parameters: {
                 engine: "native",
                 max_total_results: 5,
-                user_location: { type: "approximate", country: "IN" },
+                user_location: { type: "approximate", country: (measurementContext?.country || "in").toUpperCase() },
               },
             },
           ],
@@ -185,6 +185,7 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
         });
       }
       const data = await response.json();
+      if (captureEvidence) await captureEvidence({payload:data,provider:"openrouter",surface:engine,requestId:data.id || null});
       const message = data?.choices?.[0]?.message;
       if (!message) throw new Error("OpenRouter returned no answer message");
       const usage = data.usage || null;
@@ -194,7 +195,7 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
       if (!textFromMessage(message) && references.length === 0) {
         throw new Error(`OpenRouter returned an empty answer (finish reason: ${data?.choices?.[0]?.finish_reason || "unknown"})`);
       }
-      const returnedModel = data?.model || model;
+      const returnedModel = data?.model || null;
       return {
         text: textFromMessage(message),
         citations: references.map((item) => normalizeUrl(item.href)).filter(Boolean),
@@ -204,7 +205,7 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
         requested_model: model,
         returned_model: returnedModel,
         provider_request_id: data?.id || null,
-        search_requests: Number(usage?.server_tool_use?.web_search_requests) || 0,
+        search_requests: Number.isFinite(usage?.server_tool_use?.web_search_requests) ? usage.server_tool_use.web_search_requests : null,
         ...cost,
         error: null,
         error_kind: null,

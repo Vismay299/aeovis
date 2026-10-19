@@ -239,9 +239,10 @@ function ConnectCard({ onConnect, busy, disabled }) {
         <Search />
       </div>
       <h2 className="pv-gsc-connect__title">Connect Google Search Console</h2>
+      <p>This connection imports Search Analytics query data. Google’s separate Generative AI report is not imported here.</p>
       <ul className="pv-gsc-benefits">
         <li><CircleCheck aria-hidden="true" />See which searches bring visitors to your site.</li>
-        <li><CircleCheck aria-hidden="true" />Compare search demand with how AI engines mention your brand.</li>
+        <li><CircleCheck aria-hidden="true" />Compare Google Search queries with your separately collected AI observations.</li>
         <li><CircleCheck aria-hidden="true" />Read-only access. Disconnect any time.</li>
       </ul>
       <Button icon={Link2} loading={busy} disabled={disabled} onClick={onConnect}>

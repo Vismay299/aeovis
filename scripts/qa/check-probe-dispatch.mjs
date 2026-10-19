@@ -338,7 +338,7 @@ try {
   await run(["R02-20"], async () => {
     // Reset previous fixture day charges; this database belongs only to this job.
     await query(
-      "TRUNCATE probe_reconciliations,probe_late_receipts,probe_attempts,probe_observations,provider_dispatch_circuits,provider_canary_budgets",
+      "TRUNCATE measurement_evidence,measurement_incidents,probe_reconciliations,probe_late_receipts,probe_attempts,probe_observations,provider_dispatch_circuits,provider_canary_budgets",
     );
     const { rows } = await fixture(10);
     const claims = await Promise.all(

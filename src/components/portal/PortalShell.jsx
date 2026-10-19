@@ -43,6 +43,7 @@ const BRAND_STORAGE_KEY = "perceev-portal-brand";
 const NAV = [
   { href: "/portal", label: "Overview", icon: LayoutDashboard, exact: true },
   { href: "/portal/scans", label: "Scans", icon: Radar, meta: "scan" },
+  { href: "/portal/measurement", label: "Questions & evidence", icon: Search },
   { href: "/portal/content", label: "Content Studio", icon: PenLine, meta: "content" },
   { href: "/portal/search-console", label: "Search Console", icon: Search, meta: "gsc" },
 ];

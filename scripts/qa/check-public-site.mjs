@@ -14,7 +14,7 @@ for (const page of getPublicUrlInventory()) {
   const canonical = /<link\b[^>]*rel="canonical"[^>]*href="([^"]+)"/.exec(html)?.[1];
   assert.equal(canonical && new URL(canonical).href, new URL(page.url).href, page.path);
 }
-for (const path of ["/login", "/signup", "/scan", "/dashboard", "/dashboard/example", "/portal", "/portal/scans/example", "/auth/reset", "/onboarding", "/api/health"]) {
+for (const path of ["/login", "/signup", "/scan", "/dashboard", "/dashboard/example", "/portal", "/portal/scans/example", "/ops/measurement", "/auth/reset", "/onboarding", "/api/health"]) {
   const response = await read(path);
   assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow", path);
 }

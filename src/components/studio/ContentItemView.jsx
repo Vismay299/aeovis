@@ -80,7 +80,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
 
   // GEO lift for approved geo_articles — target queries visible/cited since publish.
   useEffect(() => {
-    if (item?.playbook !== "geo_article" || item?.status !== "approved") return;
+    if (item?.playbook !== "geo_article" || item?.status !== "published") return;
     fetch(`/api/content-items/${itemId}/lift`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d?.applicable && setLift(d))
@@ -109,7 +109,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
       const res = await fetch(`/api/content-items/${itemId}/decision`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ verdict, comment: comment.trim() }),
+        body: JSON.stringify({ verdict, comment: comment.trim(), content_version:item.content_version, content_hash:item.content_hash }),
       });
       if (!res.ok) throw new Error((await res.json()).detail || "Decision failed");
       setComment("");
@@ -245,11 +245,12 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
           <TrendingUp size={14} />
           {lift.has_post_scan ? (
             <span>
-              GEO lift: <strong>{lift.target_count}</strong> target{" "}
+              Observed target change: <strong>{lift.target_count}</strong> target{" "}
               {lift.target_count === 1 ? "query" : "queries"} → cited on{" "}
               <strong>{lift.after.cited}</strong> (was {lift.before.cited}), visible on{" "}
-              <strong>{lift.after.visible}</strong> since approval.
+              <strong>{lift.after.visible}</strong> since verified publication.
               {lift.cited_delta > 0 && ` +${lift.cited_delta} newly cited.`}
+              <span> Observed association; causation has not been established.</span>
               {/* R5.2.3 — the approve→publish→lift pipeline has not been
                   proven end-to-end; this is a correlation, not a causal
                   measurement.  The caveat stays until the pipeline runs
@@ -259,7 +260,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
           ) : (
             <span>
               Tracking <strong>{lift.target_count}</strong> target{" "}
-              {lift.target_count === 1 ? "query" : "queries"} — re-scan the brand to measure lift since approval.
+              {lift.target_count === 1 ? "query" : "queries"} — re-scan the brand to compare observations since verified publication.
             </span>
           )}
         </div>

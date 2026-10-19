@@ -263,6 +263,7 @@ export async function insertScan(scanRecord, deps = {}) {
   // 001 (:12-24); nothing in it is optional-on-some-deployments.
   const scanRow = {
     ...baseRecord,
+    ...(scanRecord.origin_job_id ? {origin_job_id:scanRecord.origin_job_id} : {}),
     ...(scanRecord.brand_key ? { brand_key: scanRecord.brand_key } : {}),
     scoring_version: scanRecord.scoring_version,
     score_ci_low: scanRecord.score_ci_low,
@@ -278,7 +279,10 @@ export async function insertScan(scanRecord, deps = {}) {
   // (true)`, one policy covering INSERT and SELECT.
   let result;
   try {
-    result = await client.from("scans").insert([scanRow]).select();
+    if(scanRecord.origin_job_id){
+      result=await client.from("scans").upsert([scanRow],{onConflict:"origin_job_id",ignoreDuplicates:true}).select();
+      if(!result.error && !result.data?.length)result=await client.from("scans").select("*").eq("origin_job_id",scanRecord.origin_job_id);
+    } else result = await client.from("scans").insert([scanRow]).select();
   } catch (transportErr) {
     // postgrest-js resolves statement errors rather than throwing, so reaching
     // here means the request never completed (DNS, socket, an injected client
@@ -833,7 +837,7 @@ export function isJobAlive(job, nowMs = Date.now()) {
   return Number.isFinite(heartbeatMs) && nowMs - heartbeatMs < HEARTBEAT_STALE_MS;
 }
 
-export async function createScanJob({ brand, url, industry, competitors, brandKey }, deps = {}) {
+export async function createScanJob({ brand, url, industry, competitors, brandKey, panelSnapshot, measurementContext }, deps = {}) {
   const client = resolveClient(deps);
   const hasDb = !!client;
 
@@ -842,6 +846,8 @@ export async function createScanJob({ brand, url, industry, competitors, brandKe
   const job = {
     id: jobId,
     ...(brandKey ? { brand_key: brandKey } : {}),
+    ...(panelSnapshot ? {panel_snapshot:panelSnapshot} : {}),
+    ...(measurementContext ? {measurement_context:measurementContext} : {}),
     brand,
     url: url || "",
     industry: industry || "",

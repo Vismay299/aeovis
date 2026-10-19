@@ -21,6 +21,7 @@ import {
   logicalObservationKey,
   measurementContext,
   reduceObservations,
+  estimateUncertainty,
 } from "./metricContract.js";
 import {
   AIO_CONCURRENCY,
@@ -126,7 +127,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
   const { cost: queryCost } = resolveSerpQueryCost({ provider: "brightdata" });
 
   try {
-    const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true, geo: options.geo, ...(options.durableDispatch ? { attempts: 1, deadlineAt: options.deadlineAt } : {}) });
+    const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true, geo: options.geo, measurementContext: options.measurementContext, captureEvidence: options.captureEvidence, ...(options.durableDispatch ? { attempts: 1, deadlineAt: options.deadlineAt } : {}) });
     const {
       text,
       citations,
@@ -201,6 +202,9 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     result.error = sanitizeProviderText(err.message || String(err));
     result.cost = null;
     result.provider_request_id = err.evidence?.provider_request_id ?? null;
+    result.serp_state = err.serp_state || null;
+    result.parser_version = err.evidence?.parser_version || null;
+    result.validation_errors = err.evidence?.validation_errors || [];
     result.provider_failure = err.provider_failure || classifyProviderFailure({provider:"brightdata",error:err});
     console.warn(`[aio] Query failed: "${query.text}" — ${result.error}`);
   }
@@ -271,7 +275,7 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   result.measurement_method = "model_api";
   result.model_used = probeResult.model || probeResult.model_used || null;
   result.requested_model = probeResult.requested_model || probeResult.model || null;
-  result.returned_model = probeResult.returned_model || probeResult.model || null;
+  result.returned_model = Object.hasOwn(probeResult, "returned_model") ? probeResult.returned_model : (probeResult.model || null);
   result.provider_request_id = probeResult.provider_request_id || null;
   result.search_requests = probeResult.search_requests !== undefined ? probeResult.search_requests : null;
   result.search_used =
@@ -954,7 +958,7 @@ function metricFromRows({
     valueOf: (o) => o.value,
   });
 
-  return createMetric({
+  return {...createMetric({
     metricId,
     unit,
     numerator: counts.numerator,
@@ -970,7 +974,7 @@ function metricFromRows({
     collection,
     context,
     policy,
-  });
+  }),uncertainty:estimateUncertainty([...new Map(observations.map(o=>[o.key,o])).values()],{clusterOf:o=>o.promptId})};
 }
 
 /** Distinct prompt IDs across a pool of rows, for a metric counted from totals. */
@@ -1037,6 +1041,8 @@ function buildSliceMetrics({
   // The self metrics. No roster version: they are counted over the declared panel
   // and must not depend on which rivals are tracked.
   const selfContext = contextFor(null);
+  const eligibleRecommendationQueries = Array.isArray(options.plannedEligibility) ? new Set(options.plannedEligibility.filter(p=>p.purpose==="recommendation").map(p=>p.text.trim().toLowerCase())) : null;
+  const recommendationPanel=panel.filter(r=>!eligibleRecommendationQueries || eligibleRecommendationQueries.has(String(r.query ?? r.prompt ?? "").trim().toLowerCase()));
   const conditionalContext = contextFor(hasRivalRoster ? rivalRoster.join("|") : null);
   const elicitingIds = distinctPromptIds(elicitingPool);
 
@@ -1083,7 +1089,7 @@ function buildSliceMetrics({
     }),
     [METRIC_IDS.RECOMMENDATION]: metricFromRows({
       metricId: METRIC_IDS.RECOMMENDATION,
-      rows: panel,
+      rows: recommendationPanel,
       valueOf: (r) => {
         const reading = selfRecommendationOf(r);
         return reading.observed ? reading.positive : null;
@@ -1141,6 +1147,9 @@ function buildSliceMetrics({
     });
   }
 
+  if(options.panelApproved===false)for(const metric of Object.values(metrics)){
+    metric.qualified_pct=null;metric.qualified=false;metric.qualified_reason="panel_not_reviewed";
+  }
   return metrics;
 }
 
@@ -1584,7 +1593,7 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
     }
   }
 
-  return createMetric({
+  const metric=createMetric({
     metricId: METRIC_IDS.EXPOSURE,
     numerator,
     denominator,
@@ -1599,6 +1608,8 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
     context,
     policy,
   });
+  if(options?.panelApproved===false){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="panel_not_reviewed";metric.qualified_state="insufficient";}
+  return metric;
 }
 
 /**
@@ -2103,7 +2114,7 @@ const ENGINE_REGISTRY = [
     probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
         { name: "gemini", probe: async (prompt, options) => {
-          const result = await probeOpenRouterEngine({ engine: "gemini", query: prompt, stats: options?.stats, durableDispatch: options?.durableDispatch, deadlineAt: options?.deadlineAt });
+          const result = await probeOpenRouterEngine({ engine: "gemini", query: prompt, stats: options?.stats, durableDispatch: options?.durableDispatch, deadlineAt: options?.deadlineAt, measurementContext: options?.measurementContext, captureEvidence: options?.captureEvidence });
           const observed = !result.error && (result.search_requests > 0 || result.references.length > 0);
           return {
             ...result,

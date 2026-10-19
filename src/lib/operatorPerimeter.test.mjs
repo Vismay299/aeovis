@@ -239,6 +239,11 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
   assert.deepEqual(
     exempt.sort(),
     [
+      "/api/customer/content/[id]/check",
+      "/api/customer/content/[id]/publish",
+      "/api/customer/repairs/[kind]",
+      "/api/customer/measurement/evidence",
+      "/api/customer/measurement",
       "/api/customer/agents",
       "/api/customer/agents/[id]",
       "/api/customer/content",

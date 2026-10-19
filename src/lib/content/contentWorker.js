@@ -1,3 +1,5 @@
+import {draftCheck} from '../repairs/workflow.js';
+import {isCurrentCheck} from '../repairs/researchContract.js';
 import {
   getContentJob,
   updateContentJob,
@@ -169,7 +171,7 @@ function getCostCap() {
 
 function assertUnderCostCap(stats, step) {
   const cap = getCostCap();
-  if ((stats.cost || 0) > cap) {
+  if ((stats.cost || 0) + (stats.prior_cost || 0) > cap) {
     throw new Error(
       `Cost cap exceeded after step "${step}": $${stats.cost.toFixed(4)} > $${cap} (CONTENT_MAX_COST_PER_ITEM)`
     );
@@ -583,9 +585,13 @@ export async function startContentJob(jobId, deps = {}) {
       );
     }
     costBase = Number.isFinite(recordedCost) ? recordedCost : 0;
+    if(costBase >= getCostCap())throw new Error("Content item budget exhausted before resume");
 
+    stats.prior_cost=costBase;
     const { brand, playbook, input } = job;
     const agent = resolveAgent(job);
+    // Pipelines without a fact-check block deliver an unchecked draft; the
+    // exact-version approval gate requires a separate saved-draft check.
     const pipeline = resolvePipeline(agent);
     trace = initTrace(pipeline);
 
@@ -777,6 +783,7 @@ export async function startContentJob(jobId, deps = {}) {
           const blockId = `${slug}:1`;
 
           // R3.5.1 — skip completed mid-blocks.
+          if (slug==="fact_check" && !isCurrentCheck(factCheck,draft,ctx.researchPack)) completedBlocks.delete(blockId);
           if (completedBlocks.has(blockId)) {
             if (checkpoint) {
               console.log(`[content-worker] Job ${jobId}: resuming — block "${slug}" already completed`);
@@ -887,6 +894,7 @@ export async function startContentJob(jobId, deps = {}) {
       fact_check: factCheck ? { passed: factCheck.passed, issue_count: factCheck.issues.length } : undefined,
       below_threshold: belowThreshold,
       cycles,
+      check: draftCheck(draft,ctx.researchPack,factCheck),
     };
 
     // R3.5.7 — STILL OURS? The last status write ("reviewing") can be minutes
@@ -1087,10 +1095,18 @@ export async function reviseContentItem(itemId, comment, deps = {}) {
   const revCycle = (item.revision || 0) + 1;
   const revLedger = (slug) => ({ jobId: item.job_id, brand, slug, cycle: revCycle, stats, deps });
 
+  const originalJob=item.job_id ? await (deps.getContentJob || getContentJob)(item.job_id,deps) : null;
+  stats.prior_cost=Number(originalJob?.cost_total || 0);
+  assertUnderCostCap(stats,"before human revision");
   try {
     const draft = await withLedger(revLedger("draft"), () => runDraft(ctx, deps));
     assertUnderCostCap(stats, "draft(revision)");
-    const review = await withLedger(revLedger("review"), () => runReview({ ...ctx, draft }, deps));
+    const factCheck = await withLedger(revLedger("fact_check"),()=>runFactCheck({...ctx,draft},deps));
+    assertUnderCostCap(stats,"fact_check(revision)");
+    const review = await withLedger(revLedger("review"), () => runReview({ ...ctx, draft, factCheck }, deps));
+    review.check=draftCheck(draft,ctx.researchPack,factCheck);
+    review.fact_check={passed:factCheck.passed,issues:factCheck.issues};
+    review.below_threshold=review.verdict!=="pass" || !factCheck.passed;
     assertUnderCostCap(stats, "review(revision)");
 
     const revisions = [

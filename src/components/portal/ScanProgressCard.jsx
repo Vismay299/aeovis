@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { Radar, Play } from "lucide-react";
 import { usePortal } from "./PortalShell";
 import { SCAN_STAGES } from "./useScanTracker";
+import { scanCompletionNotice } from "@/lib/scanCompletion";
 import { Banner, Badge, Button, ProgressBar, StageSteps, formatDuration } from "./ui";
 
 function useElapsed(since, running) {
@@ -33,14 +34,15 @@ export function ScanProgressCard({ showIdle = true }) {
   const elapsed = useElapsed(scan.job?.created_at, scan.active);
 
   if (scan.finished?.status === "complete") {
+    const completion = scanCompletionNotice(scan.finished);
     return (
       <Banner
-        tone="success"
-        title="Scan complete"
+        tone={completion.tone}
+        title={completion.title}
         onDismiss={scan.dismiss}
         action={scan.finished.resultId ? <Button size="sm" variant="secondary" href={`/portal/scans/${encodeURIComponent(scan.finished.resultId)}`}>View report</Button> : null}
       >
-        Your latest AI visibility results are ready below.
+        {completion.message}
       </Banner>
     );
   }

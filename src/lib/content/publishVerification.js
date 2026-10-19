@@ -1,3 +1,4 @@
+import {verifyBodyMatch,contentHash,canonicalPage} from '../repairs/workflow.js';
 /**
  * R5.2.2 — explicit publish step with URL verification.
  *
@@ -60,7 +61,7 @@ export function titleMatches(itemTitle, pageTitle) {
  *   ok: true — verification passed; the URL is live and the content matches.
  *   ok: false — one of the gates failed; error explains which.
  */
-export async function verifyPublishUrl({ url, itemTitle, fetchImpl } = {}) {
+export async function verifyPublishUrl({ url, itemTitle, itemBody, allowedDomains, fetchImpl } = {}) {
   if (!url || typeof url !== "string") {
     return { ok: false, error: "missing_url", detail: "A URL is required to publish." };
   }
@@ -77,6 +78,8 @@ export async function verifyPublishUrl({ url, itemTitle, fetchImpl } = {}) {
     return { ok: false, error: "invalid_url", detail: `The URL could not be parsed: ${err.message}` };
   }
 
+  const domainAllowed=value=>!allowedDomains || allowedDomains.some(domain=>new URL(value).hostname===domain || new URL(value).hostname.endsWith(`.${domain}`));
+  if(!domainAllowed(normalizedUrl))return {ok:false,error:"unapproved_publication_domain",detail:"Approve the publishing domain before verification."};
   // Gate 1: the URL must resolve with HTTP 200
   let response;
   try {
@@ -106,6 +109,20 @@ export async function verifyPublishUrl({ url, itemTitle, fetchImpl } = {}) {
       error: "not_ok",
       detail: `The URL returned HTTP ${status} — expected 200.`,
     };
+  }
+
+  if(itemBody!==undefined){
+    const finalUrl=response.url || normalizedUrl;
+    if(!domainAllowed(finalUrl))return {ok:false,error:"unapproved_redirect_domain",detail:"The final publishing domain is not approved."};
+    let html;try {html=await response.text();} catch{return {ok:false,error:"body_read_failed",detail:"The live page body could not be verified."};}
+    if(html.length>2_000_000)return {ok:false,error:"body_too_large",detail:"The page exceeds the verification limit."};
+    const match=verifyBodyMatch(itemBody,html);
+    const canonical=html.match(/<link\b[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)/i)?.[1];
+    return {ok:match.matched,matched:match.matched,error:match.reason,detail:match.matched?null:"The published body does not match the approved draft.",
+      ...match,status:response.status,content_hash:contentHash(itemTitle,itemBody),page_hash:contentHash('',html),
+      final_url:canonicalPage(finalUrl),canonical_url:canonical?canonicalPage(new URL(canonical,finalUrl).href):null,
+      title_found:extractTitle(html),verified_at:new Date().toISOString(),
+      indexing:null,noindex:/noindex/i.test(response.headers?.get?.("x-robots-tag")||'') || /<meta[^>]+(?:name=["']robots["'][^>]*content=["'][^"']*noindex|content=["'][^"']*noindex[^>]*name=["']robots)/i.test(html)};
   }
 
   // Gate 2 (optional): content match when an item title is provided

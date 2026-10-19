@@ -130,6 +130,7 @@ export function createObservationEnvelope(input = {}) {
     // Location identity: requested vs observed
     requested_location: input.requested_location || "in",
     observed_location: input.observed_location || null,
+    language:input.language || null,device:input.device || null,session_policy:input.session_policy || null,
     location_verification: input.location_verification || (input.observed_location ? LOCATION_VERIFICATION.PROVIDER_ATTESTED : LOCATION_VERIFICATION.UNVERIFIED),
 
     // Telemetry and requests

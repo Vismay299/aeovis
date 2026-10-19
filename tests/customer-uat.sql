@@ -138,16 +138,17 @@ INSERT INTO public.content_jobs(id,brand,playbook,status) VALUES
 INSERT INTO public.content_items(id,job_id,brand,playbook,status) VALUES
  ('40000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','geo_article','awaiting_approval');
 SET LOCAL ROLE service_role;
-SELECT public.decide_customer_content('40000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','awaiting_approval','approved','approved','approved','Test review');
+UPDATE public.content_items SET rubric=jsonb_build_object('check',jsonb_build_object('passed',true,'content_hash',content_hash,'research_snapshot',coalesce(research_pack,'{}'::jsonb))) WHERE id='40000000-0000-0000-0000-000000000001';
+SELECT public.decide_checked_content(id,brand,content_version,content_hash,'approved','Test review',NULL) FROM public.content_items WHERE id='40000000-0000-0000-0000-000000000001';
 DO $$ BEGIN
  IF (SELECT status FROM public.content_jobs WHERE id='30000000-0000-0000-0000-000000000001') <> 'approved'
  OR (SELECT status FROM public.content_items WHERE id='40000000-0000-0000-0000-000000000001') <> 'approved'
  OR (SELECT count(*) FROM public.content_feedback WHERE item_id='40000000-0000-0000-0000-000000000001') <> 1
  THEN RAISE EXCEPTION 'Review was not committed atomically'; END IF;
  BEGIN
-  PERFORM public.decide_customer_content('40000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','awaiting_approval','rejected','rejected','rejected','Stale review');
+  PERFORM public.decide_checked_content('40000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001',0,'stale','rejected','Stale review',NULL);
   RAISE EXCEPTION 'Stale review was allowed';
- EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'Draft changed or is unavailable' THEN RAISE; END IF; END;
+ EXCEPTION WHEN OTHERS THEN IF SQLERRM <> 'stale draft version' THEN RAISE; END IF; END;
 END $$;
 RESET ROLE;
 SET LOCAL ROLE authenticated;

@@ -1,0 +1,456 @@
+{
+  "suite": "bounded-owned-site-technical-capture",
+  "schema_version": "technical-evidence-v1",
+  "scope": {
+    "website": "https://perceev.ai/",
+    "max_requests": 6,
+    "requests": 2,
+    "whole_site_audit": false
+  },
+  "pages": [
+    {
+      "url": "https://perceev.ai/",
+      "final_url": "https://perceev.ai/",
+      "status": 200,
+      "redirects": [
+        {
+          "url": "https://perceev.ai/",
+          "status": 200,
+          "location": null
+        }
+      ],
+      "discovery": "homepage",
+      "canonical": null,
+      "canonical_selected_by_google": null,
+      "directives": [],
+      "source_text_chars": 0,
+      "source_sha256": "d1dac02bbc73b84231dce33b032df1d94860b6729f60c477ca5de04f119fef54",
+      "captured_at": "2026-10-19T19:35:47.176Z",
+      "structured_data": [],
+      "robots_state": "found",
+      "robots": [
+        {
+          "name": "GPTBot",
+          "operator": "OpenAI",
+          "platform": "GPT model training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "OAI-SearchBot",
+          "operator": "OpenAI",
+          "platform": "ChatGPT Search",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "ChatGPT-User",
+          "operator": "OpenAI",
+          "platform": "ChatGPT browsing & actions (on-demand)",
+          "purpose": "agent",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "ClaudeBot",
+          "operator": "Anthropic",
+          "platform": "Claude model training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "anthropic-ai",
+          "operator": "Anthropic",
+          "platform": "Claude model training (legacy crawler identity)",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Claude-User",
+          "operator": "Anthropic",
+          "platform": "Claude on-demand fetch (user-referenced links)",
+          "purpose": "agent",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Claude-SearchBot",
+          "operator": "Anthropic",
+          "platform": "Claude search & answer grounding",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Claude-Web",
+          "operator": "Anthropic",
+          "platform": "Legacy Claude crawler (predecessor to ClaudeBot)",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Google-Extended",
+          "operator": "Google",
+          "platform": "Gemini & AI training (Search unaffected)",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Googlebot",
+          "operator": "Google",
+          "platform": "Google Search & AI Overviews indexing",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "GoogleOther",
+          "operator": "Google",
+          "platform": "Internal Google research crawling",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Google-CloudVertexBot",
+          "operator": "Google",
+          "platform": "Vertex AI Search / customer RAG agents",
+          "purpose": "agent",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "PerplexityBot",
+          "operator": "Perplexity",
+          "platform": "Perplexity search index",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Perplexity-User",
+          "operator": "Perplexity",
+          "platform": "Perplexity Assistant on-demand fetch",
+          "purpose": "agent",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Bytespider",
+          "operator": "ByteDance",
+          "platform": "Doubao & TikTok AI model training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "CCBot",
+          "operator": "Common Crawl Foundation",
+          "platform": "Common Crawl corpus (widely reused for LLM training)",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Amazonbot",
+          "operator": "Amazon",
+          "platform": "Alexa & Amazon AI training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Applebot",
+          "operator": "Apple",
+          "platform": "Siri & Spotlight Search indexing",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Applebot-Extended",
+          "operator": "Apple",
+          "platform": "Apple Intelligence model training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Meta-ExternalAgent",
+          "operator": "Meta",
+          "platform": "Meta AI training & search grounding",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "FacebookBot",
+          "operator": "Meta",
+          "platform": "Meta language-model training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "meta-externalfetcher",
+          "operator": "Meta",
+          "platform": "Meta AI on-demand link fetch",
+          "purpose": "agent",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "cohere-ai",
+          "operator": "Cohere",
+          "platform": "Cohere model training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "cohere-training-data-crawler",
+          "operator": "Cohere",
+          "platform": "Cohere model training data collection",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Bingbot",
+          "operator": "Microsoft",
+          "platform": "Bing Search & Copilot grounding",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "BingPreview",
+          "operator": "Microsoft",
+          "platform": "Bing preview card rendering",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "DuckAssistBot",
+          "operator": "DuckDuckGo",
+          "platform": "DuckAssist AI answers",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "DuckDuckBot",
+          "operator": "DuckDuckGo",
+          "platform": "DuckDuckGo Search index",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "YouBot",
+          "operator": "You.com",
+          "platform": "You.com search & AI answers",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Diffbot",
+          "operator": "Diffbot",
+          "platform": "Diffbot Knowledge Graph & AI training data",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Timpibot",
+          "operator": "Timpi",
+          "platform": "Timpi decentralized search index",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "ImagesiftBot",
+          "operator": "ImageSift",
+          "platform": "Image dataset collection for AI/ML training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Omgilibot",
+          "operator": "Webz.io",
+          "platform": "Web data feed resold for AI training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Webzio-Extended",
+          "operator": "Webz.io",
+          "platform": "AI training data opt-out crawler",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "PetalBot",
+          "operator": "Huawei",
+          "platform": "Petal Search & Celia AI assistant",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "AI2Bot",
+          "operator": "Allen Institute for AI",
+          "platform": "Dolma dataset / OLMo model training",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "VelenPublicWebCrawler",
+          "operator": "Velen.io",
+          "platform": "AI training data marketplace",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "ProRataInc",
+          "operator": "ProRata.ai",
+          "platform": "Gist AI news app (licensed content attribution)",
+          "purpose": "training",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "iaskspider",
+          "operator": "iAsk.ai",
+          "platform": "iAsk AI search engine",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Andibot",
+          "operator": "Andi Search",
+          "platform": "Andi AI search assistant",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "ExaBot",
+          "operator": "Exa Labs",
+          "platform": "Exa AI search API for AI agents",
+          "purpose": "agent",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "Kagibot",
+          "operator": "Kagi",
+          "platform": "Kagi Search & Kagi Assistant",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        },
+        {
+          "name": "YandexBot",
+          "operator": "Yandex",
+          "platform": "Yandex Search & YandexGPT grounding",
+          "purpose": "search",
+          "status": "open",
+          "matchedGroup": "*",
+          "reason": "Matched the wildcard (*) group, which carries no disallow rules."
+        }
+      ],
+      "rendered_content": {
+        "state": "unmeasured"
+      },
+      "indexing": {
+        "state": "unknown"
+      },
+      "verified_crawler_fetch": {
+        "state": "unobserved"
+      },
+      "ai_inclusion_control": {
+        "state": "unverified",
+        "reason": "Authorized property settings have not been imported"
+      },
+      "issues": [
+        {
+          "code": "insufficient_source_text",
+          "severity": "medium",
+          "evidence": "0 source characters",
+          "action": "Inspect source and rendered content; rendering has not been measured",
+          "target_url": "https://perceev.ai/",
+          "owner": "Website owner",
+          "confidence": "observed",
+          "engine_relevance": "Search and answer discovery",
+          "retest": "Fetch the same URL after the change and compare directives/content; confirm indexing separately"
+        }
+      ]
+    }
+  ],
+  "failures": [
+    {
+      "resource": "sitemap",
+      "reason": "unavailable"
+    }
+  ],
+  "captured_at": "2026-10-19T19:35:47.178Z",
+  "interpretation": "Observed fetch/directive facts only. Indexing, rendered accessibility, crawler visits and inclusion settings require separate evidence."
+}

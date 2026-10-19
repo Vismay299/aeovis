@@ -420,12 +420,13 @@ function proxySessionError(data) {
   return null;
 }
 
-function buildGoogleSearchUrl(query, { geo = resolveSerpGeo(), aiOverview = true } = {}) {
+function buildGoogleSearchUrl(query, { geo = resolveSerpGeo(), aiOverview = true, context = null } = {}) {
   const params = new URLSearchParams({
     q: query,
-    hl: "en",
+    hl: context?.language || "en",
     gl: geo,
     brd_json: "1",
+    ...(context?.device === "mobile" ? {brd_mobile:"1"} : {}),
   });
   if (aiOverview) {
     params.set("brd_ai_overview", "2");
@@ -581,7 +582,7 @@ function parseErrorFrom(parsed) {
 
 export async function brightDataSearch(query, options = {}) {
   const baseTimeoutMs = options.timeout || 60000;
-  const maxAttempts = options.attempts ?? 2;
+  const maxAttempts = options.durableDispatch ? 1 : options.attempts ?? 2;
   const backoffMs = options.backoffMs ?? 3000;
   const deadlineAt =
     options.deadlineAt != null
@@ -615,7 +616,7 @@ export async function brightDataSearch(query, options = {}) {
     throw new Error("Bright Data SERP is not configured (set BRIGHTDATA_API_KEY).");
   }
 
-  const geo = resolveSerpGeo(options.geo);
+  const geo = options.measurementContext?.country || resolveSerpGeo(options.geo);
   const attemptsEvidence = [];
 
   let lastErr = null;
@@ -645,7 +646,7 @@ export async function brightDataSearch(query, options = {}) {
         },
         body: JSON.stringify({
           zone: config.zone,
-          url: buildGoogleSearchUrl(query, { geo, aiOverview: wantAio }),
+          url: buildGoogleSearchUrl(query, { geo, aiOverview: wantAio, context:options.measurementContext }),
           format: "json",
           country: geo,
         }),
@@ -676,6 +677,8 @@ export async function brightDataSearch(query, options = {}) {
 
       // The body is read while the timer is still armed — the R04-17 fix.
       const raw = await res.text();
+      if (options.captureEvidence) await options.captureEvidence({payload:raw,provider:"brightdata",surface:"aio",
+        requestId:res.headers?.get?.("x-request-id") || null,parserVersion:GOOGLE_PAYLOAD_PARSER_VERSION});
 
       // HTML proxy error pages are transient — retry once. An HTML page that is
       // a CAPTCHA / consent / login wall is an ACCESS STATE (R04-12) and is not

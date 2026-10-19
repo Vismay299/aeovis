@@ -1,3 +1,4 @@
+import {createMeasurementEvidenceStore} from './measurementEvidence.js';
 import crypto from "node:crypto";
 import { supabase } from "../db.js";
 import {
@@ -11,7 +12,7 @@ import {
 } from "../engines/providerFailure.js";
 import { planRetry } from "../attemptPolicy.js";
 
-export const DISPATCH_VERSION = "durable-probes-v1";
+export const DISPATCH_VERSION = "durable-probes-v2";
 export const PROBE_LEASE_SECONDS = 120;
 export const PROBE_REQUEST_MS = 70_000;
 // jsonb may reorder object keys between chunks. Canonicalize recursively so a
@@ -90,6 +91,7 @@ export function createProbeDispatchStore(client = supabase) {
     return data;
   }
   return {
+    evidence:client.storage ? createMeasurementEvidenceStore(client) : null,
     block: (id, reason) =>
       rpc("block_probe_dispatch", { p_id: id, p_reason: reason }),
     seed: (rows) => rpc("seed_probe_observations", { p_rows: rows }),

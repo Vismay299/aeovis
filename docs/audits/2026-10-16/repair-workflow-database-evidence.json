@@ -1,0 +1,16 @@
+{
+  "suite": "real-postgresql-repair-workflows",
+  "executed_at": "2026-10-19T19:47:30.838Z",
+  "database": "isolated-loopback-qa",
+  "passed": [
+    "R14-D: competing panel edits have one immutable version; cross-tenant reads and writes denied",
+    "R11-D: simultaneous scheduled enqueue creates one job and records every missed opportunity",
+    "R17-D: stale review cannot approve edited text or leave feedback; all writers reject unchecked approval",
+    "R17-D: paid check races reserve once; expired checks cannot approve later content and retain uncertainty",
+    "R18-D: publication failure rolls back item, job, event and version artifact; retry is idempotent",
+    "R03-09/10-D: concurrent report identity, failed materialization rollback, and idempotent recovery",
+    "R06-D: evidence, check reservations and provider incidents have no customer or anonymous direct grants"
+  ],
+  "failures": [],
+  "qualification": "Only the listed database behaviors; hosted Auth/Storage and browser acceptance are separate."
+}

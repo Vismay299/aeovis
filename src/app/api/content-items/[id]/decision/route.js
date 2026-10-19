@@ -1,9 +1,7 @@
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { NextResponse } from "next/server";
 import {
   getContentItem,
-  updateContentItem,
-  insertContentFeedback,
-  updateContentJob,
 } from "@/lib/db/content";
 import { reviseContentItem } from "@/lib/content/contentWorker";
 import { runLearn } from "@/lib/content/steps/learn";
@@ -55,7 +53,7 @@ function publicationState(newStatus) {
  * on changes_requested an async revision pass. It publishes nothing and
  * records no URL — see publicationState above.
  */
-export async function POST(request, { params }) {
+export async function POST(request, { params }, deps = {}) {
   params = await params;
   try {
     const { id } = params;
@@ -93,24 +91,17 @@ export async function POST(request, { params }) {
     }
     const newStatus = routed.status;
 
-    // 1. Feedback row — the raw learning signal.
-    const feedback = await insertContentFeedback({
-      item_id: id,
-      brand: item.brand,
-      verdict,
-      comment,
-    });
-
-    // 2. Status change. changes_requested keeps the item in-flight; the
-    //    revision pass returns it to awaiting_approval when done.
-    await updateContentItem(id, { status: newStatus });
-    if (item.job_id) {
-      try {
-        await updateContentJob(item.job_id, { status: jobStatusForItemStatus(newStatus) });
-      } catch (err) {
-        console.warn("[decision] job status sync failed:", err.message);
-      }
+    if (!Number.isInteger(payload.content_version) || typeof payload.content_hash!=="string" || payload.content_version !== item.content_version || payload.content_hash !== item.content_hash) {
+      return NextResponse.json({detail:"Draft changed. Refresh before reviewing."},{status:409});
     }
+    const admin = (deps.getSupabaseAdmin || getSupabaseAdmin)();
+    if (!admin) return NextResponse.json({detail:"Review storage is unavailable."},{status:503});
+    const {error} = await admin.rpc("decide_checked_content", {
+      p_item:id,p_brand:item.brand,p_version:payload.content_version,p_hash:payload.content_hash,
+      p_status:newStatus,p_comment:comment,p_actor:null,
+    });
+    if(error) return NextResponse.json({detail:"Review was not committed. Check the current draft and its evidence."},{status:409});
+    const feedback = null;
 
     // 3. (deleted) No content_events row is written here. Approval is not
     //    publication; see publicationState above.
