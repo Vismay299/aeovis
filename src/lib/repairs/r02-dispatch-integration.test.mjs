@@ -14,6 +14,7 @@ import {
 } from "../workers/durableProbing.js";
 import {
   probeTextEngine,
+  resolveEnabledEngines,
   summarizeEngineSlice,
   computeHeadline,
 } from "../scoring/enginePipeline.js";
@@ -411,4 +412,45 @@ test("P0 a failed account circuit overrides an earlier valid readiness canary wi
   assert.equal(report.provider_requests, 0);
   assert.ok(!report.summary.ready.includes("chatgpt"));
   assert.equal(report.engines.chatgpt.operator_action, "repair_credentials");
+});
+
+test("P0 Google canary retains the actual transport request ID on a validated no-AIO observation", async () => {
+  await withEnv(
+    { BRIGHTDATA_API_KEY: fake, BRIGHTDATA_SERP_ZONE: "fixture_zone" },
+    async () => {
+      let calls = 0;
+      global.fetch = async () => {
+        calls++;
+        return new Response(
+          JSON.stringify({
+            organic: [
+              { title: "Fixture result", link: "https://fixture.example/page" },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "x-request-id": "fixture-provider-request" },
+          },
+        );
+      };
+      const engine = resolveEnabledEngines({
+        engines: "aio",
+        allowFallback: false,
+      })[0];
+      const result = await engine.probe(
+        { text: "Fixture?" },
+        "Acme",
+        ["Acme"],
+        "acme.example",
+        [],
+        {},
+        { durableDispatch: true, deadlineAt: Date.now() + 1000 },
+      );
+      assert.equal(calls, 1);
+      assert.equal(result.error, null);
+      assert.equal(result.serp_state, "valid_serp");
+      assert.equal(result.aio_present, false);
+      assert.equal(result.provider_request_id, "fixture-provider-request");
+    },
+  );
 });

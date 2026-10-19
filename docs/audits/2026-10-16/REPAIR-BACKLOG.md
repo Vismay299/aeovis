@@ -9,7 +9,7 @@ This is the execution specification and current implementation status for 21 rep
 
 ## Current status: implemented code versus accepted repairs
 
-Verified against merged main `c5530c9` (PRs [#6](https://github.com/Vismay299/aeovis/pull/6), [#7](https://github.com/Vismay299/aeovis/pull/7), [#8](https://github.com/Vismay299/aeovis/pull/8)) and the P0 completion changes accompanying this update. **No priority group is release accepted.** R01–R11 have some implementation; that is eleven numbered repairs, including six P1 repairs R06–R11. It does not mean eleven or fifteen P1 tasks are complete. R20/R21 also have merged foundations.
+Verified against merged main `c5530c9` (PRs [#6](https://github.com/Vismay299/aeovis/pull/6), [#7](https://github.com/Vismay299/aeovis/pull/7), [#8](https://github.com/Vismay299/aeovis/pull/8)) and the P0 dispatch changes in [PR #9](https://github.com/Vismay299/aeovis/pull/9). **No priority group is release accepted.** R01–R11 have some implementation; that is eleven numbered repairs, including six P1 repairs R06–R11. It does not mean eleven or fifteen P1 tasks are complete. R20/R21 also have merged foundations.
 
 Checkboxes below mean the whole implementation subtask is present in code/documentation, **not** deployed, live verified or release accepted. An unchecked item may be partially implemented; its remaining clauses still matter. The named acceptance inventory remains 404 scenarios / 214 subtasks; passing a helper test does not close a repair.
 

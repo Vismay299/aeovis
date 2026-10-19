@@ -768,7 +768,9 @@ export async function brightDataSearch(query, options = {}) {
       // Every attempt, including the last, satisfies the same contract: a
       // payload that is not a recognisable Google SERP raises a typed parse
       // error and never reaches the normaliser.
-      const parsed = parseGoogleSerp(data, { providerRequestId: options.providerRequestId });
+      const parsed = parseGoogleSerp(data, {
+        providerRequestId: options.providerRequestId || res.headers?.get?.("x-request-id") || res.headers?.get?.("request-id") || null,
+      });
       attemptsEvidence.push(evidenceRecord(attempt, parsed));
 
       if (parsed.serp_state !== SERP_STATE.VALID_SERP) {

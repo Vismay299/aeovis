@@ -153,6 +153,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     if (citations_verified_empty !== undefined) result.citations_verified_empty = citations_verified_empty;
     if (parser_version !== undefined) result.parser_version = parser_version;
     if (evidence_id !== undefined) result.evidence_id = evidence_id;
+    result.provider_request_id = data.serp_validation?.provider_request_id ?? null;
     result.organic = organic;
     if (brandDomain && organic.length > 0) {
       const brandPos = organic.findIndex(
@@ -199,6 +200,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
   } catch (err) {
     result.error = sanitizeProviderText(err.message || String(err));
     result.cost = null;
+    result.provider_request_id = err.evidence?.provider_request_id ?? null;
     result.provider_failure = err.provider_failure || classifyProviderFailure({provider:"brightdata",error:err});
     console.warn(`[aio] Query failed: "${query.text}" — ${result.error}`);
   }
