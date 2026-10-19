@@ -1,3 +1,4 @@
+import { classifyProviderFailure, sanitizeProviderText } from './providerFailure.js';
 import { normalizeUrl } from "../scoring/citations.js";
 import { getLlmApiKey, getLlmBaseUrl, getLlmProvider } from "../llmConfig.js";
 import { assertModelPriceable, isUnpricedModel, resolveCost } from "../llmPricing.js";
@@ -123,7 +124,7 @@ function addStats(stats, usage, cost) {
  * ChatGPT and Perplexity model calls behind the single LLM_API_KEY used by the
  * utility/content LLM, while retaining engine-specific model ids and citations.
  */
-export async function probeOpenRouterEngine({ engine, query, stats, model = getOpenRouterEngineModel(engine) }) {
+export async function probeOpenRouterEngine({ engine, query, stats, model = getOpenRouterEngineModel(engine), durableDispatch = false, deadlineAt = null }) {
   const apiKey = getLlmApiKey();
   const baseUrl = getLlmBaseUrl();
   const provider = getLlmProvider(baseUrl);
@@ -144,10 +145,10 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
   const nativeSonar = engine === "perplexity" && /^perplexity\/sonar(?:$|-|:)/.test(model);
 
   let lastError = null;
-  const attempts = MAX_RETRIES + 1;
+  const attempts = durableDispatch ? 1 : MAX_RETRIES + 1;
   for (let attempt = 0; attempt < attempts; attempt++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), Math.max(1,Math.min(TIMEOUT_MS,deadlineAt == null ? TIMEOUT_MS : deadlineAt-Date.now())));
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
@@ -179,7 +180,9 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
       });
       if (!response.ok) {
         const body = await response.text().catch(() => "");
-        throw tagHttpFailure(new Error(`OpenRouter HTTP ${response.status}: ${body}`), response.status);
+        throw Object.assign(tagHttpFailure(new Error(`OpenRouter HTTP ${response.status}: ${sanitizeProviderText(body)}`), response.status), {
+          provider_failure: classifyProviderFailure({ provider:'openrouter',status:response.status,headers:response.headers,body }),
+        });
       }
       const data = await response.json();
       const message = data?.choices?.[0]?.message;
@@ -214,7 +217,7 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
       clearTimeout(timeoutId);
     }
   }
-  const message = lastError?.message || "OpenRouter answer probe failed";
+  const message = sanitizeProviderText(lastError?.message) || "OpenRouter answer probe failed";
   return {
     text: "",
     citations: [],
@@ -228,5 +231,6 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
     cost_state_detail: message,
     error: message,
     error_kind: failureKindOf(lastError),
+    provider_failure: lastError?.provider_failure || classifyProviderFailure({provider:"openrouter",error:lastError}),
   };
 }

@@ -341,7 +341,7 @@ const MEASURED_SUMMARY = scanSummaryFor([
  * `results` rows are a different shape from the probe rows above — so both are
  * supplied, exactly as db.js writes them.
  */
-function storedRow(summary) {
+function storedRow(summary, preserveContract = false) {
   const results = times(10, (i) => ({
     query: `unbranded prompt ${i}`,
     engine: "aio",
@@ -365,7 +365,10 @@ function storedRow(summary) {
     results,
     raw_results: {
       results,
-      summary_stats: summary,
+      // This September v8.1 fixture predates the R05 exposure contract.
+      // Its no-vendor conditional reading stays unknown; new-contract exposure
+      // zeros have separate coverage in r02-dispatch-integration.test.mjs.
+      summary_stats: preserveContract ? summary : { ...summary, metric_contract_version: undefined },
       scoring_version: "v8.1-aio-unbranded-plus-presence",
       prompt_set_id: "acme.com:v1",
     },
@@ -528,7 +531,7 @@ test("POSITIVE — a measured 40 still renders its Moderate chip and its number"
 
 test("R05 qualification — a six-prompt reading has no headline tier and labels the raw score exploratory", async () => {
   const summary = scanSummaryFor(times(6, (i) => answered(i, { visible: true })));
-  const html = await renderShell(storedRow(summary));
+  const html = await renderShell(storedRow(summary, true));
   const header = panelHeader(html, "score-band");
   for (const word of ["Strong", "Moderate", "Weak"]) assert.ok(!textOf(header).includes(word));
   assert.match(textOf(wholePanel(html, "headline-qualification")), /Exploratory reading: 100%/);

@@ -138,7 +138,7 @@ export function buildHealthPayload({
   // persisted call was failing authentication. The readiness report is built
   // elsewhere (from stored canaries, never from a probe here), and only a
   // BLOCKED surface degrades: an aged canary is a recovery prompt, not a lie.
-  const blockedSurfaces = providerReadiness?.summary?.blocked ?? [];
+  const blockedSurfaces = [...(providerReadiness?.summary?.blocked ?? []), ...(providerReadiness?.summary?.degraded ?? [])];
   const status = !db?.ok
     ? "down"
     : missingRequired.length || truth.disagrees || blockedSurfaces.length

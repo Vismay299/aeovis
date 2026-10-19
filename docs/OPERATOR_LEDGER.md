@@ -324,6 +324,13 @@ Also environment-shaped and easy to get silently wrong:
 
 ## C. Migrations
 
+`027_durable_probe_dispatch` is implemented and tested on disposable PostgreSQL;
+production application is **not verified**. It adds the P0 service-only dispatch
+ledger, claims, budgets, circuits, canaries and reconciliation. Apply before
+shipping the new worker. See [the P0 runbook](runbooks/p0-provider-dispatch.md)
+for the dispatch pause, rollout and rollback sequence.
+
+
 `supabase/migrations/` holds twenty-three files (count last checked 2026-10-07; the guard checks names, not this number). They are named individually rather
 than as a range, and `src/lib/docStatus.test.mjs` fails this document if a file
 on disk is missing from the list — the previous revision wrote "`001` … `012`"

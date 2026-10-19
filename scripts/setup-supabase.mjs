@@ -59,6 +59,21 @@ ALTER TABLE schema_migrations
  * the state 009 was found in.
  */
 const EXPECTED_OBJECTS = {
+  "027_durable_probe_dispatch.sql": [
+    { kind: "table", name: "probe_observations" },
+    { kind: "table", name: "probe_dispatch_control" },
+    { kind: "table", name: "probe_reconciliations" },
+    { kind: "table", name: "provider_canary_budgets" },
+    { kind: "function", name: "reconcile_probe_dispatch" },
+    { kind: "table", name: "probe_attempts" },
+    { kind: "table", name: "probe_late_receipts" },
+    { kind: "table", name: "provider_dispatch_circuits" },
+    { kind: "function", name: "seed_probe_observations" },
+    { kind: "function", name: "claim_probe_dispatch" },
+    { kind: "function", name: "finish_probe_dispatch" },
+    { kind: "function", name: "block_probe_dispatch" },
+    { kind: "function", name: "renew_probe_dispatch" },
+  ],
   "001_initial_schema.sql": [
     { kind: "table", name: "scans" },
     { kind: "table", name: "brand_prompts" },

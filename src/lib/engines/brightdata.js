@@ -1,3 +1,4 @@
+import { classifyProviderFailure, sanitizeProviderText } from './providerFailure.js';
 import { normalizeUrl } from "../scoring/citations.js";
 import { resolveSerpGeo } from "./serpGeo.js";
 import {
@@ -667,10 +668,10 @@ export async function brightDataSearch(query, options = {}) {
           await delayWithinDeadline(delay, deadlineAt);
           continue;
         }
-        throw tagHttpFailure(
-          new Error(`Bright Data HTTP ${res.status}: ${errText.slice(0, 200)}`),
+        throw Object.assign(tagHttpFailure(
+          new Error(`Bright Data HTTP ${res.status}: ${(sanitizeProviderText(errText) || "").slice(0, 200)}`),
           res.status
-        );
+        ), { provider_failure: classifyProviderFailure({provider:"brightdata",status:res.status,headers:res.headers,body:errText}) });
       }
 
       // The body is read while the timer is still armed — the R04-17 fix.
@@ -724,9 +725,9 @@ export async function brightDataSearch(query, options = {}) {
 
       // Rate-limit detection — stop retrying immediately.
       if (isRateLimitResponse(data)) {
-        throw new Error(
-          `Bright Data rate limit / quota exhausted — ${data.error || data.message || "try again later"}`
-        );
+        throw Object.assign(new Error(
+          `Bright Data rate limit / quota exhausted — ${sanitizeProviderText(data.error || data.message || "try again later")}`
+        ), {provider_failure:classifyProviderFailure({provider:"brightdata",status:429,headers:res.headers,body:data})});
       }
 
       if (data.error || data.status === "error") {

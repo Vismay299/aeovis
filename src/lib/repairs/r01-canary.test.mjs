@@ -87,13 +87,11 @@ test("R01-04 — a shared gateway with no direct vendor keys selects the shared 
     assert.deepEqual(planEngineCanary(engine, SHARED_GATEWAY_ENV).dispatch_plan, plan.dispatch_plan, "stable");
   }
 
-  // The contrast that makes the claim mean something: Gemini's adapter has no
-  // gateway route at all, so the same environment does NOT configure it. This
-  // is the audit's "configured credentials reported healthy" shape — a vendor
-  // the registry calls configured and an adapter that cannot call it.
+  // The offered Gemini surface also uses the shared gateway. The standalone
+  // native utility is not the scan adapter.
   const gemini = validateEngineConfig("gemini", SHARED_GATEWAY_ENV);
-  assert.equal(gemini.ok, false);
-  assert.deepEqual(gemini.missing, ["GEMINI_API_KEY"]);
+  assert.equal(gemini.ok, true);
+  assert.equal(planEngineCanary("gemini",SHARED_GATEWAY_ENV).provider,"openrouter");
 });
 
 test("R01-09 — a Bright Data capacity envelope stays a failure with no no-AIO answer and no geography change", async () => {
@@ -337,6 +335,7 @@ test("R01-12 — a health payload carrying readiness stays dispatch-free, and a 
     ...Object.fromEntries(VENDORS.flatMap((vendor) => vendor.env.map((name) => [name, "set"]))),
     LLM_API_KEY: FAKE,
     BRIGHTDATA_API_KEY: FAKE,
+    OPENROUTER_GEMINI_MODEL: "invalid-model-id",
   };
 
   const blocked = buildProviderReadiness({ engines: ["aio", "gemini"], env, canaries: {}, now: new Date(NOW_MS).toISOString() });

@@ -1,3 +1,4 @@
+import { classifyProviderFailure, sanitizeProviderText } from './providerFailure.js';
 import { normalizeUrl } from "../scoring/citations.js";
 // `export ... from` below re-exports these for callers; this import is what
 // makes them usable INSIDE this module.
@@ -231,9 +232,9 @@ function delay(ms) {
   return new Promise((res) => setTimeout(res, ms));
 }
 
-async function perplexityFetch(url, body, apiKey) {
+async function perplexityFetch(url, body, apiKey, options = {}) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), Math.max(1,Math.min(TIMEOUT_MS,options.deadlineAt == null ? TIMEOUT_MS : options.deadlineAt-Date.now())));
 
   try {
     const res = await fetch(url, {
@@ -245,7 +246,13 @@ async function perplexityFetch(url, body, apiKey) {
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    return res;
+    // Consume the body while its abort timer is still armed.
+    if (res.ok) {
+      const data = await res.json();
+      return { ok:res.ok,status:res.status,headers:res.headers,json:async()=>data };
+    }
+    const bodyText = await res.text();
+    return {ok:res.ok,status:res.status,headers:res.headers,text:async()=>bodyText};
   } finally {
     clearTimeout(timeoutId);
   }
@@ -263,10 +270,11 @@ async function perplexityFetch(url, body, apiKey) {
  * @param {string} leg "answer" | "search", for the failure message.
  * @param {() => Promise<any>} run one attempt.
  */
-async function withRetry(leg, run) {
+async function withRetry(leg, run, options = {}) {
   let lastErr = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  const maxRetries = options.durableDispatch ? 0 : MAX_RETRIES;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await run();
     } catch (e) {
@@ -274,7 +282,7 @@ async function withRetry(leg, run) {
       // Permanent: the vendor already answered the question. Stop here rather
       // than spend two more calls and three seconds to be refused twice more.
       if (!isRetryableFailure(e)) break;
-      if (attempt < MAX_RETRIES) {
+      if (attempt < maxRetries) {
         await delay(RETRY_BASE_DELAY_MS * Math.pow(2, attempt));
       }
     }
@@ -283,7 +291,7 @@ async function withRetry(leg, run) {
   throw lastErr ?? new Error(`Perplexity ${leg} probe failed`);
 }
 
-async function probeAnswer(query, apiKey, model) {
+async function probeAnswer(query, apiKey, model, options = {}) {
   try {
     return await withRetry("answer", async () => {
       const res = await perplexityFetch(
@@ -293,12 +301,12 @@ async function probeAnswer(query, apiKey, model) {
           messages: [{ role: "user", content: query }],
           web_search_options: { user_location: { country: "IN" } },
         },
-        apiKey
+        apiKey, options
       );
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
-        throw httpError("answer", res.status, errText);
+        throw Object.assign(httpError("answer",res.status,sanitizeProviderText(errText)),{ provider_failure:classifyProviderFailure({provider:"perplexity",status:res.status,headers:res.headers,body:errText}) });
       }
 
       const resJson = await res.json();
@@ -361,7 +369,7 @@ async function probeAnswer(query, apiKey, model) {
         error_kind: null,
         usage,
       };
-    });
+    }, options);
   } catch (e) {
     return {
       text: "",
@@ -374,23 +382,24 @@ async function probeAnswer(query, apiKey, model) {
       cost_state_detail: e?.message || "Perplexity answer probe failed",
       error: e?.message || "Perplexity answer probe failed",
       error_kind: failureKindOf(e),
+      provider_failure: e.provider_failure || classifyProviderFailure({provider:"perplexity",error:e}),
       usage: null,
     };
   }
 }
 
-async function probeSearch(query, apiKey, model) {
+async function probeSearch(query, apiKey, model, options = {}) {
   try {
     return await withRetry("search", async () => {
       const res = await perplexityFetch(
         PERPLEXITY_SEARCH_URL,
         { query, max_results: 10 },
-        apiKey
+        apiKey, options
       );
 
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
-        throw httpError("search", res.status, errText);
+        throw Object.assign(httpError("search",res.status,sanitizeProviderText(errText)),{ provider_failure:classifyProviderFailure({provider:"perplexity",status:res.status,headers:res.headers,body:errText}) });
       }
 
       const resJson = await res.json();
@@ -446,7 +455,7 @@ async function probeSearch(query, apiKey, model) {
         error: null,
         error_kind: null,
       };
-    });
+    }, options);
   } catch (e) {
     return {
       references: [],
@@ -459,6 +468,7 @@ async function probeSearch(query, apiKey, model) {
       cost_state_detail: e?.message || "Perplexity search probe failed",
       error: e?.message || "Perplexity search probe failed",
       error_kind: failureKindOf(e),
+      provider_failure: e.provider_failure || classifyProviderFailure({provider:"perplexity",error:e}),
     };
   }
 }
@@ -567,6 +577,7 @@ export async function probePerplexity(query, options = {}) {
         engine: "perplexity",
         query,
         stats: options.stats,
+        durableDispatch: options.durableDispatch, deadlineAt: options.deadlineAt,
       });
       const searchObserved = result.search_requests > 0 || result.references.length > 0;
       const citationsState = searchObserved
@@ -596,6 +607,7 @@ export async function probePerplexity(query, options = {}) {
         usage: result.usage,
         error: result.error,
         error_kind: result.error_kind,
+        provider_failure: result.provider_failure,
         ...citationsState,
       };
     }
@@ -626,8 +638,8 @@ export async function probePerplexity(query, options = {}) {
   const model = getPerplexityModel();
 
   const [answer, search] = await Promise.all([
-    probeAnswer(query, apiKey, model),
-    probeSearch(query, apiKey, model),
+    probeAnswer(query, apiKey, model, options),
+    probeSearch(query, apiKey, model, options),
   ]);
 
   // The two legs are priced independently and can disagree. `cost` is a sum
@@ -661,7 +673,7 @@ export async function probePerplexity(query, options = {}) {
         `[${answer.error_kind}${
           answer.error_kind === FAILURE_KIND.PERMANENT
             ? ", not retried — check PERPLEXITY_API_KEY / request shape"
-            : `, retried ${MAX_RETRIES + 1}x`
+            : `, retried ${options.durableDispatch ? 1 : MAX_RETRIES + 1}x`
         }] ` +
         `(citations ${citationsState.citations_state}` +
         `${citationsState.citations_state_reason ? `: ${citationsState.citations_state_reason}` : ""})`
@@ -674,6 +686,7 @@ export async function probePerplexity(query, options = {}) {
       ...costState,
       error: answer.error,
       error_kind: answer.error_kind,
+      provider_failure: answer.provider_failure,
       ...citationsState,
     };
   }
@@ -719,6 +732,7 @@ export async function probePerplexity(query, options = {}) {
     ...costState,
     error: null,
     error_kind: null,
+    provider_failure: search.provider_failure || null,
     ...citationsState,
   };
 }
