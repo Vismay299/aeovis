@@ -40,6 +40,20 @@ import {
   terminalOutcomeFromRecord,
 } from "../scanOutcome.js";
 import { runProbingPhase } from "../workers/scanWorker.js";
+import { scanCompletionNotice } from "../scanCompletion.js";
+import { normalizeResult } from "../../services/api.js";
+
+test("R03-14: completed execution retains collection quality through normalization and completion notices", () => {
+  for (const [outcome, tone] of [["complete", "success"], ["partial", "warn"], ["failed", "error"], ["blocked", "error"], ["legacy", "info"]]) {
+    const terminal = { ...legacyTerminalOutcome(), outcome };
+    const normalized = normalizeResult({ brand: "Acme", results: [], summary_stats: { terminal_outcome: terminal } }, "Acme", "https://acme.example");
+    assert.equal(normalized.terminal_outcome.outcome, outcome);
+    assert.equal(scanCompletionNotice(normalized).tone, tone);
+    assert.equal(scanCompletionNotice(normalizeResult(normalized)).tone, tone);
+    assert.equal(scanCompletionNotice({ terminal_outcome: terminal }).tone, tone);
+  }
+  assert.equal(scanCompletionNotice({}).tone, "info");
+});
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const STATUS_ROUTE = path.join(REPO, "src/app/api/scan/[job_id]/status/route.js");

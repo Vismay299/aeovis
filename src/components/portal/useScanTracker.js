@@ -118,7 +118,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
             settledJobIds.current.add(jobId);
             setProgress((prev) => applyScanReading(prev, { stage: SCAN_STAGES.length, progressPct: 100 }));
             setJob((prev) => (prev ? { ...prev, status: "complete" } : prev));
-            setFinished({ status: "complete", jobId, resultId: body.result_id || null, at: Date.now() });
+            setFinished({ status: "complete", jobId, resultId: body.result_id || null, terminal_outcome: body.terminal_outcome, at: Date.now() });
             onFinishedRef.current?.();
             return;
           }

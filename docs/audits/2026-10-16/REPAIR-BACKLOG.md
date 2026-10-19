@@ -288,7 +288,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [x] R03.3b Preserve successful surfaces and classify never-dispatched work; avoid deleting failed rows during finalize retries.
 4. **Propagate the contract.**
    - [x] R03.4a Update polling, persisted reports, customer/public dashboards, history, and export schemas together.
-   - [ ] R03.4b Show partial evidence and recovery actions; prevent “complete” animations or success emails for all-error scans.
+   - [x] R03.4b Show partial evidence and recovery actions; prevent “complete” animations or success emails for all-error scans. Public completion notices and portal banners now use collection outcome, with actual browser checks for complete/partial/failed notices; this application has no scan-success email sender.
 5. **Protect finalization under concurrency.**
    - [x] R03.5a Finalize atomically or through a fenced idempotent operation; reconcile interrupted materialization.
    - [x] R03.5b Mark historical records as legacy where quality cannot be reconstructed; do not invent modern outcome counts.

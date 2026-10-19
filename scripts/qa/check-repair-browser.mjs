@@ -170,6 +170,33 @@ try {
     );
     await page.close();
   }
+  for (const [name, title, tone] of [["complete", "Scan complete", "success"], ["partial", "Partial collection", "warning"], ["failed", "Collection failed", "error"]]) {
+    const page = await browser.newPage();
+    let simulatedStarts = 0;
+    await page.route("**/api/**", route => {
+      const pathname = new URL(route.request().url()).pathname;
+      let body = { scans: [], items: [] };
+      if (route.request().method() === "POST") {
+        assert.equal(pathname, "/api/scan");
+        simulatedStarts++;
+        body = { job_id: `fixture-${name}` };
+      } else if (pathname.endsWith("/status")) {
+        body = { status: "complete", result_id: fixtures[name].id, terminal_outcome: fixtures[name].raw_results.summary_stats.terminal_outcome };
+      } else if (pathname.includes("/by-id/")) body = { scan: fixtures[name] };
+      else if (pathname === "/api/industries") body = [];
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    });
+    await page.goto(`${origin}/scan`);
+    await page.getByTestId("scan-brand-input").fill("Acme");
+    await page.getByTestId("scan-website-input").fill("acme.example");
+    await page.getByTestId("scan-submit-btn").click();
+    const toast = page.locator("[data-sonner-toast]").filter({ hasText: title }).first();
+    await toast.waitFor();
+    assert.equal(await toast.getAttribute("data-type"), tone);
+    assert.equal(simulatedStarts, 1);
+    passed.push(`R03-14-B ${name}: completed execution shows ${tone} collection notice and no automatic rescan`);
+    await page.close();
+  }
   const ops = await browser.newPage();
   await ops.route("**/api/measurement/operations", (r) =>
     r.fulfill({

@@ -19,6 +19,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { compileJsx, renderToHtml, textOf } from "../../lib/renderHarness.mjs";
 import * as scanProgress from "../../lib/scanProgress.js";
+import * as scanCompletion from "../../lib/scanCompletion.js";
+import { legacyTerminalOutcome } from "../../lib/scanOutcome.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const nextLink = {
@@ -101,6 +103,7 @@ async function renderCard(scan) {
       ["react", React],
       ["./ui", ui],
       ["./useScanTracker", tracker],
+      ["@/lib/scanCompletion", scanCompletion],
       ["./PortalShell", { usePortal: () => ({ scan, brand: { display_name: "Acme" } }) }],
     ]),
     autoNull: ["lucide-react"],
@@ -142,6 +145,16 @@ test("ScanProgressCard: no reading yet is an em dash, not 0%", async () => {
 test("ScanProgressCard: a stalled scan says it resumes on its own", async () => {
   const text = textOf(await renderCard({ ...baseScan, stalled: true }));
   assert.match(text, /Taking longer than usual/);
+});
+
+test("ScanProgressCard: completed execution cannot turn failed or partial collection into success", async () => {
+  for (const [outcome, tone, title] of [["failed", "error", "Collection failed"], ["partial", "warn", "Partial collection"], ["complete", "success", "Scan complete"], ["legacy", "info", "collection quality unknown"]]) {
+    const html = await renderCard({ ...baseScan, active: false, finished: { status: "complete", resultId: "report-1", terminal_outcome: { ...legacyTerminalOutcome(), outcome } } });
+    assert.ok(textOf(html).includes(title));
+    assert.match(html, new RegExp(`pv-banner--${tone}`));
+    if (outcome !== "complete") assert.doesNotMatch(html, /pv-banner--success/);
+    assert.match(html, /\/portal\/scans\/report-1/);
+  }
 });
 
 test("the portal inherits the shared light root instead of carrying an independent theme", async () => {
