@@ -19,7 +19,7 @@ export function resolveEntityEvidence({ brand, website, text = "", references = 
   const entityId = domain ? `domain:${domain}` : `name:${String(brand).trim().toLowerCase()}`;
   // Mask echoed questions without changing offsets into the original capture.
   const answer = String(text).replace(/(?:user(?:\s+asked)?|question|prompt):\s*["'][^"'\n]+["']/gi, match => " ".repeat(match.length));
-  const candidates = [...new Set([brand, ...(aliases || getBrandAliases(brand, website))].filter(Boolean))];
+  const candidates = [...new Map([brand, ...(aliases || getBrandAliases(brand, website))].filter(Boolean).map(a=>[a.toLowerCase(),a])).values()];
   const nameAliases = new Set([brand, ...getBrandAliases(brand, "")].filter(Boolean).map(a=>a.toLowerCase()));
   const distinctive = candidates.filter(a => nameAliases.has(a.toLowerCase()) && !a.includes(".") && a.length > 2 && !HOMONYMS.has(a.toLowerCase()) && !ALIAS_STOPLIST.has(a.toLowerCase()));
   const spans = findMentionSpans(answer, distinctive);

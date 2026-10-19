@@ -56,13 +56,13 @@ export async function verifyEvidenceRetention(admin,run){
   const key=captures?.[0]?.object_key;
   if(!key || !key.startsWith(`measurements/${id}/`))throw Error("QA object scope mismatch");
   const bucket=admin.storage.from("probe-evidence");
-  const sign=await bucket.createSignedUrl(key,1);if(sign.error)throw Error("QA signing failed");
+  const sign=await bucket.createSignedUrl(key,3);if(sign.error)throw Error("QA signing failed");
   const initial=await fetch(sign.data.signedUrl,{cache:"no-store",signal:AbortSignal.timeout(10000)});
   if(initial.status!==200)throw Error("Fresh signed URL could not read private evidence");
   await initial.arrayBuffer();
   const claims=JSON.parse(Buffer.from(new URL(sign.data.signedUrl).searchParams.get("token").split(".")[1],"base64url").toString());
   const waitMs=Math.max(0,claims.exp*1000-Date.now()+1200);
-  if(waitMs>4000)throw Error("Unexpected QA signing TTL");
+  if(waitMs>6000)throw Error("Unexpected QA signing TTL");
   await new Promise(resolve=>setTimeout(resolve,waitMs));
   const expiredUrl=new URL(sign.data.signedUrl);expiredUrl.searchParams.set("qa_cache_bust",crypto.randomUUID());
   const expiredRead=await fetch(expiredUrl,{cache:"no-store",signal:AbortSignal.timeout(10000)});await expiredRead.arrayBuffer();
@@ -87,6 +87,7 @@ export async function cleanupEvidenceQualification(admin, run, userIds) {
   for(const table of ["measurement_evidence","probe_late_receipts","probe_reconciliations","probe_attempts"])
     await checked(admin.from(table).delete().eq("observation_id",id));
   await checked(admin.from("probe_observations").delete().eq("id",id));
+  for(const row of observations || [])if(row.job_id)await checked(admin.from("prompt_results").delete().eq("job_id",row.job_id).eq("brand",brandKey(run,"a")));
   await checked(admin.from("scan_jobs").delete().eq("query_source","qa_fixture").in("brand_key",[brandKey(run,"a"),brandKey(run,"b")]));
   await checked(admin.from("provider_dispatch_circuits").delete().eq("circuit_key",`qa-fixture:${run}`));
   const control=await checked(admin.from("probe_dispatch_control").select("*").eq("singleton",true).single());
