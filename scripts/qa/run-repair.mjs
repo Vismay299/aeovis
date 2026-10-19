@@ -691,6 +691,7 @@ function dispatch({ files, caseIds, environment, depth }) {
     env: child,
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
+    timeout: Math.max(1, Number(process.env.PERCEEV_REPAIR_CHILD_TIMEOUT_MS) || 120_000),
   });
   return {
     argv,
@@ -701,6 +702,8 @@ function dispatch({ files, caseIds, environment, depth }) {
     namePattern,
     clearedEnv: cleared,
     childExitCode: run.status,
+    childSignal: run.signal ?? null,
+    childError: run.error?.message ?? null,
     durationMs: Date.now() - started,
     tap: run.stdout ?? "",
     stderrLines: (run.stderr ?? "").split("\n").filter(Boolean).slice(0, 40),
@@ -808,6 +811,12 @@ function executeOfflineSuite({ cases, files, discovered, environment, depth }) {
       `dispatched file(s) failed at the file level, before their tests could be attributed: ${entryFailures.join(", ")}`
     );
   }
+  if (dispatched.childExitCode !== 0 || dispatched.childSignal || dispatched.childError || entryFailures.length) {
+    result.fatal = dispatched.childError || (dispatched.childSignal
+      ? `test subprocess terminated by ${dispatched.childSignal}`
+      : `test subprocess failed (exit ${dispatched.childExitCode}); failed files: ${entryFailures.join(", ") || "see TAP"}`);
+    result.passed = [];
+  }
   return result;
 }
 
@@ -816,17 +825,8 @@ function executeOfflineSuite({ cases, files, discovered, environment, depth }) {
 // ---------------------------------------------------------------------------
 
 async function shortSha() {
-  try {
-    const head = (await readFile(path.join(REPO, ".git/HEAD"), "utf8")).trim();
-    const match = /^ref:\s*(.+)$/.exec(head);
-    if (match) {
-      const ref = (await readFile(path.join(REPO, ".git", match[1]), "utf8")).trim();
-      return ref.slice(0, 7);
-    }
-    return head.slice(0, 7);
-  } catch {
-    return "local";
-  }
+  const git = spawnSync("git", ["rev-parse", "--short=12", "HEAD"], { cwd: REPO, encoding: "utf8" });
+  return git.status === 0 ? git.stdout.trim() : "local";
 }
 
 function printableSummary(summary) {

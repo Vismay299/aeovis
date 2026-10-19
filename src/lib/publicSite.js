@@ -50,6 +50,7 @@ export const PRIVATE_ROUTE_PREFIXES = Object.freeze([
   "/login",
   "/signup",
   "/auth",
+  "/onboarding",
 ]);
 
 /**
@@ -186,7 +187,7 @@ export function generateRobotsTxt({ preferredOrigin = PREFERRED_PRODUCTION_ORIGI
     ].join("\n");
   }
 
-  const disallows = PRIVATE_ROUTE_PREFIXES.map((prefix) => `Disallow: ${prefix}/`);
+  const disallows = PRIVATE_ROUTE_PREFIXES.flatMap((prefix) => [`Disallow: ${prefix}$`, `Disallow: ${prefix}/`]);
   return [
     "User-agent: *",
     "Allow: /",

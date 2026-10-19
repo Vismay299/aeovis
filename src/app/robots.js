@@ -19,7 +19,7 @@ export default function robots() {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: PRIVATE_ROUTE_PREFIXES.map((prefix) => `${prefix}/`),
+      disallow: PRIVATE_ROUTE_PREFIXES.flatMap((prefix) => [prefix + "$", `${prefix}/`]),
     },
     sitemap: `${PREFERRED_PRODUCTION_ORIGIN}/sitemap.xml`,
   };

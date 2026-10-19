@@ -119,6 +119,7 @@ test("R20-04 — production build robots and sitemap metadata handlers return va
       robotsData.rules.disallow.includes(`${prefix}/`),
       `robots must disallow ${prefix}/`
     );
+    assert.ok(robotsData.rules.disallow.includes(`${prefix}$`), `robots must disallow bare ${prefix}`);
   }
   assert.equal(robotsData.sitemap, "https://perceev.com/sitemap.xml");
 
