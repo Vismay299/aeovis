@@ -533,6 +533,8 @@ test("R05 qualification — a six-prompt reading has no headline tier and labels
   for (const word of ["Strong", "Moderate", "Weak"]) assert.ok(!textOf(header).includes(word));
   assert.match(textOf(wholePanel(html, "headline-qualification")), /Exploratory reading: 100%/);
   assert.match(textOf(wholePanel(html, "headline-qualification")), /6 of 6 eligible observations/);
+  assert.match(textOf(wholePanel(html, "insight-interpretation")), /observations are exploratory/);
+  assert.doesNotMatch(textOf(wholePanel(html, "insight-interpretation")), /nothing was measured/);
 });
 
 test("POSITIVE — a MEASURED ZERO still renders Weak and a 0, not a dash", async () => {
