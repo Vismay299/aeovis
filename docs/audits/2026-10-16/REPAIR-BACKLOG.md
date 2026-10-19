@@ -3,43 +3,43 @@
 > <!-- doc-status -->
 > **Status: LIVE.** Acceptance plan for the repairs identified by the 16 October 2026 audit.
 
-Updated: **19 October 2026, Asia/Kolkata**. Historical audited source baseline: `a2c97ddf12e332807c960e776eeae8de4550a210`.
+Updated: **20 October 2026, Asia/Kolkata**. Historical audited source baseline: `a2c97ddf12e332807c960e776eeae8de4550a210`.
 
 This is the execution specification and current implementation status for 21 repairs. The original audit baseline is historical: its 3,209 passing tests, 30 skipped tests, 120 isolated mock answers and 11 reproduced unwanted behaviors describe that baseline, not today's release. See [the audit](./AUDIT.md) and [reproduction evidence](./adversarial-results.json).
 
 ## Current status: implemented code versus accepted repairs
 
-Verified against merged main `c5530c9` (PRs [#6](https://github.com/Vismay299/aeovis/pull/6), [#7](https://github.com/Vismay299/aeovis/pull/7), [#8](https://github.com/Vismay299/aeovis/pull/8)) and the P0 dispatch changes in [PR #9](https://github.com/Vismay299/aeovis/pull/9). **No priority group is release accepted.** R01–R11 have some implementation; that is eleven numbered repairs, including six P1 repairs R06–R11. It does not mean eleven or fifteen P1 tasks are complete. R20/R21 also have merged foundations.
+Verified against merged main `c5530c9` (PRs [#6](https://github.com/Vismay299/aeovis/pull/6), [#7](https://github.com/Vismay299/aeovis/pull/7), [#8](https://github.com/Vismay299/aeovis/pull/8)), the open P0 dispatch [PR #9](https://github.com/Vismay299/aeovis/pull/9), and the follow-on `codex/finish-repair-backlog` branch. The follow-on PR is stacked on #9; neither branch is described as merged/deployed. **No priority group is release accepted.** R01–R11 are numbered repairs across P0/P1, not eleven completed P1 tasks.
 
-Checkboxes below mean the whole implementation subtask is present in code/documentation, **not** deployed, live verified or release accepted. An unchecked item may be partially implemented; its remaining clauses still matter. The named acceptance inventory remains 404 scenarios / 214 subtasks; passing a helper test does not close a repair.
+Checkboxes mean an entire implementation subtask is present, not deployed, live qualified or release accepted. Unchecked items may have substantial partial code. The inventory remains 404 named scenarios / 214 implementation subtasks; partial database/browser suites cannot close the full inventory.
 
 | Repair | Priority | Implementation actually present | Work still owed |
 |---|---|---|---|
-| R01 | P0 | Classification/config identities and bounded canary policy merged. This change connects service-only durable canaries, shared reservations, stored health reads and the actual Gemini gateway route. | Operator/browser acceptance, bounded real canaries for every offered surface, deployed configuration evidence and rollback sign-off. |
-| R02 | P0 | Retry/circuit/spend policies merged. This change connects the worker to additive SQL observations/attempts, fenced claims, persisted retry times, circuit recovery, reservations, legacy adoption and audited ambiguity reconciliation. | Authorized workspace shadow/cutover, execution-detail browser acceptance, full rollback exercise and remaining adapter-idempotency fixture acceptance. No offered adapter currently promises provider idempotency. |
-| R03 | P0 | Frozen requested matrix, persisted outcome equation and API/report propagation merged. This change persists per-pair identities before dispatch and commits attempt/result projection together. | Real DB finalizer/materialization crash cases and browser reload/export checks; production migration/rollback qualification. |
-| R04 | P0 | Google SERP/AIO validation, final-attempt rejection, evidence identity and whole-request deadlines merged; durable worker disables nested Google retries. | Durable evidence-store failure case, actual parser-drift alert delivery and two bounded live Google checks. |
-| R05 | P0 | Metric DTOs, fixed denominators, 20-prompt / 95% collection gate and storage/API/dashboard/report/export propagation merged. This change retains qualified zero exposure for fully observed brand-free panels. | Complete pre-outcome intent/entity eligibility, uncertainty/cluster review, frozen cohort/weights acceptance, methodology examples and DB/browser acceptance. |
-| R06 | P1 | Provenance envelope and wrapper propagation merged; nullable legacy handling and search/cost states have offline coverage. | Complete context/model identity through every runtime path, private evidence retention/RLS and browser/export acceptance. |
-| R07 | P1 | Fixed 30×4 sample, stable illustrative timestamp, normalization identity and effect guards merged. | Remaining storage/navigation/banner/download browser cases, version invalidation and complete sample metric-contract acceptance. |
-| R08 | P1 | Relationship labels, contextual sentiment, evidence spans and first-mention/list-rank distinction wired into judging. | Full entity-resolution/escalation acceptance, DB label persistence and browser inspection. |
-| R09 | P1 | Calibration protocol/metric tooling and synthetic tests merged. | Actual 240-answer adjudicated corpus, held-out calibration, leakage/disagreement review and manual sign-off. Runtime qualification has not been established. |
-| R10 | P1 | Geography/context/comparability helpers merged; original country propagation still executes. | Full new context contract through sourcing, every adapter, persistence, resume and UI; DB/browser/live market evidence. |
-| R11 | P1 | Schedule-window/catch-up/incident/soak policy helpers merged. Existing legacy scheduler still executes. | Wire durable scheduling and measurement alerts into production storage/dispatch, DB/browser acceptance and seven real elapsed days of observations. |
-| R12 | P1 | No completed repair implementation established. | Consumer capture/comparison workflow plus browser/live/manual/soak qualification. |
-| R13 | P1 | R03/R05 add some outcome/qualification UI behavior. | Complete audited dashboard state matrix and all required browser behavior. |
-| R14 | P1 | No completed repair implementation established. | Reviewed/versioned question panels, persistence, approvals and browser acceptance. |
-| R15 | P1 | Existing crawlability product code predates this repair. | Audited technical-eligibility repairs and DB/browser/live/manual evidence. |
-| R16 | P1 | No completed repair implementation established. | Verified source opportunity workflow and provenance/tenant/browser acceptance. |
-| R17 | P1 | Existing content tools do not close this repair. | Evidence-backed research/revision checks and DB/browser acceptance. |
-| R18 | P1 | Existing publication functions do not close this repair. | Version-linked publication/observation transaction model and acceptance. |
-| R19 | P1 | Existing reporting/GSC functions do not close this repair. | Current metric outcome joins, attribution/source honesty and DB/browser/live acceptance. |
-| R20 | P2 | Preferred hostname/canonicals, robots/sitemap, private/preview noindex and built-site HTTP checks merged. | Public navigation/mobile/browser checks, methodology/claim review, real owned-site study and deployed/Search Console evidence. |
-| R21 | P2/bootstrap | 404-case inventory, guarded offline runner, truthful missing-suite/release refusal and CI/bootstrap merged. This change adds a dedicated real-PostgreSQL P0 dispatch job. | Complete DB/browser/live/manual/soak manifests and evidence ingestion, architecture cleanup, semantic mutations, documentation and end-to-end rollout/rollback sign-off. |
+| R01 | P0 | Durable canaries, stored readiness, config identities, shared reservations and incident/recovery operator view. Actual configured adapters exercised in authorized local QA. | Hosted configuration/cutover/rollback qualification. Latest Google canary measured provider capacity failure; three gateway surfaces answered. Readiness is time-limited evidence, not a permanent certification. |
+| R02 | P0 | Production durable observations/attempts, fenced claims, persisted retry times, circuits, reservations and ambiguity reconciliation in #9; operator attempt/cost/recovery display and browser checks added here. | Authorized shadow/cutover and full rollback exercise. Offered adapters do not promise provider idempotency; unsupported capability cannot be fabricated to pass R02-12. |
+| R03 | P0 | Frozen matrix/outcome propagation plus natural report identity and transactional materialization of links, citations, judgments, rollups and terminal job. Actual SQL races/crash rollback/recovery and browser reload/JSON totals verified. | Hosted deployment/rollback qualification and the remaining complete browser inventory. |
+| R04 | P0 | Strict Google parsing, whole-response deadlines, no nested durable retries, private capture state, parser incident inbox and operator display. Live AIO/no-AIO and provider failures recorded. | Hosted Storage upload/retention/signing and full live/manual Google fidelity acceptance. Preserve the first live harness's four actual attempts and its corrected two-request rerun; neither failure is hidden. |
+| R05 | P0 | Fixed self denominators; frozen pre-answer purpose, panel/version/equal weights and full context; recommendation eligibility; clustered uncertainty; unreviewed-panel headline refusal; shared metric propagation and numerical methodology. | Full independent entity-resolution/calibration acceptance, all cluster/cohort scenarios and hosted rollup/browser release checks. |
+| R06 | P1 | Runtime context/model identity, explicit unreported returned models, observed/unknown search telemetry, attempt IDs/times, sanitized private captures and tenant-scoped signed access endpoint. | Hosted Auth/Storage/retention tests and complete adapter/error/export inventory. Local filesystem captures are explicitly not hosted Storage acceptance. |
+| R07 | P1 | Fixed sample and isolation foundations; actual mobile sample reload with no measurement requests verified. | Remaining storage/navigation/banner/download/version browser cases and complete sample-contract acceptance. |
+| R08 | P1 | Merged relationships, contextual sentiment, evidence spans and first-mention/list-rank distinction. | Full entity-resolution/escalation, label persistence and browser inspection acceptance. |
+| R09 | P1 | Calibration tooling/protocol and synthetic tests. | Actual 240-answer adjudicated corpus, held-out evidence, disagreement/leakage review and human sign-off. No real corpus or qualification is invented. |
+| R10 | P1 | Full frozen context through sourcing, durable dispatch and adapters; accurate model unknowns; context-aware comparison refusal and explicit unverified egress. | Complete outgoing capability validation, all market/browser tests and real non-India qualification. Unsupported city/egress controls are not advertised. |
+| R11 | P1 | Actual SQL window/job enqueue transaction, immutable panel/context, bounded catch-up, overlap/block records, finalization trigger and history UI. Concurrent database enqueue tested. | Full schedule settings/measurement alert integration, fault/rollout acceptance and seven real elapsed days. **Acceptance soak has not started**; a short canary is not the required 840-observation window. |
+| R12 | P1 | API/Google methods remain explicitly separate. Consumer fleet stub still refuses. | Actual consumer adapter selection/execution, bounded production queue integration, 90 manual fidelity comparisons and three-/seven-day trials. This is still implementation work, not merely missing tests. |
+| R13 | P1 | Read-state contract, cancellation, opaque denial, retained retry URL, partial/failure counts and JSON export. Actual Next/Chromium error/retry/reload/download tests. | Full authenticated customer/history/mobile/keyboard/slow-navigation browser matrix. |
+| R14 | P1 | Immutable reviewed panels, source/provenance/intent/diagnostic separation, equal weights, duplicate review, tenant-scoped editor, approval and worker/scheduler snapshot integration. SQL edit races/RLS tested. | Remaining role/import/topic-review and full customer browser acceptance. Approval does not establish representative AI demand. |
+| R15 | P1 | Owned scoped URL audit with bounded requests, robots/search-vs-training separation, HTTP/redirect/directive/canonical/text/structured-data evidence and reviewer actions in customer UI. | Rendered-vs-source comparison, authorized property/inclusion controls, complete live/browser/manual scope and stale-evidence acceptance. Fetching a page does not prove indexing or crawler visits. |
+| R16 | P1 | Source snapshots, exact passage/offset verification, honest retrieval hypotheses, tenant-scoped opportunities and immutable accept/dismiss/correct decisions/UI. | Complete observed citation/entity joins, dedupe/priority model, reviewed work-order integration and full browser acceptance. |
+| R17 | P1 | Captured research/skips, missing-evidence blocking, exact draft/dependency checks, edit invalidation, bounded paid rechecks, combined revision costs and exact-version approval in both routes. Default pipelines without a check deliver explicitly unchecked drafts; approval requires a fresh saved-draft check. | Full claim/support/conflict review, native worker-wide check scheduling and the complete browser/fault inventory. |
+| R18 | P1 | Exact approved hash/version, meaningful body match, publication/event/item/job transaction, immutable publication record and separate unknown indexing/crawl/citation states; real rollback/idempotency SQL tests. | Approved external-domain policy, withdrawn/changed page observation history, bounded follow-up scheduler and full browser/live acceptance. |
+| R19 | P1 | Item observations anchored to verified publication, actual target counts, compatible cohorts, uncertainty and small-sample withholding. Conventional GSC rows explicitly labeled; current Google Generative AI reporting capabilities checked against primary sources. | Complete replacement of remaining legacy prompt_score reports, preregistered treatment/control windows, referral/conversion ingestion, correction/export integration and full acceptance. |
+| R20 | P2 | Merged hostname/canonical/robots/sitemap/private-noindex foundations; built-site HTTP checks pass. | Public navigation/mobile/claims review, real owned-site study and deployed/Search Console evidence. |
+| R21 | P2/bootstrap | Existing honest 404-case harness and isolated SQL job; follow-on SQL/browser/live executables and evidence manifests added here. | Complete evidence ingestion for every suite, architecture/semantic mutation checks, manual/soak evidence and end-to-end rollout/rollback sign-off. |
 
-**Evidence and immediate sequence.** The merged #6/#8 baseline passed 3,419 tests with 72 skipped; skips remain outstanding, never passes. For this change see [P0 implementation evidence](./P0-IMPLEMENTATION-STATUS.md) and [the dispatch runbook](../../runbooks/p0-provider-dispatch.md). The dedicated database job executes actual migrations and concurrency/crash/access checks; the generic repair runner still refuses unexecuted DB/browser/live suites. No production environment or paid provider was used for these changes.
+**Evidence.** See [follow-on verification and limits](./REPAIR-IMPLEMENTATION-STATUS.md), [database workflow results](./repair-workflow-database-evidence.json), [actual browser results](./repair-browser-evidence.json), [durable live canaries](./repair-provider-live-evidence.json), [Google checks](./repair-google-live-evidence.json), and the [historical first Google run](./repair-google-live-first-run.json). The initial credential assessment looked at legacy names; the configured canonical `LLM_API_KEY` was subsequently verified through all three actual gateway routes. No production application database was migrated or written.
 
-P0 comes first: apply/verify additive migration 027 in QA, exercise bounded canaries and honest full/partial/failed reports, complete the remaining P0 acceptance above, then authorize cutover. R09–R11 integration/qualification and R12–R19 remain subsequent P1 work. P2 foundations are implemented but P2 is not closed.
+P0 remains first: qualify hosted evidence and deployment behavior, resolve the measured Google capacity failure with bounded recovery, then shadow/cut over and exercise rollback. R09 human adjudication, R11/R12 elapsed soak, the consumer fleet, remaining P1 integration and P2 acceptance stay open. This branch is substantial implementation progress, not completion of every scope in the requested table.
 
 The plan contains **404 named acceptance scenarios**. Counts reflect distinct behaviors and failure boundaries; they are minimum coverage, not a target for inflating assertion counts. Reuse an existing behavioral test if it establishes the entire scenario and link its result. Table-driven variants expand runtime executions without changing the scenario inventory. Corpus examples and daily observations are counted separately.
 
@@ -271,7 +271,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R03. Make terminal scan outcomes reflect collection quality
 
-**Current status:** Core implementation merged; the new ledger closes the dispatch/result persistence gap. Finalizer rollup/citation crash recovery still needs its separate real-DB/browser acceptance.
+**Current status:** Core implementation merged; the new ledger closes the dispatch/result persistence gap. Transactional finalizer rollback/recovery now has actual isolated PostgreSQL and browser reload/export evidence; hosted rollout and the full case inventory remain open.
 
 **Priority/dependencies:** P0; R02/R04. **Primary code:** scan worker/finalizer, scan job storage, status routes, public/customer report adapters. **Regression:** A07.
 
@@ -290,7 +290,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [x] R03.4a Update polling, persisted reports, customer/public dashboards, history, and export schemas together.
    - [ ] R03.4b Show partial evidence and recovery actions; prevent “complete” animations or success emails for all-error scans.
 5. **Protect finalization under concurrency.**
-   - [ ] R03.5a Finalize atomically or through a fenced idempotent operation; reconcile interrupted materialization.
+   - [x] R03.5a Finalize atomically or through a fenced idempotent operation; reconcile interrupted materialization.
    - [x] R03.5b Mark historical records as legacy where quality cannot be reconstructed; do not invent modern outcome counts.
 
 ### Test plan — 18 named cases
@@ -322,7 +322,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R04. Validate Google payloads before classifying AIO absence
 
-**Current status:** Parser/transport implementation merged. Evidence identity is retained, but that does not establish a durable raw-capture store or production parser-drift alert delivery.
+**Current status:** Parser/transport implementation merged. Private capture metadata/upload state and a durable operator parser-drift inbox are connected. Local live captures and browser delivery are verified; hosted Storage and complete fidelity acceptance remain open.
 
 **Priority/dependencies:** P0; harness bootstrap. **Primary code:** `engines/brightdata.js`, `scoring/enginePipeline.js`, fixtures, evidence retention. **Regressions:** A01/A10.
 
@@ -342,7 +342,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [x] R04.4b Check remaining chunk/lease budget before dispatch; stop before a probe cannot finish within its envelope.
 5. **Preserve evidence and monitor drift.**
    - [x] R04.5a Save sanitized raw payload/evidence identity, parser version, validation errors, and provider request ID.
-   - [ ] R04.5b Version fixture coverage and alert on newly unknown shapes without falling back to manufactured Google text.
+   - [x] R04.5b Version fixture coverage and alert on newly unknown shapes without falling back to manufactured Google text.
 
 ### Test plan — 24 named cases
 
@@ -379,7 +379,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R05. Fix denominator invariance and sample eligibility
 
-**Current status:** Core metric/qualification propagation merged; brand-free observed panels now retain exposure zero. The legacy vendor-eliciting exploratory index remains separate. Compound intent/entity/uncertainty/cohort tasks stay open where the full requirement is not established.
+**Current status:** Core metric/qualification propagation merged; brand-free observed panels now retain exposure zero. The legacy vendor-eliciting exploratory index remains separate. Pre-answer purpose, clustered uncertainty and frozen context/cohort integration are implemented in this follow-on; independent entity-resolution/calibration and full acceptance remain open.
 
 **Priority/dependencies:** P0; R03/R04 and agreed R08 labels. **Primary code:** `scoring/enginePipeline.js`, analytics rollups, normalization, dashboard metrics/export. **Regressions:** A02–A04.
 
@@ -389,17 +389,17 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [x] R05.1a Define mention, citation, recommendation, conditional share, trigger, completion, and observed exposure separately.
    - [x] R05.1b Store numerator, denominator, unit, panel/surface/policy version, collection window, and exclusion reasons for each value.
 2. **Freeze eligibility before observing answers.**
-   - [ ] R05.2a Classify panel intent in advance; do not drop brand-free answers to improve a headline.
+   - [x] R05.2a Classify panel intent in advance; do not drop brand-free answers to improve a headline.
    - [ ] R05.2b Resolve entities independently of the selected rival list; preserve citation-only evidence in the appropriate metric.
 3. **Implement qualification and uncertainty.**
    - [x] R05.3a Apply distinct-prompt minimum and collection gate to the metric's actual denominator, not a larger answered pool.
-   - [ ] R05.3b Keep raw exploratory ratios labeled; compute suitable confidence intervals and cluster repeated observations by prompt.
+   - [x] R05.3b Keep raw exploratory ratios labeled; compute suitable confidence intervals and cluster repeated observations by prompt.
 4. **Make comparisons compatible.**
-   - [ ] R05.4a Freeze cross-engine cohort/weights; reject incompatible panel, surface, market, model-policy, and metric versions.
+   - [x] R05.4a Freeze cross-engine cohort/weights; reject incompatible panel, surface, market, model-policy, and metric versions.
    - [x] R05.4b Backfill only from surviving evidence; preserve original historical values and show version boundaries.
 5. **Propagate one calculation everywhere.**
    - [x] R05.5a Use shared metric DTOs in storage, rollups, API, dashboard, history, and export.
-   - [ ] R05.5b Add numerical examples to methodology; separate rounded display from unrounded stored counts.
+   - [x] R05.5b Add numerical examples to methodology; separate rounded display from unrounded stored counts.
 
 ### Test plan — 24 named cases
 
@@ -443,11 +443,11 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 ### Implementation tasks and subtasks
 
 1. **Define a versioned observation envelope.**
-   - [ ] R06.1a Include observation/attempt IDs, requested/returned model, gateway, surface, requested/observed location, language/device/session policy, and capture window.
+   - [x] R06.1a Include observation/attempt IDs, requested/returned model, gateway, surface, requested/observed location, language/device/session policy, and capture window.
    - [x] R06.1b Add search state (`observed_used/observed_not_used/unknown`), parser version, provider request ID, evidence identities, and cost source/state.
 2. **Remove field-dropping wrappers.**
    - [ ] R06.2a Return the shared envelope from direct and gateway paths; validate at adapter and persistence boundaries.
-   - [ ] R06.2b Preserve actual response identity separately from request configuration; never substitute requested model as observed model.
+   - [x] R06.2b Preserve actual response identity separately from request configuration; never substitute requested model as observed model.
 3. **Persist field quality.**
    - [x] R06.3a Add nullable columns/JSON schema and explicit reasons for unavailable fields; migrate without inventing historic values.
    - [x] R06.3b Retain provenance when an answer or citation leg fails independently and when the engine later retries.
@@ -645,7 +645,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 ### Implementation tasks and subtasks
 
 1. **Freeze the requested measurement context.**
-   - [ ] R10.1a Add country/city where supported, language, device, surface, and session policy to panel/observation identity.
+   - [x] R10.1a Add country/city where supported, language, device, surface, and session policy to panel/observation identity.
    - [ ] R10.1b Validate supported codes and explicit defaults; record inherited versus user-selected values.
 2. **Map context through each adapter.**
    - [ ] R10.2a Remove hardcoded country assumptions; assert actual outgoing parameters for direct, gateway, and native-Sonar branches.
@@ -654,8 +654,8 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [ ] R10.3a Record provider attestation/egress verification separately from requested location; retain coarse evidence and age.
    - [ ] R10.3b Keep UI language, query language, model locale, and egress country distinct when they cannot be equated.
 4. **Preserve compatibility and recovery.**
-   - [ ] R10.4a Resume with frozen context even if deployment defaults change; do not rescue failures by switching countries.
-   - [ ] R10.4b Block cross-context trend comparisons and mark fallback surfaces explicitly.
+   - [x] R10.4a Resume with frozen context even if deployment defaults change; do not rescue failures by switching countries.
+   - [x] R10.4b Block cross-context trend comparisons and mark fallback surfaces explicitly.
 5. **Verify offered markets.**
    - [ ] R10.5a Run a small authorized check of India and one non-India configuration for supported adapters.
    - [ ] R10.5b Publish only verified capability statements, with limitations for provider routing/personalization.
@@ -697,8 +697,8 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [ ] R11.1a Configure an owned/authorized QA brand, fixed panel/context, cadence/timezone, surfaces, request/spend ceiling, and start/end dates.
    - [ ] R11.1b Keep customer scheduling opt-in; show enabled/off/paused and next due/last successful measurement separately.
 2. **Make dispatch durable.**
-   - [ ] R11.2a Claim each scheduled window atomically; use a schedule-window idempotency key and immutable panel/context snapshot.
-   - [ ] R11.2b Implement bounded catch-up for missed windows and clear policy for overlapping active scans; do not create a dispatch storm.
+   - [x] R11.2a Claim each scheduled window atomically; use a schedule-window idempotency key and immutable panel/context snapshot.
+   - [x] R11.2b Implement bounded catch-up for missed windows and clear policy for overlapping active scans; do not create a dispatch storm.
 3. **Measure schedule fulfillment.**
    - [ ] R11.3a Record due, claimed, started, finalized, delayed, missed, and blocked events with actual times.
    - [ ] R11.3b Alert on missed due work or stale successful measurement, not merely missing process heartbeats.
@@ -794,16 +794,16 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 ### Implementation tasks and subtasks
 
 1. **Define a view-state contract.**
-   - [ ] R13.1a Distinguish loading, available, partial, authentication-required, unavailable/not-found, backend-error, offline, and expired evidence.
-   - [ ] R13.1b Preserve opaque tenant-denial responses: do not reveal a private scan exists to an anonymous or unrelated customer.
+   - [x] R13.1a Distinguish loading, available, partial, authentication-required, unavailable/not-found, backend-error, offline, and expired evidence.
+   - [x] R13.1b Preserve opaque tenant-denial responses: do not reveal a private scan exists to an anonymous or unrelated customer.
 2. **Map route outcomes without dropping errors.**
-   - [ ] R13.2a Carry status/reason/retry state from fetch through page props instead of converting every non-OK result to `scan: null`.
-   - [ ] R13.2b Treat malformed successful payloads as a contract error, not as an empty customer account.
+   - [x] R13.2a Carry status/reason/retry state from fetch through page props instead of converting every non-OK result to `scan: null`.
+   - [x] R13.2b Treat malformed successful payloads as a contract error, not as an empty customer account.
 3. **Implement recovery actions.**
-   - [ ] R13.3a Offer sign-in/access guidance or retry appropriate to known state; preserve the current URL and workspace on recovery.
-   - [ ] R13.3b Do not prescribe another paid scan to repair a report-read outage.
+   - [x] R13.3a Offer sign-in/access guidance or retry appropriate to known state; preserve the current URL and workspace on recovery.
+   - [x] R13.3b Do not prescribe another paid scan to repair a report-read outage.
 4. **Protect asynchronous transitions.**
-   - [ ] R13.4a Cancel/ignore stale requests after navigation; avoid briefly rendering another workspace's prior report.
+   - [x] R13.4a Cancel/ignore stale requests after navigation; avoid briefly rendering another workspace's prior report.
    - [ ] R13.4b Keep public/customer/history/export views consistent in partial/failure states.
 5. **Verify visible behavior.**
    - [ ] R13.5a Use a fixture HTTP server to exercise status, latency, disconnect, and recovery sequences.
@@ -841,17 +841,17 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 ### Implementation tasks and subtasks
 
 1. **Create a panel schema and provenance model.**
-   - [ ] R14.1a Store buyer persona, use case, intent, topic, market/language, prompt origin, scoring purpose, reviewer, and version.
-   - [ ] R14.1b Distinguish actual user evidence, conventional search data, generated suggestions, and licensed panel estimates; preserve confidence/usage rights.
+   - [x] R14.1a Store buyer persona, use case, intent, topic, market/language, prompt origin, scoring purpose, reviewer, and version.
+   - [x] R14.1b Distinguish actual user evidence, conventional search data, generated suggestions, and licensed panel estimates; preserve confidence/usage rights.
 2. **Separate suggestions from approved tracking.**
    - [ ] R14.2a Generate common comparison and engine-appropriate conversational questions without restricting all text to search-bar wording.
    - [ ] R14.2b Review near-duplicates, leading self-brand terms, unsupported intent, and topic imbalance before activation.
 3. **Implement review and edits.**
-   - [ ] R14.3a Support draft, approved, retired, and revised prompt/panel states with a durable change log.
-   - [ ] R14.3b Freeze the exact approved version for scheduled/in-flight scans; edits create a new version rather than mutating history.
+   - [x] R14.3a Support draft, approved, retired, and revised prompt/panel states with a durable change log.
+   - [x] R14.3b Freeze the exact approved version for scheduled/in-flight scans; edits create a new version rather than mutating history.
 4. **Make panel choice explainable.**
    - [ ] R14.4a Show business relevance and source evidence to the reviewer; require explicit weights if used and justify them before outcomes.
-   - [ ] R14.4b Preserve informational citation panels separately from recommendation-intent panels; do not retire prompts solely to remove poor brand outcomes.
+   - [x] R14.4b Preserve informational citation panels separately from recommendation-intent panels; do not retire prompts solely to remove poor brand outcomes.
 5. **Test ownership and compatibility.**
    - [ ] R14.5a Scope prompt edits/imports to workspace membership and role; validate imported content/size/encoding.
    - [ ] R14.5b Mark panel-change boundaries in reports; allow like-for-like cohort analysis only with explicit compatible IDs.
@@ -891,7 +891,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 1. **Inventory and prioritize URLs.**
    - [ ] R15.1a Select owned product/service/evidence pages from sitemap/internal links and approved inputs; record discovery source and canonical candidates.
-   - [ ] R15.1b Limit crawl depth/requests and honor the target audit scope; do not mistake a homepage-only check for site-wide eligibility.
+   - [x] R15.1b Limit crawl depth/requests and honor the target audit scope; do not mistake a homepage-only check for site-wide eligibility.
 2. **Collect URL-level facts.**
    - [ ] R15.2a Record status/redirect chain, robots path rules, meta/X-Robots directives, snippet controls, canonical, meaningful text, and internal discovery.
    - [ ] R15.2b Compare source HTML/rendered content where relevant; distinguish fetch visibility from actual search indexing.
@@ -900,7 +900,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [ ] R15.3b Separate search crawlers from training controls and allowlisting from an observed verified crawler fetch.
 4. **Integrate first-party evidence where available.**
    - [ ] R15.4a Inspect authorized property/indexing information and effective generative-AI inclusion controls using currently supported API/UI/export methods.
-   - [ ] R15.4b Treat inaccessible property settings as unverified, not excluded; retain property inheritance and capture date.
+   - [x] R15.4b Treat inaccessible property settings as unverified, not excluded; retain property inheritance and capture date.
 5. **Produce evidence-backed repairs.**
    - [ ] R15.5a Emit target URL, observed issue, engine relevance, severity/confidence, owner, suggested action, and retest conditions.
    - [ ] R15.5b Preserve SSRF protection on DNS resolution and every redirect; display stale/missing evidence separately from a clean result.
@@ -946,10 +946,10 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 1. **Retain discovery signals without overstating them.**
    - [ ] R16.1a Join observed answers, citations, entities, prompts, surfaces, and dates by durable observation ID.
-   - [ ] R16.1b Label co-occurrence as a hypothesis; separate cited sources from actually observed retrieval and generated research suggestions.
+   - [x] R16.1b Label co-occurrence as a hypothesis; separate cited sources from actually observed retrieval and generated research suggestions.
 2. **Verify the source page.**
-   - [ ] R16.2a Fetch a permitted page snapshot; record final URL/canonical, status, date/hash, and relevant quoted passage with offsets.
-   - [ ] R16.2b Verify the alleged competitor/client claim in the page itself; unavailable, paywalled, changed, or ambiguous content remains unverified.
+   - [x] R16.2a Fetch a permitted page snapshot; record final URL/canonical, status, date/hash, and relevant quoted passage with offsets.
+   - [x] R16.2b Verify the alleged competitor/client claim in the page itself; unavailable, paywalled, changed, or ambiguous content remains unverified.
 3. **Classify actionable work.**
    - [ ] R16.3a Choose owned-page update, missing original proof, access repair, factual correction, or legitimate external opportunity.
    - [ ] R16.3b Store mechanism, owner, target URL, confidence, supporting observations, expected effect, and retest window. Outreach recommendations do not send messages.
@@ -957,7 +957,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [ ] R16.4a Use repeat frequency, intent relevance, evidence quality, affected prompts, and estimated effort; publish score components/units.
    - [ ] R16.4b Deduplicate syndicated/canonical pages and repeated citation deliveries; do not call a gap score causal influence or universal source authority.
 5. **Connect action to review and outcomes.**
-   - [ ] R16.5a Allow a reviewer to accept/dismiss/correct a hypothesis, retaining its evidence version.
+   - [x] R16.5a Allow a reviewer to accept/dismiss/correct a hypothesis, retaining its evidence version.
    - [ ] R16.5b Create work orders only from reviewed evidence and route completed changes to R18/R19 observations.
 
 ### Test plan — 18 named cases
@@ -995,10 +995,10 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 1. **Persist the research evidence contract.**
    - [ ] R17.1a Store source snapshots, skipped-source reasons, capture/freshness dates, supporting claims, and approved first-party client facts.
-   - [ ] R17.1b Define blocking inputs versus exploratory-only work; zero supported facts cannot silently fall back to general knowledge for a factual client draft.
+   - [x] R17.1b Define blocking inputs versus exploratory-only work; zero supported facts cannot silently fall back to general knowledge for a factual client draft.
 2. **Bind checks to exact content.**
-   - [ ] R17.2a Hash the draft plus relevant fact/source versions; store each check's input hash, verdict, issues, and evidence references.
-   - [ ] R17.2b Invalidate checks after any substantive draft/fact/source change, including automatic and human-requested revisions.
+   - [x] R17.2a Hash the draft plus relevant fact/source versions; store each check's input hash, verdict, issues, and evidence references.
+   - [x] R17.2b Invalidate checks after any substantive draft/fact/source change, including automatic and human-requested revisions.
 3. **Verify claims independently.**
    - [ ] R17.3a Extract factual claims and map support/contradictions; competitor pages cannot establish the client's own prices/specifications.
    - [ ] R17.3b Handle stale, conflicting, inaccessible, or insufficient evidence with explicit unresolved issues and appropriate review routing.
@@ -1007,7 +1007,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [ ] R17.4b Resume an unchanged verified draft without repaying for checks; enforce combined per-item budgets across revisions/retries.
 5. **Protect human approval.**
    - [ ] R17.5a Display unresolved claims, failed source fetches, and cost/quality limitations to the reviewer.
-   - [ ] R17.5b Require approval for the exact checked draft version; an old approval cannot authorize a new changed body.
+   - [x] R17.5b Require approval for the exact checked draft version; an old approval cannot authorize a new changed body.
 
 ### Test plan — 20 named cases
 
@@ -1045,20 +1045,20 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 ### Implementation tasks and subtasks
 
 1. **Separate editorial and search states.**
-   - [ ] R18.1a Keep draft/checked/approved states separate from publication, discoverability, indexing, verified crawl, and observed citation facts.
+   - [x] R18.1a Keep draft/checked/approved states separate from publication, discoverability, indexing, verified crawl, and observed citation facts.
    - [ ] R18.1b Rename “covered” if it means editorial coverage; expose lifecycle evidence rather than one optimistic status.
 2. **Verify the submitted live page.**
-   - [ ] R18.2a Capture approved version/hash, submitted/final/canonical URL, page body evidence, status, and verification time.
+   - [x] R18.2a Capture approved version/hash, submitted/final/canonical URL, page body evidence, status, and verification time.
    - [ ] R18.2b Require meaningful content match, not title alone; define reviewable tolerance for editorial changes and approved external publishing domains.
 3. **Make publication recording atomic.**
-   - [ ] R18.3a In one transaction/RPC write the publication event/URL/version and item/job transition, with an idempotency key.
-   - [ ] R18.3b Fail/reconcile if evidence/event storage cannot complete; never acknowledge a durable published state with no recoverable URL join.
+   - [x] R18.3a In one transaction/RPC write the publication event/URL/version and item/job transition, with an idempotency key.
+   - [x] R18.3b Fail/reconcile if evidence/event storage cannot complete; never acknowledge a durable published state with no recoverable URL join.
 4. **Observe downstream states independently.**
    - [ ] R18.4a Schedule bounded indexing/crawl/citation observation; record observed time/source and unknown states.
    - [ ] R18.4b Link only exact/compatible page and prompt versions; publication does not itself assert indexing or AI citation.
 5. **Handle retries and subsequent edits.**
    - [ ] R18.5a Retry recording safely without duplicate events; preserve withdrawn/redirected/changed page history.
-   - [ ] R18.5b This ticket records/verifies publication at a submitted URL. It does not claim to deploy to a CMS; any future CMS action needs its own delivery/outbox contract.
+   - [x] R18.5b This ticket records/verifies publication at a submitted URL. It does not claim to deploy to a CMS; any future CMS action needs its own delivery/outbox contract.
 
 ### Test plan — 20 named cases
 
@@ -1103,7 +1103,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [ ] R19.2b Report matched-panel differences and uncertainty; preserve missingness and control trends. Observational differences do not prove causal lift.
 3. **Connect first-party data honestly.**
    - [ ] R19.3a Ingest authorized GSC and permitted referral/conversion data with pagination, watermarks, generations, and source types.
-   - [ ] R19.3b Verify current dedicated Google generative-AI report/API/export capabilities during implementation; conventional search rows cannot be relabeled AIO-specific.
+   - [x] R19.3b Verify current dedicated Google generative-AI report/API/export capabilities during implementation; conventional search rows cannot be relabeled AIO-specific.
 4. **Resolve attribution and data quality.**
    - [ ] R19.4a Normalize landing URLs/canonical policy, known assistant referrers, event dedupe, timezone, currency/units, and delayed corrections.
    - [ ] R19.4b Preserve unknown/direct/referrer-stripped journeys and incomplete imports; count observed referrals rather than asserting total AI influence.

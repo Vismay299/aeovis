@@ -1,3 +1,5 @@
+import {createObservationEnvelope} from "../provenance.js";
+import {resolveMeasurementContext} from '../engines/serpGeo.js';
 import {
   dispatchIdentity,
   hashIdentity,
@@ -92,6 +94,7 @@ export async function runDurableProbing({
         stored.filter((r) => r.raw?.cost == null).length,
     ),
   };
+  cp.measurement_context ||= resolveMeasurementContext({country:typeof cp.geo === "string" ? cp.geo : cp.geo?.country});
   const queries = cp.queries;
   if (
     !queries.length ||
@@ -103,9 +106,10 @@ export async function runDurableProbing({
   );
   const names = cp.engines || engines.map((e) => e.name);
   const context = {
-    version: DISPATCH_VERSION,
+    version: cp.dispatch.version,
     panel: hashIdentity(queries),
     geo: cp.geo || null,
+    ...(cp.dispatch.version !== "durable-probes-v1" ? {measurement_context:cp.measurement_context} : {}),
     model_policy_version: cp.model_policy_version || null,
     sourcing_cost: cp.dispatch.sourcing_cost,
   };
@@ -178,6 +182,10 @@ export async function runDurableProbing({
     }
     tally.probesAttempted = (tally.probesAttempted || 0) + 1;
     let result;
+    const captures=[];
+    const evidence=store.evidence;
+    const captureEvidence=evidence ? async input=>{captures.push(await evidence.capture({observationId:row.id,token:claim.lease_token,index:captures.length,...input}));} : null;
+    const startedAt=new Date(now()).toISOString();
     try {
       result = await engine.probe(
         queries.find((q) => q.text === row.query),
@@ -188,6 +196,8 @@ export async function runDurableProbing({
         stats,
         {
           geo: cp.geo,
+          measurementContext:{...cp.measurement_context,surface:row.engine},
+          captureEvidence,
           durableDispatch: true,
           deadlineAt: now() + PROBE_REQUEST_MS,
         },
@@ -201,6 +211,21 @@ export async function runDurableProbing({
         answer_present: false,
         provider_failure: classifyProviderFailure({ error }),
       };
+    }
+    result={...result,measurement_context:{...cp.measurement_context,surface:row.engine},
+      observed_location:null,location_verification:"unverified",capture_started_at:startedAt,capture_completed_at:new Date(now()).toISOString(),
+      evidence_state:evidence ? (captures.length && captures.every(c=>c.state==="stored") ? "stored" : "incomplete") : "unverified",
+      evidence_captures:captures};
+    result.attempt_id=claim.lease_token;
+    result.provenance=createObservationEnvelope({...result.provenance,...result,
+      observation_id:row.id,attempt_id:claim.lease_token,attempt_number:claim.attempt_no,
+      surface:result.provenance?.surface || row.engine,method:result.provenance?.method || result.measurement_method || "model_api",
+      gateway:result.provenance?.gateway || (row.engine==="aio"?"brightdata":"unknown"),
+      requested_location:cp.measurement_context.country,language:cp.measurement_context.language,device:cp.measurement_context.device,
+      session_policy:cp.measurement_context.session_policy,started_at:startedAt,completed_at:result.capture_completed_at,
+      evidence_identities:captures.map(c=>c.sha256).filter(Boolean),evidence_state:result.evidence_state});
+    if(evidence && ["unknown_schema","malformed"].includes(result.serp_state)) {
+      await evidence.incident({observationId:row.id,engine:row.engine,parserVersion:result.parser_version,shape:JSON.stringify(result.validation_errors || [])});
     }
     const decision = resultDecision(
       result,

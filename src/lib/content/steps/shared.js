@@ -23,7 +23,7 @@ export async function callStepLlm({
 }) {
   const call = llm || contentLlmJson;
 
-  let out = await call(prompt, { stats, temperature, deadlineMs });
+  let out = await call(prompt, { step, stats, temperature, deadlineMs });
   let result = validate(out);
   if (result.ok) return result.value;
 
@@ -32,7 +32,7 @@ export async function callStepLlm({
     "\n\n---\nYour previous output was INVALID for these reasons:\n- " +
     result.errors.join("\n- ") +
     "\nReturn the corrected JSON only.";
-  out = await call(retryPrompt, { stats, temperature: Math.min(1, temperature + 0.1), deadlineMs });
+  out = await call(retryPrompt, { step, stats, temperature: Math.min(1, temperature + 0.1), deadlineMs });
   result = validate(out);
   if (result.ok) return result.value;
 

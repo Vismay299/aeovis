@@ -215,7 +215,7 @@ test("GUARD — CASCADE_DROPPED_COLUMNS corpus is intact", () => {
   });
 });
 
-const MODERN_COLUMNS = new Set([...LEGACY_COLUMNS, ...CASCADE_DROPPED_COLUMNS, "query_source"]);
+const MODERN_COLUMNS = new Set([...LEGACY_COLUMNS, ...CASCADE_DROPPED_COLUMNS, "query_source", "origin_job_id"]);
 
 function jsonResponse(status, payload) {
   return new Response(JSON.stringify(payload), {

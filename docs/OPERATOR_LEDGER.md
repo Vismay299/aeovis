@@ -324,6 +324,9 @@ Also environment-shaped and easy to get silently wrong:
 
 ## C. Migrations
 
+`028_measurement_evidence`, `029_repair_workflow`, `030_scan_finalize_identity`, `031_content_check_budget`, `032_durable_schedule_windows`, `033_atomic_scan_materialization` are implemented and verified in isolated QA; production application is unverified. Apply all additive migrations before deploying this branch.
+
+
 `027_durable_probe_dispatch` is implemented and tested on disposable PostgreSQL;
 production application is **not verified**. It adds the P0 service-only dispatch
 ledger, claims, budgets, circuits, canaries and reconciliation. Apply before

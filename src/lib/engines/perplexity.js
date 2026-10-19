@@ -299,7 +299,7 @@ async function probeAnswer(query, apiKey, model, options = {}) {
         {
           model,
           messages: [{ role: "user", content: query }],
-          web_search_options: { user_location: { country: "IN" } },
+          web_search_options: { user_location: { country: (options.measurementContext?.country || "in").toUpperCase() } },
         },
         apiKey, options
       );
@@ -310,6 +310,7 @@ async function probeAnswer(query, apiKey, model, options = {}) {
       }
 
       const resJson = await res.json();
+      if(options.captureEvidence)await options.captureEvidence({payload:resJson,provider:"perplexity",surface:"perplexity",requestId:resJson.id || null});
       const text = resJson.choices?.[0]?.message?.content || "";
 
       // PRICING (R3.6.5). The line this replaces was
@@ -361,6 +362,8 @@ async function probeAnswer(query, apiKey, model, options = {}) {
 
       return {
         text: text.trim(),
+        returned_model: resJson.model || null,
+        provider_request_id: resJson.id || null,
         cost,
         cost_source: costSource,
         cost_state: costState,
@@ -403,6 +406,7 @@ async function probeSearch(query, apiKey, model, options = {}) {
       }
 
       const resJson = await res.json();
+      if(options.captureEvidence)await options.captureEvidence({payload:resJson,provider:"perplexity",surface:"perplexity",requestId:resJson.id || null});
       const results = resJson.results || [];
 
       const references = results.map((r) => ({
@@ -577,7 +581,7 @@ export async function probePerplexity(query, options = {}) {
         engine: "perplexity",
         query,
         stats: options.stats,
-        durableDispatch: options.durableDispatch, deadlineAt: options.deadlineAt,
+        durableDispatch: options.durableDispatch, deadlineAt: options.deadlineAt, measurementContext:options.measurementContext,captureEvidence:options.captureEvidence,
       });
       const searchObserved = result.search_requests > 0 || result.references.length > 0;
       const citationsState = searchObserved
@@ -726,8 +730,9 @@ export async function probePerplexity(query, options = {}) {
     references: search.references,
     model: model,
     requested_model: model,
-    returned_model: model,
-    search_requests: search.error ? 0 : 1,
+    returned_model: answer.returned_model || null,
+    provider_request_id: answer.provider_request_id || null,
+    search_requests: search.error ? null : 1,
     usage: answer.usage || null,
     ...costState,
     error: null,

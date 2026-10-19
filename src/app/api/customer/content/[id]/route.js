@@ -31,8 +31,9 @@ export async function PATCH(request, { params }) {
   if (!["draft", "awaiting_approval", "approved", "rejected"].includes(ctx.item.status)) return json({ error: "Wait for generation to finish before editing." }, 409);
   const admin = getSupabaseAdmin();
   if (!admin) return json({ error: "Draft editing is not configured." }, 503);
+  if(body.content_version!==ctx.item.content_version)return json({error:"Draft changed; refresh before saving."},409);
   const { data, error } = await admin.from("content_items").update({ title: body.title.trim(), body_md: body.body_md, status: "awaiting_approval", updated_at: new Date().toISOString() })
-    .eq("id", params.id).eq("brand", ctx.brand.brandKey).eq("status", ctx.item.status).select("id").maybeSingle();
+    .eq("id", params.id).eq("brand", ctx.brand.brandKey).eq("status", ctx.item.status).eq("content_version",body.content_version).select("id").maybeSingle();
   if (error) return json({ error: "Could not save draft." }, 503);
   return data ? json({ saved: true }) : json({ error: "Draft changed. Refresh and retry." }, 409);
 }
@@ -46,10 +47,10 @@ export async function POST(request, { params }) {
   if (!decision.ok) return json({ error: decision.error }, 409);
   const admin = getSupabaseAdmin();
   if (!admin) return json({ error: "Draft review is not configured." }, 503);
-  const { error } = await admin.rpc("decide_customer_content", {
-    p_item_id: params.id, p_brand: ctx.brand.brandKey, p_old_status: ctx.item.status,
-    p_status: decision.status, p_job_status: jobStatusForItemStatus(decision.status),
-    p_verdict: body.verdict, p_comment: typeof body.comment === "string" ? body.comment.slice(0, 4000) : "",
+  if(body.content_version!==ctx.item.content_version || body.content_hash!==ctx.item.content_hash)return json({error:"Draft changed; refresh before review."},409);
+  const { error } = await admin.rpc("decide_checked_content", {
+    p_item:params.id,p_brand:ctx.brand.brandKey,p_version:body.content_version,p_hash:body.content_hash,p_status:decision.status,
+    p_actor:ctx.user.id,p_comment:typeof body.comment==="string"?body.comment.slice(0,4000):"",
   });
   return error ? json({ error: "Could not save review. Refresh and retry." }, 409) : json({ status: decision.status, published: false });
 }

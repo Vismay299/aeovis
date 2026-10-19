@@ -106,7 +106,7 @@ export async function probeChatGpt(query, options = {}) {
         engine: "chatgpt",
         query,
         stats,
-        durableDispatch: options.durableDispatch, deadlineAt: options.deadlineAt,
+        durableDispatch: options.durableDispatch, deadlineAt: options.deadlineAt, measurementContext:options.measurementContext,captureEvidence:options.captureEvidence,
       });
       return {
         text: result.text,
@@ -172,7 +172,7 @@ export async function probeChatGpt(query, options = {}) {
         // Same constant the fee above was priced with, so the tool that is
         // billed and the tool that is priced cannot drift apart.
         type: OPENAI_TOOL,
-        user_location: { type: "approximate", country: "IN" },
+        user_location: { type: "approximate", country: (options.measurementContext?.country || "in").toUpperCase() },
       },
     ],
     input: query,
@@ -227,6 +227,7 @@ export async function probeChatGpt(query, options = {}) {
       }
 
       const resJson = await res.json();
+      if(options.captureEvidence)await options.captureEvidence({payload:resJson,provider:"openai",surface:"chatgpt",requestId:resJson.id || null});
 
       const textParts = [];
       const references = [];
@@ -318,7 +319,7 @@ export async function probeChatGpt(query, options = {}) {
         requested_model: model,
         returned_model: resJson?.model || null,
         provider_request_id: resJson?.id || null,
-        search_requests: 1,
+        search_requests: Array.isArray(resJson?.output) ? resJson.output.filter(item => item.type === "web_search_call").length : null,
         usage: resJson?.usage || null,
         error: null,
       };

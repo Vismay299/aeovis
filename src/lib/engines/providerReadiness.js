@@ -876,7 +876,7 @@ export function readinessForEngine({ engine, env = {}, canary = null, now, ttlMs
       readiness: READINESS.DEGRADED,
       reason: canary.kind || "canary_failed",
       detail: canary.failure?.message ?? "the last canary produced no valid measurement",
-      operator_action: canary.action ?? operatorActionFor(canary.kind),
+      operator_action: canary.action ?? canary.failure?.action ?? operatorActionFor(canary.kind || canary.failure?.kind) ?? "Investigate the last failure, then run a bounded canary",
     };
   }
 

@@ -1,0 +1,306 @@
+{
+  "suite": "bounded-live-durable-provider-canaries",
+  "executed_at": "2026-10-19T19:31:22.692Z",
+  "workspace": "Perceev authorized QA",
+  "ledger": "dedicated-loopback-live-qa",
+  "slot": "repairs-2026-10-20-v1",
+  "ceilings": {
+    "network_requests": 5,
+    "reservations_usd": 1,
+    "reserve_per_observation_usd": 0.2,
+    "provider_retries": false
+  },
+  "network_requests": 4,
+  "billing_note": "Reservations are estimates. Provider-reported charges and unknown costs are preserved; this is not a guaranteed invoice cap.",
+  "storage_note": "Sanitized captures stored in a private local QA directory; hosted Storage remains separate acceptance.",
+  "outcomes": [
+    {
+      "engine": "aio",
+      "state": "retry",
+      "reason": "provider_capacity"
+    },
+    {
+      "engine": "chatgpt",
+      "state": "answered",
+      "reason": null
+    },
+    {
+      "engine": "gemini",
+      "state": "answered",
+      "reason": null
+    },
+    {
+      "engine": "perplexity",
+      "state": "answered",
+      "reason": null
+    }
+  ],
+  "observations": [
+    {
+      "id": "70a5caaebc4167b85519a6a16de0aa3487c3142244b16b6eb88214f524defde2",
+      "engine": "aio",
+      "state": "retry",
+      "observed_at": "2026-10-19T19:30:54.285Z",
+      "reason": "provider_capacity",
+      "attempt_count": 1,
+      "total_cost": "0",
+      "unknown_cost_calls": 1,
+      "provenance": {
+        "cost": null,
+        "device": "desktop",
+        "method": "model_api",
+        "gateway": "direct",
+        "surface": "aio",
+        "language": "en",
+        "attempt_id": "58b0e52b-52b2-4a52-9067-31f1a664eed0",
+        "cost_state": "unknown",
+        "cost_source": null,
+        "search_state": "unknown",
+        "attempt_number": 1,
+        "capture_window": {
+          "started_at": "2026-10-19T19:30:48.019Z",
+          "duration_ms": 6265,
+          "completed_at": "2026-10-19T19:30:54.284Z"
+        },
+        "observation_id": "70a5caaebc4167b85519a6a16de0aa3487c3142244b16b6eb88214f524defde2",
+        "parser_version": "google-payload/1.0.0",
+        "returned_model": null,
+        "schema_version": "r06-provenance-v1",
+        "session_policy": "fresh_anonymous",
+        "requested_model": null,
+        "search_requests": null,
+        "evidence_expired": false,
+        "retention_reason": null,
+        "cost_state_detail": null,
+        "observed_location": null,
+        "requested_location": "in",
+        "evidence_identities": [
+          "0177a77966c1ab501fedce7424336849e89057707c9a8d43a23048413ab0d56c"
+        ],
+        "provider_request_id": null,
+        "model_unknown_reason": "response_model_unreported",
+        "location_verification": "unverified",
+        "evidence_retention_date": null
+      },
+      "evidence_state": "stored",
+      "captures": [
+        {
+          "state": "stored",
+          "sha256": "0177a77966c1ab501fedce7424336849e89057707c9a8d43a23048413ab0d56c",
+          "object_key": "measurements/70a5caaebc4167b85519a6a16de0aa3487c3142244b16b6eb88214f524defde2/58b0e52b-52b2-4a52-9067-31f1a664eed0/0-0177a77966c1ab501fedce7424336849e89057707c9a8d43a23048413ab0d56c.json"
+        }
+      ],
+      "provider_failure": {
+        "kind": "provider_capacity",
+        "action": "investigate_provider_capacity",
+        "detail": "Bright Data proxy session error: No ready cookies",
+        "status": null,
+        "message": "brightdata: provider could not serve this request path",
+        "evidence": "error",
+        "provider": "brightdata",
+        "retryable": true,
+        "observation": null,
+        "reset_source": null,
+        "brand_absence": false,
+        "opens_circuit": false,
+        "provider_code": null,
+        "reset_observed": false,
+        "retry_after_ms": null
+      }
+    },
+    {
+      "id": "c5c8c6df8fe563be6363e1a582c5c3e7185822c5cf24bac1300400351065f2c0",
+      "engine": "chatgpt",
+      "state": "answered",
+      "observed_at": "2026-10-19T19:31:00.456Z",
+      "reason": null,
+      "attempt_count": 1,
+      "total_cost": "0.000806675",
+      "unknown_cost_calls": 0,
+      "provenance": {
+        "cost": 0.000806675,
+        "device": "desktop",
+        "method": "model_api",
+        "gateway": "openrouter",
+        "surface": "chatgpt",
+        "language": "en",
+        "attempt_id": "632eb1c4-d0b7-4a8d-b381-34101cb6713c",
+        "cost_state": "measured",
+        "cost_source": "gateway",
+        "search_state": "unknown",
+        "attempt_number": 1,
+        "capture_window": {
+          "started_at": "2026-10-19T19:30:54.290Z",
+          "duration_ms": 6165,
+          "completed_at": "2026-10-19T19:31:00.455Z"
+        },
+        "observation_id": "c5c8c6df8fe563be6363e1a582c5c3e7185822c5cf24bac1300400351065f2c0",
+        "parser_version": "v1",
+        "returned_model": "openai/gpt-6-luna",
+        "schema_version": "r06-provenance-v1",
+        "session_policy": "fresh_anonymous",
+        "requested_model": "openai/gpt-6-luna",
+        "search_requests": null,
+        "evidence_expired": false,
+        "retention_reason": null,
+        "cost_state_detail": null,
+        "observed_location": null,
+        "requested_location": "in",
+        "evidence_identities": [
+          "d4e721ad9711ab26024a1fc0d59ae498323b0541d769a452f9b2afb62b699b58"
+        ],
+        "provider_request_id": "gen-1792438254-TRYRfo1mO7EbBf0xAPCu",
+        "model_unknown_reason": null,
+        "location_verification": "unverified",
+        "evidence_retention_date": null
+      },
+      "evidence_state": "stored",
+      "captures": [
+        {
+          "state": "stored",
+          "sha256": "d4e721ad9711ab26024a1fc0d59ae498323b0541d769a452f9b2afb62b699b58",
+          "object_key": "measurements/c5c8c6df8fe563be6363e1a582c5c3e7185822c5cf24bac1300400351065f2c0/632eb1c4-d0b7-4a8d-b381-34101cb6713c/0-d4e721ad9711ab26024a1fc0d59ae498323b0541d769a452f9b2afb62b699b58.json"
+        }
+      ],
+      "provider_failure": null
+    },
+    {
+      "id": "074c5941a53bcd4911d91b5c3764c6739214c8128a3bf50ddff53f5660771045",
+      "engine": "gemini",
+      "state": "answered",
+      "observed_at": "2026-10-19T19:31:11.956Z",
+      "reason": null,
+      "attempt_count": 1,
+      "total_cost": "0.00396075",
+      "unknown_cost_calls": 0,
+      "provenance": {
+        "cost": 0.00396075,
+        "device": "desktop",
+        "method": "model_api",
+        "gateway": "openrouter",
+        "surface": "gemini",
+        "language": "en",
+        "attempt_id": "1493f435-3eea-4d40-8419-4aa8248031b7",
+        "cost_state": "measured",
+        "cost_source": "gateway",
+        "search_state": "unknown",
+        "attempt_number": 1,
+        "capture_window": {
+          "started_at": "2026-10-19T19:31:00.459Z",
+          "duration_ms": 11495,
+          "completed_at": "2026-10-19T19:31:11.954Z"
+        },
+        "observation_id": "074c5941a53bcd4911d91b5c3764c6739214c8128a3bf50ddff53f5660771045",
+        "parser_version": "v1",
+        "returned_model": "google/gemini-3.8-flash",
+        "schema_version": "r06-provenance-v1",
+        "session_policy": "fresh_anonymous",
+        "requested_model": "google/gemini-3.8-flash",
+        "search_requests": null,
+        "evidence_expired": false,
+        "retention_reason": null,
+        "cost_state_detail": null,
+        "observed_location": null,
+        "requested_location": "in",
+        "evidence_identities": [
+          "a9d4e8efa11ff7dea3560d88d573929f11516b7b7a40325870e2c5dd046f43e9"
+        ],
+        "provider_request_id": "gen-1792438260-shXitYqrokpA4snrbKX5",
+        "model_unknown_reason": null,
+        "location_verification": "unverified",
+        "evidence_retention_date": null
+      },
+      "evidence_state": "stored",
+      "captures": [
+        {
+          "state": "stored",
+          "sha256": "a9d4e8efa11ff7dea3560d88d573929f11516b7b7a40325870e2c5dd046f43e9",
+          "object_key": "measurements/074c5941a53bcd4911d91b5c3764c6739214c8128a3bf50ddff53f5660771045/1493f435-3eea-4d40-8419-4aa8248031b7/0-a9d4e8efa11ff7dea3560d88d573929f11516b7b7a40325870e2c5dd046f43e9.json"
+        }
+      ],
+      "provider_failure": null
+    },
+    {
+      "id": "c3aa32e7b0977f22e1820634876bb096fcf04c7455c56cb0555ad667e9145d93",
+      "engine": "perplexity",
+      "state": "answered",
+      "observed_at": "2026-10-19T19:31:22.683Z",
+      "reason": null,
+      "attempt_count": 1,
+      "total_cost": "0.00591",
+      "unknown_cost_calls": 0,
+      "provenance": {
+        "cost": 0.00591,
+        "device": "desktop",
+        "method": "model_api",
+        "gateway": "openrouter",
+        "surface": "perplexity",
+        "language": "en",
+        "attempt_id": "deb187f6-8f89-4d34-950e-300abaaa9a38",
+        "cost_state": "measured",
+        "cost_source": "gateway",
+        "search_state": "unknown",
+        "attempt_number": 1,
+        "capture_window": {
+          "started_at": "2026-10-19T19:31:11.963Z",
+          "duration_ms": 10718,
+          "completed_at": "2026-10-19T19:31:22.681Z"
+        },
+        "observation_id": "c3aa32e7b0977f22e1820634876bb096fcf04c7455c56cb0555ad667e9145d93",
+        "parser_version": "v1",
+        "returned_model": "perplexity/sonar",
+        "schema_version": "r06-provenance-v1",
+        "session_policy": "fresh_anonymous",
+        "requested_model": "perplexity/sonar",
+        "search_requests": null,
+        "evidence_expired": false,
+        "retention_reason": null,
+        "cost_state_detail": null,
+        "observed_location": null,
+        "requested_location": "in",
+        "evidence_identities": [
+          "62ca0168b1985eaeda669c71a9e335623ddc448438f777b08c633c47901d20a9"
+        ],
+        "provider_request_id": "gen-1792438271-qvfb3iYwabcdndgkcY6B",
+        "model_unknown_reason": null,
+        "location_verification": "unverified",
+        "evidence_retention_date": null
+      },
+      "evidence_state": "stored",
+      "captures": [
+        {
+          "state": "stored",
+          "sha256": "62ca0168b1985eaeda669c71a9e335623ddc448438f777b08c633c47901d20a9",
+          "object_key": "measurements/c3aa32e7b0977f22e1820634876bb096fcf04c7455c56cb0555ad667e9145d93/deb187f6-8f89-4d34-950e-300abaaa9a38/0-62ca0168b1985eaeda669c71a9e335623ddc448438f777b08c633c47901d20a9.json"
+        }
+      ],
+      "provider_failure": null
+    }
+  ],
+  "readiness": {
+    "aio": {
+      "readiness": "degraded",
+      "reason": "canary_failed",
+      "provider": "brightdata",
+      "operator_action": null
+    },
+    "chatgpt": {
+      "readiness": "ready",
+      "reason": null,
+      "provider": "openrouter",
+      "operator_action": null
+    },
+    "perplexity": {
+      "readiness": "ready",
+      "reason": null,
+      "provider": "openrouter",
+      "operator_action": null
+    },
+    "gemini": {
+      "readiness": "ready",
+      "reason": null,
+      "provider": "openrouter",
+      "operator_action": null
+    }
+  }
+}

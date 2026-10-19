@@ -1,0 +1,274 @@
+{
+  "kind": "bounded-live-google-acceptance",
+  "property": "https://perceev.ai",
+  "executed_at": "2026-10-19T19:19:46.760Z",
+  "query_ceiling": 2,
+  "retries": false,
+  "zone_lookup_request_ceiling": 1,
+  "requests_sent": 2,
+  "control_requests_sent": 0,
+  "spend": "Provider billing not exposed by SERP responses; two query calls were authorized. No spend total is invented.",
+  "storage": "Private local QA snapshots; hosted Storage qualification remains separate.",
+  "other_surfaces": {
+    "chatgpt": "not_assessed_in_this_google_only_run; see repair-provider-live-evidence.json",
+    "perplexity": "not_assessed_in_this_google_only_run; see repair-provider-live-evidence.json",
+    "gemini": "not_assessed_in_this_google_only_run; see repair-provider-live-evidence.json"
+  },
+  "observations": [
+    {
+      "query": "What is AI answer engine visibility measurement?",
+      "started_at": "2026-10-19T19:18:56.117Z",
+      "finished_at": "2026-10-19T19:19:39.647Z",
+      "surface": "google_serp_aio",
+      "requested_country": "in",
+      "observed_location": null,
+      "parser_version": "google-payload/1.0.0",
+      "validation": {
+        "serp_state": "valid_serp",
+        "aio_present": true,
+        "parser_version": "google-payload/1.0.0",
+        "evidence_id": "bd_39a7e6c09dc7746f45827fc7",
+        "provider_request_id": null,
+        "per_field_quality": {
+          "text": "complete",
+          "citations": "complete"
+        },
+        "citations_verified_empty": false,
+        "text": "AI answer engine visibility measurement is the process of tracking, scoring, and analyzing how often and how favorably a brand, product, or piece of content is referenced, cited, or recommended by AI-powered search engines and chat assistants (such as ChatGPT, Perplexity, Gemini, Claude, Copilot, and Google AI Overviews). Webolutions Digital Marketing Agency +2\nUnlike traditional Search Engine Optimization (SEO) \u2014 which measures blue-link rankings and click-through rates \u2014 AI visibility measurement evaluates narrative inclusion inside generative answers. Webolutions Digital Marketing Agency +1\nCore Metrics Tracked\nTo measure AI answer engine visibility, platforms and marketers typically track three main dimensions across repeated prompt tests:\nMention Rate: How often your brand or domain appears in an AI response for a specific set of target queries.\nPosition & Share of Citations: Whether your brand is named first, listed among top alternatives, or buried in the text, alongside the exact URLs or sources the AI cites for attribution.\nSentiment & Narrative Accuracy: Whether the AI describes your brand accurately, favorably, or with outdated facts and wrong context.\nKey Areas Evaluated in Measurement\nCross-Model Consistency: Checking how different engines (e.g., Claude vs. Perplexity vs. Gemini) perceive and talk about your brand.\nBot Crawl Access: Verifying whether AI crawlers (like GPTBot or ClaudeBot) are allowed to scrape and index your site via robots.txt.\nStructured Data & Entity Signals: Assessing how well your content is formatted (using atomic structures, FAQs, and schema markup) for machine readability.\nThird-Party Authority: Tracking how often external review sites, directories, and trusted publications \u2014 which AI models use to train and cross-reference \u2014 mention your business. LinkedIn\u00b7Sherri Barna +5\nGuides and diagnostic frameworks for tracking these metrics are available through resources like UltraScout AI and Web Cited.\nWould you like to know how to audit your current AI visibility or which tools are used to track brand mentions in ChatGPT and Perplexity?",
+        "blocks": [
+          {
+            "text": "AI answer engine visibility measurement is the process of tracking, scoring, and analyzing how often and how favorably a brand, product, or piece of content is referenced, cited, or recommended by AI-powered search engines and chat assistants (such as ChatGPT, Perplexity, Gemini, Claude, Copilot, and Google AI Overviews). Webolutions Digital Marketing Agency +2",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 0,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Unlike traditional Search Engine Optimization (SEO) \u2014 which measures blue-link rankings and click-through rates \u2014 AI visibility measurement evaluates narrative inclusion inside generative answers. Webolutions Digital Marketing Agency +1",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 1,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Core Metrics Tracked",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 2,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "To measure AI answer engine visibility, platforms and marketers typically track three main dimensions across repeated prompt tests:",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 3,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Mention Rate: How often your brand or domain appears in an AI response for a specific set of target queries.",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 4,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Position & Share of Citations: Whether your brand is named first, listed among top alternatives, or buried in the text, alongside the exact URLs or sources the AI cites for attribution.",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 5,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Sentiment & Narrative Accuracy: Whether the AI describes your brand accurately, favorably, or with outdated facts and wrong context.",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 6,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Key Areas Evaluated in Measurement",
+            "reference_indexes": [],
+            "kind": "list",
+            "order": 7,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Cross-Model Consistency: Checking how different engines (e.g., Claude vs. Perplexity vs. Gemini) perceive and talk about your brand.",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 8,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Bot Crawl Access: Verifying whether AI crawlers (like GPTBot or ClaudeBot) are allowed to scrape and index your site via robots.txt.",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 9,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Structured Data & Entity Signals: Assessing how well your content is formatted (using atomic structures, FAQs, and schema markup) for machine readability.",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 10,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Third-Party Authority: Tracking how often external review sites, directories, and trusted publications \u2014 which AI models use to train and cross-reference \u2014 mention your business. LinkedIn\u00b7Sherri Barna +5",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 11,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Guides and diagnostic frameworks for tracking these metrics are available through resources like UltraScout AI and Web Cited.",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 12,
+            "citation_indexes": [],
+            "citation_urls": []
+          },
+          {
+            "text": "Would you like to know how to audit your current AI visibility or which tools are used to track brand mentions in ChatGPT and Perplexity?",
+            "reference_indexes": [],
+            "kind": "block",
+            "order": 13,
+            "citation_indexes": [],
+            "citation_urls": []
+          }
+        ],
+        "citations": [
+          "https://lifestyle.utv.ie",
+          "https://web-cited.com/learn",
+          "https://webolutionsmarketingagency.com",
+          "https://anithaseo.com",
+          "https://jbrmarketing.net",
+          "https://www.linkedin.com",
+          "https://ultrascout.ai/guides",
+          "https://www.facebook.com"
+        ],
+        "references": [
+          {
+            "href": "https://lifestyle.utv.ie",
+            "normalized": "https://lifestyle.utv.ie",
+            "title": "How to Measure AI Search Visibility: Complete AEO Guide For ...",
+            "source": "",
+            "reference_indexes": [
+              0
+            ],
+            "blocks": []
+          },
+          {
+            "href": "https://web-cited.com/learn/",
+            "normalized": "https://web-cited.com/learn",
+            "title": "Learn: AI Search Visibility, AEO, and GEO - Web Cited",
+            "source": "",
+            "reference_indexes": [
+              1
+            ],
+            "blocks": []
+          },
+          {
+            "href": "https://webolutionsmarketingagency.com",
+            "normalized": "https://webolutionsmarketingagency.com",
+            "title": "Answer Engine Optimization (AEO) for AI Visibility",
+            "source": "",
+            "reference_indexes": [
+              2
+            ],
+            "blocks": []
+          },
+          {
+            "href": "https://anithaseo.com",
+            "normalized": "https://anithaseo.com",
+            "title": "AI Search Optimization: Complete AEO Guide",
+            "source": "",
+            "reference_indexes": [
+              3
+            ],
+            "blocks": []
+          },
+          {
+            "href": "https://jbrmarketing.net",
+            "normalized": "https://jbrmarketing.net",
+            "title": "Answer Engine Optimization: How to Win Visibility in the Age of AI",
+            "source": "",
+            "reference_indexes": [
+              4
+            ],
+            "blocks": []
+          },
+          {
+            "href": "https://www.linkedin.com",
+            "normalized": "https://www.linkedin.com",
+            "title": "Unleashing Visibility in AI-Powered Search - LinkedIn",
+            "source": "",
+            "reference_indexes": [
+              5
+            ],
+            "blocks": []
+          },
+          {
+            "href": "https://ultrascout.ai/guides",
+            "normalized": "https://ultrascout.ai/guides",
+            "title": "AEO & AI Visibility Guides | Expert Resources - UltraScout AI",
+            "source": "",
+            "reference_indexes": [
+              6
+            ],
+            "blocks": []
+          },
+          {
+            "href": "https://www.facebook.com",
+            "normalized": "https://www.facebook.com",
+            "title": "Tools for Improving Brand AI Search Presence (AEO & Answer ...",
+            "source": "",
+            "reference_indexes": [
+              7
+            ],
+            "blocks": []
+          }
+        ],
+        "errors": []
+      },
+      "request_id": null,
+      "state": "aio_present",
+      "captures": [
+        {
+          "sha256": "b35cdd3e3910ea3f60b610849769cc5d20a871cccb6756af0ab42f60f9aee9d5",
+          "private_qa_file": "/tmp/aeovis-google-live-repairs/b35cdd3e3910ea3f60b610849769cc5d20a871cccb6756af0ab42f60f9aee9d5.json",
+          "bytes": 50346
+        }
+      ]
+    },
+    {
+      "query": "site:perceev.ai privacy policy",
+      "started_at": "2026-10-19T19:19:39.647Z",
+      "finished_at": "2026-10-19T19:19:46.760Z",
+      "surface": "google_serp_aio",
+      "state": "failed",
+      "failure_kind": "BrightDataParseError",
+      "parser_state": "provider_failure",
+      "captures": [
+        {
+          "sha256": "cc4f8568dbd3c9cc86422ee2e2dbf28efac059bf50ac0c32170e5c022701e68b",
+          "private_qa_file": "/tmp/aeovis-google-live-repairs/cc4f8568dbd3c9cc86422ee2e2dbf28efac059bf50ac0c32170e5c022701e68b.json",
+          "bytes": 427
+        }
+      ]
+    }
+  ],
+  "credential_assessment_correction": "The initial assessment checked legacy provider-specific names. The canonical shared LLM_API_KEY was configured and subsequently exercised through production gateway adapters."
+}

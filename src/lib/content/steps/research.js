@@ -1,3 +1,5 @@
+import {makeSourceSnapshot} from '../../repairs/workflow.js';
+import {researchEvidence} from '../../repairs/researchContract.js';
 import { renderStepPrompt } from "../skills/loader.js";
 import { validateResearchPack } from "../schemas.js";
 import { normalizeScrapeResult, scrapeSite } from "../../firecrawl.js";
@@ -42,7 +44,7 @@ export async function runResearch(ctx, deps = {}) {
       // scrape reports its own state and the reason is kept, not inferred.
       const res = normalizeScrapeResult(await scrape(url));
       if (res.content) {
-        scraped.push({ url, content: res.content });
+        scraped.push({ url, content: res.content, snapshot:makeSourceSnapshot({url,text:res.content}) });
       } else {
         skippedScrapes.push(`${url} (${res.state_reason})`);
       }
@@ -68,7 +70,7 @@ export async function runResearch(ctx, deps = {}) {
       ? formatScanAnswers(rows)
       : ctx.input?.answer_text
         ? `### [${ctx.input.engine || "aio"}] "${ctx.input.query}"\n${String(ctx.input.answer_text).slice(0, 1400)}`
-        : "(no scan answers available — compensate with scraped sources and general knowledge, and flag weakly-supported areas)";
+        : "(no captured scan answers; do not invent sources or client facts; keep unsupported claims unresolved)";
 
   const prompt = renderStepPrompt("research", ctx.playbook, {
     brand: ctx.input?.brand_name || ctx.brand,
@@ -81,7 +83,7 @@ export async function runResearch(ctx, deps = {}) {
     scraped_pages: formatScrapedPages(scraped),
   });
 
-  return callStepLlm({
+  const pack = await callStepLlm({
     step: "research",
     prompt,
     validate: validateResearchPack,
@@ -89,4 +91,6 @@ export async function runResearch(ctx, deps = {}) {
     stats: ctx.stats,
     temperature: 0.3,
   });
+  return {...pack,evidence:researchEvidence({snapshots:scraped.map(p=>p.snapshot),skipped:skippedScrapes,
+    clientFacts:ctx.input?.approved_facts || []})};
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { findCustomerBrand, getCustomerContext } from "@/lib/supabase/customer";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { createScanJob } from "@/lib/db";
+import { repairWorkflowStore } from "@/lib/db/repairWorkflow";
 import { DuplicateScanError } from "@/lib/duplicateScan";
 import { keepAlive } from "@/lib/keepAlive";
 
@@ -31,7 +32,13 @@ export async function POST(request) {
   const competitors = (body?.competitors || "").trim();
 
   try {
+    const admin=getSupabaseAdmin();
+    if(!admin)return fail(503,"Measurement storage unavailable.");
+    const panels=await repairWorkflowStore(admin).list(brand.brandKey,"panel");
+    const panel=panels.find(p=>p.artifact_key===(body.panel_key || "default") && p.state==="approved");
+    if(!panel)return fail(409,"Review and approve a question panel before starting measurement.");
     const job = await createScanJob({
+      panelSnapshot:panel,measurementContext:panel.payload.context,
       brand: brand.display_name,
       brandKey: brand.brandKey,
       url,

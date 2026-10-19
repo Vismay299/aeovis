@@ -1,0 +1,18 @@
+{
+  "suite": "actual-next-browser-controlled-api",
+  "executed_at": "2026-10-19T19:52:58.862Z",
+  "passed": [
+    "R13-B authentication: opaque/error recovery and zero paid requests",
+    "R13-B missing: opaque/error recovery and zero paid requests",
+    "R13-B denied: opaque/error recovery and zero paid requests",
+    "R13-B backend: opaque/error recovery and zero paid requests",
+    "R13-B malformed: opaque/error recovery and zero paid requests",
+    "R03/R05-B complete: durable reload and downloaded outcome/count agreement",
+    "R03/R05-B partial: durable reload and downloaded outcome/count agreement",
+    "R03/R05-B failed: durable reload and downloaded outcome/count agreement",
+    "R01/R02/R04-B stored readiness age, ambiguous attempts, cost uncertainty and incident recovery visible",
+    "R07-B mobile sample survives reload without measurement requests"
+  ],
+  "paid_requests": 0,
+  "qualification": "Actual Chromium and Next app with isolated API fixtures. Hosted authenticated customer/Storage acceptance and the complete browser case inventory remain separate."
+}

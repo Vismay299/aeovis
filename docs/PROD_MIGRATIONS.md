@@ -1415,3 +1415,15 @@ Local disposable PostgreSQL and the CI database job execute actual concurrent
 claims and settlements, customer-role denials, interrupted-worker recovery and
 legacy report projection. These checks do not apply anything to production.
 See [the rollout and rollback runbook](runbooks/p0-provider-dispatch.md).
+
+
+## Repair workflow migrations 028–033
+
+- `028_measurement_evidence.sql`: Private response capture metadata and durable parser incident inbox.
+- `029_repair_workflow.sql`: Immutable reviewed panels and sources; exact-content approval and transactional verified publication.
+- `030_scan_finalize_identity.sql`: One report identity per originating scan job, including crash recovery.
+- `031_content_check_budget.sql`: Shared paid-check reservations, fenced completion, and approval guards.
+- `032_durable_schedule_windows.sql`: Atomic scheduled-window enqueue, bounded catch-up, overlap and finalization records.
+- `033_atomic_scan_materialization.sql`: Transactional report links, citations, brand judgments, daily rollups and terminal job state.
+
+Verified against disposable PostgreSQL, not production. Deploy the migrations before the worker and routes. Rollback pauses dispatch and disables new workflow actions while preserving historical attempts, immutable artifact versions, and evidence. Never drop these tables to roll back an application build.

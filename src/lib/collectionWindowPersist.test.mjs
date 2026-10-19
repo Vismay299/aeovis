@@ -97,6 +97,7 @@ function recordInserts() {
   const original = db.supabase.from;
   db.supabase.from = (table) => {
     const builder = {
+      upsert(rows) { return builder.insert(rows); },
       insert(rows) {
         captured.push({ table, rows });
         return builder;
@@ -198,6 +199,7 @@ test("SCHEMA MISMATCH — the window is never persisted by a quieter retry; the 
   const original = db.supabase.from;
   db.supabase.from = (table) => {
     const builder = {
+      upsert(rows) { return builder.insert(rows); },
       insert(rows) {
         captured.push({ table, rows });
         return builder;

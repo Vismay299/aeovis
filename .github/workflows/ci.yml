@@ -54,7 +54,9 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: TEST_DATABASE_PASSWORD
           PGDATABASE: customer_uat
-        run: node scripts/qa/check-probe-dispatch.mjs
+        run: |
+          node scripts/qa/check-probe-dispatch.mjs
+          node scripts/qa/check-repair-workflows.mjs
   test:
     name: tests
     runs-on: ubuntu-latest
@@ -155,7 +157,12 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
         run: npm run build
 
-      - name: public site HTTP contracts
+      - name: install isolated browser test runtime
+        run: |
+          npm --prefix worker ci
+          node worker/node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: public site and measurement browser contracts
         run: |
           node node_modules/next/dist/bin/next start -p 3328 > /tmp/perceev-next.log 2>&1 &
           site_pid=$!
@@ -165,3 +172,4 @@ jobs:
             sleep 1
           done
           node scripts/qa/check-public-site.mjs http://127.0.0.1:3328
+          node scripts/qa/check-repair-browser.mjs http://127.0.0.1:3328

@@ -10,7 +10,8 @@ import {
 } from "../../src/lib/db/probeDispatch.js";
 import { resolveEnabledEngines } from "../../src/lib/scoring/enginePipeline.js";
 import { dispatchBudget } from "../../src/lib/workers/durableProbing.js";
-import { resolveSerpGeo } from "../../src/lib/engines/serpGeo.js";
+import { createObservationEnvelope } from "../../src/lib/provenance.js";
+import { resolveSerpGeo,resolveMeasurementContext } from "../../src/lib/engines/serpGeo.js";
 import {
   validateEngineConfig,
   planEngineCanary,
@@ -95,6 +96,9 @@ export async function dispatchCanaries({
       continue;
     }
     let result;
+    const captures=[],startedAt=new Date(now()).toISOString();
+    const context=resolveMeasurementContext({country:geo});
+    const captureEvidence=store.evidence ? async input=>{const capture=await store.evidence.capture({observationId:id,token:claim.lease_token,index:captures.length,...input});captures.push(capture);} : null;
     try {
       result = await engine.probe(
         {
@@ -105,7 +109,7 @@ export async function dispatchCanaries({
         "acme.example",
         [],
         {},
-        { geo, durableDispatch: true, deadlineAt: now() + PROBE_REQUEST_MS },
+        { geo,measurementContext:context,captureEvidence,durableDispatch: true, deadlineAt: now() + PROBE_REQUEST_MS },
       );
     } catch (error) {
       result = {
@@ -115,6 +119,12 @@ export async function dispatchCanaries({
         provider_failure: classifyProviderFailure({ error }),
       };
     }
+    result={...result,observation_id:id,attempt_id:claim.lease_token,evidence_captures:captures,
+      evidence_state:store.evidence?(captures.length && captures.every(c=>c.state==='stored')?'stored':'incomplete'):'unverified'};
+    result.provenance=createObservationEnvelope({...result.provenance,...result,surface:result.provenance?.surface || name,
+      observation_id:id,attempt_id:claim.lease_token,attempt_number:claim.attempt_no,requested_location:geo,
+      method:result.provenance?.method || result.measurement_method || "model_api",gateway:result.provenance?.gateway || (name==="aio"?"brightdata":"unknown"),
+      language:context.language,device:context.device,session_policy:context.session_policy,started_at:startedAt,completed_at:new Date(now()).toISOString(),evidence_identities:captures.map(c=>c.sha256).filter(Boolean)});
     // Canary retries are separate operator invocations of the same slot and
     // use the same durable due time, maximum attempts and shared reservations.
     const decision = resultDecision(

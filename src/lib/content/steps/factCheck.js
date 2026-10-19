@@ -1,3 +1,4 @@
+import {bindResearchCheck} from '../../repairs/researchContract.js';
 import { renderStepPrompt } from "../skills/loader.js";
 import { validateFactCheck } from "../schemas.js";
 import { callStepLlm } from "./shared.js";
@@ -15,7 +16,7 @@ export async function runFactCheck(ctx, deps = {}) {
     knowledge: ctx.knowledge || "(no knowledge blocks)",
   });
 
-  return callStepLlm({
+  const verdict = await callStepLlm({
     step: "fact_check",
     prompt,
     validate: validateFactCheck,
@@ -23,4 +24,5 @@ export async function runFactCheck(ctx, deps = {}) {
     stats: ctx.stats,
     temperature: 0.2,
   });
+  return bindResearchCheck(ctx,verdict);
 }
