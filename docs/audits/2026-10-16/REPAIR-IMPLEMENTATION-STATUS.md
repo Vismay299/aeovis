@@ -1,7 +1,7 @@
 # Repair follow-on implementation and verification
 
 > <!-- doc-status -->
-> **Status: ARCHIVED.** PR #11 implementation snapshot, merged 20 October 2026, Asia/Kolkata. Current hosted work is tracked in [P0 release qualification](./P0-RELEASE-QUALIFICATION.md).
+> **Status: HISTORICAL.** PR #11 implementation snapshot, merged 20 October 2026, Asia/Kolkata. Current hosted work is tracked in [P0 release qualification](./P0-RELEASE-QUALIFICATION.md).
 
 This branch is stacked on `codex/finish-p0` / [PR #9](https://github.com/Vismay299/aeovis/pull/9). It does not imply #9 is merged or deployed. The backlog now records **100 implemented subtasks and 114 open/partial subtasks**, out of 214. No repair priority group is release accepted.
 
