@@ -65,8 +65,21 @@ export function vendorFlags(env = {}) {
  * @param {Array<{name: string, last_tick_at: string}>} args.ticks system_heartbeats rows
  * @param {string} args.now ISO timestamp
  * @param {number} [args.staleTickMs] a tick older than this is reported stale
+ * @param {object|null} [args.providerReadiness] an ALREADY-BUILT readiness report
+ *        (engines/providerReadiness.js's buildProviderReadiness). Optional, and
+ *        optional on purpose: this function must stay cheap, so it never builds
+ *        one and never dispatches a probe. A caller that has canary records
+ *        passes them through; a caller that does not gets `provider_readiness:
+ *        null`, which is "we did not look", not "everything is fine".
  */
-export function buildHealthPayload({ db, env = {}, ticks = [], now, staleTickMs = 2 * 60 * 60 * 1000 }) {
+export function buildHealthPayload({
+  db,
+  env = {},
+  ticks = [],
+  now,
+  staleTickMs = 2 * 60 * 60 * 1000,
+  providerReadiness = null,
+}) {
   const vendors = vendorFlags(env);
   const nowMs = Date.parse(now);
 
@@ -119,9 +132,16 @@ export function buildHealthPayload({ db, env = {}, ticks = [], now, staleTickMs 
   // equivalent of a 100% share of voice. A production deployment lying about
   // its NODE_ENV degrades for the same reason: the gates are holding, but the
   // deployment is not the one the operator thinks they configured.
+  //
+  // R01: a surface whose CONFIGURATION cannot work degrades the endpoint too,
+  // and for exactly the audit's reason — `/api/health` answered ok while every
+  // persisted call was failing authentication. The readiness report is built
+  // elsewhere (from stored canaries, never from a probe here), and only a
+  // BLOCKED surface degrades: an aged canary is a recovery prompt, not a lie.
+  const blockedSurfaces = providerReadiness?.summary?.blocked ?? [];
   const status = !db?.ok
     ? "down"
-    : missingRequired.length || truth.disagrees
+    : missingRequired.length || truth.disagrees || blockedSurfaces.length
       ? "degraded"
       : "ok";
 
@@ -137,5 +157,6 @@ export function buildHealthPayload({ db, env = {}, ticks = [], now, staleTickMs 
     missing_required: missingRequired,
     environment,
     cron,
+    provider_readiness: providerReadiness,
   };
 }

@@ -142,7 +142,11 @@ function scanSummaryFor(rows) {
     engines: { aio },
     headline: computeHeadline([aio]),
   });
-  return summary;
+  // These fixtures exercise historical rows written before headline qualification.
+  // Modern qualification/rendering is covered in r05-finalize-contract and
+  // heroVerdictNullScore; do not attach today's policy to legacy-state tests.
+  const { metric_contract_version, ...legacySummary } = summary;
+  return legacySummary;
 }
 
 const NOT_ASSESSED_SUMMARY = scanSummaryFor(times(30, (i) => answered(i, { named: false })));

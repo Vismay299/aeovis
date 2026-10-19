@@ -51,6 +51,7 @@ export async function GET(request, { params }) {
         scanned_at: scan.scanned_at,
         created_at: scan.created_at,
         visibility_pct: scan.visibility_pct,
+        summary_stats: scan.raw_results?.summary_stats ?? null,
         prompts_tracked: scan.prompts_tracked,
         prompts_mentioned: scan.prompts_mentioned,
         platform: scan.platform,

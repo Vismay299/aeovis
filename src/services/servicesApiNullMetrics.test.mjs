@@ -104,10 +104,6 @@ const ALLOWED_ZERO_COALESCE = new Map([
     ": (data.promptsAnalyzed ?? 0) + brandedPromptsCount);",
     "a count of questions asked, and a NaN guard specifically: `undefined + brandedPromptsCount` is NaN, which would render as 'NaN queries tracked'. (`null + n === n`, so null was never why it is here.)",
   ],
-  [
-    "enginesCounted: data.engines_counted ?? raw.engines_counted ?? 0,",
-    "an inventory of engines, not a reading. Load-bearing: describeScanDataSourceIssue's docstring in enginePipeline.js describes this exact default and warns against reading it as authoritative, and its `Number(options.enginesCounted)` cannot tell null from 0 anyway. Making it honest is a change to enginePipeline, filed separately.",
-  ],
 ]);
 
 test("R2.1.2 GUARD — every zero-coalesce left in api.js is declared, with a reason", () => {

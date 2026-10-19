@@ -5,6 +5,11 @@ import {
   FAILURE_KIND,
   tagHttpFailure,
 } from "./httpFailureKind.js";
+import {
+  GOOGLE_PAYLOAD_PARSER_VERSION,
+  SERP_STATE,
+  parseGoogleSerp,
+} from "./googlePayload.js";
 
 /**
  * Typed Bright Data zone failure (R1.2.7, finding C4).
@@ -37,6 +42,74 @@ export class BrightDataZoneError extends Error {
 
 export function isBrightDataZoneError(err) {
   return Boolean(err) && (err instanceof BrightDataZoneError || err.name === "BrightDataZoneError");
+}
+
+/**
+ * A 200 that carried something other than a usable Google SERP (R04, A10).
+ *
+ * The audit's reproduced defect is precisely the absence of this type: the
+ * retry loop only ran its truncation check while attempts remained, so on the
+ * LAST attempt a payload of the wrong shape fell straight through to
+ * `normalizeBrightDataResponse` and was returned as though it were a SERP. A
+ * downstream parser then read no text and no citations and scored a
+ * non-mention — a provider/parse failure wearing a brand-absence costume.
+ *
+ * `serp_state` and `evidence` are copied off the parser result so the failure
+ * is auditable: the reason names which stage rejected it, and the evidence
+ * carries the derived payload id, the parser version, the provider request id
+ * and the validation errors — enough to reopen the exact payload without it
+ * ever being mistaken for an answer.
+ *
+ * Matched by name as well as instance for the same double-load reason as the
+ * zone error above.
+ */
+export class BrightDataParseError extends Error {
+  constructor(message, meta = {}) {
+    super(message);
+    this.name = "BrightDataParseError";
+    this.reason = meta.reason || "malformed";
+    this.serp_state = meta.serp_state ?? meta.reason ?? null;
+    /**
+     * What the parser said about AI Overview PRESENCE, carried on the error.
+     *
+     * `null` on every failure, and that is the point: a payload that could not
+     * be validated must not reach a caller with a readable boolean it could
+     * mistake for "no AI Overview was seen". Null here means unknown, never
+     * absent — the same rule SERP_STATE applies to the parser result.
+     */
+    this.aio_present = meta.aio_present ?? null;
+    this.evidence = meta.evidence ?? null;
+    if (meta.attempts !== undefined) this.attempts = meta.attempts;
+    if (meta.cause !== undefined) this.cause = meta.cause;
+  }
+}
+
+export function isBrightDataParseError(err) {
+  return Boolean(err) && (err instanceof BrightDataParseError || err.name === "BrightDataParseError");
+}
+
+/**
+ * The request was refused or aborted before it could finish inside its budget
+ * (R04.4b / R04-19).
+ *
+ * Distinct from a parse or zone failure because the operator action is
+ * different: nothing is broken, the chunk simply ran out of lease. The refusal
+ * happens BEFORE dispatch, so a probe that could not finish never spends a
+ * request or leaves paid work abandoned.
+ */
+export class BrightDataDeadlineError extends Error {
+  constructor(message, meta = {}) {
+    super(message);
+    this.name = "BrightDataDeadlineError";
+    this.reason = meta.reason || "deadline_exceeded";
+    if (meta.remainingMs !== undefined) this.remainingMs = meta.remainingMs;
+    if (meta.minDispatchMs !== undefined) this.minDispatchMs = meta.minDispatchMs;
+    if (meta.cause !== undefined) this.cause = meta.cause;
+  }
+}
+
+export function isBrightDataDeadlineError(err) {
+  return Boolean(err) && (err instanceof BrightDataDeadlineError || err.name === "BrightDataDeadlineError");
 }
 
 /**
@@ -75,6 +148,29 @@ export function isBrightDataZoneError(err) {
  * every resolve), which is a legitimate setting for a debugging session.
  */
 export const DEFAULT_BRIGHTDATA_ZONE_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * How long the zone-discovery lookup may take (R04.4a).
+ *
+ * `get_all_zones` used to be an UNBOUNDED fetch: a hung control-plane call
+ * blocked the probe forever, and because the SERP request was only issued after
+ * the lookup returned, the paid request never happened but neither did anything
+ * else. Bounding the lookup means a configuration fetch that hangs fails inside
+ * its own deadline (a typed `lookup_failed`) and no SERP dispatch follows, which
+ * is what R04-18 pins. Ten seconds: the lookup is a small JSON list and this is
+ * longer than a normal round trip while still far inside a scan's lease.
+ */
+export const DEFAULT_BRIGHTDATA_ZONE_LOOKUP_TIMEOUT_MS = 10 * 1000;
+
+/**
+ * The smallest slice of remaining budget a probe will dispatch into (R04.4b).
+ *
+ * A request started with less than this cannot finish before its deadline, so
+ * the honest move is to refuse it (typed `insufficient_time`) rather than leave
+ * paid work abandoned and unusable. Only consulted when the caller supplies a
+ * deadline; a caller with no deadline is making no such promise.
+ */
+export const DEFAULT_BRIGHTDATA_MIN_DISPATCH_MS = 1500;
 
 /**
  * The auto-discovery cache: `{ name, at }` or null.
@@ -142,7 +238,7 @@ export function getBrightDataApiKey() {
   return (process.env.BRIGHTDATA_API_KEY || "").trim() || null;
 }
 
-export async function resolveBrightDataSerpZone(apiKey = getBrightDataApiKey()) {
+export async function resolveBrightDataSerpZone(apiKey = getBrightDataApiKey(), options = {}) {
   const configuredZone = (process.env.BRIGHTDATA_SERP_ZONE || "").trim();
   if (configuredZone) return configuredZone;
 
@@ -158,25 +254,61 @@ export async function resolveBrightDataSerpZone(apiKey = getBrightDataApiKey()) 
     return null;
   }
 
-  const res = await fetch("https://api.brightdata.com/zone/get_all_zones", {
-    headers: { Authorization: `Bearer ${apiKey}` },
-  });
+  // R04.4a — the lookup runs under its own deadline, capped by whatever is left
+  // of the caller's overall budget so a probe near its lease end cannot spend
+  // the remainder waiting on a control-plane call.
+  //
+  // THE TIMER IS ARMED FOR THE WHOLE LOOKUP, NOT JUST THE HEADERS. It used to be
+  // cleared in a `finally` that ended the moment `fetch()` resolved, with
+  // `await res.json()` sitting BELOW it — so a control plane that sent headers
+  // and then stalled its body held the probe open indefinitely: measured on a
+  // local server, a 150ms lookup timeout resolved successfully after 616ms
+  // against a body delayed by 600ms, and `zoneLookupTimeoutMs` bounded nothing.
+  // Fetching, reading, decoding and the abort-to-typed-error conversion are all
+  // inside this try for that reason; anything that waits on the network belongs
+  // under the timer.
+  const lookupTimeoutMs = zoneLookupTimeoutMs(options);
+  const controller = new AbortController();
+  const timer = lookupTimeoutMs > 0 ? setTimeout(() => controller.abort(), lookupTimeoutMs) : null;
 
-  if (!res.ok) {
-    // A re-check that could not be COMPLETED is not evidence the zone died, so
-    // the cached name is kept -- but its timestamp is NOT refreshed, so the very
-    // next call retries the lookup instead of trusting an unverified name for
-    // another full TTL. The rejected alternative was a grace window that keeps
-    // serving the stale name through an API outage: that is precisely the
-    // fail-soft this task removes, and it would hide a dead zone for as long as
-    // the control plane stayed unreachable.
-    throw new BrightDataZoneError(`Bright Data zone lookup failed: HTTP ${res.status}`, {
-      reason: "lookup_failed",
-      zone: staleName,
+  let zones;
+  try {
+    const res = await fetch("https://api.brightdata.com/zone/get_all_zones", {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
     });
+
+    if (!res.ok) {
+      // A re-check that could not be COMPLETED is not evidence the zone died, so
+      // the cached name is kept -- but its timestamp is NOT refreshed, so the very
+      // next call retries the lookup instead of trusting an unverified name for
+      // another full TTL. The rejected alternative was a grace window that keeps
+      // serving the stale name through an API outage: that is precisely the
+      // fail-soft this task removes, and it would hide a dead zone for as long as
+      // the control plane stayed unreachable.
+      throw new BrightDataZoneError(`Bright Data zone lookup failed: HTTP ${res.status}`, {
+        reason: "lookup_failed",
+        zone: staleName,
+      });
+    }
+
+    zones = await res.json();
+  } catch (err) {
+    // Already typed by the branch above: re-wrapping it would bury the real
+    // cause under "BrightDataZoneError: ...".
+    if (isBrightDataZoneError(err)) throw err;
+    // A lookup that did not COMPLETE is not evidence the zone died, so the
+    // cached name is kept (its timestamp untouched) — and the failure is typed
+    // so the caller records a configuration error rather than dispatching a
+    // SERP request it can no longer justify.
+    throw new BrightDataZoneError(
+      `Bright Data zone lookup failed: ${err?.name === "AbortError" ? `timed out after ${lookupTimeoutMs}ms` : err?.message || String(err)}`,
+      { reason: "lookup_failed", zone: staleName, cause: err }
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
-  const zones = await res.json();
   const activeSerpZone = (zones || []).find(
     (z) => z.type === "serp" && z.status === "active"
   );
@@ -207,11 +339,46 @@ export async function resolveBrightDataSerpZone(apiKey = getBrightDataApiKey()) 
   return cachedZone.name;
 }
 
-export async function getBrightDataConfig() {
+/**
+ * Resolve the lookup deadline: the caller's explicit zone timeout if given,
+ * otherwise the default, always capped by what remains of the overall budget.
+ */
+function zoneLookupTimeoutMs(options = {}) {
+  let timeout =
+    options.zoneLookupTimeoutMs != null
+      ? options.zoneLookupTimeoutMs
+      : DEFAULT_BRIGHTDATA_ZONE_LOOKUP_TIMEOUT_MS;
+  if (options.deadlineAt != null) {
+    const remaining = options.deadlineAt - Date.now();
+    if (remaining <= 0) return 0;
+    timeout = Math.min(timeout, remaining);
+  }
+  return timeout;
+}
+
+/** Remaining budget in ms for an absolute deadline, or null with no deadline. */
+function remainingBudget(deadlineAt) {
+  return deadlineAt == null ? null : deadlineAt - Date.now();
+}
+
+/**
+ * Sleep, but never past the deadline (R04.4a — retry delays are part of the
+ * bounded request). A zero-remaining budget returns immediately so the next
+ * loop iteration can raise the deadline error rather than the delay swallowing
+ * it.
+ */
+async function delayWithinDeadline(ms, deadlineAt) {
+  if (ms <= 0) return;
+  const remaining = remainingBudget(deadlineAt);
+  const wait = remaining == null ? ms : Math.min(ms, Math.max(0, remaining));
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+}
+
+export async function getBrightDataConfig(options = {}) {
   const apiKey = getBrightDataApiKey();
   if (!apiKey) return null;
 
-  const zone = await resolveBrightDataSerpZone(apiKey);
+  const zone = await resolveBrightDataSerpZone(apiKey, options);
   if (!zone) return null;
 
   return { apiKey, zone };
@@ -346,47 +513,127 @@ function zoneRejectedError(detail, zone) {
   );
 }
 
-function innerBody(data) {
-  // Bright Data wraps the Google SERP response inside data.body as a JSON
-  // string. Parse it if present so truncation checks operate on the actual
-  // SERP object, not the outer string.
-  if (!data) return null;
-  if (data.body && typeof data.body === "string") {
-    try { return JSON.parse(data.body); } catch (_) { return data.body; }
+/**
+ * R04.5a — evidence identity for a returned SERP.
+ *
+ * Attached NON-ENUMERABLY so the return value keeps the SERP's own keys: the
+ * audit's A10 read `Object.keys(malformed)` to show a wrong payload came back,
+ * and an enumerable metadata field would blur exactly that signal.
+ */
+function attachBrightDataEvidence(result, meta) {
+  if (!result || typeof result !== "object") return result;
+  try {
+    Object.defineProperty(result, "__brightdata", {
+      value: meta,
+      enumerable: false,
+      configurable: true,
+    });
+  } catch {
+    // A frozen payload keeps its data; evidence still rides the error path.
   }
-  if (data.body && typeof data.body === "object") return data.body;
-  // No body wrapper — the SERP data sits directly on `data` (legacy zone configs).
-  return data;
+  return result;
 }
 
-function bodyLooksTruncated(body, wantAio) {
-  if (!body) return true;
-  if (!wantAio) return false;
-  // Google always returns at least organic + general for any valid SERP
-  // response. If none of the expected sections are present and AI Overview was
-  // requested but is missing, the proxy likely truncated the stream.
-  const hasOrganic = Array.isArray(body.organic) && body.organic.length > 0;
-  const hasGeneral = !!(body.general && body.general.query);
-  const hasPaa = Array.isArray(body.people_also_ask) && body.people_also_ask.length > 0;
-  const hasAio = !!body.ai_overview;
-  return !hasOrganic && !hasGeneral && !hasPaa && !hasAio;
+/** One attempt's parser result, in the bounded shape the evidence records. */
+function evidenceRecord(attempt, parsed) {
+  return {
+    attempt,
+    serp_state: parsed.serp_state,
+    evidence_id: parsed.evidence?.evidence_id ?? null,
+    parser_version: parsed.parser_version ?? null,
+    errors: parsed.errors ?? [],
+  };
+}
+
+/**
+ * Turn a non-valid parser result into the typed error the caller records.
+ *
+ * `reason` is the parser's own `serp_state`, so a caller can branch on the
+ * failure kind without reading the message — and `evidence` carries the
+ * validation errors and the derived payload id, so a parse failure is
+ * auditable and can never be filed as a brand non-mention (R04-5a).
+ */
+function parseErrorFrom(parsed) {
+  const state = parsed?.serp_state || SERP_STATE.MALFORMED;
+  const first = Array.isArray(parsed?.errors) ? parsed.errors[0] : null;
+  return new BrightDataParseError(
+    `Bright Data returned a payload that is not a usable Google SERP (${state})` +
+      (first?.message ? `: ${first.message}` : "."),
+    {
+      reason: state,
+      serp_state: state,
+      // Readable off the thrown error rather than only off the evidence blob:
+      // "this capture failed to validate, so the AIO state is UNKNOWN" is the
+      // contract a caller records, and a caller should not have to know that
+      // the parser's aio_present lives one field deeper.
+      aio_present: parsed ? parsed.aio_present : null,
+      evidence: parsed
+        ? {
+            ...parsed.evidence,
+            parser_version: parsed.parser_version,
+            validation_errors: parsed.errors,
+          }
+        : null,
+    }
+  );
 }
 
 export async function brightDataSearch(query, options = {}) {
-  const config = await getBrightDataConfig();
+  const baseTimeoutMs = options.timeout || 60000;
+  const maxAttempts = options.attempts ?? 2;
+  const backoffMs = options.backoffMs ?? 3000;
+  const deadlineAt =
+    options.deadlineAt != null
+      ? options.deadlineAt
+      : options.deadlineMs != null
+        ? Date.now() + options.deadlineMs
+        : null;
+  const minDispatchMs = options.minDispatchMs ?? DEFAULT_BRIGHTDATA_MIN_DISPATCH_MS;
+  const wantAio = options.aiOverview !== false;
+
+  // R04.4b / R04-19 — refuse a probe that cannot finish inside its budget,
+  // BEFORE the zone lookup, so neither a control-plane call nor a paid request
+  // is started for work that would be abandoned.
+  const startRemaining = remainingBudget(deadlineAt);
+  if (startRemaining != null && startRemaining < minDispatchMs) {
+    throw new BrightDataDeadlineError(
+      `Refusing to dispatch a Bright Data SERP probe: ${Math.max(0, startRemaining)}ms of the deadline ` +
+        `remains, under the ${minDispatchMs}ms needed to complete one request.`,
+      { reason: "insufficient_time", remainingMs: startRemaining, minDispatchMs }
+    );
+  }
+
+  // The zone lookup is part of the bounded request (R04.4a): it inherits the
+  // caller's deadline so a hung control-plane call cannot outlive it.
+  const config = await getBrightDataConfig({
+    deadlineAt,
+    timeoutMs: baseTimeoutMs,
+    zoneLookupTimeoutMs: options.zoneLookupTimeoutMs,
+  });
   if (!config) {
     throw new Error("Bright Data SERP is not configured (set BRIGHTDATA_API_KEY).");
   }
 
   const geo = resolveSerpGeo(options.geo);
-  const timeoutMs = options.timeout || 60000;
-  const maxAttempts = options.attempts ?? 2;
-  const backoffMs = options.backoffMs ?? 3000;
+  const attemptsEvidence = [];
 
   let lastErr = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const remaining = remainingBudget(deadlineAt);
+    if (remaining != null && remaining <= 0) {
+      throw new BrightDataDeadlineError(`Bright Data deadline exceeded before attempt ${attempt}.`, {
+        reason: "deadline_exceeded",
+        remainingMs: remaining,
+      });
+    }
+    // The abort timer covers connection, headers AND the body read (R04-17).
+    // The old code cleared it the instant headers arrived, so a body that hung
+    // after a successful connection could outlive the deadline entirely.
+    const attemptTimeoutMs =
+      remaining != null ? Math.max(1, Math.min(baseTimeoutMs, remaining)) : baseTimeoutMs;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), attemptTimeoutMs);
+
     try {
       const res = await fetch("https://api.brightdata.com/request", {
         method: "POST",
@@ -397,17 +644,12 @@ export async function brightDataSearch(query, options = {}) {
         },
         body: JSON.stringify({
           zone: config.zone,
-          url: buildGoogleSearchUrl(query, {
-            geo,
-            aiOverview: options.aiOverview !== false,
-          }),
+          url: buildGoogleSearchUrl(query, { geo, aiOverview: wantAio }),
           format: "json",
           country: geo,
         }),
         signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errText = await res.text();
@@ -422,7 +664,7 @@ export async function brightDataSearch(query, options = {}) {
             res.status
           );
           const delay = res.status === 429 ? backoffMs * attempt * 3 : backoffMs * attempt;
-          await new Promise((r) => setTimeout(r, delay));
+          await delayWithinDeadline(delay, deadlineAt);
           continue;
         }
         throw tagHttpFailure(
@@ -431,14 +673,24 @@ export async function brightDataSearch(query, options = {}) {
         );
       }
 
+      // The body is read while the timer is still armed — the R04-17 fix.
       const raw = await res.text();
 
-      // HTML proxy error pages are transient — retry once.
+      // HTML proxy error pages are transient — retry once. An HTML page that is
+      // a CAPTCHA / consent / login wall is an ACCESS STATE (R04-12) and is not
+      // retried: no answer was produced and none may be substituted.
       const trimmed = raw.trimStart();
       if (trimmed.startsWith("<") || trimmed.startsWith("<!DOCTYPE")) {
+        const asHtml = parseGoogleSerp(raw);
+        if (asHtml.serp_state === SERP_STATE.ACCESS_STATE) {
+          attemptsEvidence.push(evidenceRecord(attempt, asHtml));
+          const accessError = parseErrorFrom(asHtml);
+          accessError.attempts = attemptsEvidence.slice();
+          throw accessError;
+        }
         if (attempt < maxAttempts) {
           lastErr = new Error(`Bright Data returned a non-JSON response (${raw.slice(0, 80)}...)`);
-          await new Promise((r) => setTimeout(r, backoffMs * attempt * 2));
+          await delayWithinDeadline(backoffMs * attempt * 2, deadlineAt);
           continue;
         }
         throw new Error(`Bright Data returned an HTML proxy page instead of JSON.`);
@@ -448,13 +700,26 @@ export async function brightDataSearch(query, options = {}) {
       try {
         data = JSON.parse(raw);
       } catch (parseErr) {
-        // Truncated JSON (stream cut mid-response) is transient — retry.
+        // Truncated JSON (stream cut mid-response) is transient — retry, but on
+        // the LAST attempt it is a typed decode failure carrying evidence
+        // identity (R04-10 / R04-16), never a returned pseudo-SERP.
+        const asText = parseGoogleSerp(raw);
+        attemptsEvidence.push(evidenceRecord(attempt, asText));
+        const decodeError = new BrightDataParseError(
+          `Bright Data response was not valid JSON: ${parseErr.message}`,
+          {
+            reason: "json_decode_error",
+            serp_state: SERP_STATE.MALFORMED,
+            evidence: { ...asText.evidence, validation_errors: asText.errors },
+          }
+        );
+        decodeError.attempts = attemptsEvidence.slice();
         if (attempt < maxAttempts) {
-          lastErr = new Error(`Bright Data response was not valid JSON: ${parseErr.message}`);
-          await new Promise((r) => setTimeout(r, backoffMs * attempt * 2));
+          lastErr = decodeError;
+          await delayWithinDeadline(backoffMs * attempt * 2, deadlineAt);
           continue;
         }
-        throw new Error(`Bright Data response was not valid JSON: ${parseErr.message}`);
+        throw decodeError;
       }
 
       // Rate-limit detection — stop retrying immediately.
@@ -469,39 +734,112 @@ export async function brightDataSearch(query, options = {}) {
         // Bright Data also returns zone faults inside a 200 envelope.
         const bodyZoneErr = zoneRejectionDetail(message);
         if (bodyZoneErr) throw zoneRejectedError(bodyZoneErr, config.zone);
-        throw new Error(message);
+        const asProvider = parseGoogleSerp(data);
+        attemptsEvidence.push(evidenceRecord(attempt, asProvider));
+        throw parseErrorFrom(asProvider);
       }
 
-      // Proxy-level session failure (e.g. "no_ready_cookies") — retryable,
-      // but must not fall through to normalizeBrightDataResponse on an empty body.
+      // Proxy-level session failure (e.g. "no_ready_cookies") is a
+      // provider-capacity fault, retried, and typed as provider_failure so it
+      // can never fall through to normalizeBrightDataResponse (R04-11).
       const sessionErr = proxySessionError(data);
       if (sessionErr) {
+        const asProvider = parseGoogleSerp(data);
+        attemptsEvidence.push(evidenceRecord(attempt, asProvider));
+        const providerError = new BrightDataParseError(
+          `Bright Data proxy session error: ${sessionErr}`,
+          {
+            reason: SERP_STATE.PROVIDER_FAILURE,
+            serp_state: SERP_STATE.PROVIDER_FAILURE,
+            evidence: { ...asProvider.evidence, validation_errors: asProvider.errors },
+          }
+        );
+        providerError.attempts = attemptsEvidence.slice();
         if (attempt < maxAttempts) {
-          lastErr = new Error(`Bright Data proxy session error: ${sessionErr}`);
-          await new Promise((r) => setTimeout(r, backoffMs * attempt * 2));
+          lastErr = providerError;
+          await delayWithinDeadline(backoffMs * attempt * 2, deadlineAt);
           continue;
         }
-        throw new Error(`Bright Data proxy session error: ${sessionErr}`);
+        throw providerError;
       }
 
-      // Check actual SERP body for truncation (parse inner body first).
-      const parsed = innerBody(data);
-      const wantAio = options.aiOverview !== false;
-      if (bodyLooksTruncated(parsed, wantAio) && attempt < maxAttempts) {
-        lastErr = new Error("Bright Data returned a truncated/empty AIO response");
-        await new Promise((r) => setTimeout(r, backoffMs * attempt * 3));
-        continue;
+      // THE SHAPE VALIDATION THAT USED TO BE SKIPPED ON THE LAST ATTEMPT (A10).
+      // Every attempt, including the last, satisfies the same contract: a
+      // payload that is not a recognisable Google SERP raises a typed parse
+      // error and never reaches the normaliser.
+      const parsed = parseGoogleSerp(data, { providerRequestId: options.providerRequestId });
+      attemptsEvidence.push(evidenceRecord(attempt, parsed));
+
+      if (parsed.serp_state !== SERP_STATE.VALID_SERP) {
+        const retryable =
+          parsed.serp_state === SERP_STATE.MALFORMED ||
+          parsed.serp_state === SERP_STATE.UNKNOWN_SCHEMA ||
+          parsed.serp_state === SERP_STATE.PROVIDER_FAILURE;
+        const parseError = parseErrorFrom(parsed);
+        parseError.attempts = attemptsEvidence.slice();
+        if (retryable && attempt < maxAttempts) {
+          lastErr = parseError;
+          await delayWithinDeadline(backoffMs * attempt * 2, deadlineAt);
+          continue;
+        }
+        throw parseError;
       }
 
-      return normalizeBrightDataResponse(data);
+      // R04 — THE VALIDATED PARSE RESULT IS RETURNED, NOT THROWN AWAY.
+      //
+      // This used to be `return normalizeBrightDataResponse(data)`: the parser
+      // had just computed blocks, safety-checked references and per-field
+      // quality, and every one of them was dropped on the floor. probeAio then
+      // re-derived an overview from the RAW payload through
+      // extractBrightDataAiOverview, which reconstructs exactly the unvalidated
+      // fields — so a `javascript:` reference the parser had rejected reappeared
+      // in the persisted probe row, and no quality ever reached persistence.
+      //
+      // The transport still hands back the SERP itself, because callers read
+      // `organic` / `ai_overview` off it, and the validation rides with it:
+      //
+      //   `__brightdata` (below, NON-ENUMERABLE) keeps the A10 signal intact —
+      //   Object.keys(returned) is still the SERP's own keys.
+      //   `serp_validation` (ENUMERABLE, here) is what survives the
+      //   JSON.stringify that prompt_results.raw performs. The non-enumerable
+      //   copy does not survive it, which is how the evidence identity and the
+      //   quality were lost between the probe and the database row.
+      const validation = {
+        serp_state: parsed.serp_state,
+        aio_present: parsed.aio_present,
+        parser_version: parsed.parser_version || GOOGLE_PAYLOAD_PARSER_VERSION,
+        evidence_id: parsed.evidence?.evidence_id ?? null,
+        provider_request_id: parsed.evidence?.provider_request_id ?? null,
+        per_field_quality: parsed.per_field_quality,
+        citations_verified_empty: parsed.citations_verified_empty,
+        text: parsed.text,
+        blocks: parsed.blocks,
+        citations: parsed.citations,
+        references: parsed.references,
+        errors: parsed.errors,
+      };
+
+      const result = normalizeBrightDataResponse(data);
+      if (result && typeof result === "object") {
+        try {
+          result.serp_validation = validation;
+        } catch {
+          // A frozen payload keeps its data; the non-enumerable copy below still
+          // carries the identity, and the error path is unaffected.
+        }
+      }
+      return attachBrightDataEvidence(result, { ...validation, attempts: attemptsEvidence });
     } catch (err) {
-      clearTimeout(timeoutId);
       lastErr = err;
 
       // A zone fault is not transient and not this loop's to fix: the cache has
       // already been dropped, so the next probe re-resolves. Retrying here would
       // burn the attempt budget on a zone that is gone.
       if (isBrightDataZoneError(err)) throw err;
+
+      // A typed parse error already exhausted its retries or is terminal (an
+      // access state, for example); never re-wrap or retry past it.
+      if (isBrightDataParseError(err)) throw err;
 
       // Rate-limit errors are not retryable — throw immediately.
       const msg = (err.message || "").toLowerCase();
@@ -513,10 +851,12 @@ export async function brightDataSearch(query, options = {}) {
       const isJsonErr = /not valid JSON/.test(err.message || "");
       const isTruncation = /truncated/.test(err.message || "");
       if ((isAbort || is5xx || isHtml || isJsonErr || isTruncation) && attempt < maxAttempts) {
-        await new Promise((r) => setTimeout(r, backoffMs * attempt));
+        await delayWithinDeadline(backoffMs * attempt, deadlineAt);
         continue;
       }
       throw err;
+    } finally {
+      clearTimeout(timer);
     }
   }
   throw lastErr || new Error("Bright Data request failed after retries.");
@@ -547,7 +887,47 @@ function extractSnippetsFromBlock(block) {
   return out.filter(Boolean);
 }
 
+/**
+ * The AI Overview, as the parser validated it when the transport carried a
+ * parse result, and reconstructed from the raw payload otherwise.
+ *
+ * WHY THE VALIDATED BRANCH EXISTS (R04). This function is the ONLY extraction
+ * path the AIO engine has: probeAio calls it and copies its text, citations and
+ * references straight into the row that is persisted verbatim in
+ * prompt_results.raw. Rebuilding the overview from `data.ai_overview` here
+ * therefore re-derived the fields the parser had just rejected — with one
+ * `javascript:alert(1)` and one https reference, parseGoogleSerp returned one
+ * reference and this returned both, so the rejected href was back in the
+ * persisted probe row. Reading the parser's verdict HERE is what makes the
+ * validated output reach production; recomputing it anywhere downstream would
+ * put the hole back.
+ *
+ * The extended keys (per_field_quality, parser_version, evidence_id) exist only
+ * on the validated branch. A caller that hands this function a raw payload
+ * still gets exactly the three-key shape it always got — the direct-call
+ * contract other suites pin — because there is no validated quality to report
+ * for a payload that never went through the parser.
+ */
 export function extractBrightDataAiOverview(data) {
+  const validated = data?.serp_validation;
+  if (validated && Array.isArray(validated.blocks)) {
+    return {
+      text: typeof validated.text === "string" ? validated.text : "",
+      citations: Array.isArray(validated.citations) ? validated.citations : [],
+      references: (validated.references || []).map((ref) => ({
+        href: ref.href,
+        title: ref.title || "",
+        source: ref.source || "",
+      })),
+      per_field_quality: validated.per_field_quality,
+      citations_verified_empty: validated.citations_verified_empty ?? false,
+      aio_present: validated.aio_present,
+      serp_state: validated.serp_state,
+      parser_version: validated.parser_version,
+      evidence_id: validated.evidence_id,
+    };
+  }
+
   const ao = data?.ai_overview;
   if (!ao) return { text: "", citations: [], references: [] };
 

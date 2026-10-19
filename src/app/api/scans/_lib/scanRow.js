@@ -1,4 +1,5 @@
 import { supabase, ScansUnavailableError } from "@/lib/db";
+import { terminalOutcomeFromRecord } from "@/lib/scanOutcome";
 
 // Private helper module (the `_lib` prefix opts it out of Next.js route
 // resolution) shared by the two new P0.3 single-scan endpoints:
@@ -113,6 +114,10 @@ export function enrichScanForClient(scan) {
       raw.data_source_issue ?? summary_stats?.data_source_issue ?? false,
     insufficient_sample:
       raw.insufficient_sample ?? summary_stats?.insufficient_sample ?? false,
+    // R03.4a — the versioned terminal collection outcome, read through the same
+    // shared reader the status endpoint uses. A historical row that predates the
+    // vocabulary reads as `legacy` with null counts, never a fabricated 100%.
+    terminal_outcome: terminalOutcomeFromRecord(scan),
     query_source: scan.query_source ?? raw.query_source ?? null,
     seeds: raw.seeds ?? [],
   };

@@ -328,11 +328,11 @@ function scanSummaryFor(rows) {
    `{ visibility_pct: null }`. */
 const NOT_ASSESSED_SUMMARY = scanSummaryFor(times(30, (i) => answered(i, { named: false })));
 /* Every answer named a rival and none named us: a real, measured 0. */
-const MEASURED_ZERO_SUMMARY = scanSummaryFor(times(10, (i) => answered(i, { visible: false })));
-/* 4 of 10 answers name us: 40%. */
+const MEASURED_ZERO_SUMMARY = scanSummaryFor(times(30, (i) => answered(i, { visible: false })));
+/* 12 of 30 answers name us: 40%, with an adequate eligible panel. */
 const MEASURED_SUMMARY = scanSummaryFor([
-  ...times(4, (i) => answered(i, { visible: true })),
-  ...times(6, (i) => answered(100 + i)),
+  ...times(12, (i) => answered(i, { visible: true })),
+  ...times(18, (i) => answered(100 + i)),
 ]);
 
 /**
@@ -524,6 +524,15 @@ test("POSITIVE — a measured 40 still renders its Moderate chip and its number"
     /appear in some Google AI Overviews/,
     "a measured reading keeps its interpretation"
   );
+});
+
+test("R05 qualification — a six-prompt reading has no headline tier and labels the raw score exploratory", async () => {
+  const summary = scanSummaryFor(times(6, (i) => answered(i, { visible: true })));
+  const html = await renderShell(storedRow(summary));
+  const header = panelHeader(html, "score-band");
+  for (const word of ["Strong", "Moderate", "Weak"]) assert.ok(!textOf(header).includes(word));
+  assert.match(textOf(wholePanel(html, "headline-qualification")), /Exploratory reading: 100%/);
+  assert.match(textOf(wholePanel(html, "headline-qualification")), /6 of 6 eligible observations/);
 });
 
 test("POSITIVE — a MEASURED ZERO still renders Weak and a 0, not a dash", async () => {
