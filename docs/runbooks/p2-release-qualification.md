@@ -1,5 +1,8 @@
 # R20–R21 acceptance and release qualification
 
+> <!-- doc-status -->
+> **Status: LIVE.** Current acceptance status and operational guidance; release remains unverified.
+
 Status: implemented engineering checks; full release acceptance remains open.
 Reviewed against the #8 baseline (`c5530c9`) and this follow-up on 20 October 2026,
 Asia/Kolkata. No production migration or deployment is performed by these checks.

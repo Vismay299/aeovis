@@ -1,5 +1,8 @@
 # P2: R20–R21 acceptance status
 
+> <!-- doc-status -->
+> **Status: LIVE.** Current acceptance status and operational guidance; release remains unverified.
+
 Date: 20 October 2026, Asia/Kolkata. Baseline: merged PR
 [#8](https://github.com/Vismay299/aeovis/pull/8), `c5530c9`.
 Status: engineering follow-up implemented; **release unverified**.
