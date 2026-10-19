@@ -29,6 +29,9 @@ PGHOST=127.0.0.1 PGPORT=55439 PGDATABASE=aeovis_p0_qa \
   node scripts/qa/check-probe-dispatch.mjs
 ```
 
+[Committed SQL execution evidence](./p0-database-evidence.json) records the source
+commit, source hashes, timestamps and per-case results.
+
 Applied `tests/supabase-bootstrap.sql` and the actual 001–027 migration chain
 before execution. The job also runs in CI after customer RLS tests, using its
 own disposable PostgreSQL service. It refuses non-loopback hosts, non-QA/UAT

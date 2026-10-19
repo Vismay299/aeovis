@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "source_commit": "84fd4afa2a8fd59117102570598009139644b096",
+  "environment": "isolated-loopback-postgresql16",
+  "production_provider_requests": 0,
+  "started_at": "2026-10-19T12:49:18.339811+00:00",
+  "ended_at": "2026-10-19T12:49:18.711486+00:00",
+  "outcome": "pass",
+  "policy_version": "durable-probes-v1",
+  "fixture": "Synthetic Acme data; fresh UUID identities; actual migrations 001\u2013027 applied",
+  "source_hashes": {
+    "supabase/migrations/027_durable_probe_dispatch.sql": "437d7274bff6fa8569b202fe20d318fb6901e86af0e2b055b9ce0f0b90fe7697",
+    "scripts/qa/check-probe-dispatch.mjs": "0474e993fca4a734a026531c343c9c087b5dbb85f6626273304346f30dbf5d33",
+    "src/lib/workers/durableProbing.js": "b63ca0718069c4453fe661fe91684d3cb11fb8839b9bc27e4c385c5b79d301a2",
+    "src/lib/db/probeDispatch.js": "38bd2a64486606397e42414b3717b83f175b85defe94d414b87869d4fc686731"
+  },
+  "cases": [
+    {
+      "repair_id": "R02",
+      "case_id": "R02-07",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-09",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R01",
+      "case_id": "R01-13",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-08",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-10",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-13",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-11",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-14",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-16",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-15",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-17",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-18",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-21",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "P0",
+      "case_id": "P0-shared-canary-budget-and-pause",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-19",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-20",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-22",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "R02",
+      "case_id": "R02-23",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    },
+    {
+      "repair_id": "P0",
+      "case_id": "P0-worker-database-integration",
+      "suite": "database",
+      "outcome": "pass",
+      "expected": "All assertions in the mapped real-database contract pass",
+      "actual": "Passed; child exit 0, no production/provider requests"
+    }
+  ],
+  "limitations": [
+    "No vendor idempotency/billing guarantee tested",
+    "No production deployment, browser acceptance or paid provider calls",
+    "Generic release aggregation remains unverified"
+  ]
+}
