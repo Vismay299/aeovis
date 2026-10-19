@@ -12,6 +12,31 @@
 **Date:** 2026-09-05 · **Task:** R1.1.4 · **Consumes:** R1.1.1 ·
 **Consumed by:** R1.1.2, R1.1.5, R1.3.x, R1.4.x, R1.6.1, R1.7.2, R1.7.3
 
+## Current status addendum — 20 October 2026
+
+The sections below preserve the `1a5ed81` historical baseline. They are not a
+current deployment qualification record. In the executing #8/follow-up tree,
+`scoring/enginePipeline.js` registers **Gemini, Google AIO, ChatGPT and Perplexity**.
+AIO now checks `BRIGHTDATA_API_KEY`; Gemini uses `openRouterProbe.js`; ChatGPT and
+Perplexity configuration/dispatch are resolved by their adapters. The prior
+hardcoded AIO readiness observation below is historical.
+
+| Surface | Implemented path | Qualification boundary |
+|---|---|---|
+| Google AI Overview | Bright Data SERP via `probeAio`; validated Google payloads | Valid no-AIO is collection evidence, not an answered AIO denominator. Actual deployed geography/readiness still needs live evidence. |
+| ChatGPT | `probeChatGpt` with direct/shared gateway selection | API/gateway answer; consumer UI equivalence unqualified. |
+| Gemini | `probeOpenRouterEngine` search-grounded adapter | Gateway answer; requested location is not verified geography. |
+| Perplexity | `probePerplexity` configured adapter | API/gateway answer; citations/search state must be observed. |
+| Consumer browser fleet | Separate `worker/` process and probe-result ingestion contract | Registration and a passing selftest do not qualify live consumer capture. |
+
+The deployment's offered/displayed engine list comes from `deployedEngines.js`;
+credential presence is not a canary or a successful observation. Metrics use
+`r05-metric-v1` and `eligibility-policy-v1` through `metricContract.js`. Existing
+historical readers retain their version boundaries. No row in this addendum
+claims a current production provider pass or a completed study. Operational
+commands and exact release blockers are in the
+[P2 qualification runbook](../runbooks/p2-release-qualification.md).
+
 ## Baseline and citation policy
 
 **Every claim in this document was resolved against `git show 1a5ed81:<path>`**

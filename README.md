@@ -40,13 +40,20 @@ the same job by id and skip every `(engine, query)` pair already persisted.
 
 ### Scoring
 
-- **Share-of-AI** per engine = prompts where the brand is visible ÷ non-branded
-  prompts that produced an answer.
-- **Visibility index** = weighted mean across engines that produced enough
-  answers to be eligible (`ENGINE_WEIGHTS`, relative and renormalized).
-- Visible = mentioned in the answer text **or** cited by domain.
-- Coverage / error-rate gates mark a scan `data_source_issue` or
-  `insufficient_sample` rather than reporting a misleading number.
+- Versioned metrics (`r05-metric-v1`) carry their numerator, actual denominator,
+  distinct eligible prompt IDs, surface and collection coverage. Raw `value_pct`
+  is separate from the gated `qualified_pct`; unknown is null with a reason and
+  measured zero remains zero.
+- A headline requires 95% valid collection and 20 distinct eligible prompts in
+  that metric's denominator (`eligibility-policy-v1`). Repeated observations
+  do not satisfy the distinct-question minimum. Below the gate, results are
+  exploratory or insufficient.
+- Valid Google SERPs without an AI Overview count toward collection completion,
+  but not the conditional AIO answer denominator. Failed or unattempted captures
+  do not count as brand absence.
+- Mentions, citations and positive recommendations are distinct measures.
+  First textual mention is not recommendation rank. Historical rows retain
+  their original scoring/policy versions; this does not requalify old scores.
 
 ### Prompt-set contract
 
@@ -60,11 +67,10 @@ the UI can mark the point where a tracked set changed.
 
 ## Tech stack
 
-- **Next.js 14** (App Router, JS) · **Tailwind** + a token-driven CSS design
+- **Next.js 15.5** (App Router, JS) · **Tailwind** + a token-driven CSS design
   system in `src/app/globals.css` (shadcn HSL vars stay mapped)
 - **Supabase** (Postgres) — schema in `supabase/migrations/`
-- **Engines**: Google AI Overview via Bright Data SERP · ChatGPT via the OpenAI
-  Responses API with `web_search` · grounded Gemini via OpenRouter · Perplexity `sonar` (native search)
+- **Engines**: Google AI Overview via Bright Data SERP · ChatGPT via its configured direct/shared gateway adapter · grounded Gemini via OpenRouter · Perplexity via its configured adapter. API/gateway results are not automatically consumer UI measurements
 - **Utility LLM**: a free model on any OpenAI-compatible gateway (`LLM_BASE_URL`)
   for prompt generation, competitor extraction, and classification chores
 - **Content OS**: a paid model (`CONTENT_MODEL`) with a hard per-item cost cap
@@ -73,8 +79,12 @@ the UI can mark the point where a tracked set changed.
 
 ## Setup
 
+Use Node.js 22.22 or newer in the 22.x line (`nvm use` reads `.nvmrc`). CI,
+the web app and the fleet use Node 22. Install each package from its lockfile:
+
 ```bash
-npm install
+npm ci
+npm --prefix worker ci
 ```
 
 Create `.env.local`:
@@ -193,7 +203,7 @@ how many were re-derived from surviving per-prompt rows, how many were a
 measured zero, and how many are genuinely unrecoverable and were therefore
 stored as unmeasured rather than as `0`.
 
-RLS is enabled on every table with permissive anon policies. Customer login,
+Customer access uses tenant membership checks and the RLS policies in migrations 023–026. Older migrations contain permissive policies; do not infer production isolation from an old schema alone. Customer login,
 invites, and tenant-scoped reads are implemented; production customer access
 still depends on applying `023_customer_auth_and_tenant_rls` and configuring
 `SUPABASE_SERVICE_ROLE_KEY` before deploying that migration.
@@ -242,3 +252,29 @@ content pipeline to human review. This uses provider credits; all persistence
 is isolated in memory and the result is saved to `/tmp/aeo-local-acceptance.json`.
 Customer browser testing additionally requires a signed-in local customer session
 and `SUPABASE_SERVICE_ROLE_KEY` in the local server environment.
+
+## Repair acceptance and release qualification
+
+PR #8 implemented public indexing policy and the offline repair harness. The
+R20–R21 follow-up adds methodology/use-case pages, browser acceptance and
+commit-bound external evidence. Engineering checks passing does not mean the
+release is qualified. See [the P2 runbook](docs/runbooks/p2-release-qualification.md)
+for commands, the evidence schema, deployment checks and rollback, and
+[the current status](docs/audits/2026-10-20-p2-qualification.md) for outstanding cases.
+
+```bash
+npm run qa:repair -- --repair R20 --suite offline --output
+npm run qa:repair -- --repair R21 --suite offline --output
+# Against a production build served locally, with placeholder Supabase config:
+npx playwright install chromium
+npm run qa:public-browser -- http://127.0.0.1:3328
+# Exit 1 is expected until every required suite has current passing evidence:
+npm run qa:repair -- --repair R20 --suite release --environment qa \
+  --evidence test_reports/public-browser/evidence.json --output
+```
+
+The browser job uses Chromium and 1440px/390px viewports. CI retains JSON,
+assertion logs and screenshots as an artifact. Offline tests require no provider
+credentials. The release command accepts reviewed external evidence for D/B/L/M/S
+cases and runs U/I itself; missing, blocked, skipped or failing cases keep it
+unverified. A synthetic browser run cannot qualify live capture or human review.

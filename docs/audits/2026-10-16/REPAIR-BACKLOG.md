@@ -5,7 +5,14 @@
 
 Updated: **16 October 2026, Asia/Kolkata**. Audited source baseline: `a2c97ddf12e332807c960e776eeae8de4550a210`.
 
-This replaces the short backlog with an execution specification for the same 21 repairs. **Everything below is planned work.** Expanding this document does not implement a repair, create the proposed test files, or establish a new test pass. The audit's executed evidence remains 3,209 passing tests, 30 skipped tests, a successful build, 120 isolated mock answers, and 11 reproduced unwanted behaviors. See [the audit](./AUDIT.md) and [reproduction evidence](./adversarial-results.json).
+**Implementation status update (20 October 2026):** PR #8 merged the R20 public
+indexing foundation and guarded offline/release harness. The follow-up's
+[current P2 status](../2026-10-20-p2-qualification.md) maps remaining acceptance,
+documentation and qualification work. The plan below remains normative; unchecked
+tasks are not evidence that the merged foundation is absent, and automated
+checks do not replace live/database/soak/manual acceptance.
+
+This replaces the short backlog with an execution specification for the same 21 repairs. **The original plan below is not an execution record; consult the dated implementation updates for delivered work.** Expanding this document does not implement a repair, create the proposed test files, or establish a new test pass. The audit's executed evidence remains 3,209 passing tests, 30 skipped tests, a successful build, 120 isolated mock answers, and 11 reproduced unwanted behaviors. See [the audit](./AUDIT.md) and [reproduction evidence](./adversarial-results.json).
 
 The plan contains **404 named acceptance scenarios**. Counts reflect distinct behaviors and failure boundaries; they are minimum coverage, not a target for inflating assertion counts. Reuse an existing behavioral test if it establishes the entire scenario and link its result. Table-driven variants expand runtime executions without changing the scenario inventory. Corpus examples and daily observations are counted separately.
 

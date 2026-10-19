@@ -51,10 +51,10 @@ test("R20-01 — preferred hostname/page path generates correct canonical URL wi
 test("R20-02 — public URL inventory generates sitemap with only intended indexable URLs and non-invented dates", () => {
   const inventory = getPublicUrlInventory();
   assert.ok(Array.isArray(inventory));
-  assert.equal(inventory.length, 4, "exact public indexable pages inventory");
+  assert.deepEqual(inventory.map((page) => page.path), ["/", "/demo", "/methodology", "/use-cases", "/privacy", "/terms"]);
 
   const paths = inventory.map((item) => item.path);
-  assert.deepEqual(paths.sort(), ["/", "/demo", "/privacy", "/terms"]);
+  assert.deepEqual(paths.sort(), ["/", "/demo", "/methodology", "/privacy", "/terms", "/use-cases"]);
 
   // Every URL is an absolute canonical production URL
   for (const item of inventory) {
@@ -126,7 +126,7 @@ test("R20-04 — production build robots and sitemap metadata handlers return va
   // Test Next.js App Router metadata sitemap handler
   const sitemapData = sitemapHandler();
   assert.ok(Array.isArray(sitemapData));
-  assert.equal(sitemapData.length, 4);
+  assert.equal(sitemapData.length, getPublicUrlInventory().length);
   const urls = sitemapData.map((e) => e.url);
   assert.ok(urls.includes("https://perceev.com"));
   assert.ok(urls.includes("https://perceev.com/terms"));
@@ -220,6 +220,12 @@ test("R20-07 — marketing claim data withholds or limits unverified consumer co
   assert.equal(unverifiedAttempt.claims.consumerCaptureStatus, "unverified");
   assert.match(unverifiedAttempt.claims.consumerCaptureNotice, /experimental and not yet qualified/);
 
+  for (const evidenceVersion of [undefined, "", "  "]) {
+    const noVersion = validateMarketingClaims({ offersConsumerCapture: true }, { consumerQualified: true, evidenceVersion });
+    assert.equal(noVersion.claims.offersConsumerCapture, false, "a qualification flag alone cannot invent an evidence version");
+    assert.equal(noVersion.claims.consumerCaptureStatus, "unverified");
+  }
+
   // Case B: Capability is consumer-qualified -> claim allowed with evidence version
   const qualifiedAttempt = validateMarketingClaims(
     { offersConsumerCapture: true },
@@ -246,19 +252,19 @@ test("R20-07 — marketing claim data withholds or limits unverified consumer co
 
 test(
   "R20-08 — homepage and focused product pages navigation on desktop and mobile",
-  { skip: "BLOCKED: requires browser (B) against running Next.js application to test DOM interactions and viewport responsiveness." },
+  { skip: "B level: executed by scripts/qa/check-public-browser.mjs in the CI build job, not by Node offline tests." },
   () => {}
 );
 
 test(
   "R20-09 — public page metadata rendered document unique title/description/canonical agreement",
-  { skip: "BLOCKED: requires browser (B) to verify rendered DOM elements and open graph tags." },
+  { skip: "B level: rendered metadata runs in scripts/qa/check-public-browser.mjs, not the offline suite." },
   () => {}
 );
 
 test(
   "R20-10 — sample opened from marketing CTA maintains simulation banner and prevents real mutations",
-  { skip: "BLOCKED: requires browser (B) against /demo and sample dashboard sessionStorage." },
+  { skip: "B level: sample CTA, sessionStorage and mock scan run in scripts/qa/check-public-browser.mjs." },
   () => {}
 );
 
@@ -294,6 +300,6 @@ test(
 
 test(
   "R20-16 — keyboard-only user and narrow viewport usability across public routes",
-  { skip: "BLOCKED: requires browser (B) with accessibility and keyboard event automation." },
+  { skip: "B level: desktop/mobile Tab and Enter navigation runs in scripts/qa/check-public-browser.mjs." },
   () => {}
 );

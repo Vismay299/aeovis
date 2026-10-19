@@ -25,7 +25,7 @@ export function SiteNav() {
         <div className="nav__links">
           <Link href="/#gap">The gap</Link>
           <Link href="/#work">What it does</Link>
-          <Link href="/#evidence">Evidence</Link>
+          <Link href="/methodology">Methodology</Link>
         </div>
         <div className="nav__r">
           <Link className="btn btn--quiet btn--sm" href="/login">Sign in</Link>

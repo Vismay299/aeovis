@@ -153,3 +153,13 @@ jobs:
             sleep 1
           done
           node scripts/qa/check-public-site.mjs http://127.0.0.1:3328
+          npx playwright install --with-deps chromium
+          npm run qa:public-browser -- http://127.0.0.1:3328 test_reports/public-browser
+
+      - name: retain browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-browser-${{ github.sha }}
+          path: test_reports/public-browser
+          if-no-files-found: error
