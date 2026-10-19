@@ -1,3 +1,4 @@
+import { classifyProviderFailure, sanitizeProviderText } from '../engines/providerFailure.js';
 import { brightDataSearch, extractBrightDataAiOverview, extractBrightDataOrganic } from "../engines/brightdata.js";
 import { resolveSerpQueryCost } from "../llmPricing.js";
 import { probeChatGpt, isChatGptConfigured } from "../engines/openai.js";
@@ -125,7 +126,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
   const { cost: queryCost } = resolveSerpQueryCost({ provider: "brightdata" });
 
   try {
-    const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true, geo: options.geo });
+    const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true, geo: options.geo, ...(options.durableDispatch ? { attempts: 1, deadlineAt: options.deadlineAt } : {}) });
     const {
       text,
       citations,
@@ -152,6 +153,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     if (citations_verified_empty !== undefined) result.citations_verified_empty = citations_verified_empty;
     if (parser_version !== undefined) result.parser_version = parser_version;
     if (evidence_id !== undefined) result.evidence_id = evidence_id;
+    result.provider_request_id = data.serp_validation?.provider_request_id ?? null;
     result.organic = organic;
     if (brandDomain && organic.length > 0) {
       const brandPos = organic.findIndex(
@@ -196,7 +198,10 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
       result.competitors_cited = findCompetitorsCited(result.references, competitors);
     }
   } catch (err) {
-    result.error = err.message || String(err);
+    result.error = sanitizeProviderText(err.message || String(err));
+    result.cost = null;
+    result.provider_request_id = err.evidence?.provider_request_id ?? null;
+    result.provider_failure = err.provider_failure || classifyProviderFailure({provider:"brightdata",error:err});
     console.warn(`[aio] Query failed: "${query.text}" — ${result.error}`);
   }
 
@@ -220,7 +225,7 @@ export const EMPTY_ANSWER = "empty_answer";
  * previous wording here — "always produce an answer unless the API errors" —
  * was the assumption that made the bug invisible.
  */
-export async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, competitors, stats) {
+export async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, competitors, stats, options = {}) {
   const probeFn = engine.probe;
   const engineName = engine.name;
 
@@ -262,7 +267,7 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
     citations_state_detail: null,
   };
 
-  const probeResult = await probeFn(query.text, { stats });
+  const probeResult = await probeFn(query.text, { ...options, stats });
   result.measurement_method = "model_api";
   result.model_used = probeResult.model || probeResult.model_used || null;
   result.requested_model = probeResult.requested_model || probeResult.model || null;
@@ -301,6 +306,7 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   // return path added later cannot reintroduce the drop by forgetting a line.
   // The error path matters as much as the success one — both legs dead is also
   // an unobserved citation list, not an empty one.
+  result.provider_failure = probeResult.provider_failure || null;
   result.citations_state = probeResult.citations_state ?? null;
   result.citations_state_reason = probeResult.citations_state_reason ?? null;
   result.citations_state_detail = probeResult.citations_state_detail ?? null;
@@ -343,7 +349,9 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   result.visible = result.brand_mentioned_in_text || result.brand_cited;
 
   if (probeResult.error) {
-    result.error = probeResult.error;
+    result.error = sanitizeProviderText(probeResult.error);
+    result.error_kind = probeResult.error_kind;
+    result.provider_failure = probeResult.provider_failure;
     console.warn(`[${engineName}] Query failed: "${query.text}" — ${probeResult.error}`);
     return result;
   }
@@ -1672,8 +1680,12 @@ export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS, optio
       state_reason: s.state_reason ?? null,
     }));
 
+  const exposureSlices = slices.filter(s => s.metrics?.[METRIC_IDS.EXPOSURE]);
+  const exposureMetric = exposureSlices.length ? headlineMetricFor(exposureSlices, {
+    policy, options, cohort: exposureSlices.map(s=>s.engine), slices,
+  }) : null;
   if (eligible.length === 0) {
-    const none = createMetric({
+    const none = exposureMetric || createMetric({
       metricId: METRIC_IDS.EXPOSURE,
       numerator: null,
       denominator: null,
@@ -1691,11 +1703,8 @@ export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS, optio
   );
   const mean = Math.round((weightedSum / totalWeight) * 10) / 10;
 
-  const metric = headlineMetricFor(eligible, {
-    policy,
-    options,
-    cohort: eligible.map((s) => s.engine),
-    slices,
+  const metric = exposureMetric || headlineMetricFor(eligible, {
+    policy, options, cohort: eligible.map((s) => s.engine), slices,
   });
 
   return headlineResult({ index: mean, eligible, excludedEngines, metric });
@@ -2091,10 +2100,10 @@ const ENGINE_REGISTRY = [
     name: "gemini",
     label: "Gemini",
     isConfigured: () => isOpenRouterEngineConfigured("gemini"),
-    probe: async (query, brand, brandAliases, brandDomain, competitors, stats) =>
+    probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
         { name: "gemini", probe: async (prompt, options) => {
-          const result = await probeOpenRouterEngine({ engine: "gemini", query: prompt, stats: options?.stats });
+          const result = await probeOpenRouterEngine({ engine: "gemini", query: prompt, stats: options?.stats, durableDispatch: options?.durableDispatch, deadlineAt: options?.deadlineAt });
           const observed = !result.error && (result.search_requests > 0 || result.references.length > 0);
           return {
             ...result,
@@ -2103,7 +2112,7 @@ const ENGINE_REGISTRY = [
             citations_state_detail: observed ? null : "No web-search activity or citation references were returned",
           };
         } },
-        query, brand, brandAliases, brandDomain, competitors, stats
+        query, brand, brandAliases, brandDomain, competitors, stats, options
       ),
     concurrency: 4,
   },
@@ -2118,7 +2127,7 @@ const ENGINE_REGISTRY = [
     name: "chatgpt",
     label: "ChatGPT",
     isConfigured: isChatGptConfigured,
-    probe: async (query, brand, brandAliases, brandDomain, competitors, stats) =>
+    probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
         { name: "chatgpt", probe: probeChatGpt },
         query,
@@ -2126,7 +2135,7 @@ const ENGINE_REGISTRY = [
         brandAliases,
         brandDomain,
         competitors,
-        stats
+        stats, options
       ),
     concurrency: CHATGPT_CONCURRENCY,
   },
@@ -2134,7 +2143,7 @@ const ENGINE_REGISTRY = [
     name: "perplexity",
     label: "Perplexity",
     isConfigured: isPerplexityConfigured,
-    probe: async (query, brand, brandAliases, brandDomain, competitors, stats) =>
+    probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
         { name: "perplexity", probe: probePerplexity },
         query,
@@ -2142,7 +2151,7 @@ const ENGINE_REGISTRY = [
         brandAliases,
         brandDomain,
         competitors,
-        stats
+        stats, options
       ),
     concurrency: PERPLEXITY_CONCURRENCY,
   },

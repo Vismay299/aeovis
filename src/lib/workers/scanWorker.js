@@ -79,6 +79,8 @@ import {
 // rows and never from how many rows the loop processed.
 import { deriveScanOutcome, buildScorePlan, BLOCK_REASONS } from "../scanOutcome.js";
 import { SURFACE_POLICY_VERSION, METRIC_IDS } from "../scoring/metricContract.js";
+import { createProbeDispatchStore } from "../db/probeDispatch.js";
+import { runDurableProbing, freezeDispatch } from "./durableProbing.js";
 import { configVersion } from "../engines/providerReadiness.js";
 
 const MAX_SOURCING_ATTEMPTS = 3;
@@ -1619,6 +1621,16 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     unbranded_texts: unbrandedQueries.map((q) => q.text.toLowerCase().trim()),
     engines: frozenEngineNames,
     model_policy_version: `provider-config-v1:${modelPolicyVersion}`,
+    // Freeze selected accounts/models during sourcing, before any possible
+    // configuration rotation between sourcing and the first probe chunk.
+    ...((supabase && !deps.resolveEnabledEngines) || deps.probeDispatchStore ? {
+      dispatch: freezeDispatch({
+        engines: frozenEngineNames,
+        stats,
+        env: deps.env || process.env,
+        now: deps.now || Date.now,
+      }),
+    } : {}),
     geo,
     prompt_target: promptTarget,
     // R3.7.2 — `website_scrape` rides the checkpoint alongside cost/tokens so a
@@ -1738,6 +1750,27 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       `[scan-chunk] Job ${jobId}: engine set ${engineSetChange.state} — ${engineSetChange.title}. ` +
         `Carried on the checkpoint so the finalized scan record says so, not just the run ledger.`
     );
+  }
+
+  // Production dispatch is database-authoritative. No fallback if its schema,
+  // claim or budget read fails. Memory-backed simulations keep their own path.
+  if (process.env.NODE_ENV === "production" && !supabase && !deps.resolveEnabledEngines) {
+    throw new Error("Provider dispatch requires the service database; memory fallback is disabled");
+  }
+  if (deps.probeDispatchStore || (supabase && !deps.resolveEnabledEngines)) {
+    return runDurableProbing({
+      jobId,
+      checkpoint: { ...checkpoint, ...(engineSetChange ? { engine_set_change: engineSetChange } : {}) },
+      engines: engineDefs,
+      store: deps.probeDispatchStore || createProbeDispatchStore(),
+      getResults: deps.getPromptResultsForJob || getPromptResultsForJob,
+      updateJob,
+      now: nowFn,
+      chunkStartMs,
+      budgetMs,
+      env: deps.env || process.env,
+      tally,
+    });
   }
 
   const completed = await getCompletedPairs(jobId);
@@ -2508,6 +2541,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     summary_stats: {
       ...summary,
       terminal_outcome: terminalOutcome,
+      ...(checkpoint.dispatch_summary ? { dispatch_summary: checkpoint.dispatch_summary } : {}),
       ...(engineSetChange ? { engine_set_change: engineSetChange } : {}),
     },
   };
@@ -2939,7 +2973,10 @@ export async function runScanChunk(jobId, deps = {}) {
       const outcome = await runProbingPhase(jobId, checkpoint, deps, chunkStartMs, tally);
       checkpoint = outcome.checkpoint;
       if (outcome.budgetHit) {
-        selfContinue(jobId);
+        // Respect durable due times; poll/cron will recover deferred work.
+        if (!outcome.resumeAt || Date.parse(outcome.resumeAt) <= (deps.now || Date.now)()) {
+          selfContinue(jobId);
+        }
         result = { ok: true, reason: "checkpointed", progress_pct: outcome.progressPct };
         break chunkBody;
       }

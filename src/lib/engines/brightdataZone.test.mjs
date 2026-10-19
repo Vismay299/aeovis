@@ -339,7 +339,7 @@ test("a zone rejected at PROBE time drops the cache — the fleet recovers after
 
   assert.ok(row.error, "the probe that hit the dead zone is still an ERROR row (R0.1.10 must not regress)");
   assert.match(row.error, /rejected SERP zone "zone_old"/, "and it names the zone, not just an HTTP status");
-  assert.equal(row.cost, 0, "a rejected probe bought nothing");
+  assert.equal(row.cost, null, "a failed external request has unmeasured billing");
   assert.equal(summarizeEngineSlice([row], "aio").errored_queries, 1, "counted, never skipped");
   assert.equal(serpCalls, 1, "a zone Bright Data refused is not retried — that would spend the attempt budget for the same answer");
 
@@ -580,7 +580,7 @@ test("R1.2.10 — a 200-envelope refusal reaches the caller as an ERROR row, not
   assert.match(row.error, /rejected SERP zone "envelope_zone"/, "typed, and naming the zone — not a bare envelope message");
   assert.equal(row.answer_present, false, "a refused probe never counts as answered");
   assert.equal(row.visible, false);
-  assert.equal(row.cost, 0, "a refused probe bought nothing");
+  assert.equal(row.cost, null, "a refused external request has unmeasured billing");
 
   const summary = summarizeEngineSlice([row], "aio");
   assert.equal(summary.errored_queries, 1, "counted, never skipped");

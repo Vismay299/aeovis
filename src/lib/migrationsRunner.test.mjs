@@ -277,6 +277,9 @@ function pathToFileUrlString(p) {
 
 /** Everything 001-023 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
+  "probe_observations", "probe_attempts", "probe_late_receipts", "probe_reconciliations",
+  "provider_dispatch_circuits", "provider_canary_budgets", "probe_dispatch_control",
+  "renew_probe_dispatch", "seed_probe_observations", "claim_probe_dispatch", "finish_probe_dispatch", "block_probe_dispatch", "reconcile_probe_dispatch",
   "scans", "brand_prompts", "scan_jobs", "content_events",
   "content_jobs", "content_items", "content_feedback", "brand_briefs", "content_lessons",
   "content_agents", "knowledge_blocks",

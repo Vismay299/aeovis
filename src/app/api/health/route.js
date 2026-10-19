@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/db";
 import { getCronTicks } from "@/lib/db/analytics";
+import { readProviderReadiness } from "@/lib/db/probeDispatch";
+import { buildProviderReadiness } from "@/lib/engines/providerReadiness";
 import { buildHealthPayload } from "@/lib/health";
 
 // Reads live state; must never be prerendered at build time.
@@ -53,7 +55,16 @@ export async function GET() {
     db.error = db.error || `cron tick read failed: ${err.message}`;
   }
 
-  const payload = buildHealthPayload({ db, env: process.env, ticks, now });
+  let providerReadiness = buildProviderReadiness({ env:process.env, now });
+  let readinessError = null;
+  if (supabase) {
+    try { providerReadiness = await readProviderReadiness({ now }); }
+    catch { readinessError = 'Provider readiness history unavailable; run migration 027 and check database access'; }
+  }
+  // Only configuration and sanitized canary metadata leave this public route.
+  // Queries, attempt evidence, account circuit identities and raw results stay private.
+  const payload = buildHealthPayload({ db, env: process.env, ticks, now, providerReadiness });
+  if (readinessError) { payload.readiness_error = readinessError; if (payload.status === 'ok') payload.status='degraded'; }
 
   // 200 for ok/degraded, 503 when the database is unreachable — an uptime
   // monitor should page on "down", not on "Firecrawl is unconfigured".

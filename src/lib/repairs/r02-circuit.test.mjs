@@ -88,13 +88,13 @@ test("R02-17 — a shared gateway credential failure stops the dependent engines
   const groups = dependentEnginesByProvider(Object.values(plans));
   const gatewayIdentity = plans.chatgpt.circuit_identity;
   const gatewayKey = circuitKey(gatewayIdentity);
-  assert.deepEqual(groups.get(gatewayKey)?.sort(), ["chatgpt", "perplexity"]);
+  assert.deepEqual(groups.get(gatewayKey)?.sort(), ["chatgpt", "gemini", "perplexity"]);
   assert.equal(
     circuitKey(plans.perplexity.circuit_identity),
     gatewayKey,
     "one shared credential is one shared circuit, whatever model each engine sent"
   );
-  assert.equal(plans.gemini.provider, "gemini", "Gemini routes natively, so it is not a dependent of the gateway");
+  assert.equal(plans.gemini.provider, "openrouter", "The offered Gemini scan uses the same gateway circuit");
 
   const probe = countingProbe();
   const seen = [];

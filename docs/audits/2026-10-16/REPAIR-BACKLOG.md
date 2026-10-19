@@ -3,9 +3,43 @@
 > <!-- doc-status -->
 > **Status: LIVE.** Acceptance plan for the repairs identified by the 16 October 2026 audit.
 
-Updated: **16 October 2026, Asia/Kolkata**. Audited source baseline: `a2c97ddf12e332807c960e776eeae8de4550a210`.
+Updated: **19 October 2026, Asia/Kolkata**. Historical audited source baseline: `a2c97ddf12e332807c960e776eeae8de4550a210`.
 
-This replaces the short backlog with an execution specification for the same 21 repairs. **Everything below is planned work.** Expanding this document does not implement a repair, create the proposed test files, or establish a new test pass. The audit's executed evidence remains 3,209 passing tests, 30 skipped tests, a successful build, 120 isolated mock answers, and 11 reproduced unwanted behaviors. See [the audit](./AUDIT.md) and [reproduction evidence](./adversarial-results.json).
+This is the execution specification and current implementation status for 21 repairs. The original audit baseline is historical: its 3,209 passing tests, 30 skipped tests, 120 isolated mock answers and 11 reproduced unwanted behaviors describe that baseline, not today's release. See [the audit](./AUDIT.md) and [reproduction evidence](./adversarial-results.json).
+
+## Current status: implemented code versus accepted repairs
+
+Verified against merged main `c5530c9` (PRs [#6](https://github.com/Vismay299/aeovis/pull/6), [#7](https://github.com/Vismay299/aeovis/pull/7), [#8](https://github.com/Vismay299/aeovis/pull/8)) and the P0 dispatch changes in [PR #9](https://github.com/Vismay299/aeovis/pull/9). **No priority group is release accepted.** R01–R11 have some implementation; that is eleven numbered repairs, including six P1 repairs R06–R11. It does not mean eleven or fifteen P1 tasks are complete. R20/R21 also have merged foundations.
+
+Checkboxes below mean the whole implementation subtask is present in code/documentation, **not** deployed, live verified or release accepted. An unchecked item may be partially implemented; its remaining clauses still matter. The named acceptance inventory remains 404 scenarios / 214 subtasks; passing a helper test does not close a repair.
+
+| Repair | Priority | Implementation actually present | Work still owed |
+|---|---|---|---|
+| R01 | P0 | Classification/config identities and bounded canary policy merged. This change connects service-only durable canaries, shared reservations, stored health reads and the actual Gemini gateway route. | Operator/browser acceptance, bounded real canaries for every offered surface, deployed configuration evidence and rollback sign-off. |
+| R02 | P0 | Retry/circuit/spend policies merged. This change connects the worker to additive SQL observations/attempts, fenced claims, persisted retry times, circuit recovery, reservations, legacy adoption and audited ambiguity reconciliation. | Authorized workspace shadow/cutover, execution-detail browser acceptance, full rollback exercise and remaining adapter-idempotency fixture acceptance. No offered adapter currently promises provider idempotency. |
+| R03 | P0 | Frozen requested matrix, persisted outcome equation and API/report propagation merged. This change persists per-pair identities before dispatch and commits attempt/result projection together. | Real DB finalizer/materialization crash cases and browser reload/export checks; production migration/rollback qualification. |
+| R04 | P0 | Google SERP/AIO validation, final-attempt rejection, evidence identity and whole-request deadlines merged; durable worker disables nested Google retries. | Durable evidence-store failure case, actual parser-drift alert delivery and two bounded live Google checks. |
+| R05 | P0 | Metric DTOs, fixed denominators, 20-prompt / 95% collection gate and storage/API/dashboard/report/export propagation merged. This change retains qualified zero exposure for fully observed brand-free panels. | Complete pre-outcome intent/entity eligibility, uncertainty/cluster review, frozen cohort/weights acceptance, methodology examples and DB/browser acceptance. |
+| R06 | P1 | Provenance envelope and wrapper propagation merged; nullable legacy handling and search/cost states have offline coverage. | Complete context/model identity through every runtime path, private evidence retention/RLS and browser/export acceptance. |
+| R07 | P1 | Fixed 30×4 sample, stable illustrative timestamp, normalization identity and effect guards merged. | Remaining storage/navigation/banner/download browser cases, version invalidation and complete sample metric-contract acceptance. |
+| R08 | P1 | Relationship labels, contextual sentiment, evidence spans and first-mention/list-rank distinction wired into judging. | Full entity-resolution/escalation acceptance, DB label persistence and browser inspection. |
+| R09 | P1 | Calibration protocol/metric tooling and synthetic tests merged. | Actual 240-answer adjudicated corpus, held-out calibration, leakage/disagreement review and manual sign-off. Runtime qualification has not been established. |
+| R10 | P1 | Geography/context/comparability helpers merged; original country propagation still executes. | Full new context contract through sourcing, every adapter, persistence, resume and UI; DB/browser/live market evidence. |
+| R11 | P1 | Schedule-window/catch-up/incident/soak policy helpers merged. Existing legacy scheduler still executes. | Wire durable scheduling and measurement alerts into production storage/dispatch, DB/browser acceptance and seven real elapsed days of observations. |
+| R12 | P1 | No completed repair implementation established. | Consumer capture/comparison workflow plus browser/live/manual/soak qualification. |
+| R13 | P1 | R03/R05 add some outcome/qualification UI behavior. | Complete audited dashboard state matrix and all required browser behavior. |
+| R14 | P1 | No completed repair implementation established. | Reviewed/versioned question panels, persistence, approvals and browser acceptance. |
+| R15 | P1 | Existing crawlability product code predates this repair. | Audited technical-eligibility repairs and DB/browser/live/manual evidence. |
+| R16 | P1 | No completed repair implementation established. | Verified source opportunity workflow and provenance/tenant/browser acceptance. |
+| R17 | P1 | Existing content tools do not close this repair. | Evidence-backed research/revision checks and DB/browser acceptance. |
+| R18 | P1 | Existing publication functions do not close this repair. | Version-linked publication/observation transaction model and acceptance. |
+| R19 | P1 | Existing reporting/GSC functions do not close this repair. | Current metric outcome joins, attribution/source honesty and DB/browser/live acceptance. |
+| R20 | P2 | Preferred hostname/canonicals, robots/sitemap, private/preview noindex and built-site HTTP checks merged. | Public navigation/mobile/browser checks, methodology/claim review, real owned-site study and deployed/Search Console evidence. |
+| R21 | P2/bootstrap | 404-case inventory, guarded offline runner, truthful missing-suite/release refusal and CI/bootstrap merged. This change adds a dedicated real-PostgreSQL P0 dispatch job. | Complete DB/browser/live/manual/soak manifests and evidence ingestion, architecture cleanup, semantic mutations, documentation and end-to-end rollout/rollback sign-off. |
+
+**Evidence and immediate sequence.** The merged #6/#8 baseline passed 3,419 tests with 72 skipped; skips remain outstanding, never passes. For this change see [P0 implementation evidence](./P0-IMPLEMENTATION-STATUS.md) and [the dispatch runbook](../../runbooks/p0-provider-dispatch.md). The dedicated database job executes actual migrations and concurrency/crash/access checks; the generic repair runner still refuses unexecuted DB/browser/live suites. No production environment or paid provider was used for these changes.
+
+P0 comes first: apply/verify additive migration 027 in QA, exercise bounded canaries and honest full/partial/failed reports, complete the remaining P0 acceptance above, then authorize cutover. R09–R11 integration/qualification and R12–R19 remain subsequent P1 work. P2 foundations are implemented but P2 is not closed.
 
 The plan contains **404 named acceptance scenarios**. Counts reflect distinct behaviors and failure boundaries; they are minimum coverage, not a target for inflating assertion counts. Reuse an existing behavioral test if it establishes the entire scenario and link its result. Table-driven variants expand runtime executions without changing the scenario inventory. Corpus examples and daily observations are counted separately.
 
@@ -51,12 +85,12 @@ Dependencies distinguish shared contracts from finished implementations. R05/R08
 
 Every case table specifies Given/input, When/action, and Then/pass criteria. Each row is one independently reportable scenario. A case may contain several assertions that jointly establish that behavior.
 
-### B. Harness and commands — implement these entry points, do not assume they exist
+### B. Harness and commands — implementation and remaining suites
 
-As R21's first subtask, add `scripts/qa/run-repair.mjs`, a test inventory, and these execution modes:
+The merged `scripts/qa/run-repair.mjs` and inventory execute offline U/I and refuse unverified required suites. The commands below define the full target interface; DB/browser/live/soak/release acceptance remains open. P0 dispatch SQL has a separate CI job and executable documented above:
 
 ```powershell
-# Proposed runner: rejects unsupported repair/suite combinations and empty selections.
+# Runner rejects unsupported combinations, empty selections and missing required evidence.
 node scripts/qa/run-repair.mjs --repair R01 --suite offline
 node scripts/qa/run-repair.mjs --repair R02 --suite database --environment qa
 node scripts/qa/run-repair.mjs --repair R07 --suite browser --environment qa
@@ -128,22 +162,24 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R01. Diagnose and recover provider readiness
 
+**Current status:** Implementation is connected in this change; deployment/live/browser acceptance remains open. The runbook lists the offered adapter/credential map. No deployed environment was inspected.
+
 **Priority/dependencies:** P0; harness bootstrap. **Primary code:** `src/lib/vendorRegistry.js`, `health.js`, `engines/httpFailureKind.js`, engine adapters, `scripts/check-secrets.mjs`. **Problem:** configured credentials were reported healthy while persisted calls failed authentication or key limits.
 
 ### Implementation tasks and subtasks
 
 1. **Trace configuration to the actual adapter.**
    - [ ] R01.1a Inventory each offered surface, selected gateway/model, credential variable name, fallback rule, and deployed environment.
-   - [ ] R01.1b Record configuration identity/version without recording credential values; flag unsupported model/gateway combinations before spending.
+   - [x] R01.1b Record configuration identity/version without recording credential values; flag unsupported model/gateway combinations before spending.
 2. **Create one failure classifier.**
-   - [ ] R01.2a Parse status plus allowlisted provider codes into authentication, permission/challenge, spend limit, rate limit, transient, timeout, and parse outcomes.
-   - [ ] R01.2b Preserve retry eligibility/reset information; sanitize operator messages. A generic 403 or 429 must not imply one universal cause.
+   - [x] R01.2a Parse status plus allowlisted provider codes into authentication, permission/challenge, spend limit, rate limit, transient, timeout, and parse outcomes.
+   - [x] R01.2b Preserve retry eligibility/reset information; sanitize operator messages. A generic 403 or 429 must not imply one universal cause.
 3. **Separate readiness from liveness.**
-   - [ ] R01.3a Store canary start/end, observation time, surface, location status, config version, outcome, and request ID.
-   - [ ] R01.3b Return configured/unverified/ready/degraded/blocked/stale distinctly; credential changes invalidate old readiness.
+   - [x] R01.3a Store canary start/end, observation time, surface, location status, config version, outcome, and request ID.
+   - [x] R01.3b Return configured/unverified/ready/degraded/blocked/stale distinctly; credential changes invalidate old readiness.
 4. **Implement bounded canaries and operator recovery.**
-   - [ ] R01.4a Dispatch canaries separately from health polling, with shared budget/request reservation and no concurrent duplicate canaries.
-   - [ ] R01.4b Document the action for each failure: repair selection/credentials, review limits, wait for reset, or investigate provider capacity. Do not auto-fund.
+   - [x] R01.4a Dispatch canaries separately from health polling, with shared budget/request reservation and no concurrent duplicate canaries.
+   - [x] R01.4b Document the action for each failure: repair selection/credentials, review limits, wait for reset, or investigate provider capacity. Do not auto-fund.
 5. **Deploy and validate narrowly.**
    - [ ] R01.5a Start with one authorized QA workspace and preserve sanitized evidence for all offered surfaces.
    - [ ] R01.5b Confirm readiness expiry and rollback to the previous status schema without treating stale results as current.
@@ -175,25 +211,27 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R02. Add durable per-pair attempts, leases, and provider circuit breakers
 
+**Current status:** Implementation is connected in this change and tested against real disposable PostgreSQL. Attempts are immutable once settled; dispatch/reconciliation transitions append evidence. Lease renewal is fenced; expired intents require explicit reconciliation. R02-12 remains unverified because offered adapters do not expose provider idempotency.
+
 **Priority/dependencies:** P0; R01 classification and R06 identity contract. **Primary code:** `src/lib/workers/scanWorker.js`, `db/analytics.js`, `probeQueue.js`, lease helpers, new additive migrations. **Regression:** A08.
 
 ### Implementation tasks and subtasks
 
 1. **Separate observations from attempts.**
-   - [ ] R02.1a Add immutable observation identity and append-only attempt records; preserve provider errors and retry history.
-   - [ ] R02.1b Define unique constraints for logical observation and attempt number; migrate legacy failed rows as historical attempts, not successes.
+   - [x] R02.1a Add immutable observation identity and append-only attempt records; preserve provider errors and retry history.
+   - [x] R02.1b Define unique constraints for logical observation and attempt number; migrate legacy failed rows as historical attempts, not successes.
 2. **Implement atomic claims and fenced leases.**
-   - [ ] R02.2a Claim due work transactionally, issue a lease token/generation, and renew only for the current owner.
-   - [ ] R02.2b Reject stale completion writes after lease expiry; preserve late provider evidence for reconciliation without overriding a newer result.
+   - [x] R02.2a Claim due work transactionally, issue a lease token/generation, and renew only for the current owner.
+   - [x] R02.2b Reject stale completion writes after lease expiry; preserve late provider evidence for reconciliation without overriding a newer result.
 3. **Make retry policy explicit.**
-   - [ ] R02.3a Calculate bounded backoff with seeded jitter and provider retry time; stop at attempt/deadline limits.
-   - [ ] R02.3b Keep valid no-AIO and successful answers terminal; retry typed transient failures only.
+   - [x] R02.3a Calculate bounded backoff with seeded jitter and provider retry time; stop at attempt/deadline limits.
+   - [x] R02.3b Keep valid no-AIO and successful answers terminal; retry typed transient failures only.
 4. **Handle the external-call uncertainty window.**
-   - [ ] R02.4a Persist dispatch intent and provider idempotency key where supported; distinguish not-dispatched from dispatched-but-result-unknown.
-   - [ ] R02.4b Do not promise exactly-once billing without provider support. Reconcile ambiguous calls or require a bounded explicit retry policy with possible spend disclosed.
+   - [x] R02.4a Persist dispatch intent and provider idempotency key where supported; distinguish not-dispatched from dispatched-but-result-unknown.
+   - [x] R02.4b Do not promise exactly-once billing without provider support. Reconcile ambiguous calls or require a bounded explicit retry policy with possible spend disclosed.
 5. **Share circuit and spend state across workers.**
-   - [ ] R02.5a Scope circuits to provider/config/account identity; open on permanent credential/budget failures and use one half-open canary.
-   - [ ] R02.5b Reserve estimated spend atomically, reconcile actual/unknown cost, and isolate unrelated providers and tenants as policy requires.
+   - [x] R02.5a Scope circuits to provider/config/account identity; open on permanent credential/budget failures and use one half-open canary.
+   - [x] R02.5b Reserve estimated spend atomically, reconcile actual/unknown cost, and isolate unrelated providers and tenants as policy requires.
 6. **Roll out with a kill/restart exercise.**
    - [ ] R02.6a Shadow legacy completion decisions, inspect differences, then switch one workspace to new claims.
    - [ ] R02.6b Keep old rows readable; rollback stops new dispatch while in-flight attempts are reconciled.
@@ -233,25 +271,27 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R03. Make terminal scan outcomes reflect collection quality
 
+**Current status:** Core implementation merged; the new ledger closes the dispatch/result persistence gap. Finalizer rollup/citation crash recovery still needs its separate real-DB/browser acceptance.
+
 **Priority/dependencies:** P0; R02/R04. **Primary code:** scan worker/finalizer, scan job storage, status routes, public/customer report adapters. **Regression:** A07.
 
 ### Implementation tasks and subtasks
 
 1. **Freeze the work matrix.**
-   - [ ] R03.1a Persist all prompt/surface observation IDs before execution, with branded diagnostics separately tagged.
-   - [ ] R03.1b Reject missing/duplicate IDs; retain planned work when a surface becomes unavailable.
+   - [x] R03.1a Persist all prompt/surface observation IDs before execution, with branded diagnostics separately tagged.
+   - [x] R03.1b Reject missing/duplicate IDs; retain planned work when a surface becomes unavailable.
 2. **Define two state machines.**
-   - [ ] R03.2a Keep execution phase separate from collection outcome; specify allowed transitions and terminal reasons.
-   - [ ] R03.2b Use complete for fully valid collection, partial for mixed usable/failing outcomes, failed for no usable collection, and blocked for configuration/budget stops; retain explicit reason codes.
+   - [x] R03.2a Keep execution phase separate from collection outcome; specify allowed transitions and terminal reasons.
+   - [x] R03.2b Use complete for fully valid collection, partial for mixed usable/failing outcomes, failed for no usable collection, and blocked for configuration/budget stops; retain explicit reason codes.
 3. **Finalize from durable observations.**
-   - [ ] R03.3a Derive exclusive dispositions and engine summaries from persisted data; do not use array length as success.
-   - [ ] R03.3b Preserve successful surfaces and classify never-dispatched work; avoid deleting failed rows during finalize retries.
+   - [x] R03.3a Derive exclusive dispositions and engine summaries from persisted data; do not use array length as success.
+   - [x] R03.3b Preserve successful surfaces and classify never-dispatched work; avoid deleting failed rows during finalize retries.
 4. **Propagate the contract.**
-   - [ ] R03.4a Update polling, persisted reports, customer/public dashboards, history, and export schemas together.
+   - [x] R03.4a Update polling, persisted reports, customer/public dashboards, history, and export schemas together.
    - [ ] R03.4b Show partial evidence and recovery actions; prevent “complete” animations or success emails for all-error scans.
 5. **Protect finalization under concurrency.**
    - [ ] R03.5a Finalize atomically or through a fenced idempotent operation; reconcile interrupted materialization.
-   - [ ] R03.5b Mark historical records as legacy where quality cannot be reconstructed; do not invent modern outcome counts.
+   - [x] R03.5b Mark historical records as legacy where quality cannot be reconstructed; do not invent modern outcome counts.
 
 ### Test plan — 18 named cases
 
@@ -282,24 +322,26 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R04. Validate Google payloads before classifying AIO absence
 
+**Current status:** Parser/transport implementation merged. Evidence identity is retained, but that does not establish a durable raw-capture store or production parser-drift alert delivery.
+
 **Priority/dependencies:** P0; harness bootstrap. **Primary code:** `engines/brightdata.js`, `scoring/enginePipeline.js`, fixtures, evidence retention. **Regressions:** A01/A10.
 
 ### Implementation tasks and subtasks
 
 1. **Specify parsing stages.**
-   - [ ] R04.1a Separate transport envelope, recognizable Google SERP, AIO detection, answer blocks, and citations into explicit parse results.
-   - [ ] R04.1b Require affirmative valid-SERP evidence before `valid_no_aio`; unknown schema is not absence.
+   - [x] R04.1a Separate transport envelope, recognizable Google SERP, AIO detection, answer blocks, and citations into explicit parse results.
+   - [x] R04.1b Require affirmative valid-SERP evidence before `valid_no_aio`; unknown schema is not absence.
 2. **Handle supported shapes.**
-   - [ ] R04.2a Preserve block order and reference-index mappings; validate and deduplicate safe citation URLs.
-   - [ ] R04.2b Preserve partial fields with per-field quality; a references-only capture cannot establish a complete text measurement.
+   - [x] R04.2a Preserve block order and reference-index mappings; validate and deduplicate safe citation URLs.
+   - [x] R04.2b Preserve partial fields with per-field quality; a references-only capture cannot establish a complete text measurement.
 3. **Classify provider/access failures.**
-   - [ ] R04.3a Recognize proxy/session, challenge, consent/login, truncated, and malformed results independent of HTTP 200.
-   - [ ] R04.3b Exhaust retry policy before terminal parse failure; the last attempt must satisfy the same validation as the first.
+   - [x] R04.3a Recognize proxy/session, challenge, consent/login, truncated, and malformed results independent of HTTP 200.
+   - [x] R04.3b Exhaust retry policy before terminal parse failure; the last attempt must satisfy the same validation as the first.
 4. **Bound the whole request.**
-   - [ ] R04.4a Apply deadlines to zone lookup, connection, headers, body reading, decoding, and retry delays.
-   - [ ] R04.4b Check remaining chunk/lease budget before dispatch; stop before a probe cannot finish within its envelope.
+   - [x] R04.4a Apply deadlines to zone lookup, connection, headers, body reading, decoding, and retry delays.
+   - [x] R04.4b Check remaining chunk/lease budget before dispatch; stop before a probe cannot finish within its envelope.
 5. **Preserve evidence and monitor drift.**
-   - [ ] R04.5a Save sanitized raw payload/evidence identity, parser version, validation errors, and provider request ID.
+   - [x] R04.5a Save sanitized raw payload/evidence identity, parser version, validation errors, and provider request ID.
    - [ ] R04.5b Version fixture coverage and alert on newly unknown shapes without falling back to manufactured Google text.
 
 ### Test plan — 24 named cases
@@ -337,24 +379,26 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R05. Fix denominator invariance and sample eligibility
 
+**Current status:** Core metric/qualification propagation merged; brand-free observed panels now retain exposure zero. The legacy vendor-eliciting exploratory index remains separate. Compound intent/entity/uncertainty/cohort tasks stay open where the full requirement is not established.
+
 **Priority/dependencies:** P0; R03/R04 and agreed R08 labels. **Primary code:** `scoring/enginePipeline.js`, analytics rollups, normalization, dashboard metrics/export. **Regressions:** A02–A04.
 
 ### Implementation tasks and subtasks
 
 1. **Write and version the metric contract.**
-   - [ ] R05.1a Define mention, citation, recommendation, conditional share, trigger, completion, and observed exposure separately.
-   - [ ] R05.1b Store numerator, denominator, unit, panel/surface/policy version, collection window, and exclusion reasons for each value.
+   - [x] R05.1a Define mention, citation, recommendation, conditional share, trigger, completion, and observed exposure separately.
+   - [x] R05.1b Store numerator, denominator, unit, panel/surface/policy version, collection window, and exclusion reasons for each value.
 2. **Freeze eligibility before observing answers.**
    - [ ] R05.2a Classify panel intent in advance; do not drop brand-free answers to improve a headline.
    - [ ] R05.2b Resolve entities independently of the selected rival list; preserve citation-only evidence in the appropriate metric.
 3. **Implement qualification and uncertainty.**
-   - [ ] R05.3a Apply distinct-prompt minimum and collection gate to the metric's actual denominator, not a larger answered pool.
+   - [x] R05.3a Apply distinct-prompt minimum and collection gate to the metric's actual denominator, not a larger answered pool.
    - [ ] R05.3b Keep raw exploratory ratios labeled; compute suitable confidence intervals and cluster repeated observations by prompt.
 4. **Make comparisons compatible.**
    - [ ] R05.4a Freeze cross-engine cohort/weights; reject incompatible panel, surface, market, model-policy, and metric versions.
-   - [ ] R05.4b Backfill only from surviving evidence; preserve original historical values and show version boundaries.
+   - [x] R05.4b Backfill only from surviving evidence; preserve original historical values and show version boundaries.
 5. **Propagate one calculation everywhere.**
-   - [ ] R05.5a Use shared metric DTOs in storage, rollups, API, dashboard, history, and export.
+   - [x] R05.5a Use shared metric DTOs in storage, rollups, API, dashboard, history, and export.
    - [ ] R05.5b Add numerical examples to methodology; separate rounded display from unrounded stored counts.
 
 ### Test plan — 24 named cases
@@ -392,19 +436,21 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R06. Preserve provenance through every adapter
 
+**Current status:** Core envelope propagation merged. Full context, observed-model accuracy and private evidence lifecycle are not yet accepted.
+
 **Priority/dependencies:** P1; shared contract lands alongside R01/R02. **Primary code:** `engines/openRouterProbe.js`, `openai.js`, `perplexity.js`, `scoring/enginePipeline.js`, prompt-result storage and export. **Regression:** A11.
 
 ### Implementation tasks and subtasks
 
 1. **Define a versioned observation envelope.**
    - [ ] R06.1a Include observation/attempt IDs, requested/returned model, gateway, surface, requested/observed location, language/device/session policy, and capture window.
-   - [ ] R06.1b Add search state (`observed_used/observed_not_used/unknown`), parser version, provider request ID, evidence identities, and cost source/state.
+   - [x] R06.1b Add search state (`observed_used/observed_not_used/unknown`), parser version, provider request ID, evidence identities, and cost source/state.
 2. **Remove field-dropping wrappers.**
    - [ ] R06.2a Return the shared envelope from direct and gateway paths; validate at adapter and persistence boundaries.
    - [ ] R06.2b Preserve actual response identity separately from request configuration; never substitute requested model as observed model.
 3. **Persist field quality.**
-   - [ ] R06.3a Add nullable columns/JSON schema and explicit reasons for unavailable fields; migrate without inventing historic values.
-   - [ ] R06.3b Retain provenance when an answer or citation leg fails independently and when the engine later retries.
+   - [x] R06.3a Add nullable columns/JSON schema and explicit reasons for unavailable fields; migrate without inventing historic values.
+   - [x] R06.3b Retain provenance when an answer or citation leg fails independently and when the engine later retries.
 4. **Protect evidence access and retention.**
    - [ ] R06.4a Keep raw captures private; scope signed access to the owning workspace/observation and record expiration.
    - [ ] R06.4b Redact secrets/private session artifacts before export; report retention deletion as expired evidence, not missing historical measurement.
@@ -439,22 +485,24 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R07. Repair sample isolation and cardinality
 
+**Current status:** Sample manifest/isolation code merged. Eight named browser cases remain required; offline guards do not prove sessionStorage/navigation effects.
+
 **Priority/dependencies:** P1; R03/R05 contracts. **Primary code:** `src/data/mockData.js`, `services/api.js`, dashboard/sample routes, `/demo`, content/scan action handlers. **Regression:** A06.
 
 ### Implementation tasks and subtasks
 
 1. **Create one immutable sample manifest.**
-   - [ ] R07.1a Assign 30 fixed unbranded prompt IDs, four surfaces, fixed illustrative time, fictional entities, and a simulation origin.
-   - [ ] R07.1b Generate 120 observation rows from the Cartesian product; keep diagnostics optional and separate.
+   - [x] R07.1a Assign 30 fixed unbranded prompt IDs, four surfaces, fixed illustrative time, fictional entities, and a simulation origin.
+   - [x] R07.1b Generate 120 observation rows from the Cartesian product; keep diagnostics optional and separate.
 2. **Preserve sample metadata through normalization.**
-   - [ ] R07.2a Support sample flags in raw and already-normalized inputs, storage/handoff, refresh, and export.
+   - [x] R07.2a Support sample flags in raw and already-normalized inputs, storage/handoff, refresh, and export.
    - [ ] R07.2b Compute sample metrics with the current contract; counted-engine labels and headline eligibility must agree.
 3. **Isolate sample effects.**
-   - [ ] R07.3a Guard rerun, generation, publication, history, schedules, and provider calls at both UI and service boundaries.
-   - [ ] R07.3b Offer explicit navigation to a real scan rather than converting a synthetic record into real history.
+   - [x] R07.3a Guard rerun, generation, publication, history, schedules, and provider calls at both UI and service boundaries.
+   - [x] R07.3b Offer explicit navigation to a real scan rather than converting a synthetic record into real history.
 4. **Make sample status unmistakable.**
-   - [ ] R07.4a Render the banner on all sample views and label export/downloads simulated.
-   - [ ] R07.4b Fix missing-history/first-reading text for samples; never imply a current measurement or actual clients.
+   - [x] R07.4a Render the banner on all sample views and label export/downloads simulated.
+   - [x] R07.4b Fix missing-history/first-reading text for samples; never imply a current measurement or actual clients.
 5. **Test persistence and transition.**
    - [ ] R07.5a Version sessionStorage sample records and safely invalidate incompatible prior sample shapes.
    - [ ] R07.5b Verify sample-to-real navigation clears only the handoff state and cannot overwrite real reports.
@@ -486,22 +534,24 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R08. Separate recommendation, first mention, and sentiment
 
+**Current status:** Core judge integration merged. Corpus calibration belongs to R09 and is not established by synthetic relationship fixtures.
+
 **Priority/dependencies:** P1; R06; agree labels before R05 implementation. **Primary code:** `scoring/judge.js`, `aliases.js`, extraction schemas, result-brand storage, report labels. **Regression:** A05.
 
 ### Implementation tasks and subtasks
 
 1. **Define independent labels.**
-   - [ ] R08.1a Store mentioned, relationship (`recommended/compared/discouraged/incidental/uncertain`), first mention order, and explicit list rank separately.
-   - [ ] R08.1b Attach text span offsets/hash, confidence, judge method/version, and null reasons; avoid inventing a rank when none exists.
+   - [x] R08.1a Store mentioned, relationship (`recommended/compared/discouraged/incidental/uncertain`), first mention order, and explicit list rank separately.
+   - [x] R08.1b Attach text span offsets/hash, confidence, judge method/version, and null reasons; avoid inventing a rank when none exists.
 2. **Resolve entities conservatively.**
    - [ ] R08.2a Use approved company/product aliases, verified domains, boundaries, and ambiguity context; support collisions and reused product names.
    - [ ] R08.2b Distinguish quoted user questions, source titles, and answer assertions so echoing a brand is not a recommendation.
 3. **Classify relationships using evidence.**
-   - [ ] R08.3a Scope negation/comparison to the correct entity and clause; retain deterministic fast paths where demonstrably accurate.
+   - [x] R08.3a Scope negation/comparison to the correct entity and clause; retain deterministic fast paths where demonstrably accurate.
    - [ ] R08.3b Escalate uncertain cases to a schema-validated model/human path; unsupported evidence causes abstention, not a confident invented label.
 4. **Make sentiment contextual.**
-   - [ ] R08.4a Score entity-specific statements and mixed sentiment; do not borrow praise/criticism from nearby rivals.
-   - [ ] R08.4b Keep absent sentiment null and explicit negative distinct; document numeric mapping if retained.
+   - [x] R08.4a Score entity-specific statements and mixed sentiment; do not borrow praise/criticism from nearby rivals.
+   - [x] R08.4b Keep absent sentiment null and explicit negative distinct; document numeric mapping if retained.
 5. **Deploy labels without rewriting history.**
    - [ ] R08.5a Version new labels, annotate old position semantics, and update every “rank” label/export consumer.
    - [ ] R08.5b Compare against R09 human evidence before qualifying the output; retain original text and legacy interpretation.
@@ -536,6 +586,8 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 **Repair acceptance:** All 20 pass; A05 cannot produce a false recommendation; labels have valid evidence and version semantics. Quality targets in R09 must pass before presenting classifier conclusions as qualified metrics.
 
 ## R09. Calibrate the production judge and metric contract
+
+**Current status:** Tooling implemented; real calibration and manual decisions remain open.
 
 **Priority/dependencies:** P1; R05/R08. **Primary code:** calibration runner/schema/fixtures, production judge import, evaluation reports. This replaces legacy-helper-only calibration with an auditable evaluation.
 
@@ -586,6 +638,8 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R10. Make geography, language, device, and surface explicit
 
+**Current status:** New helpers implemented; complete production wiring remains open. The P0 observation context freezes the existing geo value, not the entire R10 contract.
+
 **Priority/dependencies:** P1; R06. **Primary code:** `engines/serpGeo.js`, all engine adapters, checkpoint schema, UI/export filters.
 
 ### Implementation tasks and subtasks
@@ -632,6 +686,8 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 **Repair acceptance:** All 16 pass; context is stable end to end, capabilities are explicit, and no requested parameter is promoted to observed fact. Rollback keeps market/surface boundaries in existing records.
 
 ## R11. Recover continuous measurement
+
+**Current status:** Policy helpers implemented; durable scheduled-window production integration and real seven-day soak remain open.
 
 **Priority/dependencies:** P1; R01–R06/R10. **Primary code:** scheduler and worker routes, `scan_schedules`, scan-run ledger, health/alerts. **Problem:** both inspected schedules were disabled; a cron heartbeat did not establish a recurring baseline.
 
@@ -1090,16 +1146,18 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R20. Repair Perceev's own public-site foundation
 
+**Current status:** Technical indexing foundation merged; public proof, real study and deployment qualification remain open.
+
 **Priority/dependencies:** P2; sample work R07; methodology publication depends on qualified R05/R12 behavior. **Primary code:** app metadata/routes, robots/sitemap, hostname configuration, marketing/sample/methodology/use-case pages.
 
 ### Implementation tasks and subtasks
 
 1. **Establish public URL policy.**
    - [ ] R20.1a Confirm the configured preferred production hostname; map aliases/preview deployments and canonical/redirect behavior explicitly.
-   - [ ] R20.1b Set per-page metadata and absolute canonical URLs without treating robots rules as access control.
+   - [x] R20.1b Set per-page metadata and absolute canonical URLs without treating robots rules as access control.
 2. **Implement discovery and indexing intent.**
-   - [ ] R20.2a Serve valid robots/sitemap routes listing intended public URLs, actual update dates, and correct hostnames.
-   - [ ] R20.2b Define portal/account/private-report/preview indexing behavior while preserving real authentication and public report access policy.
+   - [x] R20.2a Serve valid robots/sitemap routes listing intended public URLs, actual update dates, and correct hostnames.
+   - [x] R20.2b Define portal/account/private-report/preview indexing behavior while preserving real authentication and public report access policy.
 3. **Publish accurate product evidence.**
    - [ ] R20.3a Explain sampling, surfaces, locations, failure handling, denominators, and limits based on implemented/deployed/qualified states.
    - [ ] R20.3b Provide focused use cases and substantiated comparisons; verify every competitive claim when authored and never invent clients/results.
@@ -1137,6 +1195,8 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R21. Consolidate production contracts, documentation, and release checks
 
+**Current status:** Bootstrap implemented; release acceptance remains open. Dedicated P0 SQL checks run separately from the generic runner and must not be presented as complete DB-suite/release acceptance.
+
 **Priority/dependencies:** P2 cleanup, with test-harness bootstrap performed first. **Primary code:** package scripts, `.github/workflows/ci.yml`, registry/legacy scoring modules, docs/contracts/runbooks, QA inventory/runner.
 
 ### Implementation tasks and subtasks
@@ -1149,7 +1209,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [ ] R21.2b Select one production engine registry and metric DTO; keep temporary compatibility adapters documented with removal conditions.
 3. **Remove dead paths safely.**
    - [ ] R21.3a Delete unused registries/scorers after import/runtime verification; migrate consumers before removal.
-   - [ ] R21.3b Preserve old data readers/version boundaries; historical values cannot silently adopt the new formulas.
+   - [x] R21.3b Preserve old data readers/version boundaries; historical values cannot silently adopt the new formulas.
 4. **Make checks establish behavior.**
    - [ ] R21.4a Register U/I/D/B/L/M/S jobs; expose skips/blocks and aggregate release evidence without `continue-on-error` laundering.
    - [ ] R21.4b Exercise targeted semantic mutations: inverted quality gate, dropped sample flag, retry success marked incomplete, bypassed tenant filter. Required tests must detect the wrong behavior.

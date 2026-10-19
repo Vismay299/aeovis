@@ -1400,3 +1400,18 @@ the durable queue. Customer content review commits feedback, item status, and
 job status together. `npm run check:uat` checks production variable registration
 and the live migration ledger without printing credentials; sensitive variable
 values still require runtime verification after deployment.
+
+
+## P0 dispatch: migration 027_durable_probe_dispatch
+
+**Implemented; production application unverified.** Apply
+`027_durable_probe_dispatch.sql` after 026 and before deploying the new worker.
+It adds service-only observations, attempts, late receipts, reconciliation,
+provider circuits, canary budgets, and the dispatch pause control. It preserves
+all existing prompt/results and scan readers. The worker refuses dispatch if
+the migration or privileged database is unavailable.
+
+Local disposable PostgreSQL and the CI database job execute actual concurrent
+claims and settlements, customer-role denials, interrupted-worker recovery and
+legacy report projection. These checks do not apply anything to production.
+See [the rollout and rollback runbook](runbooks/p0-provider-dispatch.md).

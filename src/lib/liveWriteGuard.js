@@ -124,6 +124,8 @@ export const WRITABLE_BY_OPT_IN = Object.freeze(["scan_runs", "probe_tasks", "cr
  * for the obvious reason.
  */
 export const NEVER_WRITABLE = Object.freeze([
+  "probe_observations", "probe_attempts", "probe_late_receipts", "probe_reconciliations",
+  "provider_dispatch_circuits", "provider_canary_budgets", "probe_dispatch_control",
   "scans",
   "brand_metrics_daily",
   "scan_jobs",
