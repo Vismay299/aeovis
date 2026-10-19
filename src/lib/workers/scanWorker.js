@@ -78,7 +78,7 @@ import {
 // R03.3a — the honest terminal collection outcome, derived from the persisted
 // rows and never from how many rows the loop processed.
 import { deriveScanOutcome, buildScorePlan, BLOCK_REASONS } from "../scanOutcome.js";
-import { SURFACE_POLICY_VERSION } from "../scoring/metricContract.js";
+import { SURFACE_POLICY_VERSION, METRIC_IDS } from "../scoring/metricContract.js";
 import { configVersion } from "../engines/providerReadiness.js";
 
 const MAX_SOURCING_ATTEMPTS = 3;
@@ -1786,6 +1786,7 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       }
       if (perScanCap != null && stats.cost >= perScanCap) {
         spendCapReached = CHUNK_SKIP_REASONS.SPEND_CAP_PER_SCAN;
+        workingCheckpoint.blocked = { reason: BLOCK_REASONS.SPEND_CAP_PER_SCAN, detail: "Per-scan spend cap reached" };
         console.warn(
           `[scan-chunk] Job ${jobId}: per-scan spend cap $${perScanCap.toFixed(4)} reached ` +
             `(current $${stats.cost.toFixed(4)}). Halting new spend.`
@@ -1795,6 +1796,7 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       }
       if (perDayCap != null && dailySpend >= perDayCap) {
         spendCapReached = CHUNK_SKIP_REASONS.SPEND_CAP_PER_DAY;
+        workingCheckpoint.blocked = { reason: BLOCK_REASONS.SPEND_CAP_PER_DAY, detail: "Daily spend cap reached" };
         console.warn(
           `[scan-chunk] Job ${jobId}: daily spend cap $${perDayCap.toFixed(4)} reached ` +
             `(rolling $${dailySpend.toFixed(4)}). Halting new spend.`
@@ -2355,12 +2357,12 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   let summary;
   let engineSummaries = null;
   let headline = null;
-  let visibilityIndexPct = null;
   let enginesCounted = 0;
   const promptTexts = [...(unbrandedTexts || [])].sort();
   const prompt_set_hash = crypto.createHash("sha256").update(promptTexts.join("|")).digest("hex");
   const prompt_set_id = prompt_set_hash.slice(0, 16);
   const metricContext = {
+    plannedQueries: unbrandedTexts || [],
     panelVersion: prompt_set_hash,
     surfaceVersion: SURFACE_POLICY_VERSION,
     market: checkpoint.geo ?? null,
@@ -2379,11 +2381,16 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     const multiSummary = summarizeMulti({ results, engines: engineSummaries, headline });
     summary = multiSummary.summary;
     engineSummaries = multiSummary.engines;
-    visibilityIndexPct = headline.visibility_index_pct;
     enginesCounted = headline.engines_counted;
   } else {
     const single = summarizeAio(results);
-    summary = single.summary;
+    const slice = summarizeEngineSlice(results, engineNames[0] || "aio", metricContext);
+    headline = computeHeadlineFn([slice], undefined, metricContext);
+    const qualified = summarizeMulti({ results, engines: { [slice.engine]: slice }, headline }).summary;
+    summary = { ...single.summary, ...Object.fromEntries(Object.entries(qualified).filter(([key]) =>
+      ["metric_contract_version", "headline_metric", "headline_pct", "headline_state", "headline_reason",
+        "headline_qualified", "exploratory_index_pct", "distinct_eligible_prompts", "valid_collection_pct",
+        "counted_engines", "excluded_engines", "headline_reweighted", "measurement_context", "metrics"].includes(key))) };
   }
 
   // R03.3a — THE TERMINAL COLLECTION OUTCOME, from the persisted rows.
@@ -2507,9 +2514,12 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
 
   if (isMultiEngine) {
     scanRecord.engines = engineSummaries;
-    scanRecord.visibility_index_pct = visibilityIndexPct;
+    scanRecord.visibility_index_pct = headline.headline_pct;
     scanRecord.engines_counted = enginesCounted;
   }
+  // Existing report/history consumers read this column. Raw scores remain in
+  // summary_stats.exploratory_index_pct; a refused headline stays null here.
+  scanRecord.visibility_pct = headline.headline_pct;
 
   // Fail-loud, crash-recoverable: if a PREVIOUS finalize attempt already got
   // as far as stamping scan_id onto these rows (stampScanIdForJob is
@@ -2699,9 +2709,12 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     dateOnly,
     scanId: savedScanId,
     promptSetId: prompt_set_id,
-    summary,
-    engineSummaries,
-    headline,
+    summary: { ...summary, visibility_pct: headline.headline_pct, share_of_ai_pct: headline.headline_pct },
+    engineSummaries: engineSummaries && Object.fromEntries(Object.entries(engineSummaries).map(([name, slice]) => {
+      const value = slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_pct ?? null;
+      return [name, { ...slice, visibility_pct: value, share_of_ai_pct: value }];
+    })),
+    headline: { ...headline, visibility_index_pct: headline.headline_pct },
     promptResultRows: allRows,
     brandJudgmentRows,
   });

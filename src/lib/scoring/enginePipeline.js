@@ -29,6 +29,7 @@ import {
 } from "./aioConstants.js";
 import { ENGINE_LABELS, formatEngineList } from "../engines/deployedEngines.js";
 import { createObservationEnvelope, SEARCH_STATE } from "../provenance.js";
+import { scanHeadline } from "./scanHeadline.js";
 
 const CHATGPT_CONCURRENCY = 4;
 const PERPLEXITY_CONCURRENCY = 4;
@@ -672,6 +673,16 @@ export const NO_MEASUREMENT_TEXT = "—";
  * }}
  */
 export function describeScanMeasurement(row, { key = "visibility_pct" } = {}) {
+  const headline = (key === "visibility_pct" || key === "visibility_index_pct") ? scanHeadline(row) : null;
+  if (headline) {
+    return {
+      measured: headline.qualified, measuredZero: headline.value === 0,
+      pct: headline.value, text: headline.value === null ? NO_MEASUREMENT_TEXT : `${headline.value}%`,
+      state: headline.state, reason: headline.reason,
+      label: headline.qualified ? (headline.value === 0 ? ENGINE_MEASURED_ZERO_LABEL : null) : "Insufficient evidence",
+      detail: headline.qualified ? null : "The sample does not meet the headline requirements. Raw readings are exploratory.",
+    };
+  }
   const raw = row && typeof row === "object" ? row[key] : undefined;
   const pct = Number.isFinite(raw) ? raw : null;
   const { state, reason } = readScanStateFields(row);
@@ -815,7 +826,7 @@ function resolveEngineMeasurementState({
 /** The prompt ID a row belongs to. Distinct prompt IDs are what the sample gate counts. */
 function promptIdentityOf(row) {
   const id = row?.prompt_id ?? row?.promptId ?? row?.query ?? row?.prompt;
-  return id === null || id === undefined ? null : String(id);
+  return id === null || id === undefined ? null : String(id).trim().toLowerCase();
 }
 
 /**
@@ -988,8 +999,18 @@ function buildSliceMetrics({
   policy = ELIGIBILITY_POLICY_V1,
   options = {},
 }) {
-  const planned = nonBranded.length;
-  const collection = { valid: panel.length, planned };
+  const plannedQueries = Array.isArray(options.plannedQueries)
+    ? new Set(options.plannedQueries.map((q) => String(q).trim().toLowerCase()))
+    : null;
+  const inPlan = (row) => !plannedQueries || plannedQueries.has(String(row.query ?? row.prompt ?? "").trim().toLowerCase());
+  nonBranded = nonBranded.filter(inPlan);
+  panel = panel.filter((r) => inPlan(r) && !r.error);
+  elicitingPool = elicitingPool.filter((r) => inPlan(r) && !r.error);
+  const unique = [...new Map(nonBranded.map((r) => [observationKeyOf(r), r])).values()];
+  const validRows = unique.filter((r) => !r.error && (r.answer_present === true ||
+    (engineName === "aio" && r.serp_state === "valid_serp")));
+  const planned = plannedQueries ? plannedQueries.size : unique.length;
+  const collection = { valid: validRows.length, planned };
   const window = rowsCollectionWindow(panel);
 
   const contextFor = (rosterVersion) =>
@@ -1087,10 +1108,12 @@ function buildSliceMetrics({
       context: conditionalContext,
       policy,
     }),
-    [METRIC_IDS.COMPLETION]: metricFromRows({
+    [METRIC_IDS.COMPLETION]: createMetric({
       metricId: METRIC_IDS.COMPLETION,
-      rows: nonBranded,
-      valueOf: (r) => r.answer_present === true,
+      numerator: collection.valid,
+      denominator: collection.planned,
+      eligiblePromptIds: distinctPromptIds(validRows),
+      collection,
       context: selfContext,
       policy,
     }),
@@ -1102,7 +1125,7 @@ function buildSliceMetrics({
   if (engineName === "aio") {
     metrics[METRIC_IDS.TRIGGER] = metricFromRows({
       metricId: METRIC_IDS.TRIGGER,
-      rows: panel,
+      rows: validRows,
       valueOf: (r) => r.aio_present === true,
       context: selfContext,
       collection,
@@ -1490,7 +1513,7 @@ function headlineContext({ policy, options, cohort }) {
  * denominator — the answers the index was actually counted over — and not off the
  * larger pool of answers that happened to come back (A02's defect, exactly).
  */
-function headlineMetricFor(eligible, { policy, options, cohort }) {
+function headlineMetricFor(eligible, { policy, options, cohort, slices = eligible }) {
   const context = headlineContext({ policy, options, cohort });
   const metricSlices = eligible
     .map((s) => s?.metrics?.[METRIC_IDS.EXPOSURE])
@@ -1540,8 +1563,12 @@ function headlineMetricFor(eligible, { policy, options, cohort }) {
       exclusionCounts.set(exclusion.reason, prior === null ? exclusion.count : prior + exclusion.count);
     }
 
-    const countedValid = measuredNumberOrNull(metric.collection?.valid);
-    const countedPlanned = measuredNumberOrNull(metric.collection?.planned);
+  }
+  // Collection is over every offered surface, including excluded/missing engines.
+  for (const slice of slices) {
+    const metric = slice?.metrics?.[METRIC_IDS.EXPOSURE];
+    const countedValid = measuredNumberOrNull(metric?.collection?.valid);
+    const countedPlanned = measuredNumberOrNull(metric?.collection?.planned);
     if (countedValid === null || countedPlanned === null) collectionComplete = false;
     else {
       valid += countedValid;
@@ -1668,6 +1695,7 @@ export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS, optio
     policy,
     options,
     cohort: eligible.map((s) => s.engine),
+    slices,
   });
 
   return headlineResult({ index: mean, eligible, excludedEngines, metric });

@@ -67,7 +67,9 @@ export function describeHeroTrend(currentHero, prev) {
   // is computeHeadline's output over the slices that WERE measured, so it has
   // no per-engine state of its own to consult, and the `visibility_pct` arm is
   // the same nullable column the history cards read. Absent is absent either way.
-  const prevHero = prev?.raw_results?.visibility_index_pct ?? prev?.visibility_pct ?? null;
+  const hasQualifiedContract = prev?.summary_stats?.metric_contract_version || prev?.raw_results?.summary_stats?.metric_contract_version;
+  const prevHero = hasQualifiedContract ? describeScanMeasurement(prev).pct
+    : (prev?.raw_results?.visibility_index_pct ?? prev?.visibility_pct ?? null);
   if (!Number.isFinite(currentHero) || !Number.isFinite(prevHero)) {
     return {
       trend: null,
@@ -1194,6 +1196,22 @@ export default function DashboardShell({ scan, scanId, error = null }) {
                   {result.promptsTracked ?? result.promptsAnalyzed} tracked prompts returned a live
                   answer. Treat this score with caution.
                 </b>
+              </div>
+            </div>
+          )}
+
+          {result.headlineQualified === false && (
+            <div className="panel" data-testid="headline-qualification">
+              <div className="panel__b">
+                <b>Insufficient evidence for a headline</b>
+                <p>{result.headlineReason === "insufficient_collection"
+                  ? "Too much planned collection is missing."
+                  : "The eligible sample does not meet the headline requirements."}</p>
+                {Number.isFinite(result.exploratoryIndexPct) && <p>
+                  Exploratory reading: {result.exploratoryIndexPct}%. This is not a qualified headline.
+                </p>}
+                {result.headlineMetric && <p>{result.headlineMetric.numerator ?? "—"} of {result.headlineMetric.denominator ?? "—"} eligible observations;
+                  {" "}{result.headlineMetric.distinct_eligible_prompts ?? "—"} distinct prompts.</p>}
               </div>
             </div>
           )}

@@ -490,6 +490,7 @@ test("runFinalizePhase — multi-engine: reconstructs results from `raw` and mat
   // Finalize re-judges each row against the complete roster before scoring.
   // Recompute from those finalized rows and the frozen measurement identity.
   const metricContext = {
+    plannedQueries: checkpoint.unbranded_texts,
     panelVersion: record.prompt_set_hash,
     surfaceVersion: "surface-policy-v1",
     market: checkpoint.geo ?? null,
@@ -506,7 +507,8 @@ test("runFinalizePhase — multi-engine: reconstructs results from `raw` and mat
 
   assert.deepEqual(record.engines.aio, expectedAio);
   assert.deepEqual(record.engines.chatgpt, expectedChatgpt);
-  assert.equal(record.visibility_index_pct, expectedHeadline.visibility_index_pct);
+  assert.equal(record.visibility_index_pct, expectedHeadline.headline_pct);
+  assert.equal(record.summary_stats.exploratory_index_pct, expectedHeadline.visibility_index_pct);
   assert.equal(record.engines_counted, expectedHeadline.engines_counted);
   // R03.3a — summary_stats now ALWAYS carries the versioned terminal collection
   // outcome (the same field the status route, report and history read back).
@@ -550,9 +552,11 @@ test("runFinalizePhase — single engine (aio only): uses summarizeAioResults di
   const expected = summarizeAioResults(raws).summary;
   // R03.3a — summary_stats always carries terminal_outcome now; compare the rest.
   const { terminal_outcome: singleOutcome, ...singleSummaryStats } = record.summary_stats;
-  assert.deepEqual(singleSummaryStats, expected);
+  for (const [key, value] of Object.entries(expected)) assert.deepEqual(singleSummaryStats[key], value, key);
+  assert.equal(singleSummaryStats.headline_qualified, false);
+  assert.equal(singleSummaryStats.exploratory_index_pct, expected.visibility_pct);
   assert.equal(singleOutcome.version, "r03-v1");
-  assert.equal(record.visibility_pct, expected.visibility_pct);
+  assert.equal(record.visibility_pct, null, "six prompts cannot qualify a headline");
 });
 
 test("runFinalizePhase — insertScan throws => the error propagates (never swallowed)", async () => {

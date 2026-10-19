@@ -247,7 +247,7 @@ test("runFinalizePhase — a real insertScan refusal propagates; the job is neve
     getScansByDomain: async () => [],
     getResultBrandsForScan: async () => [],
     enrichCitations: async (rows) => rows,
-    judgeBrandsSymmetric: async () => [],
+    judgeBrandsSymmetric: () => [],
   };
 
   let failure = null;
@@ -369,7 +369,7 @@ function finalizeDepsAndCheckpoint(jobId, insertScanFn) {
     getScansByDomain: async () => [],
     getResultBrandsForScan: async () => [],
     enrichCitations: async (rows) => rows,
-    judgeBrandsSymmetric: async () => [],
+    judgeBrandsSymmetric: () => [],
   };
 
   return { checkpoint, deps, jobUpdates };
