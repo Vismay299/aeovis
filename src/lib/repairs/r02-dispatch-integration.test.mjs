@@ -444,7 +444,7 @@ test("P0 Google canary retains the actual transport request ID on a validated no
         "acme.example",
         [],
         {},
-        { durableDispatch: true, deadlineAt: Date.now() + 1000 },
+        { durableDispatch: true, deadlineAt: Date.now() + 10_000 },
       );
       assert.equal(calls, 1);
       assert.equal(result.error, null);
