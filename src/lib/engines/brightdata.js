@@ -580,9 +580,15 @@ function parseErrorFrom(parsed) {
   );
 }
 
+/** After an empty cookie pool, how long standard SERP is used before rendered mode is retried. */
+export const RENDERED_AIO_RETRY_AFTER_MS = 10 * 60_000;
+let renderedAioUnavailableUntil = 0;
+/** Test seam: forget a remembered empty cookie pool. */
+export function resetRenderedAioMemo() { renderedAioUnavailableUntil = 0; }
+
 export async function brightDataSearch(query, options = {}) {
   const baseTimeoutMs = options.timeout || 60000;
-  const maxAttempts = options.durableDispatch ? 1 : options.attempts ?? 2;
+  let maxAttempts = options.durableDispatch ? 1 : options.attempts ?? 2;
   const backoffMs = options.backoffMs ?? 3000;
   const deadlineAt =
     options.deadlineAt != null
@@ -591,7 +597,14 @@ export async function brightDataSearch(query, options = {}) {
         ? Date.now() + options.deadlineMs
         : null;
   const minDispatchMs = options.minDispatchMs ?? DEFAULT_BRIGHTDATA_MIN_DISPATCH_MS;
-  const wantAio = options.aiOverview !== false;
+  // Bright Data's AI-Overview rendering mode depends on its cookie pool. When
+  // that pool is empty ("No ready cookies") the standard SERP, which still
+  // carries any AI Overview Google served inline, is requested once instead.
+  // The capture mode travels with the result, so a no-AIO reading from the
+  // fallback is never presented as the stronger rendered-mode negative.
+  let wantAio = options.aiOverview !== false;
+  let aioFallback = false;
+  if (wantAio && renderedAioUnavailableUntil > Date.now()) { wantAio = false; aioFallback = true; }
 
   // R04.4b / R04-19 — refuse a probe that cannot finish inside its budget,
   // BEFORE the zone lookup, so neither a control-plane call nor a paid request
@@ -759,6 +772,16 @@ export async function brightDataSearch(query, options = {}) {
           }
         );
         providerError.attempts = attemptsEvidence.slice();
+        const fallbackRemaining = remainingBudget(deadlineAt);
+        if (wantAio && /ready[ _-]?cookies/i.test(sessionErr) &&
+            (fallbackRemaining == null || fallbackRemaining >= minDispatchMs)) {
+          wantAio = false;
+          aioFallback = true;
+          maxAttempts += 1;
+          renderedAioUnavailableUntil = Date.now() + RENDERED_AIO_RETRY_AFTER_MS;
+          lastErr = providerError;
+          continue;
+        }
         if (attempt < maxAttempts) {
           lastErr = providerError;
           await delayWithinDeadline(backoffMs * attempt * 2, deadlineAt);
@@ -813,6 +836,7 @@ export async function brightDataSearch(query, options = {}) {
       const validation = {
         serp_state: parsed.serp_state,
         aio_present: parsed.aio_present,
+        aio_capture_mode: aioFallback ? "standard_serp_fallback" : wantAio ? "rendered_ai_overview" : "standard_serp",
         parser_version: parsed.parser_version || GOOGLE_PAYLOAD_PARSER_VERSION,
         evidence_id: parsed.evidence?.evidence_id ?? null,
         provider_request_id: parsed.evidence?.provider_request_id ?? null,

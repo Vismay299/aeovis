@@ -156,6 +156,10 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     if (parser_version !== undefined) result.parser_version = parser_version;
     if (evidence_id !== undefined) result.evidence_id = evidence_id;
     result.provider_request_id = data.serp_validation?.provider_request_id ?? null;
+    // How the Overview was requested. A no-AIO reading from the standard-SERP
+    // fallback is weaker than one from rendered mode, which waits for
+    // asynchronously loaded Overviews; the row says which it is.
+    result.aio_capture_mode = data.serp_validation?.aio_capture_mode ?? null;
     result.organic = organic;
     if (brandDomain && organic.length > 0) {
       const brandPos = organic.findIndex(
