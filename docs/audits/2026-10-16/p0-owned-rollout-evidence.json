@@ -1,0 +1,140 @@
+{
+  "suite": "actual-owned-customer-worker-rollback",
+  "executed_at": "2026-10-20T05:30:06.431Z",
+  "deployment": "https://aeo-g863popch-vismays-projects-e0c6f290.vercel.app",
+  "run_id": "08455912-ce4f-4e57-b5c9-dddb3fb1c43b",
+  "job_id": "cfc82dbd-c4c1-4a88-b4bf-c590afbab2dc",
+  "scan_id": "72e986e7-3374-4a5c-ba01-b6db585e851a",
+  "approved_scoring_questions": 1,
+  "offered_engines": 4,
+  "rollback_at": "2026-10-20T05:29:41.778Z",
+  "observations": [
+    {
+      "id": "6601cc67f5df898f26941d26d5ee57c4385eaa9ab451cfff8c5bbedc3515da4c",
+      "engine": "aio",
+      "state": "valid_no_aio",
+      "attempt_count": 1,
+      "reason": null
+    },
+    {
+      "id": "29373181ab40e4eafd11b8d4ad39a4b8369e0ff3a402ab5ecfa9983bfd1eb0a7",
+      "engine": "chatgpt",
+      "state": "answered",
+      "attempt_count": 1,
+      "reason": null
+    },
+    {
+      "id": "4084a2434a30bd5dddeb2517dc8c3c2bf59213a0ff3c2fe8eac274b4513bf2d3",
+      "engine": "gemini",
+      "state": "blocked",
+      "attempt_count": 0,
+      "reason": "dispatch_paused"
+    },
+    {
+      "id": "bb3250e3f287efa12f352aab29204fb8d480c1cbe355a448d11ec274d0af11b6",
+      "engine": "perplexity",
+      "state": "blocked",
+      "attempt_count": 0,
+      "reason": "dispatch_paused"
+    }
+  ],
+  "terminal_outcome": {
+    "counts": {
+      "valid": 2,
+      "failed": 0,
+      "planned": 4,
+      "answered": 1,
+      "diagnostics": 0,
+      "valid_no_aio": 1,
+      "not_attempted": 2,
+      "scoring_attempts": 2
+    },
+    "blocked": {
+      "detail": "Dispatch refused before provider request",
+      "reason": "dispatch_paused"
+    },
+    "engines": [
+      {
+        "name": "aio",
+        "state": "complete",
+        "valid": 1,
+        "failed": 0,
+        "planned": 1,
+        "answered": 0,
+        "valid_no_aio": 1,
+        "not_attempted": 0
+      },
+      {
+        "name": "chatgpt",
+        "state": "complete",
+        "valid": 1,
+        "failed": 0,
+        "planned": 1,
+        "answered": 1,
+        "valid_no_aio": 0,
+        "not_attempted": 0
+      },
+      {
+        "name": "gemini",
+        "state": "not_attempted",
+        "valid": 0,
+        "failed": 0,
+        "planned": 1,
+        "answered": 0,
+        "valid_no_aio": 0,
+        "not_attempted": 1
+      },
+      {
+        "name": "perplexity",
+        "state": "not_attempted",
+        "valid": 0,
+        "failed": 0,
+        "planned": 1,
+        "answered": 0,
+        "valid_no_aio": 0,
+        "not_attempted": 1
+      }
+    ],
+    "metrics": {
+      "measured": true,
+      "aio_trigger": {
+        "reason": null,
+        "surfaces": {
+          "aio": {
+            "aio_present": 0,
+            "valid_serps": 1,
+            "trigger_rate_pct": 0
+          }
+        },
+        "available": true,
+        "aio_present": 0,
+        "valid_serps": 1,
+        "trigger_rate_pct": 0,
+        "conditional_headline": null
+      },
+      "mention_measured": false,
+      "valid_observations": 2,
+      "collection_completion_pct": 50
+    },
+    "outcome": "blocked",
+    "version": "r03-v1",
+    "equation": {
+      "holds": true,
+      "expression": "4 = 1 + 1 + 0 + 2"
+    },
+    "failed_reasons": {},
+    "outcome_reason": "blocked_before_completion",
+    "execution_phase": "terminal"
+  },
+  "legacy_execution_status": "complete",
+  "qualified_headline": null,
+  "inflight_result_recorded": true,
+  "post_rollback_dispatches": 0,
+  "historical_records_unchanged": true,
+  "dispatch_control": {
+    "paused": true,
+    "canaries_allowed": true,
+    "brand_allowlist": []
+  },
+  "qualification": "Actual customer login, approved question panel, deployed worker, durable claims and real provider calls. Rollback removed only the owned QA allowlist while the request was in flight. Historical customer records and all paid QA attempts/captures are retained. The one-question panel deliberately cannot qualify a headline. QA Auth users/workspaces and disabled schedule are retained for evidence, not represented as deleted fixtures."
+}

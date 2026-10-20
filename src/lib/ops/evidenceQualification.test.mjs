@@ -16,3 +16,9 @@ test('QA cleanup validates every identity before touching either workspace',asyn
   await assert.rejects(()=>cleanupEvidenceQualification(admin,run,['owned-user','foreign-user']),/ownership mismatch/);
   assert.equal(reads,2);assert.equal(writes,0);
 });
+
+test('QA fixture cleanup refuses a real paid-workflow job before deleting objects, reports or memberships',async()=>{
+  let storageCalls=0;
+  const admin={auth:{admin:{getUserById:async()=>({data:{user:{user_metadata:{p0_qualification_run:run}}},error:null})}},from(table){assert.equal(table,'scan_jobs');return {select(){return this;},in:async()=>({data:[{id:'real-job',query_source:'reviewed_panel'}],error:null})};},storage:{from(){storageCalls++;throw Error('Unexpected mutation');}}};
+  await assert.rejects(()=>cleanupEvidenceQualification(admin,run,['owned-user']),/Real QA scan history is retained/);assert.equal(storageCalls,0);
+});

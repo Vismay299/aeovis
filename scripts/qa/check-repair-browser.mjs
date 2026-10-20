@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { chromium } from "../../worker/node_modules/playwright/index.mjs";
+import {qualifyVisibilityPoint,computeQualifiedVisibilitySummary} from "../../src/lib/analytics/visibilitySeries.js";
 const origin = process.argv[2] || "http://127.0.0.1:3340";
 if (!["127.0.0.1", "localhost"].includes(new URL(origin).hostname))
   throw Error("Browser acceptance requires isolated local app");
@@ -195,6 +196,24 @@ try {
     const stream=await (await pending).createReadStream();let data="";for await(const chunk of stream)data+=chunk;
     assert.deepEqual(JSON.parse(data).raw_results.summary_stats.headline_metric,metric);assert.equal(paid,0);
     passed.push(`R05-22/23-B ${name}: qualified versus exploratory/unknown screen state agrees with exact downloaded metric DTO`);await page.close();
+  }
+  for(const name of ["market-boundary","legacy-unqualified"]){
+    const page=await browser.newPage();let paid=0;
+    const metric=fixtures.complete.raw_results.summary_stats.headline_metric;
+    const older={...metric,context:{...metric.context,market:"us"}};
+    const series=name==="market-boundary" ? [
+      {date:"2026-10-19",engine:"all",...qualifyVisibilityPoint({engine:"all",visibility_pct:100},{headline_metric:older})},
+      {date:"2026-10-20",engine:"all",...qualifyVisibilityPoint({engine:"all",visibility_pct:100},{headline_metric:metric})},
+    ] : [{date:"2026-10-20",engine:"all",...qualifyVisibilityPoint({engine:"all",visibility_pct:100},null)}];
+    await page.route("**/api/**",route=>{if(route.request().method()==="POST"){paid++;return route.abort();}const path=new URL(route.request().url()).pathname;return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(path.endsWith("/metrics")?{series,summary:computeQualifiedVisibilitySummary(series)}:path.includes("/by-id/")?{scan:fixtures.complete}:{scans:[],items:[]})});});
+    await page.goto(`${origin}/dashboard/acme/report-fixture`);
+    await page.getByTestId("trend-comparison-boundary").waitFor();
+    assert.equal(await page.getByTestId("overview-trend").count(),0);
+    assert.match(await page.getByTestId("trend-delta-chip").innerText(),/—/);
+    const value=await page.getByTestId("trend-current-value").innerText();
+    if(name==="market-boundary"){assert.match(value,/100/);assert.match(await page.getByTestId("trend-comparison-boundary").innerText(),/market/i);}
+    else{assert.equal(value,"—");assert.match(await page.getByTestId("trend-comparison-boundary").innerText(),/qualification is unknown/);}
+    assert.equal(paid,0);passed.push(`R05-18/20/24-B ${name}: daily trend withholds incompatible lines/deltas and never replaces explicit unknown with a hero score`);await page.close();
   }
   for (const [name, title, tone] of [["complete", "Scan complete", "success"], ["partial", "Partial collection", "warning"], ["failed", "Collection failed", "error"]]) {
     const page = await browser.newPage();

@@ -3,6 +3,8 @@
  * or in a shape the worker does not document, so nothing here throws and
  * nothing turns an unknown into a number.
  */
+import {terminalOutcomeFromRecord} from "../../../lib/scanOutcome.js";
+import {validateMetric,METRIC_REASON_DETAIL} from "../../../lib/scoring/metricContract.js";
 
 const ENGINE_LABELS = {
   google_ai_overview: "Google AI Overviews",
@@ -28,6 +30,26 @@ export function finiteNumber(value) {
 export function roundedPct(value) {
   const n = finiteNumber(value);
   return n === null ? null : Math.round(n);
+}
+
+export function qualifiedMetricValue(metric){
+  const value=finiteNumber(metric?.qualified_pct),raw=finiteNumber(metric?.value_pct);
+  return metric?.qualified===true && validateMetric(metric).valid && value!==null && value>=0 && value<=100 && raw!==null && Math.abs(value-raw)<=0.05 ? value : null;
+}
+
+export function customerReportQuality(scan){
+  const metrics=scan?.summary_stats?.metrics || {};
+  return {outcome:terminalOutcomeFromRecord(scan),headline:qualifiedMetricValue(scan?.summary_stats?.headline_metric),share:qualifiedMetricValue(metrics.share_of_voice),citation:qualifiedMetricValue(metrics.owned_citation)};
+}
+
+export function engineMetricReading(summary,legacyPct){
+  const metric=summary?.metrics?.observed_exposure;
+  if(!metric)return {pct:summary?.data_source_issue ? null : legacyPct,legacy:true,incomplete:summary?.data_source_issue===true,note:"Legacy reading: qualification is unknown."};
+  const valid=finiteNumber(metric.collection?.valid),planned=finiteNumber(metric.collection?.planned);
+  const pct=qualifiedMetricValue(metric);
+  return {pct,legacy:false,incomplete:valid!==null && planned>0 ? valid<planned : summary?.data_source_issue===true,
+    note:pct===null ? METRIC_REASON_DETAIL[metric.qualified_reason] || "No qualified measurement is available." : null,
+    exploratory:finiteNumber(metric.value_pct),numerator:metric.numerator,denominator:metric.denominator};
 }
 
 export function engineLabel(engine) {
@@ -74,7 +96,7 @@ export function readEngineScores(engineScores, engines) {
     entries.forEach(([name, slice]) => {
       if (!name || !isRecord(slice)) return;
       const pct = finiteNumber(slice.visibility_pct);
-      if (pct !== null || slice.data_source_issue === true || slice.insufficient_sample === true) rows.push({ name: String(name), pct });
+      if (pct !== null || slice.data_source_issue === true || slice.insufficient_sample === true || isRecord(slice.metrics?.observed_exposure)) rows.push({ name: String(name), pct });
     });
   } else if (isRecord(engineScores)) {
     Object.entries(engineScores).forEach(([name, value]) => {

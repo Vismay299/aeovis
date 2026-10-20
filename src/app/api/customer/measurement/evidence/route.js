@@ -26,6 +26,7 @@ export async function GET(request) {
     .maybeSingle();
   if (readError) return fail("Could not read evidence", 503);
   if (!capture) return fail("Evidence unavailable", 404);
+  if(capture.reason==="redaction_retracted")return fail("This capture was withdrawn because its redaction could not be verified. The measurement is retained.",410);
   if (capture.state !== "stored" && capture.state !== "expired")
     return fail("This capture was not stored. The observation has incomplete evidence.",409);
   const remaining = Date.parse(capture.expires_at) - Date.now();

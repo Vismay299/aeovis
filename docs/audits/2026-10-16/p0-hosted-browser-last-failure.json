@@ -1,19 +1,12 @@
 {
   "suite": "actual-hosted-auth-storage-browser",
-  "executed_at": "2026-10-20T05:06:57.517Z",
-  "deployment": "https://aeo-kofkixzdr-vismays-projects-e0c6f290.vercel.app",
+  "executed_at": "2026-10-20T05:20:38.569Z",
+  "deployment": "https://aeo-g863popch-vismays-projects-e0c6f290.vercel.app",
   "outcome": "failed",
   "passed": [
-    "Anonymous evidence access and privileged QA preparation are refused before side effects",
-    "Actual customer login/browser opens its owned private JSON capture; expired and failed uploads remain distinct",
-    "Two actual authenticated tenants remain isolated in history, evidence signing and direct private Storage access",
-    "actual hosted private JSON capture",
-    "actual bucket rejection retained as write_failed",
-    "fresh signed URL readable",
-    "expired signed URL refused",
-    "retention removed only two QA objects and persisted expiry"
+    "Anonymous evidence access and privileged QA preparation are refused before side effects"
   ],
-  "failed_stage": "expired evidence history refresh",
+  "failed_stage": "owner browser sign-in",
   "error_type": "Error",
   "code": "browser_operation_failed",
   "paid_requests": 0,

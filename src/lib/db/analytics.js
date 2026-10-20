@@ -710,6 +710,30 @@ export async function getBrandMetricsSeries(brand, { from, to, engine = "all" } 
   return data || [];
 }
 
+// Fetch only measurement metadata, never answer text or raw provider payloads.
+// scan_id was historically nullable and has no foreign key: missing sources
+// therefore remain explicitly legacy/unknown rather than being synthesized.
+export async function getBrandMetricSources(scanIds, engine = "all", deps = {}) {
+  if (!["all", "aio", "chatgpt", "gemini", "perplexity"].includes(engine))
+    throw Error("Invalid metric source engine");
+  const ids = [...new Set((scanIds || []).filter(id => typeof id === "string" &&
+    /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)))];
+  if (!ids.length) return [];
+  const client = resolveClient(deps);
+  // Memory mode keeps no durable reports, so every point stays legacy/unknown.
+  if (!client) return [];
+  const projection = "id,headline_metric:raw_results->summary_stats->headline_metric" +
+    (engine === "all" ? "" : `,engine_metric:raw_results->engines->${engine}->metrics->observed_exposure`);
+  const batches = [];
+  for (let i = 0; i < ids.length; i += 100) batches.push(ids.slice(i, i + 100));
+  const results = await Promise.all(batches.map(async batch => {
+    const {data,error} = await client.from("scans").select(projection).in("id",batch);
+    if(error) throw error;
+    return data || [];
+  }));
+  return results.flat();
+}
+
 // ---------------------------------------------------------------------------
 // scan_schedules
 // ---------------------------------------------------------------------------

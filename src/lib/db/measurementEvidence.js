@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { supabase } from "../db.js";
 import { redactSecrets } from "../provenance.js";
 import { EVIDENCE_BUCKET } from "../evidenceRetention.js";
+import {evidenceRedactionStatus} from "../evidenceRedaction.js";
 
 export const EVIDENCE_SCHEMA = "measurement-evidence-v1";
 export const MAX_EVIDENCE_BYTES = 2_000_000;
@@ -34,6 +35,7 @@ export function evidenceDocument({
 }) {
   const doc = redactSecrets({
     schema: EVIDENCE_SCHEMA,
+    redaction_version: "structured-json-v2",
     provider,
     surface,
     provider_request_id: requestId,
@@ -42,6 +44,7 @@ export function evidenceDocument({
     payload,
   });
   const body = JSON.stringify(doc);
+  if(!evidenceRedactionStatus(doc).safe)throw new Error("Evidence redaction could not be verified");
   if (Buffer.byteLength(body) > MAX_EVIDENCE_BYTES)
     throw new Error("Provider evidence exceeds the capture limit");
   return {

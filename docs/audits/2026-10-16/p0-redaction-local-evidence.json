@@ -1,0 +1,19 @@
+{
+  "executed_at": "2026-10-20T05:45:21.749Z",
+  "provider_requests": 2,
+  "checks": [
+    {
+      "sha256": "6ab898d76e1c167cd0799d50b67aa031ca44469b23d4c83f7017bc154641ae50",
+      "redaction_version": "structured-json-v2",
+      "parseable_transport": true,
+      "redaction_verified": true
+    },
+    {
+      "sha256": "19bf5b8701387df64974403c15f4ad37998fc9f96b25e81108182a6ba3c870bc",
+      "redaction_version": "structured-json-v2",
+      "parseable_transport": true,
+      "redaction_verified": true
+    }
+  ],
+  "qualification": "Actual new Google failure response captures remain parseable after structured redaction. The provider returned capacity failures, so this does not qualify fresh positive AIO/no-AIO fidelity. No raw bodies were printed."
+}

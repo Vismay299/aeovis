@@ -34,18 +34,18 @@ export async function GET(request) {
     );
   const ids=observations.data.map(o=>o.id);
   const evidence=ids.length ? await admin.from("measurement_evidence")
-    .select("observation_id,attempt_token,capture_index,state,expires_at")
+    .select("observation_id,attempt_token,capture_index,state,expires_at,reason")
     .in("observation_id",ids) : {data:[],error:null};
   if(evidence.error)return NextResponse.json({error:"Could not load private evidence metadata"},{status:503});
   const captureView=o=>(evidence.data || []).filter(c=>c.observation_id===o.id && c.attempt_token===o.result?.attempt_id)
-    .map(c=>({index:c.capture_index,state:c.state==="stored" && (!Number.isFinite(Date.parse(c.expires_at)) || Date.parse(c.expires_at)<=Date.now()) ? "expired" : c.state}));
+    .map(c=>({index:c.capture_index,reason:c.reason||null,state:c.state==="stored" && (!Number.isFinite(Date.parse(c.expires_at)) || Date.parse(c.expires_at)<=Date.now()) ? "expired" : c.state}));
   return NextResponse.json(
     {
       observations: observations.data.map((o) => ({
         ...o,
         result: undefined,
         provenance: o.result?.provenance || null,
-        evidence_state: captureView(o).some(c=>c.state==="expired") ? "expired" : captureView(o).some(c=>c.state!=="stored") ? "incomplete" : o.result?.evidence_state || "legacy_unknown",
+        evidence_state: captureView(o).some(c=>c.reason==="redaction_retracted") ? "withdrawn" : captureView(o).some(c=>c.state==="expired") ? "expired" : captureView(o).some(c=>c.state!=="stored") ? "incomplete" : o.result?.evidence_state || "legacy_unknown",
         attempt_id: o.result?.attempt_id || null,
         captures: captureView(o),
       })),

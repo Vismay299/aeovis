@@ -6,6 +6,7 @@ import React from "react";
 import { compileJsx, renderToHtml, textOf } from "../../lib/renderHarness.mjs";
 import * as scanProgress from "../../lib/scanProgress.js";
 import * as reportData from "./scans/reportData.js";
+import {createMetric} from "../../lib/scoring/metricContract.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const noop = () => {};
@@ -213,6 +214,16 @@ test("engine visibility uses current worker summaries, including measured zero, 
   assert.deepEqual(reportData.readEngineScores(null, [{ engine: "chatgpt", visibility_pct: 12 }]), [{ name: "chatgpt", pct: 12 }]);
 });
 
+test("R05 customer report withholds tiny raw 100 but preserves a qualified zero and threshold-qualified partial collection",()=>{
+  const metric=(n,planned=n)=>createMetric({metricId:"observed_exposure",numerator:n===5?5:0,denominator:n,eligiblePromptIds:Array.from({length:n},(_,i)=>`q-${i}`),collection:{valid:n,planned}});
+  const thin=reportData.engineMetricReading({visibility_pct:100,metrics:{observed_exposure:metric(5)}},100);
+  assert.equal(thin.pct,null);assert.equal(thin.exploratory,100);
+  assert.equal(reportData.engineMetricReading({metrics:{observed_exposure:metric(30)}},100).pct,0);
+  const partial=reportData.engineMetricReading({metrics:{observed_exposure:metric(29,30)}},100);
+  assert.equal(partial.pct,0);assert.equal(partial.incomplete,true);
+  assert.equal(reportData.customerReportQuality({visibility_pct:100}).headline,null);
+});
+
 test("the report renders its By engine card from the actual worker payload shape", async (t) => {
   const lifecycle = createLifecycle();
   t.after(() => lifecycle.close());
@@ -341,4 +352,99 @@ test("a completed healthy scan with no elicited brands renders an unmeasured his
   assert.match(html, /aria-label="AI visibility: not measured"/);
   assert.match(html, /pv-progress--unmeasured/);
   assert.doesNotMatch(html, /pv-progress--indeterminate|pv-progress__fill/);
+});
+
+// Real finalizer output, read back through the customer report API's projection.
+async function finalizedReport(valid, planned = 30, mentions = valid) {
+  const { runFinalizePhase } = await import("../../lib/workers/scanWorker.js");
+  const { makeMemoryScanBackend } = await import("../../lib/demo/memoryScanBackend.js");
+  const backend = makeMemoryScanBackend(), jobId = `portal-${valid}-${planned}-${mentions}`;
+  const queries = Array.from({ length: planned }, (_, i) => `Buyer question ${i}`);
+  await backend.deps.upsertPromptResults(queries.map((query, i) => ({
+    id: `result-${i}`, job_id: jobId, engine: "chatgpt", query, answered: i < valid,
+    raw: { engine: "chatgpt", prompt: query, answer_present: i < valid, text: i < valid ? (i < mentions ? "Acme is an option." : "A general answer with no vendor named.") : "",
+      error: i < valid ? null : "Fixture provider timeout", visible: i < valid && i < mentions, brand_mentioned_in_text: i < valid && i < mentions,
+      brand_cited: false, references: [], brands: [], cost: null },
+  })));
+  const job = await runFinalizePhase(jobId, { brand: "Acme", url: "https://acme.example", prompt_key: "acme.example", competitors: [], engines: ["chatgpt"],
+    queries: queries.map((text) => ({ text })), unbranded_texts: queries.map((q) => q.toLowerCase()), geo: "in", stats: {}, model_policy_version: "fixture-only" },
+  { ...backend.deps, resolveEnabledEngines: () => [{ name: "chatgpt" }], extractCompetitors: async () => [] });
+  const raw = job.run_record;
+  return { id: jobId, brand: "Acme", visibility_pct: raw.visibility_pct, summary_stats: raw.summary_stats ?? null, prompts_tracked: raw.prompts_tracked, prompts_mentioned: raw.prompts_mentioned,
+    engines: raw.engines || null, engine_scores: raw.engine_scores || null, competitors: [], share_of_voice_pct: raw.share_of_voice_pct ?? null, brand_citation_share_pct: raw.brand_citation_share_pct ?? null };
+}
+
+async function renderCustomerReport(t, scan) {
+  const lifecycle = createLifecycle();
+  t.after(() => lifecycle.close());
+  const body = { scan, results: [] };
+  t.mock.method(globalThis, "fetch", async () => response(200, body));
+  const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["next/link", { __esModule: true, default: "a" }]]), autoNull: ["lucide-react"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const { default: ReportPage } = await compileJsx(path.join(here, "../../app/portal/scans/[scanId]/page.jsx"), {
+    modules: new Map([
+      ["react", lifecycle.react], ["next/navigation", { useParams: () => ({ scanId: scan.id }) }],
+      ["@/components/portal/PortalShell", { usePortal: () => ({ redirectToLogin: noop }) }],
+      ["@/components/portal/ui", ui], ["@/components/portal/scans/ReportCards", cards],
+      ["@/components/portal/scans/reportData", reportData], ["@/components/portal/scans/scans.css", {}],
+    ]), autoNull: ["lucide-react"],
+  });
+  lifecycle.setRender(() => ReportPage()); await lifecycle.settle();
+  const outcome = find(lifecycle.output, (node) => node.props?.["data-testid"] === "customer-collection-outcome");
+  const banner = find(outcome, (node) => node.type === ui.Banner);
+  const stat = (label) => find(lifecycle.output, (node) => node.type === ui.Stat && node.props.label === label)?.props.value;
+  const card = find(lifecycle.output, (node) => node.type === cards.EngineScoresCard);
+  return {
+    body, banner: banner && { title: banner.props.title, text: [].concat(banner.props.children).join("") },
+    visibility: stat("AI visibility"), engineText: card ? textOf(renderToHtml(cards.EngineScoresCard, card.props)) : "",
+    download: find(outcome, (node) => node.type === ui.Button)?.props.onClick,
+  };
+}
+
+test("R05 customer report page shows honest terminal counts, withholds a thin 100, keeps a measured zero, and labels legacy unknown", async (t) => {
+  const thin = await renderCustomerReport(t, await finalizedReport(5, 5));
+  assert.equal(thin.visibility, null, "a 5-observation 100% must not become the headline");
+  assert.match(thin.engineText, /Exploratory reading: 100% \(5 of 5 eligible observations\); headline withheld/);
+  assert.equal(thin.engineText.split("100%").length - 1, 1, "100% appears only in the exploratory note, never as the engine score");
+
+  const zero = await renderCustomerReport(t, await finalizedReport(30, 30, 0));
+  assert.equal(zero.visibility, 0, "a qualified zero is a measurement, not missing data");
+  assert.match(zero.banner.title, /Collection: complete/);
+  assert.match(zero.banner.text, /30 of 30 valid observations: 30 answered/);
+
+  const partialScan = await finalizedReport(29);
+  const partial = await renderCustomerReport(t, partialScan);
+  const counts = partialScan.summary_stats.terminal_outcome.counts;
+  assert.match(partial.banner.title, /Collection: partial/);
+  assert.ok(partial.banner.text.includes(`${counts.valid} of ${counts.planned} valid observations`));
+  assert.ok(partial.banner.text.includes(`${counts.failed} failed`));
+  assert.match(partial.engineText, /Partial collection/);
+
+  const failed = await renderCustomerReport(t, await finalizedReport(0));
+  assert.match(failed.banner.title, /Collection: failed/);
+  assert.equal(failed.visibility, null);
+
+  const legacy = await renderCustomerReport(t, { id: "legacy-scan", brand: "Acme", visibility_pct: 87, summary_stats: null, engines: { chatgpt: { visibility_pct: 87 } }, engine_scores: null, competitors: [] });
+  assert.match(legacy.banner.title, /Collection: legacy/);
+  assert.match(legacy.banner.text, /quality is unknown/);
+  assert.equal(legacy.visibility, null, "a historical scalar is not presented as a qualified headline");
+  assert.match(legacy.engineText, /Legacy reading: qualification is unknown/);
+});
+
+test("R05 customer report download is the exact report DTO the page rendered", async (t) => {
+  const scan = await finalizedReport(5, 5);
+  const view = await renderCustomerReport(t, scan);
+  let blob, filename;
+  const link = { click() { filename = this.download; } };
+  t.mock.method(URL, "createObjectURL", (value) => { blob = value; return "blob:fixture"; });
+  t.mock.method(URL, "revokeObjectURL", noop);
+  globalThis.document = { createElement: () => link };
+  t.after(() => { delete globalThis.document; });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  view.download();
+  assert.equal(filename, `measurement-${scan.id}.json`);
+  const downloaded = JSON.parse(await blob.text());
+  assert.deepEqual(downloaded, JSON.parse(JSON.stringify(view.body)));
+  assert.deepEqual(downloaded.scan.summary_stats.headline_metric, scan.summary_stats.headline_metric);
+  assert.deepEqual(downloaded.scan.summary_stats.terminal_outcome, scan.summary_stats.terminal_outcome);
 });

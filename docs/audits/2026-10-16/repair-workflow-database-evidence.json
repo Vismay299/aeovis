@@ -1,6 +1,6 @@
 {
   "suite": "real-postgresql-repair-workflows",
-  "executed_at": "2026-10-20T05:05:28.820Z",
+  "executed_at": "2026-10-20T06:26:49.318Z",
   "database": "isolated-loopback-qa",
   "passed": [
     "R14-D: competing panel edits have one immutable version; cross-tenant reads and writes denied",
@@ -12,7 +12,8 @@
     "R06-D: evidence, check reservations and provider incidents have no customer or anonymous direct grants",
     "R02-D: paused rollout admits one owned QA workspace and bounded canaries; rollback blocks new attempts but accepts in-flight settlement",
     "R04-D: private evidence bucket accepts JSON and the read-only storage contract is present",
-    "QA-D: last-owner protection remains active and only validated fixture membership can be demoted for workspace cleanup"
+    "QA-D: last-owner protection remains active and only validated fixture membership can be demoted for workspace cleanup",
+    "R05-19/20-D: repeated daily materialization retains one versioned zero; historical scalars remain unqualified"
   ],
   "failures": [],
   "qualification": "Only the listed database behaviors; hosted Auth/Storage and browser acceptance are separate."
