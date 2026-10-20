@@ -483,3 +483,26 @@ test("the finalizer stores the planned question list in panel order with the pla
   assert.deepEqual(plannedQuestions([{ text: "Best CRM?" }, { text: "Acme pricing" }, "Best ERP?"], ["best crm?", "best erp?"], ["aio"]), { engines: ["aio"], prompts: ["Best CRM?", "Best ERP?"] });
   assert.ok(scan);
 });
+
+test("the Google card states the AI Overview trigger count from the terminal outcome, not '0 questions answered'", async () => {
+  const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const metric = createMetric({ metricId: "observed_exposure", numerator: null, denominator: 0, eligiblePromptIds: [], collection: { valid: 26, planned: 30 } });
+  const engines = { aio: { metrics: { observed_exposure: metric }, non_branded_queries: 30, non_branded_with_answer: 0, errored_queries: 4, data_source_issue: true } };
+  const terminalOutcome = { engines: [{ name: "aio", planned: 30, valid: 26, answered: 0, valid_no_aio: 26, failed: 4, not_attempted: 0 }] };
+  const text = textOf(renderToHtml(cards.EngineScoresCard, { engineScores: null, engines, terminalOutcome }));
+  assert.match(text, /AI Overview shown on 0 of 26 valid Google searches · 4 searches could not be collected/);
+  assert.doesNotMatch(text, /0 of 30 questions answered/);
+});
+
+test("multi-engine reports count questions named by any engine, once per question", async () => {
+  const { questionsNamingBrand } = await import("../../lib/workers/scanWorker.js");
+  const rows = [
+    { query: "Best tees?", engine: "aio", raw: { visible: false } },
+    { query: "Best tees?", engine: "chatgpt", mentioned: true, raw: {} },
+    { query: "best tees?", engine: "gemini", raw: { brand_cited: true } },
+    { query: "Garment dyed?", engine: "perplexity", raw: { error: "timeout", brand_mentioned_in_text: true } },
+    { query: "Drop shoulder?", engine: "gemini", raw: { brand_mentioned_in_text: false } },
+  ];
+  assert.equal(questionsNamingBrand(rows), 1);
+});

@@ -1186,6 +1186,20 @@ export function deferredResumeWaitMs(resumeAt, nowMs, chunkStartMs) {
   return Math.max(1, Math.min(dueAt - nowMs, remaining));
 }
 
+/** Distinct scoring questions on which at least one engine's valid answer named or cited the brand. */
+export function questionsNamingBrand(rows) {
+  const named = new Set();
+  for (const row of rows || []) {
+    const raw = row.raw || {};
+    if (row.error || raw.error) continue;
+    if (row.mentioned === true || row.brand_cited === true || raw.visible === true ||
+        raw.brand_mentioned_in_text === true || raw.brand_cited === true)
+      named.add(String(row.query || raw.prompt || "").toLowerCase().trim());
+  }
+  named.delete("");
+  return named.size;
+}
+
 /** Planned scoring questions in panel order, in their original wording. */
 export function plannedQuestions(queries, unbrandedTexts, engines) {
   const scoring = new Set((unbrandedTexts || []).map((t) => String(t).toLowerCase().trim()));
@@ -2524,7 +2538,10 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     presence_rate_pct: summary.presence_rate_pct,
     mention_rate_pct: summary.mention_rate_pct,
     prompts_tracked: (unbrandedTexts || []).length,
-    prompts_mentioned: summary.visible_non_branded,
+    // Multi-engine: questions on which ANY engine named the brand. The legacy
+    // summary field is the primary (AIO) slice's, so one engine without an
+    // Overview used to report "0 of N" although other engines named the brand.
+    prompts_mentioned: isMultiEngine ? questionsNamingBrand(scoringRows) : summary.visible_non_branded,
     // Every planned scoring question and surface, so a report can list the
     // questions that produced no row (not attempted, blocked) by name, not
     // only as a count.
