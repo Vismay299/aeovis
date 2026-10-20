@@ -442,7 +442,7 @@ export default function MeasurementPage() {
                         Open private response capture {c.index + 1}
                       </a>
                     ) : (
-                      c.state === "expired" ? "Raw capture expired; the measurement is retained." : c.state === "write_failed" ? "Capture unavailable because the storage upload failed." : "Capture is not yet available."
+                      c.reason === "redaction_retracted" ? "Capture withdrawn because redaction could not be verified; the measurement is retained." : c.state === "expired" ? "Raw capture expired; the measurement is retained." : c.state === "write_failed" ? "Capture unavailable because it could not be stored safely." : "Capture is not yet available."
                     )}
                   </p>
                 ))}

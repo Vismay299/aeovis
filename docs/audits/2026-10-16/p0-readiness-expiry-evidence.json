@@ -1,0 +1,28 @@
+{
+  "suite": "actual-hosted-canary-replay-with-frozen-clock",
+  "executed_at": "2026-10-20T05:19:30.104Z",
+  "source_deployment": "https://aeo-g863popch-vismays-projects-e0c6f290.vercel.app",
+  "ttl_ms": 3600000,
+  "passed": [
+    {
+      "engine": "chatgpt",
+      "observed_at": "2026-10-20T04:59:04.195967+00:00",
+      "expires_at": "2026-10-20T05:59:04.195Z",
+      "post_expiry_state": "stale"
+    },
+    {
+      "engine": "gemini",
+      "observed_at": "2026-10-20T04:59:16.870227+00:00",
+      "expires_at": "2026-10-20T05:59:16.870Z",
+      "post_expiry_state": "stale"
+    },
+    {
+      "engine": "perplexity",
+      "observed_at": "2026-10-20T04:59:24.2662+00:00",
+      "expires_at": "2026-10-20T05:59:24.266Z",
+      "post_expiry_state": "stale"
+    }
+  ],
+  "legacy_health_fields_present": true,
+  "qualification": "Actual current hosted health/canary records replayed through the real readiness resolver with the clock set just past each expiry. This is not an elapsed-hour claim or a rollback deployment. No provider calls or stored timestamp changes."
+}

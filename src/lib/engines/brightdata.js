@@ -710,7 +710,7 @@ export async function brightDataSearch(query, options = {}) {
         const asText = parseGoogleSerp(raw);
         attemptsEvidence.push(evidenceRecord(attempt, asText));
         const decodeError = new BrightDataParseError(
-          `Bright Data response was not valid JSON: ${parseErr.message}`,
+          "Bright Data response was not valid JSON.",
           {
             reason: "json_decode_error",
             serp_state: SERP_STATE.MALFORMED,

@@ -1,0 +1,18 @@
+{
+  "executed_at": "2026-10-20T05:41:08.383Z",
+  "results": [
+    {
+      "sha256": "b35cdd3e3910ea3f60b610849769cc5d20a871cccb6756af0ab42f60f9aee9d5",
+      "status": "withdrawn",
+      "reason": "malformed_json_capture",
+      "measurement_metadata_retained": true
+    },
+    {
+      "sha256": "1ddfd01479a5f8da7f93b58ab9659f695f7a4e2f4274995a3d086819e134c612",
+      "status": "withdrawn",
+      "reason": "malformed_json_capture",
+      "measurement_metadata_retained": true
+    }
+  ],
+  "qualification": "Only hash-verified, manifest-referenced local QA capture files were inspected. Unsafe raw files were removed; historical measurement metadata and hashes remain. No customer files or provider settings changed."
+}

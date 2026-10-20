@@ -34,9 +34,16 @@ export const LOCATION_VERIFICATION = Object.freeze({
  */
 const REDACTION_PATTERNS = [
   /Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi,
-  /(?:api[_-]?key|secret|password|token|authorization)["']?\s*[:=]\s*["']?[A-Za-z0-9\-._~+/]+=*["']?/gi,
-  /(?:cookie|set-cookie)["']?\s*[:=]\s*["']?[^"';\n]+["']?/gi,
+  /(?:api[_-]?key|secret|password|token|authorization)["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}]+)/gi,
+  // Every ';'-separated cookie pair, but no further: callers also redact
+  // whitespace-collapsed page text, where "to end of line" means the document.
+  /(?:cookie|set-cookie)["']?\s*[:=]\s*(?:"[^"\r\n]*"|[^\s"';])*(?:\s*;\s*(?:"[^"\r\n]*"|[^\s"';])*)*/gi,
 ];
+
+export function isSensitiveEvidenceKey(key) {
+  const lower=String(key).toLowerCase();
+  return ["secret","key","token","auth","cookie"].some(part=>lower.includes(part));
+}
 
 /**
  * Redacts secrets, auth headers, and session tokens from provider bodies or logs.
@@ -44,6 +51,13 @@ const REDACTION_PATTERNS = [
 export function redactSecrets(data) {
   if (data === null || data === undefined) return data;
   if (typeof data === "string") {
+    // Provider transports often put JSON inside a JSON string. Redact parsed
+    // fields first, including nested string bodies, so quoted cookies are
+    // removed completely and the evidence remains parseable JSON.
+    if (/^\s*[\[{]/.test(data)) {
+      try { return JSON.stringify(redactSecrets(JSON.parse(data))); }
+      catch { /* Never expose the source through a JSON parse exception. */ }
+    }
     let sanitized = data;
     for (const pattern of REDACTION_PATTERNS) {
       sanitized = sanitized.replace(pattern, "[REDACTED]");
@@ -56,14 +70,7 @@ export function redactSecrets(data) {
   if (typeof data === "object") {
     const out = {};
     for (const [k, v] of Object.entries(data)) {
-      const lower = k.toLowerCase();
-      if (
-        lower.includes("secret") ||
-        lower.includes("key") ||
-        lower.includes("token") ||
-        lower.includes("auth") ||
-        lower.includes("cookie")
-      ) {
+      if (isSensitiveEvidenceKey(k)) {
         out[k] = "[REDACTED]";
       } else {
         out[k] = redactSecrets(v);

@@ -2,6 +2,7 @@ import { TrendChart, DeltaChip } from "@/components/perceev/charts";
 import { formatPercent, isFiniteNumber } from "@/components/perceev/charts/chartMath";
 import { Skeleton } from "@/components/perceev/Skeleton";
 import { SectionStrap } from "./SectionStrap";
+import { comparableVisibilityTail } from "@/lib/analytics/visibilitySeries";
 
 /**
  * Overview's "Visibility Trend" block (P1.4). Wraps the finished TrendChart
@@ -26,16 +27,19 @@ export const VisibilityTrendPanel = ({ metrics, heroScore }) => {
   const series = status === "ready" && Array.isArray(metrics.series) ? metrics.series : [];
 
   // Prefer the metrics endpoint's own latest point (the same number the
-  // chart plots); fall back to the scan's own hero score — already loaded,
-  // no fetch required — only when the endpoint has nothing to say yet.
-  const currentValue = isFiniteNumber(summary?.latest_visibility_pct)
-    ? summary.latest_visibility_pct
-    : isFiniteNumber(heroScore)
-    ? heroScore
-    : null;
+  // chart plots). An explicitly withheld latest reading stays unknown; the
+  // scan's hero is a fallback only before history is loaded or when it is empty.
+  const currentValue = status === "ready" && series.length > 0
+    ? isFiniteNumber(summary?.latest_visibility_pct) ? summary.latest_visibility_pct : null
+    : isFiniteNumber(heroScore) ? heroScore : null;
 
-  const hasTrend = status === "ready" && series.length >= 2;
-  const showEmptyState = status === "error" || (status === "ready" && series.length < 2);
+  const chartSeries = comparableVisibilityTail(series);
+  const hasTrend = status === "ready" && chartSeries.length >= 2;
+  const showEmptyState = status === "error" || (status === "ready" && !hasTrend);
+  const explanation = series.at(-1)?.metric_state === "legacy_unknown"
+    ? "This historical value is retained, but its qualification is unknown."
+    : summary?.comparison?.comparable === false && series.length >= 2
+      ? summary.comparison.detail : null;
 
   return (
     <div data-testid="trend-panel">
@@ -73,7 +77,8 @@ export const VisibilityTrendPanel = ({ metrics, heroScore }) => {
 
       {status === "loading" && <Skeleton style={{ height: "280px", borderRadius: "var(--radius-2)" }} />}
 
-      {hasTrend && <TrendChart series={series} keyline="you" />}
+      {explanation && <p role="status" data-testid="trend-comparison-boundary">{explanation}</p>}
+      {hasTrend && <TrendChart series={chartSeries} keyline="you" />}
 
       {showEmptyState && (
         <div
@@ -98,7 +103,7 @@ export const VisibilityTrendPanel = ({ metrics, heroScore }) => {
           >
             {status === "error"
               ? "Trend history is temporarily unavailable — your latest scan value is shown above."
-              : "Not enough scan history yet to chart a trend. It appears here once your next scheduled scan lands."}
+              : "Not enough comparable qualified readings yet to chart a trend."}
           </p>
         </div>
       )}

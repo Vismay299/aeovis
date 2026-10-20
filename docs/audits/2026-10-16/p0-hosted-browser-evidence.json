@@ -1,0 +1,21 @@
+{
+  "suite": "actual-hosted-auth-storage-browser",
+  "executed_at": "2026-10-20T05:24:37.943Z",
+  "deployment": "https://aeo-g863popch-vismays-projects-e0c6f290.vercel.app",
+  "run_id": "3e839065-5aa9-4ab6-a3d9-a23ef00d7a57",
+  "passed": [
+    "Anonymous evidence access and privileged QA preparation are refused before side effects",
+    "Actual customer login/browser opens its owned private JSON capture; expired and failed uploads remain distinct",
+    "Two actual authenticated tenants remain isolated in history, evidence signing and direct private Storage access",
+    "actual hosted private JSON capture",
+    "actual bucket rejection retained as write_failed",
+    "fresh signed URL readable",
+    "expired signed URL refused",
+    "retention removed only two QA objects and persisted expiry",
+    "R01-12: 100 actual hosted health reads preserve every stored canary without provider dispatch",
+    "Customer history refresh removes expired capture links and never starts a paid scan"
+  ],
+  "paid_requests": 0,
+  "fixture_cleanup": true,
+  "qualification": "Actual deployed app, two disposable Auth users and owned QA workspaces, real hosted RLS/Storage. Provider text is an explicit fixture. Retention advances time only for its exact QA prefix; no elapsed-day claim."
+}

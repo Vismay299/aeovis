@@ -8,7 +8,7 @@ import {
   Banner, Button, Card, EmptyState, PageHeader, Skeleton, SkeletonRows, Stat, formatDate,
 } from "@/components/portal/ui";
 import { CompetitorsCard, EngineScoresCard, QuestionsCard } from "@/components/portal/scans/ReportCards";
-import { finiteNumber, readCompetitors, readEngineScores, roundedPct } from "@/components/portal/scans/reportData";
+import { customerReportQuality, finiteNumber, readCompetitors, readEngineScores, roundedPct } from "@/components/portal/scans/reportData";
 import "@/components/portal/scans/scans.css";
 
 function KpiSkeleton() {
@@ -68,6 +68,11 @@ export default function ScanReportPage() {
 
   const tracked = finiteNumber(scan?.prompts_tracked);
   const mentioned = finiteNumber(scan?.prompts_mentioned);
+  const quality=customerReportQuality(scan),outcome=quality.outcome;
+  function downloadMeasurement(){
+    const link=document.createElement("a"),url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:"application/json"}));
+    link.href=url;link.download=`measurement-${scan.id}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
 
   if (state.status === "notfound") {
     return (
@@ -103,6 +108,9 @@ export default function ScanReportPage() {
       />
 
       <div className="pv-stack">
+        {scan ? <div data-testid="customer-collection-outcome"><Banner tone={outcome.outcome==="failed"?"error":outcome.outcome==="complete"?"success":outcome.outcome==="legacy"?"info":"warn"} title={`Collection: ${outcome.outcome}`}>
+          {outcome.outcome==="legacy" ? "Historical collection quality is unknown; no modern qualification is inferred." : `${outcome.counts.valid} of ${outcome.counts.planned} valid observations: ${outcome.counts.answered} answered, ${outcome.counts.valid_no_aio} valid without AIO, ${outcome.counts.failed} failed, ${outcome.counts.not_attempted} not attempted. Diagnostics: ${outcome.counts.diagnostics}.`}
+        </Banner><Button variant="secondary" size="sm" onClick={downloadMeasurement}>Download measurement JSON</Button></div> : null}
         {state.status === "error" ? (
           <Banner
             tone="error"
@@ -113,9 +121,9 @@ export default function ScanReportPage() {
           </Banner>
         ) : null}
 
-        {scan && Object.values(scan.engines || {}).some((engine) => engine?.data_source_issue || engine?.insufficient_sample || Number(engine?.errored_queries) > 0) ? (
+        {scan && Object.values(scan.engines || {}).some((engine) => engine?.metrics?.observed_exposure ? engine.metrics.observed_exposure.qualified!==true : engine?.data_source_issue || engine?.insufficient_sample || Number(engine?.errored_queries) > 0) ? (
           <Banner tone="warn" title="Collection or sample needs attention">
-            Some answers could not be collected or did not name enough tracked brands for a reliable score. Review each engine's coverage and sample notes before using these results.
+            Some observations could not be collected or did not meet the minimum evidence needed for a headline. Review each engine's counts and quality notes; missing work is not a measured absence.
           </Banner>
         ) : null}
         <div className="pv-grid pv-grid--4">
@@ -128,21 +136,21 @@ export default function ScanReportPage() {
             </>
           ) : (
             <>
-              <Stat label="AI visibility" value={roundedPct(scan?.visibility_pct)} suffix="%" />
+              <Stat label="AI visibility" value={roundedPct(quality.headline)} suffix="%" />
               <Stat
                 label="Answers naming you"
                 value={mentioned}
                 sub={tracked !== null ? `of ${tracked} questions` : undefined}
               />
-              <Stat label="Share of voice" value={roundedPct(scan?.share_of_voice_pct)} suffix="%" />
-              <Stat label="Citation share" value={roundedPct(scan?.brand_citation_share_pct)} suffix="%" />
+              <Stat label="Share of voice" value={roundedPct(quality.share)} suffix="%" />
+              <Stat label="Citation share" value={roundedPct(quality.citation)} suffix="%" />
             </>
           )}
         </div>
 
         {scan && (showEngines || showCompetitors) ? (
           <div className={showEngines && showCompetitors ? "pv-scans-split" : "pv-stack"}>
-            {showEngines ? <EngineScoresCard engineScores={scan.engine_scores} engines={scan.engines} /> : null}
+            {showEngines ? <EngineScoresCard engineScores={scan.engine_scores} engines={scan.engines} terminalOutcome={outcome} /> : null}
             {showCompetitors ? (
               <CompetitorsCard competitors={scan.competitors} engines={scan.engines} brand={scan.brand} />
             ) : null}

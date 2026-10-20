@@ -2,7 +2,10 @@
 // Deliberate bounded live acceptance. No application database is constructed.
 import { mkdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import assert from "node:assert/strict";
 const args = process.argv.slice(2);
+const redactionCheck=args.at(-1)==="--redaction-check";
+if(redactionCheck)args.pop();
 if (args.join(" ") !== "--property https://perceev.ai --max-requests 2")
   throw Error(
     "This acceptance command requires the authorized Perceev property and a two-query ceiling",
@@ -20,6 +23,8 @@ const { brightDataSearch } = await import(
 const { evidenceDocument } = await import(
   "../../src/lib/db/measurementEvidence.js"
 );
+const {parseGoogleSerp}=await import("../../src/lib/engines/googlePayload.js");
+const {classifyProviderFailure}=await import("../../src/lib/engines/providerFailure.js");
 const directory = "/tmp/aeovis-google-live-repairs";
 await mkdir(directory, { recursive: true, mode: 0o700 });
 const rows = [];
@@ -44,6 +49,7 @@ for (const query of [
   "site:perceev.ai privacy policy",
 ]) {
   const captures = [];
+  const documents = [];
   const started = new Date().toISOString();
   try {
     const result = await brightDataSearch(query, {
@@ -59,6 +65,7 @@ for (const query of [
       deadlineAt: Date.now() + 70000,
       captureEvidence: async (input) => {
         const doc = evidenceDocument(input);
+        documents.push(doc.document);
         const path = `${directory}/${doc.hash}.json`;
         await writeFile(path, doc.body, { mode: 0o600 });
         captures.push({
@@ -68,6 +75,13 @@ for (const query of [
         });
       },
     });
+    if(redactionCheck)for(const document of documents){
+      const replay=parseGoogleSerp(document.payload);
+      assert.equal(replay.serp_state,result.serp_validation.serp_state);
+      assert.equal(replay.aio_present,result.serp_validation.aio_present);
+      assert.equal(replay.text,result.serp_validation.text);
+      assert.deepEqual(replay.references,result.serp_validation.references);
+    }
     rows.push({
       query,
       started_at: started,
@@ -89,6 +103,7 @@ for (const query of [
             : "valid_no_aio"
           : "unverified",
       captures,
+      redaction_replay:redactionCheck ? "passed" : "not_run",
     });
   } catch (error) {
     rows.push({
@@ -97,7 +112,7 @@ for (const query of [
       finished_at: new Date().toISOString(),
       surface: "google_serp_aio",
       state: "failed",
-      failure_kind: error.provider_failure?.kind || error.code || error.name,
+      failure_kind: error.provider_failure?.kind || classifyProviderFailure({provider:"brightdata",error}).kind,
       parser_state: error.serp_state || null,
       captures,
     });
@@ -117,14 +132,14 @@ const manifest = {
   storage:
     "Private local QA snapshots; hosted Storage qualification remains separate.",
   other_surfaces: {
-    chatgpt: "blocked_missing_authorized_credential",
-    perplexity: "blocked_missing_authorized_credential",
-    gemini: "blocked_missing_openrouter_credential",
+    chatgpt: "not_assessed_in_this_google_only_run; see p0-hosted-provider-evidence.json",
+    perplexity: "not_assessed_in_this_google_only_run; see p0-hosted-provider-evidence.json",
+    gemini: "not_assessed_in_this_google_only_run; see p0-hosted-provider-evidence.json",
   },
   observations: rows,
 };
 await writeFile(
-  "docs/audits/2026-10-16/repair-google-live-evidence.json",
+  redactionCheck ? "docs/audits/2026-10-16/p0-google-redaction-live-evidence.json" : "docs/audits/2026-10-16/repair-google-live-evidence.json",
   JSON.stringify(manifest, null, 2) + "\n",
 );
-console.log(JSON.stringify(manifest, null, 2));
+console.log(JSON.stringify({executed_at:manifest.executed_at,requests_sent:requestsSent,observations:rows.map(r=>({state:r.state,failure_kind:r.failure_kind||null,redaction_replay:r.redaction_replay||null,captures:r.captures.length}))}));

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { getBrandMetricsSeries } from "@/lib/db/analytics";
-import { parseEngineParam, parseDateParam, computeVisibilitySummary, MAX_SERIES_ROWS } from "@/lib/brandAnalyticsApi";
+import { getBrandMetricsSeries, getBrandMetricSources } from "@/lib/db/analytics";
+import { parseEngineParam, parseDateParam, MAX_SERIES_ROWS } from "@/lib/brandAnalyticsApi";
+import { qualifyVisibilityPoint, computeQualifiedVisibilitySummary } from "@/lib/analytics/visibilitySeries";
 
 // This must always be fresh — a scheduled/manual re-scan lands new
 // brand_metrics_daily rows the client needs to see immediately (same reason
@@ -25,13 +26,16 @@ export const fetchCache = "force-no-store";
  *            blended row brand_metrics_daily always carries per plan.md P0.1)
  *
  * Response 200: { brand, engine, series, summary }
- *   series  — brand_metrics_daily rows ordered by date ascending, one row per
+ *   series  — daily rows plus their linked report's immutable metric DTO,
+ *             qualification state and original stored scalar. Legacy/unknown
+ *             or contradictory readings have visibility_pct:null.
+ *             Ordered by date ascending, one row per
  *             day for the requested engine; defensively capped at
  *             MAX_SERIES_ROWS (keeps the most recent rows — no pagination,
  *             per plan.md P0.4: this is a bounded time series, not a list)
  *   summary — { latest_date, latest_visibility_pct, previous_visibility_pct,
- *             delta_visibility_pct } — the Overview trend header's minimum
- *             payload, null-safe when the series has fewer than 2 points
+ *             delta_visibility_pct, comparison } — a delta is present only
+ *             for two qualified readings with compatible measurement contexts.
  *
  * Errors: 400 on a missing brand or an invalid engine/from/to; 500 on a DB
  * failure (message never echoes the raw DB/SQL error to the client).
@@ -73,11 +77,12 @@ export async function GET(request, { params }) {
     // Most-recent-first cap: a trend chart cares about recency over depth,
     // and rows are already ascending, so slice(-N) keeps the tail.
     const capped = (rows || []).slice(-MAX_SERIES_ROWS);
+    const sources = new Map((await getBrandMetricSources(capped.map(row=>row.scan_id),engine)).map(source=>[source.id,source]));
 
     const series = capped.map((row) => ({
       date: row.date,
       engine: row.engine,
-      visibility_pct: row.visibility_pct ?? null,
+      ...qualifyVisibilityPoint(row,sources.get(row.scan_id)),
       sov_pct: row.sov_pct ?? null,
       // R4.3.4 — sov_state and sov_state_reason survive to the client so it
       // can distinguish "not assessed" (self-only roster) from "measured zero"
@@ -94,9 +99,10 @@ export async function GET(request, { params }) {
       prompts_answered: row.prompts_answered ?? null,
       prompts_mentioned: row.prompts_mentioned ?? null,
       prompt_set_id: row.prompt_set_id ?? null,
+      scan_id: row.scan_id ?? null,
     }));
 
-    const summary = computeVisibilitySummary(series);
+    const summary = computeQualifiedVisibilitySummary(series);
 
     return NextResponse.json(
       { brand: brandKey, engine, series, summary },

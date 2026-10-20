@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import pg from "pg";
+import {createMetric,measurementContext} from "../../src/lib/scoring/metricContract.js";
+import {qualifyVisibilityPoint} from "../../src/lib/analytics/visibilitySeries.js";
 import {
   contentHash,
   artifactHash,
@@ -459,6 +461,25 @@ try {
     await q("delete from customer_brands where brand_key=$1",[fixtureBrand]);
     assert.equal((await q("select count(*)::int n from customer_brand_memberships where brand_key=$1",[fixtureBrand])).rows[0].n,0);
     assert.equal((await q("select count(*)::int n from customer_brands where brand_key=$1",[brand])).rows[0].n,1);
+  });
+  await test("R05-19/20-D: repeated daily materialization retains one versioned zero; historical scalars remain unqualified",async()=>{
+    const job=id(),scan=id(),legacy=id();
+    const brand=`qa-trend-${id()}.example`;
+    await q("insert into customer_brands(brand_key,display_name,website,website_host) values($1,$1,'https://trend.example','trend.example')",[brand]);
+    await q("insert into customer_brand_memberships(user_id,brand_key,role) values($1,$2,'owner')",[actor,brand]);
+    const metric=createMetric({metricId:"observed_exposure",numerator:0,denominator:30,eligiblePromptIds:Array.from({length:30},(_,i)=>`qa-question-${i}`),collection:{valid:30,planned:30},context:measurementContext({panelVersion:"qa-fixed",surfaceVersion:"qa-model-api",market:"in",modelPolicyVersion:"qa-v1",engineCohort:["chatgpt"]})});
+    await q("insert into scan_jobs(id,brand,brand_key,status) values($1,$2,$2,'scoring')",[job,brand]);
+    await q("insert into scans(id,brand,brand_key,origin_job_id) values($1,$2,$2,$3)",[scan,brand,job]);
+    const record={visibility_pct:0,prompts_tracked:30,prompts_mentioned:0,scoring_version:"qa-r05",summary_stats:{headline_metric:metric}};
+    const args={p_job:job,p_scan:scan,p_citations:[],p_brands:[],p_metrics:[{brand,date:"2026-10-21",engine:"all",scan_id:scan,visibility_pct:0,prompts_total:30,prompts_answered:30,prompts_mentioned:0,prompt_set_id:"qa-fixed"}],p_record:record};
+    await rpc("materialize_scan_report",args);await rpc("materialize_scan_report",args);
+    const rows=(await q("select m.*,s.raw_results->'summary_stats'->'headline_metric' as headline_metric from brand_metrics_daily m join scans s on s.id=m.scan_id where m.brand=$1 and m.date='2026-10-21' and m.engine='all'",[brand])).rows;
+    assert.equal(rows.length,1);assert.equal(rows[0].prompts_answered,30);assert.deepEqual(rows[0].headline_metric,metric);
+    assert.equal(qualifyVisibilityPoint(rows[0],rows[0]).visibility_pct,0);
+    await q("insert into scans(id,brand,brand_key,visibility_pct,raw_results) values($1,$2,$2,87,$3)",[legacy,brand,JSON.stringify({legacy_snapshot:true})]);
+    await q("insert into brand_metrics_daily(brand,date,engine,scan_id,visibility_pct) values($1,'2026-10-22','all',$2,87)",[brand,legacy]);
+    const old=(await q("select m.*,s.raw_results,s.raw_results->'summary_stats'->'headline_metric' as headline_metric from brand_metrics_daily m join scans s on s.id=m.scan_id where m.scan_id=$1",[legacy])).rows[0];
+    const projected=qualifyVisibilityPoint(old,old);assert.equal(projected.visibility_pct,null);assert.equal(projected.stored_visibility_pct,87);assert.equal(projected.metric_state,"legacy_unknown");assert.deepEqual(old.raw_results,{legacy_snapshot:true});
   });
   const manifest = {
     suite: "real-postgresql-repair-workflows",
