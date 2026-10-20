@@ -50,3 +50,11 @@ test("a QA-shaped workspace name is insufficient without verified QA Auth owners
   },storage:{from(){storageCalls++;throw Error("Unexpected storage access");}}};
   await assert.rejects(()=>withdrawQaRedaction(admin,[id]),/ownership could not be verified/);assert.equal(storageCalls,0);
 });
+
+test("v2 captures whose answer text merely looks bracketed or carries redacted key=value pairs are stored, not refused",()=>{
+  for(const payload of ["[1] Password: EXAMPLE-NOT-A-REAL-PASS and twelve characters","{ not json, token=EXAMPLE-NOT-A-REAL;y=1 }","a.authToken=EXAMPLE-NOT-A-REAL;c=d"]){
+    const doc=evidenceDocument({payload,provider:"fixture",surface:"chatgpt"});
+    assert.deepEqual(evidenceRedactionStatus(doc.document),{safe:true,reason:null});assert.equal(doc.body.includes("EXAMPLE-NOT-A-REAL"),false);
+  }
+  assert.equal(evidenceRedactionStatus({payload:"{ not json, token=[REDACTED];y=1 }"}).safe,false,"the same shape in a v1 capture stays suspect");
+});

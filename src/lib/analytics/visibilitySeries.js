@@ -1,4 +1,4 @@
-import { compareMetrics, validateMetric } from "../scoring/metricContract.js";
+import { compareMetrics, validateMetric, METRIC_REASON_DETAIL } from "../scoring/metricContract.js";
 import { measuredNumberOrNull } from "../scoring/measuredNumber.js";
 import { computeVisibilitySummary } from "../brandAnalyticsApi.js";
 
@@ -26,7 +26,8 @@ export function qualifyVisibilityPoint(row, source) {
   return {
     visibility_pct: invalid ? null : candidate,
     stored_visibility_pct: stored,
-    metric: metric || null,
+    // Comparison reads only the context; the prompt-ID list is the bulk of the DTO.
+    metric: metric ? (({eligible_prompt_ids, ...rest}) => rest)(metric) : null,
     metric_state: !metric ? "legacy_unknown" : invalid ? "contradictory" : metric.qualified_state || "not_assessed",
     metric_reason: !metric ? "metric_source_unavailable" : invalid ? "contradictory_counts" : metric.qualified_reason || null,
     contradictions,
@@ -36,6 +37,16 @@ export function qualifyVisibilityPoint(row, source) {
 export function computeQualifiedVisibilitySummary(series) {
   const summary = computeVisibilitySummary(series);
   const latest = series?.at(-1), previous = series?.at(-2);
+  // A withheld reading is refused for its own reason, not as a context change.
+  const withheld = [latest, previous].find(point => point && point.visibility_pct == null);
+  if (withheld) {
+    const which = withheld === latest ? "latest" : "previous";
+    const detail = withheld.metric_state === "legacy_unknown"
+      ? `The ${which} reading is historical; its qualification is unknown.`
+      : `The ${which} reading is withheld: ${METRIC_REASON_DETAIL[withheld.metric_reason] || "it did not qualify."}`;
+    return {...summary, delta_visibility_pct: null,
+      comparison: {comparable: false, delta_pct: null, boundary_reason: withheld.metric_reason || "not_qualified", detail, changed: []}};
+  }
   const comparison = compareMetrics(
     latest?.visibility_pct == null ? null : latest?.metric,
     previous?.visibility_pct == null ? null : previous?.metric,

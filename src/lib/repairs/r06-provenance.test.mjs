@@ -226,3 +226,9 @@ test("R06-16 — retry uses different provider/model preserves identity across a
   assert.equal(attempt2.returned_model, "gpt-4o-mini");
   assert.notEqual(attempt1.gateway, attempt2.gateway);
 });
+
+test("R06-12 cookie redaction stops after the cookie pairs in whitespace-collapsed page text",()=>{
+  const result=redactSecrets("Our policy. Cookie: EXAMPLE-NOT-A-REAL-SID=a; Path=/; Secure We never sell data. Contact support.");
+  assert.equal(result.includes("EXAMPLE-NOT-A-REAL"),false);assert.ok(result.includes("We never sell data. Contact support."));
+  assert.equal(redactSecrets("Cookie: functional cookies keep you signed in."),"[REDACTED] cookies keep you signed in.");
+});

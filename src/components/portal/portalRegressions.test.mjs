@@ -448,3 +448,13 @@ test("R05 customer report download is the exact report DTO the page rendered", a
   assert.deepEqual(downloaded.scan.summary_stats.headline_metric, scan.summary_stats.headline_metric);
   assert.deepEqual(downloaded.scan.summary_stats.terminal_outcome, scan.summary_stats.terminal_outcome);
 });
+
+test("R05 scan-level share and citation use the primary slice DTO only for single-engine scans",()=>{
+  const dto=(pct)=>createMetric({metricId:"observed_exposure",numerator:pct===0?0:30,denominator:30,eligiblePromptIds:Array.from({length:30},(_,i)=>`q-${i}`),collection:{valid:30,planned:30}});
+  const summary_stats={metrics:{share_of_voice:dto(100),owned_citation:dto(0)}};
+  const multi=reportData.customerReportQuality({summary_stats,share_of_voice_pct:41,brand_citation_share_pct:12,engines:{aio:{metrics:{}},chatgpt:{metrics:{}}}});
+  assert.equal(multi.share,41);assert.equal(multi.citation,12);
+  const single=reportData.customerReportQuality({summary_stats,share_of_voice_pct:41,brand_citation_share_pct:12,engines:{chatgpt:{metrics:{}}}});
+  assert.equal(single.share,qualifiedMetricValueOf(summary_stats.metrics.share_of_voice));assert.equal(single.citation,0);
+});
+function qualifiedMetricValueOf(metric){return reportData.qualifiedMetricValue(metric);}

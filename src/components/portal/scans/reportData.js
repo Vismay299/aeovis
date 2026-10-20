@@ -38,8 +38,14 @@ export function qualifiedMetricValue(metric){
 }
 
 export function customerReportQuality(scan){
-  const metrics=scan?.summary_stats?.metrics || {};
-  return {outcome:terminalOutcomeFromRecord(scan),headline:qualifiedMetricValue(scan?.summary_stats?.headline_metric),share:qualifiedMetricValue(metrics.share_of_voice),citation:qualifiedMetricValue(metrics.owned_citation)};
+  // summary_stats.metrics is the primary engine slice, not a blended scan figure.
+  // It speaks for the scan only when one engine was measured; otherwise keep the
+  // stored scan-level scalars the report has always shown.
+  const sliced=Object.values(scan?.engines || {}).filter(slice=>isRecord(slice?.metrics)).length===1;
+  const metrics=sliced ? scan?.summary_stats?.metrics || {} : null;
+  return {outcome:terminalOutcomeFromRecord(scan),headline:qualifiedMetricValue(scan?.summary_stats?.headline_metric),
+    share:metrics ? qualifiedMetricValue(metrics.share_of_voice) : finiteNumber(scan?.share_of_voice_pct),
+    citation:metrics ? qualifiedMetricValue(metrics.owned_citation) : finiteNumber(scan?.brand_citation_share_pct)};
 }
 
 export function engineMetricReading(summary,legacyPct){

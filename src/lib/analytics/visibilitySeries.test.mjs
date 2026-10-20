@@ -7,7 +7,7 @@ const metric=(mentions=6,n=30,ctx=context)=>createMetric({metricId:'observed_exp
 const point=(m,date='2026-10-20',stored=m.qualified_pct)=>({date,engine:'all',...qualifyVisibilityPoint({engine:'all',visibility_pct:stored},{headline_metric:m})});
 
 test('R05-24 daily trend retains the exact stored metric DTO and measured zero',()=>{
-  const m=metric(0),p=point(m);assert.equal(p.visibility_pct,0);assert.deepEqual(p.metric,m);assert.equal(p.metric_state,'measured_zero');
+  const m=metric(0),p=point(m);assert.equal(p.visibility_pct,0);const {eligible_prompt_ids,...context}=m;assert.deepEqual(p.metric,context);assert.equal(eligible_prompt_ids.length,30);assert.equal('eligible_prompt_ids' in p.metric,false);assert.equal(p.metric_state,'measured_zero');
   const perEngine=qualifyVisibilityPoint({engine:'chatgpt',visibility_pct:0},{headline_metric:m});assert.equal(perEngine.visibility_pct,0);
 });
 test('R05-22 daily trend does not promote an insufficient 100 percent to a headline',()=>{
@@ -41,4 +41,12 @@ test('R05-18 trend and hover deltas cannot bridge a version boundary or unknown 
   assert.deepEqual(comparableVisibilityTail([old,a,b]),[a,b]);
   assert.deepEqual(comparableVisibilityTail([a,{visibility_pct:null,metric:null},b]),[b]);
   assert.deepEqual(comparableVisibilityTail([a,{visibility_pct:null,metric:null}]),[]);
+});
+
+test('R05-24 a withheld reading explains its own qualification reason, not a context change',()=>{
+  const thin=point(metric(5,5),'2026-10-21',100),summary=computeQualifiedVisibilitySummary([point(metric(),'2026-10-20'),thin]);
+  assert.equal(summary.delta_visibility_pct,null);assert.equal(summary.comparison.comparable,false);
+  assert.equal(summary.comparison.boundary_reason,thin.metric_reason);assert.match(summary.comparison.detail,/^The latest reading is withheld: /);assert.doesNotMatch(summary.comparison.detail,/context/i);
+  const legacy=computeQualifiedVisibilitySummary([qualifyVisibilityPoint({engine:'all',visibility_pct:40},null),point(metric())]);
+  assert.match(legacy.comparison.detail,/previous reading is historical/);
 });

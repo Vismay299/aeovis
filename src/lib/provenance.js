@@ -35,7 +35,9 @@ export const LOCATION_VERIFICATION = Object.freeze({
 const REDACTION_PATTERNS = [
   /Bearer\s+[A-Za-z0-9\-._~+/]+=*/gi,
   /(?:api[_-]?key|secret|password|token|authorization)["']?\s*[:=]\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\s,;}]+)/gi,
-  /(?:cookie|set-cookie)["']?\s*[:=]\s*[^\r\n]+/gi,
+  // Every ';'-separated cookie pair, but no further: callers also redact
+  // whitespace-collapsed page text, where "to end of line" means the document.
+  /(?:cookie|set-cookie)["']?\s*[:=]\s*(?:"[^"\r\n]*"|[^\s"';])*(?:\s*;\s*(?:"[^"\r\n]*"|[^\s"';])*)*/gi,
 ];
 
 export function isSensitiveEvidenceKey(key) {
