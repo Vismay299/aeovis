@@ -1,3 +1,4 @@
+import { classifyProviderFailure, sanitizeProviderText } from './providerFailure.js';
 import { normalizeUrl } from "../scoring/citations.js";
 import {
   FAILURE_KIND,
@@ -105,6 +106,7 @@ export async function probeChatGpt(query, options = {}) {
         engine: "chatgpt",
         query,
         stats,
+        durableDispatch: options.durableDispatch, deadlineAt: options.deadlineAt, measurementContext:options.measurementContext,captureEvidence:options.captureEvidence,
       });
       return {
         text: result.text,
@@ -122,6 +124,7 @@ export async function probeChatGpt(query, options = {}) {
         usage: result.usage,
         error: result.error,
         error_kind: result.error_kind,
+        provider_failure: result.provider_failure,
       };
     }
     console.warn("[chatgpt] no OPENAI_API_KEY or shared OpenRouter LLM_API_KEY — skipping");
@@ -169,7 +172,7 @@ export async function probeChatGpt(query, options = {}) {
         // Same constant the fee above was priced with, so the tool that is
         // billed and the tool that is priced cannot drift apart.
         type: OPENAI_TOOL,
-        user_location: { type: "approximate", country: "IN" },
+        user_location: { type: "approximate", country: (options.measurementContext?.country || "in").toUpperCase() },
       },
     ],
     input: query,
@@ -182,15 +185,15 @@ export async function probeChatGpt(query, options = {}) {
   // retries" on a call that was made once is a log that lies).
   let attempts = 0;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  const maxRetries = options.durableDispatch ? 0 : MAX_RETRIES;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), Math.max(1,Math.min(TIMEOUT_MS,options.deadlineAt == null ? TIMEOUT_MS : options.deadlineAt-Date.now())));
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
       attempts++;
       let res;
-      try {
-        res = await fetch(OPENAI_RESPONSES_URL, {
+      res = await fetch(OPENAI_RESPONSES_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -199,11 +202,7 @@ export async function probeChatGpt(query, options = {}) {
           body: JSON.stringify(body),
           signal: controller.signal,
         });
-      } finally {
-        // `finally`, not a bare call after the await: a rejected fetch used to
-        // leave a live 45s timer per attempt holding the event loop open.
-        clearTimeout(timeoutId);
-      }
+
 
       if (!res.ok) {
         const errorText = await res.text().catch(() => "");
@@ -222,10 +221,13 @@ export async function probeChatGpt(query, options = {}) {
         // in hand, and the verdict rides on the error for the catch to read.
         // Shared with src/lib/engines/perplexity.js via httpFailureKind.js so
         // the two adapters cannot disagree about whether a 403 is worth a retry.
-        throw tagHttpFailure(new Error(`OpenAI HTTP ${res.status}: ${errorText}`), res.status);
+        throw Object.assign(tagHttpFailure(new Error(`OpenAI HTTP ${res.status}: ${sanitizeProviderText(errorText)}`), res.status), {
+          provider_failure: classifyProviderFailure({provider:'openai',status:res.status,headers:res.headers,body:errorText}),
+        });
       }
 
       const resJson = await res.json();
+      if(options.captureEvidence)await options.captureEvidence({payload:resJson,provider:"openai",surface:"chatgpt",requestId:resJson.id || null});
 
       const textParts = [];
       const references = [];
@@ -317,7 +319,7 @@ export async function probeChatGpt(query, options = {}) {
         requested_model: model,
         returned_model: resJson?.model || null,
         provider_request_id: resJson?.id || null,
-        search_requests: 1,
+        search_requests: Array.isArray(resJson?.output) ? resJson.output.filter(item => item.type === "web_search_call").length : null,
         usage: resJson?.usage || null,
         error: null,
       };
@@ -328,10 +330,10 @@ export async function probeChatGpt(query, options = {}) {
       // more seconds buy the same refusal, and the transport-noise default in
       // failureKindOf keeps an unrecognisable failure retryable.
       if (!isRetryableFailure(e)) break;
-      if (attempt < MAX_RETRIES) {
+      if (attempt < maxRetries) {
         await delay(1000 * Math.pow(2, attempt));
       }
-    }
+    } finally { clearTimeout(timeoutId); }
   }
 
   const kind = failureKindOf(lastErr);
@@ -349,10 +351,10 @@ export async function probeChatGpt(query, options = {}) {
   // cost: null, not 0. A probe that never got a completion has no priced call
   // to report; OpenAI may still have billed the attempts, and claiming a
   // measured $0 for them is the fabrication this task exists to remove.
-  return unpricedOutcome(
+  return { ...unpricedOutcome(
     stats,
     COST_STATE.PROBE_FAILED,
     `no completion was returned after ${spent}, so nothing could be priced`,
-    lastErr?.message || "ChatGPT probe failed"
-  );
+    sanitizeProviderText(lastErr?.message) || "ChatGPT probe failed"
+  ), provider_failure: lastErr?.provider_failure || classifyProviderFailure({provider:"openai",error:lastErr}) };
 }

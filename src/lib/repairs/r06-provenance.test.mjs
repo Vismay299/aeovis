@@ -192,6 +192,17 @@ test("R06-15 — invalid timestamp ordering rejected by envelope validation", ()
   );
 });
 
+test("R06-12 JSON transport strings retain valid structure and redact complete quoted cookie values",()=>{
+  const input=JSON.stringify({headers:{'set-cookie':'EXAMPLE-NOT-A-REAL-COOKIE="quoted value"; Secure; Other=EXAMPLE-NOT-A-REAL-TAIL',Authorization:'Bearer EXAMPLE-NOT-A-REAL-TOKEN'},body:JSON.stringify({answer:'Public answer',headers:{Cookie:'EXAMPLE-NOT-A-REAL-NESTED=abc; Second=def'},api_key:'EXAMPLE-NOT-A-REAL-KEY with spaces'})});
+  const sanitized=redactSecrets(input),outer=JSON.parse(sanitized),inner=JSON.parse(outer.body);
+  assert.equal(outer.headers['set-cookie'],'[REDACTED]');assert.equal(outer.headers.Authorization,'[REDACTED]');assert.equal(inner.headers.Cookie,'[REDACTED]');assert.equal(inner.api_key,'[REDACTED]');assert.equal(inner.answer,'Public answer');assert.equal(sanitized.includes('EXAMPLE-NOT-A-REAL'),false);
+});
+
+test("R06-12 malformed text headers redact whole cookie lines including semicolon-separated values",()=>{
+  const result=redactSecrets('Set-Cookie: EXAMPLE-NOT-A-REAL-FIRST=a; EXAMPLE-NOT-A-REAL-SECOND=b\nPublic answer');
+  assert.equal(result.includes('EXAMPLE-NOT-A-REAL'),false);assert.ok(result.includes('Public answer'));
+});
+
 test("R06-16 — retry uses different provider/model preserves identity across attempts", () => {
   const attempt1 = createObservationEnvelope({
     attempt_id: "att-1",
@@ -214,4 +225,10 @@ test("R06-16 — retry uses different provider/model preserves identity across a
   assert.equal(attempt2.attempt_number, 2);
   assert.equal(attempt2.returned_model, "gpt-4o-mini");
   assert.notEqual(attempt1.gateway, attempt2.gateway);
+});
+
+test("R06-12 cookie redaction stops after the cookie pairs in whitespace-collapsed page text",()=>{
+  const result=redactSecrets("Our policy. Cookie: EXAMPLE-NOT-A-REAL-SID=a; Path=/; Secure We never sell data. Contact support.");
+  assert.equal(result.includes("EXAMPLE-NOT-A-REAL"),false);assert.ok(result.includes("We never sell data. Contact support."));
+  assert.equal(redactSecrets("Cookie: functional cookies keep you signed in."),"[REDACTED] cookies keep you signed in.");
 });

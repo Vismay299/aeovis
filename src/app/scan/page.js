@@ -30,6 +30,7 @@ import {
   progressFraction,
 } from '@/lib/scanProgress';
 import { SAMPLE_RESULT } from '@/data/mockData';
+import { scanCompletionNotice } from '@/lib/scanCompletion';
 
 const STAGES = [
   { label: 'Brand accepted', detail: 'the domain is resolved and the run is queued' },
@@ -141,7 +142,9 @@ export default function Scan() {
         (meta) => setProgressState((prev) => applyScanUnknown(prev, meta)),
       );
       saveScan(result);
-      toast.success('Reading ready');
+      const completion = scanCompletionNotice(result);
+      const notify = completion.tone === 'success' ? toast.success : completion.tone === 'error' ? toast.error : completion.tone === 'warn' ? toast.warning : toast.info;
+      notify(completion.title, { description: completion.message });
       router.push('/dashboard');
     } catch (err) {
       setFailed(true);

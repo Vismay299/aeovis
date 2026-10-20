@@ -324,6 +324,16 @@ Also environment-shaped and easy to get silently wrong:
 
 ## C. Migrations
 
+`028_measurement_evidence`, `029_repair_workflow`, `030_scan_finalize_identity`, `031_content_check_budget`, `032_durable_schedule_windows`, `033_atomic_scan_materialization`, `034_measurement_storage_contract`, `035_scoped_provider_rollout` are implemented and verified in isolated QA. Hosted application and qualification results are tracked in the current P0 release evidence. Apply all additive migrations before deploying this branch.
+
+
+`027_durable_probe_dispatch` is implemented and tested on disposable PostgreSQL;
+production application is **not verified**. It adds the P0 service-only dispatch
+ledger, claims, budgets, circuits, canaries and reconciliation. Apply before
+shipping the new worker. See [the P0 runbook](runbooks/p0-provider-dispatch.md)
+for the dispatch pause, rollout and rollback sequence.
+
+
 `supabase/migrations/` holds twenty-three files (count last checked 2026-10-07; the guard checks names, not this number). They are named individually rather
 than as a range, and `src/lib/docStatus.test.mjs` fails this document if a file
 on disk is missing from the list — the previous revision wrote "`001` … `012`"

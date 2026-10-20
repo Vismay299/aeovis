@@ -289,6 +289,7 @@ test("cost cap: job fails with the cap named once spend crosses it", async () =>
 test("reviseContentItem: human comment drives a redraft back to the queue", async () => {
   const { llm, prompts } = makeFakeLlm([
     { ...LI_DRAFT, title: "revised-after-feedback" },
+    {passed:true,issues:[]},
     LI_REVIEW_PASS,
   ]);
 
@@ -327,7 +328,7 @@ test("reviseContentItem: human comment drives a redraft back to the queue", asyn
   const updated = await reviseContentItem("item-1", "cut the salesy ending", deps);
 
   assert.ok(updated);
-  assert.equal(prompts.length, 2, "one draft + one review, no auto-loop");
+  assert.equal(prompts.length, 3, "one draft + one fresh fact check + one review, no auto-loop");
   assert.ok(prompts[0].includes("HUMAN REVIEWER FEEDBACK"));
   assert.ok(prompts[0].includes("cut the salesy ending"));
 

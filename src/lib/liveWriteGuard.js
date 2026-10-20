@@ -124,6 +124,9 @@ export const WRITABLE_BY_OPT_IN = Object.freeze(["scan_runs", "probe_tasks", "cr
  * for the obvious reason.
  */
 export const NEVER_WRITABLE = Object.freeze([
+  "measurement_evidence","measurement_incidents","repair_artifacts","repair_artifact_heads","content_check_claims","measurement_windows",
+  "probe_observations", "probe_attempts", "probe_late_receipts", "probe_reconciliations",
+  "provider_dispatch_circuits", "provider_canary_budgets", "probe_dispatch_control",
   "scans",
   "brand_metrics_daily",
   "scan_jobs",
@@ -164,6 +167,11 @@ export const NEVER_WRITABLE = Object.freeze([
  * from a mutating one, and "we could not tell" must not resolve to "allow".
  */
 export const WRITING_FUNCTIONS = Object.freeze({
+  set_probe_rollout:["probe_dispatch_control"],
+  record_measurement_incident:["measurement_incidents"],append_repair_artifact:["repair_artifacts","repair_artifact_heads"],
+  decide_checked_content:["content_items","content_feedback","content_jobs"],record_verified_publication:["content_items","content_jobs","content_events","repair_artifacts"],
+  claim_content_check:["content_check_claims"],finish_content_check:["content_check_claims","content_items","content_jobs"],
+  enqueue_measurement_window:["measurement_windows","scan_jobs","scan_schedules"],materialize_scan_report:["scan_jobs","prompt_results","citations","result_brands","brand_metrics_daily"],
   create_customer_workspace: ["customer_brands", "customer_brand_memberships"],
   activate_customer_gsc: ["gsc_oauth_credentials", "gsc_connections", "gsc_sync_jobs", "gsc_oauth_attempts"],
   disconnect_customer_gsc: ["gsc_oauth_credentials", "gsc_connections", "gsc_sync_jobs", "gsc_oauth_attempts"],

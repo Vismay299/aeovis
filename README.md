@@ -184,6 +184,15 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `024_customer_workspace_ownership` | Drops `website_host` UNIQUE constraint, adds `idempotency_key` for retry-safe workspace creation, adds `customer_team_invites` table, adds transactional `create_customer_workspace` RPC, and adds a trigger to prevent removing the last owner. New workspaces use opaque UUID keys. |
 | `025_gsc_customer_oauth` | Per-workspace OAuth credentials (`gsc_oauth_credentials`), short-lived OAuth attempts (`gsc_oauth_attempts`), durable sync jobs (`gsc_sync_jobs`), connection generation tracking on `gsc_connections` and `gsc_daily`, and expired attempt pruning. Enables the self-service GSC connector. |
 | `026_customer_uat_repairs` | Explicit scan workspace ownership and RLS, generation-aware GSC storage and guarded writes, transactional OAuth activation/disconnect, verified team invite redemption, and sync lease recovery. Apply before deploying the repaired customer routes. |
+| `027_durable_probe_dispatch` | Service-only observation/attempt ledger, fenced dispatch claims, shared provider circuits and spend reservations, bounded canaries and audited ambiguity reconciliation. Apply before deploying the P0 worker; see docs/runbooks/p0-provider-dispatch.md. |
+| `028_measurement_evidence` | Private response capture metadata and durable parser incident inbox. |
+| `029_repair_workflow` | Immutable reviewed panels and sources; exact-content approval and transactional verified publication. |
+| `030_scan_finalize_identity` | One report identity per originating scan job, including crash recovery. |
+| `031_content_check_budget` | Shared paid-check reservations, fenced completion, and approval guards. |
+| `032_durable_schedule_windows` | Atomic scheduled-window enqueue, bounded catch-up, overlap and finalization records. |
+| `033_atomic_scan_materialization` | Transactional report links, citations, brand judgments, daily rollups and terminal job state. |
+| `034_measurement_storage_contract` | Private JSON response capture MIME support and a read-only storage contract check. |
+| `035_scoped_provider_rollout` | Fenced pause/rollback with one owned QA workspace and bounded canaries allowed during qualification. |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

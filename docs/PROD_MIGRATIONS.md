@@ -1400,3 +1400,32 @@ the durable queue. Customer content review commits feedback, item status, and
 job status together. `npm run check:uat` checks production variable registration
 and the live migration ledger without printing credentials; sensitive variable
 values still require runtime verification after deployment.
+
+
+## P0 dispatch: migration 027_durable_probe_dispatch
+
+**Implemented; production application unverified.** Apply
+`027_durable_probe_dispatch.sql` after 026 and before deploying the new worker.
+It adds service-only observations, attempts, late receipts, reconciliation,
+provider circuits, canary budgets, and the dispatch pause control. It preserves
+all existing prompt/results and scan readers. The worker refuses dispatch if
+the migration or privileged database is unavailable.
+
+Local disposable PostgreSQL and the CI database job execute actual concurrent
+claims and settlements, customer-role denials, interrupted-worker recovery and
+legacy report projection. These checks do not apply anything to production.
+See [the rollout and rollback runbook](runbooks/p0-provider-dispatch.md).
+
+
+## Repair workflow migrations 028–033
+
+- `028_measurement_evidence.sql`: Private response capture metadata and durable parser incident inbox.
+- `029_repair_workflow.sql`: Immutable reviewed panels and sources; exact-content approval and transactional verified publication.
+- `030_scan_finalize_identity.sql`: One report identity per originating scan job, including crash recovery.
+- `031_content_check_budget.sql`: Shared paid-check reservations, fenced completion, and approval guards.
+- `032_durable_schedule_windows.sql`: Atomic scheduled-window enqueue, bounded catch-up, overlap and finalization records.
+- `033_atomic_scan_materialization.sql`: Transactional report links, citations, brand judgments, daily rollups and terminal job state.
+- `034_measurement_storage_contract.sql`: Private JSON evidence upload MIME support; verify the read-only `measurement_storage_ready` function exists in `pg_proc` and the `storage.buckets` row remains private with `application/json` in its allowlist.
+- `035_scoped_provider_rollout.sql`: `probe_dispatch_control.brand_allowlist` and service-only `set_probe_rollout` control one owned QA workspace and deliberate canaries during a dispatch pause; the claim path retains all existing lease, circuit and budget checks.
+
+Verified against disposable PostgreSQL, not production. Deploy the migrations before the worker and routes. Rollback pauses dispatch and disables new workflow actions while preserving historical attempts, immutable artifact versions, and evidence. Never drop these tables to roll back an application build.

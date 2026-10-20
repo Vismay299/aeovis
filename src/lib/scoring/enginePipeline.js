@@ -1,3 +1,4 @@
+import { classifyProviderFailure, sanitizeProviderText } from '../engines/providerFailure.js';
 import { brightDataSearch, extractBrightDataAiOverview, extractBrightDataOrganic } from "../engines/brightdata.js";
 import { resolveSerpQueryCost } from "../llmPricing.js";
 import { probeChatGpt, isChatGptConfigured } from "../engines/openai.js";
@@ -6,6 +7,7 @@ import { probeOpenRouterEngine, isOpenRouterEngineConfigured } from "../engines/
 import { getBrandAliases } from "./aliases.js";
 import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
 import { detectMention, judgeBrandsSymmetric } from "./judge.js";
+import { applyEntityEvidence, ENTITY_RESOLUTION_VERSION } from "./entityEvidence.js";
 import { countBrandsElicited } from "./promptQuality.js";
 import { extractBrandDomain } from "./citations.js";
 import { measuredNumberOrNull, ratioPctOrNull } from "./measuredNumber.js";
@@ -20,6 +22,7 @@ import {
   logicalObservationKey,
   measurementContext,
   reduceObservations,
+  estimateUncertainty,
 } from "./metricContract.js";
 import {
   AIO_CONCURRENCY,
@@ -125,7 +128,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
   const { cost: queryCost } = resolveSerpQueryCost({ provider: "brightdata" });
 
   try {
-    const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true, geo: options.geo });
+    const data = await brightDataSearch(query.text, { timeout: 60000, aiOverview: true, geo: options.geo, measurementContext: options.measurementContext, captureEvidence: options.captureEvidence, ...(options.durableDispatch ? { attempts: 1, deadlineAt: options.deadlineAt } : {}) });
     const {
       text,
       citations,
@@ -152,6 +155,7 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     if (citations_verified_empty !== undefined) result.citations_verified_empty = citations_verified_empty;
     if (parser_version !== undefined) result.parser_version = parser_version;
     if (evidence_id !== undefined) result.evidence_id = evidence_id;
+    result.provider_request_id = data.serp_validation?.provider_request_id ?? null;
     result.organic = organic;
     if (brandDomain && organic.length > 0) {
       const brandPos = organic.findIndex(
@@ -196,11 +200,17 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
       result.competitors_cited = findCompetitorsCited(result.references, competitors);
     }
   } catch (err) {
-    result.error = err.message || String(err);
+    result.error = sanitizeProviderText(err.message || String(err));
+    result.cost = null;
+    result.provider_request_id = err.evidence?.provider_request_id ?? null;
+    result.serp_state = err.serp_state || null;
+    result.parser_version = err.evidence?.parser_version || null;
+    result.validation_errors = err.evidence?.validation_errors || [];
+    result.provider_failure = err.provider_failure || classifyProviderFailure({provider:"brightdata",error:err});
     console.warn(`[aio] Query failed: "${query.text}" — ${result.error}`);
   }
 
-  return result;
+  return applyEntityEvidence(result, {brand, website:brandDomain, aliases:brandAliases});
 }
 
 /**
@@ -220,7 +230,7 @@ export const EMPTY_ANSWER = "empty_answer";
  * previous wording here — "always produce an answer unless the API errors" —
  * was the assumption that made the bug invisible.
  */
-export async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, competitors, stats) {
+export async function probeTextEngine(engine, query, brand, brandAliases, brandDomain, competitors, stats, options = {}) {
   const probeFn = engine.probe;
   const engineName = engine.name;
 
@@ -262,11 +272,11 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
     citations_state_detail: null,
   };
 
-  const probeResult = await probeFn(query.text, { stats });
+  const probeResult = await probeFn(query.text, { ...options, stats });
   result.measurement_method = "model_api";
   result.model_used = probeResult.model || probeResult.model_used || null;
   result.requested_model = probeResult.requested_model || probeResult.model || null;
-  result.returned_model = probeResult.returned_model || probeResult.model || null;
+  result.returned_model = Object.hasOwn(probeResult, "returned_model") ? probeResult.returned_model : (probeResult.model || null);
   result.provider_request_id = probeResult.provider_request_id || null;
   result.search_requests = probeResult.search_requests !== undefined ? probeResult.search_requests : null;
   result.search_used =
@@ -301,6 +311,7 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   // return path added later cannot reintroduce the drop by forgetting a line.
   // The error path matters as much as the success one — both legs dead is also
   // an unobserved citation list, not an empty one.
+  result.provider_failure = probeResult.provider_failure || null;
   result.citations_state = probeResult.citations_state ?? null;
   result.citations_state_reason = probeResult.citations_state_reason ?? null;
   result.citations_state_detail = probeResult.citations_state_detail ?? null;
@@ -343,9 +354,11 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   result.visible = result.brand_mentioned_in_text || result.brand_cited;
 
   if (probeResult.error) {
-    result.error = probeResult.error;
+    result.error = sanitizeProviderText(probeResult.error);
+    result.error_kind = probeResult.error_kind;
+    result.provider_failure = probeResult.provider_failure;
     console.warn(`[${engineName}] Query failed: "${query.text}" — ${probeResult.error}`);
-    return result;
+    return applyEntityEvidence(result, {brand, website:brandDomain, aliases:brandAliases});
   }
 
   result.text = probeResult.text || "";
@@ -390,7 +403,7 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   // known until the answer text exists and has been scanned.
   result.visible = result.brand_mentioned_in_text || result.brand_cited;
 
-  return result;
+  return applyEntityEvidence(result, {brand, website:brandDomain, aliases:brandAliases});
 }
 
 function findCompetitorsInText(text, competitors) {
@@ -946,7 +959,7 @@ function metricFromRows({
     valueOf: (o) => o.value,
   });
 
-  return createMetric({
+  return {...createMetric({
     metricId,
     unit,
     numerator: counts.numerator,
@@ -962,7 +975,7 @@ function metricFromRows({
     collection,
     context,
     policy,
-  });
+  }),uncertainty:estimateUncertainty([...new Map(observations.map(o=>[o.key,o])).values()],{clusterOf:o=>o.promptId})};
 }
 
 /** Distinct prompt IDs across a pool of rows, for a metric counted from totals. */
@@ -1018,7 +1031,7 @@ function buildSliceMetrics({
       panelVersion: options.panelVersion ?? options.panel_version ?? null,
       surfaceVersion: options.surfaceVersion ?? options.surface_version ?? null,
       market: options.market ?? null,
-      modelPolicyVersion: options.modelPolicyVersion ?? options.model_policy_version ?? null,
+      modelPolicyVersion: panel.some(r=>r.entity_evidence?.version===ENTITY_RESOLUTION_VERSION) ? `${options.modelPolicyVersion ?? options.model_policy_version ?? "unknown"}|${ENTITY_RESOLUTION_VERSION}` : options.modelPolicyVersion ?? options.model_policy_version ?? null,
       metricVersion: METRIC_CONTRACT_VERSION,
       policyVersion: policy.version,
       rosterVersion,
@@ -1029,6 +1042,8 @@ function buildSliceMetrics({
   // The self metrics. No roster version: they are counted over the declared panel
   // and must not depend on which rivals are tracked.
   const selfContext = contextFor(null);
+  const eligibleRecommendationQueries = Array.isArray(options.plannedEligibility) ? new Set(options.plannedEligibility.filter(p=>p.purpose==="recommendation").map(p=>p.text.trim().toLowerCase())) : null;
+  const recommendationPanel=panel.filter(r=>!eligibleRecommendationQueries || eligibleRecommendationQueries.has(String(r.query ?? r.prompt ?? "").trim().toLowerCase()));
   const conditionalContext = contextFor(hasRivalRoster ? rivalRoster.join("|") : null);
   const elicitingIds = distinctPromptIds(elicitingPool);
 
@@ -1036,7 +1051,7 @@ function buildSliceMetrics({
     [METRIC_IDS.EXPOSURE]: metricFromRows({
       metricId: METRIC_IDS.EXPOSURE,
       rows: panel,
-      valueOf: (r) => r.visible === true,
+      valueOf: (r) => r.entity_evidence?.mention_state === "ambiguous" && !r.brand_cited ? null : r.visible === true,
       context: selfContext,
       collection,
       policy,
@@ -1044,7 +1059,7 @@ function buildSliceMetrics({
     [METRIC_IDS.MENTION]: metricFromRows({
       metricId: METRIC_IDS.MENTION,
       rows: panel,
-      valueOf: (r) => (hasObservedAnswerText(r) ? r.brand_mentioned_in_text === true : null),
+      valueOf: (r) => (hasObservedAnswerText(r) && r.entity_evidence?.mention_state !== "ambiguous" ? r.brand_mentioned_in_text === true : null),
       exclusionOf: () => METRIC_REASONS.TEXT_NOT_OBSERVED,
       context: selfContext,
       collection,
@@ -1075,8 +1090,9 @@ function buildSliceMetrics({
     }),
     [METRIC_IDS.RECOMMENDATION]: metricFromRows({
       metricId: METRIC_IDS.RECOMMENDATION,
-      rows: panel,
+      rows: recommendationPanel,
       valueOf: (r) => {
+        if(r.entity_evidence?.mention_state === "ambiguous")return null;
         const reading = selfRecommendationOf(r);
         return reading.observed ? reading.positive : null;
       },
@@ -1133,6 +1149,15 @@ function buildSliceMetrics({
     });
   }
 
+  if(panel.some(r=>r.entity_evidence?.mention_state === "ambiguous"))for(const id of [METRIC_IDS.EXPOSURE,METRIC_IDS.MENTION,METRIC_IDS.RECOMMENDATION]){
+    const metric=metrics[id];metric.qualified_pct=null;metric.qualified=false;metric.qualified_reason="entity_resolution_incomplete";metric.qualified_state="insufficient";
+  }
+  if(panel.some(r=>r.entity_evidence?.version===ENTITY_RESOLUTION_VERSION) && panel.some(r=>r.entity_evidence?.version!==ENTITY_RESOLUTION_VERSION))for(const metric of Object.values(metrics)){
+    metric.qualified_pct=null;metric.qualified=false;metric.qualified_reason="entity_resolution_policy_mixed";metric.qualified_state="insufficient";
+  }
+  if(options.panelApproved===false)for(const metric of Object.values(metrics)){
+    metric.qualified_pct=null;metric.qualified=false;metric.qualified_reason="panel_not_reviewed";
+  }
   return metrics;
 }
 
@@ -1518,6 +1543,8 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
   const metricSlices = eligible
     .map((s) => s?.metrics?.[METRIC_IDS.EXPOSURE])
     .filter((m) => m && typeof m === "object");
+  const hasEntityPolicy=metricSlices.some(m=>m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`));
+  if(hasEntityPolicy)context.model_policy_version=`${context.model_policy_version || "unknown"}|${ENTITY_RESOLUTION_VERSION}`;
 
   if (metricSlices.length === 0) {
     /**
@@ -1576,7 +1603,7 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
     }
   }
 
-  return createMetric({
+  const metric=createMetric({
     metricId: METRIC_IDS.EXPOSURE,
     numerator,
     denominator,
@@ -1591,6 +1618,10 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
     context,
     policy,
   });
+  if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_incomplete")){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_incomplete";metric.qualified_state="insufficient";}
+  if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_policy_mixed") || (hasEntityPolicy && metricSlices.some(m=>!m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`)))){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_policy_mixed";metric.qualified_state="insufficient";}
+  if(options?.panelApproved===false){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="panel_not_reviewed";metric.qualified_state="insufficient";}
+  return metric;
 }
 
 /**
@@ -1672,8 +1703,12 @@ export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS, optio
       state_reason: s.state_reason ?? null,
     }));
 
+  const exposureSlices = slices.filter(s => s.metrics?.[METRIC_IDS.EXPOSURE]);
+  const exposureMetric = exposureSlices.length ? headlineMetricFor(exposureSlices, {
+    policy, options, cohort: exposureSlices.map(s=>s.engine), slices,
+  }) : null;
   if (eligible.length === 0) {
-    const none = createMetric({
+    const none = exposureMetric || createMetric({
       metricId: METRIC_IDS.EXPOSURE,
       numerator: null,
       denominator: null,
@@ -1691,11 +1726,8 @@ export function computeHeadline(engineSummaries, weights = ENGINE_WEIGHTS, optio
   );
   const mean = Math.round((weightedSum / totalWeight) * 10) / 10;
 
-  const metric = headlineMetricFor(eligible, {
-    policy,
-    options,
-    cohort: eligible.map((s) => s.engine),
-    slices,
+  const metric = exposureMetric || headlineMetricFor(eligible, {
+    policy, options, cohort: eligible.map((s) => s.engine), slices,
   });
 
   return headlineResult({ index: mean, eligible, excludedEngines, metric });
@@ -2091,10 +2123,10 @@ const ENGINE_REGISTRY = [
     name: "gemini",
     label: "Gemini",
     isConfigured: () => isOpenRouterEngineConfigured("gemini"),
-    probe: async (query, brand, brandAliases, brandDomain, competitors, stats) =>
+    probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
         { name: "gemini", probe: async (prompt, options) => {
-          const result = await probeOpenRouterEngine({ engine: "gemini", query: prompt, stats: options?.stats });
+          const result = await probeOpenRouterEngine({ engine: "gemini", query: prompt, stats: options?.stats, durableDispatch: options?.durableDispatch, deadlineAt: options?.deadlineAt, measurementContext: options?.measurementContext, captureEvidence: options?.captureEvidence });
           const observed = !result.error && (result.search_requests > 0 || result.references.length > 0);
           return {
             ...result,
@@ -2103,7 +2135,7 @@ const ENGINE_REGISTRY = [
             citations_state_detail: observed ? null : "No web-search activity or citation references were returned",
           };
         } },
-        query, brand, brandAliases, brandDomain, competitors, stats
+        query, brand, brandAliases, brandDomain, competitors, stats, options
       ),
     concurrency: 4,
   },
@@ -2118,7 +2150,7 @@ const ENGINE_REGISTRY = [
     name: "chatgpt",
     label: "ChatGPT",
     isConfigured: isChatGptConfigured,
-    probe: async (query, brand, brandAliases, brandDomain, competitors, stats) =>
+    probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
         { name: "chatgpt", probe: probeChatGpt },
         query,
@@ -2126,7 +2158,7 @@ const ENGINE_REGISTRY = [
         brandAliases,
         brandDomain,
         competitors,
-        stats
+        stats, options
       ),
     concurrency: CHATGPT_CONCURRENCY,
   },
@@ -2134,7 +2166,7 @@ const ENGINE_REGISTRY = [
     name: "perplexity",
     label: "Perplexity",
     isConfigured: isPerplexityConfigured,
-    probe: async (query, brand, brandAliases, brandDomain, competitors, stats) =>
+    probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
         { name: "perplexity", probe: probePerplexity },
         query,
@@ -2142,7 +2174,7 @@ const ENGINE_REGISTRY = [
         brandAliases,
         brandDomain,
         competitors,
-        stats
+        stats, options
       ),
     concurrency: PERPLEXITY_CONCURRENCY,
   },

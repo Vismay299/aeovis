@@ -2,6 +2,7 @@ import { extractBrandDomain, aggregateTopDomains, computeCompetitorCitationShare
 import { buildCompetitorLeaderboard } from "../lib/scoring/coMentions.js";
 import { isSampleRecord, assertSampleNotMutated } from "../lib/sampleIsolation.js";
 import { scanHeadline } from "../lib/scoring/scanHeadline.js";
+import { terminalOutcomeFromRecord } from "../lib/scanOutcome.js";
 
 export const SAMPLE_STORAGE_KEY = "aeo_sample_scan_v1";
 export const REAL_STORAGE_KEY = "aeo_last_scan";
@@ -383,6 +384,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
 
     return {
       ...data,
+      terminal_outcome: terminalOutcomeFromRecord(data),
       ...headlineFields,
       ...(headline ? { visibilityScore: headline.value, visibilityIndexPct: headline.value, shareOfAiPct: headline.value } : {}),
       brand,
@@ -644,6 +646,7 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
   return {
     brand,
     website,
+    terminal_outcome: terminalOutcomeFromRecord(data),
     industry: data.industry ?? "",
     // See the note on the already-normalized branch above.
     rosterSource: data.roster_source ?? raw.roster_source ?? null,

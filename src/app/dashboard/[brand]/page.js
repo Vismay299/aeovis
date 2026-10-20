@@ -1,7 +1,9 @@
 "use client";
+import Link from "next/link";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import {reportResponseState} from "@/lib/reportViewState";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 
 /**
@@ -38,6 +40,7 @@ export default function BrandDashboardPage() {
   // three-state contract DashboardShell expects, plus `error` for the fourth.
   const [scan, setScan] = useState(undefined);
   const [error, setError] = useState(null);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     if (!brand) {
@@ -69,7 +72,10 @@ export default function BrandDashboardPage() {
           return;
         }
         const data = await res.json();
-        setScan(data.scan || null);
+        if (cancelled) return;
+        const state=reportResponseState(res.status,data);
+        if(!state.scan){setError(state.message);return;}
+        setScan(state.scan);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -83,7 +89,8 @@ export default function BrandDashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [brand]);
+  }, [brand,retry]);
 
+  if(error)return <main role="alert"><h1>Report unavailable</h1><p>{error}</p><button onClick={()=>setRetry(n=>n+1)}>Retry report</button><Link href="/portal/scans">Workspace history</Link></main>;
   return <DashboardShell scan={scan} scanId={scan?.id ?? null} error={error} />;
 }

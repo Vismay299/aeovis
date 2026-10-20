@@ -1,0 +1,82 @@
+{
+  "kind": "bounded-live-google-acceptance",
+  "property": "https://perceev.ai",
+  "executed_at": "2026-10-19T19:18:16.413Z",
+  "query_ceiling": 4,
+  "retries": true,
+  "zone_lookup_request_ceiling": 1,
+  "requests_sent": 4,
+  "spend": "Provider billing not exposed by SERP responses; two query calls were authorized. No spend total is invented.",
+  "storage": "Private local QA snapshots; hosted Storage qualification remains separate.",
+  "other_surfaces": {
+    "chatgpt": "not_assessed_in_this_google_only_run; see repair-provider-live-evidence.json",
+    "perplexity": "not_assessed_in_this_google_only_run; see repair-provider-live-evidence.json",
+    "gemini": "not_assessed_in_this_google_only_run; see repair-provider-live-evidence.json"
+  },
+  "observations": [
+    {
+      "query": "What is AI answer engine visibility measurement?",
+      "started_at": "2026-10-19T19:17:25.078Z",
+      "finished_at": "2026-10-19T19:17:44.302Z",
+      "surface": "google_serp_aio",
+      "state": "failed",
+      "failure_kind": "BrightDataParseError",
+      "parser_state": "provider_failure",
+      "captures": [
+        {
+          "sha256": "5af40f664afc8a5c5a9bdf1d68e8cdc5728fd1ad5c401871b4af47ffe2cfbd2e",
+          "private_qa_file": "/tmp/aeovis-google-live-repairs/5af40f664afc8a5c5a9bdf1d68e8cdc5728fd1ad5c401871b4af47ffe2cfbd2e.json",
+          "bytes": 427
+        },
+        {
+          "sha256": "6b97ce55ed4bed5e2445ccef8d84c3d25a315e1de3e3acf50debfe0de6527ef0",
+          "private_qa_file": "/tmp/aeovis-google-live-repairs/6b97ce55ed4bed5e2445ccef8d84c3d25a315e1de3e3acf50debfe0de6527ef0.json",
+          "bytes": 427
+        }
+      ]
+    },
+    {
+      "query": "site:perceev.ai privacy policy",
+      "started_at": "2026-10-19T19:17:44.302Z",
+      "finished_at": "2026-10-19T19:18:16.413Z",
+      "surface": "google_serp_aio",
+      "requested_country": "in",
+      "observed_location": null,
+      "parser_version": "google-payload/1.0.0",
+      "validation": {
+        "serp_state": "valid_serp",
+        "aio_present": false,
+        "parser_version": "google-payload/1.0.0",
+        "evidence_id": "bd_ca2b008b35e58323a3fcb500",
+        "provider_request_id": null,
+        "per_field_quality": {
+          "text": "absent",
+          "citations": "absent"
+        },
+        "citations_verified_empty": false,
+        "text": "",
+        "blocks": [],
+        "citations": [],
+        "references": [],
+        "errors": []
+      },
+      "request_id": null,
+      "state": "valid_no_aio",
+      "captures": [
+        {
+          "sha256": "1c6b548d4f45a176c8b233b2af9f17e85c8fb53395017d2305dc55052e0f1ab5",
+          "private_qa_file": "/tmp/aeovis-google-live-repairs/1c6b548d4f45a176c8b233b2af9f17e85c8fb53395017d2305dc55052e0f1ab5.json",
+          "bytes": 427
+        },
+        {
+          "sha256": "1ddfd01479a5f8da7f93b58ab9659f695f7a4e2f4274995a3d086819e134c612",
+          "private_qa_file": "/tmp/aeovis-google-live-repairs/1ddfd01479a5f8da7f93b58ab9659f695f7a4e2f4274995a3d086819e134c612.json",
+          "bytes": 19054
+        }
+      ]
+    }
+  ],
+  "qualification": "unaccepted_retry_limit_harness_error",
+  "note": "Historical first run passed durableDispatch to a lower-level function that did not consume it. Four paid attempts occurred; the corrected harness counts network requests explicitly.",
+  "credential_assessment_correction": "The initial assessment checked legacy provider-specific names. The canonical shared LLM_API_KEY was configured and subsequently exercised through production gateway adapters."
+}

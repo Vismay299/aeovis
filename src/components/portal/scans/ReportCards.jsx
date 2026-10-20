@@ -12,11 +12,12 @@ import {
   questionNamesBrand,
   readCompetitors,
   readEngineScores,
+  engineMetricReading,
 } from "./reportData";
 import "./scans.css";
 
 /** One row per engine with its measured visibility. */
-export function EngineScoresCard({ engineScores, engines }) {
+export function EngineScoresCard({ engineScores, engines, terminalOutcome }) {
   const rows = readEngineScores(engineScores, engines);
   if (!rows.length) return null;
   return (
@@ -24,10 +25,12 @@ export function EngineScoresCard({ engineScores, engines }) {
       <div className="pv-scans-rows">
         {rows.map((row) => {
           const summary = Array.isArray(engines) ? engines.find((entry) => (entry.engine || entry.name) === row.name) : engines?.[row.name];
-          const incomplete = summary?.data_source_issue === true;
+          const reading=engineMetricReading(summary,row.pct);
+          const incomplete = reading.incomplete;
           const partial = incomplete || Number(summary?.errored_queries) > 0;
-          const smallSample = summary?.insufficient_sample === true;
-          const score = incomplete ? null : row.pct;
+          const smallSample = reading.legacy && summary?.insufficient_sample === true;
+          const score = reading.legacy && incomplete ? null : reading.pct;
+          const disposition=terminalOutcome?.engines?.find(engine=>engine.name===row.name);
           return (
           <div key={row.name} className="pv-scans-rows__item">
             <div className="pv-scans-rows__head">
@@ -35,7 +38,10 @@ export function EngineScoresCard({ engineScores, engines }) {
               <span className="pv-scans-rows__value">{formatPct(score)}</span>
             </div>
             <ProgressBar value={score} size="sm" label={`${engineLabel(row.name)} score`} />
-          {partial ? <p role="status">{incomplete ? "Collection incomplete" : "Partial collection"} · {summary.non_branded_with_answer ?? "—"} of {summary.non_branded_queries ?? "—"} questions answered · {summary.errored_queries ?? "—"} collection errors.{incomplete ? " Visibility is not assessed for this engine." : ""}</p> : null}
+          {reading.note ? <p role="status">{reading.note}{reading.exploratory!=null ? ` Exploratory reading: ${reading.exploratory}% (${reading.numerator} of ${reading.denominator} eligible observations); headline withheld.` : ""}</p> : null}
+          {disposition?.valid_no_aio>0 ? <p>Valid SERPs without AIO: {disposition.valid_no_aio}.</p> : null}
+          {disposition?.not_attempted>0 ? <p>{disposition.not_attempted} planned observations were not attempted.</p> : null}
+          {partial ? <p role="status">{incomplete && score===null ? "Collection incomplete" : "Partial collection"} · {summary.non_branded_with_answer ?? "—"} of {summary.non_branded_queries ?? "—"} questions answered · {summary.errored_queries ?? "—"} collection errors.{incomplete && score===null ? " Visibility is not assessed for this engine." : ""}</p> : null}
           {smallSample ? <p role="status">Limited scoring sample · {summary.eliciting_queries ?? "—"} answers named a tracked brand. {score === null ? "Visibility is not assessed for this engine." : "Treat this score as low confidence."}</p> : null}
           </div>
         ); })}

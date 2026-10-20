@@ -23,10 +23,10 @@ export const SUPPORTED_SESSION_POLICIES = Object.freeze(["fresh_anonymous", "fix
 export const ADAPTER_CAPABILITIES = Object.freeze({
   aio: {
     countryControl: true,
-    cityControl: true,
+    cityControl: false,
     languageControl: true,
     deviceControl: true,
-    observedLocationAttested: true,
+    observedLocationAttested: false,
   },
   chatgpt_direct: {
     countryControl: false,
@@ -214,6 +214,7 @@ export function assertContextComparability(contextA, contextB) {
     );
   }
 
+  for(const field of ["language","session_policy","city","surface"])if(a[field]!==b[field])throw Object.assign(new Error(`Incompatible ${field} comparison`),{code:`INCOMPATIBLE_${field.toUpperCase()}_COMPARISON`});
   if (a.device !== b.device) {
     throw Object.assign(
       new Error(`Incompatible measurement comparison: device "${a.device}" cannot be compared to "${b.device}"`),

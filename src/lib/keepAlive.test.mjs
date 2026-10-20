@@ -44,13 +44,17 @@ test("a job that throws synchronously is handled the same way", async () => {
   assert.match(errors[0], /sync/);
 });
 
-test("maxMs releases the platform hold without cancelling the work", async () => {
+test("maxMs releases the platform hold without cancelling the work", async (t) => {
+  t.mock.timers.enable({apis:["setTimeout"]});
   let finished = false;
   const work = new Promise((r) => setTimeout(() => { finished = true; r(); }, 80));
-  const t0 = Date.now();
-  await keepAlive(work, { maxMs: 10, waitUntil: () => {}, logger: quiet });
-  assert.ok(Date.now() - t0 < 70, "the hold must end at maxMs");
+  const held = keepAlive(work, { maxMs: 10, waitUntil: () => {}, logger: quiet });
+  let released=false;held.then(()=>{released=true;});
+  t.mock.timers.tick(9);await Promise.resolve();
+  assert.equal(released,false,"the hold must remain active before its deadline");
+  t.mock.timers.tick(1);await held;
   assert.equal(finished, false);
+  t.mock.timers.tick(70);
   await work;
   assert.equal(finished, true, "the work itself keeps running");
 });

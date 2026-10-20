@@ -87,6 +87,10 @@ export async function GET(request) {
       days,
       data: rows || [],
       totals,
+      measurement_source:"google_search_console_search_analytics_web_query_api",
+      ai_visibility_imported:false,
+      capability_checked_on:"2026-10-20",
+      source_note:"Google provides a separate Generative AI performance report. This integration imports Search Analytics query data and has not ingested that report; these rows cannot establish AI-only visibility.",
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error(`[gsc-data] read failed for ${brand.brandKey}:`, error);

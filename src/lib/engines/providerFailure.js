@@ -602,7 +602,12 @@ export function classifyProviderFailureEnvelope(provider, envelope = null, raw =
   if (!message) {
     return classifyProviderFailure({ provider, error: null, nowMs: raw?.nowMs });
   }
-  const classification = classifyProviderFailure({ provider, error: new Error(String(message)), nowMs: raw?.nowMs });
+  // Legacy adapters persisted only their literal "HTTP NNN" message. This
+  // remains coarse evidence, but must not turn a recorded 401 into a retry.
+  const legacyStatus = String(message).match(/\bHTTP\s+([45]\d{2})\b/i);
+  const classification = classifyProviderFailure({ provider, status:legacyStatus ? Number(legacyStatus[1]) : null,
+    error: new Error(String(message)), nowMs: raw?.nowMs });
+  if (envelope?.error_kind === FAILURE_KIND.PERMANENT) classification.retryable=false;
   return { ...classification, evidence: "coarse" };
 }
 

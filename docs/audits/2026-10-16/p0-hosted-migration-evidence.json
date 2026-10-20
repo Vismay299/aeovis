@@ -1,0 +1,122 @@
+{
+  "suite": "actual-hosted-p0-migrations",
+  "runs": [
+    {
+      "executed_at": "2026-10-19T20:21:17.459Z",
+      "applied": true,
+      "source": {
+        "027_durable_probe_dispatch.sql": {
+          "checksum": "7e840ea73f074362",
+          "sqlChecksum": "ca59467d7b9e3e6f",
+          "strippedReason": null
+        },
+        "028_measurement_evidence.sql": {
+          "checksum": "22f90642e46a5c74",
+          "sqlChecksum": "c2e64db0a4f22f7a",
+          "strippedReason": null
+        },
+        "029_repair_workflow.sql": {
+          "checksum": "623521d45293a356",
+          "sqlChecksum": "e490260cbaf66e6d",
+          "strippedReason": null
+        },
+        "030_scan_finalize_identity.sql": {
+          "checksum": "df21de4aee909784",
+          "sqlChecksum": "8858700c7d7d84b7",
+          "strippedReason": null
+        },
+        "031_content_check_budget.sql": {
+          "checksum": "0d4e0d6ad023d3db",
+          "sqlChecksum": "d1e3691fb6937ff8",
+          "strippedReason": null
+        },
+        "032_durable_schedule_windows.sql": {
+          "checksum": "20eba1cba0bd7198",
+          "sqlChecksum": "f799b1bfdfad5b05",
+          "strippedReason": null
+        },
+        "033_atomic_scan_materialization.sql": {
+          "checksum": "873e74d9403e241a",
+          "sqlChecksum": "16b8fe62b015c91a",
+          "strippedReason": null
+        },
+        "034_measurement_storage_contract.sql": {
+          "checksum": "6d4f5d2bdde651a6",
+          "sqlChecksum": "d0a37b84c0506796",
+          "strippedReason": null
+        }
+      },
+      "applied_files": [
+        "027_durable_probe_dispatch.sql",
+        "028_measurement_evidence.sql",
+        "029_repair_workflow.sql",
+        "030_scan_finalize_identity.sql",
+        "031_content_check_budget.sql",
+        "032_durable_schedule_windows.sql",
+        "033_atomic_scan_materialization.sql",
+        "034_measurement_storage_contract.sql"
+      ],
+      "active_jobs": 0,
+      "history_counts_preserved": true,
+      "dispatch_paused": true
+    },
+    {
+      "executed_at": "2026-10-19T20:24:24.573Z",
+      "applied": true,
+      "source": {
+        "027_durable_probe_dispatch.sql": {
+          "checksum": "7e840ea73f074362",
+          "sqlChecksum": "ca59467d7b9e3e6f",
+          "strippedReason": null
+        },
+        "028_measurement_evidence.sql": {
+          "checksum": "22f90642e46a5c74",
+          "sqlChecksum": "c2e64db0a4f22f7a",
+          "strippedReason": null
+        },
+        "029_repair_workflow.sql": {
+          "checksum": "623521d45293a356",
+          "sqlChecksum": "e490260cbaf66e6d",
+          "strippedReason": null
+        },
+        "030_scan_finalize_identity.sql": {
+          "checksum": "df21de4aee909784",
+          "sqlChecksum": "8858700c7d7d84b7",
+          "strippedReason": null
+        },
+        "031_content_check_budget.sql": {
+          "checksum": "0d4e0d6ad023d3db",
+          "sqlChecksum": "d1e3691fb6937ff8",
+          "strippedReason": null
+        },
+        "032_durable_schedule_windows.sql": {
+          "checksum": "20eba1cba0bd7198",
+          "sqlChecksum": "f799b1bfdfad5b05",
+          "strippedReason": null
+        },
+        "033_atomic_scan_materialization.sql": {
+          "checksum": "873e74d9403e241a",
+          "sqlChecksum": "16b8fe62b015c91a",
+          "strippedReason": null
+        },
+        "034_measurement_storage_contract.sql": {
+          "checksum": "6d4f5d2bdde651a6",
+          "sqlChecksum": "d0a37b84c0506796",
+          "strippedReason": null
+        },
+        "035_scoped_provider_rollout.sql": {
+          "checksum": "c54090044012c865",
+          "sqlChecksum": "c58f278986ca72ad",
+          "strippedReason": null
+        }
+      },
+      "applied_files": [
+        "035_scoped_provider_rollout.sql"
+      ],
+      "active_jobs": 0,
+      "history_counts_preserved": true,
+      "dispatch_paused": true
+    }
+  ],
+  "qualification": "Actual hosted database, additive migrations only. Historical scan/job/result counts preserved. Provider readiness and browser/Storage acceptance are separate."
+}

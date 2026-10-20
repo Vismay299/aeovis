@@ -1,3 +1,5 @@
+import {repairWorkflowStore} from "../db/repairWorkflow.js";
+import {validatePanel,artifactHash} from "../repairs/workflow.js";
 import { DEFAULT_UNBRANDED_TARGET } from "../scoring/promptSetSize.js";
 import crypto from "crypto";
 import {
@@ -62,7 +64,7 @@ import { buildBrandedQueries, isBrandedQuery } from "../scoring/aioQueryClassify
 import { getBrandAliases } from "../scoring/aliases.js";
 import { resolveBrandKey } from "../scoring/brandKey.js";
 import { extractBrandDomain } from "../scoring/citations.js";
-import { resolveSerpGeo } from "../engines/serpGeo.js";
+import { resolveSerpGeo, resolveMeasurementContext } from "../engines/serpGeo.js";
 import { keepAlive } from "../keepAlive.js";
 import { productionAliasBase, warnSelfContinueResponse } from "../selfContinue.js";
 import { enrichCitations } from "../analytics/citationEnrich.js";
@@ -79,6 +81,8 @@ import {
 // rows and never from how many rows the loop processed.
 import { deriveScanOutcome, buildScorePlan, BLOCK_REASONS } from "../scanOutcome.js";
 import { SURFACE_POLICY_VERSION, METRIC_IDS } from "../scoring/metricContract.js";
+import { createProbeDispatchStore } from "../db/probeDispatch.js";
+import { runDurableProbing, freezeDispatch } from "./durableProbing.js";
 import { configVersion } from "../engines/providerReadiness.js";
 
 const MAX_SOURCING_ATTEMPTS = 3;
@@ -1414,14 +1418,21 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
 
   const promptTarget = deps.promptTarget || resolvePromptTarget(schedule?.prompt_target);
   const enginesConfig = schedule?.engines || undefined;
-  const geo = resolveSerpGeo(schedule?.geo);
+  let approvedPanel = job.panel_snapshot || null;
+  if (!approvedPanel && supabase && !deps.sourceUnbrandedQueries) {
+    const panels=await repairWorkflowStore().list(promptKey,"panel");
+    approvedPanel=panels.find(p=>p.artifact_key==="default" && p.state==="approved") || null;
+  }
+  const geo = resolveSerpGeo(approvedPanel?.payload?.context?.country || job.measurement_context?.country || schedule?.geo);
 
   const {
     queries: unbrandedQueries,
     newlyGenerated,
     prompt_source: promptSource,
     static_pack_prompts: staticPackPrompts,
-  } = await sourceQueries(brand, url, industry, stats, brandAliases, { ...deps, promptTarget, brandKey: job.brand_key });
+  } = approvedPanel ? {queries:approvedPanel.payload.prompts.filter(p=>p.purpose!=="diagnostic").map(p=>({...p,text:p.text,intent_tier:p.purpose})),
+    newlyGenerated:[],prompt_source:"reviewed_panel",static_pack_prompts:0} :
+    await sourceQueries(brand, url, industry, stats, brandAliases, { ...deps, promptTarget, brandKey: job.brand_key });
 
   // R3.4.1 — register the brand with the scheduler. Here and not in
   // POST /api/scan because this is the one place per job where the canonical
@@ -1543,7 +1554,9 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     return !unbrandedQueries.some((u) => queryTextKey(u.text) === key);
   });
 
-  const queries = [...unbrandedQueries, ...brandedQueries];
+  const queries = [...unbrandedQueries, ...(approvedPanel ? approvedPanel.payload.prompts.filter(p=>p.purpose==="diagnostic") : brandedQueries)];
+  const frozenPanel=approvedPanel || {state:"unreviewed",version:1,payload:validatePanel({persona:"Exploratory generated panel",context:{country:geo},
+    prompts:queries.map(q=>({...q,weight:1,origin:q.source==="gsc"?"gsc_search":"generated",purpose:isBrandedQuery(q.text,brandAliases)?"diagnostic":undefined}))},{brandAliases})};
 
   const toPersist = [...newlyGenerated, ...brandedQueries];
   if (toPersist.length > 0) {
@@ -1619,7 +1632,19 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     unbranded_texts: unbrandedQueries.map((q) => q.text.toLowerCase().trim()),
     engines: frozenEngineNames,
     model_policy_version: `provider-config-v1:${modelPolicyVersion}`,
+    // Freeze selected accounts/models during sourcing, before any possible
+    // configuration rotation between sourcing and the first probe chunk.
+    ...((supabase && !deps.resolveEnabledEngines) || deps.probeDispatchStore ? {
+      dispatch: freezeDispatch({
+        engines: frozenEngineNames,
+        stats,
+        env: deps.env || process.env,
+        now: deps.now || Date.now,
+      }),
+    } : {}),
     geo,
+    panel_snapshot:frozenPanel,
+    measurement_context: resolveMeasurementContext({country:geo,...(approvedPanel?.payload?.context || {}),...(job.measurement_context || {})}),
     prompt_target: promptTarget,
     // R3.7.2 — `website_scrape` rides the checkpoint alongside cost/tokens so a
     // chunk that resumes into probing or finalize can still see that this
@@ -1738,6 +1763,27 @@ export async function runProbingPhase(jobId, checkpoint, deps = {}, chunkStartMs
       `[scan-chunk] Job ${jobId}: engine set ${engineSetChange.state} — ${engineSetChange.title}. ` +
         `Carried on the checkpoint so the finalized scan record says so, not just the run ledger.`
     );
+  }
+
+  // Production dispatch is database-authoritative. No fallback if its schema,
+  // claim or budget read fails. Memory-backed simulations keep their own path.
+  if (process.env.NODE_ENV === "production" && !supabase && !deps.resolveEnabledEngines) {
+    throw new Error("Provider dispatch requires the service database; memory fallback is disabled");
+  }
+  if (deps.probeDispatchStore || (supabase && !deps.resolveEnabledEngines)) {
+    return runDurableProbing({
+      jobId,
+      checkpoint: { ...checkpoint, ...(engineSetChange ? { engine_set_change: engineSetChange } : {}) },
+      engines: engineDefs,
+      store: deps.probeDispatchStore || createProbeDispatchStore(),
+      getResults: deps.getPromptResultsForJob || getPromptResultsForJob,
+      updateJob,
+      now: nowFn,
+      chunkStartMs,
+      budgetMs,
+      env: deps.env || process.env,
+      tally,
+    });
   }
 
   const completed = await getCompletedPairs(jobId);
@@ -1967,6 +2013,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   const updateJob = deps.updateScanJob || updateScanJob;
   const claimJob = deps.claimJobStatus || claimJobStatus;
   const getResultsForJob = deps.getPromptResultsForJob || getPromptResultsForJob;
+  const atomicMaterialization=deps.materializeScanReport || (supabase && !deps.insertScan ? async args=>{const {data,error}=await supabase.rpc("materialize_scan_report",args);if(error)throw error;return data;} : null);
   const insertScanFn = deps.insertScan || insertScan;
   const stampScanId = deps.stampScanIdForJob || stampScanIdForJob;
   const deleteCits = deps.deleteCitationsForJob || deleteCitationsForJob;
@@ -2095,7 +2142,6 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
 
   const allEngineDefs = resolveEngines({ allowFallback: false });
   let engineNames = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : allEngineDefs.map((e) => e.name);
-  const isMultiEngine = engineNames.length > 1;
 
   // R3.2.5 — the engine-set verdict this scan is finalized under, recomputed
   // from EVIDENCE rather than trusted from the checkpoint alone.
@@ -2146,6 +2192,11 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     engineNames = uniqueProbed;
   }
 
+  // The legacy path understands Google SERPs only. A single text provider
+  // still needs per-engine answer denominators and persisted health metadata.
+  // Include the observed set after a refreeze so substituted text answers
+  // cannot be summarized as missing AI Overviews.
+  const isMultiEngine = engineNames.length > 1 || engineNames.some(name => name !== "aio");
   const scannedAt = new Date().toISOString();
 
   // Same shape-normalization the pre-P0.2 code used, unchanged: both pipeline
@@ -2359,13 +2410,15 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   let headline = null;
   let enginesCounted = 0;
   const promptTexts = [...(unbrandedTexts || [])].sort();
-  const prompt_set_hash = crypto.createHash("sha256").update(promptTexts.join("|")).digest("hex");
+  const prompt_set_hash = checkpoint.panel_snapshot ? artifactHash(checkpoint.panel_snapshot) : crypto.createHash("sha256").update(promptTexts.join("|")).digest("hex");
   const prompt_set_id = prompt_set_hash.slice(0, 16);
   const metricContext = {
     plannedQueries: unbrandedTexts || [],
     panelVersion: prompt_set_hash,
     surfaceVersion: SURFACE_POLICY_VERSION,
-    market: checkpoint.geo ?? null,
+    market: checkpoint.measurement_context ? JSON.stringify(Object.fromEntries(["country","city","language","device","session_policy"].map(key=>[key,checkpoint.measurement_context[key] ?? null]))) : checkpoint.geo ?? null,
+    plannedEligibility: checkpoint.panel_snapshot?.payload?.prompts,
+    panelApproved: checkpoint.panel_snapshot ? checkpoint.panel_snapshot.state==="approved" : undefined,
     // A model-policy identity must be frozen at sourcing. If an older job
     // lacks one, comparison stays unavailable instead of inventing it now.
     modelPolicyVersion: checkpoint.model_policy_version ?? null,
@@ -2480,6 +2533,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     query_source: "openrouter_unbranded",
     data_source_issue: summary.data_source_issue,
     insufficient_sample: summary.insufficient_sample,
+    origin_job_id: jobId,
     // R3.2.5 — why engines_counted fell, ON THE SCAN, not only in the ledger.
     //
     // IT RIDES INSIDE summary_stats DELIBERATELY, and this is not tidiness.
@@ -2508,6 +2562,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     summary_stats: {
       ...summary,
       terminal_outcome: terminalOutcome,
+      ...(checkpoint.dispatch_summary ? { dispatch_summary: checkpoint.dispatch_summary } : {}),
       ...(engineSetChange ? { engine_set_change: engineSetChange } : {}),
     },
   };
@@ -2559,7 +2614,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     }
   }
 
-  await stampScanId(jobId, savedScanId);
+  if(!atomicMaterialization)await stampScanId(jobId, savedScanId);
 
   // Materialize citations fresh from raw.references (P0.2 FIX 1): citations
   // are no longer written during probing (see runProbingPhase) — they're a
@@ -2570,7 +2625,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   // run any number of times (crash-recovery re-finalize, or the
   // alreadyStamped resume path above) without duplicating rows — citations
   // carries no unique constraint of its own.
-  await deleteCits(jobId);
+  if(!atomicMaterialization)await deleteCits(jobId);
   const citationCandidates = [];
   allRows.forEach((row) => {
     const raw = row.raw || {};
@@ -2622,7 +2677,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     enrichedCitations = citationCandidates;
   }
   const citationRows = enrichedCitations.map(({ title, ...row }) => row);
-  if (citationRows.length > 0) await insertCits(citationRows);
+  if (!atomicMaterialization && citationRows.length > 0) await insertCits(citationRows);
 
   // Symmetric per-brand judging (P1.2, competitor-judging gap fix):
   // materialize one result_brands row per (non-branded result, tracked
@@ -2650,7 +2705,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
   // result_id join, since result_brands has no job_id column of its own —
   // see deleteResultBrandsForJob) makes this safe to run any number of
   // times.
-  await deleteRB(jobId);
+  if(!atomicMaterialization)await deleteRB(jobId);
   const resultBrandRows = [];
   // Rollup-only projection (P1.3, buildMetricsRows below): carries the
   // engine/is_branded_query context computeBrandRollups needs but
@@ -2700,7 +2755,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
       });
     });
   });
-  if (resultBrandRows.length > 0) await insertRB(resultBrandRows);
+  if (!atomicMaterialization && resultBrandRows.length > 0) await insertRB(resultBrandRows);
 
   const dateOnly = toDateOnly(scannedAt);
   const metricsRows = buildMetricsRows({
@@ -2718,6 +2773,7 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     promptResultRows: allRows,
     brandJudgmentRows,
   });
+  if(atomicMaterialization)return atomicMaterialization({p_job:jobId,p_scan:savedScanId,p_citations:citationRows,p_brands:resultBrandRows,p_metrics:metricsRows,p_record:scanRecord});
   await upsertMetrics(metricsRows);
 
   return updateJob(jobId, {
@@ -2939,7 +2995,10 @@ export async function runScanChunk(jobId, deps = {}) {
       const outcome = await runProbingPhase(jobId, checkpoint, deps, chunkStartMs, tally);
       checkpoint = outcome.checkpoint;
       if (outcome.budgetHit) {
-        selfContinue(jobId);
+        // Respect durable due times; poll/cron will recover deferred work.
+        if (!outcome.resumeAt || Date.parse(outcome.resumeAt) <= (deps.now || Date.now)()) {
+          selfContinue(jobId);
+        }
         result = { ok: true, reason: "checkpointed", progress_pct: outcome.progressPct };
         break chunkBody;
       }
@@ -3227,6 +3286,13 @@ export async function runSchedulerTick(nowIso, deps = {}) {
     dueCount = due.length;
 
     for (const schedule of due) {
+      if(supabase && !deps.createScanJob){
+        const {data:window,error}=await supabase.rpc("enqueue_measurement_window",{p_brand:schedule.brand,p_now:nowIso});
+        if(error)throw error;
+        if(window.started){keepAlive(()=>kickChunk(window.job_id),{label:`[scheduler] durable window ${window.job_id}`});started.push({brand:schedule.brand,job_id:window.job_id});}
+        else skipped.push({brand:schedule.brand,reason:window.reason});
+        continue;
+      }
       let brandLabel = schedule.display_name;
       if (!brandLabel && (deps.getScansByDomain || getScansByDomain)) {
         try {

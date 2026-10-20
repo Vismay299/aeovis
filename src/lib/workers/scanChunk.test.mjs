@@ -559,6 +559,28 @@ test("runFinalizePhase — single engine (aio only): uses summarizeAioResults di
   assert.equal(record.visibility_pct, null, "six prompts cannot qualify a headline");
 });
 
+test("R05 single text-provider scans retain measured zero and answer health", async t => {
+  for (const engine of ["chatgpt", "gemini", "perplexity"]) await t.test(engine, async () => {
+    const backend = makeFakeBackend(), jobId = `single-text-${engine}`;
+    const queries = makeQueries(30), checkpoint = makeCheckpoint({queries, engines:[engine]});
+    for (const query of queries) {
+      const raw = makeProbeResult({engine, query, visible:false, text:"A general answer without a vendor."});
+      delete raw.aio_present;
+      seedPromptResultRow(backend, {jobId, raw});
+    }
+    const job = await runFinalizePhase(jobId, checkpoint, {...backend.deps,
+      resolveEnabledEngines:()=>[{name:engine}], extractCompetitors:async()=>[]});
+    const record = job.run_record;
+    assert.equal(record.platform, "multi");
+    assert.equal(record.engines[engine].non_branded_with_answer, 30);
+    assert.equal(record.engines[engine].data_source_issue, false);
+    assert.equal(record.summary_stats.data_source_issue, false);
+    assert.equal(record.summary_stats.headline_metric.qualified_pct, 0);
+    assert.equal(record.visibility_pct, 0);
+    assert.equal(record.engines_counted, 1);
+  });
+});
+
 test("runFinalizePhase — insertScan throws => the error propagates (never swallowed)", async () => {
   const backend = makeFakeBackend();
   const jobId = "job-finalize-fail-1";

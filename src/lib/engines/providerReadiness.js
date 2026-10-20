@@ -78,12 +78,9 @@ export const LOCATION_STATE = Object.freeze({
  * new vendor or a renamed canonical variable must not make readiness and
  * /api/health disagree.
  *
- * GEMINI IS THE ONE EXCEPTION, and it is the audit finding in miniature:
- * the registry's `gemini` entry describes the shared-gateway route that
- * ChatGPT and Perplexity take, but `src/lib/engines/gemini.js` has no gateway
- * fallback at all — it reads GEMINI_API_KEY and returns "not configured"
- * without it. Readiness therefore asks the ADAPTER's question per surface, and
- * `direct_variables` records the native keys the adapter's own predicate reads.
+ * Gemini's offered scan surface uses the shared OpenRouter adapter in
+ * enginePipeline.js. The standalone native gemini.js utility is not the
+ * offered scan adapter; a GEMINI_API_KEY must not verify that surface.
  *
  * `provider` names the vendor the NATIVE adapter actually calls, and is taken
  * from the adapter module's own constant so the two cannot drift; `gateway`
@@ -123,12 +120,9 @@ export const ENGINE_SURFACES = Object.freeze({
   gemini: Object.freeze({
     label: "Gemini",
     provider: "gemini",
-    // No registry route on purpose: see the header. The registry's gemini entry
-    // is about model ENGINES behind the shared gateway, which this adapter does
-    // not implement.
-    required_groups: Object.freeze([Object.freeze({ env: Object.freeze(["GEMINI_API_KEY"]) })]),
-    direct_variables: Object.freeze(["GEMINI_API_KEY"]),
-    gateway: null,
+    required_groups: Object.freeze([Object.freeze({ registry: "gemini" })]),
+    direct_variables: Object.freeze([]),
+    gateway: "openrouter",
   }),
 });
 
@@ -882,7 +876,7 @@ export function readinessForEngine({ engine, env = {}, canary = null, now, ttlMs
       readiness: READINESS.DEGRADED,
       reason: canary.kind || "canary_failed",
       detail: canary.failure?.message ?? "the last canary produced no valid measurement",
-      operator_action: canary.action ?? operatorActionFor(canary.kind),
+      operator_action: canary.action ?? canary.failure?.action ?? operatorActionFor(canary.kind || canary.failure?.kind) ?? "Investigate the last failure, then run a bounded canary",
     };
   }
 

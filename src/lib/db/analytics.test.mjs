@@ -11,6 +11,7 @@ import {
   getCompletedPairsForJob,
   getPromptMetrics,
   getBrandMetricsSeries,
+  getBrandMetricSources,
   getScanSchedule,
   upsertScanSchedule,
   listDueSchedules,
@@ -902,6 +903,22 @@ test("getBrandMetricsSeries — hasDb=true: filters by brand + default engine 'a
   const series = await getBrandMetricsSeries("acme.com", {}, { client });
   assert.deepEqual(series.map((r) => r.date), ["2026-07-01", "2026-07-02", "2026-07-03"]);
   assert.ok(series.every((r) => r.engine === "all"));
+});
+
+test("R05 metric sources batch unique report IDs and project only metric metadata", async()=>{
+  const ids=Array.from({length:250},(_,i)=>`00000000-0000-4000-8000-${String(i).padStart(12,'0')}`);
+  const projections=[];
+  const {client,calls}=makeMockClient({scans:state=>{projections.push(state.selectCols);return {data:state.filters.find(f=>f[0]==='in')[2].map(id=>({id,headline_metric:{metric_id:'observed_exposure'}})),error:null};}});
+  const sources=await getBrandMetricSources([...ids,ids[0],null,'invalid-id'],'chatgpt',{client});
+  assert.equal(sources.length,250);assert.equal(calls.length,3);
+  for(const call of calls){assert.equal(call.table,'scans');assert.ok(call.filters.find(f=>f[0]==='in')[2].length<=100);}
+  for(const projection of projections){assert.ok(!projection.includes('*'));assert.match(projection,/headline_metric/);assert.match(projection,/engine_metric/);}
+});
+
+test("R05 metric source read failures cannot silently become unqualified legacy history",async()=>{
+  const {client}=makeMockClient({scans:()=>({data:null,error:Error('source read failed')})});
+  await assert.rejects(()=>getBrandMetricSources(['00000000-0000-4000-8000-000000000001'],'all',{client}),/source read failed/);
+  await assert.rejects(()=>getBrandMetricSources([],'invalid',{client}),/Invalid metric source engine/);
 });
 
 test("getBrandMetricsSeries — hasDb=true: engine filter picks the per-engine row, not the blended row", async () => {

@@ -30,6 +30,9 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
   const [deciding, setDeciding] = useState("");
   const [actionError, setActionError] = useState("");
   const [message, setMessage] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [publishUrl, setPublishUrl] = useState("");
+  const [publishing, setPublishing] = useState(false);
 
   const applyItem = useCallback((next) => {
     setItem(next);
@@ -104,7 +107,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
       await contentRequest(`/api/customer/content/${itemId}`, {
         brandKey,
         method: "PATCH",
-        body: { title: title.trim(), body_md: body },
+        body: { title: title.trim(), body_md: body, content_version: item.content_version },
       });
       await refresh();
       setMessage("Saved. The draft is back in Needs review until you approve it.");
@@ -123,7 +126,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
     setActionError("");
     setMessage("");
     try {
-      await contentRequest(`/api/customer/content/${itemId}`, { brandKey, method: "POST", body: { verdict } });
+      await contentRequest(`/api/customer/content/${itemId}`, { brandKey, method: "POST", body: { verdict, content_version: item.content_version, content_hash: item.content_hash } });
       await refresh();
       setMessage(verdict === "approved"
         ? "Review recorded as approved. Nothing was published to your website."
@@ -135,6 +138,20 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
     } finally {
       setDeciding("");
     }
+  }
+
+  async function checkedAction(action) {
+    const setBusy = action === "check" ? setChecking : setPublishing;
+    setBusy(true); setActionError(""); setMessage("");
+    try {
+      const data = await contentRequest(`/api/customer/content/${itemId}/${action}`, {brandKey, method:"POST", body:{
+        content_version:item.content_version, content_hash:item.content_hash, ...(action === "publish" ? {url:publishUrl} : {})
+      }});
+      await refresh(); onChanged();
+      setMessage(action === "publish" ? "Publication verified and recorded. Indexing and citations need separate observations." :
+        data.check?.passed ? "This saved version passed its evidence check. Review it before approval." : "Check finished with issues. Resolve them before approval.");
+    } catch(err) { if(err.status === 401) onUnauthorized(); else setActionError(err.message || "Action could not be completed."); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -162,6 +179,15 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
 
       {item ? (
         <>
+          <div className="pv-content-editor__notices">
+            <p role="status">Evidence check: {item.rubric?.check?.passed && item.rubric.check.content_hash === item.content_hash ? "passed for this version" : "required before approval"} · Version {item.content_version || "legacy"}</p>
+            {(item.rubric?.check?.issues || []).map((issue,i) => <p key={i}>{issue.detail || issue.claim || issue.description || issue.type || "Review supporting evidence"}</p>)}
+            <Button size="sm" variant="secondary" disabled={dirty || checking || saving || generating || publishing || item.status === "published"} onClick={() => checkedAction("check")}>{checking ? "Checking…" : "Check saved draft"}</Button>
+            {item.status === "approved" && !dirty ? <div>
+              <label>Published page URL<input aria-label="Published page URL" type="url" value={publishUrl} onChange={e=>setPublishUrl(e.target.value)} /></label>
+              <Button size="sm" disabled={!publishUrl || publishing} onClick={()=>checkedAction("publish")}>{publishing ? "Verifying…" : "Verify publication"}</Button>
+            </div> : null}
+          </div>
           <div className="pv-content-editor__head">
             <input
               className="pv-content-title"
@@ -225,10 +251,10 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
                 Download .md
               </a>
               <Button variant="secondary" loading={saving} disabled={!canSave} onClick={save}>Save changes</Button>
-              <Button variant="danger" icon={X} loading={deciding === "rejected"} disabled={!canDecide} onClick={() => decide("rejected")}>
+              <Button variant="danger" icon={X} loading={deciding === "rejected"} disabled={!canDecide || checking || publishing} onClick={() => decide("rejected")}>
                 Reject
               </Button>
-              <Button variant="primary" icon={Check} loading={deciding === "approved"} disabled={!canDecide} onClick={() => decide("approved")}>
+              <Button variant="primary" icon={Check} loading={deciding === "approved"} onClick={() => decide("approved")} disabled={!canDecide || checking || publishing || !item.rubric?.check?.passed || item.rubric.check.content_hash !== item.content_hash}>
                 Approve
               </Button>
             </div>

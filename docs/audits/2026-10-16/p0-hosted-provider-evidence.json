@@ -1,0 +1,76 @@
+{
+  "suite": "actual-production-durable-canaries",
+  "executed_at": "2026-10-20T05:00:07.999Z",
+  "commit": "c5b8e5955322c6243b33bed1dba9adf001ffbe56",
+  "deployment": "https://aeo-kofkixzdr-vismays-projects-e0c6f290.vercel.app",
+  "scope": "provider-canary:qa-p0-20261020-production-c5b8e59",
+  "budget": [
+    {
+      "max_requests": 8,
+      "max_spend_usd": "2"
+    }
+  ],
+  "observations": [
+    {
+      "id": "b055dcf3776d54b3a98926ed43318a1b0b80a39dd111d7cbdedab1c84e557baa",
+      "engine": "aio",
+      "state": "retry",
+      "attempt_count": 1,
+      "reason": "provider_capacity",
+      "observed_at": "2026-10-20T04:58:55.142Z",
+      "unknown_cost_calls": 1,
+      "total_cost": "0",
+      "next_attempt_at": "2026-10-20T04:58:55.659Z",
+      "evidence_state": "stored",
+      "requested_model": null,
+      "returned_model": null,
+      "stored_captures": 1
+    },
+    {
+      "id": "c406812cb93d81235bcc8a23636e4b8e56540e3fa9e9e16a8c01dca343069f39",
+      "engine": "chatgpt",
+      "state": "answered",
+      "attempt_count": 1,
+      "reason": null,
+      "observed_at": "2026-10-20T04:59:04.195Z",
+      "unknown_cost_calls": 0,
+      "total_cost": "0.000728675",
+      "next_attempt_at": "2026-10-20T04:59:04.195Z",
+      "evidence_state": "stored",
+      "requested_model": "openai/gpt-6-luna",
+      "returned_model": "openai/gpt-6-luna",
+      "stored_captures": 1
+    },
+    {
+      "id": "d1696b6b2699f77b263982a66447f49392ea76cb3d7493d5bf7fd0c132c6d7c7",
+      "engine": "gemini",
+      "state": "answered",
+      "attempt_count": 1,
+      "reason": null,
+      "observed_at": "2026-10-20T04:59:16.870Z",
+      "unknown_cost_calls": 0,
+      "total_cost": "0.00434325",
+      "next_attempt_at": "2026-10-20T04:59:16.870Z",
+      "evidence_state": "stored",
+      "requested_model": "google/gemini-3.8-flash",
+      "returned_model": "google/gemini-3.8-flash",
+      "stored_captures": 1
+    },
+    {
+      "id": "9013e9ee3bdbf2aeb15815aa0fe321060bd7d0a9a39be633bef6bb8e6a8f6388",
+      "engine": "perplexity",
+      "state": "answered",
+      "attempt_count": 1,
+      "reason": null,
+      "observed_at": "2026-10-20T04:59:24.266Z",
+      "unknown_cost_calls": 0,
+      "total_cost": "0.00552",
+      "next_attempt_at": "2026-10-20T04:59:24.266Z",
+      "evidence_state": "stored",
+      "requested_model": "perplexity/sonar",
+      "returned_model": "perplexity/sonar",
+      "stored_captures": 1
+    }
+  ],
+  "qualification": "Actual production adapters and durable private captures. Readiness is time limited; Google provider-capacity failure is retained. Unknown billing is not free. No provider account, funding or geography change."
+}

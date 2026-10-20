@@ -1,0 +1,17 @@
+{
+  "suite": "qa-request-scoped-status-schema-rollback",
+  "executed_at": "2026-10-20T05:49:58.942Z",
+  "qa_request_route": [
+    "https://aeo-g863popch-vismays-projects-e0c6f290.vercel.app",
+    "https://aeo-kofkixzdr-vismays-projects-e0c6f290.vercel.app",
+    "https://aeo-g863popch-vismays-projects-e0c6f290.vercel.app"
+  ],
+  "legacy_status_fields_preserved": true,
+  "previous_target_status": "degraded",
+  "previous_target_ready_engines": 0,
+  "previous_target_disclosed_history_error": true,
+  "canary_history_unchanged": true,
+  "provider_dispatch_delta": 0,
+  "production_alias_changed": false,
+  "qualification": "Actual QA requests routed current deployed handler → previous deployed handler → current handler against the same hosted database. The prior handler degrades on its known history-read failure and never advertises stale/configured-only providers ready. No production traffic promotion/rollback, database rollback or paid provider request is claimed."
+}

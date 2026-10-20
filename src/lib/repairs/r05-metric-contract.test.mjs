@@ -183,7 +183,7 @@ test("R05-16 — uncertainty resamples prompt clusters with a recorded seed", ()
   assert.equal(one.cluster_rate_pct, 50);
 });
 
-test("R05-17 — a failed frozen engine is explicit and changes the comparison cohort", () => {
+test("R05-17 — a failed frozen engine stays in collection and refuses a qualified comparison", () => {
   const context = { panelVersion: "panel-a", surfaceVersion: "api-v1", market: "in", modelPolicyVersion: "models-a" };
   const healthy = summarizeEngineSlice(rows(30, 6), "chatgpt", context);
   const otherRows = rows(30, 6).map((r) => ({ ...r, engine: "perplexity" }));
@@ -198,7 +198,9 @@ test("R05-17 — a failed frozen engine is explicit and changes the comparison c
   assert.equal(after.reweighted, true);
   const comparison = compareHeadlines(after, before);
   assert.equal(comparison.comparable, false);
-  assert.equal(comparison.boundary_reason, COMPARISON_BOUNDARIES.ENGINE_COHORT);
+  assert.equal(after.qualified, false);
+  assert.equal(after.metric.collection.planned,60);
+  assert.equal(comparison.boundary_reason,"incompatible_measurement");
 });
 
 test("R05-18 — panel, market and surface changes each suppress a delta", () => {

@@ -1,0 +1,14 @@
+{
+  "suite": "actual-hosted-auth-storage-browser",
+  "executed_at": "2026-10-20T05:20:38.569Z",
+  "deployment": "https://aeo-g863popch-vismays-projects-e0c6f290.vercel.app",
+  "outcome": "failed",
+  "passed": [
+    "Anonymous evidence access and privileged QA preparation are refused before side effects"
+  ],
+  "failed_stage": "owner browser sign-in",
+  "error_type": "Error",
+  "code": "browser_operation_failed",
+  "paid_requests": 0,
+  "qualification": "Partial evidence only; failed stage and cleanup must be resolved before acceptance."
+}

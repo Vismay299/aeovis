@@ -55,6 +55,7 @@ function seedItem(id, overrides = {}) {
     title: "Best analytics tool for startups",
     target_queries: ["best analytics tool for startups"],
     body_md: "# draft",
+    content_version:1,content_hash:"a".repeat(64),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,
@@ -72,9 +73,9 @@ async function postDecision(id, body) {
     const request = new Request(`http://localhost/api/content-items/${id}/decision`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({content_version:1,content_hash:"a".repeat(64),...body}),
     });
-    const res = await decide(request, { params: { id } });
+    const res = await decide(request, { params: { id } }, {getSupabaseAdmin:()=>({rpc:async(name,args)=>{assert.equal(name,"decide_checked_content");assert.equal(args.p_hash,"a".repeat(64));return {data:{status:args.p_status},error:null};}})});
     return { res, body: await res.json() };
   } finally {
     globalThis.fetch = realFetch;

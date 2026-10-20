@@ -1,0 +1,53 @@
+{
+  "kind": "bounded-live-google-acceptance",
+  "property": "https://perceev.ai",
+  "executed_at": "2026-10-20T05:43:53.683Z",
+  "query_ceiling": 2,
+  "retries": false,
+  "zone_lookup_request_ceiling": 1,
+  "requests_sent": 2,
+  "control_requests_sent": 0,
+  "spend": "Provider billing not exposed by SERP responses; two query calls were authorized. No spend total is invented.",
+  "storage": "Private local QA snapshots; hosted Storage qualification remains separate.",
+  "other_surfaces": {
+    "chatgpt": "not_assessed_in_this_google_only_run; see p0-hosted-provider-evidence.json",
+    "perplexity": "not_assessed_in_this_google_only_run; see p0-hosted-provider-evidence.json",
+    "gemini": "not_assessed_in_this_google_only_run; see p0-hosted-provider-evidence.json"
+  },
+  "observations": [
+    {
+      "query": "What is AI answer engine visibility measurement?",
+      "started_at": "2026-10-20T05:43:29.137Z",
+      "finished_at": "2026-10-20T05:43:46.060Z",
+      "surface": "google_serp_aio",
+      "state": "failed",
+      "failure_kind": "provider_capacity",
+      "parser_state": "provider_failure",
+      "captures": [
+        {
+          "sha256": "6ab898d76e1c167cd0799d50b67aa031ca44469b23d4c83f7017bc154641ae50",
+          "private_qa_file": "/tmp/aeovis-google-live-repairs/6ab898d76e1c167cd0799d50b67aa031ca44469b23d4c83f7017bc154641ae50.json",
+          "bytes": 468
+        }
+      ],
+      "failure_reclassified_from_capture": true
+    },
+    {
+      "query": "site:perceev.ai privacy policy",
+      "started_at": "2026-10-20T05:43:46.060Z",
+      "finished_at": "2026-10-20T05:43:53.683Z",
+      "surface": "google_serp_aio",
+      "state": "failed",
+      "failure_kind": "provider_capacity",
+      "parser_state": "provider_failure",
+      "captures": [
+        {
+          "sha256": "19bf5b8701387df64974403c15f4ad37998fc9f96b25e81108182a6ba3c870bc",
+          "private_qa_file": "/tmp/aeovis-google-live-repairs/19bf5b8701387df64974403c15f4ad37998fc9f96b25e81108182a6ba3c870bc.json",
+          "bytes": 468
+        }
+      ],
+      "failure_reclassified_from_capture": true
+    }
+  ]
+}

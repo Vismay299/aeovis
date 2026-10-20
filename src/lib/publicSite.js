@@ -55,6 +55,7 @@ export const PUBLIC_INDEXABLE_ROUTES = Object.freeze([
  * Note: robots disallows do not replace authentication/authorization (R20-03, R20-06).
  */
 export const PRIVATE_ROUTE_PREFIXES = Object.freeze([
+  "/ops",
   "/portal",
   "/dashboard",
   "/scan",
