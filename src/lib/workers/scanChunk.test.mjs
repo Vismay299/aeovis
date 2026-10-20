@@ -1648,3 +1648,14 @@ test("runScanChunk — full lifecycle across multiple chunk invocations: pending
   assert.ok(record.prompt_set_hash);
   assert.equal(record.competitors[0].name, "RivalCo");
 });
+
+test("a chunk bridges short provider backoffs itself instead of waiting for a poll or the daily cron", async () => {
+  const { deferredResumeWaitMs, DEFERRED_RESUME_MAX_MS, WORKER_MAX_DURATION_MS } = await import("./scanWorker.js");
+  const start = 1_000_000, now = start + 150_000;
+  assert.equal(deferredResumeWaitMs(null, now, start), 0, "nothing deferred: hand on now");
+  assert.equal(deferredResumeWaitMs(new Date(now - 1).toISOString(), now, start), 0, "already due: hand on now");
+  assert.equal(deferredResumeWaitMs(new Date(now + 30_000).toISOString(), now, start), 30_000, "a 30 s Retry-After is waited for in-process");
+  const long = deferredResumeWaitMs(new Date(now + 5 * 60_000).toISOString(), now, start);
+  assert.ok(long > 0 && now + long < start + WORKER_MAX_DURATION_MS, "a longer wait ends inside the function lifetime, then chains");
+  assert.equal(deferredResumeWaitMs(new Date(now + DEFERRED_RESUME_MAX_MS + 1).toISOString(), now, start), -1, "far-off work is left to the rescue path");
+});

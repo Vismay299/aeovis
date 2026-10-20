@@ -148,10 +148,11 @@ export async function runDurableProbing({
   const aliases = getBrandAliases(cp.brand, cp.url);
   const domain = extractBrandDomain(cp.url);
   let stats = { ...cp.stats };
-  // Serial dispatch lets a permanent failure stop the very next dependent
-  // request. Workers still run independently; SQL owns all authorization.
-  for (const row of rows) {
-    if (now() - chunkStartMs + PROBE_REQUEST_MS + 5_000 > budgetMs) break;
+  // One serial lane per engine: a permanent failure still stops the next request
+  // to that provider, but one slow or blocked engine no longer starves the
+  // others, and a chunk that stops early leaves whole questions rather than one
+  // engine's prefix. SQL owns all authorization; claims serialize on its lock.
+  async function dispatchRow(row) {
     const engine = engines.find((e) => e.name === row.engine);
     if (
       !engine ||
@@ -163,7 +164,7 @@ export async function runDurableProbing({
         detail: `Frozen configuration unavailable: ${row.engine}`,
       };
       await store.block(row.id, "configuration_changed");
-      continue;
+      return;
     }
     const claim = await store.claim(row.id, budget);
     if (!claim?.granted) {
@@ -178,7 +179,7 @@ export async function runDurableProbing({
           reason: claim.reason,
           detail: "Dispatch refused before provider request",
         };
-      continue;
+      return;
     }
     tally.probesAttempted = (tally.probesAttempted || 0) + 1;
     let result;
@@ -261,6 +262,19 @@ export async function runDurableProbing({
     // Reconstruct spend from the durable ledger below, including recovered work.
     await updateJob(jobId, { checkpoint: { ...cp, stats }, attempts: 0 });
   }
+  const lanes = new Map();
+  for (const row of rows) {
+    if (!lanes.has(row.engine)) lanes.set(row.engine, []);
+    lanes.get(row.engine).push(row);
+  }
+  const settled = await Promise.allSettled([...lanes.values()].map(async (lane) => {
+    for (const row of lane) {
+      if (now() - chunkStartMs + PROBE_REQUEST_MS + 5_000 > budgetMs) break;
+      await dispatchRow(row);
+    }
+  }));
+  const laneFailure = settled.find((s) => s.status === "rejected");
+  if (laneFailure) throw laneFailure.reason;
   const observations = await store.list(jobId);
   const remaining = observations.filter((o) => !terminal.has(o.state));
   const measured = observations.reduce(

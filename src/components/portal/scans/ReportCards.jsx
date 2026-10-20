@@ -142,6 +142,7 @@ function QuestionRow({ question, engine }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const rows = engine === "all" ? question.rows : question.rows.filter((row) => row.engine === engine);
+  const missing = (question.missing || []).filter((name) => engine === "all" || name === engine);
 
   return (
     <li className="pv-scans-q">
@@ -155,6 +156,7 @@ function QuestionRow({ question, engine }) {
         <span className="pv-scans-q__text">{question.query}</span>
         <span className="pv-scans-q__badges">
           <EngineBadges rows={rows} />
+          {missing.length ? <span className="pv-scans-q__missing">{missing.length === 1 ? "1 engine not collected" : `${missing.length} engines not collected`}</span> : null}
         </span>
         <span className="pv-scans-q__chev" aria-hidden="true"><ChevronRight /></span>
       </button>
@@ -164,6 +166,7 @@ function QuestionRow({ question, engine }) {
           {rows.map((row, index) => (
             <AnswerBlock key={`${row.id || row.engine || "row"}-${index}`} row={row} />
           ))}
+          {missing.length ? <p role="status" className="pv-scans-q__missing-note">Not collected: {missing.map(engineLabel).join(", ")}. This question was planned for these engines, but no provider answer was recorded (not attempted, or blocked before a request). It is not a measured absence.</p> : null}
         </div>
       ) : null}
     </li>
@@ -171,18 +174,18 @@ function QuestionRow({ question, engine }) {
 }
 
 /** Questions grouped by text, with tabs, search and an engine filter. */
-export function QuestionsCard({ results }) {
+export function QuestionsCard({ results, planned }) {
   const [view, setView] = useState("all");
   const [search, setSearch] = useState("");
   const [engine, setEngine] = useState("all");
   const searchId = useId();
   const engineId = useId();
 
-  const questions = useMemo(() => groupQuestions(results), [results]);
-  const engines = useMemo(() => engineOptions(results), [results]);
+  const questions = useMemo(() => groupQuestions(results, planned), [results, planned]);
+  const engines = useMemo(() => engineOptions(results, planned), [results, planned]);
 
   const scoped = useMemo(
-    () => (engine === "all" ? questions : questions.filter((q) => q.rows.some((row) => row.engine === engine))),
+    () => (engine === "all" ? questions : questions.filter((q) => q.rows.some((row) => row.engine === engine) || q.missing.includes(engine))),
     [questions, engine],
   );
   const naming = scoped.filter((q) => questionNamesBrand(q, engine));

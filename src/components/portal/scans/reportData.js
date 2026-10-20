@@ -178,15 +178,27 @@ export function readCompetitors({ competitors, engines, brand }) {
 }
 
 /** Group prompt_results rows by question text, keeping the engine rows in order. */
-export function groupQuestions(results) {
+export function groupQuestions(results, planned) {
   const groups = new Map();
+  const key = (text) => text.toLowerCase();
+  // Planned questions come first, in panel order, so a question that produced no
+  // row (not attempted, blocked before a request) is still listed by name.
+  const prompts = Array.isArray(planned?.prompts) ? planned.prompts : [];
+  const plannedEngines = Array.isArray(planned?.engines) ? planned.engines.map(String) : [];
+  prompts.forEach((text) => {
+    if (typeof text !== "string" || !text.trim() || groups.has(key(text.trim()))) return;
+    groups.set(key(text.trim()), { query: text.trim(), rows: [], planned: true });
+  });
   (Array.isArray(results) ? results : []).forEach((row) => {
     if (!isRecord(row)) return;
     const query = typeof row.query === "string" && row.query.trim() ? row.query.trim() : "Untitled question";
-    if (!groups.has(query)) groups.set(query, { query, rows: [] });
-    groups.get(query).rows.push(row);
+    if (!groups.has(key(query))) groups.set(key(query), { query, rows: [], planned: false });
+    groups.get(key(query)).rows.push(row);
   });
-  return [...groups.values()];
+  return [...groups.values()].map((group) => ({
+    ...group,
+    missing: group.planned ? plannedEngines.filter((engine) => !group.rows.some((row) => String(row.engine) === engine)) : [],
+  }));
 }
 
 /** Does this question count as "naming you" for the chosen engine filter? */
@@ -200,8 +212,8 @@ export function questionHasAnswer(question, engine) {
   return rows.some((row) => row.answered === true && !row.raw?.error);
 }
 
-export function engineOptions(results) {
-  const names = new Set();
+export function engineOptions(results, planned) {
+  const names = new Set(Array.isArray(planned?.engines) ? planned.engines.map(String) : []);
   (Array.isArray(results) ? results : []).forEach((row) => {
     if (isRecord(row) && row.engine) names.add(String(row.engine));
   });

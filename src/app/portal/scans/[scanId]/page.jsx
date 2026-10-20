@@ -162,7 +162,7 @@ export default function ScanReportPage() {
             <SkeletonRows rows={5} />
           </Card>
         ) : scan ? (
-          <QuestionsCard results={results} />
+          <QuestionsCard results={results} planned={scan?.planned_questions} />
         ) : null}
       </div>
     </div>

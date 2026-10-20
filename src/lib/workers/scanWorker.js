@@ -1168,6 +1168,37 @@ async function claimJobAttempt(jobId, job, deps = {}) {
  * below simply fails silently and the job resumes on the next poll/cron tick
  * instead.
  */
+/** Longest backoff a chunk bridges itself before leaving work to the poll/cron rescue. */
+export const DEFERRED_RESUME_MAX_MS = 10 * 60_000;
+/** Matches the worker route's maxDuration; the wait must end before it does. */
+export const WORKER_MAX_DURATION_MS = 300_000;
+
+/**
+ * How long a chunk should wait before handing its job on: 0 = hand on now,
+ * >0 = wait that long (bounded by this function's remaining lifetime; a later
+ * invocation continues the wait), -1 = too far out, leave it to the rescue.
+ */
+export function deferredResumeWaitMs(resumeAt, nowMs, chunkStartMs) {
+  const dueAt = resumeAt ? Date.parse(resumeAt) : NaN;
+  if (!Number.isFinite(dueAt) || dueAt <= nowMs) return 0;
+  if (dueAt - nowMs > DEFERRED_RESUME_MAX_MS) return -1;
+  const remaining = WORKER_MAX_DURATION_MS - (nowMs - chunkStartMs) - SELF_CONTINUE_HOLD_MS - 15_000;
+  return Math.max(1, Math.min(dueAt - nowMs, remaining));
+}
+
+/** Planned scoring questions in panel order, in their original wording. */
+export function plannedQuestions(queries, unbrandedTexts, engines) {
+  const scoring = new Set((unbrandedTexts || []).map((t) => String(t).toLowerCase().trim()));
+  const prompts = [], seen = new Set();
+  for (const q of queries || []) {
+    const text = typeof q === "string" ? q : q?.text;
+    const key = String(text || "").toLowerCase().trim();
+    if (!key || !scoring.has(key) || seen.has(key)) continue;
+    seen.add(key); prompts.push(text);
+  }
+  return { engines: [...(engines || [])], prompts };
+}
+
 export function resolveSelfContinueUrl(jobId) {
   const base =
     process.env.NEXT_PUBLIC_APP_URL ||
@@ -2494,6 +2525,10 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     mention_rate_pct: summary.mention_rate_pct,
     prompts_tracked: (unbrandedTexts || []).length,
     prompts_mentioned: summary.visible_non_branded,
+    // Every planned scoring question and surface, so a report can list the
+    // questions that produced no row (not attempted, blocked) by name, not
+    // only as a count.
+    planned_questions: plannedQuestions(checkpoint.queries, unbrandedTexts, planEngines),
     competitors: competitorObjects,
     competitors_raw: competitorsRaw,
     // Standing rule 1: a measured zero must look different from never-ran.
@@ -2995,8 +3030,13 @@ export async function runScanChunk(jobId, deps = {}) {
       const outcome = await runProbingPhase(jobId, checkpoint, deps, chunkStartMs, tally);
       checkpoint = outcome.checkpoint;
       if (outcome.budgetHit) {
-        // Respect durable due times; poll/cron will recover deferred work.
-        if (!outcome.resumeAt || Date.parse(outcome.resumeAt) <= (deps.now || Date.now)()) {
+        // Respect durable due times. Work due soon (a provider backoff or lease)
+        // is waited for inside this function's remaining lifetime and then
+        // handed on, so it never sits until a portal poll or the daily cron.
+        const waitMs = deferredResumeWaitMs(outcome.resumeAt, nowFn(), chunkStartMs);
+        if (waitMs === 0) selfContinue(jobId);
+        else if (waitMs > 0) {
+          await (deps.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms))))(waitMs);
           selfContinue(jobId);
         }
         result = { ok: true, reason: "checkpointed", progress_pct: outcome.progressPct };
