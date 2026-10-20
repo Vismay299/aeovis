@@ -217,7 +217,7 @@ export const OverviewView = ({
           <div className="panel__b">
             {destinations.length > 0 ? (
               <>
-                <FlowDiagram
+                <FlowDiagram revealed
                   total={answered || total}
                   destinations={destinations}
                   setLabel="ANSWERED"

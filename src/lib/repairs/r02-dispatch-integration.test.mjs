@@ -454,3 +454,43 @@ test("P0 Google canary retains the actual transport request ID on a validated no
     },
   );
 });
+
+test("P0 dispatch runs one lane per engine so a slow engine cannot starve the rest of a chunk", async () => {
+  const env = { LLM_API_KEY: fake, LLM_BASE_URL: "https://openrouter.ai/api/v1" };
+  await withEnv(env, async () => {
+    const engines = ["chatgpt", "gemini"], rows = [], calls = { chatgpt: [], gemini: [] };
+    let clock = 1_000_000;
+    const checkpoint = {
+      brand: "Acme", url: "https://acme.example", engines, stats: { cost: 0 },
+      queries: Array.from({ length: 6 }, (_, i) => ({ text: `Fixture question ${i}?` })),
+      dispatch: freezeDispatch({ engines, env, now: () => clock }),
+    };
+    const store = {
+      seed: async (values) => rows.push(...values.map((r) => ({ ...r, state: "pending", attempt_count: 0, next_attempt_at: new Date(clock).toISOString() }))),
+      block: async (id, reason) => Object.assign(rows.find((r) => r.id === id), { state: "blocked", reason }),
+      claim: async (id) => {
+        const row = rows.find((r) => r.id === id);
+        if (row.state !== "pending") return { granted: false, reason: row.state };
+        row.state = "leased"; row.attempt_count++;
+        return { granted: true, lease_token: `lease-${id}`, attempt_no: row.attempt_count };
+      },
+      finish: async (id) => { Object.assign(rows.find((r) => r.id === id), { state: "answered" }); return { accepted: true }; },
+      list: async () => rows,
+    };
+    const probe = (name, ms) => async (query) => {
+      await new Promise(setImmediate);
+      calls[name].push(query.text); clock += ms;
+      return { engine: name, prompt: query.text, text: "Globex is an option.", answer_present: true, cost: 0.001, references: [] };
+    };
+    const outcome = await runDurableProbing({
+      jobId: "lanes", checkpoint, store, getResults: async () => [], updateJob: async () => {}, env,
+      engines: [{ name: "chatgpt", probe: probe("chatgpt", 30_000) }, { name: "gemini", probe: probe("gemini", 1_000) }],
+      now: () => clock, chunkStartMs: clock, budgetMs: 150_000,
+    });
+    assert.equal(outcome.budgetHit, true, "the slow engine still leaves work for the next chunk");
+    assert.ok(calls.gemini.length >= 2, `gemini must progress beside a slow chatgpt (got ${calls.gemini.length})`);
+    const both = calls.chatgpt.filter((q) => calls.gemini.includes(q));
+    assert.ok(both.length >= 2, "an early stop leaves whole questions answered by both engines");
+    assert.equal(calls.chatgpt[0], "Fixture question 0?");assert.equal(calls.gemini[0], "Fixture question 0?");
+  });
+});

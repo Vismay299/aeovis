@@ -121,6 +121,8 @@
 .pv-scans-q__toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .pv-scans-q__text { color: var(--ink-1); font-size: 14px; font-weight: 550; line-height: 1.45; overflow-wrap: anywhere; }
 .pv-scans-q__badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.pv-scans-q__missing { color: var(--ink-2); font-size: 12px; align-self: center; }
+.pv-scans-q__missing-note { color: var(--ink-2); font-size: 13px; margin: 0; }
 .pv-scans-q__chev { color: var(--ink-4); display: inline-flex; }
 .pv-scans-q__chev svg { width: 16px; height: 16px; transition: transform var(--t-fast, 150ms); }
 .pv-scans-q__toggle[aria-expanded="true"] .pv-scans-q__chev svg { transform: rotate(90deg); }

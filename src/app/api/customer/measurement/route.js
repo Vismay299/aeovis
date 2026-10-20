@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { customerRouteContext } from "@/lib/supabase/customerRoute";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 export const dynamic = "force-dynamic";
+const MAX_OBSERVATIONS = 800;
 export async function GET(request) {
   const ctx = await customerRouteContext(request);
   if (ctx.response) return ctx.response;
@@ -14,12 +15,14 @@ export async function GET(request) {
   const [observations, windows] = await Promise.all([
     admin
       .from("probe_observations")
+      // Metadata only: answer text stays in the report. The limit covers one
+      // full 200-question panel on all four engines (the panel maximum).
       .select(
-        "id,engine,state,attempt_count,reason,observed_at,result,scan_jobs!inner(brand_key)",
+        "id,job_id,engine,query,state,attempt_count,reason,observed_at,provenance:result->provenance,attempt_id:result->>attempt_id,result_evidence_state:result->>evidence_state,scan_jobs!inner(brand_key)",
       )
       .eq("scan_jobs.brand_key", ctx.brand.brandKey)
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(MAX_OBSERVATIONS),
     admin
       .from("measurement_windows")
       .select("window_at,disposition,reason,finalized_at,outcome")
@@ -33,20 +36,23 @@ export async function GET(request) {
       { status: 503 },
     );
   const ids=observations.data.map(o=>o.id);
-  const evidence=ids.length ? await admin.from("measurement_evidence")
+  // Batched so hundreds of 64-character IDs never overflow one request URL.
+  const batches=[];for(let i=0;i<ids.length;i+=100)batches.push(ids.slice(i,i+100));
+  const reads=await Promise.all(batches.map(batch=>admin.from("measurement_evidence")
     .select("observation_id,attempt_token,capture_index,state,expires_at,reason")
-    .in("observation_id",ids) : {data:[],error:null};
+    .in("observation_id",batch)));
+  const evidence={data:reads.flatMap(r=>r.data || []),error:reads.find(r=>r.error)?.error || null};
   if(evidence.error)return NextResponse.json({error:"Could not load private evidence metadata"},{status:503});
-  const captureView=o=>(evidence.data || []).filter(c=>c.observation_id===o.id && c.attempt_token===o.result?.attempt_id)
+  const captureView=o=>(evidence.data || []).filter(c=>c.observation_id===o.id && c.attempt_token===o.attempt_id)
     .map(c=>({index:c.capture_index,reason:c.reason||null,state:c.state==="stored" && (!Number.isFinite(Date.parse(c.expires_at)) || Date.parse(c.expires_at)<=Date.now()) ? "expired" : c.state}));
   return NextResponse.json(
     {
       observations: observations.data.map((o) => ({
         ...o,
-        result: undefined,
-        provenance: o.result?.provenance || null,
-        evidence_state: captureView(o).some(c=>c.reason==="redaction_retracted") ? "withdrawn" : captureView(o).some(c=>c.state==="expired") ? "expired" : captureView(o).some(c=>c.state!=="stored") ? "incomplete" : o.result?.evidence_state || "legacy_unknown",
-        attempt_id: o.result?.attempt_id || null,
+        result_evidence_state: undefined,
+        provenance: o.provenance || null,
+        evidence_state: captureView(o).some(c=>c.reason==="redaction_retracted") ? "withdrawn" : captureView(o).some(c=>c.state==="expired") ? "expired" : captureView(o).some(c=>c.state!=="stored") ? "incomplete" : o.result_evidence_state || "legacy_unknown",
+        attempt_id: o.attempt_id || null,
         captures: captureView(o),
       })),
       windows: windows.data,

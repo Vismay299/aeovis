@@ -56,6 +56,7 @@ export async function GET(request, { params }) {
         prompts_mentioned: scan.prompts_mentioned,
         platform: scan.platform,
         engines: scan.raw_results?.engines || null,
+        planned_questions: scan.raw_results?.planned_questions || null,
         engine_scores: scan.raw_results?.engine_scores || null,
         competitors: scan.raw_results?.competitors || [],
         share_of_voice_pct: scan.raw_results?.share_of_voice_pct ?? null,

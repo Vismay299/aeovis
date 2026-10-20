@@ -156,6 +156,10 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     if (parser_version !== undefined) result.parser_version = parser_version;
     if (evidence_id !== undefined) result.evidence_id = evidence_id;
     result.provider_request_id = data.serp_validation?.provider_request_id ?? null;
+    // How the Overview was requested. A no-AIO reading from the standard-SERP
+    // fallback is weaker than one from rendered mode, which waits for
+    // asynchronously loaded Overviews; the row says which it is.
+    result.aio_capture_mode = data.serp_validation?.aio_capture_mode ?? null;
     result.organic = organic;
     if (brandDomain && organic.length > 0) {
       const brandPos = organic.findIndex(
@@ -1378,10 +1382,16 @@ export function summarizeEngineSlice(results, engineName, options = {}) {
   // a reader can see the null branch was considered, so the next edit does not
   // "fix" an apparently missing guard by reintroducing a `?? 0`.
   const gates = engineHealthThresholds(engineName);
+  // A validated Google SERP without an Overview is a collected measurement (the
+  // R04 parser proved the page was read), not a gap in the data source. Only
+  // rows carrying that verdict count; legacy rows keep the answer-only gate.
+  const verifiedNoAio = engineName === "aio"
+    ? nonBranded.filter((r) => !r.answer_present && !r.error && r.serp_state === "valid_serp").length
+    : 0;
   const dataSourceIssue =
     (errorRatePct !== null && errorRatePct > gates.errorRateLimitPct) ||
     (nonBranded.length > 0 &&
-      nonBrandedWithAnswer.length / nonBranded.length < gates.minNonBrandedCoverage);
+      (nonBrandedWithAnswer.length + verifiedNoAio) / nonBranded.length < gates.minNonBrandedCoverage);
 
   // Sample adequacy is judged on the ELICITING pool — the prompts that can
   // actually produce a mention. 56 answered prompts of which only 16 name any
@@ -1543,7 +1553,11 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
   const metricSlices = eligible
     .map((s) => s?.metrics?.[METRIC_IDS.EXPOSURE])
     .filter((m) => m && typeof m === "object");
-  const hasEntityPolicy=metricSlices.some(m=>m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`));
+  // Only slices that resolved at least one eligible answer carry an entity
+  // policy. An empty slice (no AIO, nothing attempted) is policy-neutral, not "old".
+  const entitySuffixed=m=>m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`);
+  const resolvedSlices=metricSlices.filter(m=>Number(m.denominator)>0);
+  const hasEntityPolicy=resolvedSlices.some(entitySuffixed);
   if(hasEntityPolicy)context.model_policy_version=`${context.model_policy_version || "unknown"}|${ENTITY_RESOLUTION_VERSION}`;
 
   if (metricSlices.length === 0) {
@@ -1619,7 +1633,7 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
     policy,
   });
   if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_incomplete")){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_incomplete";metric.qualified_state="insufficient";}
-  if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_policy_mixed") || (hasEntityPolicy && metricSlices.some(m=>!m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`)))){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_policy_mixed";metric.qualified_state="insufficient";}
+  if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_policy_mixed") || (hasEntityPolicy && resolvedSlices.some(m=>!entitySuffixed(m)))){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_policy_mixed";metric.qualified_state="insufficient";}
   if(options?.panelApproved===false){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="panel_not_reviewed";metric.qualified_state="insufficient";}
   return metric;
 }

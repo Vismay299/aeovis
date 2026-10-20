@@ -1,12 +1,13 @@
 {
   "suite": "actual-hosted-auth-storage-browser",
-  "executed_at": "2026-10-20T05:24:37.943Z",
-  "deployment": "https://aeo-g863popch-vismays-projects-e0c6f290.vercel.app",
-  "run_id": "3e839065-5aa9-4ab6-a3d9-a23ef00d7a57",
+  "executed_at": "2026-10-20T07:32:16.592Z",
+  "deployment": "https://aeo-kwnci9quv-vismays-projects-e0c6f290.vercel.app",
+  "run_id": "9d0107bc-3226-4d6a-9929-8758c928432e",
   "passed": [
     "Anonymous evidence access and privileged QA preparation are refused before side effects",
     "Actual customer login/browser opens its owned private JSON capture; expired and failed uploads remain distinct",
     "Two actual authenticated tenants remain isolated in history, evidence signing and direct private Storage access",
+    "Actual hosted nested JSON capture remains parseable/redacted; only the explicit unsafe QA object is withdrawn with its hash and paid history retained",
     "actual hosted private JSON capture",
     "actual bucket rejection retained as write_failed",
     "fresh signed URL readable",

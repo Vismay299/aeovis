@@ -420,6 +420,7 @@ export default function MeasurementPage() {
               <details key={o.id}>
                 <summary>
                   {o.engine} · {o.state} · {o.attempt_count} attempts
+                  {o.query ? <> · {o.query}</> : null}
                 </summary>
                 <p>
                   {o.reason} · {o.provenance?.method || "Legacy method unknown"}{" "}

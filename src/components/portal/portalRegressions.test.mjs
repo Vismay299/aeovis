@@ -371,7 +371,7 @@ async function finalizedReport(valid, planned = 30, mentions = valid) {
   { ...backend.deps, resolveEnabledEngines: () => [{ name: "chatgpt" }], extractCompetitors: async () => [] });
   const raw = job.run_record;
   return { id: jobId, brand: "Acme", visibility_pct: raw.visibility_pct, summary_stats: raw.summary_stats ?? null, prompts_tracked: raw.prompts_tracked, prompts_mentioned: raw.prompts_mentioned,
-    engines: raw.engines || null, engine_scores: raw.engine_scores || null, competitors: [], share_of_voice_pct: raw.share_of_voice_pct ?? null, brand_citation_share_pct: raw.brand_citation_share_pct ?? null };
+    engines: raw.engines || null, planned_questions: raw.planned_questions || null, engine_scores: raw.engine_scores || null, competitors: [], share_of_voice_pct: raw.share_of_voice_pct ?? null, brand_citation_share_pct: raw.brand_citation_share_pct ?? null };
 }
 
 async function renderCustomerReport(t, scan) {
@@ -458,3 +458,51 @@ test("R05 scan-level share and citation use the primary slice DTO only for singl
   assert.equal(single.share,qualifiedMetricValueOf(summary_stats.metrics.share_of_voice));assert.equal(single.citation,0);
 });
 function qualifiedMetricValueOf(metric){return reportData.qualifiedMetricValue(metric);}
+
+test("every planned question is listed, including those with no collected row, with the engines that were not collected", async () => {
+  const planned = { engines: ["aio", "chatgpt"], prompts: Array.from({ length: 30 }, (_, i) => `Planned question ${i}`) };
+  const results = Array.from({ length: 5 }, (_, i) => ({ id: `r${i}`, engine: "chatgpt", query: `Planned question ${i}`, answered: true, mentioned: i === 0, raw: {} }));
+  const groups = reportData.groupQuestions(results, planned);
+  assert.equal(groups.length, 30, "30 planned questions are listed although only 5 have rows");
+  assert.deepEqual(groups.map((g) => g.query), planned.prompts, "panel order is kept");
+  assert.deepEqual(groups[0].missing, ["aio"]);assert.deepEqual(groups[29].missing, ["aio", "chatgpt"]);
+  assert.deepEqual(reportData.engineOptions(results, planned).map((o) => o.value), ["aio", "chatgpt"]);
+  assert.equal(reportData.groupQuestions(results, null).length, 5, "legacy reports without a plan keep their row-only list");
+  const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const text = textOf(renderToHtml(cards.QuestionsCard, { results, planned }));
+  assert.match(text, /All\D*30/);
+  assert.ok(text.includes("Planned question 29"));
+  assert.match(text, /2 engines not collected/);
+});
+
+test("the finalizer stores the planned question list in panel order with the planned engines", async () => {
+  const scan = await finalizedReport(30);
+  assert.equal(scan.planned_questions.prompts.length, 30);assert.equal(scan.planned_questions.prompts[0], "Buyer question 0");assert.deepEqual(scan.planned_questions.engines, ["chatgpt"]);
+  const { plannedQuestions } = await import("../../lib/workers/scanWorker.js");
+  assert.deepEqual(plannedQuestions([{ text: "Best CRM?" }, { text: "Acme pricing" }, "Best ERP?"], ["best crm?", "best erp?"], ["aio"]), { engines: ["aio"], prompts: ["Best CRM?", "Best ERP?"] });
+  assert.ok(scan);
+});
+
+test("the Google card states the AI Overview trigger count from the terminal outcome, not '0 questions answered'", async () => {
+  const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const metric = createMetric({ metricId: "observed_exposure", numerator: null, denominator: 0, eligiblePromptIds: [], collection: { valid: 26, planned: 30 } });
+  const engines = { aio: { metrics: { observed_exposure: metric }, non_branded_queries: 30, non_branded_with_answer: 0, errored_queries: 4, data_source_issue: true } };
+  const terminalOutcome = { engines: [{ name: "aio", planned: 30, valid: 26, answered: 0, valid_no_aio: 26, failed: 4, not_attempted: 0 }] };
+  const text = textOf(renderToHtml(cards.EngineScoresCard, { engineScores: null, engines, terminalOutcome }));
+  assert.match(text, /AI Overview shown on 0 of 26 valid Google searches · 4 searches could not be collected/);
+  assert.doesNotMatch(text, /0 of 30 questions answered/);
+});
+
+test("multi-engine reports count questions named by any engine, once per question", async () => {
+  const { questionsNamingBrand } = await import("../../lib/workers/scanWorker.js");
+  const rows = [
+    { query: "Best tees?", engine: "aio", raw: { visible: false } },
+    { query: "Best tees?", engine: "chatgpt", mentioned: true, raw: {} },
+    { query: "best tees?", engine: "gemini", raw: { brand_cited: true } },
+    { query: "Garment dyed?", engine: "perplexity", raw: { error: "timeout", brand_mentioned_in_text: true } },
+    { query: "Drop shoulder?", engine: "gemini", raw: { brand_mentioned_in_text: false } },
+  ];
+  assert.equal(questionsNamingBrand(rows), 1);
+});

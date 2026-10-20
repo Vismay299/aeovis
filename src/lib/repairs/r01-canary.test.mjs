@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { brightDataSearch } from "../engines/brightdata.js";
+import { brightDataSearch, resetRenderedAioMemo } from "../engines/brightdata.js";
 import { isOpenRouterEngineConfigured } from "../engines/openRouterProbe.js";
 import { buildHealthPayload } from "../health.js";
 import { VENDORS } from "../vendorRegistry.js";
@@ -95,6 +95,7 @@ test("R01-04 — a shared gateway with no direct vendor keys selects the shared 
 });
 
 test("R01-09 — a Bright Data capacity envelope stays a failure with no no-AIO answer and no geography change", async () => {
+  resetRenderedAioMemo();
   const savedEnv = {
     BRIGHTDATA_API_KEY: process.env.BRIGHTDATA_API_KEY,
     BRIGHTDATA_SERP_ZONE: process.env.BRIGHTDATA_SERP_ZONE,
@@ -135,7 +136,11 @@ test("R01-09 — a Bright Data capacity envelope stays a failure with no no-AIO 
     // A capacity failure is retryable, so the canary spends its bounded attempt
     // ceiling on it — three attempts, three requests, and no more.
     assert.equal(result.requests, 3, "the attempt ceiling bounds a capacity failure");
-    assert.equal(requested.length, 3, "every attempt is a real provider request, and none is hidden");
+    // The first attempt asks for the rendered AI Overview, finds the cookie pool
+    // empty and falls back once to the standard SERP; the remembered empty pool
+    // sends the later attempts straight to the standard SERP. Every request is
+    // still counted, and none rescues the failure.
+    assert.equal(requested.length, 4, "every provider request is counted, including the one fallback");
     for (const attempt of result.attempts) {
       assert.equal(attempt.kind, PROVIDER_FAILURE.PROVIDER_CAPACITY);
       assert.equal(attempt.provider_code, "no_ready_cookies", "the provider's own code is preserved");
@@ -162,9 +167,10 @@ test("R01-09 — a Bright Data capacity envelope stays a failure with no no-AIO 
     for (const attempt of requested) {
       assert.equal(attempt.url, "https://api.brightdata.com/request");
       assert.match(attempt.body.url, /gl=in/, "the frozen geography is what was sent, on every attempt");
-      assert.match(attempt.body.url, /brd_ai_overview=2/);
       assert.equal(attempt.body.country, "in", "and it is the same geography the proxy was told to use");
     }
+    assert.match(requested[0].body.url, /brd_ai_overview=2/, "rendered mode is tried first");
+    assert.ok(requested.slice(1).every((attempt) => !/brd_ai_overview/.test(attempt.body.url)), "then the standard SERP");
     assert.equal(process.env.SERP_GEO, "in", "nothing silently switched the market");
 
     // A failed request may still have been billed, and is not reported as free.

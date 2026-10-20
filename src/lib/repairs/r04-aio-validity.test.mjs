@@ -520,3 +520,42 @@ test("R04-04 — a brand named only in an Overview heading still reaches the per
   assert.equal(row.brand_mentioned_in_text, true, "and the row records the brand as present in the answer");
   assert.equal(row.visible, true, "which is what makes the prompt count as visible");
 });
+
+test("an empty rendered-AIO cookie pool falls back once to the standard SERP, keeps an inline Overview and labels the capture mode", async (t) => {
+  pinAioEnv(t);
+  const { resetRenderedAioMemo } = await import("../engines/brightdata.js");
+  resetRenderedAioMemo(); t.after(resetRenderedAioMemo);
+  const urls = [];
+  const inline = {
+    general: { query: "best oversized t-shirt brands in india" },
+    organic: [{ position: 1, title: "Tees", link: "https://tees.example/", domain: "tees.example" }],
+    ai_overview: { texts: [{ snippet: "Acme is a popular oversized tee label.", reference_indexes: [0] }], references: [{ href: "https://acme.example/", title: "Acme", source: "acme.example" }] },
+  };
+  mockFetch(t, async (_url, init) => {
+    const target = JSON.parse(init.body).url; urls.push(target);
+    return /brd_ai_overview=2/.test(target)
+      ? new Response(JSON.stringify({ headers: { "x-brd-error": "no_ready_cookies" }, body: "" }), { status: 200 })
+      : envelope(inline);
+  });
+  const serp = await brightDataSearch("best oversized t-shirt brands in India", { durableDispatch: true, deadlineAt: Date.now() + 70_000 });
+  assert.equal(urls.length, 2, "one rendered request, then exactly one standard request");
+  assert.equal(serp.serp_validation.serp_state, "valid_serp");
+  assert.equal(serp.serp_validation.aio_present, true, "an Overview Google served inline is still captured");
+  assert.equal(serp.serp_validation.aio_capture_mode, "standard_serp_fallback");
+  const row = persisted(await probeAioRow(aioEngine()));
+  assert.equal(row.aio_capture_mode, "standard_serp_fallback", "the stored row carries the capture mode");
+  await brightDataSearch("best oversized t-shirt brands in India", { durableDispatch: true, deadlineAt: Date.now() + 70_000 });
+  assert.equal(urls.length, 4, "the remembered empty pool skips straight to the standard SERP");
+  assert.ok(urls.slice(2).every((u) => !/brd_ai_overview/.test(u)));
+});
+
+test("rendered-AIO successes are labelled rendered and never fall back", async (t) => {
+  pinAioEnv(t);
+  const { resetRenderedAioMemo } = await import("../engines/brightdata.js");
+  resetRenderedAioMemo(); t.after(resetRenderedAioMemo);
+  let calls = 0;
+  mockFetch(t, async () => { calls++; return envelope(noAioSerp()); });
+  const serp = await brightDataSearch("best vitrified tiles", { durableDispatch: true, deadlineAt: Date.now() + 70_000 });
+  assert.equal(calls, 1);
+  assert.equal(serp.serp_validation.aio_capture_mode, "rendered_ai_overview");
+});

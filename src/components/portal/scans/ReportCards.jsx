@@ -31,6 +31,7 @@ export function EngineScoresCard({ engineScores, engines, terminalOutcome }) {
           const smallSample = reading.legacy && summary?.insufficient_sample === true;
           const score = reading.legacy && incomplete ? null : reading.pct;
           const disposition=terminalOutcome?.engines?.find(engine=>engine.name===row.name);
+          const isAio=row.name==="aio" || row.name==="google_ai_overview";
           return (
           <div key={row.name} className="pv-scans-rows__item">
             <div className="pv-scans-rows__head">
@@ -38,10 +39,11 @@ export function EngineScoresCard({ engineScores, engines, terminalOutcome }) {
               <span className="pv-scans-rows__value">{formatPct(score)}</span>
             </div>
             <ProgressBar value={score} size="sm" label={`${engineLabel(row.name)} score`} />
-          {reading.note ? <p role="status">{reading.note}{reading.exploratory!=null ? ` Exploratory reading: ${reading.exploratory}% (${reading.numerator} of ${reading.denominator} eligible observations); headline withheld.` : ""}</p> : null}
-          {disposition?.valid_no_aio>0 ? <p>Valid SERPs without AIO: {disposition.valid_no_aio}.</p> : null}
+          {reading.note && !(isAio && disposition && !(disposition.answered > 0)) ? <p role="status">{reading.note}{reading.exploratory!=null ? ` Exploratory reading: ${reading.exploratory}% (${reading.numerator} of ${reading.denominator} eligible observations); headline withheld.` : ""}</p> : null}
+          {isAio && disposition ? <p role="status">AI Overview shown on {disposition.answered ?? 0} of {disposition.valid ?? 0} valid Google searches{disposition.failed>0 ? ` · ${disposition.failed} searches could not be collected` : ""}. A search without an Overview is a measured result, not a collection gap.</p> : null}
+          {!isAio && disposition?.valid_no_aio>0 ? <p>Valid SERPs without AIO: {disposition.valid_no_aio}.</p> : null}
           {disposition?.not_attempted>0 ? <p>{disposition.not_attempted} planned observations were not attempted.</p> : null}
-          {partial ? <p role="status">{incomplete && score===null ? "Collection incomplete" : "Partial collection"} · {summary.non_branded_with_answer ?? "—"} of {summary.non_branded_queries ?? "—"} questions answered · {summary.errored_queries ?? "—"} collection errors.{incomplete && score===null ? " Visibility is not assessed for this engine." : ""}</p> : null}
+          {partial && !(isAio && disposition) ? <p role="status">{incomplete && score===null ? "Collection incomplete" : "Partial collection"} · {summary.non_branded_with_answer ?? "—"} of {summary.non_branded_queries ?? "—"} questions answered · {summary.errored_queries ?? "—"} collection errors.{incomplete && score===null ? " Visibility is not assessed for this engine." : ""}</p> : null}
           {smallSample ? <p role="status">Limited scoring sample · {summary.eliciting_queries ?? "—"} answers named a tracked brand. {score === null ? "Visibility is not assessed for this engine." : "Treat this score as low confidence."}</p> : null}
           </div>
         ); })}
@@ -142,6 +144,7 @@ function QuestionRow({ question, engine }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const rows = engine === "all" ? question.rows : question.rows.filter((row) => row.engine === engine);
+  const missing = (question.missing || []).filter((name) => engine === "all" || name === engine);
 
   return (
     <li className="pv-scans-q">
@@ -155,6 +158,7 @@ function QuestionRow({ question, engine }) {
         <span className="pv-scans-q__text">{question.query}</span>
         <span className="pv-scans-q__badges">
           <EngineBadges rows={rows} />
+          {missing.length ? <span className="pv-scans-q__missing">{missing.length === 1 ? "1 engine not collected" : `${missing.length} engines not collected`}</span> : null}
         </span>
         <span className="pv-scans-q__chev" aria-hidden="true"><ChevronRight /></span>
       </button>
@@ -164,6 +168,7 @@ function QuestionRow({ question, engine }) {
           {rows.map((row, index) => (
             <AnswerBlock key={`${row.id || row.engine || "row"}-${index}`} row={row} />
           ))}
+          {missing.length ? <p role="status" className="pv-scans-q__missing-note">Not collected: {missing.map(engineLabel).join(", ")}. This question was planned for these engines, but no provider answer was recorded (not attempted, or blocked before a request). It is not a measured absence.</p> : null}
         </div>
       ) : null}
     </li>
@@ -171,18 +176,18 @@ function QuestionRow({ question, engine }) {
 }
 
 /** Questions grouped by text, with tabs, search and an engine filter. */
-export function QuestionsCard({ results }) {
+export function QuestionsCard({ results, planned }) {
   const [view, setView] = useState("all");
   const [search, setSearch] = useState("");
   const [engine, setEngine] = useState("all");
   const searchId = useId();
   const engineId = useId();
 
-  const questions = useMemo(() => groupQuestions(results), [results]);
-  const engines = useMemo(() => engineOptions(results), [results]);
+  const questions = useMemo(() => groupQuestions(results, planned), [results, planned]);
+  const engines = useMemo(() => engineOptions(results, planned), [results, planned]);
 
   const scoped = useMemo(
-    () => (engine === "all" ? questions : questions.filter((q) => q.rows.some((row) => row.engine === engine))),
+    () => (engine === "all" ? questions : questions.filter((q) => q.rows.some((row) => row.engine === engine) || q.missing.includes(engine))),
     [questions, engine],
   );
   const naming = scoped.filter((q) => questionNamesBrand(q, engine));
