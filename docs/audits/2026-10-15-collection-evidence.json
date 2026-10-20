@@ -1,0 +1,187 @@
+{
+  "checked_at": "2026-10-15T05:19:07.394Z",
+  "production": {
+    "scan_id": "699eda4b-dc9f-415a-9827-7618003ec086",
+    "job_ids": [
+      "0a5e6fe0-8ff7-44bf-bf65-bc46cf66a3c3"
+    ],
+    "scanned_at": "2026-10-14T16:20:17.656Z",
+    "collection": [
+      {
+        "engine": "aio",
+        "persisted_pairs": 34,
+        "non_branded_pairs": 30,
+        "answered": 19,
+        "errors": 13,
+        "first_result_at": "2026-10-14T16:14:16.474Z",
+        "last_result_at": "2026-10-14T16:19:49.349Z"
+      },
+      {
+        "engine": "chatgpt",
+        "persisted_pairs": 34,
+        "non_branded_pairs": 30,
+        "answered": 0,
+        "errors": 34,
+        "first_result_at": "2026-10-14T16:19:50.882Z",
+        "last_result_at": "2026-10-14T16:19:58.021Z"
+      },
+      {
+        "engine": "gemini",
+        "persisted_pairs": 34,
+        "non_branded_pairs": 30,
+        "answered": 0,
+        "errors": 34,
+        "first_result_at": "2026-10-14T16:19:59.032Z",
+        "last_result_at": "2026-10-14T16:20:08.074Z"
+      },
+      {
+        "engine": "perplexity",
+        "persisted_pairs": 34,
+        "non_branded_pairs": 30,
+        "answered": 0,
+        "errors": 34,
+        "first_result_at": "2026-10-14T16:20:08.649Z",
+        "last_result_at": "2026-10-14T16:20:16.012Z"
+      }
+    ],
+    "failures": [
+      {
+        "engine": "aio",
+        "category": "provider_cookie_pool_unavailable",
+        "pairs": 11
+      },
+      {
+        "engine": "aio",
+        "category": "timeout_or_abort",
+        "pairs": 2
+      },
+      {
+        "engine": "chatgpt",
+        "category": "credential_rejected",
+        "pairs": 34
+      },
+      {
+        "engine": "gemini",
+        "category": "credential_rejected",
+        "pairs": 34
+      },
+      {
+        "engine": "perplexity",
+        "category": "credential_rejected",
+        "pairs": 34
+      }
+    ],
+    "chunks": [
+      {
+        "scan_job_id": "0a5e6fe0-8ff7-44bf-bf65-bc46cf66a3c3",
+        "phase": "sourcing",
+        "outcome": "succeeded",
+        "reason": "checkpointed",
+        "probes_attempted": 12,
+        "probes_succeeded": 4,
+        "errors_recovered": 8,
+        "started_at": "2026-10-14T16:12:19.308Z",
+        "ended_at": "2026-10-14T16:15:31.537Z"
+      },
+      {
+        "scan_job_id": "0a5e6fe0-8ff7-44bf-bf65-bc46cf66a3c3",
+        "phase": "probing",
+        "outcome": "succeeded",
+        "reason": "checkpointed",
+        "probes_attempted": 18,
+        "probes_succeeded": 14,
+        "errors_recovered": 4,
+        "started_at": "2026-10-14T16:15:32.888Z",
+        "ended_at": "2026-10-14T16:18:36.972Z"
+      },
+      {
+        "scan_job_id": "0a5e6fe0-8ff7-44bf-bf65-bc46cf66a3c3",
+        "phase": "probing",
+        "outcome": "succeeded",
+        "reason": "complete",
+        "probes_attempted": 106,
+        "probes_succeeded": 3,
+        "errors_recovered": 103,
+        "started_at": "2026-10-14T16:18:38.069Z",
+        "ended_at": "2026-10-14T16:20:29.457Z"
+      }
+    ],
+    "competitor_roster_source": "carried_forward",
+    "competitor_extraction_offline": true
+  },
+  "local_text_collection_replay": {
+    "scope": "Original 34 stored questions and pre-finalization competitor inputs; runProbingPhase with memory-only persistence and local credentials. No fresh sourcing or finalization; not a production repair or scoring acceptance.",
+    "elapsed_ms": 366766,
+    "expected": 102,
+    "persisted": 102,
+    "recorded_cost_usd": 1.602235925,
+    "tokens": 476005,
+    "engines": {
+      "chatgpt": {
+        "rows": 34,
+        "answered": 34,
+        "errors": {},
+        "unverified_citation_lists": 0
+      },
+      "gemini": {
+        "rows": 34,
+        "answered": 34,
+        "errors": {},
+        "unverified_citation_lists": 3
+      },
+      "perplexity": {
+        "rows": 34,
+        "answered": 34,
+        "errors": {},
+        "unverified_citation_lists": 0
+      }
+    }
+  },
+  "google_country_comparison": {
+    "query_market": "in",
+    "ai_overview_parameter": "2",
+    "scope": "Two original stored questions, one request per mode; small diagnostic sample, not a reliability benchmark.",
+    "results": [
+      {
+        "index": 0,
+        "pinnedEgress": true,
+        "elapsedMs": 7061,
+        "http": 200,
+        "providerStatus": 502,
+        "error": "No ready cookies",
+        "aiTextLength": 0,
+        "organicCount": 0
+      },
+      {
+        "index": 0,
+        "pinnedEgress": false,
+        "elapsedMs": 5388,
+        "http": 200,
+        "providerStatus": 502,
+        "error": "No ready cookies",
+        "aiTextLength": 0,
+        "organicCount": 0
+      },
+      {
+        "index": 4,
+        "pinnedEgress": true,
+        "elapsedMs": 23807,
+        "http": 200,
+        "providerStatus": 200,
+        "error": null,
+        "aiTextLength": 2507,
+        "organicCount": 7
+      },
+      {
+        "index": 4,
+        "pinnedEgress": false,
+        "elapsedMs": 4008,
+        "http": 200,
+        "providerStatus": 502,
+        "error": "No ready cookies",
+        "aiTextLength": 0,
+        "organicCount": 0
+      }
+    ]
+  }
+}
