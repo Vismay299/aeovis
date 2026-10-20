@@ -1543,7 +1543,11 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
   const metricSlices = eligible
     .map((s) => s?.metrics?.[METRIC_IDS.EXPOSURE])
     .filter((m) => m && typeof m === "object");
-  const hasEntityPolicy=metricSlices.some(m=>m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`));
+  // Only slices that resolved at least one eligible answer carry an entity
+  // policy. An empty slice (no AIO, nothing attempted) is policy-neutral, not "old".
+  const entitySuffixed=m=>m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`);
+  const resolvedSlices=metricSlices.filter(m=>Number(m.denominator)>0);
+  const hasEntityPolicy=resolvedSlices.some(entitySuffixed);
   if(hasEntityPolicy)context.model_policy_version=`${context.model_policy_version || "unknown"}|${ENTITY_RESOLUTION_VERSION}`;
 
   if (metricSlices.length === 0) {
@@ -1619,7 +1623,7 @@ function headlineMetricFor(eligible, { policy, options, cohort, slices = eligibl
     policy,
   });
   if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_incomplete")){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_incomplete";metric.qualified_state="insufficient";}
-  if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_policy_mixed") || (hasEntityPolicy && metricSlices.some(m=>!m.context?.model_policy_version?.endsWith(`|${ENTITY_RESOLUTION_VERSION}`)))){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_policy_mixed";metric.qualified_state="insufficient";}
+  if(slices.some(slice=>slice.metrics?.[METRIC_IDS.EXPOSURE]?.qualified_reason==="entity_resolution_policy_mixed") || (hasEntityPolicy && resolvedSlices.some(m=>!entitySuffixed(m)))){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="entity_resolution_policy_mixed";metric.qualified_state="insufficient";}
   if(options?.panelApproved===false){metric.qualified=false;metric.qualified_pct=null;metric.qualified_reason="panel_not_reviewed";metric.qualified_state="insufficient";}
   return metric;
 }
