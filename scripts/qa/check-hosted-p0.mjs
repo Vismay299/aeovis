@@ -27,7 +27,8 @@ try{
   operatorContext=await context();
   async function operator(action){
     const r=await operatorContext.request.post(`${origin}/api/measurement/qualification`,{headers:{"x-operator-token":process.env.OPERATOR_TOKEN,origin},data:{action,run_id:fixture.run_id,user_ids:fixture.users.map(u=>u.id)},timeout:120000});
-    assert.equal(r.status(),200);return r.json();
+    if(r.status()!==200)throw Object.assign(Error("QA operator action failed"),{code:`qa_http_${r.status()}`});
+    return r.json();
   }
   const api=(user,index=0)=>`${origin}/api/customer/measurement/evidence?brand_key=${encodeURIComponent(user.brand_key)}&observation=${fixture.observation_id}&attempt=${fixture.attempt}&index=${index}`;
   stage="anonymous access";
@@ -70,16 +71,31 @@ try{
   passed.push("Two actual authenticated tenants remain isolated in history, evidence signing and direct private Storage access");
   stage="hosted signed expiry and scoped retention";
   const retention=await operator("verify_retention");passed.push(...retention.passed);
+  stage="expired evidence history refresh";
   await owner.page.reload();await owner.page.getByRole("heading",{name:"Questions and evidence",exact:true}).waitFor();
   await owner.page.locator("details").filter({hasText:"aio · valid_no_aio"}).first().locator("summary").click();
   assert.equal(await owner.page.getByRole("link",{name:/Open private response capture/}).count(),0);
-  assert.match(await owner.page.locator("main").innerText(),/expired/i);
+  await owner.page.getByText("Raw capture expired; the measurement is retained.",{exact:true}).first().waitFor();
+  stage="health reads remain free of provider dispatch";
+  const health=async()=>{const r=await anonymous.request.get(`${origin}/api/health`);assert.equal(r.status(),200);const body=await r.json();assert.equal(body.db.ok,true);return body.provider_readiness;};
+  const before=await health();
+  const canaries=report=>Object.fromEntries(Object.entries(report.engines).map(([engine,r])=>[engine,{config_version:r.config_version,canary:r.canary}]));
+  for(let batch=0;batch<20;batch++){
+    const readings=await Promise.all(Array.from({length:5},()=>health()));
+    for(const reading of readings)assert.deepEqual(canaries(reading),canaries(before));
+  }
+  passed.push("R01-12: 100 actual hosted health reads preserve every stored canary without provider dispatch");
   assert.equal(paidRequests,0);
   passed.push("Customer history refresh removes expired capture links and never starts a paid scan");
   stage="fixture cleanup";const cleanup=await operator("cleanup");assert.equal(cleanup.cleaned,true);cleaned=true;
   await writeFile("docs/audits/2026-10-16/p0-hosted-browser-evidence.json",JSON.stringify({suite:"actual-hosted-auth-storage-browser",executed_at:new Date().toISOString(),deployment:origin,run_id:fixture.run_id,passed,paid_requests:paidRequests,fixture_cleanup:cleaned,qualification:"Actual deployed app, two disposable Auth users and owned QA workspaces, real hosted RLS/Storage. Provider text is an explicit fixture. Retention advances time only for its exact QA prefix; no elapsed-day claim."},null,2)+"\n");
   console.log(JSON.stringify({passed:passed.length,paid_requests:paidRequests,fixture_cleanup:cleaned}));
-}catch(error){console.error(JSON.stringify({failed:true,stage,error_type:error.name}));process.exitCode=1;}
+}catch(error){
+  const code=error.code || /net::ERR_[A-Z_]+/.exec(error.message || "")?.[0] || (/Timeout/i.test(error.message || "")?"timeout":"browser_operation_failed");
+  const failure={suite:"actual-hosted-auth-storage-browser",executed_at:new Date().toISOString(),deployment:origin,outcome:"failed",passed,failed_stage:stage,error_type:error.name,code,paid_requests:paidRequests,qualification:"Partial evidence only; failed stage and cleanup must be resolved before acceptance."};
+  await writeFile("docs/audits/2026-10-16/p0-hosted-browser-last-failure.json",JSON.stringify(failure,null,2)+"\n");
+  console.error(JSON.stringify({failed:true,stage,error_type:error.name,code}));process.exitCode=1;
+}
 finally{
   if(!cleaned && operatorContext && fixture?.users){try{const r=await operatorContext.request.post(`${origin}/api/measurement/qualification`,{headers:{"x-operator-token":process.env.OPERATOR_TOKEN,origin},data:{action:"cleanup",run_id:fixture.run_id,user_ids:fixture.users.map(u=>u.id)}});console.log(JSON.stringify({cleanup_status:r.status()}));}catch{console.error("QA cleanup could not be confirmed; private run details retained for recovery.");}}
   if(browser)await browser.close();
