@@ -67,6 +67,17 @@ test("an empty bucket is a measured zero", async () => {
   assert.equal(report.removed, 0);
 });
 
+test("QA retention is confined to its exact prefix, including recursive folders", async () => {
+  const storage = fakeStorage({
+    "": [folder("customer"), folder("qa")], customer: [file("private.json", daysAgo(200))],
+    qa: [folder("run")], "qa/run": [file("capture.json", daysAgo(91))],
+  });
+  const report = await pruneProbeEvidence({ storage, prefix:"qa/run", now:()=>NOW });
+  assert.equal(report.scanned,1);
+  assert.deepEqual(storage.removed,["qa/run/capture.json"]);
+  await assert.rejects(()=>listEvidenceObjects(storage,{prefix:"qa/../customer"}),/Invalid evidence prefix/);
+});
+
 test("a list failure throws — it is not '0 expired'", async () => {
   await assert.rejects(
     () => pruneProbeEvidence({ storage: fakeStorage({}, { listError: "bucket not found" }), now: () => NOW }),

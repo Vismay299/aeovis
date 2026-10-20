@@ -26,22 +26,20 @@ export async function GET(request) {
     .maybeSingle();
   if (readError) return fail("Could not read evidence", 503);
   if (!capture) return fail("Evidence unavailable", 404);
+  if (capture.state !== "stored" && capture.state !== "expired")
+    return fail("This capture was not stored. The observation has incomplete evidence.",409);
+  const remaining = Date.parse(capture.expires_at) - Date.now();
   if (
     capture.state === "expired" ||
-    Date.parse(capture.expires_at) <= Date.now()
+    !Number.isFinite(remaining) || remaining < 1000
   )
     return fail(
       "Raw capture expired under the retention policy. The measurement is retained.",
       410,
     );
-  if (capture.state !== "stored")
-    return fail(
-      "This capture was not stored. The observation has incomplete evidence.",
-      409,
-    );
   const { data, error: signError } = await admin.storage
     .from("probe-evidence")
-    .createSignedUrl(capture.object_key, 120);
+    .createSignedUrl(capture.object_key, Math.min(120, Math.floor(remaining / 1000)));
   if (signError || !data?.signedUrl)
     return fail("Could not open the stored capture", 503);
   return new Response(null, {

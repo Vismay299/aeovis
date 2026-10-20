@@ -21,10 +21,10 @@ const { runFinalizePhase } = await import(
 const { makeMemoryScanBackend } = await import(
   "../../src/lib/demo/memoryScanBackend.js"
 );
-async function fixture(valid) {
+async function fixture(valid,planned=30,mentions=valid) {
   const backend = makeMemoryScanBackend(),
-    queries = Array.from({ length: 30 }, (_, i) => `Buyer question ${i}`),
-    jobId = `fixture-${valid}`;
+    queries = Array.from({ length: planned }, (_, i) => `Buyer question ${i}`),
+    jobId = `fixture-${valid}-${planned}-${mentions}`;
   await backend.deps.upsertPromptResults(
     queries.map((query, i) => ({
       id: `result-${i}`,
@@ -36,10 +36,10 @@ async function fixture(valid) {
         engine: "chatgpt",
         prompt: query,
         answer_present: i < valid,
-        text: i < valid ? "Acme is an option." : "",
+        text: i < valid ? i < mentions ? "Acme is an option." : "A general answer with no vendor named." : "",
         error: i < valid ? null : "Fixture provider timeout",
-        visible: i < valid,
-        brand_mentioned_in_text: i < valid,
+        visible: i < valid && i < mentions,
+        brand_mentioned_in_text: i < valid && i < mentions,
         brand_cited: false,
         references: [],
         brands: [],
@@ -79,6 +79,8 @@ const fixtures = {
   partial: await fixture(29),
   failed: await fixture(0),
   complete: await fixture(30),
+  thin:await fixture(5,5),
+  zero:await fixture(30,30,0),
 };
 const browser = await chromium.launch({ headless: true });
 const passed = [];
@@ -169,6 +171,30 @@ try {
       `R03/R05-B ${name}: durable reload and downloaded outcome/count agreement`,
     );
     await page.close();
+  }
+  for(const name of ["thin","zero","failed"]){
+    const page=await browser.newPage({acceptDownloads:true});let paid=0;
+    await page.route("**/api/**",route=>{if(route.request().method()==="POST"){paid++;return route.abort();}return route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(route.request().url().includes("/by-id/")?{scan:fixtures[name]}:{scans:[],items:[]})});});
+    await page.goto(`${origin}/dashboard/acme/report-fixture`);
+    await page.getByRole("status",{name:"Collection outcome"}).waitFor();
+    const metric=fixtures[name].raw_results.summary_stats.headline_metric;
+    if(name==="thin"){
+      const qualifier=page.getByTestId("headline-qualification");await qualifier.waitFor();
+      assert.match(await qualifier.innerText(),/Insufficient evidence for a headline/);
+      assert.match(await qualifier.innerText(),/5 of 5 eligible observations/);
+      assert.equal(metric.value_pct,100);assert.equal(metric.qualified_pct,null);
+      if(await page.getByTestId("score-band").count())assert.ok((await page.getByTestId("score-band").locator(".num").innerText()).includes("—"));
+    }else if(name==="zero"){
+      assert.equal(metric.value_pct,0);assert.equal(metric.qualified_pct,0);
+      await page.getByTestId("score-band").waitFor();assert.match(await page.getByTestId("score-band").locator(".num").innerText(),/^0/);
+    }else{
+      assert.equal(metric.qualified_pct,null);assert.equal(await page.getByTestId("score-band").count(),0);
+      await page.getByTestId("dashboard-unreliable-placeholder").waitFor();
+    }
+    const pending=page.waitForEvent("download");await page.getByRole("button",{name:"Download measurement JSON"}).click();
+    const stream=await (await pending).createReadStream();let data="";for await(const chunk of stream)data+=chunk;
+    assert.deepEqual(JSON.parse(data).raw_results.summary_stats.headline_metric,metric);assert.equal(paid,0);
+    passed.push(`R05-22/23-B ${name}: qualified versus exploratory/unknown screen state agrees with exact downloaded metric DTO`);await page.close();
   }
   for (const [name, title, tone] of [["complete", "Scan complete", "success"], ["partial", "Partial collection", "warning"], ["failed", "Collection failed", "error"]]) {
     const page = await browser.newPage();

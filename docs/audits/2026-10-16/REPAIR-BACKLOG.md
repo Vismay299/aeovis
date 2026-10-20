@@ -9,7 +9,7 @@ This is the execution specification and current implementation status for 21 rep
 
 ## Current status: implemented code versus accepted repairs
 
-Verified against merged main `c5530c9` (PRs [#6](https://github.com/Vismay299/aeovis/pull/6), [#7](https://github.com/Vismay299/aeovis/pull/7), [#8](https://github.com/Vismay299/aeovis/pull/8)), the open P0 dispatch [PR #9](https://github.com/Vismay299/aeovis/pull/9), and the follow-on `codex/finish-repair-backlog` branch. The follow-on PR is stacked on #9; neither branch is described as merged/deployed. **No priority group is release accepted.** R01–R11 are numbered repairs across P0/P1, not eleven completed P1 tasks.
+Verified against merged main `af69523`, including PRs [#6](https://github.com/Vismay299/aeovis/pull/6), [#7](https://github.com/Vismay299/aeovis/pull/7), [#8](https://github.com/Vismay299/aeovis/pull/8), [#9](https://github.com/Vismay299/aeovis/pull/9) and [#11](https://github.com/Vismay299/aeovis/pull/11), plus the current P0 qualification follow-on. There are **102 implemented subtasks and 112 open/partial subtasks**. Hosted rollout progress and deployment limits are tracked in [P0 release qualification](./P0-RELEASE-QUALIFICATION.md). **No priority group is release accepted at this checkpoint.** R01–R11 are numbered repairs across P0/P1, not eleven completed P1 tasks.
 
 Checkboxes mean an entire implementation subtask is present, not deployed, live qualified or release accepted. Unchecked items may have substantial partial code. The inventory remains 404 named scenarios / 214 implementation subtasks; partial database/browser suites cannot close the full inventory.
 
@@ -19,7 +19,7 @@ Checkboxes mean an entire implementation subtask is present, not deployed, live 
 | R02 | P0 | Production durable observations/attempts, fenced claims, persisted retry times, circuits, reservations and ambiguity reconciliation in #9; operator attempt/cost/recovery display and browser checks added here. | Authorized shadow/cutover and full rollback exercise. Offered adapters do not promise provider idempotency; unsupported capability cannot be fabricated to pass R02-12. |
 | R03 | P0 | Frozen matrix/outcome propagation plus natural report identity and transactional materialization of links, citations, judgments, rollups and terminal job. Actual SQL races/crash rollback/recovery and browser reload/JSON totals verified. | Hosted deployment/rollback qualification and the remaining complete browser inventory. |
 | R04 | P0 | Strict Google parsing, whole-response deadlines, no nested durable retries, private capture state, parser incident inbox and operator display. Live AIO/no-AIO and provider failures recorded. | Hosted Storage upload/retention/signing and full live/manual Google fidelity acceptance. Preserve the first live harness's four actual attempts and its corrected two-request rerun; neither failure is hidden. |
-| R05 | P0 | Fixed self denominators; frozen pre-answer purpose, panel/version/equal weights and full context; recommendation eligibility; clustered uncertainty; unreviewed-panel headline refusal; shared metric propagation and numerical methodology. | Full independent entity-resolution/calibration acceptance, all cluster/cohort scenarios and hosted rollup/browser release checks. |
+| R05 | P0 | Fixed self denominators; independent registered-entity resolution; frozen pre-answer purpose, panel/version/equal weights and full context; recommendation eligibility; clustered uncertainty; unreviewed-panel headline refusal; shared metric propagation and numerical methodology. Single text-provider scans use their own answer/health summaries, preserving measured zero. | Full entity-resolution/calibration acceptance, all cluster/cohort scenarios and hosted rollup/browser release checks. |
 | R06 | P1 | Runtime context/model identity, explicit unreported returned models, observed/unknown search telemetry, attempt IDs/times, sanitized private captures and tenant-scoped signed access endpoint. | Hosted Auth/Storage/retention tests and complete adapter/error/export inventory. Local filesystem captures are explicitly not hosted Storage acceptance. |
 | R07 | P1 | Fixed sample and isolation foundations; actual mobile sample reload with no measurement requests verified. | Remaining storage/navigation/banner/download/version browser cases and complete sample-contract acceptance. |
 | R08 | P1 | Merged relationships, contextual sentiment, evidence spans and first-mention/list-rank distinction. | Full entity-resolution/escalation, label persistence and browser inspection acceptance. |
@@ -37,7 +37,7 @@ Checkboxes mean an entire implementation subtask is present, not deployed, live 
 | R20 | P2 | Merged hostname/canonical/robots/sitemap/private-noindex foundations; built-site HTTP checks pass. | Public navigation/mobile/claims review, real owned-site study and deployed/Search Console evidence. |
 | R21 | P2/bootstrap | Existing honest 404-case harness and isolated SQL job; follow-on SQL/browser/live executables and evidence manifests added here. | Complete evidence ingestion for every suite, architecture/semantic mutation checks, manual/soak evidence and end-to-end rollout/rollback sign-off. |
 
-**Evidence.** See [follow-on verification and limits](./REPAIR-IMPLEMENTATION-STATUS.md), [database workflow results](./repair-workflow-database-evidence.json), [actual browser results](./repair-browser-evidence.json), [durable live canaries](./repair-provider-live-evidence.json), [Google checks](./repair-google-live-evidence.json), and the [historical first Google run](./repair-google-live-first-run.json). The initial credential assessment looked at legacy names; the configured canonical `LLM_API_KEY` was subsequently verified through all three actual gateway routes. No production application database was migrated or written.
+**Evidence.** See [current hosted rollout and limits](./P0-RELEASE-QUALIFICATION.md), [hosted migration results](./p0-hosted-migration-evidence.json), [database workflow results](./repair-workflow-database-evidence.json), [actual browser results](./repair-browser-evidence.json), [durable local live canaries](./repair-provider-live-evidence.json), [Google checks](./repair-google-live-evidence.json), and the [historical first Google run](./repair-google-live-first-run.json). Production migrations 027–035 have now been applied with existing scan/job/result counts preserved; ordinary provider dispatch is paused for qualification. The first hosted canary exposed a different gateway binding rejected with HTTP 401. Its replacement uses the existing locally verified credential and awaits a new authorized deployment and hosted canary. The earlier implementation report is a historical pre-migration snapshot.
 
 P0 remains first: qualify hosted evidence and deployment behavior, resolve the measured Google capacity failure with bounded recovery, then shadow/cut over and exercise rollback. R09 human adjudication, R11/R12 elapsed soak, the consumer fleet, remaining P1 integration and P2 acceptance stay open. This branch is substantial implementation progress, not completion of every scope in the requested table.
 
@@ -162,14 +162,14 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 ## R01. Diagnose and recover provider readiness
 
-**Current status:** Implementation is connected in this change; deployment/live/browser acceptance remains open. The runbook lists the offered adapter/credential map. No deployed environment was inspected.
+**Current status:** Production adapter/configuration selection has been inspected. The current P0 release record tracks the hosted migration, bounded provider, Storage, browser and rollout qualification; configured credentials alone still do not establish readiness.
 
 **Priority/dependencies:** P0; harness bootstrap. **Primary code:** `src/lib/vendorRegistry.js`, `health.js`, `engines/httpFailureKind.js`, engine adapters, `scripts/check-secrets.mjs`. **Problem:** configured credentials were reported healthy while persisted calls failed authentication or key limits.
 
 ### Implementation tasks and subtasks
 
 1. **Trace configuration to the actual adapter.**
-   - [ ] R01.1a Inventory each offered surface, selected gateway/model, credential variable name, fallback rule, and deployed environment.
+   - [x] R01.1a Inventory each offered surface, selected gateway/model, credential variable name, fallback rule, and deployed environment. The hosted production health read and current P0 rollout record verify the actual gateway selections.
    - [x] R01.1b Record configuration identity/version without recording credential values; flag unsupported model/gateway combinations before spending.
 2. **Create one failure classifier.**
    - [x] R01.2a Parse status plus allowlisted provider codes into authentication, permission/challenge, spend limit, rate limit, transient, timeout, and parse outcomes.
@@ -390,7 +390,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
    - [x] R05.1b Store numerator, denominator, unit, panel/surface/policy version, collection window, and exclusion reasons for each value.
 2. **Freeze eligibility before observing answers.**
    - [x] R05.2a Classify panel intent in advance; do not drop brand-free answers to improve a headline.
-   - [ ] R05.2b Resolve entities independently of the selected rival list; preserve citation-only evidence in the appropriate metric.
+   - [x] R05.2b Resolve entities independently of the selected rival list; preserve citation-only evidence in the appropriate metric. Registered identity/text/owned-host evidence is resolved before roster display; generic/short aliases remain ambiguous, and the entity-policy boundary prevents mixed/historical comparisons from qualifying.
 3. **Implement qualification and uncertainty.**
    - [x] R05.3a Apply distinct-prompt minimum and collection gate to the metric's actual denominator, not a larger answered pool.
    - [x] R05.3b Keep raw exploratory ratios labeled; compute suitable confidence intervals and cluster repeated observations by prompt.

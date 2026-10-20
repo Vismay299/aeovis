@@ -2142,7 +2142,6 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
 
   const allEngineDefs = resolveEngines({ allowFallback: false });
   let engineNames = checkpoint.engines && checkpoint.engines.length ? checkpoint.engines : allEngineDefs.map((e) => e.name);
-  const isMultiEngine = engineNames.length > 1;
 
   // R3.2.5 — the engine-set verdict this scan is finalized under, recomputed
   // from EVIDENCE rather than trusted from the checkpoint alone.
@@ -2193,6 +2192,11 @@ export async function runFinalizePhase(jobId, checkpoint, deps = {}, tally = {})
     engineNames = uniqueProbed;
   }
 
+  // The legacy path understands Google SERPs only. A single text provider
+  // still needs per-engine answer denominators and persisted health metadata.
+  // Include the observed set after a refreeze so substituted text answers
+  // cannot be summarized as missing AI Overviews.
+  const isMultiEngine = engineNames.length > 1 || engineNames.some(name => name !== "aio");
   const scannedAt = new Date().toISOString();
 
   // Same shape-normalization the pre-P0.2 code used, unchanged: both pipeline

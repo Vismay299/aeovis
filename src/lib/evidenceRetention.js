@@ -28,9 +28,10 @@ function objectTimeMs(obj) {
  * Walk the bucket (folders recurse; Storage `list` is one level deep) and
  * return every file object with its full path. Throws on a list error.
  */
-export async function listEvidenceObjects(storage, { maxObjects = DEFAULT_MAX_OBJECTS } = {}) {
+export async function listEvidenceObjects(storage, { maxObjects = DEFAULT_MAX_OBJECTS, prefix = "" } = {}) {
+  if (prefix && (!/^[a-zA-Z0-9_/-]+$/.test(prefix) || prefix.includes(".."))) throw new Error("Invalid evidence prefix");
   const files = [];
-  const queue = [""];
+  const queue = [prefix.replace(/\/$/, "")];
   let truncated = false;
   while (queue.length) {
     const prefix = queue.shift();
@@ -68,7 +69,7 @@ export async function pruneProbeEvidence(deps = {}) {
   const storage = deps.storage ?? client.storage.from(EVIDENCE_BUCKET);
   const cutoffMs = now.getTime() - retentionDays * 24 * 60 * 60 * 1000;
 
-  const { files, truncated } = await listEvidenceObjects(storage, { maxObjects: deps.maxObjects });
+  const { files, truncated } = await listEvidenceObjects(storage, { maxObjects: deps.maxObjects, prefix: deps.prefix });
   const expired = [];
   let undated = 0;
   let bytesKept = 0;
@@ -93,6 +94,13 @@ export async function pruneProbeEvidence(deps = {}) {
       );
     }
     removed += chunk.length;
+    // Preserve the durable expired state after an object is removed. A failed
+    // metadata write is reported; it cannot turn a partial retention pass green.
+    if (client && !deps.storage) {
+      const { error: metadataError } = await client.from("measurement_evidence")
+        .update({state:"expired",reason:"retention_expired"}).in("object_key",chunk);
+      if (metadataError) throw new Error("Evidence removed but retention metadata could not be persisted");
+    }
   }
 
   return {

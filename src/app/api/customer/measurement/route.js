@@ -32,18 +32,22 @@ export async function GET(request) {
       { error: "Could not load measurement history" },
       { status: 503 },
     );
+  const ids=observations.data.map(o=>o.id);
+  const evidence=ids.length ? await admin.from("measurement_evidence")
+    .select("observation_id,attempt_token,capture_index,state,expires_at")
+    .in("observation_id",ids) : {data:[],error:null};
+  if(evidence.error)return NextResponse.json({error:"Could not load private evidence metadata"},{status:503});
+  const captureView=o=>(evidence.data || []).filter(c=>c.observation_id===o.id && c.attempt_token===o.result?.attempt_id)
+    .map(c=>({index:c.capture_index,state:c.state==="stored" && (!Number.isFinite(Date.parse(c.expires_at)) || Date.parse(c.expires_at)<=Date.now()) ? "expired" : c.state}));
   return NextResponse.json(
     {
       observations: observations.data.map((o) => ({
         ...o,
         result: undefined,
         provenance: o.result?.provenance || null,
-        evidence_state: o.result?.evidence_state || "legacy_unknown",
+        evidence_state: captureView(o).some(c=>c.state==="expired") ? "expired" : captureView(o).some(c=>c.state!=="stored") ? "incomplete" : o.result?.evidence_state || "legacy_unknown",
         attempt_id: o.result?.attempt_id || null,
-        captures: (o.result?.evidence_captures || []).map((c, index) => ({
-          index,
-          state: c.state,
-        })),
+        captures: captureView(o),
       })),
       windows: windows.data,
     },

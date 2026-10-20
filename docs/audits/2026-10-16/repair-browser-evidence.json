@@ -1,6 +1,6 @@
 {
   "suite": "actual-next-browser-controlled-api",
-  "executed_at": "2026-10-19T19:56:51.070Z",
+  "executed_at": "2026-10-19T20:46:24.839Z",
   "passed": [
     "R13-B authentication: opaque/error recovery and zero paid requests",
     "R13-B missing: opaque/error recovery and zero paid requests",
@@ -10,6 +10,9 @@
     "R03/R05-B complete: durable reload and downloaded outcome/count agreement",
     "R03/R05-B partial: durable reload and downloaded outcome/count agreement",
     "R03/R05-B failed: durable reload and downloaded outcome/count agreement",
+    "R05-22/23-B thin: qualified versus exploratory/unknown screen state agrees with exact downloaded metric DTO",
+    "R05-22/23-B zero: qualified versus exploratory/unknown screen state agrees with exact downloaded metric DTO",
+    "R05-22/23-B failed: qualified versus exploratory/unknown screen state agrees with exact downloaded metric DTO",
     "R03-14-B complete: completed execution shows success collection notice and no automatic rescan",
     "R03-14-B partial: completed execution shows warning collection notice and no automatic rescan",
     "R03-14-B failed: completed execution shows error collection notice and no automatic rescan",
