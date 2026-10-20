@@ -450,6 +450,16 @@ try {
     assert.equal(bucket.public,false);assert.ok(bucket.allowed_mime_types.includes("application/json"));
     assert.equal((await q("select measurement_storage_ready() ready")).rows[0].ready,true);
   });
+  await test("QA-D: last-owner protection remains active and only validated fixture membership can be demoted for workspace cleanup", async()=>{
+    const fixtureBrand=`qa-cleanup-${id()}.example`;
+    await q("insert into customer_brands(brand_key,display_name,website,website_host) values($1,'QA cleanup','https://cleanup.example','cleanup.example')",[fixtureBrand]);
+    await q("insert into customer_brand_memberships(user_id,brand_key,role) values($1,$2,'owner')",[actor,fixtureBrand]);
+    await assert.rejects(()=>q("delete from customer_brand_memberships where brand_key=$1",[fixtureBrand]),/last owner/);
+    await q("update customer_brand_memberships set role='member' where brand_key=$1 and user_id=$2",[fixtureBrand,actor]);
+    await q("delete from customer_brands where brand_key=$1",[fixtureBrand]);
+    assert.equal((await q("select count(*)::int n from customer_brand_memberships where brand_key=$1",[fixtureBrand])).rows[0].n,0);
+    assert.equal((await q("select count(*)::int n from customer_brands where brand_key=$1",[brand])).rows[0].n,1);
+  });
   const manifest = {
     suite: "real-postgresql-repair-workflows",
     executed_at: new Date().toISOString(),

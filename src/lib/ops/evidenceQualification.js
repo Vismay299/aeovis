@@ -93,6 +93,10 @@ export async function cleanupEvidenceQualification(admin, run, userIds) {
   const control=await checked(admin.from("probe_dispatch_control").select("*").eq("singleton",true).single());
   if(control.brand_allowlist?.includes(brandKey(run,"a")))await checked(admin.rpc("set_probe_rollout",{p_paused:control.paused,p_canaries:control.canaries_allowed,p_brands:[]}));
   for(const key of [brandKey(run,"a"),brandKey(run,"b")]){
+    // The workspace guard correctly refuses deleting its last owner. These
+    // disposable identities were validated above; demote only their scoped
+    // fixture memberships before removing the fixture workspace and users.
+    if(userIds.length)await checked(admin.from("customer_brand_memberships").update({role:"member"}).eq("brand_key",key).in("user_id",userIds));
     await checked(admin.from("customer_brand_memberships").delete().eq("brand_key",key));
     await checked(admin.from("customer_brands").delete().eq("brand_key",key));
   }

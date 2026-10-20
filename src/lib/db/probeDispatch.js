@@ -133,7 +133,7 @@ export function createProbeDispatchStore(client = supabase) {
       const { data, error } = await client
         .from("probe_observations")
         .select(
-          "engine,config_version,state,observed_at,result,reason,created_at,context,probe_attempts(started_at,finished_at,attempt_no)",
+          "engine,config_version,state,observed_at,result,reason,created_at,context,probe_attempts!probe_attempts_observation_id_fkey(started_at,finished_at,attempt_no)",
         )
         .eq("purpose", "canary")
         .order("created_at", { ascending: false })
