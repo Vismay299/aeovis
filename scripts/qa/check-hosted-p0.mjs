@@ -77,8 +77,9 @@ try{
   assert.equal(await owner.page.getByRole("link",{name:/Open private response capture/}).count(),0);
   await owner.page.getByText("Raw capture expired; the measurement is retained.",{exact:true}).first().waitFor();
   stage="health reads remain free of provider dispatch";
-  const health=async()=>{const r=await anonymous.request.get(`${origin}/api/health`);assert.equal(r.status(),200);const body=await r.json();assert.equal(body.db.ok,true);return body.provider_readiness;};
+  const health=async()=>{const r=await anonymous.request.get(`${origin}/api/health`);assert.equal(r.status(),200);const body=await r.json();assert.equal(body.db.ok,true);assert.equal(body.readiness_error,undefined);return body.provider_readiness;};
   const before=await health();
+  for(const engine of ["chatgpt","gemini","perplexity"])assert.equal(before.engines[engine].canary.outcome,"valid");
   const canaries=report=>Object.fromEntries(Object.entries(report.engines).map(([engine,r])=>[engine,{config_version:r.config_version,canary:r.canary}]));
   for(let batch=0;batch<20;batch++){
     const readings=await Promise.all(Array.from({length:5},()=>health()));
