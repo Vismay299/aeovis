@@ -11,7 +11,7 @@ const root = fileURLToPath(new URL("../../../", import.meta.url));
 test("R21-01 — runner fails when a passing test is followed by process, hook, signal or timeout failure", async (t) => {
   const dir = await mkdtemp(path.join(tmpdir(), "perceev-runner-failure-"));
   t.after(() => rm(dir, { recursive: true, force: true }));
-  for (const file of ["scripts/qa/run-repair.mjs", "src/lib/repairs/caseInventory.mjs",
+  for (const file of ["scripts/qa/run-repair.mjs", "src/lib/repairs/caseInventory.mjs", "src/lib/repairs/releaseEvidence.mjs",
     "src/lib/liveWriteGuardAuto.mjs", "src/lib/liveWriteGuard.js", "tests/fixtures/repairs/synthetic-prompts.json"]) {
     await mkdir(path.dirname(path.join(dir, file)), { recursive: true });
     await copyFile(path.join(root, file), path.join(dir, file));

@@ -52,3 +52,7 @@ next-env.d.ts
 /design-options/previews/
 .claude/orchestration/tasks.json.lock
 .claude/orchestration/*.tmp
+
+# Generated acceptance packets and screenshots (CI uploads these as artifacts).
+/test_reports/public-browser/
+/test_reports/repairs/

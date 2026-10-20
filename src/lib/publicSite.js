@@ -25,6 +25,18 @@ export const PUBLIC_INDEXABLE_ROUTES = Object.freeze([
     lastModified: "2026-10-16T00:00:00.000Z",
   },
   {
+    path: "/methodology",
+    changeFrequency: "monthly",
+    priority: 0.8,
+    lastModified: "2026-10-19T18:30:00.000Z",
+  },
+  {
+    path: "/use-cases",
+    changeFrequency: "monthly",
+    priority: 0.8,
+    lastModified: "2026-10-19T18:30:00.000Z",
+  },
+  {
     path: "/privacy",
     changeFrequency: "monthly",
     priority: 0.3,
@@ -266,14 +278,14 @@ export function validateMarketingClaims(marketingConfig = {}, capabilities = {})
 
   // R20-07: Consumer collection capability check
   if (claims.offersConsumerCapture) {
-    if (!capabilities.consumerQualified) {
+    if (capabilities.consumerQualified !== true || typeof capabilities.evidenceVersion !== "string" || !capabilities.evidenceVersion.trim()) {
       withheld.push("offersConsumerCapture");
       claims.offersConsumerCapture = false;
       claims.consumerCaptureStatus = "unverified";
       claims.consumerCaptureNotice = "Consumer capture is experimental and not yet qualified in this release.";
     } else {
       claims.consumerCaptureStatus = "qualified";
-      claims.evidenceVersion = capabilities.evidenceVersion || "v1";
+      claims.evidenceVersion = capabilities.evidenceVersion;
     }
   }
 

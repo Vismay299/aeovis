@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "suite": "browser",
+  "environment": "qa",
+  "command": "npm run qa:public-browser -- http://127.0.0.1:3328",
+  "ciWorkflow": ".github/workflows/ci.yml",
+  "ciJob": "build",
+  "script": "scripts/qa/check-public-browser.mjs",
+  "cases": ["R20-08", "R20-09", "R20-10", "R20-16"],
+  "viewports": [{ "width": 1440, "height": 1000 }, { "width": 390, "height": 844 }],
+  "fixturePolicy": "Disposable local production build with placeholder credentials; invented samples only; no real scan submissions."
+}

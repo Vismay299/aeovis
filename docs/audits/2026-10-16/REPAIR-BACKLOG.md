@@ -5,6 +5,13 @@
 
 Updated: **20 October 2026, Asia/Kolkata**. Historical audited source baseline: `a2c97ddf12e332807c960e776eeae8de4550a210`.
 
+**Implementation status update (20 October 2026):** PR #8 merged the R20 public
+indexing foundation and guarded offline/release harness. The follow-up's
+[current P2 status](../2026-10-20-p2-qualification.md) maps remaining acceptance,
+documentation and qualification work. The plan below remains normative; unchecked
+tasks are not evidence that the merged foundation is absent, and automated
+checks do not replace live/database/soak/manual acceptance.
+
 This is the execution specification and current implementation status for 21 repairs. The original audit baseline is historical: its 3,209 passing tests, 30 skipped tests, 120 isolated mock answers and 11 reproduced unwanted behaviors describe that baseline, not today's release. See [the audit](./AUDIT.md) and [reproduction evidence](./adversarial-results.json).
 
 ## Current status: implemented code versus accepted repairs

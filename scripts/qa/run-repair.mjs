@@ -38,7 +38,9 @@
  * days, and a dedicated job/manifest each (backlog section B: do not let a
  * naming convention hide them). Those suites are reported `skipped` or `missing`
  * with the reason, which is what makes a release unverified rather than quietly
- * complete. A suite this runner did not run is never reported as satisfied.
+ * complete. Release may import dedicated-job/reviewer attestations with
+ * --evidence: commit, clean source, fixture hash and artifact hashes must match.
+ * This validates the packet's integrity, not the truth of an attestation.
  *
  * RE-ENTRANCY. A dispatched file may itself spawn this runner (the R21 harness
  * does). Dispatch therefore carries a case-id name filter — a test that spawns
@@ -71,6 +73,8 @@ import {
   suitesForRepair,
   validateInventory,
 } from "../../src/lib/repairs/caseInventory.mjs";
+
+import { loadReleaseEvidence, sha256 } from "../../src/lib/repairs/releaseEvidence.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
@@ -150,7 +154,7 @@ const NOT_A_CREDENTIAL = new Set(["PATH", "PATHEXT", "HOME", "NODE_OPTIONS", "NO
 const USAGE = [
   "usage: node scripts/qa/run-repair.mjs --repair RNN --suite offline|database|browser|live|soak|release",
   "       --environment qa [--case RNN-NN] [--max-requests N] [--max-spend-usd X] [--days N]",
-  "       [--output [dir]] [--manifest path] [--inventory path]",
+  "       [--output [dir]] [--manifest path] [--inventory path] [--evidence packet.json]",
 ].join("\n");
 
 /** A refusal the operator is meant to read: it names the exact problem. */
@@ -179,6 +183,7 @@ const VALUE_FLAGS = new Map([
   ["--days", "days"],
   ["--manifest", "manifest"],
   ["--inventory", "inventory"],
+  ["--evidence", "evidence"],
 ]);
 
 function parseArgs(argv) {
@@ -1056,8 +1061,21 @@ async function run(argv) {
 
     // 6. Release aggregates required evidence; the other suites are either
     //    dispatched or explicitly reported as not run.
+    if (opts.evidence && selection.suite !== "release") refuse("--evidence is only accepted by the release suite");
     if (selection.suite === "release") {
-      return await runRelease({ summary, selection, discovered, files, environment });
+      let external = new Map();
+      if (opts.evidence) {
+        const git = spawnSync("git", ["rev-parse", "HEAD"], { cwd: REPO, encoding: "utf8" });
+        const dirty = spawnSync("git", ["status", "--porcelain", "--untracked-files=all"], { cwd: REPO, encoding: "utf8" });
+        if (git.status !== 0 || dirty.status !== 0 || dirty.stdout.trim()) refuse("external evidence requires a clean committed checkout");
+        try {
+          external = await loadReleaseEvidence(path.resolve(REPO, opts.evidence), {
+            commit: git.stdout.trim(), manifestHash: sha256(await readFile(path.resolve(REPO, opts.manifest))),
+          });
+        } catch (err) { refuse(err.message); }
+        summary.evidence = { path: opts.evidence, cases: [...external.keys()] };
+      }
+      return await runRelease({ summary, selection, discovered, files, environment, external });
     }
     if (selection.suite !== "offline") {
       const levels = SUITE_LEVELS[selection.suite].join("/");
@@ -1154,7 +1172,7 @@ function applyOutcome(summary, outcome, suite) {
   tally(summary);
 }
 
-async function runRelease({ summary, selection, discovered, files, environment }) {
+async function runRelease({ summary, selection, discovered, files, environment, external = new Map() }) {
   const repairs = selection.scope === "ALL" ? REPAIRS : [selection.scope];
   const depth = Number(process.env.PERCEEV_REPAIR_RUNNER_DEPTH || 0);
   const suites = [];
@@ -1165,11 +1183,30 @@ async function runRelease({ summary, selection, discovered, files, environment }
   summary.cases.passed = [];
   summary.cases.failed = [];
   summary.cases.skipped = [];
+  summary.cases.blocked = [];
 
   for (const repair of repairs) {
     for (const suite of suitesForRepair(repair)) {
       const entry = { repair, suite, status: null, reason: null, cases: 0, casesPassed: 0 };
+      if (suite !== "offline" && external.size) {
+        const ids = casesForLevels(repair, suite === MANUAL_SUITE ? ["M"] : SUITE_LEVELS[suite]);
+        entry.cases = ids.length;
+        summary.cases.selected.push(...ids);
+        for (const id of ids) {
+          const row = external.get(id);
+          if (row?.outcome === "pass") { summary.cases.passed.push(id); entry.casesPassed++; }
+          else if (row?.outcome === "fail") summary.cases.failed.push({ case: id, reason: row.actual });
+          else if (row?.outcome === "skipped") summary.cases.skipped.push({ case: id, reason: row.actual });
+          else summary.cases.blocked.push({ case: id, reason: row?.actual || "no current external evidence" });
+        }
+        entry.status = entry.casesPassed === ids.length ? "passed" : "incomplete";
+        entry.reason = entry.status === "passed" ? null : `${ids.length - entry.casesPassed} required cases lack passing evidence`;
+        if (entry.reason) skips.push({ repair, suite, reason: entry.reason });
+        suites.push(entry);
+        continue;
+      }
       if (suite === MANUAL_SUITE) {
+        summary.cases.selected.push(...casesForLevels(repair, ["M"]));
         entry.cases = casesForLevels(repair, ["M"]).length;
         entry.status = "missing";
         entry.reason =

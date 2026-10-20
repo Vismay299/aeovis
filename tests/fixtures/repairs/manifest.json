@@ -1,7 +1,7 @@
 {
   "registry": "tests/fixtures/repairs/manifest.json",
   "version": 1,
-  "updated": "2026-10-16",
+  "updated": "2026-10-20",
   "collected_test_glob": "src/lib/repairs/*.test.mjs",
   "orphan_scan_paths": ["tests/fixtures"],
   "credential_example": "sk-example-not-a-real-key",
@@ -10,7 +10,20 @@
     "A hash is never invented for a file this repository does not hold, and no real credential, capture, or provider body is stored here.",
     "All synthetic fixtures use Acme/Rival tiles data on .example or .invalid hosts."
   ],
+  "external_suites": [{
+    "manifest": "tests/fixtures/repairs/public-browser.json",
+    "suite": "browser",
+    "script": "scripts/qa/check-public-browser.mjs",
+    "ci_job": ".github/workflows/ci.yml#build",
+    "cases": ["R20-08", "R20-09", "R20-10", "R20-16"]
+  }],
   "required_test_files": [
+    {
+      "path": "src/lib/repairs/r21-release-evidence.test.mjs",
+      "repair": "R21",
+      "cases": ["R21-05"],
+      "note": "External evidence validation and end-to-end release aggregation; synthetic harness fixtures are not product qualification."
+    },
     {
       "path": "src/lib/repairs/r21-harness.test.mjs",
       "repair": "R21",
@@ -25,6 +38,19 @@
     }
   ],
   "fixtures": [
+    {
+      "name": "public-browser-suite",
+      "path": "tests/fixtures/repairs/public-browser.json",
+      "sha256": "fd3026f421515e40d54822f9e098fe6b85fa44b9978306cbd26e15f9605513ed",
+      "origin": "synthetic",
+      "consent": "not required (synthetic)",
+      "usage_status": "permitted",
+      "surface": "browser",
+      "capture_date": null,
+      "redaction": "not applicable (no real data)",
+      "state": "present",
+      "used_by": ["R20-08", "R20-09", "R20-10", "R20-16"]
+    },
     {
       "name": "synthetic-prompts",
       "path": "tests/fixtures/repairs/synthetic-prompts.json",

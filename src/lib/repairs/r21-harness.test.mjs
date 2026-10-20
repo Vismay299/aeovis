@@ -681,7 +681,7 @@ test("HARNESS-DISPATCH — an offline run really dispatches the collected tests,
     `the child environment must be cleared, got ${JSON.stringify(run.summary.dispatch.clearedEnv)}`
   );
   assert.equal(run.summary.errors.length, 0, `no refusals or manifest errors: ${errors(run.summary)}`);
-  assert.equal(run.summary.counts.testsCollected, 12, "eleven cases plus the subprocess-failure regression are collected");
+  assert.ok(run.summary.counts.testsCollected >= 16, "all eleven cases plus subprocess and external-evidence regressions are collected");
   const passed = new Set(run.summary.cases.passed);
   for (const id of [
     "R21-01",
