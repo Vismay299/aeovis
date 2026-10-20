@@ -751,6 +751,15 @@ export default function DashboardShell({ scan, scanId, error = null }) {
       ? "The collected observations are exploratory. The sample or collection coverage does not meet the headline requirements, so no headline verdict is shown."
       : tier == null
       ? "This scan produced no visibility score, so there is no verdict to interpret. The reading is not a zero — nothing was measured. Retry the scan, or add more high-intent queries."
+      : result.isMultiEngine
+      ? {
+          strong:
+            "Your brand holds a strong presence in AI answers. Defend the lead by monitoring high-intent comparison questions where rivals push hardest.",
+          moderate:
+            "AI answers name you on some category questions but miss most. There is clear, addressable room to grow.",
+          weak:
+            "AI answers rarely name your brand for its category. Competitors are winning the exact questions your buyers ask.",
+        }[tier]
       : {
           strong:
             "Your brand holds strong AI Overview presence. Defend the lead by monitoring high-intent comparison queries where rivals push hardest.",

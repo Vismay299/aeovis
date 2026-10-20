@@ -37,3 +37,15 @@ test("R05 empty engine slices do not turn a thin headline into an entity-policy 
   assert.notEqual(headline.qualified_reason, "entity_resolution_policy_mixed");
   assert.equal(headline.qualified_reason, "insufficient_distinct_eligible_prompts");
 });
+
+test("verified Google SERPs without an Overview are collected measurements, not a degraded data source", async () => {
+  const { summarizeEngineSlice } = await import("./enginePipeline.js");
+  const rows = Array.from({ length: 30 }, (_, i) => i < 4
+    ? { engine: "aio", prompt: `q${i}`, error: "Bright Data proxy session error", serp_state: "provider_failure", answer_present: false }
+    : { engine: "aio", prompt: `q${i}`, serp_state: "valid_serp", aio_present: false, answer_present: false });
+  const slice = summarizeEngineSlice(rows, "aio", { brand: "Acme" });
+  assert.equal(slice.data_source_issue, false, "26 read pages without an Overview are not an outage");
+  assert.notEqual(slice.state, "failed");
+  const legacy = summarizeEngineSlice(rows.map(({ serp_state, ...r }) => r), "aio", { brand: "Acme" });
+  assert.equal(legacy.data_source_issue, true, "rows without a validated SERP verdict keep the strict gate");
+});

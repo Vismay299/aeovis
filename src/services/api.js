@@ -553,6 +553,18 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     recomputeFromResults();
   }
 
+  // Multi-engine scans: the summary's coverage/presence scalars belong to the
+  // primary (AIO) slice, so a scan whose Google results carried no Overview read
+  // "0 of 30 answered" while three engines answered every question. Read them
+  // per question across engines instead: answered by any engine, named by any.
+  if (isMultiEngine && nonBranded.length > 0) {
+    const byPrompt = [...groupRowsByPrompt(nonBranded).values()].map((rows) => rows.filter((r) => !r.error));
+    nonBrandedWithAio = byPrompt.filter((rows) => rows.some(getAioPresent)).length;
+    visibleNonBranded = byPrompt.filter((rows) => rows.some((r) => getAioPresent(r) && getVisible(r))).length;
+    aioCoveragePct = round1(nonBrandedWithAio / byPrompt.length);
+    presenceRatePct = round1(visibleNonBranded / byPrompt.length);
+  }
+
   // Brand Presence KPI always uses intentional own-name set, not every alias hit.
   // Prompt-level semantics: a prompt counts as answered/visible if ANY engine
   // answered / showed the brand (identical to before for single-engine rows).
@@ -626,7 +638,9 @@ export function normalizeResult(data, fallbackBrand, fallbackWebsite) {
     summary?.data_source_issue ??
     raw.data_source_issue
   );
-  const insufficientSample = !!(
+  // A qualified multi-engine headline met the sample gates; one thin slice
+  // (usually Google without Overviews) is reported by its engine chip instead.
+  const insufficientSample = isMultiEngine && summary?.headline_qualified === true ? false : !!(
     data.insufficient_sample ??
     data.insufficientSample ??
     summary?.insufficient_sample ??

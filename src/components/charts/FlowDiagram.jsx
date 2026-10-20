@@ -31,11 +31,15 @@ export function FlowDiagram({
   rightX = 620,
   width = 940,
   className = '',
+  revealed = false,
 }) {
   const shown = destinations.filter((d) => d.answers > 0);
   if (!total || shown.length === 0) return null;
 
-  const unit = H / total;
+  /* One answer can name several brands, so the destinations may sum past the
+     total; scale to whichever is larger so every band stays inside the bar. */
+  const placedTotal = shown.reduce((s, d) => s + d.answers, 0);
+  const unit = H / Math.max(total, placedTotal);
 
   /* Walk both columns at once: the left drains in set order, the right opens
      a gap between each destination so the labels have room. */
@@ -50,7 +54,7 @@ export function FlowDiagram({
   });
 
   /* Anything not yet accounted for sits at the foot of the left column. */
-  const placed = shown.reduce((s, d) => s + d.answers, 0);
+  const placed = placedTotal;
   const restH = Math.max(0, (total - placed) * unit);
 
   const height = Math.max(ly + restH, ry) + 24;
@@ -67,7 +71,7 @@ export function FlowDiagram({
   });
 
   return (
-    <div className={`flow ${className}`.trim()}>
+    <div className={`flow${revealed ? ' is-in' : ''} ${className}`.trim()}>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"

@@ -483,3 +483,22 @@ test("normalizeResult — a real scanned_at is preserved verbatim", () => {
     "the camelCase carrier still works"
   );
 });
+
+test("multi-engine coverage and presence are per question across engines, not the Google slice's", async () => {
+  const { normalizeResult } = await import("./api.js");
+  const q = (i) => `Question ${i}`;
+  const results = [];
+  for (let i = 0; i < 4; i++) {
+    results.push({ engine: "aio", prompt: q(i), answer_present: false, aio_present: false, serp_state: "valid_serp" });
+    results.push({ engine: "chatgpt", prompt: q(i), answer_present: true, brand_mentioned_in_text: i === 0 });
+  }
+  results.push({ engine: "gemini", prompt: q(3), answer_present: true, brand_mentioned_in_text: true, error: "timeout" });
+  const summary_stats = { non_branded_with_aio: 0, visible_non_branded: 0, aio_coverage_pct: 0, presence_rate_pct: 0, insufficient_sample: true, headline_qualified: true };
+  const r = normalizeResult({ brand: "Acme", url: "https://acme.example", engines: { aio: {}, chatgpt: {} }, summary_stats, results, prompts_tracked: 4 });
+  assert.equal(r.nonBrandedWithAio, 4, "every question was answered by some engine");
+  assert.equal(r.visibleCount, 1, "named on one question; an errored row does not count");
+  assert.equal(r.aioCoveragePct, 100);assert.equal(r.presenceRatePct, 25);
+  assert.equal(r.insufficientSample, false, "a qualified multi-engine headline is not a small sample");
+  const single = normalizeResult({ brand: "Acme", url: "https://acme.example", summary_stats, results: results.filter((x) => x.engine === "aio") });
+  assert.equal(single.nonBrandedWithAio, 0, "single-engine AIO scans keep their own summary");
+});

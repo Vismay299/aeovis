@@ -1382,10 +1382,16 @@ export function summarizeEngineSlice(results, engineName, options = {}) {
   // a reader can see the null branch was considered, so the next edit does not
   // "fix" an apparently missing guard by reintroducing a `?? 0`.
   const gates = engineHealthThresholds(engineName);
+  // A validated Google SERP without an Overview is a collected measurement (the
+  // R04 parser proved the page was read), not a gap in the data source. Only
+  // rows carrying that verdict count; legacy rows keep the answer-only gate.
+  const verifiedNoAio = engineName === "aio"
+    ? nonBranded.filter((r) => !r.answer_present && !r.error && r.serp_state === "valid_serp").length
+    : 0;
   const dataSourceIssue =
     (errorRatePct !== null && errorRatePct > gates.errorRateLimitPct) ||
     (nonBranded.length > 0 &&
-      nonBrandedWithAnswer.length / nonBranded.length < gates.minNonBrandedCoverage);
+      (nonBrandedWithAnswer.length + verifiedNoAio) / nonBranded.length < gates.minNonBrandedCoverage);
 
   // Sample adequacy is judged on the ELICITING pool — the prompts that can
   // actually produce a mention. 56 answered prompts of which only 16 name any
