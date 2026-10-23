@@ -56,3 +56,9 @@ next-env.d.ts
 # Generated acceptance packets and screenshots (CI uploads these as artifacts).
 /test_reports/public-browser/
 /test_reports/repairs/
+
+# Playwright MCP browser session snapshots
+.playwright-mcp/
+
+# Role handoff notes from feature build sessions (features/_BUILD-PROMPT.md)
+.team/
