@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const NOTICES = path.join(REPO, "THIRD_PARTY_NOTICES.md");
 const HEADER_MARKER = "Portions ported from every-app/open-seo@c5f8db1";
+const ROOTS = ["src", "worker", "scripts", "supabase"];
 
 async function filesUnder(dir, acc = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -34,17 +35,25 @@ test("THIRD_PARTY_NOTICES.md carries OpenSEO's MIT licence verbatim", async () =
 test("every file with a ported-portion header is listed in the notices", async () => {
   const notices = await readFile(NOTICES, "utf8");
   const offenders = [];
-  for (const full of await filesUnder(path.join(REPO, "src"))) {
-    let text;
+  for (const root of ROOTS) {
+    let files;
     try {
-      text = await readFile(full, "utf8");
+      files = await filesUnder(path.join(REPO, root));
     } catch {
       continue;
     }
-    const head = text.split("\n", 5).join("\n");
-    if (!head.includes(HEADER_MARKER)) continue;
-    const rel = path.relative(REPO, full).split(path.sep).join("/");
-    if (!notices.includes(rel)) offenders.push(rel);
+    for (const full of files) {
+      let text;
+      try {
+        text = await readFile(full, "utf8");
+      } catch {
+        continue;
+      }
+      const head = text.split("\n", 5).join("\n");
+      if (!head.includes(HEADER_MARKER)) continue;
+      const rel = path.relative(REPO, full).split(path.sep).join("/");
+      if (!notices.includes(rel)) offenders.push(rel);
+    }
   }
   assert.deepEqual(
     offenders,

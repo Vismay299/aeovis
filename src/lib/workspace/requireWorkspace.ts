@@ -69,15 +69,17 @@ export async function requireWorkspace(
   }
 
   const key =
-    opts?.brandKey ??
-    new URL(request.url).searchParams.get("brand_key") ??
-    context.brands?.[0]?.brandKey ??
+    opts?.brandKey ||
+    new URL(request.url).searchParams.get("brand_key") ||
+    context.brands?.[0]?.brandKey ||
     "";
   const brand = findCustomerBrand(context.brands, key) as CustomerBrand | null;
   if (!brand) {
     throw new WorkspaceError(404, "workspace_not_found", "Workspace not found.");
   }
-  if (opts?.role === "owner" && brand.role === "member") {
+  // Fail closed: any role that is not exactly "owner" is refused, so a role
+  // added to the database later cannot inherit owner-only access by default.
+  if (opts?.role === "owner" && brand.role !== "owner") {
     throw new WorkspaceError(403, "owner_required", "Only the workspace owner can do this.");
   }
 

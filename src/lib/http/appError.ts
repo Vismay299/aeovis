@@ -11,7 +11,7 @@ export class AppError extends Error {
     opts?: { recovery?: string; details?: Record<string, unknown>; cause?: unknown }
   ) {
     super(message, opts && "cause" in opts ? { cause: opts.cause } : undefined);
-    this.name = "AppError";
+    this.name = new.target.name;
     this.status = status;
     this.code = code;
     this.recovery = opts?.recovery;

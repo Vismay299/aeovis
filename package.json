@@ -9,7 +9,7 @@
     "lint": "next lint",
     "test:prompts": "node --env-file=.env.local scripts/test-dynamic-prompts.mjs",
     "test:scoring": "node --import ./src/lib/liveWriteGuardAuto.mjs --test-concurrency=4 --test \"src/**/*.test.mjs\" \"src/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "next typegen && tsc --noEmit -p tsconfig.json",
     "test:live": "node --import ./src/lib/liveWriteGuardAuto.mjs --env-file=.env.local --test",
     "test:calibration": "node src/lib/scoring/test_calibration.js",
     "test:gsc": "node --env-file=.env.local scripts/test-gsc.mjs",

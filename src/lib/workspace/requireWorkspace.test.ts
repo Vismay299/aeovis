@@ -119,6 +119,22 @@ test("an unknown brand is 404 workspace_not_found", async () => {
   assert.equal(err.message, "Workspace not found.");
 });
 
+test("an empty brand key falls back to the first membership", async () => {
+  const emptyOpt = await requireWorkspace(
+    request("https://app.test/api/customer/test"),
+    { brandKey: "" },
+    deps()
+  );
+  assert.equal(emptyOpt.brandKey, "acme");
+
+  const emptyQuery = await requireWorkspace(
+    request("https://app.test/api/customer/test?brand_key="),
+    {},
+    deps()
+  );
+  assert.equal(emptyQuery.brandKey, "acme");
+});
+
 test("a member on an owner-only route is 403 owner_required", async () => {
   const err = await rejection(
     requireWorkspace(
@@ -130,6 +146,19 @@ test("a member on an owner-only route is 403 owner_required", async () => {
   assert.equal(err.status, 403);
   assert.equal(err.code, "owner_required");
   assert.equal(err.message, "Only the workspace owner can do this.");
+});
+
+test("a role that is not exactly owner is refused on an owner-only route", async () => {
+  const viewer = { ...BETA, role: "viewer" } as unknown as CustomerBrand;
+  const err = await rejection(
+    requireWorkspace(
+      request("https://app.test/api/customer/test"),
+      { role: "owner" },
+      deps({ brands: [viewer] })
+    )
+  );
+  assert.equal(err.status, 403);
+  assert.equal(err.code, "owner_required");
 });
 
 test("a missing service client is 503 storage_unavailable", async () => {

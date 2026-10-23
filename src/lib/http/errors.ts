@@ -1,15 +1,16 @@
 import { ZodError } from "zod";
 import { AppError, WorkspaceError, isAppError } from "./appError.ts";
-import { SpendRefused } from "../spend/errors.ts";
 
 export { AppError, WorkspaceError, isAppError };
 
-export const NO_STORE: HeadersInit = { "Cache-Control": "no-store" };
+const NO_STORE_HEADERS = { "Cache-Control": "no-store" };
+
+export const NO_STORE: HeadersInit = NO_STORE_HEADERS;
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Cache-Control": "no-store", "Content-Type": "application/json" },
+    headers: { ...NO_STORE_HEADERS, "Content-Type": "application/json" },
   });
 }
 
@@ -17,14 +18,20 @@ export function jsonOk(body: unknown, status: number = 200): Response {
   return json(body, status);
 }
 
-export function toErrorResponse(err: unknown): Response {
-  if (err instanceof SpendRefused) {
-    const body: Record<string, unknown> = { error: err.message, code: err.code };
-    if (err.recovery !== undefined) body.recovery = err.recovery;
-    if (err.details !== undefined) body.details = err.details;
-    return json(body, err.status);
+/**
+ * Reads a JSON request body. A body that is not JSON is a client error; any
+ * other SyntaxError stays a server error, so an internal JSON.parse failure is
+ * never reported as a bad request.
+ */
+export async function readJsonBody(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    throw new AppError(400, "invalid_json", "The request body must be JSON.");
   }
+}
 
+export function toErrorResponse(err: unknown): Response {
   if (err instanceof AppError) {
     const body: Record<string, unknown> = { error: err.message, code: err.code };
     if (err.recovery !== undefined) body.recovery = err.recovery;
@@ -46,10 +53,6 @@ export function toErrorResponse(err: unknown): Response {
       },
       400
     );
-  }
-
-  if (err instanceof SyntaxError) {
-    return json({ error: "The request body must be JSON.", code: "invalid_json" }, 400);
   }
 
   console.error(

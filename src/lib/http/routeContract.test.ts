@@ -28,9 +28,15 @@ async function contractViolations(contract: RouteContract): Promise<string[]> {
   if (!contract.response) {
     problems.push(`${contract.id}: response schema is missing`);
   } else {
-    problems.push(
-      ...closedOutputPaths(z.toJSONSchema(contract.response, { io: "output" }), contract.id)
-    );
+    let outputSchema: unknown;
+    try {
+      outputSchema = z.toJSONSchema(contract.response, { io: "output" });
+    } catch {
+      problems.push(`${contract.id}: response schema is not representable as JSON Schema`);
+    }
+    if (outputSchema !== undefined) {
+      problems.push(...closedOutputPaths(outputSchema, contract.id));
+    }
   }
   const examples = Array.isArray(contract.examples) ? contract.examples : [];
   if (examples.length === 0) problems.push(`${contract.id}: at least one example is required`);
@@ -115,11 +121,17 @@ test("finds closed objects inside array items and unions", () => {
 test("every discovered route contract has a closed response with examples", async () => {
   const files = globSync("src/lib/**/*.contract.ts", { cwd: REPO }).sort();
   const problems: string[] = [];
+  const seen = new Map<string, string>();
   for (const file of files) {
     const mod = (await import(pathToFileURL(path.join(REPO, file)).href)) as Record<string, unknown>;
     const contracts = mod.contracts;
     assert.ok(Array.isArray(contracts), `${file} must export contracts: RouteContract[]`);
     for (const contract of contracts as RouteContract[]) {
+      const owner = seen.get(contract.id);
+      if (owner !== undefined && owner !== file) {
+        problems.push(`${contract.id}: id is declared by both ${owner} and ${file}`);
+      }
+      seen.set(contract.id, file);
       problems.push(...(await contractViolations(contract)));
     }
   }
@@ -136,10 +148,27 @@ test("the harness catches a closed response schema", async () => {
   assert.deepEqual(problems, ["fixture.closed_response.additionalProperties"]);
 });
 
-test("defineRouteContract rejects a duplicate contract id", async () => {
+test("the harness reports an unrepresentable response schema instead of aborting", async () => {
+  const problems = await contractViolations({
+    id: "fixture.unrepresentable",
+    method: "GET",
+    path: "/api/fixture/date",
+    file: "src/lib/http/__fixtures__/closed.handler.fixture.ts",
+    auth: "workspace",
+    response: z.date(),
+    errorCodes: [],
+    examples: [{ response: new Date(0) }],
+  });
+  assert.deepEqual(problems, ["fixture.unrepresentable: response schema is not representable as JSON Schema"]);
+});
+
+test("defineRouteContract allows an identical re-registration but refuses a conflicting one", async () => {
   const { fixtureContracts } = await import("./__fixtures__/closed.contract.fixture.ts");
+  const contract = fixtureContracts[0];
+  assert.doesNotThrow(() => defineRouteContract({ ...contract }));
+  assert.doesNotThrow(() => defineRouteContract({ ...contract }));
   assert.throws(
-    () => defineRouteContract({ ...fixtureContracts[0] }),
+    () => defineRouteContract({ ...contract, path: "/api/fixture/other" }),
     /Duplicate route contract id: fixture\.closed_response/
   );
 });
