@@ -31,3 +31,4 @@ SOFTWARE.
 ### Files containing ported portions
 
 - `src/lib/http/schemaContract.ts`
+- `src/lib/http/routeContract.test.ts`

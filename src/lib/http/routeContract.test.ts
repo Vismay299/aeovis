@@ -1,3 +1,7 @@
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/server/mcp/output-schema-contract.test.ts
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, globSync } from "node:fs";
@@ -5,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import { closedOutputPaths } from "./schemaContract.ts";
+import { defineRouteContract } from "./routeContract.ts";
 import type { RouteContract } from "./routeContract.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -129,4 +134,12 @@ test("the harness catches a closed response schema", async () => {
   const { fixtureContracts } = await import("./__fixtures__/closed.contract.fixture.ts");
   const problems = await contractViolations(fixtureContracts[0]);
   assert.deepEqual(problems, ["fixture.closed_response.additionalProperties"]);
+});
+
+test("defineRouteContract rejects a duplicate contract id", async () => {
+  const { fixtureContracts } = await import("./__fixtures__/closed.contract.fixture.ts");
+  assert.throws(
+    () => defineRouteContract({ ...fixtureContracts[0] }),
+    /Duplicate route contract id: fixture\.closed_response/
+  );
 });
