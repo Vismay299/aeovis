@@ -1,0 +1,686 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>OpenSEO vs Perceev</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Spline+Sans+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a sticky contents rail beside one reading column; wide tables scroll inside their own frame. Perceev's light product palette, with a matched dark variant. */
+:root {
+  --paper: #F7F7FA;
+  --surface: #FFFFFF;
+  --sunken: #EFEFF4;
+  --ink-1: #0E1017;
+  --ink-2: #474C5A;
+  --ink-3: #5F6475;
+  --line: #E2E3EB;
+  --line-strong: #CFD2DE;
+  --brand: #3730CE;
+  --brand-tint: #EEEEFC;
+  --good: #1D7148;
+  --good-tint: #E3F3EA;
+  --warn: #8A5709;
+  --warn-tint: #FBF0DE;
+  --crit: #B02F2F;
+  --crit-tint: #FBEAEA;
+  --font-display: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Spline Sans Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0F1016; --surface: #171923; --sunken: #1F2230;
+    --ink-1: #ECEDF3; --ink-2: #BABDCB; --ink-3: #9599AB;
+    --line: #2A2D3B; --line-strong: #3B3F52;
+    --brand: #9A95FF; --brand-tint: #25244A;
+    --good: #6BCB98; --good-tint: #16301F;
+    --warn: #E7AE55; --warn-tint: #33270F;
+    --crit: #F08484; --crit-tint: #3A1B1B;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0F1016; --surface: #171923; --sunken: #1F2230;
+  --ink-1: #ECEDF3; --ink-2: #BABDCB; --ink-3: #9599AB;
+  --line: #2A2D3B; --line-strong: #3B3F52;
+  --brand: #9A95FF; --brand-tint: #25244A;
+  --good: #6BCB98; --good-tint: #16301F;
+  --warn: #E7AE55; --warn-tint: #33270F;
+  --crit: #F08484; --crit-tint: #3A1B1B;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink-1);
+  font: 400 16px/1.6 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--brand); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.84em; }
+code { background: var(--sunken); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+.shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 48px;
+}
+@media (max-width: 900px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+
+/* Contents rail */
+.toc {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 24px);
+  align-self: start;
+  padding-top: 56px;
+  font-size: 13.5px;
+}
+.toc p { margin: 0 0 10px; font: 600 11px/1.4 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.toc a { display: block; padding: 5px 10px; border-radius: 6px; color: var(--ink-2); text-decoration: none; }
+.toc a:hover { background: var(--sunken); color: var(--ink-1); }
+@media (max-width: 900px) {
+  .toc { position: static; padding-top: 24px; }
+  .toc ol { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toc a { border: 1px solid var(--line); background: var(--surface); padding: 4px 10px; }
+}
+
+main { min-width: 0; }
+header.doc { padding-top: 56px; padding-bottom: 8px; }
+.eyebrow { font: 600 12px/1.4 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--brand); margin: 0 0 12px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; color: var(--ink-1); }
+h1 { font-size: clamp(34px, 5vw, 52px); line-height: 1.04; font-weight: 800; font-stretch: 118%; letter-spacing: -0.02em; margin: 0 0 18px; }
+h1 .vs { color: var(--ink-3); font-weight: 400; font-stretch: 100%; }
+h2 { font-size: 26px; line-height: 1.2; font-weight: 750; font-stretch: 110%; letter-spacing: -0.01em; margin: 0 0 8px; }
+h3 { font-size: 18px; line-height: 1.3; font-weight: 650; margin: 0 0 6px; }
+.lede { font-size: 19px; line-height: 1.55; color: var(--ink-2); max-width: 66ch; margin: 0 0 20px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--ink-3); margin: 0; padding: 0; list-style: none; }
+.meta b { color: var(--ink-2); font-weight: 600; }
+
+section { padding-top: 56px; scroll-margin-top: 16px; }
+.sec-intro { color: var(--ink-2); max-width: 68ch; margin: 0 0 22px; }
+p, li { max-width: 72ch; }
+
+/* Verdict panel */
+.verdict {
+  margin-top: 28px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px clamp(18px, 3vw, 28px);
+}
+.verdict h2 { font-size: 20px; margin-bottom: 14px; }
+.verdict ul { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.verdict li::marker { color: var(--brand); }
+
+.split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+@media (max-width: 640px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.split > div { background: var(--sunken); border-radius: 8px; padding: 16px 18px; min-width: 0; }
+.split h3 { font-size: 15px; }
+.split ul { margin: 6px 0 0; padding-left: 18px; font-size: 14.5px; display: grid; gap: 6px; }
+
+/* Chips */
+.chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font: 600 12px/1 var(--font-body); padding: 5px 9px; border-radius: 999px; border: 1px solid transparent; }
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.v-they { color: var(--warn); background: var(--warn-tint); }
+.v-we { color: var(--good); background: var(--good-tint); }
+.v-mixed { color: var(--brand); background: var(--brand-tint); }
+.v-none { color: var(--ink-3); background: transparent; border-color: var(--line-strong); }
+
+/* Matrix */
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; align-items: center; }
+.filters span { font-size: 13px; color: var(--ink-3); margin-right: 4px; }
+.filters button {
+  font: 600 13px/1 var(--font-body); color: var(--ink-2); background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: 999px; padding: 8px 13px; cursor: pointer;
+}
+.filters button[aria-pressed="true"] { background: var(--ink-1); color: var(--surface); border-color: var(--ink-1); }
+.filters .count { font-variant-numeric: tabular-nums; opacity: .7; margin-left: 4px; }
+
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 760px; }
+th, td { text-align: left; vertical-align: top; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+thead th { font: 600 11.5px/1.3 var(--font-body); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); background: var(--sunken); position: sticky; top: 0; }
+tbody tr:last-child td { border-bottom: 0; }
+td:first-child { font-weight: 600; width: 19%; }
+td.vcell { width: 120px; }
+tr.group td { background: var(--paper); font: 650 12px/1.3 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--brand); padding-top: 16px; padding-bottom: 8px; }
+td .note { display: block; color: var(--ink-3); font-size: 13px; margin-top: 4px; }
+
+/* Recommendations */
+.tier { margin-top: 28px; }
+.tier-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; border-bottom: 1px solid var(--line-strong); padding-bottom: 8px; }
+.tier-head h3 { margin: 0; font-size: 19px; font-stretch: 108%; }
+.tier-head p { margin: 0; color: var(--ink-3); font-size: 14px; }
+.recs { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; counter-reset: rec var(--start, 0); }
+.recs > li {
+  counter-increment: rec;
+  max-width: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px 20px 18px 62px; position: relative;
+}
+.recs > li::before {
+  content: counter(rec);
+  position: absolute; left: 18px; top: 17px;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center;
+  font: 700 14px/1 var(--font-display); font-variant-numeric: tabular-nums;
+  background: var(--brand-tint); color: var(--brand);
+}
+.recs h4 { margin: 0 0 4px; font: 650 16.5px/1.35 var(--font-display); }
+.recs p { margin: 6px 0 0; font-size: 15px; color: var(--ink-2); }
+.recs .why { color: var(--ink-1); }
+.recs .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 12.5px; color: var(--ink-3); }
+.recs .facts b { color: var(--ink-2); font-weight: 600; }
+@media (max-width: 520px) { .recs > li { padding: 56px 16px 16px; } .recs > li::before { top: 16px; left: 16px; } }
+
+/* Callout */
+.callout {
+  background: var(--brand-tint); border-radius: var(--radius); padding: 20px 22px; margin-top: 18px;
+}
+.callout h3 { color: var(--brand); font-size: 16px; }
+.callout p { margin: 6px 0 0; color: var(--ink-1); }
+.callout.warn { background: var(--warn-tint); }
+.callout.warn h3 { color: var(--warn); }
+
+/* Pattern lists */
+.patterns { display: grid; gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.pattern { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 8px 24px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.pattern:last-child { border-bottom: 0; }
+.pattern h4 { margin: 0 0 4px; font: 650 15.5px/1.35 var(--font-display); }
+.pattern p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+.pattern .ours { font-size: 14px; color: var(--ink-2); border-left: 2px solid var(--line-strong); padding-left: 14px; }
+.pattern .ours b { display: block; font: 600 11px/1.4 var(--font-body); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 3px; }
+@media (max-width: 720px) { .pattern { grid-template-columns: minmax(0, 1fr); } .pattern .ours { border-left: 0; padding-left: 0; border-top: 1px dashed var(--line-strong); padding-top: 8px; } }
+
+/* Cost table numerics */
+.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.small { min-width: 560px; }
+
+.cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; min-width: 0; }
+.card ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 7px; font-size: 14.5px; color: var(--ink-2); }
+.card li b { color: var(--ink-1); font-weight: 600; }
+
+.questions { counter-reset: q; list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.questions li { counter-increment: q; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px 14px 52px; position: relative; max-width: none; }
+.questions li::before { content: "Q" counter(q); position: absolute; left: 16px; top: 15px; font: 700 13px/1.4 var(--font-mono); color: var(--brand); }
+.questions b { display: block; margin-bottom: 2px; }
+.questions span { color: var(--ink-2); font-size: 14.5px; }
+
+details.method { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px; }
+details.method summary { cursor: pointer; font-weight: 600; }
+details.method p, details.method li { font-size: 14.5px; color: var(--ink-2); }
+
+footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<nav class="toc" aria-label="Contents">
+  <p>Contents</p>
+  <ol>
+    <li><a href="#verdict">The short answer</a></li>
+    <li><a href="#matrix">Side by side</a></li>
+    <li><a href="#adopt">What to adopt</a></li>
+    <li><a href="#provider">The provider question</a></li>
+    <li><a href="#questions">How they handle questions</a></li>
+    <li><a href="#backend">Backend patterns</a></li>
+    <li><a href="#frontend">Frontend patterns</a></li>
+    <li><a href="#ahead">Where we are ahead</a></li>
+    <li><a href="#gaps">Their weak spots</a></li>
+    <li><a href="#reuse">Reusing their code</a></li>
+    <li><a href="#decide">Decisions for you</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="doc">
+  <p class="eyebrow">Competitor teardown · 20 October 2026</p>
+  <h1>OpenSEO <span class="vs">vs</span> Perceev</h1>
+  <p class="lede">OpenSEO is an open-source, pay-as-you-go alternative to Semrush and Ahrefs with an AI-visibility module. This page compares its backend and frontend with ours, lists what we are missing, and ranks what is worth taking.</p>
+  <ul class="meta">
+    <li><b>Their code:</b> <code>every-app/open-seo</code> at <code>c5f8db1</code>, MIT licence</li>
+    <li><b>Our code:</b> <code>main</code> at <code>dfc9b40</code></li>
+    <li><b>Evidence:</b> file paths cited throughout; nothing of theirs was run</li>
+  </ul>
+
+  <div class="verdict" id="verdict">
+    <h2>The short answer</h2>
+    <ul>
+      <li><strong>It is not exactly our product.</strong> OpenSEO is a classic SEO suite (keywords, rank tracking, backlinks, site audits, Search Console and Analytics) with AI visibility as one of six workflows. Perceev is AI-visibility first, with content production attached.</li>
+      <li><strong>Their AI-visibility module is shallower than ours but far easier to use.</strong> Setup researches the website and writes prompts and competitors for the customer, shows the price before every run, and lets the customer set a schedule. Our portal hands the customer a blank text box.</li>
+      <li><strong>The biggest single finding is their data provider.</strong> They collect ChatGPT and Gemini from the consumer apps, and Google AI Overviews, through DataForSEO at roughly a tenth of a cent per answer in their price table. That touches three of our open problems at once: consumer collection (R12, not started), the empty Bright Data cookie pool for India AI Overviews, and cost.</li>
+      <li><strong>Their platform is ahead of ours:</strong> billing with credits, an MCP server with 79 tools, agent skills shipped as plugins, shareable reports, Google sign-in, lifecycle email and product analytics. We have none of these.</li>
+      <li><strong>We are ahead on measurement rigour:</strong> entity resolution with aliases, sentiment and recommendation labels, private raw evidence with redaction, AI-crawler and llms.txt checks, a full content pipeline, and a much larger verification suite.</li>
+    </ul>
+    <div class="split">
+      <div>
+        <h3>Take from them first</h3>
+        <ul>
+          <li>Trial DataForSEO as a collection provider</li>
+          <li>Setup that writes the questions and competitors for the customer</li>
+          <li>Price shown and approved before every paid run</li>
+          <li>Customer-set schedule, user-editable competitors</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Keep, they lack it</h3>
+        <ul>
+          <li>Brand aliases and homonym handling</li>
+          <li>Sentiment and recommendation classification</li>
+          <li>Stored, redacted raw answers</li>
+          <li>AI-crawler access and llms.txt checks</li>
+          <li>Content Studio with fact-check and publication proof</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="matrix" aria-labelledby="matrix-h">
+  <h2 id="matrix-h">Side by side</h2>
+  <p class="sec-intro">Each row is a capability. The verdict says who is ahead today, judged by what a customer can actually use, not by what exists in code behind an operator token.</p>
+  <div class="filters" role="group" aria-label="Filter by verdict">
+    <span>Show</span>
+    <button type="button" id="f-all" data-f="all" aria-pressed="true">All<span class="count"></span></button>
+    <button type="button" id="f-they" data-f="they" aria-pressed="false">They lead<span class="count"></span></button>
+    <button type="button" id="f-we" data-f="we" aria-pressed="false">We lead<span class="count"></span></button>
+    <button type="button" id="f-mixed" data-f="mixed" aria-pressed="false">Mixed<span class="count"></span></button>
+    <button type="button" id="f-none" data-f="none" aria-pressed="false">Neither<span class="count"></span></button>
+  </div>
+  <div class="table-wrap">
+    <table id="matrix-table">
+      <thead><tr><th>Capability</th><th>OpenSEO</th><th>Perceev</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="4">AI visibility</td></tr>
+        <tr data-v="they"><td>Engines and capture</td><td>ChatGPT and Gemini scraped from the consumer apps, Google AI Overviews from the SERP, all via DataForSEO. Claude and Perplexity via their APIs.<span class="note"><code>src/server/lib/dataforseo/ai-tracking.ts:24-31</code></span></td><td>ChatGPT, Gemini, Perplexity via APIs (OpenRouter or native). Google AI Overviews via Bright Data; India rendered mode has an empty cookie pool. Consumer-app fleet refuses to run.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Cost per answer</td><td>$0.0012 scheduled, $0.004 live for ChatGPT, Gemini, AI Overviews. Claude $0.18, Perplexity $0.04.<span class="note">Raw provider cost from <code>src/shared/ai-visibility.ts:31-40</code></span></td><td>About $0.06 per answer on the Offcult run (about USD 7 for 120 answers).</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Questions at setup</td><td>An agent reads the site and live SERPs, writes 5 topics of 5 prompts, tracks 15, and runs a baseline straight away. A Generate button drafts 5 more; Prompt Research picks from a dataset.</td><td>A good generator exists (<code>src/lib/scoring/promptGen.js</code>) but only the free scan uses it. The portal requires the customer to type every question.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="mixed"><td>Stable question set</td><td>Prompt text is immutable; editing archives and re-adds. Pause, archive, revive with history. Up to 100 prompts, 30 topics.</td><td>Immutable, versioned panels with approval before any scan. Stricter, but the whole panel versions together.</td><td class="vcell"><span class="chip v-mixed">Mixed</span></td></tr>
+        <tr data-v="mixed"><td>Trend comparability</td><td>Trends compare matched cells (prompt × engine × market) and hide changes unless at least 90% of answers were collected in both periods.<span class="note"><code>aiVisibilityTrend.ts:69-152</code></span></td><td>Canonical metric records, measured-zero kept, deltas refused across context or cohort boundaries.</td><td class="vcell"><span class="chip v-mixed">Mixed</span></td></tr>
+        <tr data-v="we"><td>Brand matching</td><td>Project name or domain in the prose. No aliases. Generic names false-match, and the code says that is accepted.</td><td>Entity resolution by domain and name, aliases, homonym list, relationship labels.</td><td class="vcell"><span class="chip v-we">We lead</span></td></tr>
+        <tr data-v="we"><td>Sentiment and recommendation</td><td>None. Their own skill says not to invent sentiment.</td><td>Positive-recommendation and sentiment labels exist. Human calibration (R09) not started, so treat as partial.</td><td class="vcell"><span class="chip v-we">We lead</span></td></tr>
+        <tr data-v="we"><td>Share of voice</td><td>Only in Brand Lookup (DataForSEO mentions database, US/English, hidden from navigation). Not in tracking.</td><td>Defined in the metric contract and shown on the free-scan dashboard. Not shown in the customer portal yet.</td><td class="vcell"><span class="chip v-we">We lead</span></td></tr>
+        <tr data-v="mixed"><td>Competitors</td><td>Setup agent finds them and each must cite a page it actually read. Suggested competitors from cited domains with one-click Add. Customer edits the list.</td><td>Extracted automatically from answers with a stable roster. Customer cannot add or remove competitors in the portal.</td><td class="vcell"><span class="chip v-mixed">Mixed</span></td></tr>
+        <tr data-v="mixed"><td>Citations and sources</td><td>URLs cleaned of tracking parameters, grouped by page or domain, owner (you, competitor, other) and engine; rows expand to the prompts that cited them.</td><td>Richer classification (content type, domain type) and source-gap analysis, but only on operator and free-scan screens.</td><td class="vcell"><span class="chip v-mixed">Mixed</span></td></tr>
+        <tr data-v="we"><td>Raw evidence</td><td>Stores the answer as markdown only. No raw payloads, so answers cannot be re-parsed later.</td><td>Private evidence bucket, structured redaction, signed expiring links, retention jobs.</td><td class="vcell"><span class="chip v-we">We lead</span></td></tr>
+        <tr data-v="they"><td>Scheduling</td><td>Customer picks daily, weekly or monthly per tracker; next run shown on the page.</td><td>Durable schedule windows exist but are operator-only and off by default. Seven-day soak not started.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Price before running</td><td>Every run opens a cost dialog. The run carries an approved maximum and refuses if the price rose. Settings show monthly projections.</td><td>Server-side reservations and caps per scan and per day. The customer never sees a price.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Ask one question now</td><td>Prompt Explorer: one prompt across up to 4 models, with sources and the model's fan-out queries.</td><td>Not available.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Answer detail view</td><td>Per-prompt page: answer per engine and date, highlighted brand-mention excerpts, citations and brands side tabs.</td><td>Scan report lists every question with each engine's answer and badges. No per-question history page.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+
+        <tr class="group"><td colspan="4">Classic SEO data</td></tr>
+        <tr data-v="they"><td>Keyword research</td><td>Volume, trend, CPC, difficulty, intent, local volume, saved lists with tags.</td><td>None.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Rank tracking</td><td>Daily, weekly or monthly positions per keyword and device, SERP features stored (including AI Overview presence), anti-glitch rechecks.</td><td>None.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Domain and competitor research</td><td>Traffic estimate, ranked keywords with about 20 filters, top pages, SERP competitors.</td><td>None.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Backlinks</td><td>Summary, list, referring domains, top pages, new and lost, spam filter, free Ahrefs DR column.</td><td>None.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Local SEO</td><td>Business profile, reviews, local rank grid, local SERP (MCP tools).</td><td>None.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+
+        <tr class="group"><td colspan="4">Website and technical</td></tr>
+        <tr data-v="they"><td>Site audit</td><td>Crawler up to 10,000 pages, 30 issue types with fix text, Lighthouse sample, optional JavaScript rendering, live crawled-URL feed.</td><td>"Check owned website": up to 6 requests covering status, redirects, robots, directives, canonical, sitemap, structured data.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="we"><td>AI crawler access</td><td>None. No GPTBot, ClaudeBot or PerplexityBot checks, no llms.txt.</td><td>About 30 AI bots by operator and purpose, plus llms.txt. Currently operator-gated, so customers cannot see it.</td><td class="vcell"><span class="chip v-we">We lead</span></td></tr>
+        <tr data-v="they"><td>IndexNow</td><td>Generates a key, checks it is hosted, submits to Bing with fallbacks.</td><td>None.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+
+        <tr class="group"><td colspan="4">Google integrations</td></tr>
+        <tr data-v="mixed"><td>Search Console</td><td>Live queries, period comparison, country and device splits, striking-distance queries (positions 5–20), URL inspection. Nothing stored.</td><td>OAuth, property picker, daily sync with stored history, query table.</td><td class="vcell"><span class="chip v-mixed">Mixed</span></td></tr>
+        <tr data-v="they"><td>Google Analytics 4</td><td>Seven report types plus a GSC × GA4 page-opportunity score.</td><td>None.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+
+        <tr class="group"><td colspan="4">Content and reports</td></tr>
+        <tr data-v="we"><td>Content production</td><td>None in the app. Agents write content outside it.</td><td>Content Studio: research, draft, fact-check, approval, publication verification, custom agents, seven formats.</td><td class="vcell"><span class="chip v-we">We lead</span></td></tr>
+        <tr data-v="they"><td>Reports and sharing</td><td>Agent-written HTML reports, public share link with a generated preview image, print to PDF, templates.</td><td>JSON download per scan. Free-scan results shareable by URL.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="none"><td>Scheduled or emailed reports</td><td>None.</td><td>None.</td><td class="vcell"><span class="chip v-none">Neither</span></td></tr>
+
+        <tr class="group"><td colspan="4">Agents and MCP</td></tr>
+        <tr data-v="they"><td>MCP server</td><td>79 tools, OAuth for Claude and ChatGPT, API keys, two widgets that render inside ChatGPT.</td><td>None.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Agent skills</td><td>12 public skills shipped as Claude, Codex and Cursor plugins; the same skills drive their in-app agent.</td><td>None for customers.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>In-app chat agent</td><td>SAM: chat over the same tools, billed per turn. Hidden from navigation.</td><td>Content agents only; no chat over measurement data.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Project memory</td><td>Business overview, goal, positioning, competitors, key pages, research log; edited by users and agents.</td><td>Brand briefs and knowledge exist, operator-only.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+
+        <tr class="group"><td colspan="4">Platform and business</td></tr>
+        <tr data-v="they"><td>Billing</td><td>$10/month plan with $10 of credits; usage at provider cost × 1.28; every call reserves then settles on the real cost.</td><td>None.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Sign-in</td><td>Email or Google, captcha, disposable-email blocking.</td><td>Email and password only.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="mixed"><td>Teams</td><td>Organisations with owner, admin, member and permission rules.</td><td>Owner and member per workspace, row-level security, several workspaces per user.</td><td class="vcell"><span class="chip v-mixed">Mixed</span></td></tr>
+        <tr data-v="they"><td>Lifecycle email</td><td>Onboarding drip triggered by milestones.</td><td>Only Supabase auth emails.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="they"><td>Product analytics</td><td>PostHog events, errors and source maps.</td><td>Operational telemetry only.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+
+        <tr class="group"><td colspan="4">Front door and quality</td></tr>
+        <tr data-v="they"><td>Onboarding</td><td>Website, then Search Console, then preferences, then connect an agent. Saving the website starts a 50-page audit so results are waiting.</td><td>Brand name and website, then an empty overview and a blank question panel.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="mixed"><td>Free tools</td><td>Eight no-signup SEO tools with a sign-up link that carries the domain. No free AI-visibility tool.</td><td>A free AI-visibility scan with a shareable dashboard, which they do not have.</td><td class="vcell"><span class="chip v-mixed">Mixed</span></td></tr>
+        <tr data-v="they"><td>Tables and export</td><td>Shared table with range select, bulk actions, export to Sheets, CSV (formula-safe), Excel, JSON.</td><td>JSON download only.</td><td class="vcell"><span class="chip v-they">They lead</span></td></tr>
+        <tr data-v="we"><td>Verification</td><td>About 242 Vitest files; Playwright tests exist but do not run in CI.</td><td>About 3,560 tests, real Postgres workflow checks, browser checks, hosted QA harness.</td><td class="vcell"><span class="chip v-we">We lead</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="adopt" aria-labelledby="adopt-h">
+  <h2 id="adopt-h">What to adopt, in order</h2>
+  <p class="sec-intro">Ranked by how directly each item fixes something hurting us now. Effort is a rough size for our stack: S is days, M is one to two weeks, L is longer.</p>
+
+  <div class="tier">
+    <div class="tier-head"><h3>Now: fixes current pain</h3><p>These close gaps a first customer hits on day one.</p></div>
+    <ol class="recs" style="--start: 0">
+      <li>
+        <h4>Run a provider bake-off with DataForSEO</h4>
+        <p class="why">Their consumer-app scrapers for ChatGPT and Gemini, and the async AI Overview flag on Google results, may solve consumer collection (R12), the empty India cookie pool, and our per-answer cost together.</p>
+        <p>Run our Offcult 30-question India panel through both providers once and compare capture fidelity, India location support, AI Overview presence and real invoice cost. See <a href="#provider">the provider question</a>.</p>
+        <div class="facts"><span><b>Their code:</b> <code>src/server/lib/dataforseo/ai-tracking.ts</code>, <code>llm-models.ts</code>, <code>pricing.ts</code></span><span><b>Effort:</b> S for the trial, M to integrate</span></div>
+      </li>
+      <li>
+        <h4>Setup that writes the questions and competitors for the customer</h4>
+        <p class="why">Their single "Start research" click reads the site, searches live results, proposes topics, prompts and competitors, then shows one review screen and runs a baseline.</p>
+        <p>We already own the generator (<code>promptGen.js</code>). Wire it into the portal as a draft the customer edits and approves, and add competitor research with the rule that every competitor must cite a page actually read. This is where your locked-core idea plugs in.</p>
+        <div class="facts"><span><b>Their code:</b> <code>projects/services/websiteResearch.ts:139-188</code>, <code>ai-visibility/AiResearchSetupGate.tsx</code>, <code>WebsiteSetupReview.tsx</code></span><span><b>Effort:</b> M</span></div>
+      </li>
+      <li>
+        <h4>Show the price and get approval before every paid run</h4>
+        <p class="why">Customers who pay per use need to see the cost first. They show a dialog, send the approved maximum with the run, and refuse if the price moved.</p>
+        <p>We already reserve spend per attempt. Expose the estimate per scan and per month on the Run scan button and settings.</p>
+        <div class="facts"><span><b>Their code:</b> <code>aiVisibilityCost.ts:60-109</code>, <code>aiVisibilityRuns.ts:190-208</code>, <code>TrackingCostReview.tsx</code></span><span><b>Effort:</b> S</span></div>
+      </li>
+      <li>
+        <h4>Let customers set the schedule and edit competitors</h4>
+        <p class="why">Both exist in our backend but only operators can use them. A daily, weekly or monthly picker with "next run" on the overview turns a one-off scan into monitoring.</p>
+        <p>Add suggested competitors from cited domains with one-click Add, as they do.</p>
+        <div class="facts"><span><b>Their code:</b> <code>scheduledAiVisibility.ts:36-62</code>, <code>SuggestedCompetitors.tsx:51-133</code></span><span><b>Ours:</b> <code>continuousMeasurement.js</code>, <code>competitorExtract.js</code></span><span><b>Effort:</b> M</span></div>
+      </li>
+      <li>
+        <h4>Bring hidden measurements into the portal</h4>
+        <p class="why">Share of voice, rank, sentiment, citation sources and AI-crawler access already exist but only on operator or free-scan screens. A paying customer currently sees less than an anonymous visitor.</p>
+        <p>Pair this with their "x of y answers" under every rate and gaps instead of zeros on charts.</p>
+        <div class="facts"><span><b>Their code:</b> <code>VisibilityTrendChart.tsx</code>, <code>CompetitorsTab.tsx:94-123</code></span><span><b>Effort:</b> M</span></div>
+      </li>
+    </ol>
+  </div>
+
+  <div class="tier">
+    <div class="tier-head"><h3>Next: product breadth</h3><p>Needed before charging customers or scaling sign-ups.</p></div>
+    <ol class="recs" style="--start: 5">
+      <li>
+        <h4>Billing with credits that reserve then settle</h4>
+        <p class="why">Every paid provider call goes through one wrapper that requires a price, holds credits, runs, and charges the real cost reported by the provider.</p>
+        <p>They use Autumn on Stripe. For India, check Razorpay support before choosing.</p>
+        <div class="facts"><span><b>Their code:</b> <code>src/server/lib/dataforseo/client.ts:85-97, 333-430</code>, <code>src/shared/billing.ts</code></span><span><b>Effort:</b> L</span></div>
+      </li>
+      <li>
+        <h4>Shareable reports</h4>
+        <p class="why">A public link with a preview image is how an agency shows a client results. They have no scheduled or emailed reports, so a weekly email digest would put us ahead.</p>
+        <div class="facts"><span><b>Their code:</b> <code>src/routes/s/$token/raw.ts</code>, <code>og[.]png.ts</code>, <code>src/shared/report-sandbox.ts</code></span><span><b>Effort:</b> M</span></div>
+      </li>
+      <li>
+        <h4>Ask-one-question explorer and per-question history</h4>
+        <p class="why">Customers want to try a question before tracking it, and to open one question and read every engine's answer over time with their brand highlighted.</p>
+        <div class="facts"><span><b>Their code:</b> <code>PromptExplorerResults.tsx</code>, <code>PromptAnalysis.tsx</code>, route <code>ai-visibility/prompts/$promptId</code></span><span><b>Effort:</b> M</span></div>
+      </li>
+      <li>
+        <h4>MCP server and agent skills</h4>
+        <p class="why">Their main growth channel: "connect your agent in 2 minutes". Our scan results, citations and content drafts would be useful inside Claude and ChatGPT.</p>
+        <p>Build one tool layer used by both MCP and any in-app agent, with output schemas checked by tests, as they do.</p>
+        <div class="facts"><span><b>Their code:</b> <code>src/server/mcp/server.ts</code>, <code>oauth-provider.ts</code>, <code>samChatTools.ts</code>, <code>plugins/openseo</code></span><span><b>Effort:</b> L</span></div>
+      </li>
+      <li>
+        <h4>Onboarding that produces value before the first click</h4>
+        <p class="why">Saving the website starts work in the background, so the dashboard is not empty. For us: start the website check and question research when the workspace is created, then offer Search Console.</p>
+        <div class="facts"><span><b>Their code:</b> <code>features/onboarding/onboardingModel.ts</code>, <code>_authenticated.onboarding.index.tsx</code></span><span><b>Effort:</b> S</span></div>
+      </li>
+    </ol>
+  </div>
+
+  <div class="tier">
+    <div class="tier-head"><h3>Later: decide on scope first</h3><p>Valuable only if we choose to be broader than AI visibility.</p></div>
+    <ol class="recs" style="--start: 10">
+      <li>
+        <h4>Rank tracking with AI Overview presence per keyword</h4>
+        <p class="why">The classic SEO feature closest to our mission: it shows which tracked keywords trigger an AI Overview, which is where AEO and SEO meet.</p>
+        <div class="facts"><span><b>Their code:</b> <code>src/db/app.schema.ts:216-380</code>, <code>rankCheckRetries.ts</code>, <code>dataforseo/serp.ts:136-160</code></span><span><b>Effort:</b> M</span></div>
+      </li>
+      <li>
+        <h4>A real site crawler, plus the AEO checks they lack</h4>
+        <p class="why">Their crawler design is solid. Adding our AI-bot, llms.txt and structured-data validation on top would beat them where they are weakest.</p>
+        <p>Copy their fixture-site test idea: one deliberately broken page per issue, with a check that every issue is covered.</p>
+        <div class="facts"><span><b>Their code:</b> <code>SiteAuditWorkflow.ts</code>, <code>AuditScratchpad.ts</code>, <code>url-policy.ts</code>, <code>tests/badseo</code></span><span><b>Effort:</b> L</span></div>
+      </li>
+      <li>
+        <h4>Keyword research, backlinks, GA4</h4>
+        <p class="why">Mostly thin, cached reads from DataForSEO. Cheap to add once the provider is in, but they make us a general SEO suite competing with Semrush on price.</p>
+        <div class="facts"><span><b>Their code:</b> <code>features/keywords</code>, <code>BacklinksService.ts</code>, <code>SearchOpportunityService.ts</code></span><span><b>Effort:</b> M each</span></div>
+      </li>
+      <li>
+        <h4>Smaller platform items</h4>
+        <p class="why">Google sign-in, captcha and disposable-email blocking on sign-up, lifecycle emails, product analytics, IndexNow submission, CSV and Sheets export.</p>
+        <div class="facts"><span><b>Their code:</b> <code>src/lib/auth.ts</code>, <code>src/server/email</code>, <code>IndexNowService.ts</code>, <code>components/table/</code></span><span><b>Effort:</b> S each</span></div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="provider" aria-labelledby="provider-h">
+  <h2 id="provider-h">The provider question</h2>
+  <p class="sec-intro">OpenSEO buys all its data from DataForSEO. For AI visibility it uses these endpoints, with the raw costs written in their code.</p>
+  <div class="table-wrap">
+    <table class="small">
+      <thead><tr><th>Engine</th><th>DataForSEO endpoint</th><th>What is captured</th><th>Raw cost per answer</th></tr></thead>
+      <tbody>
+        <tr><td>ChatGPT</td><td><code>/v3/ai_optimization/chat_gpt/llm_scraper</code></td><td>Consumer app</td><td class="num">$0.0012 queued · $0.004 live</td></tr>
+        <tr><td>Gemini</td><td><code>/v3/ai_optimization/gemini/llm_scraper</code></td><td>Consumer app</td><td class="num">$0.0012 queued · $0.004 live</td></tr>
+        <tr><td>Google AI Overviews</td><td><code>/v3/serp/google/organic</code> with <code>load_async_ai_overview: true</code></td><td>Search result page</td><td class="num">$0.0012 queued · $0.004 live</td></tr>
+        <tr><td>Perplexity</td><td><code>/v3/ai_optimization/perplexity/llm_responses/live</code></td><td>Model API with web search</td><td class="num">$0.04</td></tr>
+        <tr><td>Claude</td><td><code>/v3/ai_optimization/claude/llm_responses/live</code></td><td>Model API, forced web search</td><td class="num">$0.18</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warn">
+    <h3>What I could not verify</h3>
+    <p>These prices are constants in their code (<code>src/shared/ai-visibility.ts:31-40</code>, <code>dataforseo/pricing.ts:116-140</code>), not a quote. I have not checked whether the consumer-app scrapers support India as a location, how often India searches return an AI Overview through their async flag, or the terms of use for scraped answers. The bake-off in recommendation 1 answers all of these for a few dollars.</p>
+  </div>
+  <p>If the numbers hold, a 30-question, 4-engine scan would cost well under a dollar in provider fees against our roughly USD 7 today. That changes what a monthly price can be, and makes daily scheduling affordable.</p>
+  <p>Two cautions. Their Claude and Perplexity answers come from model APIs, not the consumer apps, so fidelity is mixed across engines, which is the same problem we have. And a single provider for everything is a single point of failure; we would keep OpenRouter and Bright Data as fallbacks behind our existing provider circuits.</p>
+</section>
+
+<section id="questions" aria-labelledby="questions-h">
+  <h2 id="questions-h">How they handle questions</h2>
+  <p class="sec-intro">This bears directly on the locked-core idea you recorded today (<code>docs/ideas/2026-10-20-locked-core-rolling-questions.md</code>).</p>
+  <div class="cols">
+    <div class="card">
+      <h3>OpenSEO's model</h3>
+      <ul>
+        <li><b>AI drafts, the user curates, the set is fixed.</b> Every scheduled run asks the same saved prompts. Nothing regenerates per scan.</li>
+        <li><b>Three ways in:</b> setup research seeds 15 prompts; a Generate button drafts 5 at a time; Prompt Research picks from a dataset of questions with search volume.</li>
+        <li><b>Prompt text never changes.</b> Editing archives the old prompt and adds a new one. Re-adding archived text revives its history.</li>
+        <li><b>Branded prompts are flagged at run start</b> and kept out of trends.</li>
+        <li><b>Trends compare matched cells</b> and stay silent unless 90% of answers were collected in both periods.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>What it means for the locked-core idea</h3>
+      <ul>
+        <li><b>Your idea goes further than theirs.</b> Their set never explores new phrasing unless the user adds it. A rolling regenerated set fills that gap.</li>
+        <li><b>Use their trend rules for the locked core.</b> Per-question identity that survives edits, matched cells, a coverage gate and named comparison states are exactly what a stable core needs.</li>
+        <li><b>Report the rolling set as discovery,</b> never in trends, the same way they keep branded prompts out.</li>
+        <li><b>Their setup flow answers "what is the first scan?"</b> Research the site, propose about 30 questions, run a baseline, then let the customer lock the ones that matter.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="backend" aria-labelledby="backend-h">
+  <h2 id="backend-h">Backend patterns worth taking</h2>
+  <p class="sec-intro">Engineering choices from their code, set against what we do today.</p>
+  <div class="patterns">
+    <div class="pattern"><div><h4>One metering wrapper with a mandatory price</h4><p>No paid endpoint can be added without a cost estimate. Hold, call, settle on the provider-reported cost, log when the estimate was low, never charge for requests the provider rejected unbilled. <code>dataforseo/client.ts:85</code></p></div><div class="ours"><b>Ours</b>Reservations per attempt and per-model pricing exist (<code>llmPricing.js</code>). Reuse the shape when customer credits arrive.</div></div>
+    <div class="pattern"><div><h4>Billed steps never retry; free reads do</h4><p>Collection steps that cost money run once; polling and reading steps retry. <code>AiVisibilityWorkflow.ts:29-43</code></p></div><div class="ours"><b>Ours</b>Attempts, leases and circuits exist. Confirm the same split is explicit; it relates to the open R02-12 idempotency case.</div></div>
+    <div class="pattern"><div><h4>Per-question identity across edits</h4><p>Prompt text is immutable; an edit archives and re-adds; re-adding revives history. <code>aiVisibilityConfiguration.ts:148-231</code></p></div><div class="ours"><b>Ours</b>We version the whole panel. The locked core needs per-question identity so one question's history survives panel changes.</div></div>
+    <div class="pattern"><div><h4>Brand snapshot stored with every match</h4><p>Name and domain are copied into each match row, so later edits to the brand never rewrite history. <code>ai-visibility.schema.ts:149-150</code></p></div><div class="ours"><b>Ours</b>Check that entity evidence keeps the identity used at judging time.</div></div>
+    <div class="pattern"><div><h4>Named comparison states for trends</h4><p>comparable, incomplete, scope_changed, no_previous, no_data, with a 90% coverage gate. <code>aiVisibilityTrend.ts:69-152</code></p></div><div class="ours"><b>Ours</b><code>visibilitySeries.js</code> already refuses deltas across boundaries. Their state names are good customer-facing wording.</div></div>
+    <div class="pattern"><div><h4>Citation clean-up before matching</h4><p>Strip <code>utm_*</code>, <code>gclid</code> and similar, remove citation markers like <code>[1]</code> before looking for brand names, keep engine order. <code>dataforseoEvidence.ts:120-180</code></p></div><div class="ours"><b>Ours</b>Check that <code>citationEnrich.js</code> and the judge strip markers before mention matching.</div></div>
+    <div class="pattern"><div><h4>Resolve model names against the provider catalogue</h4><p>Invalid model names are billed, so names are checked against the free model list first. <code>llm-models.ts:10-60</code></p></div><div class="ours"><b>Ours</b>OpenRouter model IDs are configured by hand. Add a catalogue check to the readiness canary.</div></div>
+    <div class="pattern"><div><h4>Scheduler moves the next-run time before starting</h4><p>A failing run cannot block the queue. <code>scheduledAiVisibility.ts:36-62</code></p></div><div class="ours"><b>Ours</b>Durable windows with bounded catch-up. Compare during R11 integration.</div></div>
+    <div class="pattern"><div><h4>Soft-expiry cache for expensive research</h4><p>Results cached under versioned keys and re-validated with a schema on read. <code>src/server/lib/r2-cache.ts</code></p></div><div class="ours"><b>Ours</b>No provider-response cache. Useful for site scrapes and question research.</div></div>
+    <div class="pattern"><div><h4>One tool layer for MCP and the in-app agent</h4><p>Same handlers serve outside agents and their chat; every tool has an output schema checked by a contract test. <code>mcp/server.ts</code>, <code>output-schema-contract.test.ts</code></p></div><div class="ours"><b>Ours</b>Nothing yet. Design it this way from the start.</div></div>
+    <div class="pattern"><div><h4>Fixture site with one broken page per issue</h4><p>A real site where each page triggers exactly the issues it declares, plus a check that every issue type is covered. <code>tests/badseo</code></p></div><div class="ours"><b>Ours</b><code>tests/fixtures/repairs</code>. Extend to AI-crawler, llms.txt and schema checks.</div></div>
+    <div class="pattern"><div><h4>Formula-safe CSV export with short-lived links</h4><p>Cells that could run as spreadsheet formulas are neutralised; export links expire after an hour. <code>aiVisibilityExport.ts</code></p></div><div class="ours"><b>Ours</b>JSON only. Apply when adding CSV.</div></div>
+  </div>
+</section>
+
+<section id="frontend" aria-labelledby="frontend-h">
+  <h2 id="frontend-h">Frontend patterns worth taking</h2>
+  <p class="sec-intro">Their stack is shadcn on Base UI, Tailwind 4, Recharts and TanStack Table. We keep our own design system; these are behaviours to copy, not components.</p>
+  <div class="patterns">
+    <div class="pattern"><div><h4>Poll only while work runs, at the server's pace</h4><p>The server returns how long to wait; finished runs never refetch; results fill in as they arrive. <code>ai-visibility/shared.tsx:115-135</code></p></div><div class="ours"><b>Ours</b>Scan progress polls on a fixed timer. Let the status route return the next poll time.</div></div>
+    <div class="pattern"><div><h4>"x of y" under every rate</h4><p>Every percentage shows its denominator; missing days are gaps, not zeros. <code>VisibilityTrend.tsx</code></p></div><div class="ours"><b>Ours</b>Matches our evidence-first rules. Apply across portal tiles.</div></div>
+    <div class="pattern"><div><h4>One review screen after research</h4><p>Competitors, topics and prompts proposed together, edited together, then confirmed. <code>WebsiteSetupReview.tsx</code></p></div><div class="ours"><b>Ours</b>The new question-panel page is the natural home.</div></div>
+    <div class="pattern"><div><h4>Highlighted mention excerpts</h4><p>The brand mention is shown in context inside the answer, not just as a yes or no. <code>PromptAnalysis.tsx</code></p></div><div class="ours"><b>Ours</b>We store first-mention data; show it in the scan report.</div></div>
+    <div class="pattern"><div><h4>Model fan-out queries</h4><p>Shows the searches the model ran before answering. <code>PromptExplorerResults.tsx</code></p></div><div class="ours"><b>Ours</b>Check whether OpenRouter web-search responses expose these.</div></div>
+    <div class="pattern"><div><h4>Live feed while a long job runs</h4><p>Audits show each crawled URL as it lands, every 1.5 seconds. <code>audit/AuditDetail.tsx</code></p></div><div class="ours"><b>Ours</b>Show answers landing per engine during a scan instead of a stage bar.</div></div>
+    <div class="pattern"><div><h4>One empty state with three kinds</h4><p>No data, filtered (with Clear filters), and error (with Retry); stale data stays visible when a refresh fails. <code>components/EmptyState.tsx</code></p></div><div class="ours"><b>Ours</b><code>EmptyState</code> and <code>Banner</code> exist; add the filtered kind.</div></div>
+    <div class="pattern"><div><h4>Onboarding that finishes itself</h4><p>When the agent connects, the step shows "Connected" and the wizard completes without a click. <code>ai-mcp/AgentSetup.tsx</code></p></div><div class="ours"><b>Ours</b>Same idea for Search Console connect and the first baseline scan.</div></div>
+    <div class="pattern"><div><h4>Free tool to sign-up hand-off</h4><p>Free results are capped with the total shown, and sign-up carries the domain so onboarding is prefilled. <code>web/src/lib/free-tools/</code></p></div><div class="ours"><b>Ours</b>Our free scan should hand its brand, site and questions into the new workspace.</div></div>
+  </div>
+</section>
+
+<section id="ahead" aria-labelledby="ahead-h">
+  <h2 id="ahead-h">Where we are ahead</h2>
+  <p class="sec-intro">Keep these while borrowing the rest. Several are invisible to customers today, which wastes the lead.</p>
+  <div class="cols">
+    <div class="card">
+      <h3>Measurement depth</h3>
+      <ul>
+        <li><b>Entity resolution</b> with aliases and homonyms; they match on name and domain only.</li>
+        <li><b>Sentiment and recommendation labels</b>; they have none.</li>
+        <li><b>Raw evidence kept privately</b> with structured redaction and expiry; they keep only markdown.</li>
+        <li><b>Competitors extracted from the answers themselves</b>; theirs come from setup research or citations.</li>
+        <li><b>Free AI-visibility scan</b>; they have SEO free tools but no AI one.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Product and engineering</h3>
+      <ul>
+        <li><b>Content Studio</b> from research to fact-checked, approved, verified publication.</li>
+        <li><b>AI-crawler access and llms.txt</b> checks; their audit has none.</li>
+        <li><b>Search Console history stored</b>; theirs is queried live and limited to Google's window.</li>
+        <li><b>Verification</b>: about 3,560 tests with real-database and hosted checks, against their roughly 242 test files with end-to-end tests outside CI.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="gaps" aria-labelledby="gaps-h">
+  <h2 id="gaps-h">Their weak spots, our openings</h2>
+  <div class="card">
+    <ul>
+      <li><b>One sample per question, engine and run.</b> No repeat sampling to smooth model randomness.</li>
+      <li><b>One market per project.</b> No multi-country tracking in one tracker.</li>
+      <li><b>Matches are frozen at collection.</b> A competitor added later never appears in older results, which distorts competitor trends.</li>
+      <li><b>"Position" counts only tracked brands,</b> not the full list in the answer.</li>
+      <li><b>Prompt Research data is mostly Google "People also ask"</b> questions, US and English only, not real chatbot logs. Their own skill text admits this.</li>
+      <li><b>No AI-visibility card on the dashboard,</b> no AI-visibility widget in ChatGPT, no scheduled reports.</li>
+      <li><b>Brand Lookup and the chat agent are hidden</b> from navigation; the research progress bar advances on a timer, not real progress.</li>
+      <li><b>No pages comparing against Profound or Peec</b> on their marketing site, and no free AI-visibility tool. Both are open ground for us.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="reuse" aria-labelledby="reuse-h">
+  <h2 id="reuse-h">Reusing their code</h2>
+  <p class="sec-intro">The MIT licence lets us copy and modify their code commercially, as long as we keep their copyright and licence notice with any copied files.</p>
+  <div class="cols">
+    <div class="card">
+      <h3>Port the logic</h3>
+      <ul>
+        <li>Brand-mention matching and Unicode-safe span search: <code>aiVisibilityMatching.ts</code></li>
+        <li>Answer and citation parsing for DataForSEO responses: <code>providers/dataforseoEvidence.ts</code></li>
+        <li>DataForSEO client shape and price table: <code>src/server/lib/dataforseo/</code></li>
+        <li>Audit issue registry with fix text: <code>src/shared/audit-issues.ts</code></li>
+        <li>IndexNow service and CSV export helpers</li>
+        <li>Their public agent skills, as starting points for ours</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Do not port the infrastructure</h3>
+      <ul>
+        <li>They run TanStack Start on Cloudflare Workers with D1, Durable Objects and Workflows. We run Next.js on Vercel with Supabase.</li>
+        <li>Their dual SQLite and Postgres layer exists for self-hosting; we do not need it.</li>
+        <li>Much of their architecture works around the 128 MB Worker memory limit.</li>
+        <li>Their files are TypeScript and ours are JavaScript, so each port is a rewrite with their tests as the guide.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="decide" aria-labelledby="decide-h">
+  <h2 id="decide-h">Decisions for you</h2>
+  <p class="sec-intro">These set the order of everything above.</p>
+  <ol class="questions">
+    <li><b>Stay AI-visibility only, or add classic SEO?</b><span>Keywords, rank tracking and backlinks are cheap once DataForSEO is in, but they put us head to head with Semrush, Ahrefs and OpenSEO on price.</span></li>
+    <li><b>Trial DataForSEO as a provider?</b><span>A one-panel bake-off against our current providers costs a few dollars and settles the cost and India questions.</span></li>
+    <li><b>How should customers pay?</b><span>OpenSEO charges $10 a month plus usage at provider cost × 1.28. Usage-based, a flat subscription, or a mix?</span></li>
+    <li><b>Build the MCP and agent channel now or later?</b><span>It is OpenSEO's main pitch. It also needs billing in place first, because agents can spend money quickly.</span></li>
+    <li><b>Adopt the locked-core question model?</b><span>Their research shows a fixed, curated set works for trends; your rolling set adds discovery they lack.</span></li>
+  </ol>
+
+  <details class="method" id="method">
+    <summary>How this was produced</summary>
+    <p>The reverse-engineering skill was invoked as asked. Its own routing rule says that for a complete source repository, normal repository tools should be used instead of its binary and runtime analysis tools, so its staged investigation method was followed instead:</p>
+    <ul>
+      <li>A question checklist for each area.</li>
+      <li>Four parallel read-only reviews: their AI visibility core, the rest of their backend, their frontend, and an inventory of our platform.</li>
+      <li>An evidence trail with file paths, separating what was read in code from what was inferred.</li>
+    </ul>
+    <p>Their repository was cloned at commit <code>c5f8db1</code> into an isolated scratch folder. Nothing of theirs was installed or executed, and their skills and agent instructions were treated as data. Our side was read from <code>main</code> at <code>dfc9b40</code>. Prices and limits quoted for OpenSEO come from constants in their code and may differ from what DataForSEO charges today.</p>
+  </details>
+
+  <footer>
+    Prepared 20 October 2026 for internal planning. Source: github.com/every-app/open-seo (MIT, © 2026 Ben Senescu).
+  </footer>
+</section>
+</main>
+</div>
+
+<script>
+(function () {
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#matrix-table tbody tr'));
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('.filters button'));
+  function count(f) {
+    return rows.filter(function (r) { return r.dataset.v && (f === 'all' || r.dataset.v === f); }).length;
+  }
+  buttons.forEach(function (b) {
+    b.querySelector('.count').textContent = count(b.dataset.f);
+    b.addEventListener('click', function () { apply(b.dataset.f); });
+  });
+  function apply(f) {
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.f === f)); });
+    var lastGroup = null, groupHasRows = false;
+    rows.forEach(function (r) {
+      if (r.classList.contains('group')) {
+        if (lastGroup) lastGroup.hidden = !groupHasRows;
+        lastGroup = r; groupHasRows = false;
+        return;
+      }
+      var show = f === 'all' || r.dataset.v === f;
+      r.hidden = !show;
+      if (show) groupHasRows = true;
+    });
+    if (lastGroup) lastGroup.hidden = !groupHasRows;
+  }
+})();
+</script>
+</body>
+</html>
