@@ -80,6 +80,9 @@ jobs:
 
       # No `continue-on-error` and no `|| true` anywhere in this file: a red
       # test must fail the job. That is the whole contract.
+      - name: typecheck
+        run: npm run typecheck
+
       - name: unit tests
         run: npm run test:scoring
 
