@@ -1519,7 +1519,7 @@ Fixtures: `tests/fixtures/f01/openrouter-generate-usage.json` and `openrouter-no
 2. New `enqueueSystemJob(kind, payload, { dedupeKey?, singleActiveKey?, runAt? })` for platform jobs with no workspace.
 3. `defineJob` gains a third optional argument `{ payloadSchema?, pollAfterSeconds?, deadlineSeconds?, maxInvocations?, leaseSeconds? }`.
 4. New `definePeriodic({ name, everySeconds, run })`.
-5. `reserveSpend`/`metered` inputs gain `ttlSeconds?: number` (default 1,800, max 86,340). `reserveSpend` also gains `subject?: { kind: string; id: string }`.
+5. `reserveSpend`/`metered` inputs gain `ttlSeconds?: number` (default 1,800, max 86,340). `reserveSpend` also gains `subject?: { kind: string; id: string }` and returns `{ holdId, existing }`; `metered` refuses `existing: true` with `AppError 409 duplicate_paid_call` instead of re-running the paid call.
 6. New `settleSpendBatch(holdId, costs[])`.
 7. `AppError` constructor is `(status, code, message, { recovery?, details?, cause? })`. Error bodies may include `details`.
 8. New error classes in `src/lib/spend/errors.ts`: `ChargedCallError`, `UnbilledCallError`, `AmbiguousCallError`.
