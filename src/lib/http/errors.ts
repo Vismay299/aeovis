@@ -21,13 +21,18 @@ export function jsonOk(body: unknown, status: number = 200): Response {
 /**
  * Reads a JSON request body. A body that is not JSON is a client error; any
  * other SyntaxError stays a server error, so an internal JSON.parse failure is
- * never reported as a bad request.
+ * never reported as a bad request. A failure that is not a parse failure (an
+ * already-consumed body, a stream error) is a bug, so it is rethrown and ends
+ * up as a logged 500 rather than a silent 400.
  */
 export async function readJsonBody(request: Request): Promise<unknown> {
   try {
     return await request.json();
-  } catch {
-    throw new AppError(400, "invalid_json", "The request body must be JSON.");
+  } catch (err) {
+    if (err instanceof SyntaxError) {
+      throw new AppError(400, "invalid_json", "The request body must be JSON.");
+    }
+    throw err;
   }
 }
 

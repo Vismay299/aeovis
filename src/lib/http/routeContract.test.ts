@@ -127,9 +127,11 @@ test("every discovered route contract has a closed response with examples", asyn
     const contracts = mod.contracts;
     assert.ok(Array.isArray(contracts), `${file} must export contracts: RouteContract[]`);
     for (const contract of contracts as RouteContract[]) {
+      // Each file is imported once here, so any repeated id is a real
+      // duplicate, whether it comes from another file or from this one twice.
       const owner = seen.get(contract.id);
-      if (owner !== undefined && owner !== file) {
-        problems.push(`${contract.id}: id is declared by both ${owner} and ${file}`);
+      if (owner !== undefined) {
+        problems.push(`${contract.id}: id is already declared by ${owner}`);
       }
       seen.set(contract.id, file);
       problems.push(...(await contractViolations(contract)));

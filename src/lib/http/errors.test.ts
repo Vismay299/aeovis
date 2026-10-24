@@ -124,6 +124,20 @@ test("readJsonBody returns the parsed body", async () => {
   assert.deepEqual(await readJsonBody(request), { a: 1 });
 });
 
+test("a body failure that is not a parse failure is rethrown, not a 400", async () => {
+  const request = new Request("https://app.test/api/x", { method: "POST", body: '{"a":1}' });
+  await request.json();
+  const err = await readJsonBody(request).then(
+    () => {
+      throw new Error("expected a throw");
+    },
+    (thrown: unknown) => thrown
+  );
+  assert.equal(err instanceof AppError, false);
+  const { status } = await bodyOf(err);
+  assert.equal(status, 500);
+});
+
 test("an internal SyntaxError is a 500, not a client error", async () => {
   const original = console.error;
   const logged: unknown[][] = [];
