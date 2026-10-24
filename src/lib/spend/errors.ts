@@ -52,3 +52,34 @@ export class SpendRefused extends AppError {
     this.estimateUsd = opts?.estimateUsd;
   }
 }
+
+export class ChargedCallError extends Error {
+  readonly actualUsd: number;
+  readonly provider: string;
+  readonly endpoint: string;
+
+  constructor(
+    message: string,
+    opts: { actualUsd: number; provider: string; endpoint: string; cause?: unknown }
+  ) {
+    super(message, opts && "cause" in opts ? { cause: opts.cause } : undefined);
+    this.name = "ChargedCallError";
+    this.actualUsd = opts.actualUsd;
+    this.provider = opts.provider;
+    this.endpoint = opts.endpoint;
+  }
+}
+
+export class UnbilledCallError extends Error {
+  constructor(message: string, opts?: { cause?: unknown }) {
+    super(message, opts && "cause" in opts ? { cause: opts.cause } : undefined);
+    this.name = "UnbilledCallError";
+  }
+}
+
+export class AmbiguousCallError extends Error {
+  constructor(message: string, opts?: { cause?: unknown }) {
+    super(message, opts && "cause" in opts ? { cause: opts.cause } : undefined);
+    this.name = "AmbiguousCallError";
+  }
+}
