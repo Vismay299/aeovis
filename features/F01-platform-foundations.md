@@ -654,6 +654,9 @@ BEGIN
   -- Serialise per workspace and per feature: reservations race on caps, never on the network.
   PERFORM pg_advisory_xact_lock(hashtext('f01:spend:brand:' || p_brand));
   PERFORM pg_advisory_xact_lock(hashtext('f01:spend:feature:' || p_feature));
+  -- Abandoned holds stop eating caps here: the next reservation for this brand or feature expires
+  -- its due holds and prices them at their estimate, so a stale key collides as a duplicate below.
+  PERFORM public.f01_expire_due_holds(p_brand, p_feature, 100);
   SELECT * INTO h FROM spend_holds WHERE brand_key = p_brand AND idempotency_key = p_idempotency;
   IF FOUND THEN
     IF h.status = 'held' THEN RETURN jsonb_build_object('granted', true, 'hold_id', h.id, 'existing', true); END IF;
@@ -691,14 +694,46 @@ BEGIN
 END $$;
 
 -- Settle a hold with one or more cost rows (OpenSEO: one hold, each call credited separately).
+-- An expired hold is reconciled late rather than dropped: its reservation row becomes the real cost.
 -- p_costs: [{provider, endpoint, units?, actual_usd|null, cost_source, suffix?, meta?}]
 CREATE OR REPLACE FUNCTION public.settle_spend(p_hold uuid, p_costs jsonb)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
 DECLARE h spend_holds; r jsonb; i integer := 0; v_actual numeric := 0; v_unknown boolean := false;
-  v_rows integer; v_est numeric; v_cost numeric; v_src text;
+  v_rows integer; v_est numeric; v_cost numeric; v_src text; v_provider text; v_endpoint text;
 BEGIN
   SELECT * INTO h FROM spend_holds WHERE id = p_hold FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'hold not found'; END IF;
+  IF h.status = 'expired' THEN
+    -- Late settle: the sweep already wrote the hold:<id> reservation row at the estimate. Re-price
+    -- that one row once every cost is known; an unknown cost leaves the hold and the row untouched.
+    v_rows := jsonb_array_length(p_costs);
+    IF v_rows < 1 OR v_rows > 200 THEN RAISE EXCEPTION 'settle needs 1..200 cost rows'; END IF;
+    FOR r IN SELECT value FROM jsonb_array_elements(p_costs) LOOP
+      i := i + 1;
+      v_cost := (r->>'actual_usd')::numeric;
+      IF v_cost IS NOT NULL AND v_cost < 0 THEN RAISE EXCEPTION 'negative cost'; END IF;
+      IF i = 1 THEN v_provider := r->>'provider'; v_endpoint := r->>'endpoint'; END IF;
+      IF v_cost IS NULL THEN v_unknown := true; ELSE v_actual := v_actual + v_cost; END IF;
+    END LOOP;
+    IF v_unknown THEN
+      RETURN jsonb_build_object('settled', false, 'status', 'expired', 'unknown', true,
+                                'actual_usd', v_actual);
+    END IF;
+    INSERT INTO spend_ledger(brand_key, feature, hold_id, job_id, source_ref, provider, endpoint,
+                             estimate_usd, actual_usd, accounted_usd, cost_source, meta)
+    VALUES (h.brand_key, h.feature, h.id, h.job_id, 'hold:' || h.id,
+            coalesce(nullif(v_provider, ''), 'unknown'), coalesce(nullif(v_endpoint, ''), 'late_settle'),
+            h.estimate_usd, v_actual, v_actual, 'provider_reported',
+            jsonb_build_object('expired', true, 'late_settle', true))
+    ON CONFLICT (source_ref) DO UPDATE
+      SET provider = excluded.provider, endpoint = excluded.endpoint,
+          actual_usd = excluded.actual_usd, accounted_usd = excluded.accounted_usd,
+          cost_source = 'provider_reported',
+          meta = spend_ledger.meta || jsonb_build_object('late_settle', true);
+    UPDATE spend_holds SET status = 'settled', actual_usd = v_actual, closed_at = now() WHERE id = p_hold;
+    RETURN jsonb_build_object('settled', true, 'late', true, 'actual_usd', v_actual, 'unknown', false,
+      'undershoot', v_actual > h.estimate_usd, 'over_max', h.max_usd IS NOT NULL AND v_actual > h.max_usd);
+  END IF;
   IF h.status <> 'held' THEN RETURN jsonb_build_object('settled', false, 'status', h.status); END IF;
   v_rows := jsonb_array_length(p_costs);
   IF v_rows < 1 OR v_rows > 200 THEN RAISE EXCEPTION 'settle needs 1..200 cost rows'; END IF;
@@ -750,6 +785,31 @@ BEGIN
   RETURN v;
 END $$;
 
+-- Scoped sweep: reserve_spend calls this so a workspace's or a feature's abandoned holds stop
+-- counting against caps at the next reservation. Both scopes NULL expires nothing.
+CREATE OR REPLACE FUNCTION public.f01_expire_due_holds(p_brand text, p_feature text, p_limit integer DEFAULT 100)
+RETURNS integer LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE h spend_holds; v integer := 0;
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 500 THEN
+    RAISE EXCEPTION 'hold expiry limit must be 1..500';
+  END IF;
+  FOR h IN SELECT * FROM spend_holds
+            WHERE status = 'held' AND expires_at < now()
+              AND ((p_brand IS NOT NULL AND brand_key = p_brand)
+                   OR (p_feature IS NOT NULL AND feature = p_feature))
+            ORDER BY expires_at LIMIT p_limit FOR UPDATE SKIP LOCKED LOOP
+    INSERT INTO spend_ledger(brand_key, feature, hold_id, job_id, source_ref, provider, endpoint,
+                             estimate_usd, actual_usd, accounted_usd, cost_source, meta)
+    VALUES (h.brand_key, h.feature, h.id, h.job_id, 'hold:' || h.id, 'unknown', 'expired_hold',
+            h.estimate_usd, NULL, h.estimate_usd, 'reservation', jsonb_build_object('expired', true))
+    ON CONFLICT (source_ref) DO NOTHING;
+    UPDATE spend_holds SET status = 'expired', closed_at = now() WHERE id = h.id AND status = 'held';
+    IF FOUND THEN v := v + 1; END IF;
+  END LOOP;
+  RETURN v;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.prune_spend(p_holds_before timestamptz, p_ledger_before timestamptz, p_limit integer DEFAULT 5000)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
 DECLARE v_l integer; v_h integer;
@@ -767,13 +827,17 @@ END $$;
 REVOKE ALL ON FUNCTION public.f01_committed_usd(text,text,timestamptz),
   public.reserve_spend(text,text,numeric,numeric,text,uuid,text,text,integer,numeric,numeric),
   public.settle_spend(uuid,jsonb), public.release_spend(uuid,text), public.expire_spend_holds(integer),
+  public.f01_expire_due_holds(text,text,integer),
   public.prune_spend(timestamptz,timestamptz,integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.f01_committed_usd(text,text,timestamptz),
   public.reserve_spend(text,text,numeric,numeric,text,uuid,text,text,integer,numeric,numeric),
   public.settle_spend(uuid,jsonb), public.release_spend(uuid,text), public.expire_spend_holds(integer),
+  public.f01_expire_due_holds(text,text,integer),
   public.prune_spend(timestamptz,timestamptz,integer) TO service_role;
 NOTIFY pgrst, 'reload schema';
 ```
+
+A due hold is expired at the start of the next reservation for its brand or feature — `reserve_spend` calls `f01_expire_due_holds` after taking both advisory locks, so abandoned holds stop counting against caps there and a stale idempotency key answers `duplicate_paid_call`; the phase 3 watchdog adds the periodic sweep on top.
 
 Retention: `spend_ledger` keeps 13 months (OpenSEO keeps 13 months of AI runs); closed `spend_holds` keep 90 days.
 
@@ -884,6 +948,7 @@ END $$;
   {kind:"table",name:"spend_holds"},{kind:"table",name:"spend_ledger"},
   {kind:"function",name:"reserve_spend"},{kind:"function",name:"settle_spend"},
   {kind:"function",name:"release_spend"},{kind:"function",name:"expire_spend_holds"},
+  {kind:"function",name:"f01_expire_due_holds"},
   {kind:"function",name:"prune_spend"},{kind:"function",name:"f01_committed_usd"},
 ],
 "042_f01_provider_cache.sql": [
@@ -915,7 +980,7 @@ export function jsonOk(body: unknown, status?: number): Response; // JSON + NO_S
 `toErrorResponse` rules, in order:
 1. `AppError` → `status`, body `{ error: message, code, recovery?, details? }`.
 2. `ZodError` (zod v4 `z.ZodError`) → 400 `{ error: "The request was not valid.", code: "invalid_request", details: { issues: [{ path: "a.b", message }] } }` (path and message only; never the received value).
-3. `SpendRefused` (from `src/lib/spend/errors.ts`) → `feature_disabled` 403 "This feature is not enabled for your workspace."; `daily_cap` 402 "Today's spend limit for this workspace has been reached." recovery "Try again tomorrow or ask the workspace owner to raise the limit."; `workspace_cap` 402 "This month's spend limit for this workspace has been reached."; `over_approved_max` 409 "This now costs more than you approved. Review the new price." with `details.estimateUsd`.
+3. `SpendRefused` (from `src/lib/spend/errors.ts`) → `feature_disabled` 403 "This feature is not enabled for your workspace."; `daily_cap` 402 "Today's spend limit for this workspace has been reached." recovery "Try again tomorrow or ask the workspace owner to raise the limit."; `workspace_cap` 402 "This month's spend limit for this workspace has been reached."; `over_approved_max` 409 "This now costs more than you approved. Review the new price." with `details.estimateUsd`. When a `daily_cap` refusal has `scope: "feature"`, the copy is "This feature's daily spend limit has been reached." and the recovery is "Try again tomorrow."
 4. `SyntaxError` from `request.json()` → 400 `invalid_json` "The request body must be JSON."
 5. Anything else → 500 `{ error: "Something went wrong. Please retry.", code: "internal_error" }` and `console.error("[http] unhandled", err instanceof Error ? err.name + ": " + err.message.slice(0, 200) : typeof err)`.
 
@@ -1006,7 +1071,7 @@ Semantics:
 // src/lib/spend/index.ts  (§5 names, plus two additive options and one additive export)
 export async function reserveSpend(i: { brandKey: string; feature: SpendFeature; estimateUsd: number; maxUsd?: number;
   jobId?: string; idempotencyKey: string; ttlSeconds?: number; subject?: { kind: string; id: string } },
-  deps?: SpendDeps): Promise<{ holdId: string }>;
+  deps?: SpendDeps): Promise<{ holdId: string; existing: boolean }>;
 export async function settleSpend(holdId: string, actualUsd: number | null,
   meta?: { provider: string; endpoint: string; units?: number; providerCostReported?: boolean }, deps?: SpendDeps): Promise<void>;
 export async function settleSpendBatch(holdId: string, costs: SpendCost[], deps?: SpendDeps): Promise<void>;
@@ -1021,10 +1086,10 @@ type SpendDeps = { store?: SpendStore; env?: Record<string, string | undefined>;
 ```
 
 Behaviour:
-- `reserveSpend` validates the input (`estimateUsd` finite and > 0, at most USD 1,000; `ttlSeconds` 60–86,340, default 1,800, which is OpenSEO's 30-minute `HOLD_TTL_MS`; `idempotencyKey` 1–300 chars). It calls `reserve_spend` with `p_default_daily = env.SPEND_DEFAULT_DAILY_CAP_USD` and `p_default_monthly = env.SPEND_DEFAULT_MONTHLY_CAP_USD` (each `null` when unset or blank; a non-numeric value throws `AppError(500,"spend_config_invalid")`). `granted:false` maps to `SpendRefused(reason)`, except `duplicate_paid_call`, which maps to `AppError(409,"duplicate_paid_call","This paid request was already made.")`. A database error throws `AppError(503,"spend_unavailable","Spend control is unavailable, so paid work is paused.")`: the guard fails closed.
+- `reserveSpend` validates the input (`estimateUsd` finite and > 0 at micro-dollar resolution — a sub-micro estimate such as `4e-7` would round the hold to USD 0, so it is refused — and at most USD 1,000; `ttlSeconds` 60–86,340, default 1,800, which is OpenSEO's 30-minute `HOLD_TTL_MS`; `idempotencyKey` 1–300 chars). It calls `reserve_spend` with `p_default_daily = env.SPEND_DEFAULT_DAILY_CAP_USD` and `p_default_monthly = env.SPEND_DEFAULT_MONTHLY_CAP_USD` (each `null` when unset or blank; a non-numeric value throws `AppError(500,"spend_config_invalid")`). `granted:false` maps to `SpendRefused(reason)`, except `duplicate_paid_call`, which maps to `AppError(409,"duplicate_paid_call","This paid request was already made.")`. A database error throws `AppError(503,"spend_unavailable","Spend control is unavailable, so paid work is paused.")`: the guard fails closed. On a grant it returns `{ holdId, existing }`, where `existing` is the `existing:true` flag `reserve_spend` answers with when the same `(brandKey, idempotencyKey)` is already behind a live hold; `reserveSpend` itself still returns that same hold (F01-AC-08) and only `metered` refuses it.
 - `settleSpend(holdId, actual, meta)` calls `settleSpendBatch` with one cost: `costSource = meta.providerCostReported === false ? "price_table" : "provider_reported"`. When `actual` is null, `settle_spend` records `reservation`.
-- `settleSpendBatch` **never throws**, following OpenSEO `subscription.ts:477-520`. A failed RPC is retried once after 250 ms. If it still fails, it logs `console.error("[spend] settle failed", { holdId, rows: costs.length })`, and the hold later expires and is counted at its estimate. When the result says `undershoot`, it logs `console.error("[spend] estimate undershoot", { feature, provider, endpoint, estimateUsd, actualUsd })`. When it says `over_max`, it logs `console.error("[spend] over approved max", { holdId, maxUsd, actualUsd })`. Never log payloads, prompts, answers or headers.
-- `metered` order: `reserveSpend` → `call()` → settle or release. The work after `reserveSpend` is one promise registered with `keepAlive(work, { label: "metered:" + feature })` and also awaited, so a caller whose HTTP response has gone still settles (OpenSEO `client.ts:404-413`). Outcomes:
+- `settleSpendBatch` **never throws**, following OpenSEO `subscription.ts:477-520`. A failed RPC is retried once after 250 ms. If it still fails, it logs `console.error("[spend] settle failed", { holdId, rows: costs.length })`, and the hold later expires and is counted at its estimate. It evaluates its alerts on `actualUsd = result.actualUsd ?? attemptedActual`, where `attemptedActual` is `usd6` of the summed cost actuals and `null` when any cost actual is `null`, plus `estimateUsd = result.estimateUsd ?? null` and `maxUsd = result.maxUsd ?? null`, so a skipped or retried settle still alerts: `settle_spend` reports the flags but not the amounts, and on `settled:false` it reports none at all. When `settled` is false it logs `console.error("[spend] settle skipped", { holdId, status })` with `status` defaulting to `"unknown"`; when `late` is true it logs `console.error("[spend] late settle", { holdId, actualUsd })`. It logs `console.error("[spend] estimate undershoot", { feature, provider, endpoint, estimateUsd, actualUsd })` when the result says `undershoot` **or** the actual is above the estimate, and `console.error("[spend] over approved max", { holdId, maxUsd, actualUsd })` when the result says `over_max` **or** the actual is above the max — at most one of each per call. Never log payloads, prompts, answers or headers.
+- `metered` order: `reserveSpend` → `call()` → settle or release. If `reserveSpend` reports `existing:true` — the same `(brandKey, idempotencyKey)` is already behind a live hold — `metered` throws `AppError(409,"duplicate_paid_call","This paid request was already made.")` **before** `call()` and before registering `keepAlive`, so a retry can never re-run a paid call against an in-flight hold. The work after `reserveSpend` is one promise registered with `keepAlive(work, { label: "metered:" + feature })` and also awaited, so a caller whose HTTP response has gone still settles (OpenSEO `client.ts:404-413`). Outcomes:
 
 | `call()` outcome | Spend action | Returned / thrown |
 |---|---|---|
@@ -1034,7 +1099,7 @@ Behaviour:
 | throws `ChargedCallError` | `settle(hold, err.actualUsd)` | rethrow |
 | throws `AmbiguousCallError` or any other error | `settle(hold, null)`; logs `[spend] unclassified call error` (name only) | rethrow |
 
-There are no retries inside `metered`. Billed calls run once (§6.4 of the conventions).
+There are no retries inside `metered`. Billed calls run once (§6.4 of the conventions). A release failure never escapes `metered`: both `release(…, "not_billed")` and `release(…, "unbilled_error")` run inside a try/catch that logs `console.error("[spend] release failed", { holdId, reason })` and then continues, so a `billed:false` success still returns its value and an `UnbilledCallError` is still rethrown as itself. A failed release is never turned into a settle: the hold expires and is counted at its estimate.
 
 #### `src/lib/jobs/`
 
@@ -1260,7 +1325,13 @@ None. F01 ships no customer or operator screens. F03 builds the Usage page and t
 
 - **Customers** can read their own workspace's `jobs`, `spend_holds`, `spend_ledger` and `workspace_spend_limits` through RLS. All writes go through service-role routes after `requireWorkspace`. `job_steps`, `job_periodic`, `paid_feature_controls` and `provider_cache` are service-only.
 - **Members and owners** can view status and cancel jobs. Changing spend limits and paid controls is operator-only in F01.
-- **Logs.** Only the fixed lines named in this spec are logged, with ids, codes, features, providers, endpoints and amounts. Never log payloads, prompts, answers, cached bodies, headers, URLs with query strings, cookies or secrets (CLAUDE.md secrets hygiene; conventions §6.9).
+- **Logs.** Only the fixed lines named in this spec are logged, with ids, codes, features, providers, endpoints and amounts. Never log payloads, prompts, answers, cached bodies, headers, URLs with query strings, cookies or secrets (CLAUDE.md secrets hygiene; conventions §6.9). The fixed lines are:
+  - `[http] unhandled` — error name and message head only (§6.2 `toErrorResponse`).
+  - `[spend] settle failed` `{ holdId, rows }`, `[spend] settle skipped` `{ holdId, status }`, `[spend] late settle` `{ holdId, actualUsd }`, `[spend] estimate undershoot` `{ feature, provider, endpoint, estimateUsd, actualUsd }`, `[spend] over approved max` `{ holdId, maxUsd, actualUsd }` — §6.2 `settleSpendBatch`.
+  - `[spend] release failed` `{ holdId, reason }` and `[spend] unclassified call error` — name only — §6.2 `metered`.
+  - `[ops] spend control changed` `{ feature, enabled }` (§6.5).
+  - `[cache] schema mismatch` `{ namespace, version }` and `[cache] write failed` — namespace only (§6.2 `src/lib/cache/`).
+  - `[llm] call failed` `{ model, code }` (§6.2 `src/lib/llm/`).
 - **PostHog.** No events (F26 owns telemetry). F01 exposes counts in the tick log line.
 - **Telemetry and email hooks (F25, F26).** F01 accepts one-line calls, added by those specs' PRs, into `src/lib/telemetry/context.ts` from `requireWorkspace` (sets server-event identity), `toErrorResponse` (5xx error capture), `reserveSpend` (cap-reached refusals, which F25 turns into the spend-cap email) and the job runner (job identity and terminal status). F01 itself ships none of these calls; each hook must be a no-op when F26/F25 are disabled and must never throw into the caller.
 - **Vault.** The cron secret is stored once in Supabase Vault by the owner (§10). The migration never contains it.
