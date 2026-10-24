@@ -15,9 +15,12 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/024_customer_workspace_ownership.sql
 \ir ../supabase/migrations/025_gsc_customer_oauth.sql
 \ir ../supabase/migrations/026_customer_uat_repairs.sql
--- 023's blanket REVOKE strips authenticated's spend grants, so the re-apply
--- finishes with 041 exactly as the runner's filename order does.
+-- 023's blanket REVOKE strips authenticated's spend and job grants, so the
+-- re-apply finishes with 040, 041 and 043 exactly as the runner's filename order
+-- does.
+\ir ../supabase/migrations/040_f01_jobs.sql
 \ir ../supabase/migrations/041_f01_spend.sql
+\ir ../supabase/migrations/043_f01_jobs_cron.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -177,6 +180,22 @@ SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002'
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.workspace_spend_limits) <> 1 OR (SELECT count(*) FROM public.spend_ledger) <> 1
   THEN RAISE EXCEPTION 'Spend limits or ledger leaked across tenants'; END IF;
+END $$;
+RESET ROLE;
+INSERT INTO public.jobs(kind,brand_key,trigger,status) VALUES
+ ('uat.job','10000000-0000-0000-0000-000000000001','manual','queued'),
+ ('uat.job','10000000-0000-0000-0000-000000000002','manual','queued'),
+ ('uat.job',NULL,'system','queued');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.jobs) <> 1
+  THEN RAISE EXCEPTION 'Jobs leaked across tenants, or the system job was visible'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.jobs) <> 1
+  THEN RAISE EXCEPTION 'Jobs leaked across tenants, or the system job was visible'; END IF;
 END $$;
 RESET ROLE;
 ROLLBACK;

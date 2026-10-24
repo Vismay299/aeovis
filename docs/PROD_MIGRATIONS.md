@@ -1463,3 +1463,77 @@ fails closed with `503 spend_unavailable` rather than spending uncapped.
 
 Verified against disposable PostgreSQL (`scripts/qa/check-f01-db.mjs` groups
 `spend-*` and `tests/customer-uat.sql`), never against production.
+
+
+## F01 platform foundations: migration 040_f01_jobs.sql
+
+**Implemented; production application unverified.** Apply `040_f01_jobs.sql`
+after `035_scoped_provider_rollout.sql`. It has no foreign key to
+`041_f01_spend.sql` and neither file reads the other, so 040 and 041 may be
+applied in either order. Both must be applied before the build that calls the
+job runner or `metered()`.
+
+Objects to check in the catalog: tables `jobs`, `job_steps` and `job_periodic`;
+functions `enqueue_job`, `claim_due_jobs`, `job_step_begin`,
+`job_step_complete`, `job_step_fail`, `job_sleep`, `job_yield`, `job_progress`,
+`job_finish`, `cancel_job`, `reconcile_stale_jobs`, `claim_due_periodic` and
+`prune_jobs` in `pg_proc`; and the partial unique index
+`jobs_single_active_idx` in `pg_class`. `npm run setup:db` verifies exactly that
+list for this file.
+
+All three tables have RLS enabled and are service-role only except one
+customer read: `authenticated` holds `SELECT` on `jobs`, and the policy
+`jobs_customer_read` shows a row only when `brand_key IS NOT NULL` and
+`customer_can_access_brand(brand_key)` holds. A job with no workspace — the
+platform maintenance jobs — is therefore invisible to every customer, and
+`job_steps` and `job_periodic` are not readable by `authenticated` at all.
+
+`enqueue_job` raises `invalid job deadline` for a deadline below 60 s or above
+7 days, and takes its deadline window from `coalesce(p_run_at, now())`, so a
+job scheduled into the future is not born expired. `claim_due_jobs` takes
+`FOR UPDATE SKIP LOCKED`, so two ticks never run the same row, and
+`f01_job_fenced` turns a write from a stale lease holder into a no-op rather
+than a lost update. A billed step is never re-run: `job_step_begin` fails a
+`running` billed row as `billed_step_interrupted` on replay.
+
+The tables are inert until something enqueues jobs. Rolling the application
+back does not require dropping them.
+
+Verified against disposable PostgreSQL (`scripts/qa/check-f01-db.mjs` groups
+`jobs-*` and `tests/customer-uat.sql`), never against production.
+
+
+## F01 platform foundations: migration 043_f01_jobs_cron.sql
+
+**Implemented; production application unverified, and it does nothing until the
+owner creates two Vault secrets.** Apply `043_f01_jobs_cron.sql` after
+`040_f01_jobs.sql` and before enabling `FEATURE_JOBS_TICK=on`.
+
+Objects to check in the catalog: function `jobs_tick_http` in `pg_proc`, and,
+on a database that has both extensions, one row for `perceev-jobs-tick` in
+`cron.job`. On a database without `pg_cron` and `pg_net` — CI and local QA —
+the file applies, raises a NOTICE, installs no schedule and creates no
+extension, so applying it there is not an error and not a partial install.
+
+Owner steps, in order, before the schedule can fire:
+
+1. Apply the migrations through `npm run setup:db`.
+2. Create the two Vault secrets without echoing either: `perceev_cron_secret`
+   (the same value as the deployment's `CRON_SECRET`) and
+   `perceev_jobs_tick_url` (`https://perceev.xyz/api/jobs/tick`, the custom
+   domain, which deployment protection does not cover). These names are the
+   only place either value is read; the migration file contains neither.
+3. Set `FEATURE_JOBS_TICK=on` and redeploy. Until it is `on`, the tick answers
+   200 `{"skipped":"disabled"}` and no job runs.
+
+With either secret missing, `jobs_tick_http()` raises a NOTICE and returns
+NULL instead of failing the cron run. To stop the schedule, either
+`select cron.unschedule('perceev-jobs-tick');` or set `FEATURE_JOBS_TICK=off`;
+queued jobs resume when the tick is re-enabled.
+
+The NOTICE/NULL branch is exercised by `scripts/qa/check-f01-db.mjs` group
+`jobs-cron` only on a database that has a `vault` schema; without one the group
+skips, so no local or CI run proves the installed schedule. That half is an
+owner-run check after applying on Supabase — `select * from cron.job` must
+show exactly one `perceev-jobs-tick` row — and is recorded in the PR body.
+Never verified against production.
