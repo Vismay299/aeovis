@@ -29,12 +29,22 @@ const LIMIT_ROW = {
 
 /**
  * A fake PostgREST client. Every chain the routes use is represented
- * (select/order/eq/upsert/select/single), and each write is recorded verbatim so
- * a test can assert the columns instead of trusting the route.
+ * (select/eq/order/upsert/select/single/maybeSingle), and each write is recorded
+ * verbatim so a test can assert the columns instead of trusting the route.
+ * The brand lookup `PUT /limits/[brandKey]` runs is recorded separately, in
+ * `brandReads`, so the write assertions keep counting writes only.
  */
-function fakeAdmin({ rows = [], error = null, calls = [] } = {}) {
+function fakeAdmin({
+  rows = [],
+  error = null,
+  brand = { brand_key: "example-workspace" },
+  brandError = null,
+  calls = [],
+} = {}) {
+  const brandReads = [];
   return {
     calls,
+    brandReads,
     admin: {
       from(table) {
         const state = { table, filters: [], payload: null };
@@ -54,6 +64,12 @@ function fakeAdmin({ rows = [], error = null, calls = [] } = {}) {
           async order(column) {
             calls.push({ op: "order", table, column, filters: state.filters });
             return { data: rows, error };
+          },
+          // `customer_brands` lookup; `brand: null` is the "no such workspace" row set.
+          async maybeSingle() {
+            brandReads.push({ op: "select", table, filters: state.filters });
+            if (brandError) return { data: null, error: brandError };
+            return { data: brand, error: null };
           },
           async single() {
             return { data: state.payload, error };
@@ -224,6 +240,9 @@ test("PUT /api/ops/spend/limits/[brandKey] upserts exactly the limit columns as 
   assert.equal(status, 200);
   assert.equal(cacheControl, "no-store");
   assert.equal(fake.calls.length, 1);
+  assert.deepEqual(fake.brandReads, [
+    { op: "select", table: "customer_brands", filters: [["brand_key", "example-workspace"]] },
+  ]);
   const [write] = fake.calls;
   assert.equal(write.table, "workspace_spend_limits");
   assert.deepEqual(write.options, { onConflict: "brand_key" });
@@ -254,6 +273,71 @@ test("PUT /api/ops/spend/limits/[brandKey] rejects a negative or oversized cap",
     assert.equal(payload.code, "invalid_request");
     assert.equal(fake.calls.length, 0);
   }
+});
+
+test("PUT /api/ops/spend/limits/[brandKey] rejects an out-of-bounds path brand key before any database call", async () => {
+  const tooLong = fakeAdmin();
+  const long = await read(
+    await putLimit("k".repeat(201), { dailyCapUsd: 25, monthlyCapUsd: null }, tooLong)
+  );
+  assert.equal(long.status, 400);
+  assert.equal(long.body.code, "invalid_request");
+  assert.equal(tooLong.calls.length, 0, "an over-long key must not be written");
+  assert.equal(tooLong.brandReads.length, 0, "an over-long key must not reach the database");
+
+  const empty = fakeAdmin();
+  const blank = await read(await putLimit("", { dailyCapUsd: 25, monthlyCapUsd: null }, empty));
+  assert.equal(blank.status, 400);
+  assert.equal(blank.body.code, "invalid_request");
+  assert.equal(empty.calls.length, 0);
+  assert.equal(empty.brandReads.length, 0);
+});
+
+test("PUT /api/ops/spend/limits/[brandKey] answers 404 workspace_not_found for an unknown workspace", async () => {
+  const fake = fakeAdmin({ brand: null });
+  const { status, body } = await read(
+    await putLimit("no-such-workspace", { dailyCapUsd: 25, monthlyCapUsd: null }, fake)
+  );
+  assert.equal(status, 404);
+  assert.equal(body.code, "workspace_not_found");
+  assert.equal(body.error, "Workspace not found.");
+  assert.equal(fake.calls.length, 0, "an unknown workspace must not be upserted");
+  assert.deepEqual(fake.brandReads, [
+    { op: "select", table: "customer_brands", filters: [["brand_key", "no-such-workspace"]] },
+  ]);
+});
+
+test("PUT /api/ops/spend/limits/[brandKey] turns a foreign-key race on the write into 404 workspace_not_found", async () => {
+  const fake = fakeAdmin({ error: { code: "23503", message: "violates foreign key constraint" } });
+  const { status, body } = await read(
+    await putLimit("example-workspace", { dailyCapUsd: 25, monthlyCapUsd: null }, fake)
+  );
+  assert.equal(status, 404);
+  assert.equal(body.code, "workspace_not_found");
+  assert.equal(body.error, "Workspace not found.");
+  assert.equal(fake.calls.length, 1, "the upsert was attempted");
+  assert.equal(fake.calls[0].op, "upsert");
+});
+
+test("PUT /api/ops/spend/limits/[brandKey] answers 503 spend_unavailable when the brand lookup fails", async () => {
+  const fake = fakeAdmin({ brandError: { code: "08006", message: "connection failure" } });
+  const { status, body } = await read(
+    await putLimit("example-workspace", { dailyCapUsd: 25, monthlyCapUsd: null }, fake)
+  );
+  assert.equal(status, 503);
+  assert.equal(body.code, "spend_unavailable");
+  assert.equal(body.error, "Spend control is unavailable, so paid work is paused.");
+  assert.equal(fake.calls.length, 0, "a failed brand lookup must not be followed by a write");
+});
+
+test("PUT /api/ops/spend/limits/[brandKey] keeps 503 spend_unavailable for a write error that is not a FK race", async () => {
+  const fake = fakeAdmin({ error: { code: "42P01", message: "relation does not exist" } });
+  const { status, body } = await read(
+    await putLimit("example-workspace", { dailyCapUsd: 25, monthlyCapUsd: null }, fake)
+  );
+  assert.equal(status, 503);
+  assert.equal(body.code, "spend_unavailable");
+  assert.equal(body.error, "Spend control is unavailable, so paid work is paused.");
 });
 
 test("GET /api/ops/spend/limits filters by brand_key only when the query names one", async () => {

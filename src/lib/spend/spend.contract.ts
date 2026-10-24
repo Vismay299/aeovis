@@ -23,6 +23,13 @@ export const spendLimitsQuery = z.strictObject({
   brand_key: z.string().min(1).max(200).optional(),
 });
 
+/**
+ * The path brand key of `PUT /api/ops/spend/limits/[brandKey]`. Bounded because
+ * it is a URL segment, not a body field: an unbounded key would reach the
+ * database as an arbitrary-length parameter.
+ */
+export const brandKeyParamSchema = z.string().min(1).max(200);
+
 export function spendControlPutSchema(feature: string) {
   return z.strictObject({
     enabled: z.boolean(),
@@ -143,7 +150,12 @@ export const contracts = [
     auth: "operator",
     request: spendLimitsPutSchema,
     response: spendLimitSchema,
-    errorCodes: ["invalid_request", "storage_unavailable", "spend_unavailable"],
+    errorCodes: [
+      "invalid_request",
+      "workspace_not_found",
+      "storage_unavailable",
+      "spend_unavailable",
+    ],
     examples: [
       {
         response: {
