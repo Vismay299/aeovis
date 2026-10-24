@@ -96,7 +96,7 @@ export class AppError extends Error { status: number; code: string; recovery?: s
 
 // src/lib/jobs/ (tables: jobs, job_steps)
 export function defineJob<P>(kind: string, handler: (ctx: JobContext<P>) => Promise<JobResult>): void;
-export async function enqueueJob<P>(kind: string, payload: P, opts: { brandKey: string; dedupeKey?: string; runAt?: Date; trigger?: "manual" | "scheduled" | "baseline" | "system" }): Promise<{ jobId: string; deduped: boolean }>;
+export async function enqueueJob<P>(kind: string, payload: P, opts: { brandKey: string; dedupeKey?: string; runAt?: Date; trigger?: "manual" | "scheduled" | "baseline" }): Promise<{ jobId: string; deduped: boolean }>;
 export async function getJobStatus(jobId: string): Promise<{ status: JobStatus; progress?: { done: number; total: number; label?: string }; pollAfterSeconds: number | null; result?: unknown; error?: { code: string; message: string } }>;
 export async function cancelJob(jobId: string): Promise<void>;
 type JobStatus = "queued" | "running" | "completed" | "partial" | "failed" | "cancelled";
@@ -107,6 +107,7 @@ interface JobContext<P> {
     sleep(name: string, seconds: number): Promise<void>; // yields; tick resumes after the delay
   };
   progress(done: number, total: number, label?: string): Promise<void>;
+  cancelRequested?(): Promise<boolean>; // long steps poll this mid-step; never throws
 }
 // Rule: billed === true forces retries = 0. A step's return value must be JSON and < 64 KB; put bulk data in tables.
 
@@ -142,8 +143,12 @@ export function isFeatureEnabled(name: FeatureName, brandKey?: string): Promise<
 enqueueJob(kind, payload, opts: { brandKey; dedupeKey?; runAt?; trigger?; singleActiveKey?: string; createdBy?: string })
 // singleActiveKey conflict → AppError 409 code "job_already_running", details.activeJobId
 export async function enqueueSystemJob(kind, payload, opts?: { dedupeKey?; singleActiveKey?; runAt? }): Promise<{ jobId: string; deduped: boolean }>;
-defineJob(kind, handler, opts?: { payloadSchema?: ZodType; pollAfterSeconds?: number; deadlineSeconds?: number; maxInvocations?: number; leaseSeconds?: number })
-export function definePeriodic(i: { name: string; everySeconds: number; run: () => Promise<void> }): void; // advances next-run before running
+defineJob(kind, handler, opts?: { payloadSchema?: ZodType; pollAfterSeconds?: number; deadlineSeconds?: number; maxInvocations?: number })
+export function definePeriodic(i: { name: string; everySeconds: number; run: (now: Date) => Promise<void> }): void; // advances next-run before running
+export function jobStepKey(ctx: { jobId: string }, stepName: string): string; // idempotencyKey for a paid call inside a job: `job:${ctx.jobId}:${stepName}`
+export const STEP: { SINGLE_ATTEMPT; READ_STEP; DB_STEP; LONG_PAID_STEP }; // `as const`; re-exported by src/lib/jobs/index.ts
+// STEP presets: SINGLE_ATTEMPT = { retries: 0, timeoutMs: 120_000, billed: true }, READ_STEP = { retries: 2, timeoutMs: 120_000 },
+// DB_STEP = { retries: 3, timeoutMs: 60_000 }, LONG_PAID_STEP = { retries: 0, timeoutMs: 220_000, billed: true }.
 
 // Spend
 reserveSpend(i: { …; ttlSeconds?: number /* default 1800, max 86340 */; subject?: { kind: string; id: string } })
@@ -265,7 +270,7 @@ Rules:
 - Feature flag names are registered in `src/lib/features/names.ts`, each with its linked spend features.
 - Price estimators live in `src/lib/pricing/<provider>.ts` (F03). Provider clients bind to them; they do not define their own prices.
 - Modules under `src/lib/**` use **relative imports with explicit file extensions**, never the `@/` alias, so `node --test` can load them. `@/` is fine in `src/app/**` and `src/components/**`.
-- Route contracts live in `src/lib/<feature>/*.contract.ts`: requests use `z.strictObject`, responses `z.looseObject`.
+- Route contracts live in `src/lib/<feature>/*.contract.ts`: requests use `z.strictObject`, responses `z.looseObject`, and export `contracts: RouteContract[]`.
 - Priced actions register with F09's registry (F09 §6.2.5) so the estimate → confirm → run dialog and the `409 price_changed` refusal work the same everywhere.
 - Every provider result carries `provenance.gateway` (which provider actually served it).
 
