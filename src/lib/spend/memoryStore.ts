@@ -189,7 +189,80 @@ export function createMemoryStore(seed: MemoryStoreSeed = {}): MemorySpendStore 
     async settle(holdId: string, costs: SpendCostRow[]): Promise<SettleResult> {
       const hold = holds.get(holdId);
       if (!hold) throw new Error("hold not found");
-      if (hold.status !== "held") return { settled: false, status: hold.status };
+
+      if (hold.status === "expired") {
+        // Late settle of an expired hold: the expiry reservation row is re-priced at the actual
+        // cost, and the hold moves to settled. Any unknown cost leaves everything untouched.
+        if (costs.length < 1 || costs.length > 200) throw new Error("settle needs 1..200 cost rows");
+        let sum = 0;
+        let unknown = false;
+        for (const cost of costs) {
+          if (cost.actualUsd !== null && cost.actualUsd < 0) throw new Error("negative cost");
+          if (cost.actualUsd === null) unknown = true;
+          else sum += cost.actualUsd;
+        }
+        if (unknown) {
+          return {
+            settled: false,
+            status: "expired",
+            unknown: true,
+            feature: hold.feature,
+            estimateUsd: hold.estimateUsd,
+            maxUsd: hold.maxUsd ?? undefined,
+            actualUsd: hold.actualUsd ?? undefined,
+          };
+        }
+        const actualUsd = usd6(sum);
+        const sourceRef = `hold:${holdId}`;
+        const reservation = ledger.find((row) => row.sourceRef === sourceRef);
+        if (reservation) {
+          reservation.actualUsd = actualUsd;
+          reservation.accountedUsd = actualUsd;
+          reservation.costSource = "provider_reported";
+          reservation.meta = { ...reservation.meta, lateSettle: true };
+        } else {
+          ledger.push({
+            brandKey: hold.brandKey,
+            feature: hold.feature,
+            holdId,
+            sourceRef,
+            provider: costs[0]?.provider ?? "unknown",
+            endpoint: costs[0]?.endpoint ?? "unknown",
+            units: costs[0]?.units ?? null,
+            estimateUsd: hold.estimateUsd,
+            actualUsd,
+            accountedUsd: actualUsd,
+            costSource: "provider_reported",
+            occurredAt: now(),
+            meta: { ...(costs[0]?.meta ?? {}), lateSettle: true },
+          });
+        }
+        hold.status = "settled";
+        hold.actualUsd = actualUsd;
+        hold.closedAt = now();
+        return {
+          settled: true,
+          late: true,
+          actualUsd,
+          unknown: false,
+          undershoot: actualUsd > hold.estimateUsd,
+          overMax: hold.maxUsd !== null && actualUsd > hold.maxUsd,
+          feature: hold.feature,
+          estimateUsd: hold.estimateUsd,
+          maxUsd: hold.maxUsd ?? undefined,
+        };
+      }
+
+      if (hold.status !== "held") {
+        return {
+          settled: false,
+          status: hold.status,
+          feature: hold.feature,
+          estimateUsd: hold.estimateUsd,
+          maxUsd: hold.maxUsd ?? undefined,
+          actualUsd: hold.actualUsd ?? undefined,
+        };
+      }
       if (costs.length < 1 || costs.length > 200) throw new Error("settle needs 1..200 cost rows");
 
       let actualUsd = 0;

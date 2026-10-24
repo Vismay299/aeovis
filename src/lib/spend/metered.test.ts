@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { AppError } from "../http/appError.ts";
 import {
   AmbiguousCallError,
   ChargedCallError,
@@ -259,4 +260,146 @@ test("metered: reserves before calling and does not call the provider when the r
   );
   assert.equal(called, false);
   assert.equal(h.keepAliveCalls.length, 0);
+});
+
+function named(h: Harness, line: string): unknown[][] {
+  return h.logger.lines.filter((entry) => entry[0] === line);
+}
+
+test("metered: an existing hold behind a live reservation throws 409 before calling the provider", async () => {
+  const h = harness();
+  const store: SpendStore = {
+    ...h.deps.store,
+    reserve: async () => ({ granted: true, holdId: "11111111-1111-1111-1111-111111111111", existing: true }),
+  };
+  let called = 0;
+  await assert.rejects(
+    metered({ brandKey: BRAND, feature: FEATURE, estimateUsd: 1, idempotencyKey: "existing" }, async () => {
+      called += 1;
+      return { value: "x", actualUsd: 0, provider: "p", endpoint: "e", billed: false };
+    }, { ...h.deps, store }),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError, `expected AppError, got ${String(err)}`);
+      assert.equal(err.status, 409);
+      assert.equal(err.code, "duplicate_paid_call");
+      assert.equal(err.message, "This paid request was already made.");
+      return true;
+    }
+  );
+  assert.equal(called, 0, "a duplicate must not re-run the paid call");
+  assert.equal(h.keepAliveCalls.length, 0, "a duplicate registers no keepAlive");
+  assert.equal(h.calls.settle, 0);
+  assert.deepEqual(h.calls.release, []);
+});
+
+test("metered: a failed release on billed === false still returns the value and logs one release failure", async () => {
+  const h = harness();
+  const store: SpendStore = {
+    ...h.deps.store,
+    release: async () => {
+      throw new Error("release rpc failed");
+    },
+  };
+  const value = await metered(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 1, idempotencyKey: "release-fails-unbilled" },
+    async () => ({ value: "cached", actualUsd: 0, provider: "dataforseo", endpoint: "serp", billed: false }),
+    { ...h.deps, store }
+  );
+  assert.equal(value, "cached", "the release failure does not reach the caller");
+  const failed = named(h, "[spend] release failed");
+  assert.equal(failed.length, 1);
+  assert.equal(h.logger.lines.length, 1, "nothing else is logged");
+  assert.deepEqual(failed[0][1], { holdId: onlyHold(h.store).id, reason: "not_billed" });
+});
+
+test("metered: a failed release keeps the UnbilledCallError, logs once, and never settles", async () => {
+  const h = harness();
+  const store: SpendStore = {
+    ...h.deps.store,
+    release: async () => {
+      throw new Error("release rpc failed");
+    },
+  };
+  const failure = new UnbilledCallError("validation rejected the request");
+  await assert.rejects(
+    metered({ brandKey: BRAND, feature: FEATURE, estimateUsd: 1, idempotencyKey: "release-fails-unbilled-error" }, async () => {
+      throw failure;
+    }, { ...h.deps, store }),
+    (err: unknown) => err === failure
+  );
+  const failed = named(h, "[spend] release failed");
+  assert.equal(failed.length, 1);
+  assert.deepEqual(failed[0][1], { holdId: onlyHold(h.store).id, reason: "unbilled_error" });
+  assert.equal(h.calls.settle, 0, "a failed release is not turned into a settle");
+});
+
+test("metered: a skipped settle logs settle skipped and still evaluates the over-max alert", async () => {
+  const h = harness();
+  const skipped = { settled: false, status: "settled", feature: FEATURE, estimateUsd: 0.5, maxUsd: 1, actualUsd: 1.5 };
+  const store: SpendStore = {
+    ...h.deps.store,
+    settle: async () => {
+      h.calls.settle += 1;
+      return skipped;
+    },
+  };
+  const value = await metered(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 0.5, maxUsd: 1, idempotencyKey: "skipped-settle" },
+    async () => ({ value: "ok", actualUsd: 1.5, provider: "openrouter", endpoint: "chat:qa", billed: true }),
+    { ...h.deps, store }
+  );
+  assert.equal(value, "ok");
+  const holdId = onlyHold(h.store).id;
+  const skippedLines = named(h, "[spend] settle skipped");
+  assert.equal(skippedLines.length, 1);
+  assert.deepEqual(skippedLines[0][1], { holdId, status: "settled" });
+  const overMax = named(h, "[spend] over approved max");
+  assert.equal(overMax.length, 1);
+  assert.deepEqual(overMax[0][1], { holdId, maxUsd: 1, actualUsd: 1.5 });
+});
+
+test("metered: a retried settle that comes back skipped still logs the over-max alert", async () => {
+  const h = harness();
+  const skipped = { settled: false, status: "settled", feature: FEATURE, estimateUsd: 0.5, maxUsd: 1, actualUsd: 1.5 };
+  let calls = 0;
+  const store: SpendStore = {
+    ...h.deps.store,
+    settle: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("rpc timed out");
+      return skipped;
+    },
+  };
+  await metered(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 0.5, maxUsd: 1, idempotencyKey: "skipped-retry" },
+    async () => ({ value: "ok", actualUsd: 1.5, provider: "openrouter", endpoint: "chat:qa", billed: true }),
+    { ...h.deps, store }
+  );
+  assert.equal(calls, 2, "the thrown settle is retried once");
+  const holdId = onlyHold(h.store).id;
+  assert.equal(named(h, "[spend] settle failed").length, 0);
+  assert.equal(named(h, "[spend] settle skipped").length, 1);
+  const overMax = named(h, "[spend] over approved max");
+  assert.equal(overMax.length, 1, "the alert survives the first thrown attempt");
+  assert.deepEqual(overMax[0][1], { holdId, maxUsd: 1, actualUsd: 1.5 });
+});
+
+test("metered: a late settle logs the late settle line", async () => {
+  const h = harness();
+  const store: SpendStore = {
+    ...h.deps.store,
+    settle: async () => {
+      h.calls.settle += 1;
+      return { settled: true, late: true, actualUsd: 2 };
+    },
+  };
+  const value = await metered(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 1, idempotencyKey: "late-settle" },
+    async () => ({ value: "ok", actualUsd: 2, provider: "openrouter", endpoint: "chat:qa", billed: true }),
+    { ...h.deps, store }
+  );
+  assert.equal(value, "ok");
+  const late = named(h, "[spend] late settle");
+  assert.equal(late.length, 1);
+  assert.deepEqual(late[0][1], { holdId: onlyHold(h.store).id, actualUsd: 2 });
 });

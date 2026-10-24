@@ -69,7 +69,8 @@ function capFromEnv(env: Record<string, string | undefined>, name: string): numb
 }
 
 function validateReserve(i: { estimateUsd: number; ttlSeconds?: number; idempotencyKey: string }): void {
-  if (!Number.isFinite(i.estimateUsd) || i.estimateUsd <= 0 || i.estimateUsd > MAX_ESTIMATE_USD) {
+  // A sub-micro estimate rounds to a zero-dollar hold, which would meter the call at nothing.
+  if (!Number.isFinite(i.estimateUsd) || usd6(i.estimateUsd) <= 0 || i.estimateUsd > MAX_ESTIMATE_USD) {
     throw new AppError(400, "spend_invalid", "The spend estimate is out of range.");
   }
   const ttlSeconds = i.ttlSeconds ?? DEFAULT_TTL_SECONDS;
@@ -97,7 +98,7 @@ export async function reserveSpend(
     subject?: { kind: string; id: string };
   },
   deps?: SpendDeps
-): Promise<{ holdId: string }> {
+): Promise<{ holdId: string; existing: boolean }> {
   validateReserve(i);
   const env = deps?.env ?? process.env;
   const defaultDailyUsd = capFromEnv(env, "SPEND_DEFAULT_DAILY_CAP_USD");
@@ -123,7 +124,7 @@ export async function reserveSpend(
     throw refused("Spend control is unavailable, so paid work is paused.", err);
   }
 
-  if (result.granted && result.holdId) return { holdId: result.holdId };
+  if (result.granted && result.holdId) return { holdId: result.holdId, existing: result.existing === true };
   if (result.reason === "duplicate_paid_call") {
     throw new AppError(409, "duplicate_paid_call", "This paid request was already made.");
   }
@@ -185,21 +186,35 @@ export async function settleSpendBatch(
     return;
   }
 
-  if (result.undershoot) {
+  // The RPC reports the flags, and on a skipped or late settle it carries no amounts; fall back
+  // to the costs the caller handed us and to the hold row the store read back.
+  const attemptedActual = costs.every((cost) => cost.actualUsd !== null)
+    ? usd6(costs.reduce((sum, cost) => sum + (cost.actualUsd as number), 0))
+    : null;
+  const actualUsd = result.actualUsd ?? attemptedActual;
+  const estimateUsd = result.estimateUsd ?? null;
+  const maxUsd = result.maxUsd ?? null;
+
+  if (result.settled === false) {
+    logger.error("[spend] settle skipped", { holdId, status: result.status ?? "unknown" });
+  }
+  if (result.late === true) {
+    logger.error("[spend] late settle", { holdId, actualUsd });
+  }
+  if (
+    result.undershoot === true ||
+    (actualUsd != null && estimateUsd != null && actualUsd > estimateUsd)
+  ) {
     logger.error("[spend] estimate undershoot", {
       feature: result.feature ?? "unknown",
       provider: costs[0]?.provider ?? "unknown",
       endpoint: costs[0]?.endpoint ?? "unknown",
-      estimateUsd: result.estimateUsd ?? null,
-      actualUsd: result.actualUsd ?? null,
+      estimateUsd,
+      actualUsd,
     });
   }
-  if (result.overMax) {
-    logger.error("[spend] over approved max", {
-      holdId,
-      maxUsd: result.maxUsd ?? null,
-      actualUsd: result.actualUsd ?? null,
-    });
+  if (result.overMax === true || (actualUsd != null && maxUsd != null && actualUsd > maxUsd)) {
+    logger.error("[spend] over approved max", { holdId, maxUsd, actualUsd });
   }
 }
 
@@ -228,9 +243,24 @@ export async function metered<T>(
   }>,
   deps?: SpendDeps
 ): Promise<T> {
-  const { holdId } = await reserveSpend(i, deps);
+  const { holdId, existing } = await reserveSpend(i, deps);
+  if (existing) {
+    // The same (brandKey, idempotencyKey) is already in flight behind a live hold. Running the
+    // paid call again would bill twice, so a retry is refused instead of reusing the hold.
+    throw new AppError(409, "duplicate_paid_call", "This paid request was already made.");
+  }
   const logger = deps?.logger ?? console;
   const keepAlive = deps?.keepAlive ?? defaultKeepAlive;
+
+  const safeRelease = async (reason: string): Promise<void> => {
+    try {
+      await releaseSpend(holdId, reason, deps);
+    } catch {
+      // The release failure must not replace the caller's own outcome; the hold expires and is
+      // counted at its estimate, so the outcome is only logged.
+      logger.error("[spend] release failed", { holdId, reason });
+    }
+  };
 
   const work = (async (): Promise<T> => {
     try {
@@ -250,12 +280,12 @@ export async function metered<T>(
           deps
         );
       } else {
-        await releaseSpend(holdId, "not_billed", deps);
+        await safeRelease("not_billed");
       }
       return outcome.value;
     } catch (err) {
       if (err instanceof UnbilledCallError) {
-        await releaseSpend(holdId, "unbilled_error", deps);
+        await safeRelease("unbilled_error");
         throw err;
       }
       if (err instanceof ChargedCallError) {

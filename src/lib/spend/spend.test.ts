@@ -73,6 +73,33 @@ test("reserveSpend rejects an estimate that is not a positive finite number unde
   }
 });
 
+test("reserveSpend rejects a sub-micro estimate before the store is asked to reserve", async () => {
+  for (const estimateUsd of [1e-9, 4e-7]) {
+    let reserves = 0;
+    const store = storeWith();
+    const spy: SpendStore = {
+      ...store,
+      reserve: async (args) => {
+        reserves += 1;
+        return store.reserve(args);
+      },
+    };
+    const err = await appError(
+      reserveSpend({ brandKey: BRAND, feature: FEATURE, estimateUsd, idempotencyKey: shortId() }, { store: spy, env: ENV })
+    );
+    assert.equal(err.status, 400);
+    assert.equal(err.code, "spend_invalid");
+    assert.equal(reserves, 0, `${estimateUsd} rounds to a zero-dollar hold, so the store is never reached`);
+  }
+
+  const store = storeWith();
+  const { holdId } = await reserveSpend(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 1e-6, idempotencyKey: shortId() },
+    { store, env: ENV }
+  );
+  assert.equal(store.holds.get(holdId)?.estimateUsd, 0.000001, "one micro-dollar is a valid estimate");
+});
+
 test("reserveSpend enforces the hold TTL bounds and defaults the TTL to 1,800 seconds", async () => {
   const store = storeWith();
   for (const ttlSeconds of [59, 86_341, 60.5]) {
@@ -183,6 +210,18 @@ test("reserveSpend returns the same hold for the same (brandKey, idempotencyKey)
   assert.equal(store.holds.size, 1);
 });
 
+test("reserveSpend reports existing:false on a fresh grant and existing:true while the hold is held", async () => {
+  const store = storeWith();
+  const idempotencyKey = shortId();
+  const first = await reserveSpend({ brandKey: BRAND, feature: FEATURE, estimateUsd: 1, idempotencyKey }, { store, env: ENV });
+  assert.equal(first.existing, false);
+  assert.ok(first.holdId);
+  const second = await reserveSpend({ brandKey: BRAND, feature: FEATURE, estimateUsd: 1, idempotencyKey }, { store, env: ENV });
+  assert.equal(second.holdId, first.holdId, "the same hold comes back, it is not recreated");
+  assert.equal(second.existing, true);
+  assert.equal(store.holds.size, 1);
+});
+
 test("reserveSpend throws 409 duplicate_paid_call after the hold was settled or released", async () => {
   for (const close of ["settle", "release"] as const) {
     const store = storeWith();
@@ -273,6 +312,56 @@ test("settleSpendBatch never throws: it retries once and then logs one settle fa
   assert.equal(errors.length, 1);
   assert.equal(errors[0][0], "[spend] settle failed");
   assert.deepEqual(errors[0][1], { holdId: "00000000-0000-0000-0000-000000000000", rows: 1 });
+});
+
+test("a late settle after the hold expired re-prices the hold:<id> row and reports late", async () => {
+  let at = 1_700_000_000_000;
+  const store = storeWith({ now: () => at });
+  const { holdId } = await reserveSpend(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 1, ttlSeconds: 60, idempotencyKey: shortId() },
+    { store, env: ENV }
+  );
+  at += 61_000;
+  assert.equal(await store.expire(10), 1);
+  const expiredRow = store.ledger.find((row) => row.sourceRef === `hold:${holdId}`);
+  assert.ok(expiredRow, "the expiry writes one reservation row");
+  assert.equal(expiredRow.actualUsd, null);
+
+  const result = await store.settle(holdId, [
+    { provider: "openrouter", endpoint: "chat:qa", actualUsd: 1.5, costSource: "provider_reported" },
+  ]);
+  assert.equal(result.settled, true);
+  assert.equal(result.late, true);
+  assert.equal(result.actualUsd, 1.5);
+  assert.equal(result.undershoot, true);
+  assert.equal(result.overMax, false);
+
+  const row = store.ledger.find((entry) => entry.sourceRef === `hold:${holdId}`);
+  assert.ok(row);
+  assert.equal(row.actualUsd, 1.5, "the reservation row is recorded at the actual cost");
+  assert.equal(row.accountedUsd, 1.5);
+  assert.equal(row.costSource, "provider_reported");
+  assert.equal(row.meta.lateSettle, true);
+  assert.equal(row.meta.expired, true, "the expiry marker is kept");
+  assert.equal(store.holds.get(holdId)?.status, "settled");
+  assert.equal(store.holds.get(holdId)?.actualUsd, 1.5);
+});
+
+test("a duplicate settle reports settled:false with the hold's feature, estimate, max and actual", async () => {
+  const store = storeWith();
+  const { holdId } = await reserveSpend(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 0.5, maxUsd: 1, idempotencyKey: shortId() },
+    { store, env: ENV }
+  );
+  const costs = [{ provider: "openrouter", endpoint: "chat:qa", actualUsd: 1.5, costSource: "provider_reported" as const }];
+  assert.equal((await store.settle(holdId, costs)).settled, true);
+  const again = await store.settle(holdId, costs);
+  assert.equal(again.settled, false);
+  assert.equal(again.status, "settled");
+  assert.equal(again.feature, FEATURE);
+  assert.equal(again.estimateUsd, 0.5);
+  assert.equal(again.maxUsd, 1);
+  assert.equal(again.actualUsd, 1.5);
 });
 
 test("usd6 rounds half-up to six decimals and SPEND_FEATURES is a closed union", () => {

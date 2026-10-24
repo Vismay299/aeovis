@@ -40,6 +40,7 @@ export type SettleResult = {
   unknown?: boolean;
   undershoot?: boolean;
   overMax?: boolean;
+  late?: boolean;
   feature?: string;
   estimateUsd?: number;
   maxUsd?: number;
@@ -86,6 +87,7 @@ function toSettleResult(raw: RawResult): SettleResult {
   if (typeof data.unknown === "boolean") result.unknown = data.unknown;
   result.undershoot = data.undershoot === true;
   result.overMax = data.over_max === true;
+  if (data.late === true) result.late = true;
   return result;
 }
 
@@ -128,12 +130,13 @@ export function createSpendStore(admin: SupabaseClient): SpendStore {
       });
       if (error) throw new Error(error.message);
       const result = toSettleResult(data as RawResult);
-      if (result.undershoot || result.overMax) {
-        // settle_spend reports the flags but not the hold it priced them against;
-        // the undershoot log line is required to carry feature, estimate and max.
+      if (!result.settled || result.undershoot || result.overMax) {
+        // settle_spend reports the flags but not the hold it priced them against, and a skipped
+        // settle (a retry after a lost response, or a hold that already expired) carries no
+        // amounts at all, so read the numbers the caller's alert needs from the hold row.
         const hold = await admin
           .from("spend_holds")
-          .select("feature, estimate_usd, max_usd")
+          .select("feature, estimate_usd, max_usd, actual_usd")
           .eq("id", holdId)
           .maybeSingle();
         const row = hold.error ? null : (hold.data as RawResult);
@@ -143,6 +146,8 @@ export function createSpendStore(admin: SupabaseClient): SpendStore {
           if (estimateUsd !== undefined) result.estimateUsd = estimateUsd;
           const maxUsd = num(row.max_usd);
           if (maxUsd !== undefined) result.maxUsd = maxUsd;
+          const actualUsd = num(row.actual_usd);
+          if (actualUsd !== undefined) result.actualUsd = actualUsd;
         }
       }
       return result;
