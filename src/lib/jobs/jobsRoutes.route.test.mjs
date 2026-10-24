@@ -177,6 +177,28 @@ test("GET /api/customer/jobs/[jobId] composes a terminal job with its result and
   assert.equal(jobStatusResponse.safeParse(body).success, true);
 });
 
+test("GET /api/customer/jobs/[jobId] normalises the Postgres timestamps PostgREST really sends", async () => {
+  const { store, ids } = await fixture();
+  // PostgREST renders timestamptz as `+00:00` with a microsecond fraction;
+  // jobStatusResponse's z.iso.datetime() accepts only a `Z` instant.
+  const postgrest = {
+    ...store,
+    getJob: async (jobId) => {
+      const row = await store.getJob(jobId);
+      if (!row) return row;
+      return { ...row, created_at: "2026-10-21T09:00:00.123456+00:00", finished_at: "2026-10-21T09:04:00+00:00" };
+    },
+  };
+
+  const { status, body } = await read(await getJob(ids.own, "", { store: postgrest }));
+  assert.equal(status, 200);
+  assert.equal(body.createdAt, "2026-10-21T09:00:00.123Z");
+  assert.equal(body.finishedAt, "2026-10-21T09:04:00.000Z");
+
+  const parsed = jobStatusResponse.safeParse(body);
+  assert.equal(parsed.success, true, parsed.success ? "" : JSON.stringify(parsed.error.issues));
+});
+
 test("another workspace's job and a system job answer the same 404 as a job that does not exist", async () => {
   const { store, ids } = await fixture();
   const foreign = await read(await getJob(ids.foreign, "", { store }));

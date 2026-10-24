@@ -458,3 +458,91 @@ test("runner: a step completion the store refuses ends lost_lease and writes no 
   assert.equal(jobOf(h, job.id).finished_at, null);
   assert.equal(h.store.steps.get(job.id + ":work")?.status, "running");
 });
+
+test("runner: the last throttled progress is flushed before the job finishes", async () => {
+  const h = harness();
+  const writes: Array<{ done: number; total: number }> = [];
+  defineJob("test.progress_flush", async (ctx) => {
+    await ctx.progress(1, 10, "starting");
+    // Inside the throttle window, so neither of these writes on its own.
+    await ctx.progress(5, 10, "half");
+    await ctx.progress(10, 10, "done");
+    return {};
+  });
+
+  const job = await startJob(h, "test.progress_flush");
+  const counted: JobStore = {
+    ...h.store,
+    progress: async (jobId, owner, done, total, label, leaseSeconds) => {
+      writes.push({ done, total });
+      return await h.store.progress(jobId, owner, done, total, label, leaseSeconds);
+    },
+  };
+  assert.equal(await runJob(job, env(h, { store: counted })), "completed");
+  assert.deepEqual(writes, [
+    { done: 1, total: 10 },
+    { done: 10, total: 10 },
+  ]);
+  assert.equal(jobOf(h, job.id).progress_done, 10);
+  assert.equal(jobOf(h, job.id).progress_label, "done");
+});
+
+test("runner: a progress write the store fences ends lost_lease and writes no finish", async () => {
+  const h = harness();
+  let after = 0;
+  let finishes = 0;
+  defineJob("test.progress_fence", async (ctx) => {
+    await ctx.progress(1, 2);
+    after += 1;
+    return {};
+  });
+
+  const job = await startJob(h, "test.progress_fence");
+  const fenced: JobStore = {
+    ...h.store,
+    progress: async () => false,
+    finish: async (args) => {
+      finishes += 1;
+      return await h.store.finish(args);
+    },
+  };
+  assert.equal(await runJob(job, env(h, { store: fenced })), "lost_lease");
+  assert.equal(after, 0, "a lost lease stops the handler");
+  assert.equal(finishes, 0);
+  assert.equal(jobOf(h, job.id).status, "running");
+});
+
+test("runner: a finish that throws is reported lost, not completed", async () => {
+  const h = harness();
+  defineJob("test.finish_throws", async () => ({}));
+
+  const job = await startJob(h, "test.finish_throws");
+  const broken: JobStore = {
+    ...h.store,
+    finish: async () => {
+      throw new Error("PostgREST unreachable");
+    },
+  };
+  assert.equal(await runJob(job, env(h, { store: broken })), "lost_lease");
+  // The row is still the watchdog's to reconcile.
+  assert.equal(jobOf(h, job.id).status, "running");
+  assert.equal(jobOf(h, job.id).finished_at, null);
+  assert.equal(h.logger.lines.length, 1);
+});
+
+test("runner: a retry the store calls exhausted fails with the code on the row", async () => {
+  const h = harness();
+  defineJob("test.exhausted_code", async (ctx) => {
+    await ctx.step.do("work", { ...READ_STEP, retries: 2 }, async () => {
+      throw new AppError(502, "provider_unavailable", "The provider is down.");
+    });
+    return {};
+  });
+
+  const job = await startJob(h, "test.exhausted_code");
+  // The store's own budget is shorter than the step's, as a raised `retries`
+  // leaves it after a deploy.
+  const exhausted: JobStore = { ...h.store, stepFail: async () => "failed" };
+  assert.equal(await runJob(job, env(h, { store: exhausted })), "failed");
+  assert.equal(jobOf(h, job.id).error_code, "provider_unavailable");
+});

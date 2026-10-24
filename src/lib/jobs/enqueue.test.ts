@@ -104,6 +104,23 @@ test("enqueue: a payload of 32 KB or more throws payload_too_large", async () =>
   assert.equal(h.store.jobs.size, 0);
 });
 
+test("enqueue: the limit is bytes, so a multi-byte payload under 32 K characters is refused", async () => {
+  const h = harness();
+  // Three bytes per character in UTF-8, one UTF-16 unit each: this is well
+  // under MAX_PAYLOAD_BYTES by `String.length` and well over it on the wire.
+  const blob = "\u4e2d".repeat(Math.ceil(MAX_PAYLOAD_BYTES / 2));
+  assert.ok(blob.length < MAX_PAYLOAD_BYTES, "the string must be short in UTF-16 units");
+  await assert.rejects(
+    enqueueJob("test.enqueue", { blob }, { brandKey: BRAND }, h.deps),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError);
+      assert.equal(err.code, "payload_too_large");
+      return true;
+    }
+  );
+  assert.equal(h.store.jobs.size, 0);
+});
+
 test("enqueue: a fresh immediate enqueue fires one self-continue and a deduped one fires none", async () => {
   const h = harness();
   const first = await enqueueJob("test.enqueue", {}, { brandKey: BRAND, dedupeKey: "dedupe:2" }, h.deps);
