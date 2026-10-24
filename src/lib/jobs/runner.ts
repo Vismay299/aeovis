@@ -57,6 +57,7 @@ type RunState = {
   cancelCacheUntil: number;
   cancelCached: boolean;
   lastProgressAt: number;
+  pendingProgress: { done: number; total: number; label: string | null } | null;
 };
 
 type FinishArgs = {
@@ -153,7 +154,13 @@ function validateStep(name: string, opts: StepOptions, state: RunState): void {
  */
 export async function runJob(job: JobRow, env: RunEnv): Promise<RunOutcome> {
   const now = env.now;
-  const state: RunState = { names: new Set(), cancelCacheUntil: 0, cancelCached: false, lastProgressAt: 0 };
+  const state: RunState = {
+    names: new Set(),
+    cancelCacheUntil: 0,
+    cancelCached: false,
+    lastProgressAt: 0,
+    pendingProgress: null,
+  };
 
   const finish = async (args: FinishArgs): Promise<"ok" | "lost_lease" | "error"> => {
     try {
@@ -178,7 +185,10 @@ export async function runJob(job: JobRow, env: RunEnv): Promise<RunOutcome> {
 
   const settle = async (outcome: RunOutcome, args: FinishArgs): Promise<RunOutcome> => {
     const written = await finish(args);
-    return written === "lost_lease" ? "lost_lease" : outcome;
+    // A finish that threw left the row `running`, so this invocation did not
+    // settle the job: the watchdog owns it now. Reporting `outcome` here would
+    // count an unsettled job as completed.
+    return written === "ok" ? outcome : "lost_lease";
   };
 
   const def = getJobDefinition(job.kind);
@@ -253,7 +263,9 @@ export async function runJob(job: JobRow, env: RunEnv): Promise<RunOutcome> {
     const retryAt = new Date(now() + Math.min(2 ** attempt * 2_000, MAX_RETRY_DELAY_MS));
     const result = await env.store.stepFail({ jobId: job.id, owner: env.owner, name, code, message, retryAt });
     if (result === "lost_lease") throw new LostLease();
-    if (result === "failed") throw new StepFailedError("step_attempts_exhausted", message);
+    // The row was written with `code`, and a replay reads it back out of
+    // job_step_begin, so the first pass has to throw the same code.
+    if (result === "failed") throw new StepFailedError(code, message);
     if (retryAt.getTime() - now() <= IN_PROCESS_WAIT_MS && budgetAllows(timeoutMs)) {
       await waitMs(retryAt.getTime() - now());
       return;
@@ -327,11 +339,28 @@ export async function runJob(job: JobRow, env: RunEnv): Promise<RunOutcome> {
     },
   };
 
+  const writeProgress = async (done: number, total: number, label: string | null): Promise<void> => {
+    state.lastProgressAt = now();
+    state.pendingProgress = null;
+    const written = await env.store.progress(job.id, env.owner, done, total, label, LEASE_SECONDS);
+    if (!written) throw new LostLease();
+  };
+
   const progress = async (done: number, total: number, label?: string): Promise<void> => {
     const at = now();
-    if (state.lastProgressAt !== 0 && at - state.lastProgressAt < PROGRESS_MIN_INTERVAL_MS) return;
-    state.lastProgressAt = at;
-    await env.store.progress(job.id, env.owner, done, total, label ?? null, LEASE_SECONDS);
+    if (state.lastProgressAt !== 0 && at - state.lastProgressAt < PROGRESS_MIN_INTERVAL_MS) {
+      // Held, not dropped: flushProgress writes the last one the throttle ate,
+      // so a fast loop's final progress(10, 10) still lands on the row.
+      state.pendingProgress = { done, total, label: label ?? null };
+      return;
+    }
+    await writeProgress(done, total, label ?? null);
+  };
+
+  const flushProgress = async (): Promise<void> => {
+    const pending = state.pendingProgress;
+    if (!pending) return;
+    await writeProgress(pending.done, pending.total, pending.label);
   };
 
   const ctx: JobContext<unknown> = {
@@ -346,6 +375,7 @@ export async function runJob(job: JobRow, env: RunEnv): Promise<RunOutcome> {
 
   try {
     const outcome = await def.handler(ctx);
+    await flushProgress();
     const status = outcome?.status === "partial" ? "partial" : "completed";
     const value = outcome?.result ?? null;
     if (value !== null) {
