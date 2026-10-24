@@ -33,7 +33,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 
 | ID | Feature | Comparison row(s) covered | Wave | Depends on | Migrations | Status |
 |---|---|---|---|---|---|---|
-| [F01](./F01-platform-foundations.md) | Platform foundations: TypeScript, durable jobs, spend guard, provider cache, LLM helper | Backend patterns | 0 | none | 040–044 | Spec ✓ |
+| [F01](./F01-platform-foundations.md) | Platform foundations: TypeScript, durable jobs, spend guard, provider cache, LLM helper | Backend patterns | 0 | none | 040–044 | In progress |
 | [F02](./F02-dataforseo-provider.md) | DataForSEO provider and bake-off | Engines and capture; "What I could not verify" | 0 | F01 | 045–049 | Spec ✓ |
 | [F03](./F03-cost-ledger.md) | Cost ledger and per-answer cost | Cost per answer | 0 | F01, F02 | 050–054 | Spec ✓ |
 | [F04](./F04-design-system-and-app-shell.md) | Design system and app shell (OpenSEO UI/UX) | UI/UX decision; Frontend patterns | 0 | F01 (phase 1 TypeScript, phase 2 flags) | 055–059 | Spec ✓ |

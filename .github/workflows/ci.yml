@@ -80,6 +80,12 @@ jobs:
 
       # No `continue-on-error` and no `|| true` anywhere in this file: a red
       # test must fail the job. That is the whole contract.
+      - name: typecheck
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+        run: npm run typecheck
+
       - name: unit tests
         run: npm run test:scoring
 

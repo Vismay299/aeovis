@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-/** Every *.test.mjs under src/, found without reference to any glob. */
+/** Every *.test.mjs or *.test.ts under src/, found without reference to any glob. */
 async function testFilesOnDisk(dir = path.join(REPO, "src"), acc = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -29,7 +29,7 @@ async function testFilesOnDisk(dir = path.join(REPO, "src"), acc = []) {
     // Normalised to forward slashes to match collectedByScript: on Windows
     // path.relative yields backslashes, so every file read as orphaned and the
     // guard failed on a suite it had in fact collected in full.
-    else if (entry.name.endsWith(".test.mjs"))
+    else if (entry.name.endsWith(".test.mjs") || entry.name.endsWith(".test.ts"))
       acc.push(path.relative(REPO, full).split(path.sep).join("/"));
   }
   return acc;
@@ -47,7 +47,7 @@ function collectedByScript(script) {
   return [...seen];
 }
 
-test("GUARD — the test:scoring glob collects every *.test.mjs under src/", async () => {
+test("GUARD — the test:scoring glob collects every *.test.mjs and *.test.ts under src/", async () => {
   const pkg = JSON.parse(await readFile(path.join(REPO, "package.json"), "utf8"));
   const script = pkg.scripts["test:scoring"];
   assert.ok(script, "package.json must still define test:scoring");
@@ -61,7 +61,8 @@ test("GUARD — the test:scoring glob collects every *.test.mjs under src/", asy
   assert.deepEqual(
     orphaned,
     [],
-    `these test files exist but the glob does not collect them, so nothing runs them:\n  ` +
+    `these test files exist but the test:scoring glob (*.test.mjs, *.test.ts) does not collect them, ` +
+      `so nothing runs them:\n  ` +
       orphaned.join("\n  ")
   );
 });
