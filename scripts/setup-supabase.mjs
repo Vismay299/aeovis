@@ -59,6 +59,19 @@ ALTER TABLE schema_migrations
  * the state 009 was found in.
  */
 const EXPECTED_OBJECTS = {
+  "041_f01_spend.sql": [
+    { kind: "table", name: "paid_feature_controls" },
+    { kind: "table", name: "workspace_spend_limits" },
+    { kind: "table", name: "spend_holds" },
+    { kind: "table", name: "spend_ledger" },
+    { kind: "function", name: "reserve_spend" },
+    { kind: "function", name: "settle_spend" },
+    { kind: "function", name: "release_spend" },
+    { kind: "function", name: "expire_spend_holds" },
+    { kind: "function", name: "f01_expire_due_holds" },
+    { kind: "function", name: "prune_spend" },
+    { kind: "function", name: "f01_committed_usd" },
+  ],
   "035_scoped_provider_rollout.sql": [
     {kind:"function",name:"set_probe_rollout"},
     {kind:"column",name:"probe_dispatch_control.brand_allowlist"},

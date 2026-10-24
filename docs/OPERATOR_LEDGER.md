@@ -326,6 +326,21 @@ Also environment-shaped and easy to get silently wrong:
 
 `028_measurement_evidence`, `029_repair_workflow`, `030_scan_finalize_identity`, `031_content_check_budget`, `032_durable_schedule_windows`, `033_atomic_scan_materialization`, `034_measurement_storage_contract`, `035_scoped_provider_rollout` are implemented and verified in isolated QA. Hosted application and qualification results are tracked in the current P0 release evidence. Apply all additive migrations before deploying this branch.
 
+`041_f01_spend` is implemented and verified on disposable PostgreSQL — the
+`spend-defaults`, `spend-refusals`, `spend-concurrency`, `spend-idempotency`,
+`spend-settle`, `spend-expiry` and `spend-rls` groups of
+`scripts/qa/check-f01-db.mjs` run against a loopback database, and
+`tests/customer-uat.sql` reads the two new tables as two different customer
+users. It is **NOT applied to production**, and no row of it exists there. It
+adds `paid_feature_controls`, `workspace_spend_limits`, `spend_holds` and
+`spend_ledger` plus `reserve_spend`, `settle_spend`, `release_spend`,
+`expire_spend_holds`, `f01_expire_due_holds`, `prune_spend` and `f01_committed_usd`; it seeds one
+disabled `platform.selftest` control row so no paid feature is ever enabled by
+a migration. Apply it after `035_scoped_provider_rollout` and before deploying
+a build that calls `metered()`. Until it is applied, `reserveSpend()` fails
+closed with `503 spend_unavailable`, so a missing 041 pauses paid work instead
+of spending uncapped.
+
 
 `027_durable_probe_dispatch` is implemented and tested on disposable PostgreSQL;
 production application is **not verified**. It adds the P0 service-only dispatch

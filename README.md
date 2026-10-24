@@ -193,6 +193,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `033_atomic_scan_materialization` | Transactional report links, citations, brand judgments, daily rollups and terminal job state. |
 | `034_measurement_storage_contract` | Private JSON response capture MIME support and a read-only storage contract check. |
 | `035_scoped_provider_rollout` | Fenced pause/rollback with one owned QA workspace and bounded canaries allowed during qualification. |
+| `041_f01_spend` | `paid_feature_controls`, `workspace_spend_limits`, `spend_holds`, `spend_ledger` and the `reserve_spend` / `settle_spend` / `release_spend` / `expire_spend_holds` / `f01_expire_due_holds` / `prune_spend` / `f01_committed_usd` functions behind F01's spend guard: an estimate becomes a hold, the call settles on its recorded cost, and caps are enforced per feature and per workspace. Every paid feature ships disabled. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

@@ -137,6 +137,11 @@ export const NEVER_WRITABLE = Object.freeze([
   "brand_briefs",
   "scan_schedules",
   "scan_rate_limits",
+  // F01 phase 2 — migration 041: the spend guard's control rows, caps, holds
+  // and ledger. A test that needs a spend ledger row gets it from the memory
+  // store, not from the production table.
+  "paid_feature_controls", "workspace_spend_limits",
+  "spend_holds", "spend_ledger",
   "system_heartbeats",
   "knowledge_blocks",
   "topics",

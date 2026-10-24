@@ -112,9 +112,10 @@ interface JobContext<P> {
 
 // src/lib/spend/ (tables: spend_holds, spend_ledger, workspace_spend_limits, paid_feature_controls)
 export async function reserveSpend(i: { brandKey: string; feature: SpendFeature; estimateUsd: number; maxUsd?: number; jobId?: string; idempotencyKey: string }):
-  Promise<{ holdId: string }>;                 // throws SpendRefused { code: "feature_disabled" | "workspace_cap" | "daily_cap" | "over_approved_max" }
+  Promise<{ holdId: string; existing: boolean }>;                 // throws SpendRefused { code: "feature_disabled" | "workspace_cap" | "daily_cap" | "over_approved_max" }
+// existing === true means the same (brandKey, idempotencyKey) is still held; metered() refuses it with 409 duplicate_paid_call.
 export async function settleSpend(holdId: string, actualUsd: number | null, meta?: { provider: string; endpoint: string; units?: number; providerCostReported?: boolean }): Promise<void>;
-export async function releaseSpend(holdId: string, reason: string): Promise<void>;
+export async function releaseSpend(holdId: string, reason: string): Promise<boolean>;  // false = the hold was no longer held
 export async function metered<T>(i: { brandKey: string; feature: SpendFeature; estimateUsd: number; maxUsd?: number; idempotencyKey: string; jobId?: string },
   call: () => Promise<{ value: T; actualUsd: number | null; provider: string; endpoint: string; billed: boolean }>): Promise<T>;
 // metered(): reserve → call → settle (or release if billed === false). Settles even if the caller's response is gone (keepAlive).

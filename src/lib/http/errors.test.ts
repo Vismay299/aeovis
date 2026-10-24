@@ -105,6 +105,35 @@ test("each SpendRefused reason maps to its status, code and copy", async () => {
   }
 });
 
+test("a daily_cap refusal scoped to a feature uses the feature copy, not the workspace copy", async () => {
+  const { status, body } = await bodyOf(new SpendRefused("daily_cap", { scope: "feature" }));
+  assert.equal(status, 402);
+  assert.equal(body.code, "daily_cap");
+  assert.equal(body.error, "This feature's daily spend limit has been reached.");
+  assert.equal(body.recovery, "Try again tomorrow.");
+  // The workspace copy tells the customer to ask the workspace owner, which a
+  // customer cannot do for a platform-wide feature cap.
+  assert.notEqual(body.error, "Today's spend limit for this workspace has been reached.");
+  assert.notEqual(
+    body.recovery,
+    "Try again tomorrow or ask the workspace owner to raise the limit."
+  );
+});
+
+test("a daily_cap refusal with no scope or a workspace scope keeps the workspace copy", async () => {
+  const refusals = [new SpendRefused("daily_cap"), new SpendRefused("daily_cap", { scope: "workspace" })];
+  for (const refusal of refusals) {
+    const { status, body } = await bodyOf(refusal);
+    assert.equal(status, 402);
+    assert.equal(body.code, "daily_cap");
+    assert.equal(body.error, "Today's spend limit for this workspace has been reached.");
+    assert.equal(
+      body.recovery,
+      "Try again tomorrow or ask the workspace owner to raise the limit."
+    );
+  }
+});
+
 test("an unparseable request body becomes 400 invalid_json", async () => {
   const request = new Request("https://app.test/api/x", { method: "POST", body: "{" });
   const err = await readJsonBody(request).then(

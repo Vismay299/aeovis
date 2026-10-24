@@ -1429,3 +1429,37 @@ See [the rollout and rollback runbook](runbooks/p0-provider-dispatch.md).
 - `035_scoped_provider_rollout.sql`: `probe_dispatch_control.brand_allowlist` and service-only `set_probe_rollout` control one owned QA workspace and deliberate canaries during a dispatch pause; the claim path retains all existing lease, circuit and budget checks.
 
 Verified against disposable PostgreSQL, not production. Deploy the migrations before the worker and routes. Rollback pauses dispatch and disables new workflow actions while preserving historical attempts, immutable artifact versions, and evidence. Never drop these tables to roll back an application build.
+
+
+## F01 platform foundations: migration 041_f01_spend.sql
+
+**Implemented; production application unverified.** Apply
+`041_f01_spend.sql` after `035_scoped_provider_rollout.sql` and before deploying
+a build that reserves spend. It has no foreign key to `040_f01_jobs.sql`, so it
+may be applied before or after that file; applying it never depends on anything
+outside `customer_brands` and `auth.users`.
+
+Objects to check in the catalog: tables `paid_feature_controls`,
+`workspace_spend_limits`, `spend_holds` and `spend_ledger`; functions
+`reserve_spend`, `settle_spend`, `release_spend`, `expire_spend_holds`,
+`f01_expire_due_holds`, `prune_spend` and `f01_committed_usd` in `pg_proc`. All
+four tables have RLS enabled, `authenticated` holds `SELECT` on the three
+workspace-scoped tables only, and `paid_feature_controls` is service-role only.
+`npm run setup:db` verifies exactly that list for this file.
+
+`reserve_spend` calls `f01_expire_due_holds` for its own brand and feature,
+after taking both advisory locks and before it checks the daily or monthly caps,
+so an abandoned hold stops counting against a cap at that workspace's next
+reservation instead of waiting for someone to run the sweep by hand. A call
+whose hold had already expired is still reconciled rather than dropped:
+`settle_spend` re-prices that expired hold's `hold:<id>` reservation row to the
+reported actual cost, marks the hold settled and answers with `late: true`, and
+writes no per-row `hold:<id>[:n]` ledger rows.
+
+The migration seeds one `platform.selftest` row with `enabled = false`; that row
+being disabled is the expected state and must not be "fixed" on a live database
+without the owner's instruction. Until the file is applied, `reserveSpend()`
+fails closed with `503 spend_unavailable` rather than spending uncapped.
+
+Verified against disposable PostgreSQL (`scripts/qa/check-f01-db.mjs` groups
+`spend-*` and `tests/customer-uat.sql`), never against production.
