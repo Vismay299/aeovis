@@ -15,6 +15,9 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/024_customer_workspace_ownership.sql
 \ir ../supabase/migrations/025_gsc_customer_oauth.sql
 \ir ../supabase/migrations/026_customer_uat_repairs.sql
+-- 023's blanket REVOKE strips authenticated's spend grants, so the re-apply
+-- finishes with 041 exactly as the runner's filename order does.
+\ir ../supabase/migrations/041_f01_spend.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -155,6 +158,25 @@ SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
 DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM public.content_items WHERE id='40000000-0000-0000-0000-000000000001')
- THEN RAISE EXCEPTION 'Another customer can see draft'; END IF;
+  THEN RAISE EXCEPTION 'Another customer can see draft'; END IF;
 END $$;
+RESET ROLE;
+INSERT INTO public.workspace_spend_limits(brand_key,daily_cap_usd,monthly_cap_usd) VALUES
+ ('10000000-0000-0000-0000-000000000001',5,50),
+ ('10000000-0000-0000-0000-000000000002',5,50);
+INSERT INTO public.spend_ledger(brand_key,feature,source_ref,provider,endpoint,estimate_usd,actual_usd,accounted_usd,cost_source) VALUES
+ ('10000000-0000-0000-0000-000000000001','platform.selftest','uat:0001:1','openrouter','chat:uat',0.1,0.1,0.1,'provider_reported'),
+ ('10000000-0000-0000-0000-000000000002','platform.selftest','uat:0002:1','openrouter','chat:uat',0.1,0.1,0.1,'provider_reported');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.workspace_spend_limits) <> 1 OR (SELECT count(*) FROM public.spend_ledger) <> 1
+  THEN RAISE EXCEPTION 'Spend limits or ledger leaked across tenants'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.workspace_spend_limits) <> 1 OR (SELECT count(*) FROM public.spend_ledger) <> 1
+  THEN RAISE EXCEPTION 'Spend limits or ledger leaked across tenants'; END IF;
+END $$;
+RESET ROLE;
 ROLLBACK;
