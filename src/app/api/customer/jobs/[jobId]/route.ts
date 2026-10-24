@@ -38,8 +38,9 @@ export async function GET(request: Request, context: RouteContext, deps: JobStat
       kind: job.kind,
       trigger: job.trigger,
       ...status,
-      createdAt: job.created_at,
-      finishedAt: job.finished_at,
+      // Postgres renders `+00:00`, which jobStatusResponse's z.iso.datetime() rejects.
+      createdAt: new Date(job.created_at).toISOString(),
+      finishedAt: job.finished_at === null ? null : new Date(job.finished_at).toISOString(),
     });
   } catch (err) {
     return toErrorResponse(err);

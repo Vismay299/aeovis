@@ -54,7 +54,9 @@ function assertEnqueueable(kind: string, payload: unknown): void {
   if (text === undefined) {
     throw new AppError(500, "invalid_payload", "The job payload is not JSON.");
   }
-  if (text.length >= MAX_PAYLOAD_BYTES) {
+  // Bytes, not UTF-16 units: the limit guards the row, and runner.ts measures
+  // step output the same way.
+  if (new TextEncoder().encode(text).length >= MAX_PAYLOAD_BYTES) {
     throw new AppError(500, "payload_too_large", "The job payload is too large; put bulk data in a table.");
   }
   if (def.payloadSchema && !def.payloadSchema.safeParse(payload).success) {
