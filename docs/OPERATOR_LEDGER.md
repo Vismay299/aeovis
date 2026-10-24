@@ -334,7 +334,7 @@ Also environment-shaped and easy to get silently wrong:
 users. It is **NOT applied to production**, and no row of it exists there. It
 adds `paid_feature_controls`, `workspace_spend_limits`, `spend_holds` and
 `spend_ledger` plus `reserve_spend`, `settle_spend`, `release_spend`,
-`expire_spend_holds`, `prune_spend` and `f01_committed_usd`; it seeds one
+`expire_spend_holds`, `f01_expire_due_holds`, `prune_spend` and `f01_committed_usd`; it seeds one
 disabled `platform.selftest` control row so no paid feature is ever enabled by
 a migration. Apply it after `035_scoped_provider_rollout` and before deploying
 a build that calls `metered()`. Until it is applied, `reserveSpend()` fails
