@@ -996,7 +996,7 @@ Semantics:
 
 | File | Exports |
 |---|---|
-| `features.ts` | `export const SPEND_FEATURES = ["platform.selftest"] as const; export type SpendFeature = typeof SPEND_FEATURES[number]; export function isSpendFeature(v: string): v is SpendFeature;` Each spec appends its values. |
+| `features.ts` | Re-exports only: `export { SPEND_FEATURES, isSpendFeature } from "../../shared/spend-features.ts"; export type { SpendFeature } from "../../shared/spend-features.ts";`. The const and the type live in `src/shared/spend-features.ts` (conventions §5): `export const SPEND_FEATURES = ["platform.selftest"] as const; export type SpendFeature = typeof SPEND_FEATURES[number]; export function isSpendFeature(v: string): v is SpendFeature;` Each spec appends its values in the shared file. |
 | `errors.ts` | `export class SpendRefused extends AppError { reason: "feature_disabled"\|"workspace_cap"\|"daily_cap"\|"over_approved_max"; scope?: "feature"\|"workspace"; limitUsd?: number }`; `export class ChargedCallError extends Error { actualUsd: number; provider: string; endpoint: string }` (provider failed after billing); `export class UnbilledCallError extends Error {}` (provider rejected without billing); `export class AmbiguousCallError extends Error {}` (sent, outcome unknown). |
 | `money.ts` | `export function usd6(n: number): number` (round half-up to 6 decimals via integer micro-dollars); `export function toMicros(n: number): number; export function fromMicros(m: number): number;` |
 | `store.ts` | `export function createSpendStore(admin: SupabaseClient): SpendStore`; `SpendStore` = `{ reserve(args): Promise<ReserveResult>; settle(holdId, costs): Promise<SettleResult>; release(holdId, reason): Promise<boolean>; expire(limit): Promise<number>; prune(holdsBefore, ledgerBefore): Promise<{ledger:number;holds:number}> }` — thin RPC wrappers over §6.1 functions. `src/lib/spend/memoryStore.ts` implements the same interface in memory for unit tests (same refusal order). |
@@ -1250,7 +1250,7 @@ Errors: as above, plus 403 `cross_site`. Idempotent: repeating returns the curre
 - `GET /api/ops/spend/limits?brand_key=` and `PUT /api/ops/spend/limits/[brandKey]` body `z.strictObject({ dailyCapUsd: z.number().min(0).max(10000).nullable(), monthlyCapUsd: z.number().min(0).max(100000).nullable() })`.
 - `GET /api/ops/jobs?status=&kind=&brand_key=&limit=50` → the most recent jobs (no payloads; `payload` keys only).
 
-All operator writes set `updated_by = "operator"` and log `[ops] spend control changed { feature, enabled }`. These routes change paid controls. Under conventions §11 they are used only on the owner's instruction, and no PR, test or script calls them against production.
+All operator writes set `updated_by = "operator"`. The controls write logs `[ops] spend control changed { feature, enabled }`; the limits write has no feature/enabled to log, so it is attributable by `updated_by = "operator"` and `updated_at` instead. These routes change paid controls. Under conventions §11 they are used only on the owner's instruction, and no PR, test or script calls them against production.
 
 ### 6.6 UI
 
@@ -1328,7 +1328,7 @@ None. F01 ships no customer or operator screens. F03 builds the Usage page and t
   - [x] **P2.T1.S3** *Files:* `tests/customer-uat.sql`. *Do:* add a block inserting one `spend_ledger` and one `workspace_spend_limits` row per workspace (as postgres), then as user `…0001` assert `count(*) = 1` in each table, and as `…0002` likewise. *Verify:* the CI `customer-database` step passes locally with the same commands.
   - [x] **P2.T1.S4** Migration paperwork. *Files:* `README.md` (migration table), `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Do:* add a row for `041_f01_spend.sql` in each (purpose, objects, apply order, not yet applied to production). *Verify:* `npm test` → migration-ledger guard tests pass.
 - [x] **P2.T2 Spend modules**
-  - [x] **P2.T2.S1** *Files:* `src/lib/spend/features.ts`, `src/lib/spend/errors.ts` (completed), `src/lib/spend/money.ts`, `src/lib/spend/store.ts`, `src/lib/spend/memoryStore.ts`, `src/lib/spend/index.ts`. *Do:* §6.2. *Verify:* `node --test src/lib/spend/` → pass.
+  - [x] **P2.T2.S1** *Files:* `src/shared/spend-features.ts`, `src/lib/spend/features.ts` (re-exports), `src/lib/spend/errors.ts` (completed), `src/lib/spend/money.ts`, `src/lib/spend/store.ts`, `src/lib/spend/memoryStore.ts`, `src/lib/spend/index.ts`. *Do:* §6.2. *Verify:* `node --test "src/lib/spend/*.test.ts"` → pass.
   - [x] **P2.T2.S2** *Files:* `src/lib/spend/spend.test.ts`. *Do:* memory-store cases for reserve validation (estimate ≤ 0, > 1000, ttl bounds), refusal mapping, idempotent reserve, duplicate after settle → 409, default caps from env (`"5"` → 5, `""` → null, `"abc"` → 500 `spend_config_invalid`), DB error → 503 `spend_unavailable`. *Verify:* pass.
   - [x] **P2.T2.S3** *Files:* `src/lib/spend/metered.test.ts`. *Do:* table-driven over the five outcome rows in §6.2; assert the store calls and the thrown value; undershoot logs exactly one `console.error` whose first argument is `"[spend] estimate undershoot"` and whose second contains only `feature, provider, endpoint, estimateUsd, actualUsd`; `keepAlive` injected and asserted called once; caller rejection after `keepAlive` still settles. *Verify:* pass (F01-AC-09, F01-AC-10).
 - [x] **P2.T3 Feature flags**

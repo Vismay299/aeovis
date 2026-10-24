@@ -158,7 +158,7 @@ SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
 DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM public.content_items WHERE id='40000000-0000-0000-0000-000000000001')
-  THEN RAISE EXCEPTION 'Another customer can see draft'; END IF;
+ THEN RAISE EXCEPTION 'Another customer can see draft'; END IF;
 END $$;
 RESET ROLE;
 INSERT INTO public.workspace_spend_limits(brand_key,daily_cap_usd,monthly_cap_usd) VALUES

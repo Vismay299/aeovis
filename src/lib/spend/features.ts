@@ -1,7 +1,2 @@
-export const SPEND_FEATURES = ["platform.selftest"] as const;
-
-export type SpendFeature = (typeof SPEND_FEATURES)[number];
-
-export function isSpendFeature(v: string): v is SpendFeature {
-  return (SPEND_FEATURES as readonly string[]).includes(v);
-}
+export { SPEND_FEATURES, isSpendFeature } from "../../shared/spend-features.ts";
+export type { SpendFeature } from "../../shared/spend-features.ts";
