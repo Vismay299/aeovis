@@ -68,6 +68,7 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "settle_spend" },
     { kind: "function", name: "release_spend" },
     { kind: "function", name: "expire_spend_holds" },
+    { kind: "function", name: "f01_expire_due_holds" },
     { kind: "function", name: "prune_spend" },
     { kind: "function", name: "f01_committed_usd" },
   ],

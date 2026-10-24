@@ -133,6 +133,9 @@ BEGIN
   -- Serialise per workspace and per feature: reservations race on caps, never on the network.
   PERFORM pg_advisory_xact_lock(hashtext('f01:spend:brand:' || p_brand));
   PERFORM pg_advisory_xact_lock(hashtext('f01:spend:feature:' || p_feature));
+  -- Abandoned holds stop eating caps here: the next reservation for this brand or feature expires
+  -- its due holds and prices them at their estimate, so a stale key collides as a duplicate below.
+  PERFORM public.f01_expire_due_holds(p_brand, p_feature, 100);
   SELECT * INTO h FROM spend_holds WHERE brand_key = p_brand AND idempotency_key = p_idempotency;
   IF FOUND THEN
     IF h.status = 'held' THEN RETURN jsonb_build_object('granted', true, 'hold_id', h.id, 'existing', true); END IF;
@@ -170,14 +173,46 @@ BEGIN
 END $$;
 
 -- Settle a hold with one or more cost rows (OpenSEO: one hold, each call credited separately).
+-- An expired hold is reconciled late rather than dropped: its reservation row becomes the real cost.
 -- p_costs: [{provider, endpoint, units?, actual_usd|null, cost_source, suffix?, meta?}]
 CREATE OR REPLACE FUNCTION public.settle_spend(p_hold uuid, p_costs jsonb)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
 DECLARE h spend_holds; r jsonb; i integer := 0; v_actual numeric := 0; v_unknown boolean := false;
-  v_rows integer; v_est numeric; v_cost numeric; v_src text;
+  v_rows integer; v_est numeric; v_cost numeric; v_src text; v_provider text; v_endpoint text;
 BEGIN
   SELECT * INTO h FROM spend_holds WHERE id = p_hold FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'hold not found'; END IF;
+  IF h.status = 'expired' THEN
+    -- Late settle: the sweep already wrote the hold:<id> reservation row at the estimate. Re-price
+    -- that one row once every cost is known; an unknown cost leaves the hold and the row untouched.
+    v_rows := jsonb_array_length(p_costs);
+    IF v_rows < 1 OR v_rows > 200 THEN RAISE EXCEPTION 'settle needs 1..200 cost rows'; END IF;
+    FOR r IN SELECT value FROM jsonb_array_elements(p_costs) LOOP
+      i := i + 1;
+      v_cost := (r->>'actual_usd')::numeric;
+      IF v_cost IS NOT NULL AND v_cost < 0 THEN RAISE EXCEPTION 'negative cost'; END IF;
+      IF i = 1 THEN v_provider := r->>'provider'; v_endpoint := r->>'endpoint'; END IF;
+      IF v_cost IS NULL THEN v_unknown := true; ELSE v_actual := v_actual + v_cost; END IF;
+    END LOOP;
+    IF v_unknown THEN
+      RETURN jsonb_build_object('settled', false, 'status', 'expired', 'unknown', true,
+                                'actual_usd', v_actual);
+    END IF;
+    INSERT INTO spend_ledger(brand_key, feature, hold_id, job_id, source_ref, provider, endpoint,
+                             estimate_usd, actual_usd, accounted_usd, cost_source, meta)
+    VALUES (h.brand_key, h.feature, h.id, h.job_id, 'hold:' || h.id,
+            coalesce(nullif(v_provider, ''), 'unknown'), coalesce(nullif(v_endpoint, ''), 'late_settle'),
+            h.estimate_usd, v_actual, v_actual, 'provider_reported',
+            jsonb_build_object('expired', true, 'late_settle', true))
+    ON CONFLICT (source_ref) DO UPDATE
+      SET provider = excluded.provider, endpoint = excluded.endpoint,
+          actual_usd = excluded.actual_usd, accounted_usd = excluded.accounted_usd,
+          cost_source = 'provider_reported',
+          meta = spend_ledger.meta || jsonb_build_object('late_settle', true);
+    UPDATE spend_holds SET status = 'settled', actual_usd = v_actual, closed_at = now() WHERE id = p_hold;
+    RETURN jsonb_build_object('settled', true, 'late', true, 'actual_usd', v_actual, 'unknown', false,
+      'undershoot', v_actual > h.estimate_usd, 'over_max', h.max_usd IS NOT NULL AND v_actual > h.max_usd);
+  END IF;
   IF h.status <> 'held' THEN RETURN jsonb_build_object('settled', false, 'status', h.status); END IF;
   v_rows := jsonb_array_length(p_costs);
   IF v_rows < 1 OR v_rows > 200 THEN RAISE EXCEPTION 'settle needs 1..200 cost rows'; END IF;
@@ -229,6 +264,31 @@ BEGIN
   RETURN v;
 END $$;
 
+-- Scoped sweep: reserve_spend calls this so a workspace's or a feature's abandoned holds stop
+-- counting against caps at the next reservation. Both scopes NULL expires nothing.
+CREATE OR REPLACE FUNCTION public.f01_expire_due_holds(p_brand text, p_feature text, p_limit integer DEFAULT 100)
+RETURNS integer LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE h spend_holds; v integer := 0;
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 500 THEN
+    RAISE EXCEPTION 'hold expiry limit must be 1..500';
+  END IF;
+  FOR h IN SELECT * FROM spend_holds
+            WHERE status = 'held' AND expires_at < now()
+              AND ((p_brand IS NOT NULL AND brand_key = p_brand)
+                   OR (p_feature IS NOT NULL AND feature = p_feature))
+            ORDER BY expires_at LIMIT p_limit FOR UPDATE SKIP LOCKED LOOP
+    INSERT INTO spend_ledger(brand_key, feature, hold_id, job_id, source_ref, provider, endpoint,
+                             estimate_usd, actual_usd, accounted_usd, cost_source, meta)
+    VALUES (h.brand_key, h.feature, h.id, h.job_id, 'hold:' || h.id, 'unknown', 'expired_hold',
+            h.estimate_usd, NULL, h.estimate_usd, 'reservation', jsonb_build_object('expired', true))
+    ON CONFLICT (source_ref) DO NOTHING;
+    UPDATE spend_holds SET status = 'expired', closed_at = now() WHERE id = h.id AND status = 'held';
+    IF FOUND THEN v := v + 1; END IF;
+  END LOOP;
+  RETURN v;
+END $$;
+
 CREATE OR REPLACE FUNCTION public.prune_spend(p_holds_before timestamptz, p_ledger_before timestamptz, p_limit integer DEFAULT 5000)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
 DECLARE v_l integer; v_h integer;
@@ -246,9 +306,11 @@ END $$;
 REVOKE ALL ON FUNCTION public.f01_committed_usd(text,text,timestamptz),
   public.reserve_spend(text,text,numeric,numeric,text,uuid,text,text,integer,numeric,numeric),
   public.settle_spend(uuid,jsonb), public.release_spend(uuid,text), public.expire_spend_holds(integer),
+  public.f01_expire_due_holds(text,text,integer),
   public.prune_spend(timestamptz,timestamptz,integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.f01_committed_usd(text,text,timestamptz),
   public.reserve_spend(text,text,numeric,numeric,text,uuid,text,text,integer,numeric,numeric),
   public.settle_spend(uuid,jsonb), public.release_spend(uuid,text), public.expire_spend_holds(integer),
+  public.f01_expire_due_holds(text,text,integer),
   public.prune_spend(timestamptz,timestamptz,integer) TO service_role;
 NOTIFY pgrst, 'reload schema';

@@ -1442,10 +1442,19 @@ outside `customer_brands` and `auth.users`.
 Objects to check in the catalog: tables `paid_feature_controls`,
 `workspace_spend_limits`, `spend_holds` and `spend_ledger`; functions
 `reserve_spend`, `settle_spend`, `release_spend`, `expire_spend_holds`,
-`prune_spend` and `f01_committed_usd` in `pg_proc`. All four tables have RLS
-enabled, `authenticated` holds `SELECT` on the three workspace-scoped tables
-only, and `paid_feature_controls` is service-role only. `npm run setup:db`
-verifies exactly that list for this file.
+`f01_expire_due_holds`, `prune_spend` and `f01_committed_usd` in `pg_proc`. All
+four tables have RLS enabled, `authenticated` holds `SELECT` on the three
+workspace-scoped tables only, and `paid_feature_controls` is service-role only.
+`npm run setup:db` verifies exactly that list for this file.
+
+`reserve_spend` calls `f01_expire_due_holds` for its own brand and feature,
+after taking both advisory locks and before it checks the daily or monthly caps,
+so an abandoned hold stops counting against a cap at that workspace's next
+reservation instead of waiting for someone to run the sweep by hand. A call
+whose hold had already expired is still reconciled rather than dropped:
+`settle_spend` re-prices that expired hold's `hold:<id>` reservation row to the
+reported actual cost, marks the hold settled and answers with `late: true`, and
+writes no per-row `hold:<id>[:n]` ledger rows.
 
 The migration seeds one `platform.selftest` row with `enabled = false`; that row
 being disabled is the expected state and must not be "fixed" on a live database

@@ -362,6 +362,134 @@ const GROUPS = [
       await rpc("expire_spend_holds", { p_limit: 500 });
       const again = (await q("select count(*)::int n from spend_ledger where hold_id=$1", [held.hold_id])).rows[0].n;
       assert.equal(again, 1, "a second sweep must not write a second row");
+      assert.equal(
+        Number(await rpc("f01_expire_due_holds", { p_brand: brand, p_feature: feature, p_limit: 100 })),
+        0,
+        "a scoped sweep leaves an already-expired hold alone",
+      );
+
+      // Owner review — a workspace's due holds stop counting at its own next reservation.
+      const sweepFeature = await createFeature();
+      const sweepBrand = await createBrand();
+      const abandonedKey = `expire-abandoned-${id()}`;
+      const abandoned = await reserve(sweepBrand, sweepFeature, 2, abandonedKey);
+      assert.equal(abandoned.granted, true);
+      await q("update spend_holds set expires_at = now() - interval '1 minute' where id=$1", [abandoned.hold_id]);
+      const fresh = await reserve(sweepBrand, sweepFeature, 1, `expire-fresh-${id()}`);
+      assert.equal(fresh.granted, true, "a reservation sweeps its workspace's due holds before the cap check");
+      const swept = (await q("select status, actual_usd from spend_holds where id=$1", [abandoned.hold_id])).rows[0];
+      assert.equal(swept.status, "expired", "the next reservation for the brand expires its abandoned hold");
+      assert.equal(swept.actual_usd, null);
+      const sweptRows = (
+        await q("select count(*)::int n from spend_ledger where source_ref=$1", [`hold:${abandoned.hold_id}`])
+      ).rows[0].n;
+      assert.equal(sweptRows, 1, "the scoped sweep writes exactly one hold:<old> reservation row");
+      const stale = await reserve(sweepBrand, sweepFeature, 2, abandonedKey);
+      assert.equal(stale.granted, false, "an expired idempotency key must not be re-granted");
+      assert.equal(stale.reason, "duplicate_paid_call");
+      assert.equal(stale.hold_id, abandoned.hold_id);
+
+      // Owner review — the feature scope also sweeps a brand that has not reserved again.
+      const featureSweep = await createFeature();
+      const quietBrand = await createBrand();
+      const quiet = await reserve(quietBrand, featureSweep, 1, `expire-quiet-${id()}`);
+      assert.equal(quiet.granted, true);
+      await q("update spend_holds set expires_at = now() - interval '1 minute' where id=$1", [quiet.hold_id]);
+      const otherBrand = await createBrand();
+      const otherGrant = await reserve(otherBrand, featureSweep, 1, `expire-other-${id()}`);
+      assert.equal(otherGrant.granted, true);
+      const quietAfter = (await q("select status from spend_holds where id=$1", [quiet.hold_id])).rows[0];
+      assert.equal(quietAfter.status, "expired", "a reservation for another brand sweeps the feature's due holds");
+      await assert.rejects(
+        () => rpc("f01_expire_due_holds", { p_brand: quietBrand, p_feature: featureSweep, p_limit: 0 }),
+        /1\.\.500/,
+        "f01_expire_due_holds validates its limit",
+      );
+
+      // Owner review — a late settle reconciles the expired hold instead of dropping the cost.
+      const lateBrand = await createBrand();
+      const lateFeature = await createFeature();
+      const lateHold = await reserve(lateBrand, lateFeature, 1, `late-${id()}`);
+      assert.equal(lateHold.granted, true);
+      await q("update spend_holds set expires_at = now() - interval '1 minute' where id=$1", [lateHold.hold_id]);
+      assert.equal(
+        Number(await rpc("f01_expire_due_holds", { p_brand: lateBrand, p_feature: lateFeature, p_limit: 100 })),
+        1,
+        "the scoped sweep expires the one due hold",
+      );
+      const stillReserved = (
+        await q("select actual_usd, accounted_usd, cost_source from spend_ledger where source_ref=$1", [
+          `hold:${lateHold.hold_id}`,
+        ])
+      ).rows[0];
+      assert.equal(stillReserved.actual_usd, null);
+      assert.equal(Number(stillReserved.accounted_usd), 1);
+      assert.equal(stillReserved.cost_source, "reservation");
+
+      const late = await rpc("settle_spend", {
+        p_hold: lateHold.hold_id,
+        p_costs: [{ provider: "openrouter", endpoint: "chat:qa", actual_usd: 2, cost_source: "provider_reported" }],
+      });
+      assert.equal(late.settled, true, "an expired hold is reconciled, not silently dropped");
+      assert.equal(late.late, true);
+      assert.equal(late.unknown, false);
+      assert.equal(Number(late.actual_usd), 2);
+      const lateRows = (
+        await q(
+          "select source_ref, provider, endpoint, actual_usd, accounted_usd, cost_source, meta from spend_ledger where hold_id=$1",
+          [lateHold.hold_id],
+        )
+      ).rows;
+      assert.equal(lateRows.length, 1, "a late settle re-prices the one reservation row instead of adding rows");
+      assert.equal(lateRows[0].source_ref, `hold:${lateHold.hold_id}`);
+      assert.equal(lateRows[0].provider, "openrouter");
+      assert.equal(lateRows[0].endpoint, "chat:qa");
+      assert.equal(Number(lateRows[0].actual_usd), 2);
+      assert.equal(Number(lateRows[0].accounted_usd), 2);
+      assert.equal(lateRows[0].cost_source, "provider_reported");
+      assert.equal(lateRows[0].meta.late_settle, true);
+      const settledLate = (await q("select status, actual_usd from spend_holds where id=$1", [lateHold.hold_id])).rows[0];
+      assert.equal(settledLate.status, "settled");
+      assert.equal(Number(settledLate.actual_usd), 2);
+      const lateRepeat = await rpc("settle_spend", {
+        p_hold: lateHold.hold_id,
+        p_costs: [{ provider: "openrouter", endpoint: "chat:qa", actual_usd: 3, cost_source: "provider_reported" }],
+      });
+      assert.equal(lateRepeat.settled, false, "a late-settled hold is settled once");
+      assert.equal(lateRepeat.status, "settled");
+
+      // Owner review — a late settle with an unknown cost leaves the hold and its reservation alone.
+      const unknownHold = await reserve(lateBrand, lateFeature, 1.5, `late-unknown-${id()}`);
+      assert.equal(unknownHold.granted, true);
+      await q("update spend_holds set expires_at = now() - interval '1 minute' where id=$1", [unknownHold.hold_id]);
+      assert.equal(
+        Number(await rpc("f01_expire_due_holds", { p_brand: lateBrand, p_feature: lateFeature, p_limit: 100 })),
+        1,
+      );
+      const unknownLate = await rpc("settle_spend", {
+        p_hold: unknownHold.hold_id,
+        p_costs: [{ provider: "openrouter", endpoint: "chat:qa", actual_usd: null, cost_source: "provider_reported" }],
+      });
+      assert.equal(unknownLate.settled, false);
+      assert.equal(unknownLate.status, "expired");
+      assert.equal(unknownLate.unknown, true);
+      assert.equal(Number(unknownLate.actual_usd), 0, "the reply carries the sum of the known costs");
+      const unknownAfter = (await q("select status, actual_usd from spend_holds where id=$1", [unknownHold.hold_id])).rows[0];
+      assert.equal(unknownAfter.status, "expired", "an unknown late cost leaves the hold expired");
+      assert.equal(unknownAfter.actual_usd, null);
+      const unknownRows = (
+        await q("select provider, endpoint, actual_usd, accounted_usd, cost_source, meta from spend_ledger where hold_id=$1", [
+          unknownHold.hold_id,
+        ])
+      ).rows;
+      assert.equal(unknownRows.length, 1);
+      assert.equal(unknownRows[0].provider, "unknown");
+      assert.equal(unknownRows[0].endpoint, "expired_hold");
+      assert.equal(unknownRows[0].actual_usd, null);
+      assert.equal(Number(unknownRows[0].accounted_usd), 1.5, "the reservation keeps counting at its estimate");
+      assert.equal(unknownRows[0].cost_source, "reservation");
+      assert.equal(unknownRows[0].meta.expired, true);
+      assert.equal(unknownRows[0].meta.late_settle, undefined);
     },
   },
   {

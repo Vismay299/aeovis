@@ -277,7 +277,7 @@ function pathToFileUrlString(p) {
 
 /** Everything 001-023 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
-"paid_feature_controls","workspace_spend_limits","spend_holds","spend_ledger","reserve_spend","settle_spend","release_spend","expire_spend_holds","prune_spend","f01_committed_usd",
+"paid_feature_controls","workspace_spend_limits","spend_holds","spend_ledger","reserve_spend","settle_spend","release_spend","expire_spend_holds","f01_expire_due_holds","prune_spend","f01_committed_usd",
 "measurement_storage_ready","set_probe_rollout","probe_dispatch_control.brand_allowlist",
 "measurement_evidence","measurement_incidents","record_measurement_incident","repair_artifacts","repair_artifact_heads","append_repair_artifact","decide_checked_content","record_verified_publication","repair_content_hash","scans.origin_job_id","scans_origin_job_key","content_check_claims","claim_content_check","finish_content_check","measurement_windows","enqueue_measurement_window","scan_jobs.panel_snapshot","scan_jobs.measurement_context","materialize_scan_report",
   "probe_observations", "probe_attempts", "probe_late_receipts", "probe_reconciliations",
