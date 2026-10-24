@@ -11,7 +11,26 @@ export type FeatureFlagDeps = {
 };
 
 const CACHE_MS = 30_000;
+const CACHE_LIMIT = 5_000;
 const cache = new Map<string, { value: boolean; expiresAt: number }>();
+
+/**
+ * Drops every cached answer. The controls PUT calls it so a feature an operator
+ * has just enabled is not held off for the rest of the cache window.
+ */
+export function invalidateFeatureFlagCache(): void {
+  cache.clear();
+}
+
+function remember(key: string, value: boolean, nowMs: number): void {
+  if (cache.size >= CACHE_LIMIT && !cache.has(key)) {
+    for (const [cached, entry] of cache) {
+      if (entry.expiresAt <= nowMs) cache.delete(cached);
+    }
+    if (cache.size >= CACHE_LIMIT) cache.clear();
+  }
+  cache.set(key, { value, expiresAt: nowMs + CACHE_MS });
+}
 
 export function featureEnvName(name: FeatureName): string {
   return `FEATURE_${name.toUpperCase()}`;
@@ -33,20 +52,25 @@ function envAllows(name: FeatureName, brandKey: string | undefined, env: Record<
   return resolveNodeEnv({ NODE_ENV: env.NODE_ENV, VERCEL_ENV: env.VERCEL_ENV }) !== "production";
 }
 
+/**
+ * True/false is the controls' own answer; null means the controls could not be
+ * read. A read failure still refuses the feature, but it is a transient outage
+ * and must not be memoized for the next 30 s.
+ */
 async function spendControlsAllow(
   spendFeatures: readonly string[],
   brandKey: string | undefined,
   deps: FeatureFlagDeps | undefined
-): Promise<boolean> {
+): Promise<boolean | null> {
   if (spendFeatures.length === 0) return true;
   const admin = deps && "admin" in deps ? deps.admin : getSupabaseAdmin();
-  if (!admin) return false;
+  if (!admin) return null;
   try {
     const { data, error } = await admin
       .from("paid_feature_controls")
       .select("feature, enabled, mode, brand_allowlist")
       .in("feature", spendFeatures as string[]);
-    if (error) return false;
+    if (error) return null;
     const rows = (data ?? []) as Array<{
       feature: string;
       enabled: boolean;
@@ -60,7 +84,7 @@ async function spendControlsAllow(
       return brandKey !== undefined && (row.brand_allowlist ?? []).includes(brandKey);
     });
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -75,10 +99,12 @@ export async function isFeatureEnabled(
   if (cached && cached.expiresAt > now()) return cached.value;
 
   const env = deps?.env ?? process.env;
-  let value = false;
-  if (envAllows(name, brandKey, env)) {
-    value = await spendControlsAllow(FEATURES[name].spend, brandKey, deps);
+  if (!envAllows(name, brandKey, env)) {
+    remember(cacheKey, false, now());
+    return false;
   }
-  cache.set(cacheKey, { value, expiresAt: now() + CACHE_MS });
-  return value;
+  const allowed = await spendControlsAllow(FEATURES[name].spend, brandKey, deps);
+  if (allowed === null) return false;
+  remember(cacheKey, allowed, now());
+  return allowed;
 }

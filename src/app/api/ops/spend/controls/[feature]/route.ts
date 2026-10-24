@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError, jsonOk, readJsonBody, toErrorResponse } from "../../../../../../lib/http/errors.ts";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase/admin.js";
+import { invalidateFeatureFlagCache } from "../../../../../../lib/features/flags.ts";
 import { isSpendFeature } from "../../../../../../lib/spend/features.ts";
 import { spendControlPutSchema } from "../../../../../../lib/spend/spend.contract.ts";
 
@@ -74,6 +75,9 @@ export async function PUT(
       throw new AppError(503, "spend_unavailable", "Spend control is unavailable, so paid work is paused.");
     }
 
+    // The flag cache memoizes this table's answer for 30 s, so a feature just enabled
+    // here would otherwise stay off for the rest of the window.
+    invalidateFeatureFlagCache();
     console.log("[ops] spend control changed", { feature, enabled: body.enabled });
     return jsonOk(controlJson(data as ControlRow));
   } catch (err) {

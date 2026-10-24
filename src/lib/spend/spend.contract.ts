@@ -42,9 +42,15 @@ export function spendControlPutSchema(feature: string) {
   });
 }
 
+/**
+ * Both caps are optional so one can be set without restating the other. A null
+ * column means "no cap", not "fall back to the env default", so an omitted cap
+ * keeps whatever ceiling the workspace already had; the route resolves that.
+ * At least one cap must be named — the route rejects `{}` as invalid_request.
+ */
 export const spendLimitsPutSchema = z.strictObject({
-  dailyCapUsd: z.number().min(0).max(10000).nullable(),
-  monthlyCapUsd: z.number().min(0).max(100000).nullable(),
+  dailyCapUsd: z.number().min(0).max(10000).nullable().optional(),
+  monthlyCapUsd: z.number().min(0).max(100000).nullable().optional(),
 });
 
 export const spendControlsListResponse = z.looseObject({
@@ -64,7 +70,7 @@ export type SpendControlInput = {
   note: string | null;
 };
 
-export type SpendLimitInput = { dailyCapUsd: number | null; monthlyCapUsd: number | null };
+export type SpendLimitInput = { dailyCapUsd?: number | null; monthlyCapUsd?: number | null };
 
 export const contracts = [
   defineRouteContract({

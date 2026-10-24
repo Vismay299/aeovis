@@ -341,7 +341,7 @@ test("a late settle after the hold expired re-prices the hold:<id> row and repor
   assert.equal(row.actualUsd, 1.5, "the reservation row is recorded at the actual cost");
   assert.equal(row.accountedUsd, 1.5);
   assert.equal(row.costSource, "provider_reported");
-  assert.equal(row.meta.lateSettle, true);
+  assert.equal(row.meta.late_settle, true, "the key settle_spend writes, not a camelCase variant");
   assert.equal(row.meta.expired, true, "the expiry marker is kept");
   assert.equal(store.holds.get(holdId)?.status, "settled");
   assert.equal(store.holds.get(holdId)?.actualUsd, 1.5);
@@ -372,4 +372,89 @@ test("usd6 rounds half-up to six decimals and SPEND_FEATURES is a closed union",
   assert.strictEqual(SPEND_FEATURES, SHARED_SPEND_FEATURES, "the lib path re-exports the shared array");
   assert.equal(isSpendFeature("platform.selftest"), true);
   assert.equal(isSpendFeature("platform.selftest.extra"), false);
+});
+
+test("reserveSpend rejects an approved maximum outside numeric(12,6) before the store is asked", async () => {
+  for (const maxUsd of [0, -1, 1e-9, Number.NaN, Number.POSITIVE_INFINITY, 1000.000001]) {
+    let reserves = 0;
+    const store = storeWith();
+    const spy: SpendStore = {
+      ...store,
+      reserve: async (args) => {
+        reserves += 1;
+        return store.reserve(args);
+      },
+    };
+    const err = await appError(
+      reserveSpend(
+        { brandKey: BRAND, feature: FEATURE, estimateUsd: 0.5, maxUsd, idempotencyKey: shortId() },
+        { store: spy, env: ENV }
+      )
+    );
+    assert.equal(err.status, 400);
+    assert.equal(err.code, "spend_invalid", `${maxUsd} must be a 400, not a 503 guard outage`);
+    assert.equal(reserves, 0);
+  }
+});
+
+test("reserveSpend rounds the approved maximum to six decimals", async () => {
+  const store = storeWith();
+  const { holdId } = await reserveSpend(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 0.5, maxUsd: 1.00000049, idempotencyKey: shortId() },
+    { store, env: ENV }
+  );
+  assert.equal(store.holds.get(holdId)?.maxUsd, 1);
+});
+
+test("an idempotency key is scoped per feature, so two features never share a hold", async () => {
+  const other = "platform.selftest_other";
+  const store = storeWith({
+    controls: { [FEATURE]: enabledControl(), [other]: enabledControl() },
+  });
+  const key = "job:00000000-0000-0000-0000-000000000000:step";
+  const first = await store.reserve({
+    brandKey: BRAND,
+    feature: FEATURE,
+    estimateUsd: 1,
+    maxUsd: null,
+    idempotencyKey: key,
+    jobId: null,
+    subjectKind: null,
+    subjectId: null,
+    ttlSeconds: 600,
+    defaultDailyUsd: null,
+    defaultMonthlyUsd: null,
+  });
+  const second = await store.reserve({
+    brandKey: BRAND,
+    feature: other,
+    estimateUsd: 1,
+    maxUsd: null,
+    idempotencyKey: key,
+    jobId: null,
+    subjectKind: null,
+    subjectId: null,
+    ttlSeconds: 600,
+    defaultDailyUsd: null,
+    defaultMonthlyUsd: null,
+  });
+  assert.equal(first.granted, true);
+  assert.equal(second.granted, true);
+  assert.equal(second.existing, false, "the other feature's hold must not answer this reservation");
+  assert.notEqual(first.holdId, second.holdId);
+  assert.equal(store.holds.get(second.holdId as string)?.feature, other);
+});
+
+test("the memory store accounts in six-decimal dollars, as numeric(12,6) does", async () => {
+  const store = storeWith();
+  const { holdId } = await reserveSpend(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 0.3, idempotencyKey: shortId() },
+    { store, env: ENV }
+  );
+  const result = await store.settle(holdId, [
+    { provider: "openrouter", endpoint: "chat:a", actualUsd: 0.1, costSource: "provider_reported" },
+    { provider: "openrouter", endpoint: "chat:b", actualUsd: 0.2, costSource: "provider_reported" },
+  ]);
+  assert.equal(result.actualUsd, 0.3);
+  assert.equal(result.undershoot, false, "0.1 + 0.2 does not exceed a 0.3 estimate in numeric(12,6)");
 });

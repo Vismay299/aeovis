@@ -253,6 +253,29 @@ const GROUPS = [
       const afterRelease = await reserve(brand, feature, 1, thirdKey);
       assert.equal(afterRelease.granted, false);
       assert.equal(afterRelease.reason, "duplicate_paid_call");
+
+      // Owner review — the key is scoped per feature. The documented convention
+      // (job:<jobId>:<stepName>) carries no feature, so a (brand, key) match alone could
+      // answer one feature's reservation with another feature's hold and settle the cost
+      // against the wrong feature's cap.
+      const otherFeature = await createFeature();
+      const sharedKey = `idem-shared-${id()}`;
+      const onFirst = await reserve(brand, feature, 1, sharedKey);
+      assert.equal(onFirst.granted, true);
+      assert.equal(onFirst.existing, false);
+      const onOther = await reserve(brand, otherFeature, 1, sharedKey);
+      assert.equal(onOther.granted, true);
+      assert.equal(onOther.existing, false, "the other feature's hold must not answer this reservation");
+      assert.notEqual(onOther.hold_id, onFirst.hold_id);
+      const scoped = (
+        await q("select feature from spend_holds where id = any($1::uuid[]) order by feature", [
+          [onFirst.hold_id, onOther.hold_id],
+        ])
+      ).rows.map((row) => row.feature);
+      assert.deepEqual(scoped, [feature, otherFeature].sort(), "each hold keeps its own feature");
+      const repeatOnOther = await reserve(brand, otherFeature, 1, sharedKey);
+      assert.equal(repeatOnOther.existing, true, "the key still dedups within its own feature");
+      assert.equal(repeatOnOther.hold_id, onOther.hold_id);
     },
   },
   {
@@ -405,6 +428,35 @@ const GROUPS = [
         /1\.\.500/,
         "f01_expire_due_holds validates its limit",
       );
+
+      // Owner review — each scope gets its own budget, so other workspaces' due holds on a
+      // shared feature cannot spend the whole sweep and leave the caller's own hold counted.
+      const sharedFeature = await createFeature();
+      const starvedBrand = await createBrand();
+      const noisyBrand = await createBrand();
+      const starved = await reserve(starvedBrand, sharedFeature, 1, `starve-mine-${id()}`);
+      assert.equal(starved.granted, true);
+      const noisy = [];
+      for (let n = 0; n < 3; n += 1) {
+        const hold = await reserve(noisyBrand, sharedFeature, 1, `starve-other-${n}-${id()}`);
+        assert.equal(hold.granted, true);
+        noisy.push(hold.hold_id);
+      }
+      await q(
+        "update spend_holds set expires_at = now() - interval '2 minutes' where id = any($1::uuid[])",
+        [[starved.hold_id, ...noisy]],
+      );
+      // The caller's own hold is the newest, so a shared LIMIT 1 ordered by expires_at would
+      // spend the whole budget on the other workspace and never reach it.
+      assert.equal(
+        Number(
+          await rpc("f01_expire_due_holds", { p_brand: starvedBrand, p_feature: sharedFeature, p_limit: 1 }),
+        ),
+        2,
+        "one budget per scope: the brand pass and the feature pass each expire a hold",
+      );
+      const starvedAfter = (await q("select status from spend_holds where id=$1", [starved.hold_id])).rows[0];
+      assert.equal(starvedAfter.status, "expired", "the caller's own due hold is swept with the smallest budget");
 
       // Owner review — a late settle reconciles the expired hold instead of dropping the cost.
       const lateBrand = await createBrand();

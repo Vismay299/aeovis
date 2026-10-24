@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS public.spend_holds (
   expires_at timestamptz NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   closed_at timestamptz,
-  CONSTRAINT spend_holds_idem UNIQUE (brand_key, idempotency_key),
+  CONSTRAINT spend_holds_idem UNIQUE (brand_key, feature, idempotency_key),
   CONSTRAINT spend_holds_closed CHECK ((status = 'held') = (closed_at IS NULL))
 );
 COMMENT ON COLUMN public.spend_holds.job_id IS 'jobs.id when reserved inside a job step. No FK: jobs are pruned after 30 days.';
@@ -136,7 +136,11 @@ BEGIN
   -- Abandoned holds stop eating caps here: the next reservation for this brand or feature expires
   -- its due holds and prices them at their estimate, so a stale key collides as a duplicate below.
   PERFORM public.f01_expire_due_holds(p_brand, p_feature, 100);
-  SELECT * INTO h FROM spend_holds WHERE brand_key = p_brand AND idempotency_key = p_idempotency;
+  -- Scoped by feature as well as key: the documented key convention (job:<jobId>:<stepName>)
+  -- carries no feature, so matching on (brand, key) alone could answer a reservation for one
+  -- feature with another feature's hold, and settle the cost against the wrong feature's cap.
+  SELECT * INTO h FROM spend_holds
+   WHERE brand_key = p_brand AND feature = p_feature AND idempotency_key = p_idempotency;
   IF FOUND THEN
     IF h.status = 'held' THEN RETURN jsonb_build_object('granted', true, 'hold_id', h.id, 'existing', true); END IF;
     RETURN jsonb_build_object('granted', false, 'reason', 'duplicate_paid_call', 'hold_id', h.id);
@@ -273,11 +277,19 @@ BEGIN
   IF p_limit IS NULL OR p_limit < 1 OR p_limit > 500 THEN
     RAISE EXCEPTION 'hold expiry limit must be 1..500';
   END IF;
-  FOR h IN SELECT * FROM spend_holds
-            WHERE status = 'held' AND expires_at < now()
-              AND ((p_brand IS NOT NULL AND brand_key = p_brand)
-                   OR (p_feature IS NOT NULL AND feature = p_feature))
-            ORDER BY expires_at LIMIT p_limit FOR UPDATE SKIP LOCKED LOOP
+  -- One budget per scope. A single shared LIMIT let the feature scope, which is platform-wide,
+  -- spend the whole sweep on other workspaces' due holds, leaving the caller's own due hold
+  -- still counted against its caps and refusing a reservation that should have fitted.
+  FOR h IN SELECT * FROM spend_holds WHERE id IN (
+             (SELECT id FROM spend_holds
+               WHERE status = 'held' AND expires_at < now() AND brand_key = p_brand
+               ORDER BY expires_at LIMIT p_limit)
+             UNION
+             (SELECT id FROM spend_holds
+               WHERE status = 'held' AND expires_at < now() AND feature = p_feature
+                 AND (p_brand IS NULL OR brand_key <> p_brand)
+               ORDER BY expires_at LIMIT p_limit))
+            ORDER BY expires_at FOR UPDATE SKIP LOCKED LOOP
     INSERT INTO spend_ledger(brand_key, feature, hold_id, job_id, source_ref, provider, endpoint,
                              estimate_usd, actual_usd, accounted_usd, cost_source, meta)
     VALUES (h.brand_key, h.feature, h.id, h.job_id, 'hold:' || h.id, 'unknown', 'expired_hold',

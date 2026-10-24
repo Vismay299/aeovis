@@ -31,20 +31,24 @@ const LIMIT_ROW = {
  * A fake PostgREST client. Every chain the routes use is represented
  * (select/eq/order/upsert/select/single/maybeSingle), and each write is recorded
  * verbatim so a test can assert the columns instead of trusting the route.
- * The brand lookup `PUT /limits/[brandKey]` runs is recorded separately, in
- * `brandReads`, so the write assertions keep counting writes only.
+ * The two reads `PUT /limits/[brandKey]` runs are recorded separately, in
+ * `brandReads` and `limitReads`, so the write assertions keep counting writes only.
  */
 function fakeAdmin({
   rows = [],
   error = null,
   brand = { brand_key: "example-workspace" },
   brandError = null,
+  currentLimit = null,
+  limitError = null,
   calls = [],
 } = {}) {
   const brandReads = [];
+  const limitReads = [];
   return {
     calls,
     brandReads,
+    limitReads,
     admin: {
       from(table) {
         const state = { table, filters: [], payload: null };
@@ -65,8 +69,15 @@ function fakeAdmin({
             calls.push({ op: "order", table, column, filters: state.filters });
             return { data: rows, error };
           },
-          // `customer_brands` lookup; `brand: null` is the "no such workspace" row set.
+          // Two single-row reads: the `customer_brands` lookup (`brand: null` is the
+          // "no such workspace" row set) and the limit row the PUT merges omitted caps
+          // into (`currentLimit: null` is a workspace with no row yet).
           async maybeSingle() {
+            if (table === "workspace_spend_limits") {
+              limitReads.push({ op: "select", table, filters: state.filters });
+              if (limitError) return { data: null, error: limitError };
+              return { data: currentLimit, error: null };
+            }
             brandReads.push({ op: "select", table, filters: state.filters });
             if (brandError) return { data: null, error: brandError };
             return { data: brand, error: null };
@@ -243,6 +254,9 @@ test("PUT /api/ops/spend/limits/[brandKey] upserts exactly the limit columns as 
   assert.deepEqual(fake.brandReads, [
     { op: "select", table: "customer_brands", filters: [["brand_key", "example-workspace"]] },
   ]);
+  assert.deepEqual(fake.limitReads, [
+    { op: "select", table: "workspace_spend_limits", filters: [["brand_key", "example-workspace"]] },
+  ]);
   const [write] = fake.calls;
   assert.equal(write.table, "workspace_spend_limits");
   assert.deepEqual(write.options, { onConflict: "brand_key" });
@@ -263,6 +277,55 @@ test("PUT /api/ops/spend/limits/[brandKey] upserts exactly the limit columns as 
     monthlyCapUsd: null,
     updatedAt: write.payload.updated_at,
   });
+});
+
+test("PUT /api/ops/spend/limits/[brandKey] keeps the cap a partial body omits", async () => {
+  const fake = fakeAdmin({ currentLimit: { daily_cap_usd: "25.000000", monthly_cap_usd: "400.000000" } });
+  const { status } = await read(await putLimit("example-workspace", { monthlyCapUsd: 900 }, fake));
+  assert.equal(status, 200);
+  const [write] = fake.calls;
+  assert.equal(write.payload.monthly_cap_usd, 900);
+  assert.equal(write.payload.daily_cap_usd, 25, "the untouched daily cap survives the write");
+});
+
+test("PUT /api/ops/spend/limits/[brandKey] carries the env default into a first partial write", async () => {
+  const fake = fakeAdmin({ currentLimit: null });
+  const deps = { ...asDeps(fake), env: { SPEND_DEFAULT_DAILY_CAP_USD: "12.5" } };
+  const response = await LIMIT.PUT(
+    new Request("https://ops.test/api/ops/spend/limits/example-workspace", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ monthlyCapUsd: 900 }),
+    }),
+    { params: Promise.resolve({ brandKey: "example-workspace" }) },
+    deps
+  );
+  assert.equal(response.status, 200);
+  const [write] = fake.calls;
+  assert.equal(
+    write.payload.daily_cap_usd,
+    12.5,
+    "a NULL column means no cap, so the env default must be written, not dropped"
+  );
+  assert.equal(write.payload.monthly_cap_usd, 900);
+});
+
+test("PUT /api/ops/spend/limits/[brandKey] still refuses a body that names no cap", async () => {
+  const fake = fakeAdmin();
+  const { status, body } = await read(await putLimit("example-workspace", {}, fake));
+  assert.equal(status, 400);
+  assert.equal(body.code, "invalid_request");
+  assert.equal(fake.calls.length, 0);
+});
+
+test("PUT /api/ops/spend/limits/[brandKey] answers 503 spend_unavailable when the limit read fails", async () => {
+  const fake = fakeAdmin({ limitError: { message: "read timed out" } });
+  const { status, body } = await read(
+    await putLimit("example-workspace", { dailyCapUsd: 25 }, fake)
+  );
+  assert.equal(status, 503);
+  assert.equal(body.code, "spend_unavailable");
+  assert.equal(fake.calls.length, 0);
 });
 
 test("PUT /api/ops/spend/limits/[brandKey] rejects a negative or oversized cap", async () => {

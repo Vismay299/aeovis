@@ -97,13 +97,13 @@ export function createMemoryStore(seed: MemoryStoreSeed = {}): MemorySpendStore 
       if (row.occurredAt < since) continue;
       if (brandKey !== null && row.brandKey !== brandKey) continue;
       if (feature !== null && row.feature !== feature) continue;
-      total += row.accountedUsd;
+      total = usd6(total + row.accountedUsd);
     }
     for (const hold of holds.values()) {
       if (hold.status !== "held") continue;
       if (brandKey !== null && hold.brandKey !== brandKey) continue;
       if (feature !== null && hold.feature !== feature) continue;
-      total += hold.estimateUsd;
+      total = usd6(total + hold.estimateUsd);
     }
     return total;
   };
@@ -121,7 +121,10 @@ export function createMemoryStore(seed: MemoryStoreSeed = {}): MemorySpendStore 
       if (args.ttlSeconds < 60 || args.ttlSeconds > 86340) throw new Error("invalid hold ttl");
 
       const existing = [...holds.values()].find(
-        (hold) => hold.brandKey === args.brandKey && hold.idempotencyKey === args.idempotencyKey
+        (hold) =>
+          hold.brandKey === args.brandKey &&
+          hold.feature === args.feature &&
+          hold.idempotencyKey === args.idempotencyKey
       );
       if (existing) {
         if (existing.status === "held") {
@@ -199,7 +202,7 @@ export function createMemoryStore(seed: MemoryStoreSeed = {}): MemorySpendStore 
         for (const cost of costs) {
           if (cost.actualUsd !== null && cost.actualUsd < 0) throw new Error("negative cost");
           if (cost.actualUsd === null) unknown = true;
-          else sum += cost.actualUsd;
+          else sum = usd6(sum + cost.actualUsd);
         }
         if (unknown) {
           return {
@@ -219,7 +222,7 @@ export function createMemoryStore(seed: MemoryStoreSeed = {}): MemorySpendStore 
           reservation.actualUsd = actualUsd;
           reservation.accountedUsd = actualUsd;
           reservation.costSource = "provider_reported";
-          reservation.meta = { ...reservation.meta, lateSettle: true };
+          reservation.meta = { ...reservation.meta, late_settle: true };
         } else {
           ledger.push({
             brandKey: hold.brandKey,
@@ -227,14 +230,15 @@ export function createMemoryStore(seed: MemoryStoreSeed = {}): MemorySpendStore 
             holdId,
             sourceRef,
             provider: costs[0]?.provider ?? "unknown",
-            endpoint: costs[0]?.endpoint ?? "unknown",
-            units: costs[0]?.units ?? null,
+            endpoint: costs[0]?.endpoint ?? "late_settle",
+            // settle_spend's late path writes neither units nor the caller's meta.
+            units: null,
             estimateUsd: hold.estimateUsd,
             actualUsd,
             accountedUsd: actualUsd,
             costSource: "provider_reported",
             occurredAt: now(),
-            meta: { ...(costs[0]?.meta ?? {}), lateSettle: true },
+            meta: { expired: true, late_settle: true },
           });
         }
         hold.status = "settled";
@@ -275,7 +279,7 @@ export function createMemoryStore(seed: MemoryStoreSeed = {}): MemorySpendStore 
         const accountedUsd = cost.actualUsd === null ? share : cost.actualUsd;
         const costSource = cost.actualUsd === null ? "reservation" : cost.costSource;
         if (cost.actualUsd === null) unknown = true;
-        else actualUsd += cost.actualUsd;
+        else actualUsd = usd6(actualUsd + cost.actualUsd);
         if (ledger.some((row) => row.sourceRef === sourceRef)) return;
         ledger.push({
           brandKey: hold.brandKey,

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { featureEnvName, isFeatureEnabled } from "./flags.ts";
+import { featureEnvName, invalidateFeatureFlagCache, isFeatureEnabled } from "./flags.ts";
 import { FEATURES } from "./names.ts";
 import type { FeatureName } from "./names.ts";
 
@@ -158,4 +158,45 @@ test("isFeatureEnabled caches a result for 30 s per (name, brandKey)", async () 
   nowMs += 1_001;
   assert.equal(await isFeatureEnabled(SPEND_LINKED, "brand-cache", deps), true);
   assert.equal(admin.calls.selects, 3, "the entry expires after 30 s");
+});
+
+test("isFeatureEnabled does not memoize a false caused by a control-table read error", async () => {
+  let nowMs = 2_000_000;
+  const env = { NODE_ENV: "development" as const };
+  const errored = fakeAdmin(null, { error: true });
+  const deps = { env, admin: errored.client, now: () => nowMs };
+
+  assert.equal(await isFeatureEnabled(SPEND_LINKED, "brand-transient", deps), false);
+  assert.equal(await isFeatureEnabled(SPEND_LINKED, "brand-transient", deps), false);
+  assert.equal(errored.calls.selects, 2, "a read failure is an outage, not a cached answer");
+
+  // The controls come back, and the flag turns on inside what would have been the cache window.
+  const healthy = fakeAdmin([SELFTEST_ROW]);
+  assert.equal(
+    await isFeatureEnabled(SPEND_LINKED, "brand-transient", { env, admin: healthy.client, now: () => nowMs }),
+    true
+  );
+});
+
+test("invalidateFeatureFlagCache drops a cached answer so a just-enabled feature is seen", async () => {
+  let nowMs = 3_000_000;
+  const env = { NODE_ENV: "development" as const };
+  const disabled = fakeAdmin([{ ...SELFTEST_ROW, enabled: false }]);
+  assert.equal(
+    await isFeatureEnabled(SPEND_LINKED, "brand-invalidate", { env, admin: disabled.client, now: () => nowMs }),
+    false
+  );
+  assert.equal(
+    await isFeatureEnabled(SPEND_LINKED, "brand-invalidate", { env, admin: disabled.client, now: () => nowMs }),
+    false
+  );
+  assert.equal(disabled.calls.selects, 1, "a control-table false is cached");
+
+  invalidateFeatureFlagCache();
+  const enabled = fakeAdmin([SELFTEST_ROW]);
+  assert.equal(
+    await isFeatureEnabled(SPEND_LINKED, "brand-invalidate", { env, admin: enabled.client, now: () => nowMs }),
+    true,
+    "the operator's write is not held off for the rest of the 30 s window"
+  );
 });

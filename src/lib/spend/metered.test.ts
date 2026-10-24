@@ -6,6 +6,7 @@ import {
   ChargedCallError,
   UnbilledCallError,
   metered,
+  settleSpendBatch,
 } from "./index.ts";
 import { createMemoryStore } from "./memoryStore.ts";
 import type { MemoryControl, MemorySpendStore } from "./memoryStore.ts";
@@ -167,7 +168,7 @@ test("metered: ChargedCallError settles at its actualUsd and rethrows", async ()
   assert.equal(h.store.ledger[0].endpoint, "chat:qa");
 });
 
-test("metered: AmbiguousCallError settles an unknown cost at the estimate and logs the error name only", async () => {
+test("metered: AmbiguousCallError settles an unknown cost at the estimate and logs the ambiguous line", async () => {
   const h = harness();
   const failure = new AmbiguousCallError("socket closed after send");
   await assert.rejects(
@@ -180,7 +181,9 @@ test("metered: AmbiguousCallError settles an unknown cost at the estimate and lo
   assert.equal(hold.status, "settled");
   assert.equal(h.store.ledger[0].accountedUsd, 0.25);
   assert.equal(h.store.ledger[0].costSource, "reservation");
-  assert.deepEqual(h.logger.lines, [["[spend] unclassified call error", "AmbiguousCallError"]]);
+  assert.deepEqual(h.logger.lines, [
+    ["[spend] ambiguous call", { holdId: hold.id, feature: FEATURE }],
+  ]);
 });
 
 test("metered: any other thrown error is counted at the estimate and rethrown", async () => {
@@ -402,4 +405,71 @@ test("metered: a late settle logs the late settle line", async () => {
   const late = named(h, "[spend] late settle");
   assert.equal(late.length, 1);
   assert.deepEqual(late[0][1], { holdId: onlyHold(h.store).id, actualUsd: 2 });
+});
+
+test("metered: a release that closed nothing logs one release failure and keeps the value", async () => {
+  const h = harness();
+  const store: SpendStore = {
+    ...h.deps.store,
+    // What release_spend answers when the hold is no longer `held` — already swept by the
+    // expiry sweep, so the unbilled call is about to be charged at its estimate.
+    release: async () => false,
+  };
+  const value = await metered(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 1, idempotencyKey: "release-returns-false" },
+    async () => ({ value: "cached", actualUsd: 0, provider: "openrouter", endpoint: "chat:qa", billed: false }),
+    { ...h.deps, store }
+  );
+  assert.equal(value, "cached");
+  const failed = named(h, "[spend] release failed");
+  assert.equal(failed.length, 1, "a release that closed no hold is not a silent success");
+  assert.deepEqual(failed[0][1], { holdId: onlyHold(h.store).id, reason: "not_billed" });
+});
+
+test("metered: a retried settle on the same hold does not re-emit the over-max alert", async () => {
+  const h = harness();
+  const skipped = { settled: false, status: "settled", feature: FEATURE, estimateUsd: 0.5, maxUsd: 1, actualUsd: 1.5 };
+  let first = true;
+  const store: SpendStore = {
+    ...h.deps.store,
+    settle: async (holdId, costs) => {
+      h.calls.settle += 1;
+      if (first) {
+        first = false;
+        return h.store.settle(holdId, costs);
+      }
+      return skipped;
+    },
+  };
+  const deps = { ...h.deps, store };
+  const call = async () => ({
+    value: "ok",
+    actualUsd: 1.5,
+    provider: "openrouter",
+    endpoint: "chat:qa",
+    billed: true as const,
+  });
+  const input = {
+    brandKey: BRAND,
+    feature: FEATURE,
+    estimateUsd: 0.5,
+    maxUsd: 1,
+    idempotencyKey: "alert-once",
+  } satisfies Parameters<typeof metered>[0];
+  await metered(input, call, deps);
+  const holdId = onlyHold(h.store).id;
+  assert.equal(named(h, "[spend] over approved max").length, 1);
+
+  // The same hold settled again, as a retry after a lost response does.
+  await settleSpendBatch(
+    holdId,
+    [{ provider: "openrouter", endpoint: "chat:qa", actualUsd: 1.5, costSource: "provider_reported" }],
+    deps
+  );
+  assert.equal(named(h, "[spend] settle skipped").length, 1, "the skipped settle is still reported");
+  assert.equal(
+    named(h, "[spend] over approved max").length,
+    1,
+    "the alert the first settle already sent is not sent twice for the same hold"
+  );
 });

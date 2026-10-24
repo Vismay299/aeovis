@@ -5,7 +5,7 @@
 import { AppError } from "../http/appError.ts";
 import { getSupabaseAdmin } from "../supabase/admin.js";
 import { keepAlive as defaultKeepAlive } from "../keepAlive.js";
-import { ChargedCallError, SpendRefused, UnbilledCallError } from "./errors.ts";
+import { AmbiguousCallError, ChargedCallError, SpendRefused, UnbilledCallError } from "./errors.ts";
 import type { SpendRefusalReason } from "./errors.ts";
 import { usd6 } from "./money.ts";
 import { createSpendStore } from "./store.ts";
@@ -23,6 +23,20 @@ const MIN_TTL_SECONDS = 60;
 const MAX_TTL_SECONDS = 86_340;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 300;
 const SETTLE_RETRY_DELAY_MS = 250;
+const ALERT_MEMORY_LIMIT = 1_000;
+
+// A settle that comes back `settled: false` still carries the hold's amounts, which is the only
+// chance a retry after a lost response has to alert. The same retry would otherwise re-emit the
+// alert the first attempt already sent, so each hold alerts at most once per process.
+const alerted = new Set<string>();
+
+function alertOnce(kind: string, holdId: string): boolean {
+  const key = kind + ":" + holdId;
+  if (alerted.has(key)) return false;
+  if (alerted.size >= ALERT_MEMORY_LIMIT) alerted.clear();
+  alerted.add(key);
+  return true;
+}
 
 const REFUSAL_REASONS: readonly SpendRefusalReason[] = [
   "feature_disabled",
@@ -68,10 +82,23 @@ function capFromEnv(env: Record<string, string | undefined>, name: string): numb
   return usd6(value);
 }
 
-function validateReserve(i: { estimateUsd: number; ttlSeconds?: number; idempotencyKey: string }): void {
+function validateReserve(i: {
+  estimateUsd: number;
+  maxUsd?: number;
+  ttlSeconds?: number;
+  idempotencyKey: string;
+}): void {
   // A sub-micro estimate rounds to a zero-dollar hold, which would meter the call at nothing.
   if (!Number.isFinite(i.estimateUsd) || usd6(i.estimateUsd) <= 0 || i.estimateUsd > MAX_ESTIMATE_USD) {
     throw new AppError(400, "spend_invalid", "The spend estimate is out of range.");
+  }
+  // max_usd is numeric(12,6): an out-of-range ceiling would overflow in the INSERT and reach the
+  // caller as a 503 guard outage instead of the 400 its own input earned.
+  if (
+    i.maxUsd !== undefined &&
+    (!Number.isFinite(i.maxUsd) || usd6(i.maxUsd) <= 0 || i.maxUsd > MAX_ESTIMATE_USD)
+  ) {
+    throw new AppError(400, "spend_invalid", "The approved maximum is out of range.");
   }
   const ttlSeconds = i.ttlSeconds ?? DEFAULT_TTL_SECONDS;
   if (!Number.isInteger(ttlSeconds) || ttlSeconds < MIN_TTL_SECONDS || ttlSeconds > MAX_TTL_SECONDS) {
@@ -111,7 +138,7 @@ export async function reserveSpend(
       brandKey: i.brandKey,
       feature: i.feature,
       estimateUsd: usd6(i.estimateUsd),
-      maxUsd: i.maxUsd ?? null,
+      maxUsd: i.maxUsd === undefined ? null : usd6(i.maxUsd),
       idempotencyKey: i.idempotencyKey,
       jobId: i.jobId ?? null,
       subjectKind: i.subject?.kind ?? null,
@@ -202,8 +229,9 @@ export async function settleSpendBatch(
     logger.error("[spend] late settle", { holdId, actualUsd });
   }
   if (
-    result.undershoot === true ||
-    (actualUsd != null && estimateUsd != null && actualUsd > estimateUsd)
+    (result.undershoot === true ||
+      (actualUsd != null && estimateUsd != null && actualUsd > estimateUsd)) &&
+    alertOnce("undershoot", holdId)
   ) {
     logger.error("[spend] estimate undershoot", {
       feature: result.feature ?? "unknown",
@@ -213,14 +241,21 @@ export async function settleSpendBatch(
       actualUsd,
     });
   }
-  if (result.overMax === true || (actualUsd != null && maxUsd != null && actualUsd > maxUsd)) {
+  if (
+    (result.overMax === true || (actualUsd != null && maxUsd != null && actualUsd > maxUsd)) &&
+    alertOnce("over_max", holdId)
+  ) {
     logger.error("[spend] over approved max", { holdId, maxUsd, actualUsd });
   }
 }
 
-export async function releaseSpend(holdId: string, reason: string, deps?: SpendDeps): Promise<void> {
+/**
+ * Returns false when the hold was no longer `held` — already swept, settled or released. The
+ * caller's unbilled call is then charged at the estimate, so the outcome has to be visible.
+ */
+export async function releaseSpend(holdId: string, reason: string, deps?: SpendDeps): Promise<boolean> {
   const store = storeFor(deps);
-  await store.release(holdId, reason);
+  return await store.release(holdId, reason);
 }
 
 export async function metered<T>(
@@ -254,7 +289,8 @@ export async function metered<T>(
 
   const safeRelease = async (reason: string): Promise<void> => {
     try {
-      await releaseSpend(holdId, reason, deps);
+      const released = await releaseSpend(holdId, reason, deps);
+      if (!released) logger.error("[spend] release failed", { holdId, reason });
     } catch {
       // The release failure must not replace the caller's own outcome; the hold expires and is
       // counted at its estimate, so the outcome is only logged.
@@ -303,7 +339,12 @@ export async function metered<T>(
         );
         throw err;
       }
-      logger.error("[spend] unclassified call error", err instanceof Error ? err.name : typeof err);
+      if (err instanceof AmbiguousCallError) {
+        // Sent, outcome unknown: the cost stays null so the hold settles at its estimate.
+        logger.error("[spend] ambiguous call", { holdId, feature: i.feature });
+      } else {
+        logger.error("[spend] unclassified call error", err instanceof Error ? err.name : typeof err);
+      }
       await settleSpendBatch(
         holdId,
         [{ provider: "unknown", endpoint: "unknown", actualUsd: null, costSource: "provider_reported" }],

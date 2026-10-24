@@ -5,7 +5,10 @@ import { brandKeyParamSchema, spendLimitsPutSchema } from "../../../../../../lib
 
 export const dynamic = "force-dynamic";
 
-type OperatorDeps = { getSupabaseAdmin?: () => SupabaseClient | null };
+type OperatorDeps = {
+  getSupabaseAdmin?: () => SupabaseClient | null;
+  env?: Record<string, string | undefined>;
+};
 
 type LimitRow = {
   brand_key: string;
@@ -20,6 +23,18 @@ function toUsd(value: number | string | null): number | null {
   if (value === null || value === undefined) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * The ceiling a workspace has today when it has no limit row: no row at all means
+ * the env defaults apply, so writing one cap must carry the other default into the
+ * row rather than leave a NULL that silently means "no cap".
+ */
+function envCap(env: Record<string, string | undefined>, name: string): number | null {
+  const raw = env[name];
+  if (raw === undefined || raw === null || String(raw).trim() === "") return null;
+  const parsed = Number(String(raw).trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function limitJson(row: LimitRow) {
@@ -42,6 +57,9 @@ export async function PUT(
     const { brandKey: pathBrandKey } = await params;
     const brandKey = brandKeyParamSchema.parse(pathBrandKey);
     const body = spendLimitsPutSchema.parse(await readJsonBody(request));
+    if (body.dailyCapUsd === undefined && body.monthlyCapUsd === undefined) {
+      throw new AppError(400, "invalid_request", "Name at least one cap to set.");
+    }
     const admin = (deps.getSupabaseAdmin ?? getSupabaseAdmin)();
     if (!admin) throw new AppError(503, "storage_unavailable", "Workspace storage is unavailable.");
 
@@ -59,13 +77,38 @@ export async function PUT(
       throw new AppError(404, "workspace_not_found", "Workspace not found.");
     }
 
+    // An omitted cap keeps the ceiling the workspace has now: the one already on its
+    // limit row, or, with no row yet, the env default that was in force until this write.
+    const { data: current, error: currentError } = await admin
+      .from("workspace_spend_limits")
+      .select("daily_cap_usd, monthly_cap_usd")
+      .eq("brand_key", brandKey)
+      .maybeSingle();
+    if (currentError) {
+      throw new AppError(503, "spend_unavailable", SPEND_UNAVAILABLE);
+    }
+    const env = deps.env ?? process.env;
+    const existing = (current ?? null) as Pick<LimitRow, "daily_cap_usd" | "monthly_cap_usd"> | null;
+    const dailyCapUsd =
+      body.dailyCapUsd !== undefined
+        ? body.dailyCapUsd
+        : existing
+          ? toUsd(existing.daily_cap_usd)
+          : envCap(env, "SPEND_DEFAULT_DAILY_CAP_USD");
+    const monthlyCapUsd =
+      body.monthlyCapUsd !== undefined
+        ? body.monthlyCapUsd
+        : existing
+          ? toUsd(existing.monthly_cap_usd)
+          : envCap(env, "SPEND_DEFAULT_MONTHLY_CAP_USD");
+
     const { data, error } = await admin
       .from("workspace_spend_limits")
       .upsert(
         {
           brand_key: brandKey,
-          daily_cap_usd: body.dailyCapUsd,
-          monthly_cap_usd: body.monthlyCapUsd,
+          daily_cap_usd: dailyCapUsd,
+          monthly_cap_usd: monthlyCapUsd,
           updated_by: "operator",
           updated_at: new Date().toISOString(),
         },
