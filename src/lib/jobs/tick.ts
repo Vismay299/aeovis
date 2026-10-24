@@ -16,6 +16,13 @@ export const DEFAULT_CLAIM_LIMIT = 8;
 export const DEFAULT_CONCURRENCY = 4;
 const MAX_CLAIM_LIMIT = 50;
 const MAX_CONCURRENCY = 8;
+/**
+ * How far into the future a run_at still counts as "about to be due".
+ * `claim_due_jobs` takes only `run_at <= now()`, so a continuation fired for a
+ * job a few seconds out would claim nothing and the job would wait for the next
+ * cron minute. A targeted tick waits out a gap this small instead; the same
+ * window is the one runner.ts yieldUntil fires its per-job continue in.
+ */
 const CONTINUE_SOON_MS = 5_000;
 
 export type TickReport = {
@@ -34,6 +41,7 @@ export type TickReport = {
 export type TickDeps = {
   store?: JobStore;
   now?: () => number;
+  wait?: (ms: number) => Promise<void>;
   env?: Record<string, string | undefined>;
   selfContinue?: (jobId: string) => unknown;
   selfContinueTick?: () => unknown;
@@ -51,6 +59,10 @@ function readInt(
   const raw = Number(String(env[name] ?? "").trim());
   if (!Number.isInteger(raw) || raw < min) return fallback;
   return Math.min(raw, max);
+}
+
+function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(ms, 0)));
 }
 
 let perJobContinue: ((jobId: string) => unknown) | null = null;
@@ -72,6 +84,19 @@ function defaultSelfContinueTick(): unknown {
     Promise.resolve(fetch(url.toString(), { headers, redirect: "manual" })).catch(() => undefined),
     { label: "jobs-tick self-continue", maxMs: SELF_CONTINUE_HOLD_MS }
   );
+}
+
+/** Milliseconds until a job becomes claimable, or null when it is unknown or already due. */
+async function dueGap(store: JobStore, jobId: string, now: () => number): Promise<number | null> {
+  let row: Awaited<ReturnType<JobStore["getJob"]>>;
+  try {
+    row = await store.getJob(jobId);
+  } catch {
+    return null;
+  }
+  if (!row || (row.status !== "queued" && row.status !== "running")) return null;
+  const gap = Date.parse(row.run_at) - now();
+  return Number.isFinite(gap) && gap > 0 && gap <= CONTINUE_SOON_MS ? gap : null;
 }
 
 /**
@@ -109,12 +134,19 @@ export async function runTick(input: { jobId?: string; startedAt: number }, deps
   report.periodics = await runDuePeriodics(new Date(now()), { store, logger });
   for (const failure of report.periodics.errors) report.errors.push(`${failure.name}: ${failure.reason}`);
 
-  const claimed = await store.claimDue(
-    owner,
-    readInt(env, "JOBS_TICK_CLAIM_LIMIT", DEFAULT_CLAIM_LIMIT, MAX_CLAIM_LIMIT),
-    LEASE_SECONDS,
-    input.jobId ?? null
-  );
+  const limit = readInt(env, "JOBS_TICK_CLAIM_LIMIT", DEFAULT_CLAIM_LIMIT, MAX_CLAIM_LIMIT);
+  let claimed = await store.claimDue(owner, limit, LEASE_SECONDS, input.jobId ?? null);
+
+  // A continuation names the job it was fired for. If that job is a second or
+  // two short of due, wait the gap out and claim again rather than hand it back
+  // to the cron for a whole minute.
+  if (claimed.length === 0 && input.jobId !== undefined) {
+    const gap = await dueGap(store, input.jobId, now);
+    if (gap !== null && gap > 0 && now() + gap + CONTINUE_SOON_MS <= deadlineMs) {
+      await (deps.wait ?? waitMs)(gap);
+      claimed = await store.claimDue(owner, limit, LEASE_SECONDS, input.jobId);
+    }
+  }
   report.claimed = claimed.length;
 
   const count = (outcome: RunOutcome): void => {
@@ -155,16 +187,17 @@ export async function runTick(input: { jobId?: string; startedAt: number }, deps
   await Promise.all(Array.from({ length: concurrency }, worker));
 
   if (yielded.length > 0) {
-    const soon = now() + CONTINUE_SOON_MS;
     for (const jobId of yielded) {
-      let dueSoon = false;
+      let due = false;
       try {
         const row = await store.getJob(jobId);
-        dueSoon = Boolean(row && Date.parse(row.run_at) <= soon);
+        // Strictly due: a batch tick claims nothing for a future run_at, and a
+        // job a few seconds out already got its own targeted continuation.
+        due = Boolean(row && Date.parse(row.run_at) <= now());
       } catch {
-        dueSoon = false;
+        due = false;
       }
-      if (dueSoon) {
+      if (due) {
         (deps.selfContinueTick ?? defaultSelfContinueTick)();
         break;
       }
