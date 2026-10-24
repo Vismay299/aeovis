@@ -88,6 +88,8 @@ const SELF_GATED = [
   // a cron that can only ever present CRON_SECRET, so the pass would 401 every
   // night and the table would grow while the deployment looked healthy.
   /^\/api\/scan-runs\/retention\/?$/,
+  // F01 — cronAuth gate, pg_cron every minute.
+  /^\/api\/jobs\/tick\/?$/,
 ];
 
 /** Non-API paths the middleware never sees (see the matcher in middleware.js). */
