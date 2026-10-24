@@ -59,6 +59,25 @@ ALTER TABLE schema_migrations
  * the state 009 was found in.
  */
 const EXPECTED_OBJECTS = {
+  "040_f01_jobs.sql": [
+    { kind: "table", name: "jobs" },
+    { kind: "table", name: "job_steps" },
+    { kind: "table", name: "job_periodic" },
+    { kind: "function", name: "enqueue_job" },
+    { kind: "function", name: "claim_due_jobs" },
+    { kind: "function", name: "job_step_begin" },
+    { kind: "function", name: "job_step_complete" },
+    { kind: "function", name: "job_step_fail" },
+    { kind: "function", name: "job_sleep" },
+    { kind: "function", name: "job_yield" },
+    { kind: "function", name: "job_progress" },
+    { kind: "function", name: "job_finish" },
+    { kind: "function", name: "cancel_job" },
+    { kind: "function", name: "reconcile_stale_jobs" },
+    { kind: "function", name: "claim_due_periodic" },
+    { kind: "function", name: "prune_jobs" },
+    { kind: "index", name: "jobs_single_active_idx" },
+  ],
   "041_f01_spend.sql": [
     { kind: "table", name: "paid_feature_controls" },
     { kind: "table", name: "workspace_spend_limits" },
@@ -72,6 +91,7 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "prune_spend" },
     { kind: "function", name: "f01_committed_usd" },
   ],
+  "043_f01_jobs_cron.sql": [{ kind: "function", name: "jobs_tick_http" }],
   "035_scoped_provider_rollout.sql": [
     {kind:"function",name:"set_probe_rollout"},
     {kind:"column",name:"probe_dispatch_control.brand_allowlist"},

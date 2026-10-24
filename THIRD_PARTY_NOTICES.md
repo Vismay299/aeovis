@@ -32,5 +32,7 @@ SOFTWARE.
 
 - `src/lib/http/schemaContract.ts`
 - `src/lib/http/routeContract.test.ts`
+- `src/lib/jobs/stepConfigs.ts`
+- `src/lib/jobs/watchdog.ts`
 - `src/lib/spend/index.ts`
 - `supabase/migrations/041_f01_spend.sql`

@@ -88,6 +88,48 @@ async function createFeature(overrides = {}) {
   return feature;
 }
 
+// ---- F01 phase 3: jobs fixtures -------------------------------------------
+// The rows these helpers create are tracked so the cleanup below removes them
+// even when a group throws halfway: a failed group must not poison the next one.
+const jobIds = [];
+const periodics = [];
+
+/** `enqueue_job` with the §6.3.3 defaults; every argument is overridable. */
+async function enqueueJob(overrides = {}) {
+  const args = {
+    p_kind: "qa.job",
+    p_brand: null,
+    p_payload: {},
+    p_trigger: "manual",
+    p_dedupe: null,
+    p_single_active: null,
+    p_run_at: null,
+    p_created_by: null,
+    p_deadline_seconds: 86_400,
+    p_max_invocations: null,
+    ...overrides,
+  };
+  if (args.p_brand === null) args.p_trigger = overrides.p_trigger ?? "system";
+  const result = await rpc("enqueue_job", args);
+  if (result.job_id) jobIds.push(result.job_id);
+  return result;
+}
+
+/** `claim_due_jobs` is SETOF public.jobs, so it is read from the FROM clause. */
+async function claimDue(owner, limit, jobId = null, leaseSeconds = 300) {
+  const r = await q(
+    "select * from claim_due_jobs(p_owner=>$1, p_limit=>$2, p_lease_seconds=>$3, p_job_id=>$4)",
+    [owner, limit, leaseSeconds, jobId],
+  );
+  return r.rows;
+}
+
+const jobRow = async (jobId) => (await q("select * from jobs where id=$1", [jobId])).rows[0];
+const stepRow = async (jobId, name) =>
+  (await q("select * from job_steps where job_id=$1 and name=$2", [jobId, name])).rows[0];
+const periodicRow = async (name) => (await q("select * from job_periodic where name=$1", [name])).rows[0];
+
+
 function reserveArgs(brand, feature, estimateUsd, idempotencyKey, extra = {}) {
   return {
     p_brand: brand,
@@ -110,6 +152,11 @@ const reserve = (brand, feature, estimateUsd, key, extra) =>
 async function holdCount(brand) {
   return (await q("select count(*)::int n from spend_holds where brand_key=$1", [brand])).rows[0].n;
 }
+
+// 043 installs jobs_tick_http everywhere but reads its url and secret from Vault, so the
+// "not configured" branch is only reachable where a vault schema exists. CI's postgres:16
+// and local QA have neither pg_cron nor vault, so the group is skipped rather than faked.
+const hasVault = (await q("select count(*)::int n from pg_namespace where nspname='vault'")).rows[0].n > 0;
 
 const GROUPS = [
   {
@@ -595,6 +642,297 @@ const GROUPS = [
       );
     },
   },
+  {
+    name: "jobs-enqueue",
+    group: "jobs",
+    async run() {
+      const brand = await createBrand();
+      const dedupe = `qa-dedupe-${id()}`;
+
+      const first = await enqueueJob({ p_kind: "qa.enqueue", p_brand: brand, p_dedupe: dedupe });
+      assert.equal(first.deduped, false);
+      assert.ok(first.job_id, "a fresh dedupe key creates a job");
+      const second = await enqueueJob({ p_kind: "qa.enqueue", p_brand: brand, p_dedupe: dedupe });
+      assert.equal(second.deduped, true);
+      assert.equal(second.job_id, first.job_id, "the same dedupe key answers with the same job id");
+
+      // jobs_dedupe_idx is (kind, brand_key, dedupe_key) with NO status predicate, so the key
+      // keeps answering after the job finished — until prune_jobs removes it at 30 days. That
+      // is why §6.3.6 date-scopes its dedupe keys ("jobs.retention:" + YYYY-MM-DD).
+      await q("update jobs set status='completed', finished_at=now() where id=$1", [first.job_id]);
+      const afterFinish = await enqueueJob({ p_kind: "qa.enqueue", p_brand: brand, p_dedupe: dedupe });
+      assert.equal(afterFinish.deduped, true, "a permanent dedupe index still answers for a finished job");
+      assert.equal(afterFinish.job_id, first.job_id);
+      assert.equal(await q("select count(*)::int n from jobs where kind='qa.enqueue' and dedupe_key=$1", [dedupe]).then((r) => r.rows[0].n), 1);
+
+      // jobs_single_active_idx, by contrast, IS partial: it covers queued/running only.
+      const active = `qa-active-${id()}`;
+      const blocker = await enqueueJob({ p_kind: "qa.enqueue", p_brand: brand, p_single_active: active });
+      assert.ok(blocker.job_id);
+      const conflict = await enqueueJob({ p_kind: "qa.enqueue", p_brand: brand, p_single_active: active });
+      assert.equal(conflict.job_id, null);
+      assert.equal(conflict.deduped, false);
+      assert.equal(conflict.conflict_job_id, blocker.job_id, "the blocked enqueue names the job holding the key");
+
+      // The key is (kind, single_active_key): another kind is another key space.
+      const otherKind = await enqueueJob({ p_kind: "qa.enqueue_other", p_brand: brand, p_single_active: active });
+      assert.ok(otherKind.job_id, "single-active is scoped per kind");
+
+      await q("update jobs set status='completed', finished_at=now() where id=$1", [blocker.job_id]);
+      const released = await enqueueJob({ p_kind: "qa.enqueue", p_brand: brand, p_single_active: active });
+      assert.ok(released.job_id, "a finished blocker no longer holds the key");
+      await q("update jobs set status='completed', finished_at=now() where id=$1", [released.job_id]);
+      await q("update jobs set status='completed', finished_at=now() where id=$1", [otherKind.job_id]);
+    },
+  },
+  {
+    name: "jobs-leases",
+    group: "jobs",
+    async run() {
+      const brand = await createBrand();
+      const dueAt = new Date(Date.now() - 60_000).toISOString();
+      const created = [];
+      for (let n = 0; n < 6; n += 1) {
+        const job = await enqueueJob({ p_kind: "qa.leases", p_brand: brand, p_run_at: dueAt });
+        created.push(job.job_id);
+      }
+
+      const [firstTick, secondTick] = await Promise.all([claimDue("leases-a", 5), claimDue("leases-b", 5)]);
+      const a = firstTick.map((row) => row.id);
+      const b = secondTick.map((row) => row.id);
+      assert.ok(a.length <= 5 && b.length <= 5, "each claim respects its limit");
+      assert.equal(new Set([...a, ...b]).size, 6, `both ticks together claim all six, got ${a.length}+${b.length}`);
+      assert.equal(a.filter((claimed) => b.includes(claimed)).length, 0, "SKIP LOCKED keeps the two claims disjoint");
+      assert.deepEqual([...a, ...b].sort(), [...created].sort(), "every claim is one of the six due jobs");
+      const claimedRows = await q("select id, invocations, lease_owner, status from jobs where id = any($1::uuid[])", [created]);
+      for (const row of claimedRows.rows) {
+        assert.equal(row.invocations, 1, "a row is claimed exactly once");
+        assert.equal(row.status, "running");
+        assert.ok(["leases-a", "leases-b"].includes(row.lease_owner));
+      }
+
+      // G8: a fenced `job_step_complete` answers false — it is `job_step_begin`'s action that
+      // says lost_lease, and `job_step_fail`'s return value. Assert the SQL, not AC-20's prose.
+      const leased = claimedRows.rows[0];
+      const begin = await rpc("job_step_begin", {
+        p_job: leased.id,
+        p_owner: leased.lease_owner,
+        p_name: "step-1",
+        p_billed: false,
+        p_max_attempts: 1,
+        p_timeout_ms: 1000,
+      });
+      assert.equal(begin.action, "run");
+
+      await q("update jobs set lease_until = now() - interval '1 minute' where id=$1", [leased.id]);
+      const before = await jobRow(leased.id);
+      const completed = await rpc("job_step_complete", {
+        p_job: leased.id,
+        p_owner: leased.lease_owner,
+        p_name: "step-1",
+        p_output: { ok: true },
+        p_lease_seconds: 300,
+      });
+      assert.equal(completed, false, "a stale owner's step completion is refused");
+      const after = await jobRow(leased.id);
+      assert.equal(after.lease_until.getTime(), before.lease_until.getTime(), "a fenced write does not renew the lease");
+      assert.equal(after.lease_owner, leased.lease_owner, "a fenced write does not move ownership");
+      assert.equal(after.heartbeat_at.getTime(), before.heartbeat_at.getTime(), "a fenced write does not heartbeat");
+      const step = await stepRow(leased.id, "step-1");
+      assert.equal(step.status, "running", "the step row is untouched");
+      assert.equal(step.output, null);
+      assert.equal(step.finished_at, null);
+    },
+  },
+  {
+    name: "jobs-steps",
+    group: "jobs",
+    async run() {
+      const brand = await createBrand();
+      const dueAt = new Date(Date.now() - 60_000).toISOString();
+
+      // A billed step found `running` on replay: the invocation that started it died.
+      const paid = await enqueueJob({ p_kind: "qa.steps_paid", p_brand: brand, p_run_at: dueAt });
+      const [paidClaim] = await claimDue("steps-owner", 1, paid.job_id);
+      assert.ok(paidClaim);
+      const beginArgs = {
+        p_job: paid.job_id,
+        p_owner: "steps-owner",
+        p_name: "paid",
+        p_billed: true,
+        p_max_attempts: 1,
+        p_timeout_ms: 1000,
+      };
+      const started = await rpc("job_step_begin", beginArgs);
+      assert.deepEqual(started, { action: "run", attempt: 1 });
+      const replay = await rpc("job_step_begin", beginArgs);
+      assert.equal(replay.action, "failed");
+      assert.equal(replay.error_code, "billed_step_interrupted");
+      assert.match(replay.error_message, /never re-run/);
+      const paidStep = await stepRow(paid.job_id, "paid");
+      assert.equal(paidStep.status, "failed");
+      assert.equal(paidStep.attempts, 1, "the interrupted billed step is never re-run");
+      assert.equal(paidStep.output, null);
+      assert.ok(paidStep.finished_at);
+      assert.equal((await rpc("job_step_begin", beginArgs)).error_code, "billed_step_interrupted", "the failure is persisted");
+
+      // A sleep returns its wake time while the wake is ahead and NULL once it has passed.
+      const sleepy = await enqueueJob({ p_kind: "qa.steps_sleep", p_brand: brand, p_run_at: dueAt });
+      await claimDue("steps-sleeper", 1, sleepy.job_id);
+      const sleepArgs = { p_job: sleepy.job_id, p_owner: "steps-sleeper", p_name: "wait-1", p_seconds: 60 };
+      const wake = await rpc("job_sleep", sleepArgs);
+      assert.ok(wake instanceof Date, `job_sleep returns the wake time, got ${wake}`);
+      const secondsOut = (wake.getTime() - Date.now()) / 1000;
+      assert.ok(secondsOut > 55 && secondsOut <= 65, `the wake time is ~60 s out, got ${secondsOut.toFixed(1)}`);
+      const sleeping = await stepRow(sleepy.job_id, "wait-1");
+      assert.equal(sleeping.step_kind, "sleep");
+      assert.equal(sleeping.status, "sleeping");
+      assert.equal(sleeping.timeout_ms, 1);
+      assert.equal(sleeping.max_attempts, 1);
+      assert.equal((await rpc("job_sleep", sleepArgs)).getTime(), wake.getTime(), "the same wake time comes back early");
+
+      await q("update job_steps set wake_at = now() - interval '1 second' where job_id=$1 and name='wait-1'", [
+        sleepy.job_id,
+      ]);
+      assert.equal(await rpc("job_sleep", sleepArgs), null, "a wake that has passed returns NULL and continues");
+      const woke = await stepRow(sleepy.job_id, "wait-1");
+      assert.equal(woke.status, "completed");
+      assert.equal(woke.wake_at, null);
+      assert.ok(woke.finished_at);
+      assert.equal(await rpc("job_sleep", sleepArgs), null, "a completed sleep keeps answering NULL");
+    },
+  },
+  {
+    name: "jobs-watchdog",
+    group: "jobs",
+    async run() {
+      const brand = await createBrand();
+
+      const expired = await enqueueJob({ p_kind: "qa.watchdog_deadline", p_brand: brand });
+      await q("update jobs set deadline_at = now() - interval '1 minute' where id=$1", [expired.job_id]);
+
+      const runaway = await enqueueJob({ p_kind: "qa.watchdog_invocations", p_brand: brand, p_max_invocations: 1 });
+      await claimDue("watchdog-runaway", 1, runaway.job_id);
+      await q("update jobs set lease_until = now() - interval '1 minute' where id=$1", [runaway.job_id]);
+
+      // The bad row: stale by deadline but still leased. It must be left alone AND must not
+      // stop the two sweeps reaching the rows above it.
+      const leased = await enqueueJob({ p_kind: "qa.watchdog_leased", p_brand: brand });
+      await claimDue("watchdog-leased", 1, leased.job_id);
+      await q("update jobs set deadline_at = now() - interval '1 minute' where id=$1", [leased.job_id]);
+
+      const report = await rpc("reconcile_stale_jobs", { p_limit: 100 });
+      assert.ok(Number(report.deadline_exceeded) >= 1, `the deadline sweep reports a failure, got ${report.deadline_exceeded}`);
+      assert.ok(Number(report.invocation_limit) >= 1, `the invocation sweep reports a failure, got ${report.invocation_limit}`);
+
+      const expiredRow = await jobRow(expired.job_id);
+      assert.equal(expiredRow.status, "failed");
+      assert.equal(expiredRow.error_code, "deadline_exceeded");
+      assert.ok(expiredRow.finished_at);
+      assert.equal(expiredRow.lease_owner, null);
+
+      const runawayRow = await jobRow(runaway.job_id);
+      assert.equal(runawayRow.status, "failed");
+      assert.equal(runawayRow.error_code, "invocation_limit");
+      assert.ok(runawayRow.finished_at);
+
+      const leasedRow = await jobRow(leased.job_id);
+      assert.equal(leasedRow.status, "running", "a live lease protects a row past its deadline");
+      assert.equal(leasedRow.error_code, null);
+      assert.equal(leasedRow.lease_owner, "watchdog-leased");
+    },
+  },
+  {
+    name: "jobs-cancel",
+    group: "jobs",
+    async run() {
+      const brand = await createBrand();
+
+      const queued = await enqueueJob({ p_kind: "qa.cancel_queued", p_brand: brand });
+      assert.equal(await rpc("cancel_job", { p_job: queued.job_id }), "cancelled");
+      const queuedRow = await jobRow(queued.job_id);
+      assert.equal(queuedRow.status, "cancelled", "a queued job is cancelled at once");
+      assert.ok(queuedRow.cancel_requested_at);
+      assert.ok(queuedRow.finished_at);
+      assert.equal(queuedRow.error_code, "cancelled");
+      assert.equal(await rpc("cancel_job", { p_job: queued.job_id }), "cancelled", "a repeat returns the current status");
+
+      const running = await enqueueJob({ p_kind: "qa.cancel_running", p_brand: brand });
+      await claimDue("cancel-owner", 1, running.job_id);
+      assert.equal(await rpc("cancel_job", { p_job: running.job_id }), "cancel_requested");
+      const runningRow = await jobRow(running.job_id);
+      assert.equal(runningRow.status, "running", "a live lease leaves the status to the runner");
+      assert.ok(runningRow.cancel_requested_at, "the request is recorded");
+      const requestedAt = runningRow.cancel_requested_at.getTime();
+      assert.equal(await rpc("cancel_job", { p_job: running.job_id }), "cancel_requested");
+      assert.equal(
+        (await jobRow(running.job_id)).cancel_requested_at.getTime(),
+        requestedAt,
+        "a repeat keeps the first request's timestamp",
+      );
+
+      const terminal = await enqueueJob({ p_kind: "qa.cancel_terminal", p_brand: brand });
+      await q("update jobs set status='completed', finished_at=now() where id=$1", [terminal.job_id]);
+      assert.equal(await rpc("cancel_job", { p_job: terminal.job_id }), "completed");
+      assert.equal((await jobRow(terminal.job_id)).status, "completed", "cancelling never rewrites a terminal row");
+
+      assert.equal(await rpc("cancel_job", { p_job: id() }), "not_found", "an unknown id is a 404 upstairs");
+    },
+  },
+  {
+    name: "jobs-periodic",
+    group: "jobs",
+    async run() {
+      const name = `qa.periodic_${id().replace(/-/g, "")}`;
+      periodics.push(name);
+      const now = new Date();
+      const args = (at) => ({ p_name: name, p_interval_seconds: 3600, p_now: at.toISOString() });
+
+      const claims = await Promise.all([rpc("claim_due_periodic", args(now)), rpc("claim_due_periodic", args(now))]);
+      assert.equal(claims.filter((claimed) => claimed === true).length, 1, "exactly one of two concurrent claims wins");
+      assert.equal(claims.filter((claimed) => claimed === false).length, 1);
+
+      const row = await periodicRow(name);
+      assert.equal(row.next_run_at.getTime(), now.getTime() + 3_600_000, "the next slot is advanced by claim time");
+      assert.equal(row.last_started_at.getTime(), now.getTime(), "last_started_at is the claimed slot");
+      assert.equal(row.last_error, null);
+      assert.equal(await rpc("claim_due_periodic", args(now)), false, "the advanced slot is not claimable at the same instant");
+
+      // Five missed slots collapse into one catch-up run, then land on the next slot.
+      const later = new Date(now.getTime() + 5 * 3_600_000);
+      assert.equal(await rpc("claim_due_periodic", args(later)), true);
+      const collapsed = await periodicRow(name);
+      assert.equal(collapsed.next_run_at.getTime(), later.getTime() + 3_600_000);
+      assert.equal(collapsed.last_started_at.getTime(), later.getTime());
+    },
+  },
+  {
+    name: "jobs-cron",
+    group: "jobs",
+    skip: hasVault
+      ? null
+      : "this database has no vault schema, so the vault/NOTICE path cannot be reached (CI and local QA have neither pg_cron nor vault)",
+    async run() {
+      // With the vault present but its two secrets absent, 043's function must say so in a
+      // NOTICE and return NULL rather than raise from inside pg_cron.
+      const client = await pool.connect();
+      const notices = [];
+      const onNotice = (notice) => notices.push(notice.message);
+      client.on("notice", onNotice);
+      let result;
+      try {
+        result = (await client.query("select public.jobs_tick_http() result")).rows[0].result;
+      } finally {
+        client.off("notice", onNotice);
+        client.release();
+      }
+      assert.equal(result, null, "no url/secret in vault means no request is fired");
+      assert.ok(
+        notices.some((message) => message.includes("jobs tick not configured")),
+        `expected 043's NOTICE, got ${JSON.stringify(notices)}`,
+      );
+    },
+  },
 ];
 
 const selected = only ? GROUPS.filter((group) => group.group === only) : GROUPS;
@@ -602,6 +940,8 @@ if (only && selected.length === 0) {
   console.error(`no database groups for --only ${only}`);
   process.exit(2);
 }
+
+const skipped = [];
 
 try {
   if (actor) {
@@ -612,8 +952,21 @@ try {
       `qa-outsider-${outsider}@example.test`,
     ]);
   }
-  for (const group of selected) await test(group.name, group.run);
+  // A run that died before its own finally leaves qa.* jobs behind. jobs-leases has to know
+  // that every due row belongs to its six, so leftovers are cleared up front.
+  await q("delete from jobs where kind like 'qa.%'");
+  await q("delete from job_periodic where name like 'qa.%'");
+  for (const group of selected) {
+    if (group.skip) {
+      skipped.push(group.name);
+      console.log("SKIP " + group.name + " — " + group.skip);
+      continue;
+    }
+    await test(group.name, group.run);
+  }
 } finally {
+  if (jobIds.length) await q("delete from jobs where id = any($1::uuid[])", [jobIds]);
+  if (periodics.length) await q("delete from job_periodic where name = any($1)", [periodics]);
   if (brands.length) {
     await q("update customer_brand_memberships set role='member' where brand_key = any($1)", [brands]);
     await q("delete from customer_brands where brand_key = any($1)", [brands]);
@@ -623,4 +976,7 @@ try {
   await pool.end();
 }
 
-console.log(`\n${passed.length} groups passed on a loopback QA database.`);
+console.log(
+  `\n${passed.length} groups passed on a loopback QA database.` +
+    (skipped.length ? ` ${skipped.length} skipped: ${skipped.join(", ")}.` : ""),
+);

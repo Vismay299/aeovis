@@ -342,6 +342,34 @@ closed with `503 spend_unavailable`, so a missing 041 pauses paid work instead
 of spending uncapped.
 
 
+`040_f01_jobs` is implemented and verified on disposable PostgreSQL — the
+`jobs-enqueue`, `jobs-leases`, `jobs-steps`, `jobs-watchdog`, `jobs-cancel`
+and `jobs-periodic` groups of `scripts/qa/check-f01-db.mjs` run
+against a loopback database, and `tests/customer-uat.sql` reads `jobs` as two
+different customer users while a system job stays invisible. It is **NOT
+applied to production**, and no row of it exists there. It adds `jobs`,
+`job_steps` and `job_periodic` plus `enqueue_job`, `claim_due_jobs`,
+`job_step_begin`, `job_step_complete`, `job_step_fail`, `job_sleep`,
+`job_yield`, `job_progress`, `job_finish`, `cancel_job`,
+`reconcile_stale_jobs`, `claim_due_periodic` and `prune_jobs`. Nothing runs
+until `043_f01_jobs_cron` and `/api/jobs/tick` are enabled; the tables are
+inert without callers.
+
+`043_f01_jobs_cron` is implemented; the CI database job applies it on a
+database without `pg_cron`/`pg_net`, and the `jobs-cron` group of
+`scripts/qa/check-f01-db.mjs` exercises its NOTICE/NULL path only where a
+`vault` schema exists — the group skips otherwise. The installed schedule is
+an owner-run check after applying on Supabase (`select * from cron.job` must
+show exactly one `perceev-jobs-tick` row), recorded in the PR body; no local
+or CI run installs it. It adds `jobs_tick_http()` and, only where `pg_cron`
+and `pg_net` are installed, one `perceev-jobs-tick` schedule running every
+minute. It reads the API URL and the cron secret from the Supabase Vault
+secrets `perceev_jobs_tick_url` and `perceev_cron_secret`; the file contains
+neither, and with either secret missing the function raises a NOTICE and does
+nothing. **NOT applied to production** — the owner creates both Vault secrets
+(names only; never paste a value into chat, a ticket or a terminal) before the
+schedule can fire.
+
 `027_durable_probe_dispatch` is implemented and tested on disposable PostgreSQL;
 production application is **not verified**. It adds the P0 service-only dispatch
 ledger, claims, budgets, circuits, canaries and reconciliation. Apply before
