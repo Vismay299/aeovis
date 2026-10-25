@@ -171,6 +171,8 @@ export const NEVER_WRITABLE = Object.freeze([
   "gsc_oauth_attempts",
   "gsc_oauth_credentials",
   "gsc_sync_jobs",
+  // F26 — per-user analytics consent. Written only via service role after requireUser.
+  "user_privacy_choices",
 ]);
 
 /**

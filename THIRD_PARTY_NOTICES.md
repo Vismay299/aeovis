@@ -38,4 +38,5 @@ SOFTWARE.
 - `src/lib/spend/index.ts`
 - `src/lib/cache/providerCache.ts`
 - `src/lib/llm/openrouter.ts`
+- `src/lib/telemetry/server.ts` (and `server.test.ts` message-stripping cases)
 - `supabase/migrations/041_f01_spend.sql`
