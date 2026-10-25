@@ -2,5 +2,49 @@
   "ai-crawler-fix": {
     "version": "1.0.0",
     "sha256": "141818c3be0a5fe05cb0908fe54733c433354aa738050a73118f35bb7f215b23"
+  },
+  "ai-prompt-research": {
+    "version": "1.0.0",
+    "sha256": "7bfc6cc7d723f8b9249f12b2e513355c9764ee50351e17994dc39ac9e27cd9b3"
+  },
+  "ai-visibility-audit": {
+    "version": "1.0.0",
+    "sha256": "7d4ceab5d605ecdcdcf201b868b0654ef9fe3d79edd0cdfe1357ed707933b497"
+  },
+  "competitive-landscape": {
+    "version": "1.0.0",
+    "sha256": "7a39d95dfecf0c7dcffa07a47f5835ad339cf35ced709308afc2218c1938b34c"
+  },
+  "competitor-analysis": {
+    "version": "1.0.0",
+    "sha256": "14dce5bdcf8d06a509a43d8cbe94fe35b39cdae3c05bc6ebb7f9e4eedf992c6b"
+  },
+  "keyword-clustering": {
+    "version": "1.0.0",
+    "sha256": "907771aa69dee72448be4f085a182046f8a18111dec4749f8b8dc5c2a0359f2c"
+  },
+  "keyword-research": {
+    "version": "1.0.0",
+    "sha256": "58212123f42dfe33479b18f37a0f5244a964c50609ab203a56aeca9eb7eaba5c"
+  },
+  "link-prospecting": {
+    "version": "1.0.0",
+    "sha256": "5ae516a524add0ab80ee2e2b2e336d8bacbed4060064a3ab88cfbc081a41eb19"
+  },
+  "local-seo": {
+    "version": "1.0.0",
+    "sha256": "e85995fce2a50eed5a5a2cf0fe4b899bd5688d89616d2358ddb90c98346259c3"
+  },
+  "seo-audit": {
+    "version": "1.0.0",
+    "sha256": "34c63bdaf7becbc25dd18ebed92ba0ed58ceeefaed16111fbedf277fd4c60988"
+  },
+  "seo-coach": {
+    "version": "1.0.0",
+    "sha256": "c127584b05bdf921f71874a91061f414b1e6d7b226abf30e11a333f7d0c77e68"
+  },
+  "seo-project-setup": {
+    "version": "1.0.0",
+    "sha256": "213ab9d03e8ea00b3f9ca1da0187dc6cde759310b4ac5475ac3f34be91ed520d"
   }
 }
