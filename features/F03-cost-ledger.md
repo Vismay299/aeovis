@@ -8,7 +8,7 @@
 | ID | F03 |
 | Wave | 0 |
 | Comparison rows covered | "Cost per answer" (OpenSEO: $0.0012 queued / $0.004 live for ChatGPT, Gemini, AI Overviews; Claude $0.18; Perplexity $0.04. Perceev: about $0.06 per answer on the Offcult run); the "Billing" row's *metering* half only (no payments, by owner decision) |
-| Depends on | F01 (merged). F02 is listed in `README.md`, but F03 does not import F02 code: F02 binds its client to F03's price tables. Phase 4 (UI) also needs F04 (UI primitives, app shell) and F05 (`QueryClient` provider) merged. |
+| Depends on | F01 (merged). F02 is listed in `README.md`, but F03 does not import F02 code: F02 binds its client to F03's price tables. Phase 4 (UI) also needs F04 (UI primitives, app shell, and **its phase 4 `src/lib/features/clientFeatures.ts`**, which does not exist before then) and F05 (`QueryClient` provider) merged. |
 | Blocks | F08, F09, F11, F13, F15, F22 (they read per-feature spend and use F03's price tables) |
 | Reserved migrations | 050–054 (050 ledger extensions, 051 usage read functions; 052–054 unused) |
 | Feature flag | `FEATURE_USAGE_PAGE` (customer Usage page and its route). The operator view and the background sync have no flag. |
@@ -47,9 +47,9 @@ Every answer Perceev collects and every paid provider call it makes gets a ledge
 | ID | Statement | Verified by |
 |---|---|---|
 | F03-AC-01 | `src/lib/pricing/dataforseo.ts` reproduces OpenSEO's estimates exactly for every case in `openseo:src/server/lib/dataforseo/pricing.test.ts` (raw USD, to 10 decimal places). | unit `src/lib/pricing/dataforseo.test.ts` |
-| F03-AC-02 | `aiAnswerUsd(engine, mode)` returns 0.0012 queued and 0.004 live for chatgpt, gemini and google_ai_overview, and the model-API price with web search for claude (0.18) and perplexity (0.04) in both modes. | unit `src/shared/ai-visibility-pricing.test.ts` |
+| F03-AC-02 | `aiAnswerUsd(engine, mode)` returns 0.0012 queued and 0.004 live for chatgpt, gemini and google_ai_overview, and the model-API price with web search for perplexity (0.04) in both modes. It also keeps the ported `claude` slug at 0.18 for **pricing-table parity only** — Claude is not a Perceev engine (owner decision, 25 October 2026) and has no label or picker entry. | unit `src/shared/ai-visibility-pricing.test.ts` |
 | F03-AC-03 | `src/lib/pricing/perceev.ts` reads Bright Data, SerpAPI and OpenRouter prices **from `src/lib/llmPricing.js`** (no second copy). A changed `SERP_QUERY_PRICES` env value changes the result. | unit `src/lib/pricing/perceev.test.ts` |
-| F03-AC-04 | Every finished probe attempt of a workspace scan becomes exactly one `spend_ledger` row (`source_ref = probe_attempt:<observation>:<attempt>`, feature `ai_visibility.scan`). A measured gateway cost is `provider_reported`; a measured table cost is `price_table`; an unknown cost is `reservation` at `reserved_usd`; `confirmed_not_dispatched` is `none` at 0. Re-running the sync creates no duplicates and updates rows whose cost state changed. | DB `scripts/qa/check-f03-db.mjs` group `sync` |
+| F03-AC-04 | Every finished probe attempt of a workspace scan becomes exactly one `spend_ledger` row (`source_ref = probe_attempt:<observation>:<attempt>`, feature `ai_visibility.scan`). A measured gateway cost is `provider_reported`; a measured table cost is `price_table`; an unknown or `reconciliation_conflict` cost is `reservation` at `reserved_usd`; `confirmed_not_dispatched` is `none` at 0. Re-running the sync creates no duplicates and updates rows whose cost state changed. | DB `scripts/qa/check-f03-db.mjs` group `sync` |
 | F03-AC-05 | Attempts of canaries and of scan jobs with no `brand_key` are never written to `spend_ledger`. | DB group `sync` |
 | F03-AC-06 | A scan's open accounting hold (`subject_kind = 'scan_job'`) is settled only after the scan job is terminal. Its ledger rows are written at that moment with `hold_id` set, the hold's `actual_usd` equals their sum (or `NULL` if any is unknown), and committed spend never counts the same scan twice (hold estimate **or** attempt rows, never both). | DB group `scan-hold` |
 | F03-AC-07 | An expired scan hold is replaced by its attempt rows when the scan finishes. The `hold:<id>` reservation row is removed in the same transaction. | DB group `scan-hold` |
@@ -64,6 +64,7 @@ Every answer Perceev collects and every paid provider call it makes gets a ledge
 | F03-AC-16 | `costs.sync` runs every 5 minutes as an F01 periodic job, settles at most 50 finished scan holds and syncs at most 1,000 attempts per run, and is idempotent. | unit `src/lib/costs/jobs.test.ts`; DB group `sync` |
 | F03-AC-17 | `paid_feature_controls('ai_visibility.scan')` is seeded `enabled = true, mode = 'all'` so existing scans are not refused. P0 controls (dispatch pause, brand allowlist) remain the gate on collection. | DB group `seed` |
 | F03-AC-18 | Engine typical-cost statistics (`engine_cost_stats(30)`) return the median and p90 of measured `charged_usd` per engine across all scans, only for engines with at least 20 measured attempts. Fewer → no row, so no invented typical cost. | DB group `stats` |
+| F03-AC-19 | The two cost paths agree: for a terminal scan job whose attempts have been synced, `getScanCost(admin, jobId, brandKey).totalAccountedUsd` equals the sum of `accounted_usd` over that job's `probe_attempt:%` ledger rows, and each `byEngine[].knownUsd` equals the same-engine ledger sum. A divergence fails the test rather than showing two numbers for one scan. | unit `src/lib/costs/scanCost.test.ts` (fixture shared with the SQL mapping); DB group `sync` |
 
 ## 5. Scope
 
@@ -73,7 +74,7 @@ Every answer Perceev collects and every paid provider call it makes gets a ledge
 - Per-scan and per-answer cost in the scan report (API + card).
 - Customer Usage page `/portal/usage` (spend by day, by feature, recent activity, against caps). No payments, plans, credits, invoices or top-ups.
 - Operator view `/ops/costs`, including UI for F01's paid-feature controls and workspace limits.
-- Job kinds `costs.sync`, `costs.retention`.
+- Job kinds `costs.sync`; reconciliation retention rides on F01's existing `spend.retention` job.
 
 **Out of scope**
 - Collecting answers or changing reservations (`claim_probe_dispatch` untouched; F02 and F09).
@@ -184,40 +185,45 @@ ON CONFLICT (feature) DO NOTHING;
 -- One ledger row per finished probe attempt. Pure mapping; P0 tables are only read.
 CREATE OR REPLACE FUNCTION public.f03_upsert_attempt_rows(p_job uuid, p_hold uuid, p_limit integer)
 RETURNS integer LANGUAGE plpgsql SET search_path = public AS $$
-DECLARE r record; v integer := 0; v_src text; v_actual numeric; v_accounted numeric; v_feature text;
+DECLARE r record; v integer := 0; v_src text; v_actual numeric; v_accounted numeric;
 BEGIN
   FOR r IN
     SELECT a.observation_id, a.attempt_no, a.reserved_usd, a.charged_usd, a.cost_state, a.dispatch_state,
            a.result->>'cost_source' AS reported_source, a.started_at, a.finished_at,
            coalesce(a.result->'provenance'->>'gateway', 'unknown') AS gateway,
-           o.engine, o.purpose, o.job_id, j.brand_key, j.status AS job_status
+           o.engine, o.job_id, j.brand_key, j.status AS job_status
       FROM probe_attempts a
       JOIN probe_observations o ON o.id = a.observation_id
       JOIN scan_jobs j ON j.id = o.job_id
      WHERE j.brand_key IS NOT NULL
-       AND o.purpose IN ('scan','explore')
+       -- Scan rows only: `probe_observations.purpose` is CHECK (scan, canary) until F11 adds
+       -- 'explore', and F11-AC-01 requires explore rows to carry no job_id, so this inner join
+       -- can never match one. F11 writes its own explore ledger rows.
+       AND o.purpose = 'scan'
        AND (p_job IS NULL OR o.job_id = p_job)
        AND (a.dispatch_state IN ('recorded','unknown','historical')
             OR (a.dispatch_state = 'intent' AND j.status IN ('complete','failed','cancelled')))
+       -- `expired` counts: F01's expiry turns the hold estimate into a `hold:<id>` reservation
+       -- row, so until settlement runs the periodic sync must not add attempt rows beside it.
        AND (p_job IS NOT NULL OR NOT EXISTS (
             SELECT 1 FROM spend_holds h WHERE h.subject_kind = 'scan_job'
-               AND h.subject_id = o.job_id::text AND h.status = 'held'))
+               AND h.subject_id = o.job_id::text AND h.status IN ('held','expired')))
        AND NOT EXISTS (
             SELECT 1 FROM spend_ledger l
              WHERE l.source_ref = 'probe_attempt:' || a.observation_id || ':' || a.attempt_no
                AND l.cost_source = CASE
                      WHEN a.cost_state = 'confirmed_not_dispatched' THEN 'none'
-                     WHEN a.charged_usd IS NULL THEN 'reservation'
+                     WHEN a.cost_state = 'reconciliation_conflict' OR a.charged_usd IS NULL THEN 'reservation'
                      WHEN a.result->>'cost_source' = 'gateway' THEN 'provider_reported'
                      ELSE 'price_table' END
                AND l.hold_id IS NOT DISTINCT FROM coalesce(p_hold, l.hold_id))
      ORDER BY a.started_at
      LIMIT p_limit
   LOOP
-    v_feature := CASE r.purpose WHEN 'scan' THEN 'ai_visibility.scan' ELSE 'ai_visibility.explore' END;
     IF r.cost_state = 'confirmed_not_dispatched' THEN
       v_src := 'none'; v_actual := 0; v_accounted := 0;
-    ELSIF r.charged_usd IS NULL THEN
+    ELSIF r.cost_state = 'reconciliation_conflict' OR r.charged_usd IS NULL THEN
+      -- Disputed or unreported: never trust a number here, count the reservation and queue it.
       v_src := 'reservation'; v_actual := NULL; v_accounted := r.reserved_usd;
     ELSE
       v_src := CASE WHEN r.reported_source = 'gateway' THEN 'provider_reported' ELSE 'price_table' END;
@@ -226,7 +232,7 @@ BEGIN
     INSERT INTO spend_ledger(brand_key, feature, hold_id, job_id, source_ref, provider, endpoint, units,
                              estimate_usd, actual_usd, accounted_usd, cost_source, occurred_at, meta,
                              subject_kind, subject_id, answer_ref)
-    VALUES (r.brand_key, v_feature, p_hold, NULL,
+    VALUES (r.brand_key, 'ai_visibility.scan', p_hold, NULL,
             'probe_attempt:' || r.observation_id || ':' || r.attempt_no,
             r.gateway, 'probe:' || r.engine, 1, r.reserved_usd, v_actual, v_accounted, v_src,
             coalesce(r.finished_at, r.started_at),
@@ -252,7 +258,7 @@ $$;
 -- Settle a scan's accounting hold (created by F09) once the scan is terminal.
 CREATE OR REPLACE FUNCTION public.settle_scan_hold(p_job uuid)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
-DECLARE h spend_holds; v_status text; v_sum numeric; v_unknown boolean; v_rows integer;
+DECLARE h spend_holds; v_status text; v_sum numeric; v_unknown boolean; v_rows integer; r record;
 BEGIN
   SELECT * INTO h FROM spend_holds
    WHERE subject_kind = 'scan_job' AND subject_id = p_job::text AND status IN ('held','expired')
@@ -260,6 +266,14 @@ BEGIN
   IF NOT FOUND THEN RETURN jsonb_build_object('settled', false, 'reason', 'no_hold'); END IF;
   SELECT status INTO v_status FROM scan_jobs WHERE id = p_job;
   IF NOT FOUND THEN
+    -- An expired hold already wrote its `hold:<id>` reservation row, and release_spend only
+    -- touches `held`. Close it at zero here or it is re-selected forever and starves the budget.
+    IF h.status = 'expired' THEN
+      DELETE FROM spend_ledger WHERE source_ref = 'hold:' || h.id AND cost_source = 'reservation';
+      UPDATE spend_holds SET status = 'settled', actual_usd = 0, release_reason = 'scan_missing',
+             closed_at = now() WHERE id = h.id;
+      RETURN jsonb_build_object('settled', true, 'reason', 'scan_missing', 'rows', 0, 'actual_usd', 0);
+    END IF;
     PERFORM release_spend(h.id, 'scan_missing');
     RETURN jsonb_build_object('settled', false, 'reason', 'scan_missing');
   END IF;
@@ -277,6 +291,17 @@ BEGIN
   UPDATE spend_holds SET status = 'settled',
          actual_usd = CASE WHEN coalesce(v_unknown, false) THEN NULL ELSE v_sum END,
          closed_at = now() WHERE id = h.id;
+  -- F09 creates one hold per scan. If a second slipped through, close it at zero too: attempt
+  -- rows are the source of truth, and an open sibling would stay in f01_committed_usd forever.
+  FOR r IN SELECT id, status FROM spend_holds
+            WHERE subject_kind = 'scan_job' AND subject_id = p_job::text
+              AND status IN ('held','expired') AND id <> h.id LOOP
+    IF r.status = 'expired' THEN
+      DELETE FROM spend_ledger WHERE source_ref = 'hold:' || r.id AND cost_source = 'reservation';
+    END IF;
+    UPDATE spend_holds SET status = 'settled', actual_usd = 0, release_reason = 'duplicate_scan_hold',
+           closed_at = now() WHERE id = r.id;
+  END LOOP;
   RETURN jsonb_build_object('settled', true, 'rows', v_rows, 'actual_usd', v_sum,
                             'unknown', coalesce(v_unknown, false));
 END $$;
@@ -285,16 +310,19 @@ CREATE OR REPLACE FUNCTION public.settle_finished_scan_holds(p_limit integer DEF
 RETURNS integer LANGUAGE plpgsql SET search_path = public AS $$
 DECLARE r record; v integer := 0;
 BEGIN
+  -- One row per job, so a second hold on one scan cannot hide behind a settled sibling.
   FOR r IN
-    SELECT h.subject_id::uuid AS job_id FROM spend_holds h
+    SELECT h.subject_id::uuid AS job_id
+      FROM spend_holds h
       LEFT JOIN scan_jobs j ON j.id = h.subject_id::uuid
      WHERE h.subject_kind = 'scan_job' AND h.status IN ('held','expired')
        AND (j.id IS NULL OR j.status IN ('complete','failed','cancelled'))
-       AND NOT EXISTS (SELECT 1 FROM spend_holds s2 WHERE s2.subject_kind = 'scan_job'
-                         AND s2.subject_id = h.subject_id AND s2.status = 'settled')
-     ORDER BY h.created_at LIMIT p_limit
+     GROUP BY h.subject_id
+     ORDER BY min(h.created_at)
+     LIMIT p_limit
   LOOP
-    PERFORM settle_scan_hold(r.job_id); v := v + 1;
+    -- Count holders settled, not attempt rows written: `costs.sync` reports this number.
+    IF (public.settle_scan_hold(r.job_id)->>'settled')::boolean THEN v := v + 1; END IF;
   END LOOP;
   RETURN v;
 END $$;
@@ -320,6 +348,24 @@ BEGIN
   UPDATE cost_reconciliations SET resolution = p_resolution, resolved_at = now(), resolved_by = left(p_by, 60),
          note = left(p_note, 500) WHERE id = p_id;
   RETURN jsonb_build_object('resolved', true);
+END $$;
+
+-- Drain the queue in one call: one `unknown_cost` row per reservation row is not resolvable
+-- row by row before F09 adds scan holds at volume. Idempotent; a bad id fails the whole call
+-- (the route reports it) rather than being skipped silently.
+CREATE OR REPLACE FUNCTION public.resolve_cost_reconciliations_bulk(
+  p_ids uuid[], p_resolution text, p_note text, p_by text)
+RETURNS integer LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE v_id uuid; v integer := 0;
+BEGIN
+  IF p_ids IS NULL OR coalesce(array_length(p_ids, 1), 0) NOT BETWEEN 1 AND 500 THEN
+    RAISE EXCEPTION 'between 1 and 500 reconciliation ids are required'; END IF;
+  FOREACH v_id IN ARRAY p_ids LOOP
+    IF (public.resolve_cost_reconciliation(v_id, p_resolution, p_note, p_by)->>'resolved')::boolean THEN
+      v := v + 1;
+    END IF;
+  END LOOP;
+  RETURN v;
 END $$;
 
 -- Typical engine cost from measured attempts (no tenant detail is exposed: per-engine aggregates).
@@ -348,18 +394,20 @@ END $$;
 REVOKE ALL ON FUNCTION public.f03_ledger_fill(), public.f03_ledger_reconcile(),
   public.f03_upsert_attempt_rows(uuid,uuid,integer), public.sync_probe_attempt_costs(integer),
   public.settle_scan_hold(uuid), public.settle_finished_scan_holds(integer),
-  public.resolve_cost_reconciliation(uuid,text,text,text), public.engine_cost_stats(integer),
+  public.resolve_cost_reconciliation(uuid,text,text,text),
+  public.resolve_cost_reconciliations_bulk(uuid[],text,text,text), public.engine_cost_stats(integer),
   public.prune_cost_reconciliations(timestamptz,integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.f03_upsert_attempt_rows(uuid,uuid,integer),
   public.sync_probe_attempt_costs(integer), public.settle_scan_hold(uuid),
   public.settle_finished_scan_holds(integer), public.resolve_cost_reconciliation(uuid,text,text,text),
-  public.engine_cost_stats(integer), public.prune_cost_reconciliations(timestamptz,integer) TO service_role;
+  public.resolve_cost_reconciliations_bulk(uuid[],text,text,text), public.engine_cost_stats(integer),
+  public.prune_cost_reconciliations(timestamptz,integer) TO service_role;
 NOTIFY pgrst, 'reload schema';
 ```
 
-**Explore attempts.** `f03_upsert_attempt_rows` inner-joins `scan_jobs`, and Prompt Explorer (F11) observations have no scan job, so the `'explore'` branch of the feature mapping never fires for them. That is intended: F11 writes its own `spend_ledger` rows (feature `ai_visibility.explore`) using the same `source_ref` form `probe_attempt:<observation>:<attempt>`, so the unique `source_ref` keeps any later sync from double-counting. The `'explore'` branch stays for explore observations that do carry a job.
+**Scan rows only.** `probe_observations.purpose` is `CHECK (purpose IN ('scan','canary'))` until F11's migration adds `'explore'`, and F11-AC-01 requires every explore observation to carry `job_id IS NULL`. This function inner-joins `scan_jobs`, so an explore row could never match; the old `'explore'` branch was unreachable and is gone. F11 writes its own `spend_ledger` rows (feature `ai_visibility.explore`) with the same `source_ref` form, so the unique `source_ref` keeps any later sync from double-counting. F03 defines no `ai_visibility.explore` label either; F11 adds its label line in the PR that adds the feature.
 
-Why the double-counting rule holds: while a scan's hold is `held`, its estimate counts in `f01_committed_usd` and **no** attempt rows exist for that job, because the periodic sync skips jobs with a held scan hold. Settlement writes the attempt rows and closes the hold in one transaction. A scan with no hold (scheduled scans before F10, operator scans) is synced as attempts finish.
+Why the double-counting rule holds: while a scan's hold is `held` **or `expired`**, its estimate counts in `f01_committed_usd` (F01's expiry writes a `hold:<id>` reservation row at the estimate) and **no** attempt rows exist for that job, because the periodic sync skips jobs with either status. Settlement writes the attempt rows and deletes an expired hold's reservation row in one transaction. A scan with no hold (scheduled scans before F10, operator scans) is synced as attempts finish.
 
 #### `supabase/migrations/051_f03_usage.sql`
 
@@ -443,6 +491,7 @@ Migrations 052–054 are reserved and unused.
   {kind:"table",name:"cost_reconciliations"},{kind:"function",name:"sync_probe_attempt_costs"},
   {kind:"function",name:"settle_scan_hold"},{kind:"function",name:"settle_finished_scan_holds"},
   {kind:"function",name:"resolve_cost_reconciliation"},{kind:"function",name:"engine_cost_stats"},
+  {kind:"function",name:"resolve_cost_reconciliations_bulk"},
   {kind:"function",name:"f03_upsert_attempt_rows"},{kind:"function",name:"prune_cost_reconciliations"},
 ],
 "051_f03_usage.sql": [
@@ -458,9 +507,9 @@ Migrations 052–054 are reserved and unused.
 | File | Exports |
 |---|---|
 | `src/lib/pricing/version.ts` | `export const PRICE_TABLE_VERSION = "2026-10-21.1";` Bump the date-sequence on any price change. Every estimate writes it to `meta.price_version`. |
-| `src/lib/pricing/dataforseo.ts` (PORT of `pricing.ts:63-326` and `rank-tracking.ts:16-25, 69-91`) | Constants verbatim (`LABS_TASK_USD = 0.012`, `LABS_ROW_USD = 0.00012`, `GOOGLE_ADS_LIVE_TASK_USD = 0.09`, `BACKLINKS_TASK_USD = 0.024`, `BACKLINKS_ROW_USD = 0.000036`, `BUSINESS_LISTINGS_TASK_USD = 0.012`, `BUSINESS_LISTINGS_ROW_USD = 0.00036`, `MY_BUSINESS_INFO_LIVE_USD = 0.0054`, `QUESTIONS_ANSWERS_PER_20_USD = 0.0054`, `REVIEWS_PRIORITY_TASK_USD = 0.001`, `REVIEWS_PRIORITY_PER_10_USD = 0.0015`, `EXTENDED_REVIEWS_PRIORITY_PER_20_USD = 0.01`, `UPDATES_PRIORITY_TASK_USD = 0.003`, `UPDATES_PRIORITY_PER_10_USD = 0.0015`, `LIGHTHOUSE_LIVE_USD = 0.005`, `LLM_MENTIONS_TASK_USD = 0.1`, `LLM_MENTIONS_ROW_USD = 0.001`, `LOCAL_SERP_PAGE_USD = 0.002`, `LOCAL_SERP_TASK_USD = 0.0012`, SERP live 0.002/0.0015 and queued 0.0006/0.00045 per first/extra page, operator multiplier 5). `export function llmResponseUsd(slug: "chat_gpt"\|"claude"\|"gemini"\|"perplexity", webSearch: boolean): number`. `export const dataforseoPricing = { business: {...}, backlinks: {...}, keywords: {...}, domain: {...}, serp: {...}, labs: {...}, lighthouse: {...}, aiSearch: {...} }`. The structure matches theirs, but each estimator takes a **local input type** (for example `{ limit: number; includeClickstreamData?: boolean }`) instead of being bound to a fetcher; F02 binds them. Input shapes other specs rely on (frozen; change only with the consuming spec): F13 `labs.*({ limit, includeClickstreamData })`, `keywords.*({ keywords, includeClickstreamData })`, `googleAds.*({ dateFrom, dateTo })`, and `({})` for flat-priced calls; F17 `business.*({ limit } | { depth } | { includeOtherSources })`, `serp.localTaskPost({ locationCoordinates })`, `labs.keywordOverview({ keywords })`. `export function clampSerpDepth(d: number): number` (1–700, as theirs), `export const SERP_ANALYSIS_DEPTH = 20`, `export const BACKLINKS_DEFAULT_LIMIT = 100`, `export function resolveLlmMentionsLimit(l?: number): number` (default 100, max 1000). |
-| `src/shared/ai-visibility-pricing.ts` (PORT of `ai-visibility.ts:8-40` and `aiVisibilityCost.ts:25-32`) | `export type AiEngine = "chatgpt"\|"gemini"\|"google_ai_overview"\|"claude"\|"perplexity"`; `AI_RECORD_COST_USD = 0.0012`; `AI_LIVE_RECORD_COST_USD = 0.004`; `aiEngineUsesModelApi(e)`; `aiAnswerUsd(e, mode: "live"\|"queued")`; `AI_ENGINE_LABELS`. Imports `llmResponseUsd` from a copy of the four-row table (shared code cannot import `src/lib/`). The table lives here, and `src/lib/pricing/dataforseo.ts` re-exports it, so there is a single source. |
-| `src/lib/pricing/perceev.ts` | Adapters over `../llmPricing.js`: `serpQueryUsd(provider: "brightdata"\|"serpapi", queries = 1, env)` → `resolveSerpQueryCost`; `modelCallUsd(model, inTok, outTok, env)` → `lookupModelPrice` rates or `null`; `toolFeeUsd(model, tool, calls, env)` → `lookupToolFee` or `null`. `export const PERCEEV_ENGINE_PROVIDERS = { aio: "brightdata", chatgpt: "openrouter", gemini: "openrouter", perplexity: "openrouter" } as const` (from `src/lib/engines/*` defaults; an unknown engine maps to `"unknown"`). (Claude is not an engine for now, owner decision 25 Oct 2026; `llmResponseUsd` keeps the ported `claude` row verbatim, unused.) `export function engineProvider(engine: string, route?: "native" | "dataforseo"): string` returns `"dataforseo"` when the attempt was routed through DataForSEO (F02 records `result.provenance.gateway = "dataforseo"`), otherwise `PERCEEV_ENGINE_PROVIDERS[engine] ?? "unknown"`; the sync and the ops "engine stats" use it instead of reading the constant directly. DataForSEO-routed attempts write `result.cost_source = "gateway"` with the task's reported `cost`, so the sync maps them to `provider_reported` like OpenRouter rows. `aioMaxQueriesPerAttempt = 2` (rendered attempt plus same-deadline standard fallback, `docs/audits/2026-10-16/HANDOFF-2026-10-20-demo-and-consolidation.md:29`). No new numbers are introduced. |
+| `src/lib/pricing/dataforseo.ts` (PORT of `pricing.ts:63-326` and `rank-tracking.ts:16-25, 69-91`) | Constants verbatim (`LABS_TASK_USD = 0.012`, `LABS_ROW_USD = 0.00012`, `GOOGLE_ADS_LIVE_TASK_USD = 0.09`, `BACKLINKS_TASK_USD = 0.024`, `BACKLINKS_ROW_USD = 0.000036`, `BUSINESS_LISTINGS_TASK_USD = 0.012`, `BUSINESS_LISTINGS_ROW_USD = 0.00036`, `MY_BUSINESS_INFO_LIVE_USD = 0.0054`, `QUESTIONS_ANSWERS_PER_20_USD = 0.0054`, `REVIEWS_PRIORITY_TASK_USD = 0.001`, `REVIEWS_PRIORITY_PER_10_USD = 0.0015`, `EXTENDED_REVIEWS_PRIORITY_PER_20_USD = 0.01`, `UPDATES_PRIORITY_TASK_USD = 0.003`, `UPDATES_PRIORITY_PER_10_USD = 0.0015`, `LIGHTHOUSE_LIVE_USD = 0.005`, `LLM_MENTIONS_TASK_USD = 0.1`, `LLM_MENTIONS_ROW_USD = 0.001`, `LOCAL_SERP_PAGE_USD = 0.002`, `LOCAL_SERP_TASK_USD = 0.0012`, SERP live 0.002/0.0015 and queued 0.0006/0.00045 per first/extra page, operator multiplier 5). `export function llmResponseUsd(slug: "chat_gpt"\|"claude"\|"gemini"\|"perplexity", webSearch: boolean): number`. `export const dataforseoPricing = { business: {...}, backlinks: {...}, keywords: {...}, domain: {...}, serp: {...}, labs: {...}, lighthouse: {...}, aiSearch: {...} }`. The structure matches theirs, but each estimator takes a **local input type** (for example `{ limit: number; includeClickstreamData?: boolean }`) instead of being bound to a fetcher; F02 binds them. Input shapes other specs rely on (frozen; change only with the consuming spec): F13 `labs.*({ limit, includeClickstreamData })`, `keywords.*({ limit, includeClickstreamData })`, `keywords.adsIdeas|adsSearchVolume({ dateFrom?, dateTo? })` (flat 0.09), and `({})` for flat-priced calls; F17 `business.*({ limit } | { depth } | { includeOtherSources })`, `serp.localTaskPost({ locationCoordinates })`, `labs.keywordOverview({ keywords })`. `export function clampSerpDepth(d: number): number` (10–100, as theirs), `export const SERP_ANALYSIS_DEPTH = 20`, `export const BACKLINKS_DEFAULT_LIMIT = 100`, `export function resolveLlmMentionsLimit(l?: number): number` (default 100, max 1000). |
+| `src/shared/ai-visibility-pricing.ts` (PORT of `ai-visibility.ts:8-40` and `aiVisibilityCost.ts:25-32`) | `export type AiEngine = "chatgpt"\|"gemini"\|"google_ai_overview"\|"claude"\|"perplexity"` — `claude` stays in **this union only** because the ported price table and `llmResponseUsd` know that slug; it is not a Perceev engine (owner decision, 25 Oct 2026) and no caller may use it. `export type PerceevEngine = Exclude<AiEngine, "claude">`; `AI_RECORD_COST_USD = 0.0012`; `AI_LIVE_RECORD_COST_USD = 0.004`; `aiEngineUsesModelApi(e)`; `aiAnswerUsd(e, mode: "live"\|"queued")`; `AI_ENGINE_LABELS: Record<PerceevEngine, string>` — **four entries, no `claude` label**. The four-row LLM response table lives in this file (shared code cannot import `src/lib/`), and `src/lib/pricing/dataforseo.ts` re-exports its `llmResponseUsd`, so there is exactly one copy. |
+| `src/lib/pricing/perceev.ts` | Adapters over `../llmPricing.js`: `serpQueryUsd(provider: "brightdata"\|"serpapi", queries = 1, env)` → `resolveSerpQueryCost`; `modelCallUsd(model, inTok, outTok, env)` → `lookupModelPrice` rates or `null`; `toolFeeUsd(model, tool, calls, env)` → `resolveToolFee({ model, tool, provider: "openrouter", calls, env }).cost` (per-call table × `calls`; throws `UnpricedModelError` rather than returning a silent 0). `export const PERCEEV_ENGINE_PROVIDERS = { aio: "brightdata", chatgpt: "openrouter", gemini: "openrouter", perplexity: "openrouter" } as const` (from `src/lib/engines/*` defaults; an unknown engine maps to `"unknown"`). (Claude is not an engine for now, owner decision 25 Oct 2026; `llmResponseUsd` keeps the ported `claude` row verbatim, unused.) `export function engineProvider(engine: string, route?: "native" | "dataforseo"): string` returns `"dataforseo"` when the attempt was routed through DataForSEO (F02 records `result.provenance.gateway = "dataforseo"`), otherwise `PERCEEV_ENGINE_PROVIDERS[engine] ?? "unknown"`; the sync and the ops "engine stats" use it instead of reading the constant directly. DataForSEO-routed attempts write `result.cost_source = "gateway"` with the task's reported `cost`, so the sync maps them to `provider_reported` like OpenRouter rows. `aioMaxQueriesPerAttempt = 2` (rendered attempt plus same-deadline standard fallback, `docs/audits/2026-10-16/HANDOFF-2026-10-20-demo-and-consolidation.md:29`). No new numbers are introduced. |
 | `src/lib/pricing/index.ts` | Re-exports the above plus `export function costAccuracy(estimateUsd: number, actualUsd: number \| null): "unknown"\|"within"\|"undershoot"` (`actual > estimate` is an undershoot, exact micro-dollar comparison via `toMicros`). |
 
 **Costs services** (`src/lib/costs/`):
@@ -482,7 +531,7 @@ export async function getScanCost(admin: SupabaseClient, jobId: string | null, b
 export async function getAnswerCosts(admin: SupabaseClient, jobId: string, brandKey: string): Promise<Map<string, AnswerCost>>;
 ```
 
-`getScanCost` reads committed attempt costs straight from `probe_attempts` joined to `probe_observations` for `job_id` (service role; brand checked against `scan_jobs.brand_key` first, else `AppError(404,"scan_not_found")`). The live report must not wait for the 5-minute sync. Mapping per attempt is the same as SQL `f03_upsert_attempt_rows`: `charged_usd` known → known; `cost_state = confirmed_not_dispatched` → 0 and not counted as an attempt; otherwise unknown (reserved). `state = "final"` when the job is terminal, `"running"` otherwise, and `"unavailable"` when `jobId` is null (legacy scan) or the job has no observations. Per-answer `usd` = `knownUsd` when `unknownAttempts = 0`, else `null`. `perAnswerUsd` = `knownUsd / answers` only when there are no unknown attempts and `answers > 0`; otherwise `null`. `answers` = observations in state `answered` or `valid_no_aio`. `heldUsd` = the open scan hold's estimate (`spend_holds` subject), else `null`.
+`getScanCost` reads committed attempt costs straight from `probe_attempts` joined to `probe_observations` for `job_id` (service role; brand checked against `scan_jobs.brand_key` first, else `AppError(404,"scan_not_found")`). The live report must not wait for the 5-minute sync. Mapping per attempt is the same as SQL `f03_upsert_attempt_rows`: `charged_usd` known → known; `cost_state = confirmed_not_dispatched` → 0 and not counted as an attempt; `cost_state = reconciliation_conflict` → unknown (reserved) **even if a value is present**, so a disputed cost is never shown as measured; otherwise unknown (reserved). F03-AC-19 pins the two paths together: once a terminal job is synced, `totalAccountedUsd` equals the sum of that job's `probe_attempt:%` ledger rows and each `byEngine[].knownUsd` equals the same-engine ledger sum. `state = "final"` when the job is terminal, `"running"` otherwise, and `"unavailable"` when `jobId` is null (legacy scan) or the job has no observations. Per-answer `usd` = `knownUsd` when `unknownAttempts = 0`, else `null`. `perAnswerUsd` = `knownUsd / answers` only when there are no unknown attempts and `answers > 0`; otherwise `null`. `answers` = observations in state `answered` or `valid_no_aio`. `heldUsd` = the open scan hold's estimate (`spend_holds` subject), else `null`.
 
 ```ts
 // src/lib/costs/usage.ts
@@ -506,7 +555,6 @@ export type WorkspaceUsage = { range: "7d"|"30d"|"90d"; timeZone: string; from: 
 // src/shared/spend-features.ts (PATTERN of billing-credit-features.ts:12-79)
 export const SPEND_FEATURE_LABELS: Record<string, string> = {
   "ai_visibility.scan": "AI visibility scans",
-  "ai_visibility.explore": "Prompt Explorer",
   "platform.selftest": "Platform check",
 };
 export function spendFeatureLabel(feature: string): string; // unknown → "Other"
@@ -522,34 +570,46 @@ export async function getOperatorCosts(admin, opts: { from: Date; to: Date }): P
 //   reconciliations: [{ id, brandKey, feature, provider, endpoint, kind, estimateUsd, actualUsd, priceVersion, detectedAt, isProbe }] (open, ≤ 200),
 //   engineStats: rows of engine_cost_stats(30), priceVersion: PRICE_TABLE_VERSION }
 export async function resolveReconciliation(admin, id: string, resolution: "accepted"|"price_updated"|"not_billed", note: string): Promise<void>;
-// maps SQL exceptions: 'probe attempts are reconciled…' → AppError(409,"use_probe_reconciliation"); 'only unknown…' → AppError(409,"not_unknown_cost"); note rule → AppError(400,"note_required")
+export async function resolveReconciliationsBulk(admin, ids: string[], resolution: "accepted"|"price_updated"|"not_billed", note: string): Promise<number>;
+// maps SQL exceptions: 'probe attempts are reconciled…' → AppError(409,"use_probe_reconciliation"); 'only unknown…' → AppError(409,"not_unknown_cost"); note rule → AppError(400,"note_required"); id count rule → AppError(400,"invalid_ids")
 ```
 
+An `unknown_cost` row is opened for **every** reservation row, so the queue drains in batches: `resolveReconciliationsBulk` calls `resolve_cost_reconciliations_bulk` and returns how many rows it resolved. The operator view selects all rows on the page (max 200).
+
 ```ts
-// src/lib/costs/jobs.ts — registered from src/lib/jobs/kinds.ts
-definePeriodic({ name: "costs.sync", everySeconds: 300,
-  run: (now) => enqueueSystemJob("costs.sync", {}, { dedupeKey: "costs.sync:" + slot5m(now) }) });
-defineJob("costs.sync", async (ctx) => {
-  const settled = await ctx.step.do("settle-scan-holds", STEP.DB_STEP, () => rpc("settle_finished_scan_holds", { p_limit: 50 }));
-  const synced = await ctx.step.do("sync-attempts", STEP.DB_STEP, () => rpc("sync_probe_attempt_costs", { p_limit: 1000 }));
-  return { result: { settled, synced } };
-}, { deadlineSeconds: 900 });
-definePeriodic({ name: "costs.retention", everySeconds: 86400,
-  run: (now) => enqueueSystemJob("costs.retention", {}, { dedupeKey: "costs.retention:" + isoDate(now) }) });
-defineJob("costs.retention", async (ctx) => {
-  await ctx.step.do("prune", STEP.DB_STEP, () => rpc("prune_cost_reconciliations", { p_before: monthsAgo(13), p_limit: 5000 }));
-  return {};
-});
+// src/lib/costs/jobs.ts — imported by src/lib/jobs/kinds.ts
+// Registered the way F01's maintenance module is: guarded, and with the active store passed to
+// enqueueSystemJob, so a test that re-registers cannot hit duplicate_periodic and cannot be
+// handed the production store. P2.T2.S1 exports `activeStore`/`periodicDefined` from
+// src/lib/jobs/maintenance.ts for this reuse instead of copying them.
+if (!periodicDefined("costs.sync")) {
+  definePeriodic({
+    name: "costs.sync",
+    everySeconds: 300,
+    run: async (now) => {
+      await enqueueSystemJob("costs.sync", {}, { dedupeKey: "costs.sync:" + slot5m(now) }, { store: activeStore() });
+    },
+  });
+}
+if (jobDefined("costs.sync")) { /* already registered */ } else {
+  defineJob("costs.sync", async (ctx) => {
+    // `settled` counts hold rows closed, not attempt rows written.
+    const settled = await ctx.step.do("settle-scan-holds", STEP.DB_STEP, () => rpc("settle_finished_scan_holds", { p_limit: 50 }));
+    const synced = await ctx.step.do("sync-attempts", STEP.DB_STEP, () => rpc("sync_probe_attempt_costs", { p_limit: 1000 }));
+    return { result: { settled, synced } };
+  }, { deadlineSeconds: 900 });
+}
 ```
+
+`costs.sync` is the only new kind. Reconciliation retention is not a new job: `prune_cost_reconciliations(13 months, 5,000)` becomes a `prune-reconciliations` step inside F01's existing `spend.retention` job (`src/lib/jobs/maintenance.ts`), beside `pruneSpend` (P2.T2.S1).
 
 ### 6.3 Jobs
 
 | Kind | Trigger | Steps | Retries / billed | Completion |
 |---|---|---|---|---|
-| `costs.sync` | periodic every 300 s (system) | `settle-scan-holds` → `sync-attempts` | DB_STEP (3 retries), not billed | `completed` with `{settled, synced}`; any step exhausting retries → `failed`; the next slot runs anyway |
-| `costs.retention` | periodic daily (system) | `prune` | DB_STEP | `completed` |
+| `costs.sync` | periodic every 300 s (system) | `settle-scan-holds` → `sync-attempts` | DB_STEP (3 retries), not billed | `completed` with `{settled, synced}` where `settled` = scan holds closed; any step exhausting retries → `failed`; the next slot runs anyway |
 
-Ledger retention (13 months) is F01's `spend.retention`. Resolved reconciliations keep 13 months.
+Ledger and resolved-reconciliation retention (13 months each) is F01's `spend.retention` job.
 
 ### 6.4 Provider calls and cost
 
@@ -623,6 +683,7 @@ The response keeps every existing field. `scan.cost: ScanCost` is added, and eac
 
 - `GET /api/ops/costs?from=<iso>&to=<iso>`: defaults to the last 30 days; `to − from` at most 400 days → otherwise 400 `invalid_range`. Response `OperatorCosts` (§6.2). Contract `src/lib/costs/ops.contract.ts`.
 - `POST /api/ops/costs/reconciliations/[id]` body `z.strictObject({ resolution: z.enum(["accepted","price_updated","not_billed"]), note: z.string().min(10).max(500) })` → 200 `{ "resolved": true }`; 404 `reconciliation_not_found`; 409 `use_probe_reconciliation` with recovery "Reconcile this attempt from Measurement operations with reconcile_probe_dispatch."; 409 `not_unknown_cost`; 400 `note_required`.
+- `POST /api/ops/costs/reconciliations/bulk` body `z.strictObject({ ids: z.array(z.uuid()).min(1).max(500), resolution: z.enum(["accepted","price_updated","not_billed"]), note: z.string().min(10).max(500) })` → 200 `{ "resolved": n }` (the number actually resolved; already-resolved ids are ignored). 400 `invalid_ids` for an empty/oversized list; the per-row 409s above apply and fail the whole call.
 - The view also calls F01's `GET/PUT /api/ops/spend/controls…` and `/api/ops/spend/limits…`.
 
 ### 6.6 UI
@@ -668,7 +729,7 @@ All new UI is built from F04 primitives: `src/components/ui/{card,button,badge,s
   3. "Estimate accuracy" table by provider × endpoint (calls, estimated, actual, unknown, undershoots, worst ratio; rows with undershoots > 0 highlighted with Badge "Price may be stale").
   4. "Typical answer cost" (engine, samples, median, p90; "Not enough samples (needs 20)" when absent).
   5. "Open holds" (oldest first; holds older than their `expiresAt` flagged "Expiring").
-  6. "Reconciliation queue" with a Resolve dialog: radio Accepted / Price updated / Not billed, note textarea (min 10 chars), submit "Resolve". For probe rows "Not billed" is disabled with the hint "Use Measurement operations for answer attempts".
+  6. "Reconciliation queue" with a Resolve dialog: radio Accepted / Price updated / Not billed, note textarea (min 10 chars), submit "Resolve". For probe rows "Not billed" is disabled with the hint "Use Measurement operations for answer attempts". A page-level checkbox selects the visible rows (max 200) and "Resolve selected" calls the bulk route; the toast reads "Resolved {n}".
   7. "Paid features": the F01 controls table; each row has an "Edit" dialog with Enabled switch, Mode (All workspaces / Allowlist), Allowlist (comma-separated brand keys), Daily cap, Max per call, Note, and a confirmation field "Type {feature} to confirm".
   8. "Workspace limits": search by brand key, then daily and monthly cap inputs ("Leave empty for no limit") and Save.
 - **Copy for success toasts (sonner):** "Saved", "Resolved". Errors show the API's `error` string.
@@ -708,12 +769,12 @@ All new UI is built from F04 primitives: `src/components/ui/{card,button,badge,s
 **Goal:** one tested home for every provider price, with OpenSEO parity.
 
 - [x] **P1.T1 Ported tables**
-  - [x] **P1.T1.S1** *Files:* `src/lib/pricing/version.ts`, `src/lib/pricing/dataforseo.ts` (licence header), `src/shared/ai-visibility-pricing.ts` (licence header), `src/shared/money.ts` (licence header). *Do:* §6.2 tables, constants copied from the cited lines. *Verify:* `node --test src/lib/pricing/dataforseo.test.ts src/shared/ai-visibility-pricing.test.ts` → pass.
+  - [x] **P1.T1.S1** *Files:* `src/lib/pricing/version.ts`, `src/lib/pricing/dataforseo.ts` (licence header), `src/shared/ai-visibility-pricing.ts` (licence header), `src/shared/money.ts` (licence header). *Do:* §6.2 tables, constants copied from the cited lines. `AI_ENGINE_LABELS` has four entries and no `claude` label; `claude` stays only in the `AiEngine` union for price-table parity. *Verify:* `node --test src/lib/pricing/dataforseo.test.ts src/shared/ai-visibility-pricing.test.ts` → pass.
   - [x] **P1.T1.S2** *Files:* `src/lib/pricing/dataforseo.test.ts`. *Do:* port the six `it.each` cases of `pricing.test.ts:8-64` (raw USD with `assert.ok(Math.abs(a-b) < 1e-10)`) and the reviews "holds at least the billed cost" cases; add SERP page rounding (`depth 25` bills 3 pages) and the operator multiplier. *Verify:* pass (F03-AC-01).
   - [x] **P1.T1.S3** *Files:* `src/shared/ai-visibility-pricing.test.ts`. *Do:* port `aiVisibilityCost.test.ts:10-41` non-credit cases; per-engine `aiAnswerUsd`; `scheduledChecksPerMonth`. *Verify:* pass (F03-AC-02).
 - [x] **P1.T2 Perceev adapters**
-  - [x] **P1.T2.S1** *Files:* `src/lib/pricing/perceev.ts`, `src/lib/pricing/index.ts`, `src/lib/pricing/perceev.test.ts`. *Do:* §6.2; tests: `serpQueryUsd("brightdata")` equals `BUILT_IN_SERP_QUERY_PRICES.brightdata`; with env `SERP_QUERY_PRICES={"brightdata":0.002}` → 0.002; unknown model → `null`; `costAccuracy` table. *Verify:* `node --test src/lib/pricing/perceev.test.ts` → pass (F03-AC-03).
-  - [x] **P1.T2.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* append the four ported paths. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
+  - [x] **P1.T2.S1** *Files:* `src/lib/pricing/perceev.ts`, `src/lib/pricing/index.ts`, `src/lib/pricing/perceev.test.ts`. *Do:* §6.2; tests: `serpQueryUsd("brightdata")` equals `BUILT_IN_SERP_QUERY_PRICES.brightdata`; with env `SERP_QUERY_PRICES={"brightdata":0.002}` → 0.002; unknown model → `null`; unknown tool → throws `UnpricedModelError` (via `resolveToolFee`); `costAccuracy` table. *Verify:* `node --test src/lib/pricing/perceev.test.ts` → pass (F03-AC-03).
+  - [x] **P1.T2.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* append the five ported paths (the guard test requires every headed file, including the two ported tests). *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
 
 **Checkpoint:** `npm test`, `npm run typecheck` pass. ACs 01–03.
 
@@ -723,13 +784,13 @@ All new UI is built from F04 primitives: `src/components/ui/{card,button,badge,s
 
 - [ ] **P2.T1 Migration 050**
   - [ ] **P2.T1.S1** *Files:* `supabase/migrations/050_f03_cost_ledger.sql`, `scripts/setup-supabase.mjs`. *Do:* §6.1. *Verify:* bootstrap + all migrations applied twice on loopback `perceev_qa` → exit 0.
-  - [ ] **P2.T1.S2** *Files:* `scripts/qa/check-f03-db.mjs` (loopback guard as `check-repair-workflows.mjs:13-18`). *Do:* groups `seed` (scan control enabled/all), `sync` (load `tests/fixtures/f03/probe-attempts.json` into `scan_jobs`/`probe_observations`/`probe_attempts` for a QA brand plus one canary and one brandless job; run `sync_probe_attempt_costs` twice; assert row count, each `cost_source`, idempotency, update after flipping one attempt to `confirmed_not_dispatched`), `scan-hold` (create hold via `reserve_spend(..., p_subject_kind => 'scan_job')`, job running → `scan_running` and zero attempt rows; set job `complete` → settled with sum; `f01_committed_usd` before/after equal to estimate/sum; expired-hold path removes the `hold:` row), `reconcile` (undershoot row, unknown row, auto-resolve, `not_billed` refused for probe rows and applied for a `hold:` row), `stats` (19 measured → no row; 20 → row), `rls` (customer sees own `spend_ledger` rows only). *Verify:* `node scripts/qa/check-f03-db.mjs` → `PASS` per group (F03-AC-04..09, 13, 17, 18).
+  - [ ] **P2.T1.S2** *Files:* `scripts/qa/check-f03-db.mjs` (loopback guard as `check-repair-workflows.mjs:13-18`). *Do:* groups `seed` (scan control enabled/all), `sync` (load `tests/fixtures/f03/probe-attempts.json` into `scan_jobs`/`probe_observations`/`probe_attempts` for a QA brand plus one canary and one brandless job; run `sync_probe_attempt_costs` twice; assert row count, each `cost_source`, idempotency, update after flipping one attempt to `confirmed_not_dispatched`; an attempt with `cost_state = reconciliation_conflict` **and** a non-null `charged_usd` stays `reservation`; a scan with a `held` **or `expired`** scan hold gets no attempt rows from the periodic sync; F03-AC-19: the synced ledger sums equal `getScanCost` totals), `scan-hold` (create hold via `reserve_spend(..., p_subject_kind => 'scan_job')`, job running → `scan_running` and zero attempt rows; set job `complete` → settled with sum; `f01_committed_usd` before/after equal to estimate/sum, never both; expired hold settles by deleting its `hold:` row; **expired hold whose `scan_jobs` row is gone → settled at 0, `hold:` row gone, second run selects nothing**; two open holds on one scan → both closed, only attempt rows counted), `reconcile` (undershoot row, unknown row, auto-resolve, `not_billed` refused for probe rows and applied for a `hold:` row, `resolve_cost_reconciliations_bulk` resolves N and is idempotent), `stats` (19 measured → no row; 20 → row), `rls` (customer sees own `spend_ledger` rows only). *Verify:* `node scripts/qa/check-f03-db.mjs` → `PASS` per group (F03-AC-04..09, 13, 17, 18, 19 DB half).
   - [ ] **P2.T1.S3** *Files:* `.github/workflows/ci.yml`. *Do:* add `node scripts/qa/check-f03-db.mjs` after F01's harness in `customer-database`. *Verify:* CI green.
   - [ ] **P2.T1.S4** Migration paperwork. *Files:* `README.md` (migration table), `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Do:* row for `050_f03_cost_ledger.sql`. *Verify:* `npm test` → migration-ledger guard tests pass.
 - [ ] **P2.T2 Jobs**
-  - [ ] **P2.T2.S1** *Files:* `src/lib/costs/jobs.ts`, `src/lib/jobs/kinds.ts` (add `import "../costs/jobs.ts";`), `src/lib/costs/jobs.test.ts`. *Do:* §6.2/§6.3; test with F01 `memoryStore` that `costs.sync` calls the two RPCs with limits 50 and 1000 in that order, and that the periodic dedupe key is stable within a 5-minute slot. *Verify:* `node --test src/lib/costs/jobs.test.ts` → pass (F03-AC-16).
+  - [ ] **P2.T2.S1** *Files:* `src/lib/costs/jobs.ts`, `src/lib/jobs/kinds.ts` (add `import "../costs/jobs.ts";`), `src/lib/jobs/maintenance.ts` (export `activeStore`/`periodicDefined`; add the `prune-reconciliations` step to `spend.retention`), `src/lib/costs/jobs.test.ts`. *Do:* §6.2/§6.3. Register `costs.sync` behind the same `periodicDefined`/`jobDefined` guards as F01 and pass `{ store: activeStore() }` to `enqueueSystemJob`. No `costs.retention` kind: the prune is a step in `spend.retention`. Test with F01 `memoryStore` that `costs.sync` calls the two RPCs with limits 50 and 1000 in that order, that the periodic dedupe key is stable within a 5-minute slot, and that re-registering on a second import is a no-op. *Verify:* `node --test src/lib/costs/jobs.test.ts` → pass (F03-AC-16).
 
-**Checkpoint:** tests, typecheck, build, `check-f01-db.mjs`, `check-f03-db.mjs`, `check-probe-dispatch.mjs` pass. ACs 04–09, 13, 16–18.
+**Checkpoint:** tests, typecheck, build, `check-f01-db.mjs`, `check-f03-db.mjs`, `check-probe-dispatch.mjs` pass. ACs 04–09, 13, 16–19 (AC-19 DB half).
 
 ### Phase 3 — Read APIs
 
@@ -739,23 +800,23 @@ All new UI is built from F04 primitives: `src/components/ui/{card,button,badge,s
   - [ ] **P3.T1.S1** *Files:* `supabase/migrations/051_f03_usage.sql`, `scripts/setup-supabase.mjs`. *Do:* §6.1. *Verify:* migrations apply twice → exit 0; `check-f03-db.mjs` group `usage` (day bins across a UTC/Asia-Kolkata boundary from `tests/fixtures/f03/ledger-rows.json`) → PASS.
   - [ ] **P3.T1.S1a** Migration paperwork. *Files:* `README.md` (migration table), `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Do:* row for `051_f03_usage.sql`. *Verify:* `npm test` → migration-ledger guard tests pass.
   - [ ] **P3.T1.S2** *Files:* `src/lib/costs/types.ts`, `src/shared/costs.ts` (re-exports response types for UI), `src/shared/spend-features.ts`, `src/lib/costs/scanCost.ts`, `src/lib/costs/usage.ts`, `src/lib/costs/ops.ts`. *Do:* §6.2. *Verify:* `node --test src/lib/costs/` → pass.
-  - [ ] **P3.T1.S3** *Files:* `src/lib/costs/usage.test.ts`, `src/lib/costs/scanCost.test.ts`. *Do:* fake admin returning fixture rows; assert gap-filled days, feature ordering and "Other", the recent list excluding `none`; scan cost per-engine maths, `perAnswerUsd` null when unknown attempts exist, `confirmed_not_dispatched` excluded, `unavailable` for a null job. *Verify:* pass (F03-AC-12 unit half).
+  - [ ] **P3.T1.S3** *Files:* `src/lib/costs/usage.test.ts`, `src/lib/costs/scanCost.test.ts`. *Do:* fake admin returning fixture rows; assert gap-filled days, feature ordering and "Other", the recent list excluding `none`; scan cost per-engine maths, `perAnswerUsd` null when unknown attempts exist, `confirmed_not_dispatched` excluded, `reconciliation_conflict` treated as unknown even with a value, `unavailable` for a null job; F03-AC-19: `totalAccountedUsd` and each `byEngine[].knownUsd` equal the ledger fixture's sums for the same `job_id`. *Verify:* pass (F03-AC-12 unit half, F03-AC-19 unit half).
 - [ ] **P3.T2 Routes**
-  - [ ] **P3.T2.S1** *Files:* `src/app/api/customer/usage/route.ts`, `src/lib/costs/usage.contract.ts`, `src/lib/features/names.ts` (add `usage_page: { spend: [] }`), `src/lib/features/clientFeatures.ts` (append `"usage_page"` to `CLIENT_FEATURES`). *Do:* §6.5. *Verify (extra):* `GET /api/customer/features` includes `usage_page`. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
+  - [ ] **P3.T2.S1** *Files:* `src/app/api/customer/usage/route.ts`, `src/lib/costs/usage.contract.ts`, `src/lib/features/names.ts` (add `usage_page: { spend: [] as const }`). *Do:* §6.5. The client feature entry lands with the UI in phase 4 (it needs F04's `clientFeatures.ts`). *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
   - [ ] **P3.T2.S2** *Files:* `src/app/api/customer/scan/report/[scan_id]/route.js` → rename to `route.ts`, `src/lib/costs/scanReport.contract.ts`. *Do:* keep the existing body; add `cost` and `results[].cost`; switch to `requireWorkspace` and `toErrorResponse` with identical statuses and messages. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/customerRoutes.test.mjs` → pass unchanged.
-  - [ ] **P3.T2.S3** *Files:* `src/app/api/ops/costs/route.ts`, `src/app/api/ops/costs/reconciliations/[id]/route.ts`, `src/lib/costs/ops.contract.ts`. *Do:* §6.5. *Verify:* contract test passes.
-  - [ ] **P3.T2.S4** *Files:* `src/lib/costs/usageRoute.route.test.mjs`, `src/lib/costs/scanCostRoute.route.test.mjs`, `src/lib/costs/opsRoutes.route.test.mjs` (hooks `src/lib/customerRoutes.test.hooks.mjs`). *Do:* tenant isolation (workspace A cannot read B: the admin fake asserts every query filters `brand_key` = A); bad tz → 400; flag off → 404 `feature_unavailable`; report response deep-equals the pre-change fixture for every old key; ops 409 mapping. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/costs/*.route.test.mjs` → pass (F03-AC-09, 10, 12, 13, 15 route half).
+  - [ ] **P3.T2.S3** *Files:* `src/app/api/ops/costs/route.ts`, `src/app/api/ops/costs/reconciliations/[id]/route.ts`, `src/app/api/ops/costs/reconciliations/bulk/route.ts`, `src/lib/costs/ops.contract.ts`. *Do:* §6.5. *Verify:* contract test passes.
+  - [ ] **P3.T2.S4** *Files:* `src/lib/costs/usageRoute.route.test.mjs`, `src/lib/costs/scanCostRoute.route.test.mjs`, `src/lib/costs/opsRoutes.route.test.mjs` (hooks `src/lib/customerRoutes.test.hooks.mjs`). *Do:* tenant isolation (workspace A cannot read B: the admin fake asserts every query filters `brand_key` = A); bad tz → 400; flag off → 404 `feature_unavailable`; report response deep-equals the pre-change fixture for every old key; ops 409 mapping; bulk route resolves N, rejects an empty/501-id list with `invalid_ids`, and propagates `use_probe_reconciliation`. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/costs/*.route.test.mjs` → pass (F03-AC-09, 10, 12, 13, 15 route half).
 - [ ] **P3.T3 Env**
   - [ ] **P3.T3.S1** *Files:* `.env.example`. *Do:* add `# FEATURE_USAGE_PAGE=off`. *Verify:* `npm run check:secrets` → pass.
 
-**Checkpoint:** all suites pass; ACs 10, 12, 13, 15 (routes).
+**Checkpoint:** all suites pass; ACs 10, 12, 13, 15 (routes), 19 (unit half).
 
-### Phase 4 — UI (requires F04 and F05 merged)
+### Phase 4 — UI (requires F04 — including its phase 4 `clientFeatures.ts` — and F05 merged)
 
 **Goal:** customers see usage and per-answer cost; the operator has a cost console.
 
 - [ ] **P4.T1 Usage page**
-  - [ ] **P4.T1.S1** *Files:* `src/app/portal/usage/page.tsx`, `src/components/portal/usage/{UsagePage,UsageLimits,UsageChart,UsageByFeature,UsageRecent,UsageSection}.tsx` (licence headers on the three ported files), `src/components/portal/usage/hooks/useUsage.ts`, `src/lib/query/keys.ts` (add `usage`), `src/components/app/navigation/items.ts` (add Settings → Usage with `flag: "usage_page"`, so the item is hidden while the flag is off). *Do:* §6.6.1. *Verify:* `npm run build` → exit 0.
+  - [ ] **P4.T1.S1** *Files:* `src/app/portal/usage/page.tsx`, `src/components/portal/usage/{UsagePage,UsageLimits,UsageChart,UsageByFeature,UsageRecent,UsageSection}.tsx` (licence headers on the three ported files), `src/components/portal/usage/hooks/useUsage.ts`, `src/lib/query/keys.ts` (add `usage`), `src/lib/features/clientFeatures.ts` (append `"usage_page"` to `CLIENT_FEATURES`), `src/components/app/navigation/items.ts` (add Settings → Usage with `flag: "usage_page"`, so the item is hidden while the flag is off). *Do:* §6.6.1. *Verify (extra):* `GET /api/customer/features` includes `usage_page`. *Verify:* `npm run build` → exit 0.
 - [ ] **P4.T2 Scan cost card**
   - [ ] **P4.T2.S1** *Files:* `src/components/portal/cost/ScanCostCard.tsx`, `src/app/portal/scans/[scanId]/page.jsx` (one import, one element). *Do:* §6.6.2. *Verify:* `node --test src/components/portal/portalRegressions.test.mjs src/components/portal/portalProgress.test.mjs` → pass unchanged.
 - [ ] **P4.T3 Operator console**
@@ -773,9 +834,9 @@ All new UI is built from F04 primitives: `src/components/ui/{card,button,badge,s
 | `src/lib/pricing/dataforseo.test.ts` | ported pricing cases, SERP pages, operator ×5 | 01 |
 | `src/shared/ai-visibility-pricing.test.ts` | answer prices, model-API engines, checks per month | 02 |
 | `src/lib/pricing/perceev.test.ts` | llmPricing delegation, env override, accuracy | 03 |
-| `scripts/qa/check-f03-db.mjs` | `seed`, `sync`, `scan-hold`, `reconcile`, `stats`, `rls`, `usage` | 04–09, 13, 17, 18 |
+| `scripts/qa/check-f03-db.mjs` | `seed`, `sync`, `scan-hold`, `reconcile`, `stats`, `rls`, `usage` | 04–09, 13, 17, 18, 19 |
 | `src/lib/costs/jobs.test.ts` | periodic slot dedupe, RPC order and limits | 16 |
-| `src/lib/costs/usage.test.ts`, `scanCost.test.ts` | aggregation and honesty rules | 10, 12 |
+| `src/lib/costs/usage.test.ts`, `scanCost.test.ts` | aggregation and honesty rules; the two cost paths agree | 10, 12, 19 |
 | `src/lib/costs/*.route.test.mjs` | tenancy, flags, validation, additive report, ops mapping | 09, 10, 12, 13, 15 |
 | `scripts/qa/check-f03-browser.mjs` | UI states and copy | 11, 14, 15 |
 
@@ -801,13 +862,15 @@ Fixtures are synthetic JSON under `tests/fixtures/f03/`. No provider recordings 
 | 5 | Provider invoice reconciliation (DataForSEO `id_list`, OpenRouter generation lookup) is not built. | Follow-up after F02's bake-off. The undershoot queue is the interim signal. |
 | 6 | F04 component names are assumed (shadcn defaults). | If F04 names differ, F03 phase 4 uses F04's names for the same primitives. The structure and copy in §6.6 stay fixed. |
 | 7 | Nav registry §12 has no Usage entry. | Proposed: Settings → Usage → `/portal/usage` (request to coordinator). |
+| 8 | The live report (`getScanCost` over `probe_attempts`) and the Usage page (`spend_ledger`) compute cost independently, so the same scan could show two totals. | Pinned by F03-AC-19: a synced terminal job must produce identical totals on both paths. |
+| 9 | An expired scan hold counts at its estimate in `f01_committed_usd` until `costs.sync` settles it; a long scan can outlive its 24-hour TTL. | The periodic sync skips jobs with a `held` **or `expired`** hold, so exactly one of the two counts. Settlement (or the scan-missing close at zero) ends the window. |
 
 **Deviations from conventions:** (a) `ai_visibility.scan` ships enabled (risk 4). (b) The existing report route file is converted from `.js` to `.ts` in place, to use `requireWorkspace`; its URL and JSON are unchanged.
 
 ## 12. Definition of done
 
 - [ ] Phases 1–4 merged with checkpoints green.
-- [ ] F03-AC-01 … F03-AC-18 covered by passing tests in §9.
+- [ ] F03-AC-01 … F03-AC-19 covered by passing tests in §9.
 - [ ] `npm test`, `npm run typecheck`, `npm run build`, CI database and browser jobs green.
 - [ ] `THIRD_PARTY_NOTICES.md` updated with all ported files.
 - [ ] `00-CONVENTIONS.md` §12 gains the Usage row, in the phase 4 PR.
