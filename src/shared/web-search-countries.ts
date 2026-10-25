@@ -320,4 +320,3 @@ export function supportsWebSearchCountry(
 ): boolean {
   return MODEL_COUNTRIES[model].includes(country);
 }
-
