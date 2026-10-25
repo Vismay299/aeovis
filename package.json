@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "skills:build": "node scripts/build-assistant-skills.mjs --write",
+    "prebuild": "node scripts/build-assistant-skills.mjs --check",
     "start": "next start",
     "lint": "next lint",
     "test:prompts": "node --env-file=.env.local scripts/test-dynamic-prompts.mjs",
