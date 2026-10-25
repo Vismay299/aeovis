@@ -146,6 +146,9 @@ export const NEVER_WRITABLE = Object.freeze([
   // slots. A test that needs a claimed job gets it from the memory store, not
   // from the production table.
   "jobs", "job_steps", "job_periodic",
+  // F01 phase 4 — migration 042: the provider cache. A test that needs a
+  // cached row gets it from the memory store, not from the production table.
+  "provider_cache",
   "system_heartbeats",
   "knowledge_blocks",
   "topics",

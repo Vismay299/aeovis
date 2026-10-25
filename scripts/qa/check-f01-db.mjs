@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * F01 database harness — spend guard (migration 041).
+ * F01 database harness — spend guard (041), jobs runner (040/043), cache (042).
  *
  * Runs against a disposable loopback PostgreSQL database that has every
  * migration applied. It never sees production: the guard below refuses any
@@ -930,6 +930,55 @@ const GROUPS = [
       assert.ok(
         notices.some((message) => message.includes("jobs tick not configured")),
         `expected 043's NOTICE, got ${JSON.stringify(notices)}`,
+      );
+    },
+  },
+  {
+    name: "cache",
+    group: "cache",
+    async run() {
+      const keyA = `${"a".repeat(63)}0`;
+      const keyB = `${"b".repeat(63)}0`;
+      const keyC = `${"c".repeat(63)}0`;
+      // Both bodies at once violates provider_cache_one_body.
+      await assert.rejects(
+        q(
+          "insert into provider_cache(key,namespace,version,scope,brand_key,value,storage_path,size_bytes,fetched_at,expires_at) values($1,'qa.cache',1,'global',null,'{}','provider-cache/x.json',10,now(),now()+interval '1 hour')",
+          [keyA],
+        ),
+        /provider_cache_one_body/,
+      );
+      // A workspace row without a brand violates provider_cache_scope.
+      await assert.rejects(
+        q(
+          "insert into provider_cache(key,namespace,version,scope,brand_key,value,storage_path,size_bytes,fetched_at,expires_at) values($1,'qa.cache',1,'workspace',null,'{}',null,10,now(),now()+interval '1 hour')",
+          [keyB],
+        ),
+        /provider_cache_scope/,
+      );
+      // Neither body violates the same constraint.
+      await assert.rejects(
+        q(
+          "insert into provider_cache(key,namespace,version,scope,brand_key,value,storage_path,size_bytes,fetched_at,expires_at) values($1,'qa.cache',1,'global',null,null,null,10,now(),now()+interval '1 hour')",
+          [keyC],
+        ),
+        /provider_cache_one_body/,
+      );
+      // Prune returns the expired rows' storage paths for the caller to delete.
+      const expired = `${"d".repeat(63)}0`;
+      await q(
+        "insert into provider_cache(key,namespace,version,scope,brand_key,value,storage_path,size_bytes,fetched_at,expires_at) values($1,'qa.cache',1,'global',null,null,$2,300000,now()-interval '8 days',now()-interval '1 minute')",
+        [expired, "provider-cache/qa/expired.json"],
+      );
+      const pruned = await q("select public.prune_provider_cache(now(),1000) path");
+      assert.deepEqual(
+        pruned.rows.map((row) => row.path),
+        ["provider-cache/qa/expired.json"],
+      );
+      assert.equal(
+        (await q("select count(*)::int n from provider_cache where key=$1", [expired])).rows[0].n,
+        0,
+        "the expired row is gone",
       );
     },
   },

@@ -75,6 +75,8 @@ export type MemoryJobStore = JobStore & {
   jobs: Map<string, MemoryJob>;
   steps: Map<string, MemoryStep>;
   periodics: Map<string, MemoryPeriodic>;
+  prunedCachePaths: string[];
+  removedCacheBodies: string[][];
 };
 
 const iso = (ms: number | null): string | null => (ms === null ? null : new Date(ms).toISOString());
@@ -122,6 +124,8 @@ export function createMemoryJobStore(seed: MemoryJobStoreSeed = {}): MemoryJobSt
   const jobs = new Map<string, MemoryJob>();
   const steps = new Map<string, MemoryStep>();
   const periodics = new Map<string, MemoryPeriodic>();
+  const prunedCachePaths: string[] = [];
+  const removedCacheBodies: string[][] = [];
 
   const fenced = (jobId: string, owner: string): boolean => {
     const job = jobs.get(jobId);
@@ -133,6 +137,8 @@ export function createMemoryJobStore(seed: MemoryJobStoreSeed = {}): MemoryJobSt
     jobs,
     steps,
     periodics,
+    prunedCachePaths,
+    removedCacheBodies,
 
     async enqueue(args: EnqueueArgs): Promise<EnqueueResult> {
       if (!Number.isInteger(args.deadlineSeconds) || args.deadlineSeconds < 60 || args.deadlineSeconds > 7 * 86_400) {
@@ -502,6 +508,14 @@ export function createMemoryJobStore(seed: MemoryJobStoreSeed = {}): MemoryJobSt
 
     async pruneSpend(): Promise<PruneResult> {
       return { ledger: 0, holds: 0 };
+    },
+
+    async pruneProviderCache(): Promise<string[]> {
+      return [...prunedCachePaths.splice(0)];
+    },
+
+    async removeCacheBodies(storagePaths: string[]) {
+      removedCacheBodies.push([...storagePaths]);
     },
   };
 }
