@@ -38,6 +38,11 @@ SOFTWARE.
 - `src/lib/spend/index.ts`
 - `src/lib/cache/providerCache.ts`
 - `src/lib/llm/openrouter.ts`
+- `src/lib/pricing/dataforseo.ts`
+- `src/lib/pricing/dataforseo.test.ts`
+- `src/shared/ai-visibility-pricing.ts`
+- `src/shared/ai-visibility-pricing.test.ts`
+- `src/shared/money.ts`
 - `src/lib/telemetry/server.ts` (and `server.test.ts` message-stripping cases)
 - `src/shared/privacy-choices.ts` (and `privacy-choices.test.ts`)
 - `src/lib/telemetry/sanitize.ts` (and `sanitize.test.ts`)
