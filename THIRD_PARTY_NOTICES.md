@@ -39,3 +39,14 @@ SOFTWARE.
 - `src/lib/cache/providerCache.ts`
 - `src/lib/llm/openrouter.ts`
 - `supabase/migrations/041_f01_spend.sql`
+- `src/shared/project-context.ts`
+- `src/shared/project-context.test.ts`
+- `src/lib/projectContext/normalize.ts`
+- `src/lib/projectContext/normalize.test.ts`
+- `src/lib/projectContext/contextUpdateOps.ts`
+- `src/lib/projectContext/contextUpdateOps.test.ts`
+- `src/lib/projectContext/repository.ts`
+- `src/lib/projectContext/service.ts`
+- `src/lib/projectContext/service.test.ts`
+- `scripts/qa/check-f07-db.mjs`
+- `supabase/migrations/070_f07_project_memory.sql`

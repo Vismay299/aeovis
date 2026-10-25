@@ -1563,3 +1563,14 @@ skips, so no local or CI run proves the installed schedule. That half is an
 owner-run check after applying on Supabase — `select * from cron.job` must
 show exactly one `perceev-jobs-tick` row — and is recorded in the PR body.
 Never verified against production.
+
+## F07 project memory: migration `070_f07_project_memory.sql`
+
+Migration 070 adds the five workspace-scoped tables `project_context_sections`,
+`project_competitors`, `project_key_pages`, `project_research_log` and
+`project_memory_state`. Customer roles receive read-only access through the
+workspace membership policy; all writes go through the service-only functions
+`apply_project_context_ops`, `claim_project_brief_import` and
+`prune_project_research_log`. Apply it before deploying F07. The database
+contract is exercised by `scripts/qa/check-f07-db.mjs` on loopback QA PostgreSQL
+and tenant reads are checked by `tests/customer-uat.sql`.
