@@ -43,3 +43,14 @@ SOFTWARE.
 - `src/lib/telemetry/sanitize.ts` (and `sanitize.test.ts`)
 - `src/lib/telemetry/client.ts` (and `client.test.ts` buffer/opt-in cases)
 - `supabase/migrations/041_f01_spend.sql`
+- `src/shared/project-context.ts`
+- `src/shared/project-context.test.ts`
+- `src/lib/projectContext/normalize.ts`
+- `src/lib/projectContext/normalize.test.ts`
+- `src/lib/projectContext/contextUpdateOps.ts`
+- `src/lib/projectContext/contextUpdateOps.test.ts`
+- `src/lib/projectContext/repository.ts`
+- `src/lib/projectContext/service.ts`
+- `src/lib/projectContext/service.test.ts`
+- `scripts/qa/check-f07-db.mjs`
+- `supabase/migrations/070_f07_project_memory.sql`

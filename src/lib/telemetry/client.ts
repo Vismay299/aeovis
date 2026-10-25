@@ -3,6 +3,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 import { validateEventProps, type ClientEventName, type EventProps } from "./events.ts";
 import { sanitizeEvent } from "./sanitize.ts";
+import { clearPrivacyCookie } from "../../shared/privacy-choices.ts";
 
 type PostHogClient = {
   init: (key: string, opts: Record<string, unknown>) => void;
@@ -175,9 +176,11 @@ export function setTelemetryIdentity(args: {
   withClient((client) => applyIdentity(client));
 }
 
+/** Sign-out: drop the identity, PostHog's own state, and the cookie that carried the choice. */
 export function resetTelemetry(): void {
   state.identity = null;
   withClient((client) => client.reset());
+  clearPrivacyCookie();
 }
 
 /**

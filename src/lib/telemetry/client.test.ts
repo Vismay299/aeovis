@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { PRIVACY_COOKIE } from "../../shared/privacy-choices.ts";
 
 function fakePostHog() {
   const calls = {
@@ -122,13 +123,23 @@ test("stopAnalyticsCapture calls opt_out_capturing", async () => {
   await waitFor(() => fake.calls.opt_out === 1);
 });
 
-test("resetTelemetry calls reset", async () => {
+test("resetTelemetry calls reset and clears the privacy cookie", async () => {
   const fake = fakePostHog();
   const mod = await loadClient(fake);
   mod.startAnalyticsCapture();
   await waitFor(() => fake.calls.opt_in === 1);
-  mod.resetTelemetry();
+  const jar = { cookie: `${PRIVACY_COOKIE}=a1` };
+  const globals = globalThis as { document?: unknown };
+  const previousDocument = globals.document;
+  globals.document = jar;
+  try {
+    mod.resetTelemetry();
+  } finally {
+    if (previousDocument === undefined) globals.document = undefined;
+    else globals.document = previousDocument;
+  }
   await waitFor(() => fake.calls.reset === 1);
+  assert.match(jar.cookie, /Max-Age=0/);
 });
 
 test("setTelemetryIdentity groups by workspace telemetry id after start", async () => {

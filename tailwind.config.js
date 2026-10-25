@@ -5,11 +5,6 @@
    them reachable from a class name. See docs/design/DESIGN-SYSTEM.md. */
 
 module.exports = {
-    content: [
-    "./src/pages/**/*.{js,jsx,ts,tsx}",
-    "./src/components/**/*.{js,jsx,ts,tsx}",
-    "./src/app/**/*.{js,jsx,ts,tsx}",
-  ],
   theme: {
     extend: {
       fontFamily: {
@@ -135,14 +130,6 @@ module.exports = {
         slow: '620ms',
       },
       keyframes: {
-        'accordion-down': {
-          from: { height: '0' },
-          to: { height: 'var(--radix-accordion-content-height)' }
-        },
-        'accordion-up': {
-          from: { height: 'var(--radix-accordion-content-height)' },
-          to: { height: '0' }
-        },
         /* a calm opacity pulse, never a sweeping shimmer */
         'skel': {
           '0%, 100%': { opacity: '1' },
@@ -154,14 +141,10 @@ module.exports = {
         }
       },
       animation: {
-        'accordion-down': 'accordion-down 260ms cubic-bezier(.22,.68,0,1)',
-        'accordion-up': 'accordion-up 260ms cubic-bezier(.22,.68,0,1)',
         'skel': 'skel 1.5s ease-in-out infinite',
         'screen-in': 'screen-in 380ms cubic-bezier(.22,.68,0,1) both'
       }
     }
   },
-  plugins: [
-    require("tailwindcss-animate"),
-  ],
+  plugins: [],
 };
