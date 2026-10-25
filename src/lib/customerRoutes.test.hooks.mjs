@@ -13,5 +13,17 @@ export async function resolve(specifier, context, nextResolve) {
   if (specifier === "@/lib/supabase/admin") {
     return { url: `data:text/javascript,${encodeURIComponent("export function getSupabaseAdmin() { return globalThis.customerRouteFixture.admin; }")}`, shortCircuit: true };
   }
+  // The customer scan route's job insert is DB transport too; the test decides
+  // whether it succeeds or hits the one-running-scan seal.
+  if (specifier === "@/lib/db" && context.parentURL?.endsWith("/app/api/customer/scan/route.js")) {
+    const source = `
+      export async function createScanJob(args) {
+        const create = globalThis.customerRouteFixture.createScanJob;
+        if (!create) throw new Error("createScanJob is not stubbed for this test");
+        return create(args);
+      }
+    `;
+    return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true };
+  }
   return resolveRoute(specifier, context, nextResolve);
 }

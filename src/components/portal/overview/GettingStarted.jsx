@@ -6,11 +6,23 @@ import { CircleCheck, Circle } from "lucide-react";
 import { Button, Card, ProgressBar } from "../ui";
 import "./overview.css";
 
-export function buildChecklist({ overview, gsc, scan }) {
+/**
+ * `panelApproved` is true/false once the question panel has loaded, null while
+ * unknown; an unknown panel falls back to "a scan has already run", since scans
+ * start only from an approved panel.
+ */
+export function buildChecklist({ overview, gsc, scan, panelApproved = null }) {
   const scanCount = overview?.scans?.length ?? 0;
   const draftCount = overview?.content_items?.length ?? 0;
   return [
     { id: "workspace", title: "Workspace created", description: "Your brand workspace is ready.", done: true },
+    {
+      id: "panel",
+      title: "Review and approve your question panel",
+      description: "Choose the buyer questions every scan asks. Scans start once the panel is approved.",
+      done: panelApproved ?? scanCount > 0,
+      action: { label: "Review questions", href: "/portal/measurement" },
+    },
     {
       id: "scan",
       title: "Run your first AI visibility scan",

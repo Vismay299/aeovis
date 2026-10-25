@@ -8,7 +8,7 @@
 | ID | F09 |
 | Wave | 1 |
 | Comparison rows covered | "Price before running" (OpenSEO: every run opens a cost dialog; the run carries an approved maximum and refuses if the price rose; settings show monthly projections. Perceev: server-side reservations and caps per scan and per day; the customer never sees a price) |
-| Depends on | F01 and F03 (merged). Phase 3 (UI) also needs F04 and F05 merged, and branch `fix/portal-measurement-ui` (commit `f86efb07`) merged into `main`, because it introduced the `panel_not_approved` / `scan_already_running` codes this spec extends. |
+| Depends on | F01 and F03 (merged). Phase 3 (UI) also needs F04 and F05 merged, and the run-scan fix (`fix/run-scan-unapproved-panel`) merged into `main`, because it introduced the `panel_not_approved` / `scan_already_running` codes this spec extends. |
 | Blocks | F10 (schedule approval and monthly projection), F13, F15, F18 and F22 (each registers a priced action) |
 | Reserved migrations | 080–084 (080 used; 081–084 unused) |
 | Feature flag | `FEATURE_PRICE_REVIEW` (shows the cost dialog before Run scan). The server-side price check and the approved-maximum cap are **always on**; they need no flag. |
@@ -34,8 +34,8 @@ Before any paid run, the customer sees what it can cost and approves that amount
 
 ## 3. What Perceev has today
 
-- **Run scan.** `POST /api/customer/scan` reads the approved panel and creates the job via `createScanJob`, then fires `runScanChunk` in `keepAlive` (`src/app/api/customer/scan/route.js:16-65`). On `fix/portal-measurement-ui` the 409s carry codes `panel_not_approved` and `scan_already_running` (`git show fix/portal-measurement-ui:src/app/api/customer/scan/route.js:12-14, 39, 60`). There is no price, approval or `maxUsd`.
-- **Client.** `useScanTracker().start()` POSTs `{ brand_key }` and handles 401/409/errors (`git show fix/portal-measurement-ui:src/components/portal/useScanTracker.js:157-196`). `start` is wired to seven buttons: Overview (`src/app/portal/page.jsx:53`), Scans page (`src/app/portal/scans/page.jsx:129,159,207`), Measurement (`src/app/portal/measurement/page.jsx:230`), Getting started (`src/components/portal/overview/GettingStarted.jsx:31`), and the progress card's idle CTA and "Try again" (`src/components/portal/ScanProgressCard.jsx:67,85`). Tests on the fix branch call `start()` and expect a POST (`src/components/portal/portalRegressions.test.mjs:112-175`) and look for `onClick === scan.start` (`:549-619`).
+- **Run scan.** `POST /api/customer/scan` reads the approved panel and creates the job via `createScanJob`, then fires `runScanChunk` in `keepAlive` (`src/app/api/customer/scan/route.js:16-65`). Since the run-scan fix, the 409s carry codes `panel_not_approved` and `scan_already_running` (`src/app/api/customer/scan/route.js`, `fail(status, error, code)`). There is no price, approval or `maxUsd`.
+- **Client.** `useScanTracker().start()` POSTs `{ brand_key }` and handles 401/409/errors (`src/components/portal/useScanTracker.js` on `main` after the run-scan fix). `start` is wired to seven buttons: Overview (`src/app/portal/page.jsx:53`), Scans page (`src/app/portal/scans/page.jsx:129,159,207`), Measurement (the "Run scan" button F04 phase 5 adds to `src/app/portal/measurement/page.jsx`), Getting started (`src/components/portal/overview/GettingStarted.jsx:31`), and the progress card's idle CTA and "Try again" (`src/components/portal/ScanProgressCard.jsx:67,85`). Tests on the fix branch call `start()` and expect a POST (`src/components/portal/portalRegressions.test.mjs:112-175`) and look for `onClick === scan.start` (`:549-619`).
 - **What dispatch actually reserves.** `claim_probe_dispatch(p_id, p_reserve, p_scan_cap, p_day_cap, …)` reserves `p_reserve` per **attempt** (up to 3 attempts per observation). It refuses when `scan_spend + p_reserve > p_scan_cap` or `day_spend + p_reserve > p_day_cap`, where spend sums `coalesce(charged_usd, reserved_usd)` plus the scan's `context.sourcing_cost` (`supabase/migrations/035_scoped_provider_rollout.sql:36-89`). `p_reserve`, `p_scan_cap` and `p_day_cap` come from `dispatchBudget(env)`: `SCAN_PROBE_RESERVATION_USD` (code default 1; the owner states production uses 0.20), `SCAN_MAX_COST_PER_SCAN`, `SCAN_MAX_COST_PER_DAY` (`src/lib/workers/durableProbing.js:26-41`, used at `:144-147`, `:169`).
 - **Which observations a scan reserves for.** Rows = frozen engines × panel queries (`durableProbing.js:116-142`). Panel queries are all `payload.prompts`, non-diagnostic first then diagnostic (`src/lib/workers/scanWorker.js:1475-1479` and the diagnostic merge after it). Engines resolve from the brand's `scan_schedules.engines`, else `ENGINES` (`scanWorker.js:1463-1465`, `:1635-1644`; `src/lib/scoring/enginePipeline.js:2238-2271`). Unconfigured engines are frozen but blocked without a claim (`durableProbing.js:157-167`), so they reserve nothing. A panel scan makes no other paid call: sourcing comes from the panel (`stats.cost = 0`, `scanWorker.js:1450, 1475-1480`), and finalize uses the deterministic judge.
 - **Single-flight.** `scan_jobs_one_running_per_brand` (migration 007) and `DuplicateScanError` (`src/lib/db.js:840-900`).
@@ -406,7 +406,7 @@ Secondary button "Cancel" (ghost), disabled while starting. Title "Run scan". Th
 
 #### 6.6.2 Scan wiring (all seven Run scan entry points, no call-site changes)
 
-- `src/components/portal/useScanTracker.js` (version from `fix/portal-measurement-ui`):
+- `src/components/portal/useScanTracker.js` (version on `main` after the run-scan fix and F05):
   - New exported constant `PRICE_CHANGED = "price_changed"`.
   - New state `review = { open: boolean, priceChanged: { approvedMaxUsd, quote } | null, error: string | null }`.
   - `start()`: when `priceReview` (a new hook argument, `true` when `FEATURE_PRICE_REVIEW` is on for the workspace; `PortalShell` reads it from F04's `GET /api/customer/features` (`features.price_review`; F09 appends `"price_review"` to `CLIENT_FEATURES`) is true, it only opens the dialog (`setReview({ open: true, priceChanged: null, error: null })`) and sends no request. Otherwise it calls `confirmStart(undefined)`, today's behaviour.
@@ -473,11 +473,11 @@ Secondary button "Cancel" (ghost), disabled while starting. Title "Run scan". Th
 
 **Checkpoint:** all unit, route and DB suites pass, plus `check-probe-dispatch.mjs` unchanged; F09-AC-02..08.
 
-### Phase 3 — Cost dialog (requires F04, F05 and `fix/portal-measurement-ui` merged)
+### Phase 3 — Cost dialog (requires F04, F05 and the run-scan fix merged)
 
 **Goal:** every Run scan shows the price and sends the approved maximum.
 
-- [ ] **P3.T0 Precondition.** *Verify:* `git merge-base --is-ancestor f86efb07 main` → exit 0, and F05 phase 3 (`postStart` in `useScanTracker.js`) is merged. If it is not merged, stop and report. Do not re-implement its changes.
+- [ ] **P3.T0 Precondition.** *Verify:* `git grep -c "PANEL_NOT_APPROVED" origin/main -- src/components/portal/useScanTracker.js` → at least 1 (the run-scan fix is merged), and F05 phase 3 (`postStart` in `useScanTracker.js`) is merged. If it is not merged, stop and report. Do not re-implement its changes.
 - [ ] **P3.T1 Generic UI**
   - [ ] **P3.T1.S1** *Files:* `src/components/app/cost/usePriceQuote.ts`, `CostReviewDialog.tsx`, `MonthlyProjection.tsx` (licence headers on all three). *Do:* §6.6.1. *Verify:* `npm run build` → exit 0.
 - [ ] **P3.T2 Scan wiring**

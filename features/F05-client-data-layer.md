@@ -8,7 +8,7 @@
 | ID | F05 |
 | Wave | 0 |
 | Comparison rows covered | "Frontend patterns worth taking": poll only while work runs at the server's pace; results fill in as they arrive; stale data stays visible when a refresh fails; prefetch on intent; URL-held filters; browser-like search tabs; recent searches |
-| Depends on | F04 phases 1–4 merged (React 19, `@tanstack/react-query` installed, primitives, `QueryState`, `AppProviders`, app shell, `/api/customer/features`); F01 phase 1 (`zod`, `src/lib/http/errors.ts` envelope). Phase 3 also needs `fix/portal-measurement-ui` merged (it migrates that branch's `useScanTracker.js` and Overview). |
+| Depends on | F04 phases 1–4 merged (React 19, `@tanstack/react-query` installed, primitives, `QueryState`, `AppProviders`, app shell, `/api/customer/features`); F01 phase 1 (`zod`, `src/lib/http/errors.ts` envelope). Phase 3 also needs `fix/run-scan-unapproved-panel` merged (it migrates that branch's `useScanTracker.js` and Overview). |
 | Blocks | F06; F09 phase 3; every later UI phase (F03 P4, F11 P3, F12 P3, F13…) |
 | Reserved migrations | 060–064 — **unused** (F05 has no database objects) |
 | Feature flag | none (infrastructure; behaviour of migrated surfaces is unchanged) |
@@ -448,7 +448,7 @@ Branches `feat/f05-client-data-layer-p<N>`.
 
 **Checkpoint:** suite, typecheck, build. Completes F05-AC-05 … -10 (unit).
 
-### Phase 3 — Portal migration (requires `fix/portal-measurement-ui` merged)
+### Phase 3 — Portal migration (requires `fix/run-scan-unapproved-panel` merged)
 
 **Goal:** the portal context, scan tracker, Overview panel read and scan report run on queries with unchanged behaviour; prefetch and URL-held filters work.
 

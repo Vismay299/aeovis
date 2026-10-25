@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { register } from "node:module";
 
 register("./customerRoutes.test.hooks.mjs", import.meta.url);
+const { DuplicateScanError } = await import("./duplicateScan.js");
 const listing = await import("../app/api/customer/scan/route.js");
 const report = await import("../app/api/customer/scan/report/[scan_id]/route.js");
 const gscData = await import("../app/api/customer/gsc/data/route.js");
@@ -91,6 +92,27 @@ test("scan listing cannot expose matching names, websites, or wildcard labels fr
   const body = await response.json();
   assert.deepEqual(body.scans.map((scan) => scan.id), ["scan-a"]);
   assert.deepEqual(body.jobs.map((job) => job.id), ["scan-a"]);
+});
+
+test("starting a scan distinguishes an unapproved question panel from a scan already running", async () => {
+  const { tables } = fixture();
+  const start = () => listing.POST(new Request("https://app.example.test/api/customer/scan", { method: "POST", body: JSON.stringify({ brand_key: "workspace-a" }) }));
+  let created = 0;
+  globalThis.customerRouteFixture.createScanJob = async () => { created++; throw new DuplicateScanError("workspace-a", "job-running"); };
+
+  const noPanel = await start();
+  assert.equal(noPanel.status, 409);
+  assert.deepEqual(await noPanel.json(), { error: "Review and approve a question panel before starting measurement.", code: "panel_not_approved" });
+  assert.equal(created, 0, "no job is created without an approved panel");
+
+  tables.repair_artifact_heads = [{ brand: "workspace-a", kind: "panel", artifact: { artifact_key: "default", state: "draft", payload: { context: {} } } }];
+  assert.equal((await (await start()).json()).code, "panel_not_approved", "a draft panel is not approved");
+
+  tables.repair_artifact_heads[0].artifact.state = "approved";
+  const running = await start();
+  assert.equal(running.status, 409);
+  assert.deepEqual(await running.json(), { error: "A scan is already running for this workspace.", code: "scan_already_running" });
+  assert.equal(created, 1);
 });
 
 test("scan report rejects another workspace and unassigned historical rows even when names match", async () => {
