@@ -233,7 +233,7 @@ export const CrawlabilityView = ({ brand, competitors }) => {
           <div
             style={{
               background: "var(--bg-1)",
-              borderTop: "3px solid var(--accent)",
+              borderTop: "3px solid var(--brand)",
               borderRight: "1px solid var(--border-1)",
               borderBottom: "1px solid var(--border-1)",
               borderLeft: "1px solid var(--border-1)",
@@ -242,7 +242,7 @@ export const CrawlabilityView = ({ brand, competitors }) => {
             }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-3)" }}>
-              <Bot size={18} style={{ color: "var(--accent)" }} />
+              <Bot size={18} style={{ color: "var(--brand)" }} />
               <span
                 style={{
                   fontFamily: "var(--font-mono)",
@@ -386,14 +386,14 @@ export const CrawlabilityView = ({ brand, competitors }) => {
                     outline: "none",
                     boxSizing: "border-box",
                   }}
-                  onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+                  onFocus={(e) => (e.target.style.borderColor = "var(--brand)")}
                   onBlur={(e) => (e.target.style.borderColor = "var(--border-2)")}
                 />
               </div>
               <button
                 type="submit"
                 style={{
-                  background: "var(--accent)",
+                  background: "var(--brand)",
                   color: "var(--accent-fg)",
                   border: "none",
                   borderRadius: "var(--radius-1)",

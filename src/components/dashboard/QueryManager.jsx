@@ -155,7 +155,7 @@ export const QueryManager = ({ brand, legacyBrand, currentPrompts = [], onPrompt
               gap: "var(--space-2)",
             }}
           >
-            <Sparkles size={16} style={{ color: "var(--accent)" }} />
+            <Sparkles size={16} style={{ color: "var(--brand)" }} />
             Add Custom Query
           </h3>
           <p style={{ fontSize: "12px", color: "var(--text-3)", marginBottom: "var(--space-5)", lineHeight: 1.5 }}>
@@ -197,7 +197,7 @@ export const QueryManager = ({ brand, legacyBrand, currentPrompts = [], onPrompt
                   resize: "none",
                   boxSizing: "border-box",
                 }}
-                onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+                onFocus={(e) => (e.target.style.borderColor = "var(--brand)")}
                 onBlur={(e) => (e.target.style.borderColor = "var(--border-2)")}
               />
             </div>
@@ -283,7 +283,7 @@ export const QueryManager = ({ brand, legacyBrand, currentPrompts = [], onPrompt
               disabled={actionLoading || !newText.trim()}
               style={{
                 width: "100%",
-                background: "var(--accent)",
+                background: "var(--brand)",
                 color: "var(--accent-fg)",
                 border: "none",
                 borderRadius: "var(--radius-1)",

@@ -182,7 +182,7 @@ function JobCard({ job, onOpen }) {
         <div style={{ fontSize: "12px", color: "var(--crit)", marginTop: "var(--space-3)", lineHeight: 1.5 }}>{job.error_message || "Pipeline error"}</div>
       ) : (
         <div style={{ marginTop: "var(--space-3)", height: "4px", background: "var(--bg-2)", borderRadius: "2px", overflow: "hidden" }}>
-          <div style={{ width: `${job.progress_pct || 0}%`, height: "100%", background: "var(--accent)", transition: "width 600ms var(--ease-out)" }} />
+          <div style={{ width: `${job.progress_pct || 0}%`, height: "100%", background: "var(--brand)", transition: "width 600ms var(--ease-out)" }} />
         </div>
       )}
     </button>
@@ -367,7 +367,7 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
             {runningJobs.length > 0 && (
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "var(--space-3)" }}>
-                  <Bot size={13} style={{ color: "var(--accent)" }} />
+                  <Bot size={13} style={{ color: "var(--brand)" }} />
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-2)" }}>
                     Agents at work ({runningJobs.length})
                   </span>
@@ -382,7 +382,7 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
 
             {loaded && items.length === 0 && runningJobs.length === 0 && (
               <Card style={{ padding: "var(--space-9)", textAlign: "center" }} data-testid="studio-empty">
-                <Sparkles size={28} style={{ color: "var(--accent)", margin: "0 auto var(--space-4)" }} />
+                <Sparkles size={28} style={{ color: "var(--brand)", margin: "0 auto var(--space-4)" }} />
                 <h3 style={{ fontFamily: "var(--font-sans)", fontSize: "17px", fontWeight: 600, color: "var(--text-1)" }}>No content yet</h3>
                 <p style={{ fontSize: "13px", color: "var(--text-2)", marginTop: "var(--space-2)", lineHeight: 1.6 }}>
                   Point an agent at a scan gap in <strong>Opportunities</strong>, or start a run from scratch.
@@ -404,7 +404,7 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
               return (
                 <div key={group.key} data-testid={`studio-group-${group.key}`}>
                   <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-3)" }}>
-                    {group.key === "awaiting_approval" && <Inbox size={12} style={{ color: "var(--accent)" }} />}
+                    {group.key === "awaiting_approval" && <Inbox size={12} style={{ color: "var(--brand)" }} />}
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: "10px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: group.key === "awaiting_approval" ? "var(--accent-text)" : "var(--text-2)" }}>
                       {group.label} ({list.length})
                     </span>
@@ -441,7 +441,7 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
         {tab === "lessons" && (
           <div style={{ maxWidth: "760px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
-              <GraduationCap size={16} style={{ color: "var(--accent)" }} />
+              <GraduationCap size={16} style={{ color: "var(--brand)" }} />
               <span style={{ fontSize: "13px", color: "var(--text-2)" }}>
                 Lessons distilled from your feedback — injected into every future run for this brand.
               </span>
@@ -453,7 +453,7 @@ export function StudioView({ brand, scan, initialItemId = null, onCountsChange }
         {tab === "brief" && (
           <div style={{ maxWidth: "760px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
-              <BookOpen size={16} style={{ color: "var(--accent)" }} />
+              <BookOpen size={16} style={{ color: "var(--brand)" }} />
               <span style={{ fontSize: "13px", color: "var(--text-2)" }}>
                 The Brand Brief is written once and inherited by every agent — never re-explained per run.
               </span>

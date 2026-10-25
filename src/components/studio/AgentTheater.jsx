@@ -10,7 +10,7 @@ const RUNNING = ["pending", "coordinating", "researching", "benchmarking", "draf
 
 function StatusDot({ status }) {
   if (status === "working")
-    return <Loader2 size={13} style={{ color: "var(--accent)", animation: "spin 1s linear infinite" }} />;
+    return <Loader2 size={13} style={{ color: "var(--brand)", animation: "spin 1s linear infinite" }} />;
   if (status === "done") return <Check size={13} style={{ color: "var(--good)" }} />;
   if (status === "failed") return <X size={13} style={{ color: "var(--crit)" }} />;
   return <CircleDot size={13} style={{ color: "var(--text-3)", opacity: 0.5 }} />;
@@ -93,7 +93,7 @@ export function PipelineStrip({ trace }) {
             {m.emoji}
           </span>
           {m.status === "working" && (
-            <Loader2 size={10} style={{ color: "var(--accent)", animation: "spin 1s linear infinite" }} />
+            <Loader2 size={10} style={{ color: "var(--brand)", animation: "spin 1s linear infinite" }} />
           )}
           {i < trace.length - 1 && <span style={{ color: "var(--text-3)", fontSize: "9px" }}>›</span>}
         </div>

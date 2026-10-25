@@ -125,7 +125,7 @@ export function Markdown({ children }) {
         <blockquote
           key={key++}
           style={{
-            borderLeft: "3px solid var(--accent)",
+            borderLeft: "3px solid var(--brand)",
             padding: "var(--space-2) var(--space-4)",
             margin: "var(--space-3) 0",
             color: "var(--text-2)",

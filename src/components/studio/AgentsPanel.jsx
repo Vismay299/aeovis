@@ -131,7 +131,7 @@ export function AgentsPanel({ brand, onRun, apiBase = "/api/agents", customer = 
     <div data-testid="agents-panel">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-4)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-          <Sparkles size={16} style={{ color: "var(--accent)" }} />
+          <Sparkles size={16} style={{ color: "var(--brand)" }} />
           <span style={{ fontSize: "13px", color: "var(--text-2)" }}>
             Build an operator for each job to be done. It runs on a crew of five specialists you can watch work.
           </span>
