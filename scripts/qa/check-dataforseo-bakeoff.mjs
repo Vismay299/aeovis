@@ -178,7 +178,8 @@ async function main() {
     return lease;
   }
 
-  async function record(lease, answer, error = null) {
+  async function record(lease, answer, error = null, postedAtMs = null, collectedAtMs = null, collectionCompleted = false) {
+    const resultAtMs = collectionCompleted ? collectedAtMs ?? Date.now() : null;
     const item = lease.item;
     const reportedCost = Number.isFinite(answer?.costUsd) ? answer.costUsd : Number.isFinite(answer?.billing?.costUsd) ? answer.billing.costUsd : Number.isFinite(answer?.cost) ? answer.cost : null;
     const providerCost = item.arm === "current" && item.engine === "aio" ? null : reportedCost;
@@ -201,10 +202,14 @@ async function main() {
     if (finish?.accepted === false) throw new Error("Dispatch result lost its active lease");
     const duration = Date.now() - lease.startedAt;
     const tablePrice = item.arm === "current" ? brightDataPriceUsd : item.arm === "dfs_model" ? llmResponseUsd("perplexity", true) : aiAnswerUsd(item.engine === "google_ai_overview" ? "google_ai_overview" : item.engine, item.arm === "dfs_live" ? "live" : "queued");
-    const metricRow = { id: lease.row.id, arm: item.arm, engine: item.engine, questionIndex: item.questionIndex, state, posted: item.arm === "current" ? false : answer?.posted !== false, accepted: item.arm === "current" ? false : answer?.accepted !== false, echoedLocation: answer?.locationCode === 2356, validSerp: item.engine === "google_ai_overview" || item.engine === "aio" && answer?.serp_state === "valid_serp", aioPresent: Boolean(answer?.aioPresent ?? answer?.aio_present), asyncRefund: Boolean(answer?.asyncRefund), noResults: Boolean(answer?.noResults), aioCaptureMode: answer?.aio_capture_mode ?? answer?.provenance?.aio_capture_mode ?? null, latencyMs: duration, collectMinutes: answer?.collectMinutes ?? null, costUsd: providerCost, priceUsd: tablePrice, failureKind: result.provider_failure?.kind ?? null, statusCode: answer?.statusCode ?? null, rejectedTask: Boolean(answer?.rejectedTask || answer?.accepted === false), ambiguous: result.provider_failure?.kind === "dispatch_unknown", openRouterCostUsd: answer?.openRouterCostUsd ?? (answer?.cost_source === "gateway" ? reportedCost : null), brightDataPriceUsd };
+    const collectMinutes = postedAtMs === null || resultAtMs === null ? null : Math.max(0, (resultAtMs - postedAtMs) / 60_000);
+    const validSerp = answer?.validSerp ?? (item.engine === "aio"
+      ? answer?.serp_state === "valid_serp"
+      : item.engine === "google_ai_overview" && answer?.statusCode === 20000 && answer?.noResults !== true);
+    const metricRow = { id: lease.row.id, arm: item.arm, engine: item.engine, questionIndex: item.questionIndex, state, posted: item.arm === "current" ? false : answer?.posted !== false, accepted: item.arm === "current" ? false : answer?.accepted !== false, echoedLocation: answer?.locationCode === 2356, validSerp: Boolean(validSerp), aioPresent: Boolean(answer?.aioPresent ?? answer?.aio_present), asyncRefund: Boolean(answer?.asyncRefund), noResults: Boolean(answer?.noResults), aioCaptureMode: answer?.aio_capture_mode ?? answer?.provenance?.aio_capture_mode ?? null, latencyMs: duration, collectionEligible: postedAtMs !== null, collectionCompleted, postedAt: postedAtMs === null ? null : new Date(postedAtMs).toISOString(), resultAt: resultAtMs === null ? null : new Date(resultAtMs).toISOString(), collectMinutes, costUsd: providerCost, priceUsd: tablePrice, failureKind: result.provider_failure?.kind ?? null, statusCode: answer?.statusCode ?? null, rejectedTask: Boolean(answer?.rejectedTask || answer?.accepted === false), ambiguous: result.provider_failure?.kind === "dispatch_unknown", openRouterCostUsd: answer?.openRouterCostUsd ?? (answer?.cost_source === "gateway" ? reportedCost : null), brightDataPriceUsd };
     observations.push(metricRow);
     answers.push({ observationId: lease.row.id, arm: item.arm, engine: item.engine, questionIndex: item.questionIndex, answerText: text, citations, brandMentioned: Boolean(processed?.brand_mentioned_in_text), branded: Boolean(processed?.is_branded_query), competitorsNamed: (processed?.competitors_found_in_text ?? []).length, extractedMentioned: Boolean(processed?.brand_mentioned_in_text) });
-    manifestRows.push({ id: lease.row.id, arm: item.arm, engine: item.engine, questionIndex: item.questionIndex, state, attemptCount: lease.attemptNo, costUsd: providerCost, costSource: providerCost == null ? "unknown" : "provider", latencyMs: duration, statusCode: answer?.statusCode ?? null, reason: result.provider_failure?.kind ?? null, provenance: answer?.provenance ?? null });
+    manifestRows.push({ id: lease.row.id, arm: item.arm, engine: item.engine, questionIndex: item.questionIndex, state, attemptCount: lease.attemptNo, costUsd: providerCost, costSource: providerCost == null ? "unknown" : "provider", latencyMs: duration, collectionEligible: metricRow.collectionEligible, collectionCompleted, postedAt: metricRow.postedAt, resultAt: metricRow.resultAt, collectMinutes, statusCode: answer?.statusCode ?? null, reason: result.provider_failure?.kind ?? null, provenance: answer?.provenance ?? null });
     activeLeases.delete(lease.row.id);
   }
 
@@ -219,30 +224,35 @@ async function main() {
           let response;
           try { response = await postAiTrackingTasks({ engine: apiEngine(engine), locationCode: 2356, languageCode: panel.context.language, tasks: leases.map((lease) => ({ tag: lease.row.id, prompt: lease.row.query })) }); }
           catch (error) { for (const lease of leases) await record(lease, { costUsd: null }, error); continue; }
+          const postedAtMs = Date.now();
           const postedByTag = new Map(response.data.posted.map((item) => [item.tag, item.taskId]));
           for (const rejected of response.data.rejected) {
             const lease = leases.find((item) => item.row.id === rejected.tag);
             if (lease) await record(lease, { costUsd: rejected.costUsd, statusCode: rejected.statusCode, accepted: false, rejectedTask: true }, new Error("Provider rejected task"));
           }
-          const pending = leases.filter((lease) => postedByTag.has(lease.row.id)).map((lease) => ({ lease, taskId: postedByTag.get(lease.row.id) }));
+          const pending = leases.filter((lease) => postedByTag.has(lease.row.id)).map((lease) => ({ lease, taskId: postedByTag.get(lease.row.id), postedAtMs }));
           const pollStarted = Date.now();
           for (const offset of [2, 4, 7, 10, 14, 18, 22, 26, 30]) {
             await delay(Math.max(0, offset * 60_000 - (Date.now() - pollStarted)));
             const next = [];
             for (const entry of pending) {
-              if (entry.lease.renewalFailed) { await record(entry.lease, { costUsd: null }, new Error("Lease renewal failed")); continue; }
+              if (entry.lease.renewalFailed) { await record(entry.lease, { costUsd: null }, new Error("Lease renewal failed"), entry.postedAtMs); continue; }
+              let collectionCompleted = false;
+              let collectedAtMs = null;
               try {
                 const outcome = await fetchAiTrackingTaskResult({ engine: apiEngine(engine), taskId: entry.taskId });
                 if (outcome.status === "pending") { next.push(entry); continue; }
-                if (outcome.status === "failed") { await record(entry.lease, { costUsd: outcome.costUsd }, new Error(outcome.message)); continue; }
+                collectionCompleted = true;
+                collectedAtMs = Date.now();
+                if (outcome.status === "failed") { await record(entry.lease, { costUsd: outcome.costUsd, statusCode: outcome.statusCode }, new Error(outcome.message), entry.postedAtMs, collectedAtMs, true); continue; }
                 const parsed = parseDataforseoAnswer(outcome.result, apiEngine(engine));
-                await record(entry.lease, { answerText: parsed?.answerText ?? "", citations: parsed?.citations ?? [], costUsd: outcome.costUsd, statusCode: 20000, aioPresent: Boolean(parsed?.answerText), asyncRefund: engine === "google_ai_overview" && (outcome.costUsd ?? 0) < 0.0012, noResults: outcome.result === null, locationCode: 2356 });
-              } catch (error) { await record(entry.lease, { costUsd: null }, error); }
+                await record(entry.lease, { answerText: parsed?.answerText ?? "", citations: parsed?.citations ?? [], costUsd: outcome.costUsd, statusCode: outcome.statusCode, aioPresent: Boolean(parsed?.answerText), asyncRefund: engine === "google_ai_overview" && outcome.costUsd !== null && outcome.costUsd !== undefined && Number.isFinite(Number(outcome.costUsd)) && Number(outcome.costUsd) < 0.0012, noResults: outcome.result === null, locationCode: 2356 }, null, entry.postedAtMs, collectedAtMs, true);
+              } catch (error) { await record(entry.lease, { costUsd: null }, error, entry.postedAtMs, collectedAtMs, collectionCompleted); }
             }
             pending.splice(0, pending.length, ...next);
             if (!pending.length) break;
           }
-          for (const entry of pending) await record(entry.lease, { costUsd: null }, new Error("Task collection window expired"));
+          for (const entry of pending) await record(entry.lease, { costUsd: null }, new Error("Task collection window expired"), entry.postedAtMs);
         }
       } else if (arm === "current") {
         const requested = "aio,chatgpt,gemini,perplexity";
@@ -276,9 +286,12 @@ async function main() {
             } else {
               const engine = apiEngine(item.engine);
               const response = await fetchAiTrackingLiveAnswer({ engine, locationCode: 2356, languageCode: panel.context.language, task: { tag: lease.row.id, prompt: lease.row.query } });
-              if (response.data.status === "failed") throw Object.assign(new Error("DataForSEO live task failed"), { code: response.data.code });
+              if (response.data.status === "failed") {
+                await record(lease, { costUsd: response.billing.costUsd, statusCode: response.data.statusCode }, new Error(response.data.message));
+                continue;
+              }
               const parsed = parseDataforseoAnswer(response.data.result, engine);
-              await record(lease, { answerText: parsed?.answerText ?? "", citations: parsed?.citations ?? [], costUsd: response.billing.costUsd, statusCode: 20000, locationCode: 2356, aioPresent: Boolean(parsed?.answerText), noResults: response.data.result === null });
+              await record(lease, { answerText: parsed?.answerText ?? "", citations: parsed?.citations ?? [], costUsd: response.billing.costUsd, statusCode: response.data.statusCode, locationCode: 2356, aioPresent: Boolean(parsed?.answerText), noResults: response.data.result === null });
             }
           } catch (error) { await record(lease, { costUsd: null }, error); }
         }

@@ -77,8 +77,17 @@ test("dry-run guarded fetch allows sandbox/catalogue hosts only and stops at N+1
   await assert.rejects(allowed("https://api.dataforseo.com/v3/ai_optimization/perplexity/llm_responses/live"), /Dry run/);
 });
 
-test("fixture metrics equal the expected summary and markdown contains no answer text", async () => {
+test("fixture metrics and all six owner-facing report groups match without answer text", async () => {
   const observations = JSON.parse(await readFile(fixtureDir + "observations.json", "utf8"));
+  for (const observation of observations) {
+    if (observation.arm !== "dfs_queued") continue;
+    observation.collectionEligible = observation.posted === true && observation.accepted === true;
+    observation.collectionCompleted = observation.collectionEligible && observation.collectMinutes != null;
+    if (!observation.collectionCompleted) { delete observation.collectMinutes; continue; }
+    observation.postedAt = 0;
+    observation.resultAt = Number(observation.collectMinutes) * 60_000;
+    delete observation.collectMinutes;
+  }
   const answers = (await readFile(fixtureDir + "answers.jsonl", "utf8")).trim().split(/\r?\n/).map((line) => JSON.parse(line));
   const metrics = computeMetrics(observations, answers, [{ name: "Offcult", domain: "offcult.in" }]);
   const expected = JSON.parse(await readFile(fixtureDir + "expected-summary.json", "utf8"));
@@ -88,8 +97,148 @@ test("fixture metrics equal the expected summary and markdown contains no answer
   assert.equal(metrics["dfs_queued:chatgpt"].answered.rate, 1);
   assert.equal(metrics["dfs_queued:chatgpt"].indiaAcceptance.count, 2);
   assert.equal(metrics["dfs_queued:chatgpt"].parserAgreement.rate, 1);
+  assert.deepEqual(metrics["dfs_queued:chatgpt"].latencyMs, { p50: null, p90: null, max: null });
+  assert.deepEqual(metrics["dfs_queued:chatgpt"].queuedLatencyMinutes, { p50: 1, p90: 1, max: 1 });
+  assert.deepEqual(metrics["dfs_queued:chatgpt"].collectedBy10Minutes, { count: 2, total: 2, rate: 1 });
   const markdown = renderSummaryMarkdown(metrics);
+  const expectedGroups = [
+    "## 1. India location support",
+    "## 2. AI Overview presence and async refunds",
+    "## 3. Answer fidelity, extraction, and cross-arm agreement",
+    "## 4. Latency and queued collection",
+    "## 5. Failure modes",
+    "## 6. Cost vs price table (USD)",
+  ];
+  for (const heading of expectedGroups) assert.ok(markdown.includes(heading), `missing report group: ${heading}`);
+  const assertEveryMetricCell = (heading: string, column: string, expected: (value: any) => unknown) => {
+    const start = markdown.indexOf(heading);
+    const next = markdown.indexOf("\n## ", start + heading.length);
+    const section = markdown.slice(start, next === -1 ? undefined : next);
+    const lines = section.split(/\r?\n/);
+    const header = lines.find((line) => line.startsWith("| Arm |"))?.split("|").map((item) => item.trim()) ?? [];
+    const columnIndex = header.indexOf(column);
+    assert.ok(columnIndex > 0, `missing column ${column} in ${heading}`);
+    for (const value of Object.values(metrics)) {
+      const row = lines.find((line) => line.startsWith(`| ${value.arm} | ${value.engine} |`));
+      assert.ok(row, `missing ${value.arm}:${value.engine} row in ${heading}`);
+      const actual = row!.split("|").map((item) => item.trim())[columnIndex];
+      assert.equal(actual, String(expected(value)), `${value.arm}:${value.engine} ${column}`);
+    }
+  };
+  const formatRate = (item: { total: number; count: number; rate: number | null }) => item.total
+    ? `${item.count} of ${item.total} (${((item.rate ?? 0) * 100).toFixed(1)}%)`
+    : "0 of 0 (n/a)";
+  const formatNumber = (item: number | null | undefined, digits = 2) => Number.isFinite(item) ? Number(item).toFixed(digits) : "n/a";
+  const formatHistogram = (item: Record<string, number>) => Object.keys(item).length
+    ? Object.entries(item).sort(([a], [b]) => a.localeCompare(b)).map(([key, count]) => `${key}: ${count}`).join(", ")
+    : "none";
+
+  for (const [column, metric] of [
+    ["Accepted / posted", "indiaAcceptance"],
+    ["Echoed location 2356 / accepted", "echoedIndiaLocation"],
+    [".in heuristic / answered", "indiaDomainHeuristic"],
+  ]) assertEveryMetricCell(expectedGroups[0], column, (value) => formatRate(value[metric]));
+  assertEveryMetricCell(expectedGroups[0], "Rejected task_post entries", (value) => value.rejectedTasks);
+  assertEveryMetricCell(expectedGroups[0], "Rejected status codes", (value) => formatHistogram(value.rejectedStatusCodes));
+
+  assertEveryMetricCell(expectedGroups[1], "AIO present / valid SERPs", (value) => formatRate(value.aiOverviewPresence));
+  assertEveryMetricCell(expectedGroups[1], "Capture modes", (value) => formatHistogram(value.aioCaptureModes));
+  assertEveryMetricCell(expectedGroups[1], "Queued Google refunds (< $0.0012) / accepted queued Google tasks", (value) => formatRate(value.asyncRefundObserved));
+  const queuedGoogle = observations.filter((observation: any) => observation.arm === "dfs_queued" && observation.engine === "google_ai_overview" && observation.posted && observation.accepted);
+  assert.deepEqual(metrics["dfs_queued:google_ai_overview"].asyncRefundObserved, {
+    count: queuedGoogle.filter((observation: any) => observation.costUsd !== null && observation.costUsd !== undefined && observation.costUsd !== "" && Number.isFinite(Number(observation.costUsd)) && Number(observation.costUsd) < 0.0012).length,
+    total: queuedGoogle.length,
+    rate: queuedGoogle.filter((observation: any) => observation.costUsd !== null && observation.costUsd !== undefined && observation.costUsd !== "" && Number.isFinite(Number(observation.costUsd)) && Number(observation.costUsd) < 0.0012).length / queuedGoogle.length,
+  });
+  assert.deepEqual(metrics["dfs_live:google_ai_overview"].asyncRefundObserved, { count: 0, total: 0, rate: null });
+
+  for (const [column, metric] of [
+    ["Answered", "answered"],
+    ["Empty answers", "emptyAnswer"],
+    ["Offcult mentioned", "offcultMention"],
+    ["Branded mention", "brandedMention"],
+    ["Non-branded mention", "nonBrandedMention"],
+    ["Citation coverage", "citationCoverage"],
+    ["Parser agreement", "parserAgreement"],
+  ]) assertEveryMetricCell(expectedGroups[2], column, (value) => formatRate(value[metric]));
+  assertEveryMetricCell(expectedGroups[2], "Mean competitors", (value) => formatNumber(value.meanCompetitorsNamed));
+  assertEveryMetricCell(expectedGroups[2], "Mean citations", (value) => formatNumber(value.meanCitations));
+  assertEveryMetricCell(expectedGroups[2], "Median answer chars", (value) => formatNumber(value.medianAnswerLength, 0));
+  assertEveryMetricCell(expectedGroups[2], "Cross-arm Offcult agreement", (value) => value.crossArmAgreement ? formatRate(value.crossArmAgreement.mentioned) : "n/a (current baseline)");
+  assertEveryMetricCell(expectedGroups[2], "Citation-domain Jaccard mean (paired questions)", (value) => value.crossArmAgreement
+    ? `${formatNumber(value.crossArmAgreement.citationDomainJaccardMean, 3)} (${value.crossArmAgreement.mentioned.total} paired questions)`
+    : "n/a (current baseline)");
+
+  assertEveryMetricCell(expectedGroups[3], "Live request wall p50 / p90 / max (ms)", (value) => `${formatNumber(value.latencyMs.p50, 0)} / ${formatNumber(value.latencyMs.p90, 0)} / ${formatNumber(value.latencyMs.max, 0)}`);
+  assertEveryMetricCell(expectedGroups[3], "Queued post-to-result p50 / p90 / max (min)", (value) => `${formatNumber(value.queuedLatencyMinutes.p50)} / ${formatNumber(value.queuedLatencyMinutes.p90)} / ${formatNumber(value.queuedLatencyMinutes.max)}`);
+  assertEveryMetricCell(expectedGroups[3], "Collected by 10 min / eligible accepted queued tasks", (value) => formatRate(value.collectedBy10Minutes));
+  assertEveryMetricCell(expectedGroups[3], "Collected by 30 min / eligible accepted queued tasks", (value) => formatRate(value.collectedBy30Minutes));
+
+  assertEveryMetricCell(expectedGroups[4], "Observation states", (value) => formatHistogram(value.states));
+  assertEveryMetricCell(expectedGroups[4], "provider_failure.kind", (value) => formatHistogram(value.failureModes));
+  assertEveryMetricCell(expectedGroups[4], "DataForSEO status codes", (value) => formatHistogram(value.statusCodes));
+  assertEveryMetricCell(expectedGroups[4], "Rejected task_post entries", (value) => value.rejectedTasks);
+  assertEveryMetricCell(expectedGroups[4], "No-results", (value) => value.noResults);
+  assertEveryMetricCell(expectedGroups[4], "Ambiguous dispatches", (value) => value.ambiguousDispatches);
+
+  assertEveryMetricCell(expectedGroups[5], "Provider cost sum", (value) => formatNumber(value.providerCostUsd.sum, 4));
+  assertEveryMetricCell(expectedGroups[5], "Provider cost mean", (value) => formatNumber(value.providerCostUsd.mean, 4));
+  assertEveryMetricCell(expectedGroups[5], "Known / unknown costs", (value) => `${value.providerCostUsd.known} / ${value.providerCostUsd.unknown}`);
+  assertEveryMetricCell(expectedGroups[5], "Price-table expected", (value) => formatNumber(value.priceTableUsd.expected, 4));
+  assertEveryMetricCell(expectedGroups[5], "Provider / price ratio", (value) => formatNumber(value.priceTableUsd.ratio, 3));
+  assertEveryMetricCell(expectedGroups[5], "OpenRouter usage.cost", (value) => formatNumber(value.openRouterUsageUsd, 4));
+  assertEveryMetricCell(expectedGroups[5], "Bright Data price-table cost", (value) => formatNumber(value.brightDataPriceTableUsd, 4));
+  assertEveryMetricCell(expectedGroups[5], "Projected 30 questions (engine)", (value) => formatNumber(value.projected30QuestionEngineUsd, 4));
+  assertEveryMetricCell(expectedGroups[5], "Projected daily ×30 (engine)", (value) => formatNumber(value.projectedMonthlyDailyEngineUsd, 4));
+  assert.ok(markdown.includes("### Per-arm projection for the configured engine set"));
+  assert.equal(metrics["dfs_queued:chatgpt"].projectedEngineCount, 3);
+  assert.equal(metrics["dfs_queued:chatgpt"].projectedPricedEngineCount, 3);
+  assert.equal(metrics["dfs_queued:chatgpt"].projected30QuestionScanUsd, 0.09);
+  assert.ok(markdown.includes("| dfs_queued | 3 | 3 of 3 | 0.0900 | 2.7000 |"));
+  assert.match(markdown, /DataForSEO balance delta \(before − after\): \$[^;]+; summed DataForSEO task costs: \$/);
   for (const answer of answers) assert.equal(markdown.includes(answer.answerText), false);
+});
+
+test("metrics use billed queued refunds, valid SERPs, AIO cross-arm matching, and posted-to-result collection time", () => {
+  const observations = [
+    { id: "queued-0", arm: "dfs_queued", engine: "google_ai_overview", questionIndex: 0, posted: true, accepted: true, collectionEligible: true, collectionCompleted: true, validSerp: true, aioPresent: true, costUsd: null, postedAt: 0, resultAt: 2 * 60_000 },
+    { id: "queued-1", arm: "dfs_queued", engine: "google_ai_overview", questionIndex: 1, posted: true, accepted: true, collectionEligible: true, collectionCompleted: true, validSerp: false, aioPresent: true, costUsd: undefined, postedAt: 0, resultAt: 9 * 60_000 },
+    { id: "queued-2", arm: "dfs_queued", engine: "google_ai_overview", questionIndex: 2, posted: true, accepted: true, collectionEligible: true, collectionCompleted: true, validSerp: true, aioPresent: false, costUsd: 0.0011, postedAt: 0, resultAt: 29 * 60_000 },
+    { id: "queued-3", arm: "dfs_queued", engine: "google_ai_overview", questionIndex: 3, posted: true, accepted: true, collectionEligible: true, collectionCompleted: true, validSerp: false, aioPresent: false, costUsd: 0.0012, postedAt: 0, resultAt: 31 * 60_000 },
+    { id: "queued-4", arm: "dfs_queued", engine: "google_ai_overview", questionIndex: 4, posted: true, accepted: true, collectionEligible: true, collectionCompleted: false, state: "failed", failureKind: "dataforseo_unavailable", statusCode: 40101, validSerp: false, aioPresent: false, costUsd: null },
+    { id: "queued-5", arm: "dfs_queued", engine: "google_ai_overview", questionIndex: 5, posted: true, accepted: true, collectionEligible: true, collectionCompleted: true, state: "valid_no_aio", noResults: true, statusCode: 40501, validSerp: false, aioPresent: false, costUsd: 0, postedAt: 0, resultAt: 35 * 60_000 },
+    { id: "live-0", arm: "dfs_live", engine: "google_ai_overview", questionIndex: 0, validSerp: true, costUsd: 0.001, collectMinutes: 3 },
+    { id: "live-failed", arm: "dfs_live", engine: "chatgpt", questionIndex: 1, state: "failed", failureKind: "dataforseo_unavailable", statusCode: 40101, costUsd: 0.001 },
+    { id: "live-no-results", arm: "dfs_live", engine: "google_ai_overview", questionIndex: 1, state: "valid_no_aio", noResults: true, statusCode: 40501, validSerp: false, costUsd: 0 },
+    { id: "current-0", arm: "current", engine: "aio", questionIndex: 0, validSerp: true, aioPresent: true, collectMinutes: 4 },
+  ];
+  const answers = [
+    { observationId: "queued-0", brandMentioned: true, citations: [{ domain: "queued.example" }] },
+    { observationId: "live-0", brandMentioned: false, citations: [{ domain: "current.example" }] },
+    { observationId: "current-0", brandMentioned: false, citations: [{ domain: "current.example" }] },
+  ];
+  const metrics = computeMetrics(observations, answers);
+
+  assert.deepEqual(metrics["dfs_queued:google_ai_overview"].asyncRefundObserved, { count: 2, total: 6, rate: 1 / 3 });
+  assert.equal(metrics["dfs_queued:google_ai_overview"].statusCodes[40101], 1);
+  assert.equal(metrics["dfs_queued:google_ai_overview"].statusCodes[40501], 1);
+  assert.equal(metrics["dfs_queued:google_ai_overview"].failureModes.dataforseo_unavailable, 1);
+  assert.equal(metrics["dfs_live:chatgpt"].statusCodes[40101], 1);
+  assert.equal(metrics["dfs_live:google_ai_overview"].statusCodes[40501], 1);
+  assert.deepEqual(metrics["dfs_live:google_ai_overview"].asyncRefundObserved, { count: 0, total: 0, rate: null });
+  assert.deepEqual(metrics["dfs_queued:google_ai_overview"].aiOverviewPresence, { count: 1, total: 2, rate: 0.5 });
+  assert.deepEqual(metrics["dfs_queued:google_ai_overview"].crossArmAgreement.mentioned, { count: 0, total: 1, rate: 0 });
+  assert.equal(metrics["dfs_queued:google_ai_overview"].crossArmAgreement.citationDomainJaccardMean, 0);
+  assert.deepEqual(metrics["dfs_live:google_ai_overview"].crossArmAgreement.mentioned, { count: 1, total: 1, rate: 1 });
+  assert.equal(metrics["dfs_live:google_ai_overview"].crossArmAgreement.citationDomainJaccardMean, 1);
+  assert.deepEqual(metrics["dfs_queued:google_ai_overview"].queuedLatencyMinutes, { p50: 29, p90: 35, max: 35 });
+  assert.deepEqual(metrics["dfs_queued:google_ai_overview"].collectedBy10Minutes, { count: 2, total: 6, rate: 1 / 3 });
+  assert.deepEqual(metrics["dfs_queued:google_ai_overview"].collectedBy30Minutes, { count: 3, total: 6, rate: 0.5 });
+  assert.deepEqual(metrics["dfs_live:google_ai_overview"].queuedLatencyMinutes, { p50: null, p90: null, max: null });
+  assert.deepEqual(metrics["dfs_live:google_ai_overview"].collectedBy10Minutes, { count: 0, total: 0, rate: null });
+  const markdown = renderSummaryMarkdown(metrics);
+  assert.match(markdown, /40101: 1/);
+  assert.match(markdown, /40501: 1/);
 });
 
 test("rejects --out paths through a symlink or junction into the repository", async () => {

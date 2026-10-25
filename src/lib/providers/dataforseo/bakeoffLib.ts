@@ -286,6 +286,30 @@ function aiMentionSpans(text: string, names: string[]): { start: number; end: nu
 }
 
 function safeRate(count: number, total: number) { return { count, total, rate: total ? count / total : null }; }
+function finiteProvidedNumber(value: unknown): number | null {
+  if (value === null || value === undefined || typeof value === "string" && value.trim() === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+function timestampMillis(value: unknown): number | null {
+  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string" && value.trim()) {
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+  return null;
+}
+function queuedCollectionMinutes(observation: DataRecord): number | null {
+  if (observation.collectionCompleted !== true) return null;
+  const postedAt = timestampMillis(observation.postedAt);
+  const resultAt = timestampMillis(observation.resultAt);
+  if (postedAt !== null && resultAt !== null) {
+    const elapsed = (resultAt - postedAt) / 60_000;
+    return elapsed >= 0 ? elapsed : null;
+  }
+  return finiteProvidedNumber(observation.collectMinutes);
+}
 function percentile(values: number[], p: number): number | null {
   if (!values.length) return null;
   const sorted = [...values].sort((a, b) => a - b);
@@ -311,12 +335,13 @@ export function computeMetrics(observations: DataRecord[], answers: DataRecord[]
     const nonEmpty = answered.length;
     const mentioned = answered.filter(({ answer }) => Boolean(answer.brandMentioned)).length;
     const citationRows = answered.map(({ answer }) => answer.citations ?? []);
-    const knownCosts = rows.map(({ observation }) => observation.costUsd).filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
+    const knownCosts = rows.map(({ observation }) => finiteProvidedNumber(observation.costUsd)).filter((value): value is number => value !== null);
     const costs = knownCosts.reduce((sum, value) => sum + value, 0);
     const expected = rows.reduce((sum, { observation }) => sum + (Number(observation.priceUsd) || 0), 0);
-    const validSerps = rows.filter(({ observation }) => observation.validSerp).length;
-    const aios = rows.filter(({ observation }) => observation.aioPresent).length;
-    const latencies = rows.map(({ observation }) => Number(observation.latencyMs)).filter(Number.isFinite);
+    const validSerpRows = rows.filter(({ observation }) => observation.validSerp === true);
+    const validSerps = validSerpRows.length;
+    const aios = validSerpRows.filter(({ observation }) => observation.aioPresent).length;
+    const latencies = rows.filter(({ observation }) => observation.arm !== "dfs_queued").map(({ observation }) => Number(observation.latencyMs)).filter(Number.isFinite);
     const failures: Record<string, number> = {};
     const states: Record<string, number> = {};
     for (const { observation } of rows) {
@@ -338,7 +363,13 @@ export function computeMetrics(observations: DataRecord[], answers: DataRecord[]
       echoedIndiaLocation: safeRate(rows.filter(({ observation }) => observation.echoedLocation).length, rows.filter(({ observation }) => observation.accepted).length),
       indiaDomainHeuristic: safeRate(answered.filter(({ answer }) => (answer.citations ?? []).some((citation: DataRecord) => citation.domain?.toLowerCase().endsWith(".in"))).length, nonEmpty),
       aiOverviewPresence: safeRate(aios, validSerps),
-      asyncRefundObserved: safeRate(rows.filter(({ observation }) => observation.asyncRefund).length, rows.filter(({ observation }) => observation.engine === "google_ai_overview").length),
+      asyncRefundObserved: (() => {
+        const queuedGoogle = rows.filter(({ observation }) => observation.arm === "dfs_queued" && observation.engine === "google_ai_overview" && observation.posted === true && observation.accepted === true);
+        return safeRate(queuedGoogle.filter(({ observation }) => {
+          const cost = finiteProvidedNumber(observation.costUsd);
+          return cost !== null && cost < 0.0012;
+        }).length, queuedGoogle.length);
+      })(),
       rejectedTasks: rows.filter(({ observation }) => observation.rejectedTask).length,
       rejectedStatusCodes: rows.reduce<Record<string, number>>((histogram, { observation }) => { if (observation.rejectedTask && observation.statusCode != null) histogram[observation.statusCode] = (histogram[observation.statusCode] ?? 0) + 1; return histogram; }, {}),
       noResults: rows.filter(({ observation }) => observation.noResults).length,
@@ -353,17 +384,34 @@ export function computeMetrics(observations: DataRecord[], answers: DataRecord[]
       medianAnswerLength: percentile(answered.map(({ answer }) => answer.answerText.length), 0.5),
       parserAgreement: safeRate(parserMatches, parser.length),
       latencyMs: { p50: percentile(latencies, 0.5), p90: percentile(latencies, 0.9), max: latencies.length ? Math.max(...latencies) : null },
-      queuedLatencyMinutes: { p50: percentile(rows.map(({ observation }) => Number(observation.collectMinutes)).filter(Number.isFinite), 0.5), p90: percentile(rows.map(({ observation }) => Number(observation.collectMinutes)).filter(Number.isFinite), 0.9), max: Math.max(0, ...rows.map(({ observation }) => Number(observation.collectMinutes)).filter(Number.isFinite)) || null },
-      collectedBy10Minutes: safeRate(rows.filter(({ observation }) => observation.collectMinutes != null && observation.collectMinutes <= 10).length, rows.filter(({ observation }) => observation.collectMinutes != null).length),
-      collectedBy30Minutes: safeRate(rows.filter(({ observation }) => observation.collectMinutes != null && observation.collectMinutes <= 30).length, rows.filter(({ observation }) => observation.collectMinutes != null).length),
+      queuedLatencyMinutes: (() => {
+        const collectionTimes = rows.filter(({ observation }) => observation.arm === "dfs_queued" && observation.collectionEligible === true).map(({ observation }) => queuedCollectionMinutes(observation)).filter((value): value is number => value !== null);
+        return { p50: percentile(collectionTimes, 0.5), p90: percentile(collectionTimes, 0.9), max: collectionTimes.length ? Math.max(...collectionTimes) : null };
+      })(),
+      collectedBy10Minutes: (() => {
+        const eligible = rows.filter(({ observation }) => observation.arm === "dfs_queued" && observation.collectionEligible === true);
+        const collectedByThreshold = eligible.filter(({ observation }) => {
+          const minutes = queuedCollectionMinutes(observation);
+          return minutes !== null && minutes <= 10;
+        }).length;
+        return safeRate(collectedByThreshold, eligible.length);
+      })(),
+      collectedBy30Minutes: (() => {
+        const eligible = rows.filter(({ observation }) => observation.arm === "dfs_queued" && observation.collectionEligible === true);
+        const collectedByThreshold = eligible.filter(({ observation }) => {
+          const minutes = queuedCollectionMinutes(observation);
+          return minutes !== null && minutes <= 30;
+        }).length;
+        return safeRate(collectedByThreshold, eligible.length);
+      })(),
       states,
       failureModes: failures,
       statusCodes: rows.reduce<Record<string, number>>((histogram, { observation }) => { if (observation.statusCode != null) histogram[observation.statusCode] = (histogram[observation.statusCode] ?? 0) + 1; return histogram; }, {}),
       ambiguousDispatches: rows.filter(({ observation }) => observation.ambiguous).length,
       providerCostUsd: { sum: costs, mean: knownCosts.length ? costs / knownCosts.length : null, known: knownCosts.length, unknown: rows.length - knownCosts.length },
       priceTableUsd: { expected: expected, ratio: expected && knownCosts.length === rows.length ? costs / expected : null },
-      projected30QuestionScanUsd: rows.length ? costs / rows.length * 120 : null,
-      projectedMonthlyDailyUsd: rows.length ? costs / rows.length * 120 * 30 : null,
+      projected30QuestionEngineUsd: knownCosts.length ? costs / knownCosts.length * 30 : null,
+      projectedMonthlyDailyEngineUsd: knownCosts.length ? costs / knownCosts.length * 30 * 30 : null,
       balanceDeltaUsd: typeof balanceBefore === "number" && typeof balanceAfter === "number" ? balanceBefore - balanceAfter : null,
       openRouterUsageUsd: optionalSum(rows.map(({ observation }) => observation.openRouterCostUsd)),
       brightDataPriceTableUsd: optionalSum(rows.map(({ observation }) => observation.brightDataPriceUsd)),
@@ -373,14 +421,31 @@ export function computeMetrics(observations: DataRecord[], answers: DataRecord[]
   }
   for (const [key, item] of Object.entries(output)) {
     if (item.arm === "current") continue;
-    const current = output[`current:${item.engine}`];
+    const currentEngine = item.engine === "google_ai_overview" ? "aio" : item.engine;
+    const current = output[`current:${currentEngine}`];
     if (!current) { item.crossArmAgreement = null; continue; }
-    const paired = rowsFor(observations, item.arm, item.engine, current.arm, item.engine, answerById);
+    const paired = rowsFor(observations, item.arm, item.engine, current.arm, currentEngine, answerById);
     const mentionAgreement = paired.filter((pair) => Boolean(pair.left.brandMentioned) === Boolean(pair.right.brandMentioned)).length;
     item.crossArmAgreement = {
       mentioned: safeRate(mentionAgreement, paired.length),
       citationDomainJaccardMean: paired.length ? paired.reduce((sum, pair) => sum + jaccard((pair.left.citations ?? []).map((item: DataRecord) => item.domain), (pair.right.citations ?? []).map((item: DataRecord) => item.domain)), 0) / paired.length : null,
     };
+  }
+  const armGroups = new Map<string, BakeoffMetric[]>();
+  for (const item of Object.values(output)) {
+    if (!armGroups.has(item.arm)) armGroups.set(item.arm, []);
+    armGroups.get(item.arm)!.push(item);
+  }
+  for (const armItems of armGroups.values()) {
+    const projections = armItems.map((item) => item.projected30QuestionEngineUsd).filter((value) => value !== null);
+    const complete = projections.length === armItems.length;
+    const total = complete ? projections.reduce((sum, value) => sum + value, 0) : null;
+    for (const item of armItems) {
+      item.projected30QuestionScanUsd = total;
+      item.projectedMonthlyDailyUsd = total === null ? null : total * 30;
+      item.projectedEngineCount = armItems.length;
+      item.projectedPricedEngineCount = projections.length;
+    }
   }
   return output;
 }
@@ -390,9 +455,9 @@ function optionalSum(values: unknown[]): number | null {
   return known.length ? known.reduce((sum, value) => sum + value, 0) : null;
 }
 
-function rowsFor(observations: DataRecord[], armA: string, engine: string, armB: string, _engineB: string, answers: Map<string, DataRecord>) {
+function rowsFor(observations: DataRecord[], armA: string, engineA: string, armB: string, engineB: string, answers: Map<string, DataRecord>) {
   const byQuestion = new Map<number, Record<string, DataRecord>>();
-  for (const observation of observations.filter((item) => item.engine === engine && (item.arm === armA || item.arm === armB))) {
+  for (const observation of observations.filter((item) => item.arm === armA && item.engine === engineA || item.arm === armB && item.engine === engineB)) {
     const pair: Record<string, DataRecord> = byQuestion.get(observation.questionIndex) ?? {};
     pair[observation.arm] = answers.get(observation.id) ?? {};
     byQuestion.set(observation.questionIndex, pair);
@@ -401,11 +466,84 @@ function rowsFor(observations: DataRecord[], armA: string, engine: string, armB:
 }
 
 export function renderSummaryMarkdown(metrics: Record<string, BakeoffMetric>): string {
-  const lines = ["# DataForSEO bake-off summary", "", "| Arm | Engine | Answered | India acceptance | Cost (USD) |", "|---|---|---:|---:|---:|"];
-  for (const value of Object.values(metrics)) {
-    const rate = (item: { total: number; count: number; rate: number | null }) => item.total ? `${item.count} of ${item.total} (${((item.rate ?? 0) * 100).toFixed(1)}%)` : "0 of 0 (n/a)";
-    const cost = value.providerCostUsd.known ? `${value.providerCostUsd.sum.toFixed(4)}${value.providerCostUsd.unknown ? ` (${value.providerCostUsd.unknown} unknown)` : ""}` : "unknown";
-    lines.push(`| ${value.arm} | ${value.engine} | ${rate(value.answered)} | ${rate(value.indiaAcceptance)} | ${cost} |`);
-  }
+  const values = Object.values(metrics);
+  const lines = ["# DataForSEO bake-off summary", "", "Metrics contain counts and aggregates only; answer text is intentionally excluded.", ""];
+  const rate = (item: { total: number; count: number; rate: number | null }) => item.total
+    ? `${item.count} of ${item.total} (${((item.rate ?? 0) * 100).toFixed(1)}%)`
+    : "0 of 0 (n/a)";
+  const number = (value: number | null | undefined, digits = 2) => Number.isFinite(value) ? Number(value).toFixed(digits) : "n/a";
+  const cell = (value: unknown) => String(value ?? "n/a").replace(/[|\r\n]/g, " ");
+  const histogram = (value: Record<string, number>) => Object.keys(value).length
+    ? Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, count]) => `${cell(key)}: ${count}`).join(", ")
+    : "none";
+  const table = (header: string[], rows: unknown[][]) => {
+    lines.push(`| ${header.join(" | ")} |`);
+    lines.push(`|${header.map(() => "---").join("|")}|`);
+    for (const row of rows) lines.push(`| ${row.map(cell).join(" | ")} |`);
+    lines.push("");
+  };
+  const rows = (project: (value: BakeoffMetric) => unknown[]) => values.map((value) => [value.arm, value.engine, ...project(value)]);
+
+  lines.push("## 1. India location support", "", "`.in` citation locality is a heuristic, not location proof.", "");
+  table(["Arm", "Engine", "Accepted / posted", "Rejected task_post entries", "Rejected status codes", "Echoed location 2356 / accepted", ".in heuristic / answered"], rows((value) => [
+    rate(value.indiaAcceptance), value.rejectedTasks, histogram(value.rejectedStatusCodes), rate(value.echoedIndiaLocation), rate(value.indiaDomainHeuristic),
+  ]));
+
+  lines.push("## 2. AI Overview presence and async refunds", "");
+  table(["Arm", "Engine", "AIO present / valid SERPs", "Capture modes", "Queued Google refunds (< $0.0012) / accepted queued Google tasks"], rows((value) => [
+    rate(value.aiOverviewPresence), histogram(value.aioCaptureModes), rate(value.asyncRefundObserved),
+  ]));
+
+  lines.push("## 3. Answer fidelity, extraction, and cross-arm agreement", "");
+  table(["Arm", "Engine", "Answered", "Empty answers", "Offcult mentioned", "Branded mention", "Non-branded mention", "Mean competitors", "Citation coverage", "Mean citations", "Median answer chars", "Parser agreement", "Cross-arm Offcult agreement", "Citation-domain Jaccard mean (paired questions)"], rows((value) => [
+    rate(value.answered), rate(value.emptyAnswer), rate(value.offcultMention), rate(value.brandedMention), rate(value.nonBrandedMention),
+    number(value.meanCompetitorsNamed), rate(value.citationCoverage), number(value.meanCitations), number(value.medianAnswerLength, 0), rate(value.parserAgreement),
+    value.crossArmAgreement ? rate(value.crossArmAgreement.mentioned) : "n/a (current baseline)",
+    value.crossArmAgreement ? `${number(value.crossArmAgreement.citationDomainJaccardMean, 3)} (${value.crossArmAgreement.mentioned.total} paired questions)` : "n/a (current baseline)",
+  ]));
+
+  lines.push("## 4. Latency and queued collection", "");
+  table(["Arm", "Engine", "Live request wall p50 / p90 / max (ms)", "Queued post-to-result p50 / p90 / max (min)", "Collected by 10 min / eligible accepted queued tasks", "Collected by 30 min / eligible accepted queued tasks"], rows((value) => [
+    `${number(value.latencyMs.p50, 0)} / ${number(value.latencyMs.p90, 0)} / ${number(value.latencyMs.max, 0)}`,
+    `${number(value.queuedLatencyMinutes.p50)} / ${number(value.queuedLatencyMinutes.p90)} / ${number(value.queuedLatencyMinutes.max)}`,
+    rate(value.collectedBy10Minutes), rate(value.collectedBy30Minutes),
+  ]));
+
+  lines.push("## 5. Failure modes", "");
+  table(["Arm", "Engine", "Observation states", "provider_failure.kind", "DataForSEO status codes", "Rejected task_post entries", "No-results", "Ambiguous dispatches"], rows((value) => [
+    histogram(value.states), histogram(value.failureModes), histogram(value.statusCodes), value.rejectedTasks, value.noResults, value.ambiguousDispatches,
+  ]));
+
+  lines.push("## 6. Cost vs price table (USD)", "");
+  table(["Arm", "Engine", "Provider cost sum", "Provider cost mean", "Known / unknown costs", "Price-table expected", "Provider / price ratio", "OpenRouter usage.cost", "Bright Data price-table cost", "Projected 30 questions (engine)", "Projected daily ×30 (engine)"], rows((value) => [
+    number(value.providerCostUsd.sum, 4), number(value.providerCostUsd.mean, 4), `${value.providerCostUsd.known} / ${value.providerCostUsd.unknown}`,
+    number(value.priceTableUsd.expected, 4), number(value.priceTableUsd.ratio, 3), number(value.openRouterUsageUsd, 4),
+    number(value.brightDataPriceTableUsd, 4), number(value.projected30QuestionEngineUsd, 4), number(value.projectedMonthlyDailyEngineUsd, 4),
+  ]));
+  lines.push("### Per-arm projection for the configured engine set", "");
+  const armProjectionRows = [...armGroupsFromMetrics(values).entries()].map(([arm, armValues]) => {
+    const projection = armValues[0];
+    const complete = projection.projectedPricedEngineCount === projection.projectedEngineCount;
+    return [
+      arm,
+      projection.projectedEngineCount,
+      `${projection.projectedPricedEngineCount} of ${projection.projectedEngineCount}`,
+      complete ? number(projection.projected30QuestionScanUsd, 4) : "unknown (incomplete engine costs)",
+      complete ? number(projection.projectedMonthlyDailyUsd, 4) : "unknown (incomplete engine costs)",
+    ];
+  });
+  table(["Arm", "Configured engines", "Priced engine projections", "30-question arm scan (USD)", "Daily schedule ×30 (USD)"], armProjectionRows);
+  const dataForSeoCost = values.filter((value) => String(value.arm).startsWith("dfs_")).reduce((sum, value) => sum + Number(value.providerCostUsd.sum || 0), 0);
+  const balanceDelta = values.find((value) => value.balanceDeltaUsd !== null && value.balanceDeltaUsd !== undefined)?.balanceDeltaUsd;
+  lines.push(`DataForSEO balance delta (before − after): $${number(balanceDelta, 4)}; summed DataForSEO task costs: $${number(dataForSeoCost, 4)}.`);
   return lines.join("\n") + "\n";
+}
+
+function armGroupsFromMetrics(values: BakeoffMetric[]): Map<string, BakeoffMetric[]> {
+  const groups = new Map<string, BakeoffMetric[]>();
+  for (const value of values) {
+    if (!groups.has(value.arm)) groups.set(value.arm, []);
+    groups.get(value.arm)!.push(value);
+  }
+  return groups;
 }

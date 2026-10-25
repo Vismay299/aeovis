@@ -27,9 +27,9 @@
       "rate": 1
     },
     "latencyMs": {
-      "p50": 101,
-      "p90": 103,
-      "max": 103
+      "p50": null,
+      "p90": null,
+      "max": null
     }
   },
   "dfs_queued:gemini": {
@@ -60,9 +60,9 @@
       "rate": 1
     },
     "latencyMs": {
-      "p50": 101,
-      "p90": 103,
-      "max": 103
+      "p50": null,
+      "p90": null,
+      "max": null
     }
   },
   "dfs_queued:google_ai_overview": {
@@ -93,9 +93,9 @@
       "rate": 1
     },
     "latencyMs": {
-      "p50": 101,
-      "p90": 103,
-      "max": 103
+      "p50": null,
+      "p90": null,
+      "max": null
     }
   },
   "dfs_live:chatgpt": {
