@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Play, PenLine } from "lucide-react";
 import { usePortal } from "@/components/portal/PortalShell";
 import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
@@ -12,12 +13,34 @@ import ContentStudioCard from "@/components/portal/overview/ContentStudioCard";
 import { websiteHost } from "@/components/portal/overview/overviewModel";
 import "@/components/portal/overview/overview.css";
 
+/** true/false once the workspace's question panel is known; null while loading or unreadable. */
+function useApprovedPanel(brandKey) {
+  const [approved, setApproved] = useState(null);
+  useEffect(() => {
+    setApproved(null);
+    if (!brandKey) return undefined;
+    let live = true;
+    fetch(`/api/customer/repairs/panel?brand_key=${encodeURIComponent(brandKey)}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (live && Array.isArray(body?.items)) {
+          // Same predicate POST /api/customer/scan uses before it will start a scan.
+          setApproved(body.items.some((panel) => panel.artifact_key === "default" && panel.state === "approved"));
+        }
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [brandKey]);
+  return approved;
+}
+
 export default function OverviewPage() {
-  const { brand, overview, overviewError, refreshOverview, gsc, scan } = usePortal();
+  const { brand, brandKey, overview, overviewError, refreshOverview, gsc, scan } = usePortal();
+  const panelApproved = useApprovedPanel(brandKey);
 
   const name = brand?.display_name || overview?.brand?.display_name || "Your brand";
   const host = websiteHost(brand?.website || overview?.brand?.website);
-  const checklist = buildChecklist({ overview, gsc, scan });
+  const checklist = buildChecklist({ overview, gsc, scan, panelApproved });
 
   return (
     <div className="pv-page">

@@ -95,7 +95,7 @@ test("the tracker polls the status route, which is what rescues a stalled scan",
   assert.match(route, /keepAlive\(\(\) => runScanChunk\(job\.id\)/, "status route must still rescue stalled chunks");
 });
 
-async function renderCard(scan) {
+async function renderCard(scan, props = {}) {
   const ui = await loadUi();
   const tracker = await loadTracker();
   const { ScanProgressCard } = await compileJsx(path.join(here, "ScanProgressCard.jsx"), {
@@ -108,7 +108,7 @@ async function renderCard(scan) {
     ]),
     autoNull: ["lucide-react"],
   });
-  return renderToHtml(ScanProgressCard, {});
+  return renderToHtml(ScanProgressCard, props);
 }
 
 const baseScan = {
@@ -155,6 +155,19 @@ test("ScanProgressCard: completed execution cannot turn failed or partial collec
     if (outcome !== "complete") assert.doesNotMatch(html, /pv-banner--success/);
     assert.match(html, /\/portal\/scans\/report-1/);
   }
+});
+
+test("ScanProgressCard: a scan blocked on the question panel links to Questions & evidence on every surface", async () => {
+  const blocked = { ...baseScan, active: false, job: null, percent: null, stageIndex: -1, stage: null, error: "Scans ask the questions in your approved question panel.", errorCode: "panel_not_approved" };
+  for (const showIdle of [true, false]) {
+    const html = await renderCard(blocked, { showIdle });
+    assert.match(html, /pv-banner--error/);
+    assert.match(textOf(html), /Approve your question panel first/);
+    assert.match(html, /href="\/portal\/measurement"/, `showIdle=${showIdle} must link to the panel`);
+  }
+  const other = await renderCard({ ...blocked, error: "Could not start the scan.", errorCode: null }, { showIdle: false });
+  assert.match(textOf(other), /Could not start the scan\./);
+  assert.doesNotMatch(other, /\/portal\/measurement/);
 });
 
 test("the portal inherits the shared light root instead of carrying an independent theme", async () => {

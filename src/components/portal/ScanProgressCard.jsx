@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 import { Radar, Play } from "lucide-react";
 import { usePortal } from "./PortalShell";
-import { SCAN_STAGES } from "./useScanTracker";
+import { PANEL_NOT_APPROVED, SCAN_STAGES } from "./useScanTracker";
 import { scanCompletionNotice } from "@/lib/scanCompletion";
 import { Banner, Badge, Button, ProgressBar, StageSteps, formatDuration } from "./ui";
 
@@ -23,6 +23,21 @@ function useElapsed(since, running) {
   }, [running]);
   const start = since ? new Date(since).getTime() : NaN;
   return Number.isFinite(start) ? Math.max(0, now - start) : null;
+}
+
+/** A failed start. With no approved panel, point to where the panel is approved. */
+function ScanStartError({ scan, dismissible }) {
+  const needsPanel = scan.errorCode === PANEL_NOT_APPROVED;
+  return (
+    <Banner
+      tone="error"
+      title={needsPanel ? "Approve your question panel first" : undefined}
+      onDismiss={dismissible ? scan.dismiss : undefined}
+      action={needsPanel ? <Button size="sm" variant="secondary" href="/portal/measurement">Review questions</Button> : null}
+    >
+      {scan.error}
+    </Banner>
+  );
 }
 
 /**
@@ -57,7 +72,7 @@ export function ScanProgressCard({ showIdle = true }) {
 
   if (!scan.active) {
     if (!showIdle) {
-      return scan.error ? <Banner tone="error" onDismiss={scan.dismiss}>{scan.error}</Banner> : null;
+      return scan.error ? <ScanStartError scan={scan} dismissible /> : null;
     }
     return (
       <section className="pv-card">
@@ -69,7 +84,7 @@ export function ScanProgressCard({ showIdle = true }) {
           </div>
           <Button icon={Play} onClick={scan.start} loading={scan.starting}>{scan.starting ? "Starting…" : "Run AI visibility scan"}</Button>
         </div>
-        {scan.error ? <div style={{ padding: "0 20px 20px" }}><Banner tone="error">{scan.error}</Banner></div> : null}
+        {scan.error ? <div style={{ padding: "0 20px 20px" }}><ScanStartError scan={scan} /></div> : null}
       </section>
     );
   }

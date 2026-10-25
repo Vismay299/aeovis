@@ -24,6 +24,10 @@ import {
 
 export const ACTIVE_SCAN_STATUSES = ["pending", "generating_prompts", "probing", "scoring"];
 
+/** 409 codes from POST /api/customer/scan. Only the second one means "a run exists". */
+export const PANEL_NOT_APPROVED = "panel_not_approved";
+export const SCAN_ALREADY_RUNNING = "scan_already_running";
+
 export const SCAN_STAGES = [
   { status: "pending", label: "Queued", detail: "Your scan is lined up to start" },
   { status: "generating_prompts", label: "Writing questions", detail: "Real buyer questions for your category" },
@@ -48,6 +52,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
   const [finished, setFinished] = useState(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState(null);
   const [notice, setNotice] = useState("");
   // Overview can lag behind a status poll. Never resurrect a scan that has
   // already finished or returned 404 during this workspace session.
@@ -66,6 +71,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
     setQuietMs(null);
     setFinished(null);
     setError("");
+    setErrorCode(null);
     setNotice("");
   }, [brandKey]);
 
@@ -152,6 +158,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
     if (!brandKey || starting) return;
     setStarting(true);
     setError("");
+    setErrorCode(null);
     setNotice("");
     setFinished(null);
     try {
@@ -165,7 +172,12 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
         return;
       }
       const body = await response.json().catch(() => ({}));
-      if (response.status === 409) {
+      if (response.status === 409 && body.code === PANEL_NOT_APPROVED) {
+        // Nothing is running: scans need an approved question panel first.
+        setErrorCode(PANEL_NOT_APPROVED);
+        throw new Error("Scans ask the questions in your approved question panel. Review and approve it on Questions & evidence, then run the scan.");
+      }
+      if (response.status === 409 && body.code === SCAN_ALREADY_RUNNING) {
         // Not an error: one is already running. Show its progress instead.
         setNotice("A scan is already running for this workspace — showing its progress.");
         onFinishedRef.current?.();
@@ -187,6 +199,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
     setFinished(null);
     setNotice("");
     setError("");
+    setErrorCode(null);
     if (job && !ACTIVE_SCAN_STATUSES.includes(job.status)) {
       setJob(null);
       setProgress(initialScanProgress());
@@ -211,6 +224,8 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
     finished,
     starting,
     error,
+    /** Machine code for `error`, e.g. PANEL_NOT_APPROVED; null otherwise. */
+    errorCode,
     notice,
     start,
     dismiss,

@@ -9,8 +9,8 @@ import { keepAlive } from "@/lib/keepAlive";
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-function fail(status, error) {
-  return NextResponse.json({ error }, { status, headers: { "Cache-Control": "no-store" } });
+function fail(status, error, code) {
+  return NextResponse.json(code ? { error, code } : { error }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(request) {
@@ -36,7 +36,7 @@ export async function POST(request) {
     if(!admin)return fail(503,"Measurement storage unavailable.");
     const panels=await repairWorkflowStore(admin).list(brand.brandKey,"panel");
     const panel=panels.find(p=>p.artifact_key===(body.panel_key || "default") && p.state==="approved");
-    if(!panel)return fail(409,"Review and approve a question panel before starting measurement.");
+    if(!panel)return fail(409,"Review and approve a question panel before starting measurement.","panel_not_approved");
     const job = await createScanJob({
       panelSnapshot:panel,measurementContext:panel.payload.context,
       brand: brand.display_name,
@@ -57,7 +57,7 @@ export async function POST(request) {
     }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof DuplicateScanError) {
-      return fail(409, "A scan is already running for this workspace.");
+      return fail(409, "A scan is already running for this workspace.", "scan_already_running");
     }
     console.error(`[customer] scan creation failed for ${brand.brandKey}:`, error);
     return fail(500, "Could not start the scan. Please retry.");

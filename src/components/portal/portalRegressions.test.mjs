@@ -113,7 +113,7 @@ for (const terminal of ["complete", "failed"]) {
     const polled = [];
     let conflict = false;
     const { lifecycle, useScanTracker } = await trackerLifecycle(t, async (url, init) => {
-      if (init?.method === "POST") { conflict = true; return response(409, {}); }
+      if (init?.method === "POST") { conflict = true; return response(409, { error: "A scan is already running for this workspace.", code: "scan_already_running" }); }
       polled.push(url);
       return url.includes("old-job")
         ? response(200, { status: terminal, result_id: "result-a" })
@@ -137,6 +137,45 @@ for (const terminal of ["complete", "failed"]) {
     assert.ok(polled.some((url) => url.includes("new-job")));
   });
 }
+
+test("a 409 for an unapproved question panel is an actionable error, not an 'already running' notice", async (t) => {
+  let finished = 0, polls = 0;
+  const { lifecycle, useScanTracker } = await trackerLifecycle(t, async (url, init) => {
+    if (init?.method === "POST") {
+      return response(409, { error: "Review and approve a question panel before starting measurement.", code: "panel_not_approved" });
+    }
+    polls++;
+    return response(200, { status: "probing" });
+  });
+  lifecycle.setRender(() => useScanTracker({ brandKey: "brand-a", jobs: [], onFinished: () => { finished++; } }));
+  await lifecycle.settle();
+  await lifecycle.output.start(); await lifecycle.settle();
+  assert.equal(lifecycle.output.errorCode, "panel_not_approved");
+  assert.match(lifecycle.output.error, /approved question panel/);
+  assert.match(lifecycle.output.error, /Questions & evidence/);
+  assert.equal(lifecycle.output.notice, "", "nothing is running, so no progress notice");
+  assert.equal(lifecycle.output.active, false);
+  assert.equal(lifecycle.output.job, null);
+  assert.equal(finished, 0, "no overview refresh is needed to adopt a run that does not exist");
+  assert.equal(polls, 0);
+  lifecycle.output.dismiss(); await lifecycle.settle();
+  assert.equal(lifecycle.output.errorCode, null);
+});
+
+test("a 409 for a scan already running keeps the progress notice and adopts the run", async (t) => {
+  let finished = 0;
+  const { lifecycle, useScanTracker } = await trackerLifecycle(t, async (url, init) => {
+    if (init?.method === "POST") return response(409, { error: "A scan is already running for this workspace.", code: "scan_already_running" });
+    return response(200, { status: "probing", progress_pct: 20 });
+  });
+  lifecycle.setRender(() => useScanTracker({ brandKey: "brand-a", jobs: [], onFinished: () => { finished++; } }));
+  await lifecycle.settle();
+  await lifecycle.output.start(); await lifecycle.settle();
+  assert.equal(lifecycle.output.error, "");
+  assert.equal(lifecycle.output.errorCode, null);
+  assert.match(lifecycle.output.notice, /already running/);
+  assert.equal(finished, 1, "the overview is refreshed so the running scan is adopted");
+});
 
 async function draftLifecycle(t, request) {
   const lifecycle = createLifecycle();
@@ -505,4 +544,21 @@ test("multi-engine reports count questions named by any engine, once per questio
     { query: "Drop shoulder?", engine: "gemini", raw: { brand_mentioned_in_text: false } },
   ];
   assert.equal(questionsNamingBrand(rows), 1);
+});
+
+test("Getting started asks for an approved question panel between the workspace and the first scan", async () => {
+  const { buildChecklist } = await compileJsx(path.join(here, "overview/GettingStarted.jsx"), {
+    modules: new Map([["react", React], ["../ui", {}], ["./overview.css", {}]]),
+    autoNull: ["lucide-react"],
+  });
+  const scan = { start: noop, starting: false, active: false };
+  const steps = (panelApproved, scans = []) => buildChecklist({ overview: { scans }, gsc: null, scan, panelApproved });
+  assert.deepEqual(steps(false).map((step) => step.id), ["workspace", "panel", "scan", "gsc", "draft"]);
+  const panel = steps(false).find((step) => step.id === "panel");
+  assert.equal(panel.done, false);
+  assert.equal(panel.action.href, "/portal/measurement");
+  assert.equal(steps(true).find((step) => step.id === "panel").done, true);
+  assert.equal(steps(null).find((step) => step.id === "panel").done, false, "unknown with no scans is not done");
+  assert.equal(steps(null, [{ id: "s" }]).find((step) => step.id === "panel").done, true, "a scan only starts from an approved panel");
+  assert.equal(steps(false, [{ id: "s" }]).find((step) => step.id === "panel").done, false, "a known unapproved panel wins over history");
 });
