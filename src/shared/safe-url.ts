@@ -1,5 +1,5 @@
 // Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
-//   src/shared/prompt-search-countries.ts
+//   src/shared/safe-url.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 /**

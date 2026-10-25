@@ -57,8 +57,9 @@ export type AiTrackingAnswer =
       message: string;
       code: "dataforseo_unavailable" | "dataforseo_task_failed";
       retryable: boolean;
+      statusCode?: number;
     }
-  | { status: "completed"; result: unknown };
+  | { status: "completed"; result: unknown; statusCode?: number };
 
 export type AiTrackingTaskOutcome =
   | { status: "pending" }
@@ -188,17 +189,19 @@ export async function fetchAiTrackingTaskResult(input: {
 }
 
 function aiTrackingAnswer(task: DataforseoTaskLike): AiTrackingAnswer {
+  const statusCode = typeof task.status_code === "number" ? { statusCode: task.status_code } : {};
   if (task.status_code !== 20000) {
-    if (isNoResultsTask(task)) return { status: "completed", result: null };
+    if (isNoResultsTask(task)) return { status: "completed", result: null, ...statusCode };
     const retryable = isUpstreamFailureStatus(task.status_code);
     return {
       status: "failed",
       message: task.status_message || "DataForSEO task failed.",
       code: retryable ? "dataforseo_unavailable" : "dataforseo_task_failed",
       retryable,
+      ...statusCode,
     };
   }
-  return { status: "completed", result: task.result?.[0] ?? null };
+  return { status: "completed", result: task.result?.[0] ?? null, ...statusCode };
 }
 
 export async function fetchAiTrackingLiveAnswer(

@@ -151,6 +151,7 @@ test("task_get maps pending status codes and returns the result cost", async () 
         markdown: "Sample answer.",
         sources: [{ url: "https://example.test/" }],
       },
+      statusCode: 20000,
       costUsd: 0.0012,
     });
     globalThis.fetch = async () => Response.json(fixture("scraper-task-get-backend-failed.json"));
@@ -159,7 +160,16 @@ test("task_get maps pending status codes and returns the result cost", async () 
       message: "Internal SE Server Error.",
       code: "dataforseo_unavailable",
       retryable: true,
+      statusCode: 40101,
       costUsd: 0.0012,
+    });
+    globalThis.fetch = async () => Response.json({ status_code: 20000, tasks: [{ status_message: "Missing task status code." }] });
+    assert.deepEqual(await fetchAiTrackingTaskResult({ engine: "chatgpt", taskId: "t1" }), {
+      status: "failed",
+      message: "Missing task status code.",
+      code: "dataforseo_task_failed",
+      retryable: false,
+      costUsd: 0,
     });
   } finally {
     if (oldKey === undefined) delete process.env.DATAFORSEO_API_KEY;
@@ -182,7 +192,7 @@ test("Google task_get returns AI Overview result, a normal SERP without overview
     assert.equal(noAio.status, "completed");
     globalThis.fetch = async () => Response.json(fixture("serp-no-results.json"));
     const empty = await fetchAiTrackingTaskResult({ engine: "google_ai_overview", taskId: "g3" });
-    assert.deepEqual(empty, { status: "completed", result: null, costUsd: 0 });
+    assert.deepEqual(empty, { status: "completed", result: null, statusCode: 40501, costUsd: 0 });
   } finally {
     if (oldKey === undefined) delete process.env.DATAFORSEO_API_KEY;
     else process.env.DATAFORSEO_API_KEY = oldKey;
@@ -214,7 +224,37 @@ test("one live answer is posted once and returns provider cost", async () => {
     );
     assert.equal(calls, 1);
     assert.equal(result.billing.costUsd, 0.004);
-    assert.deepEqual(result.data, { status: "completed", result: { markdown: "Live." } });
+    assert.deepEqual(result.data, { status: "completed", result: { markdown: "Live." }, statusCode: 20000 });
+  } finally {
+    if (oldKey === undefined) delete process.env.DATAFORSEO_API_KEY;
+    else process.env.DATAFORSEO_API_KEY = oldKey;
+    globalThis.fetch = oldFetch;
+  }
+});
+
+test("live task failures and no-results preserve their DataForSEO status codes", async () => {
+  const oldKey = process.env.DATAFORSEO_API_KEY;
+  const oldFetch = globalThis.fetch;
+  process.env.DATAFORSEO_API_KEY = "test-only";
+  let task: { status_code: number; status_message: string; cost: number } = { status_code: 40101, status_message: "Internal SE Server Error.", cost: 0.0012 };
+  globalThis.fetch = async () => Response.json({
+    status_code: 20000,
+    tasks: [{ ...task, path: ["v3", "ai_optimization", "chat_gpt", "llm_scraper", "live", "advanced"] }],
+  });
+  try {
+    const { fetchAiTrackingLiveAnswer } = await import("./ai-tracking.ts");
+    const input = { engine: "chatgpt" as const, locationCode: 2356, languageCode: "en", task: { tag: "q1", prompt: "synthetic" } };
+    const failed = await fetchAiTrackingLiveAnswer(input);
+    assert.deepEqual(failed.data, {
+      status: "failed",
+      message: "Internal SE Server Error.",
+      code: "dataforseo_unavailable",
+      retryable: true,
+      statusCode: 40101,
+    });
+    task = { status_code: 40501, status_message: "No Search Results", cost: 0 };
+    const noResults = await fetchAiTrackingLiveAnswer(input);
+    assert.deepEqual(noResults.data, { status: "completed", result: null, statusCode: 40501 });
   } finally {
     if (oldKey === undefined) delete process.env.DATAFORSEO_API_KEY;
     else process.env.DATAFORSEO_API_KEY = oldKey;
