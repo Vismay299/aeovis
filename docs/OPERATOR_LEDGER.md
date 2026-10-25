@@ -355,6 +355,15 @@ applied to production**, and no row of it exists there. It adds `jobs`,
 until `043_f01_jobs_cron` and `/api/jobs/tick` are enabled; the tables are
 inert without callers.
 
+`042_f01_provider_cache` is implemented and verified on disposable PostgreSQL — the
+`cache` group of `scripts/qa/check-f01-db.mjs` checks both-bodies and
+missing-brand refusals plus the prune path returning storage paths, against a
+loopback database. It is **NOT applied to production**, and no row of it
+exists there. It adds `provider_cache` and `prune_provider_cache` plus the
+private Storage bucket `provider-cache`. Rows over 256 KB live in Storage with
+the row holding `storage_path`; the retention job deletes expired rows and
+their objects. Apply it before deploying a build that calls `cached()`.
+
 `043_f01_jobs_cron` is implemented; the CI database job applies it on a
 database without `pg_cron`/`pg_net`, and the `jobs-cron` group of
 `scripts/qa/check-f01-db.mjs` exercises its NOTICE/NULL path only where a
