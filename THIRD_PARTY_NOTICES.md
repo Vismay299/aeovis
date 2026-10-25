@@ -59,3 +59,17 @@ SOFTWARE.
 - `src/lib/projectContext/service.test.ts`
 - `scripts/qa/check-f07-db.mjs`
 - `supabase/migrations/070_f07_project_memory.sql`
+- `src/assistant/skills/ai-prompt-research/SKILL.md` (`.agents/skills/ai-prompt-research/SKILL.md`)
+- `src/assistant/skills/ai-visibility-audit/SKILL.md` (`.agents/skills/ai-visibility-audit/SKILL.md`)
+- `src/assistant/skills/competitive-landscape/SKILL.md` (`.agents/skills/competitive-landscape/SKILL.md`)
+- `src/assistant/skills/competitor-analysis/SKILL.md` (`.agents/skills/competitor-analysis/SKILL.md`)
+- `src/assistant/skills/keyword-research/SKILL.md` (`.agents/skills/keyword-research/SKILL.md`)
+- `src/assistant/skills/keyword-clustering/SKILL.md` (`.agents/skills/keyword-clustering/SKILL.md`)
+- `src/assistant/skills/link-prospecting/SKILL.md` (`.agents/skills/link-prospecting/SKILL.md`)
+- `src/assistant/skills/local-seo/SKILL.md` (`.agents/skills/local-seo/SKILL.md`)
+- `src/assistant/skills/seo-audit/SKILL.md` (`.agents/skills/seo-audit/SKILL.md`)
+- `src/assistant/skills/seo-coach/SKILL.md` (`.agents/skills/seo-coach/SKILL.md`)
+- `src/assistant/skills/seo-project-setup/SKILL.md` (`.agents/skills/seo-project-setup/SKILL.md`)
+- `src/assistant/skills/frontmatter.ts` (`src/server/features/sam/samSkills.ts` frontmatter schema, parse and internal filter)
+- `src/assistant/skills/index.ts` (`src/server/features/sam/samSkills.ts` fingerprint, catalog cache and load)
+- `src/assistant/skills/skills.test.ts` (`src/server/features/sam/samSkills.test.ts` served-skill guard)
