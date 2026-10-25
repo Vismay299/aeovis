@@ -198,7 +198,7 @@ Rows (order, label, detail):
 | id | Label | Detail | Done when |
 |---|---|---|---|
 | `questions` | Approve your questions | Choose the buyer questions every scan asks. Scans start once they're approved. | the workspace has an approved panel |
-| `scan` | Run your first AI visibility scan | See whether ChatGPT, Gemini, Perplexity, Claude and Google's AI Overviews name you. | any `scans` row for the workspace |
+| `scan` | Run your first AI visibility scan | See whether ChatGPT, Gemini, Perplexity and Google's AI Overviews name you. | any `scans` row for the workspace |
 | `gsc` | Connect Google Search Console | Import the searches and pages that already bring people to your site. | an enabled OAuth `gsc_connections` row |
 | `audit` (flag `site_audit`) | Audit your site | Find blocked AI crawlers, broken links and missing structured data. | any `site_audits` row |
 | `schedule` (flag `customer_scheduling`) | Schedule scans | Track changes weekly; you approve the monthly cost once. | `scan_schedules` customer-managed and enabled |

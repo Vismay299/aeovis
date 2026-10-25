@@ -2,6 +2,8 @@
 
 > <!-- doc-status -->
 > **Status: LIVE.** Implementation spec. Not built yet. Phase 1 (the bake-off) may start when F01 and F03 phase 1 are merged. Phases 2–5 are gated on a recorded **go** in the decision record (§6.8).
+>
+> **Owner decision, 25 October 2026: Claude is not an answer engine for now.** Do not register a `claude` engine, route, adapter, readiness surface, vendor entry, OpenRouter model, marketing label or Prompt Explorer model. Ported OpenSEO code that only *knows* the `claude` slug (DataForSEO model catalogue, `llmResponseUsd` price rows, schemas) stays verbatim; nothing calls it. Every Claude item below is marked **(deferred)** and must be skipped.
 
 | Field | Value |
 |---|---|
@@ -9,7 +11,7 @@
 | Wave | 0 |
 | Comparison rows covered | "Engines and capture"; "The provider question → What I could not verify" (India support, AI Overview presence, terms of use, real cost); the measurement half of "Cost per answer" (F03 owns the ledger) |
 | Depends on | F01 (merged): `metered`, `settleSpendBatch`, `AppError`, `ChargedCallError`/`UnbilledCallError`/`AmbiguousCallError`, `isFeatureEnabled`, `definePeriodic`. F03 phase 1 (merged): `src/lib/pricing/dataforseo.ts`, `src/shared/ai-visibility-pricing.ts`. |
-| Blocks | F08 (Claude engine, provider choice), F11 (answer fetchers and model catalogue), F13–F17 (reusable metered client), F15 (SERP fetchers), F20 (client conventions) |
+| Blocks | F08 (provider choice), F11 (answer fetchers and model catalogue), F13–F17 (reusable metered client), F15 (SERP fetchers), F20 (client conventions) |
 | Reserved migrations | 045–049. **045** `045_f02_queued_dispatch.sql` (phase 4). 046–049 deliberately unused. |
 | Feature flag | `FEATURE_DATAFORSEO_ENGINES` (feature name `dataforseo_engines`, no linked spend features: answer-engine spend is fenced by `claim_probe_dispatch`, not by `paid_feature_controls`). Off in production by default. |
 | Spend features | `providers.dataforseo.selftest` (owner-run live check of the metered client only). Consumers of the client (F13–F17) register their own. |
@@ -92,7 +94,7 @@ DataForSEO sells ChatGPT and Gemini answers captured from the consumer apps, Goo
 | F02-AC-17 | `fetchLiveSerp` and the SERP task queue behave as OpenSEO's tests (no-results empty, tags map ids, cost summed, pending/completed). | unit `src/lib/providers/dataforseo/serp.test.ts` (port of `serp.test.ts:24-215`) |
 | F02-AC-18 | DataForSEO adapters return the `probeTextEngine`/`probeAio` result shape with `gateway: "dataforseo"`, `measurement_method` `consumer_capture` (scrapers), `model_api` (llm_responses) or `google_serp` (organic), `cost` = task cost, `cost_source: "gateway"`, `cost_state: "measured"`, `requested_model`/`returned_model`, `provider_request_id` = task id. | unit `src/lib/engines/dataforseo.test.ts` |
 | F02-AC-19 | Every engine result from every adapter carries `provenance.gateway` naming the provider that served it (`brightdata`, `openai`, `perplexity`, `openrouter`, `dataforseo`). | unit `src/lib/engines/gatewayProvenance.test.mjs` |
-| F02-AC-20 | Claude is a registered engine end to end: `resolveEnabledEngines({engines:"claude"})` returns it when its route is configured; `ENGINE_LABELS.claude = "Claude"`; `ENGINE_WEIGHTS.claude = 1`; the landing guard tests pass with `NEXT_PUBLIC_ENGINES` including and excluding `claude`; `check-secrets` reports an unfunded Claude as MISMATCH. | unit `src/lib/engines/claudeEngine.test.mjs`; existing `src/lib/landingHonesty.test.mjs` |
+| F02-AC-20 | **(deferred — owner decision 25 Oct 2026; not built, not tested)** Claude is a registered engine end to end: `resolveEnabledEngines({engines:"claude"})` returns it when its route is configured; `ENGINE_LABELS.claude = "Claude"`; `ENGINE_WEIGHTS.claude = 1`; the landing guard tests pass with `NEXT_PUBLIC_ENGINES` including and excluding `claude`; `check-secrets` reports an unfunded Claude as MISMATCH. | unit `src/lib/engines/claudeEngine.test.mjs`; existing `src/lib/landingHonesty.test.mjs` |
 | F02-AC-21 | With no `ANSWER_ENGINE_ROUTES` set, `configVersion` and `circuitIdentity` for `aio`, `chatgpt`, `gemini`, `perplexity` equal today's strings for the same env (recorded fixture). A `dataforseo` route produces `v1:dataforseo:direct:n/a:<model>:DATAFORSEO_API_KEY#<digest>`. | unit `src/lib/engines/engineRoutes.test.ts` |
 | F02-AC-22 | Route resolution at freeze picks the first route in the engine's order that is configured, allowed (`FEATURE_DATAFORSEO_ENGINES` on and engine in `DATAFORSEO_APPROVED_ENGINES` for `dataforseo`), scan-capable, and whose circuit is closed; the frozen route never changes within a scan. | unit `engineRoutes.test.ts`; unit `src/lib/workers/durableProbing.routes.test.mjs` |
 | F02-AC-23 | DataForSEO failures map to provider-failure kinds (§6.2.6): balance → `spend_limit` (opens the shared `dataforseo` circuit), 401 → `authentication`, backend codes → `transient`, 429 → `rate_limit`, invalid field → `request`, timeout → `timeout`. | unit `src/lib/engines/providerFailure.dataforseo.test.mjs` |
@@ -110,7 +112,7 @@ DataForSEO sells ChatGPT and Gemini answers captured from the consumer apps, Goo
 **In scope**
 - Phase 1: DataForSEO transport/envelope/answer fetchers/parsers needed for the bake-off; `scripts/qa/check-dataforseo-bakeoff.mjs`; the decision record template; the terms-of-use checklist.
 - Phase 2: the reusable metered client (`createDataforseoClient`, `meter`, `meterBatch`), SERP fetchers, LLM-mentions fetchers, appendix, bound to F03 estimators.
-- Phase 3: engine routing (`ANSWER_ENGINE_ROUTES`, freeze-time fallback), DataForSEO adapters (live), Claude as a new engine, readiness/circuit/canary/evidence/provenance integration, marketing-copy guard updates.
+- Phase 3: engine routing (`ANSWER_ENGINE_ROUTES`, freeze-time fallback), DataForSEO adapters (live), readiness/circuit/canary/evidence/provenance integration, marketing-copy guard updates. (Claude as a new engine is deferred.)
 - Phase 4: queued (`task_post`/`task_get`) collection inside the P0 fence (migration 045).
 - Phase 5: owner cutover kit: live check script, vendor doc, runbook.
 
@@ -417,7 +419,7 @@ export type DfsProbeOptions = { stats?: object; deadlineAt?: number; measurement
   maxOutputTokens?: number;   // llm_responses only; default 4096 (clamped 256-4096)
   env?: Record<string, string | undefined>; fetchImpl?: typeof fetch };
 export async function probeDataforseoScraper(engine: "chatgpt" | "gemini", query: string, o: DfsProbeOptions): Promise<TextProbeResult>;
-export async function probeDataforseoModel(engine: "claude" | "perplexity" | "chatgpt" | "gemini", query: string, o: DfsProbeOptions): Promise<TextProbeResult>;
+export async function probeDataforseoModel(engine: "perplexity" | "chatgpt" | "gemini", query: string, o: DfsProbeOptions): Promise<TextProbeResult>;
 export async function fetchDataforseoAioSerp(query: string, o: DfsProbeOptions): Promise<AioSerpData>;   // consumed by probeAioDataforseo in enginePipeline.js
 export function dataforseoTextResult(engine: string, answer: ParsedAiAnswer, task: { id: string; cost: number; data?: unknown },
   meta: { method: "consumer_capture" | "model_api"; requestedModel: string | null; returnedModel: string | null;
@@ -441,14 +443,14 @@ Mapping rules:
 #### 6.2.5 Routing and fallback (`src/lib/engines/engineRoutes.ts`, new)
 
 ```ts
-export type EngineName = "aio" | "chatgpt" | "gemini" | "perplexity" | "claude";
+export type EngineName = "aio" | "chatgpt" | "gemini" | "perplexity";   // claude deferred
 export type RouteId = "dataforseo" | "brightdata" | "openrouter" | "vendor_api";
 export const DEFAULT_ROUTE_ORDER: Record<EngineName, RouteId[]> = {
   aio: ["brightdata"], chatgpt: ["vendor_api", "openrouter"], gemini: ["openrouter"],
-  perplexity: ["vendor_api", "openrouter"], claude: ["openrouter"] };
+  perplexity: ["vendor_api", "openrouter"] };
 export const DATAFORSEO_APPROVED_ENGINES: readonly EngineName[] = [];          // set from the decision record (§6.8)
 export const DATAFORSEO_SCAN_MODES: Record<EngineName, DataforseoRouteMode> = {
-  aio: "serp_queued", chatgpt: "scraper_queued", gemini: "scraper_queued", perplexity: "model_live", claude: "model_live" };
+  aio: "serp_queued", chatgpt: "scraper_queued", gemini: "scraper_queued", perplexity: "model_live" };
 export function parseAnswerEngineRoutes(raw: string | undefined): Partial<Record<EngineName, RouteId[]>>;
 export function routeOrder(engine: EngineName, env): RouteId[];
 export function isRouteConfigured(engine: EngineName, route: RouteId, env): boolean;
@@ -460,7 +462,7 @@ export function leaseSecondsFor(engine: EngineName, route: RouteId | undefined):
 export function laneConcurrency(engine: EngineName, route: RouteId | undefined, env): number; // 1 default; DATAFORSEO_SCAN_MODEL_CONCURRENCY (default 3, max 6) for dataforseo model_live
 ```
 
-- `ANSWER_ENGINE_ROUTES` (server-only) format: `engine=route>route;engine=route`, for example `aio=dataforseo>brightdata;chatgpt=dataforseo>openrouter;gemini=dataforseo>openrouter;perplexity=dataforseo>openrouter;claude=dataforseo>openrouter`. Unknown engines or routes → `AppError(500,"answer_engine_routes_invalid")` at parse. Engines missing from the variable use `DEFAULT_ROUTE_ORDER`, which reproduces today's selection exactly (`providerReadiness.js:210-242`: direct key present → `vendor_api`, else gateway).
+- `ANSWER_ENGINE_ROUTES` (server-only) format: `engine=route>route;engine=route`, for example `aio=dataforseo>brightdata;chatgpt=dataforseo>openrouter;gemini=dataforseo>openrouter;perplexity=dataforseo>openrouter`. Unknown engines or routes → `AppError(500,"answer_engine_routes_invalid")` at parse. Engines missing from the variable use `DEFAULT_ROUTE_ORDER`, which reproduces today's selection exactly (`providerReadiness.js:210-242`: direct key present → `vendor_api`, else gateway).
 - `isRouteConfigured`: `dataforseo` → `DATAFORSEO_API_KEY` set; `brightdata` → `BRIGHTDATA_API_KEY`; `openrouter` → `isOpenRouterEngineConfigured(engine)` (`openRouterProbe.js:41-47`); `vendor_api` → the engine's direct variable (`OPENAI_API_KEY`, `PERPLEXITY_API_KEY`).
 - `isRouteScanCapable`: `dataforseo` for `chatgpt`, `gemini`, `aio` is scan-capable only after phase 4 (`QUEUED_COLLECTION_READY = true` exported from `src/lib/workers/queuedCollection.js`); before that only canaries and F11 may use those routes.
 - `resolveFrozenRoutes` (called once per scan inside `runDurableProbing` when `cp.dispatch.routes` is absent): for each engine, the first route in order that is configured, allowed (`dataforseo` requires `await isFeatureEnabled("dataforseo_engines")` **and** the engine in `DATAFORSEO_APPROVED_ENGINES`), scan-capable, and whose circuit key (`hashIdentity(circuitIdentity(engine, env, { route }))`) is not in `openCircuitKeys` (from `store.circuits()`, `probeDispatch.js:124-131`). For a `dataforseo` model route it resolves the model name once (`resolveLatestLlmModelName`, free) and freezes it. `fallbackFrom` records the skipped first choice. If no route qualifies, the engine resolves to its first configured route, so the existing claim path blocks it with `provider_circuit_open` exactly as today.
@@ -471,21 +473,21 @@ export function laneConcurrency(engine: EngineName, route: RouteId | undefined, 
 
 | File | Change |
 |---|---|
-| `src/lib/vendorRegistry.js` | Add `{ key: "dataforseo", env: ["DATAFORSEO_API_KEY"], required: false }` and `{ key: "claude", env: [LLM_ENV.apiKey.canonical], legacy: { [LLM_ENV.apiKey.canonical]: [LLM_ENV.apiKey.legacy] }, required: false }` (mirrors `gemini`, `:78`). |
-| `src/lib/engines/providerReadiness.js` | `ENGINE_SURFACES.claude = { label: "Claude", provider: "anthropic", required_groups: [{ registry: "claude" }], direct_variables: [], gateway: "openrouter" }`. `resolveRoute(engine, env, opts = {})`, `credentialFingerprint(engine, env, opts)`, `configVersion(engine, env, opts)`, `circuitIdentity(engine, env, opts)`, `validateEngineConfig(engine, env, opts)`, `planEngineCanary(engine, env, opts)` gain `opts.route` and `opts.model`. `opts.route === "dataforseo"` → `{ adapter: "vendor_api", provider: "dataforseo", gateway: null, model: opts.model ?? dataforseoModelLabel(engine), credential_names: ["DATAFORSEO_API_KEY"] when set }` where `dataforseoModelLabel` is `llm_scraper:chatgpt`, `llm_scraper:gemini`, `serp:google_organic:async_aio`, or `llm_responses:<slug>:catalogue`. `opts.route === "openrouter"` forces the shared-gateway branch; `"vendor_api"`/`"brightdata"` force the native branch; `undefined` keeps today's branch, so existing strings do not change (F02-AC-21). All DataForSEO routes share one circuit identity `{ provider: "dataforseo", account: <fingerprint> }`: one balance failure stops every DataForSEO engine. |
+| `src/lib/vendorRegistry.js` | Add `{ key: "dataforseo", env: ["DATAFORSEO_API_KEY"], required: false }` (Claude entry deferred: `{ key: "claude", env: [LLM_ENV.apiKey.canonical], legacy: { [LLM_ENV.apiKey.canonical]: [LLM_ENV.apiKey.legacy] }, required: false }` (mirrors `gemini`, `:78`). |
+| `src/lib/engines/providerReadiness.js` | **(Claude surface deferred)** `ENGINE_SURFACES.claude = { label: "Claude", provider: "anthropic", required_groups: [{ registry: "claude" }], direct_variables: [], gateway: "openrouter" }`. `resolveRoute(engine, env, opts = {})`, `credentialFingerprint(engine, env, opts)`, `configVersion(engine, env, opts)`, `circuitIdentity(engine, env, opts)`, `validateEngineConfig(engine, env, opts)`, `planEngineCanary(engine, env, opts)` gain `opts.route` and `opts.model`. `opts.route === "dataforseo"` → `{ adapter: "vendor_api", provider: "dataforseo", gateway: null, model: opts.model ?? dataforseoModelLabel(engine), credential_names: ["DATAFORSEO_API_KEY"] when set }` where `dataforseoModelLabel` is `llm_scraper:chatgpt`, `llm_scraper:gemini`, `serp:google_organic:async_aio`, or `llm_responses:<slug>:catalogue`. `opts.route === "openrouter"` forces the shared-gateway branch; `"vendor_api"`/`"brightdata"` force the native branch; `undefined` keeps today's branch, so existing strings do not change (F02-AC-21). All DataForSEO routes share one circuit identity `{ provider: "dataforseo", account: <fingerprint> }`: one balance failure stops every DataForSEO engine. |
 | `src/lib/db/probeDispatch.js` | `dispatchIdentity(engine, env, opts)` passes `opts` through. `store.claim(id, { reserve, scanCap, dayCap, leaseSeconds })` sends `p_lease_seconds: leaseSeconds ?? PROBE_LEASE_SECONDS`. New `store.renew(id, token, seconds)` → `renew_probe_dispatch`. New export `withLeaseRenewal(store, id, token, seconds, fn)`: runs `fn()`, calls `store.renew(id, token, seconds)` every 60 s until `fn` settles, never throws from a failed renewal (logs `[dispatch] lease renewal failed {id}`), and returns `fn`'s result (used by scans, the bake-off and F11). Phase 4: `store.post`, `store.collect`, `store.reschedule`, `store.listPosted(jobId)`. |
 | `src/lib/workers/durableProbing.js` | `freezeDispatch`/`runDurableProbing` add `cp.dispatch.routes` (from `resolveFrozenRoutes`) on first freeze; identities use `{ route, model }`. `dispatchRow` passes `{ route, model }` to `engine.probe` options, uses `leaseSecondsFor`, `requestBudgetMs` (deadline and the lane budget check at `:272`), wraps the probe in `withLeaseRenewal(store, row.id, token, leaseSeconds)` (renew every 60 s, stop on settle). Lanes run `laneConcurrency` claims at a time; a lane stops starting new claims after a result whose `provider_failure.opens_circuit` is true. Phase 4 routes `*_queued` engines through `runQueuedLane` (§6.3). A checkpoint without `routes` (a scan frozen before this change) resolves every engine to `undefined`, i.e. today's behaviour. |
 | `src/lib/scoring/enginePipeline.js` | `probeTextEngine` sets `gateway: probeResult.gateway ?? "openrouter"`, `method: probeResult.measurement_method ?? "model_api"`, and copies `answer_markdown`, `fan_out_queries`, `output_tokens`, `web_search`, `location_code`, `provider_task_id` onto the result (`probeAioDataforseo` sets `answer_markdown` from the AI Overview markdown the same way). Registry probes select the adapter from `options.route` (table below). Adds the `claude` entry and `probeAioDataforseo`. `ENGINE_WEIGHTS.claude = 1`. |
-| `src/lib/engines/openRouterProbe.js` | `DEFAULT_OPENROUTER_MODELS.claude = "anthropic/claude-sonnet-4.5"` (priced at `src/lib/llmPricing.js:90`); `MODEL_ENV.claude = ["OPENROUTER_CLAUDE_MODEL"]`; result gains `gateway: "openrouter"`. |
+| `src/lib/engines/openRouterProbe.js` | Result gains `gateway: "openrouter"`. (The `claude` default model and `OPENROUTER_CLAUDE_MODEL` are deferred.) |
 | `src/lib/engines/openai.js`, `perplexity.js` | Results gain `gateway: "openai"` / `gateway: "perplexity"` on the native path and `"openrouter"` on the gateway path. `brightdata.js`-backed `probeAio` sets `provenance.gateway: "brightdata"`. |
 | `src/lib/engines/providerFailure.js` | `PROVIDER_CODE_KINDS` adds `dataforseo_http_401: AUTHENTICATION`, `dataforseo_40100: AUTHENTICATION`, `dataforseo_40200: SPEND_LIMIT`, `dataforseo_40210: SPEND_LIMIT`, `dataforseo_http_402: SPEND_LIMIT`, `dataforseo_http_429: RATE_LIMIT`, `dataforseo_40101`/`40103`/`50000`/`50301`/`50302`/`50303`/`50304`/`50401`/`50402: TRANSIENT`, `dataforseo_40501: REQUEST`, `dataforseo_50100: REQUEST`, `dataforseo_timeout: TIMEOUT`. Adapters build `provider_failure = classifyProviderFailure({ provider: "dataforseo", error })` from the thrown error (its `details.providerCode` is read via `error.providerCode`). |
 | `src/lib/engines/serpGeo.js` | `ADAPTER_CAPABILITIES` adds `chatgpt_dataforseo`, `gemini_dataforseo`, `aio_dataforseo` (`countryControl: true`, `languageControl: true`, `observedLocationAttested: false`) and `claude_dataforseo`, `perplexity_dataforseo` (`countryControl: true`, `languageControl: false`), `gemini_dataforseo_model` (`countryControl: false`). `buildAdapterContextParams(engine, ctx, "dataforseo")` returns `{ location_code, language_code }` (scraper/SERP) or `{ web_search_country_iso_code }` (model), from `dataforseoMarket`. |
-| `src/lib/engines/deployedEngines.js` | `ENGINE_LABELS.claude = "Claude"`. |
-| `src/app/page.js` | `ENGINE_NOTE.Claude = 'Claude is asked with web search on, so its answer can cite the pages it read.'` |
-| `scripts/check-secrets.mjs` | `OPENROUTER_ENGINES` adds `"claude"`. New function `checkRouteFunding()` used inside `checkEngineAdvertising`: an advertised engine is unfunded when none of its configured routes (`routeOrder` + `isRouteConfigured`) is available; message "MISMATCH: the page advertises Claude, but no answer route for it is configured (routes: dataforseo>openrouter). Configure one, or drop it from ENGINES and NEXT_PUBLIC_ENGINES." Adds a vendor check for `dataforseo` that calls the free `fetchUserData()` and prints PASS/FAIL only (never `login` or balance). |
-| `src/lib/engines/types.js` | `Engine.CLAUDE = "claude"`; weight tables unchanged (legacy aggregate; verify `aggregate.js` ignores engines absent from its table in P3.T5.S4). |
+| `src/lib/engines/deployedEngines.js` | No change (Claude label deferred). |
+| `src/app/page.js` | No change (Claude note deferred). |
+| `scripts/check-secrets.mjs` | New function `checkRouteFunding()` used inside `checkEngineAdvertising`: an advertised engine is unfunded when none of its configured routes (`routeOrder` + `isRouteConfigured`) is available; message "MISMATCH: the page advertises Claude, but no answer route for it is configured (routes: dataforseo>openrouter). Configure one, or drop it from ENGINES and NEXT_PUBLIC_ENGINES." Adds a vendor check for `dataforseo` that calls the free `fetchUserData()` and prints PASS/FAIL only (never `login` or balance). |
+| `src/lib/engines/types.js` | No change (Claude deferred). |
 | `src/components/portal/scans/ReportCards.jsx` | `AnswerBlock` (`:102-119`): `row.raw?.measurement_method === "consumer_capture" ? <Badge>Consumer app</Badge>` beside the existing `Model API` badge. |
-| `.env.example` | Names only: `DATAFORSEO_API_KEY=`, `DATAFORSEO_BASE_URL=`, `ANSWER_ENGINE_ROUTES=`, `FEATURE_DATAFORSEO_ENGINES=off`, `OPENROUTER_CLAUDE_MODEL=anthropic/claude-sonnet-4.5`, `DATAFORSEO_LLM_MODEL_CHAT_GPT=`, `DATAFORSEO_LLM_MODEL_CLAUDE=`, `DATAFORSEO_LLM_MODEL_GEMINI=`, `DATAFORSEO_LLM_MODEL_PERPLEXITY=`, `DATAFORSEO_SCAN_MODEL_CONCURRENCY=3`, each with a one-line comment. |
+| `.env.example` | Names only: `DATAFORSEO_API_KEY=`, `DATAFORSEO_BASE_URL=`, `ANSWER_ENGINE_ROUTES=`, `FEATURE_DATAFORSEO_ENGINES=off`, `DATAFORSEO_LLM_MODEL_CHAT_GPT=`, `DATAFORSEO_LLM_MODEL_GEMINI=`, `DATAFORSEO_LLM_MODEL_PERPLEXITY=`, `DATAFORSEO_SCAN_MODEL_CONCURRENCY=3`, each with a one-line comment. |
 | `src/lib/features/names.ts` | `dataforseo_engines: { spend: [] as const }`. |
 | `src/shared/spend-features.ts` | `"providers.dataforseo.selftest": "DataForSEO check"`. |
 
@@ -500,8 +502,7 @@ Registry adapter selection (`enginePipeline.js` `ENGINE_REGISTRY`):
 | `chatgpt`, `gemini` | `dataforseo` | `probeDataforseoScraper` (live) or queued (§6.3) |
 | `gemini` | `undefined`/`openrouter` | today |
 | `perplexity` | `undefined`/`vendor_api`/`openrouter` | today (`probePerplexity` picks native vs gateway) |
-| `perplexity`, `claude` | `dataforseo` | `probeDataforseoModel` |
-| `claude` | `undefined`/`openrouter` | `probeOpenRouterEngine({ engine: "claude" })` |
+| `perplexity` | `dataforseo` | `probeDataforseoModel` |
 
 `isConfigured` for each entry becomes `routeOrder(name, env).some((r) => isRouteConfigured(name, r, env))`.
 
@@ -566,7 +567,7 @@ None. F02 adds no customer or operator route. Readiness keeps flowing through th
 No new screens. Two visible changes, both phase 3:
 
 1. Customer scan report answer block (`src/components/portal/scans/ReportCards.jsx:102-119`): a neutral badge **"Consumer app"** when `raw.measurement_method === "consumer_capture"`, next to the existing **"Model API"** badge. Tooltip (`title`): "Captured from the consumer app through DataForSEO." Engine label "Claude" comes from `reportData.js:16`.
-2. Landing engine rail: when `NEXT_PUBLIC_ENGINES` includes `claude`, the label "Claude" and its `ENGINE_NOTE` render through the existing `RAIL_NOTES` mapping (`src/app/page.js:148`). Nothing renders when it is not deployed (the guard tests enforce this).
+2. Landing engine rail: unchanged (Claude deferred).
 
 ### 6.7 Permissions, privacy, observability
 
@@ -588,7 +589,6 @@ PGHOST=127.0.0.1 PGDATABASE=aeovis_live_qa node --env-file=<owner's env file out
   --panel ~/.aeovis-private/demo/offcult-panel.json \
   --run-id offcult-2026-10-22-v1 \
   --arms dfs_queued,dfs_live,dfs_model,current \
-  --claude-questions 12 \
   --competitors "Bewakoof,The Souled Store,Uniqlo,Bonkers Corner" \
   --reserve-usd 0.20 --max-requests 400 --max-spend-usd 12 \
   --out ~/.aeovis-private/bakeoff/offcult-2026-10-22-v1 \
@@ -603,7 +603,7 @@ Arms (each engine × question is one `purpose='canary'` observation, `context.bu
 |---|---|---|---|---|---|
 | `dfs_queued` | chatgpt, gemini, google_ai_overview | task_post + task_get, lease held and renewed while polling | all | 1 | 96 × 0.0012 = 0.1152 |
 | `dfs_live` | chatgpt, gemini, google_ai_overview | live/advanced, 3 concurrent per engine | all | 1 | 96 × 0.004 = 0.384 |
-| `dfs_model` | perplexity (all), claude (`--claude-questions`: the first N−2 non-branded plus both branded) | llm_responses, web search on, country `IN` | as stated | 1 | 32 × 0.04 + 12 × 0.18 = 3.44 |
+| `dfs_model` | perplexity (`--perplexity-questions N`, default all; optional arm) | llm_responses, web search on, country `IN` | as stated | 1 | 32 × 0.04 = 1.28 (5 q = 0.20) |
 | `current` | aio (Bright Data), chatgpt, gemini, perplexity via today's routes | today's adapters (`resolveEnabledEngines({engines:"aio,chatgpt,gemini,perplexity", allowFallback:false})`) | all | aio 2, perplexity native 2, others 1 | about 7 (20 October run) |
 
 Ceilings enforced three ways: the SQL canary budget (`claim_probe_dispatch` refuses at `--max-spend-usd`, `035:53-69`, `:85-89`), a request counter in the wrapped `fetch` (refuses past `--max-requests` real requests), and a host allowlist (`api.dataforseo.com`, `sandbox.dataforseo.com`, the `LLM_BASE_URL` host, `api.brightdata.com`, `api.openai.com` and `api.perplexity.ai` only if their direct keys are set). The queued arm holds each lease by `store.renew(id, token, 180)` every 60 s while polling on `POLL_OFFSETS_MIN`, then `finish`es; this needs no migration.
@@ -645,7 +645,7 @@ Metrics (per arm × engine unless stated; every rate shows "x of y"):
 > **Status: LIVE.** Decision record for F02 phase 1.
 
 **Date:** YYYY-MM-DD · **Run id:** <run-id> · **Owner:** <name> · **Decision:** go | partial-go | no-go
-**Approved engines:** <comma list of: aio, chatgpt, gemini, perplexity, claude, or "none">
+**Approved engines:** <comma list of: aio, chatgpt, gemini, perplexity, or "none">
 
 ## Context
 One paragraph: why the bake-off ran (F02 §1) and what it compared.
@@ -747,9 +747,9 @@ The phase 3 PR sets `DATAFORSEO_APPROVED_ENGINES` to the record's approved list;
 
 **Checkpoint:** full suite, typecheck, build. Completes F02-AC-13…17.
 
-### Phase 3 — Engine routing, adapters, Claude
+### Phase 3 — Engine routing and adapters
 
-**Goal:** answer engines can run on DataForSEO inside the P0 fence, Claude is a full engine, and every result names its gateway.
+**Goal:** answer engines can run on DataForSEO inside the P0 fence and every result names its gateway. (Claude as an engine is deferred.)
 
 - [ ] **P3.T1 Routes**
   - [ ] **P3.T1.S1** *Files:* `src/lib/engines/engineRoutes.ts`, `engineRoutes.test.ts`, fixture `tests/fixtures/f02/config-versions-today.json` (recorded by running `configVersion`/`circuitIdentity` for the four engines on `main` before this PR with a synthetic env: `LLM_API_KEY=k1`, `LLM_BASE_URL=https://openrouter.ai/api/v1`, `BRIGHTDATA_API_KEY=k2`, `OPENROUTER_GEMINI_MODEL=google/gemini-3.8-flash`). *Verify:* `node --test src/lib/engines/engineRoutes.test.ts` → pass (F02-AC-21, 22).
@@ -761,9 +761,9 @@ The phase 3 PR sets `DATAFORSEO_APPROVED_ENGINES` to the record's approved list;
 - [ ] **P3.T3 Durable dispatch wiring**
   - [ ] **P3.T3.S1** *Files:* `src/lib/db/probeDispatch.js` (`dispatchIdentity` opts), `src/lib/workers/durableProbing.js` (routes freeze, lease/budget per route, `withLeaseRenewal`, lane concurrency), `src/lib/workers/durableProbing.routes.test.mjs`. Cases: checkpoint without `routes` behaves exactly as before (snapshot of claim calls); frozen route reused across chunks; circuit open at freeze → fallback frozen with `fallbackFrom`; circuit opening mid-scan → remaining rows of that engine blocked, no switch; dataforseo live claim uses lease 180 and deadline 140 s; renewal every 60 s (fake timers); lane stops new claims after an `opens_circuit` result; `dataforseo` scraper route refused for scans while `QUEUED_COLLECTION_READY` is absent. *Verify:* `node --test src/lib/workers/durableProbing.routes.test.mjs src/lib/workers/*.test.mjs` → pass (F02-AC-22, 26).
   - [ ] **P3.T3.S2** *Files:* `src/lib/ops/providerCanary.js` (request units 1 for dataforseo routes; passes `{ route }` from `routeOrder(engine, env)[0]` or a `--route` override in `scripts/ops/provider-canary.mjs`), `src/lib/ops/providerCanary.dataforseo.test.mjs`. *Verify:* pass (F02-AC-24).
-- [ ] **P3.T4 Claude and the marketing guard**
-  - [ ] **P3.T4.S1** *Files:* `src/lib/engines/deployedEngines.js`, `src/app/page.js`, `src/lib/scoring/enginePipeline.js` (`claude` registry entry, `ENGINE_WEIGHTS.claude`), `src/lib/engines/types.js`, `src/lib/engines/claudeEngine.test.mjs`. *Verify:* `node --test src/lib/engines/claudeEngine.test.mjs src/lib/landingHonesty.test.mjs src/lib/landingProbeCounter.test.mjs` → pass (F02-AC-20).
-  - [ ] **P3.T4.S2** *Files:* `scripts/check-secrets.mjs`, `src/lib/checkSecretsEngines.test.mjs` (new; imports the exported `checkEngineAdvertising` after it is exported). Cases: `ENGINES=claude` without a route → MISMATCH line; `claude=dataforseo>openrouter` with only `LLM_API_KEY` → ok (fallback funds it); DataForSEO vendor check prints only PASS/FAIL. *Verify:* `node --test src/lib/checkSecretsEngines.test.mjs` → pass.
+- [ ] **P3.T4 Marketing guard and report badge** (Claude parts deferred)
+  - [ ] **P3.T4.S1 (deferred — skip)** *Files:* `src/lib/engines/deployedEngines.js`, `src/app/page.js`, `src/lib/scoring/enginePipeline.js` (`claude` registry entry, `ENGINE_WEIGHTS.claude`), `src/lib/engines/types.js`, `src/lib/engines/claudeEngine.test.mjs`. *Verify:* `node --test src/lib/engines/claudeEngine.test.mjs src/lib/landingHonesty.test.mjs src/lib/landingProbeCounter.test.mjs` → pass (F02-AC-20).
+  - [ ] **P3.T4.S2** *Files:* `scripts/check-secrets.mjs`, `src/lib/checkSecretsEngines.test.mjs` (new; imports the exported `checkEngineAdvertising` after it is exported). Cases: `ENGINES=perplexity` without a route → MISMATCH line; `perplexity=dataforseo>openrouter` with only `LLM_API_KEY` → ok (fallback funds it); DataForSEO vendor check prints only PASS/FAIL. *Verify:* `node --test src/lib/checkSecretsEngines.test.mjs` → pass.
   - [ ] **P3.T4.S3** *Files:* `src/components/portal/scans/ReportCards.jsx`, `scripts/qa/check-dataforseo-browser.mjs` (local app with the existing report fixture plus one `consumer_capture` row; asserts badge text "Consumer app" and "Model API"). *Verify:* `node scripts/qa/check-dataforseo-browser.mjs` → "2 passed" (F02-AC-30).
   - [ ] **P3.T4.S4** *Do:* confirm `src/lib/scoring/aggregate.js` ignores engines missing from `ENGINE_DEFAULT_WEIGHTS`: `git grep -n "ENGINE_DEFAULT_WEIGHTS\|ENGINE_HYBRID_WEIGHTS" src/lib/scoring/aggregate.js`; if it indexes weights without a guard, add `?? 0` there and a case in its test. *Verify:* `node --test src/lib/scoring/*.test.mjs` → pass.
 - [ ] **P3.T5 Gate**
@@ -811,7 +811,7 @@ The phase 3 PR sets `DATAFORSEO_APPROVED_ENGINES` to the record's approved list;
 | `src/lib/providers/dataforseo/serp.test.ts` | ported serp cases | 17 |
 | `src/lib/engines/dataforseo.test.ts` | result shape, evidence capture | 18, 25 |
 | `src/lib/engines/gatewayProvenance.test.mjs` | gateway on every adapter | 19 |
-| `src/lib/engines/claudeEngine.test.mjs`, `src/lib/landingHonesty.test.mjs` | Claude end to end, guard | 20 |
+| `src/lib/landingHonesty.test.mjs` | marketing guard (Claude end-to-end test deferred) | — |
 | `src/lib/engines/engineRoutes.test.ts` | config_version stability, route resolution | 21, 22 |
 | `src/lib/engines/providerFailure.dataforseo.test.mjs` | code → kind | 23 |
 | `src/lib/ops/providerCanary.dataforseo.test.mjs` | canaries | 24 |

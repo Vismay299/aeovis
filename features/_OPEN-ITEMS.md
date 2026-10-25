@@ -55,9 +55,10 @@ Each item states the default the specs already assume. **23 October 2026: the ow
 
 | # | Question | Default |
 |---|---|---|
-| B6 | Bake-off budget: USD 12 same-day head-to-head, or about USD 5 reusing the 20 October run for current providers. | USD 12 |
+| B6 | Bake-off budget: USD 12 same-day head-to-head, or about USD 5 reusing the 20 October run for current providers. | **Updated 25 Oct 2026:** DataForSEO account has USD 1 credit. Run arms `dfs_queued,dfs_live` (ChatGPT, Gemini, AI Overviews; about USD 0.50) with `--max-spend-usd 0.80`; `dfs_model` (Perplexity) only after a top-up, or 5 questions. |
 | B7 | Go thresholds: ≥ 95% India acceptance, ≥ 90% answered, ≤ 2× price table, 9 of 10 correct on manual review. | As stated |
 | B8 | Lower the per-answer reservation after a "go" to match DataForSEO's price. | Yes |
+| B49 | Claude as an answer engine. | **Decided 25 Oct 2026: not for now.** Removed from F02 (engine, routes, bake-off arm), F03 provider map, F11 model picker, F26 event enum and customer copy (F22, F25, F27). |
 | B9 | Accept the third-party-terms risk of capturing ChatGPT and Gemini consumer-app answers through a provider. | **Decided 23 Oct 2026: accepted by owner** |
 | B10 | While dispatch is paused, only the allowlisted workspace can use Prompt Explorer. | Yes |
 | B11 | Questions match case-insensitively (OpenSEO is case-sensitive). | Yes |

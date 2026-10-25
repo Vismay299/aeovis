@@ -197,7 +197,7 @@ Legend for the table: `n` count, `usd`, `b` flag, `ms` durationMs, `c` code, `c[
 | F11 | `prompt_explorer:run_finished` | S | `{ status: c, answered: n, failed: n, reused: b }` |
 | F11 | `prompt_explorer:question_tracked` | C | `{}` |
 | F12 | `question_history:viewed` | C | `{ executions: n, range: c }` |
-| F12 | `question_history:answer_opened` | C | `{ engine: E(chatgpt\|gemini\|perplexity\|claude\|aio), source: c }` |
+| F12 | `question_history:answer_opened` | C | `{ engine: E(chatgpt\|gemini\|perplexity\|aio), source: c }` |
 | F13 | `keyword_research:search_complete` | C | `{ location_code: n, search_mode: c, clickstream: b, local: b, result_count: n, cached: b }` |
 | F13 | `keyword_research:serp_open` | C | `{}` |
 | F13, F14 | `keyword:save` | C | `{ source_feature: E(keyword_research\|domain_overview\|rank_tracking), keyword_count: n }` |

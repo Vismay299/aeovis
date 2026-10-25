@@ -26,6 +26,7 @@ Each feature has one spec, detailed enough that an AI agent can implement it pha
 | Reuse OpenSEO code | Yes, logic and UI. Not their Cloudflare infrastructure |
 | UI/UX | Match OpenSEO's customer app (F04, F05, F06), keeping Perceev's name and logo |
 | "Mixed" rows from the comparison | Deferred; the owner will decide later. Specs must not change them |
+| Claude as an answer engine (25 Oct 2026) | Not for now. No Claude engine, route, label or Prompt Explorer model; see `00-CONVENTIONS.md` |
 
 ## Feature index
 
@@ -34,8 +35,8 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | ID | Feature | Comparison row(s) covered | Wave | Depends on | Migrations | Status |
 |---|---|---|---|---|---|---|
 | [F01](./F01-platform-foundations.md) | Platform foundations: TypeScript, durable jobs, spend guard, provider cache, LLM helper | Backend patterns | 0 | none | 040–044 | In progress |
-| [F02](./F02-dataforseo-provider.md) | DataForSEO provider and bake-off | Engines and capture; "What I could not verify" | 0 | F01 | 045–049 | Spec ✓ |
-| [F03](./F03-cost-ledger.md) | Cost ledger and per-answer cost | Cost per answer | 0 | F01, F02 | 050–054 | Spec ✓ |
+| [F02](./F02-dataforseo-provider.md) | DataForSEO provider and bake-off | Engines and capture; "What I could not verify" | 0 | F01, F03 phase 1 (price tables) | 045–049 | Spec ✓ |
+| [F03](./F03-cost-ledger.md) | Cost ledger and per-answer cost | Cost per answer | 0 | F01 (F04, F05 for phase 4 UI) | 050–054 | Spec ✓ |
 | [F04](./F04-design-system-and-app-shell.md) | Design system and app shell (OpenSEO UI/UX) | UI/UX decision; Frontend patterns | 0 | F01 (phase 1 TypeScript, phase 2 flags) | 055–059 | Spec ✓ |
 | [F05](./F05-client-data-layer.md) | Client data layer and interaction patterns | Frontend patterns | 0 | F04 | 060–064 | Spec ✓ |
 | [F06](./F06-data-tables-and-export.md) | Data tables and export | Tables and export | 0 | F04, F05 | 065–069 | Spec ✓ |
