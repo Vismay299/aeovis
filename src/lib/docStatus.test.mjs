@@ -101,12 +101,16 @@ test("GUARD — exactly one design authority is LIVE", async () => {
 test("GUARD — the live design doc matches the shared light implementation", async () => {
   const design = await readFile(path.join(REPO, "DESIGN.md"), "utf8");
   assert.match(design, /\*\*Status: LIVE\.\*\*/);
-  assert.match(design, /one light interface/i);
+  assert.match(design, /public website[\s\S]*one light interface/i);
+  assert.match(design, /customer app[\s\S]*dark/i);
   const layout = await readFile(path.join(REPO, "src/app/layout.js"), "utf8");
   assert.match(layout, /data-theme="light"/);
+  assert.match(layout, /buildThemeInitScript/);
   const css = await readFile(path.join(REPO, "src/app/globals.css"), "utf8");
   assert.match(css, /--paper:\s*#F7F7FA/i);
   assert.doesNotMatch(css, /prefers-color-scheme|data-theme="dark"/);
+  const appCss = await readFile(path.join(REPO, "src/styles/app-theme.css"), "utf8");
+  assert.match(appCss, /:root\[data-theme="dark"\]/);
 });
 
 test("GUARD — the close rule is written down where plans are read", async () => {
