@@ -16,6 +16,8 @@ export type EnqueueArgs = {
   maxInvocations: number | null;
 };
 
+export type CachePruneResult = { deleted: number; paths: string[] };
+
 export type EnqueueResult = {
   jobId: string | null;
   deduped: boolean;
@@ -87,6 +89,8 @@ export type JobStore = {
   pruneJobs(before: Date, limit: number): Promise<number>;
   expireSpendHolds(limit: number): Promise<number>;
   pruneSpend(holdsBefore: Date, ledgerBefore: Date, limit: number): Promise<PruneResult>;
+  pruneProviderCache(before: Date, limit: number): Promise<CachePruneResult>;
+  removeCacheBodies(storagePaths: string[]): Promise<void>;
 };
 
 type RawRow = Record<string, unknown>;
@@ -308,6 +312,29 @@ export function createJobStore(admin: SupabaseClient): JobStore {
       if (error) throw new Error(error.message);
       const row = (data ?? {}) as RawRow;
       return { ledger: num(row.ledger), holds: num(row.holds) };
+    },
+
+    async pruneProviderCache(before, limit) {
+      const { data, error } = await admin.rpc("prune_provider_cache", {
+        p_expired_before: before.toISOString(),
+        p_limit: limit,
+      });
+      if (error) throw new Error(error.message);
+      if (!Array.isArray(data)) return { deleted: 0, paths: [] };
+      // The RPC returns one row per deleted cache row, and `storage_path` is
+      // NULL for an inline body. Filtering those away loses the count, so the
+      // deleted total is the row count and the paths are the storage-backed
+      // subset that still needs its object removed.
+      return {
+        deleted: data.length,
+        paths: data.filter((path): path is string => typeof path === "string" && path.length > 0),
+      };
+    },
+
+    async removeCacheBodies(storagePaths) {
+      if (storagePaths.length === 0) return;
+      const { error } = await admin.storage.from("provider-cache").remove(storagePaths);
+      if (error) throw new Error(error.message);
     },
   };
 }

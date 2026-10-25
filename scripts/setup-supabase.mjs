@@ -91,6 +91,11 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "prune_spend" },
     { kind: "function", name: "f01_committed_usd" },
   ],
+  "042_f01_provider_cache.sql": [
+    { kind: "table", name: "provider_cache" },
+    { kind: "function", name: "prune_provider_cache" },
+    { kind: "bucket", name: "provider-cache" },
+  ],
   "043_f01_jobs_cron.sql": [{ kind: "function", name: "jobs_tick_http" }],
   "035_scoped_provider_rollout.sql": [
     {kind:"function",name:"set_probe_rollout"},

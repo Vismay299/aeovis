@@ -1503,6 +1503,32 @@ Verified against disposable PostgreSQL (`scripts/qa/check-f01-db.mjs` groups
 `jobs-*` and `tests/customer-uat.sql`), never against production.
 
 
+## F01 platform foundations: migration 042_f01_provider_cache.sql
+
+**Implemented; production application unverified.** Apply `042_f01_provider_cache.sql`
+after `035_scoped_provider_rollout.sql` and before deploying a build that calls
+`cached()`. It has a foreign key to `customer_brands(brand_key)` (workspace
+rows cascade on brand delete), so it must be applied after migration 023 or any
+file that creates `customer_brands`.
+
+Objects to check in the catalog: table `provider_cache` in `pg_class` with RLS
+enabled and service-role only (`authenticated` holds no grant); the private
+Storage bucket `provider-cache` in `storage.buckets`; function
+`prune_provider_cache` in `pg_proc`. `npm run setup:db` verifies exactly that
+list for this file.
+
+The table carries two check constraints: `provider_cache_one_body` (exactly one
+of `value` / `storage_path` is set — bodies over 256 KB live in Storage) and
+`provider_cache_scope` (`scope = 'workspace'` if and only if `brand_key` is set,
+so a workspace lookup can never answer from another brand's row). The
+retention job (`cache.retention`, hourly) calls `prune_provider_cache` for rows
+expired more than 7 days and deletes the returned Storage paths in batches of
+100.
+
+Verified against disposable PostgreSQL (`scripts/qa/check-f01-db.mjs` group
+`cache`), never against production.
+
+
 ## F01 platform foundations: migration 043_f01_jobs_cron.sql
 
 **Implemented; production application unverified, and it does nothing until the
