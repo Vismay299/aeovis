@@ -708,12 +708,12 @@ All new UI is built from F04 primitives: `src/components/ui/{card,button,badge,s
 **Goal:** one tested home for every provider price, with OpenSEO parity.
 
 - [ ] **P1.T1 Ported tables**
-  - [ ] **P1.T1.S1** *Files:* `src/lib/pricing/version.ts`, `src/lib/pricing/dataforseo.ts` (licence header), `src/shared/ai-visibility-pricing.ts` (licence header), `src/shared/money.ts` (licence header). *Do:* §6.2 tables, constants copied from the cited lines. *Verify:* `node --test src/lib/pricing/dataforseo.test.ts src/shared/ai-visibility-pricing.test.ts` → pass.
-  - [ ] **P1.T1.S2** *Files:* `src/lib/pricing/dataforseo.test.ts`. *Do:* port the six `it.each` cases of `pricing.test.ts:8-64` (raw USD with `assert.ok(Math.abs(a-b) < 1e-10)`) and the reviews "holds at least the billed cost" cases; add SERP page rounding (`depth 25` bills 3 pages) and the operator multiplier. *Verify:* pass (F03-AC-01).
-  - [ ] **P1.T1.S3** *Files:* `src/shared/ai-visibility-pricing.test.ts`. *Do:* port `aiVisibilityCost.test.ts:10-41` non-credit cases; per-engine `aiAnswerUsd`; `scheduledChecksPerMonth`. *Verify:* pass (F03-AC-02).
+  - [x] **P1.T1.S1** *Files:* `src/lib/pricing/version.ts`, `src/lib/pricing/dataforseo.ts` (licence header), `src/shared/ai-visibility-pricing.ts` (licence header), `src/shared/money.ts` (licence header). *Do:* §6.2 tables, constants copied from the cited lines. *Verify:* `node --test src/lib/pricing/dataforseo.test.ts src/shared/ai-visibility-pricing.test.ts` → pass.
+  - [x] **P1.T1.S2** *Files:* `src/lib/pricing/dataforseo.test.ts`. *Do:* port the six `it.each` cases of `pricing.test.ts:8-64` (raw USD with `assert.ok(Math.abs(a-b) < 1e-10)`) and the reviews "holds at least the billed cost" cases; add SERP page rounding (`depth 25` bills 3 pages) and the operator multiplier. *Verify:* pass (F03-AC-01).
+  - [x] **P1.T1.S3** *Files:* `src/shared/ai-visibility-pricing.test.ts`. *Do:* port `aiVisibilityCost.test.ts:10-41` non-credit cases; per-engine `aiAnswerUsd`; `scheduledChecksPerMonth`. *Verify:* pass (F03-AC-02).
 - [ ] **P1.T2 Perceev adapters**
-  - [ ] **P1.T2.S1** *Files:* `src/lib/pricing/perceev.ts`, `src/lib/pricing/index.ts`, `src/lib/pricing/perceev.test.ts`. *Do:* §6.2; tests: `serpQueryUsd("brightdata")` equals `BUILT_IN_SERP_QUERY_PRICES.brightdata`; with env `SERP_QUERY_PRICES={"brightdata":0.002}` → 0.002; unknown model → `null`; `costAccuracy` table. *Verify:* `node --test src/lib/pricing/perceev.test.ts` → pass (F03-AC-03).
-  - [ ] **P1.T2.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* append the four ported paths. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
+  - [x] **P1.T2.S1** *Files:* `src/lib/pricing/perceev.ts`, `src/lib/pricing/index.ts`, `src/lib/pricing/perceev.test.ts`. *Do:* §6.2; tests: `serpQueryUsd("brightdata")` equals `BUILT_IN_SERP_QUERY_PRICES.brightdata`; with env `SERP_QUERY_PRICES={"brightdata":0.002}` → 0.002; unknown model → `null`; `costAccuracy` table. *Verify:* `node --test src/lib/pricing/perceev.test.ts` → pass (F03-AC-03).
+  - [x] **P1.T2.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* append the four ported paths. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
 
 **Checkpoint:** `npm test`, `npm run typecheck` pass. ACs 01–03.
 

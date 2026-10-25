@@ -38,4 +38,9 @@ SOFTWARE.
 - `src/lib/spend/index.ts`
 - `src/lib/cache/providerCache.ts`
 - `src/lib/llm/openrouter.ts`
+- `src/lib/pricing/dataforseo.ts`
+- `src/lib/pricing/dataforseo.test.ts`
+- `src/shared/ai-visibility-pricing.ts`
+- `src/shared/ai-visibility-pricing.test.ts`
+- `src/shared/money.ts`
 - `supabase/migrations/041_f01_spend.sql`
