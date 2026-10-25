@@ -16,6 +16,8 @@ export type EnqueueArgs = {
   maxInvocations: number | null;
 };
 
+export type CachePruneResult = { deleted: number; paths: string[] };
+
 export type EnqueueResult = {
   jobId: string | null;
   deduped: boolean;
@@ -87,7 +89,7 @@ export type JobStore = {
   pruneJobs(before: Date, limit: number): Promise<number>;
   expireSpendHolds(limit: number): Promise<number>;
   pruneSpend(holdsBefore: Date, ledgerBefore: Date, limit: number): Promise<PruneResult>;
-  pruneProviderCache(before: Date, limit: number): Promise<string[]>;
+  pruneProviderCache(before: Date, limit: number): Promise<CachePruneResult>;
   removeCacheBodies(storagePaths: string[]): Promise<void>;
 };
 
@@ -318,8 +320,15 @@ export function createJobStore(admin: SupabaseClient): JobStore {
         p_limit: limit,
       });
       if (error) throw new Error(error.message);
-      if (!Array.isArray(data)) return [];
-      return data.filter((path): path is string => typeof path === "string");
+      if (!Array.isArray(data)) return { deleted: 0, paths: [] };
+      // The RPC returns one row per deleted cache row, and `storage_path` is
+      // NULL for an inline body. Filtering those away loses the count, so the
+      // deleted total is the row count and the paths are the storage-backed
+      // subset that still needs its object removed.
+      return {
+        deleted: data.length,
+        paths: data.filter((path): path is string => typeof path === "string" && path.length > 0),
+      };
     },
 
     async removeCacheBodies(storagePaths) {

@@ -148,3 +148,76 @@ test("safeFetch: the pinned transport dials the vetted address, not a rebinding 
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test("safeFetch: a 303 after a POST follows as a GET with no body", async () => {
+  const seen: { method: string; body: unknown }[] = [];
+  await safeFetch(
+    "http://example.com/post",
+    { method: "POST", body: "a=1", headers: { "content-type": "text/plain" } },
+    {
+      lookup: lookupFor({ "example.com": ["93.184.216.34"] }),
+      fetchImpl: async (_input, init) => {
+        seen.push({ method: String(init?.method), body: init?.body ?? null });
+        return seen.length === 1
+          ? textResponse("see other", 303, { location: "http://example.com/done" })
+          : textResponse("ok");
+      },
+    }
+  );
+  assert.deepEqual(seen.map((hop) => hop.method), ["POST", "GET"]);
+  assert.equal(seen[1].body, null, "the body is dropped on a 303");
+});
+
+test("safeFetch: a 307 replays the method and the body", async () => {
+  const seen: { method: string; body: unknown }[] = [];
+  await safeFetch("http://example.com/post", { method: "POST", body: "a=1" }, {
+    lookup: lookupFor({ "example.com": ["93.184.216.34"] }),
+    fetchImpl: async (_input, init) => {
+      seen.push({ method: String(init?.method), body: init?.body ?? null });
+      return seen.length === 1
+        ? textResponse("keep", 307, { location: "http://example.com/done" })
+        : textResponse("ok");
+    },
+  });
+  assert.deepEqual(seen.map((hop) => hop.method), ["POST", "POST"]);
+  assert.equal(seen[1].body, "a=1");
+});
+
+test("safeFetch: a streamed body that would be replayed is refused, not re-read", async () => {
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("chunk"));
+      controller.close();
+    },
+  });
+  await assert.rejects(
+    () =>
+      safeFetch("http://example.com/post", { method: "POST", body } as never, {
+        lookup: lookupFor({ "example.com": ["93.184.216.34"] }),
+        fetchImpl: async () => textResponse("keep", 307, { location: "http://example.com/done" }),
+      }),
+    (err: unknown) => err instanceof AppError && err.code === "safe_fetch_redirect_body"
+  );
+});
+
+test("safeFetch: an unreachable target is 422 url_unreachable, not a 500", async () => {
+  for (const err of [
+    Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
+    Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }),
+    }),
+    Object.assign(new Error("timed out"), { name: "TimeoutError" }),
+  ]) {
+    await assert.rejects(
+      () =>
+        safeFetch("http://example.com/x", {}, {
+          lookup: lookupFor({ "example.com": ["93.184.216.34"] }),
+          fetchImpl: async () => {
+            throw err;
+          },
+        }),
+      (thrown: unknown) =>
+        thrown instanceof AppError && thrown.status === 422 && thrown.code === "url_unreachable"
+    );
+  }
+});

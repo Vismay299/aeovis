@@ -60,7 +60,7 @@ export function createMemoryCacheStore(seed: MemoryCacheSeed = {}): MemoryCacheS
           paths.push(row.storagePath);
         }
       }
-      return paths;
+      return { deleted: expired.length, paths };
     },
   };
 }

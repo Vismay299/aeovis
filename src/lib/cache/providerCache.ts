@@ -24,13 +24,45 @@ export type CacheDeps = {
   logger?: Pick<Console, "warn" | "error">;
 };
 
+// Sorted object keys, recursive, arrays keep order. Every value a key part can
+// hold has to render distinctly: `Object.entries(new Date())` is empty, so a
+// plain-object walk renders every Date, Map and Set as "{}" and two key parts
+// that differ only in their date hash to the SAME key — a cache hit returning
+// another request's payload. The exotic types are therefore named here, and a
+// type that is none of them and carries no own keys throws rather than
+// collapsing into "{}".
 function stableStringify(value: unknown): string {
   if (value === null || value === undefined) return "null";
+  if (typeof value === "bigint") return JSON.stringify(`@bigint:${value.toString()}`) as string;
+  if (typeof value === "function" || typeof value === "symbol") {
+    throw new AppError(500, "cache_key_invalid", "A cache key part cannot be serialised.");
+  }
   if (typeof value !== "object") return JSON.stringify(value) as string;
   if (Array.isArray(value)) return "[" + value.map((entry) => stableStringify(entry)).join(",") + "]";
+  if (value instanceof Date) {
+    const time = value.getTime();
+    return JSON.stringify(`@date:${Number.isNaN(time) ? "invalid" : value.toISOString()}`) as string;
+  }
+  if (value instanceof Map) {
+    const entries = [...value.entries()]
+      .map(([key, entry]) => stableStringify(key) + ":" + stableStringify(entry))
+      .sort();
+    return "@map{" + entries.join(",") + "}";
+  }
+  if (value instanceof Set) {
+    return "@set[" + [...value].map((entry) => stableStringify(entry)).sort().join(",") + "]";
+  }
+  if (value instanceof RegExp) return JSON.stringify(`@regexp:${value.source}/${value.flags}`) as string;
+  if (value instanceof URL) return JSON.stringify(`@url:${value.toString()}`) as string;
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, entry]) => entry !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  if (entries.length === 0) {
+    const proto = Object.getPrototypeOf(value as object);
+    if (proto !== Object.prototype && proto !== null) {
+      throw new AppError(500, "cache_key_invalid", "A cache key part cannot be serialised.");
+    }
+  }
   return "{" + entries.map(([key, entry]) => JSON.stringify(key) + ":" + stableStringify(entry)).join(",") + "}";
 }
 
@@ -56,7 +88,14 @@ function storeFor(deps?: CacheDeps): CacheStore | null {
   return createCacheStore(admin);
 }
 
-const singleFlight = new Map<string, Promise<unknown>>();
+type FlightResult = { value: unknown; fetchedAt: string };
+
+const singleFlight = new Map<string, Promise<FlightResult>>();
+
+// A row read from Storage that could not be fetched is a miss, which a plain
+// `null` cannot say: a body of "null" is a cached value, and the two must not
+// render as the same thing.
+const MISSING = Symbol("cache-missing");
 
 export async function cached<T>(
   i: {
@@ -87,20 +126,20 @@ export async function cached<T>(
       row = null;
     }
     if (row && Date.parse(row.expiresAt) > nowMs) {
-      let record: unknown = row.value;
+      let record: unknown = row.storagePath ? MISSING : row.value;
       if (row.storagePath) {
         try {
           const body = await store.readBody(row.storagePath);
-          record = body === null ? null : JSON.parse(body);
+          record = body === null ? MISSING : JSON.parse(body);
         } catch {
-          record = null;
+          record = MISSING;
         }
       }
-      const parsed = i.schema.safeParse(record);
-      if (parsed.success && record !== null) {
-        return { value: parsed.data, hit: true, fetchedAt: row.fetchedAt };
-      }
-      if (record !== null) {
+      if (record !== MISSING) {
+        const parsed = i.schema.safeParse(record);
+        if (parsed.success) {
+          return { value: parsed.data, hit: true, fetchedAt: row.fetchedAt };
+        }
         logger.warn("[cache] schema mismatch", { namespace: i.namespace, version: i.version });
       }
     } else if (row) {
@@ -111,13 +150,16 @@ export async function cached<T>(
     }
   }
 
-  const running = singleFlight.get(key) as Promise<T> | undefined;
+  const running = singleFlight.get(key);
   if (running) {
-    const value = await running;
-    return { value, hit: true, fetchedAt: new Date(nowMs).toISOString() };
+    // Piggybacking on the in-flight fetch: the value is fresh from the fetcher,
+    // not from the cache, so it reports `hit: false` and the fetch's own
+    // fetchedAt rather than a timestamp taken before the fetch finished.
+    const shared = await running;
+    return { value: shared.value as T, hit: false, fetchedAt: shared.fetchedAt };
   }
 
-  const work = (async (): Promise<T> => {
+  const work = (async (): Promise<FlightResult> => {
     const fresh = await fetcher();
     const parsed = i.schema.safeParse(fresh);
     if (!parsed.success) {
@@ -130,8 +172,13 @@ export async function cached<T>(
       const keepAlive = deps?.keepAlive ?? defaultKeepAlive;
       const text = JSON.stringify(value);
       const bytes = new TextEncoder().encode(text).length;
+      // `provider_cache_one_body` is `(value IS NULL) <> (storage_path IS NULL)`,
+      // so a cached JSON null cannot live in the row: it would write NULL into
+      // both columns, the upsert would be refused, and the keepAlive wrapper
+      // would swallow it — the namespace silently never caching. A null body
+      // goes to Storage, where it round-trips as the value it is.
       const write =
-        bytes > CACHE_INLINE_MAX_BYTES
+        bytes > CACHE_INLINE_MAX_BYTES || value === null
           ? (async () => {
               const storagePath = `provider-cache/${i.namespace}/${key}.json`;
               await target.writeBody(storagePath, text);
@@ -170,13 +217,13 @@ export async function cached<T>(
         { label: "cache:write" }
       );
     }
-    return value;
+    return { value, fetchedAt };
   })();
 
   singleFlight.set(key, work);
   try {
-    const value = await work;
-    return { value, hit: false, fetchedAt: new Date((deps?.now ?? Date.now)()).toISOString() };
+    const fresh = await work;
+    return { value: fresh.value as T, hit: false, fetchedAt: fresh.fetchedAt };
   } finally {
     singleFlight.delete(key);
   }

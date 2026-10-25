@@ -234,3 +234,87 @@ test("llm: reserve carries estimate, maxUsd and idempotencyKey", async () => {
   );
   assert.equal(h.inner.ledger.length, 1);
 });
+
+test("llm: a retry behind a live hold is 409 duplicate_paid_call and makes no call", async () => {
+  const h = spendHarness();
+  (h.deps as { model?: unknown }).model = { fake: "model" };
+  const { reserveSpend } = await import("../spend/index.ts");
+  await reserveSpend(
+    { brandKey: BRAND, feature: FEATURE, estimateUsd: 0.01, idempotencyKey: "llm-dup" },
+    h.deps.spend
+  );
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      llmText(
+        { brandKey: BRAND, feature: FEATURE, system: "s", prompt: "p", idempotencyKey: "llm-dup" },
+        {
+          ...h.deps,
+          generateText: (async () => {
+            calls += 1;
+            return generateResult();
+          }) as unknown as LlmDeps["generateText"],
+        }
+      ),
+    (err: unknown) => err instanceof AppError && err.status === 409 && err.code === "duplicate_paid_call"
+  );
+  assert.equal(calls, 0, "the paid call must not run a second time");
+  assert.equal(h.inner.ledger.length, 0, "the live hold is left to its own call");
+});
+
+test("llm: an unpriceable answer settles the hold before it throws 500 llm_unpriced", async () => {
+  const h = spendHarness();
+  (h.deps as { model?: unknown }).model = { fake: "model" };
+  const deps: LlmDeps = {
+    ...h.deps,
+    env: {
+      LLM_API_KEY: "sk-EXAMPLE-NOT-A-REAL-KEY",
+      LLM_BASE_URL: "https://gateway.example/v1",
+      LLM_MODEL_PRICES: JSON.stringify({ "custom/qa": { input: 1, output: 2 } }),
+    },
+    // A priced id whose gateway reported no token counts at all: resolveCost
+    // throws `unmeasured_tokens` AFTER the call was paid for.
+    generateText: stubGenerate(generateResult({ providerMetadata: {}, usage: undefined }), {}),
+  };
+  await assert.rejects(
+    () =>
+      llmText(
+        { brandKey: BRAND, feature: FEATURE, system: "s", prompt: "p", model: "custom/qa", idempotencyKey: "llm-unpriced" },
+        deps
+      ),
+    (err: unknown) => err instanceof AppError && err.status === 500 && err.code === "llm_unpriced"
+  );
+  assert.equal(h.inner.ledger.length, 1, "the hold is settled, never left open");
+  assert.equal(h.inner.ledger[0].costSource, "reservation", "an unknown cost counts at the estimate");
+});
+
+test("llm: the estimate uses the model's own rates, not a flat fallback", async () => {
+  const h = spendHarness();
+  (h.deps as { model?: unknown }).model = { fake: "model" };
+  const deps: LlmDeps = {
+    ...h.deps,
+    env: {
+      LLM_API_KEY: "sk-EXAMPLE-NOT-A-REAL-KEY",
+      LLM_BASE_URL: "https://gateway.example/v1",
+      LLM_MODEL_PRICES: JSON.stringify({ "custom/qa": { input: 1, output: 2 } }),
+    },
+    generateText: stubGenerate(generateResult({ providerMetadata: {} }), {}),
+  };
+  // ceil(2 chars / 3) input tokens x $1/Mtok + 4000 output tokens x $2/Mtok
+  // = $0.008001, which fits under a $0.02 ceiling; the old flat $0.05 did not.
+  const out = await llmText(
+    {
+      brandKey: BRAND,
+      feature: FEATURE,
+      system: "s",
+      prompt: "p",
+      model: "custom/qa",
+      maxUsd: 0.02,
+      idempotencyKey: "llm-estimate",
+    },
+    deps
+  );
+  assert.equal(out.model, "custom/qa");
+  const hold = [...h.inner.holds.values()][0];
+  assert.equal(hold.estimateUsd, 0.008001);
+});

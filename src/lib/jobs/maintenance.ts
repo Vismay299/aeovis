@@ -16,7 +16,7 @@ const PRUNE_BATCH = 1_000;
 const PRUNE_MAX_STEPS = 20;
 const SPEND_PRUNE_LIMIT = 5_000;
 
-export type MaintenanceDeps = { store?: JobStore };
+export type MaintenanceDeps = { store?: JobStore | null };
 
 // The retentions' store binding. The module auto-registers handlers on import
 // (via `kinds.ts` in the tick route) with the production store; tests call
@@ -46,7 +46,10 @@ function periodicDefined(name: string): boolean {
  * throw `duplicate_job_kind` / `duplicate_periodic`.
  */
 export function registerMaintenanceJobs(deps: MaintenanceDeps = {}): void {
-  if (deps.store) boundStore = deps.store;
+  // Passing `store` rebinds; passing `store: null` unbinds, so a test store
+  // cannot stay bound for the rest of the process. The bare call the module
+  // makes on import leaves the binding alone.
+  if ("store" in deps) boundStore = deps.store ?? null;
   const store = (): JobStore => activeStore();
 
   if (!jobDefined("jobs.retention")) {
@@ -91,7 +94,10 @@ export function registerMaintenanceJobs(deps: MaintenanceDeps = {}): void {
         const pruned = await ctx.step.do("prune-1", DB_STEP, () =>
           store().pruneProviderCache(new Date(Date.now() - CACHE_RETENTION_DAYS * DAY_MS), CACHE_PRUNE_LIMIT)
         );
-        const paths = pruned.filter((path) => typeof path === "string" && path.length > 0);
+        // `deleted` counts every pruned row; `paths` is only the storage-backed
+        // subset, so reporting its length would show 0 after deleting a
+        // thousand inline rows.
+        const paths = pruned.paths.filter((path) => typeof path === "string" && path.length > 0);
         for (let index = 0; index < paths.length; index += CACHE_STORAGE_BATCH) {
           const batch = paths.slice(index, index + CACHE_STORAGE_BATCH);
           const stepName = `prune-${2 + index / CACHE_STORAGE_BATCH}`;
@@ -100,7 +106,7 @@ export function registerMaintenanceJobs(deps: MaintenanceDeps = {}): void {
             return { removed: batch.length };
           });
         }
-        return { result: { pruned: paths.length } };
+        return { result: { pruned: pruned.deleted, bodies: paths.length } };
       },
       { deadlineSeconds: 3_600, maxInvocations: 10 }
     );
@@ -135,6 +141,11 @@ export function registerMaintenanceJobs(deps: MaintenanceDeps = {}): void {
       },
     });
   }
+}
+
+/** Drops any injected store, so the retentions go back to `jobStore()`. */
+export function resetMaintenanceStore(): void {
+  boundStore = null;
 }
 
 registerMaintenanceJobs();

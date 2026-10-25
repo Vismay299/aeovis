@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import type { LanguageModel } from "ai";
+import { isFreeModelId, lookupModelPrice } from "../llmPricing.js";
 
 export type LlmEnv = Record<string, string | undefined>;
 
@@ -39,13 +40,18 @@ export function estimateLlmUsd(
   maxOutputTokens: number,
   env: LlmEnv = process.env
 ): number {
+  // Spec §6.2: table rates x (ceil(promptChars/3) input tokens + maxOutputTokens
+  // output tokens), falling back to LLM_HELPER_UNPRICED_ESTIMATE_USD only for an
+  // id the table has no rate for (priceable because the gateway reports cost).
+  // A flat fallback for every id would under-reserve a long call on an expensive
+  // model, and the cap check at reserve time is only as good as this number.
+  if (isFreeModelId(modelId)) return 0;
+  const price = lookupModelPrice(modelId, env as unknown as NodeJS.ProcessEnv);
+  if (price) {
+    const inputTokens = Math.ceil(Math.max(promptChars, 0) / 3);
+    const outputTokens = Math.max(maxOutputTokens, 0);
+    return (inputTokens / 1e6) * price.input + (outputTokens / 1e6) * price.output;
+  }
   const fallback = Number(env.LLM_HELPER_UNPRICED_ESTIMATE_USD ?? 0.05);
-  const unpriced = Number.isFinite(fallback) && fallback > 0 ? fallback : 0.05;
-  void modelId;
-  void maxOutputTokens;
-  // Token counts before the call are a guess (ceil(chars/4)); the settle uses
-  // the reported cost. The estimate only needs to bound the hold.
-  const guessedInputTokens = Math.ceil(Math.max(promptChars, 0) / 4);
-  void guessedInputTokens;
-  return unpriced;
+  return Number.isFinite(fallback) && fallback > 0 ? fallback : 0.05;
 }

@@ -13,13 +13,16 @@ export type CacheRow = {
   expiresAt: string;
 };
 
+/** `deleted` is every pruned row; `paths` only the storage-backed subset. */
+export type CachePruneResult = { deleted: number; paths: string[] };
+
 export type CacheStore = {
   read(key: string): Promise<CacheRow | null>;
   write(row: CacheRow): Promise<void>;
   readBody(storagePath: string): Promise<string | null>;
   writeBody(storagePath: string, body: string): Promise<void>;
   removeBodies(storagePaths: string[]): Promise<void>;
-  pruneExpired(before: Date, limit: number): Promise<string[]>;
+  pruneExpired(before: Date, limit: number): Promise<CachePruneResult>;
 };
 
 function toRow(data: Record<string, unknown> | null): CacheRow | null {
@@ -98,8 +101,13 @@ export function createCacheStore(admin: SupabaseClient): CacheStore {
         p_limit: limit,
       });
       if (error) throw new Error(error.message);
-      if (!Array.isArray(data)) return [];
-      return data.filter((path): path is string => typeof path === "string");
+      if (!Array.isArray(data)) return { deleted: 0, paths: [] };
+      // One row per deleted cache row; `storage_path` is NULL for inline
+      // bodies, so the count has to come from the rows, not the paths.
+      return {
+        deleted: data.length,
+        paths: data.filter((path): path is string => typeof path === "string" && path.length > 0),
+      };
     },
   };
 }

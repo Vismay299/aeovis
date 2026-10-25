@@ -193,3 +193,63 @@ test("workspace scope without a brand is a 500 before any fetch", async () => {
     (err: unknown) => err instanceof Error && (err as { code?: string }).code === "cache_scope_invalid"
   );
 });
+
+test("stableStringify separates dates, maps and sets instead of rendering them as {}", () => {
+  const early = new Date("2026-01-01T00:00:00.000Z");
+  const late = new Date("2026-06-01T00:00:00.000Z");
+  assert.notEqual(stableStringify(early), stableStringify(late));
+  assert.equal(stableStringify(early), stableStringify(new Date(early.getTime())));
+  assert.notEqual(stableStringify(new Set([1])), stableStringify(new Set([2])));
+  assert.equal(stableStringify(new Set([1, 2])), stableStringify(new Set([2, 1])));
+  assert.notEqual(stableStringify(new Map([["a", 1]])), stableStringify(new Map([["a", 2]])));
+  assert.notEqual(stableStringify(early), stableStringify({}));
+});
+
+test("key stability: a date in keyParts changes the key", () => {
+  const base = { namespace: "n", version: 1, scope: "global" as const };
+  const first = cacheKey({ ...base, keyParts: [{ since: new Date("2026-01-01T00:00:00.000Z") }] });
+  const second = cacheKey({ ...base, keyParts: [{ since: new Date("2026-06-01T00:00:00.000Z") }] });
+  assert.notEqual(first, second, "two windows must not share a cache key");
+});
+
+test("a null payload round-trips through storage and is a hit", async () => {
+  const { store, held, deps } = harness();
+  const nullable = z.object({ ok: z.boolean() }).nullable();
+  let calls = 0;
+  const fetcher = async () => {
+    calls += 1;
+    return null;
+  };
+  const miss = await cached({ ...input, keyParts: ["nullable"], schema: nullable }, fetcher, deps);
+  await Promise.all(held.splice(0));
+  assert.equal(miss.hit, false);
+  assert.equal(miss.value, null);
+  const row = await store.read(cacheKey({ ...input, keyParts: ["nullable"] }));
+  // provider_cache_one_body is (value IS NULL) <> (storage_path IS NULL), so a
+  // null body has to live in Storage or the row cannot be written at all.
+  assert.ok(row, "the null payload was cached");
+  assert.ok(row?.storagePath, "a null body goes to storage, never the row");
+  const hit = await cached({ ...input, keyParts: ["nullable"], schema: nullable }, fetcher, deps);
+  assert.equal(hit.hit, true);
+  assert.equal(hit.value, null);
+  assert.equal(calls, 1, "the second call is served from the cache");
+});
+
+test("a piggybacked single-flight call is not reported as a cache hit", async () => {
+  const { held, deps } = harness();
+  let calls = 0;
+  const fetcher = async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return { ok: true };
+  };
+  const [first, second] = await Promise.all([
+    cached({ ...input, keyParts: ["piggyback"] }, fetcher, deps),
+    cached({ ...input, keyParts: ["piggyback"] }, fetcher, deps),
+  ]);
+  await Promise.all(held.splice(0));
+  assert.equal(calls, 1);
+  assert.equal(first.hit, false);
+  assert.equal(second.hit, false, "nothing came from the cache, so it is not a hit");
+  assert.equal(second.fetchedAt, first.fetchedAt, "both report the shared fetch's time");
+});

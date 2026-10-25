@@ -95,8 +95,13 @@ function logFailed(model: string, code: string, deps?: LlmDeps): void {
   logger.error("[llm] call failed", { model, code });
 }
 
-function roundedEstimate(promptChars: number, maxOutputTokens: number, env: Record<string, string | undefined>): number {
-  const estimate = estimateLlmUsd("model", promptChars, maxOutputTokens, env);
+function roundedEstimate(
+  model: string,
+  promptChars: number,
+  maxOutputTokens: number,
+  env: Record<string, string | undefined>
+): number {
+  const estimate = estimateLlmUsd(model, promptChars, maxOutputTokens, env);
   return Math.max(Math.ceil(estimate * 1_000_000) / 1_000_000, 0.000001);
 }
 
@@ -106,6 +111,15 @@ function reportedOrNull(provider: string, providerMetadata: unknown): number | n
   return openRouterCostUsd(providerMetadata);
 }
 
+type CostOutcome =
+  | { priced: true; usd: number; costSource: "price_table" | "provider_reported" }
+  | { priced: false };
+
+// Never throws: the call has already been made and the hold is still open, so a
+// pricing failure has to be reported back to the caller, which settles the hold
+// at the estimate before surfacing it. `resolveCost` throws `UnpricedModelError`
+// for an id with no rate and for a gateway that reported no token counts
+// (`unmeasured_tokens`), and an escape here would leak the hold until the sweep.
 function tableCost(
   model: string,
   provider: string,
@@ -113,15 +127,32 @@ function tableCost(
   env: Record<string, string | undefined>,
   modelForLog: string,
   deps?: LlmDeps
-): number {
-  const priced = resolveCost({ model, provider, usage, env: targetEnv(env) });
-  if (priced.cost_source === "gateway") {
-    // A non-OpenRouter gateway never reports cost; a "gateway" source here
-    // would mean the price came from nowhere, so refuse rather than settle 0.
+): CostOutcome {
+  let priced: { cost: number; cost_source: string };
+  try {
+    priced = resolveCost({ model, provider, usage, env: targetEnv(env) });
+  } catch {
     logFailed(modelForLog, "unpriced", deps);
-    throw new AppError(500, "llm_unpriced", "The LLM cost could not be priced.");
+    return { priced: false };
   }
-  return priced.cost;
+  // A "gateway" source means `usage.cost` arrived after all: authoritative
+  // spend, recorded as provider_reported rather than re-derived from the table.
+  if (priced.cost_source === "gateway") {
+    return { priced: true, usd: priced.cost, costSource: "provider_reported" };
+  }
+  return { priced: true, usd: priced.cost, costSource: "price_table" };
+}
+
+// Settle the hold at the estimate (unknown actual), then surface the pricing
+// failure. Mirrors the abort path: an unpriced call is never a free call.
+async function settleUnpriced(
+  holdId: string,
+  provider: string,
+  endpoint: string,
+  deps?: LlmDeps
+): Promise<never> {
+  await settleSpend(holdId, null, { provider: providerName(provider), endpoint }, deps?.spend);
+  throw new AppError(500, "llm_unpriced", "The LLM cost could not be priced.");
 }
 
 export async function llmText(
@@ -138,7 +169,7 @@ export async function llmText(
   const provider = providerOf(env);
   assertPriceable(model, provider, env);
   const promptChars = (i.system + i.prompt).length;
-  const estimate = roundedEstimate(promptChars, maxOutputTokens, env);
+  const estimate = roundedEstimate(model, promptChars, maxOutputTokens, env);
   const endpoint = `chat:${model}`;
 
   const generate = deps?.generateText ?? generateText;
@@ -148,7 +179,7 @@ export async function llmText(
   // metered()'s own settle path always records cost_source provider_reported —
   // the price_table branch needs the explicit providerCostReported: false.
   const { reserveSpend: reserve } = await import("../spend/index.ts");
-  const { holdId } = await reserve(
+  const { holdId, existing } = await reserve(
     {
       brandKey: i.brandKey,
       feature: i.feature,
@@ -158,6 +189,12 @@ export async function llmText(
     },
     deps?.spend
   );
+  if (existing) {
+    // Same (brandKey, feature, idempotencyKey) already behind a live hold, as
+    // metered() treats it: running the paid call again would bill twice, and
+    // settling would close a hold that belongs to the call still in flight.
+    throw new AppError(409, "duplicate_paid_call", "This paid request was already made.");
+  }
 
   let result: Awaited<ReturnType<typeof generateText>>;
   try {
@@ -196,13 +233,14 @@ export async function llmText(
     return { text: result.text, usd: null, model };
   }
   const actual = tableCost(model, provider, tokenUsage(result), env, model, deps);
+  if (!actual.priced) return await settleUnpriced(holdId, provider, endpoint, deps);
   const { settleSpendBatch: settleBatch } = await import("../spend/index.ts");
   await settleBatch(
     holdId,
-    [{ provider: providerName(provider), endpoint, actualUsd: actual, costSource: "price_table" }],
+    [{ provider: providerName(provider), endpoint, actualUsd: actual.usd, costSource: actual.costSource }],
     deps?.spend
   );
-  return { text: result.text, usd: actual, model };
+  return { text: result.text, usd: actual.usd, model };
 }
 
 export async function llmObject<T>(
@@ -219,7 +257,7 @@ export async function llmObject<T>(
   const provider = providerOf(env);
   assertPriceable(model, provider, env);
   const promptChars = (i.system + i.prompt).length;
-  const estimate = roundedEstimate(promptChars, maxOutputTokens, env);
+  const estimate = roundedEstimate(model, promptChars, maxOutputTokens, env);
   const endpoint = `chat:${model}`;
 
   const generate = deps?.generateText ?? generateText;
@@ -237,6 +275,9 @@ export async function llmObject<T>(
     deps?.spend
   );
   const objectHoldId = created.holdId;
+  if (created.existing) {
+    throw new AppError(409, "duplicate_paid_call", "This paid request was already made.");
+  }
 
   let result: Awaited<ReturnType<typeof generateText>>;
   try {
@@ -272,33 +313,47 @@ export async function llmObject<T>(
     // billed failure (settled at the known cost), then a 502 to the caller.
     logFailed(model, "bad_output", deps);
     const badReported = reportedOrNull(provider, result.providerMetadata);
-    const badActual =
-      badReported !== null
-        ? badReported
-        : provider === "openrouter"
-          ? null
-          : tableCost(model, provider, tokenUsage(result), env, model, deps);
-    if (badActual === null) {
+    if (badReported !== null) {
       await settleSpend(
         objectHoldId,
-        null,
+        badReported,
         { provider: providerName(provider), endpoint },
         deps?.spend
       );
     } else if (provider === "openrouter") {
       await settleSpend(
         objectHoldId,
-        badActual,
+        null,
         { provider: providerName(provider), endpoint },
         deps?.spend
       );
     } else {
-      const { settleSpendBatch: settleBad } = await import("../spend/index.ts");
-      await settleBad(
-        objectHoldId,
-        [{ provider: providerName(provider), endpoint, actualUsd: badActual, costSource: "price_table" }],
-        deps?.spend
-      );
+      // An unpriceable bad output still settles — at the estimate, since the
+      // cost is unknown — so the hold closes either way and the caller still
+      // sees the schema failure rather than a pricing error.
+      const badActual = tableCost(model, provider, tokenUsage(result), env, model, deps);
+      if (!badActual.priced) {
+        await settleSpend(
+          objectHoldId,
+          null,
+          { provider: providerName(provider), endpoint },
+          deps?.spend
+        );
+      } else {
+        const { settleSpendBatch: settleBad } = await import("../spend/index.ts");
+        await settleBad(
+          objectHoldId,
+          [
+            {
+              provider: providerName(provider),
+              endpoint,
+              actualUsd: badActual.usd,
+              costSource: badActual.costSource,
+            },
+          ],
+          deps?.spend
+        );
+      }
     }
     throw new AppError(502, "llm_bad_output", "The model returned an answer that did not match the schema.");
   }
@@ -312,13 +367,14 @@ export async function llmObject<T>(
     return { object: parsed.data as T, usd: null, model };
   }
   const actual = tableCost(model, provider, tokenUsage(result), env, model, deps);
+  if (!actual.priced) return await settleUnpriced(objectHoldId, provider, endpoint, deps);
   const { settleSpendBatch: settleBatch } = await import("../spend/index.ts");
   await settleBatch(
     objectHoldId,
-    [{ provider: providerName(provider), endpoint, actualUsd: actual, costSource: "price_table" }],
+    [{ provider: providerName(provider), endpoint, actualUsd: actual.usd, costSource: actual.costSource }],
     deps?.spend
   );
-  return { object: parsed.data as T, usd: actual, model };
+  return { object: parsed.data as T, usd: actual.usd, model };
 }
 
 function providerName(provider: string): string {
