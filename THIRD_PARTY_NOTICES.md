@@ -39,4 +39,7 @@ SOFTWARE.
 - `src/lib/cache/providerCache.ts`
 - `src/lib/llm/openrouter.ts`
 - `src/lib/telemetry/server.ts` (and `server.test.ts` message-stripping cases)
+- `src/shared/privacy-choices.ts` (and `privacy-choices.test.ts`)
+- `src/lib/telemetry/sanitize.ts` (and `sanitize.test.ts`)
+- `src/lib/telemetry/client.ts` (and `client.test.ts` buffer/opt-in cases)
 - `supabase/migrations/041_f01_spend.sql`
