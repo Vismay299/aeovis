@@ -1,3 +1,16 @@
+@import "tailwindcss" source(none);
+@import "tw-animate-css";
+@config "../../tailwind.config.js";
+
+/* Tailwind 4 auto-detects sources by walking the repo, which mints utilities
+   out of docs fixtures and prose - the mock acceptance JSON under docs/audits
+   alone produced ~120 bogus .pr-N rules. source(none) above turns that off;
+   these are the only trees that hold class names. */
+@source "../../src/app";
+@source "../../src/components";
+@source "../../src/lib";
+@source "../../src/middleware.js";
+
 /* Perceev's shared light design system. DESIGN.md governs visual direction.
    Tokens live here; primitives.css owns shared controls and surfaces.
    Compatibility aliases are retained only for live legacy report components. */
@@ -27,10 +40,6 @@
   font-style: normal;
   font-display: swap;
 }
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════
    TOKENS · light is the base palette
@@ -308,47 +317,53 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   RESET
+   RESET & TYPE
    ═══════════════════════════════════════════════════════════════ */
-*, *::before, *::after { box-sizing: border-box }
+@layer base {
+  *, *::before, *::after { box-sizing: border-box }
 
-html { scroll-behavior: smooth; -webkit-text-size-adjust: 100% }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100% }
 
-body {
-  margin: 0;
-  /* Explicit ground keeps the product independent of the host appearance. */
-  background: var(--paper);
-  color: var(--ink-2);
-  font-family: var(--font-sans);
-  font-variation-settings: 'wdth' 100;
-  font-size: 14px;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  body {
+    margin: 0;
+    /* Explicit ground keeps the product independent of the host appearance. */
+    background: var(--paper);
+    color: var(--ink-2);
+    font-family: var(--font-sans);
+    font-variation-settings: 'wdth' 100;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  img, svg { display: block; max-width: 100% }
+  button, input, select, textarea { font: inherit; color: inherit }
+  p { margin: 0 }
+  a { color: inherit; text-decoration: none }
+  :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 3px }
+
+  /* ═══════════════════════════════════════════════════════════════
+     TYPE
+     ═══════════════════════════════════════════════════════════════ */
+  h1, h2, h3, h4 {
+    margin: 0;
+    color: var(--ink-1);
+    font-variation-settings: 'wdth' 100;
+    font-weight: 620;
+    letter-spacing: -.03em;
+    line-height: 1.04;
+    text-wrap: balance;
+  }
+  h1 { font-size: clamp(38px, 5.4vw, 68px) }
+  h2 { font-size: clamp(30px, 3.9vw, 52px) }
+  h3 { font-size: clamp(20px, 1.7vw, 25px); line-height: 1.2; letter-spacing: -.024em }
+  h4 { font-size: 17px; letter-spacing: -.018em; line-height: 1.3 }
+
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
 }
-
-img, svg { display: block; max-width: 100% }
-button, input, select, textarea { font: inherit; color: inherit }
-p { margin: 0 }
-a { color: inherit; text-decoration: none }
-:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 3px }
-
-/* ═══════════════════════════════════════════════════════════════
-   TYPE
-   ═══════════════════════════════════════════════════════════════ */
-h1, h2, h3, h4 {
-  margin: 0;
-  color: var(--ink-1);
-  font-variation-settings: 'wdth' 100;
-  font-weight: 620;
-  letter-spacing: -.03em;
-  line-height: 1.04;
-  text-wrap: balance;
-}
-h1 { font-size: clamp(38px, 5.4vw, 68px) }
-h2 { font-size: clamp(30px, 3.9vw, 52px) }
-h3 { font-size: clamp(20px, 1.7vw, 25px); line-height: 1.2; letter-spacing: -.024em }
-h4 { font-size: 17px; letter-spacing: -.018em; line-height: 1.3 }
 
 .mono {
   font-family: var(--font-mono);
@@ -1072,3 +1087,5 @@ mark.lit-rival { background: var(--sunken); color: var(--ink-2); font-weight: 60
     @apply border-border;
   }
 }
+
+

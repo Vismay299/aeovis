@@ -9,7 +9,7 @@
 | Wave | 1 |
 | Comparison rows covered | "Project memory" (OpenSEO: business overview, goal, positioning, competitors, key pages and research log, edited by users and agents. Perceev: brand briefs and knowledge exist, operator-only) |
 | Depends on | F01 (merged): `requireWorkspace`, `AppError`/`toErrorResponse`, `isFeatureEnabled`, `defineJob`/`definePeriodic`, route-contract harness. Phase 3 (UI) also needs F04 and F05 merged. |
-| Blocks | F08 (setup reads missing fields and writes reviewed competitors and the overview here), F22 (assistant reads and writes memory through the tools in §6.2), F27 (onboarding), F13 (writes research-log entries) |
+| Blocks | F08 (setup reads missing fields and writes reviewed competitors and the overview here), F22 (assistant reads and writes memory through the tools in §6.2), F27 (onboarding), F13 (`appendResearch`, `findRecentResearch`, `getProjectContext`), F14 (`applyContextUpdates`, `declaredCompetitors`, `appendResearch`, `findRecentResearch`), F15 and F16 (`appendResearch`, `findRecentResearch`; F16 also `declaredCompetitors`), F17 (`appendResearch`, `findRecentResearch`). All of them need phase 1 only. |
 | Reserved migrations | 070–074. **070** `070_f07_project_memory.sql`. 071–074 unused. |
 | Feature flag | `FEATURE_PROJECT_MEMORY` (feature name `project_memory`, spend `[]`): page, routes and sidebar item. `FEATURE_PROJECT_MEMORY_CONTENT` (name `project_memory_content`, spend `[]`): Content Studio reads memory (§6.2.6). Both in `CLIENT_FEATURES` only for `project_memory`. |
 | Spend features | none (memory is free; it records other features' paid research) |
@@ -51,22 +51,24 @@ Every workspace gets one shared memory: what the business sells and to whom, the
 | ID | Statement | Verified by |
 |---|---|---|
 | F07-AC-01 | Migration 070 creates `project_context_sections`, `project_competitors`, `project_key_pages`, `project_research_log` and `project_memory_state` with RLS; a member reads only their workspace's rows; anon reads nothing; customers cannot write directly. | DB `scripts/qa/check-f07-db.mjs` group `rls`; `tests/customer-uat.sql` |
-| F07-AC-02 | A prose section over 4,000 characters is refused with `400 context_invalid` "updates[i] was rejected (nothing in this batch was applied): Sections are capped at 4,000 characters. Summarize instead of pasting." An empty section deletes the row and the key appears in `missingSections`. | unit `src/lib/projectContext/contextUpdateOps.test.ts` |
+| F07-AC-02 | A prose section over 4,000 characters is refused with `400 context_invalid` "updates[0] was rejected (nothing in this batch was applied): Sections are capped at 4,000 characters. Summarize instead of pasting." An empty section deletes the row and the key appears in `missingSections`. | unit `src/lib/projectContext/contextUpdateOps.test.ts` |
 | F07-AC-03 | Custom sections use slug `^[a-z0-9]+(-[a-z0-9]+)*$` (≤ 60) and are stored as `custom:<slug>`; a 21st is refused; re-using a slug edits it. | unit `contextUpdateOps.test.ts` |
 | F07-AC-04 | Competitor domains are normalised (`https://www.Acme.com/pricing` → `acme.com`); repeats in one op collapse to the last; the workspace's own host is refused with "Your own website cannot be a competitor." | unit `contextUpdateOps.test.ts` |
 | F07-AC-05 | Caps of 100 competitors and 100 key pages count earlier ops in the same batch; an entry already stored at the cap can still be updated. The SQL function re-checks every cap and rolls the whole batch back when one is exceeded. | unit `contextUpdateOps.test.ts`; DB group `atomic` |
 | F07-AC-06 | Upserts keep stored `title`, `name`, `notes`, `topic` and `source_url` when the caller omits them; an omitted key-page role keeps the stored role; a new page without a role is `other`. | DB group `coalesce` |
 | F07-AC-07 | Research-log entries get a server-stamped UTC `entry_date` (callers cannot supply one); entries older than 90 days are pruned on every append and by the daily `project_context.retention` job; reads return the newest 20; the digest says when older entries are omitted. | unit `src/lib/projectContext/service.test.ts`; DB group `research` |
 | F07-AC-08 | `findRecentResearch(admin, { brandKey, kind, researchKey, days })` returns the newest entry of that kind whose normalised key matches within the window, or `null`. | unit `service.test.ts`; DB group `research` |
-| F07-AC-09 | Writes record `updated_by` = `user` (routes, with `updated_by_user` = the caller), `assistant` (tool handler) or `system` (brief import, F08 setup writes made without a reviewer); the UI shows "Updated by you", "a teammate", "the assistant" or "Perceev". | route test; DB group `coalesce` |
+| F07-AC-09 | Writes record `updated_by` = `user` (routes, with `updated_by_user` = the caller), `assistant` (tool handler) or `system` (brief import, F08 setup writes made without a reviewer); the UI shows "Updated by you", "a teammate", "the assistant" or "Perceev". An `actorUserId` who is no longer a member is stored as `NULL` with the author kept, and the write succeeds. | route test; DB groups `coalesce`, `actor` |
 | F07-AC-10 | `GET /api/customer/context` returns typed sections in declared order, `missingSections`, `customSections`, competitors, key pages, research log and `brandIdentity`; `PATCH` applies 1–50 updates and returns the new context; members and owners may edit; flag off → `404 feature_unavailable`. | route `src/lib/projectContext/context.route.test.mjs` |
-| F07-AC-11 | On the first `GET` for a workspace whose memory is empty and whose `brand_briefs` row is not the auto-seeded preset, memory imports the brief (overview, writing preferences, priority topics, domain-shaped competitors, money pages) once, as `system`; later `GET`s never import again, even after the user deletes those rows. | unit `src/lib/projectContext/briefImport.test.ts`; DB group `import-once` |
+| F07-AC-11 | On the first `getProjectContext` for a workspace — from the route, an F13 job step or an F22 turn, whichever happens first — whose memory is empty and whose `brand_briefs` row (keyed by `brand_key` or by `display_name`) is not the auto-seeded preset, memory imports the brief (overview, writing preferences, priority topics, domain-shaped competitors, money pages) once, as `system`; later calls never import again, even after the user deletes those rows, and make no write at all. An import that throws is released and retried on the next call. | unit `src/lib/projectContext/briefImport.test.ts`; DB group `import-once` |
 | F07-AC-12 | Tracking isolation: `src/lib/workers/**`, `src/lib/scoring/**`, `src/lib/engines/**` and `src/app/api/customer/scan/**` import nothing from `src/lib/projectContext/`; `POST /api/customer/scan` still passes only the request body's `competitors` to `createScanJob`. | unit `src/lib/projectContext/trackingIsolation.test.mjs` |
 | F07-AC-13 | `renderProjectContextMarkdown` matches OpenSEO's digest format: `# Project context`, typed sections always present (`_Empty_`), custom sections, `Competitors`, `Key pages`, `Research log (n entries)`, omission note at the limit, `Missing sections:` line. | unit `service.test.ts` |
 | F07-AC-14 | With `project_memory_content` on for the workspace, `resolveBrief` returns the brief plus `project_memory` (the digest, ≤ 12,000 characters) and never persists it; with it off the returned brief is byte-identical to today. | unit `src/lib/projectContext/contentOverlay.test.ts`; existing `brandBriefRegression.test.mjs` |
 | F07-AC-15 | Tool definitions `get_project_context` and `update_project_context` validate input and output with zod (closed inputs, loose outputs) and write as `assistant`. | unit `src/lib/projectContext/tools.test.ts` |
 | F07-AC-16 | `/portal/context` shows loading, error (Retry), empty, saved and edited states with exact copy (§6.6); a save toasts "Context updated"; the sidebar item "Context" shows only when `project_memory` is on. | browser `scripts/qa/check-f07-browser.mjs` B1–B4 |
 | F07-AC-17 | At 375 px wide the page has no horizontal scroll; every control is reachable by keyboard and labelled. | browser B5 |
+| F07-AC-18 | `applyResolvedOps` runs `assertResolvedOps` on hand-built ops: a competitor row whose domain is the workspace's own host, or is not a normalised host, is refused with `400 context_invalid` before anything is written. This is the guard F08's setup save relies on. | unit `src/lib/projectContext/service.test.ts` |
+| F07-AC-19 | The periodic `project_context.retention` registers with `definePeriodic` and its job prunes entries older than 90 days across all workspaces, stopping once a pass deletes fewer than 5,000 rows. | unit `src/lib/projectContext/jobs.test.ts`; DB group `research` |
 
 ## 5. Scope
 
@@ -87,8 +89,7 @@ Every workspace gets one shared memory: what the business sells and to whom, the
 
 ```sql
 -- F07: project memory. Additive. Writes only through apply_project_context_ops (service role).
-CREATE OR REPLACE FUNCTION public.f07_touch_updated_at() RETURNS trigger
-LANGUAGE plpgsql SET search_path = public AS $$ BEGIN NEW.updated_at := now(); RETURN NEW; END $$;
+-- Touch trigger is F01's public.f01_touch_updated_at() (040_f01_jobs.sql:87). Do not add a second one.
 
 CREATE TABLE IF NOT EXISTS public.project_context_sections (
   brand_key text NOT NULL REFERENCES public.customer_brands(brand_key) ON DELETE CASCADE,
@@ -109,7 +110,8 @@ CREATE TABLE IF NOT EXISTS public.project_competitors (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   brand_key text NOT NULL REFERENCES public.customer_brands(brand_key) ON DELETE CASCADE,
   domain text NOT NULL CHECK (domain = lower(domain) AND length(domain) BETWEEN 3 AND 255
-    AND domain ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$' AND domain !~ '^www\.'),
+    AND domain ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$' AND domain !~ '^www\.'
+    AND domain !~ '^[0-9.]+$'),   -- the last clause rejects IP literals, which the label regex alone accepts
   name text CHECK (name IS NULL OR length(name) BETWEEN 1 AND 120),
   notes text CHECK (notes IS NULL OR length(notes) <= 500),
   source text NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','setup_research','assistant','brief_import')),
@@ -152,9 +154,12 @@ CREATE TABLE IF NOT EXISTS public.project_research_log (
 );
 COMMENT ON COLUMN public.project_research_log.kind IS 'Spend feature that bought the research (e.g. questions.setup), or note.';
 COMMENT ON COLUMN public.project_research_log.research_key IS 'Normalised input (keyword, domain) so a repeat purchase within 90 days can be detected.';
+COMMENT ON COLUMN public.project_research_log.job_id IS 'Job that bought the research, when there was one. Deliberately no FK: F01 prune_jobs deletes finished jobs and must not delete the log entry.';
 CREATE INDEX IF NOT EXISTS project_research_log_recent_idx ON public.project_research_log (brand_key, created_at DESC);
 CREATE INDEX IF NOT EXISTS project_research_log_lookup_idx
   ON public.project_research_log (brand_key, kind, research_key, created_at DESC) WHERE research_key IS NOT NULL;
+-- The retention job filters on entry_date alone, with no brand_key, so it needs its own index.
+CREATE INDEX IF NOT EXISTS project_research_log_entry_date_idx ON public.project_research_log (entry_date);
 
 CREATE TABLE IF NOT EXISTS public.project_memory_state (
   brand_key text PRIMARY KEY REFERENCES public.customer_brands(brand_key) ON DELETE CASCADE,
@@ -165,27 +170,42 @@ CREATE TABLE IF NOT EXISTS public.project_memory_state (
 
 DROP TRIGGER IF EXISTS project_context_sections_touch ON public.project_context_sections;
 CREATE TRIGGER project_context_sections_touch BEFORE UPDATE ON public.project_context_sections
-  FOR EACH ROW EXECUTE FUNCTION public.f07_touch_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.f01_touch_updated_at();
 DROP TRIGGER IF EXISTS project_competitors_touch ON public.project_competitors;
 CREATE TRIGGER project_competitors_touch BEFORE UPDATE ON public.project_competitors
-  FOR EACH ROW EXECUTE FUNCTION public.f07_touch_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.f01_touch_updated_at();
 DROP TRIGGER IF EXISTS project_key_pages_touch ON public.project_key_pages;
 CREATE TRIGGER project_key_pages_touch BEFORE UPDATE ON public.project_key_pages
-  FOR EACH ROW EXECUTE FUNCTION public.f07_touch_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION public.f01_touch_updated_at();
 
-DO $$
-DECLARE t text;
-BEGIN
-  FOREACH t IN ARRAY ARRAY['project_context_sections','project_competitors','project_key_pages',
-                           'project_research_log','project_memory_state'] LOOP
-    EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
-    EXECUTE format('REVOKE ALL ON public.%I FROM PUBLIC, anon, authenticated', t);
-    EXECUTE format('GRANT SELECT ON public.%I TO authenticated', t);
-    EXECUTE format('GRANT ALL ON public.%I TO service_role', t);
-    EXECUTE format('DROP POLICY IF EXISTS f07_member_read ON public.%I', t);
-    EXECUTE format('CREATE POLICY f07_member_read ON public.%I FOR SELECT TO authenticated USING (public.customer_can_access_brand(brand_key))', t);
-  END LOOP;
-END $$;
+ALTER TABLE public.project_context_sections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_competitors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_key_pages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_research_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.project_memory_state ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON public.project_context_sections, public.project_competitors, public.project_key_pages,
+  public.project_research_log, public.project_memory_state FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.project_context_sections, public.project_competitors, public.project_key_pages,
+  public.project_research_log, public.project_memory_state TO authenticated;
+GRANT ALL ON public.project_context_sections, public.project_competitors, public.project_key_pages,
+  public.project_research_log, public.project_memory_state TO service_role;
+
+DROP POLICY IF EXISTS project_context_sections_read ON public.project_context_sections;
+CREATE POLICY project_context_sections_read ON public.project_context_sections FOR SELECT TO authenticated
+  USING (public.customer_can_access_brand(brand_key));
+DROP POLICY IF EXISTS project_competitors_read ON public.project_competitors;
+CREATE POLICY project_competitors_read ON public.project_competitors FOR SELECT TO authenticated
+  USING (public.customer_can_access_brand(brand_key));
+DROP POLICY IF EXISTS project_key_pages_read ON public.project_key_pages;
+CREATE POLICY project_key_pages_read ON public.project_key_pages FOR SELECT TO authenticated
+  USING (public.customer_can_access_brand(brand_key));
+DROP POLICY IF EXISTS project_research_log_read ON public.project_research_log;
+CREATE POLICY project_research_log_read ON public.project_research_log FOR SELECT TO authenticated
+  USING (public.customer_can_access_brand(brand_key));
+DROP POLICY IF EXISTS project_memory_state_read ON public.project_memory_state;
+CREATE POLICY project_memory_state_read ON public.project_memory_state FOR SELECT TO authenticated
+  USING (public.customer_can_access_brand(brand_key));
 
 -- Applies an already-resolved batch (src/lib/projectContext/contextUpdateOps.ts) in one transaction.
 -- Caps are re-checked after all ops; any violation raises and rolls the whole batch back.
@@ -199,8 +219,11 @@ BEGIN
     RAISE EXCEPTION 'project_memory_invalid:ops'; END IF;
   IF NOT EXISTS (SELECT 1 FROM customer_brands WHERE brand_key = p_brand AND is_active) THEN
     RAISE EXCEPTION 'project_memory_invalid:brand'; END IF;
+  -- An actor who is no longer a member is dropped to NULL, not refused: background jobs
+  -- (F13 keywords.metrics_refresh, F15 rank_tracking.metrics) append research-log entries as
+  -- "user" with the id of whoever started them, and an offboarded teammate must not fail a job step.
   IF p_actor IS NOT NULL AND NOT EXISTS (SELECT 1 FROM customer_brand_memberships WHERE brand_key = p_brand AND user_id = p_actor) THEN
-    RAISE EXCEPTION 'project_memory_invalid:actor'; END IF;
+    p_actor := NULL; END IF;
   PERFORM pg_advisory_xact_lock(hashtext('f07:memory:' || p_brand));
   FOR op IN SELECT value FROM jsonb_array_elements(p_ops) LOOP
     v_kind := op->>'kind';
@@ -262,15 +285,25 @@ BEGIN
   RETURN jsonb_build_object('applied', v_applied);
 END $$;
 
+-- Claims the one-time brief import. Returns true to exactly one caller, which then owns the import.
+-- A claim that is never released and never marked imported stays claimed, so the import is attempted once.
 CREATE OR REPLACE FUNCTION public.claim_project_brief_import(p_brand text) RETURNS boolean
 LANGUAGE plpgsql SET search_path = public AS $$
 DECLARE v boolean;
 BEGIN
   INSERT INTO project_memory_state(brand_key) VALUES (p_brand) ON CONFLICT DO NOTHING;
   UPDATE project_memory_state SET brief_import_checked_at = now()
-   WHERE brand_key = p_brand AND brief_import_checked_at IS NULL RETURNING true INTO v;
+   WHERE brand_key = p_brand AND brief_import_checked_at IS NULL AND NOT brief_imported RETURNING true INTO v;
   RETURN coalesce(v, false);
 END $$;
+
+-- Releases a claim whose import failed, so the next read retries it. Called only from the
+-- error path of maybeImportBrandBrief; a successful import sets brief_imported and is never released.
+CREATE OR REPLACE FUNCTION public.release_project_brief_import(p_brand text) RETURNS void
+LANGUAGE sql SET search_path = public AS $$
+  UPDATE project_memory_state SET brief_import_checked_at = NULL
+   WHERE brand_key = p_brand AND NOT brief_imported;
+$$;
 
 CREATE OR REPLACE FUNCTION public.prune_project_research_log(p_before date, p_limit integer DEFAULT 5000)
 RETURNS integer LANGUAGE plpgsql SET search_path = public AS $$
@@ -282,14 +315,16 @@ BEGIN
 END $$;
 
 REVOKE ALL ON FUNCTION public.apply_project_context_ops(text,jsonb,text,uuid),
-  public.claim_project_brief_import(text), public.prune_project_research_log(date,integer)
+  public.claim_project_brief_import(text), public.release_project_brief_import(text),
+  public.prune_project_research_log(date,integer)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.apply_project_context_ops(text,jsonb,text,uuid),
-  public.claim_project_brief_import(text), public.prune_project_research_log(date,integer) TO service_role;
+  public.claim_project_brief_import(text), public.release_project_brief_import(text),
+  public.prune_project_research_log(date,integer) TO service_role;
 NOTIFY pgrst, 'reload schema';
 ```
 
-`scripts/setup-supabase.mjs` required objects: `"070_f07_project_memory.sql": [{kind:"table",name:"project_context_sections"},{kind:"table",name:"project_competitors"},{kind:"table",name:"project_key_pages"},{kind:"table",name:"project_research_log"},{kind:"table",name:"project_memory_state"},{kind:"function",name:"apply_project_context_ops"},{kind:"function",name:"claim_project_brief_import"},{kind:"function",name:"prune_project_research_log"}]`. `tests/customer-uat.sql`: one section, competitor, key page and log entry per tenant workspace; each user reads exactly their own (4 rows). Retention: research log 90 days (`project_context.retention`, §6.3). Other tables hold one bounded set per workspace (caps) and need no retention.
+`scripts/setup-supabase.mjs` required objects: `"070_f07_project_memory.sql": [{kind:"table",name:"project_context_sections"},{kind:"table",name:"project_competitors"},{kind:"table",name:"project_key_pages"},{kind:"table",name:"project_research_log"},{kind:"table",name:"project_memory_state"},{kind:"function",name:"apply_project_context_ops"},{kind:"function",name:"claim_project_brief_import"},{kind:"function",name:"release_project_brief_import"},{kind:"function",name:"prune_project_research_log"}]`. `tests/customer-uat.sql`: one section, competitor, key page and log entry per tenant workspace; each user reads exactly their own (4 rows). Retention: research log 90 days (`project_context.retention`, §6.3). Other tables hold one bounded set per workspace (caps) and need no retention.
 
 ### 6.2 Server modules
 
@@ -314,8 +349,11 @@ export type ContextAuthor = typeof CONTEXT_AUTHORS[number];
 export const MAX_CUSTOM_SECTIONS = 20, MAX_COMPETITORS = 100, MAX_KEY_PAGES = 100;
 export const RESEARCH_LOG_RETENTION_DAYS = 90, RESEARCH_LOG_LIMIT = 20;
 export const customSectionSlugSchema: z.ZodString;   // trim, max 60, /^[a-z0-9]+(?:-[a-z0-9]+)*$/, message "Use a lowercase slug like 'launch-plan'"
+export const researchKindSchema;                      // z.union([z.literal("note"), z.enum(SPEND_FEATURES)]) from src/shared/spend-features.ts
+  // A free-text kind would silently miss findRecentResearch and the workspace would re-buy the research,
+  // so the kind is the spend-feature key itself, not a regex-shaped string. The DB CHECK stays as the backstop.
 export const projectContextUpdateSchema;              // z.union of z.strictObject, exactly OpenSEO's 9 members (:76-110),
-  // with appendResearchLog extended to { summary: string(1..1000), kind?: string (spend-feature regex or "note"), researchKey?: string(1..300) }
+  // with appendResearchLog extended to { summary: string(1..1000), kind?: researchKindSchema, researchKey?: string(1..300) }
 export type ProjectContextUpdate = z.infer<typeof projectContextUpdateSchema>;
 export const updateProjectContextBody = z.strictObject({ brand_key: z.string().min(1).max(200).optional(),
   updates: z.array(projectContextUpdateSchema).min(1).max(50) });
@@ -344,9 +382,13 @@ export type ResolvedOp =
   | { kind: "delete_key_pages"; urls: string[] }
   | { kind: "append_research_log"; summary: string; research_kind: string; research_key: string | null; spend_usd: number | null; job_id: string | null }
   | { kind: "delete_research_log"; ids: string[] };
+export type CompetitorSource = "manual" | "setup_research" | "assistant" | "brief_import";
 export function resolveContextUpdates(updates: ProjectContextUpdate[],
   current: { customKeys: Set<string>; domains: Set<string>; urls: Set<string>; ownHost: string },
-  opts?: { competitorSource?: "manual" | "assistant" }): ResolvedOp[];
+  opts?: { competitorSource?: CompetitorSource }): ResolvedOp[];
+export function assertResolvedOps(ops: ResolvedOp[], ownHost: string): void;
+  // Re-checks what only the resolver knows, for callers that build ops by hand (F08 setup save, brief import):
+  // every competitor domain is normalised and is not ownHost, every key-page URL is normalised. Same AppError as (a)/(c) below.
 ```
 
 Behaviour is OpenSEO's (§2 item 9) with three additions: (a) a competitor whose normalised domain equals `ownHost` (the workspace's `website_host` with `www.` stripped) throws "Your own website cannot be a competitor." (OpenSEO applies this only at setup, `ProjectWebsiteService.ts:82-86`; we apply it everywhere); (b) `appendResearchLog.kind` defaults to `"note"`, and `researchKey` is passed through `normalizeResearchKey`; (c) errors are `AppError(400, "context_invalid", "updates[<i>] was rejected (nothing in this batch was applied): <message>", { details: { index: i } })`. Cap messages (exact): "A workspace can hold 20 custom sections. Delete one first.", "A workspace can track 100 competitors. Remove some first.", "A workspace can hold 100 key pages. This is a shortlist, not a page inventory.", "Sections are capped at 4,000 characters. Summarize instead of pasting."
@@ -361,23 +403,36 @@ export function createProjectContextRepository(admin: SupabaseClient): {
   listResearchLog(brandKey: string, limit: number): Promise<ResearchRow[]>; // order by created_at desc
   findRecentResearch(brandKey: string, kind: string, researchKey: string, since: string /* YYYY-MM-DD */): Promise<ResearchRow | null>;
   applyOps(brandKey: string, ops: ResolvedOp[], author: ContextAuthor, actor: string | null): Promise<{ applied: number }>;
+  briefImportState(brandKey: string): Promise<{ checkedAt: string | null; imported: boolean } | null>; // cheap read, no write
   claimBriefImport(brandKey: string): Promise<boolean>;
+  releaseBriefImport(brandKey: string): Promise<void>;   // failed import; the next read retries
   markBriefImported(brandKey: string): Promise<void>;
-  getBrandBrief(brandKey: string): Promise<Record<string, unknown> | null>;  // brand_briefs.brief where brand = brandKey
+  getBrandBrief(brandKey: string, displayName: string): Promise<Record<string, unknown> | null>;
+    // brand_briefs.brief where brand = brandKey, else where brand = displayName. `brand_briefs.brand` is a
+    // free-text label (002_content_os.sql:49): only the customer content route keys rows by brand_key, so an
+    // operator-written brief — the kind worth importing — is usually keyed by the display name.
 };
 ```
 
-`applyOps` calls `rpc("apply_project_context_ops", { p_brand, p_ops, p_author, p_actor })`. Postgres errors map: message starting `project_memory_cap:competitors|key_pages|custom_sections` → `AppError(400,"context_cap", <matching cap message>)`; `project_memory_invalid:*` → `AppError(400,"context_invalid","These changes could not be applied.")`; any other → `AppError(503,"context_unavailable","Context could not be saved. Please retry.")`. `src/lib/projectContext/memoryRepository.ts` implements the same interface in memory (same coalesce, cap and prune semantics) for unit tests.
+`applyOps` calls `rpc("apply_project_context_ops", { p_brand, p_ops, p_author, p_actor })`. Postgres errors map: message starting `project_memory_cap:competitors|key_pages|custom_sections` → `AppError(400,"context_cap", <matching cap message>)`; `project_memory_invalid:*` → `AppError(400,"context_invalid","These changes could not be applied.")`; any other → `AppError(503,"context_unavailable","Context could not be saved. Please retry.")`. There is no `project_memory_invalid:actor` any more: a stale actor is stored as `NULL`. `src/lib/projectContext/memoryRepository.ts` implements the same interface in memory (same coalesce, cap and prune semantics) for unit tests.
 
 #### 6.2.5 `src/lib/projectContext/service.ts` (PORT of `ProjectContextService.ts`)
 
 ```ts
 export type ProjectContextDeps = { repo?: ProjectContextRepository; now?: () => Date };
-export async function getProjectContext(admin: SupabaseClient, brand: { brandKey: string; display_name: string; website: string; website_host: string; aliases: string[] }, deps?): Promise<ProjectContext>;
+export type WorkspaceBrand = { brandKey: string; display_name: string; website: string; website_host: string; aliases: string[] };
+export async function getProjectContext(admin: SupabaseClient, brand: WorkspaceBrand, deps?): Promise<ProjectContext>;
+export async function getProjectContextByKey(admin: SupabaseClient, brandKey: string, deps?): Promise<ProjectContext>;
+  // Loads the customer_brands row, then getProjectContext. For callers that hold only a brandKey:
+  // F13's `cluster` step and F22's turn prompt run inside jobs, where JobContext carries brandKey alone.
 export async function applyContextUpdates(admin: SupabaseClient, brand: {...same}, updates: ProjectContextUpdate[],
   author: ContextAuthor, actorUserId: string | null, deps?): Promise<ProjectContext>;
-export async function applyResolvedOps(admin: SupabaseClient, brandKey: string, ops: ResolvedOp[], author: ContextAuthor,
-  actorUserId: string | null, deps?): Promise<void>;   // used by F08 setup save (insert_*_if_* ops)
+export async function applyResolvedOps(admin: SupabaseClient, brand: WorkspaceBrand, ops: ResolvedOp[], author: ContextAuthor,
+  actorUserId: string | null, deps?): Promise<void>;
+  // Used by F08 setup save (insert_*_if_* ops with source "setup_research") and the brief import.
+  // Takes the brand row, not a bare key, because it runs `assertResolvedOps(ops, ownHost)` first: hand-built
+  // ops skip resolveContextUpdates, so this is where F08's "Your own website cannot be a competitor."
+  // (400 context_invalid, F08 §6.5) actually comes from.
 export async function appendResearch(admin: SupabaseClient, i: { brandKey: string; kind: string; researchKey?: string;
   summary: string; spendUsd?: number | null; jobId?: string | null; author: ContextAuthor; actorUserId?: string | null }, deps?): Promise<void>;
 export async function findRecentResearch(admin: SupabaseClient, i: { brandKey: string; kind: string; researchKey: string; days?: number /* default 90 */ }, deps?):
@@ -387,7 +442,8 @@ export function renderProjectContextMarkdown(context: ProjectContext): string;  
 export async function maybeImportBrandBrief(admin: SupabaseClient, brand: {...}, deps?): Promise<boolean>;
 ```
 
-- `getProjectContext` first calls `maybeImportBrandBrief` (§6.2.7), then reads the four lists in parallel and builds the response (§6.5). `missingSections` lists typed keys with no row. `brandIdentity = { displayName, website, matchNames: unique([display_name, ...aliases]) }`.
+- `getProjectContext` first calls `maybeImportBrandBrief` (§6.2.7), then reads the four lists in parallel and builds the response (§6.5). `missingSections` lists typed keys with no row; typed sections come back in `PROJECT_CONTEXT_SECTION_KEYS` order, not the repository's key order. `brandIdentity = { displayName, website, matchNames: unique([display_name, ...aliases]) }`.
+- The research log is read with `limit = RESEARCH_LOG_LIMIT` and `researchLogLimited = researchLog.length >= RESEARCH_LOG_LIMIT` — OpenSEO's own rule (`ProjectContextService.ts:305`), which is why it reads 20 and not 21. `renderProjectContextMarkdown` prints the omission note on the same condition.
 - `applyContextUpdates` reads current custom keys, domains and URLs, calls `resolveContextUpdates(..., { ownHost: brand.website_host.replace(/^www\./,"") })`, then `repo.applyOps` once, then returns `getProjectContext` (no import attempt on this path).
 - `appendResearch` resolves one `appendResearchLog` op and applies it. `findRecentResearch` computes `since = UTC date of now − days` and normalises the key.
 
@@ -417,7 +473,12 @@ export function briefToOps(brief: Record<string, unknown>, ownHost: string): Res
 - `insert_competitors_if_none` with `source: "brief_import"` for each `competitors` string that `normalizeCompetitorDomain` accepts and that is not the own host; names without a domain are skipped.
 - `upsert_key_pages` role `money` for each `money_pages` string that `normalizeKeyPageUrl` accepts (max 100).
 
-`maybeImportBrandBrief`: if `claimBriefImport(brandKey)` returns false → return false (already checked once, ever). Otherwise read the brief; when present and not seeded, apply `briefToOps` as author `system`, then `markBriefImported`. Errors are logged `[project-context] brief import failed {brandKey}` and do not fail the read.
+`maybeImportBrandBrief`:
+
+1. `briefImportState(brandKey)` first. A row with `imported === true` or `checkedAt !== null` → return false without writing anything. `getProjectContext` runs on every route read, every F13 `cluster` step and every F22 turn, so the common path must be one cheap `SELECT`, not an INSERT plus an UPDATE.
+2. Otherwise `claimBriefImport(brandKey)`; false (another caller won the race) → return false.
+3. Read the brief with `getBrandBrief(brandKey, brand.display_name)`; when present and not seeded, `applyResolvedOps(admin, brand, briefToOps(brief, ownHost), "system", null)`, then `markBriefImported`.
+4. On any error: log `[project-context] brief import failed {brandKey}`, call `releaseBriefImport(brandKey)`, return false. The read never fails. Releasing matters because the claim is stamped *before* the write: without it one transient error would silently cost that workspace its import forever.
 
 #### 6.2.8 Tool definitions `src/lib/projectContext/tools.ts`
 
@@ -492,9 +553,9 @@ Response 200: the full context (same shape as GET). Errors: 400 `invalid_request
 
 ### 6.6 UI
 
-Route `src/app/portal/context/page.tsx` (client component in the F04 shell). Components in `src/components/portal/context/`: `ProjectContextPage.tsx` (PORT `ProjectContextPage.tsx`), `ProseSections.tsx`, `CustomSections.tsx`, `ResearchLog.tsx`, `CompetitorsSection.tsx` (PORT), `KeyPagesSection.tsx` (PORT), `EditableListSection.tsx` (PORT), `Provenance.tsx`, `BrandIdentityCard.tsx`, `hooks/useProjectContext.ts` (`useProjectContext(brandKey)`: `useQuery({ queryKey: keys.projectContext(brandKey), staleTime: 0 })`; `useContextUpdate(brandKey)`: PORT `shared.tsx:25-45`, toast "Context updated"). F04 primitives: `PageHeader`, `QueryState`, `EmptyState`, `CardShell`, `SectionHeader`, `Field`, `Textarea`, `Input`, `Select`, `Button`, `Badge`, `InlineConfirm`, `FormActions`, `Skeleton`, `SafeExternalLink`. `src/lib/query/keys.ts` gains `projectContext: (brandKey) => ["projectContext", brandKey]`.
+Route `src/app/portal/context/page.tsx` (client component in the F04 shell). Components in `src/components/portal/context/`: `ProjectContextPage.tsx` (PORT `ProjectContextPage.tsx`), `ProseSections.tsx`, `CustomSections.tsx`, `ResearchLog.tsx`, `CompetitorsSection.tsx` (PORT), `KeyPagesSection.tsx` (PORT), `EditableListSection.tsx` (PORT), `Provenance.tsx`, `BrandIdentityCard.tsx`, `hooks/useProjectContext.ts` (`useProjectContext(brandKey)`: `useQuery({ queryKey: keys.projectContext(brandKey), staleTime: 0 })`; `useContextUpdate(brandKey)`: PORT `shared.tsx:25-45`, toast "Context updated"). F04 primitives: `PageHeader`, `QueryState`, `EmptyState`, `CardShell`, `SectionHeader`, `Field`, `Input`, `Select`, `Button`, `Badge`, `InlineConfirm`, `FormActions`, `Skeleton`, `SafeExternalLink`. **F04 ships no textarea**, and the prose form needs four, so this spec adds `src/components/ui/textarea.tsx` (shadcn `base-nova` textarea, same token set as `input.tsx`) as part of P3.T2 and appends it to F04's `ui.jsx` parity expectations only if that test enumerates the directory. `src/lib/query/keys.ts` gains `projectContext: (brandKey) => ["projectContext", brandKey]`.
 
-**Navigation:** `src/components/app/navigation/items.ts` group `tools`: `{ id: "context", label: "Context", href: "/portal/context", icon: BookOpen, flag: "project_memory" }`. `src/lib/features/clientFeatures.ts` appends `"project_memory"`.
+**Navigation:** `src/components/app/navigation/items.ts` group `tools`: `{ id: "context", label: "Context", href: "/portal/context", icon: BookOpen, flag: "project_memory" }`, **last in the group** (F22 takes Assistant first, F23 puts Reports after it; conventions §12 order). `src/lib/features/clientFeatures.ts` appends `"project_memory"`.
 
 **Layout (top to bottom):** `PageHeader title="Context" description="What Perceev knows about {brand.display_name}."`; intro `p.text-sm.text-muted-foreground`: "Question setup, the assistant and Content Studio read this before they work, and some of them write back what they learn. Correct anything that looks wrong."; `BrandIdentityCard`; prose form; Competitors; Key pages; Custom sections; Research log. `div.space-y-8`, max width `max-w-3xl`.
 
@@ -523,7 +584,8 @@ Route `src/app/portal/context/page.tsx` (client component in the F04 shell). Com
 
 ### 6.7 Permissions, privacy, observability
 
-- Read: any member. Write: members and owners (memory is collaborative, as OpenSEO). The service role writes only through `apply_project_context_ops`, which re-checks membership of `p_actor`.
+- Read: any member. Write: members and owners (memory is collaborative, as OpenSEO). The service role writes only through `apply_project_context_ops`.
+- **`project_memory` gates surfaces, not the service.** The flag gates the page, the sidebar item, the two routes and the assistant tools. It does **not** gate `appendResearch`, `findRecentResearch`, `declaredCompetitors` or `applyResolvedOps`: F08 and F13–F17 call those on every research purchase, and a flag flip must not lose the repeat-purchase history that stops a workspace buying the same data twice. So with the flag off the log still fills (invisible to the customer) and F13's `recent_research` quote warning still fires. Turning the flag on later reveals a complete log rather than an empty one.
 - Logs: `[project-context] brief import failed {brandKey}`, `[content-worker] project memory unavailable`. Never log section content, notes or summaries.
 - PostHog (F26 names, registered when `src/lib/telemetry/events.ts` exists): `project_context:viewed {}`, `project_context:updated { ops: number, kinds: string[] }`.
 - Memory text is customer content and is sent only to the LLM features that read it (F08, F22, Content Studio), under their own spend features.
@@ -557,6 +619,7 @@ Route `src/app/portal/context/page.tsx` (client component in the F04 shell). Com
   - [ ] **P1.T1.S2** *Files:* `scripts/setup-supabase.mjs`. *Do:* add the §6.1 required-objects entry. *Verify:* `node --test src/lib/migrationsRunner.test.mjs` → pass.
   - [ ] **P1.T1.S3** *Files:* `README.md` (migration table: `| \`070_f07_project_memory\` | Project memory: sections, declared competitors, key pages, 90-day research log. |`), `docs/OPERATOR_LEDGER.md` § C (append `070_f07_project_memory` to the additive list with "apply before deploying F07"), `docs/PROD_MIGRATIONS.md` (one bullet describing the five tables and three service-only functions). *Verify:* the paperwork guards `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass (README and OPERATOR_LEDGER § C list 070).
   - [ ] **P1.T1.S4** *Files:* `tests/customer-uat.sql`, `.github/workflows/ci.yml`. *Do:* tenant block per §6.1; add `node scripts/qa/check-f07-db.mjs` after `check-repair-workflows.mjs` in `customer-database`. *Verify:* CI green.
+  - [ ] **P1.T1.S5** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* append every PORT/COPY path this phase adds to the OpenSEO section (conventions §2 requires it in the same PR; later phases append their own files). *Verify:* `grep -c 'projectContext' THIRD_PARTY_NOTICES.md` → non-zero; `node --test src/lib/docStatus.test.mjs` → pass.
 - [ ] **P1.T2 Shared vocabulary and normalisers**
   - [ ] **P1.T2.S1** *Files:* `src/shared/project-context.ts`, `src/shared/project-context.test.ts`. *Do:* §6.2.1. Tests: slug accepts `launch-plan`, rejects `Launch_Plan`; an update `{ section, contents }` fails (strict); 51 updates fail. *Verify:* `node --test src/shared/project-context.test.ts` → pass.
   - [ ] **P1.T2.S2** *Files:* `src/lib/projectContext/normalize.ts`, `normalize.test.ts`. *Do:* §6.2.2. Cases: `https://www.Acme.com/pricing` → `acme.com`; `ACME.co.in` → `acme.co.in`; `localhost` and `192.168.1.1` → `context_invalid`; key page `example.com` → `https://example.com`; `http://www.x.com/a?b=1#c` → `https://x.com/a?b=1`. *Verify:* `node --test src/lib/projectContext/normalize.test.ts` → pass.
@@ -564,12 +627,12 @@ Route `src/app/portal/context/page.tsx` (client component in the F04 shell). Com
   - [ ] **P1.T3.S1** *Files:* `src/lib/projectContext/contextUpdateOps.ts`, `contextUpdateOps.test.ts`. *Do:* §6.2.3; port every case of `ProjectContextService.test.ts:91-267` plus own-domain refusal and research `kind` default. *Verify:* `node --test src/lib/projectContext/contextUpdateOps.test.ts` → pass (F07-AC-02..05).
 - [ ] **P1.T4 Repository and service**
   - [ ] **P1.T4.S1** *Files:* `src/lib/projectContext/repository.ts`, `memoryRepository.ts`. *Do:* §6.2.4 with the error mapping. *Verify:* `npm run typecheck` → exit 0.
-  - [ ] **P1.T4.S2** *Files:* `src/lib/projectContext/service.ts`, `service.test.ts`. *Do:* §6.2.5. Tests (memory repo, fixed clock): typed vs custom split and `missingSections` (port `:67-89`); appended entry gets today's UTC date and a 91-day-old one is pruned (port `:278-304`); 20-entry limit and digest note (port `:306-330`); `findRecentResearch` hit within 90 days and miss at 91; digest format snapshot. *Verify:* `node --test src/lib/projectContext/service.test.ts` → pass (F07-AC-07, F07-AC-08, F07-AC-13).
-  - [ ] **P1.T4.S3** *Files:* `scripts/qa/check-f07-db.mjs` (loopback `_qa` DB guard as `check-repair-workflows.mjs:13-18`). *Do:* groups `rls` (two workspaces, two users), `atomic` (batch with 101st competitor raises and leaves zero new rows), `coalesce` (port of the two repository query tests plus title and source_url), `research` (append prunes, lookup by key), `import-once` (two `claim_project_brief_import` calls → true then false). *Verify:* `PGHOST=localhost PGDATABASE=perceev_qa node scripts/qa/check-f07-db.mjs` → "ok 5 groups" (F07-AC-01, F07-AC-05, F07-AC-06).
+  - [ ] **P1.T4.S2** *Files:* `src/lib/projectContext/service.ts`, `service.test.ts`. *Do:* §6.2.5. Tests (memory repo, fixed clock): typed vs custom split, declared-key ordering and `missingSections` (port `:67-89`); appended entry gets today's UTC date and a 91-day-old one is pruned (port `:278-304`); exactly 20 entries sets `researchLogLimited` true and prints the omission note, 19 sets it false (port `:306-330`); `findRecentResearch` hit within 90 days and miss at 91; `applyResolvedOps` refuses a hand-built own-host competitor op and writes nothing; `getProjectContextByKey` loads the brand row; digest format snapshot. *Verify:* `node --test src/lib/projectContext/service.test.ts` → pass (F07-AC-07, F07-AC-08, F07-AC-13, F07-AC-18).
+  - [ ] **P1.T4.S3** *Files:* `scripts/qa/check-f07-db.mjs` (loopback `_qa` DB guard as `check-repair-workflows.mjs:13-18`). *Do:* groups `rls` (two workspaces, two users), `atomic` (batch with 101st competitor raises and leaves zero new rows), `coalesce` (port of the two repository query tests plus title and source_url), `research` (append prunes, lookup by key, `prune_project_research_log` uses `project_research_log_entry_date_idx` — assert the plan is not a sequential scan), `import-once` (`claim_project_brief_import` → true then false; `release_project_brief_import` makes the next claim true again; a claim after `brief_imported` stays false), `actor` (an `updated_by_user` who is not a member is stored as NULL and the write succeeds), `competitor-domain` (an IP literal is refused by the CHECK). *Verify:* `PGHOST=localhost PGDATABASE=perceev_qa node scripts/qa/check-f07-db.mjs` → "ok 7 groups" (F07-AC-01, F07-AC-05, F07-AC-06, F07-AC-09, F07-AC-19).
 - [ ] **P1.T5 Tracking isolation guard**
   - [ ] **P1.T5.S1** *Files:* `src/lib/projectContext/trackingIsolation.test.mjs`. *Do:* walk `src/lib/workers`, `src/lib/scoring`, `src/lib/engines`, `src/app/api/customer/scan` (all `.js/.mjs/.ts/.tsx/.jsx`) and fail on any import specifier containing `projectContext`; assert `src/app/api/customer/scan/route.*` reads competitors only from the request body (regex on `body?.competitors` / `body.competitors`). *Verify:* `node --test src/lib/projectContext/trackingIsolation.test.mjs` → pass (F07-AC-12).
 
-**Checkpoint:** `npm test`, `npm run typecheck`, `npm run build`, `node scripts/qa/check-f07-db.mjs` pass. ACs 01–08, 12, 13.
+**Checkpoint:** `npm test`, `npm run typecheck`, `npm run build`, `node scripts/qa/check-f07-db.mjs` pass. ACs 01–08, 12, 13, 18.
 
 ### Phase 2 — Routes, flags, brief import, tools, content overlay, retention
 **Goal:** customers and other features can use memory through stable interfaces.
@@ -578,18 +641,18 @@ Route `src/app/portal/context/page.tsx` (client component in the F04 shell). Com
   - [ ] **P2.T1.S1** *Files:* `src/lib/features/names.ts`. *Do:* add `project_memory: { spend: [] as const }` and `project_memory_content: { spend: [] as const }`. *Verify:* `node --test src/lib/features/*.test.ts` → pass.
   - [ ] **P2.T1.S2** *Files:* `.env.example`. *Do:* add names only: `FEATURE_PROJECT_MEMORY=`, `FEATURE_PROJECT_MEMORY_BRANDS=`, `FEATURE_PROJECT_MEMORY_CONTENT=`, `FEATURE_PROJECT_MEMORY_CONTENT_BRANDS=` with one comment line each. *Verify:* `grep -c '^FEATURE_PROJECT_MEMORY' .env.example` → `4`; `node --test src/lib/credentialAssertionGuard.test.mjs` → pass.
 - [ ] **P2.T2 Brief import**
-  - [ ] **P2.T2.S1** *Files:* `src/lib/projectContext/briefImport.ts`, `briefImport.test.ts`. *Do:* §6.2.7; cases: seeded healthcare preset → `isSeededBrief` true; generic preset → true; edited brief → false; competitors `["Bewakoof", "thesouledstore.com"]` → one competitor op with `thesouledstore.com`; own host dropped; money pages normalised. *Verify:* `node --test src/lib/projectContext/briefImport.test.ts` → pass.
-  - [ ] **P2.T2.S2** *Files:* `src/lib/projectContext/service.ts` (`maybeImportBrandBrief` wired into `getProjectContext`), `service.test.ts`. *Do:* second call imports nothing after the user deleted the imported section. *Verify:* `node --test src/lib/projectContext/service.test.ts` → pass (F07-AC-11).
+  - [ ] **P2.T2.S1** *Files:* `src/lib/projectContext/briefImport.ts`, `briefImport.test.ts`. *Do:* §6.2.7; cases: seeded healthcare preset → `isSeededBrief` true; generic preset → true; edited brief → false; competitors `["Bewakoof", "thesouledstore.com"]` → one competitor op with `thesouledstore.com`; own host dropped; money pages normalised; a brief row keyed by `display_name` instead of `brand_key` is still found. *Verify:* `node --test src/lib/projectContext/briefImport.test.ts` → pass.
+  - [ ] **P2.T2.S2** *Files:* `src/lib/projectContext/service.ts` (`maybeImportBrandBrief` wired into `getProjectContext`), `service.test.ts`. *Do:* cases: second call imports nothing after the user deleted the imported section; a second call makes **no** write at all (spy on the repository: `briefImportState` only); an import whose `applyResolvedOps` throws is released, logged, does not fail the read, and the next call retries it and succeeds. *Verify:* `node --test src/lib/projectContext/service.test.ts` → pass (F07-AC-11).
 - [ ] **P2.T3 Routes**
   - [ ] **P2.T3.S1** *Files:* `src/app/api/customer/context/route.ts`, `src/lib/projectContext/projectContext.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [ ] **P2.T3.S2** *Files:* `src/lib/projectContext/context.route.test.mjs` (hook pattern `src/lib/customerRoutes.test.hooks.mjs`). *Do:* cases: GET shape and order; PATCH writes `updated_by "user"` with the caller id; `context_invalid` with `details.index`; `context_cap`; flag off → 404 `feature_unavailable`; member allowed; cross-site → 403. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/projectContext/context.route.test.mjs` → pass (F07-AC-09, F07-AC-10).
+  - [ ] **P2.T3.S2** *Files:* `src/lib/projectContext/context.route.test.mjs` (hook pattern `src/lib/customerRoutes.test.hooks.mjs`). *Do:* cases: GET shape and order; PATCH writes `updated_by "user"` with the caller id; `context_invalid` with `details.index`; `context_cap`; 51 updates → `400 invalid_request` from zod before any DB call (the SQL function's own 1–60 bound is headroom for resolution, never reached from the wire); flag off → 404 `feature_unavailable`; member allowed; cross-site → 403. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/projectContext/context.route.test.mjs` → pass (F07-AC-09, F07-AC-10).
 - [ ] **P2.T4 Tools and content overlay**
   - [ ] **P2.T4.S1** *Files:* `src/lib/projectContext/tools.ts`, `tools.test.ts`. *Do:* §6.2.8; tests: `z.toJSONSchema(input, {io:"input"}).additionalProperties === false`; handler writes `assistant`; output parses. *Verify:* `node --test src/lib/projectContext/tools.test.ts` → pass (F07-AC-15).
   - [ ] **P2.T4.S2** *Files:* `src/lib/projectContext/contentOverlay.ts`, `contentOverlay.test.ts`, `src/lib/content/contentWorker.js` (`resolveBrief`). *Do:* §6.2.6; tests: flag on → `project_memory` present, upsert receives the brief without it; flag off → `deepStrictEqual` to today's output; overlay error → plain brief. *Verify:* `node --test src/lib/projectContext/contentOverlay.test.ts src/lib/content/brandBriefRegression.test.mjs src/lib/content/contentWorker.test.mjs` → pass (F07-AC-14).
 - [ ] **P2.T5 Retention**
-  - [ ] **P2.T5.S1** *Files:* `src/lib/projectContext/jobs.ts`, `src/lib/jobs/kinds.ts` (one import line). *Do:* §6.3. *Verify:* `node scripts/qa/check-f07-db.mjs --group research` → ok; `node --test src/lib/jobs/*.test.ts` → pass.
+  - [ ] **P2.T5.S1** *Files:* `src/lib/projectContext/jobs.ts`, `src/lib/projectContext/jobs.test.ts`, `src/lib/jobs/kinds.ts` (one import line). *Do:* §6.3. Tests: the periodic registers with `everySeconds: 86_400` and the dated `dedupeKey`; the handler stops after a pass that deletes fewer than 5,000 rows and runs at most 10 passes. *Verify:* `node --test src/lib/projectContext/jobs.test.ts src/lib/jobs/*.test.ts` → pass; `node scripts/qa/check-f07-db.mjs --group research` → ok (F07-AC-19).
 
-**Checkpoint:** full suite, typecheck, build, DB harness. ACs 09–11, 14, 15.
+**Checkpoint:** full suite, typecheck, build, DB harness. ACs 09–11, 14, 15, 19.
 
 ### Phase 3 — `/portal/context` (requires F04 and F05 merged)
 **Goal:** customers read and edit memory in the app.
@@ -597,7 +660,7 @@ Route `src/app/portal/context/page.tsx` (client component in the F04 shell). Com
 - [ ] **P3.T1 Data hooks and keys**
   - [ ] **P3.T1.S1** *Files:* `src/lib/query/keys.ts` (`projectContext`), `src/lib/query/keys.test.ts`, `src/components/portal/context/hooks/useProjectContext.ts`. *Verify:* `node --test src/lib/query/keys.test.ts` → pass.
 - [ ] **P3.T2 Page and sections**
-  - [ ] **P3.T2.S1** *Files:* `src/app/portal/context/page.tsx`, `src/components/portal/context/{ProjectContextPage,ProseSections,CustomSections,ResearchLog,CompetitorsSection,KeyPagesSection,EditableListSection,Provenance,BrandIdentityCard}.tsx`, `editableList.ts`, `editableList.test.ts`. *Do:* §6.6 with the exact copy. *Verify:* `node --test src/components/portal/context/editableList.test.ts` → pass; `npm run build` → exit 0.
+  - [ ] **P3.T2.S1** *Files:* `src/components/ui/textarea.tsx` (new; F04 ships none), `src/app/portal/context/page.tsx`, `src/components/portal/context/{ProjectContextPage,ProseSections,CustomSections,ResearchLog,CompetitorsSection,KeyPagesSection,EditableListSection,Provenance,BrandIdentityCard}.tsx`, `editableList.ts`, `editableList.test.ts`, `THIRD_PARTY_NOTICES.md` (the PORT files of this phase). *Do:* §6.6 with the exact copy. *Verify:* `node --test src/components/portal/context/editableList.test.ts` → pass; `npm run build` → exit 0.
   - [ ] **P3.T2.S2** *Files:* `src/components/app/navigation/items.ts`, `src/lib/features/clientFeatures.ts`. *Do:* add the `context` item and `"project_memory"`. *Verify:* `node --test src/components/app/navigation/navModel.test.ts` → pass.
 - [ ] **P3.T3 Browser checks**
   - [ ] **P3.T3.S1** *Files:* `scripts/qa/check-f07-browser.mjs` (Playwright from `worker/node_modules/playwright`, local app with fixture APIs). Scenarios: B1 loading → saved state; B2 edit overview + add competitor → toast "Context updated", provenance "Updated by you"; B3 cap error toast; B4 flag off → no sidebar item and page shows `feature_unavailable` copy; B5 375 px: `document.documentElement.scrollWidth <= 375`, Tab order reaches every control. *Verify:* `node scripts/qa/check-f07-browser.mjs` → "ok 5 scenarios" (F07-AC-16, F07-AC-17).
@@ -611,13 +674,14 @@ Route `src/app/portal/context/page.tsx` (client component in the F04 shell). Com
 | `src/shared/project-context.test.ts` | strict union, slug, batch size | 03 |
 | `src/lib/projectContext/normalize.test.ts` | domains, URLs, research keys | 04 |
 | `src/lib/projectContext/contextUpdateOps.test.ts` | prose cap, clear, custom cap, domain normalisation and dedupe, own domain, caps across ops, op-index error | 02–05 |
-| `src/lib/projectContext/service.test.ts` | split, missing, research stamp/prune/limit, recent lookup, digest, import once | 07, 08, 11, 13 |
+| `src/lib/projectContext/service.test.ts` | split, missing, declared order, research stamp/prune/limit, `researchLogLimited`, recent lookup, digest, import once, import released on failure, `applyResolvedOps` own-host refusal, `getProjectContextByKey` | 07, 08, 11, 13, 18 |
+| `src/lib/projectContext/jobs.test.ts` | periodic registration, prune pass loop and stop condition | 19 |
 | `src/lib/projectContext/briefImport.test.ts` | seeded detection, mapping | 11 |
 | `src/lib/projectContext/contentOverlay.test.ts` | flag on/off, no persistence, error fallback | 14 |
 | `src/lib/projectContext/tools.test.ts` | schemas, author | 15 |
 | `src/lib/projectContext/trackingIsolation.test.mjs` | import walk, scan route body | 12 |
 | `src/lib/projectContext/context.route.test.mjs` | GET/PATCH, errors, flag, roles | 09, 10 |
-| `scripts/qa/check-f07-db.mjs` | rls, atomic, coalesce, research, import-once | 01, 05, 06, 07, 08, 11 |
+| `scripts/qa/check-f07-db.mjs` | rls, atomic, coalesce, research, import-once, actor, competitor-domain | 01, 05, 06, 07, 08, 09, 11, 19 |
 | `scripts/qa/check-f07-browser.mjs` | B1–B5 | 16, 17 |
 
 Fixtures: `tests/fixtures/f07/brand-briefs.json` (seeded healthcare preset, generic preset, an edited Offcult-like brief with names and domains mixed). All synthetic; no provider payloads.
@@ -637,17 +701,20 @@ Fixtures: `tests/fixtures/f07/brand-briefs.json` (seeded healthcare preset, gene
 |---|---|---|
 | 1 | Members (not only owners) can delete memory entries. | Allowed, as OpenSEO; provenance shows who changed what. Revisit with the Teams Mixed row. |
 | 2 | A brand brief's `competitors` are free-text names, not domains. | Import only domain-shaped strings; names are left in the brief and Content Studio still sees them through the brief. |
-| 3 | The brief import runs once per workspace forever; a later brief edit is not re-imported. | Accept; memory becomes the editable source and the brief stays as is. |
+| 3 | The brief import runs once per workspace forever; a later brief edit is not re-imported. | Accept; memory becomes the editable source and the brief stays as is. A *failed* import is the exception: it is released and retried (§6.2.7), because a transient error must not cost a workspace its import permanently. |
 | 4 | Declared competitors could be expected to change scan results. | Explicitly not (Mixed row deferred); the page copy says scan results find competitors in the answers. Guard test F07-AC-12. |
 | 5 | `spend_usd` on log entries duplicates ledger data. | Informational only, written by the feature that settled the spend; the Usage page reads the ledger. |
 | 6 | No optimistic locking: two editors can overwrite each other's prose. | Accept, as OpenSEO; drafts are per section and the last save wins. |
+| 7 | A customer can delete research-log entries (`removeResearchLog`), which is the history F13/F14/F16 read for their `recent_research` warning. Deleting it makes the next identical lookup look fresh and the workspace pays again. | Allowed, as OpenSEO. The page copy says what the log is for, and `spend_ledger` keeps the authoritative money trail, so nothing about billing is lost. Revisit if support sees repeat purchases. |
+| 8 | `brand_briefs.brand` is a free-text label, so a workspace can in principle have two brief rows (one keyed by `brand_key`, one by `display_name`). | Import prefers the `brand_key` row and falls back to the display name (§6.2.4). The brief table is not changed; F07 never writes to it. |
+| 9 | With `project_memory` off, research-log writes still happen invisibly. | Deliberate (§6.7): the log is cross-feature spend history, not a page feature. Turning the flag on shows a complete log. |
 
-**Deviations from conventions:** none. (Retention exists only for the research log; the other tables are capped per workspace.)
+**Deviations from conventions:** none. (Retention exists only for the research log; the other tables are capped per workspace. The touch trigger is F01's `f01_touch_updated_at()`, per conventions §5.1.)
 
 ## 12. Definition of done
 
 - [ ] Phases 1–3 merged; every subtask ticked.
-- [ ] F07-AC-01..17 covered by passing tests listed in §9.
+- [ ] F07-AC-01..19 covered by passing tests listed in §9.
 - [ ] `npm test`, `npm run typecheck`, `npm run build`, `check-f07-db.mjs`, `check-f07-browser.mjs` green.
 - [ ] Migration paperwork updated (README, OPERATOR_LEDGER § C, PROD_MIGRATIONS); `THIRD_PARTY_NOTICES.md` lists every PORT/COPY file.
 - [ ] `features/README.md` F07 status updated.

@@ -184,14 +184,15 @@ export class AmbiguousCallError extends Error {}  // sent, outcome unknown; coun
 
 | Module | Exports | Owner | Used by |
 |---|---|---|---|
-| `src/lib/projectContext/service.ts` | `appendResearch(kind, key, …)`, `findRecentResearch(kind, key)` (90-day repeat-purchase check), `declaredCompetitors(brandKey)`, `applyResolvedOps()` | F07 | F08, F13–F17 (log research purchases), F22 |
+| `src/lib/projectContext/service.ts` | `appendResearch(admin, { brandKey, kind, researchKey?, summary, … })`, `findRecentResearch(admin, { brandKey, kind, researchKey, days? })` (90-day repeat-purchase check), `declaredCompetitors(admin, brandKey)`, `applyResolvedOps(admin, brand, ops, author, actorUserId)` (validates hand-built ops), `applyContextUpdates(admin, brand, updates, author, actorUserId)`, `getProjectContext(admin, brand)` / `getProjectContextByKey(admin, brandKey)`, `renderProjectContextMarkdown(context)` | F07 | F08, F13–F17 (log research purchases; F14 also writes competitors), F22 (digest + tools) |
 | `src/lib/projectContext/tools.ts`, `src/lib/questions/tools.ts` | Tool definitions for the F22 registry | F07, F08 | F22 |
 | `src/shared/schedule.ts` | Schedule maths (intervals, next-run computation) | F10 | F15 |
 | `src/lib/schedules/runDue.ts` | Generic due-schedule runner on F01 `definePeriodic`; always advances, records skip reasons | F10 | F15 |
 | `ScheduleField` component (F10) | Schedule picker; optional props `allowManual`, `dailyNote` (needed by F15) | F10 | F15 |
 | `src/lib/pricing/firecrawl.ts` | `firecrawlScrapeUsd()` | F08 | F07, F18 |
 
-- Research purchases are logged with `appendResearch` using the spend-feature key as `kind` (for example `keywords.research`).
+- Research purchases are logged with `appendResearch` using the spend-feature key as `kind` (for example `keywords.research`). The `kind` is validated against the `SpendFeature` union plus `"note"`, not free text, because a typo would silently miss `findRecentResearch` and the workspace would buy the same research twice.
+- The memory service is **not** gated on `project_memory`; only F07's page, routes and assistant tools are. Features log and read research history whatever the flag says (F07 §6.7).
 
 ### 5.7 Assistant, skills and reports (fixed by F21, F22, F23)
 

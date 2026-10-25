@@ -37,7 +37,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F01](./F01-platform-foundations.md) | Platform foundations: TypeScript, durable jobs, spend guard, provider cache, LLM helper | Backend patterns | 0 | none | 040–044 | In progress |
 | [F02](./F02-dataforseo-provider.md) | DataForSEO provider and bake-off | Engines and capture; "What I could not verify" | 0 | F01, F03 phase 1 (price tables) | 045–049 | Spec ✓ |
 | [F03](./F03-cost-ledger.md) | Cost ledger and per-answer cost | Cost per answer | 0 | F01 (F04, F05 for phase 4 UI) | 050–054 | Spec ✓ |
-| [F04](./F04-design-system-and-app-shell.md) | Design system and app shell (OpenSEO UI/UX) | UI/UX decision; Frontend patterns | 0 | F01 (phase 1 TypeScript, phase 2 flags) | 055–059 | Spec ✓ |
+| [F04](./F04-design-system-and-app-shell.md) | Design system and app shell (OpenSEO UI/UX) | UI/UX decision; Frontend patterns | 0 | F01 (phase 1 TypeScript, phase 2 flags) | 055–059 | In progress |
 | [F05](./F05-client-data-layer.md) | Client data layer and interaction patterns | Frontend patterns | 0 | F04 | 060–064 | Spec ✓ |
 | [F06](./F06-data-tables-and-export.md) | Data tables and export | Tables and export | 0 | F04, F05 | 065–069 | Spec ✓ |
 | [F07](./F07-project-memory.md) | Project memory | Project memory | 1 | F01 | 070–074 | Spec ✓ |
@@ -46,10 +46,10 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F10](./F10-customer-scheduling.md) | Customer scheduling | Scheduling | 1 | F01, F09 | 085–089 | Spec ✓ |
 | [F11](./F11-prompt-explorer.md) | Prompt Explorer (ask one question now) | Ask one question now | 1 | F02, F03, F04, F05, F08, F09 | 090–094 | Spec ✓ |
 | [F12](./F12-question-detail-history.md) | Question detail and answer history | Answer detail view | 1 | F05, F08 | 095–099 | Spec ✓ |
-| [F13](./F13-keyword-research.md) | Keyword research and saved keywords | Keyword research | 2 | F01, F02, F03, F06 | 100–104 | Spec ✓ |
-| [F14](./F14-domain-overview.md) | Domain overview and competitor research | Domain and competitor research | 2 | F13 | 105–109 | Spec ✓ |
-| [F15](./F15-rank-tracking.md) | Rank tracking with AI Overview presence | Rank tracking | 2 | F01, F02, F03, F06, F09, F10, F13, F14 (phase 1); F08 + F12 for phase 6 | 110–114 | Spec ✓ |
-| [F16](./F16-backlinks.md) | Backlinks | Backlinks | 2 | F02, F06, F13 (phase 1 research kit) | 115–119 | Spec ✓ |
+| [F13](./F13-keyword-research.md) | Keyword research and saved keywords | Keyword research | 2 | F01, F02, F03, F06, F07 phase 1 | 100–104 | Spec ✓ |
+| [F14](./F14-domain-overview.md) | Domain overview and competitor research | Domain and competitor research | 2 | F07 phase 1, F13 | 105–109 | Spec ✓ |
+| [F15](./F15-rank-tracking.md) | Rank tracking with AI Overview presence | Rank tracking | 2 | F01, F02, F03, F06, F07 phase 1, F09, F10, F13, F14 (phase 1); F08 + F12 for phase 6 | 110–114 | Spec ✓ |
+| [F16](./F16-backlinks.md) | Backlinks | Backlinks | 2 | F02, F06, F07 phase 1, F13 (phase 1 research kit) | 115–119 | Spec ✓ |
 | [F17](./F17-local-seo.md) | Local SEO | Local SEO | 2 | F02, F07, F09, F13 | 120–124 | Spec ✓ |
 | [F18](./F18-site-audit.md) | Site audit crawler (plus Perceev's AEO checks) | Site audit | 3 | F01, F02, F06, F08 (Firecrawl price), F09 | 125–129 | Spec ✓ |
 | [F19](./F19-indexnow.md) | IndexNow | IndexNow | 3 | F01, F04, F05; F18 for phase 3 | 130–134 | Spec ✓ |
