@@ -54,6 +54,21 @@ Preflight — STOP and report to the user (do not start any role) if any of thes
   docs/OPERATOR_LEDGER.md § C, docs/PROD_MIGRATIONS.md, scripts/setup-supabase.mjs required objects).
 - Tick the phase's subtask checkboxes in the spec as they are completed, in the same branch.
 - Match surrounding code style. No unrelated refactors, no formatting churn.
+- FILE OWNERSHIP. You may change only:
+  (a) files this phase's spec lists, and features/<FEATURE>-*.md (checkboxes, notes);
+  (b) these shared files, APPEND-ONLY (add your own lines, never edit or reorder others'):
+      package.json, package-lock.json, .env.example, .github/workflows/ci.yml,
+      src/lib/features/names.ts, src/lib/features/clientFeatures.ts, src/lib/jobs/kinds.ts,
+      src/lib/pricing/actions/index.ts, src/components/app/navigation/items.ts,
+      scripts/setup-supabase.mjs, THIRD_PARTY_NOTICES.md, README.md (migration table),
+      docs/OPERATOR_LEDGER.md, docs/PROD_MIGRATIONS.md, features/README.md (only your feature's row).
+  Never edit another feature's spec, 00-CONVENTIONS.md, or another feature's code. If one needs a change,
+  write it in the PR body under "Cross-spec requests" and leave it to the owner.
+- COMMITS. Stage explicit paths only (git add <path>…); never git add -A or git add .
+  Run git status before every commit; commit nothing you did not change in this session.
+- BEFORE OPENING THE PR: git fetch origin && git rebase origin/main, then rerun npm test, typecheck and build.
+  For package-lock.json conflicts, take main's version and run npm install; never hand-merge it.
+  For append-only files, keep both sides.
 
 ══════════════════════════════════════════════════════════════
 2. THE TEAM (each role gets the rules in §1 plus its brief)
@@ -130,6 +145,7 @@ Loop limit: 3 QA rounds and 2 CTO rounds. If still failing, stop, push the branc
       Changes — grouped: migrations / server / client / tests / docs.
       Verification — QA results table (command → result), test count before/after.
       Spec deviations — each accepted SPEC GAP with the CTO's reason (or "None").
+      Cross-spec requests — changes another feature's spec or 00-CONVENTIONS.md needs (or "None").
       Owner actions — anything only the owner can do: migrations to apply to production (file names, order),
         env vars to set (names only), dashboard steps, live checks to run. Write "None" if none.
       Safety — confirm: no production changes made, flags default off, no secrets in diff.
