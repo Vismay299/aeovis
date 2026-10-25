@@ -170,7 +170,7 @@ export class AmbiguousCallError extends Error {}  // sent, outcome unknown; coun
 - `dispatchIdentity`, `configVersion` and `circuitIdentity` accept an optional `{ route, model }`. Engine routing order comes from `ANSWER_ENGINE_ROUTES` (for example `dataforseo>openrouter`), chosen once per scan.
 - `withLeaseRenewal` is exported from `src/lib/db/probeDispatch.js`.
 - DataForSEO costs are recorded with `cost_source: "gateway"`.
-- Claude is a full engine (`claude`), added wherever engines are enumerated.
+- Claude is **not** an engine for now (owner decision, 25 October 2026). Do not add `claude` to any engine list, route, label, model picker or event enum. Ported OpenSEO code that only knows the `claude` slug stays verbatim and unused.
 
 ### 5.3 Shared question helpers (owned by F08, used by F11, F12 and others)
 
@@ -390,5 +390,5 @@ Each feature also registers its PostHog events in `src/lib/telemetry/events.ts` 
 | Question / prompt | A buyer question asked to answer engines. OpenSEO says "prompt"; the UI may use either word, but must be consistent within a page. |
 | Panel | The approved, versioned set of questions a scan asks (R14). |
 | Observation | One question × engine × run (`probe_observations`). OpenSEO's `ai_observations`. |
-| Engine | ChatGPT, Gemini, Perplexity, Claude, Google AI Overview. |
+| Engine | ChatGPT, Gemini, Perplexity, Google AI Overview (Claude deferred). |
 | Hold | A spend reservation created before a paid call and settled after it. |

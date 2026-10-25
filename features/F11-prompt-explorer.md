@@ -1,6 +1,8 @@
 # F11 — Prompt Explorer (ask one question now)
 
 > <!-- doc-status -->
+> **Owner decision, 25 October 2026:** Claude is not offered. Explore models are ChatGPT, Gemini and Perplexity (max 3). OpenSEO observations below that mention Claude describe their product, not ours.
+>
 > **Status: LIVE.** Implementation spec. Not built yet.
 
 | Field | Value |
@@ -17,7 +19,7 @@
 
 ## 1. Summary
 
-A customer types one buyer question, picks up to four models (ChatGPT, Claude, Gemini, Perplexity), sees the price, approves it, and gets each model's answer side by side: the answer as markdown, the token count, whether the model actually searched the web, whether it named their brand, the sources it cited, and the related searches it ran first. One click then adds the question to the tracked set. This is how a customer tries a question before tracking it, and every answer is collected inside Perceev's P0 dispatch fence, so it is paused, allow-listed, circuit-protected and capped exactly like a scan answer.
+A customer types one buyer question, picks up to three models (ChatGPT, Gemini, Perplexity), sees the price, approves it, and gets each model's answer side by side: the answer as markdown, the token count, whether the model actually searched the web, whether it named their brand, the sources it cited, and the related searches it ran first. One click then adds the question to the tracked set. This is how a customer tries a question before tracking it, and every answer is collected inside Perceev's P0 dispatch fence, so it is paused, allow-listed, circuit-protected and capped exactly like a scan answer.
 
 ## 2. What OpenSEO does (observed)
 
@@ -33,7 +35,7 @@ A customer types one buyer question, picks up to four models (ChatGPT, Claude, G
 10. Access: hosted mode requires a paid plan (`openseo:src/server/features/ai-search/services/access.ts:5-16`). The server function runs inside `requireProjectContext` (`openseo:src/serverFunctions/ai-search.ts:19-24`).
 11. Route `/p/$projectId/prompt-explorer` keeps the whole search in the URL (`q`, `models`, `web`, `cc`, `hb`) so it is shareable (`openseo:src/types/schemas/ai-search.ts:270-303`; `openseo:src/routes/_app/p/$projectId/prompt-explorer.tsx:13-72`). The client query runs when the URL has a prompt, with `staleTime` one day, `retry: false`, no refetch on focus or reconnect, "Answers are billed per model" (`openseo:src/client/features/ai-search/promptExplorerQuery.ts:17-34`; `PromptExplorerPage.tsx:117-129`). Recent searches are kept per project in local storage (`openseo:src/client/hooks/usePromptExplorerSearchHistory.ts:39-45`).
 12. Form: textarea with "{n}/500" counter and helper "What your customers might ask AI."; "Highlight brand (optional)" with "We'll flag whether each model mentions this brand."; model checkboxes with "Skipped for {Country}"; "Allow web search" checkbox; country combobox with "No country preference"; info tooltip; submit "Run {n} model(s)" (`openseo:src/client/features/ai-search/components/PromptExplorerForm.tsx:116-263`). Validation copy: "Enter a prompt", "Keep prompts under 500 characters", "Select at least one model" (`PromptExplorerPage.tsx:131-160`).
-13. Results: one card per model with a coloured left border (ChatGPT emerald, Claude orange, Gemini sky, Perplexity violet), header with model label, model name, Error/Skipped badge, brand badge ("{brand}" success or "no {brand}"), "web search"/"no web search", "{n} tokens"; a line "Country hint sent: {Country}. This is not a verified search location." or "No country hint sent. Any search uses the provider’s default location."; the markdown answer; "Cited sources ({n})" list showing 3 then "+N more"; "Related queries the model considered" badges (`openseo:src/client/features/ai-search/components/PromptExplorerResults.tsx:28-254`; accents `openseo:src/client/features/ai-search/platformLabels.ts:18-35`; list limit `openseo:src/client/components/ExpandableList.tsx:4-37`).
+13. Results: one card per model with a coloured left border (ChatGPT emerald, Gemini sky, Perplexity violet), header with model label, model name, Error/Skipped badge, brand badge ("{brand}" success or "no {brand}"), "web search"/"no web search", "{n} tokens"; a line "Country hint sent: {Country}. This is not a verified search location." or "No country hint sent. Any search uses the provider’s default location."; the markdown answer; "Cited sources ({n})" list showing 3 then "+N more"; "Related queries the model considered" badges (`openseo:src/client/features/ai-search/components/PromptExplorerResults.tsx:28-254`; accents `openseo:src/client/features/ai-search/platformLabels.ts:18-35`; list limit `openseo:src/client/components/ExpandableList.tsx:4-37`).
 14. Markdown answers collapse to 240 px with a fade and "Read more"/"Show less"; `<think>` blocks are shown separately as "Model Thinking"; malformed list markers are repaired; links are http(s) only; an empty answer shows "Model returned an empty response." (`openseo:src/client/features/ai-search/components/MarkdownAnswer.tsx:17-177`).
 15. Loading: one skeleton card per selected model, named, `aria-busy` (`openseo:src/client/features/ai-search/components/PromptExplorerLoadingState.tsx:7-52`).
 16. Costs: per-model DataForSEO estimates at the 4,096-token cap with web search: chat_gpt 0.09, claude 0.18, gemini 0.11, perplexity 0.04 USD (`openseo:src/server/lib/dataforseo/pricing.ts:122-145`). There is no price dialog for Prompt Explorer; the gate is the paid plan. **(Inferred)** spend shows up only in the billing history.
@@ -268,7 +270,7 @@ CREATE TABLE IF NOT EXISTS public.explore_runs (
   prompt text NOT NULL CHECK (length(btrim(prompt)) BETWEEN 1 AND 500),
   prompt_hash text NOT NULL CHECK (prompt_hash ~ '^[0-9a-f]{64}$'),
   models text[] NOT NULL CHECK (cardinality(models) BETWEEN 1 AND 4
-    AND models <@ ARRAY['chatgpt','claude','gemini','perplexity']::text[]),
+    AND models <@ ARRAY['chatgpt','gemini','perplexity']::text[]),
   web_search boolean NOT NULL DEFAULT true,
   country text CHECK (country IS NULL OR country ~ '^[A-Z]{2}$'),
   highlight_brand text CHECK (highlight_brand IS NULL OR length(btrim(highlight_brand)) BETWEEN 1 AND 100),
@@ -396,16 +398,16 @@ All under `src/lib/explore/` (TypeScript, relative imports with extensions) plus
 ```ts
 export const EXPLORE_MAX_PROMPT_LENGTH = 500;
 export const EXPLORE_MAX_BRAND_LENGTH = 100;
-export const EXPLORE_MODELS = ["chatgpt", "claude", "gemini", "perplexity"] as const;   // our engine names
+export const EXPLORE_MODELS = ["chatgpt", "gemini", "perplexity"] as const;   // our engine names
 export type ExploreModel = (typeof EXPLORE_MODELS)[number];
-export const EXPLORE_MODEL_LABELS: Record<ExploreModel, string> = { chatgpt: "ChatGPT", claude: "Claude", gemini: "Gemini", perplexity: "Perplexity" };
-export const EXPLORE_MODEL_SLUG: Record<ExploreModel, "chat_gpt" | "claude" | "gemini" | "perplexity"> =
-  { chatgpt: "chat_gpt", claude: "claude", gemini: "gemini", perplexity: "perplexity" };
+export const EXPLORE_MODEL_LABELS: Record<ExploreModel, string> = { chatgpt: "ChatGPT", gemini: "Gemini", perplexity: "Perplexity" };
+export const EXPLORE_MODEL_SLUG: Record<ExploreModel, "chat_gpt" | "gemini" | "perplexity"> =
+  { chatgpt: "chat_gpt", gemini: "gemini", perplexity: "perplexity" };
 export const exploreModelSchema = z.enum(EXPLORE_MODELS);
 export const exploreCountrySchema = z.enum(WEB_SEARCH_COUNTRY_CODES);          // src/shared/web-search-countries.ts (F02)
 export const exploreRunInputSchema = z.strictObject({
   prompt: z.string().trim().min(1).max(EXPLORE_MAX_PROMPT_LENGTH),
-  models: z.array(exploreModelSchema).min(1).max(4).transform((m) => [...new Set(m)]),
+  models: z.array(exploreModelSchema).min(1).max(3).transform((m) => [...new Set(m)]),
   webSearch: z.boolean().default(true),
   country: exploreCountrySchema.nullable().default(null),
   highlightBrand: z.string().trim().min(1).max(EXPLORE_MAX_BRAND_LENGTH).nullable().default(null),
@@ -453,7 +455,7 @@ export const exploreRunAction = definePricedAction({
   key: "ai_visibility.explore.run", feature: "ai_visibility.explore", input: exploreQuoteInput, requireApproval: true,
   estimate: estimateExploreRun });
 export const exploreQuoteInput = z.strictObject({ prompt: z.string().trim().min(1).max(500),
-  models: z.array(exploreModelSchema).min(1).max(4), webSearch: z.boolean(), country: exploreCountrySchema.nullable(),
+  models: z.array(exploreModelSchema).min(1).max(3), webSearch: z.boolean(), country: exploreCountrySchema.nullable(),
   fresh: z.boolean().default(false) });
 export async function estimateExploreRun(ctx: PricingContext, input, deps?: ExploreQuoteDeps): Promise<…>;
 ```
@@ -572,13 +574,12 @@ No answer is cached in `provider_cache`: the reuse rule reads earlier explore ob
 
 All routes: `requireWorkspace` (F01), `toErrorResponse`, `Cache-Control: no-store`, contracts in `src/lib/explore/explore.contract.ts` (`z.strictObject` requests, `z.looseObject` responses).
 
-**Price:** `POST /api/customer/price/estimate` (F09) with `{ "action": "ai_visibility.explore.run", "input": { "prompt": "best oversized t-shirts in india", "models": ["chatgpt","claude","gemini"], "webSearch": true, "country": "IN", "fresh": false } }` → 200:
+**Price:** `POST /api/customer/price/estimate` (F09) with `{ "action": "ai_visibility.explore.run", "input": { "prompt": "best oversized t-shirts in india", "models": ["chatgpt","gemini"], "webSearch": true, "country": "IN", "fresh": false } }` → 200:
 
 ```json
-{ "action": "ai_visibility.explore.run", "currency": "USD", "totalUsd": 0.27, "expectedUsd": null,
+{ "action": "ai_visibility.explore.run", "currency": "USD", "totalUsd": 0.09, "expectedUsd": null,
   "units": [ { "key": "models", "label": "models", "count": 2 }, { "key": "reused", "label": "reused answers", "count": 0 } ],
   "lines": [ { "label": "ChatGPT · up to $0.09", "quantity": 1, "unitUsd": 0.09, "totalUsd": 0.09 },
-             { "label": "Claude · up to $0.18", "quantity": 1, "unitUsd": 0.18, "totalUsd": 0.18 },
              { "label": "Gemini · skipped (not available for India)", "quantity": 0, "unitUsd": 0, "totalUsd": 0 } ],
   "monthly": null,
   "warnings": [ { "code": "cost_note", "message": "You pay only the provider's charge for each answer, up to this amount." } ],
@@ -591,7 +592,7 @@ All routes: `requireWorkspace` (F01), `toErrorResponse`, `Cache-Control: no-stor
 const body = z.strictObject({
   brand_key: z.string().min(1).max(200).optional(),
   prompt: z.string().trim().min(1).max(500),
-  models: z.array(z.enum(["chatgpt","claude","gemini","perplexity"])).min(1).max(4),
+  models: z.array(z.enum(["chatgpt","gemini","perplexity"])).min(1).max(3),
   webSearch: z.boolean().default(true),
   country: z.string().regex(/^[A-Z]{2}$/).nullable().default(null),
   highlightBrand: z.string().trim().min(1).max(100).nullable().default(null),
@@ -651,14 +652,14 @@ Errors: 404 `explore_run_not_found` "This question does not exist in this worksp
 
 Route `src/app/portal/explore/page.tsx` (client component inside the F04 shell). Components under `src/components/portal/explore/`: `ExplorePage.tsx`, `ExploreForm.tsx` (PORT `PromptExplorerForm.tsx`), `ExploreResults.tsx` (PORT `PromptExplorerResults.tsx`), `ExploreLoadingState.tsx` (PORT), `RecentQuestions.tsx`, `TrackQuestionButton.tsx`, `engineAccents.ts` (COPY of `platformLabels.ts:13-35` accents for our four model names), `hooks/useExplore.ts`. Shared: `src/components/app/markdown/MarkdownAnswer.tsx` (PORT `MarkdownAnswer.tsx`; F12 reuses it). Primitives from F04: `PageHeader`, `Card`, `Field`/`FieldLabel`/`FieldDescription`, `Textarea`, `Input`, `Checkbox`, `Label`, `Combobox`, `Tooltip`, `Button`, `Badge`, `Alert`, `Skeleton`, `EmptyState`, `Collapsible`. Price dialog: F09 `CostReviewDialog` with `usePriceQuote`.
 
-**Layout:** `PageHeader` title "Prompt Explorer", description "Ask one question across ChatGPT, Claude, Gemini and Perplexity and compare their answers, sources and searches." Below: form card; then either the active run's results or "Recent questions".
+**Layout:** `PageHeader` title "Prompt Explorer", description "Ask one question across ChatGPT, Gemini and Perplexity and compare their answers, sources and searches." Below: form card; then either the active run's results or "Recent questions".
 
 **URL state:** `/portal/explore?run=<runId>`. Loading a URL with `run` shows that run and prefills the form from it; it **never** starts a run. No other query parameters. "New question" (ghost button above results) clears `run` and the form.
 
 **Form (exact copy):**
 - "Question" textarea, 3 rows, counter `{n}/500` (destructive colour over 500), helper "What your buyers might ask AI."
 - "Highlight brand (optional)" input, placeholder = workspace display name, helper "We flag whether each answer names this brand. Your own brand and its aliases are always checked."
-- "Models": four checkboxes (ChatGPT, Claude, Gemini, Perplexity). Under a model that is skipped for the chosen country: "Skipped for {Country}". Under a model with no route: "Not available yet".
+- "Models": three checkboxes (ChatGPT, Gemini, Perplexity). Under a model that is skipped for the chosen country: "Skipped for {Country}". Under a model with no route: "Not available yet".
 - Row: checkbox "Allow web search"; combobox (aria-label "Web search country", placeholder "Search countries", first item "No country preference", default = the workspace panel's country in ISO upper case when present, else "No country preference"; disabled when web search is off; empty text "No supported countries match."); info tooltip "A country guides web search when a model supports it. Models may answer without searching. Leave it unset to run all selected models."
 - Submit button "Ask {n} model" / "Ask {n} models" (n = selected models that are not skipped), disabled when n = 0.
 - Validation (role="alert"): "Enter a question", "Keep questions under 500 characters", "Keep the brand under 100 characters", "Select at least one model".
@@ -681,7 +682,7 @@ Route `src/app/portal/explore/page.tsx` (client component inside the F04 shell).
 | Rate limited (429) | `Alert` warning with the API message; submit disabled until `retryAfterSeconds` passes (countdown "Try again in {m}:{ss}") |
 | Load error (GET run) | `Alert` destructive "Could not load this question." + "Retry"; stale data stays visible on refresh failures |
 
-**Model card (PORT `ModelResultCard`):** `article` with left border accent (ChatGPT emerald, Claude orange, Gemini sky, Perplexity violet) and header row: accent dot, model label (h3), model name in `code`, badges:
+**Model card (PORT `ModelResultCard`):** `article` with left border accent (ChatGPT emerald, Gemini sky, Perplexity violet) and header row: accent dot, model label (h3), model name in `code`, badges:
 - `Error` (destructive) / `Skipped` (secondary) / `Reused` (secondary, tooltip "Reused answer from {date}. Ask again to get a new one.")
 - brand badge: success "{brand}" with check icon, or secondary "no {brand}" with x icon (brand = highlight or workspace name)
 - search indicator: globe icon + "web search" / "no web search" (muted); nothing when unknown
