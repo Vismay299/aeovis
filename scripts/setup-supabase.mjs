@@ -59,6 +59,16 @@ ALTER TABLE schema_migrations
  * the state 009 was found in.
  */
 const EXPECTED_OBJECTS = {
+  "070_f07_project_memory.sql": [
+    { kind: "table", name: "project_context_sections" },
+    { kind: "table", name: "project_competitors" },
+    { kind: "table", name: "project_key_pages" },
+    { kind: "table", name: "project_research_log" },
+    { kind: "table", name: "project_memory_state" },
+    { kind: "function", name: "apply_project_context_ops" },
+    { kind: "function", name: "claim_project_brief_import" },
+    { kind: "function", name: "prune_project_research_log" },
+  ],
   "040_f01_jobs.sql": [
     { kind: "table", name: "jobs" },
     { kind: "table", name: "job_steps" },
