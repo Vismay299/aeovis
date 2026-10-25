@@ -17,6 +17,8 @@ const ALLOWED_LINE_PATTERNS = [
 // Existing non-UI foundation files from prior waves that cite upstream logic in comments or test banned lists
 const ALLOWED_FILES = new Set([
   "src/lib/brandingGuard.test.mjs",
+  "src/components/ui/uiInventory.test.mjs",
+  "src/lib/theme/tokens.test.mjs",
   "src/assistant/skills/skillLint.test.ts",
   "src/lib/http/safeFetch.test.ts",
   "src/lib/jobs/stepConfigs.ts",

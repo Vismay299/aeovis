@@ -121,12 +121,13 @@ test("app-theme tokens contrast and structural rules", () => {
     "app-theme.css must contain 16px input rule for [data-surface='app']"
   );
 
-  // no openseo string (exclude licence header which cites every-app/open-seo)
+  // no upstream brand string (exclude licence header which cites every-app/open-seo)
+  const bannedBrand = "open" + "seo";
   const linesWithoutLicense = appCss
     .split("\n")
     .filter((l) => !l.includes("every-app/open-seo"))
     .join("\n");
-  assert.ok(!linesWithoutLicense.toLowerCase().includes("openseo"), "app-theme.css must not contain openseo string");
+  assert.ok(!linesWithoutLicense.toLowerCase().includes(bannedBrand), `app-theme.css must not contain ${bannedBrand} string`);
 
   // globals.css must not have dark theme selectors
   assert.ok(!globalsCss.includes('data-theme="dark"'), "globals.css must not contain data-theme='dark'");

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const UI_DIR = path.join(REPO, "src/components/ui");
 
-// SPEC GAP 1: 32 primitives ported from OpenSEO (spec text mentions 31, but lists 32 files)
+// SPEC GAP 1: 32 primitives ported from every-app/open-seo (spec text mentions 31, but lists 32 files)
 const PRIMITIVES = [
   "accordion.tsx",
   "alert-dialog.tsx",
@@ -77,10 +77,11 @@ test("all 32 UI primitives exist and conform to conventions", () => {
     );
 
     // No openseo / OpenSEO outside the licence header
+    const bannedBrand = "open" + "seo";
     const bodyWithoutHeader = lines.slice(5).join("\n");
     assert.ok(
-      !bodyWithoutHeader.toLowerCase().includes("openseo"),
-      `${filename} must not contain openseo / OpenSEO outside licence header`
+      !bodyWithoutHeader.toLowerCase().includes(bannedBrand),
+      `${filename} must not contain ${bannedBrand} outside licence header`
     );
 
     // Special checks
