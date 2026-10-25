@@ -334,6 +334,24 @@ async function main() {
       { url: "https://coalesce.example/money", role: "money", topic: "Saved topic", notes: "Saved page note" },
       { url: "https://coalesce.example/new", role: "other", topic: null, notes: null },
     ]);
+
+    const memberId = await makeUser(client, `coalesce-member-${id()}@example.com`);
+    await client.query("INSERT INTO public.customer_brand_memberships(user_id,brand_key,role) VALUES($1,$2,'member')", [memberId, brandKey]);
+    const strangerId = await makeUser(client, `coalesce-stranger-${id()}@example.com`);
+    await applyOps(client, brandKey, [
+      { kind: "upsert_section", key: "custom:priority", title: null, content: "By a member" },
+    ], "user", memberId);
+    await applyOps(client, brandKey, [
+      { kind: "upsert_section", key: "custom:actor", title: "Actor", content: "By a stranger" },
+    ], "user", strangerId);
+    const authors = await client.query(
+      "SELECT key,updated_by,updated_by_user FROM public.project_context_sections WHERE brand_key=$1 ORDER BY key",
+      [brandKey],
+    );
+    assert.deepEqual(authors.rows, [
+      { key: "custom:actor", updated_by: "user", updated_by_user: null },
+      { key: "custom:priority", updated_by: "user", updated_by_user: memberId },
+    ]);
   });
 
   await group("research", async (client) => {

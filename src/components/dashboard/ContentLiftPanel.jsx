@@ -82,7 +82,7 @@ export default function ContentLiftPanel({ brand }) {
                 value={newUrl}
                 onChange={(e) => setNewUrl(e.target.value)}
                 placeholder="e.g. acme.com/blog/best-analytics-tool"
-                className="w-full bg-[var(--panel-1)] border border-[var(--rule-1)] focus:border-[var(--text-1)] focus:ring-1 focus:ring-[var(--text-1)] outline-none rounded-sm px-4 py-3 font-sans text-sm text-[var(--text-1)] transition-all"
+                className="w-full bg-[var(--panel-1)] border border-[var(--rule-1)] focus:border-[var(--text-1)] focus:ring-1 focus:ring-[var(--text-1)] outline-hidden rounded-sm px-4 py-3 font-sans text-sm text-[var(--text-1)] transition-all"
                 required
               />
             </div>
@@ -96,7 +96,7 @@ export default function ContentLiftPanel({ brand }) {
                 type="date"
                 value={publishDate}
                 onChange={(e) => setPublishDate(e.target.value)}
-                className="w-full bg-[var(--panel-1)] border border-[var(--rule-1)] focus:border-[var(--text-1)] focus:ring-1 focus:ring-[var(--text-1)] outline-none rounded-sm px-4 py-3 font-sans text-sm text-[var(--text-1)] transition-all"
+                className="w-full bg-[var(--panel-1)] border border-[var(--rule-1)] focus:border-[var(--text-1)] focus:ring-1 focus:ring-[var(--text-1)] outline-hidden rounded-sm px-4 py-3 font-sans text-sm text-[var(--text-1)] transition-all"
                 required
               />
             </div>

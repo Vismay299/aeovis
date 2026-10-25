@@ -140,8 +140,11 @@ BEGIN
     RAISE EXCEPTION 'project_memory_invalid:brand'; END IF;
   SELECT lower(regexp_replace(website_host, '^www\.', '', 'i')) INTO v_own_host
     FROM customer_brands WHERE brand_key = p_brand;
+  -- An actor who is no longer a member is dropped to NULL, not refused: background jobs
+  -- (F13 keywords.metrics_refresh, F15 rank_tracking.metrics) append research-log entries as
+  -- "user" with the id of whoever started them, and an offboarded teammate must not fail a job step.
   IF p_actor IS NOT NULL AND NOT EXISTS (SELECT 1 FROM customer_brand_memberships WHERE brand_key = p_brand AND user_id = p_actor) THEN
-    RAISE EXCEPTION 'project_memory_invalid:actor'; END IF;
+    p_actor := NULL; END IF;
   PERFORM pg_advisory_xact_lock(hashtext('f07:memory:' || p_brand));
   FOR op IN SELECT value FROM jsonb_array_elements(p_ops) LOOP
     v_kind := op->>'kind';
