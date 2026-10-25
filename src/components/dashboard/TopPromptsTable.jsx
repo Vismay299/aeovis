@@ -149,7 +149,7 @@ export const TopPromptsTable = ({ prompts }) => {
               <select
                 value={selectedTopic}
                 onChange={(e) => setSelectedTopic(e.target.value)}
-                className="text-xs border border-[var(--rule-1)] pl-8 pr-3 py-2 rounded-sm focus:outline-none focus:border-[var(--text-1)] bg-transparent font-semibold uppercase tracking-wider text-[var(--text-2)] appearance-none cursor-pointer"
+                className="text-xs border border-[var(--rule-1)] pl-8 pr-3 py-2 rounded-sm focus:outline-hidden focus:border-[var(--text-1)] bg-transparent font-semibold uppercase tracking-wider text-[var(--text-2)] appearance-none cursor-pointer"
               >
                 <option value="all">All Topics</option>
                 {topics.filter(t => t !== "all").map(t => (
@@ -232,7 +232,7 @@ export const TopPromptsTable = ({ prompts }) => {
               <div key={group.topic} className="flex flex-col">
                 <button
                   onClick={() => toggleTopic(group.topic)}
-                  className="w-full text-left px-7 py-5 bg-[var(--panel-1)] hover:bg-[var(--panel-2)]/30 flex items-center justify-between transition-colors focus:outline-none"
+                  className="w-full text-left px-7 py-5 bg-[var(--panel-1)] hover:bg-[var(--panel-2)]/30 flex items-center justify-between transition-colors focus:outline-hidden"
                 >
                   <div className="flex items-center gap-3">
                     {isExpanded ? (

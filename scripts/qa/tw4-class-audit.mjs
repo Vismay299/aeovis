@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -55,7 +54,8 @@ function traverse(node, insideTarget, findings, file) {
   } else if (
     node.type === "CallExpression" &&
     node.callee &&
-    (node.callee.name === "cn" || node.callee.name === "cx")
+    (node.callee.name === "cn" || node.callee.name === "cx" || node.callee.name === "clsx" ||
+      node.callee.name === "twMerge" || node.callee.name === "cva")
   ) {
     isNowTarget = true;
   }
@@ -84,46 +84,77 @@ function traverse(node, insideTarget, findings, file) {
   }
 }
 
-// Get files from git ls-files anchored at REPO_ROOT
-const rawFiles = execSync("git ls-files 'src/**/*.js' 'src/**/*.jsx' 'src/**/*.ts' 'src/**/*.tsx'", {
-  cwd: REPO_ROOT,
-  encoding: "utf8",
-}).trim().split("\n").filter(Boolean);
+const SCRIPT_EXTS = new Set([".js", ".jsx", ".ts", ".tsx"]);
+const SKIP_PREFIXES = ["src/components/ui/", "src/components/app/"];
+const SKIP_DIRS = new Set(["node_modules", ".next", ".git", "dist", "build", "coverage"]);
 
-const files = rawFiles.filter(
-  (f) => !f.startsWith("src/components/ui/") && !f.startsWith("src/components/app/")
-);
+/* Walk src/ on disk rather than asking git: `git ls-files` hides untracked
+   files, so a brand-new component could carry v3 classes past this audit. */
+function walk(dirAbs, out) {
+  for (const entry of fs.readdirSync(dirAbs, { withFileTypes: true })) {
+    if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
+    const abs = path.join(dirAbs, entry.name);
+    if (entry.isDirectory()) {
+      walk(abs, out);
+    } else if (entry.isFile()) {
+      const rel = path.relative(REPO_ROOT, abs).split(path.sep).join("/");
+      const ext = path.extname(entry.name);
+      if (SCRIPT_EXTS.has(ext) || ext === ".css") out.push(rel);
+    }
+  }
+}
+
+const discovered = [];
+walk(path.resolve(REPO_ROOT, "src"), discovered);
+
+const files = discovered
+  .filter((f) => !SKIP_PREFIXES.some((p) => f.startsWith(p)))
+  .sort();
+
+if (files.length === 0) {
+  console.error("tw4-class-audit found no files to scan; refusing to report a clean audit.");
+  process.exit(1);
+}
 
 const findings = [];
+const parseErrors = [];
 
 for (const relFile of files) {
   const absPath = path.resolve(REPO_ROOT, relFile);
-  if (!fs.existsSync(absPath)) continue;
   const content = fs.readFileSync(absPath, "utf8");
+
+  /* Stylesheets reach utilities through @apply, which the JS parser cannot
+     see; scan those lines directly. */
+  if (path.extname(relFile) === ".css") {
+    const lines = content.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].includes("@apply")) checkString(lines[i], i + 1, relFile, findings);
+    }
+    continue;
+  }
 
   try {
     const ast = parser.parse(content, {
       sourceType: "module",
       plugins: ["jsx", "typescript"],
+      errorRecovery: false,
     });
     traverse(ast, false, findings, relFile);
   } catch (err) {
-    // Resilient fallback for any non-standard syntax
-    const lines = content.split("\n");
-    let inClassAttr = false;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (/className\s*=|(?:\bcn|\bcx)\s*\(/.test(line)) {
-        inClassAttr = true;
-      }
-      if (inClassAttr) {
-        checkString(line, i + 1, relFile, findings);
-        if (/["'`]\s*\}?/.test(line) && !line.endsWith("\\")) {
-          inClassAttr = false;
-        }
-      }
-    }
+    /* A file this audit cannot parse is a file it has not audited. Fail
+       rather than fall back to a line scan that reports a clean run. */
+    parseErrors.push({ file: relFile, message: err.message });
   }
+}
+
+let failed = false;
+
+if (parseErrors.length > 0) {
+  for (const e of parseErrors) {
+    console.error(`${e.file}: could not parse — ${e.message}`);
+  }
+  console.error(`\n${parseErrors.length} file(s) could not be parsed; audit is incomplete.`);
+  failed = true;
 }
 
 if (findings.length > 0) {
@@ -131,8 +162,10 @@ if (findings.length > 0) {
     console.error(`${f.file}:${f.line}: ${f.token}`);
   }
   console.error(`\n${findings.length} findings found in tw4 class audit.`);
-  process.exit(1);
-} else {
-  console.log("0 findings");
-  process.exit(0);
+  failed = true;
 }
+
+if (failed) process.exit(1);
+
+console.log(`0 findings (${files.length} files scanned)`);
+process.exit(0);

@@ -18,6 +18,11 @@ const VIEWPORTS = [
   { name: "390", width: 390, height: 844 },
 ];
 
+/* Scope: public, unauthenticated routes only. Authenticated surfaces
+   (dashboard and portal, including TopPromptsTable and ContentLiftPanel) are
+   NOT covered here — they need a session this harness does not establish, and
+   are guarded by scripts/qa/tw4-class-audit.mjs instead. Do not read a clean
+   run as coverage of those components. */
 function getRoutes() {
   const inv = getPublicUrlInventory();
   const paths = inv.map((i) => (typeof i === "string" ? i : i.path));
@@ -84,12 +89,17 @@ async function capture(origin, outPath) {
             return stack.join(" > ");
           }
 
+          const MAX_ELEMENTS = 5000;
           const records = [];
           const all = document.querySelectorAll("*");
           let count = 0;
+          let truncated = false;
 
           for (const el of all) {
-            if (count >= 5000) break;
+            if (count >= MAX_ELEMENTS) {
+              truncated = true;
+              break;
+            }
             const rect = el.getBoundingClientRect();
             if (rect.width <= 0 || rect.height <= 0) continue;
 
@@ -136,10 +146,20 @@ async function capture(origin, outPath) {
             records.push(rec);
             count++;
           }
-          return records;
+          return { records, truncated, total: all.length };
         });
 
-        result[vp.name][route] = elements;
+        /* Truncation shifts every later element's identity, which would
+           surface as thousands of spurious `presence` diffs rather than as
+           the capture-side problem it actually is. */
+        if (elements.truncated) {
+          throw new Error(
+            `${url} at ${vp.name} has ${elements.total} elements, above the ${5000}-element capture cap; ` +
+              `raise MAX_ELEMENTS before trusting this snapshot`
+          );
+        }
+
+        result[vp.name][route] = elements.records;
       }
       await context.close();
     }
@@ -161,14 +181,39 @@ function compare(basePath, headPath, allowPath) {
     allowlist = JSON.parse(fs.readFileSync(path.resolve(allowPath), "utf8"));
   }
 
+  const ALLOW_KEYS = new Set(["route", "vp", "path", "field", "reason"]);
+
+  /* A malformed waiver is a configuration bug, not a silent no-op: it would
+     otherwise read as "nothing is waived" and let a real regression through
+     on the next edit. `vp` is required so a waiver taken at 390 cannot
+     suppress the same field at 1440. */
+  for (const [i, a] of allowlist.entries()) {
+    const missing = ["route", "vp", "path", "field"].filter((k) => !a || !a[k]);
+    const unknown = a ? Object.keys(a).filter((k) => !ALLOW_KEYS.has(k)) : [];
+    if (missing.length > 0 || unknown.length > 0) {
+      console.error(
+        `${allowPath}[${i}]: invalid allowlist entry` +
+          (missing.length ? ` — missing ${missing.join(", ")}` : "") +
+          (unknown.length ? ` — unknown key(s) ${unknown.join(", ")}` : "")
+      );
+      process.exit(1);
+    }
+    if (!VIEWPORTS.some((v) => v.name === a.vp) && a.vp !== "*") {
+      console.error(
+        `${allowPath}[${i}]: unknown vp "${a.vp}" (expected one of ${VIEWPORTS.map((v) => v.name).join(", ")} or "*")`
+      );
+      process.exit(1);
+    }
+  }
+
   function matchesAllowlist(route, vp, domPath, field) {
-    return allowlist.some((a) => {
-      if (!a.route || !a.path || !a.field) return false;
-      if (a.route !== route) return false;
-      if (a.path !== domPath) return false;
-      if (a.field !== field) return false;
-      return true;
-    });
+    return allowlist.some(
+      (a) =>
+        a.route === route &&
+        (a.vp === vp || a.vp === "*") &&
+        a.path === domPath &&
+        a.field === field
+    );
   }
 
   const differences = [];

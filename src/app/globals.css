@@ -1,6 +1,15 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
 @import "tw-animate-css";
 @config "../../tailwind.config.js";
+
+/* Tailwind 4 auto-detects sources by walking the repo, which mints utilities
+   out of docs fixtures and prose - the mock acceptance JSON under docs/audits
+   alone produced ~120 bogus .pr-N rules. source(none) above turns that off;
+   these are the only trees that hold class names. */
+@source "../../src/app";
+@source "../../src/components";
+@source "../../src/lib";
+@source "../../src/middleware.js";
 
 /* Perceev's shared light design system. DESIGN.md governs visual direction.
    Tokens live here; primitives.css owns shared controls and surfaces.

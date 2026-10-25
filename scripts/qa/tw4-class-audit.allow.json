@@ -26,11 +26,6 @@
   },
   {
     "file": "src/components/dashboard/ContentLiftPanel.jsx",
-    "token": "outline-none",
-    "reason": "Legacy dashboard class permitted under Tailwind 4"
-  },
-  {
-    "file": "src/components/dashboard/ContentLiftPanel.jsx",
     "token": "space-y-1",
     "reason": "Legacy dashboard class permitted under Tailwind 4"
   },
@@ -47,11 +42,6 @@
   {
     "file": "src/components/dashboard/TopPromptsTable.jsx",
     "token": "rounded-sm",
-    "reason": "Legacy dashboard class permitted under Tailwind 4"
-  },
-  {
-    "file": "src/components/dashboard/TopPromptsTable.jsx",
-    "token": "outline-none",
     "reason": "Legacy dashboard class permitted under Tailwind 4"
   },
   {
