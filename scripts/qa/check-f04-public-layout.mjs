@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { getPublicUrlInventory } from "../../src/lib/publicSite.js";
 
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, "../..");
+const PLAYWRIGHT_ENTRY = path.resolve(REPO_ROOT, "worker/node_modules/playwright/index.mjs");
+
 async function loadChromium() {
-  const pw = await import(path.resolve("worker/node_modules/playwright/index.mjs"));
+  const pw = await import(PLAYWRIGHT_ENTRY);
   return pw.chromium;
 }
 
@@ -37,12 +42,20 @@ async function capture(origin, outPath) {
 
       for (const route of routes) {
         const url = new URL(route, origin).href;
+        let response = null;
         try {
-          await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
+          response = await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
         } catch {
           // If networkidle times out, wait for load
-          await page.goto(url, { waitUntil: "load", timeout: 30000 });
+          response = await page.goto(url, { waitUntil: "load", timeout: 30000 });
         }
+
+        if (!response || response.status() >= 400) {
+          throw new Error(
+            `Failed to load ${url}: status ${response ? response.status() : "no response"}`
+          );
+        }
+
         await page.evaluate(() => document.fonts.ready);
         await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 100))));
 
@@ -134,8 +147,9 @@ async function capture(origin, outPath) {
     await browser.close();
   }
 
-  fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
-  fs.writeFileSync(path.resolve(outPath), JSON.stringify(result, null, 2));
+  const resolvedOut = path.resolve(outPath);
+  fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
+  fs.writeFileSync(resolvedOut, JSON.stringify(result, null, 2));
   console.log(`Captured layout snapshot to ${outPath}`);
 }
 
@@ -149,9 +163,10 @@ function compare(basePath, headPath, allowPath) {
 
   function matchesAllowlist(route, vp, domPath, field) {
     return allowlist.some((a) => {
-      if (a.route && a.route !== route) return false;
-      if (a.path && a.path !== domPath) return false;
-      if (a.field && a.field !== field) return false;
+      if (!a.route || !a.path || !a.field) return false;
+      if (a.route !== route) return false;
+      if (a.path !== domPath) return false;
+      if (a.field !== field) return false;
       return true;
     });
   }
@@ -186,8 +201,8 @@ function compare(basePath, headPath, allowPath) {
           continue;
         }
 
-        const fields = Object.keys(bEl);
-        for (const f of fields) {
+        const allKeys = Array.from(new Set([...Object.keys(bEl), ...Object.keys(hEl)]));
+        for (const f of allKeys) {
           if (bEl[f] !== hEl[f]) {
             if (!matchesAllowlist(route, vpName, domPath, f)) {
               differences.push({

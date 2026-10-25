@@ -130,13 +130,13 @@ export const TopPromptsTable = ({ prompts }) => {
           <div className="flex bg-[var(--panel-2)] p-0.5 rounded-sm border border-[var(--rule-1)]">
             <button
               onClick={() => setViewMode("flat")}
-              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider rounded-sm transition-colors ${viewMode === "flat" ? "bg-[var(--panel-1)] text-[var(--text-1)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text-1)]"}`}
+              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider rounded-sm transition-colors ${viewMode === "flat" ? "bg-[var(--panel-1)] text-[var(--text-1)] shadow-xs" : "text-[var(--text-2)] hover:text-[var(--text-1)]"}`}
             >
               List
             </button>
             <button
               onClick={() => setViewMode("topic")}
-              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider rounded-sm transition-colors ${viewMode === "topic" ? "bg-[var(--panel-1)] text-[var(--text-1)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text-1)]"}`}
+              className={`px-3 py-1.5 text-xs font-semibold uppercase tracking-wider rounded-sm transition-colors ${viewMode === "topic" ? "bg-[var(--panel-1)] text-[var(--text-1)] shadow-xs" : "text-[var(--text-2)] hover:text-[var(--text-1)]"}`}
             >
               Topics
             </button>
