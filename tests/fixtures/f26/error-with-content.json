@@ -1,0 +1,6 @@
+{
+  "name": "AppError",
+  "code": "internal_error",
+  "message": "Failed query: insert into keywords\nparams: running shoes,acme.test",
+  "causeMessage": "acme.test refused the connection"
+}
