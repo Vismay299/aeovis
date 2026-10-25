@@ -59,3 +59,4 @@ SOFTWARE.
 - `src/lib/projectContext/service.test.ts`
 - `scripts/qa/check-f07-db.mjs`
 - `supabase/migrations/070_f07_project_memory.sql`
+- `src/app/api/customer/context/route.ts`
