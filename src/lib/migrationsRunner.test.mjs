@@ -348,6 +348,8 @@ const FULL_CATALOG = [
   "scans.brand_key", "scan_jobs.brand_key", "scan_jobs_one_running_per_workspace",
   "activate_customer_gsc", "disconnect_customer_gsc", "write_gsc_generation",
   "accept_customer_team_invites", "claim_customer_gsc_job", "commit_customer_gsc_page", "enqueue_customer_gsc_syncs", "decide_customer_content",
+  // 165_f26_privacy_and_telemetry_ids.sql — opaque workspace group key + consent table.
+  "customer_brands.telemetry_id", "user_privacy_choices",
 ];
 
 function withRegister(dir) {

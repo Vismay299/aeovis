@@ -1575,3 +1575,20 @@ workspace membership policy; all writes go through the service-only functions
 contract is exercised by `scripts/qa/check-f07-db.mjs` on loopback QA PostgreSQL
 and tenant reads are checked by `tests/customer-uat.sql`.
 The migration also adds the global (entry_date, id) retention index, a re-applied table check that rejects canonical dotted-decimal IPv4 and URL-parser numeric shorthand, octal and hexadecimal forms, and an own-host RPC guard for competitors. Reapplying 070 replaces the earlier dotted-decimal-only constraint definition. Research log entries receive a jobs(id) ON DELETE SET NULL foreign key and column comment.
+## `165_f26_privacy_and_telemetry_ids.sql`
+
+**Status:** in repo; **not yet applied to production**.
+
+Opaque `customer_brands.telemetry_id` for PostHog workspace groups, and `user_privacy_choices` for per-user analytics consent (RLS: each user reads only their own row; writes via service role after `requireUser`).
+
+### Objects to check in the catalog
+- column `public.customer_brands.telemetry_id` (uuid, not null, unique index `customer_brands_telemetry_id_idx`)
+- table `public.user_privacy_choices`
+
+### Apply
+1. Apply the migration on a maintenance window (idempotent DDL).
+2. No backfill script: `DEFAULT gen_random_uuid()` fills existing brand rows.
+3. Confirm with: `select count(*) filter (where telemetry_id is null) from customer_brands;` → 0.
+
+### Owner follow-ups (not this migration)
+PostHog EU project, env keys, and `FEATURE_PRODUCT_ANALYTICS` — see F26 §10 / phase 5.

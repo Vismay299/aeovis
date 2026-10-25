@@ -59,6 +59,7 @@ jobs:
           node scripts/qa/check-repair-workflows.mjs
           node scripts/qa/check-f07-db.mjs
           node scripts/qa/check-f01-db.mjs
+          node scripts/qa/check-f26-db.mjs
   test:
     name: tests
     runs-on: ubuntu-latest

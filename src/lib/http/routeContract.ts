@@ -5,7 +5,7 @@ export type RouteContract = {
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   file: string;
-  auth: "workspace" | "workspace_owner" | "cron" | "operator";
+  auth: "workspace" | "workspace_owner" | "user" | "cron" | "operator";
   request?: ZodType;
   query?: ZodType;
   response: ZodType;

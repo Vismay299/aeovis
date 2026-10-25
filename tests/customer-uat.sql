@@ -22,6 +22,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/041_f01_spend.sql
 \ir ../supabase/migrations/043_f01_jobs_cron.sql
 \ir ../supabase/migrations/070_f07_project_memory.sql
+\ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -199,6 +200,34 @@ DO $$ BEGIN
   THEN RAISE EXCEPTION 'Jobs leaked across tenants, or the system job was visible'; END IF;
 END $$;
 RESET ROLE;
+
+-- F26: each user reads only their own privacy choice; telemetry_id is present.
+-- The role is switched outside the DO block and reset after it, as every other
+-- tenant check here does: a set_config('role', ...) inside the block would stay
+-- in force for the rest of the transaction and fail the blocks that follow.
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES
+ ('00000000-0000-0000-0000-000000000011','f26-u1@example.test',now()),
+ ('00000000-0000-0000-0000-000000000012','f26-u2@example.test',now());
+INSERT INTO public.user_privacy_choices(user_id,analytics,source,policy_version) VALUES
+ ('00000000-0000-0000-0000-000000000011',true,'settings','2026-10-22'),
+ ('00000000-0000-0000-0000-000000000012',false,'banner','2026-10-22');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000011',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.user_privacy_choices) <> 1
+  THEN RAISE EXCEPTION 'F26 UAT: user must read only own privacy row'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000012',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.user_privacy_choices) <> 1
+  THEN RAISE EXCEPTION 'F26 UAT: user must read only own privacy row'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.customer_brands WHERE telemetry_id IS NULL) <> 0
+  THEN RAISE EXCEPTION 'F26 UAT: every brand must have telemetry_id'; END IF;
+END $$;
+
 -- F07: each tenant's section, competitor, key page and research row is visible
 -- only to that workspace's member. Customers may read these rows but cannot
 -- write to the service-only project memory tables.
