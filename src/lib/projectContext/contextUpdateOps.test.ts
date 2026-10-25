@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AppError } from "../http/appError.ts";
-import type { ProjectContextUpdate } from "../../shared/project-context.ts";
+import { PROJECT_COMPETITOR_SOURCES, type ProjectContextUpdate } from "../../shared/project-context.ts";
 import { resolveContextUpdates } from "./contextUpdateOps.ts";
 
 const empty = () => ({ customKeys: new Set<string>(), domains: new Set<string>(), urls: new Set<string>(), ownHost: "example.com" });
@@ -68,6 +68,18 @@ test("competitor inputs normalize and duplicates within an operation keep the la
     kind: "upsert_competitors",
     rows: [{ domain: "acme.com", name: "Latest", notes: "Relevant", source: "manual", source_url: null }],
   }]);
+});
+
+test("competitor operations preserve every shared source value", () => {
+  for (const source of PROJECT_COMPETITOR_SOURCES) {
+    assert.deepEqual(
+      resolveContextUpdates([{ addCompetitors: [{ domain: "rival.example" }] }], empty(), { competitorSource: source }),
+      [{
+        kind: "upsert_competitors",
+        rows: [{ domain: "rival.example", name: null, notes: null, source, source_url: null }],
+      }],
+    );
+  }
 });
 
 test("own-domain competitor is refused and errors identify the rejected operation", () => {
@@ -156,7 +168,7 @@ test("removals update the evolving cap state for later operations", () => {
 test("research operations default kind to note and normalize their research key", () => {
   const updates: ProjectContextUpdate[] = [
     { appendResearchLog: { summary: "  A summary  ", researchKey: " ＯＦＦＣＵＬＴ\t IN " } },
-    { appendResearchLog: { summary: "Questions", kind: "questions.setup" } },
+    { appendResearchLog: { summary: "Questions", kind: "platform.selftest" } },
     { removeResearchLog: ["row-id"] },
   ];
   assert.deepEqual(resolveContextUpdates(updates, empty()), [
@@ -171,7 +183,7 @@ test("research operations default kind to note and normalize their research key"
     {
       kind: "append_research_log",
       summary: "Questions",
-      research_kind: "questions.setup",
+      research_kind: "platform.selftest",
       research_key: null,
       spend_usd: null,
       job_id: null,

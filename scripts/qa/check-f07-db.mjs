@@ -216,6 +216,80 @@ async function main() {
       [brandKey],
     );
     assert.deepEqual(keyPageCounts.rows[0], { key_pages: 0, sections: 0 }, "rejected key-page batch left partial rows behind");
+
+    const sixtyOps = Array.from({ length: 60 }, () => ({ kind: "delete_section", key: "business_overview" }));
+    const sixtyResult = await applyOps(client, brandKey, sixtyOps);
+    assert.deepEqual(sixtyResult, { applied: 60 }, "SQL function must accept up to 60 resolved ops");
+    const sixtyOneOps = [...sixtyOps, { kind: "delete_section", key: "current_goal" }];
+    await client.query("SAVEPOINT f07_resolved_op_overflow");
+    let opLimitCaught;
+    try {
+      await applyOps(client, brandKey, sixtyOneOps);
+    } catch (error) {
+      opLimitCaught = error;
+    }
+    await client.query("ROLLBACK TO SAVEPOINT f07_resolved_op_overflow");
+    assert.ok(opLimitCaught, "61 resolved ops unexpectedly succeeded");
+    assert.match(opLimitCaught.message, /project_memory_invalid:ops/);
+
+    await client.query("SAVEPOINT f07_ipv4_competitor");
+    let ipv4Caught;
+    try {
+      await applyOps(client, brandKey, [{
+        kind: "upsert_competitors",
+        rows: [{ domain: "192.0.2.1", name: null, notes: null, source: "manual", source_url: null }],
+      }]);
+    } catch (error) {
+      ipv4Caught = error;
+    }
+    await client.query("ROLLBACK TO SAVEPOINT f07_ipv4_competitor");
+    assert.ok(ipv4Caught, "IPv4 competitor unexpectedly succeeded");
+    assert.equal(ipv4Caught.code, "23514", "IPv4 competitor must be rejected by the table check");
+    const ipRows = await client.query("SELECT count(*)::int AS count FROM public.project_competitors WHERE brand_key=$1", [brandKey]);
+    assert.equal(ipRows.rows[0].count, 0, "IPv4 rejection left a competitor row behind");
+
+    const numericHostConstraint = await client.query(
+      "SELECT pg_get_constraintdef(oid) AS definition, obj_description(oid, 'pg_constraint') AS comment FROM pg_constraint WHERE conrelid='public.project_competitors'::regclass AND conname='project_competitors_no_ipv4'",
+    );
+    assert.equal(numericHostConstraint.rows.length, 1, "numeric IPv4 table constraint is missing");
+    assert.match(numericHostConstraint.rows[0].comment, /URL parsers/);
+    const urlParserIpv4Hosts = ["192.168.1.1", "127.1", "0177.0.0.1", "0x7f.1"];
+    for (const [index, domain] of urlParserIpv4Hosts.entries()) {
+      assert.match(new URL(`http://${domain}`).hostname, /^\d+\.\d+\.\d+\.\d+$/, `${domain} must be a URL-parser IPv4 form`);
+      const savepoint = `f07_numeric_ipv4_${index}`;
+      await client.query(`SAVEPOINT ${savepoint}`);
+      let directInsertCaught;
+      try {
+        await client.query(
+          "INSERT INTO public.project_competitors(brand_key,domain,updated_by) VALUES($1,$2,'system')",
+          [brandKey, domain],
+        );
+      } catch (error) {
+        directInsertCaught = error;
+      }
+      await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      assert.ok(directInsertCaught, `direct SQL insert unexpectedly accepted numeric IPv4 form ${domain}`);
+      assert.equal(directInsertCaught.code, "23514", `${domain} must be rejected by a CHECK constraint`);
+      assert.equal(directInsertCaught.constraint, "project_competitors_no_ipv4", `${domain} must hit the IPv4 constraint`);
+    }
+    const numericIpRows = await client.query("SELECT count(*)::int AS count FROM public.project_competitors WHERE brand_key=$1", [brandKey]);
+    assert.equal(numericIpRows.rows[0].count, 0, "numeric IPv4 rejection left competitor rows behind");
+
+    await client.query("SAVEPOINT f07_own_host_competitor");
+    let ownHostCaught;
+    try {
+      await applyOps(client, brandKey, [{
+        kind: "upsert_competitors",
+        rows: [{ domain: brandKey, name: null, notes: null, source: "manual", source_url: null }],
+      }]);
+    } catch (error) {
+      ownHostCaught = error;
+    }
+    await client.query("ROLLBACK TO SAVEPOINT f07_own_host_competitor");
+    assert.ok(ownHostCaught, "workspace website host unexpectedly succeeded as competitor");
+    assert.match(ownHostCaught.message, /project_memory_invalid:own_competitor/);
+    const ownHostRows = await client.query("SELECT count(*)::int AS count FROM public.project_competitors WHERE brand_key=$1", [brandKey]);
+    assert.equal(ownHostRows.rows[0].count, 0, "own-host rejection left a competitor row behind");
   });
 
   await group("coalesce", async (client) => {
@@ -265,13 +339,23 @@ async function main() {
   await group("research", async (client) => {
     const brandKey = await makeBrand(client, "research");
     await client.query("SET LOCAL ROLE service_role");
+    const retentionIndex = await client.query("SELECT to_regclass('public.project_research_log_retention_idx') AS index_name");
+    assert.equal(retentionIndex.rows[0].index_name, "project_research_log_retention_idx");
+    const jobForeignKey = await client.query(
+      "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='public.project_research_log'::regclass AND conname='project_research_log_job_id_fkey'",
+    );
+    assert.match(jobForeignKey.rows[0]?.definition ?? "", /REFERENCES jobs\(id\) ON DELETE SET NULL/);
+    const jobComment = await client.query(
+      "SELECT col_description('public.project_research_log'::regclass, attnum) AS comment FROM pg_attribute WHERE attrelid='public.project_research_log'::regclass AND attname='job_id'",
+    );
+    assert.match(jobComment.rows[0]?.comment ?? "", /cleared when the job row is deleted/);
     await client.query(
-      "INSERT INTO public.project_research_log(brand_key,entry_date,kind,research_key,summary,created_by) VALUES($1,(now() AT TIME ZONE 'UTC')::date - 91,'questions.setup','offcult.in','Old research','system')",
+      "INSERT INTO public.project_research_log(brand_key,entry_date,kind,research_key,summary,created_by) VALUES($1,(now() AT TIME ZONE 'UTC')::date - 91,'platform.selftest','offcult.in','Old research','system')",
       [brandKey],
     );
     await applyOps(client, brandKey, [{
       kind: "append_research_log",
-      research_kind: "questions.setup",
+      research_kind: "platform.selftest",
       research_key: "offcult.in",
       summary: "Current research",
       spend_usd: 0.0841,
@@ -286,11 +370,11 @@ async function main() {
     assert.equal(rows.rows[0].entry_date, new Date().toISOString().slice(0, 10), "entry_date must be server-stamped UTC, ignoring caller data");
     assert.deepEqual(
       { kind: rows.rows[0].kind, research_key: rows.rows[0].research_key, summary: rows.rows[0].summary, spend_usd: Number(rows.rows[0].spend_usd) },
-      { kind: "questions.setup", research_key: "offcult.in", summary: "Current research", spend_usd: 0.0841 },
+      { kind: "platform.selftest", research_key: "offcult.in", summary: "Current research", spend_usd: 0.0841 },
     );
     const found = await client.query(
       "SELECT id FROM public.project_research_log WHERE brand_key=$1 AND kind=$2 AND research_key=$3 AND entry_date >= (now() AT TIME ZONE 'UTC')::date - 90 ORDER BY created_at DESC LIMIT 1",
-      [brandKey, "questions.setup", "offcult.in"],
+      [brandKey, "platform.selftest", "offcult.in"],
     );
     assert.equal(found.rows.length, 1, "lookup by kind and normalized key must find recent research");
   });
@@ -299,9 +383,38 @@ async function main() {
     const brandKey = await makeBrand(client, "import-once");
     await client.query("SET LOCAL ROLE service_role");
     const first = await client.query("SELECT public.claim_project_brief_import($1) AS claimed", [brandKey]);
+    await client.query(
+      "UPDATE public.project_memory_state SET brief_import_checked_at='2000-01-01T00:00:00Z' WHERE brand_key=$1",
+      [brandKey],
+    );
     const second = await client.query("SELECT public.claim_project_brief_import($1) AS claimed", [brandKey]);
+    const checked = await client.query(
+      "SELECT brief_import_checked_at='2000-01-01T00:00:00Z'::timestamptz AS unchanged FROM public.project_memory_state WHERE brand_key=$1",
+      [brandKey],
+    );
+    const released = await client.query("SELECT public.release_project_brief_import_claim($1) AS released", [brandKey]);
+    const releasedAgain = await client.query("SELECT public.release_project_brief_import_claim($1) AS released", [brandKey]);
+    const retry = await client.query("SELECT public.claim_project_brief_import($1) AS claimed", [brandKey]);
+    await client.query(
+      "UPDATE public.project_memory_state SET brief_imported=true, brief_import_checked_at=NULL WHERE brand_key=$1",
+      [brandKey],
+    );
+    const committedClaim = await client.query("SELECT public.claim_project_brief_import($1) AS claimed", [brandKey]);
+    const committedRelease = await client.query("SELECT public.release_project_brief_import_claim($1) AS released", [brandKey]);
+    const committedState = await client.query(
+      "SELECT brief_import_checked_at,brief_imported FROM public.project_memory_state WHERE brand_key=$1",
+      [brandKey],
+    );
     assert.equal(first.rows[0].claimed, true);
     assert.equal(second.rows[0].claimed, false);
+    assert.equal(checked.rows[0].unchanged, true, "duplicate claim rewrote checked_at");
+    assert.equal(released.rows[0].released, true, "failed import claim should be releasable for retry");
+    assert.equal(releasedAgain.rows[0].released, false, "an already released claim should not change state");
+    assert.equal(retry.rows[0].claimed, true, "released claim should allow a retry");
+    assert.equal(committedClaim.rows[0].claimed, false, "an imported brief should never be claimed again");
+    assert.equal(committedRelease.rows[0].released, false, "an imported brief claim must not be released");
+    assert.equal(committedState.rows[0].brief_import_checked_at, null);
+    assert.equal(committedState.rows[0].brief_imported, true);
   });
 
   console.log(`ok ${passed.length} groups`);

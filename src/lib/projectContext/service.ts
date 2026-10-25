@@ -14,6 +14,7 @@ import {
   type ProjectContext,
   type ProjectContextSectionKey,
   type ProjectContextUpdate,
+  type ProjectResearchKind,
 } from "../../shared/project-context.ts";
 import { resolveContextUpdates, type ResolvedOp } from "./contextUpdateOps.ts";
 import { createProjectContextRepository, type ProjectContextRepository } from "./repository.ts";
@@ -51,7 +52,7 @@ export async function getProjectContext(
     repo.listSections(brand.brandKey),
     repo.listCompetitors(brand.brandKey),
     repo.listKeyPages(brand.brandKey),
-    repo.listResearchLog(brand.brandKey, RESEARCH_LOG_LIMIT),
+    repo.listResearchLog(brand.brandKey, RESEARCH_LOG_LIMIT + 1),
   ]);
 
   const stored = new Map(sectionRows.map((row) => [row.key, row]));
@@ -67,7 +68,7 @@ export async function getProjectContext(
         }]
       : [];
   });
-  const limited = researchRows.length >= RESEARCH_LOG_LIMIT;
+  const limited = researchRows.length > RESEARCH_LOG_LIMIT;
   const researchLog = researchRows.slice(0, RESEARCH_LOG_LIMIT).map((row) => ({
     id: row.id,
     entryDate: row.entryDate,
@@ -146,7 +147,7 @@ export async function appendResearch(
   admin: SupabaseClient,
   input: {
     brandKey: string;
-    kind: string;
+    kind: ProjectResearchKind;
     researchKey?: string;
     summary: string;
     spendUsd?: number | null;
@@ -168,7 +169,7 @@ export async function appendResearch(
 
 export async function findRecentResearch(
   admin: SupabaseClient,
-  input: { brandKey: string; kind: string; researchKey: string; days?: number },
+  input: { brandKey: string; kind: ProjectResearchKind; researchKey: string; days?: number },
   deps?: ProjectContextDeps,
 ): Promise<{ id: string; entryDate: string; summary: string; spendUsd: number | null; createdAt: string } | null> {
   const now = deps?.now?.() ?? new Date();

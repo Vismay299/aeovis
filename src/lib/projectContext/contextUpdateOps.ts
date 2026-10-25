@@ -11,7 +11,9 @@ import {
   PROSE_MAX_CHARS,
   type ContextAuthor,
   type KeyPageRole,
+  type ProjectCompetitorSource,
   type ProjectContextUpdate,
+  type ProjectResearchKind,
 } from "../../shared/project-context.ts";
 import { normalizeCompetitorDomain, normalizeKeyPageUrl, normalizeResearchKey } from "./normalize.ts";
 
@@ -24,7 +26,7 @@ export type ResolvedOp =
         domain: string;
         name: string | null;
         notes: string | null;
-        source: "manual" | "setup_research" | "assistant" | "brief_import";
+        source: ProjectCompetitorSource;
         source_url: string | null;
       }[];
     }
@@ -37,7 +39,7 @@ export type ResolvedOp =
   | {
       kind: "append_research_log";
       summary: string;
-      research_kind: string;
+      research_kind: ProjectResearchKind;
       research_key: string | null;
       spend_usd: number | null;
       job_id: string | null;
@@ -73,7 +75,7 @@ function rejectedUpdate(index: number, error: unknown): AppError {
 export function resolveContextUpdates(
   updates: ProjectContextUpdate[],
   current: CurrentContext,
-  opts?: { competitorSource?: "manual" | "assistant" },
+  opts?: { competitorSource?: ProjectCompetitorSource },
 ): ResolvedOp[] {
   const customKeys = new Set(current.customKeys);
   const domains = new Set(current.domains);

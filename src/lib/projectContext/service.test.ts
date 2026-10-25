@@ -36,7 +36,7 @@ function researchRow(overrides: Partial<ProjectContextDeps> & Record<string, unk
     brandKey: brand.brandKey,
     id: "research-id",
     entryDate: "2026-10-25",
-    kind: "questions.setup",
+    kind: "platform.selftest",
     researchKey: "offcult.in",
     summary: "Questions researched",
     spendUsd: 0.0841,
@@ -89,7 +89,7 @@ test("research appends use the UTC day and prune entries older than ninety days"
   );
   await appendResearch(admin, {
     brandKey: brand.brandKey,
-    kind: "questions.setup",
+    kind: "platform.selftest",
     researchKey: "OFFCULT.IN",
     summary: "Today’s research",
     spendUsd: 0.1,
@@ -101,6 +101,28 @@ test("research appends use the UTC day and prune entries older than ninety days"
   assert.equal(appended?.entryDate, "2026-10-25");
   assert.equal(appended?.researchKey, "offcult.in");
   assert.equal(appended?.spendUsd, 0.1);
+});
+
+test("brief import state exposes retryable claims and committed finality", async () => {
+  const repo = createMemoryProjectContextRepository({ now: fixedNow });
+  assert.deepEqual(await repo.getBriefImportState("brand.example"), { checkedAt: null, imported: false });
+  assert.equal(await repo.claimBriefImport("brand.example"), true);
+  const claimed = await repo.getBriefImportState("brand.example");
+  assert.equal(typeof claimed.checkedAt, "string");
+  assert.equal(claimed.imported, false);
+  assert.equal(await repo.claimBriefImport("brand.example"), false);
+  assert.deepEqual(await repo.getBriefImportState("brand.example"), claimed);
+  assert.equal(await repo.releaseBriefImportClaim("brand.example"), true);
+  assert.equal(await repo.releaseBriefImportClaim("brand.example"), false);
+  assert.deepEqual(await repo.getBriefImportState("brand.example"), { checkedAt: null, imported: false });
+  assert.equal(await repo.claimBriefImport("brand.example"), true);
+  await repo.markBriefImported("brand.example");
+  const imported = await repo.getBriefImportState("brand.example");
+  assert.equal(imported.checkedAt, "2026-10-25T00:30:00.001Z");
+  assert.equal(imported.imported, true);
+  assert.equal(await repo.claimBriefImport("brand.example"), false);
+  assert.equal(await repo.releaseBriefImportClaim("brand.example"), false);
+  assert.deepEqual(await repo.getBriefImportState("brand.example"), imported);
 });
 
 test("reads return the newest twenty research rows and mark the limit for the digest", async () => {
@@ -121,7 +143,7 @@ test("reads return the newest twenty research rows and mark the limit for the di
   assert.match(renderProjectContextMarkdown(context), /_Older entries within the 90-day window are omitted\._/);
 });
 
-test("digest marks a research log at the twenty-entry limit", async () => {
+test("digest does not mark a research log limited when it has exactly twenty entries", async () => {
   const injected = deps();
   const repo = injected.repo as ReturnType<typeof createMemoryProjectContextRepository>;
   for (let index = 0; index < 20; index += 1) {
@@ -133,8 +155,8 @@ test("digest marks a research log at the twenty-entry limit", async () => {
   }
   const context = await getProjectContext(admin, brand, injected);
   assert.equal(context.researchLog.length, 20);
-  assert.equal(context.researchLogLimited, true);
-  assert.match(renderProjectContextMarkdown(context), /_Older entries within the 90-day window are omitted\._/);
+  assert.equal(context.researchLogLimited, false);
+  assert.doesNotMatch(renderProjectContextMarkdown(context), /_Older entries within the 90-day window are omitted\._/);
 });
 
 test("recent research is found within ninety days and misses a ninety-one-day-old match", async () => {
@@ -151,18 +173,18 @@ test("recent research is found within ninety days and misses a ninety-one-day-ol
   );
   const hit = await findRecentResearch(admin, {
     brandKey: brand.brandKey,
-    kind: "questions.setup",
+    kind: "platform.selftest",
     researchKey: "  OFFCULT.IN  ",
   }, injected);
   assert.equal(hit?.id, "within-window");
   assert.equal(await findRecentResearch(admin, {
     brandKey: brand.brandKey,
-    kind: "questions.setup",
+    kind: "platform.selftest",
     researchKey: "old-only.example",
   }, injected), null, "a 91-day-old only match misses under the default 90-day window");
   assert.equal(await findRecentResearch(admin, {
     brandKey: brand.brandKey,
-    kind: "questions.setup",
+    kind: "platform.selftest",
     researchKey: "offcult.in",
     days: 0,
   }, injected), null);
@@ -211,7 +233,7 @@ test("digest format includes every typed section, custom content, lists, log and
     researchLog: [{
       id: "research-id",
       entryDate: "2026-10-25",
-      kind: "questions.setup",
+      kind: "platform.selftest",
       researchKey: "offcult.in",
       summary: "Website research complete",
       spendUsd: 0.0841,

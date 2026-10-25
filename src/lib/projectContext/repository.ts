@@ -4,7 +4,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "../http/appError.ts";
-import type { ContextAuthor, KeyPageRole } from "../../shared/project-context.ts";
+import type { ContextAuthor, KeyPageRole, ProjectCompetitorSource } from "../../shared/project-context.ts";
 import type { ResolvedOp } from "./contextUpdateOps.ts";
 
 export type SectionRow = {
@@ -21,7 +21,7 @@ export type CompetitorRow = {
   domain: string;
   name: string | null;
   notes: string | null;
-  source: "manual" | "setup_research" | "assistant" | "brief_import";
+  source: ProjectCompetitorSource;
   sourceUrl: string | null;
   updatedAt: string;
   updatedBy: ContextAuthor;
@@ -60,6 +60,8 @@ export type ProjectContextRepository = {
   findRecentResearch(brandKey: string, kind: string, researchKey: string, since: string): Promise<ResearchRow | null>;
   applyOps(brandKey: string, ops: ResolvedOp[], author: ContextAuthor, actor: string | null): Promise<{ applied: number }>;
   claimBriefImport(brandKey: string): Promise<boolean>;
+  releaseBriefImportClaim(brandKey: string): Promise<boolean>;
+  getBriefImportState(brandKey: string): Promise<{ checkedAt: string | null; imported: boolean }>;
   markBriefImported(brandKey: string): Promise<void>;
   getBrandBrief(brandKey: string): Promise<Record<string, unknown> | null>;
 };
@@ -216,6 +218,25 @@ export function createProjectContextRepository(admin: SupabaseClient): ProjectCo
       const { data, error } = await admin.rpc("claim_project_brief_import", { p_brand: brandKey });
       if (error) throw unavailable("Context could not be loaded. Please retry.", error);
       return data === true;
+    },
+
+    async releaseBriefImportClaim(brandKey) {
+      const { data, error } = await admin.rpc("release_project_brief_import_claim", { p_brand: brandKey });
+      if (error) throw unavailable("Context could not be saved. Please retry.", error);
+      return data === true;
+    },
+
+    async getBriefImportState(brandKey) {
+      const { data, error } = await admin
+        .from("project_memory_state")
+        .select("brief_import_checked_at,brief_imported")
+        .eq("brand_key", brandKey)
+        .maybeSingle();
+      if (error) throw unavailable("Context could not be loaded. Please retry.", error);
+      return {
+        checkedAt: (data?.brief_import_checked_at as string | null | undefined) ?? null,
+        imported: data?.brief_imported === true,
+      };
     },
 
     async markBriefImported(brandKey) {

@@ -278,7 +278,8 @@ function pathToFileUrlString(p) {
 /** Everything 001-023 must leave behind, per the runner's own expectations. */
 const FULL_CATALOG = [
   "project_context_sections", "project_competitors", "project_key_pages", "project_research_log", "project_memory_state",
-  "apply_project_context_ops", "claim_project_brief_import", "prune_project_research_log",
+  "apply_project_context_ops", "claim_project_brief_import", "release_project_brief_import_claim", "prune_project_research_log", "project_research_log_retention_idx",
+  "project_competitors_no_ipv4", "project_research_log_job_id_fkey",
 "jobs","job_steps","job_periodic","enqueue_job","claim_due_jobs","job_step_begin","job_step_complete","job_step_fail","job_sleep","job_yield","job_progress","job_finish","cancel_job","reconcile_stale_jobs","claim_due_periodic","prune_jobs","jobs_single_active_idx","jobs_tick_http",
 "paid_feature_controls","workspace_spend_limits","spend_holds","spend_ledger","reserve_spend","settle_spend","release_spend","expire_spend_holds","f01_expire_due_holds","prune_spend","f01_committed_usd",
 "provider_cache","prune_provider_cache","provider-cache",

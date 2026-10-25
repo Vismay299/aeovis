@@ -35,7 +35,7 @@ test("append research log validates the feature kind and key", () => {
         {
           appendResearchLog: {
             summary: "Questions checked",
-            kind: "questions.setup",
+            kind: "platform.selftest",
             researchKey: " offcult.in ",
           },
         },
@@ -48,5 +48,50 @@ test("append research log validates the feature kind and key", () => {
       updates: [{ appendResearchLog: { summary: "Questions checked", kind: "Questions.Setup" } }],
     }).success,
     false,
+  );
+  assert.equal(
+    updateProjectContextBody.safeParse({
+      updates: [{ appendResearchLog: { summary: "Questions checked", kind: "questions.setup" } }],
+    }).success,
+    false,
+  );
+  assert.equal(
+    updateProjectContextBody.safeParse({
+      updates: [{ appendResearchLog: { summary: "Note" } }],
+    }).success,
+    true,
+  );
+});
+
+test("optional competitor names and key-page topics reject supplied blanks", () => {
+  for (const name of ["", "   "]) {
+    assert.equal(
+      updateProjectContextBody.safeParse({
+        updates: [{ addCompetitors: [{ domain: "competitor.example", name }] }],
+      }).success,
+      false,
+      `blank competitor name ${JSON.stringify(name)} should be rejected`,
+    );
+  }
+
+  for (const topic of ["", "   "]) {
+    assert.equal(
+      updateProjectContextBody.safeParse({
+        updates: [{ addKeyPages: [{ url: "https://brand.example/page", topic }] }],
+      }).success,
+      false,
+      `blank key-page topic ${JSON.stringify(topic)} should be rejected`,
+    );
+  }
+
+  assert.equal(
+    updateProjectContextBody.safeParse({
+      updates: [
+        { addCompetitors: [{ domain: "competitor.example" }] },
+        { addKeyPages: [{ url: "https://brand.example/page" }] },
+      ],
+    }).success,
+    true,
+    "name and topic remain optional when omitted",
   );
 });

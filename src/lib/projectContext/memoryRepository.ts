@@ -31,7 +31,7 @@ export type MemoryProjectContextRepository = ProjectContextRepository & {
   competitors: Map<string, StoredCompetitor>;
   keyPages: Map<string, StoredKeyPage>;
   researchLog: StoredResearch[];
-  briefChecked: Set<string>;
+  briefChecked: Map<string, string>;
   briefImported: Set<string>;
 };
 
@@ -66,7 +66,7 @@ export function createMemoryProjectContextRepository(seed: MemoryRepositorySeed 
   const competitors = new Map<string, StoredCompetitor>();
   const keyPages = new Map<string, StoredKeyPage>();
   const researchLog: StoredResearch[] = [];
-  const briefChecked = new Set<string>();
+  const briefChecked = new Map<string, string>();
   const briefImported = new Set<string>();
   let clockSequence = 0;
 
@@ -251,9 +251,22 @@ export function createMemoryProjectContextRepository(seed: MemoryRepositorySeed 
     },
 
     async claimBriefImport(brandKey) {
-      if (briefChecked.has(brandKey)) return false;
-      briefChecked.add(brandKey);
+      if (briefChecked.has(brandKey) || briefImported.has(brandKey)) return false;
+      briefChecked.set(brandKey, stamp());
       return true;
+    },
+
+    async releaseBriefImportClaim(brandKey) {
+      if (briefImported.has(brandKey) || !briefChecked.has(brandKey)) return false;
+      briefChecked.delete(brandKey);
+      return true;
+    },
+
+    async getBriefImportState(brandKey) {
+      return {
+        checkedAt: briefChecked.get(brandKey) ?? null,
+        imported: briefImported.has(brandKey),
+      };
     },
 
     async markBriefImported(brandKey) {

@@ -36,6 +36,14 @@ CREATE TABLE IF NOT EXISTS public.project_competitors (
   UNIQUE (brand_key, domain)
 );
 COMMENT ON COLUMN public.project_competitors.source_url IS 'Page actually read when setup research proposed this competitor (F08). Declared list only; never used by scan roster extraction.';
+-- Replace the earlier dotted-decimal-only definition on reapply. URL parsers
+-- also treat numeric shorthand, leading-zero octal and 0x hexadecimal labels
+-- as IPv4 hosts (for example, 127.1 and 0x7f.1).
+ALTER TABLE public.project_competitors DROP CONSTRAINT IF EXISTS project_competitors_no_ipv4;
+ALTER TABLE public.project_competitors ADD CONSTRAINT project_competitors_no_ipv4
+  CHECK (domain !~ '^(0x[0-9a-f]+|[0-9]+)(\.(0x[0-9a-f]+|[0-9]+))*$');
+COMMENT ON CONSTRAINT project_competitors_no_ipv4 ON public.project_competitors IS
+  'Rejects canonical and non-canonical numeric IPv4 host forms recognized by URL parsers: dotted decimal, shorthand, octal and hexadecimal.';
 
 CREATE TABLE IF NOT EXISTS public.project_key_pages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -65,11 +73,24 @@ CREATE TABLE IF NOT EXISTS public.project_research_log (
   created_by_user uuid REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
-COMMENT ON COLUMN public.project_research_log.kind IS 'Spend feature that bought the research (e.g. questions.setup), or note.';
+COMMENT ON COLUMN public.project_research_log.kind IS 'Registered spend feature that bought the research (e.g. platform.selftest), or note.';
 COMMENT ON COLUMN public.project_research_log.research_key IS 'Normalised input (keyword, domain) so a repeat purchase within 90 days can be detected.';
 CREATE INDEX IF NOT EXISTS project_research_log_recent_idx ON public.project_research_log (brand_key, created_at DESC);
 CREATE INDEX IF NOT EXISTS project_research_log_lookup_idx
   ON public.project_research_log (brand_key, kind, research_key, created_at DESC) WHERE research_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS project_research_log_retention_idx
+  ON public.project_research_log (entry_date, id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.project_research_log'::regclass AND conname = 'project_research_log_job_id_fkey'
+  ) THEN
+    ALTER TABLE public.project_research_log ADD CONSTRAINT project_research_log_job_id_fkey
+      FOREIGN KEY (job_id) REFERENCES public.jobs(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+COMMENT ON COLUMN public.project_research_log.job_id IS 'Optional originating job; cleared when the job row is deleted.';
 
 CREATE TABLE IF NOT EXISTS public.project_memory_state (
   brand_key text PRIMARY KEY REFERENCES public.customer_brands(brand_key) ON DELETE CASCADE,
@@ -77,6 +98,8 @@ CREATE TABLE IF NOT EXISTS public.project_memory_state (
   brief_imported boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+COMMENT ON COLUMN public.project_memory_state.brief_import_checked_at IS 'When one GET claimed a brief import attempt; release clears this after failure unless imported.';
+COMMENT ON COLUMN public.project_memory_state.brief_imported IS 'True only after brief import writes complete; committed imports are never claimed or released again.';
 
 DROP TRIGGER IF EXISTS project_context_sections_touch ON public.project_context_sections;
 CREATE TRIGGER project_context_sections_touch BEFORE UPDATE ON public.project_context_sections
@@ -103,10 +126,11 @@ BEGIN
 END $$;
 
 -- Applies an already-resolved batch (src/lib/projectContext/contextUpdateOps.ts) in one transaction.
+-- Accepts 1–60 already-resolved operations; the wire API remains capped at 1–50 updates.
 -- Caps are re-checked after all ops; any violation raises and rolls the whole batch back.
 CREATE OR REPLACE FUNCTION public.apply_project_context_ops(p_brand text, p_ops jsonb, p_author text, p_actor uuid DEFAULT NULL)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
-DECLARE op jsonb; r jsonb; v_kind text; v_applied integer := 0;
+DECLARE op jsonb; r jsonb; v_kind text; v_applied integer := 0; v_own_host text;
   v_today date := (now() AT TIME ZONE 'UTC')::date;
 BEGIN
   IF p_author IS NULL OR p_author NOT IN ('user','assistant','system') THEN RAISE EXCEPTION 'project_memory_invalid:author'; END IF;
@@ -114,6 +138,8 @@ BEGIN
     RAISE EXCEPTION 'project_memory_invalid:ops'; END IF;
   IF NOT EXISTS (SELECT 1 FROM customer_brands WHERE brand_key = p_brand AND is_active) THEN
     RAISE EXCEPTION 'project_memory_invalid:brand'; END IF;
+  SELECT lower(regexp_replace(website_host, '^www\.', '', 'i')) INTO v_own_host
+    FROM customer_brands WHERE brand_key = p_brand;
   IF p_actor IS NOT NULL AND NOT EXISTS (SELECT 1 FROM customer_brand_memberships WHERE brand_key = p_brand AND user_id = p_actor) THEN
     RAISE EXCEPTION 'project_memory_invalid:actor'; END IF;
   PERFORM pg_advisory_xact_lock(hashtext('f07:memory:' || p_brand));
@@ -132,6 +158,7 @@ BEGIN
     ELSIF v_kind IN ('upsert_competitors','insert_competitors_if_none') THEN
       IF v_kind = 'upsert_competitors' OR NOT EXISTS (SELECT 1 FROM project_competitors WHERE brand_key = p_brand) THEN
         FOR r IN SELECT value FROM jsonb_array_elements(op->'rows') LOOP
+          IF lower(r->>'domain') = v_own_host THEN RAISE EXCEPTION 'project_memory_invalid:own_competitor'; END IF;
           INSERT INTO project_competitors(brand_key, domain, name, notes, source, source_url, updated_by, updated_by_user)
           VALUES (p_brand, r->>'domain', r->>'name', r->>'notes', coalesce(r->>'source','manual'), r->>'source_url', p_author, p_actor)
           ON CONFLICT (brand_key, domain) DO UPDATE SET name = coalesce(excluded.name, project_competitors.name),
@@ -183,7 +210,17 @@ DECLARE v boolean;
 BEGIN
   INSERT INTO project_memory_state(brand_key) VALUES (p_brand) ON CONFLICT DO NOTHING;
   UPDATE project_memory_state SET brief_import_checked_at = now()
-   WHERE brand_key = p_brand AND brief_import_checked_at IS NULL RETURNING true INTO v;
+   WHERE brand_key = p_brand AND brief_import_checked_at IS NULL AND NOT brief_imported RETURNING true INTO v;
+  RETURN coalesce(v, false);
+END $$;
+
+CREATE OR REPLACE FUNCTION public.release_project_brief_import_claim(p_brand text) RETURNS boolean
+LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE v boolean;
+BEGIN
+  UPDATE project_memory_state SET brief_import_checked_at = NULL
+   WHERE brand_key = p_brand AND brief_imported = false AND brief_import_checked_at IS NOT NULL
+   RETURNING true INTO v;
   RETURN coalesce(v, false);
 END $$;
 
@@ -191,14 +228,16 @@ CREATE OR REPLACE FUNCTION public.prune_project_research_log(p_before date, p_li
 RETURNS integer LANGUAGE plpgsql SET search_path = public AS $$
 DECLARE v integer;
 BEGIN
-  WITH old AS (SELECT id FROM project_research_log WHERE entry_date < p_before ORDER BY entry_date LIMIT p_limit)
+  WITH old AS (SELECT id FROM project_research_log WHERE entry_date < p_before ORDER BY entry_date, id LIMIT p_limit)
   DELETE FROM project_research_log l USING old WHERE l.id = old.id;
   GET DIAGNOSTICS v = ROW_COUNT; RETURN v;
 END $$;
 
 REVOKE ALL ON FUNCTION public.apply_project_context_ops(text,jsonb,text,uuid),
-  public.claim_project_brief_import(text), public.prune_project_research_log(date,integer)
+  public.claim_project_brief_import(text), public.release_project_brief_import_claim(text),
+  public.prune_project_research_log(date,integer)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.apply_project_context_ops(text,jsonb,text,uuid),
-  public.claim_project_brief_import(text), public.prune_project_research_log(date,integer) TO service_role;
+  public.claim_project_brief_import(text), public.release_project_brief_import_claim(text),
+  public.prune_project_research_log(date,integer) TO service_role;
 NOTIFY pgrst, 'reload schema';

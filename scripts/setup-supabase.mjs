@@ -67,7 +67,11 @@ const EXPECTED_OBJECTS = {
     { kind: "table", name: "project_memory_state" },
     { kind: "function", name: "apply_project_context_ops" },
     { kind: "function", name: "claim_project_brief_import" },
+    { kind: "function", name: "release_project_brief_import_claim" },
     { kind: "function", name: "prune_project_research_log" },
+    { kind: "index", name: "project_research_log_retention_idx" },
+    { kind: "constraint", name: "project_competitors_no_ipv4" },
+    { kind: "constraint", name: "project_research_log_job_id_fkey" },
   ],
   "040_f01_jobs.sql": [
     { kind: "table", name: "jobs" },

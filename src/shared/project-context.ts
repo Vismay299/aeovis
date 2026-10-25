@@ -3,6 +3,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { z } from "zod";
+import { isSpendFeature, type SpendFeature } from "./spend-features.ts";
 
 export const PROJECT_CONTEXT_SECTION_KEYS = [
   "business_overview",
@@ -51,16 +52,20 @@ export const KEY_PAGE_ROLE_LABELS: Record<KeyPageRole, string> = {
 
 export const CONTEXT_AUTHORS = ["user", "assistant", "system"] as const;
 export type ContextAuthor = (typeof CONTEXT_AUTHORS)[number];
+export const PROJECT_COMPETITOR_SOURCES = ["manual", "setup_research", "assistant", "brief_import"] as const;
+export type ProjectCompetitorSource = (typeof PROJECT_COMPETITOR_SOURCES)[number];
 
 export const MAX_CUSTOM_SECTIONS = 20;
 export const MAX_COMPETITORS = 100;
 export const MAX_KEY_PAGES = 100;
 export const RESEARCH_LOG_RETENTION_DAYS = 90;
 export const RESEARCH_LOG_LIMIT = 20;
+export type ProjectResearchKind = "note" | SpendFeature;
 
 const projectContextSectionKeySchema = z.enum(PROJECT_CONTEXT_SECTION_KEYS);
 const keyPageRoleSchema = z.enum(KEY_PAGE_ROLES);
 const contextAuthorSchema = z.enum(CONTEXT_AUTHORS);
+const competitorSourceSchema = z.enum(PROJECT_COMPETITOR_SOURCES);
 
 export const customSectionSlugSchema = z
   .string()
@@ -70,22 +75,22 @@ export const customSectionSlugSchema = z
 
 const competitorInputSchema = z.object({
   domain: z.string().trim().min(1).max(255),
-  name: z.string().trim().max(120).optional(),
+  name: z.string().trim().min(1).max(120).optional(),
   notes: z.string().trim().max(500).optional(),
 });
 
 const keyPageInputSchema = z.object({
   url: z.string().trim().min(1).max(2048),
   role: keyPageRoleSchema.optional(),
-  topic: z.string().trim().max(200).optional(),
+  topic: z.string().trim().min(1).max(200).optional(),
   notes: z.string().trim().max(500).optional(),
 });
 
 const researchKindSchema = z
   .string()
   .refine(
-    (kind) => kind === "note" || /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/.test(kind),
-    "Use 'note' or a dotted spend-feature name.",
+    (kind): kind is ProjectResearchKind => kind === "note" || isSpendFeature(kind),
+    "Use 'note' or a registered spend-feature name.",
   );
 
 export const projectContextUpdateSchema = z.union([
@@ -145,7 +150,7 @@ export const projectContextSchema = z.looseObject({
       domain: z.string(),
       name: z.string().nullable(),
       notes: z.string().nullable(),
-      source: z.enum(["manual", "setup_research", "assistant", "brief_import"]),
+      source: competitorSourceSchema,
       sourceUrl: z.string().nullable(),
       updatedAt: z.string(),
       updatedBy: contextAuthorSchema,
