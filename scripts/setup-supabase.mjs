@@ -97,6 +97,10 @@ const EXPECTED_OBJECTS = {
     { kind: "bucket", name: "provider-cache" },
   ],
   "043_f01_jobs_cron.sql": [{ kind: "function", name: "jobs_tick_http" }],
+  "165_f26_privacy_and_telemetry_ids.sql": [
+    { kind: "column", name: "customer_brands.telemetry_id" },
+    { kind: "table", name: "user_privacy_choices" },
+  ],
   "035_scoped_provider_rollout.sql": [
     {kind:"function",name:"set_probe_rollout"},
     {kind:"column",name:"probe_dispatch_control.brand_allowlist"},

@@ -198,4 +198,25 @@ DO $$ BEGIN
   THEN RAISE EXCEPTION 'Jobs leaked across tenants, or the system job was visible'; END IF;
 END $$;
 RESET ROLE;
+
+-- F26: each user reads only their own privacy choice; telemetry_id is present.
+do $$
+declare
+  u1 uuid := gen_random_uuid();
+  u2 uuid := gen_random_uuid();
+begin
+  insert into auth.users(id, email, email_confirmed_at)
+  values (u1, 'f26-u1@example.test', now()), (u2, 'f26-u2@example.test', now());
+  insert into public.user_privacy_choices(user_id, analytics, source, policy_version)
+  values (u1, true, 'settings', '2026-10-22'), (u2, false, 'banner', '2026-10-22');
+  perform set_config('request.jwt.claim.sub', u1::text, true);
+  perform set_config('role', 'authenticated', true);
+  if (select count(*) from public.user_privacy_choices) <> 1 then
+    raise exception 'F26 UAT: user must read only own privacy row';
+  end if;
+  if (select count(*) from public.customer_brands where telemetry_id is null) <> 0 then
+    raise exception 'F26 UAT: every brand must have telemetry_id';
+  end if;
+end $$;
+
 ROLLBACK;

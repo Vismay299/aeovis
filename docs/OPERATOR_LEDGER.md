@@ -568,6 +568,13 @@ abandoned is not.
 
 ---
 
+
+### `165_f26_privacy_and_telemetry_ids` (F26 phase 1)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply 165; no backfill needed: the column default fills existing rows.
+- Objects: `customer_brands.telemetry_id` (unique opaque PostHog workspace group key); `user_privacy_choices` (per-user analytics consent, RLS read-own).
+- Safety: never send `brand_key` to PostHog; consent defaults off (no row = undecided = off).
+
 ## D. Content approval — the human gate, and what it does not yet do
 
 The content pipeline is human-in-the-loop by design. `POST /api/content-items/[id]/decision`
