@@ -1,6 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { AppError } from "../http/appError.ts";
-import { enterTelemetryContext } from "../telemetry/context.ts";
 
 export type RequireUserResult = {
   user: { id: string; email: string | null };
@@ -20,7 +19,8 @@ export type RequireUserDeps = {
 
 /**
  * Signed-in user without a workspace requirement (F25/F26 privacy and similar).
- * Enters the telemetry context with brandKey null.
+ * Does not bind AsyncLocalStorage identity — call sites that emit telemetry must
+ * pass explicit `userId` (and `brandKey` when known) to avoid enterWith bleed.
  *
  * Customer SSR client is loaded lazily so unit tests that inject createClient
  * never pull in `next/headers`.
@@ -58,7 +58,6 @@ export async function requireUser(
   }
 
   const user = data.user;
-  enterTelemetryContext({ userId: user.id, brandKey: null });
   return {
     user: { id: user.id, email: user.email ?? null },
     admin,

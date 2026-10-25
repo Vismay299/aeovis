@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { AppError } from "../http/appError.ts";
-import { enterTelemetryContext, runWithTelemetryContext } from "./context.ts";
+import { runWithTelemetryContext } from "./context.ts";
 import { clearConsentCache, clearTelemetryIdCache } from "./privacy.ts";
 import {
   captureServerError,
@@ -257,7 +257,3 @@ test("F26-AC-04 captureServerError never throws when shutdown fails", async () =
   assert.equal(/boom/.test(sent.message), false);
 });
 
-test("enterTelemetryContext is readable", () => {
-  enterTelemetryContext({ userId: "u1", brandKey: "b1" });
-  // fire-and-forget store may be process-local; just ensure no throw
-});

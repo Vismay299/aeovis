@@ -6,12 +6,17 @@ const storage = new AsyncLocalStorage<TelemetryContext>();
 
 const EMPTY: TelemetryContext = { userId: null, brandKey: null };
 
-/** Bind identity for the rest of this async chain (route handlers). */
+/**
+ * Prefer `runWithTelemetryContext` (isolated async scope) or pass explicit
+ * `userId` / `brandKey` into capture calls. `enterWith` mutates the current
+ * async scope and can bleed identity across concurrent work that shares it.
+ * Kept for narrow fallbacks only.
+ */
 export function enterTelemetryContext(ctx: TelemetryContext): void {
   storage.enterWith(ctx);
 }
 
-/** Run fn inside a telemetry context (job runner). */
+/** Run fn inside an isolated telemetry context (preferred for jobs and handlers). */
 export async function runWithTelemetryContext<T>(
   ctx: TelemetryContext,
   fn: () => Promise<T>,

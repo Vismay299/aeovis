@@ -877,6 +877,8 @@ export type ClientEventName = {
 export type ServerEventName = Exclude<EventName, ClientEventName>;
 export type EventProps<N extends EventName> = z.infer<(typeof EVENTS)[N]["props"]>;
 
+/** Privacy-policy version recorded on consent rows. Phase 2 sets this to the
+ *  merge date of the policy section and privacyCopy.test asserts equality. */
 export const POLICY_VERSION = "2026-10-22";
 
 export function validateEventProps(
