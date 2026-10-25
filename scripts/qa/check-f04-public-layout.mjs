@@ -13,6 +13,10 @@ async function loadChromium() {
   return pw.chromium;
 }
 
+/* Per-route cap on captured elements. Exceeding it aborts the capture rather
+   than silently truncating; see the throw in capture(). */
+const CAPTURE_ELEMENT_CAP = 5000;
+
 const VIEWPORTS = [
   { name: "1440", width: 1440, height: 1000 },
   { name: "390", width: 390, height: 844 },
@@ -64,7 +68,7 @@ async function capture(origin, outPath) {
         await page.evaluate(() => document.fonts.ready);
         await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 100))));
 
-        const elements = await page.evaluate(() => {
+        const elements = await page.evaluate((MAX_ELEMENTS) => {
           function getDomPath(el) {
             const stack = [];
             let current = el;
@@ -89,7 +93,6 @@ async function capture(origin, outPath) {
             return stack.join(" > ");
           }
 
-          const MAX_ELEMENTS = 5000;
           const records = [];
           const all = document.querySelectorAll("*");
           let count = 0;
@@ -147,7 +150,7 @@ async function capture(origin, outPath) {
             count++;
           }
           return { records, truncated, total: all.length };
-        });
+        }, CAPTURE_ELEMENT_CAP);
 
         /* Truncation shifts every later element's identity, which would
            surface as thousands of spurious `presence` diffs rather than as
