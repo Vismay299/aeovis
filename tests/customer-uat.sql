@@ -15,12 +15,13 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/024_customer_workspace_ownership.sql
 \ir ../supabase/migrations/025_gsc_customer_oauth.sql
 \ir ../supabase/migrations/026_customer_uat_repairs.sql
--- 023's blanket REVOKE strips authenticated's spend and job grants, so the
--- re-apply finishes with 040, 041 and 043 exactly as the runner's filename order
+-- 023's blanket REVOKE strips authenticated's later grants, so the re-apply
+-- finishes with 040, 041, 043 and 070 exactly as the runner's filename order
 -- does.
 \ir ../supabase/migrations/040_f01_jobs.sql
 \ir ../supabase/migrations/041_f01_spend.sql
 \ir ../supabase/migrations/043_f01_jobs_cron.sql
+\ir ../supabase/migrations/070_f07_project_memory.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -198,4 +199,58 @@ DO $$ BEGIN
   THEN RAISE EXCEPTION 'Jobs leaked across tenants, or the system job was visible'; END IF;
 END $$;
 RESET ROLE;
+-- F07: each tenant's section, competitor, key page and research row is visible
+-- only to that workspace's member. Customers may read these rows but cannot
+-- write to the service-only project memory tables.
+INSERT INTO public.project_context_sections(brand_key,key,content,updated_by,updated_by_user) VALUES
+ ('10000000-0000-0000-0000-000000000001','business_overview','Workspace A memory','user','00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','business_overview','Workspace B memory','user','00000000-0000-0000-0000-000000000002');
+INSERT INTO public.project_competitors(brand_key,domain,updated_by,updated_by_user) VALUES
+ ('10000000-0000-0000-0000-000000000001','competitor-a.example','user','00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','competitor-b.example','user','00000000-0000-0000-0000-000000000002');
+INSERT INTO public.project_key_pages(brand_key,url,updated_by,updated_by_user) VALUES
+ ('10000000-0000-0000-0000-000000000001','https://same.example/a','user','00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','https://same.example/b','user','00000000-0000-0000-0000-000000000002');
+INSERT INTO public.project_research_log(brand_key,summary,created_by,created_by_user) VALUES
+ ('10000000-0000-0000-0000-000000000001','Workspace A research','user','00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','Workspace B research','user','00000000-0000-0000-0000-000000000002');
+INSERT INTO public.project_memory_state(brand_key,brief_imported) VALUES
+ ('10000000-0000-0000-0000-000000000001',false),
+ ('10000000-0000-0000-0000-000000000002',false);
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.project_context_sections) <> 1
+  OR (SELECT count(*) FROM public.project_competitors) <> 1
+  OR (SELECT count(*) FROM public.project_key_pages) <> 1
+  OR (SELECT count(*) FROM public.project_research_log) <> 1
+  OR (SELECT count(*) FROM public.project_memory_state) <> 1
+  THEN RAISE EXCEPTION 'F07 memory leaked across customer workspaces'; END IF;
+ BEGIN
+  INSERT INTO public.project_context_sections(brand_key,key,content,updated_by)
+   VALUES('10000000-0000-0000-0000-000000000001','current_goal','Forbidden direct write','user');
+  RAISE EXCEPTION 'Customer could write project memory directly';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.project_context_sections) <> 1
+  OR (SELECT count(*) FROM public.project_competitors) <> 1
+  OR (SELECT count(*) FROM public.project_key_pages) <> 1
+  OR (SELECT count(*) FROM public.project_research_log) <> 1
+  OR (SELECT count(*) FROM public.project_memory_state) <> 1
+  THEN RAISE EXCEPTION 'F07 memory leaked across customer workspaces'; END IF;
+END $$;
+RESET ROLE;
+SET LOCAL ROLE anon;
+DO $$ BEGIN
+ IF has_table_privilege('anon','public.project_context_sections','SELECT')
+  OR has_table_privilege('anon','public.project_competitors','SELECT')
+  OR has_table_privilege('anon','public.project_key_pages','SELECT')
+  OR has_table_privilege('anon','public.project_research_log','SELECT')
+  OR has_table_privilege('anon','public.project_memory_state','SELECT')
+  THEN RAISE EXCEPTION 'F07 anon has project memory read privileges'; END IF;
+END $$;
+RESET ROLE;
+-- End F07 tenant check.
 ROLLBACK;
