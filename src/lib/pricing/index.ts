@@ -52,6 +52,7 @@ export type {
   AiModelApiEngine,
   AiScheduleInterval,
   LlmResponseModelSlug,
+  PerceevEngine,
 } from "../../shared/ai-visibility-pricing.ts";
 
 export { formatUsd } from "../../shared/money.ts";

@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BUILT_IN_SERP_QUERY_PRICES } from "../llmPricing.js";
+import {
+  BUILT_IN_SERP_QUERY_PRICES,
+  UnpricedModelError,
+} from "../llmPricing.js";
 import { costAccuracy } from "./index.ts";
 import {
   PERCEEV_ENGINE_PROVIDERS,
@@ -42,10 +45,16 @@ test("prices a completion from the per-million-token table", () => {
 
 test("prices a tool from the per-call fee table", () => {
   const usd = toolFeeUsd("gpt-4o-mini", "web_search", 2, ENV);
-  assert.ok(usd !== null);
   assert.ok(Math.abs(usd - 0.02) < 1e-10);
-  assert.equal(toolFeeUsd("gpt-4o-mini", "no_such_tool", 2, ENV), null);
-  assert.equal(toolFeeUsd("unpriced-model", "web_search", 2, ENV), null);
+  // resolveToolFee refuses an unpriced pair; dropping a billed fee is not an option.
+  assert.throws(
+    () => toolFeeUsd("gpt-4o-mini", "no_such_tool", 2, ENV),
+    UnpricedModelError,
+  );
+  assert.throws(
+    () => toolFeeUsd("unpriced-model", "web_search", 2, ENV),
+    UnpricedModelError,
+  );
 });
 
 test("names the gateway that served an attempt", () => {

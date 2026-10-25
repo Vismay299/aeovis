@@ -6,17 +6,23 @@
 // Shared code cannot import src/lib/, so the four-row LLM response table lives here and
 // src/lib/pricing/dataforseo.ts re-exports its `llmResponseUsd`.
 
+// `claude` stays in this union only because the ported DataForSEO price table and
+// `llmResponseUsd` know that slug. Claude is not a Perceev engine (owner decision,
+// 25 October 2026): it has no label, picker entry, route or event.
 export type AiEngine =
   | "chatgpt"
   | "gemini"
   | "google_ai_overview"
   | "claude"
   | "perplexity";
-export const AI_ENGINE_LABELS: Record<AiEngine, string> = {
+
+/** The engines Perceev can actually collect an answer from. */
+export type PerceevEngine = Exclude<AiEngine, "claude">;
+
+export const AI_ENGINE_LABELS: Record<PerceevEngine, string> = {
   chatgpt: "ChatGPT",
   gemini: "Gemini",
   google_ai_overview: "Google AI Overviews",
-  claude: "Claude",
   perplexity: "Perplexity",
 };
 /**

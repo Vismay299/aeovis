@@ -1,15 +1,14 @@
 import {
   lookupModelPrice,
-  lookupToolFee,
   resolveSerpQueryCost,
+  resolveToolFee,
 } from "../llmPricing.js";
 
 /**
  * Adapters over src/lib/llmPricing.js: the token, tool-fee and per-query SERP
  * tables already live there, so nothing here restates a price. An unpriced
- * model, tool or SERP provider returns null (or throws, for a SERP query) as
- * llmPricing.js decides, so a caller always sees that the cost is unknown
- * instead of inheriting a fabricated zero.
+ * model returns null; an unpriced tool or SERP provider throws, as
+ * llmPricing.js decides, so a caller never inherits a fabricated zero.
  */
 
 export type SerpPriceProvider = "brightdata" | "serpapi";
@@ -46,17 +45,24 @@ export function modelCallUsd(
   return (inTok / 1e6) * price.input + (outTok / 1e6) * price.output;
 }
 
-/** Raw USD for `calls` invocations of a built-in provider tool, or null. */
+/**
+ * Raw USD for `calls` invocations of a built-in provider tool. Delegates to
+ * `resolveToolFee`, which owns the per-call table and the multiplication, and
+ * throws for an unpriced pair rather than dropping a billed fee.
+ */
 export function toolFeeUsd(
   model: string,
   tool: string,
   calls: number,
   env: PriceEnv = process.env,
-): number | null {
-  const fee = lookupToolFee(model, tool, priceEnv(env)) as {
-    usd: number;
-  } | null;
-  return fee ? fee.usd * calls : null;
+): number {
+  return resolveToolFee({
+    model,
+    tool,
+    provider: "openrouter",
+    calls,
+    env: priceEnv(env),
+  }).cost;
 }
 
 /** The gateway each answer engine's probe calls by default. */

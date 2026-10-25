@@ -71,14 +71,15 @@ test("prices Claude and Perplexity at model API rates on every run", () => {
   }
 });
 
-test("labels every engine", () => {
+test("labels the four Perceev engines and no others", () => {
   assert.deepEqual(AI_ENGINE_LABELS, {
     chatgpt: "ChatGPT",
     gemini: "Gemini",
     google_ai_overview: "Google AI Overviews",
-    claude: "Claude",
     perplexity: "Perplexity",
   });
+  // Claude is a ported price-table slug, not an engine: no label (owner decision, 25 Oct 2026).
+  assert.equal("claude" in AI_ENGINE_LABELS, false);
 });
 
 test("counts one check per scheduled run", () => {
