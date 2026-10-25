@@ -137,19 +137,16 @@ test("prices a queued task_post batch the way the rank check estimate does", () 
     tasks: keywords.map((keyword) => ({ keyword })),
     depth: 20,
   });
-  const perPassUsd = keywords.reduce(
-    (sum, keyword) =>
-      sum +
-      costPerSerpAtDepth(20, "queued") * serpKeywordCostMultiplier(keyword),
-    0,
-  );
 
-  near(estimateUsd, perPassUsd);
-  // The rank check estimate F15 owns is the worst case: this post plus two
-  // queued retries.
-  near(3 * estimateUsd, 3 * perPassUsd);
-  // Every tenth keyword of the 100 carries an operator: 10 at 5x, 90 at 1x.
-  near(estimateUsd, (90 + 10 * 5) * costPerSerpAtDepth(20, "queued"));
+  // Every tenth keyword of the 100 carries an operator: 10 at 5x, 90 at 1x,
+  // i.e. 140 billed units at the queued depth-20 price of 0.0006 + 0.00045.
+  near(estimateUsd, (90 + 10 * 5) * 0.00105);
+  near(estimateUsd, 0.147);
+  // A second depth separates the queued base from the per-page price.
+  near(costPerSerpAtDepth(30, "queued"), 0.0015);
+  // Three queued passes — the rank check worst case, one post plus two
+  // retries — is 3 × 0.147.
+  near(3 * estimateUsd, 0.441);
 });
 
 test("prices a live operator rank check the way the rank check estimate does", () => {
@@ -159,12 +156,9 @@ test("prices a live operator rank check the way the rank check estimate does", (
     tasks: [{ keyword }],
     depth: 20,
   });
-  // The estimate is the worst case: the live call plus two queued retries.
-  near(
-    liveUsd + 2 * retryUsd,
-    serpKeywordCostMultiplier(keyword) *
-      (costPerSerpAtDepth(20, "live") + 2 * costPerSerpAtDepth(20, "queued")),
-  );
+  // The worst case is the live call plus two queued retries:
+  // 0.0175 + 2 × 0.00525.
+  near(liveUsd + 2 * retryUsd, 0.028);
 });
 
 test("clamps SERP depth to DataForSEO's 10-100 page range", () => {
@@ -189,6 +183,10 @@ test("prices the flat and default-shaped endpoints", () => {
   );
   near(dataforseoPricing.backlinks.summary({}), 0.024 + 0.000036);
   near(dataforseoPricing.business.myBusinessInfo({}), 0.0054);
+  near(dataforseoPricing.business.businessListings({ limit: 100 }), 0.048);
+  near(dataforseoPricing.business.businessListings({ limit: 200 }), 0.084);
+  near(dataforseoPricing.business.updatesTaskPost({ depth: 20 }), 0.006);
+  near(dataforseoPricing.business.updatesTaskPost({ depth: 30 }), 0.0075);
   near(dataforseoPricing.domain.rankOverview({}), 0.012 + 0.00012);
   near(dataforseoPricing.keywords.adsIdeas({}), 0.09);
   near(dataforseoPricing.keywords.adsSearchVolume({}), 0.09);
