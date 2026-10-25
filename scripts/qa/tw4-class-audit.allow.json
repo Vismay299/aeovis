@@ -1,0 +1,72 @@
+[
+  {
+    "file": "src/components/dashboard/ContentLiftPanel.jsx",
+    "token": "space-y-8",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/ContentLiftPanel.jsx",
+    "token": "rounded-sm",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/ContentLiftPanel.jsx",
+    "token": "space-y-6",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/ContentLiftPanel.jsx",
+    "token": "space-y-4",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/ContentLiftPanel.jsx",
+    "token": "outline-none",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/ContentLiftPanel.jsx",
+    "token": "space-y-1",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/IntentBreakdown.jsx",
+    "token": "rounded-sm",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/OpportunitiesPanel.jsx",
+    "token": "rounded-sm",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/TopPromptsTable.jsx",
+    "token": "rounded-sm",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/TopPromptsTable.jsx",
+    "token": "shadow-sm",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/TopPromptsTable.jsx",
+    "token": "outline-none",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/TopicBreakdown.jsx",
+    "token": "rounded-sm",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/TopicBreakdown.jsx",
+    "token": "space-y-4",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  },
+  {
+    "file": "src/components/dashboard/TopicBreakdown.jsx",
+    "token": "space-y-1.5",
+    "reason": "Legacy dashboard class permitted under Tailwind 4"
+  }
+]
