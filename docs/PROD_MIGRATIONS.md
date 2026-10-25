@@ -1570,7 +1570,8 @@ Migration 070 adds the five workspace-scoped tables `project_context_sections`,
 `project_competitors`, `project_key_pages`, `project_research_log` and
 `project_memory_state`. Customer roles receive read-only access through the
 workspace membership policy; all writes go through the service-only functions
-`apply_project_context_ops`, `claim_project_brief_import` and
+`apply_project_context_ops`, `claim_project_brief_import`, `release_project_brief_import_claim` and
 `prune_project_research_log`. Apply it before deploying F07. The database
 contract is exercised by `scripts/qa/check-f07-db.mjs` on loopback QA PostgreSQL
 and tenant reads are checked by `tests/customer-uat.sql`.
+The migration also adds the global (entry_date, id) retention index, a re-applied table check that rejects canonical dotted-decimal IPv4 and URL-parser numeric shorthand, octal and hexadecimal forms, and an own-host RPC guard for competitors. Reapplying 070 replaces the earlier dotted-decimal-only constraint definition. Research log entries receive a jobs(id) ON DELETE SET NULL foreign key and column comment.

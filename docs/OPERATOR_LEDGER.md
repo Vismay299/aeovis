@@ -341,7 +341,7 @@ a build that calls `metered()`. Until it is applied, `reserveSpend()` fails
 closed with `503 spend_unavailable`, so a missing 041 pauses paid work instead
 of spending uncapped.
 
-`070_f07_project_memory` is additive and must be applied before deploying F07.
+`070_f07_project_memory` is additive and must be applied before deploying F07. It adds the global research-retention index, canonical and URL-parser numeric IPv4 plus own-host competitor guards, the job_id SET NULL foreign key, and service-only brief claim/release RPCs.
 It creates the workspace-scoped project memory tables and service-only write
 functions; its tenant isolation is verified by `tests/customer-uat.sql` and
 `scripts/qa/check-f07-db.mjs` against disposable loopback PostgreSQL.
