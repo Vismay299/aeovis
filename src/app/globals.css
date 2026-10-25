@@ -1,3 +1,7 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@config "../../tailwind.config.js";
+
 /* Perceev's shared light design system. DESIGN.md governs visual direction.
    Tokens live here; primitives.css owns shared controls and surfaces.
    Compatibility aliases are retained only for live legacy report components. */
@@ -27,10 +31,6 @@
   font-style: normal;
   font-display: swap;
 }
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════
    TOKENS · light is the base palette
@@ -1072,3 +1072,10 @@ mark.lit-rival { background: var(--sunken); color: var(--ink-2); font-weight: 60
     @apply border-border;
   }
 }
+
+@layer base {
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
