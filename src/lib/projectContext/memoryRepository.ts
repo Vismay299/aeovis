@@ -8,6 +8,7 @@ import {
   type ContextAuthor,
 } from "../../shared/project-context.ts";
 import type { ResolvedOp } from "./contextUpdateOps.ts";
+import { brandBriefCandidates } from "./repository.ts";
 import type {
   CompetitorRow,
   KeyPageRow,
@@ -273,9 +274,13 @@ export function createMemoryProjectContextRepository(seed: MemoryRepositorySeed 
       briefImported.add(brandKey);
     },
 
-    async getBrandBrief(brandKey) {
-      const brief = brandBriefs.get(brandKey);
-      return brief ? { ...brief } : null;
+    async getBrandBrief(brand) {
+      // Same exact-match fallback order as the SQL-backed repository.
+      for (const candidate of brandBriefCandidates(brand)) {
+        const brief = brandBriefs.get(candidate);
+        if (brief) return { ...brief };
+      }
+      return null;
     },
   };
 

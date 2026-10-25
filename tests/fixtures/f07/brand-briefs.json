@@ -1,0 +1,37 @@
+{
+  "_notes": [
+    "F07 §9 fixtures. All synthetic; no provider payloads.",
+    "The seeded healthcare preset is NOT copied here: briefImport.test.ts builds it from",
+    "src/lib/content/briefs/healthcareCxo.js so the two cannot drift apart.",
+    "brand_key below is a placeholder workspace; tests pass their own key."
+  ],
+  "brand_key": "offcult.in",
+  "generic_preset": {
+    "one_liner": "offcult.in",
+    "website": "",
+    "tone_rules": [
+      "Use clear, factual language.",
+      "Do not invent product claims, prices, certifications or customer results."
+    ]
+  },
+  "generic_preset_with_display_name": {
+    "one_liner": "Offcult",
+    "website": "https://offcult.in/",
+    "tone_rules": [
+      "Use clear, factual language.",
+      "Do not invent product claims, prices, certifications or customer results."
+    ]
+  },
+  "edited_offcult": {
+    "one_liner": "Oversized and heavyweight T-shirts with anime graphics, sold online across India.",
+    "personas": ["18-30 year old anime fans", "Streetwear collectors"],
+    "priority_topics": ["Oversized tees", "Anime drops"],
+    "money_pages": [
+      "https://www.offcult.in/collections/oversized-tees#top",
+      "offcult.in/collections/anime-drop",
+      "not a url"
+    ],
+    "competitors": ["Bewakoof", "thesouledstore.com", "https://www.offcult.in/"],
+    "tone_rules": ["Casual and direct.", "Never say 'premium quality'."]
+  }
+}
