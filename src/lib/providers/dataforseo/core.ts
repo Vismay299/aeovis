@@ -63,26 +63,62 @@ function failure(
   method: "GET" | "POST",
   status: number,
 ): Error {
+  const details = { providerCode: `dataforseo_http_${status}` };
   if (status === 401) {
-    return new UnbilledCallError("DataForSEO authentication failed.");
+    return new UnbilledCallError("DataForSEO authentication failed.", {
+      status: 502,
+      code: "dataforseo_auth_failed",
+      details,
+    });
   }
   if (status === 402) {
-    return new UnbilledCallError("The DataForSEO account has a billing or balance issue.");
+    return new UnbilledCallError("The DataForSEO account has a billing or balance issue.", {
+      status: 402,
+      code: "dataforseo_balance",
+      details,
+    });
   }
   if (status === 429) {
-    return new UnbilledCallError("DataForSEO rate limit reached.");
+    return new UnbilledCallError("DataForSEO rate limit reached.", {
+      status: 429,
+      code: "dataforseo_rate_limited",
+      details,
+    });
   }
   if (status >= 500) {
     if (method === "POST") {
-      return new AmbiguousCallError("DataForSEO may have billed this request.");
+      return new AmbiguousCallError("DataForSEO may have billed this request.", {
+        status: 503,
+        code: "dataforseo_unavailable",
+        details,
+      });
     }
     return new AppError(
       503,
       "dataforseo_unavailable",
       "DataForSEO is temporarily unavailable.",
+      { details },
     );
   }
+  if (status === 400 || status === 403 || status === 404) {
+    return new UnbilledCallError("DataForSEO refused the request.", {
+      status: 502,
+      code: "dataforseo_request_refused",
+      details,
+    });
+  }
   return new UnbilledCallError("DataForSEO refused the request.");
+}
+
+export function withUnbilledCallMetadata(
+  _error: Error,
+  metadata: { status: number; code: string; details?: Record<string, unknown> },
+): Error {
+  return new UnbilledCallError("The DataForSEO account has a billing or balance issue.", {
+    status: metadata.status,
+    code: metadata.code,
+    details: metadata.details,
+  });
 }
 
 async function readBody(response: Response): Promise<string> {
@@ -141,7 +177,9 @@ async function request<T extends DataforseoTaskLike>(
           timedOut
             ? "DataForSEO request timed out after dispatch."
             : "DataForSEO request outcome is unknown after dispatch.",
-          { cause },
+          timedOut
+            ? { cause, status: 504, code: "dataforseo_timeout" }
+            : { cause },
         );
       }
       throw new AppError(
@@ -194,7 +232,11 @@ async function request<T extends DataforseoTaskLike>(
     const body = await readBody(response);
     const classified = options.classify?.(response.status, body, endpoint);
     if (classified) {
-      throw classified;
+      throw withUnbilledCallMetadata(classified, {
+        status: 402,
+        code: "dataforseo_balance",
+        details: { providerCode: `dataforseo_http_${response.status}` },
+      });
     }
     throw failure(method, response.status);
   }

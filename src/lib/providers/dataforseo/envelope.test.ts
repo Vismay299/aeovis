@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDataforseoBillingClassifier } from "./billingClassification.ts";
+import { toErrorResponse } from "../../http/errors.ts";
 import { z } from "zod";
 import {
   assertOk,
@@ -19,6 +20,31 @@ import {
 } from "../../spend/errors.ts";
 
 const itemSchema = z.looseObject({ keyword: z.string().optional() });
+
+function captureError(run: () => unknown): unknown {
+  try {
+    run();
+  } catch (error) {
+    return error;
+  }
+  assert.fail("expected assertOk to throw");
+}
+
+async function assertErrorResponse(
+  error: unknown,
+  expected: { status: number; code: string; details?: Record<string, unknown> },
+): Promise<void> {
+  const response = toErrorResponse(error);
+  assert.equal(response.status, expected.status);
+  const body = await response.json() as Record<string, unknown>;
+  assert.equal(body.code, expected.code);
+  assert.equal(typeof body.error, "string");
+  if (expected.details === undefined) {
+    assert.equal("details" in body, false);
+  } else {
+    assert.deepEqual(body.details, expected.details);
+  }
+}
 
 test("parseTaskItems returns [] when the task has no item array", () => {
   assert.deepEqual(parseTaskItems("x", { result: [{ items: null }] }, itemSchema), []);
@@ -62,7 +88,7 @@ test("billing classifier runs before charged task classification", () => {
     assert.equal(status, 40200);
     assert.equal(details, "Account balance is too low");
     assert.equal(path, "/v3/ai_optimization/chat_gpt/llm_responses/live");
-    return new UnbilledCallError("Balance issue");
+    return new UnbilledCallError("UPSTREAM_SENTINEL " + details);
   };
   assert.throws(
     () =>
@@ -78,7 +104,7 @@ test("billing classifier runs before charged task classification", () => {
         },
         { classify, classifyPath: "/v3/ai_optimization/chat_gpt/llm_responses/live" },
       ),
-    (error: unknown) => error instanceof UnbilledCallError && error.message === "Balance issue",
+    (error: unknown) => error instanceof UnbilledCallError && error.message === "The DataForSEO account has a billing or balance issue.",
   );
   assert.equal(calls, 1);
 });
@@ -175,16 +201,16 @@ test("?6.2.2 task rows classify by billing metadata and invalid-field state", ()
         status_code: 20000,
         tasks: [{ status_code, status_message: "Provider billing failure", path, cost: 0.05 }],
       }, { classify, classifyPath: endpoint }),
-      (error: unknown) => error instanceof UnbilledCallError && error.message === "DataForSEO balance issue",
+      (error: unknown) => error instanceof UnbilledCallError && error.message === "The DataForSEO account has a billing or balance issue.",
     );
   }
   assert.throws(
     () => assertOk({ status_code: 40200, status_message: "Account balance too low" }, { classify, classifyPath: endpoint }),
-    (error: unknown) => error instanceof UnbilledCallError && error.message === "DataForSEO balance issue",
+    (error: unknown) => error instanceof UnbilledCallError && error.message === "The DataForSEO account has a billing or balance issue.",
   );
   assert.throws(
     () => assertOk({ status_code: 40000, status_message: "Payment required" }, { classify, classifyPath: endpoint }),
-    (error: unknown) => error instanceof UnbilledCallError && error.message === "DataForSEO balance issue",
+    (error: unknown) => error instanceof UnbilledCallError && error.message === "The DataForSEO account has a billing or balance issue.",
   );
 
   const taskRows: Array<{ task: Record<string, unknown>; matches: (error: unknown) => boolean }> = [
@@ -217,15 +243,132 @@ test("?6.2.2 task rows classify by billing metadata and invalid-field state", ()
   );
 });
 
-test("F01 call-outcome errors lack the ?6.2.2 status/code/details contract", () => {
-  const errors = [
-    new UnbilledCallError("unbilled"),
-    new AmbiguousCallError("ambiguous"),
-    new ChargedCallError("charged", { actualUsd: 0.05, provider: "dataforseo", endpoint: "/v3/example" }),
-  ];
-  for (const error of errors) {
-    assert.equal("status" in error, false);
-    assert.equal("code" in error, false);
-    assert.equal("details" in error, false);
+test("§6.2.2 top-level status and billing-classifier errors serialize safe metadata", async () => {
+  const path = "/v3/ai_optimization/chat_gpt/llm_responses/live";
+  const classify = createDataforseoBillingClassifier({
+    pathPrefix: "/v3/ai_optimization",
+    billingIssueCode: "dataforseo_balance",
+    billingIssueMessage: "DataForSEO balance issue",
+  });
+
+  for (const status_code of [40200, 40210]) {
+    const error = captureError(() => assertOk({
+      status_code,
+      status_message: "UPSTREAM_SENTINEL billing account details",
+    }, { classify, classifyPath: path }));
+    assert.ok(error instanceof UnbilledCallError);
+    assert.equal(error.message, "The DataForSEO account has a billing or balance issue.");
+    assert.equal(error.message.includes("UPSTREAM_SENTINEL"), false);
+    await assertErrorResponse(error, {
+      status: 402,
+      code: "dataforseo_balance",
+      details: { providerCode: `dataforseo_${status_code}` },
+    });
+    assert.equal((await toErrorResponse(error).text()).includes("UPSTREAM_SENTINEL"), false);
   }
+
+  const billingWords = captureError(() => assertOk({
+    status_code: 40000,
+    status_message: "UPSTREAM_SENTINEL Payment required for this account",
+  }, { classify, classifyPath: path }));
+  assert.ok(billingWords instanceof UnbilledCallError);
+  await assertErrorResponse(billingWords, {
+    status: 402,
+    code: "dataforseo_balance",
+    details: { providerCode: "dataforseo_40000" },
+  });
+  assert.equal((await toErrorResponse(billingWords).text()).includes("UPSTREAM_SENTINEL"), false);
+
+  const requestFailure = captureError(() => assertOk({
+    status_code: 50000,
+    status_message: "UPSTREAM_SENTINEL internal response",
+  }));
+  assert.ok(requestFailure instanceof UnbilledCallError);
+  await assertErrorResponse(requestFailure, {
+    status: 502,
+    code: "dataforseo_request_failed",
+    details: { statusCode: 50000, providerCode: "dataforseo_50000" },
+  });
+  assert.equal((await toErrorResponse(requestFailure).text()).includes("UPSTREAM_SENTINEL"), false);
+});
+
+test("§6.2.2 task status × cost outcomes keep AppError mapping and never serialize upstream text", async () => {
+  const path = ["v3", "ai_optimization", "chat_gpt", "llm_responses", "live"];
+  const endpoint = "/" + path.join("/");
+  const classify = createDataforseoBillingClassifier({
+    pathPrefix: "/v3/ai_optimization",
+    billingIssueCode: "dataforseo_balance",
+    billingIssueMessage: "DataForSEO balance issue",
+  });
+  const rows: Array<{
+    task: Record<string, unknown>;
+    classify?: boolean;
+    verify: (error: unknown) => void;
+    response: { status: number; code: string; details?: Record<string, unknown> };
+  }> = [
+    {
+      task: { status_code: 40101, status_message: "UPSTREAM_SENTINEL backend failure", path, cost: 0.05 },
+      verify: (error) => {
+        assert.ok(error instanceof ChargedCallError);
+        assert.equal(error.actualUsd, 0.05);
+        assert.equal(error.status, 502);
+        assert.equal(error.code, "dataforseo_task_failed");
+        assert.equal(error.message.includes("UPSTREAM_SENTINEL"), false);
+      },
+      response: { status: 502, code: "dataforseo_task_failed", details: { upstream: true, providerCode: "dataforseo_40101" } },
+    },
+    {
+      task: { status_code: 40000, status_message: "UPSTREAM_SENTINEL failed", path, cost: 0 },
+      verify: (error) => {
+        assert.ok(error instanceof ChargedCallError);
+        assert.equal(error.actualUsd, 0);
+        assert.equal(error.status, 502);
+        assert.equal(error.code, "dataforseo_task_failed");
+      },
+      response: { status: 502, code: "dataforseo_task_failed", details: { upstream: false, providerCode: "dataforseo_40000" } },
+    },
+    {
+      task: { status_code: 40501, status_message: "Invalid Field: 'model_name'. UPSTREAM_SENTINEL", path, cost: 0 },
+      verify: (error) => {
+        assert.ok(error instanceof UnbilledCallError);
+        assert.equal(error.status, 422);
+        assert.equal(error.code, "dataforseo_invalid_field");
+        assert.equal(error.message.includes("UPSTREAM_SENTINEL"), false);
+      },
+      response: { status: 422, code: "dataforseo_invalid_field", details: { field: "model_name", providerCode: "dataforseo_40501" } },
+    },
+    {
+      task: { status_code: 40000, status_message: "UPSTREAM_SENTINEL outcome unknown" },
+      verify: (error) => {
+        assert.ok(error instanceof AmbiguousCallError);
+        assert.equal(error.status, 502);
+        assert.equal(error.code, "dataforseo_task_failed");
+      },
+      response: { status: 502, code: "dataforseo_task_failed", details: { providerCode: "dataforseo_40000" } },
+    },
+    {
+      task: { status_code: 40210, status_message: "UPSTREAM_SENTINEL billing failure", path, cost: 0.05 },
+      classify: true,
+      verify: (error) => {
+        assert.ok(error instanceof UnbilledCallError);
+        assert.equal(error.message, "The DataForSEO account has a billing or balance issue.");
+        assert.equal(error.status, 402);
+        assert.equal(error.code, "dataforseo_balance");
+      },
+      response: { status: 402, code: "dataforseo_balance", details: { providerCode: "dataforseo_40210" } },
+    },
+  ];
+
+  for (const row of rows) {
+    const error = captureError(() => assertOk({
+      status_code: 20000,
+      tasks: [row.task],
+    }, row.classify ? { classify, classifyPath: endpoint } : {}));
+    row.verify(error);
+    await assertErrorResponse(error, row.response);
+    assert.equal((await toErrorResponse(error).text()).includes("UPSTREAM_SENTINEL"), false);
+  }
+
+  const noResults = { status_code: 40501, status_message: "No Search Results", path, cost: 0 };
+  assert.equal(assertOk({ status_code: 20000, tasks: [noResults] }, { treatNoResultsAsEmpty: true }), noResults);
 });

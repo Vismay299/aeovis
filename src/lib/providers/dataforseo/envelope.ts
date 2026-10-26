@@ -122,12 +122,35 @@ function pathFor(task: DataforseoTaskLike, fallback?: string): string {
 }
 
 function invalidFieldMessage(message: string): string {
-  const field = invalidFieldName(message);
-  return field ? "DataForSEO rejected the request field " + field + "." : message;
+  return invalidFieldName(message)
+    ? "DataForSEO rejected an invalid request field."
+    : "DataForSEO task failed.";
 }
 
-function assertErrorClassified(error: Error): never {
-  throw error;
+function providerCode(statusCode: number | undefined): string | undefined {
+  return statusCode === undefined ? undefined : `dataforseo_${statusCode}`;
+}
+
+function callDetails(
+  statusCode: number | undefined,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const value: Record<string, unknown> = {
+    ...(extra ?? {}),
+    ...(providerCode(statusCode) ? { providerCode: providerCode(statusCode) } : {}),
+  };
+  for (const [key, item] of Object.entries(value)) {
+    if (item === undefined) delete value[key];
+  }
+  return Object.keys(value).length > 0 ? value : undefined;
+}
+
+function throwBalance(statusCode: number | undefined): never {
+  throw new UnbilledCallError("The DataForSEO account has a billing or balance issue.", {
+    status: 402,
+    code: "dataforseo_balance",
+    details: callDetails(statusCode),
+  });
 }
 
 export function assertOk<T extends DataforseoTaskLike>(
@@ -144,14 +167,22 @@ export function assertOk<T extends DataforseoTaskLike>(
 
   const classifyPath = options.classifyPath ?? "";
   if (response.status_code !== 20000) {
+    const statusCode = response.status_code;
     const message = response.status_message || "DataForSEO request failed.";
     const classified = options.classify?.(
-      response.status_code,
+      statusCode,
       message,
       classifyPath,
     );
-    if (classified) assertErrorClassified(classified);
-    throw new UnbilledCallError(message);
+    if (statusCode === 40200 || statusCode === 40210 || classified) {
+      throwBalance(statusCode);
+    }
+    const details = callDetails(statusCode, { statusCode });
+    throw new UnbilledCallError("DataForSEO request failed.", {
+      status: 502,
+      code: "dataforseo_request_failed",
+      details,
+    });
   }
 
   const task = response.tasks?.[0];
@@ -166,24 +197,41 @@ export function assertOk<T extends DataforseoTaskLike>(
   if (task.status_code !== (options.okTaskStatusCode ?? 20000)) {
     if (options.treatNoResultsAsEmpty && isNoResultsTask(task)) return task;
 
+    const statusCode = task.status_code;
     const message = task.status_message || "DataForSEO task failed.";
     const path = pathFor(task, options.classifyPath);
-    const classified = options.classify?.(task.status_code, message, path);
-    if (classified) assertErrorClassified(classified);
+    const classified = options.classify?.(statusCode, message, path);
+    if (statusCode === 40200 || statusCode === 40210 || classified) {
+      throwBalance(statusCode);
+    }
 
     const field = invalidFieldName(message);
     const billing = billingSchema.safeParse(task);
+    const details = callDetails(statusCode);
     if (field && billing.success && billing.data.cost === 0) {
-      throw new UnbilledCallError(invalidFieldMessage(message));
+      throw new UnbilledCallError(invalidFieldMessage(message), {
+        status: 422,
+        code: "dataforseo_invalid_field",
+        details: callDetails(statusCode, { field }),
+      });
     }
     if (billing.success) {
-      throw new ChargedCallError(invalidFieldMessage(message), {
+      throw new ChargedCallError("DataForSEO task failed.", {
         actualUsd: billing.data.cost,
         provider: "dataforseo",
         endpoint: dataforseoEndpoint(billing.data.path),
+        status: 502,
+        code: "dataforseo_task_failed",
+        details: callDetails(statusCode, {
+          upstream: isUpstreamFailureStatus(statusCode),
+        }),
       });
     }
-    throw new AmbiguousCallError(invalidFieldMessage(message));
+    throw new AmbiguousCallError("DataForSEO task failed.", {
+      status: 502,
+      code: "dataforseo_task_failed",
+      details,
+    });
   }
 
   return task;

@@ -27,7 +27,16 @@ export function createDataforseoBillingClassifier(config: {
     const text = details.toLowerCase();
     const billingStatus = status != null && BILLING_STATUS_CODES.has(status);
     if (billingStatus || BILLING_SIGNALS.some((signal) => text.includes(signal))) {
-      return new UnbilledCallError(config.billingIssueMessage);
+      const providerCode = status === undefined
+        ? undefined
+        : status === 402
+        ? "dataforseo_http_402"
+        : `dataforseo_${status}`;
+      return new UnbilledCallError(config.billingIssueMessage, {
+        status: 402,
+        code: config.billingIssueCode,
+        details: providerCode ? { providerCode } : undefined,
+      });
     }
     return null;
   };
