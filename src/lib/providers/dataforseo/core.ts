@@ -51,12 +51,22 @@ function apiKeyFrom(env: Record<string, string | undefined>): string {
   return value;
 }
 
+// AbortSignal.timeout() is unref'd, so a hung request would not keep the
+// process alive and the timeout would never fire in a short-lived script.
 function requestSignal(
   timeoutMs: number,
   callerSignal?: AbortSignal,
-): AbortSignal {
-  const timeout = AbortSignal.timeout(timeoutMs);
-  return callerSignal ? AbortSignal.any([timeout, callerSignal]) : timeout;
+): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    const reason = new Error("The operation timed out.");
+    reason.name = "TimeoutError";
+    controller.abort(reason);
+  }, timeoutMs);
+  const signal = callerSignal
+    ? AbortSignal.any([controller.signal, callerSignal])
+    : controller.signal;
+  return { signal, clear: () => clearTimeout(timer) };
 }
 
 function failure(
@@ -153,92 +163,96 @@ async function request<T extends DataforseoTaskLike>(
     MAX_TIMEOUT_MS,
     Math.max(1, Math.floor(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)),
   );
-  const signal = requestSignal(timeoutMs, options.signal);
+  const { signal, clear } = requestSignal(timeoutMs, options.signal);
   const headers = new Headers({ Accept: "application/json" });
   headers.set("Authorization", "Basic " + apiKey);
   if (method === "POST") headers.set("Content-Type", "application/json");
 
-  let attempt = 0;
-  while (true) {
-    let response: Response;
-    try {
-      response = await fetchImpl(baseUrl + endpoint, {
-        method,
-        headers,
-        signal,
-        ...(method === "POST" ? { body: JSON.stringify(tasks ?? []) } : {}),
-      });
-    } catch (cause) {
-      const timedOut =
-        cause instanceof Error &&
-        (cause.name === "TimeoutError" || cause.name === "AbortError");
-      if (method === "POST") {
-        throw new AmbiguousCallError(
-          timedOut
-            ? "DataForSEO request timed out after dispatch."
-            : "DataForSEO request outcome is unknown after dispatch.",
-          timedOut
-            ? { cause, status: 504, code: "dataforseo_timeout" }
-            : { cause },
-        );
-      }
-      throw new AppError(
-        503,
-        "dataforseo_unavailable",
-        "DataForSEO could not complete the free request.",
-        { cause },
-      )
-    }
-
-    if (response.ok) {
-      let text: string;
+  try {
+    let attempt = 0;
+    while (true) {
+      let response: Response;
       try {
-        text = await response.text();
+        response = await fetchImpl(baseUrl + endpoint, {
+          method,
+          headers,
+          signal,
+          ...(method === "POST" ? { body: JSON.stringify(tasks ?? []) } : {}),
+        });
       } catch (cause) {
+        const timedOut =
+          cause instanceof Error &&
+          (cause.name === "TimeoutError" || cause.name === "AbortError");
         if (method === "POST") {
-          throw new AmbiguousCallError("DataForSEO response could not be read after dispatch.", { cause });
+          throw new AmbiguousCallError(
+            timedOut
+              ? "DataForSEO request timed out after dispatch."
+              : "DataForSEO request outcome is unknown after dispatch.",
+            timedOut
+              ? { cause, status: 504, code: "dataforseo_timeout" }
+              : { cause },
+          );
         }
         throw new AppError(
-          502,
-          "dataforseo_bad_response",
-          "DataForSEO returned an unreadable response.",
+          503,
+          "dataforseo_unavailable",
+          "DataForSEO could not complete the free request.",
           { cause },
-        );
+        )
       }
-      if (text.length === 0) return null;
-      try {
-        return JSON.parse(text) as DataforseoResponseLike<T>;
-      } catch (cause) {
-        if (method === "POST") {
-          throw new AmbiguousCallError("DataForSEO returned invalid JSON after dispatch.", { cause });
+
+      if (response.ok) {
+        let text: string;
+        try {
+          text = await response.text();
+        } catch (cause) {
+          if (method === "POST") {
+            throw new AmbiguousCallError("DataForSEO response could not be read after dispatch.", { cause });
+          }
+          throw new AppError(
+            502,
+            "dataforseo_bad_response",
+            "DataForSEO returned an unreadable response.",
+            { cause },
+          );
         }
-        throw new AppError(
-          502,
-          "dataforseo_bad_response",
-          "DataForSEO returned an invalid response.",
-          { cause },
-        );
+        if (text.length === 0) return null;
+        try {
+          return JSON.parse(text) as DataforseoResponseLike<T>;
+        } catch (cause) {
+          if (method === "POST") {
+            throw new AmbiguousCallError("DataForSEO returned invalid JSON after dispatch.", { cause });
+          }
+          throw new AppError(
+            502,
+            "dataforseo_bad_response",
+            "DataForSEO returned an invalid response.",
+            { cause },
+          );
+        }
       }
-    }
 
-    if (method === "GET" && response.status >= 500 && attempt < GET_RETRIES) {
-      await new Promise((resolve) =>
-        setTimeout(resolve, GET_RETRY_BACKOFF_MS * (attempt + 1)),
-      );
-      attempt += 1;
-      continue;
-    }
+      if (method === "GET" && response.status >= 500 && attempt < GET_RETRIES) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, GET_RETRY_BACKOFF_MS * (attempt + 1)),
+        );
+        attempt += 1;
+        continue;
+      }
 
-    const body = await readBody(response);
-    const classified = options.classify?.(response.status, body, endpoint);
-    if (classified) {
-      throw withUnbilledCallMetadata(classified, {
-        status: 402,
-        code: "dataforseo_balance",
-        details: { providerCode: `dataforseo_http_${response.status}` },
-      });
+      const body = await readBody(response);
+      const classified = options.classify?.(response.status, body, endpoint);
+      if (classified) {
+        throw withUnbilledCallMetadata(classified, {
+          status: 402,
+          code: "dataforseo_balance",
+          details: { providerCode: `dataforseo_http_${response.status}` },
+        });
+      }
+      throw failure(method, response.status);
     }
-    throw failure(method, response.status);
+  } finally {
+    clear();
   }
 }
 

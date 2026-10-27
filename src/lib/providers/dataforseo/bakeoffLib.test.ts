@@ -3,7 +3,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -13,7 +13,7 @@ import { probeTextEngine } from "../../scoring/enginePipeline.js";
 import { assertEnvironment, computeMetrics, createGuardedFetch, createPrivateOutputDirectory, estimatePlan, loadPanel, parseArgs, planArms, probeCurrentProviderOnce, renderSummaryMarkdown } from "./bakeoffLib.ts";
 
 const fixtureDir = "tests/fixtures/f02/bakeoff-run/";
-const validArgv = ["--panel", "panel.json", "--run-id", "offcult-run-123", "--out", "C:\\private\\run", "--max-spend-usd", "0.8", "--confirm-spend", "0.8"];
+const validArgv = ["--panel", "panel.json", "--run-id", "offcult-run-123", "--out", path.join(os.tmpdir(), "f02-private-run"), "--max-spend-usd", "0.8", "--confirm-spend", "0.8"];
 
 test("refuses malformed or unsafe argument sets", () => {
   for (const argv of [
@@ -32,11 +32,15 @@ test("refuses malformed or unsafe argument sets", () => {
 });
 
 test("environment guard accepts only a loopback live QA database without shared secrets", () => {
-  assert.equal(assertEnvironment({ PGHOST: "127.0.0.1", PGDATABASE: "aeovis_live_qa" }, "C:\\repo", { out: "C:\\private\\run" }), true);
-  assert.throws(() => assertEnvironment({ PGHOST: "db.example", PGDATABASE: "aeovis_live_qa" }, "C:\\repo"), /loopback/);
-  assert.throws(() => assertEnvironment({ PGHOST: "localhost", PGDATABASE: "aeovis_live_qa", DATABASE_URL: "set" }, "C:\\repo"), /DATABASE_URL/);
-  assert.throws(() => assertEnvironment({ PGHOST: "localhost", PGDATABASE: "aeovis_live_qa" }, "C:\\repo", { out: "C:\\repo\\inside" }), /outside the repository/);
-  assert.throws(() => assertEnvironment({ PGHOST: "localhost", PGDATABASE: "aeovis_live_qa" }, "C:\\repo", { out: "C:\\Users\\Owner\\My Drive\\run" }), /Google Drive/);
+  const repo = path.join(os.tmpdir(), "f02-guard-repo");
+  const outside = path.join(os.tmpdir(), "f02-guard-private", "run");
+  const inside = path.join(repo, "inside");
+  const drive = path.join(os.tmpdir(), "Owner", "My Drive", "run");
+  assert.equal(assertEnvironment({ PGHOST: "127.0.0.1", PGDATABASE: "aeovis_live_qa" }, repo, { out: outside }), true);
+  assert.throws(() => assertEnvironment({ PGHOST: "db.example", PGDATABASE: "aeovis_live_qa" }, repo), /loopback/);
+  assert.throws(() => assertEnvironment({ PGHOST: "localhost", PGDATABASE: "aeovis_live_qa", DATABASE_URL: "set" }, repo), /DATABASE_URL/);
+  assert.throws(() => assertEnvironment({ PGHOST: "localhost", PGDATABASE: "aeovis_live_qa" }, repo, { out: inside }), /outside the repository/);
+  assert.throws(() => assertEnvironment({ PGHOST: "localhost", PGDATABASE: "aeovis_live_qa" }, repo, { out: drive }), /Google Drive/);
 });
 
 test("panel validation never needs to expose prompt contents", async () => {
@@ -271,7 +275,7 @@ test("output creation returns the real outside path and refuses an existing targ
   await mkdir(repository, { recursive: true });
   try {
     const realOutput = await createPrivateOutputDirectory(output, repository);
-    assert.equal(realOutput, output);
+    assert.equal(realOutput, path.join(await realpath(outside), "answers"));
     await assert.rejects(createPrivateOutputDirectory(output, repository), /run id already exists/);
   } finally {
     await rm(temporary, { recursive: true, force: true });
