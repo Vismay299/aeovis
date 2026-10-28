@@ -117,3 +117,4 @@ SOFTWARE.
 - `src/components/app/theme/useThemePreference.ts` (from `src/client/lib/theme.ts`)
 - `src/components/app/theme/ThemePreferenceRadio.tsx` (from `src/client/components/ThemePreferenceMenuItems.tsx`)
 - `src/components/app/SegmentedToggle.tsx` (from `src/client/components/SegmentedToggle.tsx`)
+- `src/app/api/customer/context/route.ts`
