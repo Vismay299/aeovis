@@ -1,0 +1,12 @@
+{
+  "status_code": 20000,
+  "tasks": [{
+    "status_code": 20000,
+    "cost": 0.0012,
+    "result": [{
+      "datetime": "2026-10-01 12:00:00 +00:00",
+      "markdown": "Sample answer.",
+      "sources": [{ "url": "https://example.test/" }]
+    }]
+  }]
+}

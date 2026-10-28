@@ -1,5 +1,6 @@
 import { ZodError } from "zod";
 import { AppError, WorkspaceError, isAppError } from "./appError.ts";
+import { isCallOutcomeError } from "../spend/errors.ts";
 
 export { AppError, WorkspaceError, isAppError };
 
@@ -42,6 +43,19 @@ export function toErrorResponse(err: unknown): Response {
     if (err.recovery !== undefined) body.recovery = err.recovery;
     if (err.details !== undefined) body.details = err.details;
     return json(body, err.status);
+  }
+
+  if (
+    isCallOutcomeError(err) &&
+    Number.isInteger(err.status) &&
+    (err.status as number) >= 400 &&
+    (err.status as number) <= 599 &&
+    typeof err.code === "string" &&
+    err.code.length > 0
+  ) {
+    const body: Record<string, unknown> = { error: err.message, code: err.code };
+    if (err.details !== undefined) body.details = err.details;
+    return json(body, err.status as number);
   }
 
   if (err instanceof ZodError) {

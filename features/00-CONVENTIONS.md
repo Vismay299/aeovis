@@ -159,9 +159,11 @@ export async function settleSpendBatch(holdId: string, costs: Array<{ actualUsd:
 new AppError(status, code, message, { recovery?, details?, cause? })   // error JSON may include "details"
 // src/lib/spend/errors.ts — provider-call outcome classes extend plain Error (not AppError):
 export class SpendRefused extends AppError { reason: "feature_disabled" | "workspace_cap" | "daily_cap" | "over_approved_max"; scope?: "feature" | "workspace"; limitUsd?: number }
-export class ChargedCallError extends Error { actualUsd: number; provider: string; endpoint: string } // billed, then failed
-export class UnbilledCallError extends Error {}   // rejected before billing (validation)
-export class AmbiguousCallError extends Error {}  // sent, outcome unknown; counted at the estimate
+export class ChargedCallError extends Error { actualUsd: number; provider: string; endpoint: string; status?; code?; details? } // billed, then failed
+export class UnbilledCallError extends Error { status?; code?; details? }   // rejected before billing (validation)
+export class AmbiguousCallError extends Error { status?; code?; details? }  // sent, outcome unknown; counted at the estimate
+// With both status (400–599) and code set, toErrorResponse answers { error: message, code, details? } with that status;
+// otherwise the error stays a generic 500. The message is then customer-facing: our copy only, never an upstream body.
 ```
 
 ### 5.2 Additions fixed by the F02 spec
