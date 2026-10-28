@@ -283,6 +283,7 @@ const FULL_CATALOG = [
 "jobs","job_steps","job_periodic","enqueue_job","claim_due_jobs","job_step_begin","job_step_complete","job_step_fail","job_sleep","job_yield","job_progress","job_finish","cancel_job","reconcile_stale_jobs","claim_due_periodic","prune_jobs","jobs_single_active_idx","jobs_tick_http",
 "paid_feature_controls","workspace_spend_limits","spend_holds","spend_ledger","reserve_spend","settle_spend","release_spend","expire_spend_holds","f01_expire_due_holds","prune_spend","f01_committed_usd",
 "provider_cache","prune_provider_cache","provider-cache",
+"spend_ledger.subject_kind","spend_ledger.answer_ref","cost_reconciliations","sync_probe_attempt_costs","settle_scan_hold","settle_finished_scan_holds","resolve_cost_reconciliation","engine_cost_stats","f03_upsert_attempt_rows","prune_cost_reconciliations","resolve_unknown_cost_backlog",
 "measurement_storage_ready","set_probe_rollout","probe_dispatch_control.brand_allowlist",
 "measurement_evidence","measurement_incidents","record_measurement_incident","repair_artifacts","repair_artifact_heads","append_repair_artifact","decide_checked_content","record_verified_publication","repair_content_hash","scans.origin_job_id","scans_origin_job_key","content_check_claims","claim_content_check","finish_content_check","measurement_windows","enqueue_measurement_window","scan_jobs.panel_snapshot","scan_jobs.measurement_context","materialize_scan_report",
   "probe_observations", "probe_attempts", "probe_late_receipts", "probe_reconciliations",

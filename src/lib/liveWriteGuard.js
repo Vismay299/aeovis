@@ -142,6 +142,8 @@ export const NEVER_WRITABLE = Object.freeze([
   // store, not from the production table.
   "paid_feature_controls", "workspace_spend_limits",
   "spend_holds", "spend_ledger",
+  // F03 phase 2 — migration 050: operator-only cost reconciliation queue.
+  "cost_reconciliations",
   // F01 phase 3 — migration 040: the job runner's queue, step memo and periodic
   // slots. A test that needs a claimed job gets it from the memory store, not
   // from the production table.

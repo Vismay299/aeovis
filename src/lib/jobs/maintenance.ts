@@ -4,6 +4,7 @@ import { defineJob, getJobDefinition } from "./registry.ts";
 import { jobStore } from "./store.ts";
 import type { JobStore } from "./store.ts";
 import { DB_STEP } from "./stepConfigs.ts";
+import { pruneCostReconciliations } from "../costs/jobs.ts";
 
 const DAY_MS = 86_400_000;
 const JOB_RETENTION_DAYS = 30;
@@ -81,7 +82,13 @@ export function registerMaintenanceJobs(deps: MaintenanceDeps = {}): void {
             SPEND_PRUNE_LIMIT
           )
         );
-        return { result: pruned };
+        const reconciliations = await ctx.step.do("prune-cost-reconciliations", DB_STEP, () =>
+          pruneCostReconciliations(
+            new Date(Date.now() - LEDGER_RETENTION_DAYS * DAY_MS),
+            SPEND_PRUNE_LIMIT
+          )
+        );
+        return { result: { ...pruned, reconciliations } };
       },
       { deadlineSeconds: 3_600, maxInvocations: 10 }
     );
