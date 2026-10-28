@@ -346,6 +346,8 @@ It creates the workspace-scoped project memory tables and service-only write
 functions; its tenant isolation is verified by `tests/customer-uat.sql` and
 `scripts/qa/check-f07-db.mjs` against disposable loopback PostgreSQL.
 
+`050_f03_cost_ledger` is additive and must be applied before deploying F03. It adds subject and answer reference columns to `spend_ledger`, creates the operator-only `cost_reconciliations` table, and adds functions `sync_probe_attempt_costs`, `settle_scan_hold`, `settle_finished_scan_holds`, `resolve_cost_reconciliation`, `engine_cost_stats`, `resolve_unknown_cost_backlog`, and `prune_cost_reconciliations`. It seeds `paid_feature_controls('ai_visibility.scan', true, 'all')` so existing scans are not refused. Verified against loopback PostgreSQL by `scripts/qa/check-f03-db.mjs` and `tests/customer-uat.sql`.
+
 
 `040_f01_jobs` is implemented and verified on disposable PostgreSQL — the
 `jobs-enqueue`, `jobs-leases`, `jobs-steps`, `jobs-watchdog`, `jobs-cancel`
