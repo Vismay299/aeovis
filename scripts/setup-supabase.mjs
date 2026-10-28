@@ -59,6 +59,19 @@ ALTER TABLE schema_migrations
  * the state 009 was found in.
  */
 const EXPECTED_OBJECTS = {
+  "050_f03_cost_ledger.sql": [
+    { kind: "column", name: "spend_ledger.subject_kind" },
+    { kind: "column", name: "spend_ledger.answer_ref" },
+    { kind: "table", name: "cost_reconciliations" },
+    { kind: "function", name: "sync_probe_attempt_costs" },
+    { kind: "function", name: "settle_scan_hold" },
+    { kind: "function", name: "settle_finished_scan_holds" },
+    { kind: "function", name: "resolve_cost_reconciliation" },
+    { kind: "function", name: "engine_cost_stats" },
+    { kind: "function", name: "f03_upsert_attempt_rows" },
+    { kind: "function", name: "prune_cost_reconciliations" },
+    { kind: "function", name: "resolve_unknown_cost_backlog" },
+  ],
   "070_f07_project_memory.sql": [
     { kind: "table", name: "project_context_sections" },
     { kind: "table", name: "project_competitors" },
