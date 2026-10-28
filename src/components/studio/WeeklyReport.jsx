@@ -62,7 +62,7 @@ export function WeeklyReport({ brand }) {
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }} data-testid="studio-report">
       {!report && (
         <Card style={{ padding: "var(--space-7)", textAlign: "center" }}>
-          <FileBarChart size={28} style={{ color: "var(--accent)", margin: "0 auto var(--space-4)" }} />
+          <FileBarChart size={28} style={{ color: "var(--brand)", margin: "0 auto var(--space-4)" }} />
           <h3 style={{ fontFamily: "var(--font-sans)", fontSize: "17px", fontWeight: 600, color: "var(--text-1)" }}>
             Weekly visibility report
           </h3>

@@ -226,7 +226,7 @@ export function KnowledgePanel({ brand }) {
               }}
             >
               <GripVertical size={14} style={{ color: "var(--text-3)", marginTop: "2px", flexShrink: 0 }} />
-              <Icon size={15} style={{ color: "var(--accent)", marginTop: "2px", flexShrink: 0 }} />
+              <Icon size={15} style={{ color: "var(--brand)", marginTop: "2px", flexShrink: 0 }} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
                   <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-1)" }}>{b.title}</span>
@@ -251,7 +251,7 @@ export function KnowledgePanel({ brand }) {
                     height: "18px",
                     borderRadius: "9px",
                     border: "1px solid var(--border-2)",
-                    background: b.active ? "var(--accent)" : "var(--bg-2)",
+                    background: b.active ? "var(--brand)" : "var(--bg-2)",
                     position: "relative",
                     cursor: "pointer",
                   }}

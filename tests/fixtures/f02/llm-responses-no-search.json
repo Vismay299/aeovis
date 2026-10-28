@@ -1,0 +1,15 @@
+{
+  "status_code": 20000,
+  "tasks": [{
+    "status_code": 20000,
+    "path": ["v3", "ai_optimization", "chat_gpt", "llm_responses", "live"],
+    "cost": 0.05,
+    "result": [{
+      "model_name": "gpt-5.5",
+      "output_tokens": 256,
+      "web_search": false,
+      "items": [{ "type": "message", "sections": [{ "text": "Synthetic answer." }] }],
+      "fan_out_queries": []
+    }]
+  }]
+}

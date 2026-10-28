@@ -1,36 +1,19 @@
 # Design
 
 > <!-- doc-status -->
-> **Status: LIVE.** Visual authority, updated to the user's light-mode decision on 13 October 2026. Supersedes the former dark Signal Box direction. Implementation details: [shared design system](docs/design/DESIGN-SYSTEM.md).
+> **Status: LIVE.** Visual authority, updated 21 October 2026 for the owner's decision to match OpenSEO's customer app (features/F04). Supersedes the 13 October "one light interface" rule for the customer app only.
 
-## Product direction
+## Two surfaces
 
-Perceev has one light interface across its website, customer portal, scan flow,
-reports, Content Studio, agent builder and demos. The OS appearance and old saved
-theme preferences must not change the product. There is no theme toggle.
+The public website (marketing pages, free scan, dashboard, methodology) keeps one light interface with its own styles in `src/app/globals.css` and `src/components/design-system/primitives.css`. The customer app (`/portal`, sign-in, onboarding, `/ops`) uses the shadcn base-nova system ported from OpenSEO, with light, dark and system themes chosen per browser; `/ops` stays light.
 
-Use pale neutral page backgrounds, white cards, dark readable text and indigo
-primary actions. Marketing can use larger display typography; it shares the same
-font families, palette, controls, borders and surface treatments as the workspace.
+## Tokens
 
-## Shared system
+Tokens live in `src/styles/app-theme.css`, imported by `src/app/globals.css`. Perceev uses primary `#3730CE` and destructive `#B02F2F`. Every text/background pair achieves WCAG contrast ≥ 4.5:1 in both light and dark themes. Chart rules: owned-brand series use `--chart-you`, rivals use `--chart-rival-*`, categorical series use `--chart-1…5`, and green, amber, red status colors are reserved only for real operational and collection status.
 
-- Palette, typography, spacing and semantic aliases: `src/app/globals.css`.
-- Buttons, badges, cards and fields: `src/components/design-system/primitives.css`.
-- Public product chrome: `src/components/design-system/PageFrame.jsx`.
-- Workspace layouts and compositions: `src/components/portal/portal.css`.
-- Existing `perceev` and `portal` component APIs adapt to the same primitives;
-  do not create a third palette or independent control style.
-- Root HTML and toast appearance are explicitly light before the first paint.
+## Components
 
-Default controls are 40px high; compact controls are 32px and large actions 48px.
-Use 8px control corners and 12px card corners. Keep shared card padding and
-sentence-case badges consistent. Use Archivo for normal text and Spline Sans Mono
-for URLs, timestamps and evidence identifiers. Avoid tiny uppercase body labels.
-
-The brand is lowercase `perceev`. Primary actions and owned-brand data are indigo.
-Rivals use neutral colours. Green, amber and red are reserved for real status and
-validation, not competitor rankings. Text must remain legible against its surface.
+App UI primitives live in `src/components/ui`, and shared app composite components live in `src/components/app`. The `ui.jsx` facade adapts legacy portal callers to the shared primitives; do not create a third palette or independent control style.
 
 ## Information and interaction
 
@@ -49,6 +32,4 @@ keep the page itself within the viewport. Respect reduced motion.
 
 ## Retired
 
-Do not restore OS-driven dark mode, saved-theme boot scripts, a theme switch,
-navy page sections, the dark railway/steel palette, or the unused generated widget
-library. Keep historical plans as records, not current visual instructions.
+Do not restore the split-screen auth showcase, the native workspace `<select>`, the `pv-*` layout classes, OS-driven dark mode on the public website, or a theme switch on public pages.

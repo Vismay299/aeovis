@@ -2,3 +2,6 @@
 // this file so a deployment defines every kind before it claims one.
 import "./maintenance.ts";
 import "../projectContext/jobs.ts";
+import { registerCostJobs } from "../costs/jobs.ts";
+
+registerCostJobs();

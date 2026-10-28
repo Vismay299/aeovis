@@ -11,7 +11,7 @@ export const SectionStrap = ({ children, testId }) => (
     data-testid={testId}
     style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}
   >
-    <span style={{ width: "3px", height: "14px", background: "var(--accent)", flexShrink: 0 }} />
+    <span style={{ width: "3px", height: "14px", background: "var(--brand)", flexShrink: 0 }} />
     <span
       style={{
         fontFamily: "var(--font-display)",

@@ -72,33 +72,66 @@ export class SpendRefused extends AppError {
   }
 }
 
+/**
+ * Optional HTTP metadata a provider client attaches to a call-outcome error so
+ * toErrorResponse can answer with it (for example 502 dataforseo_auth_failed).
+ * Without both status and code the error stays an unhandled 500, as before.
+ * The message is then shown to the customer, so it must be our own copy and
+ * never quote an upstream body.
+ */
+export type CallErrorMeta = { status?: number; code?: string; details?: Record<string, unknown> };
+
 export class ChargedCallError extends Error {
   readonly actualUsd: number;
   readonly provider: string;
   readonly endpoint: string;
+  readonly status?: number;
+  readonly code?: string;
+  readonly details?: Record<string, unknown>;
 
   constructor(
     message: string,
-    opts: { actualUsd: number; provider: string; endpoint: string; cause?: unknown }
+    opts: { actualUsd: number; provider: string; endpoint: string; cause?: unknown } & CallErrorMeta
   ) {
     super(message, opts && "cause" in opts ? { cause: opts.cause } : undefined);
     this.name = "ChargedCallError";
     this.actualUsd = opts.actualUsd;
     this.provider = opts.provider;
     this.endpoint = opts.endpoint;
+    this.status = opts.status;
+    this.code = opts.code;
+    this.details = opts.details;
   }
 }
 
 export class UnbilledCallError extends Error {
-  constructor(message: string, opts?: { cause?: unknown }) {
+  readonly status?: number;
+  readonly code?: string;
+  readonly details?: Record<string, unknown>;
+
+  constructor(message: string, opts?: { cause?: unknown } & CallErrorMeta) {
     super(message, opts && "cause" in opts ? { cause: opts.cause } : undefined);
     this.name = "UnbilledCallError";
+    this.status = opts?.status;
+    this.code = opts?.code;
+    this.details = opts?.details;
   }
 }
 
 export class AmbiguousCallError extends Error {
-  constructor(message: string, opts?: { cause?: unknown }) {
+  readonly status?: number;
+  readonly code?: string;
+  readonly details?: Record<string, unknown>;
+
+  constructor(message: string, opts?: { cause?: unknown } & CallErrorMeta) {
     super(message, opts && "cause" in opts ? { cause: opts.cause } : undefined);
     this.name = "AmbiguousCallError";
+    this.status = opts?.status;
+    this.code = opts?.code;
+    this.details = opts?.details;
   }
+}
+
+export function isCallOutcomeError(e: unknown): e is ChargedCallError | UnbilledCallError | AmbiguousCallError {
+  return e instanceof ChargedCallError || e instanceof UnbilledCallError || e instanceof AmbiguousCallError;
 }
