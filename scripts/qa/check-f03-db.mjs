@@ -81,14 +81,6 @@ async function main() {
   const fixturesPath = path.resolve("tests/fixtures/f03/probe-attempts.json");
   const fixtureData = JSON.parse(await readFile(fixturesPath, "utf8"));
 
-  // Ensure purpose check constraint supports 'explore' on loopback test DB if present
-  try {
-    await q("ALTER TABLE public.probe_observations DROP CONSTRAINT IF EXISTS probe_observations_purpose_check");
-    await q("ALTER TABLE public.probe_observations ADD CONSTRAINT probe_observations_purpose_check CHECK (purpose IN ('scan','canary','explore'))");
-  } catch {
-    // Constraint may already be flexible or absent
-  }
-
   // ─────────────────────────────────────────────────────────────
   // 1. SEED GROUP
   // ─────────────────────────────────────────────────────────────
@@ -106,20 +98,27 @@ async function main() {
     const brandA = await createBrand("sync-a");
     const jobIdA = id();
     await q(
-      "INSERT INTO public.scan_jobs(id, brand_key, status, target_url) VALUES($1, $2, 'complete', 'https://example.com')",
+      "INSERT INTO public.scan_jobs(id, brand, brand_key, status) VALUES($1, $2, $2, 'complete')",
       [jobIdA, brandA]
     );
 
     // Job with no brand_key (should never sync)
     const jobIdNoBrand = id();
-    await q("INSERT INTO public.scan_jobs(id, brand_key, status, target_url) VALUES($1, NULL, 'complete', 'https://example.com')", [
+    await q("INSERT INTO public.scan_jobs(id, brand, brand_key, status) VALUES($1, 'qa-f03-unowned', NULL, 'complete')", [
       jobIdNoBrand,
     ]);
+
+    // `explore` arrives with F11's migration. Until then the P0 purpose check
+    // refuses it, and the harness must not rewrite a P0 constraint to fit.
+    const exploreAllowed = (
+      await q("SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conname = 'probe_observations_purpose_check'")
+    ).rows.some((r) => r.d.includes("'explore'"));
 
     // Insert observations and attempts from fixture
     for (const item of fixtureData) {
       let targetJobId = jobIdA;
       if (item.purpose === "explore") {
+        if (!exploreAllowed) continue;
         targetJobId = null; // Explore has no scan_job
       }
 
@@ -186,8 +185,10 @@ async function main() {
     const { rows: noBrandRows } = await q("SELECT * FROM public.spend_ledger WHERE source_ref LIKE $1", [`probe_attempt:${noBrandObsId}:%`]);
     assert.equal(noBrandRows.length, 0, "attempt of brandless job must never be synced");
 
-    const { rows: exploreRows } = await q("SELECT * FROM public.spend_ledger WHERE source_ref LIKE 'probe_attempt:f03-obs-14:%'");
-    assert.equal(exploreRows.length, 0, "explore attempt must never be synced");
+    if (exploreAllowed) {
+      const { rows: exploreRows } = await q("SELECT * FROM public.spend_ledger WHERE source_ref LIKE 'probe_attempt:f03-obs-14:%'");
+      assert.equal(exploreRows.length, 0, "explore attempt must never be synced");
+    }
 
     // Idempotency: second run produces 0 newly synced rows
     const syncedCount2 = await rpc("sync_probe_attempt_costs", { p_limit: 1000 });
@@ -261,7 +262,7 @@ async function main() {
   await test("scan-hold", async () => {
     const brandKey = await createBrand("hold-brand");
     const jobId = id();
-    await q("INSERT INTO public.scan_jobs(id, brand_key, status, target_url) VALUES($1, $2, 'running', 'https://example.com')", [
+    await q("INSERT INTO public.scan_jobs(id, brand, brand_key, status) VALUES($1, $2, $2, 'running')", [
       jobId,
       brandKey,
     ]);
@@ -269,8 +270,8 @@ async function main() {
     // Reserve hold
     const holdId = id();
     await q(
-      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status)
-       VALUES($1, $2, 'ai_visibility.scan', 1.00, 2.00, $3, 'scan_job', $4, 'held')`,
+      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status, expires_at)
+       VALUES($1, $2, 'ai_visibility.scan', 1.00, 2.00, $3, 'scan_job', $4, 'held', now() + interval '1 hour')`,
       [holdId, brandKey, `hold-idem-${id()}`, jobId]
     );
 
@@ -321,14 +322,14 @@ async function main() {
 
     // ── Expired hold path ──
     const jobIdExpired = id();
-    await q("INSERT INTO public.scan_jobs(id, brand_key, status, target_url) VALUES($1, $2, 'running', 'https://example.com')", [
+    await q("INSERT INTO public.scan_jobs(id, brand, brand_key, status) VALUES($1, $2, $2, 'running')", [
       jobIdExpired,
       brandKey,
     ]);
     const holdExpiredId = id();
     await q(
-      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status)
-       VALUES($1, $2, 'ai_visibility.scan', 0.80, 1.00, $3, 'scan_job', $4, 'expired')`,
+      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status, expires_at, closed_at)
+       VALUES($1, $2, 'ai_visibility.scan', 0.80, 1.00, $3, 'scan_job', $4, 'expired', now() - interval '1 minute', now())`,
       [holdExpiredId, brandKey, `hold-exp-${id()}`, jobIdExpired]
     );
     // F01 expiry creates hold:<id> reservation row in spend_ledger
@@ -373,8 +374,8 @@ async function main() {
     const missingJobId = id();
     const holdMissingId = id();
     await q(
-      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status)
-       VALUES($1, $2, 'ai_visibility.scan', 0.50, 1.00, $3, 'scan_job', $4, 'expired')`,
+      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status, expires_at, closed_at)
+       VALUES($1, $2, 'ai_visibility.scan', 0.50, 1.00, $3, 'scan_job', $4, 'expired', now() - interval '1 minute', now())`,
       [holdMissingId, brandKey, `hold-mis-${id()}`, missingJobId]
     );
     await q(
@@ -394,8 +395,8 @@ async function main() {
 
     // ── Malformed subject_id does not break sweep ──
     await q(
-      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status)
-       VALUES($1, $2, 'ai_visibility.scan', 0.10, 0.20, $3, 'scan_job', 'not-a-valid-uuid', 'held')`,
+      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status, expires_at)
+       VALUES($1, $2, 'ai_visibility.scan', 0.10, 0.20, $3, 'scan_job', 'not-a-valid-uuid', 'held', now() + interval '1 hour')`,
       [id(), brandKey, `hold-mal-${id()}`]
     );
     const sweepMalformed = await rpc("settle_finished_scan_holds", { p_limit: 50 });
@@ -403,16 +404,16 @@ async function main() {
 
     // ── Job with two open holds settles one per run and strands neither ──
     const twoHoldsJobId = id();
-    await q("INSERT INTO public.scan_jobs(id, brand_key, status, target_url) VALUES($1, $2, 'complete', 'https://example.com')", [
+    await q("INSERT INTO public.scan_jobs(id, brand, brand_key, status) VALUES($1, $2, $2, 'complete')", [
       twoHoldsJobId,
       brandKey,
     ]);
     const h1 = id();
     const h2 = id();
     await q(
-      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status, created_at)
-       VALUES($1, $2, 'ai_visibility.scan', 0.50, 1.00, $3, 'scan_job', $4, 'held', now() - interval '2 minutes'),
-             ($5, $2, 'ai_visibility.scan', 0.50, 1.00, $6, 'scan_job', $4, 'held', now() - interval '1 minute')`,
+      `INSERT INTO public.spend_holds(id, brand_key, feature, estimate_usd, max_usd, idempotency_key, subject_kind, subject_id, status, created_at, expires_at)
+       VALUES($1, $2, 'ai_visibility.scan', 0.50, 1.00, $3, 'scan_job', $4, 'held', now() - interval '2 minutes', now() + interval '1 hour'),
+             ($5, $2, 'ai_visibility.scan', 0.50, 1.00, $6, 'scan_job', $4, 'held', now() - interval '1 minute', now() + interval '1 hour')`,
       [h1, brandKey, `two-1-${id()}`, twoHoldsJobId, h2, `two-2-${id()}`]
     );
 
@@ -572,7 +573,7 @@ async function main() {
     const brandKey = await createBrand("stats-brand");
     const testEngine = `stat-engine-${id().slice(0, 8)}`;
     const statJobId = id();
-    await q("INSERT INTO public.scan_jobs(id, brand_key, status, target_url) VALUES($1, $2, 'complete', 'https://example.com')", [
+    await q("INSERT INTO public.scan_jobs(id, brand, brand_key, status) VALUES($1, $2, $2, 'complete')", [
       statJobId,
       brandKey,
     ]);
@@ -638,9 +639,8 @@ async function main() {
       assert.ok(rows.length > 0, "user A sees own rows");
       assert.ok(rows.every((r) => r.brand_key === brandA), "user A sees ONLY brand A rows");
 
-      // cost_reconciliations is operator-only; customer sees 0 rows
-      const { rows: reconRows } = await client.query("SELECT * FROM public.cost_reconciliations");
-      assert.equal(reconRows.length, 0, "customer user sees 0 cost_reconciliations rows");
+      // cost_reconciliations is operator-only: a customer's read is refused outright.
+      await assert.rejects(client.query("SELECT * FROM public.cost_reconciliations"), { code: "42501" });
     });
 
     // User B should see only brand B rows
@@ -649,8 +649,8 @@ async function main() {
       assert.ok(rows.length > 0, "user B sees own rows");
       assert.ok(rows.every((r) => r.brand_key === brandB), "user B sees ONLY brand B rows");
 
-      const { rows: reconRows } = await client.query("SELECT * FROM public.cost_reconciliations");
-      assert.equal(reconRows.length, 0, "customer user sees 0 cost_reconciliations rows");
+      // cost_reconciliations is operator-only: a customer's read is refused outright.
+      await assert.rejects(client.query("SELECT * FROM public.cost_reconciliations"), { code: "42501" });
     });
   });
 
