@@ -95,13 +95,19 @@ export function createProbeDispatchStore(client = supabase) {
     block: (id, reason) =>
       rpc("block_probe_dispatch", { p_id: id, p_reason: reason }),
     seed: (rows) => rpc("seed_probe_observations", { p_rows: rows }),
-    claim: (id, { reserve, scanCap = null, dayCap = null }) =>
+    claim: (id, { reserve, scanCap = null, dayCap = null, leaseSeconds }) =>
       rpc("claim_probe_dispatch", {
         p_id: id,
         p_reserve: reserve,
         p_scan_cap: scanCap,
         p_day_cap: dayCap,
-        p_lease_seconds: PROBE_LEASE_SECONDS,
+        p_lease_seconds: leaseSeconds ?? PROBE_LEASE_SECONDS,
+      }),
+    renew: (id, token, seconds) =>
+      rpc("renew_probe_dispatch", {
+        p_id: id,
+        p_token: token,
+        p_seconds: seconds,
       }),
     finish: (id, token, result, decision) =>
       rpc("finish_probe_dispatch", {

@@ -1,0 +1,9 @@
+{
+  "status_code": 20000,
+  "tasks": [{
+    "status_code": 40501,
+    "status_message": "No Search Results",
+    "path": ["v3", "serp", "google", "organic", "task_get", "advanced", "g3"],
+    "cost": 0
+  }]
+}

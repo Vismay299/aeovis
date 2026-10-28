@@ -1,0 +1,8 @@
+{
+  "status_code": 20000,
+  "tasks": [{
+    "status_code": 20000,
+    "cost": 0.0012,
+    "result": [{ "items": [{ "type": "ai_overview", "markdown": "Sample." }] }]
+  }]
+}

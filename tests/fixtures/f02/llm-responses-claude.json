@@ -1,0 +1,22 @@
+{
+  "status_code": 20000,
+  "tasks": [{
+    "status_code": 20000,
+    "path": ["v3", "ai_optimization", "claude", "llm_responses", "live"],
+    "cost": 0.04,
+    "result": [{
+      "model_name": "claude-sonnet-5",
+      "output_tokens": 812,
+      "web_search": true,
+      "items": [{
+        "type": "message",
+        "sections": [{
+          "type": "text",
+          "text": "Synthetic answer.",
+          "annotations": [{ "type": "url_citation", "title": "Example", "url": "https://example.test/" }]
+        }]
+      }],
+      "fan_out_queries": ["synthetic query"]
+    }]
+  }]
+}
