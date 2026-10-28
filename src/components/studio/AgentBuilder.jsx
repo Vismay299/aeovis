@@ -298,7 +298,7 @@ export function AgentBuilder({ brand, formats, blocks, defaultPipelines, agent, 
                     step="0.1"
                     value={val}
                     onChange={(e) => set("rubric_emphasis", { ...form.rubric_emphasis, [dim]: Number(e.target.value) })}
-                    style={{ flex: 1, accentColor: "var(--accent)" }}
+                    style={{ flex: 1, accentColor: "var(--brand)" }}
                   />
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: val > 1 ? "var(--accent-text)" : "var(--text-3)", width: "32px", textAlign: "right" }}>
                     {val.toFixed(1)}×

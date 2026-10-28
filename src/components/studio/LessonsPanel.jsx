@@ -101,7 +101,7 @@ export function LessonsPanel({ brand }) {
                       height: "18px",
                       borderRadius: "9px",
                       border: "1px solid var(--border-2)",
-                      background: lesson.active ? "var(--accent)" : "var(--bg-2)",
+                      background: lesson.active ? "var(--brand)" : "var(--bg-2)",
                       position: "relative",
                       cursor: "pointer",
                       transition: "background var(--dur-fast)",

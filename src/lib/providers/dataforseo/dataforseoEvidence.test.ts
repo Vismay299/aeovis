@@ -9,14 +9,14 @@ import { parseDataforseoAnswer, parseLlmResponseAnswer } from "./dataforseoEvide
 test("keeps safe citations, removes tracking parameters, and drops citation pills", () => {
   const result = parseDataforseoAnswer({
     datetime: "2026-09-30 18:41:09 +00:00",
-    markdown: "- **OpenSEO** is open source. [openseo.so](https://openseo.so/blog?utm_source=chatgpt.com) See [SerpBear on GitHub](https://github.com/towfiqi/serpbear).",
+    markdown: "- **AcmeSEO** is open source. [acmeseo.example](https://acmeseo.example/blog?utm_source=chatgpt.com) See [SerpBear on GitHub](https://github.com/towfiqi/serpbear).",
     sources: [
-      { url: "https://openseo.so/blog?utm_source=chatgpt.com", title: "Blog" },
+      { url: "https://acmeseo.example/blog?utm_source=chatgpt.com", title: "Blog" },
       { url: "javascript:alert(1)" },
     ],
   }, "chatgpt");
-  assert.equal(result?.answerText, "OpenSEO is open source.  See SerpBear on GitHub.");
-  assert.deepEqual(result?.citations, [{ url: "https://openseo.so/blog", domain: "openseo.so", title: "Blog", position: 1 }]);
+  assert.equal(result?.answerText, "AcmeSEO is open source.  See SerpBear on GitHub.");
+  assert.deepEqual(result?.citations, [{ url: "https://acmeseo.example/blog", domain: "acmeseo.example", title: "Blog", position: 1 }]);
   assert.equal(result?.collectedAt, "2026-09-30T18:41:09.000Z");
 });
 
