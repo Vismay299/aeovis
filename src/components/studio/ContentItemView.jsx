@@ -352,7 +352,7 @@ export function ContentItemView({ itemId, onBack, onDecided }) {
               <Card variant="flush" style={{ padding: "var(--space-5)" }}>
                 <div style={{ ...monoLabel, marginBottom: "var(--space-3)" }}>Quotes</div>
                 {research.quotes.map((q, i) => (
-                  <blockquote key={i} style={{ borderLeft: "3px solid var(--accent)", paddingLeft: "var(--space-3)", margin: "0 0 var(--space-3)", fontSize: "13px", color: "var(--text-2)", fontStyle: "italic" }}>
+                  <blockquote key={i} style={{ borderLeft: "3px solid var(--brand)", paddingLeft: "var(--space-3)", margin: "0 0 var(--space-3)", fontSize: "13px", color: "var(--text-2)", fontStyle: "italic" }}>
                     “{q.quote}” — {q.attribution}{" "}
                     <a href={q.source_url} target="_blank" rel="noopener noreferrer" style={{ color: "var(--info)", fontSize: "11px", fontStyle: "normal" }}>
                       source

@@ -1,0 +1,9 @@
+{
+  "status_code": 20000,
+  "tasks": [
+    { "status_code": 20100, "id": "task-1", "cost": 0.0012, "data": { "tag": "q1" } },
+    { "status_code": 20100, "id": "task-2", "cost": 0.0012, "data": { "tag": "q2" } },
+    { "status_code": 40501, "status_message": "Invalid Field: 'keyword'.", "cost": 0, "data": { "tag": "q3" } },
+    { "status_code": 40501, "status_message": "Invalid Field: 'language_code'.", "cost": 0.0012, "data": { "tag": "q4" } }
+  ]
+}

@@ -170,7 +170,11 @@ const GROUPS = [
       assert.equal(seeded.enabled, false, "a fresh database must ship the only seed disabled");
       assert.equal(seeded.mode, "allowlist");
       assert.deepEqual(seeded.brand_allowlist, []);
-      const enabled = (await q("select count(*)::int n from paid_feature_controls where enabled")).rows[0].n;
+      // F03-AC-17 is the one documented exception (F03 risk 4): scan accounting
+      // ships enabled because P0 dispatch controls already gate collection.
+      const enabled = (
+        await q("select count(*)::int n from paid_feature_controls where enabled and feature <> 'ai_visibility.scan'")
+      ).rows[0].n;
       assert.equal(enabled, 0, "no paid feature may be enabled by a migration");
       const rls = (
         await q(

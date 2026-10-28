@@ -9,7 +9,7 @@ import {
   jsonOk,
   NO_STORE,
 } from "./errors.ts";
-import { SpendRefused } from "../spend/errors.ts";
+import { SpendRefused, ChargedCallError, UnbilledCallError, AmbiguousCallError } from "../spend/errors.ts";
 
 function catchOf(fn: () => unknown): unknown {
   try {
@@ -203,6 +203,60 @@ test("an unknown error becomes 500 without leaking its message", async () => {
   } finally {
     console.error = original;
   }
+});
+
+test("a call-outcome error with status and code answers with them", async () => {
+  const cases = [
+    new UnbilledCallError("DataForSEO rejected the API key.", {
+      status: 502, code: "dataforseo_auth_failed", details: { providerCode: "dataforseo_http_401" },
+    }),
+    new AmbiguousCallError("DataForSEO did not answer in time.", { status: 504, code: "dataforseo_timeout" }),
+    new ChargedCallError("The DataForSEO task failed after it was billed.", {
+      actualUsd: 0.0012, provider: "dataforseo", endpoint: "/v3/serp/google/organic/task_post",
+      status: 502, code: "dataforseo_task_failed", details: { upstream: true },
+    }),
+  ];
+  const expected = [
+    { status: 502, body: { error: "DataForSEO rejected the API key.", code: "dataforseo_auth_failed", details: { providerCode: "dataforseo_http_401" } } },
+    { status: 504, body: { error: "DataForSEO did not answer in time.", code: "dataforseo_timeout" } },
+    { status: 502, body: { error: "The DataForSEO task failed after it was billed.", code: "dataforseo_task_failed", details: { upstream: true } } },
+  ];
+  for (const [i, err] of cases.entries()) {
+    assert.deepEqual(await bodyOf(err), expected[i]);
+  }
+});
+
+test("a call-outcome error without both status and code stays a 500 that hides its message", async () => {
+  const errors = [
+    new UnbilledCallError("The gateway refused the request (401)."),
+    new AmbiguousCallError("socket closed", { code: "no_status" }),
+    new UnbilledCallError("bad status", { status: 200, code: "not_an_error_status" }),
+    new ChargedCallError("billed then failed", { actualUsd: 0.01, provider: "p", endpoint: "/e", status: 502 }),
+  ];
+  const log = test.mock.method(console, "error", () => {});
+  try {
+    for (const err of errors) {
+      const { status, body } = await bodyOf(err);
+      assert.equal(status, 500);
+      assert.equal(body.code, "internal_error");
+      assert.ok(!JSON.stringify(body).includes(err.message));
+    }
+  } finally {
+    log.mock.restore();
+  }
+});
+
+test("call-outcome errors keep their metadata fields", () => {
+  const err = new ChargedCallError("x", { actualUsd: 0.5, provider: "p", endpoint: "/e", status: 502, code: "c", details: { a: 1 } });
+  assert.equal(err.name, "ChargedCallError");
+  assert.equal(err.actualUsd, 0.5);
+  assert.equal(err.status, 502);
+  assert.equal(err.code, "c");
+  assert.deepEqual(err.details, { a: 1 });
+  assert.ok(!(err instanceof AppError));
+  const plain = new UnbilledCallError("y");
+  assert.equal(plain.status, undefined);
+  assert.equal(plain.code, undefined);
 });
 
 test("every response carries Cache-Control: no-store and JSON", async () => {

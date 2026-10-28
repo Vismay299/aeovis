@@ -11,15 +11,26 @@ import {
   RESEARCH_LOG_RETENTION_DAYS,
   type ContextAuthor,
   type KeyPageRole,
+  type ProjectCompetitorSource,
   type ProjectContext,
   type ProjectContextSectionKey,
   type ProjectContextUpdate,
   type ProjectResearchKind,
 } from "../../shared/project-context.ts";
+import { AppError } from "../http/appError.ts";
+import { briefToOps, isSeededBrief } from "./briefImport.ts";
 import { resolveContextUpdates, type ResolvedOp } from "./contextUpdateOps.ts";
 import { createProjectContextRepository, type ProjectContextRepository } from "./repository.ts";
 
-export type ProjectContextDeps = { repo?: ProjectContextRepository; now?: () => Date };
+export type ProjectContextDeps = {
+  repo?: ProjectContextRepository;
+  now?: () => Date;
+  /**
+   * The `source` an `addCompetitors` update is stored with. The routes and the
+   * resolver default to "manual"; the assistant tool passes "assistant".
+   */
+  competitorSource?: ProjectCompetitorSource;
+};
 
 export type WorkspaceBrand = {
   brandKey: string;
@@ -105,6 +116,37 @@ export async function getProjectContext(
   };
 }
 
+/**
+ * The same read for a caller that holds only a brand key — F13's `cluster` step
+ * and F22's turn prompt run inside jobs, where the context carries the key
+ * alone. The brand row is read here rather than in the repository (§6.2.4 has no
+ * brand read), so `getProjectContext` keeps one shape of input.
+ */
+export async function getProjectContextByKey(
+  admin: SupabaseClient,
+  brandKey: string,
+  deps?: ProjectContextDeps,
+): Promise<ProjectContext> {
+  const { data, error } = await admin
+    .from("customer_brands")
+    .select("brand_key,display_name,website,website_host,aliases")
+    .eq("brand_key", brandKey)
+    .maybeSingle();
+  if (error) {
+    throw new AppError(503, "context_unavailable", "Context could not be loaded. Please retry.", { cause: error });
+  }
+  if (!data) throw new AppError(404, "workspace_not_found", "Workspace not found.");
+  const row = data as Record<string, unknown>;
+  const key = typeof row.brand_key === "string" && row.brand_key !== "" ? row.brand_key : brandKey;
+  return getProjectContext(admin, {
+    brandKey: key,
+    display_name: typeof row.display_name === "string" ? row.display_name : key,
+    website: typeof row.website === "string" ? row.website : "",
+    website_host: typeof row.website_host === "string" ? row.website_host : "",
+    aliases: Array.isArray(row.aliases) ? row.aliases.filter((alias): alias is string => typeof alias === "string") : [],
+  }, deps);
+}
+
 export async function applyContextUpdates(
   admin: SupabaseClient,
   brand: WorkspaceBrand,
@@ -127,6 +169,7 @@ export async function applyContextUpdates(
       urls: new Set(keyPageRows.map((row) => row.url)),
       ownHost: brand.website_host.replace(/^www\./, ""),
     },
+    { competitorSource: deps?.competitorSource ?? "manual" },
   );
   await repo.applyOps(brand.brandKey, ops, author, actorUserId);
   return getProjectContext(admin, brand, { ...deps, repo });
@@ -245,4 +288,61 @@ export function renderProjectContextMarkdown(context: ProjectContext): string {
     ? `Missing sections: ${context.missingSections.join(", ")}`
     : "Missing sections: none");
   return lines.join("\n");
+}
+
+function describeFailure(err: unknown): string {
+  return err instanceof Error ? err.message.slice(0, 200) : typeof err;
+}
+
+/**
+ * §6.2.7 — imports a workspace's brand brief into memory exactly once.
+ *
+ * State is read first, so a completed read performs no claim and no write. A
+ * missing or still-seeded brief is a successful no-op that leaves the checked
+ * timestamp set (there is nothing to retry). Any failure after the claim is
+ * released again so a later read can retry, and is logged by brand key only:
+ * memory text must never reach a log line.
+ *
+ * Called by the GET handler only — `getProjectContext` stays pure, so F13–F17
+ * and F22 read memory without ever triggering an import.
+ */
+export async function maybeImportBrandBrief(
+  admin: SupabaseClient,
+  brand: WorkspaceBrand,
+  deps?: ProjectContextDeps,
+): Promise<boolean> {
+  const repo = getRepo(admin, deps);
+  let claimed = false;
+  try {
+    const state = await repo.getBriefImportState(brand.brandKey);
+    if (state.imported || state.checkedAt !== null) return false;
+    if (!(await repo.claimBriefImport(brand.brandKey))) return false;
+    claimed = true;
+
+    const brief = await repo.getBrandBrief({
+      brandKey: brand.brandKey,
+      displayName: brand.display_name,
+      aliases: brand.aliases,
+    });
+    if (!brief || isSeededBrief(brief, brand.brandKey, brand.display_name)) return false;
+
+    const ops = briefToOps(brief, brand.website_host.replace(/^www\./, ""));
+    // The RPC takes 1–60 resolved operations, so zero ops is never sent; the
+    // import is still committed, because there is nothing left to retry.
+    if (ops.length > 0) await repo.applyOps(brand.brandKey, ops, "system", null);
+    await repo.markBriefImported(brand.brandKey);
+    return true;
+  } catch {
+    console.error(`[project-context] brief import failed ${brand.brandKey}`);
+    if (claimed) {
+      try {
+        await repo.releaseBriefImportClaim(brand.brandKey);
+      } catch (releaseErr) {
+        console.error(
+          `[project-context] brief import claim release failed ${brand.brandKey}: ${describeFailure(releaseErr)}`,
+        );
+      }
+    }
+    return false;
+  }
 }

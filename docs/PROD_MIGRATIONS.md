@@ -1575,6 +1575,22 @@ workspace membership policy; all writes go through the service-only functions
 contract is exercised by `scripts/qa/check-f07-db.mjs` on loopback QA PostgreSQL
 and tenant reads are checked by `tests/customer-uat.sql`.
 The migration also adds the global (entry_date, id) retention index, a re-applied table check that rejects canonical dotted-decimal IPv4 and URL-parser numeric shorthand, octal and hexadecimal forms, and an own-host RPC guard for competitors. Reapplying 070 replaces the earlier dotted-decimal-only constraint definition. Research log entries receive a jobs(id) ON DELETE SET NULL foreign key and column comment.
+## F03 cost ledger: migration `050_f03_cost_ledger.sql`
+
+**Status:** in repo; **not yet applied to production**.
+
+Migration 050 adds subject and answer reference columns to `spend_ledger`, creates the operator-only `cost_reconciliations` table, and adds functions `sync_probe_attempt_costs`, `settle_scan_hold`, `settle_finished_scan_holds`, `resolve_cost_reconciliation`, `engine_cost_stats`, `resolve_unknown_cost_backlog`, and `prune_cost_reconciliations`. It seeds `paid_feature_controls('ai_visibility.scan', true, 'all')` so existing scans continue uninterrupted.
+
+### Objects to check in the catalog
+- columns `spend_ledger.subject_kind`, `spend_ledger.subject_id`, `spend_ledger.answer_ref`, `spend_ledger.price_version`
+- table `public.cost_reconciliations`
+- functions `sync_probe_attempt_costs`, `settle_scan_hold`, `settle_finished_scan_holds`, `resolve_cost_reconciliation`, `engine_cost_stats`, `f03_upsert_attempt_rows`, `prune_cost_reconciliations`, `resolve_unknown_cost_backlog`
+
+### Apply
+1. Apply the migration during a maintenance window (idempotent DDL).
+2. Existing scans are not refused because `paid_feature_controls('ai_visibility.scan')` is seeded enabled.
+3. Verified against disposable PostgreSQL by `scripts/qa/check-f03-db.mjs` and tenant isolation by `tests/customer-uat.sql`.
+
 ## `165_f26_privacy_and_telemetry_ids.sql`
 
 **Status:** in repo; **not yet applied to production**.

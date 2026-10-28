@@ -1,7 +1,9 @@
 import "./globals.css";
 import "@/components/design-system/primitives.css";
 import "@/components/portal/portal.css";
-import { Toaster } from "sonner";
+import SurfaceSync from "@/components/app/theme/SurfaceSync";
+import AppToaster from "@/components/app/AppToaster";
+import { buildThemeInitScript } from "@/lib/theme/theme";
 
 export const metadata = {
   metadataBase: new URL("https://perceev.com"),
@@ -15,24 +17,14 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" data-theme="light" data-scroll-behavior="smooth">
+    <html lang="en" data-theme="light" data-scroll-behavior="smooth" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: buildThemeInitScript() }} />
+      </head>
       <body className="antialiased">
+        <SurfaceSync />
         {children}
-        <Toaster
-          theme="light"
-          position="bottom-right"
-          toastOptions={{
-            style: {
-              background: "var(--surface)",
-              border: "1px solid var(--line)",
-              borderRadius: "var(--r-md)",
-              color: "var(--ink-1)",
-              fontFamily: "var(--font-sans)",
-              fontSize: "14px",
-              boxShadow: "var(--shadow-2)",
-            },
-          }}
-        />
+        <AppToaster />
       </body>
     </html>
   );

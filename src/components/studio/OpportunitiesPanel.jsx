@@ -256,7 +256,7 @@ export function OpportunitiesPanel({ brand, scan, agents, onLaunched }) {
   return (
     <div data-testid="opportunities-panel">
       <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
-        <Radar size={16} style={{ color: "var(--accent)" }} />
+        <Radar size={16} style={{ color: "var(--brand)" }} />
         <span style={{ fontSize: "13px", color: "var(--text-2)" }}>
           {gaps.length} {gaps.length === 1 ? "gap" : "gaps"} from your latest scan. The scan is the sensor; assign an agent to close each one.
         </span>

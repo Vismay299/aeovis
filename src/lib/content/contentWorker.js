@@ -44,6 +44,8 @@ import { runTransform } from "./steps/transform.js";
 import { runFactCheck } from "./steps/factCheck.js";
 import { formatKnowledge } from "./steps/shared.js";
 import { listKnowledgeBlocks } from "../db/knowledge.js";
+import { isFeatureEnabled } from "../features/flags.ts";
+import { defaultProjectMemoryMarkdown, withProjectMemory } from "../projectContext/contentOverlay.ts";
 import { makeSelfContinue } from "../selfContinue.js";
 
 /**
@@ -179,6 +181,27 @@ function assertUnderCostCap(stats, step) {
 }
 
 /**
+ * F07 §6.2.6 — attach the project-memory digest to the brief a pipeline step
+ * receives, when `project_memory_content` is on for this workspace.
+ *
+ * Applied AFTER any upsert and to a copy, so memory never reaches the stored
+ * brand brief. Every failure (flag read, digest read) is logged with no content
+ * and downgrades to the plain brief: a drafting job must not fail because memory
+ * is unavailable.
+ */
+async function withProjectMemoryDigest(brand, brief, deps) {
+  try {
+    const enabled = await (deps.isFeatureEnabled || isFeatureEnabled)("project_memory_content", brand);
+    if (!enabled) return brief;
+    const markdown = await (deps.getProjectMemoryMarkdown || defaultProjectMemoryMarkdown)(brand);
+    return withProjectMemory(brief, markdown);
+  } catch (err) {
+    console.warn("[content-worker] project memory unavailable:", err?.message || "unknown error");
+    return brief;
+  }
+}
+
+/**
  * Resolve the brand brief for a job: stored brief wins; otherwise seed from
  * the requested preset (first shipped preset: healthcare-cxo) and persist it
  * so Studio's brief editor starts from what the pipeline actually used.
@@ -199,7 +222,9 @@ export async function resolveBrief(brand, input, deps = {}) {
     );
   // Only replace the exact old automatically seeded preset. A customer-edited
   // healthcare brief (even one field changed) remains their source of truth.
-  if (stored?.brief && !legacyHealthcareSeed) return withRequest(stored.brief);
+  if (stored?.brief && !legacyHealthcareSeed) {
+    return withProjectMemoryDigest(brand, withRequest(stored.brief), deps);
+  }
 
   const preset = input?.brand_profile === "healthcare-cxo"
     ? HEALTHCARE_CXO_BRIEF
@@ -214,7 +239,8 @@ export async function resolveBrief(brand, input, deps = {}) {
   } catch (err) {
     console.warn("[content-worker] brief seed persist failed:", err.message);
   }
-  return withRequest(seeded);
+  // The overlay runs after the upsert, so `seeded` above is what gets stored.
+  return withProjectMemoryDigest(brand, withRequest(seeded), deps);
 }
 
 /** The agent config a job runs under: its snapshot, else the base default. */

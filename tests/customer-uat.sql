@@ -172,16 +172,28 @@ INSERT INTO public.workspace_spend_limits(brand_key,daily_cap_usd,monthly_cap_us
 INSERT INTO public.spend_ledger(brand_key,feature,source_ref,provider,endpoint,estimate_usd,actual_usd,accounted_usd,cost_source) VALUES
  ('10000000-0000-0000-0000-000000000001','platform.selftest','uat:0001:1','openrouter','chat:uat',0.1,0.1,0.1,'provider_reported'),
  ('10000000-0000-0000-0000-000000000002','platform.selftest','uat:0002:1','openrouter','chat:uat',0.1,0.1,0.1,'provider_reported');
+-- F03: cost_reconciliations is operator-only; customer users must be refused outright
+INSERT INTO public.cost_reconciliations(ledger_id, brand_key, feature, provider, endpoint, kind, estimate_usd, actual_usd)
+SELECT id, brand_key, feature, provider, endpoint, 'undershoot', estimate_usd, actual_usd + 0.05
+  FROM public.spend_ledger WHERE source_ref IN ('uat:0001:1', 'uat:0002:1');
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.workspace_spend_limits) <> 1 OR (SELECT count(*) FROM public.spend_ledger) <> 1
   THEN RAISE EXCEPTION 'Spend limits or ledger leaked across tenants'; END IF;
+ BEGIN
+  PERFORM 1 FROM public.cost_reconciliations;
+  RAISE EXCEPTION 'cost_reconciliations readable by customer';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.workspace_spend_limits) <> 1 OR (SELECT count(*) FROM public.spend_ledger) <> 1
   THEN RAISE EXCEPTION 'Spend limits or ledger leaked across tenants'; END IF;
+ BEGIN
+  PERFORM 1 FROM public.cost_reconciliations;
+  RAISE EXCEPTION 'cost_reconciliations readable by customer';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
 INSERT INTO public.jobs(kind,brand_key,trigger,status) VALUES

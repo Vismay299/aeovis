@@ -1,0 +1,8 @@
+{
+  "status_code": 20000,
+  "tasks": [{
+    "status_code": 20000,
+    "cost": 0.0006,
+    "result": [{ "items": [{ "type": "organic", "rank_group": 1 }] }]
+  }]
+}

@@ -119,7 +119,7 @@ export const VisibilityVerdictPanel = ({ result, rankedEntries }) => {
       data-testid="overview-verdict"
       style={{
         background: "var(--bg-1)",
-        borderTop: "3px solid var(--accent)",
+        borderTop: "3px solid var(--brand)",
         borderRight: "1px solid var(--border-1)",
         borderBottom: "1px solid var(--border-1)",
         borderLeft: "1px solid var(--border-1)",
