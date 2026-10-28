@@ -1,6 +1,6 @@
 /**
  * F07 §6.2.7 — the one-time import of a workspace's brand brief into project
- * memory. Own code (the spec lists no OpenSEO source for it): the two preset
+ * memory. Own code (the spec lists no upstream source for it): the two preset
  * shapes it recognises are the ones `src/lib/content/contentWorker.js` seeds.
  *
  * Both functions are pure. `maybeImportBrandBrief` in `service.ts` does the
