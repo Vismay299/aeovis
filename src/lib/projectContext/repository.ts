@@ -158,6 +158,20 @@ function mapApplyError(error: { message?: string } | null | undefined): AppError
 }
 
 export function createProjectContextRepository(admin: SupabaseClient): ProjectContextRepository {
+  /** True when a workspace other than `ownKey` uses `name` as its key, display name or alias. */
+  async function nameOwnedByAnotherWorkspace(name: string, ownKey: string): Promise<boolean> {
+    const probes = [
+      admin.from("customer_brands").select("brand_key").eq("brand_key", name).neq("brand_key", ownKey).limit(1),
+      admin.from("customer_brands").select("brand_key").eq("display_name", name).neq("brand_key", ownKey).limit(1),
+      admin.from("customer_brands").select("brand_key").contains("aliases", [name]).neq("brand_key", ownKey).limit(1),
+    ];
+    for (const { data, error } of await Promise.all(probes)) {
+      if (error) throw unavailable("Context could not be loaded. Please retry.", error);
+      if (Array.isArray(data) && data.length > 0) return true;
+    }
+    return false;
+  }
+
   return {
     async listSections(brandKey) {
       const { data, error } = await admin
@@ -265,6 +279,12 @@ export function createProjectContextRepository(admin: SupabaseClient): ProjectCo
       // fallback order is the whole compatibility story for legacy rows (§11
       // risk 8), and a fuzzy match here would import another brand's brief.
       for (const candidate of brandBriefCandidates(brand)) {
+        // The tenant boundary is brand_key; display_name is customer-chosen. A
+        // fallback name another workspace owns is that workspace's brief, so it
+        // is skipped rather than imported across tenants.
+        if (candidate !== brand.brandKey && (await nameOwnedByAnotherWorkspace(candidate, brand.brandKey))) {
+          continue;
+        }
         const { data, error } = await admin
           .from("brand_briefs")
           .select("brief")

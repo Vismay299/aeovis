@@ -141,10 +141,34 @@ test("briefToOps trims an over-long overview to the 4,000-character prose cap", 
 
 // --- brief lookup order ----------------------------------------------------
 
-function fakeBriefAdmin(rows: Record<string, Record<string, unknown>>) {
+type FakeWorkspace = { brand_key: string; display_name: string; aliases: string[] };
+
+function fakeBriefAdmin(rows: Record<string, Record<string, unknown>>, workspaces: FakeWorkspace[] = []) {
   const asked: string[] = [];
   const admin = {
     from(table: string) {
+      if (table === "customer_brands") {
+        let matches = workspaces;
+        const query = {
+          select: () => query,
+          eq(column: "brand_key" | "display_name", value: string) {
+            matches = matches.filter((row) => row[column] === value);
+            return query;
+          },
+          neq(column: "brand_key", value: string) {
+            matches = matches.filter((row) => row[column] !== value);
+            return query;
+          },
+          contains(column: "aliases", values: string[]) {
+            matches = matches.filter((row) => values.every((value) => row[column].includes(value)));
+            return query;
+          },
+          async limit(count: number) {
+            return { data: matches.slice(0, count).map((row) => ({ brand_key: row.brand_key })), error: null };
+          },
+        };
+        return query;
+      }
       assert.equal(table, "brand_briefs");
       let current = "";
       return {
@@ -183,6 +207,33 @@ test("the repository never case-folds or fuzzy-matches a brief lookup", async ()
   const repo = createProjectContextRepository(admin);
   assert.equal(await repo.getBrandBrief({ brandKey: "offcult.in", displayName: "offcult", aliases: [] }), null);
   assert.deepEqual(asked, ["offcult.in", "offcult"]);
+});
+
+test("a fallback name another workspace owns is never imported across tenants", async () => {
+  const { admin, asked } = fakeBriefAdmin(
+    { "victim.com": { one_liner: "Victim brief" }, Victim: { one_liner: "Victim legacy brief" } },
+    [
+      { brand_key: "victim.com", display_name: "Victim", aliases: ["victim-alias"] },
+      { brand_key: "attacker.io", display_name: "victim.com", aliases: [] },
+    ],
+  );
+  const repo = createProjectContextRepository(admin);
+  // The attacker names itself after the victim's brand key, then its display name.
+  assert.equal(await repo.getBrandBrief({ brandKey: "attacker.io", displayName: "victim.com", aliases: [] }), null);
+  assert.equal(await repo.getBrandBrief({ brandKey: "attacker.io", displayName: "Victim", aliases: ["victim-alias"] }), null);
+  assert.deepEqual(asked, ["attacker.io", "attacker.io"], "only the workspace's own key reaches brand_briefs");
+});
+
+test("a workspace's own display name still finds its unclaimed legacy brief", async () => {
+  const { admin } = fakeBriefAdmin(
+    { Offcult: { one_liner: "Legacy row" } },
+    [{ brand_key: "offcult.in", display_name: "Offcult", aliases: ["offcult"] }],
+  );
+  const repo = createProjectContextRepository(admin);
+  assert.deepEqual(
+    await repo.getBrandBrief({ brandKey: "offcult.in", displayName: "Offcult", aliases: ["offcult"] }),
+    { one_liner: "Legacy row" },
+  );
 });
 
 test("the memory repository mirrors the same exact-match fallback order", async () => {
