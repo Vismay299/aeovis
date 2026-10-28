@@ -1,7 +1,7 @@
 # F21 — Agent skills library
 
 > <!-- doc-status -->
-> **Status: LIVE.** Implementation spec. Phase 1 built; phases 2-3 outstanding.
+> **Status: LIVE.** Implementation spec. Phases 1–2 built; phase 3 outstanding.
 
 | Field | Value |
 |---|---|
@@ -596,18 +596,18 @@ Modified for Perceev. See THIRD_PARTY_NOTICES.md. -->
 
 **Goal:** the ported library, adapted to Perceev tools, passes every guard.
 
-- [ ] **P2.T1 AI-visibility skills**
-  - [ ] **P2.T1.S1** *Files:* `src/assistant/skills/ai-visibility-audit/SKILL.md`. *Do:* copy `openseo:.agents/skills/ai-visibility-audit/SKILL.md`, licence comment, frontmatter per §6.2.5, apply mapping, E1–E10 and row 2. *Verify:* `npm run skills:build && node --test src/assistant/skills/` → pass.
-  - [ ] **P2.T1.S2** *Files:* `src/assistant/skills/ai-prompt-research/SKILL.md`. *Do:* row 1. *Verify:* as S1.
-- [ ] **P2.T2 Search skills**
-  - [ ] **P2.T2.S1** *Files:* `src/assistant/skills/{keyword-research,keyword-clustering}/SKILL.md`. *Do:* rows 5, 6. *Verify:* as P2.T1.S1.
-  - [ ] **P2.T2.S2** *Files:* `src/assistant/skills/{competitive-landscape,competitor-analysis}/SKILL.md`. *Do:* rows 3, 4. *Verify:* as P2.T1.S1.
-  - [ ] **P2.T2.S3** *Files:* `src/assistant/skills/{link-prospecting,local-seo}/SKILL.md`. *Do:* rows 7, 8. *Verify:* as P2.T1.S1.
-  - [ ] **P2.T2.S4** *Files:* `src/assistant/skills/seo-audit/SKILL.md`. *Do:* row 9. *Verify:* as P2.T1.S1.
-- [ ] **P2.T3 Guidance skills**
-  - [ ] **P2.T3.S1** *Files:* `src/assistant/skills/{seo-coach,seo-project-setup}/SKILL.md`. *Do:* rows 10, 11. *Verify:* as P2.T1.S1.
-- [ ] **P2.T4 Notices**
-  - [ ] **P2.T4.S1** *Files:* `THIRD_PARTY_NOTICES.md` (append the 11 `.agents/skills/<name>/SKILL.md` paths and `src/server/features/sam/samSkills.ts` under the OpenSEO section). *Verify:* `grep -c "agents/skills/" THIRD_PARTY_NOTICES.md` → 11.
+- [x] **P2.T1 AI-visibility skills**
+  - [x] **P2.T1.S1** *Files:* `src/assistant/skills/ai-visibility-audit/SKILL.md`. *Do:* copy `openseo:.agents/skills/ai-visibility-audit/SKILL.md`, licence comment, frontmatter per §6.2.5, apply mapping, E1–E10 and row 2. *Verify:* `npm run skills:build && node --test src/assistant/skills/` → pass.
+  - [x] **P2.T1.S2** *Files:* `src/assistant/skills/ai-prompt-research/SKILL.md`. *Do:* row 1. *Verify:* as S1.
+- [x] **P2.T2 Search skills**
+  - [x] **P2.T2.S1** *Files:* `src/assistant/skills/{keyword-research,keyword-clustering}/SKILL.md`. *Do:* rows 5, 6. *Verify:* as P2.T1.S1.
+  - [x] **P2.T2.S2** *Files:* `src/assistant/skills/{competitive-landscape,competitor-analysis}/SKILL.md`. *Do:* rows 3, 4. *Verify:* as P2.T1.S1.
+  - [x] **P2.T2.S3** *Files:* `src/assistant/skills/{link-prospecting,local-seo}/SKILL.md`. *Do:* rows 7, 8. *Verify:* as P2.T1.S1.
+  - [x] **P2.T2.S4** *Files:* `src/assistant/skills/seo-audit/SKILL.md`. *Do:* row 9. *Verify:* as P2.T1.S1.
+- [x] **P2.T3 Guidance skills**
+  - [x] **P2.T3.S1** *Files:* `src/assistant/skills/{seo-coach,seo-project-setup}/SKILL.md`. *Do:* rows 10, 11. *Verify:* as P2.T1.S1.
+- [x] **P2.T4 Notices**
+  - [x] **P2.T4.S1** *Files:* `THIRD_PARTY_NOTICES.md` (append the 11 `.agents/skills/<name>/SKILL.md` paths and `src/server/features/sam/samSkills.ts` under the OpenSEO section). *Verify:* `grep -c "agents/skills/" THIRD_PARTY_NOTICES.md` → 11.
 
 **Checkpoint:** `node --test src/assistant/skills/` → pass; `node scripts/build-assistant-skills.mjs --check` → exit 0. Completes F21-AC-11 for ported skills.
 
