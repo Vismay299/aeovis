@@ -1,0 +1,47 @@
+"use client";
+
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/client/components/Spinner.tsx
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
+
+import { cn } from "@/lib/utils";
+import { Spinner as SpinnerIcon } from "@/components/ui/spinner";
+
+/** A loading indicator with an optional visible label, e.g. "Checking…". */
+export function Spinner({
+  size = "md",
+  label,
+  className,
+}: {
+  size?: "sm" | "md";
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-2 text-sm text-muted-foreground",
+        className
+      )}
+    >
+      {/* The icon is the status element, so it carries the label for screen readers. */}
+      <SpinnerIcon
+        aria-label={label ?? "Loading"}
+        className={size === "sm" ? "size-4" : "size-6"}
+      />
+      {label ? <span aria-hidden>{label}</span> : null}
+    </span>
+  );
+}
+
+/**
+ * A full-screen spinner for the sign-in and account layouts, which have no app
+ * chrome to show while the session loads. In the app, pages show skeletons.
+ */
+export function PageLoading() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center">
+      <Spinner />
+    </div>
+  );
+}
