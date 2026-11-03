@@ -483,12 +483,12 @@ Branch names `feat/f04-design-system-p<N>`. Every phase ends with the full suite
 
 **Goal:** every shared component of §6.6.3 exists and compiles; nothing uses them yet except a fixture page in the browser harness.
 
-- [ ] **P3.T1 Components**
-  - [ ] **P3.T1.S1** *Files:* `src/components/app/{PageHeader,PageFrame,EmptyState,ErrorState,SkeletonPresets,ConfirmDialog,InlineConfirm,CopyButton,Spinner,SegmentedToggle,HelpLabel,GateCard,RowActionsMenu,ChartAxes,CardShell,FormDialog,FormActions,SafeExternalLink,ExpandableList,Markdown,StatusScreen,PermissionHint,CountryCombobox,LocationSelect,AppBanner,NotFound,ErrorBoundaryCard,NavTabs}.tsx`, `src/components/app/brand/PerceevLogo.tsx`, `src/components/app/hooks/useCopy.ts`, `src/components/app/errors/describeError.ts`, `src/shared/safe-url.ts`. *Do:* §6.6.3. *Verify:* `npm run typecheck` → exit 0; `npm run build` → exit 0.
-  - [ ] **P3.T1.S2** *Files:* `src/components/app/queryStateView.ts`, `src/components/app/QueryState.tsx`, `src/components/app/queryStateView.test.ts`. *Do:* the two OpenSEO cases (`QueryState.test.ts:19-42`) plus pending and success. *Verify:* `node --test src/components/app/queryStateView.test.ts` → pass (F04-AC-07).
-  - [ ] **P3.T1.S3** *Files:* `src/shared/safe-url.test.ts` (new unless F02 created it). *Do:* `javascript:` → null; `https://u:p@x` → null; `https://example.com/a` → unchanged; `safeHostname("https://www.a.com/x")` → `a.com`. *Verify:* `node --test src/shared/safe-url.test.ts` → pass.
-- [ ] **P3.T2 Providers**
-  - [ ] **P3.T2.S1** *Files:* `src/components/app/providers/AppProviders.tsx`. *Do:* `TooltipProvider` wrapper. *Verify:* build → exit 0.
+- [x] **P3.T1 Components**
+  - [x] **P3.T1.S1** *Files:* `src/components/app/{PageHeader,PageFrame,EmptyState,ErrorState,SkeletonPresets,ConfirmDialog,InlineConfirm,CopyButton,Spinner,SegmentedToggle,HelpLabel,GateCard,RowActionsMenu,ChartAxes,CardShell,FormDialog,FormActions,SafeExternalLink,ExpandableList,Markdown,StatusScreen,PermissionHint,CountryCombobox,LocationSelect,AppBanner,NotFound,ErrorBoundaryCard,NavTabs}.tsx`, `src/components/app/brand/PerceevLogo.tsx`, `src/components/app/hooks/useCopy.ts`, `src/components/app/errors/describeError.ts`, `src/shared/safe-url.ts`. *Do:* §6.6.3. *Verify:* `npm run typecheck` → exit 0; `npm run build` → exit 0.
+  - [x] **P3.T1.S2** *Files:* `src/components/app/queryStateView.ts`, `src/components/app/QueryState.tsx`, `src/components/app/queryStateView.test.ts`. *Do:* the two OpenSEO cases (`QueryState.test.ts:19-42`) plus pending and success. *Verify:* `node --test src/components/app/queryStateView.test.ts` → pass (F04-AC-07).
+  - [x] **P3.T1.S3** *Files:* `src/shared/safe-url.test.ts` (new unless F02 created it). *Do:* `javascript:` → null; `https://u:p@x` → null; `https://example.com/a` → unchanged; `safeHostname("https://www.a.com/x")` → `a.com`. *Verify:* `node --test src/shared/safe-url.test.ts` → pass.
+- [x] **P3.T2 Providers**
+  - [x] **P3.T2.S1** *Files:* `src/components/app/providers/AppProviders.tsx`. *Do:* `TooltipProvider` wrapper. *Verify:* build → exit 0.
 
 **Checkpoint:** suite, typecheck, build, public layout diff → 0. Completes F04-AC-07.
 
