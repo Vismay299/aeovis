@@ -205,7 +205,7 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     for (const entry of await readdir(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) await walk(full);
-      else if (entry.name === "route.js") {
+      else if (entry.name === "route.js" || entry.name === "route.ts") {
         routes.push("/" + path.relative(REPO, path.dirname(full)).split(path.sep).slice(2).join("/"));
       }
     }
@@ -248,6 +248,7 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/agents/[id]",
       "/api/customer/content",
     "/api/customer/content/[id]",
+    "/api/customer/context",
     "/api/customer/gsc",
       "/api/customer/gsc/callback",
       "/api/customer/gsc/connect",
@@ -255,16 +256,21 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/gsc/properties",
       "/api/customer/gsc/property",
       "/api/customer/gsc/sync",
+      "/api/customer/jobs/[jobId]",
+      "/api/customer/jobs/[jobId]/cancel",
+      "/api/customer/privacy",
       "/api/customer/scan",
       "/api/customer/scan/mock",
       "/api/customer/scan/report/[scan_id]",
       "/api/customer/team",
+      "/api/customer/usage",
       "/api/gsc/sync-worker",
       "/api/customer/onboard",
       "/api/customer/overview",
       "/api/content/worker",
       "/api/evidence/retention",
       "/api/gsc/worker",
+      "/api/jobs/tick",
       "/api/scan/worker",
       // R1.2.23 — the scan_runs retention cron. Carries its own cronAuth gate,
       // exactly like the four above.

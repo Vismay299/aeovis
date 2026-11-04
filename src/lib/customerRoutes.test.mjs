@@ -5,7 +5,7 @@ import { register } from "node:module";
 register("./customerRoutes.test.hooks.mjs", import.meta.url);
 const { DuplicateScanError } = await import("./duplicateScan.js");
 const listing = await import("../app/api/customer/scan/route.js");
-const report = await import("../app/api/customer/scan/report/[scan_id]/route.js");
+const report = await import("../app/api/customer/scan/report/[scan_id]/route.ts");
 const gscData = await import("../app/api/customer/gsc/data/route.js");
 const contentListing = await import("../app/api/customer/content/route.js");
 const contentItem = await import("../app/api/customer/content/[id]/route.js");
