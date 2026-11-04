@@ -258,7 +258,7 @@ All TSX, `"use client"`, licence header where COPY/PORT. Router adaptations: Tan
 | `PageFrame.tsx` | `PageFrame({ children, width?: "7xl" \| "full" })` → `<div className="px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-8"><div className="mx-auto max-w-7xl space-y-5">` (`full` drops `max-w-7xl`). |
 | `EmptyState.tsx` | COPY. |
 | `ErrorState.tsx` | COPY. |
-| `queryStateView.ts` | Pure: `queryStateView(q: { isPending: boolean; isError: boolean; data: unknown }): "loading" \| "error" \| "error+content" \| "content"`. Relative imports only. |
+| `queryStateView.ts` | Pure: `queryStateView(q: { isPending: boolean; isError: boolean; fetchStatus?: "fetching" \| "paused" \| "idle"; data: unknown }): "loading" \| "idle" \| "error" \| "error+content" \| "content"` (pending with `fetchStatus: "idle"` is a disabled query → `"idle"`, rendered by `QueryState`'s `idle` prop, default nothing). Relative imports only. |
 | `QueryState.tsx` | `QueryError({ error?, cause?, fallback, onRetry?, isRetrying?, variant?, title? })` and `QueryState({ query, errorFallback, loading?, children })` using `queryStateView`. `describeError(error, fallback)` from `./errors/describeError.ts` (F04 version: `error instanceof Error && error.message ? error.message : fallback`). F05 replaces `describeError` and adds the `SpendRefusedError` branch in place of OpenSEO's `InsufficientCreditsError` (`QueryState.tsx:39-41`). `UseQueryResult` is a type-only import from `@tanstack/react-query` (installed in phase 1). |
 | `SkeletonPresets.tsx` | `SkeletonStatGrid`, `SkeletonTableRows` (default 8 rows), `SkeletonCard`, `SkeletonPage`, `SkeletonPageContent`. COPY. |
 | `ConfirmDialog.tsx`, `InlineConfirm.tsx`, `CopyButton.tsx` (+ `hooks/useCopy.ts`), `Spinner.tsx` (`Spinner`, `PageLoading`), `SegmentedToggle.tsx`, `HelpLabel.tsx`, `GateCard.tsx`, `RowActionsMenu.tsx`, `ChartAxes.tsx`, `CardShell.tsx`, `FormDialog.tsx`, `FormActions.tsx`, `SafeExternalLink.tsx`, `ExpandableList.tsx` | COPY. |
@@ -269,7 +269,7 @@ All TSX, `"use client"`, licence header where COPY/PORT. Router adaptations: Tan
 | `CountryCombobox.tsx`, `LocationSelect.tsx` | PORT; `options: readonly LocationOption[]` is **required** (no default list); `export type LocationOption = { code: number; label: string; shortLabel: string }`. |
 | `AppBanner.tsx` | COPY of `openseo:src/client/layout/AppBanner.tsx`. |
 | `NotFound.tsx` | PORT: title "404", body "The page you are looking for does not exist.", button "Back to overview" → `/portal`. |
-| `ErrorBoundaryCard.tsx` | PORT of `DefaultCatchBoundary.tsx:39-82`: message `describeError(error, "Something went wrong. Please try again.")`, buttons "Try again" (calls `reset`) and "Go back" (`history.back()`). |
+| `ErrorBoundaryCard.tsx` | PORT of `DefaultCatchBoundary.tsx:39-82`: message always "Something went wrong. Please try again." (the error is logged to the console and shown as a muted detail line only outside production), buttons "Try again" (calls `reset`) and "Go back" (`history.back()`). |
 | `brand/PerceevLogo.tsx` | `PerceevMark({ className? })`: 22 px square, radius 7 px, `linear-gradient(135deg, var(--brand), var(--brand-lift))`, inset white ring (from `portal.css:63-69`). `PerceevLogo({ size?: "sm" \| "md" })`: mark + wordmark "perceev", `font-family: 'Archivo', system-ui, sans-serif`, weight 750, letter-spacing −0.05em, 18 px (`md`) or 16 px (`sm`). |
 | `hooks/use-mobile.ts` | COPY (`MOBILE_BREAKPOINT = 768`). |
 | `theme/useThemePreference.ts` | PORT of `theme.ts:16-129` using `src/lib/theme/theme.ts`; applies the theme only when `surfaceForPath(location.pathname).themeMode === "user"`. |
@@ -483,12 +483,12 @@ Branch names `feat/f04-design-system-p<N>`. Every phase ends with the full suite
 
 **Goal:** every shared component of §6.6.3 exists and compiles; nothing uses them yet except a fixture page in the browser harness.
 
-- [ ] **P3.T1 Components**
-  - [ ] **P3.T1.S1** *Files:* `src/components/app/{PageHeader,PageFrame,EmptyState,ErrorState,SkeletonPresets,ConfirmDialog,InlineConfirm,CopyButton,Spinner,SegmentedToggle,HelpLabel,GateCard,RowActionsMenu,ChartAxes,CardShell,FormDialog,FormActions,SafeExternalLink,ExpandableList,Markdown,StatusScreen,PermissionHint,CountryCombobox,LocationSelect,AppBanner,NotFound,ErrorBoundaryCard,NavTabs}.tsx`, `src/components/app/brand/PerceevLogo.tsx`, `src/components/app/hooks/useCopy.ts`, `src/components/app/errors/describeError.ts`, `src/shared/safe-url.ts`. *Do:* §6.6.3. *Verify:* `npm run typecheck` → exit 0; `npm run build` → exit 0.
-  - [ ] **P3.T1.S2** *Files:* `src/components/app/queryStateView.ts`, `src/components/app/QueryState.tsx`, `src/components/app/queryStateView.test.ts`. *Do:* the two OpenSEO cases (`QueryState.test.ts:19-42`) plus pending and success. *Verify:* `node --test src/components/app/queryStateView.test.ts` → pass (F04-AC-07).
-  - [ ] **P3.T1.S3** *Files:* `src/shared/safe-url.test.ts` (new unless F02 created it). *Do:* `javascript:` → null; `https://u:p@x` → null; `https://example.com/a` → unchanged; `safeHostname("https://www.a.com/x")` → `a.com`. *Verify:* `node --test src/shared/safe-url.test.ts` → pass.
-- [ ] **P3.T2 Providers**
-  - [ ] **P3.T2.S1** *Files:* `src/components/app/providers/AppProviders.tsx`. *Do:* `TooltipProvider` wrapper. *Verify:* build → exit 0.
+- [x] **P3.T1 Components**
+  - [x] **P3.T1.S1** *Files:* `src/components/app/{PageHeader,PageFrame,EmptyState,ErrorState,SkeletonPresets,ConfirmDialog,InlineConfirm,CopyButton,Spinner,SegmentedToggle,HelpLabel,GateCard,RowActionsMenu,ChartAxes,CardShell,FormDialog,FormActions,SafeExternalLink,ExpandableList,Markdown,StatusScreen,PermissionHint,CountryCombobox,LocationSelect,AppBanner,NotFound,ErrorBoundaryCard,NavTabs}.tsx`, `src/components/app/brand/PerceevLogo.tsx`, `src/components/app/hooks/useCopy.ts`, `src/components/app/errors/describeError.ts`, `src/shared/safe-url.ts`. *Do:* §6.6.3. *Verify:* `npm run typecheck` → exit 0; `npm run build` → exit 0.
+  - [x] **P3.T1.S2** *Files:* `src/components/app/queryStateView.ts`, `src/components/app/QueryState.tsx`, `src/components/app/queryStateView.test.ts`. *Do:* the two OpenSEO cases (`QueryState.test.ts:19-42`) plus pending and success. *Verify:* `node --test src/components/app/queryStateView.test.ts` → pass (F04-AC-07).
+  - [x] **P3.T1.S3** *Files:* `src/shared/safe-url.test.ts` (new unless F02 created it). *Do:* `javascript:` → null; `https://u:p@x` → null; `https://example.com/a` → unchanged; `safeHostname("https://www.a.com/x")` → `a.com`. *Verify:* `node --test src/shared/safe-url.test.ts` → pass.
+- [x] **P3.T2 Providers**
+  - [x] **P3.T2.S1** *Files:* `src/components/app/providers/AppProviders.tsx`. *Do:* `TooltipProvider` wrapper. *Verify:* build → exit 0.
 
 **Checkpoint:** suite, typecheck, build, public layout diff → 0. Completes F04-AC-07.
 
