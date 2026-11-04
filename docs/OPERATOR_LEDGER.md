@@ -348,6 +348,8 @@ functions; its tenant isolation is verified by `tests/customer-uat.sql` and
 
 `050_f03_cost_ledger` is additive and must be applied before deploying F03. It adds subject and answer reference columns to `spend_ledger`, creates the operator-only `cost_reconciliations` table, and adds functions `sync_probe_attempt_costs`, `settle_scan_hold`, `settle_finished_scan_holds`, `resolve_cost_reconciliation`, `engine_cost_stats`, `resolve_unknown_cost_backlog`, and `prune_cost_reconciliations`. It seeds `paid_feature_controls('ai_visibility.scan', true, 'all')` so existing scans are not refused. Verified against loopback PostgreSQL by `scripts/qa/check-f03-db.mjs` and `tests/customer-uat.sql`.
 
+`051_f03_usage` is additive and must be applied before deploying F03 phase 3 (the customer Usage route and the operator cost view). It adds only functions: `workspace_usage_days` (spend binned by the viewer's local day and feature), `workspace_spend_position` (today and month spend, the workspace caps and the open holds) and `operator_costs_by_workspace` / `operator_costs_by_endpoint`. Every one is revoked from `PUBLIC`, `anon` and `authenticated` and granted to `service_role` only, so a customer read never runs them as its own role. Verified against loopback PostgreSQL by the `usage` group of `scripts/qa/check-f03-db.mjs`.
+
 
 `040_f01_jobs` is implemented and verified on disposable PostgreSQL — the
 `jobs-enqueue`, `jobs-leases`, `jobs-steps`, `jobs-watchdog`, `jobs-cancel`
