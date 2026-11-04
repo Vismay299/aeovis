@@ -5,9 +5,10 @@
 /**
  * F03 §6.2 — what one workspace has spent, read from the ledger.
  *
- * The ported OpenSEO file aggregated Autumn billing events into one bin per
- * local day and one row per credit feature. Here the same shape is read out of
- * Postgres: migration 051's `workspace_usage_days` groups the ledger by
+ * The ported upstream file (openseo:src/server/billing/usage.ts) aggregated
+ * Autumn billing events into one bin per local day and one row per credit
+ * feature. Here the same shape is read out of Postgres: migration 051's
+ * `workspace_usage_days` groups the ledger by
  * `(occurred_at AT TIME ZONE p_tz)::date` and feature, so the "Other" fallback
  * and the positive-only feature rows are kept, and the unknown-cost split and
  * the workspace caps are added.
