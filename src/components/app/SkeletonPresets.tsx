@@ -5,6 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { cn } from "@/lib/utils";
+import { PageFrame } from "@/components/app/PageFrame";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -85,9 +86,9 @@ export function SkeletonCard({ className }: { className?: string }) {
  */
 export function SkeletonPage() {
   return (
-    <div className="px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-8">
-      <SkeletonPageContent className="mx-auto max-w-7xl" />
-    </div>
+    <PageFrame>
+      <SkeletonPageContent className="space-y-5" />
+    </PageFrame>
   );
 }
 

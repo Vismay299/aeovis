@@ -27,7 +27,8 @@ export function QueryError({
   /** Omit to always show `fallback`, for errors the page words itself. */
   error?: unknown;
   /**
-   * The error behind a `fallback` the page words itself; picks the button.
+   * The error behind a `fallback` the page words itself. Never shown; F05
+   * reads it to show the spend-refusal view instead of Retry.
    */
   cause?: unknown;
   /** Shown when the error has no message of its own. */
@@ -41,7 +42,7 @@ export function QueryError({
     <ErrorState
       variant={variant}
       title={title}
-      message={describeError(error ?? cause, fallback)}
+      message={error === undefined ? fallback : describeError(error, fallback)}
       onRetry={onRetry}
       isRetrying={isRetrying}
     />
@@ -49,28 +50,35 @@ export function QueryError({
 }
 
 /**
- * Loading, error with retry, or content for one query. A failed refetch keeps
+ * Loading, idle (disabled), error with retry, or content for one query. A failed refetch keeps
  * the loaded content on screen, with the error above it.
  */
 export function QueryState<TData>({
   query,
   errorFallback,
   loading = <SkeletonCard />,
+  idle = null,
   children,
 }: {
   query: UseQueryResult<TData>;
   errorFallback: string;
   loading?: ReactNode;
+  /** Shown while the query is disabled and has no data. */
+  idle?: ReactNode;
   children: (data: TData) => ReactNode;
 }) {
   const view = queryStateView({
     isPending: query.isPending,
     isError: query.isError,
+    fetchStatus: query.fetchStatus,
     data: query.data,
   });
 
   if (view === "loading") {
     return loading;
+  }
+  if (view === "idle") {
+    return idle;
   }
 
   const error = query.isError ? (

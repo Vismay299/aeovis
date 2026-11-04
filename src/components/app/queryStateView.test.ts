@@ -44,3 +44,25 @@ test("queryStateView - returns content on successful resolution", () => {
   });
   assert.equal(view, "content");
 });
+
+test("queryStateView - a disabled query is idle, not loading forever", () => {
+  const view = queryStateView({
+    isPending: true,
+    isError: false,
+    fetchStatus: "idle",
+    data: undefined,
+  });
+  assert.equal(view, "idle");
+});
+
+test("queryStateView - pending while fetching or paused offline is loading", () => {
+  for (const fetchStatus of ["fetching", "paused"] as const) {
+    const view = queryStateView({
+      isPending: true,
+      isError: false,
+      fetchStatus,
+      data: undefined,
+    });
+    assert.equal(view, "loading");
+  }
+});

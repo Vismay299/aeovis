@@ -4,7 +4,7 @@
 //   src/client/hooks/useCopy.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 /**
@@ -14,6 +14,9 @@ import { toast } from "sonner";
 export function useCopy() {
   const [copied, setCopied] = useState(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Do not reset state on a component that has gone away.
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
 
   const copy = async (value: string, successMessage: string) => {
     try {

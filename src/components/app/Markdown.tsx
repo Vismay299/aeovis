@@ -7,6 +7,7 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/utils";
 import { safeHttpUrl } from "@/shared/safe-url";
 
 type Props = {
@@ -15,9 +16,10 @@ type Props = {
   className?: string;
 };
 
-type AnchorProps = ComponentPropsWithoutRef<"a">;
+// react-markdown also passes the hast `node`; it must not reach the DOM.
+type AnchorProps = ComponentPropsWithoutRef<"a"> & { node?: unknown };
 
-function SafeAnchor({ href, children, ...rest }: AnchorProps) {
+function SafeAnchor({ href, children, node: _node, ...rest }: AnchorProps) {
   const safeHref = safeHttpUrl(href);
   if (!safeHref) {
     return <span className="underline decoration-dotted">{children}</span>;
@@ -61,6 +63,10 @@ export const MARKDOWN_COMPONENTS = {
     <li className="leading-relaxed">{children}</li>
   ),
   a: SafeAnchor,
+  // Markdown here can be model output, which is untrusted. Loading a remote
+  // image would let it beacon out of the signed-in app, so show the alt text.
+  img: ({ alt }: ComponentPropsWithoutRef<"img">) =>
+    alt ? <span className="italic text-muted-foreground">[{alt}]</span> : null,
   strong: ({ children }: { children?: ReactNode }) => (
     <strong className="font-semibold">{children}</strong>
   ),
@@ -73,20 +79,17 @@ export const MARKDOWN_COMPONENTS = {
     </blockquote>
   ),
   hr: () => <hr className="my-3 border-border" />,
-  code: ({ children, className }: ComponentPropsWithoutRef<"code">) => {
-    // Inline code (no `language-*` className from remark) gets the badge style;
-    // block code is rendered by `pre` with a different shell.
-    if (typeof className === "string" && className.startsWith("language-")) {
-      return <code className={className}>{children}</code>;
-    }
-    return (
-      <code className="rounded bg-muted px-1 py-0.5 text-xs font-mono">
-        {children}
-      </code>
-    );
-  },
+  // Every `code` gets the inline badge style; `pre` strips it from the code
+  // inside a fenced block, with or without a language.
+  code: ({ children, className }: ComponentPropsWithoutRef<"code">) => (
+    <code
+      className={cn("rounded bg-muted px-1 py-0.5 text-xs font-mono", className)}
+    >
+      {children}
+    </code>
+  ),
   pre: ({ children }: { children?: ReactNode }) => (
-    <pre className="my-2 overflow-x-auto rounded-lg bg-muted p-3 text-xs font-mono">
+    <pre className="my-2 overflow-x-auto rounded-lg bg-muted p-3 text-xs font-mono [&>code]:rounded-none [&>code]:bg-transparent [&>code]:p-0">
       {children}
     </pre>
   ),
@@ -110,7 +113,7 @@ export const MARKDOWN_COMPONENTS = {
 
 /**
  * Shared Markdown renderer with explicit per-element Tailwind classes.
- * Anchor URLs are sanitized to http(s) only.
+ * Anchor URLs are sanitized to http(s) only; images are never loaded.
  */
 export function Markdown({ children, className }: Props) {
   return (

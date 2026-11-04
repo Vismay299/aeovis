@@ -33,11 +33,18 @@ export function CountryCombobox({
   value,
   onChange,
   options,
+  className = "w-full",
+  placeholder = "Search countries",
+  "aria-label": ariaLabel,
 }: {
   id?: string;
   value: number;
   onChange: (locationCode: number) => void;
   options: readonly LocationOption[];
+  /** Width utilities for the field. Defaults to full width. */
+  className?: string;
+  placeholder?: string;
+  "aria-label"?: string;
 }) {
   const country = options.find((option) => option.code === value) ?? null;
 
@@ -54,8 +61,9 @@ export function CountryCombobox({
     >
       <ComboboxInput
         id={id}
-        className="w-full"
-        placeholder="Search countries"
+        className={className}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
       />
       <ComboboxContent>
         <ComboboxEmpty>No countries match.</ComboboxEmpty>

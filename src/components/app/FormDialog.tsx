@@ -16,16 +16,20 @@ import {
 /**
  * A small settings-style dialog: title, labelled rows, right-aligned actions.
  * Render it only while it is open. Escape, the close button and a backdrop
- * click call `onClose`.
+ * click call `onClose`, except while `pending`, so a save in flight keeps its
+ * dialog (and somewhere to show its error).
  */
 export function FormDialog({
   title,
   onClose,
   actions,
+  pending = false,
   children,
 }: {
   title: string;
   onClose: () => void;
+  /** Set while the submit is in flight; blocks closing, like ConfirmDialog. */
+  pending?: boolean;
   actions: ReactNode;
   children: ReactNode;
 }) {
@@ -33,7 +37,7 @@ export function FormDialog({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !pending) onClose();
       }}
     >
       <DialogContent className="sm:max-w-md">
