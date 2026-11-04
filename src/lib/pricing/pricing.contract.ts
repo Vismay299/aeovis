@@ -22,10 +22,13 @@ export const estimateRouteContract = defineRouteContract({
     "invalid_json",
     "unknown_price_action",
     "pricing_unavailable",
-    "brand_not_found",
-    "membership_required",
-    "workspace_inactive",
-    "auth_unavailable",
+    // requireWorkspace (src/lib/workspace/requireWorkspace.ts)
+    "unauthenticated",
+    "auth_not_configured",
+    "cross_site",
+    "membership_unavailable",
+    "workspace_not_found",
+    "storage_unavailable",
   ],
   examples: [
     {

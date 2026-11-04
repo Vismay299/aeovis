@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   estimateScanRun,
   resolveScanEngineNames,
+  scanRunInput,
   type ScanQuoteDeps,
 } from "./scanRun.ts";
 import type { PricingContext } from "../pricedActions.ts";
@@ -336,4 +337,104 @@ test("monthly projection handles daily (30), weekly (4), and monthly (1)", async
     runsPerMonth: 1,
     totalUsd: 24.0,
   });
+});
+
+test("blocked panel_empty when the approved panel has no questions", async () => {
+  const deps: ScanQuoteDeps = {
+    listPanels: async () => [{ artifact_key: "default", state: "approved", payload: { prompts: [] } }],
+    resolveEngines: () => ({ configured: ["aio"], requested: ["aio"] }),
+  };
+  const res = await estimateScanRun(fakeContext(), { panelKey: "default" }, deps);
+  assert.equal(res.totalUsd, 0);
+  assert.equal(res.blocked?.code, "panel_empty");
+});
+
+test("blocked over_scan_limit above the $1,000 spend maximum even with no SCAN_MAX_COST_PER_SCAN", async () => {
+  const prompts = Array.from({ length: 300 }, (_, i) => ({ text: `Q${i}`, purpose: "commercial" }));
+  const deps: ScanQuoteDeps = {
+    listPanels: async () => [{ artifact_key: "default", state: "approved", payload: { prompts } }],
+    resolveEngines: () => ({ configured: ["chatgpt", "gemini", "perplexity", "aio"], requested: [] }),
+  };
+  const res = await estimateScanRun(fakeContext(), { panelKey: "default" }, deps);
+  assert.equal(res.totalUsd, 1200);
+  assert.equal(res.blocked?.code, "over_scan_limit");
+  assert.match(res.blocked!.message, /\$1,000(\.00)? per-scan limit/);
+});
+
+test("resolveScanEngineNames deduplicates repeated engine names", () => {
+  const { requested } = resolveScanEngineNames({ engines: "aio, AIO,aio" }, {});
+  assert.deepEqual(requested, ["aio"]);
+});
+
+test("panelKey other than default is rejected, because the worker only runs the default panel", () => {
+  assert.equal(scanRunInput.safeParse({ panelKey: "q4" }).success, false);
+  assert.equal(scanRunInput.parse({}).panelKey, "default");
+});
+
+test("daily_capacity_low is skipped when today's spend cannot be read", async () => {
+  const deps: ScanQuoteDeps = {
+    listPanels: async () => make30PromptsPanel(),
+    resolveEngines: () => ({ configured: ["aio"], requested: ["aio"] }),
+    daySpend: async () => null as any,
+  };
+  const res = await estimateScanRun(fakeContext({ env: { SCAN_MAX_COST_PER_DAY: "1" } }), { panelKey: "default" }, deps);
+  assert.equal(res.warnings.some((w) => w.code === "daily_capacity_low"), false);
+});
+
+function positionAdmin(o: {
+  limits: { daily_cap_usd: number | null; monthly_cap_usd: number | null } | null;
+  today: number;
+  month: number;
+}) {
+  const rpcCalls: any[] = [];
+  const admin: any = {
+    from(table: string) {
+      const q: any = {
+        select: () => q,
+        eq: () => q,
+        maybeSingle: async () =>
+          table === "workspace_spend_limits" ? { data: o.limits, error: null } : { data: null, error: null },
+      };
+      return q;
+    },
+    async rpc(name: string, args: any) {
+      rpcCalls.push({ name, args });
+      if (name !== "f01_committed_usd") return { data: null, error: null };
+      return { data: args.p_since.slice(8, 10) === "01" ? o.month : o.today, error: null };
+    },
+  };
+  return { admin, rpcCalls };
+}
+
+test("workspace_limit_low reads workspace_spend_limits and f01_committed_usd (no missing RPC)", async () => {
+  const { admin, rpcCalls } = positionAdmin({ limits: { daily_cap_usd: 10, monthly_cap_usd: null }, today: 8, month: 8 });
+  const deps: ScanQuoteDeps = {
+    listPanels: async () => make30PromptsPanel(),
+    resolveEngines: () => ({ configured: ["aio"], requested: ["aio"] }),
+    daySpend: async () => 0,
+  };
+  // ctx.now is the 21st, so the day and month starts differ.
+  const res = await estimateScanRun(fakeContext({ admin, env: { SCAN_PROBE_RESERVATION_USD: "0.2" } }), { panelKey: "default" }, deps);
+  assert.equal(rpcCalls.some((c) => c.name === "workspace_spend_position"), false);
+  assert.ok(rpcCalls.some((c) => c.name === "f01_committed_usd" && c.args.p_feature === null));
+  const w = res.warnings.find((x) => x.code === "workspace_limit_low");
+  assert.ok(w, "expected workspace_limit_low");
+  assert.match(w!.message, /remaining daily limit \(\$2\.00\)/);
+});
+
+test("workspace_limit_low falls back to SPEND_DEFAULT_* when the workspace has no limits row", async () => {
+  const { admin } = positionAdmin({ limits: null, today: 0, month: 95 });
+  const deps: ScanQuoteDeps = {
+    listPanels: async () => make30PromptsPanel(),
+    resolveEngines: () => ({ configured: ["aio"], requested: ["aio"] }),
+    daySpend: async () => 0,
+  };
+  const res = await estimateScanRun(
+    fakeContext({ admin, env: { SCAN_PROBE_RESERVATION_USD: "0.2", SPEND_DEFAULT_MONTHLY_CAP_USD: "100" } }),
+    { panelKey: "default" },
+    deps,
+  );
+  const w = res.warnings.find((x) => x.code === "workspace_limit_low");
+  assert.ok(w, "expected workspace_limit_low");
+  assert.match(w!.message, /remaining monthly limit \(\$5\.00\)/);
 });

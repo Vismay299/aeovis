@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "../http/errors.ts";
 import { stableStringify } from "../cache/providerCache.ts";
 import { PRICE_TABLE_VERSION } from "./version.ts";
+import { MAX_ESTIMATE_USD } from "../spend/index.ts";
 import type { SpendFeature } from "../../shared/spend-features.ts";
 import {
   priceQuoteSchema,
@@ -104,7 +105,13 @@ export async function quote<I>(
     quotedAt: (ctx.now ?? new Date()).toISOString(),
     inputsHash,
   };
-  return priceQuoteSchema.parse(fullQuote) as PriceQuote;
+  // A quote that fails its own schema is a server fault, not bad input, so it must not surface as
+  // a ZodError (which callers map to 400 invalid_request).
+  const checked = priceQuoteSchema.safeParse(fullQuote);
+  if (!checked.success) {
+    throw new Error(`Priced action ${key} produced an invalid quote`, { cause: checked.error });
+  }
+  return checked.data as PriceQuote;
 }
 
 export async function requireApprovedPrice<I>(
@@ -117,9 +124,7 @@ export async function requireApprovedPrice<I>(
   if (!action) {
     throw new AppError(404, "unknown_price_action", "This action cannot be priced.");
   }
-  // Validate input schema; if invalid, zod throws ZodError (which toErrorResponse converts to 400).
-  action.input.parse(rawInput);
-
+  // quote() validates the input; an invalid one throws ZodError (toErrorResponse converts to 400).
   const freshQuote = await quote(key, ctx, rawInput);
   if (freshQuote.blocked !== null) {
     throw new AppError(409, freshQuote.blocked.code, freshQuote.blocked.message, {
@@ -140,7 +145,7 @@ export async function requireApprovedPrice<I>(
     return { quote: freshQuote, approvedMaxUsd: freshQuote.totalUsd, source: "implicit" };
   }
 
-  if (typeof maxUsd !== "number" || !Number.isFinite(maxUsd) || maxUsd <= 0 || maxUsd > 1000) {
+  if (typeof maxUsd !== "number" || !Number.isFinite(maxUsd) || maxUsd <= 0 || maxUsd > MAX_ESTIMATE_USD) {
     throw new AppError(400, "invalid_request", "The approved maximum is invalid.");
   }
 

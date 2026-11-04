@@ -275,3 +275,26 @@ test("requireApprovedPrice succeeds when approved maxUsd >= fresh quote", async 
   const resHigher = await requireApprovedPrice("test.action.pass", fakeContext(), {}, 30.0);
   assert.equal(resHigher.approvedMaxUsd, 30.0);
 });
+
+test("quote throws a non-Zod error when the estimate breaks the quote schema", async () => {
+  clearPricedActionsForTesting();
+  definePricedAction({
+    key: "test.action.bad_output",
+    feature: "platform.selftest",
+    input: z.strictObject({}),
+    requireApproval: false,
+    estimate: async () => ({
+      totalUsd: -1,
+      expectedUsd: null,
+      units: [],
+      lines: [],
+      monthly: null,
+      warnings: [],
+      blocked: null,
+    }),
+  });
+  await assert.rejects(
+    () => quote("test.action.bad_output", fakeContext(), {}),
+    (err: any) => !(err instanceof z.ZodError) && !(err instanceof AppError),
+  );
+});

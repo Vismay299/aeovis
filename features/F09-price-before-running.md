@@ -220,7 +220,7 @@ Status 409, `Cache-Control: no-store`. The run did not start and nothing was res
 
 ```ts
 export const scanRunInput = z.strictObject({
-  panelKey: z.string().min(1).max(80).default("default"),
+  panelKey: z.literal("default").default("default"), // the worker only runs the default panel
   scheduleInterval: z.enum(["daily","weekly","monthly"]).optional(),
 });
 export const scanRunAction = definePricedAction({
@@ -232,15 +232,15 @@ export function resolveScanEngineNames(schedule: { engines?: string | null } | n
 
 `estimateScanRun` steps:
 
-1. **Panel.** `repairWorkflowStore(ctx.admin).list(brandKey, "panel")` → the artifact with `artifact_key === panelKey && state === "approved"`. If none, `blocked = { code: "panel_not_approved", message: "Scans ask the questions in your approved question panel. Review and approve it first.", recovery: "Open Questions & evidence to approve the panel." }`. `prompts = panel.payload.prompts.length` (diagnostics included: the worker probes them, `scanWorker.js` sourcing).
+1. **Panel.** `repairWorkflowStore(ctx.admin).list(brandKey, "panel")` → the artifact with `artifact_key === panelKey && state === "approved"`. If none, `blocked = { code: "panel_not_approved", message: "Scans ask the questions in your approved question panel. Review and approve it first.", recovery: "Open Questions & evidence to approve the panel." }`. `prompts = panel.payload.prompts.length` (diagnostics included: the worker probes them, `scanWorker.js` sourcing). With 0 prompts, `blocked = { code: "panel_empty", message: "Your approved question panel has no questions. Add questions and approve it first.", recovery: "Open Questions & evidence to add questions." }`.
 2. **Engines.** `getScanSchedule(brandKey, { client: ctx.admin })` (`src/lib/db/analytics.js:742`). `resolveScanEngineNames` calls `resolveEnabledEngines({ engines: schedule?.engines, allowFallback: false })` (`src/lib/scoring/enginePipeline.js:2238`), the same call the worker makes (`scanWorker.js:1635-1639`). Only **configured** engines are counted, because unconfigured ones are blocked without a claim (`durableProbing.js:157-167`). With 0 engines, `blocked = { code: "no_engines", message: "No answer engines are set up for scans yet. Contact Perceev support." }`.
 3. **Reservation.** `const b = dispatchBudget(ctx.env)` (`src/lib/workers/durableProbing.js:26`). `observations = prompts × engines`; `totalMicros = observations × toMicros(b.reserve)`; `totalUsd = fromMicros(totalMicros)`. One line: `{ label: \`Answers reserved at ${formatUsd(b.reserve)} each\`, quantity: observations, unitUsd: b.reserve, totalUsd }`. Units: `[{key:"questions",label:"questions",count:prompts},{key:"engines",label:"engines",count:engines},{key:"answers",label:"answers",count:observations}]`.
-4. **Per-scan limit.** If `b.scanCap !== null && toMicros(totalUsd) > toMicros(b.scanCap)`, `blocked = { code: "over_scan_limit", message: \`This scan can reserve up to ${formatUsd(totalUsd)}, above the ${formatUsd(b.scanCap)} per-scan limit.\`, recovery: "Remove questions from the panel or contact Perceev support." }`.
+4. **Per-scan limit.** If `b.scanCap !== null && toMicros(totalUsd) > toMicros(b.scanCap)`, `blocked = { code: "over_scan_limit", message: \`This scan can reserve up to ${formatUsd(totalUsd)}, above the ${formatUsd(b.scanCap)} per-scan limit.\`, recovery: "Remove questions from the panel or contact Perceev support." }`. The same block applies above F01's `MAX_ESTIMATE_USD` ($1,000), the most any hold or approval can carry.
 5. **Expected.** `engine_cost_stats(30)` rows. If every configured engine has a row, `expectedUsd = Σ prompts × median_usd`, rounded to 6 dp; else `null`.
 6. **Warnings** (exact copy):
    - `collection_paused`: `probe_dispatch_control.paused` is true and `brandKey` is not in `brand_allowlist` → "Answer collection is paused for maintenance. A scan started now will wait, and may finish without answers."
    - `daily_capacity_low`: `b.dayCap !== null` and `dayCap − today's committed probe spend` (the same SQL sums as `claim_probe_dispatch` lines 75-84, exposed as F09 helper `probeDaySpendToday(admin)` running the three sums read-only) `< totalUsd` → "Today's collection capacity is nearly used. This scan may finish with fewer answers."
-   - `workspace_limit_low`: from F03 `workspace_spend_position` with F01 defaults: daily or monthly headroom `< totalUsd` → "This scan needs more than your workspace's remaining {daily|monthly} limit ({formatUsd(headroom)})." This is a warning, not a block, because the run route's `reserveSpend` is authoritative and returns the 402.
+   - `workspace_limit_low`: the workspace's `workspace_spend_limits` row (or F01 `SPEND_DEFAULT_*` when there is none) minus `f01_committed_usd` since the UTC day / month start (F03's planned `workspace_spend_position` never shipped): daily or monthly headroom `< totalUsd` → "This scan needs more than your workspace's remaining {daily|monthly} limit ({formatUsd(headroom)})." This is a warning, not a block, because the run route's `reserveSpend` is authoritative and returns the 402.
    - `retry_note`, always: "Each question is asked once per engine. A failed answer may be retried within this amount."
    - `typical_cost`, when `expectedUsd !== null`: "Typical cost for this scan is about {formatUsd(expectedUsd)}, based on recent answers."
 7. **Monthly** when `input.scheduleInterval` is set: `runsPerMonth = scheduledChecksPerMonth(interval)` (F03 `src/shared/ai-visibility-pricing.ts`), `totalUsd = fromMicros(totalMicros × runsPerMonth)`.

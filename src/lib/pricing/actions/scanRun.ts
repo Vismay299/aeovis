@@ -12,9 +12,12 @@ import { resolveEnabledEngines } from "../../scoring/enginePipeline.js";
 import { repairWorkflowStore } from "../../db/repairWorkflow.js";
 import { getScanSchedule } from "../../db/analytics.js";
 import { probeDaySpendToday } from "../probeDaySpend.ts";
+import { capFromEnv, MAX_ESTIMATE_USD } from "../../spend/index.ts";
 
 export const scanRunInput = z.strictObject({
-  panelKey: z.string().min(1).max(80).default("default"),
+  // The scan worker only ever runs the "default" panel (scanWorker.js), so pricing any other
+  // panel would quote a scan that never runs.
+  panelKey: z.literal("default").default("default"),
   scheduleInterval: z.enum(["daily", "weekly", "monthly"]).optional(),
 });
 
@@ -39,11 +42,16 @@ export function resolveScanEngineNames(
   env: Record<string, string | undefined> = process.env,
 ): { configured: string[]; requested: string[] } {
   const envVal = ((schedule?.engines && String(schedule.engines).trim()) || env.ENGINES || "aio").trim();
-  const requested = envVal
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  const enabled = (resolveEnabledEngines as any)({ engines: envVal, allowFallback: false });
+  // Deduplicated as the worker freezes its requested names, so "aio,aio" probes once.
+  const requested = [
+    ...new Set(
+      envVal
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+  const enabled = (resolveEnabledEngines as any)({ engines: requested.join(","), allowFallback: false });
   const configured = (enabled as any[]).map((e: any) => e.name);
   return { configured, requested };
 }
@@ -56,18 +64,19 @@ export async function estimateScanRun(
   const panelKey = input.panelKey ?? "default";
   let blocked: { code: string; message: string; recovery?: string } | null = null;
 
-  // 1. Panel
-  let panels: any[] = [];
-  if (deps?.listPanels) {
-    panels = await deps.listPanels(ctx.brandKey, "panel");
-  } else if (ctx.admin && typeof ctx.admin.from === "function") {
-    try {
-      panels = await repairWorkflowStore(ctx.admin).list(ctx.brandKey, "panel");
-    } catch {
-      panels = [];
-    }
-  }
+  // The reads are independent, so they run together. Each falls back on failure: a quote with a
+  // missing warning beats no quote, and the run route's own checks stay authoritative.
+  const [panels, schedule, statsRows, dispatchControlData, todayCommittedSpend, positionData] =
+    await Promise.all([
+      loadPanels(ctx, deps),
+      loadSchedule(ctx, deps),
+      loadEngineStats(ctx, deps),
+      loadDispatchControl(ctx, deps),
+      loadDaySpend(ctx, deps),
+      loadPosition(ctx, deps),
+    ]);
 
+  // 1. Panel
   const panel = Array.isArray(panels)
     ? panels.find((p: any) => p.artifact_key === panelKey && p.state === "approved")
     : null;
@@ -81,20 +90,17 @@ export async function estimateScanRun(
     };
   } else {
     prompts = Array.isArray(panel.payload?.prompts) ? panel.payload.prompts.length : 0;
-  }
-
-  // 2. Engines
-  let schedule: { engines?: string | null; [k: string]: any } | null = null;
-  if (deps?.getSchedule) {
-    schedule = await deps.getSchedule(ctx.brandKey);
-  } else if (ctx.admin && typeof ctx.admin.from === "function") {
-    try {
-      schedule = await getScanSchedule(ctx.brandKey, { client: ctx.admin });
-    } catch {
-      schedule = null;
+    if (prompts === 0) {
+      // A zero-answer scan is refused by the worker, so it must not be approvable at $0.
+      blocked = {
+        code: "panel_empty",
+        message: "Your approved question panel has no questions. Add questions and approve it first.",
+        recovery: "Open Questions & evidence to add questions.",
+      };
     }
   }
 
+  // 2. Engines
   const { configured } = deps?.resolveEngines
     ? deps.resolveEngines(schedule, ctx.env)
     : resolveScanEngineNames(schedule, ctx.env);
@@ -136,20 +142,17 @@ export async function estimateScanRun(
       recovery: "Remove questions from the panel or contact Perceev support.",
     };
   }
-
-  // 5. Expected typical cost from engine_cost_stats(30)
-  let statsRows: Array<{ engine: string; median_usd: number | string }> = [];
-  if (deps?.engineStats) {
-    statsRows = await deps.engineStats(30);
-  } else if (ctx.admin && typeof ctx.admin.rpc === "function") {
-    try {
-      const { data, error } = await ctx.admin.rpc("engine_cost_stats", { p_days: 30 });
-      if (!error && Array.isArray(data)) statsRows = data;
-    } catch {
-      statsRows = [];
-    }
+  // Spend holds and approvals cap out at MAX_ESTIMATE_USD, so a larger quote could never be
+  // approved or reserved.
+  if (toMicros(totalUsd) > toMicros(MAX_ESTIMATE_USD) && !blocked) {
+    blocked = {
+      code: "over_scan_limit",
+      message: `This scan can reserve up to ${formatUsd(totalUsd)}, above the ${formatUsd(MAX_ESTIMATE_USD)} per-scan limit.`,
+      recovery: "Remove questions from the panel or contact Perceev support.",
+    };
   }
 
+  // 5. Expected typical cost from engine_cost_stats(30)
   const statsMap = new Map<string, number>();
   for (const row of statsRows) {
     const val = Number(row.median_usd);
@@ -170,21 +173,6 @@ export async function estimateScanRun(
   const warnings: Array<{ code: string; message: string }> = [];
 
   // collection_paused
-  let dispatchControlData: { paused?: boolean; brand_allowlist?: string[] | null } | null = null;
-  if (deps?.dispatchControl) {
-    dispatchControlData = await deps.dispatchControl();
-  } else if (ctx.admin && typeof ctx.admin.from === "function") {
-    try {
-      const { data } = await ctx.admin
-        .from("probe_dispatch_control")
-        .select("paused, brand_allowlist")
-        .eq("singleton", true)
-        .maybeSingle();
-      if (data) dispatchControlData = data;
-    } catch {
-      dispatchControlData = null;
-    }
-  }
   if (
     dispatchControlData?.paused === true &&
     !(dispatchControlData.brand_allowlist ?? []).includes(ctx.brandKey)
@@ -196,19 +184,10 @@ export async function estimateScanRun(
     });
   }
 
-  // daily_capacity_low
-  let todayCommittedSpend = 0;
-  if (deps?.daySpend) {
-    todayCommittedSpend = await deps.daySpend();
-  } else {
-    try {
-      todayCommittedSpend = await probeDaySpendToday(ctx.admin, ctx.now);
-    } catch {
-      todayCommittedSpend = 0;
-    }
-  }
+  // daily_capacity_low (skipped when today's spend could not be read)
   if (
     b.dayCap !== null &&
+    todayCommittedSpend !== null &&
     toMicros(b.dayCap) - toMicros(todayCommittedSpend) < toMicros(totalUsd)
   ) {
     warnings.push({
@@ -218,35 +197,6 @@ export async function estimateScanRun(
   }
 
   // workspace_limit_low
-  let positionData: {
-    dailyHeadroomUsd?: number | null;
-    monthlyHeadroomUsd?: number | null;
-  } | null = null;
-  if (deps?.position) {
-    positionData = await deps.position(ctx.brandKey);
-  } else if (ctx.admin && typeof ctx.admin.rpc === "function") {
-    try {
-      const defDaily = ctx.env.SPEND_DEFAULT_DAILY_CAP_USD
-        ? Number(ctx.env.SPEND_DEFAULT_DAILY_CAP_USD)
-        : null;
-      const defMonthly = ctx.env.SPEND_DEFAULT_MONTHLY_CAP_USD
-        ? Number(ctx.env.SPEND_DEFAULT_MONTHLY_CAP_USD)
-        : null;
-      const { data, error } = await ctx.admin.rpc("workspace_spend_position", {
-        p_brand: ctx.brandKey,
-        p_default_daily: defDaily,
-        p_default_monthly: defMonthly,
-      });
-      if (!error && data) {
-        positionData = {
-          dailyHeadroomUsd: data.daily_headroom_usd,
-          monthlyHeadroomUsd: data.monthly_headroom_usd,
-        };
-      }
-    } catch {
-      positionData = null;
-    }
-  }
   if (positionData) {
     if (
       positionData.dailyHeadroomUsd != null &&
@@ -316,3 +266,126 @@ export const scanRunAction = definePricedAction({
   requireApproval: false,
   estimate: (ctx, input) => estimateScanRun(ctx, input),
 });
+
+type Position = { dailyHeadroomUsd?: number | null; monthlyHeadroomUsd?: number | null };
+
+function hasFrom(ctx: PricingContext): boolean {
+  return Boolean(ctx.admin && typeof ctx.admin.from === "function");
+}
+
+function hasRpc(ctx: PricingContext): boolean {
+  return Boolean(ctx.admin && typeof ctx.admin.rpc === "function");
+}
+
+async function loadPanels(ctx: PricingContext, deps?: ScanQuoteDeps): Promise<any[]> {
+  if (deps?.listPanels) return deps.listPanels(ctx.brandKey, "panel");
+  if (!hasFrom(ctx)) return [];
+  try {
+    return await repairWorkflowStore(ctx.admin).list(ctx.brandKey, "panel");
+  } catch {
+    return [];
+  }
+}
+
+async function loadSchedule(
+  ctx: PricingContext,
+  deps?: ScanQuoteDeps,
+): Promise<{ engines?: string | null; [k: string]: any } | null> {
+  if (deps?.getSchedule) return deps.getSchedule(ctx.brandKey);
+  if (!hasFrom(ctx)) return null;
+  try {
+    return await getScanSchedule(ctx.brandKey, { client: ctx.admin });
+  } catch {
+    return null;
+  }
+}
+
+async function loadEngineStats(
+  ctx: PricingContext,
+  deps?: ScanQuoteDeps,
+): Promise<Array<{ engine: string; median_usd: number | string }>> {
+  if (deps?.engineStats) return deps.engineStats(30);
+  if (!hasRpc(ctx)) return [];
+  try {
+    const { data, error } = await ctx.admin.rpc("engine_cost_stats", { p_days: 30 });
+    return !error && Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+async function loadDispatchControl(
+  ctx: PricingContext,
+  deps?: ScanQuoteDeps,
+): Promise<{ paused?: boolean; brand_allowlist?: string[] | null } | null> {
+  if (deps?.dispatchControl) return deps.dispatchControl();
+  if (!hasFrom(ctx)) return null;
+  try {
+    const { data } = await ctx.admin
+      .from("probe_dispatch_control")
+      .select("paused, brand_allowlist")
+      .eq("singleton", true)
+      .maybeSingle();
+    return data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadDaySpend(ctx: PricingContext, deps?: ScanQuoteDeps): Promise<number | null> {
+  if (deps?.daySpend) return deps.daySpend();
+  try {
+    return await probeDaySpendToday(ctx.admin, ctx.now);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Headroom under the workspace's F01 caps, computed as reserve_spend does: the
+ * workspace_spend_limits row (or the SPEND_DEFAULT_* env when there is none) minus
+ * f01_committed_usd since the start of the UTC day / month.
+ */
+async function loadPosition(ctx: PricingContext, deps?: ScanQuoteDeps): Promise<Position | null> {
+  if (deps?.position) return deps.position(ctx.brandKey);
+  if (!hasFrom(ctx) || !hasRpc(ctx)) return null;
+  try {
+    const now = ctx.now ?? new Date();
+    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const committed = async (since: Date): Promise<number> => {
+      const { data, error } = await ctx.admin.rpc("f01_committed_usd", {
+        p_brand: ctx.brandKey,
+        p_feature: null,
+        p_since: since.toISOString(),
+      });
+      if (error) throw error;
+      return Number(data ?? 0);
+    };
+    const [limitsRes, today, month] = await Promise.all([
+      ctx.admin
+        .from("workspace_spend_limits")
+        .select("daily_cap_usd, monthly_cap_usd")
+        .eq("brand_key", ctx.brandKey)
+        .maybeSingle(),
+      committed(dayStart),
+      committed(monthStart),
+    ]);
+    if (limitsRes.error) throw limitsRes.error;
+    const limits = limitsRes.data;
+    const dailyCap = limits
+      ? limits.daily_cap_usd
+      : capFromEnv(ctx.env, "SPEND_DEFAULT_DAILY_CAP_USD");
+    const monthlyCap = limits
+      ? limits.monthly_cap_usd
+      : capFromEnv(ctx.env, "SPEND_DEFAULT_MONTHLY_CAP_USD");
+    const headroom = (cap: number | string | null, committedUsd: number) =>
+      cap == null ? null : Math.max(0, fromMicros(toMicros(Number(cap)) - toMicros(committedUsd)));
+    return {
+      dailyHeadroomUsd: headroom(dailyCap, today),
+      monthlyHeadroomUsd: headroom(monthlyCap, month),
+    };
+  } catch {
+    return null;
+  }
+}

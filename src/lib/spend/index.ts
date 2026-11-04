@@ -17,7 +17,7 @@ export type { SpendFeature } from "./features.ts";
 export { usd6, toMicros, fromMicros } from "./money.ts";
 export { SpendRefused, ChargedCallError, UnbilledCallError, AmbiguousCallError } from "./errors.ts";
 
-const MAX_ESTIMATE_USD = 1_000;
+export const MAX_ESTIMATE_USD = 1_000;
 const DEFAULT_TTL_SECONDS = 1_800;
 const MIN_TTL_SECONDS = 60;
 const MAX_TTL_SECONDS = 86_340;
@@ -72,7 +72,7 @@ function storeFor(deps?: SpendDeps): SpendStore {
   return createSpendStore(admin);
 }
 
-function capFromEnv(env: Record<string, string | undefined>, name: string): number | null {
+export function capFromEnv(env: Record<string, string | undefined>, name: string): number | null {
   const raw = env[name];
   if (raw === undefined || raw === null || String(raw).trim() === "") return null;
   const value = Number(String(raw).trim());
