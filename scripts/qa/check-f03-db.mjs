@@ -33,6 +33,24 @@ async function rpc(name, values = {}) {
   return r.rows[0].result;
 }
 
+/**
+ * The rows of a table-returning function, with `day` rendered as "YYYY-MM-DD".
+ * `rpc` above answers the scalar and jsonb functions; migration 051's read
+ * functions return a table, so they are selected with `FROM fn(...)`. The date
+ * is cast in SQL because node-pg would otherwise hand back a Date parsed in
+ * this machine's local zone, which moves the calendar day for anyone not on
+ * UTC — and the application reads that column over the API, as text.
+ */
+async function rpcDays(name, values = {}) {
+  const entries = Object.entries(values);
+  const r = await q(
+    `SELECT to_char(t.day, 'YYYY-MM-DD') AS day, t.feature, t.accounted_usd, t.known_usd, t.unknown_usd, t.calls
+       FROM ${name}(${entries.map(([k], i) => `${k}=>$${i + 1}`).join(",")}) t`,
+    entries.map(([, v]) => (v && typeof v === "object" ? JSON.stringify(v) : v))
+  );
+  return r.rows;
+}
+
 async function test(name, fn) {
   await fn();
   passed.push(name);
@@ -80,6 +98,7 @@ async function asUser(userId, fn) {
 async function main() {
   const fixturesPath = path.resolve("tests/fixtures/f03/probe-attempts.json");
   const fixtureData = JSON.parse(await readFile(fixturesPath, "utf8"));
+  const ledgerFixturePath = path.resolve("tests/fixtures/f03/ledger-rows.json");
 
   // ─────────────────────────────────────────────────────────────
   // 1. SEED GROUP
@@ -652,6 +671,101 @@ async function main() {
       // cost_reconciliations is operator-only: a customer's read is refused outright.
       await assert.rejects(client.query("SELECT * FROM public.cost_reconciliations"), { code: "42501" });
     });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // 7. USAGE GROUP (migration 051 read functions)
+  // ─────────────────────────────────────────────────────────────
+  await test("usage", async () => {
+    const usageFixture = JSON.parse(await readFile(ledgerFixturePath, "utf8"));
+    const brandKey = await createBrand("usage");
+    const tz = usageFixture.time_zone;
+    const from = usageFixture.from;
+    const to = usageFixture.to;
+
+    for (const row of usageFixture.rows) {
+      await q(
+        `INSERT INTO public.spend_ledger(brand_key, feature, source_ref, provider, endpoint,
+                                        estimate_usd, actual_usd, accounted_usd, cost_source, occurred_at, meta)
+         VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [
+          brandKey,
+          row.feature,
+          row.source_ref,
+          row.provider,
+          row.endpoint,
+          row.estimate_usd,
+          row.actual_usd,
+          row.accounted_usd,
+          row.cost_source,
+          row.occurred_at,
+          JSON.stringify(row.meta),
+        ]
+      );
+    }
+
+    const days = await rpcDays("workspace_usage_days", {
+      p_brand: brandKey,
+      p_from: from,
+      p_to: to,
+      p_tz: tz,
+    });
+
+    // The window covers 30 Asia/Kolkata days; the bins must be exactly those
+    // local dates, oldest first.
+    const localDays = [...new Set(days.map((r) => r.day))];
+    assert.equal(localDays.length, 30, "30 local days must be binned");
+    assert.equal(localDays[0], "2026-10-01", "the first local day is 2026-10-01");
+    assert.equal(localDays[29], "2026-10-30", "the last local day is 2026-10-30");
+
+    // The tz boundary: a row at 19:00Z on 2026-09-30 is already 2026-10-01 in
+    // Asia/Kolkata, so the same window bins into 31 days when read as UTC.
+    const boundary = days.find((r) => r.day === "2026-10-01");
+    assert.ok(boundary, "the 2026-09-30T19:00Z row must land in the 2026-10-01 local bin");
+    const utcDays = await rpcDays("workspace_usage_days", {
+      p_brand: brandKey,
+      p_from: from,
+      p_to: to,
+      p_tz: "UTC",
+    });
+    assert.equal(new Set(utcDays.map((r) => r.day)).size, 31, "the same window spans 31 UTC days");
+
+    // One local day: one known row, one unknown (reservation) row, one 'none'
+    // row that was never a paid call.
+    const day = days.filter((r) => r.day === "2026-10-07");
+    assert.equal(day.length, 3, "three features are binned per day");
+    const byFeature = Object.fromEntries(day.map((r) => [r.feature, r]));
+    assert.equal(Number(byFeature["ai_visibility.scan"].known_usd), 0.04, "the reported row is known spend");
+    assert.equal(Number(byFeature["ai_visibility.scan"].unknown_usd), 0, "a reported row has no unknown part");
+    assert.equal(Number(byFeature["ai_visibility.scan"].calls), 1);
+    assert.equal(Number(byFeature["platform.selftest"].known_usd), 0, "a reservation row is not known spend");
+    assert.equal(Number(byFeature["platform.selftest"].unknown_usd), 0.02, "a reservation row is unknown spend");
+    assert.equal(Number(byFeature["platform.selftest"].calls), 1);
+    assert.equal(Number(byFeature["keywords.research"].calls), 0, "a 'none' row is not a paid call");
+    assert.equal(Number(byFeature["keywords.research"].accounted_usd), 0);
+
+    // Totals over the window: usd = known + unknown, and 'none' rows never count.
+    const totalAccounted = days.reduce((sum, r) => sum + Number(r.accounted_usd), 0);
+    const totalKnown = days.reduce((sum, r) => sum + Number(r.known_usd), 0);
+    const totalUnknown = days.reduce((sum, r) => sum + Number(r.unknown_usd), 0);
+    const totalCalls = days.reduce((sum, r) => sum + Number(r.calls), 0);
+    assert.equal(Number(totalAccounted.toFixed(6)), 1.8, "30 days of 0.06 accounted");
+    assert.equal(Number(totalKnown.toFixed(6)), 1.2, "30 days of 0.04 known");
+    assert.equal(Number(totalUnknown.toFixed(6)), 0.6, "30 days of 0.02 unknown");
+    assert.equal(totalCalls, 60, "the 'none' rows are excluded from calls");
+
+    // The workspace has no limits row, so the env defaults apply.
+    const position = await rpc("workspace_spend_position", {
+      p_brand: brandKey,
+      p_default_daily: 25,
+      p_default_monthly: 50,
+    });
+    assert.equal(Number(position.daily_cap_usd), 25, "the default daily cap applies without a limits row");
+    assert.equal(Number(position.monthly_cap_usd), 50, "the default monthly cap applies without a limits row");
+    assert.equal(Number(position.open_holds), 0, "no hold is open");
+    assert.equal(Number(position.open_holds_usd), 0);
+    assert.ok(position.day_starts_at, "day_starts_at is present");
+    assert.ok(position.month_starts_at, "month_starts_at is present");
   });
 
   console.log(`\nAll ${passed.length} DB groups passed!`);
