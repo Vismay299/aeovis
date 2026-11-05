@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "artifact_key": "default",
+      "state": "approved",
+      "version": 3,
+      "payload": {
+        "persona": "a buyer comparing shortlist vendors",
+        "context": { "device": "desktop", "session_policy": "fresh_anonymous" },
+        "prompts": [
+          { "text": "Which vendors do shortlist buyers compare?", "origin": "manual", "weight": 1 },
+          { "text": "Which vendor answers most often in shortlists?", "origin": "manual", "weight": 1 }
+        ]
+      }
+    }
+  ]
+}

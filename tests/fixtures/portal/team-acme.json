@@ -1,0 +1,11 @@
+{
+  "members": [
+    {
+      "user_id": "qa-user",
+      "email": "owner@example.test",
+      "role": "owner",
+      "brand_key": "acme"
+    }
+  ],
+  "invites": []
+}
