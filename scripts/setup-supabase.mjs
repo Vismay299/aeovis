@@ -92,6 +92,12 @@ const EXPECTED_OBJECTS = {
     { kind: "constraint", name: "project_competitors_no_ipv4" },
     { kind: "constraint", name: "project_research_log_job_id_fkey" },
   ],
+  "080_f09_price_approvals.sql": [
+    { kind: "table", name: "price_approvals" },
+    { kind: "column", name: "scan_jobs.approved_max_usd" },
+    { kind: "column", name: "scan_jobs.price_quote" },
+    { kind: "function", name: "prune_price_approvals" },
+  ],
   "040_f01_jobs.sql": [
     { kind: "table", name: "jobs" },
     { kind: "table", name: "job_steps" },
