@@ -354,6 +354,9 @@ const FULL_CATALOG = [
   "customer_brands.telemetry_id", "user_privacy_choices",
   // 155_f24_signup_guard.sql — disposable-email table and the Before User Created hook.
   "disposable_email_domains", "is_disposable_email_domain", "hook_before_user_created",
+  // 085_f10_customer_schedules.sql — customer-managed schedule columns and the start/block window functions.
+  "scan_schedules.managed_by", "scan_schedules.schedule_interval", "scan_schedules.approved_max_usd",
+  "scan_schedules.last_skip_reason", "start_customer_window", "block_customer_window",
 ];
 
 function withRegister(dir) {
