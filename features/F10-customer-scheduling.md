@@ -253,7 +253,7 @@ export const SKIP_REASONS: readonly string[];                                 //
 export function skipReasonMessage(reason: string): string;                    // §6.3 table; unknown → "The scheduled scan could not start."
 ```
 
-`planWindows` walks from `nextRunAt` with `computeNextRunAt(interval, anchor)` semantics: collect every window `≤ now`; `run` = the last one, `missed` = the earlier ones (at most 50 kept; older ones are dropped from the list and counted only in logs); `next` = the first window `> now`. With no window `≤ now`, `{ run: null, missed: [], next: nextRunAt }`.
+`planWindows` walks from `nextRunAt` with `computeNextRunAt(interval, anchor)` semantics: collect every window `≤ now`; `run` = the last one, `missed` = the earlier ones (at most 50 kept; older ones are omitted from the returned list); `next` = the first window `> now`. With no window `≤ now`, `{ run: null, missed: [], next: nextRunAt }`.
 
 #### 6.2.2 `src/lib/schedules/runDue.ts` (generic, PORT of `scheduledAiVisibility.ts:16-83` structure)
 
