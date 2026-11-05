@@ -202,10 +202,12 @@ async function main() {
       .sort();
     assert.deepEqual(fromSql, expected, "the SQL seed list must equal DISPOSABLE_EMAIL_DOMAINS");
     const rows = await q(
-      "select domain from public.disposable_email_domains where source = 'openseo' order by domain",
+      "select domain from public.disposable_email_domains where source = 'openseo'",
     );
+    // Sorted here, not with ORDER BY: the database's collation (en_US on CI)
+    // ignores hyphens, so "mail-temp.com" would sort apart from JS's order.
     assert.deepEqual(
-      rows.rows.map((r) => r.domain),
+      rows.rows.map((r) => r.domain).sort(),
       expected,
       "the seeded table rows must equal DISPOSABLE_EMAIL_DOMAINS",
     );
