@@ -114,7 +114,7 @@ test("every skill that names an external tool carries the external approval sent
 test("new Perceev skills keep the six-section order", () => {
   for (const name of ["content-brief", "ai-crawler-fix", "question-panel-review"]) {
     const skill = SKILL_MANIFEST.find((entry) => entry.name === name);
-    if (!skill) continue;
+    assert.ok(skill, `${name} is missing from the manifest`);
     assert.deepEqual(headings(skill.body), NEW_SKILL_HEADINGS, name);
   }
 });
