@@ -164,3 +164,10 @@ SOFTWARE.
 - `src/lib/pricing/pricedActions.ts`
 - `src/lib/pricing/actions/scanRun.ts`
 - `src/lib/costs/usage.ts` (from `src/server/billing/usage.ts`)
+- `src/shared/disposable-email.ts` (from `src/server/auth/disposable-email.ts`)
+- `src/shared/disposable-email.test.ts`
+- `src/shared/auth-redirect.ts` (from `src/lib/auth-redirect.ts`)
+- `src/shared/auth-redirect.test.ts` (from `src/lib/auth-redirect.test.ts`)
+- `src/shared/auth-errors.ts` (from `src/client/features/integrations/googleAuthErrorCopy.ts`)
+- `src/shared/password.ts` (from `src/client/features/auth/passwordSchema.ts`, also from `src/routes/_auth.sign-up.tsx`)
+- `supabase/migrations/155_f24_signup_guard.sql` (from `src/server/auth/disposable-email.ts`)
