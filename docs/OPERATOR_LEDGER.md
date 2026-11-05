@@ -592,6 +592,12 @@ abandoned is not.
 - Refuses disposable email domains at account creation through the Supabase Before User Created hook; invited addresses pass. Until the hook is enabled in the dashboard the migration changes nothing for sign-ups.
 - Objects: `disposable_email_domains` (37-row seed, service role only), `is_disposable_email_domain`, `hook_before_user_created`.
 
+### `085_f10_customer_schedules` (F10 phase 2)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply after `080_f09_price_approvals` (the `approval_id` foreign key points at `price_approvals`). Additive; no backfill: existing rows default to `managed_by = 'operator'`.
+- Apply 085 before deploying the code that filters `listDueSchedules` on `managed_by`; without it the scheduler tick reports a read error.
+- Objects: nine `scan_schedules` columns (`managed_by`, `schedule_interval`, `schedule_time`, `last_skip_reason`, `last_skip_at`, `approved_max_usd`, `approval_id`, `customer_updated_by`, `customer_updated_at`) with the `scan_schedules_f10_checks` constraint; functions `start_customer_window`, `block_customer_window` (service role only); `enqueue_measurement_window` now returns `customer_managed` for customer rows.
+
 ## D. Content approval — the human gate, and what it does not yet do
 
 The content pipeline is human-in-the-loop by design. `POST /api/content-items/[id]/decision`
