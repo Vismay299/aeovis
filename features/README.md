@@ -57,7 +57,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F21](./F21-agent-skills.md) | Agent skills library | Agent skills | 4 | F01 | 140–144 | Merged |
 | [F22](./F22-in-app-assistant.md) | In-app assistant (chat over our tools) | In-app chat agent | 4 | F01, F03, F04, F05, F07–F20, F21 | 145–149 | Spec ✓ |
 | [F23](./F23-reports-and-sharing.md) | Reports and public sharing | Reports and sharing | 4 | F21, F22 | 150–154 | Spec ✓ |
-| [F24](./F24-sign-in-hardening.md) | Sign-in hardening: Google, captcha, disposable email | Sign-in | 5 | F04 | 155–159 | Spec ✓ |
+| [F24](./F24-sign-in-hardening.md) | Sign-in hardening: Google, captcha, disposable email | Sign-in | 5 | F04 | 155–159 | In progress |
 | [F25](./F25-lifecycle-email.md) | Lifecycle email | Lifecycle email | 5 | F01, F10, F24 | 160–164 | Spec ✓ |
 | [F26](./F26-product-analytics.md) | Product analytics and error tracking | Product analytics | 5 | F01 | 165–169 | In progress |
 | [F27](./F27-onboarding-wizard.md) | Onboarding wizard | Onboarding | 5 | F07, F08, F09, F18, F20, F24, F25, F26 | 170–174 | Spec ✓ |

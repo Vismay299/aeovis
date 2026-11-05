@@ -1,0 +1,158 @@
+[
+  {
+    "name": "normal",
+    "event": {
+      "metadata": {
+        "name": "before-user-created"
+      },
+      "user": {
+        "email": "qa@example.test",
+        "app_metadata": {
+          "provider": "email",
+          "providers": [
+            "email"
+          ]
+        }
+      }
+    },
+    "expected": {}
+  },
+  {
+    "name": "disposable",
+    "event": {
+      "metadata": {
+        "name": "before-user-created"
+      },
+      "user": {
+        "email": "qa@mailinator.com",
+        "app_metadata": {
+          "provider": "email",
+          "providers": [
+            "email"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "http_code": 400,
+        "message": "Please sign up with a non-disposable email address."
+      }
+    }
+  },
+  {
+    "name": "uppercase disposable",
+    "event": {
+      "metadata": {
+        "name": "before-user-created"
+      },
+      "user": {
+        "email": "QA@MAILINATOR.COM",
+        "app_metadata": {
+          "provider": "email",
+          "providers": [
+            "email"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "http_code": 400,
+        "message": "Please sign up with a non-disposable email address."
+      }
+    }
+  },
+  {
+    "name": "subdomain disposable",
+    "event": {
+      "metadata": {
+        "name": "before-user-created"
+      },
+      "user": {
+        "email": "qa@mail.guerrillamail.com",
+        "app_metadata": {
+          "provider": "email",
+          "providers": [
+            "email"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "http_code": 400,
+        "message": "Please sign up with a non-disposable email address."
+      }
+    }
+  },
+  {
+    "name": "invited disposable",
+    "invite": "qa-invite@mailinator.com",
+    "event": {
+      "metadata": {
+        "name": "before-user-created"
+      },
+      "user": {
+        "email": "qa-invite@mailinator.com",
+        "app_metadata": {
+          "provider": "email",
+          "providers": [
+            "email"
+          ]
+        }
+      }
+    },
+    "expected": {}
+  },
+  {
+    "name": "phone only",
+    "event": {
+      "metadata": {
+        "name": "before-user-created"
+      },
+      "user": {
+        "phone": "+15555550100",
+        "app_metadata": {
+          "provider": "phone",
+          "providers": [
+            "phone"
+          ]
+        }
+      }
+    },
+    "expected": {}
+  },
+  {
+    "name": "missing user",
+    "event": {
+      "metadata": {
+        "name": "before-user-created"
+      }
+    },
+    "expected": {}
+  },
+  {
+    "name": "trailing dot domain",
+    "event": {
+      "metadata": {
+        "name": "before-user-created"
+      },
+      "user": {
+        "email": "qa@yopmail.com.",
+        "app_metadata": {
+          "provider": "email",
+          "providers": [
+            "email"
+          ]
+        }
+      }
+    },
+    "expected": {
+      "error": {
+        "http_code": 400,
+        "message": "Please sign up with a non-disposable email address."
+      }
+    }
+  }
+]

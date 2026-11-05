@@ -175,6 +175,13 @@ SOFTWARE.
 - `src/components/app/shell/WorkspaceSwitcher.tsx` (from `src/client/features/projects/ProjectSwitcher.tsx`)
 - `src/components/portal/settings/tabs.ts` (from `src/client/features/projects/SettingsTabs.tsx`)
 - `src/app/portal/settings/layout.tsx` (from `src/routes/_app/p/$projectId/settings.tsx`)
+- `src/shared/disposable-email.ts` (from `src/server/auth/disposable-email.ts`)
+- `src/shared/disposable-email.test.ts`
+- `src/shared/auth-redirect.ts` (from `src/lib/auth-redirect.ts`)
+- `src/shared/auth-redirect.test.ts` (from `src/lib/auth-redirect.test.ts`)
+- `src/shared/auth-errors.ts` (from `src/client/features/integrations/googleAuthErrorCopy.ts`)
+- `src/shared/password.ts` (from `src/client/features/auth/passwordSchema.ts`, also from `src/routes/_auth.sign-up.tsx`)
+- `supabase/migrations/155_f24_signup_guard.sql` (from `src/server/auth/disposable-email.ts`)
 - `src/shared/schedule.ts`
 - `src/shared/schedule.test.ts`
 - `src/lib/schedules/runDue.ts`

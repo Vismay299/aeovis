@@ -11,6 +11,8 @@ export const FEATURES = {
   price_review: { spend: [] as const },
   // F03: gates the customer Usage page and its route. Reading costs spends nothing.
   usage_page: { spend: [] as const },
+  // F24: shows Continue with Google on the sign-in pages. Sign-in spends nothing; not a client feature (no workspace yet).
+  google_sign_in: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

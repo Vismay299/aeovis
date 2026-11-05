@@ -586,6 +586,12 @@ abandoned is not.
 - Objects: `customer_brands.telemetry_id` (unique opaque PostHog workspace group key); `user_privacy_choices` (per-user analytics consent, RLS read-own).
 - Safety: never send `brand_key` to PostHog; consent defaults off (no row = undecided = off).
 
+### `155_f24_signup_guard` (F24 phase 1)
+- Status: implemented in repo; **not yet applied to production**.
+- `155_f24_signup_guard` — apply, then enable Auth → Hooks → Before User Created → Postgres → `public.hook_before_user_created`.
+- Refuses disposable email domains at account creation through the Supabase Before User Created hook; invited addresses pass. Until the hook is enabled in the dashboard the migration changes nothing for sign-ups.
+- Objects: `disposable_email_domains` (37-row seed, service role only), `is_disposable_email_domain`, `hook_before_user_created`.
+
 ## D. Content approval — the human gate, and what it does not yet do
 
 The content pipeline is human-in-the-loop by design. `POST /api/content-items/[id]/decision`
