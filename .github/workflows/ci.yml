@@ -61,6 +61,7 @@ jobs:
           node scripts/qa/check-f01-db.mjs
           node scripts/qa/check-f03-db.mjs
           node scripts/qa/check-f26-db.mjs
+          node scripts/qa/check-f24-db.mjs
   test:
     name: tests
     runs-on: ubuntu-latest
