@@ -101,7 +101,9 @@ try {
       const circuitKey = crypto.randomUUID();
 
       await query(
-        "INSERT INTO public.scan_jobs(id, brand, brand_key, url, status, approved_max_usd) VALUES($1, $2, $3, 'https://example.com', 'probing', $4)",
+        // finish_probe_dispatch writes prompt_results.brand from checkpoint.prompt_key,
+        // so the job carries the checkpoint the scan worker would have written.
+        "INSERT INTO public.scan_jobs(id, brand, brand_key, url, status, approved_max_usd, checkpoint) VALUES($1, $2, $3, 'https://example.com', 'probing', $4, jsonb_build_object('prompt_key', $3::text, 'approved_max_usd', $4::numeric))",
         [jobId, brandKey, brandKey, quote],
       );
 
@@ -174,7 +176,9 @@ try {
     const circuitKey = crypto.randomUUID();
 
     await query(
-      "INSERT INTO public.scan_jobs(id, brand, brand_key, url, status, approved_max_usd) VALUES($1, $2, $3, 'https://example.com', 'probing', $4)",
+      // finish_probe_dispatch writes prompt_results.brand from checkpoint.prompt_key,
+      // so the job carries the checkpoint the scan worker would have written.
+      "INSERT INTO public.scan_jobs(id, brand, brand_key, url, status, approved_max_usd, checkpoint) VALUES($1, $2, $3, 'https://example.com', 'probing', $4, jsonb_build_object('prompt_key', $3::text, 'approved_max_usd', $4::numeric))",
       [jobId, brandKey, brandKey, approvedMax],
     );
 
