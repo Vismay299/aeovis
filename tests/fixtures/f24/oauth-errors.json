@@ -1,0 +1,27 @@
+[
+  {
+    "name": "access_denied",
+    "query": "error=access_denied&error_code=access_denied&error_description=The+user+denied+access",
+    "expected": "access_denied"
+  },
+  {
+    "name": "disposable",
+    "query": "error=server_error&error_code=unexpected_failure&error_description=Please+sign+up+with+a+non-disposable+email+address.",
+    "expected": "disposable_email"
+  },
+  {
+    "name": "captcha",
+    "query": "error=invalid_request&error_code=captcha_failed&error_description=captcha+protection%3A+request+disallowed",
+    "expected": "captcha_failed"
+  },
+  {
+    "name": "bad_oauth_state",
+    "query": "error=invalid_request&error_code=bad_oauth_state&error_description=OAuth+callback+with+invalid+state",
+    "expected": "state_mismatch"
+  },
+  {
+    "name": "otp_expired",
+    "query": "error=access_link_expired&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired",
+    "expected": "link_expired"
+  }
+]

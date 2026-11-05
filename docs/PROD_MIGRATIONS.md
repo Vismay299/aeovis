@@ -1639,3 +1639,17 @@ Migration 080 adds `approved_max_usd` and `price_quote` columns to `scan_jobs`, 
 2. Existing scans continue without disruption: scans started without `maxUsd` are automatically capped at the fresh quote with `source = 'implicit'`.
 3. Verified against disposable PostgreSQL by `scripts/qa/check-f09-db.mjs` and tenant isolation by `tests/customer-uat.sql`.
 
+## `155_f24_signup_guard.sql`
+
+**Status:** in repo; **not yet applied to production**.
+
+Refuses disposable email domains at account creation through the Supabase Before User Created hook; invited addresses pass. Apply, then enable Auth → Hooks → Before User Created → Postgres → `public.hook_before_user_created` (owner step, in the Supabase dashboard).
+
+### Objects to check in the catalog
+- table `public.disposable_email_domains` (37 seed rows, RLS on, no policies)
+- functions `public.is_disposable_email_domain`, `public.hook_before_user_created`
+
+### Apply
+1. Apply the migration (idempotent DDL: `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, seed `ON CONFLICT DO NOTHING`).
+2. Confirm with: `select count(*) from disposable_email_domains;` → 37.
+3. The hook has no effect until the owner enables it in the dashboard; existing accounts are never affected (the hook runs only at creation). Verified against disposable PostgreSQL by `scripts/qa/check-f24-db.mjs`.
