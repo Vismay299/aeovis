@@ -249,6 +249,9 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/content",
     "/api/customer/content/[id]",
     "/api/customer/context",
+    // F04 — the client-visible feature flags. Self-gated like every other
+    // customer route: it answers only for a workspace the caller belongs to.
+    "/api/customer/features",
     "/api/customer/gsc",
       "/api/customer/gsc/callback",
       "/api/customer/gsc/connect",

@@ -26,8 +26,14 @@ const THEME_OPTIONS: {
   { value: "dark", label: "Dark", icon: <Moon /> },
 ];
 
-/** System / Light / Dark segmented radio, shared by Settings and account menus. */
-export function ThemePreferenceRadio() {
+/**
+ * System / Light / Dark segmented radio, shared by Settings and account menus.
+ *
+ * `showLabels` prints the name beside each icon. It is off where the control
+ * sits in a narrow row (the account menu's dropdown variant is used there
+ * instead) and on where the words carry the meaning (the settings page).
+ */
+export function ThemePreferenceRadio({ showLabels = false }: { showLabels?: boolean } = {}) {
   const { themePreference, setThemePreference } = useThemePreference();
 
   return (
@@ -35,6 +41,7 @@ export function ThemePreferenceRadio() {
       items={THEME_OPTIONS}
       value={themePreference}
       onChange={setThemePreference}
+      showLabels={showLabels}
     />
   );
 }

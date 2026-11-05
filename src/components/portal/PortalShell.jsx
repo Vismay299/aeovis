@@ -1,23 +1,67 @@
 "use client";
 
 /**
- * Customer portal shell: auth + workspace membership, the light sidebar, and
- * one shared data context every /portal page reads through usePortal().
+ * Customer portal shell: auth + workspace membership, the app sidebar, and one
+ * shared data context every /portal page reads through usePortal().
  *
- * The shell inherits the same light root palette as the public website.
+ * The shell inherits the app palette (light or dark, per browser preference)
+ * rather than the public website's fixed light one.
  */
 
-import Link from "next/link";
+import "@/components/portal/portal.css";
+
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  LayoutDashboard, Radar, PenLine, Search, Users, LogOut, ChevronsUpDown, Loader2,
-} from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useScanTracker } from "./useScanTracker";
-import { Button, Card, ProgressBar, Spinner, TopLoadingBar } from "./ui";
+import { AppShell } from "@/components/app/shell/AppShell";
+import { PageFrame } from "@/components/app/PageFrame";
+import { StatusScreen } from "@/components/app/StatusScreen";
+import { SkeletonPageContent } from "@/components/app/SkeletonPresets";
+import { AppBanner } from "@/components/app/AppBanner";
+import { Button } from "@/components/ui/button";
+import { TopLoadingBar } from "./ui";
 
-export const PortalContext = createContext(null);
+/**
+ * @typedef {Object} PortalBrand
+ * @property {string} brandKey
+ * @property {"owner" | "member"} role
+ * @property {string} display_name
+ * @property {string} website
+ */
+
+/**
+ * @typedef {Object} PortalScan
+ * @property {boolean} active
+ * @property {number | null} percent
+ * @property {{ label: string } | null} stage
+ */
+
+/**
+ * @typedef {Object} PortalValue
+ * @property {{ id: string, email: string } | null} user
+ * @property {PortalBrand[]} brands
+ * @property {PortalBrand | null} brand
+ * @property {string} brandKey
+ * @property {(key: string) => void} setBrandKey
+ * @property {boolean} isOwner
+ * @property {any} overview
+ * @property {boolean} overviewLoading
+ * @property {string} overviewError
+ * @property {() => Promise<void>} refreshOverview
+ * @property {any} gsc
+ * @property {() => Promise<void>} refreshGsc
+ * @property {PortalScan} scan
+ * @property {Record<string, boolean> | null} features
+ * @property {() => void} redirectToLogin
+ * @property {() => Promise<void>} signOut
+ */
+
+/** @type {import("react").Context<PortalValue | null>} */
+export const PortalContext = createContext(
+  /** @type {PortalValue | null} */ (null)
+);
 
 /**
  * {
@@ -29,8 +73,11 @@ export const PortalContext = createContext(null);
  *   gsc,             // GET /api/customer/gsc body, or null
  *   refreshGsc(),
  *   scan,            // see useScanTracker's return value
+ *   features,        // GET /api/customer/features body, or null before it lands
  *   redirectToLogin(), signOut(),
  * }
+ *
+ * @returns {PortalValue}
  */
 export function usePortal() {
   const context = useContext(PortalContext);
@@ -39,16 +86,6 @@ export function usePortal() {
 }
 
 const BRAND_STORAGE_KEY = "perceev-portal-brand";
-
-const NAV = [
-  { href: "/portal", label: "Overview", icon: LayoutDashboard, exact: true },
-  { href: "/portal/scans", label: "Scans", icon: Radar, meta: "scan" },
-  { href: "/portal/measurement", label: "Questions & evidence", icon: Search },
-  { href: "/portal/content", label: "Content Studio", icon: PenLine, meta: "content" },
-  { href: "/portal/search-console", label: "Search Console", icon: Search, meta: "gsc" },
-];
-
-const SETTINGS_NAV = [{ href: "/portal/team", label: "Team", icon: Users, ownerOnly: true }];
 
 function readStoredBrand() {
   try { return window.localStorage.getItem(BRAND_STORAGE_KEY) || ""; } catch { return ""; }
@@ -71,9 +108,20 @@ export default function PortalShell({ children }) {
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState("");
   const [gsc, setGsc] = useState(null);
+  const [features, setFeatures] = useState(null);
 
-  const loginPath = `/login?next=${encodeURIComponent(pathname)}`;
-  const redirectToLogin = useCallback(() => router.replace(loginPath), [router, loginPath]);
+  // The redirect reads the CURRENT location at the moment it happens, so this
+  // callback never changes identity. That matters: the effect below loads the
+  // workspace's data, and a callback that changed on every navigation would
+  // reload it on every navigation too — and would read the feature flags more
+  // than once for the same workspace.
+  const redirectToLogin = useCallback(() => {
+    const next =
+      typeof window === "undefined"
+        ? "/portal"
+        : `${window.location.pathname}${window.location.search}`;
+    router.replace(`/login?next=${encodeURIComponent(next)}`);
+  }, [router]);
 
   // Google's OAuth callback lands on /portal; the property picker lives on
   // the Search Console page, so forward the callback parameters there.
@@ -151,6 +199,8 @@ export default function PortalShell({ children }) {
     setBrandKeyState(key);
     setOverview(null);
     setGsc(null);
+    // The flags belong to the workspace that was left, so they go with it.
+    setFeatures(null);
     storeBrand(key);
   }, []);
 
@@ -187,9 +237,29 @@ export default function PortalShell({ children }) {
 
   useEffect(() => {
     if (phase !== "ready" || !brandKey) return;
+    // The flags are read for the workspace that is open now. A response that
+    // arrives after the reader has switched workspaces is dropped: the `live`
+    // flag closes when this effect is cleaned up, which happens on every
+    // brandKey change.
+    let live = true;
     storeBrand(brandKey);
     refreshOverview();
     refreshGsc();
+    (async () => {
+      try {
+        const response = await fetch(`/api/customer/features?brand_key=${encodeURIComponent(brandKey)}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Could not read the workspace features.");
+        const body = await response.json().catch(() => ({}));
+        if (!live) return;
+        setFeatures(body.features && typeof body.features === "object" ? body.features : {});
+      } catch (featureError) {
+        if (!live) return;
+        // A flag that cannot be read is a flag that is off: nothing gated on it
+        // may be shown.
+        setFeatures({});
+      }
+    })();
+    return () => { live = false; };
   }, [phase, brandKey, refreshOverview, refreshGsc]);
 
   const scan = useScanTracker({
@@ -207,118 +277,72 @@ export default function PortalShell({ children }) {
   const value = useMemo(() => ({
     user, brands, brand, brandKey, setBrandKey, isOwner,
     overview, overviewLoading, overviewError, refreshOverview,
-    gsc, refreshGsc, scan, redirectToLogin, signOut,
-  }), [user, brands, brand, brandKey, setBrandKey, isOwner, overview, overviewLoading, overviewError, refreshOverview, gsc, refreshGsc, scan, redirectToLogin, signOut]);
+    gsc, refreshGsc, scan, features, redirectToLogin, signOut,
+  }), [user, brands, brand, brandKey, setBrandKey, isOwner, overview, overviewLoading, overviewError, refreshOverview, gsc, refreshGsc, scan, features, redirectToLogin, signOut]);
 
   if (phase === "loading") {
+    // The shell renders before the session is confirmed, so the sidebar keeps
+    // its shape from the first paint: the logo, the switcher's skeleton and
+    // placeholder nav rows, with the content showing the page skeleton. The
+    // reader never watches the page jump into place.
     return (
-      <div className="pv-center">
-        <TopLoadingBar show />
-        <div className="pv-row pv-muted"><Spinner label="Loading your workspace" /> Loading your workspace…</div>
-      </div>
+      <PortalContext.Provider value={value}>
+        <AppShell ready={false}>
+          <PageFrame>
+            <SkeletonPageContent />
+          </PageFrame>
+        </AppShell>
+      </PortalContext.Provider>
     );
   }
 
   if (phase === "error" || !brands.length) {
     return (
-      <div className="pv-center">
-        <Card
-          title={phase === "error" ? "Workspace unavailable" : "Your account is ready"}
-          description={phase === "error" ? bootError : "Finish setting up your workspace to start tracking how AI engines talk about your brand."}
-        >
-          <div className="pv-row">
-            {phase === "error"
-              ? <Button onClick={() => window.location.reload()}>Retry</Button>
-              : <Button href="/onboarding">Set up my workspace</Button>}
-            <Button variant="ghost" onClick={signOut}>Sign out</Button>
-          </div>
-        </Card>
-      </div>
+      <StatusScreen
+        logo
+        title={phase === "error" ? "Workspace unavailable" : "Your account is ready"}
+        description={
+          phase === "error"
+            ? bootError
+            : "Finish setting up your workspace to start tracking how AI engines talk about your brand."
+        }
+      >
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {phase === "error" ? (
+            <Button onClick={() => window.location.reload()}>Retry</Button>
+          ) : (
+            <Button nativeButton={false} render={<a href="/onboarding" />}>Set up my workspace</Button>
+          )}
+          <Button variant="ghost" onClick={signOut}>Sign out</Button>
+        </div>
+      </StatusScreen>
     );
   }
 
   return (
     <PortalContext.Provider value={value}>
-      <PortalFrame>{children}</PortalFrame>
+      <AppShell ready={phase === "ready"} banner={<WorkspaceBanners />}>
+        <TopLoadingBar show={overviewLoading && !overview} />
+        <PageFrame>{children}</PageFrame>
+      </AppShell>
     </PortalContext.Provider>
   );
 }
 
-/** The light sidebar + main canvas. Reads everything from usePortal(). */
-export function PortalFrame({ children }) {
+/**
+ * The shell's banner slot. The Overview page shows its own error, so the
+ * banner appears on the other pages only.
+ */
+function WorkspaceBanners() {
   const pathname = usePathname() || "/portal";
-  const { user, brands, brand, brandKey, setBrandKey, isOwner, overview, overviewLoading, gsc, scan, signOut } = usePortal();
+  const { overviewError, refreshOverview } = usePortal();
 
-  const awaitingReview = (overview?.content_items || []).filter((item) => item.status === "awaiting_approval").length;
-  const navMeta = {
-    scan: scan.active ? <span className="pv-nav__live"><Loader2 aria-hidden="true" style={{ width: 12, height: 12, animation: "pv-spin .9s linear infinite" }} />{scan.percent === null ? "" : `${Math.round(scan.percent)}%`}</span> : null,
-    content: awaitingReview ? <span className="pv-nav__meta">{awaitingReview}</span> : null,
-    gsc: gsc ? <span className="pv-nav__meta" style={{ color: gsc.connected ? "var(--good)" : "var(--ink-4)" }}>{gsc.connected ? "●" : "○"}</span> : null,
-  };
-
-  const isActive = (item) => (item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`));
+  if (!overviewError || pathname === "/portal") return null;
 
   return (
-    <div className="pv-app">
-      <aside className="pv-sidebar" aria-label="Workspace navigation">
-        <Link href="/portal" className="pv-sidebar__logo"><i aria-hidden="true" />perceev</Link>
-
-        <div className="pv-workspace">
-          <span className="pv-workspace__avatar" aria-hidden="true">{(brand?.display_name || "?").slice(0, 1)}</span>
-          <span className="pv-workspace__text">
-            <span className="pv-workspace__name">{brand?.display_name || "Workspace"}</span>
-            <span className="pv-workspace__site">{brand?.website ? brand.website.replace(/^https?:\/\//, "").replace(/\/$/, "") : brand?.role}</span>
-          </span>
-          {brands.length > 1 ? (
-            <>
-              <ChevronsUpDown className="pv-workspace__chevron" aria-hidden="true" width={15} height={15} />
-              <label className="sr-only" htmlFor="pv-workspace-select">Switch workspace</label>
-              <select id="pv-workspace-select" value={brandKey} onChange={(event) => setBrandKey(event.target.value)}>
-                {brands.map((item) => <option key={item.brandKey} value={item.brandKey}>{item.display_name}</option>)}
-              </select>
-            </>
-          ) : null}
-        </div>
-
-        <nav className="pv-nav">
-          <span className="pv-nav__label">Workspace</span>
-          {NAV.map((item) => (
-            <Link key={item.href} href={item.href} className={`pv-nav__item${isActive(item) ? " is-active" : ""}`} aria-current={isActive(item) ? "page" : undefined}>
-              <item.icon aria-hidden="true" />
-              {item.label}
-              {item.meta ? navMeta[item.meta] : null}
-            </Link>
-          ))}
-          {SETTINGS_NAV.some((item) => !item.ownerOnly || isOwner) ? <span className="pv-nav__label" style={{ marginTop: 14 }}>Settings</span> : null}
-          {SETTINGS_NAV.filter((item) => !item.ownerOnly || isOwner).map((item) => (
-            <Link key={item.href} href={item.href} className={`pv-nav__item${isActive(item) ? " is-active" : ""}`} aria-current={isActive(item) ? "page" : undefined}>
-              <item.icon aria-hidden="true" />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        {scan.active && !pathname.startsWith("/portal/scans") && pathname !== "/portal" ? (
-          <Link href="/portal/scans" className="pv-sidebar__scan">
-            <b><span>Scan running</span><span className="pv-num">{scan.percent === null ? "—" : `${Math.round(scan.percent)}%`}</span></b>
-            <ProgressBar value={scan.percent} active indeterminate size="sm" label="Scan progress" />
-            <span>{scan.stage?.label || "Starting"}…</span>
-          </Link>
-        ) : null}
-
-        <div className="pv-sidebar__foot">
-          <span className="pv-user__avatar" aria-hidden="true">{(user?.email || "?").slice(0, 1)}</span>
-          <span className="pv-user__email" title={user?.email}>{user?.email}</span>
-          <button type="button" className="pv-icon-btn" onClick={signOut} aria-label="Sign out" title="Sign out">
-            <LogOut aria-hidden="true" />
-          </button>
-        </div>
-      </aside>
-
-      <main className="pv-main">
-        <TopLoadingBar show={overviewLoading && !overview} />
-        {children}
-      </main>
-    </div>
+    <AppBanner variant="warning" icon={<AlertTriangle className="size-4" />}>
+      <span className="mr-2">Workspace data could not be refreshed. {overviewError}</span>
+      <Button size="xs" variant="outline" onClick={refreshOverview}>Try again</Button>
+    </AppBanner>
   );
 }
