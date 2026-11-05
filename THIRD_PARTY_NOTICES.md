@@ -186,3 +186,21 @@ SOFTWARE.
 - `src/shared/schedule.test.ts`
 - `src/lib/schedules/runDue.ts`
 - `src/lib/schedules/runDue.test.ts`
+- `src/components/auth/useGoogleAuth.ts` (from `src/client/features/auth/useGoogleAuth.ts`)
+- `src/components/auth/TurnstileWidget.tsx` (from `src/client/features/auth/TurnstileWidget.tsx`)
+- `src/components/auth/AuthMethodChooser.tsx` (from `src/client/features/auth/AuthMethodChooser.tsx`)
+- `src/components/auth/TermsAgreementNotice.tsx` (from `src/client/features/auth/TermsAgreementNotice.tsx`)
+- `src/components/auth/GoogleLogo.tsx` (from `src/client/features/auth/GoogleLogo.tsx`)
+- `src/components/auth/useRedirectIfSignedIn.ts` (from `src/client/features/auth/useRedirectIfSignedIn.ts`)
+- `src/components/auth/SignInForm.tsx` (from `src/routes/_auth.sign-in.tsx`)
+- `src/app/login/page.jsx` (from `src/routes/_auth.sign-in.tsx`)
+- `src/components/auth/SignUpForm.tsx` (from `src/routes/_auth.sign-up.tsx`)
+- `src/app/signup/page.jsx` (from `src/routes/_auth.sign-up.tsx`)
+- `src/components/auth/VerifyEmailCard.tsx` (from `src/routes/_auth.verify.tsx`)
+- `src/app/auth/verify/page.jsx` (from `src/routes/_auth.verify.tsx`)
+- `src/components/auth/ForgotPasswordForm.tsx` (from `src/routes/_auth.forgot-password.tsx`)
+- `src/app/auth/forgot/page.jsx` (from `src/routes/_auth.forgot-password.tsx`)
+- `src/components/auth/ResetPasswordForm.tsx` (from `src/routes/_auth.reset-password.tsx`)
+- `src/app/auth/reset/page.jsx` (from `src/routes/_auth.reset-password.tsx`)
+- `src/app/auth/error/page.jsx` (from `src/routes/_auth.auth-error.tsx`)
+- `src/app/auth/callback/route.js` (from `src/routes/api.auth.callback.ts`)
