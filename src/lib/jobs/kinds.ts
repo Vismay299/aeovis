@@ -5,3 +5,4 @@ import "../projectContext/jobs.ts";
 import { registerCostJobs } from "../costs/jobs.ts";
 
 registerCostJobs();
+import "../pricing/jobs.ts";

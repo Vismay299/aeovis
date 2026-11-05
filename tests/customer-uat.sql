@@ -22,6 +22,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/041_f01_spend.sql
 \ir ../supabase/migrations/043_f01_jobs_cron.sql
 \ir ../supabase/migrations/070_f07_project_memory.sql
+\ir ../supabase/migrations/080_f09_price_approvals.sql
 \ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
@@ -294,4 +295,35 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 -- End F07 tenant check.
+
+-- F09: each tenant's price_approvals row is visible only to that workspace's member.
+-- Customers may read their own approvals but cannot write or delete them directly.
+INSERT INTO public.price_approvals(brand_key, action, approved_max_usd, quoted_usd, source, quote, price_version, approved_by) VALUES
+ ('10000000-0000-0000-0000-000000000001', 'ai_visibility.scan.run', 24.0, 24.0, 'dialog', '{"totalUsd":24}'::jsonb, '2026-10-21.1', '00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002', 'ai_visibility.scan.run', 24.0, 24.0, 'dialog', '{"totalUsd":24}'::jsonb, '2026-10-21.1', '00000000-0000-0000-0000-000000000002');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.price_approvals) <> 1
+  THEN RAISE EXCEPTION 'F09 price approvals leaked across customer workspaces'; END IF;
+ BEGIN
+  INSERT INTO public.price_approvals(brand_key, action, approved_max_usd, quoted_usd, source, quote, price_version)
+   VALUES('10000000-0000-0000-0000-000000000001', 'ai_visibility.scan.run', 24.0, 24.0, 'dialog', '{"totalUsd":24}'::jsonb, '2026-10-21.1');
+  RAISE EXCEPTION 'Customer could insert price approvals directly';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.price_approvals) <> 1
+  THEN RAISE EXCEPTION 'F09 price approvals leaked across customer workspaces'; END IF;
+END $$;
+RESET ROLE;
+SET LOCAL ROLE anon;
+DO $$ BEGIN
+ IF has_table_privilege('anon','public.price_approvals','SELECT')
+  OR has_table_privilege('anon','public.price_approvals','INSERT')
+  THEN RAISE EXCEPTION 'F09 anon has price_approvals privileges'; END IF;
+END $$;
+RESET ROLE;
+-- End F09 tenant check.
 ROLLBACK;

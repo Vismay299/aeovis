@@ -350,6 +350,8 @@ functions; its tenant isolation is verified by `tests/customer-uat.sql` and
 
 `051_f03_usage` is additive and must be applied before deploying F03 phase 3 (the customer Usage route and the operator cost view). It adds only functions: `workspace_usage_days` (spend binned by the viewer's local day and feature), `workspace_spend_position` (today and month spend, the workspace caps and the open holds) and `operator_costs_by_workspace` / `operator_costs_by_endpoint`. Every one is revoked from `PUBLIC`, `anon` and `authenticated` and granted to `service_role` only, so a customer read never runs them as its own role. Verified against loopback PostgreSQL by the `usage` group of `scripts/qa/check-f03-db.mjs`.
 
+`080_f09_price_approvals` is additive and must be applied before deploying F09 phase 2. It adds `approved_max_usd` and `price_quote` columns to `scan_jobs`, creates the customer-readable `price_approvals` table with RLS, and adds the service-role `prune_price_approvals` retention function. Existing scans continue without disruption (legacy callers without `maxUsd` are capped at the fresh quote). Verified against loopback PostgreSQL by `scripts/qa/check-f09-db.mjs` and `tests/customer-uat.sql`.
+
 
 `040_f01_jobs` is implemented and verified on disposable PostgreSQL — the
 `jobs-enqueue`, `jobs-leases`, `jobs-steps`, `jobs-watchdog`, `jobs-cancel`
