@@ -203,6 +203,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `080_f09_price_approvals` | `scan_jobs.approved_max_usd` / `price_quote` columns, `price_approvals` table with RLS, and `prune_price_approvals` retention function behind F09's price approval enforcement. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `165_f26_privacy_and_telemetry_ids` | Opaque workspace ids for analytics groups; per-user analytics consent. | **NOT YET APPLIED to production** — see [`docs/PROD_MIGRATIONS.md`](docs/PROD_MIGRATIONS.md). |
 | `155_f24_signup_guard` | Refuses disposable email domains at account creation through the Supabase Before User Created hook; invited addresses pass. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `085_f10_customer_schedules` | Customer-managed scan schedules: interval, approved maximum, skip reasons; start/block window functions; legacy path ignores customer rows. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

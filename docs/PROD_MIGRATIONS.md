@@ -1653,3 +1653,7 @@ Refuses disposable email domains at account creation through the Supabase Before
 1. Apply the migration (idempotent DDL: `CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, seed `ON CONFLICT DO NOTHING`).
 2. Confirm with: `select count(*) from disposable_email_domains;` → 37.
 3. The hook has no effect until the owner enables it in the dashboard; existing accounts are never affected (the hook runs only at creation). Verified against disposable PostgreSQL by `scripts/qa/check-f24-db.mjs`.
+
+## `085_f10_customer_schedules.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply after `080_f09_price_approvals.sql`; additive and idempotent, no backfill. No deploy-order constraint: `listDueSchedules` skips customer rows in code, so it works before and after 085. Verified against disposable PostgreSQL by `scripts/qa/check-f10-db.mjs` and tenant isolation by `tests/customer-uat.sql`. Rollback is to revert the application change: the legacy path ignores customer rows.

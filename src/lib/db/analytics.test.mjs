@@ -1023,11 +1023,12 @@ test("listDueSchedules — hasDb=true: due/not-due boundary (<=now, null next_ru
   const now = Date.now();
   const nowIso = new Date(now).toISOString();
   const table = makeFakeTable([
-    { brand: "due-past.com", enabled: true, next_run_at: new Date(now - 60000).toISOString() },
-    { brand: "due-exact.com", enabled: true, next_run_at: nowIso },
-    { brand: "due-null.com", enabled: true, next_run_at: null },
-    { brand: "not-due-future.com", enabled: true, next_run_at: new Date(now + 60000).toISOString() },
-    { brand: "disabled-past.com", enabled: false, next_run_at: new Date(now - 60000).toISOString() },
+    { brand: "due-past.com", managed_by: "operator", enabled: true, next_run_at: new Date(now - 60000).toISOString() },
+    { brand: "due-exact.com", managed_by: "operator", enabled: true, next_run_at: nowIso },
+    { brand: "due-null.com", managed_by: "operator", enabled: true, next_run_at: null },
+    { brand: "not-due-future.com", managed_by: "operator", enabled: true, next_run_at: new Date(now + 60000).toISOString() },
+    { brand: "disabled-past.com", managed_by: "operator", enabled: false, next_run_at: new Date(now - 60000).toISOString() },
+    { brand: "customer-past.com", managed_by: "customer", enabled: true, next_run_at: new Date(now - 60000).toISOString() },
   ]);
   const { client } = makeMockClient({ scan_schedules: table.handler });
 
@@ -1035,6 +1036,44 @@ test("listDueSchedules — hasDb=true: due/not-due boundary (<=now, null next_ru
   const dueBrands = due.map((r) => r.brand).sort();
 
   assert.deepEqual(dueBrands, ["due-exact.com", "due-null.com", "due-past.com"]);
+});
+
+test("listDueSchedules — hasDb=true: customer-managed rows are excluded, rows without managed_by (pre-085) are kept", async () => {
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  const table = makeFakeTable([
+    { brand: "operator-due.com", managed_by: "operator", enabled: true, next_run_at: new Date(now - 60000).toISOString() },
+    { brand: "customer-due.com", managed_by: "customer", enabled: true, next_run_at: new Date(now - 60000).toISOString() },
+    { brand: "pre-085-due.com", enabled: true, next_run_at: new Date(now - 60000).toISOString() },
+  ]);
+  const { client, calls } = makeMockClient({ scan_schedules: table.handler });
+
+  const due = await listDueSchedules(nowIso, { client });
+
+  assert.deepEqual(
+    due.map((r) => r.brand).sort(),
+    ["operator-due.com", "pre-085-due.com"],
+    "customer-managed rows never reach the legacy scheduler",
+  );
+  const read = calls.find((c) => c.table === "scan_schedules");
+  assert.ok(read, "the schedules table was read");
+  assert.ok(
+    !read.filters.some(([, col]) => col === "managed_by"),
+    "the query does not name managed_by, so it works before 085 is applied",
+  );
+});
+
+test("listDueSchedules — hasDb=false: memory mode also skips customer-managed rows", async () => {
+  const past = new Date(Date.now() - 60000).toISOString();
+  await upsertScanSchedule("mem-op-due.com", { cadence: "daily", enabled: true, next_run_at: past }, { client: null });
+  await upsertScanSchedule(
+    "mem-cust-due.com",
+    { cadence: "daily", enabled: true, next_run_at: past, managed_by: "customer" },
+    { client: null },
+  );
+  const brands = (await listDueSchedules(new Date().toISOString(), { client: null })).map((r) => r.brand);
+  assert.ok(brands.includes("mem-op-due.com"));
+  assert.ok(!brands.includes("mem-cust-due.com"), "customer rows never reach the legacy scheduler");
 });
 
 test("listDueSchedules — hasDb=true: a DB error THROWS", async () => {

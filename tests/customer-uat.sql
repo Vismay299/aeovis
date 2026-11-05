@@ -23,6 +23,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/043_f01_jobs_cron.sql
 \ir ../supabase/migrations/070_f07_project_memory.sql
 \ir ../supabase/migrations/080_f09_price_approvals.sql
+\ir ../supabase/migrations/085_f10_customer_schedules.sql
 \ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
@@ -326,4 +327,25 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 -- End F09 tenant check.
+
+-- F10: one customer-managed schedule per workspace; each member reads only their own.
+-- Inserted as the superuser, before any role switch. The CHECK needs an interval and an approved maximum.
+INSERT INTO public.scan_schedules(brand, display_name, cadence, enabled, next_run_at, managed_by, schedule_interval, approved_max_usd) VALUES
+ ('10000000-0000-0000-0000-000000000001', 'Workspace A', 'daily', true, now() + interval '1 day', 'customer', 'daily', 5.0),
+ ('10000000-0000-0000-0000-000000000002', 'Workspace B', 'weekly', true, now() + interval '1 day', 'customer', 'weekly', 7.5);
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.scan_schedules) <> 1
+  OR (SELECT brand FROM public.scan_schedules) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F10 customer schedules leaked across customer workspaces'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.scan_schedules) <> 1
+  OR (SELECT brand FROM public.scan_schedules) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F10 customer schedules leaked across customer workspaces'; END IF;
+END $$;
+RESET ROLE;
+-- End F10 tenant check.
 ROLLBACK;
