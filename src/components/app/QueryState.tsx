@@ -8,12 +8,14 @@ import type { ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { ErrorState } from "@/components/app/ErrorState";
 import { SkeletonCard } from "@/components/app/SkeletonPresets";
-import { describeError } from "@/components/app/errors/describeError";
+import { SpendRefusedError } from "@/components/app/SpendRefusedError";
 import { queryStateView } from "@/components/app/queryStateView";
+import { describeError, isSpendRefused } from "@/lib/query/errors";
 
 /**
  * A load failure with a retry button. The message goes through
- * `describeError`.
+ * `describeError`. A spend refusal shows its own card instead, with no retry
+ * button: a retry cannot fix it.
  */
 export function QueryError({
   error,
@@ -38,6 +40,10 @@ export function QueryError({
   variant?: "inline" | "card" | "page";
   title?: string;
 }) {
+  const refusal = error ?? cause;
+  if (isSpendRefused(refusal)) {
+    return <SpendRefusedError error={refusal} variant={variant} title={title} />;
+  }
   return (
     <ErrorState
       variant={variant}

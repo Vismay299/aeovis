@@ -1,13 +1,20 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { getQueryClient } from "@/components/app/providers/queryClient";
 
 /**
  * Shared root providers for app surfaces.
- * Wraps children with TooltipProvider.
- * F05 will add QueryClientProvider; F06 will add ExportToSheetsModal.
+ * Wraps children with QueryClientProvider and TooltipProvider.
+ * F06 will add ExportToSheetsModal.
  */
 export function AppProviders({ children }: { children: ReactNode }) {
-  return <TooltipProvider>{children}</TooltipProvider>;
+  const [queryClient] = useState(getQueryClient);
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>{children}</TooltipProvider>
+    </QueryClientProvider>
+  );
 }
