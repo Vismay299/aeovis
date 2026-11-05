@@ -149,7 +149,7 @@ async function main() {
   const brand = "Offcult";
   const brandAliases = getBrandAliases(brand, panel.context.website || "offcult.in");
   const brandDomain = extractBrandDomain(panel.context.website || "offcult.in");
-  const competitors = args.competitors.map((name) => ({ name, aliases: [name] }));
+  const competitors = args.competitors;
   const manifestRows = [];
 
   function ensureLeaseRenewal() {
@@ -166,13 +166,13 @@ async function main() {
   async function claim(item) {
     const row = rowByPlan.get(`${item.arm}:${item.engine}:${item.questionIndex}`);
     const reserve = item.arm === "dfs_live" ? aiAnswerUsd(item.engine === "google_ai_overview" ? "google_ai_overview" : item.engine, "live") : item.arm === "dfs_model" ? llmResponseUsd("perplexity", true) : item.arm === "current" ? args.reserveUsd : aiAnswerUsd(item.engine === "google_ai_overview" ? "google_ai_overview" : item.engine, "queued");
-    const result = await store.claim(row.id, { reserve, scanCap: args.maxSpendUsd, leaseSeconds: item.arm === "dfs_queued" ? 180 : 120 });
+    const result = await store.claim(row.id, { reserve, scanCap: args.maxSpendUsd, leaseSeconds: item.arm === "dfs_queued" || item.arm === "dfs_live" ? 180 : 120 });
     if (!result?.granted) {
       manifestRows.push({ id: row.id, arm: item.arm, engine: item.engine, questionIndex: item.questionIndex, state: "blocked", reason: result?.reason ?? "claim_refused", attemptCount: 0, costUsd: 0, statusCode: null });
       observations.push({ id: row.id, arm: item.arm, engine: item.engine, questionIndex: item.questionIndex, state: "blocked", posted: false, accepted: false, costUsd: 0 });
       return null;
     }
-    const lease = { row, token: result.lease_token, attemptNo: result.attempt_no, item, leaseSeconds: item.arm === "dfs_queued" ? 180 : 120, startedAt: Date.now(), renewalFailed: false };
+    const lease = { row, token: result.lease_token, attemptNo: result.attempt_no, item, leaseSeconds: item.arm === "dfs_queued" || item.arm === "dfs_live" ? 180 : 120, startedAt: Date.now(), renewalFailed: false };
     activeLeases.set(row.id, lease);
     ensureLeaseRenewal();
     return lease;
@@ -197,9 +197,10 @@ async function main() {
       cost: settlementCost,
       provider_failure: error ? answerFailure(error) : null,
     };
-    const state = error ? "failed" : item.engine === "google_ai_overview" && !text.trim() || item.engine === "aio" && answer?.serp_state === "valid_serp" && answer?.aio_present === false ? "valid_no_aio" : "answered";
+    let state = error ? "failed" : item.engine === "google_ai_overview" && !text.trim() || item.engine === "aio" && answer?.serp_state === "valid_serp" && answer?.aio_present === false ? "valid_no_aio" : "answered";
     const finish = await store.finish(lease.row.id, lease.token, result, { state, failure: result.provider_failure, next_at: null });
-    if (finish?.accepted === false) throw new Error("Dispatch result lost its active lease");
+    // A result that arrives after its lease expired is already recorded as ambiguous; count it and keep running.
+    if (finish?.accepted === false) state = "ambiguous";
     const duration = Date.now() - lease.startedAt;
     const tablePrice = item.arm === "current" ? brightDataPriceUsd : item.arm === "dfs_model" ? llmResponseUsd("perplexity", true) : aiAnswerUsd(item.engine === "google_ai_overview" ? "google_ai_overview" : item.engine, item.arm === "dfs_live" ? "live" : "queued");
     const collectMinutes = postedAtMs === null || resultAtMs === null ? null : Math.max(0, (resultAtMs - postedAtMs) / 60_000);
@@ -298,7 +299,7 @@ async function main() {
       }
     }
     const balanceAfter = (await fetchUserData())?.money?.balance ?? null;
-    const metrics = computeMetrics(observations, answers, [{ name: brand, domain: brandDomain }, ...competitors.map((item) => ({ name: item.name, domain: item.name }))], { balanceBeforeUsd: balanceBefore, balanceAfterUsd: balanceAfter });
+    const metrics = computeMetrics(observations, answers, [{ name: brand, domain: brandDomain }, ...competitors.map((name) => ({ name, domain: name }))], { balanceBeforeUsd: balanceBefore, balanceAfterUsd: balanceAfter });
     const manifest = { runId: args.runId, startedAt, finishedAt: new Date().toISOString(), arms: args.arms, maxSpendUsd: args.maxSpendUsd, maxRequests: args.maxRequests, requestCount: guarded.requestCount, estimatedUsd, balanceBeforeUsd: balanceBefore, balanceAfterUsd: balanceAfter, observations: manifestRows };
     await writeFile(path.join(out, "manifest.json"), JSON.stringify(manifest, null, 2), { mode: 0o600 });
     await writeFile(path.join(out, "answers.jsonl"), answers.map((item) => JSON.stringify(item)).join("\n") + "\n", { mode: 0o600 });
