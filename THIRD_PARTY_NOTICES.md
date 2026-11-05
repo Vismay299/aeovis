@@ -173,3 +173,5 @@ SOFTWARE.
 - `src/components/app/shell/AccountMenu.tsx` (from `src/client/components/Sidebar.tsx`)
 - `src/components/app/shell/ScanRunningCard.tsx` (from `src/client/components/Sidebar.tsx`)
 - `src/components/app/shell/WorkspaceSwitcher.tsx` (from `src/client/features/projects/ProjectSwitcher.tsx`)
+- `src/components/portal/settings/tabs.ts` (from `src/client/features/projects/SettingsTabs.tsx`)
+- `src/app/portal/settings/layout.tsx` (from `src/routes/_app/p/$projectId/settings.tsx`)

@@ -32,7 +32,7 @@ export function AccountMenu({ ready }: { ready: boolean }) {
   const { user, signOut } = usePortal();
   const email = user?.email;
 
-  if (!email) {
+  if (!ready || !email) {
     // The account row's slot while the session loads.
     return (
       <SidebarMenuItem>

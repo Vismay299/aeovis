@@ -21,6 +21,7 @@ import { StatusScreen } from "@/components/app/StatusScreen";
 import { SkeletonPageContent } from "@/components/app/SkeletonPresets";
 import { AppBanner } from "@/components/app/AppBanner";
 import { Button } from "@/components/ui/button";
+import { TopLoadingBar } from "./ui";
 
 /**
  * @typedef {Object} PortalBrand
@@ -280,10 +281,18 @@ export default function PortalShell({ children }) {
   }), [user, brands, brand, brandKey, setBrandKey, isOwner, overview, overviewLoading, overviewError, refreshOverview, gsc, refreshGsc, scan, features, redirectToLogin, signOut]);
 
   if (phase === "loading") {
+    // The shell renders before the session is confirmed, so the sidebar keeps
+    // its shape from the first paint: the logo, the switcher's skeleton and
+    // placeholder nav rows, with the content showing the page skeleton. The
+    // reader never watches the page jump into place.
     return (
-      <PageFrame>
-        <SkeletonPageContent />
-      </PageFrame>
+      <PortalContext.Provider value={value}>
+        <AppShell ready={false}>
+          <PageFrame>
+            <SkeletonPageContent />
+          </PageFrame>
+        </AppShell>
+      </PortalContext.Provider>
     );
   }
 
@@ -313,6 +322,7 @@ export default function PortalShell({ children }) {
   return (
     <PortalContext.Provider value={value}>
       <AppShell ready={phase === "ready"} banner={<WorkspaceBanners />}>
+        <TopLoadingBar show={overviewLoading && !overview} />
         <PageFrame>{children}</PageFrame>
       </AppShell>
     </PortalContext.Provider>

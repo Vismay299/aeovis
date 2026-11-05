@@ -1,5 +1,9 @@
 "use client";
 
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/routes/_app/p/$projectId/settings.tsx
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
+
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { NavTab, NavTabs } from "@/components/app/NavTabs";

@@ -199,16 +199,17 @@ function SidebarNavLink({
       {placeholder ? (
         row
       ) : (
-        <>
-          <Link
-            href={item.href}
-            onClick={() => setOpenMobile(false)}
-            aria-current={active ? "page" : undefined}
-          >
-            {row}
-          </Link>
+        <Link
+          href={item.href}
+          onClick={() => setOpenMobile(false)}
+          aria-current={active ? "page" : undefined}
+        >
+          {row}
+          {/* The badge is the button's next SIBLING: shadcn positions it with
+              `peer-data-[size=…]/menu-button`, which only reaches a later
+              sibling of the button that carries the `peer` class. */}
           {badge}
-        </>
+        </Link>
       )}
     </SidebarMenuItem>
   );
