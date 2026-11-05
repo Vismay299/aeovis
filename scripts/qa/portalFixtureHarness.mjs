@@ -226,6 +226,10 @@ export async function openPortal(browser, origin, options = {}) {
   }
 
   await page.goto(new URL("/login", base).href, { waitUntil: "networkidle" });
+  const continueWithEmail = page.getByRole("button", { name: "Continue with email" });
+  if (await continueWithEmail.isVisible().catch(() => false)) {
+    await continueWithEmail.click();
+  }
   await page.fill("#email", session.user.email);
   await page.fill("#password", QA_PASSWORD);
   await page.click('button[type="submit"]');
