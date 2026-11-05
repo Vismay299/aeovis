@@ -54,7 +54,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F18](./F18-site-audit.md) | Site audit crawler (plus Perceev's AEO checks) | Site audit | 3 | F01, F02, F06, F08 (Firecrawl price), F09 | 125–129 | Spec ✓ |
 | [F19](./F19-indexnow.md) | IndexNow | IndexNow | 3 | F01, F04, F05; F18 for phase 3 | 130–134 | Spec ✓ |
 | [F20](./F20-ga4-and-opportunities.md) | Google Analytics 4 and search opportunities | Google Analytics 4 | 3 | F01, F04, F05 | 135–139 | Spec ✓ |
-| [F21](./F21-agent-skills.md) | Agent skills library | Agent skills | 4 | F01 | 140–144 | In progress |
+| [F21](./F21-agent-skills.md) | Agent skills library | Agent skills | 4 | F01 | 140–144 | Merged |
 | [F22](./F22-in-app-assistant.md) | In-app assistant (chat over our tools) | In-app chat agent | 4 | F01, F03, F04, F05, F07–F20, F21 | 145–149 | Spec ✓ |
 | [F23](./F23-reports-and-sharing.md) | Reports and public sharing | Reports and sharing | 4 | F21, F22 | 150–154 | Spec ✓ |
 | [F24](./F24-sign-in-hardening.md) | Sign-in hardening: Google, captcha, disposable email | Sign-in | 5 | F04 | 155–159 | Spec ✓ |
