@@ -1656,4 +1656,4 @@ Refuses disposable email domains at account creation through the Supabase Before
 
 ## `085_f10_customer_schedules.sql`
 
-- **Status:** in repo; **not yet applied to production**. Apply after `080_f09_price_approvals.sql`; additive and idempotent, no backfill. Apply 085 before deploying the code that filters `listDueSchedules` on `managed_by`; without it the scheduler tick reports a read error. Verified against disposable PostgreSQL by `scripts/qa/check-f10-db.mjs` and tenant isolation by `tests/customer-uat.sql`. Rollback is to revert the application change: the legacy path ignores customer rows.
+- **Status:** in repo; **not yet applied to production**. Apply after `080_f09_price_approvals.sql`; additive and idempotent, no backfill. No deploy-order constraint: `listDueSchedules` skips customer rows in code, so it works before and after 085. Verified against disposable PostgreSQL by `scripts/qa/check-f10-db.mjs` and tenant isolation by `tests/customer-uat.sql`. Rollback is to revert the application change: the legacy path ignores customer rows.

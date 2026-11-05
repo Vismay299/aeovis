@@ -64,40 +64,52 @@ BEGIN
 END $$;
 
 -- F10 start: TS has already planned the windows (run, missed, next) and passed every pre-check.
+-- Every missed window must lie in [p_observed_next, p_window_at); the job's cap may not exceed the
+-- schedule's current approval (a cap lowered after the tick read the row reads as a stale plan).
 CREATE OR REPLACE FUNCTION public.start_customer_window(p_brand text, p_now timestamptz, p_observed_next timestamptz,
   p_window_at timestamptz, p_missed timestamptz[], p_next timestamptz, p_job_id uuid, p_approved_max numeric, p_quote jsonb)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
 DECLARE s scan_schedules; panel repair_artifacts; job scan_jobs; ctx jsonb; owned_site text; owned_name text; w timestamptz;
+  missed_n integer := 0; skip_reason text;
 BEGIN
   IF p_window_at IS NULL OR p_next IS NULL OR p_next <= p_window_at OR p_approved_max IS NULL OR p_approved_max <= 0
      OR p_job_id IS NULL OR (p_quote IS NOT NULL AND pg_column_size(p_quote) >= 16384) THEN
     RAISE EXCEPTION 'invalid customer window'; END IF;
+  FOREACH w IN ARRAY coalesce(p_missed, '{}'::timestamptz[]) LOOP
+    IF w IS NULL OR w >= p_window_at OR p_observed_next IS NULL OR w < p_observed_next THEN
+      RAISE EXCEPTION 'invalid customer window'; END IF;
+  END LOOP;
   SELECT * INTO s FROM scan_schedules WHERE brand = p_brand FOR UPDATE;
   IF NOT FOUND OR s.managed_by <> 'customer' OR NOT coalesce(s.enabled, false)
-     OR s.next_run_at IS DISTINCT FROM p_observed_next OR p_window_at > p_now THEN
+     OR s.next_run_at IS DISTINCT FROM p_observed_next OR p_window_at > p_now
+     OR s.approved_max_usd IS NULL OR p_approved_max > s.approved_max_usd THEN
     RETURN jsonb_build_object('started', false, 'reason', 'not_due'); END IF;
   FOREACH w IN ARRAY coalesce(p_missed, '{}'::timestamptz[]) LOOP
     INSERT INTO measurement_windows(brand, window_at, disposition, reason) VALUES (p_brand, w, 'missed', 'bounded_catchup_elapsed')
     ON CONFLICT DO NOTHING;
+    IF FOUND THEN missed_n := missed_n + 1; END IF;
   END LOOP;
   IF EXISTS (SELECT 1 FROM measurement_windows WHERE brand = p_brand AND window_at = p_window_at) THEN
     UPDATE scan_schedules SET next_run_at = p_next, updated_at = p_now WHERE brand = p_brand;
     RETURN jsonb_build_object('started', false, 'reason', 'already_recorded'); END IF;
-  IF EXISTS (SELECT 1 FROM scan_jobs WHERE brand_key = p_brand
-             AND status IN ('pending','generating_prompts','sourcing','probing','scoring','running')) THEN
+  SELECT website, display_name INTO owned_site, owned_name FROM customer_brands WHERE brand_key = p_brand AND is_active;
+  -- Same overlap rule as the legacy path: a NULL-brand_key job for this site counts too.
+  IF EXISTS (SELECT 1 FROM scan_jobs
+             WHERE (brand_key = p_brand
+                    OR (brand_key IS NULL AND lower(brand) = lower(coalesce(owned_name, s.display_name, p_brand))))
+               AND status IN ('pending','generating_prompts','sourcing','probing','scoring','running')) THEN
     INSERT INTO measurement_windows(brand, window_at, disposition, reason) VALUES (p_brand, p_window_at, 'overlap', 'active_scan_overlap');
     UPDATE scan_schedules SET next_run_at = p_next, last_skip_reason = 'active_scan_overlap', last_skip_at = p_now, updated_at = p_now
      WHERE brand = p_brand;
     RETURN jsonb_build_object('started', false, 'reason', 'active_scan_overlap'); END IF;
   SELECT a.* INTO panel FROM repair_artifact_heads h JOIN repair_artifacts a ON a.id = h.artifact_id
    WHERE h.brand = p_brand AND h.kind = 'panel' AND h.artifact_key = 'default' AND a.state = 'approved';
-  SELECT website, display_name INTO owned_site, owned_name FROM customer_brands WHERE brand_key = p_brand AND is_active;
   IF panel.id IS NULL OR owned_site IS NULL THEN
-    INSERT INTO measurement_windows(brand, window_at, disposition, reason)
-      VALUES (p_brand, p_window_at, 'blocked', CASE WHEN owned_site IS NULL THEN 'workspace_inactive' ELSE 'panel_not_approved' END);
-    UPDATE scan_schedules SET next_run_at = p_next, updated_at = p_now, last_skip_at = p_now,
-      last_skip_reason = CASE WHEN owned_site IS NULL THEN 'workspace_inactive' ELSE 'panel_not_approved' END WHERE brand = p_brand;
-    RETURN jsonb_build_object('started', false, 'reason', CASE WHEN owned_site IS NULL THEN 'workspace_inactive' ELSE 'panel_not_approved' END);
+    skip_reason := CASE WHEN owned_site IS NULL THEN 'workspace_inactive' ELSE 'panel_not_approved' END;
+    INSERT INTO measurement_windows(brand, window_at, disposition, reason) VALUES (p_brand, p_window_at, 'blocked', skip_reason);
+    UPDATE scan_schedules SET next_run_at = p_next, updated_at = p_now, last_skip_at = p_now, last_skip_reason = skip_reason
+     WHERE brand = p_brand;
+    RETURN jsonb_build_object('started', false, 'reason', skip_reason);
   END IF;
   ctx := coalesce(panel.payload->'context', jsonb_build_object('country', s.geo));
   INSERT INTO scan_jobs(id, brand, brand_key, url, status, progress_pct, heartbeat_at, panel_snapshot, measurement_context,
@@ -108,11 +120,11 @@ BEGIN
     VALUES (p_brand, p_window_at, 'started', job.id, to_jsonb(panel), ctx);
   UPDATE scan_schedules SET last_run_at = p_now, next_run_at = p_next, last_skip_reason = NULL, last_skip_at = NULL, updated_at = p_now
    WHERE brand = p_brand;
-  RETURN jsonb_build_object('started', true, 'job_id', job.id, 'window_at', p_window_at,
-    'missed', coalesce(array_length(p_missed, 1), 0));
+  RETURN jsonb_build_object('started', true, 'job_id', job.id, 'window_at', p_window_at, 'missed', missed_n);
 END $$;
 
 -- F10 skip: record the window as blocked with a closed-vocabulary reason and move the schedule on.
+-- Same due and missed-window rules as start; a window already in the ledger is not re-reported as blocked.
 CREATE OR REPLACE FUNCTION public.block_customer_window(p_brand text, p_now timestamptz, p_observed_next timestamptz,
   p_window_at timestamptz, p_missed timestamptz[], p_next timestamptz, p_reason text)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
@@ -120,15 +132,22 @@ DECLARE s scan_schedules; w timestamptz;
 BEGIN
   IF p_reason IS NULL OR p_reason !~ '^[a-z_]{1,60}$' OR p_next IS NULL OR p_window_at IS NULL OR p_next <= p_window_at THEN
     RAISE EXCEPTION 'invalid customer window'; END IF;
+  FOREACH w IN ARRAY coalesce(p_missed, '{}'::timestamptz[]) LOOP
+    IF w IS NULL OR w >= p_window_at OR p_observed_next IS NULL OR w < p_observed_next THEN
+      RAISE EXCEPTION 'invalid customer window'; END IF;
+  END LOOP;
   SELECT * INTO s FROM scan_schedules WHERE brand = p_brand FOR UPDATE;
-  IF NOT FOUND OR s.managed_by <> 'customer' OR NOT coalesce(s.enabled, false) OR s.next_run_at IS DISTINCT FROM p_observed_next THEN
+  IF NOT FOUND OR s.managed_by <> 'customer' OR NOT coalesce(s.enabled, false)
+     OR s.next_run_at IS DISTINCT FROM p_observed_next OR p_window_at > p_now THEN
     RETURN jsonb_build_object('blocked', false, 'reason', 'not_due'); END IF;
   FOREACH w IN ARRAY coalesce(p_missed, '{}'::timestamptz[]) LOOP
     INSERT INTO measurement_windows(brand, window_at, disposition, reason) VALUES (p_brand, w, 'missed', 'bounded_catchup_elapsed')
     ON CONFLICT DO NOTHING;
   END LOOP;
-  INSERT INTO measurement_windows(brand, window_at, disposition, reason) VALUES (p_brand, p_window_at, 'blocked', p_reason)
-  ON CONFLICT DO NOTHING;
+  IF EXISTS (SELECT 1 FROM measurement_windows WHERE brand = p_brand AND window_at = p_window_at) THEN
+    UPDATE scan_schedules SET next_run_at = p_next, updated_at = p_now WHERE brand = p_brand;
+    RETURN jsonb_build_object('blocked', false, 'reason', 'already_recorded'); END IF;
+  INSERT INTO measurement_windows(brand, window_at, disposition, reason) VALUES (p_brand, p_window_at, 'blocked', p_reason);
   UPDATE scan_schedules SET next_run_at = p_next, last_skip_reason = p_reason, last_skip_at = p_now, updated_at = p_now
    WHERE brand = p_brand;
   RETURN jsonb_build_object('blocked', true, 'reason', p_reason);

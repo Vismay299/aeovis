@@ -595,7 +595,7 @@ abandoned is not.
 ### `085_f10_customer_schedules` (F10 phase 2)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply after `080_f09_price_approvals` (the `approval_id` foreign key points at `price_approvals`). Additive; no backfill: existing rows default to `managed_by = 'operator'`.
-- Apply 085 before deploying the code that filters `listDueSchedules` on `managed_by`; without it the scheduler tick reports a read error.
+- No deploy-order constraint: `listDueSchedules` skips `managed_by = 'customer'` rows in code, so it reads the same before and after 085 is applied.
 - Objects: nine `scan_schedules` columns (`managed_by`, `schedule_interval`, `schedule_time`, `last_skip_reason`, `last_skip_at`, `approved_max_usd`, `approval_id`, `customer_updated_by`, `customer_updated_at`) with the `scan_schedules_f10_checks` constraint; functions `start_customer_window`, `block_customer_window` (service role only); `enqueue_measurement_window` now returns `customer_managed` for customer rows.
 
 ## D. Content approval — the human gate, and what it does not yet do

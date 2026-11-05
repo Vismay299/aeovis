@@ -356,7 +356,9 @@ const FULL_CATALOG = [
   "disposable_email_domains", "is_disposable_email_domain", "hook_before_user_created",
   // 085_f10_customer_schedules.sql — customer-managed schedule columns and the start/block window functions.
   "scan_schedules.managed_by", "scan_schedules.schedule_interval", "scan_schedules.approved_max_usd",
-  "scan_schedules.last_skip_reason", "start_customer_window", "block_customer_window",
+  "scan_schedules.last_skip_reason", "scan_schedules.schedule_time", "scan_schedules.last_skip_at",
+  "scan_schedules.approval_id", "scan_schedules.customer_updated_by", "scan_schedules.customer_updated_at",
+  "scan_schedules_f10_checks", "scan_schedules_customer_due_idx", "start_customer_window", "block_customer_window",
 ];
 
 function withRegister(dir) {

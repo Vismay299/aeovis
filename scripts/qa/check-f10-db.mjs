@@ -9,6 +9,8 @@
  *   6. skip-panel (F10-AC-07, database half)
  *   7. block    (F10-AC-07, database half)
  *   8. pause    (F10-AC-05, database half)
+ *   9. guards   (review fixes: approval cap, missed-window range, legacy-job
+ *               overlap, block due/already-recorded, missed count)
  *
  * Runs against a disposable loopback PostgreSQL database that has every
  * migration applied. Every group seeds its own workspace under a fresh random
@@ -574,8 +576,84 @@ try {
     assert.equal(row.enabled, false);
   });
 
-  assert.equal(passed.length, 8);
-  console.log("ok 8 groups");
+  // -------------------------------------------------------------------------
+  // Group 9: guards (review fixes on start/block)
+  // -------------------------------------------------------------------------
+  await runGroup("guards", async () => {
+    // A job cap above the schedule's current approval reads as a stale plan.
+    const cap = await seedWorkspace("guard-cap");
+    const capAt = Date.now() - 2 * DAY;
+    await insertSchedule(cap.brand, { next: capAt, max: 1 });
+    const capPlan = plan(cap.brand, { observed: iso(capAt), windowAt: iso(capAt), next: iso(capAt + DAY), max: 1.5 });
+    assert.deepEqual(await start(capPlan), { started: false, reason: "not_due" });
+    assert.equal((await jobs(cap.brand)).length, 0);
+    assert.equal((await windows(cap.brand)).length, 0);
+    const okCap = await start({ ...capPlan, max: 1 });
+    assert.equal(okCap.started, true);
+    assert.equal(Number((await jobs(cap.brand))[0].approved_max_usd), 1);
+
+    // Missed windows outside [observed, window_at) are refused by both functions.
+    const rng = await seedWorkspace("guard-missed", { panel: false });
+    const rngAt = Date.now() - 3 * DAY;
+    await insertSchedule(rng.brand, { next: rngAt });
+    const rngPlan = plan(rng.brand, { observed: iso(rngAt), windowAt: iso(rngAt + DAY), next: iso(rngAt + 2 * DAY) });
+    for (const missed of [[iso(rngAt + DAY)], [iso(rngAt - DAY)], [iso(Date.now() + DAY)]]) {
+      await assert.rejects(start({ ...rngPlan, missed }), /invalid customer window/);
+      await assert.rejects(block({ ...rngPlan, missed }), /invalid customer window/);
+    }
+    assert.equal((await windows(rng.brand)).length, 0);
+
+    // Block refuses a window that is not yet due.
+    const futureBlock = { ...rngPlan, windowAt: iso(Date.now() + DAY), next: iso(Date.now() + 2 * DAY) };
+    assert.deepEqual(await block(futureBlock), { blocked: false, reason: "not_due" });
+    assert.equal((await windows(rng.brand)).length, 0);
+
+    // Block does not report a window that is already in the ledger as blocked.
+    const rec = await seedWorkspace("guard-recorded", { panel: false });
+    const recAt = Date.now() - 2 * DAY;
+    await insertSchedule(rec.brand, { next: recAt });
+    await query(
+      "INSERT INTO public.measurement_windows(brand, window_at, disposition, reason) VALUES($1, $2, 'missed', 'bounded_catchup_elapsed')",
+      [rec.brand, iso(recAt)],
+    );
+    const recPlan = plan(rec.brand, { observed: iso(recAt), windowAt: iso(recAt), next: iso(recAt + DAY) });
+    assert.deepEqual(await block(recPlan), { blocked: false, reason: "already_recorded" });
+    const recRow = await schedule(rec.brand);
+    assert.equal(recRow.last_skip_reason, null);
+    assert.equal(ms(recRow.next_run_at), ms(recPlan.next));
+    assert.equal((await windows(rec.brand)).length, 1);
+
+    // A running legacy job with a NULL brand_key for the same site counts as overlap.
+    const leg = await seedWorkspace("guard-legacy-overlap");
+    const legAt = Date.now() - 2 * DAY;
+    await insertSchedule(leg.brand, { next: legAt });
+    const { display_name: legName } = (
+      await query("SELECT display_name FROM public.customer_brands WHERE brand_key = $1", [leg.brand])
+    ).rows[0];
+    await query(
+      "INSERT INTO public.scan_jobs(id, brand, brand_key, url, status) VALUES($1, $2, NULL, 'https://example.com', 'probing')",
+      [id(), legName.toUpperCase()],
+    );
+    const legPlan = plan(leg.brand, { observed: iso(legAt), windowAt: iso(legAt), next: iso(legAt + DAY) });
+    assert.deepEqual(await start(legPlan), { started: false, reason: "active_scan_overlap" });
+
+    // `missed` counts rows written, not the array passed in.
+    const cnt = await seedWorkspace("guard-count");
+    const cntAt = Date.now() - 3 * DAY;
+    await insertSchedule(cnt.brand, { next: cntAt });
+    await query(
+      "INSERT INTO public.measurement_windows(brand, window_at, disposition, reason) VALUES($1, $2, 'missed', 'bounded_catchup_elapsed')",
+      [cnt.brand, iso(cntAt)],
+    );
+    const cntResult = await start(
+      plan(cnt.brand, { observed: iso(cntAt), windowAt: iso(cntAt + DAY), missed: [iso(cntAt)], next: iso(cntAt + 2 * DAY) }),
+    );
+    assert.equal(cntResult.started, true);
+    assert.equal(cntResult.missed, 0);
+  });
+
+  assert.equal(passed.length, 9);
+  console.log("ok 9 groups");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

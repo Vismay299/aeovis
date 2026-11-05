@@ -813,6 +813,10 @@ export async function upsertScanSchedule(brand, updates, deps = {}) {
 
 function isDueSchedule(row, nowMs) {
   if (!row || !row.enabled) return false;
+  // F10: customer-managed rows run through start/block_customer_window, never the
+  // legacy cron. Filtered here (not in the query) so both branches agree and the
+  // read still works before migration 085 adds the column.
+  if (row.managed_by === "customer") return false;
   if (!row.next_run_at) return true;
   const nextRunMs = new Date(row.next_run_at).getTime();
   return Number.isFinite(nextRunMs) && nextRunMs <= nowMs;
@@ -835,7 +839,7 @@ export async function listDueSchedules(nowIso, deps = {}) {
     return Array.from(global.memoryScanSchedules.values()).filter((row) => isDueSchedule(row, nowMs));
   }
 
-  const { data, error } = await client.from("scan_schedules").select("*").eq("enabled", true).eq("managed_by", "operator");
+  const { data, error } = await client.from("scan_schedules").select("*").eq("enabled", true);
   if (error) throw error;
   return (data || []).filter((row) => isDueSchedule(row, nowMs));
 }

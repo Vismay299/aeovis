@@ -476,6 +476,17 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 
 **Checkpoint:** suite, typecheck, build, `check-f10-db.mjs`, `check-repair-workflows.mjs`. ACs 03, 08, 09.
 
+**Phase 2 notes (review fixes on PR #46; deviations from §6.1 and P2.T2.S1):**
+
+- `start_customer_window` returns `not_due` when `p_approved_max` exceeds the row's current `approved_max_usd` (a cap lowered after the tick read the row), so the database enforces the owner's approval.
+- Both functions raise `invalid customer window` for a `p_missed` entry outside `[p_observed_next, p_window_at)`. `block_customer_window` also returns `not_due` for `p_window_at > p_now`, and `{ blocked: false, reason: 'already_recorded' }` (advancing `next_run_at`, no skip reason) when the window is already in the ledger.
+- The start overlap check also matches a running job with `brand_key IS NULL` whose `brand` equals the workspace name, as the legacy path does.
+- `missed` in the start result counts rows actually written (retries report 0).
+- The skip reason for a blocked panel or inactive workspace is computed once into a local.
+- `listDueSchedules` skips `managed_by = 'customer'` rows in `isDueSchedule` (both the database and the memory branch) instead of `.eq("managed_by","operator")`. That works with or without migration 085, so the code can deploy before the migration. The unit test asserts customer rows are excluded and the query does not name `managed_by`.
+- `scripts/setup-supabase.mjs` checks all nine 085 columns, `scan_schedules_f10_checks` and `scan_schedules_customer_due_idx`.
+- `check-f10-db.mjs` group 9 `guards` covers each of the above.
+
 ### Phase 3 — Tick, priced action and routes
 **Goal:** schedules run themselves and customers can manage them through the API.
 
