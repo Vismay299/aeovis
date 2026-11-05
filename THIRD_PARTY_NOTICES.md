@@ -164,3 +164,7 @@ SOFTWARE.
 - `src/lib/pricing/pricedActions.ts`
 - `src/lib/pricing/actions/scanRun.ts`
 - `src/lib/costs/usage.ts` (from `src/server/billing/usage.ts`)
+- `src/shared/schedule.ts`
+- `src/shared/schedule.test.ts`
+- `src/lib/schedules/runDue.ts`
+- `src/lib/schedules/runDue.test.ts`
