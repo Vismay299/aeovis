@@ -32,7 +32,6 @@ export function isSpendRefused(
  * (including thrown strings) -> `fallback`.
  */
 export function describeError(e: unknown, fallback?: string): string {
-  if (isApiError(e) && e.message) return e.message;
   if (e instanceof Error && e.message) return e.message;
   return fallback ?? DEFAULT_ERROR_MESSAGE;
 }
@@ -54,13 +53,17 @@ export function spendRefusedView(e: ApiError & { code: SpendRefusalCode }): {
   title: string;
   message: string;
   recovery: string | null;
+  /** The message and the recovery sentence, as the card and the toast show them. */
+  text: string;
   showUsageLink: boolean;
 } {
   const row = SPEND_TITLES[e.code];
+  const recovery = e.recovery ?? null;
   return {
     title: row.title,
     message: e.message,
-    recovery: e.recovery ?? null,
+    recovery,
+    text: [e.message, recovery].filter(Boolean).join(" "),
     showUsageLink: row.showUsageLink,
   };
 }

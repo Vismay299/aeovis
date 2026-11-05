@@ -47,6 +47,11 @@ export function setUnauthorizedHandler(fn: (() => void) | null): void {
   unauthorizedHandler = fn;
 }
 
+/** True while a handler is registered, i.e. a 401 will redirect to login. */
+export function hasUnauthorizedHandler(): boolean {
+  return unauthorizedHandler !== null;
+}
+
 const NETWORK_ERROR_MESSAGE =
   "Could not reach Perceev. Check your connection and try again.";
 const INVALID_RESPONSE_MESSAGE = "The server sent an unexpected response.";
@@ -55,7 +60,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function isAbortError(e: unknown): boolean {
+export function isAbortError(e: unknown): boolean {
   return (
     typeof e === "object" &&
     e !== null &&

@@ -68,6 +68,15 @@ export function stableStringify(value: unknown): string {
 }
 
 function sortKeys(value: unknown): unknown {
+  // Serialise what JSON.stringify would (a Date's ISO string, any toJSON)
+  // before the keys are rebuilt, or a Date would become `{}`.
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { toJSON?: unknown }).toJSON === "function"
+  ) {
+    return sortKeys((value as { toJSON(): unknown }).toJSON());
+  }
   if (Array.isArray(value)) return value.map(sortKeys);
   if (typeof value === "object" && value !== null) {
     const out: Record<string, unknown> = {};

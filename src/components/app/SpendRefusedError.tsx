@@ -34,7 +34,8 @@ export function SpendRefusedError({
     <ErrorState
       variant={variant}
       title={view.title}
-      message={view.recovery ? `${view.message} ${view.recovery}` : view.message}
+      // `inline` shows no title, so the title leads the message there.
+      message={variant === "inline" ? `${view.title}. ${view.text}` : view.text}
       action={showUsageLink ? <UsageButton /> : undefined}
     />
   );

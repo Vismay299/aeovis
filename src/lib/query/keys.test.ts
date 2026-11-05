@@ -90,6 +90,21 @@ test("stableStringify sorts object keys at every depth", () => {
   assert.equal(stableStringify(null), "null");
 });
 
+test("stableStringify serialises toJSON values (a Date) instead of emptying them", () => {
+  assert.equal(
+    stableStringify({ since: new Date("2026-01-01T00:00:00.000Z") }),
+    '{"since":"2026-01-01T00:00:00.000Z"}',
+  );
+  assert.notEqual(
+    stableStringify({ since: new Date("2026-01-01T00:00:00.000Z") }),
+    stableStringify({ since: new Date("2026-06-01T00:00:00.000Z") }),
+  );
+  assert.equal(
+    stableStringify({ v: { toJSON: () => ({ b: 1, a: 2 }) } }),
+    '{"v":{"a":2,"b":1}}',
+  );
+});
+
 test("stableStringify gives the same string whatever the key insertion order", () => {
   assert.equal(
     stableStringify({ a: 1, b: { c: 1, d: 2 } }),

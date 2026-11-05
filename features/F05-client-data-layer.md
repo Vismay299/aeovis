@@ -435,6 +435,13 @@ Branches `feat/f05-client-data-layer-p<N>`.
 - `SpendRefusedError`'s "View usage" `Button` takes `nativeButton={false}` as well as `render=`, as the repo's base-ui Button requires.
 - `queryClient.test.ts` case 1 (ported from OpenSEO) asserts the message is toasted verbatim, exactly once, because Perceev has no error-code table (§7: the message wins); `vi.mock("sonner")` is replaced by the injected `toastError`.
 - `fetchJson` ignores non-string `error`/`detail`/`code`/`recovery` and non-object `details` in an error body, and rethrows fetch failures that are neither `TypeError` nor `AbortError` unchanged.
+- Review fixes (PR #45):
+  - `@tanstack/query-core` and `@tanstack/react-query` are both pinned to exactly `5.104.5` (no `^`), so neither can drift into a second copy. Bump them together.
+  - `shouldRetryQuery` also refuses `invalid_response`: the same request gets the same unparseable answer.
+  - The mutation toast skips a 401 only while `setUnauthorizedHandler` has a handler registered (`hasUnauthorizedHandler()`); before phase 3 registers it, a 401 toasts its message instead of failing silently. It also skips an `AbortError` (a cancellation, not a failure).
+  - A per-call `mutate(v, { onError })` is invisible to `MutationCache` (it lives on the observer), so it cannot suppress the toast. `src/lib/query/mutationOnErrorGuard.test.mjs` fails on any such call; put `onError` on `useMutation` or set `meta: { errorToast: false }`.
+  - `stableStringify` applies `toJSON` (a `Date`) before sorting keys; it used to turn a `Date` into `{}`.
+  - `spendRefusedView` returns `text` (message + recovery), used by both the card and the toast. The `inline` variant shows no title, so `SpendRefusedError` puts the title first in the message there.
 
 ### Phase 2 — Interaction helpers
 

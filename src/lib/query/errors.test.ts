@@ -84,6 +84,7 @@ test("spendRefusedView: titles, usage link and message per code", () => {
     assert.equal(view.showUsageLink, expected[code][1], code);
     assert.equal(view.message, `API says ${code}.`, code);
     assert.equal(view.recovery, null, code);
+    assert.equal(view.text, `API says ${code}.`, code);
   }
 });
 
@@ -96,6 +97,7 @@ test("spendRefusedView passes the API recovery through, or null", () => {
     title: "Daily spend limit reached",
     message: "Limit hit.",
     recovery: "Try again tomorrow.",
+    text: "Limit hit. Try again tomorrow.",
     showUsageLink: true,
   });
 });

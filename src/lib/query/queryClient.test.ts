@@ -5,7 +5,7 @@
 //
 // F05-AC-01 — the shared client's defaults, retry rule and mutation toast.
 // The toast is injected, so no module mocking is needed.
-import test, { after } from "node:test";
+import test, { after, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
   QUERY_GC_TIME_MS,
@@ -13,7 +13,7 @@ import {
   createQueryClient,
   shouldRetryQuery,
 } from "./queryClient.ts";
-import { ApiError } from "./fetchJson.ts";
+import { ApiError, setUnauthorizedHandler } from "./fetchJson.ts";
 
 type ToastCall = { title: string; description: string | undefined };
 
@@ -23,6 +23,7 @@ const created: Array<ReturnType<typeof createQueryClient>> = [];
 after(() => {
   for (const client of created) client.clear();
 });
+afterEach(() => setUnauthorizedHandler(null));
 
 function setup() {
   const toasts: ToastCall[] = [];
@@ -81,9 +82,22 @@ test("a non-Error rejection toasts the default fallback", async () => {
   ]);
 });
 
-test("a 401 shows no toast", async () => {
+test("a 401 shows no toast while the login redirect handler is registered", async () => {
+  const { client, toasts } = setup();
+  setUnauthorizedHandler(() => undefined);
+  await runFailingMutation(client, new ApiError(401, "unauthenticated", "Please sign in."));
+  assert.equal(toasts.length, 0);
+});
+
+test("a 401 toasts when nothing will redirect, so it is not silent", async () => {
   const { client, toasts } = setup();
   await runFailingMutation(client, new ApiError(401, "unauthenticated", "Please sign in."));
+  assert.deepEqual(toasts, [{ title: "Please sign in.", description: undefined }]);
+});
+
+test("a cancelled (aborted) mutation shows no toast", async () => {
+  const { client, toasts } = setup();
+  await runFailingMutation(client, new DOMException("The operation was aborted.", "AbortError"));
   assert.equal(toasts.length, 0);
 });
 
@@ -134,7 +148,7 @@ test("defaults equal the constants, and the constants are 5 minutes and 1 hour",
   assert.equal(defaults.queries?.gcTime, QUERY_GC_TIME_MS);
   assert.equal(defaults.queries?.retry, shouldRetryQuery);
   assert.equal(defaults.mutations?.retry, 0);
-  // TanStack's default is kept (OpenSEO parity).
+  // TanStack's default is kept (upstream parity).
   assert.equal(defaults.queries?.refetchOnWindowFocus, undefined);
 });
 
@@ -146,6 +160,7 @@ test("shouldRetryQuery: never on 4xx, otherwise at most twice", () => {
   assert.equal(shouldRetryQuery(2, new ApiError(500, "http_500", "x")), false);
   assert.equal(shouldRetryQuery(0, new ApiError(500, "http_500", "x")), true);
   assert.equal(shouldRetryQuery(0, new ApiError(0, "network_error", "x")), true);
+  assert.equal(shouldRetryQuery(0, new ApiError(200, "invalid_response", "x")), false);
   assert.equal(shouldRetryQuery(1, new Error("plain")), true);
   assert.equal(shouldRetryQuery(2, new Error("plain")), false);
 });
