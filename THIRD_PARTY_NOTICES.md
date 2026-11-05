@@ -164,3 +164,14 @@ SOFTWARE.
 - `src/lib/pricing/pricedActions.ts`
 - `src/lib/pricing/actions/scanRun.ts`
 - `src/lib/costs/usage.ts` (from `src/server/billing/usage.ts`)
+- `src/components/app/navigation/navModel.ts` (from `src/client/navigation/items.ts`)
+- `src/components/app/navigation/navModel.test.ts` (from `src/client/navigation/items.ts`)
+- `src/components/app/navigation/items.ts` (from `src/client/navigation/items.ts`)
+- `src/components/app/shell/AppShell.tsx` (from `src/client/layout/AppShell.tsx`)
+- `src/components/app/shell/MobileTopBar.tsx` (from `src/client/layout/AppShell.tsx`)
+- `src/components/app/shell/AppSidebar.tsx` (from `src/client/components/Sidebar.tsx`)
+- `src/components/app/shell/AccountMenu.tsx` (from `src/client/components/Sidebar.tsx`)
+- `src/components/app/shell/ScanRunningCard.tsx` (from `src/client/components/Sidebar.tsx`)
+- `src/components/app/shell/WorkspaceSwitcher.tsx` (from `src/client/features/projects/ProjectSwitcher.tsx`)
+- `src/components/portal/settings/tabs.ts` (from `src/client/features/projects/SettingsTabs.tsx`)
+- `src/app/portal/settings/layout.tsx` (from `src/routes/_app/p/$projectId/settings.tsx`)

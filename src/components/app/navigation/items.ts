@@ -1,0 +1,121 @@
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/client/navigation/items.ts
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
+
+/**
+ * The navigation registry.
+ *
+ * DATA only: the groups, the items and their paths. The decisions about it
+ * (who may see an item, which one is active, where a workspace switch lands)
+ * live in `navModel.ts`, which is pure and unit-tested.
+ *
+ * This is the ONE file other features edit to add their own sidebar item.
+ * Each feature appends its entry in its own PR, with its own `flag`, so an
+ * item whose feature is off stays hidden until the owner turns it on.
+ */
+
+import {
+  LayoutDashboard,
+  MessageSquareText,
+  PenLine,
+  Radar,
+  Search,
+  Settings,
+  Users,
+} from "lucide-react";
+import type { NavGroup } from "./navModel.ts";
+
+export const NAV_GROUPS: readonly NavGroup[] = [
+  {
+    id: "top",
+    label: null,
+    items: [
+      {
+        id: "overview",
+        label: "Overview",
+        href: "/portal",
+        icon: LayoutDashboard,
+        match: "exact",
+      },
+    ],
+  },
+  {
+    id: "ai",
+    label: "AI Visibility",
+    items: [
+      {
+        id: "questions",
+        label: "Questions",
+        href: "/portal/measurement",
+        icon: MessageSquareText,
+        // The question history page (F12) is not an item of its own; it lights
+        // "Questions" instead.
+        activePrefixes: ["/portal/questions"],
+      },
+      {
+        id: "scans",
+        label: "Scans",
+        href: "/portal/scans",
+        icon: Radar,
+        badge: "scan",
+      },
+    ],
+  },
+  {
+    // F13, F14, F16 and F17 add their items here.
+    id: "research",
+    label: "Research",
+    items: [],
+  },
+  {
+    id: "site",
+    label: "My Site",
+    items: [
+      {
+        id: "search-console",
+        label: "Search Console",
+        href: "/portal/search-console",
+        icon: Search,
+        badge: "gsc",
+      },
+    ],
+  },
+  {
+    id: "content",
+    label: "Content",
+    items: [
+      {
+        id: "content",
+        label: "Content Studio",
+        href: "/portal/content",
+        icon: PenLine,
+        badge: "content",
+      },
+    ],
+  },
+  {
+    // F07, F22 and F23 add their items here.
+    id: "tools",
+    label: "AI Tools",
+    items: [],
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    items: [
+      {
+        id: "team",
+        label: "Team",
+        href: "/portal/team",
+        icon: Users,
+        ownerOnly: true,
+      },
+      {
+        id: "workspace-settings",
+        label: "Workspace settings",
+        href: "/portal/settings",
+        icon: Settings,
+      },
+    ],
+  },
+];

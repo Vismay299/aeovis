@@ -24,7 +24,8 @@
     "check:uat": "node --env-file-if-exists=.env.local scripts/check-customer-uat.mjs",
     "qa:public-browser": "node scripts/qa/check-public-browser.mjs",
     "qa:repair": "node scripts/qa/run-repair.mjs",
-    "qa:tw4-classes": "node scripts/qa/tw4-class-audit.mjs"
+    "qa:tw4-classes": "node scripts/qa/tw4-class-audit.mjs",
+    "qa:f04-browser": "node scripts/qa/check-f04-browser.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

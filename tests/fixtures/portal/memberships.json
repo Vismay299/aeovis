@@ -1,0 +1,22 @@
+[
+  {
+    "brand_key": "acme",
+    "role": "owner",
+    "customer_brands": {
+      "brand_key": "acme",
+      "display_name": "Acme",
+      "website": "https://acme.example",
+      "is_active": true
+    }
+  },
+  {
+    "brand_key": "beta",
+    "role": "member",
+    "customer_brands": {
+      "brand_key": "beta",
+      "display_name": "Beta",
+      "website": "https://beta.example",
+      "is_active": true
+    }
+  }
+]
