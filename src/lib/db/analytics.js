@@ -835,7 +835,7 @@ export async function listDueSchedules(nowIso, deps = {}) {
     return Array.from(global.memoryScanSchedules.values()).filter((row) => isDueSchedule(row, nowMs));
   }
 
-  const { data, error } = await client.from("scan_schedules").select("*").eq("enabled", true);
+  const { data, error } = await client.from("scan_schedules").select("*").eq("enabled", true).eq("managed_by", "operator");
   if (error) throw error;
   return (data || []).filter((row) => isDueSchedule(row, nowMs));
 }
