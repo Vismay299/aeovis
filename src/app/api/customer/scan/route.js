@@ -1,25 +1,38 @@
 import { requireWorkspace } from "../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, readJsonBody, jsonOk, AppError } from "../../../../lib/http/errors.ts";
+import { toErrorResponse, jsonOk, AppError } from "../../../../lib/http/errors.ts";
 import { requireApprovedPrice } from "../../../../lib/pricing/pricedActions.ts";
 import "../../../../lib/pricing/actions/index.ts";
 import { startCustomerScan } from "../../../../lib/pricing/startCustomerScan.ts";
 import { scanRouteBody } from "../../../../lib/pricing/scanRoute.contract.ts";
-import { createScanJob } from "../../../../lib/db.js";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-export async function POST(request, deps) {
+/**
+ * The request body. Legacy callers (the owner demo script) may POST with no
+ * body at all, which the old route accepted as `{}`; a body that is present
+ * but is not JSON is still a 400.
+ */
+async function readScanBody(request) {
+  let text = "";
   try {
-    let raw = {};
-    try {
-      raw = await readJsonBody(request);
-    } catch (err) {
-      if (err instanceof AppError && err.code === "invalid_json") {
-        throw err;
-      }
-      raw = {};
-    }
+    text = await request.text();
+  } catch {
+    return {};
+  }
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new AppError(400, "invalid_json", "The request body must be JSON.");
+  }
+}
+
+// Next.js calls a route handler as (request, { params }); `deps` is the third
+// argument so the route context is never mistaken for test dependencies.
+export async function POST(request, _ctx, deps) {
+  try {
+    const raw = await readScanBody(request);
 
     const parsed = scanRouteBody.safeParse(raw ?? {});
     if (!parsed.success) {
@@ -36,7 +49,7 @@ export async function POST(request, deps) {
     const ctx = {
       brandKey: workspace.brandKey,
       admin: workspace.admin,
-      env: process.env,
+      env: deps?.env ?? process.env,
       now: deps?.now ? deps.now() : new Date(),
     };
 
@@ -94,12 +107,7 @@ export async function POST(request, deps) {
   }
 }
 
-// Tracking isolation reference for F07 contract:
-// createScanJob({
-//   competitors,
-// })
-
-export async function GET(request, deps) {
+export async function GET(request, _ctx, deps) {
   try {
     const { searchParams } = new URL(request.url);
     const key = searchParams.get("brand_key") || undefined;

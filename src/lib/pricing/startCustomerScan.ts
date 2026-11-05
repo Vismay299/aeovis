@@ -61,18 +61,25 @@ export async function startCustomerScan(
   const keepAliveFn = deps?.keepAlive || keepAlive;
   const runScanChunkFn = deps?.runScanChunk || runScanChunk;
 
-  let hold = { holdId: "fixture-hold", existing: false };
-  if (!(globalThis as any).customerRouteFixture) {
-    hold = await reserveFn({
-      brandKey: args.brandKey,
-      feature: "ai_visibility.scan" as any,
-      estimateUsd: Math.max(args.quote.totalUsd, 0.000001),
-      maxUsd: args.approvedMaxUsd,
-      idempotencyKey: "scan:" + jobId,
-      ttlSeconds: 86340,
-      subject: { kind: "scan_job", id: jobId },
-    });
-  }
+  const hold = await reserveFn({
+    brandKey: args.brandKey,
+    feature: "ai_visibility.scan" as any,
+    estimateUsd: Math.max(args.quote.totalUsd, 0.000001),
+    maxUsd: args.approvedMaxUsd,
+    idempotencyKey: "scan:" + jobId,
+    ttlSeconds: 86340,
+    subject: { kind: "scan_job", id: jobId },
+  });
+
+  // A release that fails must not replace the error the caller is owed (a 409
+  // for a running scan, a 500 otherwise); the hold expires on its own TTL.
+  const releaseHold = async (reason: string) => {
+    try {
+      await releaseFn(hold.holdId, reason);
+    } catch (releaseErr) {
+      console.error(`[customer] spend release failed for ${args.brandKey}:`, releaseErr);
+    }
+  };
 
   try {
     await createJobFn({
@@ -89,16 +96,14 @@ export async function startCustomerScan(
     });
   } catch (error) {
     if (error instanceof DuplicateScanError) {
-      if (!(globalThis as any).customerRouteFixture) {
-        await releaseFn(hold.holdId, "scan_already_running");
-      }
+      await releaseHold("scan_already_running");
       throw new AppError(
         409,
         "scan_already_running",
         "A scan is already running for this workspace.",
       );
     }
-    await releaseFn(hold.holdId, "scan_create_failed");
+    await releaseHold("scan_create_failed");
     console.error(`[customer] scan creation failed for ${args.brandKey}:`, error);
     throw new AppError(500, "internal_error", "Could not start the scan. Please retry.");
   }

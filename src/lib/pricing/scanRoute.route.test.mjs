@@ -161,7 +161,7 @@ async function read(res) {
 test("POST /api/customer/scan: price_changed returns 409 and creates no job, hold or approval", async () => {
   const h = makeDeps();
   const req = makeRequest({ brand_key: BRAND_KEY, maxUsd: 20 });
-  const res = await read(await POST(req, h.deps));
+  const res = await read(await POST(req, undefined, h.deps));
 
   assert.equal(res.status, 409);
   assert.equal(res.cacheControl, "no-store");
@@ -182,7 +182,7 @@ test("POST /api/customer/scan: price_changed returns 409 and creates no job, hol
 test("POST /api/customer/scan: approved creates job, reserves spend hold, and records approval", async () => {
   const h = makeDeps();
   const req = makeRequest({ brand_key: BRAND_KEY, maxUsd: 25 });
-  const res = await read(await POST(req, h.deps));
+  const res = await read(await POST(req, undefined, h.deps));
 
   assert.equal(res.status, 201);
   assert.equal(res.cacheControl, "no-store");
@@ -233,7 +233,7 @@ test("POST /api/customer/scan: approved creates job, reserves spend hold, and re
 test("POST /api/customer/scan: implicit (no maxUsd) caps scan at quote and records implicit approval", async () => {
   const h = makeDeps();
   const req = makeRequest({ brand_key: BRAND_KEY });
-  const res = await read(await POST(req, h.deps));
+  const res = await read(await POST(req, undefined, h.deps));
 
   assert.equal(res.status, 201);
   assert.equal(res.body.job_id, FIXED_JOB_ID);
@@ -261,7 +261,7 @@ test("POST /api/customer/scan: F01 refusals from reserveSpend create no scan job
     });
 
     const req = makeRequest({ brand_key: BRAND_KEY, maxUsd: 25 });
-    const res = await read(await POST(req, h.deps));
+    const res = await read(await POST(req, undefined, h.deps));
 
     assert.equal(res.status, expectedStatus, `status for ${reason}`);
     assert.equal(res.body.code, reason, `code for ${reason}`);
@@ -277,7 +277,7 @@ test("POST /api/customer/scan: DuplicateScanError releases hold with scan_alread
   });
 
   const req = makeRequest({ brand_key: BRAND_KEY, maxUsd: 25 });
-  const res = await read(await POST(req, h.deps));
+  const res = await read(await POST(req, undefined, h.deps));
 
   assert.equal(res.status, 409);
   assert.equal(res.body.code, "scan_already_running");
@@ -298,7 +298,7 @@ test("POST /api/customer/scan: generic job create failure releases hold with sca
   });
 
   const req = makeRequest({ brand_key: BRAND_KEY, maxUsd: 25 });
-  const res = await read(await POST(req, h.deps));
+  const res = await read(await POST(req, undefined, h.deps));
 
   assert.equal(res.status, 500);
   assert.equal(res.body.code, "internal_error");
@@ -326,7 +326,7 @@ test("POST /api/customer/scan: approval record failure is logged and does not fa
     });
 
     const req = makeRequest({ brand_key: BRAND_KEY, maxUsd: 25 });
-    const res = await read(await POST(req, h.deps));
+    const res = await read(await POST(req, undefined, h.deps));
 
     assert.equal(res.status, 201);
     assert.equal(res.body.job_id, FIXED_JOB_ID);
@@ -335,4 +335,42 @@ test("POST /api/customer/scan: approval record failure is logged and does not fa
   } finally {
     console.error = originalError;
   }
+});
+
+test("POST /api/customer/scan: a legacy POST with no body starts an implicit-priced scan", async () => {
+  const h = makeDeps();
+  const req = new Request("https://app.test/api/customer/scan", {
+    method: "POST",
+    headers: { origin: "https://app.test" },
+  });
+  const res = await read(await POST(req, undefined, h.deps));
+
+  assert.equal(res.status, 201);
+  assert.equal(res.body.approvedMaxUsd, 24, "capped at the fresh quote");
+  assert.equal(h.createJobCalls.length, 1);
+  assert.equal(h.recordApprovalCalls[0]?.source, "implicit");
+});
+
+test("POST /api/customer/scan: a body that is not JSON is a 400 invalid_json", async () => {
+  const h = makeDeps();
+  const res = await read(await POST(makeRequest("{not json"), undefined, h.deps));
+
+  assert.equal(res.status, 400);
+  assert.equal(res.body.code, "invalid_json");
+  assert.equal(h.createJobCalls.length, 0);
+});
+
+test("POST /api/customer/scan: a failing hold release still answers 409 scan_already_running", async () => {
+  const h = makeDeps({
+    createScanJob: async () => {
+      throw new DuplicateScanError(BRAND_KEY, "job-running");
+    },
+    releaseSpend: async () => {
+      throw new Error("spend store unreachable");
+    },
+  });
+  const res = await read(await POST(makeRequest({ brand_key: BRAND_KEY, maxUsd: 25 }), undefined, h.deps));
+
+  assert.equal(res.status, 409);
+  assert.equal(res.body.code, "scan_already_running");
 });

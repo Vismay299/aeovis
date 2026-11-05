@@ -91,27 +91,19 @@ export async function estimateScanRun(
   } else {
     prompts = Array.isArray(panel.payload?.prompts) ? panel.payload.prompts.length : 0;
     if (prompts === 0) {
-      if ((globalThis as any).customerRouteFixture) {
-        prompts = 1;
-      } else {
-        // A zero-answer scan is refused by the worker, so it must not be approvable at $0.
-        blocked = {
-          code: "panel_empty",
-          message: "Your approved question panel has no questions. Add questions and approve it first.",
-          recovery: "Open Questions & evidence to add questions.",
-        };
-      }
+      // A zero-answer scan is refused by the worker, so it must not be approvable at $0.
+      blocked = {
+        code: "panel_empty",
+        message: "Your approved question panel has no questions. Add questions and approve it first.",
+        recovery: "Open Questions & evidence to add questions.",
+      };
     }
   }
 
   // 2. Engines
-  let { configured } = deps?.resolveEngines
+  const { configured } = deps?.resolveEngines
     ? deps.resolveEngines(schedule, ctx.env)
     : resolveScanEngineNames(schedule, ctx.env);
-
-  if ((globalThis as any).customerRouteFixture && configured.length === 0) {
-    configured = ["chatgpt"];
-  }
 
   if (configured.length === 0 && !blocked) {
     blocked = {
