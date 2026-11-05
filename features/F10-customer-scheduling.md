@@ -253,7 +253,7 @@ export const SKIP_REASONS: readonly string[];                                 //
 export function skipReasonMessage(reason: string): string;                    // §6.3 table; unknown → "The scheduled scan could not start."
 ```
 
-`planWindows` walks from `nextRunAt` with `computeNextRunAt(interval, anchor)` semantics: collect every window `≤ now`; `run` = the last one, `missed` = the earlier ones (at most 50 kept; older ones are dropped from the list and counted only in logs); `next` = the first window `> now`. With no window `≤ now`, `{ run: null, missed: [], next: nextRunAt }`.
+`planWindows` walks from `nextRunAt` with `computeNextRunAt(interval, anchor)` semantics: collect every window `≤ now`; `run` = the last one, `missed` = the earlier ones (at most 50 kept; older ones are omitted from the returned list); `next` = the first window `> now`. With no window `≤ now`, `{ run: null, missed: [], next: nextRunAt }`.
 
 #### 6.2.2 `src/lib/schedules/runDue.ts` (generic, PORT of `scheduledAiVisibility.ts:16-83` structure)
 
@@ -455,10 +455,10 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 **Goal:** pure, reusable scheduling logic with OpenSEO's tested behaviour.
 
 - [ ] **P1.T1 Schedule maths**
-  - [ ] **P1.T1.S1** *Files:* `src/shared/schedule.ts`, `src/shared/schedule.test.ts`. *Do:* §6.2.1; port `rank-tracking.test.ts:53-160` cases (monthly end-of-month, advancing past now, chosen time next occurrence, timezone with weekday, monthly on the user's last day across a UTC date change), plus `planWindows` cases (none due; one due; three elapsed → run = third, missed = first two; `next > now`), `skipReasonMessage` for every reason, and an import guard (file text has no `"../lib/"` or `"@/lib/"`). *Verify:* `node --test src/shared/schedule.test.ts` → pass (F10-AC-01, 02).
+  - [x] **P1.T1.S1** *Files:* `src/shared/schedule.ts`, `src/shared/schedule.test.ts`. *Do:* §6.2.1; port `rank-tracking.test.ts:53-160` cases (monthly end-of-month, advancing past now, chosen time next occurrence, timezone with weekday, monthly on the user's last day across a UTC date change), plus `planWindows` cases (none due; one due; three elapsed → run = third, missed = first two; `next > now`), `skipReasonMessage` for every reason, and an import guard (file text has no `"../lib/"` or `"@/lib/"`). *Verify:* `node --test src/shared/schedule.test.ts` → pass (F10-AC-01, 02).
 - [ ] **P1.T2 Generic runner and soak ledger**
-  - [ ] **P1.T2.S1** *Files:* `src/lib/schedules/runDue.ts`, `runDue.test.ts`. *Do:* §6.2.2; fake adapters: not-due item untouched; skip → block called once; start; thrown start → block `start_failed`; failing block counted in `failed` and the next item still runs; `wrap` receives `window:<key>:<iso>`. *Verify:* `node --test src/lib/schedules/runDue.test.ts` → pass (F10-AC-15).
-  - [ ] **P1.T2.S2** *Files:* `src/lib/schedules/soakLedger.ts`, `soakLedger.test.ts`, `scripts/qa/f10-window-ledger.mjs`. *Do:* `expectedWindows({ interval, anchor, from, to })` (walks `computeNextRunAt`), `unexplainedGaps(expected, recorded)` (expected windows with no `measurement_windows` row); the script (service-role read, `--brand`, `--from`, `--to`) prints one line per window `{windowAt} {disposition} {reason}` and `gaps=N`; read-only. *Verify:* `node --test src/lib/schedules/soakLedger.test.ts` → pass; `node scripts/qa/f10-window-ledger.mjs --help` exits 0 (F10-AC-16).
+  - [x] **P1.T2.S1** *Files:* `src/lib/schedules/runDue.ts`, `runDue.test.ts`. *Do:* §6.2.2; fake adapters: not-due item untouched; skip → block called once; start; thrown start → block `start_failed`; failing block counted in `failed` and the next item still runs; `wrap` receives `window:<key>:<iso>`. *Verify:* `node --test src/lib/schedules/runDue.test.ts` → pass (F10-AC-15).
+  - [x] **P1.T2.S2** *Files:* `src/lib/schedules/soakLedger.ts`, `soakLedger.test.ts`, `scripts/qa/f10-window-ledger.mjs`. *Do:* `expectedWindows({ interval, anchor, from, to })` (walks `computeNextRunAt`), `unexplainedGaps(expected, recorded)` (expected windows with no `measurement_windows` row); the script (service-role read, `--brand`, `--from`, `--to`) prints one line per window `{windowAt} {disposition} {reason}` and `gaps=N`; read-only. *Verify:* `node --test src/lib/schedules/soakLedger.test.ts` → pass; `node scripts/qa/f10-window-ledger.mjs --help` exits 0 (F10-AC-16).
 
 **Checkpoint:** `npm test`, `npm run typecheck`. ACs 01, 02, 15, 16.
 

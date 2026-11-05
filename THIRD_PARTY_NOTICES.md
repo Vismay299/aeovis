@@ -182,3 +182,7 @@ SOFTWARE.
 - `src/shared/auth-errors.ts` (from `src/client/features/integrations/googleAuthErrorCopy.ts`)
 - `src/shared/password.ts` (from `src/client/features/auth/passwordSchema.ts`, also from `src/routes/_auth.sign-up.tsx`)
 - `supabase/migrations/155_f24_signup_guard.sql` (from `src/server/auth/disposable-email.ts`)
+- `src/shared/schedule.ts`
+- `src/shared/schedule.test.ts`
+- `src/lib/schedules/runDue.ts`
+- `src/lib/schedules/runDue.test.ts`
