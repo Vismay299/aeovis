@@ -60,6 +60,7 @@ jobs:
           node scripts/qa/check-f07-db.mjs
           node scripts/qa/check-f01-db.mjs
           node scripts/qa/check-f03-db.mjs
+          node scripts/qa/check-f09-db.mjs
           node scripts/qa/check-f26-db.mjs
   test:
     name: tests
