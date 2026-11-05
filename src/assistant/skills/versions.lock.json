@@ -19,6 +19,10 @@
     "version": "1.0.0",
     "sha256": "14dce5bdcf8d06a509a43d8cbe94fe35b39cdae3c05bc6ebb7f9e4eedf992c6b"
   },
+  "content-brief": {
+    "version": "1.0.0",
+    "sha256": "7a72674d73d6310a35158f857edde03cdf5065e98fbb5a14fb1a416bc90a6a2f"
+  },
   "keyword-clustering": {
     "version": "1.0.0",
     "sha256": "907771aa69dee72448be4f085a182046f8a18111dec4749f8b8dc5c2a0359f2c"
@@ -34,6 +38,10 @@
   "local-seo": {
     "version": "1.0.0",
     "sha256": "e85995fce2a50eed5a5a2cf0fe4b899bd5688d89616d2358ddb90c98346259c3"
+  },
+  "question-panel-review": {
+    "version": "1.0.0",
+    "sha256": "ad899cf8ed8bb027f883d7c6b8cd15abd12969141d22dfe82e21f0a2c15f7711"
   },
   "seo-audit": {
     "version": "1.0.0",
