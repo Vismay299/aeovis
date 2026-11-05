@@ -163,3 +163,4 @@ SOFTWARE.
 - `src/components/app/QueryState.tsx` (from `src/client/components/QueryState.tsx`)
 - `src/lib/pricing/pricedActions.ts`
 - `src/lib/pricing/actions/scanRun.ts`
+- `src/lib/costs/usage.ts` (from `src/server/billing/usage.ts`)

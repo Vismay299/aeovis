@@ -9,6 +9,8 @@ export const FEATURES = {
   project_memory_content: { spend: [] as const },
   // F09: shows the cost review dialog before running a paid scan
   price_review: { spend: [] as const },
+  // F03: gates the customer Usage page and its route. Reading costs spends nothing.
+  usage_page: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

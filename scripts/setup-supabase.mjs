@@ -72,6 +72,12 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "prune_cost_reconciliations" },
     { kind: "function", name: "resolve_unknown_cost_backlog" },
   ],
+  "051_f03_usage.sql": [
+    { kind: "function", name: "workspace_usage_days" },
+    { kind: "function", name: "workspace_spend_position" },
+    { kind: "function", name: "operator_costs_by_workspace" },
+    { kind: "function", name: "operator_costs_by_endpoint" },
+  ],
   "070_f07_project_memory.sql": [
     { kind: "table", name: "project_context_sections" },
     { kind: "table", name: "project_competitors" },

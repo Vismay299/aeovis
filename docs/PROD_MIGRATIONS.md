@@ -1591,6 +1591,20 @@ Migration 050 adds subject and answer reference columns to `spend_ledger`, creat
 2. Existing scans are not refused because `paid_feature_controls('ai_visibility.scan')` is seeded enabled.
 3. Verified against disposable PostgreSQL by `scripts/qa/check-f03-db.mjs` and tenant isolation by `tests/customer-uat.sql`.
 
+## F03 usage read functions: migration `051_f03_usage.sql`
+
+**Status:** in repo; **not yet applied to production**.
+
+Migration 051 adds only the four read functions behind F03's customer Usage page and the operator cost view: `workspace_usage_days` (spend binned by the viewer's local day and feature, with the known/unknown split and the call count), `workspace_spend_position` (today and month spend, the workspace caps and the open holds) and `operator_costs_by_workspace` / `operator_costs_by_endpoint`. All four are revoked from `PUBLIC`, `anon` and `authenticated` and granted to `service_role` only. The migration adds no table and no column, and it writes nothing.
+
+### Objects to check in the catalog
+- functions `workspace_usage_days`, `workspace_spend_position`, `operator_costs_by_workspace`, `operator_costs_by_endpoint`
+
+### Apply
+1. Apply the migration during a maintenance window (idempotent DDL — the functions are `CREATE OR REPLACE`).
+2. It must be applied after `050_f03_cost_ledger`, because `workspace_spend_position` reads `f01_committed_usd` and the open holds, and `operator_costs_by_workspace` counts the open `cost_reconciliations` rows.
+3. Verified against disposable PostgreSQL by the `usage` group of `scripts/qa/check-f03-db.mjs`.
+
 ## `165_f26_privacy_and_telemetry_ids.sql`
 
 **Status:** in repo; **not yet applied to production**.
