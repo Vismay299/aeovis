@@ -103,6 +103,23 @@ try {
           .getAttribute("href");
         assert.equal(current, "/portal", "Overview is the active row on /portal");
 
+        // A live badge belongs INSIDE its row. shadcn positions it with
+        // `peer-data-[size=…]/menu-button`, which only reaches a later
+        // SIBLING of the button that carries the `peer` class — so a badge
+        // rendered beside the link falls to its static position and floats
+        // in the gap below the row.
+        const badge = page.locator('[data-slot="sidebar-menu-badge"]').first();
+        assert.ok((await badge.count()) > 0, "the Search Console row shows its connection dot");
+        const badgeBox = await badge.boundingBox();
+        const rowBox = await page
+          .locator('nav[aria-label="Main navigation"] a[href="/portal/search-console"]')
+          .boundingBox();
+        assert.ok(badgeBox && rowBox, "the badge and its row are both laid out");
+        assert.ok(
+          badgeBox.y >= rowBox.y && badgeBox.y + badgeBox.height <= rowBox.y + rowBox.height,
+          `the badge sits outside its row: badge ${JSON.stringify(badgeBox)} row ${JSON.stringify(rowBox)}`
+        );
+
         await page.goto(new URL("/portal/scans", origin).href, { waitUntil: "networkidle" });
         const scansCurrent = await page
           .locator('nav[aria-label="Main navigation"] a[aria-current="page"]')
@@ -274,6 +291,18 @@ try {
         );
         const acmeHrefs = await navHrefs(page);
 
+        // A client-side navigation must NOT read the flags again: the effect
+        // that loads the workspace's data is keyed by the workspace, not by
+        // the path.
+        await page.locator('nav[aria-label="Main navigation"] a[href="/portal/scans"]').click();
+        await page.waitForURL(new URL("/portal/scans", origin).href, { timeout: 15000 });
+        await page.waitForTimeout(400);
+        assert.deepEqual(
+          featureRequests,
+          ["acme"],
+          `a navigation read the flags again: ${JSON.stringify(featureRequests)}`
+        );
+
         await page.locator('[aria-label="Switch workspace"]').click();
         await page.locator('[data-slot="combobox-item"]:has-text("Beta")').click();
         // Switching from the Overview keeps the Overview, so the switch is
@@ -378,6 +407,62 @@ try {
 
         assert.deepEqual(blockedWrites, [], "the shell wrote to a customer route");
         return "/portal and /login carry the marker, / does not, and the app root is translate=no.";
+      } finally {
+        await context.close();
+      }
+    }
+  );
+  await record(
+    "F04-B10",
+    "The shell renders before the session is confirmed: the sidebar keeps its shape with placeholder rows, so the page never jumps into place.",
+    async () => {
+      const { context, page, blockedWrites } = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+        // The membership read is held, so the shell stays in its booting
+        // state while the case looks at it.
+        membershipDelayMs: 8000,
+      });
+      try {
+        await page.waitForSelector('[data-slot="sidebar"]', { timeout: 15000 });
+
+        assert.ok(
+          await page.locator('[data-slot="sidebar-container"]').isVisible(),
+          "the sidebar is on screen before the workspace is known"
+        );
+        assert.ok(
+          (await page.locator('[data-sidebar="group-label"]').count()) > 0,
+          "the group labels are in place"
+        );
+        assert.equal(
+          await page.locator('nav[aria-label="Main navigation"] a').count(),
+          0,
+          "the booting nav has no links yet"
+        );
+        assert.equal(
+          await page
+            .locator('nav[aria-label="Main navigation"]')
+            .getAttribute("aria-busy"),
+          "true",
+          "the nav says it is busy"
+        );
+        assert.ok(
+          (await page.locator('[data-slot="sidebar-menu-skeleton"]').count()) > 0,
+          "the account row is a skeleton"
+        );
+        assert.ok(
+          (await page.locator('[data-slot="skeleton"]').count()) > 0,
+          "the switcher and the page are skeletons"
+        );
+
+        // And once the workspace arrives, the nav gains its links.
+        await page.waitForSelector('nav[aria-label="Main navigation"] a', { timeout: 20000 });
+        assert.ok(
+          (await page.locator('nav[aria-label="Main navigation"] a').count()) > 0,
+          "the nav gains its links once the workspace is known"
+        );
+
+        assert.deepEqual(blockedWrites, [], "the shell wrote to a customer route");
+        return "The sidebar, the group labels, the placeholder rows and the skeletons are on screen before the workspace is known, and the nav fills in after.";
       } finally {
         await context.close();
       }

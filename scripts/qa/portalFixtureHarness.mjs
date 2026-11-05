@@ -86,7 +86,10 @@ async function customerApiFixture(url) {
     return brandFixture("gsc", brand, { connected: false, connection: null });
   }
   if (pathname === "/api/customer/features") {
-    return brandFixture("features", brand, { brandKey: brand, features: {} });
+    const body = await brandFixture("features", brand, { features: {} });
+    // The fixture file may belong to another workspace; the answer always
+    // names the workspace that was asked about.
+    return { ...body, brandKey: brand };
   }
   if (pathname === "/api/customer/scan") {
     return brandFixture("scans", brand, { scans: [], jobs: [] });
@@ -115,7 +118,7 @@ async function customerApiFixture(url) {
  *
  * @param {import("playwright").Browser} browser
  * @param {string|URL} origin the local app
- * @param {{ viewport?: { width: number, height: number }, theme?: "system"|"light"|"dark", fixtures?: { memberships?: unknown } }} [options]
+ * @param {{ viewport?: { width: number, height: number }, theme?: "system"|"light"|"dark", fixtures?: { memberships?: unknown }, membershipDelayMs?: number }} [options]
  * @returns {Promise<{ context: import("playwright").BrowserContext, page: import("playwright").Page, blockedWrites: string[], featureRequests: (string|null)[] }>}
  */
 export async function openPortal(browser, origin, options = {}) {
@@ -123,6 +126,7 @@ export async function openPortal(browser, origin, options = {}) {
     viewport = { width: 1440, height: 1000 },
     theme,
     fixtures = {},
+    membershipDelayMs = 0,
   } = options;
 
   const base = typeof origin === "string" ? origin : origin.href;
@@ -171,6 +175,11 @@ export async function openPortal(browser, origin, options = {}) {
         return route.fulfill({ status: 200, contentType: "application/json", body: "null" });
       }
       if (url.pathname.startsWith("/rest/v1/customer_brand_memberships")) {
+        // A delay holds the shell in its booting state, so a case can look at
+        // what the reader sees before the workspace is known.
+        if (membershipDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, membershipDelayMs));
+        }
         return route.fulfill({
           status: 200,
           contentType: "application/json",

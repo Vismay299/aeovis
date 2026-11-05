@@ -162,3 +162,35 @@ test("the module's own list names every flag the browser may read", () => {
     assert.equal(typeof name, "string");
   }
 });
+
+test("the route answers with the module's own list, evaluated for the caller's workspace", async () => {
+  const admin = { stub: "admin" };
+  const seen = [];
+
+  const response = await ROUTE.GET(
+    request(`brand_key=${BRAND_A}`),
+    undefined,
+    deps({
+      getSupabaseAdmin: () => admin,
+      isFeatureEnabled: async (name, brandKey, flagDeps) => {
+        seen.push({ name, brandKey, admin: flagDeps?.admin });
+        return true;
+      },
+    })
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+
+  // No list was injected, so this is the SHIPPED list.
+  assert.deepEqual(Object.keys(body.features).sort(), [...CLIENT_FEATURES].sort());
+  assert.equal(body.brandKey, BRAND_A);
+
+  // Every flag was evaluated for the verified workspace, with that
+  // workspace's own admin client — never for the raw query string.
+  assert.deepEqual(seen.map((entry) => entry.name).sort(), [...CLIENT_FEATURES].sort());
+  for (const entry of seen) {
+    assert.equal(entry.brandKey, BRAND_A);
+    assert.equal(entry.admin, admin);
+  }
+});
