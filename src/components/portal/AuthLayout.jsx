@@ -44,7 +44,10 @@ function AnswerCard() {
   );
 }
 
-export default function AuthLayout({ eyebrow, title, titleId, subtitle, children, footer }) {
+/**
+ * @param {{ eyebrow?: React.ReactNode; title: React.ReactNode; titleId?: string; subtitle?: React.ReactNode; children: React.ReactNode; footer?: React.ReactNode }} props
+ */
+export default function AuthLayout({ eyebrow = null, title, titleId, subtitle = null, children, footer = null }) {
   return (
     <div className="pv-auth">
       <div className="pv-auth-panel">
