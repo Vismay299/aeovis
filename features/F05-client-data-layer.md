@@ -413,18 +413,28 @@ Branches `feat/f05-client-data-layer-p<N>`.
 
 **Goal:** the shared client, fetch helper, keys, errors and spend card exist and are tested; the provider is mounted; nothing else changes.
 
-- [ ] **P1.T1 Dependencies**
-  - [ ] **P1.T1.S1** *Files:* `package.json`, `package-lock.json`. *Do:* `npm install @tanstack/query-core@^5.103.2` (same version as the `@tanstack/react-query` F04 installed). *Verify:* `node -e "import('@tanstack/query-core').then(m=>console.log(typeof m.QueryClient))"` → `function`.
-- [ ] **P1.T2 Pure modules**
-  - [ ] **P1.T2.S1** *Files:* `src/lib/query/fetchJson.ts`, `src/lib/query/fetchJson.test.ts`. *Do:* §6.2; tests with an injected `fetch` returning `{ status, ok, json }` objects: 200 JSON → value; 200 empty body → `null`; schema mismatch → `invalid_response`; 400 `{error,code,details}` → `ApiError` fields; legacy `{detail}` → message; 401 → handler called once then `ApiError(401,"unauthenticated")`; `TypeError` → `network_error`; `AbortError` re-thrown; POST sets `Content-Type` and body, GET does not; `withBrand` cases. *Verify:* `node --test src/lib/query/fetchJson.test.ts` → pass (F05-AC-02).
-  - [ ] **P1.T2.S2** *Files:* `src/lib/query/errors.ts`, `errors.test.ts`. *Do:* §6.2 table; `describeError` cases. *Verify:* `node --test src/lib/query/errors.test.ts` → pass (F05-AC-03 unit).
-  - [ ] **P1.T2.S3** *Files:* `src/lib/query/keys.ts`, `keys.test.ts`. *Do:* §6.2; tests: every builder's shape; `isWorkspaceKey(["overview","a"],"a")` true, `(["overview","b"],"a")` false, `(["scanReport","x"],"x")` false; `invalidateWorkspace` with a recording client calls the predicate and matches only `a` keys; `stableStringify({b:1,a:{d:1,c:2}})` → `{"a":{"c":2,"d":1},"b":1}`. *Verify:* `node --test src/lib/query/keys.test.ts` → pass (F05-AC-04).
-  - [ ] **P1.T2.S4** *Files:* `src/lib/query/queryClient.ts`, `queryClient.test.ts`. *Do:* PORT of OpenSEO's two cases plus: 401 → no toast; spend refusal → toast with the card title and message; defaults equal the constants; `shouldRetryQuery(0, new ApiError(404,…))` false, `(1, new ApiError(500,…))` true, `(2, …)` false; mutation `retry` 0. Build failing mutations with `client.getMutationCache().build(client, {...}).execute(undefined).catch(() => {})` as OpenSEO does. *Verify:* `node --test src/lib/query/queryClient.test.ts` → pass (F05-AC-01).
-- [ ] **P1.T3 React layer**
-  - [ ] **P1.T3.S1** *Files:* `src/components/app/providers/queryClient.ts`, `src/components/app/providers/AppProviders.tsx`, `src/components/app/workspace/WorkspaceContext.tsx`, `src/components/app/SpendRefusedError.tsx`, `src/components/app/QueryState.tsx`, `src/components/app/errors/describeError.ts`. *Do:* §6.2 React table. *Verify:* `npm run typecheck` → exit 0; `npm run build` → exit 0.
-  - [ ] **P1.T3.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* append this phase's COPY/PORT paths. *Verify:* `git grep -c "tanstack-db/queryClient.ts" -- THIRD_PARTY_NOTICES.md` → `1`.
+- [x] **P1.T1 Dependencies**
+  - [x] **P1.T1.S1** *Files:* `package.json`, `package-lock.json`. *Do:* `npm install @tanstack/query-core@^5.103.2` (same version as the `@tanstack/react-query` F04 installed). *Verify:* `node -e "import('@tanstack/query-core').then(m=>console.log(typeof m.QueryClient))"` → `function`.
+- [x] **P1.T2 Pure modules**
+  - [x] **P1.T2.S1** *Files:* `src/lib/query/fetchJson.ts`, `src/lib/query/fetchJson.test.ts`. *Do:* §6.2; tests with an injected `fetch` returning `{ status, ok, json }` objects: 200 JSON → value; 200 empty body → `null`; schema mismatch → `invalid_response`; 400 `{error,code,details}` → `ApiError` fields; legacy `{detail}` → message; 401 → handler called once then `ApiError(401,"unauthenticated")`; `TypeError` → `network_error`; `AbortError` re-thrown; POST sets `Content-Type` and body, GET does not; `withBrand` cases. *Verify:* `node --test src/lib/query/fetchJson.test.ts` → pass (F05-AC-02).
+  - [x] **P1.T2.S2** *Files:* `src/lib/query/errors.ts`, `errors.test.ts`. *Do:* §6.2 table; `describeError` cases. *Verify:* `node --test src/lib/query/errors.test.ts` → pass (F05-AC-03 unit).
+  - [x] **P1.T2.S3** *Files:* `src/lib/query/keys.ts`, `keys.test.ts`. *Do:* §6.2; tests: every builder's shape; `isWorkspaceKey(["overview","a"],"a")` true, `(["overview","b"],"a")` false, `(["scanReport","x"],"x")` false; `invalidateWorkspace` with a recording client calls the predicate and matches only `a` keys; `stableStringify({b:1,a:{d:1,c:2}})` → `{"a":{"c":2,"d":1},"b":1}`. *Verify:* `node --test src/lib/query/keys.test.ts` → pass (F05-AC-04).
+  - [x] **P1.T2.S4** *Files:* `src/lib/query/queryClient.ts`, `queryClient.test.ts`. *Do:* PORT of OpenSEO's two cases plus: 401 → no toast; spend refusal → toast with the card title and message; defaults equal the constants; `shouldRetryQuery(0, new ApiError(404,…))` false, `(1, new ApiError(500,…))` true, `(2, …)` false; mutation `retry` 0. Build failing mutations with `client.getMutationCache().build(client, {...}).execute(undefined).catch(() => {})` as OpenSEO does. *Verify:* `node --test src/lib/query/queryClient.test.ts` → pass (F05-AC-01).
+- [x] **P1.T3 React layer**
+  - [x] **P1.T3.S1** *Files:* `src/components/app/providers/queryClient.ts`, `src/components/app/providers/AppProviders.tsx`, `src/components/app/workspace/WorkspaceContext.tsx`, `src/components/app/SpendRefusedError.tsx`, `src/components/app/QueryState.tsx`, `src/components/app/errors/describeError.ts`. *Do:* §6.2 React table. *Verify:* `npm run typecheck` → exit 0; `npm run build` → exit 0.
+  - [x] **P1.T3.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* append this phase's COPY/PORT paths. *Verify:* `git grep -c "tanstack-db/queryClient.ts" -- THIRD_PARTY_NOTICES.md` → `1`.
 
 **Checkpoint:** `npm test`, `npm run typecheck`, `npm run build`, `check-f04-browser.mjs` → pass (providers do not change rendering). Completes F05-AC-01, -02, -04, unit half of -03.
+
+**Phase 1 notes (deviations from the text above, reviewed and accepted by the CTO):**
+
+- P1.T1.S1 installs `@tanstack/query-core@5.104.5` (recorded as `^5.104.5`), not `^5.103.2`: `^` resolved the newest 5.106.1 and left two copies, because `@tanstack/react-query` pins 5.104.5 exactly. One copy is what "same version as react-query" needs. Bump `@tanstack/react-query` and `@tanstack/query-core` together and run `npm ls @tanstack/query-core`.
+- §6.2 cites "conventions §5.3" for relative `.ts` imports; the rule is in `00-CONVENTIONS.md` §5.4.
+- `describeError` returns the fallback for anything that is not an `Error` with a message, so a thrown string no longer shows as-is (F04's version did); `fallback` is now optional.
+- `SpendRefusedError`: the card title is always `view.title` (the `title?` prop stays for `QueryError` parity but is unused for spend cards).
+- `SpendRefusedError`'s "View usage" `Button` takes `nativeButton={false}` as well as `render=`, as the repo's base-ui Button requires.
+- `queryClient.test.ts` case 1 (ported from OpenSEO) asserts the message is toasted verbatim, exactly once, because Perceev has no error-code table (§7: the message wins); `vi.mock("sonner")` is replaced by the injected `toastError`.
+- `fetchJson` ignores non-string `error`/`detail`/`code`/`recovery` and non-object `details` in an error body, and rethrows fetch failures that are neither `TypeError` nor `AbortError` unchanged.
 
 ### Phase 2 — Interaction helpers
 

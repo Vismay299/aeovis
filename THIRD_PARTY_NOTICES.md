@@ -186,3 +186,8 @@ SOFTWARE.
 - `src/shared/schedule.test.ts`
 - `src/lib/schedules/runDue.ts`
 - `src/lib/schedules/runDue.test.ts`
+- `src/lib/query/queryClient.ts` (from `src/client/tanstack-db/queryClient.ts`)
+- `src/lib/query/queryClient.test.ts` (from `src/client/tanstack-db/queryClient.test.ts`)
+- `src/lib/query/errors.ts` (from `src/client/lib/error-messages.ts`)
+- `src/lib/query/errors.test.ts` (from `src/client/lib/error-messages.test.ts`)
+- `src/components/app/SpendRefusedError.tsx` (from `src/client/features/billing/InsufficientCreditsError.tsx`)
