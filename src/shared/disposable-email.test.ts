@@ -52,6 +52,6 @@ test("seed parity - the SQL seed equals DISPOSABLE_EMAIL_DOMAINS", () => {
     new URL("../../supabase/migrations/155_f24_signup_guard.sql", import.meta.url),
     "utf8",
   );
-  const fromSql = [...sql.matchAll(/\('([a-z0-9.-]+)','openseo'\)/g)].map((m) => m[1]);
+  const fromSql = [...sql.matchAll(/\('([a-z0-9.-]+)','openseo'\)/g)].map((m) => m[1]); // 'openseo' = seed source column; see THIRD_PARTY_NOTICES.md
   assert.deepEqual([...fromSql].sort(), [...DISPOSABLE_EMAIL_DOMAINS].sort());
 });

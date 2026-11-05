@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-// Perceev's existing sign-up rule (src/app/signup/page.jsx); OpenSEO uses 8.
+// Perceev's existing sign-up rule (src/app/signup/page.jsx); upstream uses 8.
 export const PASSWORD_MIN_LENGTH = 10;
 export const PASSWORD_MAX_LENGTH = 128;
 
