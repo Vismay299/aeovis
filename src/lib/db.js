@@ -837,17 +837,25 @@ export function isJobAlive(job, nowMs = Date.now()) {
   return Number.isFinite(heartbeatMs) && nowMs - heartbeatMs < HEARTBEAT_STALE_MS;
 }
 
-export async function createScanJob({ brand, url, industry, competitors, brandKey, panelSnapshot, measurementContext }, deps = {}) {
+export async function createScanJob({ brand, url, industry, competitors, brandKey, panelSnapshot, measurementContext, jobId, approvedMaxUsd, priceQuote }, deps = {}) {
   const client = resolveClient(deps);
   const hasDb = !!client;
 
-  const jobId = crypto.randomUUID();
+  let resolvedJobId = crypto.randomUUID();
+  if (jobId != null) {
+    if (typeof jobId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
+      throw new Error("Invalid jobId: must be a UUID");
+    }
+    resolvedJobId = jobId;
+  }
   const now = new Date().toISOString();
   const job = {
-    id: jobId,
+    id: resolvedJobId,
     ...(brandKey ? { brand_key: brandKey } : {}),
     ...(panelSnapshot ? {panel_snapshot:panelSnapshot} : {}),
     ...(measurementContext ? {measurement_context:measurementContext} : {}),
+    ...(approvedMaxUsd != null ? { approved_max_usd: Number(approvedMaxUsd) } : {}),
+    ...(priceQuote != null ? { price_quote: priceQuote } : {}),
     brand,
     url: url || "",
     industry: industry || "",
@@ -864,7 +872,7 @@ export async function createScanJob({ brand, url, industry, competitors, brandKe
   };
 
   if (!hasDb) {
-    global.memoryJobs.set(jobId, job);
+    global.memoryJobs.set(resolvedJobId, job);
     return job;
   }
 

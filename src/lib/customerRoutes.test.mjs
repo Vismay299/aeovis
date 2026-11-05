@@ -94,9 +94,28 @@ test("scan listing cannot expose matching names, websites, or wildcard labels fr
   assert.deepEqual(body.jobs.map((job) => job.id), ["scan-a"]);
 });
 
-test("starting a scan distinguishes an unapproved question panel from a scan already running", async () => {
+test("starting a scan distinguishes an unapproved question panel from a scan already running", async (t) => {
   const { tables } = fixture();
-  const start = () => listing.POST(new Request("https://app.example.test/api/customer/scan", { method: "POST", body: JSON.stringify({ brand_key: "workspace-a" }) }));
+  // F09: the run is priced first, so an engine must be configured for the
+  // quote to price it. The placeholder is never sent anywhere: the job insert
+  // below always refuses, so no scan chunk runs. The spend hold is faked.
+  const savedEnv = { BRIGHTDATA_API_KEY: process.env.BRIGHTDATA_API_KEY, ENGINES: process.env.ENGINES };
+  process.env.BRIGHTDATA_API_KEY = "placeholder-not-a-key";
+  process.env.ENGINES = "aio";
+  t.after(() => {
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  const holds = [];
+  const released = [];
+  const deps = {
+    reserveSpend: async (args) => { holds.push(args); return { holdId: `hold-${holds.length}`, existing: false }; },
+    releaseSpend: async (holdId, reason) => { released.push({ holdId, reason }); return { released: true }; },
+    keepAlive: () => { throw new Error("no scan chunk may run in this test"); },
+  };
+  const start = () => listing.POST(new Request("https://app.example.test/api/customer/scan", { method: "POST", body: JSON.stringify({ brand_key: "workspace-a" }) }), undefined, deps);
   let created = 0;
   globalThis.customerRouteFixture.createScanJob = async () => { created++; throw new DuplicateScanError("workspace-a", "job-running"); };
 
@@ -105,7 +124,7 @@ test("starting a scan distinguishes an unapproved question panel from a scan alr
   assert.deepEqual(await noPanel.json(), { error: "Review and approve a question panel before starting measurement.", code: "panel_not_approved" });
   assert.equal(created, 0, "no job is created without an approved panel");
 
-  tables.repair_artifact_heads = [{ brand: "workspace-a", kind: "panel", artifact: { artifact_key: "default", state: "draft", payload: { context: {} } } }];
+  tables.repair_artifact_heads = [{ brand: "workspace-a", kind: "panel", artifact: { artifact_key: "default", state: "draft", payload: { context: {}, prompts: ["best beans"] } } }];
   assert.equal((await (await start()).json()).code, "panel_not_approved", "a draft panel is not approved");
 
   tables.repair_artifact_heads[0].artifact.state = "approved";
@@ -113,6 +132,8 @@ test("starting a scan distinguishes an unapproved question panel from a scan alr
   assert.equal(running.status, 409);
   assert.deepEqual(await running.json(), { error: "A scan is already running for this workspace.", code: "scan_already_running" });
   assert.equal(created, 1);
+  assert.equal(holds.length, 1, "only the run that reached the job insert reserved spend");
+  assert.deepEqual(released, [{ holdId: "hold-1", reason: "scan_already_running" }], "the refused run's hold is released");
 });
 
 test("scan report rejects another workspace and unassigned historical rows even when names match", async () => {

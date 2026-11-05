@@ -60,6 +60,7 @@ jobs:
           node scripts/qa/check-f07-db.mjs
           node scripts/qa/check-f01-db.mjs
           node scripts/qa/check-f03-db.mjs
+          node scripts/qa/check-f09-db.mjs
           node scripts/qa/check-f26-db.mjs
   test:
     name: tests
@@ -183,6 +184,7 @@ jobs:
           done
           node scripts/qa/check-public-site.mjs http://127.0.0.1:3328
           node scripts/qa/check-repair-browser.mjs http://127.0.0.1:3328
+          node scripts/qa/check-f04-browser.mjs http://127.0.0.1:3328
           npx playwright install --with-deps chromium
           npm run qa:public-browser -- http://127.0.0.1:3328 test_reports/public-browser
 

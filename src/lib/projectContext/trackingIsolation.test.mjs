@@ -11,9 +11,12 @@ const trackedRoots = [
   "src/lib/scoring",
   "src/lib/engines",
   "src/app/api/customer/scan",
+  // F09: the customer scan route hands the job insert to this shared start.
+  "src/lib/pricing/startCustomerScan.ts",
 ];
 
 async function sourceFiles(root) {
+  if (extensions.has(path.extname(root))) return [root];
   let entries;
   try {
     entries = await readdir(path.join(REPO, root), { withFileTypes: true });
@@ -43,11 +46,19 @@ test("tracking and scan paths do not import project memory", async () => {
 });
 
 test("customer scan competitors come only from the request body", async () => {
-  const routePath = path.join(REPO, "src/app/api/customer/scan/route.js");
-  const route = await readFile(routePath, "utf8");
+  // The route reads competitors from the body and hands them to the shared
+  // start as `legacy.competitors`; the start passes exactly that to the job
+  // insert. Neither file may source them from project memory.
+  const route = await readFile(path.join(REPO, "src/app/api/customer/scan/route.js"), "utf8");
   assert.match(route, /const\s+competitors\s*=\s*\(?\s*body\?\.competitors\s*\|\|\s*""\s*\)?\.trim\(\)/);
-  const createScanJobCall = route.match(/createScanJob\s*\(\s*\{([\s\S]*?)\}\s*\)/)?.[1];
-  assert.ok(createScanJobCall, "scan route must keep a createScanJob call");
-  assert.match(createScanJobCall, /\bcompetitors\s*,/);
+  const legacy = route.match(/legacy\s*:\s*\{([\s\S]*?)\}/)?.[1];
+  assert.ok(legacy, "scan route must hand the body's fields to startCustomerScan as `legacy`");
+  assert.match(legacy, /\bcompetitors\s*,/);
+  assert.doesNotMatch(route, /projectContext|declaredCompetitors/);
+
+  const start = await readFile(path.join(REPO, "src/lib/pricing/startCustomerScan.ts"), "utf8");
+  const createScanJobCall = start.match(/createJobFn\s*\(\s*\{([\s\S]*?)\}\s*\)/)?.[1];
+  assert.ok(createScanJobCall, "startCustomerScan must keep its createScanJob call");
+  assert.match(createScanJobCall, /\bcompetitors\s*:\s*\(\s*args\.legacy\?\.competitors\s*\|\|\s*""\s*\)\.trim\(\)/);
   assert.doesNotMatch(createScanJobCall, /projectContext|declaredCompetitors/);
 });

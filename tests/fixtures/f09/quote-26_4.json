@@ -1,0 +1,18 @@
+{
+  "action": "ai_visibility.scan.run",
+  "currency": "USD",
+  "totalUsd": 26.4,
+  "expectedUsd": 7.92,
+  "units": [
+    { "key": "answers", "label": "answers", "count": 132 }
+  ],
+  "lines": [
+    { "label": "Answers reserved at $0.20 each", "quantity": 132, "unitUsd": 0.2, "totalUsd": 26.4 }
+  ],
+  "monthly": null,
+  "warnings": [],
+  "blocked": null,
+  "priceVersion": "2026-10-21.1",
+  "quotedAt": "2026-10-21T09:30:00.000Z",
+  "inputsHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+}

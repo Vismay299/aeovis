@@ -1,0 +1,42 @@
+{
+  "artifact_key": "default",
+  "state": "approved",
+  "payload": {
+    "context": {
+      "brand": "Offcult",
+      "industry": "fashion"
+    },
+    "prompts": [
+      { "text": "Question 1", "purpose": "commercial" },
+      { "text": "Question 2", "purpose": "commercial" },
+      { "text": "Question 3", "purpose": "commercial" },
+      { "text": "Question 4", "purpose": "commercial" },
+      { "text": "Question 5", "purpose": "commercial" },
+      { "text": "Question 6", "purpose": "commercial" },
+      { "text": "Question 7", "purpose": "commercial" },
+      { "text": "Question 8", "purpose": "commercial" },
+      { "text": "Question 9", "purpose": "commercial" },
+      { "text": "Question 10", "purpose": "commercial" },
+      { "text": "Question 11", "purpose": "commercial" },
+      { "text": "Question 12", "purpose": "commercial" },
+      { "text": "Question 13", "purpose": "commercial" },
+      { "text": "Question 14", "purpose": "commercial" },
+      { "text": "Question 15", "purpose": "commercial" },
+      { "text": "Question 16", "purpose": "commercial" },
+      { "text": "Question 17", "purpose": "commercial" },
+      { "text": "Question 18", "purpose": "commercial" },
+      { "text": "Question 19", "purpose": "commercial" },
+      { "text": "Question 20", "purpose": "commercial" },
+      { "text": "Question 21", "purpose": "commercial" },
+      { "text": "Question 22", "purpose": "commercial" },
+      { "text": "Question 23", "purpose": "commercial" },
+      { "text": "Question 24", "purpose": "commercial" },
+      { "text": "Question 25", "purpose": "commercial" },
+      { "text": "Question 26", "purpose": "commercial" },
+      { "text": "Question 27", "purpose": "commercial" },
+      { "text": "Question 28", "purpose": "commercial" },
+      { "text": "Diagnostic 1", "purpose": "diagnostic" },
+      { "text": "Diagnostic 2", "purpose": "diagnostic" }
+    ]
+  }
+}
