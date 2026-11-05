@@ -56,6 +56,7 @@ next-env.d.ts
 # Generated acceptance packets and screenshots (CI uploads these as artifacts).
 /test_reports/public-browser/
 /test_reports/repairs/
+/test_reports/f04-browser/
 
 # Playwright MCP browser session snapshots
 .playwright-mcp/

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { getPublicUrlInventory } from "../../src/lib/publicSite.js";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -9,7 +9,10 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, "../..");
 const PLAYWRIGHT_ENTRY = path.resolve(REPO_ROOT, "worker/node_modules/playwright/index.mjs");
 
 async function loadChromium() {
-  const pw = await import(PLAYWRIGHT_ENTRY);
+  // A file URL, not a path: Node's ESM loader rejects an absolute Windows path
+  // as a specifier ("Only URLs with a scheme in: file, data, and node are
+  // supported"). The URL is the same module on every platform.
+  const pw = await import(pathToFileURL(PLAYWRIGHT_ENTRY).href);
   return pw.chromium;
 }
 
