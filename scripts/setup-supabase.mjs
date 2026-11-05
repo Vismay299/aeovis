@@ -145,6 +145,14 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "is_disposable_email_domain" },
     { kind: "function", name: "hook_before_user_created" },
   ],
+  "085_f10_customer_schedules.sql": [
+    { kind: "column", name: "scan_schedules.managed_by" },
+    { kind: "column", name: "scan_schedules.schedule_interval" },
+    { kind: "column", name: "scan_schedules.approved_max_usd" },
+    { kind: "column", name: "scan_schedules.last_skip_reason" },
+    { kind: "function", name: "start_customer_window" },
+    { kind: "function", name: "block_customer_window" },
+  ],
   "035_scoped_provider_rollout.sql": [
     {kind:"function",name:"set_probe_rollout"},
     {kind:"column",name:"probe_dispatch_control.brand_allowlist"},
