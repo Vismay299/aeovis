@@ -167,8 +167,11 @@ test("the route answers with the module's own list, evaluated for the caller's w
   const admin = { stub: "admin" };
   const seen = [];
 
+  // The key is asked for in a different FORM from the canonical one, so the
+  // assertions below prove the route uses the VERIFIED workspace key rather
+  // than the string the caller sent.
   const response = await ROUTE.GET(
-    request(`brand_key=${BRAND_A}`),
+    request(`brand_key=${BRAND_A.toUpperCase()}`),
     undefined,
     deps({
       getSupabaseAdmin: () => admin,
