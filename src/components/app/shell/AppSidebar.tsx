@@ -24,7 +24,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { PerceevLogo } from "@/components/app/brand/PerceevLogo";
 import { NAV_GROUPS } from "@/components/app/navigation/items";
-import { isItemActive, visibleNavGroups } from "@/components/app/navigation/navModel";
+import { activeNavItemId, visibleNavGroups } from "@/components/app/navigation/navModel";
 import type { NavItem } from "@/components/app/navigation/navModel";
 import { usePortal } from "@/components/portal/PortalShell";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -49,6 +49,8 @@ export function AppSidebar({ ready }: { ready: boolean }) {
   const { features, isOwner, overview, gsc, scan } = usePortal();
 
   const groups = visibleNavGroups(NAV_GROUPS, { features, isOwner });
+  // One active row: the deepest visible match, never every row that matches.
+  const activeId = activeNavItemId(groups, pathname);
   const placeholder = !ready;
 
   const awaitingReview = (overview?.content_items || []).filter(
@@ -86,7 +88,7 @@ export function AppSidebar({ ready }: { ready: boolean }) {
                     <SidebarNavLink
                       key={item.id}
                       item={item}
-                      active={isItemActive(item, pathname)}
+                      active={item.id === activeId}
                       placeholder={placeholder}
                       badge={navBadge(item, { scan, awaitingReview, gsc })}
                     />

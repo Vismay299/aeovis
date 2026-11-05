@@ -190,3 +190,40 @@ test("a workspace switch from a path in no section lands on Overview", () => {
 test("a workspace switch from Overview lands on Overview", () => {
   assert.equal(sectionPathForSwitch(NAV_GROUPS, "/portal"), "/portal");
 });
+
+// --- one active row ----------------------------------------------------------
+
+test("overlapping items: only the deepest is active", () => {
+  const groups: NavGroup[] = [
+    {
+      id: "g",
+      label: "G",
+      items: [
+        item({ id: "scans", href: "/portal/scans" }),
+        item({ id: "compare", href: "/portal/scans/compare" }),
+      ],
+    },
+  ];
+  assert.equal(activeNavItemId(groups, "/portal/scans/compare"), "compare");
+  assert.equal(activeNavItemId(groups, "/portal/scans/compare/x"), "compare");
+  assert.equal(activeNavItemId(groups, "/portal/scans/abc"), "scans");
+});
+
+test("a match through a deeper active prefix beats a shallower href", () => {
+  const groups: NavGroup[] = [
+    {
+      id: "g",
+      label: "G",
+      items: [
+        item({ id: "parent", href: "/portal/y" }),
+        item({ id: "aliased", href: "/portal/x", activePrefixes: ["/portal/y/deep"] }),
+      ],
+    },
+  ];
+  assert.equal(activeNavItemId(groups, "/portal/y/deep/1"), "aliased");
+  assert.equal(activeNavItemId(groups, "/portal/y/other"), "parent");
+});
+
+test("a workspace switch from a question lands on the questions list", () => {
+  assert.equal(sectionPathForSwitch(NAV_GROUPS, "/portal/questions/q1"), "/portal/measurement");
+});

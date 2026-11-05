@@ -60,15 +60,24 @@ function pathMatches(pathname: string, href: string): boolean {
  * plus any path in `activePrefixes`.
  */
 export function isItemActive(item: NavItem, pathname: string): boolean {
-  if (item.match === "exact") {
-    if (pathname === item.href) return true;
-  } else if (pathMatches(pathname, item.href)) {
-    return true;
-  }
+  return matchDepth(item, pathname) >= 0;
+}
+
+/**
+ * How deep an item's match on `pathname` is: the length of the longest path
+ * (its href, or one of its `activePrefixes`) that matched, or -1 when none
+ * did. A match through an active prefix is ranked by that prefix, not by the
+ * item's href, so a deeper prefix beats a shallower item.
+ */
+function matchDepth(item: NavItem, pathname: string): number {
+  let depth = -1;
+  const hrefMatches =
+    item.match === "exact" ? pathname === item.href : pathMatches(pathname, item.href);
+  if (hrefMatches) depth = item.href.length;
   for (const prefix of item.activePrefixes ?? []) {
-    if (pathMatches(pathname, prefix)) return true;
+    if (pathMatches(pathname, prefix) && prefix.length > depth) depth = prefix.length;
   }
-  return false;
+  return depth;
 }
 
 /**
@@ -95,47 +104,47 @@ export function visibleNavGroups(
   return visible;
 }
 
+/** The deepest-matching item on `pathname`, or `null` when none matches. */
+function deepestItem(
+  groups: readonly NavGroup[],
+  pathname: string
+): NavItem | null {
+  let best: { item: NavItem; depth: number } | null = null;
+  for (const group of groups) {
+    for (const item of group.items) {
+      const depth = matchDepth(item, pathname);
+      if (depth < 0) continue;
+      if (best === null || depth > best.depth) best = { item, depth };
+    }
+  }
+  return best === null ? null : best.item;
+}
+
 /**
  * The id of the active item, or `null` when the path belongs to none.
  *
- * The LONGEST matching href wins: `/portal/scans/scan-1` is the scan report,
- * which sits below the scans item, and the deepest item is the one the
- * reader means.
+ * The DEEPEST match wins: `/portal/scans/scan-1` is the scan report, which
+ * sits below the scans item, and the deepest item is the one the reader
+ * means. Exactly one row is ever active, so the shell renders from this
+ * rather than asking each item on its own.
  */
 export function activeNavItemId(
   groups: readonly NavGroup[],
   pathname: string
 ): string | null {
-  let best: { id: string; length: number } | null = null;
-  for (const group of groups) {
-    for (const item of group.items) {
-      if (!isItemActive(item, pathname)) continue;
-      const length = item.href.length;
-      if (best === null || length > best.length) {
-        best = { id: item.id, length };
-      }
-    }
-  }
-  return best === null ? null : best.id;
+  return deepestItem(groups, pathname)?.id ?? null;
 }
 
 /**
  * Where a workspace switch should land.
  *
- * The deepest registry section that prefixes the current path, so switching
- * workspaces on a scan report lands on the scans list rather than on
- * another workspace's scan report. A path in no section lands on Overview.
+ * The section of the active item, so switching workspaces on a scan report
+ * lands on the scans list (and on a question, on the questions list) rather
+ * than on another workspace's record. A path in no section lands on Overview.
  */
 export function sectionPathForSwitch(
   groups: readonly NavGroup[],
   pathname: string
 ): string {
-  let best = "";
-  for (const group of groups) {
-    for (const item of group.items) {
-      if (!pathMatches(pathname, item.href)) continue;
-      if (item.href.length > best.length) best = item.href;
-    }
-  }
-  return best === "" ? "/portal" : best;
+  return deepestItem(groups, pathname)?.href ?? "/portal";
 }
