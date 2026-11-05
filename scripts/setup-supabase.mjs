@@ -134,6 +134,11 @@ const EXPECTED_OBJECTS = {
     { kind: "column", name: "customer_brands.telemetry_id" },
     { kind: "table", name: "user_privacy_choices" },
   ],
+  "155_f24_signup_guard.sql": [
+    { kind: "table", name: "disposable_email_domains" },
+    { kind: "function", name: "is_disposable_email_domain" },
+    { kind: "function", name: "hook_before_user_created" },
+  ],
   "035_scoped_provider_rollout.sql": [
     {kind:"function",name:"set_probe_rollout"},
     {kind:"column",name:"probe_dispatch_control.brand_allowlist"},

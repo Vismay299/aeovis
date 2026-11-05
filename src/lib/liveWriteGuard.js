@@ -175,6 +175,9 @@ export const NEVER_WRITABLE = Object.freeze([
   "gsc_sync_jobs",
   // F26 — per-user analytics consent. Written only via service role after requireUser.
   "user_privacy_choices",
+  // F24 — migration 155: the sign-up refusal list the Before User Created hook reads.
+  // Service role only; operator edits go through the dashboard, never a live test.
+  "disposable_email_domains",
   // F07 phase 1 — migration 070: project memory is tenant data and live tests
   // must use memoryRepository or the loopback-only QA database harness.
   "project_context_sections",

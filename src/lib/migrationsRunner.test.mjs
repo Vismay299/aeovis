@@ -351,6 +351,8 @@ const FULL_CATALOG = [
   "accept_customer_team_invites", "claim_customer_gsc_job", "commit_customer_gsc_page", "enqueue_customer_gsc_syncs", "decide_customer_content",
   // 165_f26_privacy_and_telemetry_ids.sql — opaque workspace group key + consent table.
   "customer_brands.telemetry_id", "user_privacy_choices",
+  // 155_f24_signup_guard.sql — disposable-email table and the Before User Created hook.
+  "disposable_email_domains", "is_disposable_email_domain", "hook_before_user_created",
 ];
 
 function withRegister(dir) {
