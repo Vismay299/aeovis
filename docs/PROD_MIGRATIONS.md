@@ -1587,7 +1587,7 @@ Migration 050 adds subject and answer reference columns to `spend_ledger`, creat
 - functions `sync_probe_attempt_costs`, `settle_scan_hold`, `settle_finished_scan_holds`, `resolve_cost_reconciliation`, `engine_cost_stats`, `f03_upsert_attempt_rows`, `prune_cost_reconciliations`, `resolve_unknown_cost_backlog`
 
 ### Apply
-1. Apply the migration during a maintenance window (idempotent DDL).
+1. Apply the migration **before** deploying the F09 phase 2 code, during a maintenance window (idempotent DDL). The customer `POST /api/customer/scan` now writes `scan_jobs.approved_max_usd` and `scan_jobs.price_quote`; without 080 every customer scan start fails with a 500.
 2. Existing scans are not refused because `paid_feature_controls('ai_visibility.scan')` is seeded enabled.
 3. Verified against disposable PostgreSQL by `scripts/qa/check-f03-db.mjs` and tenant isolation by `tests/customer-uat.sql`.
 
@@ -1622,3 +1622,20 @@ Opaque `customer_brands.telemetry_id` for PostHog workspace groups, and `user_pr
 
 ### Owner follow-ups (not this migration)
 PostHog EU project, env keys, and `FEATURE_PRODUCT_ANALYTICS` — see F26 §10 / phase 5.
+
+## F09 price approvals: migration `080_f09_price_approvals.sql`
+
+**Status:** in repo; **not yet applied to production**.
+
+Migration 080 adds `approved_max_usd` and `price_quote` columns to `scan_jobs`, creates the `price_approvals` table with row-level security (members read only their workspace's approvals), and adds the service-role `prune_price_approvals` function for daily retention pruning.
+
+### Objects to check in the catalog
+- columns `public.scan_jobs.approved_max_usd`, `public.scan_jobs.price_quote`
+- table `public.price_approvals` (indexes `price_approvals_brand_idx`, `price_approvals_subject_idx`)
+- function `public.prune_price_approvals(timestamptz, integer)`
+
+### Apply
+1. Apply the migration **before** deploying the F09 phase 2 code, during a maintenance window (idempotent DDL). The customer `POST /api/customer/scan` now writes `scan_jobs.approved_max_usd` and `scan_jobs.price_quote`; without 080 every customer scan start fails with a 500.
+2. Existing scans continue without disruption: scans started without `maxUsd` are automatically capped at the fresh quote with `source = 'implicit'`.
+3. Verified against disposable PostgreSQL by `scripts/qa/check-f09-db.mjs` and tenant isolation by `tests/customer-uat.sql`.
+

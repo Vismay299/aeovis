@@ -1671,6 +1671,7 @@ export async function runSourcingPhase(job, deps = {}, tally = {}) {
     competitors_raw: competitorsRaw,
     prompt_key: promptKey,
     brand_key: job.brand_key || null,
+    approved_max_usd: job.approved_max_usd == null ? null : Number(job.approved_max_usd),
     prompt_source: promptSource,
     static_pack_prompts: staticPackPrompts,
     queries,

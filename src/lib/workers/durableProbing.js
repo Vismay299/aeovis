@@ -23,7 +23,14 @@ const terminal = new Set([
   "ambiguous",
   "blocked",
 ]);
-export function dispatchBudget(env = process.env) {
+function minNullable(a, b) {
+  if (a == null && b == null) return null;
+  if (a == null) return b;
+  if (b == null) return a;
+  return Math.min(a, b);
+}
+
+export function dispatchBudget(env = process.env, opts = {}) {
   const positive = (key, fallback = null) => {
     if (!env[key]?.trim()) return fallback;
     const value = Number(env[key]);
@@ -33,9 +40,14 @@ export function dispatchBudget(env = process.env) {
   const reserve = positive("SCAN_PROBE_RESERVATION_USD", 1);
   if (reserve <= 0)
     throw new Error("SCAN_PROBE_RESERVATION_USD must be positive");
+  const envScanCap = positive("SCAN_MAX_COST_PER_SCAN");
+  const approvedMaxUsd = opts?.approvedMaxUsd == null ? null : Number(opts.approvedMaxUsd);
+  if (approvedMaxUsd !== null && (!Number.isFinite(approvedMaxUsd) || approvedMaxUsd <= 0)) {
+    throw new Error("approvedMaxUsd must be positive");
+  }
   return {
     reserve,
-    scanCap: positive("SCAN_MAX_COST_PER_SCAN"),
+    scanCap: minNullable(envScanCap, approvedMaxUsd),
     dayCap: positive("SCAN_MAX_COST_PER_DAY"),
   };
 }
@@ -141,7 +153,7 @@ export async function runDurableProbing({
     }),
   );
   await updateJob(jobId, { checkpoint: cp });
-  const budget = dispatchBudget(env);
+  const budget = dispatchBudget(env, { approvedMaxUsd: cp.approved_max_usd ?? null });
   for (const row of rows)
     if (row.historical) row.historical.reserve = budget.reserve;
   await store.seed(rows);
