@@ -72,6 +72,25 @@ async function createBrand(suffix, ownerUserId = null) {
   return brandKey;
 }
 
+/**
+ * Run `fn(client)` as an authenticated customer inside a transaction that is
+ * always rolled back. SET LOCAL and set_config(..., true) only last for the
+ * current transaction: outside one they are no-ops, and the query would run
+ * as the superuser and see every row.
+ */
+async function asUser(userId, fn) {
+  const c = await pool.connect();
+  try {
+    await c.query("BEGIN");
+    await c.query("SET LOCAL ROLE authenticated");
+    await c.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [userId]);
+    return await fn(c);
+  } finally {
+    await c.query("ROLLBACK");
+    c.release();
+  }
+}
+
 async function ensureDispatchControl(brandKey) {
   // Inside the disposable QA database ONLY: never touch probe_dispatch_control on a shared database.
   await query(
@@ -285,30 +304,14 @@ try {
     );
 
     // Verify RLS for User A
-    const clientA = new pg.Client({ host, database });
-    await clientA.connect();
-    try {
-      await clientA.query("SET LOCAL ROLE authenticated;");
-      await clientA.query("SELECT set_config('request.jwt.claim.sub', $1, true);", [userA]);
-      const resA = await clientA.query("SELECT * FROM public.price_approvals;");
-      assert.equal(resA.rows.length, 1, "User A must see exactly 1 approval");
-      assert.equal(resA.rows[0].brand_key, brandA, "User A must see Brand A approval");
-    } finally {
-      await clientA.end();
-    }
+    const resA = await asUser(userA, (c) => c.query("SELECT * FROM public.price_approvals"));
+    assert.equal(resA.rows.length, 1, "User A must see exactly 1 approval");
+    assert.equal(resA.rows[0].brand_key, brandA, "User A must see Brand A approval");
 
     // Verify RLS for User B
-    const clientB = new pg.Client({ host, database });
-    await clientB.connect();
-    try {
-      await clientB.query("SET LOCAL ROLE authenticated;");
-      await clientB.query("SELECT set_config('request.jwt.claim.sub', $1, true);", [userB]);
-      const resB = await clientB.query("SELECT * FROM public.price_approvals;");
-      assert.equal(resB.rows.length, 1, "User B must see exactly 1 approval");
-      assert.equal(resB.rows[0].brand_key, brandB, "User B must see Brand B approval");
-    } finally {
-      await clientB.end();
-    }
+    const resB = await asUser(userB, (c) => c.query("SELECT * FROM public.price_approvals"));
+    assert.equal(resB.rows.length, 1, "User B must see exactly 1 approval");
+    assert.equal(resB.rows[0].brand_key, brandB, "User B must see Brand B approval");
 
     // Insert an approval row older than 395 days
     await query(
