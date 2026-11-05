@@ -161,3 +161,5 @@ SOFTWARE.
 - `src/components/app/ErrorBoundaryCard.tsx` (from `src/client/components/DefaultCatchBoundary.tsx`)
 - `src/components/app/NavTabs.tsx` (from `src/client/components/NavTabs.tsx`)
 - `src/components/app/QueryState.tsx` (from `src/client/components/QueryState.tsx`)
+- `src/lib/pricing/pricedActions.ts`
+- `src/lib/pricing/actions/scanRun.ts`

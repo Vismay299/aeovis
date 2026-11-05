@@ -7,6 +7,8 @@ export const FEATURES = {
   project_memory: { spend: [] as const },
   // F07: lets Content Studio read project memory. The digest is free.
   project_memory_content: { spend: [] as const },
+  // F09: shows the cost review dialog before running a paid scan
+  price_review: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;
