@@ -1,12 +1,13 @@
 export const dynamic = "force-dynamic";
 
 import { VerifyEmailCard } from "@/components/auth/VerifyEmailCard";
+import { firstParam } from "@/shared/auth-redirect";
 
 export default async function VerifyPage({ searchParams }) {
   const params = await searchParams;
-  const email = params?.email ?? "";
-  const next = params?.next ?? "";
-  const error = params?.error ?? "";
+  const email = firstParam(params?.email);
+  const next = firstParam(params?.next);
+  const error = firstParam(params?.error);
   const turnstileSiteKey = process.env["NEXT_PUBLIC_TURNSTILE_SITE_KEY"] ?? "";
 
   return (

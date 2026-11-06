@@ -6,27 +6,27 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import AuthLayout from "@/components/portal/AuthLayout";
-import { authErrorCopy } from "@/shared/auth-errors";
+import { authErrorCopy, isAuthErrorCode } from "@/shared/auth-errors";
+import { firstParam, normalizeAuthRedirect, signInHref } from "@/shared/auth-redirect";
 
 export default async function AuthErrorPage({ searchParams }) {
   const params = await searchParams;
-  const error = params?.error ?? "unknown";
+  // Only a code from the closed set is ever echoed; anything else is "unknown".
+  const raw = firstParam(params?.error);
+  const error = isAuthErrorCode(raw) ? raw : "unknown";
   const copy = authErrorCopy(error);
-
-  const footer = error ? (
-    <p className="font-mono text-xs text-muted-foreground">Code: {error}</p>
-  ) : null;
+  const backHref = signInHref(normalizeAuthRedirect(firstParam(params?.next)));
 
   return (
     <AuthLayout
       title={copy.title}
       titleId="auth-error-title"
       subtitle={copy.description}
-      footer={footer}
+      footer={<p className="font-mono text-xs text-muted-foreground">Code: {error}</p>}
     >
       <div className="space-y-4">
         <Link
-          href="/login"
+          href={backHref}
           className="inline-flex h-10 w-full items-center justify-center rounded-lg bg-secondary px-4 text-sm font-semibold text-secondary-foreground hover:bg-secondary/80"
         >
           Back to sign in

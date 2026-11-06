@@ -46,11 +46,26 @@ test("F24-AC-10 - authErrorCodeFrom: one case per code and precedence", () => {
   assert.equal(authErrorCodeFrom({ errorCode: "flow_state_expired" }), "link_expired");
   assert.equal(authErrorCodeFrom({}), "unknown");
   assert.equal(authErrorCodeFrom({ error: null, errorCode: null, description: null }), "unknown");
+  // An expired email link arrives as access_denied + otp_expired: link_expired wins.
+  assert.equal(
+    authErrorCodeFrom({ error: "access_denied", errorCode: "otp_expired", description: "Email link is invalid or has expired" }),
+    "link_expired",
+  );
   // access_denied wins over a disposable description.
   assert.equal(
     authErrorCodeFrom({ error: "access_denied", description: "non-disposable" }),
     "access_denied",
   );
+});
+
+test("isAuthErrorCode accepts only the closed set", async () => {
+  const { isAuthErrorCode } = await import("./auth-errors.ts");
+  for (const code of ["access_denied", "state_mismatch", "disposable_email", "captcha_failed", "signup_disabled", "link_expired", "unknown"]) {
+    assert.equal(isAuthErrorCode(code), true, code);
+  }
+  for (const v of ["Account locked - call support", "", null, undefined, ["access_denied"]]) {
+    assert.equal(isAuthErrorCode(v), false, String(v));
+  }
 });
 
 test("F24-AC-10 - authErrorCopy returns the section 6.6 copy for each code and a default", () => {

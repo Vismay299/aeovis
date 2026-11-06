@@ -477,6 +477,17 @@ Branches `feat/f24-sign-in-hardening-p1` … `-p3`. Shorthand: `NT` = `node --im
 
 **Checkpoint:** suite, typecheck, build, `check-f24-browser.mjs` (9 scenarios), `check-f04-browser.mjs`, and the five existing auth/route tests untouched (`git diff --stat origin/main -- src/lib/customerAuth.test.mjs src/lib/supabase/sessionBinding.test.mjs src/lib/supabase/authLink.test.mjs src/lib/customerRoutes.test.mjs src/lib/operatorPerimeter.test.mjs` → empty). Completes F24-AC-05 to 15.
 
+**Phase 2 review fixes (PR #47; deviations from §6.2 and §6.6):**
+
+- `authErrorCodeFrom` checks `otp_expired` / `flow_state_expired` before `access_denied`, because Supabase sends an expired email link as `error=access_denied&error_code=otp_expired`.
+- `/auth/callback` validates `next` with the shared `normalizeAuthRedirect` instead of its local `safeNext`, which let `/\t/evil.com` through (open redirect). On an error parameter it redirects to `/auth/verify?error=link_expired` for expired links (where the resend UI is) and to `/auth/error?error=<code>` otherwise, keeping a safe `next` either way.
+- `/auth/error` shows "Code: …" only for a code in the closed `AuthErrorCode` set (`isAuthErrorCode`), never raw query text. "Back to sign in" keeps `next`.
+- Every auth page reads `searchParams` through `firstParam` (`src/shared/auth-redirect.ts`): a repeated key arrives as `string[]` and used to crash the server render.
+- First-session detection uses `isFirstSession` (`src/lib/auth/telemetry.ts`): the sign-in must be within 60 s of `email_confirmed_at` (or `created_at`), on an account under 24 h old. Matching to the second missed every email sign-up and some Google ones. The user comes from the exchange or verify result, so the callback makes no extra `getUser()` call.
+- The sign-up and reset forms both use `PASSWORD_MIN_LENGTH` / `PASSWORD_MAX_LENGTH` from `src/shared/password.ts`. Reset used to accept 8 characters.
+- `portalFixtureHarness.mjs` waits for the method chooser or `#email` before deciding whether to click "Continue with email".
+- Unchanged: the telemetry sinks stay no-ops until F26 wires them (§6.7). `auth:verification_success` is still emitted but is not in the F26 registry (F26 open item 10), so F26 must add it before it wires the client sink.
+
 ### Phase 3 — Owner configuration and live checks
 
 **Goal:** the owner turns each protection on in the safe order and records the live results.

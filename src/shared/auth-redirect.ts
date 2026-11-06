@@ -4,6 +4,12 @@
 
 export const DEFAULT_AFTER_SIGN_IN = "/portal";
 
+/** A Next.js searchParams value is a string, a string[] for a repeated key, or absent: take the first. */
+export function firstParam(value: string | string[] | null | undefined): string {
+  if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : "";
+  return typeof value === "string" ? value : "";
+}
+
 /**
  * Accept only same-origin paths. Backslashes are rejected because URL parsers
  * treat them as slashes, and tabs and newlines because URL parsers strip them:
