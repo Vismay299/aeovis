@@ -30,6 +30,8 @@ export type NavItem = {
   badge?: "scan" | "content" | "gsc";
   /** Set by `items.ts`. */
   icon?: unknown;
+  /** Optional prefetch builder for the item's page query. */
+  prefetch?: (brandKey: string) => unknown;
 };
 
 export type NavGroup = {
