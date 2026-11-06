@@ -36,4 +36,93 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.backfill_workspace_questions(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.backfill_workspace_questions(text) TO service_role;
+
+-- Appends an approved legacy panel and syncs stable question IDs as one transaction.
+CREATE OR REPLACE FUNCTION public.append_approved_panel_with_questions(
+  p_brand text, p_key text, p_expected integer, p_canonical_payload text, p_actor uuid
+) RETURNS jsonb
+LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE
+  v_payload json;
+  v_sync jsonb;
+  v_prompts text;
+  v_payload_text text;
+  v_hash text;
+  v_artifact jsonb;
+BEGIN
+  IF p_canonical_payload IS NULL OR length(p_canonical_payload) > 500000 THEN
+    RAISE EXCEPTION 'invalid artifact';
+  END IF;
+  BEGIN
+    v_payload := p_canonical_payload::json;
+  EXCEPTION WHEN others THEN
+    RAISE EXCEPTION 'invalid artifact';
+  END;
+  IF json_typeof(v_payload) <> 'object' OR json_typeof(v_payload->'prompts') <> 'array'
+     OR json_array_length(v_payload->'prompts') NOT BETWEEN 1 AND 200 THEN
+    RAISE EXCEPTION 'reviewed panel requires reviewer and prompts';
+  END IF;
+
+  -- Any later error, including append_repair_artifact's version conflict,
+  -- rolls back this backfill and sync because the whole operation is one RPC.
+  PERFORM public.backfill_workspace_questions(p_brand);
+  v_sync := public.sync_panel_questions(
+    p_brand,
+    (v_payload::jsonb)->'prompts',
+    jsonb_build_object(
+      'persona', v_payload->>'persona',
+      'country', v_payload->'context'->>'country',
+      'language', v_payload->'context'->>'language'
+    ),
+    p_actor
+  );
+  IF jsonb_array_length(v_sync->'ids') <> json_array_length(v_payload->'prompts') THEN
+    RAISE EXCEPTION 'panel question identity mismatch';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM json_array_elements(v_payload->'prompts') AS p(prompt)
+     WHERE json_typeof(p.prompt) <> 'object'
+        OR NOT (p.prompt::jsonb ? 'id')
+        OR NOT (p.prompt::jsonb ? 'question_id')
+  ) THEN
+    RAISE EXCEPTION 'invalid artifact';
+  END IF;
+
+  -- The application sent canonical JSON so the stored sha256 remains identical
+  -- to artifactHash(payload). json (rather than jsonb) preserves number spelling
+  -- and object-key order while we replace only the two question ID fields.
+  SELECT '[' || string_agg(rewritten.json_text, ',' ORDER BY source.ordinality) || ']'
+    INTO v_prompts
+    FROM json_array_elements(v_payload->'prompts') WITH ORDINALITY AS source(prompt, ordinality)
+    CROSS JOIN LATERAL (
+      SELECT '{' || string_agg(
+        to_json(f.key)::text || ':' ||
+          CASE f.key
+            WHEN 'id' THEN to_json(v_sync->'ids'->((source.ordinality - 1)::integer)->>'question_id')::text
+            WHEN 'question_id' THEN to_json(v_sync->'ids'->((source.ordinality - 1)::integer)->>'question_id')::text
+            ELSE f.value::text
+          END,
+        ',' ORDER BY f.ordinality
+      ) || '}' AS json_text
+      FROM json_each(source.prompt) WITH ORDINALITY AS f(key, value, ordinality)
+    ) AS rewritten;
+
+  SELECT '{' || string_agg(
+    to_json(field.key)::text || ':' ||
+      CASE WHEN field.key = 'prompts' THEN v_prompts ELSE field.value::text END,
+    ',' ORDER BY field.ordinality
+  ) || '}'
+    INTO v_payload_text
+    FROM json_each(v_payload) WITH ORDINALITY AS field(key, value, ordinality);
+
+  v_hash := encode(sha256(convert_to(v_payload_text, 'UTF8')), 'hex');
+  v_artifact := public.append_repair_artifact(
+    p_brand, 'panel', p_key, p_expected, 'approved', v_payload_text::jsonb, v_hash, p_actor
+  );
+  RETURN v_artifact;
+END $$;
+REVOKE ALL ON FUNCTION public.append_approved_panel_with_questions(text,text,integer,text,uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.append_approved_panel_with_questions(text,text,integer,text,uuid)
+  TO service_role;
 NOTIFY pgrst, 'reload schema';

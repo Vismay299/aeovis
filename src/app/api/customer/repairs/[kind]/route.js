@@ -3,6 +3,7 @@ import { customerRouteContext } from "@/lib/supabase/customerRoute";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { repairWorkflowStore } from "@/lib/db/repairWorkflow";
 import {
+  canonicalJson,
   validatePanel,
   makeSourceSnapshot,
   opportunityFromEvidence,
@@ -13,11 +14,6 @@ import {
 } from "@/lib/repairs/technicalAudit";
 import { getBrandAliases } from "@/lib/scoring/aliases";
 import { safeFetch } from "@/lib/ssrfGuard";
-import {
-  ensureBackfilled,
-  normalizeQuestionText,
-  syncPanelQuestions,
-} from "@/lib/questions/workspaceQuestions.ts";
 export const dynamic = "force-dynamic";
 const json = (data, status = 200) =>
   NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -87,30 +83,9 @@ export async function POST(request, { params }) {
           "Review persona and near-duplicate questions before approval",
         );
       if (state === "approved") {
-        await ensureBackfilled(admin, ctx.brand.brandKey);
-        const { ids } = await syncPanelQuestions(admin, {
-          brandKey: ctx.brand.brandKey,
-          prompts: payload.prompts.map((p) => ({
-            text: p.text,
-            topic: p.topic,
-            purpose: p.purpose,
-            origin: p.origin,
-          })),
-          settings: {
-            persona: payload.persona,
-            country: payload.context.country,
-            language: payload.context.language,
-          },
-          actor: ctx.user.id,
-        });
-        const idsByText = new Map(
-          ids.map((item) => [normalizeQuestionText(item.text), item.question_id]),
-        );
-        const idFor = (text) => idsByText.get(normalizeQuestionText(text));
         payload.prompts = payload.prompts.map((p) => ({
           ...p,
-          id: idFor(p.text),
-          question_id: idFor(p.text),
+          question_id: null,
         }));
       }
       if (state === "retired" && !body.reason)
@@ -206,15 +181,31 @@ export async function POST(request, { params }) {
         state = "unreviewed";
       }
     }
-    const item = await store.append({
-      brand: ctx.brand.brandKey,
-      kind,
-      key,
-      expectedVersion,
-      state,
-      payload,
-      actor: ctx.user.id,
-    });
+    let item;
+    if (kind === "panel" && state === "approved") {
+      const { data, error } = await admin.rpc(
+        "append_approved_panel_with_questions",
+        {
+          p_brand: ctx.brand.brandKey,
+          p_key: key,
+          p_expected: expectedVersion,
+          p_canonical_payload: canonicalJson(payload),
+          p_actor: ctx.user.id,
+        },
+      );
+      if (error) throw error;
+      item = data;
+    } else {
+      item = await store.append({
+        brand: ctx.brand.brandKey,
+        kind,
+        key,
+        expectedVersion,
+        state,
+        payload,
+        actor: ctx.user.id,
+      });
+    }
     return json({ item }, 201);
   } catch (error) {
     return json(

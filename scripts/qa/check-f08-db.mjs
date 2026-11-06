@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import { artifactHash } from "../../src/lib/repairs/workflow.js";
+import { artifactHash, canonicalJson } from "../../src/lib/repairs/workflow.js";
 import { normalizeQuestionText } from "../../src/lib/questions/workspaceQuestions.ts";
 
 if (
@@ -94,6 +94,14 @@ async function appendPanel(client, brandKey, { prompts, persona = "QA buyers", c
   return rows[0].artifact;
 }
 
+async function appendApprovedPanel(client, brandKey, { payload, expectedVersion, actor }) {
+  const { rows } = await client.query(
+    "SELECT public.append_approved_panel_with_questions($1,'default',$2,$3,$4) AS artifact",
+    [brandKey, expectedVersion, canonicalJson(payload), actor],
+  );
+  return rows[0].artifact;
+}
+
 async function saveQuestion(client, brandKey, expectedRevision, rows) {
   return client.query(
     "SELECT public.save_workspace_questions($1,$2,$3::jsonb,'[]'::jsonb,NULL,NULL) AS result",
@@ -113,6 +121,10 @@ await group("normalize", async (client) => {
 });
 
 await group("schema", async (client) => {
+  const { rows: atomicFunction } = await client.query(
+    "SELECT to_regprocedure('public.append_approved_panel_with_questions(text,text,integer,text,uuid)') AS function",
+  );
+  assert.ok(atomicFunction[0].function, "atomic approved legacy panel RPC must exist");
   const brandKey = await makeBrand(client, "schema");
   const inserted = await client.query(
     "INSERT INTO public.workspace_questions(brand_key,text,origin) VALUES($1,$2,'manual') RETURNING id",
@@ -324,33 +336,40 @@ await group("legacy-sync", async (client) => {
     [actor, brandKey],
   );
   await client.query("SET LOCAL ROLE service_role");
-  const firstSync = await client.query(
-    "SELECT public.sync_panel_questions($1,$2::jsonb,$3::jsonb,$4) AS result",
-    [brandKey, JSON.stringify([
-      { text: "Which billing tools suit teams?", topic: "Billing", origin: "manual", purpose: "recommendation" },
-      { text: "How do teams compare invoice products?", topic: "Invoices", origin: "generated", purpose: "recommendation" },
-    ]), JSON.stringify({ persona: "Business buyers", country: "in", language: "en" }), actor],
-  );
-  const firstIds = firstSync.rows[0].result.ids;
-  const selected = firstIds[0];
-  await client.query(
-    "SELECT public.sync_panel_questions($1,$2::jsonb,$3::jsonb,$4)",
-    [brandKey, JSON.stringify([
-      { text: selected.text, topic: "Billing", origin: "manual", purpose: "recommendation" },
-    ]), JSON.stringify({ persona: "Business buyers", country: "in", language: "en" }), actor],
-  );
-  const prompt = {
-    id: selected.question_id,
-    question_id: selected.question_id,
-    cohort: "core",
-    text: selected.text,
-    topic: "Billing",
-    origin: "manual",
-    purpose: "recommendation",
-    weight: 1,
+  const firstPayload = {
+    persona: "Business buyers",
+    context: { country: "in", language: "en" },
+    prompts: [
+      { id: "initial-id-a", question_id: null, cohort: "core", text: "Which billing tools suit teams?", topic: "Billing", origin: "manual", purpose: "recommendation", weight: 1 },
+      { id: "initial-id-b", question_id: null, cohort: "core", text: "How do teams compare invoice products?", topic: "Invoices", origin: "generated", purpose: "recommendation", weight: 1 },
+    ],
+    reviewer: actor,
+    reviewed_at: "2026-11-07T00:00:00.000Z",
+    reason: null,
   };
-  const artifact = await appendPanel(client, brandKey, { prompts: [prompt], state: "approved", actor });
-  assert.equal(artifact.payload.prompts[0].question_id, selected.question_id);
+  const artifact = await appendApprovedPanel(client, brandKey, {
+    payload: firstPayload,
+    expectedVersion: 0,
+    actor,
+  });
+  const firstIds = artifact.payload.prompts.map((prompt) => prompt.question_id);
+  assert.equal(artifact.payload.prompts[0].id, firstIds[0]);
+  assert.equal(artifact.payload.prompts[0].question_id, firstIds[0]);
+  assert.equal(artifact.sha256, artifactHash(artifact.payload), "stored hash must cover the final ID-bearing payload");
+
+  const secondPayload = {
+    ...firstPayload,
+    reviewed_at: "2026-11-07T00:01:00.000Z",
+    prompts: [{ ...artifact.payload.prompts[0], question_id: null }],
+  };
+  const secondArtifact = await appendApprovedPanel(client, brandKey, {
+    payload: secondPayload,
+    expectedVersion: 1,
+    actor,
+  });
+  assert.equal(secondArtifact.version, 2);
+  assert.equal(secondArtifact.payload.prompts[0].question_id, firstIds[0]);
+  assert.equal(secondArtifact.sha256, artifactHash(secondArtifact.payload));
   const { rows } = await client.query(
     "SELECT text,status FROM public.workspace_questions WHERE brand_key=$1 ORDER BY text",
     [brandKey],
@@ -361,6 +380,79 @@ await group("legacy-sync", async (client) => {
     [brandKey],
   );
   assert.deepEqual(settings.rows[0], { persona: "Business buyers", country: "in", language: "en" });
+
+  const staleBrand = await makeBrand(client, "legacy-stale");
+  const staleActor = await makeUser(client, "legacy-stale");
+  await client.query(
+    "INSERT INTO public.customer_brand_memberships(user_id,brand_key,role) VALUES($1,$2,'owner')",
+    [staleActor, staleBrand],
+  );
+  await client.query("SET LOCAL ROLE service_role");
+  await appendPanel(client, staleBrand, {
+    prompts: [{ text: "Which older accounting tools should remain?", topic: "History", origin: "manual" }],
+    persona: "Legacy buyers",
+    context: { country: "ca", language: "fr" },
+    version: 0,
+    state: "draft",
+    actor: staleActor,
+  });
+  await client.query(
+    "INSERT INTO public.workspace_question_settings(brand_key,revision,persona,country,language) VALUES($1,7,'Saved buyers','us','en')",
+    [staleBrand],
+  );
+  const existingQuestionId = id();
+  await client.query(
+    "INSERT INTO public.workspace_questions(id,brand_key,text,topic,origin,status) VALUES($1,$2,'Which saved question should stay paused?','Saved','manual','paused')",
+    [existingQuestionId, staleBrand],
+  );
+  const beforeQuestions = await client.query(
+    "SELECT id,text,topic,origin,status FROM public.workspace_questions WHERE brand_key=$1 ORDER BY id",
+    [staleBrand],
+  );
+  const beforeSettings = await client.query(
+    "SELECT revision::int AS revision,persona,country,language,backfilled_at FROM public.workspace_question_settings WHERE brand_key=$1",
+    [staleBrand],
+  );
+  const beforeHead = await client.query(
+    "SELECT h.version,a.state,a.payload FROM public.repair_artifact_heads h JOIN public.repair_artifacts a ON a.id=h.artifact_id WHERE h.brand=$1 AND h.kind='panel' AND h.artifact_key='default'",
+    [staleBrand],
+  );
+  const stalePayload = {
+    ...firstPayload,
+    persona: "New buyers",
+    prompts: [{ ...firstPayload.prompts[0], text: "Which new invoice tools suit teams?" }],
+  };
+  await expectError(
+    client,
+    "f08_atomic_stale_approval",
+    "SELECT public.append_approved_panel_with_questions($1,'default',0,$2,$3)",
+    [staleBrand, canonicalJson(stalePayload), staleActor],
+    /artifact revision conflict/,
+  );
+  assert.deepEqual(
+    (await client.query(
+      "SELECT id,text,topic,origin,status FROM public.workspace_questions WHERE brand_key=$1 ORDER BY id",
+      [staleBrand],
+    )).rows,
+    beforeQuestions.rows,
+    "stale append must roll back backfill and sync question changes",
+  );
+  assert.deepEqual(
+    (await client.query(
+      "SELECT revision::int AS revision,persona,country,language,backfilled_at FROM public.workspace_question_settings WHERE brand_key=$1",
+      [staleBrand],
+    )).rows,
+    beforeSettings.rows,
+    "stale append must not alter settings, backfill marker, or question revision",
+  );
+  assert.deepEqual(
+    (await client.query(
+      "SELECT h.version,a.state,a.payload FROM public.repair_artifact_heads h JOIN public.repair_artifacts a ON a.id=h.artifact_id WHERE h.brand=$1 AND h.kind='panel' AND h.artifact_key='default'",
+      [staleBrand],
+    )).rows,
+    beforeHead.rows,
+    "stale append must preserve the current artifact head",
+  );
 });
 
 await group("backfill", async (client) => {

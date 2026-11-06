@@ -7,22 +7,30 @@ const route = await import("../../app/api/customer/repairs/[kind]/route.js");
 
 const QUESTION_ID = "22222222-2222-4222-8222-222222222222";
 
-function setup() {
+function setup({ atomicError = null } = {}) {
   const calls = [];
   const admin = {
     async rpc(name, args) {
       calls.push({ name, args });
-      if (name === "sync_panel_questions") {
+      if (name === "append_approved_panel_with_questions") {
+        if (atomicError) return { data: null, error: atomicError };
+        const payload = JSON.parse(args.p_canonical_payload);
+        payload.prompts = payload.prompts.map((prompt) => ({
+          ...prompt,
+          id: QUESTION_ID,
+          question_id: QUESTION_ID,
+        }));
         return {
           data: {
-            revision: 1,
-            ids: args.p_prompts.map((prompt) => ({ text: prompt.text, question_id: QUESTION_ID })),
+            id: "11111111-1111-4111-8111-111111111111",
+            brand: args.p_brand,
+            kind: "panel",
+            artifact_key: args.p_key,
+            state: "approved",
+            payload,
           },
           error: null,
         };
-      }
-      if (name === "backfill_workspace_questions") {
-        return { data: { skipped: true }, error: null };
       }
       if (name === "append_repair_artifact") {
         return {
@@ -81,12 +89,21 @@ test("an approved legacy panel syncs stable question IDs into its frozen artifac
   assert.deepEqual(Object.keys(body), ["item"]);
   assert.equal(body.item.payload.prompts[0].id, QUESTION_ID);
   assert.equal(body.item.payload.prompts[0].question_id, QUESTION_ID);
-  assert.deepEqual(calls.map((item) => item.name), [
-    "backfill_workspace_questions",
-    "sync_panel_questions",
-    "append_repair_artifact",
-  ]);
-  assert.equal(calls[1].args.p_prompts[0].text, "Which accounting systems suit teams?");
+  assert.deepEqual(calls.map((item) => item.name), ["append_approved_panel_with_questions"]);
+  assert.equal(calls[0].args.p_brand, "workspace-a");
+  assert.equal(calls[0].args.p_key, "default");
+  assert.equal(calls[0].args.p_expected, 0);
+  assert.equal(JSON.parse(calls[0].args.p_canonical_payload).prompts[0].question_id, null);
+});
+
+test("a stale approved legacy panel version returns 409 without separate sync calls", async () => {
+  const { calls } = setup({ atomicError: { message: "artifact revision conflict" } });
+  const response = await route.POST(request("approved"), { params: { kind: "panel" } });
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error: "This resource changed; reload before saving.",
+  });
+  assert.deepEqual(calls.map((item) => item.name), ["append_approved_panel_with_questions"]);
 });
 
 test("a draft legacy panel keeps its response shape and does not sync workspace questions", async () => {

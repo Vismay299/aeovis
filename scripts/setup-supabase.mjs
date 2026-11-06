@@ -447,6 +447,7 @@ const EXPECTED_OBJECTS = {
   ],
   "076_f08_question_backfill.sql": [
     { kind: "function", name: "backfill_workspace_questions" },
+    { kind: "function", name: "append_approved_panel_with_questions" },
   ],
 };
 
