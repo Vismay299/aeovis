@@ -1,4 +1,4 @@
-// Portions ported from every-app/open-seo@c5f8db1 (MIT, Ac 2026 Ben Senescu):
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
 //   src/server/features/ai-visibility/services/aiVisibilitySchedule.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 

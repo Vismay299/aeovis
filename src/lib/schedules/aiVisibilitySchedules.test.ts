@@ -377,7 +377,7 @@ test("startScheduledScan: unexpected thrown RPC error releases hold and rethrows
   assert.deepEqual(released, { holdId: "hold-boom", reason: "schedule_start_failed" });
 });
 
-test("runDueCustomerSchedules: OpenSEO test 1 - schedule advances even when start cannot happen", async () => {
+test("runDueCustomerSchedules: ported test 1 - schedule advances even when start cannot happen", async () => {
   const admin = makeFakeAdmin();
   const blocks: string[] = [];
 
@@ -399,7 +399,7 @@ test("runDueCustomerSchedules: OpenSEO test 1 - schedule advances even when star
   assert.deepEqual(blocks, ["skip-me.com:scheduling_disabled"]);
 });
 
-test("runDueCustomerSchedules: OpenSEO test 2 - a spend refusal is recorded without creating a job", async () => {
+test("runDueCustomerSchedules: ported test 2 - a spend refusal is recorded without creating a job", async () => {
   const admin = makeFakeAdmin();
   const blocks: string[] = [];
   let rpcCalled = false;

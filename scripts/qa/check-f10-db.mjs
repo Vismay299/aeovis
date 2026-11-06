@@ -27,6 +27,7 @@ import {
   registerAiVisibilityScheduleJobs,
   resetAiVisibilityScheduleJobDeps,
 } from "../../src/lib/schedules/aiVisibilitySchedules.jobs.ts";
+import { listDueCustomerSchedules } from "../../src/lib/schedules/aiVisibilitySchedules.ts";
 import { getJobDefinition } from "../../src/lib/jobs/registry.ts";
 
 const host = process.env.PGHOST || "";
@@ -669,7 +670,8 @@ try {
     const wsStart = await seedWorkspace("tick-start", { panel: true });
     const wsSkip = await seedWorkspace("tick-skip", { panel: false });
 
-    const past = Date.now() - 2 * DAY;
+    // One hour overdue on a daily schedule: exactly one due window, no missed ones.
+    const past = Date.now() - 60 * 60 * 1000;
     await insertSchedule(wsStart.brand, { next: past, max: 20 });
     await insertSchedule(wsSkip.brand, { next: past, max: 20 });
 
@@ -713,7 +715,7 @@ try {
             missed: args.p_missed,
             next: args.p_next,
             jobId: args.p_job_id,
-            approvedMax: args.p_approved_max,
+            max: args.p_approved_max,
             quote: args.p_quote,
           });
           return { data: res, error: null };
@@ -727,8 +729,8 @@ try {
               windowAt: args.p_window_at,
               missed: args.p_missed,
               next: args.p_next,
+              reason: args.p_reason,
             },
-            args.p_reason,
           );
           return { data: res, error: null };
         }
@@ -792,10 +794,16 @@ try {
       },
     };
 
+    // Earlier groups leave their own due customer schedules in this database.
+    // Run the real due-row query, then keep only the two workspaces this group
+    // seeded, so the tick's counts describe exactly those two rows.
+    const seeded = new Set([wsStart.brand, wsSkip.brand]);
     registerAiVisibilityScheduleJobs({
       admin: fakeAdmin,
       now: () => new Date(),
       scheduleDeps,
+      listDue: async (admin, now) =>
+        (await listDueCustomerSchedules(admin, now, 1000)).filter((row) => seeded.has(row.key)),
     });
 
     const def = getJobDefinition(SCHEDULES_TICK_KIND);
