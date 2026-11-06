@@ -239,4 +239,7 @@ SOFTWARE.
 - `src/components/app/hooks/useTimestampedSearchHistory.ts` (from `src/client/hooks/useTimestampedSearchHistory.ts`)
 - `src/components/app/RecentSearches.tsx` (from `src/client/components/RecentSearches.tsx`)
 - `src/components/app/PrefetchLink.tsx` (from `src/router.tsx`)
-
+- `src/lib/schedules/aiVisibilitySchedules.ts` (from `src/server/features/ai-visibility/services/scheduledAiVisibility.ts`, `AiVisibilityRepository.ts`)
+- `src/lib/schedules/aiVisibilitySchedules.jobs.ts` (from `src/server/features/ai-visibility/services/scheduledAiVisibility.ts`)
+- `src/lib/schedules/customerSchedule.ts` (from `src/server/features/ai-visibility/services/aiVisibilitySchedule.ts`)
+- `src/app/api/customer/schedule/route.ts` (from `src/server/features/ai-visibility/services/aiVisibilitySchedule.ts`)

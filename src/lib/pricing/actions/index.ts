@@ -2,4 +2,6 @@
 // Every priced action module must be imported here.
 
 import "./scanRun.ts";
+import "./scheduleSave.ts";
 export { scanRunAction } from "./scanRun.ts";
+export { scheduleSaveAction } from "./scheduleSave.ts";

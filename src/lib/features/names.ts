@@ -13,6 +13,8 @@ export const FEATURES = {
   usage_page: { spend: [] as const },
   // F24: shows Continue with Google on the sign-in pages. Sign-in spends nothing; not a client feature (no workspace yet).
   google_sign_in: { spend: [] as const },
+  // F10: gates customer-managed scheduled scans and their routes/jobs.
+  customer_scheduling: { spend: ["ai_visibility.scan"] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;
