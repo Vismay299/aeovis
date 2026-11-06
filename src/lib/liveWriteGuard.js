@@ -192,6 +192,10 @@ export const NEVER_WRITABLE = Object.freeze([
   "workspace_question_settings",
   "workspace_questions",
   "workspace_question_events",
+  // F25 — migration 160: lifecycle email outbox, per-user preferences, workspace milestones.
+  "user_email_preferences",
+  "email_outbox",
+  "workspace_milestones",
 ]);
 
 /**
@@ -224,6 +228,10 @@ export const WRITING_FUNCTIONS = Object.freeze({
   // not permit anything — it makes the refusal name the table instead of
   // reporting an unrecognised function, which is a different bug to chase.
   claim_scan_job_attempt: ["scan_jobs"],
+  // F25 — migration 161: outbox claim, exhausted close, retention prune.
+  claim_email_outbox: ["email_outbox"],
+  close_exhausted_email_outbox: ["email_outbox"],
+  prune_email_outbox: ["email_outbox"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */

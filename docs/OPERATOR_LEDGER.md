@@ -599,6 +599,11 @@ abandoned is not.
 - Objects: nine `scan_schedules` columns (`managed_by`, `schedule_interval`, `schedule_time`, `last_skip_reason`, `last_skip_at`, `approved_max_usd`, `approval_id`, `customer_updated_by`, `customer_updated_at`) with the `scan_schedules_f10_checks` constraint; functions `start_customer_window`, `block_customer_window` (service role only); `enqueue_measurement_window` now returns `customer_managed` for customer rows.
 
 `075_f08_workspace_questions` and `076_f08_question_backfill` are additive and must be applied in that order before deploying F08. The first creates the stable question, settings and event tables plus their normaliser and service-only write RPCs; the second adds the one-time backfill RPC and an atomic approved-legacy-panel append RPC. Backfill runs lazily through the app on the first customer questions read (or first approved legacy panel post), never as a manual production SQL step. The atomic append RPC performs backfill, question sync, and expected-version artifact append in one transaction, so a stale append rolls back all question side effects. Both migrations are verified by `scripts/qa/check-f08-db.mjs` against loopback QA PostgreSQL; member reads are checked by `tests/customer-uat.sql`.
+### `160_f25_email_tables` and `161_f25_email_functions` (F25 phase 1)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply 160 then 161; no data backfill: defaults apply to existing users, outbox starts empty, sweeps look back 30 minutes only.
+- Objects (160): `user_email_preferences` (per-user preferences across workspaces, RLS read-own), `email_outbox` (service-role only delivery queue with unique `dedupe_key`), `workspace_milestones` (workspace milestones reached, member readable).
+- Objects (161): `claim_email_outbox` (concurrent safe skip-locked claim), `close_exhausted_email_outbox` (closes 5-attempt exhausted claims as failed), `email_milestone_candidates` (dynamic query tolerant of optional F10/F18/F22 tables), `prune_email_outbox` (retention prune).
 
 ## D. Content approval — the human gate, and what it does not yet do
 

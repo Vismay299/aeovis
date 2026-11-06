@@ -449,6 +449,17 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "backfill_workspace_questions" },
     { kind: "function", name: "append_approved_panel_with_questions" },
   ],
+  "160_f25_email_tables.sql": [
+    { kind: "table", name: "user_email_preferences" },
+    { kind: "table", name: "email_outbox" },
+    { kind: "table", name: "workspace_milestones" },
+  ],
+  "161_f25_email_functions.sql": [
+    { kind: "function", name: "claim_email_outbox" },
+    { kind: "function", name: "close_exhausted_email_outbox" },
+    { kind: "function", name: "email_milestone_candidates" },
+    { kind: "function", name: "prune_email_outbox" },
+  ],
 };
 
 /**
