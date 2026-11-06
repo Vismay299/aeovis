@@ -367,6 +367,11 @@ const FULL_CATALOG = [
   "user_email_preferences", "email_outbox", "workspace_milestones",
   // 161_f25_email_functions.sql — outbox claim, exhausted close, milestone candidates and prune.
   "claim_email_outbox", "close_exhausted_email_outbox", "email_milestone_candidates", "prune_email_outbox",
+  // 135_f20_ga4.sql & 136_f20_ga4_functions.sql — Google Analytics 4 tables and functions.
+  "ga4_oauth_attempts", "ga4_grants", "ga4_connections",
+  "ga4_upsert_grant", "ga4_purge_cache", "ga4_set_connection", "ga4_disconnect",
+  "ga4_grant_impact", "ga4_remove_grant", "ga4_list_unused_grants", "ga4_delete_unused_grant",
+  "prune_ga4_oauth_attempts",
 ];
 
 function withRegister(dir) {
