@@ -128,7 +128,7 @@ export function validatePanel(input, { brandAliases = [] } = {}) {
     input.prompts.length < 1 ||
     input.prompts.length > 200
   )
-    throw new Error("Provide 1Ã¢â‚¬â€œ200 panel prompts");
+    throw new Error("Provide 1–200 panel prompts");
   input = { ...input, context: resolveMeasurementContext(input.context || {}) };
   const errors = [];
   const seen = new Set();

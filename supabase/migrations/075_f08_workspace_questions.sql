@@ -159,7 +159,7 @@ BEGIN
     IF r->>'op' = 'insert' THEN
       INSERT INTO workspace_questions(id, brand_key, text, topic, origin, status, branded, source_ref, created_by)
       VALUES ((r->>'id')::uuid, p_brand, r->>'text', coalesce(r->>'topic', 'General'), r->>'origin',
-              coalesce(r->>'status', 'active'), coalesce((r->>'branded')::boolean, false), r->'source_ref', p_actor);
+              coalesce(r->>'status', 'active'), coalesce((r->>'branded')::boolean, false), nullif(r->'source_ref', 'null'::jsonb), p_actor);
     ELSIF r->>'op' = 'update' THEN
       UPDATE workspace_questions SET topic = coalesce(r->>'topic', topic), status = coalesce(r->>'status', status),
         branded = coalesce((r->>'branded')::boolean, branded),

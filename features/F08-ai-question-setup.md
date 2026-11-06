@@ -278,7 +278,7 @@ BEGIN
     IF r->>'op' = 'insert' THEN
       INSERT INTO workspace_questions(id, brand_key, text, topic, origin, status, branded, source_ref, created_by)
       VALUES ((r->>'id')::uuid, p_brand, r->>'text', coalesce(r->>'topic', 'General'), r->>'origin',
-              coalesce(r->>'status', 'active'), coalesce((r->>'branded')::boolean, false), r->'source_ref', p_actor);
+              coalesce(r->>'status', 'active'), coalesce((r->>'branded')::boolean, false), nullif(r->'source_ref', 'null'::jsonb), p_actor);
     ELSIF r->>'op' = 'update' THEN
       UPDATE workspace_questions SET topic = coalesce(r->>'topic', topic), status = coalesce(r->>'status', status),
         branded = coalesce((r->>'branded')::boolean, branded),
@@ -508,7 +508,7 @@ export async function approveQuestionPanel(admin: SupabaseClient, ws: Workspace,
 
 #### 6.2.4 Legacy route sync — `src/app/api/customer/repairs/[kind]/route.js`
 
-In the `kind === "panel"` branch, after `validatePanel` and the persona/near-duplicate checks and only when `state === "approved"`: `const { ids } = await syncPanelQuestions(admin, { brandKey, prompts: payload.prompts.map(p => ({ text: p.text, topic: p.topic, purpose: p.purpose, origin: p.origin })), settings: { persona: payload.persona, country: payload.context.country, language: payload.context.language }, actor: ctx.user.id })`, then `payload.prompts = payload.prompts.map(p => ({ ...p, id: idFor(p.text), question_id: idFor(p.text) }))` where `idFor` matches by `normalizeQuestionText`. Drafts and retirements are unchanged. The request/response shapes are unchanged, so the demo setup script keeps working.
+In the `kind === "panel"` branch, after `validatePanel` and the persona/near-duplicate checks and only when `state === "approved"`: `await ensureBackfilled(admin, brandKey)` first (the lazy backfill §10 requires on the first approved post), then `const { ids } = await syncPanelQuestions(admin, { brandKey, prompts: payload.prompts.map(p => ({ text: p.text, topic: p.topic, purpose: p.purpose, origin: p.origin })), settings: { persona: payload.persona, country: payload.context.country, language: payload.context.language }, actor: ctx.user.id })`, then `payload.prompts = payload.prompts.map(p => ({ ...p, id: idFor(p.text), question_id: idFor(p.text) }))` where `idFor` matches by `normalizeQuestionText`. Drafts and retirements are unchanged. The request/response shapes are unchanged, so the demo setup script keeps working.
 
 #### 6.2.5 `src/lib/questions/state.ts` — `GET` payload
 
