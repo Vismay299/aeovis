@@ -562,3 +562,142 @@ test("Getting started asks for an approved question panel between the workspace 
   assert.equal(steps(null, [{ id: "s" }]).find((step) => step.id === "panel").done, true, "a scan only starts from an approved panel");
   assert.equal(steps(false, [{ id: "s" }]).find((step) => step.id === "panel").done, false, "a known unapproved panel wins over history");
 });
+
+test("measurement page displays approved question panel, counts questions, runs scan, and preserves exact approve payload", async (t) => {
+  const lifecycle = createLifecycle();
+  t.after(() => lifecycle.close());
+
+  let postedBody = null;
+  t.mock.method(globalThis, "fetch", async (url, init = {}) => {
+    const urlStr = String(url);
+    if (init.method === "POST" && urlStr.includes("/api/customer/repairs/panel")) {
+      postedBody = JSON.parse(init.body);
+      return response(200, { ok: true, items: [] });
+    }
+    if (urlStr.includes("/api/customer/repairs/panel")) {
+      return response(200, {
+        items: [{
+          artifact_key: "default",
+          version: 1,
+          state: "approved",
+          payload: {
+            persona: "B2B SaaS buyers",
+            context: { country: "us", language: "en" },
+            prompts: [
+              { text: "What is Aeovis?", origin: "manual", weight: 1 },
+              { text: "How does Aeovis compare?", origin: "manual", weight: 1 },
+            ],
+          },
+        }],
+      });
+    }
+    if (urlStr.includes("/api/customer/repairs/")) {
+      return response(200, { items: [] });
+    }
+    if (urlStr.includes("/api/customer/measurement")) {
+      return response(200, { observations: [], windows: [] });
+    }
+    return response(200, {});
+  });
+
+  const ui = await compileJsx(path.join(here, "ui.jsx"), {
+    modules: new Map([["react", React], ["next/link", { __esModule: true, default: "a" }]]),
+    autoNull: ["lucide-react"],
+  });
+
+  let scanStarted = false;
+  const scan = { start: () => { scanStarted = true; }, starting: false, active: false };
+
+  const { default: MeasurementPage } = await compileJsx(path.join(here, "../../app/portal/measurement/page.jsx"), {
+    modules: new Map([
+      ["react", lifecycle.react],
+      ["@/components/portal/PortalShell", { usePortal: () => ({ brandKey: "acme", brand: { display_name: "Acme" }, redirectToLogin: noop, scan }) }],
+      ["@/components/portal/ui", ui],
+    ]),
+    autoNull: ["lucide-react"],
+  });
+
+  lifecycle.setRender(() => MeasurementPage());
+  await lifecycle.settle();
+
+  function findAllNodes(node, match, acc = []) {
+    if (!node || typeof node !== "object") return acc;
+    if (Array.isArray(node)) {
+      for (const child of node) findAllNodes(child, match, acc);
+      return acc;
+    }
+    if (match(node)) acc.push(node);
+    if (node.props) {
+      for (const [key, val] of Object.entries(node.props)) {
+        if (key !== "children" && val && typeof val === "object") {
+          findAllNodes(val, match, acc);
+        }
+      }
+      findAllNodes(node.props.children, match, acc);
+    }
+    return acc;
+  }
+
+  // 1. Header title
+  const header = find(lifecycle.output, (node) => node.type === ui.PageHeader);
+  assert.ok(header, "PageHeader should be rendered");
+  assert.equal(header.props.title, "Questions and evidence");
+
+  // 2. First card title: "Question panel"
+  const cards = findAllNodes(lifecycle.output, (node) => node.type === ui.Card);
+  assert.ok(cards.length > 0, "At least one Card should be rendered");
+  assert.equal(cards[0].props.title, "Question panel");
+
+  // 3. "Approved" badge
+  const badges = findAllNodes(cards[0], (node) => node.type === ui.Badge);
+  const approvedBadge = badges.find((b) => [].concat(b.props.children).join("") === "Approved");
+  assert.ok(approvedBadge, "Card should contain an Approved badge");
+
+  // 4. Run scan wired to scan.start
+  const buttons = findAllNodes(cards[0], (node) => node.type === ui.Button);
+  const runScanBtn = buttons.find((btn) => [].concat(btn.props.children).join("") === "Run scan");
+  assert.ok(runScanBtn, "Run scan button should exist for approved panel");
+  assert.equal(scanStarted, false);
+  runScanBtn.props.onClick();
+  assert.equal(scanStarted, true, "Clicking Run scan should trigger scan.start");
+
+  // 5. Textarea rows 14 & "2 questions" count
+  const textarea = find(cards[0], (node) => node.type === "textarea" && node.props["aria-label"] === "Questions, one per line");
+  assert.ok(textarea, "Textarea for questions should be present");
+  assert.equal(textarea.props.rows, 14);
+
+  const countNode = find(cards[0], (node) => [].concat(node.props?.children).join("").includes("2 questions"));
+  assert.ok(countNode, "Should render live count line with '2 questions'");
+
+  // 6. Primary and secondary button variants
+  const approveBtn = buttons.find((btn) => [].concat(btn.props.children).join("") === "Approve this panel");
+  const saveReviewBtn = buttons.find((btn) => [].concat(btn.props.children).join("") === "Save for review");
+  assert.ok(approveBtn, "Approve this panel button should exist");
+  assert.ok(saveReviewBtn, "Save for review button should exist");
+  assert.equal(approveBtn.props.variant ?? "default", "default", "Approve this panel should be primary");
+  assert.equal(saveReviewBtn.props.variant, "secondary", "Save for review should be secondary variant");
+
+  // 7. Clicking "Approve this panel" posts exact request body
+  await approveBtn.props.onClick();
+  await lifecycle.settle();
+
+  assert.deepEqual(postedBody, {
+    key: "default",
+    expected_version: 1,
+    state: "approved",
+    payload: {
+      persona: "B2B SaaS buyers",
+      context: {
+        country: "us",
+        language: "en",
+        device: "desktop",
+        session_policy: "fresh_anonymous",
+      },
+      prompts: [
+        { text: "What is Aeovis?", origin: "manual", weight: 1 },
+        { text: "How does Aeovis compare?", origin: "manual", weight: 1 },
+      ],
+    },
+  });
+});
+

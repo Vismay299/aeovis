@@ -43,7 +43,7 @@ test("tenant Scans renders a runnable mock inside the tenant page rather than li
     modules: new Map([["react", React],["../ui", ui], ["./reportData", reportData]]), autoNull: ["lucide-react", "./mock-scan.css"],
   });
   const page = await compileJsx(path.join(here, "../../app/portal/scans/page.jsx"), {
-    modules: new Map([["react", React],["next/navigation", navigation], ["@/components/portal/PortalShell", { usePortal: () => context }],
+    modules: new Map([["react", React], ["next/link", { default: ({ children, ...props }) => React.createElement("a", props, children) }], ["next/navigation", navigation], ["@/components/portal/PortalShell", { usePortal: () => context }],
       ["@/components/portal/ui", ui], ["@/components/portal/scans/MockScanPanel", mock], ["@/components/portal/scans/reportData", reportData]]),
     autoNull: ["lucide-react", "@/components/portal/ScanProgressCard", "@/components/portal/scans/scans.css"],
   });
