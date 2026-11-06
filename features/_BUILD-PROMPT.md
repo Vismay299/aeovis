@@ -32,8 +32,14 @@ OpenSEO reference code: ~/.cache/aeovis/open-seo at commit c5f8db19c7ca9e750836b
 Preflight — STOP and report to the user (do not start any role) if any of these fail:
   - Every feature in the spec's "Depends on" (and any "requires … merged" note on this phase) is merged into main.
   - Earlier phases of this feature are merged (Phase <PHASE> − 1 checkpoint is ticked in the spec on main).
-  - `git status` is clean; create branch `feat/<feature-lowercase>-p<PHASE>-<short-name>` from up-to-date main.
-  - `npm ci && npm test` passes on the fresh branch (record the baseline pass count).
+  - Work in your own git worktree, never in the shared checkout: other sessions use it, and it may sit in a
+    synced folder (Google Drive, OneDrive). Put the worktree outside any synced folder, e.g.
+    ~/work/aeovis-wt/<feature-lowercase>-p<PHASE> on macOS or C:\work\aeovis-wt\<feature-lowercase>-p<PHASE> on Windows:
+      git fetch origin
+      git worktree add <worktree-path> -b feat/<feature-lowercase>-p<PHASE>-<short-name> origin/main
+    Then do everything below, and every role's work, inside that worktree. If the path or branch already
+    exists, stop and report. `git status` must be clean there.
+  - `npm ci && npm test` passes in the worktree (record the baseline pass count).
 
 ══════════════════════════════════════════════════════════════
 1. NON-NEGOTIABLE RULES (paste into every role agent's prompt)
@@ -150,6 +156,8 @@ Loop limit: 3 QA rounds and 2 CTO rounds. If still failing, stop, push the branc
         env vars to set (names only), dashboard steps, live checks to run. Write "None" if none.
       Safety — confirm: no production changes made, flags default off, no secrets in diff.
 - Do NOT merge. Do NOT apply migrations to production. Do NOT deploy.
+- After the PR is open, leave the worktree (cd back to the main checkout) and remove it:
+  git worktree remove <worktree-path>. Keep the branch; fixes after review go in a new worktree on that branch.
 
 ══════════════════════════════════════════════════════════════
 5. FINAL MESSAGE TO THE USER
