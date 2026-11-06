@@ -22,6 +22,12 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import pg from "pg";
 import { artifactHash, validatePanel } from "../../src/lib/repairs/workflow.js";
+import {
+  SCHEDULES_TICK_KIND,
+  registerAiVisibilityScheduleJobs,
+  resetAiVisibilityScheduleJobDeps,
+} from "../../src/lib/schedules/aiVisibilitySchedules.jobs.ts";
+import { getJobDefinition } from "../../src/lib/jobs/registry.ts";
 
 const host = process.env.PGHOST || "";
 const database = process.env.PGDATABASE || "";
@@ -42,7 +48,11 @@ const id = () => crypto.randomUUID();
 const DAY = 86_400_000;
 const iso = (ms) => new Date(ms).toISOString();
 
+const groupFlagIdx = process.argv.indexOf("--group");
+const targetGroup = groupFlagIdx !== -1 ? process.argv[groupFlagIdx + 1] : null;
+
 async function runGroup(groupName, fn) {
+  if (targetGroup && targetGroup !== groupName) return;
   await fn();
   passed.push(groupName);
   console.log(`PASS ${groupName}`);
@@ -652,8 +662,171 @@ try {
     assert.equal(cntResult.missed, 0);
   });
 
-  assert.equal(passed.length, 9);
-  console.log("ok 9 groups");
+  // -------------------------------------------------------------------------
+  // Group 10: tick (F10-AC-06 DB)
+  // -------------------------------------------------------------------------
+  await runGroup("tick", async () => {
+    const wsStart = await seedWorkspace("tick-start", { panel: true });
+    const wsSkip = await seedWorkspace("tick-skip", { panel: false });
+
+    const past = Date.now() - 2 * DAY;
+    await insertSchedule(wsStart.brand, { next: past, max: 20 });
+    await insertSchedule(wsSkip.brand, { next: past, max: 20 });
+
+    const fakeAdmin = {
+      from: (table) => ({
+        select: (cols) => ({
+          eq: (c1, v1) => ({
+            eq: (c2, v2) => ({
+              lte: (c3, v3) => ({
+                order: (c4, opts) => ({
+                  limit: async (lim) => {
+                    const r = await query(
+                      "SELECT brand, next_run_at, schedule_interval, approved_max_usd FROM public.scan_schedules WHERE managed_by = $1 AND enabled = $2 AND next_run_at <= $3::timestamptz ORDER BY next_run_at ASC LIMIT $4",
+                      [v1, v2, v3, lim],
+                    );
+                    return { data: r.rows, error: null };
+                  },
+                }),
+              }),
+            }),
+            maybeSingle: async () => {
+              if (table === "customer_brands") {
+                const r = await query("SELECT is_active FROM public.customer_brands WHERE brand_key = $1", [v1]);
+                return { data: r.rows[0] || null, error: null };
+              }
+              if (table === "probe_dispatch_control") {
+                return { data: { paused: false, brand_allowlist: null }, error: null };
+              }
+              return { data: null, error: null };
+            },
+          }),
+        }),
+      }),
+      rpc: async (fn, args) => {
+        if (fn === "start_customer_window") {
+          const res = await start({
+            brand: args.p_brand,
+            now: args.p_now,
+            observed: args.p_observed_next,
+            windowAt: args.p_window_at,
+            missed: args.p_missed,
+            next: args.p_next,
+            jobId: args.p_job_id,
+            approvedMax: args.p_approved_max,
+            quote: args.p_quote,
+          });
+          return { data: res, error: null };
+        }
+        if (fn === "block_customer_window") {
+          const res = await block(
+            {
+              brand: args.p_brand,
+              now: args.p_now,
+              observed: args.p_observed_next,
+              windowAt: args.p_window_at,
+              missed: args.p_missed,
+              next: args.p_next,
+            },
+            args.p_reason,
+          );
+          return { data: res, error: null };
+        }
+        return { data: null, error: null };
+      },
+    };
+
+    const quoteMock = async (_k, ctx) => {
+      const r = await query(
+        "SELECT a.id FROM public.repair_artifact_heads h JOIN public.repair_artifacts a ON a.id = h.artifact_id WHERE h.brand = $1 AND h.kind = 'panel' AND h.artifact_key = 'default' AND a.state = 'approved'",
+        [ctx.brandKey],
+      );
+      if (r.rows.length === 0) {
+        return {
+          action: "ai_visibility.scan.run",
+          totalUsd: 15,
+          expectedUsd: 10,
+          monthly: { interval: "daily", runsPerMonth: 30, totalUsd: 450 },
+          warnings: [],
+          blocked: { code: "panel_not_approved", message: "Review and approve question panel" },
+          units: [],
+          lines: [],
+        };
+      }
+      return {
+        action: "ai_visibility.scan.run",
+        totalUsd: 15,
+        expectedUsd: 10,
+        monthly: { interval: "daily", runsPerMonth: 30, totalUsd: 450 },
+        warnings: [],
+        blocked: null,
+        units: [],
+        lines: [],
+      };
+    };
+
+    const fakeCtx = {
+      jobId: id(),
+      brandKey: "system",
+      payload: {},
+      trigger: { type: "system" },
+      step: {
+        do: async (_name, _opts, fn) => {
+          if (typeof _opts === "function") return _opts();
+          return fn();
+        },
+        sleep: async () => {},
+      },
+    };
+
+    let wakeCount = 0;
+    const scheduleDeps = {
+      isFeatureEnabled: async () => true,
+      quote: quoteMock,
+      dispatchBudget: () => ({ dayCap: null }),
+      reserveSpend: async () => ({ holdId: "hold-tick", existing: false }),
+      releaseSpend: async () => {},
+      wakeScanWorker: () => {
+        wakeCount += 1;
+        return { fired: true, reason: null };
+      },
+    };
+
+    registerAiVisibilityScheduleJobs({
+      admin: fakeAdmin,
+      now: () => new Date(),
+      scheduleDeps,
+    });
+
+    const def = getJobDefinition(SCHEDULES_TICK_KIND);
+    const result = await def.handler(fakeCtx);
+    assert.equal(result.status, "completed");
+    assert.equal(result.result.started, 1);
+    assert.equal(result.result.skipped.panel_not_approved, 1);
+    assert.equal(result.result.failed, 0);
+    assert.equal(wakeCount, 1);
+
+    const sStart = await schedule(wsStart.brand);
+    assert.ok(ms(sStart.next_run_at) > past, "wsStart next_run_at advanced");
+    assert.equal((await jobs(wsStart.brand)).length, 1);
+    assert.equal((await windows(wsStart.brand)).length, 1);
+
+    const sSkip = await schedule(wsSkip.brand);
+    assert.ok(ms(sSkip.next_run_at) > past, "wsSkip next_run_at advanced");
+    assert.equal(sSkip.last_skip_reason, "panel_not_approved");
+    assert.equal((await jobs(wsSkip.brand)).length, 0);
+    assert.equal((await windows(wsSkip.brand)).length, 1);
+
+    resetAiVisibilityScheduleJobDeps();
+  });
+
+  if (targetGroup) {
+    assert.equal(passed.length, 1);
+    console.log(`ok 1 group (${targetGroup})`);
+  } else {
+    assert.equal(passed.length, 10);
+    console.log("ok 10 groups");
+  }
 } catch (error) {
   console.error(error);
   process.exitCode = 1;
