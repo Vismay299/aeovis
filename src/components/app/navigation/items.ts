@@ -24,6 +24,11 @@ import {
   Users,
 } from "lucide-react";
 import type { NavGroup } from "./navModel.ts";
+import {
+  overviewQueryOptions,
+  panelQueryOptions,
+  gscQueryOptions,
+} from "../../../lib/query/portalQueries.ts";
 
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
@@ -36,6 +41,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/portal",
         icon: LayoutDashboard,
         match: "exact",
+        prefetch: overviewQueryOptions,
       },
     ],
   },
@@ -51,6 +57,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         // The question history page (F12) is not an item of its own; it lights
         // "Questions" instead.
         activePrefixes: ["/portal/questions"],
+        prefetch: panelQueryOptions,
       },
       {
         id: "scans",
@@ -77,6 +84,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/portal/search-console",
         icon: Search,
         badge: "gsc",
+        prefetch: gscQueryOptions,
       },
     ],
   },

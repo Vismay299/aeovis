@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Play, Radar } from "lucide-react";
+import { PrefetchLink } from "@/components/app/PrefetchLink";
+import { scanReportQueryOptions } from "@/lib/query/portalQueries";
 import { usePortal } from "@/components/portal/PortalShell";
 import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
 import MockScanPanel from "@/components/portal/scans/MockScanPanel";
@@ -29,8 +31,9 @@ function ScanRow({ scan }) {
   const label = `Open scan from ${formatDate(scan.scanned_at || scan.created_at, { withTime: true })}`;
 
   return (
-    <Link
+    <PrefetchLink
       href={`/portal/scans/${encodeURIComponent(scan.id)}`}
+      prefetch={() => scanReportQueryOptions(scan.id)}
       aria-label={label}
       className="group flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
     >
@@ -59,7 +62,7 @@ function ScanRow({ scan }) {
       <span className="reveal-on-hover text-muted-foreground" aria-hidden="true">
         <ChevronRight className="size-4" />
       </span>
-    </Link>
+    </PrefetchLink>
   );
 }
 

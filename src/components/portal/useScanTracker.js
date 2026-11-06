@@ -1,232 +1,182 @@
 "use client";
 
-/**
- * Tracks the workspace's running AI visibility scan for the customer portal.
- *
- * It polls GET /api/scan/<job_id>/status — the same route the public scan page
- * polls. That route is not just a read: every poll also checks the run ledger
- * and re-fires a stalled scan chunk (poll-driven rescue, P0.2). Without this
- * poll a customer scan only advanced when the 10-minute cron sweep reached it,
- * which is why the portal used to sit on "generating_prompts · 10%".
- *
- * Progress is folded through lib/scanProgress so a blip never rewinds the bar
- * and "unknown" is never drawn as 0%.
- */
-
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { pollIntervalMs } from "@/lib/query/polling";
+import { keys } from "@/lib/query/keys";
 import {
-  initialScanProgress,
-  beginScanProgress,
-  applyScanReading,
-  applyScanUnknown,
-  isReconnecting,
-} from "@/lib/scanProgress";
+  ACTIVE_SCAN_STATUSES,
+  PANEL_NOT_APPROVED,
+  SCAN_ALREADY_RUNNING,
+  SCAN_POLL_SECONDS,
+  initialTrackerState,
+  scanTrackerReducer,
+  trackerView,
+} from "./scanTrackerModel";
 
-export const ACTIVE_SCAN_STATUSES = ["pending", "generating_prompts", "probing", "scoring"];
-
-/** 409 codes from POST /api/customer/scan. Only the second one means "a run exists". */
-export const PANEL_NOT_APPROVED = "panel_not_approved";
-export const SCAN_ALREADY_RUNNING = "scan_already_running";
-
-export const SCAN_STAGES = [
-  { status: "pending", label: "Queued", detail: "Your scan is lined up to start" },
-  { status: "generating_prompts", label: "Writing questions", detail: "Real buyer questions for your category" },
-  { status: "probing", label: "Asking AI engines", detail: "Every question goes to each engine" },
-  { status: "scoring", label: "Scoring answers", detail: "Which brands each answer names" },
-];
-
-/** Index into SCAN_STAGES; SCAN_STAGES.length once complete, -1 if unknown. */
-export function scanStageIndex(status) {
-  if (status === "complete") return SCAN_STAGES.length;
-  return SCAN_STAGES.findIndex((stage) => stage.status === status);
-}
-
-const POLL_MS = 2500;
-/** Matches HEARTBEAT_STALE_MS: past this the status route rescues the run. */
-export const SCAN_STALL_MS = 3 * 60 * 1000;
+export {
+  ACTIVE_SCAN_STATUSES,
+  PANEL_NOT_APPROVED,
+  SCAN_ALREADY_RUNNING,
+  SCAN_STAGES,
+  scanStageIndex,
+  SCAN_STALL_MS,
+} from "./scanTrackerModel";
 
 export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
-  const [job, setJob] = useState(null);
-  const [progress, setProgress] = useState(initialScanProgress);
-  const [quietMs, setQuietMs] = useState(null);
-  const [finished, setFinished] = useState(null);
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState("");
-  const [errorCode, setErrorCode] = useState(null);
-  const [notice, setNotice] = useState("");
-  // Overview can lag behind a status poll. Never resurrect a scan that has
-  // already finished or returned 404 during this workspace session.
-  const settledJobIds = useRef(new Set());
+  const [state, setState] = useState(() => initialTrackerState(brandKey));
+  const dispatch = useCallback(
+    (action) => setState((s) => scanTrackerReducer(s, action)),
+    []
+  );
 
+  const brandRef = useRef(brandKey);
+  brandRef.current = brandKey;
   const onFinishedRef = useRef(onFinished);
   onFinishedRef.current = onFinished;
   const onUnauthorizedRef = useRef(onUnauthorized);
   onUnauthorizedRef.current = onUnauthorized;
 
-  // A different workspace is a different scan.
   useEffect(() => {
-    settledJobIds.current = new Set();
-    setJob(null);
-    setProgress(initialScanProgress());
-    setQuietMs(null);
-    setFinished(null);
-    setError("");
-    setErrorCode(null);
-    setNotice("");
-  }, [brandKey]);
-
-  // Adopt a scan that is already running (started in another tab, by a
-  // teammate, or before a reload) as soon as the overview reports it.
-  useEffect(() => {
-    if (job && ACTIVE_SCAN_STATUSES.includes(job.status)) return;
-    const running = (jobs || []).find((candidate) =>
-      ACTIVE_SCAN_STATUSES.includes(candidate.status) && !settledJobIds.current.has(candidate.id),
-    );
-    if (!running) return;
-    setJob({ id: running.id, status: running.status, created_at: running.created_at });
-    setFinished(null);
-    setQuietMs(null);
-    setProgress(
-      applyScanReading(beginScanProgress(), {
-        stage: Math.max(0, scanStageIndex(running.status)),
-        progressPct: running.progress_pct,
-      }),
-    );
-  }, [jobs, job]);
-
-  const jobId = job?.id || null;
-  const jobActive = Boolean(job && ACTIVE_SCAN_STATUSES.includes(job.status));
+    dispatch({ type: "brandChanged", brandKey });
+  }, [brandKey, dispatch]);
 
   useEffect(() => {
-    if (!jobId || !jobActive) return undefined;
-    let live = true;
-    let timer = null;
+    dispatch({ type: "jobsSeen", jobs: jobs || [] });
+  }, [jobs, state.job, dispatch]);
 
-    async function poll() {
+  const jobId = state.job?.id || null;
+  const active = Boolean(
+    state.job && ACTIVE_SCAN_STATUSES.includes(state.job.status)
+  );
+  const activeRef = useRef(active);
+  activeRef.current = active;
+
+  const statusQuery = useQuery({
+    queryKey: keys.scanStatus(brandKey || "none", jobId || "none"),
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`/api/scan/${encodeURIComponent(jobId)}/status`, {
+        cache: "no-store",
+        signal,
+      });
+      const body = await response.json().catch(() => null);
+      return { jobId, httpStatus: response.status, ok: response.ok, body };
+    },
+    enabled: Boolean(brandKey && jobId && active),
+    refetchInterval: () =>
+      activeRef.current
+        ? pollIntervalMs(
+            {},
+            {
+              isActive: () => true,
+              floorSeconds: SCAN_POLL_SECONDS,
+              fallbackSeconds: SCAN_POLL_SECONDS,
+            }
+          )
+        : false,
+    refetchIntervalInBackground: false,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (statusQuery.dataUpdatedAt > 0 && statusQuery.data) {
+      dispatch({ type: "statusReceived", ...statusQuery.data });
+    }
+  }, [statusQuery.dataUpdatedAt, dispatch]);
+
+  useEffect(() => {
+    if (statusQuery.errorUpdatedAt > 0 && jobId) {
+      dispatch({ type: "statusNetworkError", jobId });
+    }
+  }, [statusQuery.errorUpdatedAt, jobId, dispatch]);
+
+  const [, forceUpdate] = useState(0);
+
+  useEffect(() => {
+    if (state.notifySeq > 0) {
+      onFinishedRef.current?.();
+      forceUpdate((c) => c + 1);
+    }
+  }, [state.notifySeq]);
+
+  const postStart = useCallback(
+    async (maxUsd) => {
+      const requestedFor = brandKey;
+      dispatch({ type: "startRequested" });
       try {
-        const response = await fetch(`/api/scan/${encodeURIComponent(jobId)}/status`, { cache: "no-store" });
-        if (!live) return;
-        if (response.status === 404) {
-          // Gone, or not this account's: stop tracking rather than spin forever.
-          settledJobIds.current.add(jobId);
-          setJob(null);
-          setProgress(initialScanProgress());
-          setQuietMs(null);
+        const bodyPayload = { brand_key: requestedFor };
+        if (maxUsd !== undefined) bodyPayload.max_usd = maxUsd;
+        const response = await fetch("/api/customer/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bodyPayload),
+        });
+        if (response.status === 401) {
+          onUnauthorizedRef.current?.();
           return;
         }
-        const body = await response.json().catch(() => null);
-        if (!live) return;
-        if (!response.ok || !body || body.transient_error || body.status === "unknown") {
-          setProgress((prev) => applyScanUnknown(prev, { reason: body?.status === "unknown" ? "transient_error" : `http_${response.status}` }));
-        } else {
-          setQuietMs(typeof body.execution?.quiet_ms === "number" ? body.execution.quiet_ms : null);
-          if (body.status === "complete") {
-            settledJobIds.current.add(jobId);
-            setProgress((prev) => applyScanReading(prev, { stage: SCAN_STAGES.length, progressPct: 100 }));
-            setJob((prev) => (prev ? { ...prev, status: "complete" } : prev));
-            setFinished({ status: "complete", jobId, resultId: body.result_id || null, terminal_outcome: body.terminal_outcome, at: Date.now() });
-            onFinishedRef.current?.();
-            return;
-          }
-          if (body.status === "failed") {
-            settledJobIds.current.add(jobId);
-            setJob((prev) => (prev ? { ...prev, status: "failed" } : prev));
-            setFinished({ status: "failed", jobId, error: body.error_message || null, at: Date.now() });
-            onFinishedRef.current?.();
-            return;
-          }
-          setJob((prev) => (prev ? { ...prev, status: body.status, created_at: prev.created_at || body.created_at } : prev));
-          setProgress((prev) =>
-            applyScanReading(prev, { stage: Math.max(0, scanStageIndex(body.status)), progressPct: body.progress_pct }),
-          );
+        const body = await response.json().catch(() => ({}));
+        if (brandRef.current !== requestedFor) return;
+
+        if (response.status === 409 && body.code === PANEL_NOT_APPROVED) {
+          dispatch({
+            type: "startResolved",
+            brandKey: requestedFor,
+            outcome: { kind: "panelNotApproved" },
+          });
+          return;
         }
-      } catch {
-        if (!live) return;
-        setProgress((prev) => applyScanUnknown(prev, { reason: "network" }));
+        if (response.status === 409 && body.code === SCAN_ALREADY_RUNNING) {
+          dispatch({
+            type: "startResolved",
+            brandKey: requestedFor,
+            outcome: { kind: "alreadyRunning" },
+          });
+          return;
+        }
+        if (!response.ok) {
+          dispatch({
+            type: "startResolved",
+            brandKey: requestedFor,
+            outcome: {
+              kind: "error",
+              message: body.error || "Could not start the scan.",
+            },
+          });
+          return;
+        }
+        dispatch({
+          type: "startResolved",
+          brandKey: requestedFor,
+          outcome: { kind: "started", job_id: body.job_id },
+        });
+      } catch (startError) {
+        if (brandRef.current !== requestedFor) return;
+        dispatch({
+          type: "startResolved",
+          brandKey: requestedFor,
+          outcome: {
+            kind: "error",
+            message: startError.message || "Could not start the scan.",
+          },
+        });
       }
-      if (live) timer = setTimeout(poll, POLL_MS);
-    }
+    },
+    [brandKey, dispatch]
+  );
 
-    poll();
-    return () => {
-      live = false;
-      if (timer) clearTimeout(timer);
-    };
-  }, [jobId, jobActive]);
-
-  const start = useCallback(async () => {
-    if (!brandKey || starting) return;
-    setStarting(true);
-    setError("");
-    setErrorCode(null);
-    setNotice("");
-    setFinished(null);
-    try {
-      const response = await fetch("/api/customer/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand_key: brandKey }),
-      });
-      if (response.status === 401) {
-        onUnauthorizedRef.current?.();
-        return;
-      }
-      const body = await response.json().catch(() => ({}));
-      if (response.status === 409 && body.code === PANEL_NOT_APPROVED) {
-        // Nothing is running: scans need an approved question panel first.
-        setErrorCode(PANEL_NOT_APPROVED);
-        throw new Error("Scans ask the questions in your approved question panel. Review and approve it on Questions & evidence, then run the scan.");
-      }
-      if (response.status === 409 && body.code === SCAN_ALREADY_RUNNING) {
-        // Not an error: one is already running. Show its progress instead.
-        setNotice("A scan is already running for this workspace — showing its progress.");
-        onFinishedRef.current?.();
-        return;
-      }
-      if (!response.ok) throw new Error(body.error || "Could not start the scan.");
-      setJob({ id: body.job_id, status: "pending", created_at: new Date().toISOString() });
-      setProgress(beginScanProgress());
-      setQuietMs(null);
-      onFinishedRef.current?.();
-    } catch (startError) {
-      setError(startError.message || "Could not start the scan.");
-    } finally {
-      setStarting(false);
-    }
-  }, [brandKey, starting]);
+  const start = useCallback(() => {
+    if (!brandKey || state.starting) return;
+    return postStart(undefined);
+  }, [brandKey, state.starting, postStart]);
 
   const dismiss = useCallback(() => {
-    setFinished(null);
-    setNotice("");
-    setError("");
-    setErrorCode(null);
-    if (job && !ACTIVE_SCAN_STATUSES.includes(job.status)) {
-      setJob(null);
-      setProgress(initialScanProgress());
-    }
-  }, [job]);
-
-  const stageIndex = job ? Math.max(0, scanStageIndex(job.status)) : -1;
+    dispatch({ type: "dismissed" });
+  }, [dispatch]);
 
   return {
-    /** The tracked job ({ id, status, created_at }) or null. */
-    job,
-    /** True while a scan is queued or running. */
-    active: jobActive,
-    /** 0–100, or null when no percentage has been reported yet. */
-    percent: typeof progress.progress === "number" ? progress.progress : null,
-    stageIndex,
-    stage: stageIndex >= 0 && stageIndex < SCAN_STAGES.length ? SCAN_STAGES[stageIndex] : null,
-    reconnecting: isReconnecting(progress),
-    /** True once nothing has moved for a full staleness window. */
-    stalled: typeof quietMs === "number" && quietMs > SCAN_STALL_MS,
-    /** { status: "complete" | "failed", jobId, error?, at } after a tracked run ends. */
-    finished,
-    starting,
-    error,
-    /** Machine code for `error`, e.g. PANEL_NOT_APPROVED; null otherwise. */
-    errorCode,
-    notice,
+    ...trackerView(state),
     start,
     dismiss,
   };
