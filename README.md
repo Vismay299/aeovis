@@ -205,7 +205,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `155_f24_signup_guard` | Refuses disposable email domains at account creation through the Supabase Before User Created hook; invited addresses pass. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `085_f10_customer_schedules` | Customer-managed scan schedules: interval, approved maximum, skip reasons; start/block window functions; legacy path ignores customer rows. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `075_f08_workspace_questions` | Stable question identity under reviewed panels: questions, settings, events, normaliser. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
-| `076_f08_question_backfill` | One-time import of existing panel versions into workspace questions. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `076_f08_question_backfill` | One-time import of existing panel versions into workspace questions; atomic approved legacy panel sync and append. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

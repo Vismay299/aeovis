@@ -1688,11 +1688,15 @@ member-only reads and service-role writes. It also creates
 Adds the service-role-only `backfill_workspace_questions` function. It imports
 every distinct prompt across `panel/default` artifact versions once, marks the
 current draft or approved head active, and copies its persona and market
-context. The app invokes it lazily; operators must not call it manually.
+context. It also adds `append_approved_panel_with_questions`, which runs the
+lazy backfill, legacy question sync, and version-checked artifact append in one
+transaction so a stale expected version rolls back all three effects. The app
+invokes the backfill lazily; operators must not call it manually.
 
 ### Objects to check in the catalog
 - function `public.backfill_workspace_questions(text)`
+- function `public.append_approved_panel_with_questions(text,text,integer,text,uuid)`
 
 ### Apply
-1. Apply 076 after 075 and before deploying F08. The backfill runs on the first `GET /api/customer/questions` or first approved legacy panel post and records `backfilled_at` for idempotency.
+1. Apply 076 after 075 and before deploying F08. The backfill runs on the first `GET /api/customer/questions` or first approved legacy panel post and records `backfilled_at` for idempotency. Approved legacy panels use the atomic append function; append conflicts roll back backfill and question sync.
 2. Verified against loopback QA PostgreSQL by `scripts/qa/check-f08-db.mjs`.
