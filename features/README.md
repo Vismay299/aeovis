@@ -38,7 +38,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F02](./F02-dataforseo-provider.md) | DataForSEO provider and bake-off | Engines and capture; "What I could not verify" | 0 | F01, F03 phase 1 (price tables) | 045–049 | In progress |
 | [F03](./F03-cost-ledger.md) | Cost ledger and per-answer cost | Cost per answer | 0 | F01 (F04, F05 for phase 4 UI) | 050–054 | In progress |
 | [F04](./F04-design-system-and-app-shell.md) | Design system and app shell (OpenSEO UI/UX) | UI/UX decision; Frontend patterns | 0 | F01 (phase 1 TypeScript, phase 2 flags) | 055–059 | In progress |
-| [F05](./F05-client-data-layer.md) | Client data layer and interaction patterns | Frontend patterns | 0 | F04 | 060–064 | In progress |
+| [F05](./F05-client-data-layer.md) | Client data layer and interaction patterns | Frontend patterns | 0 | F04 | 060–064 | Merged |
 | [F06](./F06-data-tables-and-export.md) | Data tables and export | Tables and export | 0 | F04, F05 | 065–069 | Spec ✓ |
 | [F07](./F07-project-memory.md) | Project memory | Project memory | 1 | F01 | 070–074 | In progress |
 | [F08](./F08-ai-question-setup.md) | AI-drafted question setup and curation | Questions at setup; question handling | 1 | F02, F03, F07, F09 | 075–079 | Spec ✓ |
