@@ -8,3 +8,4 @@ registerCostJobs();
 import "../pricing/jobs.ts";
 import "../schedules/aiVisibilitySchedules.jobs.ts";
 import "../email/jobs.ts";
+import "../ga4/retention.ts";

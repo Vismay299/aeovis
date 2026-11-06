@@ -21,6 +21,7 @@ import type { FeatureName } from "./names.ts";
 export const CLIENT_FEATURES: readonly FeatureName[] = [
   "product_analytics",
   "lifecycle_email",
+  "ga4",
 ];
 
 export type ClientFeatureName = FeatureName;
