@@ -434,6 +434,20 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "enqueue_customer_gsc_syncs" },
     { kind: "function", name: "decide_customer_content" },
   ],
+  "075_f08_workspace_questions.sql": [
+    { kind: "table", name: "workspace_question_settings" },
+    { kind: "table", name: "workspace_questions" },
+    { kind: "column", name: "workspace_questions.text_normalized" },
+    { kind: "table", name: "workspace_question_events" },
+    { kind: "function", name: "normalize_question_text" },
+    { kind: "function", name: "add_workspace_question" },
+    { kind: "function", name: "save_workspace_questions" },
+    { kind: "function", name: "sync_panel_questions" },
+    { kind: "function", name: "prune_workspace_question_events" },
+  ],
+  "076_f08_question_backfill.sql": [
+    { kind: "function", name: "backfill_workspace_questions" },
+  ],
 };
 
 /**
