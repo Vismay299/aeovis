@@ -202,11 +202,27 @@ function extractObjectsFromSql(sql) {
     }, []);
 
   let pendingBucket = false;
+  let createTable = null; // the table whose column list is being read
   for (const line of joined) {
     // CREATE TABLE [IF NOT EXISTS] <name>
     const tableMatch = line.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?(\w+)/i);
     if (tableMatch) {
       add("table", tableMatch[1].toLowerCase());
+      createTable = /\(\s*$/.test(line) ? tableMatch[1].toLowerCase() : null;
+      continue;
+    }
+
+    // Column definitions inside a CREATE TABLE block, one per line
+    // (e.g. 075's generated workspace_questions.text_normalized).
+    if (createTable) {
+      if (/^\)/.test(line)) {
+        createTable = null;
+      } else {
+        const colDef = line.match(/^"?([a-z_][a-z0-9_]*)"?\s+[a-z]/i);
+        if (colDef && !/^(CONSTRAINT|PRIMARY|UNIQUE|CHECK|FOREIGN|EXCLUDE|LIKE)$/i.test(colDef[1])) {
+          add("column", `${createTable}.${colDef[1].toLowerCase()}`);
+        }
+      }
     }
 
     // CREATE [UNIQUE] INDEX [IF NOT EXISTS] <name>
