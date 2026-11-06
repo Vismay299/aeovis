@@ -1,0 +1,32 @@
+[
+  {
+    "name": "case and repeated spaces",
+    "raw": "  Best   T-SHIRTS  ",
+    "canonical": "Best T-SHIRTS",
+    "normalized": "best t-shirts"
+  },
+  {
+    "name": "tabs and newlines",
+    "raw": "\tWhich\tbrands\nmake\r\nshirts?  ",
+    "canonical": "Which brands make shirts?",
+    "normalized": "which brands make shirts?"
+  },
+  {
+    "name": "non-breaking space after NFKC",
+    "raw": "Which\u00a0brands sell tees?",
+    "canonical": "Which brands sell tees?",
+    "normalized": "which brands sell tees?"
+  },
+  {
+    "name": "emoji",
+    "raw": "  What does 🧵 mean?  ",
+    "canonical": "What does 🧵 mean?",
+    "normalized": "what does 🧵 mean?"
+  },
+  {
+    "name": "Hindi",
+    "raw": " भारत के   अच्छे कपड़े? ",
+    "canonical": "भारत के अच्छे कपड़े?",
+    "normalized": "भारत के अच्छे कपड़े?"
+  }
+]
