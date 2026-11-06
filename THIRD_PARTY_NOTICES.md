@@ -258,6 +258,7 @@ SOFTWARE.
 - `src/components/app/search-tabs/useSearchTabNavigation.ts` (from `src/client/features/search-tabs/useSearchTabNavigation.ts`)
 - `src/components/app/search-tabs/SearchTabStrip.tsx` (from `src/client/features/search-tabs/SearchTabStrip.tsx`)
 - `src/shared/json.ts` (from `src/shared/json.ts`)
+- `src/lib/providers/loops/client.ts` (from `src/server/email/loops-client.ts`, `src/server/email/loops.ts`, `src/server/billing/loops-sync.ts`)
 - `src/lib/query/localHistory.ts` (from `src/client/hooks/useLocalHistoryStore.ts`)
 - `src/lib/query/localHistory.test.ts` (from `src/client/hooks/useLocalHistoryStore.ts`)
 - `src/components/app/hooks/useLocalHistoryStore.ts` (from `src/client/hooks/useLocalHistoryStore.ts`)
