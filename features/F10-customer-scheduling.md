@@ -454,9 +454,9 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 ### Phase 1 — Shared schedule maths and generic runner
 **Goal:** pure, reusable scheduling logic with OpenSEO's tested behaviour.
 
-- [ ] **P1.T1 Schedule maths**
+- [x] **P1.T1 Schedule maths**
   - [x] **P1.T1.S1** *Files:* `src/shared/schedule.ts`, `src/shared/schedule.test.ts`. *Do:* §6.2.1; port `rank-tracking.test.ts:53-160` cases (monthly end-of-month, advancing past now, chosen time next occurrence, timezone with weekday, monthly on the user's last day across a UTC date change), plus `planWindows` cases (none due; one due; three elapsed → run = third, missed = first two; `next > now`), `skipReasonMessage` for every reason, and an import guard (file text has no `"../lib/"` or `"@/lib/"`). *Verify:* `node --test src/shared/schedule.test.ts` → pass (F10-AC-01, 02).
-- [ ] **P1.T2 Generic runner and soak ledger**
+- [x] **P1.T2 Generic runner and soak ledger**
   - [x] **P1.T2.S1** *Files:* `src/lib/schedules/runDue.ts`, `runDue.test.ts`. *Do:* §6.2.2; fake adapters: not-due item untouched; skip → block called once; start; thrown start → block `start_failed`; failing block counted in `failed` and the next item still runs; `wrap` receives `window:<key>:<iso>`. *Verify:* `node --test src/lib/schedules/runDue.test.ts` → pass (F10-AC-15).
   - [x] **P1.T2.S2** *Files:* `src/lib/schedules/soakLedger.ts`, `soakLedger.test.ts`, `scripts/qa/f10-window-ledger.mjs`. *Do:* `expectedWindows({ interval, anchor, from, to })` (walks `computeNextRunAt`), `unexplainedGaps(expected, recorded)` (expected windows with no `measurement_windows` row); the script (service-role read, `--brand`, `--from`, `--to`) prints one line per window `{windowAt} {disposition} {reason}` and `gaps=N`; read-only. *Verify:* `node --test src/lib/schedules/soakLedger.test.ts` → pass; `node scripts/qa/f10-window-ledger.mjs --help` exits 0 (F10-AC-16).
 
@@ -465,16 +465,27 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 ### Phase 2 — Database: customer schedules and window functions
 **Goal:** customer rows can be started or skipped atomically on the R11 ledger without touching operator behaviour.
 
-- [ ] **P2.T1 Migration and paperwork**
-  - [ ] **P2.T1.S1** *Files:* `supabase/migrations/085_f10_customer_schedules.sql`. *Do:* §6.1. *Verify:* CI `customer-database` → green.
-  - [ ] **P2.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`, `.github/workflows/ci.yml` (add `node scripts/qa/check-f10-db.mjs` after `check-repair-workflows.mjs`). *Verify:* `node --test src/lib/migrationsRunner.test.mjs` → pass.
-  - [ ] **P2.T1.S3** *Files:* `README.md` (row `085_f10_customer_schedules` "Customer-managed scan schedules: interval, approved maximum, skip reasons; start/block window functions; legacy path ignores customer rows."), `docs/OPERATOR_LEDGER.md` § C (append; "apply after 080"), `docs/PROD_MIGRATIONS.md` (one bullet). *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
-- [ ] **P2.T2 Legacy filter**
-  - [ ] **P2.T2.S1** *Files:* `src/lib/db/analytics.js` (`listDueSchedules` filter), `src/lib/db/analytics.test.mjs` (new case: a recorded query includes `managed_by = operator`). *Verify:* `node --test src/lib/db/analytics.test.mjs` → pass (F10-AC-03 unit).
-- [ ] **P2.T3 Database harness**
-  - [ ] **P2.T3.S1** *Files:* `scripts/qa/check-f10-db.mjs` (loopback `_qa` guard; seeds a workspace with an approved `panel/default`, `probe_dispatch_control` row, F09 080 columns). Groups: `schema` (constraint rejects a customer row without interval/max; `enqueue_measurement_window` → `customer_managed`), `legacy` (032 behaviours on an operator row unchanged), `start` (job row fields, window `started`, schedule advanced, `last_skip_reason` cleared), `race` (two connections call `start_customer_window` with the same observed time → one job), `overlap` (active job → `overlap`), `skip-panel` (no approved head → `blocked panel_not_approved`), `block` (`block_customer_window` with `price_changed` → window, reason, advance; stale observed time → `not_due`), `pause` (disabled row → `not_due`, no window). *Verify:* `node scripts/qa/check-f10-db.mjs` → "ok 8 groups" (F10-AC-03, 05 DB, 07 DB, 08, 09).
+- [x] **P2.T1 Migration and paperwork**
+  - [x] **P2.T1.S1** *Files:* `supabase/migrations/085_f10_customer_schedules.sql`. *Do:* §6.1. *Verify:* CI `customer-database` → green.
+  - [x] **P2.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`, `.github/workflows/ci.yml` (add `node scripts/qa/check-f10-db.mjs` after `check-repair-workflows.mjs`). *Verify:* `node --test src/lib/migrationsRunner.test.mjs` → pass.
+  - [x] **P2.T1.S3** *Files:* `README.md` (row `085_f10_customer_schedules` "Customer-managed scan schedules: interval, approved maximum, skip reasons; start/block window functions; legacy path ignores customer rows."), `docs/OPERATOR_LEDGER.md` § C (append; "apply after 080"), `docs/PROD_MIGRATIONS.md` (one bullet). *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+- [x] **P2.T2 Legacy filter**
+  - [x] **P2.T2.S1** *Files:* `src/lib/db/analytics.js` (`listDueSchedules` filter), `src/lib/db/analytics.test.mjs` (new case: a recorded query includes `managed_by = operator`). *Verify:* `node --test src/lib/db/analytics.test.mjs` → pass (F10-AC-03 unit).
+- [x] **P2.T3 Database harness**
+  - [x] **P2.T3.S1** *Files:* `scripts/qa/check-f10-db.mjs` (loopback `_qa` guard; seeds a workspace with an approved `panel/default`, `probe_dispatch_control` row, F09 080 columns). Groups: `schema` (constraint rejects a customer row without interval/max; `enqueue_measurement_window` → `customer_managed`), `legacy` (032 behaviours on an operator row unchanged), `start` (job row fields, window `started`, schedule advanced, `last_skip_reason` cleared), `race` (two connections call `start_customer_window` with the same observed time → one job), `overlap` (active job → `overlap`), `skip-panel` (no approved head → `blocked panel_not_approved`), `block` (`block_customer_window` with `price_changed` → window, reason, advance; stale observed time → `not_due`), `pause` (disabled row → `not_due`, no window). *Verify:* `node scripts/qa/check-f10-db.mjs` → "ok 9 groups" (group 9 `guards` added in the phase 2 review) (F10-AC-03, 05 DB, 07 DB, 08, 09).
 
 **Checkpoint:** suite, typecheck, build, `check-f10-db.mjs`, `check-repair-workflows.mjs`. ACs 03, 08, 09.
+
+**Phase 2 notes (review fixes on PR #46; deviations from §6.1 and P2.T2.S1):**
+
+- `start_customer_window` returns `not_due` when `p_approved_max` exceeds the row's current `approved_max_usd` (a cap lowered after the tick read the row), so the database enforces the owner's approval.
+- Both functions raise `invalid customer window` for a `p_missed` entry outside `[p_observed_next, p_window_at)`. `block_customer_window` also returns `not_due` for `p_window_at > p_now`, and `{ blocked: false, reason: 'already_recorded' }` (advancing `next_run_at`, no skip reason) when the window is already in the ledger.
+- The start overlap check also matches a running job with `brand_key IS NULL` whose `brand` equals the workspace name, as the legacy path does.
+- `missed` in the start result counts rows actually written (retries report 0).
+- The skip reason for a blocked panel or inactive workspace is computed once into a local.
+- `listDueSchedules` skips `managed_by = 'customer'` rows in `isDueSchedule` (both the database and the memory branch) instead of `.eq("managed_by","operator")`. That works with or without migration 085, so the code can deploy before the migration. The unit test asserts customer rows are excluded and the query does not name `managed_by`.
+- `scripts/setup-supabase.mjs` checks all nine 085 columns, `scan_schedules_f10_checks` and `scan_schedules_customer_due_idx`.
+- `check-f10-db.mjs` group 9 `guards` covers each of the above.
 
 ### Phase 3 — Tick, priced action and routes
 **Goal:** schedules run themselves and customers can manage them through the API.
