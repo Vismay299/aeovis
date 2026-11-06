@@ -1707,3 +1707,10 @@ invokes the backfill lazily; operators must not call it manually.
 ## `161_f25_email_functions.sql`
 
 - **Status:** in repo; **not yet applied to production**. Lifecycle email functions: `claim_email_outbox` (concurrent safe skip-locked claim), `close_exhausted_email_outbox` (closes 5-attempt exhausted claims as failed), `email_milestone_candidates` (dynamic query tolerant of optional F10/F18/F22 tables), `prune_email_outbox` (retention prune). Idempotent (`CREATE OR REPLACE FUNCTION`). Verified against disposable PostgreSQL by `scripts/qa/check-f25-db.mjs`.
+## `135_f20_ga4.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply before deploying F20 phase 1. Additive and idempotent, creates `ga4_oauth_attempts`, `ga4_grants`, `ga4_connections` with RLS. Confirm with: `select to_regclass('public.ga4_grants');`.
+
+## `136_f20_ga4_functions.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply after `135_f20_ga4.sql` before deploying F20 phase 1. Creates service-role functions for grant upsert, cache purge, connection set/disconnect, impact, account removal, unused-grant purge, attempt pruning. Confirm with: `select to_regclass('public.ga4_grants');` and `select proname from pg_proc where proname = 'ga4_upsert_grant';`.
