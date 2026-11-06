@@ -128,7 +128,7 @@ export function validatePanel(input, { brandAliases = [] } = {}) {
     input.prompts.length < 1 ||
     input.prompts.length > 200
   )
-    throw new Error("Provide 1–200 panel prompts");
+    throw new Error("Provide 1Ã¢â‚¬â€œ200 panel prompts");
   input = { ...input, context: resolveMeasurementContext(input.context || {}) };
   const errors = [];
   const seen = new Set();
@@ -148,12 +148,7 @@ export function validatePanel(input, { brandAliases = [] } = {}) {
     if (seen.has(normalized))
       errors.push(`Prompt ${index + 1}: duplicate question`);
     seen.add(normalized);
-    const branded = brandAliases.some((alias) =>
-      new RegExp(
-        `(^|[^\\p{L}\\p{N}])${String(alias).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\p{L}\\p{N}]|$)`,
-        "iu",
-      ).test(text),
-    );
+    const branded = matchesBrandAlias(text, brandAliases);
     const purpose = branded
       ? "diagnostic"
       : p.purpose ||
@@ -177,6 +172,7 @@ export function validatePanel(input, { brandAliases = [] } = {}) {
         "customer_research",
         "licensed_panel",
         "manual",
+        "search_questions",
       ].includes(origin)
     )
       errors.push(`Prompt ${index + 1}: invalid origin`);
@@ -228,6 +224,16 @@ export function validatePanel(input, { brandAliases = [] } = {}) {
       {},
     ),
   };
+}
+export function matchesBrandAlias(text, aliases = []) {
+  return aliases.some((alias) => {
+    if (!alias) return false;
+    const escaped = String(alias).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(
+      `(^|[^\\p{L}\\p{N}])${escaped}([^\\p{L}\\p{N}]|$)`,
+      "iu",
+    ).test(text);
+  });
 }
 export function draftCheck(draft, research, verdict) {
   return {

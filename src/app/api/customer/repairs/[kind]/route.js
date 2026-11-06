@@ -13,6 +13,11 @@ import {
 } from "@/lib/repairs/technicalAudit";
 import { getBrandAliases } from "@/lib/scoring/aliases";
 import { safeFetch } from "@/lib/ssrfGuard";
+import {
+  ensureBackfilled,
+  normalizeQuestionText,
+  syncPanelQuestions,
+} from "@/lib/questions/workspaceQuestions.ts";
 export const dynamic = "force-dynamic";
 const json = (data, status = 200) =>
   NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } });
@@ -81,6 +86,33 @@ export async function POST(request, { params }) {
         throw new Error(
           "Review persona and near-duplicate questions before approval",
         );
+      if (state === "approved") {
+        await ensureBackfilled(admin, ctx.brand.brandKey);
+        const { ids } = await syncPanelQuestions(admin, {
+          brandKey: ctx.brand.brandKey,
+          prompts: payload.prompts.map((p) => ({
+            text: p.text,
+            topic: p.topic,
+            purpose: p.purpose,
+            origin: p.origin,
+          })),
+          settings: {
+            persona: payload.persona,
+            country: payload.context.country,
+            language: payload.context.language,
+          },
+          actor: ctx.user.id,
+        });
+        const idsByText = new Map(
+          ids.map((item) => [normalizeQuestionText(item.text), item.question_id]),
+        );
+        const idFor = (text) => idsByText.get(normalizeQuestionText(text));
+        payload.prompts = payload.prompts.map((p) => ({
+          ...p,
+          id: idFor(p.text),
+          question_id: idFor(p.text),
+        }));
+      }
       if (state === "retired" && !body.reason)
         throw new Error("Panel retirement needs a relevance rationale");
       payload = {
