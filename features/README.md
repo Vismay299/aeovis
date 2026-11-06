@@ -41,7 +41,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F05](./F05-client-data-layer.md) | Client data layer and interaction patterns | Frontend patterns | 0 | F04 | 060–064 | Merged |
 | [F06](./F06-data-tables-and-export.md) | Data tables and export | Tables and export | 0 | F04, F05 | 065–069 | Spec ✓ |
 | [F07](./F07-project-memory.md) | Project memory | Project memory | 1 | F01 | 070–074 | In progress |
-| [F08](./F08-ai-question-setup.md) | AI-drafted question setup and curation | Questions at setup; question handling | 1 | F02, F03, F07, F09 | 075–079 | Spec ✓ |
+| [F08](./F08-ai-question-setup.md) | AI-drafted question setup and curation | Questions at setup; question handling | 1 | F02, F03, F07, F09 | 075–079 | In progress |
 | [F09](./F09-price-before-running.md) | Price before running | Price before running | 1 | F03 | 080–084 | In progress |
 | [F10](./F10-customer-scheduling.md) | Customer scheduling | Scheduling | 1 | F01, F09 | 085–089 | In progress |
 | [F11](./F11-prompt-explorer.md) | Prompt Explorer (ask one question now) | Ask one question now | 1 | F02, F03, F04, F05, F08, F09 | 090–094 | Spec ✓ |

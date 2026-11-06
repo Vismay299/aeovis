@@ -461,6 +461,10 @@ Expected, from the DDL: `rls_enabled = true` and exactly one
 `schema_migrations` is created by the runner, not by a migration, and has **no**
 RLS — it is only ever touched over a direct Postgres connection.
 
+F08 adds `workspace_question_settings`, `workspace_questions` and
+`workspace_question_events`; all three must have RLS enabled and a single
+`f08_member_read` policy using `customer_can_access_brand(brand_key)`.
+
 ---
 
 # Per-migration
@@ -1657,3 +1661,38 @@ Refuses disposable email domains at account creation through the Supabase Before
 ## `085_f10_customer_schedules.sql`
 
 - **Status:** in repo; **not yet applied to production**. Apply after `080_f09_price_approvals.sql`; additive and idempotent, no backfill. No deploy-order constraint: `listDueSchedules` skips customer rows in code, so it works before and after 085. Verified against disposable PostgreSQL by `scripts/qa/check-f10-db.mjs` and tenant isolation by `tests/customer-uat.sql`. Rollback is to revert the application change: the legacy path ignores customer rows.
+
+## F08 workspace question identity: `075_f08_workspace_questions.sql`
+
+**Status:** in repo; **not yet applied to production**.
+
+Creates `workspace_question_settings`, `workspace_questions` (including the
+generated `text_normalized` column), and `workspace_question_events`, with
+member-only reads and service-role writes. It also creates
+`normalize_question_text`, `add_workspace_question`, `save_workspace_questions`,
+`sync_panel_questions` and the event-retention function.
+
+### Objects to check in the catalog
+- tables `public.workspace_question_settings`, `public.workspace_questions`, `public.workspace_question_events`
+- generated column `public.workspace_questions.text_normalized`
+- functions `public.normalize_question_text`, `public.add_workspace_question`, `public.save_workspace_questions`, `public.sync_panel_questions`, `public.prune_workspace_question_events`
+
+### Apply
+1. Apply 075 before deploying F08. The migration is additive and idempotent; it does not enable a paid feature or perform a data backfill.
+2. Verified against loopback QA PostgreSQL by `scripts/qa/check-f08-db.mjs`; tenant reads are checked by `tests/customer-uat.sql`.
+
+## F08 question backfill: `076_f08_question_backfill.sql`
+
+**Status:** in repo; **not yet applied to production**.
+
+Adds the service-role-only `backfill_workspace_questions` function. It imports
+every distinct prompt across `panel/default` artifact versions once, marks the
+current draft or approved head active, and copies its persona and market
+context. The app invokes it lazily; operators must not call it manually.
+
+### Objects to check in the catalog
+- function `public.backfill_workspace_questions(text)`
+
+### Apply
+1. Apply 076 after 075 and before deploying F08. The backfill runs on the first `GET /api/customer/questions` or first approved legacy panel post and records `backfilled_at` for idempotency.
+2. Verified against loopback QA PostgreSQL by `scripts/qa/check-f08-db.mjs`.
