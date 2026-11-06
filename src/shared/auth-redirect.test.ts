@@ -83,3 +83,12 @@ test("F24-AC-04 - link builders", () => {
     "/auth/verify?email=qa%40example.test&next=%2Fportal%2Fscans",
   );
 });
+
+test("firstParam: string, repeated key (array) and absent", async () => {
+  const { firstParam } = await import("./auth-redirect.ts");
+  assert.equal(firstParam("/a"), "/a");
+  assert.equal(firstParam(["/a", "/b"]), "/a");
+  assert.equal(firstParam([]), "");
+  assert.equal(firstParam(undefined), "");
+  assert.equal(firstParam(null), "");
+});

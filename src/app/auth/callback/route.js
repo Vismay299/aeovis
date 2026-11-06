@@ -1,18 +1,37 @@
 import { NextResponse } from "next/server";
 import { createCustomerSupabaseClient } from "@/lib/supabase/customer";
+import { authErrorCodeFrom } from "@/shared/auth-errors";
+import { normalizeAuthRedirect } from "@/shared/auth-redirect";
+import { isFirstSession, trackAuthServerEvent } from "@/lib/auth/telemetry";
 
 export const dynamic = "force-dynamic";
 
-function safeNext(value) {
-  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\")
-    ? value
-    : "/portal";
-}
-
 export async function GET(request) {
   const url = new URL(request.url);
+
+  // Handle OAuth / authentication error parameters before any session exchange
+  const errorParam = url.searchParams.get("error");
+  const errorCodeParam = url.searchParams.get("error_code");
+  const errorDescriptionParam = url.searchParams.get("error_description");
+
+  if (errorParam || errorCodeParam) {
+    const code = authErrorCodeFrom({
+      error: errorParam,
+      errorCode: errorCodeParam,
+      description: errorDescriptionParam,
+    });
+    // An expired email link goes to the verify page, which offers a resend; other
+    // errors go to /auth/error. Both keep a safe `next` (onboarding hand-off).
+    const next = normalizeAuthRedirect(url.searchParams.get("next"));
+    const errorUrl = new URL(code === "link_expired" ? "/auth/verify" : "/auth/error", url.origin);
+    errorUrl.searchParams.set("error", code);
+    if (next !== "/portal") errorUrl.searchParams.set("next", next);
+    return NextResponse.redirect(errorUrl, { status: 303 });
+  }
+
   const client = await createCustomerSupabaseClient();
-  const destination = new URL(safeNext(url.searchParams.get("next")), url.origin);
+  const nextParam = url.searchParams.get("next");
+  const destination = new URL(normalizeAuthRedirect(nextParam), url.origin);
 
   if (!client) {
     destination.pathname = "/login";
@@ -21,13 +40,14 @@ export async function GET(request) {
   }
 
   let error = null;
+  let data = null;
   const code = url.searchParams.get("code");
   const tokenHash = url.searchParams.get("token_hash");
   const type = url.searchParams.get("type");
   if (code) {
-    ({ error } = await client.auth.exchangeCodeForSession(code));
+    ({ data, error } = await client.auth.exchangeCodeForSession(code));
   } else if (tokenHash && ["invite", "recovery", "email", "signup"].includes(type)) {
-    ({ error } = await client.auth.verifyOtp({ token_hash: tokenHash, type }));
+    ({ data, error } = await client.auth.verifyOtp({ token_hash: tokenHash, type }));
   } else if (["/auth/accept", "/auth/reset"].includes(destination.pathname)) {
     // The browser retains the original fragment across this redirect. Those
     // pages consume implicit tokens, which are never sent to the server.
@@ -37,15 +57,38 @@ export async function GET(request) {
   }
 
   if (!error) {
+    // First-session detection for new-account telemetry. The exchange already
+    // returned the user, so there is no extra Auth round trip.
+    try {
+      const user = data?.user ?? data?.session?.user ?? null;
+      if (user && isFirstSession(user, Date.now())) {
+        const provider = user.app_metadata?.provider ?? "email";
+        trackAuthServerEvent(
+          "auth:sign_up_completed",
+          {
+            method: provider === "google" ? "google" : "email",
+            from_free_scan: destination.searchParams.has("scan"),
+            from_domain: destination.searchParams.has("domain"),
+          },
+          user.id
+        );
+      }
+    } catch {
+      // Best-effort telemetry
+    }
+
     const { error: inviteError } = await client.rpc("accept_customer_team_invites");
     if (inviteError) {
       console.error("[customer] invite redemption failed:", inviteError);
       destination.pathname = "/auth/accept";
     }
   }
+
   if (error) {
     destination.pathname = "/login";
+    destination.search = "";
     destination.searchParams.set("error", "link_expired");
   }
+
   return NextResponse.redirect(destination);
 }

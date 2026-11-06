@@ -26,6 +26,11 @@ export default function PrivacyPage() {
         impressions, click-through rate, and average position.
       </p>
 
+      <h2 id="google-sign-in">Signing in with Google</h2>
+      <p>
+        If you choose Continue with Google, Google shares your name, email address and Google account identifier with Perceev so we can create and secure your account. Perceev does not receive your Google password, and signing in with Google does not give Perceev access to your Search Console or Analytics data; those connections ask for separate permission.
+      </p>
+
       <h2 id="google-search-console-data">Google Search Console data</h2>
       <p>
         Perceev requests the read-only Google Search Console permission
@@ -57,6 +62,9 @@ export default function PrivacyPage() {
         Perceev to operate the service. When you use an AI content feature, the content or prompt
         you submit may be processed by the model provider configured for that feature; Google
         Search Console data is not sent to those providers.
+      </p>
+      <p>
+        Sign-up, sign-in and password-reset forms use Cloudflare Turnstile to block automated abuse; Cloudflare processes technical information from your browser for this check.
       </p>
       <p>
         We may disclose information when necessary to protect the service, comply with law, or

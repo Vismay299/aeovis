@@ -226,6 +226,13 @@ export async function openPortal(browser, origin, options = {}) {
   }
 
   await page.goto(new URL("/login", base).href, { waitUntil: "networkidle" });
+  // The form renders a loader until getUser() resolves; wait for either the
+  // method chooser (Google sign-in on) or the email field before deciding.
+  const continueWithEmail = page.getByRole("button", { name: "Continue with email" });
+  await continueWithEmail.or(page.locator("#email")).first().waitFor({ state: "visible", timeout: 30000 });
+  if (await continueWithEmail.isVisible()) {
+    await continueWithEmail.click();
+  }
   await page.fill("#email", session.user.email);
   await page.fill("#password", QA_PASSWORD);
   await page.click('button[type="submit"]');

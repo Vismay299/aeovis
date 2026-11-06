@@ -11,6 +11,20 @@ export type AuthErrorCode =
   | "link_expired"
   | "unknown";
 
+const AUTH_ERROR_CODES: readonly string[] = [
+  "access_denied",
+  "state_mismatch",
+  "disposable_email",
+  "captcha_failed",
+  "signup_disabled",
+  "link_expired",
+  "unknown",
+];
+
+export function isAuthErrorCode(value: unknown): value is AuthErrorCode {
+  return typeof value === "string" && AUTH_ERROR_CODES.includes(value);
+}
+
 /**
  * Map the error parameters Supabase Auth puts on our callback URL to one of
  * our closed codes. The code (never the raw description) is what travels to
@@ -22,6 +36,11 @@ export function authErrorCodeFrom(i: {
   description?: string | null;
 }): AuthErrorCode {
   const description = (i.description ?? "").toLowerCase();
+  // Supabase sends an expired email link as error=access_denied&error_code=otp_expired,
+  // so the link codes are checked before access_denied.
+  if (i.errorCode === "otp_expired" || i.errorCode === "flow_state_expired") {
+    return "link_expired";
+  }
   if (i.error === "access_denied") return "access_denied";
   if (description.includes("non-disposable")) return "disposable_email";
   if (description.includes("captcha")) return "captcha_failed";
@@ -31,9 +50,6 @@ export function authErrorCodeFrom(i: {
     (i.error === "invalid_request" && description.includes("state"))
   ) {
     return "state_mismatch";
-  }
-  if (i.errorCode === "otp_expired" || i.errorCode === "flow_state_expired") {
-    return "link_expired";
   }
   return "unknown";
 }
