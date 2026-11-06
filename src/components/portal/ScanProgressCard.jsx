@@ -75,16 +75,24 @@ export function ScanProgressCard({ showIdle = true }) {
       return scan.error ? <ScanStartError scan={scan} dismissible /> : null;
     }
     return (
-      <section className="pv-card">
-        <div className="pv-card__body" style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", paddingTop: 20 }}>
-          <div className="pv-empty__icon" style={{ margin: 0 }}><Radar aria-hidden="true" /></div>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <h2 className="pv-card__title">Check how AI engines see {brand?.display_name || "your brand"}</h2>
-            <p className="pv-card__desc">We ask the answer engines real buyer questions and record which brands they recommend. Takes a few minutes.</p>
+      <section className="rounded-xl border border-border bg-card p-6 shadow-sm pv-card">
+        <div className="flex flex-wrap items-center gap-4 pv-card__body">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-card shadow-sm text-muted-foreground pv-empty__icon">
+            <Radar aria-hidden="true" className="size-5" />
           </div>
-          <Button icon={Play} onClick={scan.start} loading={scan.starting}>{scan.starting ? "Starting…" : "Run AI visibility scan"}</Button>
+          <div className="min-w-[220px] flex-1">
+            <h2 className="text-base font-semibold text-foreground pv-card__title">
+              Check how AI engines see {brand?.display_name || "your brand"}
+            </h2>
+            <p className="text-sm text-muted-foreground pv-card__desc">
+              We ask the answer engines real buyer questions and record which brands they recommend. Takes a few minutes.
+            </p>
+          </div>
+          <Button icon={Play} onClick={scan.start} loading={scan.starting}>
+            {scan.starting ? "Starting…" : "Run AI visibility scan"}
+          </Button>
         </div>
-        {scan.error ? <div style={{ padding: "0 20px 20px" }}><ScanStartError scan={scan} /></div> : null}
+        {scan.error ? <div className="mt-4"><ScanStartError scan={scan} /></div> : null}
       </section>
     );
   }
@@ -93,24 +101,26 @@ export function ScanProgressCard({ showIdle = true }) {
   const stageLabel = scan.stage?.label || "Starting";
 
   return (
-    <section className="pv-card" aria-live="polite" data-testid="portal-scan-progress">
-      <div className="pv-card__header">
+    <section className="rounded-xl border border-border bg-card p-6 shadow-sm pv-card" aria-live="polite" data-testid="portal-scan-progress">
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-4 pv-card__header">
         <div>
-          <div className="pv-row" style={{ marginBottom: 4 }}>
+          <div className="mb-1 flex items-center gap-2 pv-row">
             <Badge tone="brand" live>Scan running</Badge>
             {scan.reconnecting ? <Badge tone="warn" dot>Reconnecting…</Badge> : null}
           </div>
-          <h2 className="pv-card__title">{stageLabel}…</h2>
-          <p className="pv-card__desc">{scan.stage?.detail || "Getting your scan ready"}</p>
+          <h2 className="text-lg font-semibold text-foreground pv-card__title">{stageLabel}…</h2>
+          <p className="text-sm text-muted-foreground pv-card__desc">{scan.stage?.detail || "Getting your scan ready"}</p>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <div className="pv-stat__value pv-num" style={{ fontSize: 28 }}>
+        <div className="text-right">
+          <div className="text-3xl font-semibold tabular-nums text-foreground pv-stat__value pv-num">
             {percent === null ? "—" : `${Math.round(percent)}%`}
           </div>
-          <div className="pv-stat__sub">{elapsed === null ? "" : `${formatDuration(elapsed)} elapsed`}</div>
+          <div className="text-xs text-muted-foreground pv-stat__sub">
+            {elapsed === null ? "" : `${formatDuration(elapsed)} elapsed`}
+          </div>
         </div>
       </div>
-      <div className="pv-card__body" style={{ display: "grid", gap: 18 }}>
+      <div className="mt-4 grid gap-4 pv-card__body">
         <ProgressBar value={percent} active indeterminate size="lg" label="Scan progress" />
         <StageSteps steps={SCAN_STAGES} current={scan.stageIndex} />
         {scan.notice ? <Banner tone="info" onDismiss={scan.dismiss}>{scan.notice}</Banner> : null}

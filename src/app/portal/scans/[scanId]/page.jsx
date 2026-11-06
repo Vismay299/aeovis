@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-html-link-for-pages */
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -13,10 +14,10 @@ import "@/components/portal/scans/scans.css";
 
 function KpiSkeleton() {
   return (
-    <div className="pv-card pv-stat" aria-hidden="true">
+    <Card aria-hidden="true">
       <Skeleton width={96} height={11} />
       <Skeleton width={72} height={26} style={{ marginTop: 8 }} />
-    </div>
+    </Card>
   );
 }
 
@@ -76,11 +77,11 @@ export default function ScanReportPage() {
 
   if (state.status === "notfound") {
     return (
-      <div className="pv-page">
-        <div className="pv-scans-back">
-          <Button variant="ghost" size="sm" href="/portal/scans" icon={ArrowLeft}>All scans</Button>
-        </div>
-        <PageHeader title="Scan report" />
+      <div className="space-y-6">
+        <PageHeader
+          backLink={<a href="/portal/scans" className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />All scans</a>}
+          title="Scan report"
+        />
         <Card>
           <EmptyState
             title="Scan not found"
@@ -96,21 +97,18 @@ export default function ScanReportPage() {
   const loading = state.status === "loading" && !scan;
 
   return (
-    <div className="pv-page">
-      <div className="pv-scans-back">
-        <Button variant="ghost" size="sm" href="/portal/scans" icon={ArrowLeft}>All scans</Button>
-      </div>
-
+    <div className="space-y-6">
       <PageHeader
+        backLink={<a href="/portal/scans" className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />All scans</a>}
         eyebrow={scan ? formatDate(scan.scanned_at || scan.created_at, { withTime: true }) : undefined}
         title="Scan report"
         description={scan?.url || undefined}
       />
 
-      <div className="pv-stack">
-        {scan ? <div data-testid="customer-collection-outcome"><Banner tone={outcome.outcome==="failed"?"error":outcome.outcome==="complete"?"success":outcome.outcome==="legacy"?"info":"warn"} title={`Collection: ${outcome.outcome}`}>
+      <div className="space-y-6">
+        {scan ? <div data-testid="customer-collection-outcome" className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><Banner tone={outcome.outcome==="failed"?"error":outcome.outcome==="complete"?"success":outcome.outcome==="legacy"?"info":"warn"} title={`Collection: ${outcome.outcome}`} className="flex-1">
           {outcome.outcome==="legacy" ? "Historical collection quality is unknown; no modern qualification is inferred." : `${outcome.counts.valid} of ${outcome.counts.planned} valid observations: ${outcome.counts.answered} answered, ${outcome.counts.valid_no_aio} valid without AIO, ${outcome.counts.failed} failed, ${outcome.counts.not_attempted} not attempted. Diagnostics: ${outcome.counts.diagnostics}.`}
-        </Banner><Button variant="secondary" size="sm" onClick={downloadMeasurement}>Download measurement JSON</Button></div> : null}
+        </Banner><Button variant="secondary" size="sm" onClick={downloadMeasurement} className="shrink-0">Download measurement JSON</Button></div> : null}
         {state.status === "error" ? (
           <Banner
             tone="error"
@@ -126,7 +124,7 @@ export default function ScanReportPage() {
             Some observations could not be collected or did not meet the minimum evidence needed for a headline. Review each engine's counts and quality notes; missing work is not a measured absence.
           </Banner>
         ) : null}
-        <div className="pv-grid pv-grid--4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {loading ? (
             <>
               <KpiSkeleton />
@@ -149,7 +147,7 @@ export default function ScanReportPage() {
         </div>
 
         {scan && (showEngines || showCompetitors) ? (
-          <div className={showEngines && showCompetitors ? "pv-scans-split" : "pv-stack"}>
+          <div className={showEngines && showCompetitors ? "grid gap-5 lg:grid-cols-2" : "space-y-6"}>
             {showEngines ? <EngineScoresCard engineScores={scan.engine_scores} engines={scan.engines} terminalOutcome={outcome} /> : null}
             {showCompetitors ? (
               <CompetitorsCard competitors={scan.competitors} engines={scan.engines} brand={scan.brand} />

@@ -6,7 +6,6 @@ import Link from "next/link";
 import { Eye, MessageSquareText, Search, Sparkles } from "lucide-react";
 import { Skeleton, Stat } from "../ui";
 import { countText, roundedPct, shortDate, toNumber } from "./overviewModel";
-import "./overview.css";
 
 function visibilitySub(scans, latest) {
   if (!latest) return "No scan yet";
@@ -23,12 +22,12 @@ function visibilitySub(scans, latest) {
 export default function KpiRow({ overview, gsc }) {
   if (!overview) {
     return (
-      <div className="pv-grid pv-grid--4 pv-overview-kpis" aria-busy="true" aria-label="Loading headline numbers">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-busy="true" aria-label="Loading headline numbers">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="pv-card pv-overview-kpi-skeleton">
-            <Skeleton width="45%" height={11} />
-            <Skeleton width="35%" height={26} />
-            <Skeleton width="60%" height={10} />
+          <div key={i} className="flex flex-col gap-2.5 rounded-lg border border-border bg-card p-4">
+            <Skeleton width="45%" height={12} />
+            <Skeleton width="35%" height={28} />
+            <Skeleton width="60%" height={12} />
           </div>
         ))}
       </div>
@@ -43,7 +42,7 @@ export default function KpiRow({ overview, gsc }) {
   const siteUrl = gsc?.connection?.site_url;
 
   return (
-    <div className="pv-grid pv-grid--4 pv-overview-kpis">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Stat
         label="AI visibility"
         icon={Eye}
@@ -63,7 +62,7 @@ export default function KpiRow({ overview, gsc }) {
         value={toNumber(mentioned) === null ? null : countText(mentioned)}
         sub={toNumber(tracked) === null ? "No scan yet" : `of ${countText(tracked)} questions`}
       />
-      <Link href="/portal/search-console" className="pv-overview-kpi-link">
+      <Link href="/portal/search-console" className="block rounded-lg transition-colors hover:border-foreground/20 focus-visible:outline-2 focus-visible:outline-primary">
         <Stat
           label="Search Console"
           icon={Search}

@@ -104,14 +104,14 @@ function AnswerBlock({ row }) {
   const text = typeof row.answer_text === "string" && row.answer_text.trim() ? row.answer_text : "";
   const position = finiteNumber(row.position);
   return (
-    <div className="pv-scans-answer">
-      <div className="pv-scans-answer__head">
-        <span className="pv-scans-answer__engine">{engineLabel(row.engine)}</span>
+    <div className="bg-muted/50 rounded-md p-3 text-sm space-y-2 pv-scans-answer">
+      <div className="flex flex-wrap items-center gap-2 pv-scans-answer__head">
+        <span className="font-medium text-foreground pv-scans-answer__engine">{engineLabel(row.engine)}</span>
         {row.raw?.measurement_method === "model_api" ? <Badge>Model API</Badge> : null}
         {!failed && row.answered === true && position !== null ? <Badge>#{position}</Badge> : null}
         {!failed && row.answered === true && row.brand_cited ? <Badge tone="brand">Cited</Badge> : null}
       </div>
-      <p className={`pv-scans-answer__text${text ? "" : " is-empty"}`}>
+      <p className={`text-foreground leading-relaxed pv-scans-answer__text${text ? "" : " is-empty"}`}>
         {failed ? "Collection failed. This answer was not measured." : text || (row.answered === false ? "The engine did not return an answer." : "No answer text was recorded.")}
       </p>
     </div>
@@ -147,28 +147,28 @@ function QuestionRow({ question, engine }) {
   const missing = (question.missing || []).filter((name) => engine === "all" || name === engine);
 
   return (
-    <li className="pv-scans-q">
+    <li className="rounded-lg border border-border bg-card overflow-hidden pv-scans-q">
       <button
         type="button"
-        className="pv-scans-q__toggle"
+        className="flex w-full items-start justify-between gap-3 p-4 text-left transition-colors hover:bg-muted/50 pv-scans-q__toggle"
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className="pv-scans-q__text">{question.query}</span>
-        <span className="pv-scans-q__badges">
+        <span className="font-medium text-foreground pv-scans-q__text">{question.query}</span>
+        <span className="flex flex-wrap items-center gap-1.5 pv-scans-q__badges">
           <EngineBadges rows={rows} />
-          {missing.length ? <span className="pv-scans-q__missing">{missing.length === 1 ? "1 engine not collected" : `${missing.length} engines not collected`}</span> : null}
+          {missing.length ? <span className="text-xs text-muted-foreground pv-scans-q__missing">{missing.length === 1 ? "1 engine not collected" : `${missing.length} engines not collected`}</span> : null}
         </span>
-        <span className="pv-scans-q__chev" aria-hidden="true"><ChevronRight /></span>
+        <span className={`text-muted-foreground transition-transform duration-200 pv-scans-q__chev${open ? " rotate-90" : ""}`} aria-hidden="true"><ChevronRight className="size-4 shrink-0" /></span>
       </button>
       {open ? (
-        <div id={id} className="pv-scans-q__answers">
-          {rows.some((row) => row.answered === true && !row.raw?.error && row.mentioned === false && row.brand_cited !== true) ? <a href={`/portal/content?new=1&topic=${encodeURIComponent(question.query)}`}>Create content for this gap →</a> : null}
+        <div id={id} className="space-y-3 border-t border-border p-4 bg-card pv-scans-q__answers">
+          {rows.some((row) => row.answered === true && !row.raw?.error && row.mentioned === false && row.brand_cited !== true) ? <a href={`/portal/content?new=1&topic=${encodeURIComponent(question.query)}`} className="inline-flex text-xs font-medium text-primary hover:underline">Create content for this gap &rarr;</a> : null}
           {rows.map((row, index) => (
             <AnswerBlock key={`${row.id || row.engine || "row"}-${index}`} row={row} />
           ))}
-          {missing.length ? <p role="status" className="pv-scans-q__missing-note">Not collected: {missing.map(engineLabel).join(", ")}. This question was planned for these engines, but no provider answer was recorded (not attempted, or blocked before a request). It is not a measured absence.</p> : null}
+          {missing.length ? <p role="status" className="text-xs text-muted-foreground pv-scans-q__missing-note">Not collected: {missing.map(engineLabel).join(", ")}. This question was planned for these engines, but no provider answer was recorded (not attempted, or blocked before a request). It is not a measured absence.</p> : null}
         </div>
       ) : null}
     </li>

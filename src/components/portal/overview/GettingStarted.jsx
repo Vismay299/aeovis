@@ -4,7 +4,6 @@
 
 import { CircleCheck, Circle } from "lucide-react";
 import { Button, Card, ProgressBar } from "../ui";
-import "./overview.css";
 
 /**
  * `panelApproved` is true/false once the question panel has loaded, null while
@@ -57,29 +56,36 @@ export default function GettingStarted({ steps }) {
       title="Getting started"
       description="A few steps to get your first answers in front of you."
       actions={
-        <div className="pv-overview-progress">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground whitespace-nowrap">
           <span>{doneCount} of {steps.length} complete</span>
-          <ProgressBar value={pct} size="sm" label="Setup progress" />
+          <div className="w-28">
+            <ProgressBar value={pct} size="sm" label="Setup progress" />
+          </div>
         </div>
       }
     >
-      <ol className="pv-overview-steps">
+      <ol className="divide-y divide-border">
         {steps.map((step) => (
-          <li key={step.id} className={`pv-overview-step${step.done ? " is-done" : ""}`}>
-            <span className="pv-overview-step__icon" aria-hidden="true">
-              {step.done ? <CircleCheck /> : <Circle />}
+          <li key={step.id} className="flex items-center gap-3.5 py-3.5 first:pt-0 last:pb-0">
+            <span
+              className={`flex size-5 shrink-0 items-center justify-center ${step.done ? "text-primary" : "text-muted-foreground"}`}
+              aria-hidden="true"
+            >
+              {step.done ? <CircleCheck className="size-5" /> : <Circle className="size-5" />}
             </span>
-            <div className="pv-overview-step__main">
-              <span className="pv-overview-step__title">
+            <div className="flex flex-1 flex-col gap-0.5 min-w-0">
+              <span className={`text-sm font-medium ${step.done ? "text-muted-foreground" : "text-foreground"}`}>
                 {step.title}
                 {step.done ? <span className="sr-only"> (done)</span> : null}
               </span>
-              <span className="pv-overview-step__desc">{step.description}</span>
+              <span className="text-xs text-muted-foreground">{step.description}</span>
             </div>
             {!step.done && step.action ? (
-              <div className="pv-overview-step__action">
+              <div className="shrink-0">
                 {step.action.href ? (
-                  <Button size="sm" variant="secondary" href={step.action.href}>{step.action.label}</Button>
+                  <Button size="sm" variant="secondary" href={step.action.href}>
+                    {step.action.label}
+                  </Button>
                 ) : (
                   <Button
                     size="sm"
