@@ -11,7 +11,6 @@ import VisibilityTrend from "@/components/portal/overview/VisibilityTrend";
 import RecentScans from "@/components/portal/overview/RecentScans";
 import ContentStudioCard from "@/components/portal/overview/ContentStudioCard";
 import { websiteHost } from "@/components/portal/overview/overviewModel";
-import "@/components/portal/overview/overview.css";
 
 /** true/false once the workspace's question panel is known; null while loading or unreadable. */
 function useApprovedPanel(brandKey) {
@@ -43,7 +42,7 @@ export default function OverviewPage() {
   const checklist = buildChecklist({ overview, gsc, scan, panelApproved });
 
   return (
-    <div className="pv-page">
+    <div className="space-y-6">
       <PageHeader
         eyebrow={host || undefined}
         title={name}
@@ -60,7 +59,7 @@ export default function OverviewPage() {
         }
       />
 
-      <div className="pv-stack">
+      <div className="space-y-6">
         {overviewError ? (
           <Banner
             tone="error"
@@ -79,7 +78,7 @@ export default function OverviewPage() {
 
         <VisibilityTrend overview={overview} />
 
-        <div className="pv-grid pv-overview-twocol">
+        <div className="grid gap-5 lg:grid-cols-2 items-start">
           <RecentScans overview={overview} scan={scan} />
           <ContentStudioCard overview={overview} />
         </div>

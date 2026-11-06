@@ -104,11 +104,14 @@ async function customerApiFixture(url) {
   if (pathname === "/api/customer/content") {
     return brandFixture("content", brand, { items: [], jobs: [] });
   }
-  if (pathname === "/api/customer/repairs/panel") {
-    return brandFixture("panel", brand, { items: [] });
+  if (pathname.startsWith("/api/customer/repairs/")) {
+    if (pathname === "/api/customer/repairs/panel") {
+      return brandFixture("panel", brand, { items: [] });
+    }
+    return { items: [] };
   }
   if (pathname === "/api/customer/measurement") {
-    return brandFixture("panel", brand, { items: [] });
+    return { observations: [], windows: [] };
   }
   return {};
 }
@@ -149,7 +152,7 @@ export async function openPortal(browser, origin, options = {}) {
     const url = new URL(request.url());
     const method = request.method();
 
-    if (url.origin === SUPABASE_URL) {
+    if (url.origin === SUPABASE_URL || url.hostname.endsWith(".supabase.co")) {
       if (url.pathname === "/auth/v1/token") {
         return route.fulfill({
           status: 200,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ChevronRight, Play, Radar } from "lucide-react";
 import { usePortal } from "@/components/portal/PortalShell";
 import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
@@ -21,7 +21,7 @@ function finiteOrNull(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-function ScanRow({ scan, onOpen }) {
+function ScanRow({ scan }) {
   const visibility = finiteOrNull(scan.visibility_pct);
   const tracked = finiteOrNull(scan.prompts_tracked);
   const mentioned = finiteOrNull(scan.prompts_mentioned);
@@ -29,42 +29,41 @@ function ScanRow({ scan, onOpen }) {
   const label = `Open scan from ${formatDate(scan.scanned_at || scan.created_at, { withTime: true })}`;
 
   return (
-    <tr
-      className="is-link"
-      tabIndex={0}
+    <Link
+      href={`/portal/scans/${encodeURIComponent(scan.id)}`}
       aria-label={label}
-      onClick={() => onOpen(scan.id)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen(scan.id);
-        }
-      }}
+      className="group flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
     >
-      <td className="pv-scans-date">{formatDate(scan.scanned_at || scan.created_at, { withTime: true })}</td>
-      <td>
-        <div className="pv-scans-vis">
-          <span className="pv-scans-vis__bar">
-            <ProgressBar value={visibility} indeterminate={pending} size="sm" label="AI visibility" />
-          </span>
-          <span className={`pv-scans-vis__value${visibility === null ? " is-empty" : ""}`}>
-            {formatPct(visibility)}
-          </span>
+      <div className="min-w-[140px] flex-1">
+        <p className="text-sm font-medium text-foreground">
+          {formatDate(scan.scanned_at || scan.created_at, { withTime: true })}
+        </p>
+        <p className="text-xs text-muted-foreground">{platformLabel(scan.platform)}</p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className="w-24">
+          <ProgressBar value={visibility} indeterminate={pending} size="sm" label="AI visibility" />
         </div>
-        {scan.collection_partial ? <Badge tone="warn">Partial collection</Badge> : null}
-      </td>
-      <td className="is-num">{tracked === null ? "—" : tracked}</td>
-      <td className="is-num">
-        {mentioned === null || tracked === null ? "—" : `${mentioned} of ${tracked}`}
-      </td>
-      <td className="pv-scans-engines">{platformLabel(scan.platform)}</td>
-      <td className="pv-scans-chevron" aria-hidden="true"><ChevronRight /></td>
-    </tr>
+        <span className={`w-12 text-right text-sm font-semibold tabular-nums ${visibility === null ? "text-muted-foreground" : "text-foreground"}`}>
+          {formatPct(visibility)}
+        </span>
+        {scan.collection_partial ? <Badge tone="warn">Partial</Badge> : null}
+      </div>
+
+      <div className="hidden sm:block text-right text-xs text-muted-foreground tabular-nums">
+        {tracked === null ? "—" : `${tracked} questions`}
+        {mentioned !== null && tracked !== null ? ` · ${mentioned} mentioned` : ""}
+      </div>
+
+      <span className="reveal-on-hover text-muted-foreground" aria-hidden="true">
+        <ChevronRight className="size-4" />
+      </span>
+    </Link>
   );
 }
 
 export default function ScansPage() {
-  const router = useRouter();
   const { brandKey, brand, scan, redirectToLogin } = usePortal();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -112,12 +111,11 @@ export default function ScansPage() {
     });
   }, [data]);
 
-  const openScan = (id) => router.push(`/portal/scans/${encodeURIComponent(id)}`);
   const initialLoad = loading && !data;
   const showEmpty = !initialLoad && !error && scans.length === 0 && !scan.active;
 
   return (
-    <div className="pv-page">
+    <div className="space-y-6">
       <PageHeader
         title="Scans"
         description="Every AI visibility scan for this workspace."
@@ -133,7 +131,7 @@ export default function ScansPage() {
         )}
       />
 
-      <div className="pv-stack">
+      <div className="space-y-6">
         <ScanProgressCard showIdle={false} />
         {brandKey ? <MockScanPanel key={brandKey} brandKey={brandKey} brandName={brand?.display_name || "this workspace"} onUnauthorized={redirectToLogin} /> : null}
 
@@ -167,24 +165,10 @@ export default function ScansPage() {
             description={brand?.display_name ? `Each scan of ${brand.display_name}, newest first.` : "Newest first."}
             flush
           >
-            <div className="pv-table-wrap">
-              <table className="pv-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col">Visibility</th>
-                    <th scope="col" className="is-num">Questions</th>
-                    <th scope="col" className="is-num">Mentioned</th>
-                    <th scope="col">Engines</th>
-                    <th scope="col"><span className="pv-scans-sr">Open</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scans.map((row) => (
-                    <ScanRow key={row.id} scan={row} onOpen={openScan} />
-                  ))}
-                </tbody>
-              </table>
+            <div className="divide-y divide-border">
+              {scans.map((row) => (
+                <ScanRow key={row.id} scan={row} />
+              ))}
             </div>
           </Card>
         ) : null}
@@ -195,18 +179,18 @@ export default function ScansPage() {
             description="Runs from the last 7 days that stopped before finishing."
             flush
           >
-            <div className="pv-scans-failed">
+            <div className="divide-y divide-border">
               {failedRuns.map((job) => (
-                <div key={job.id} className="pv-scans-failed__row">
-                  <div style={{ minWidth: 0 }}>
-                    <div className="pv-scans-failed__date">{formatDate(job.created_at, { withTime: true })}</div>
-                    <p className="pv-scans-failed__msg">
-                      {job.error_message || "The scan stopped before finishing."}
+                <div key={job.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">
+                      {formatDate(job.created_at, { withTime: true })}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {job.error?.message || "Scan stopped before finishing."}
                     </p>
                   </div>
-                  <Button variant="secondary" size="sm" disabled={scan.active || !brandKey} loading={scan.starting} onClick={() => scan.start()}>
-                    Retry
-                  </Button>
+                  <Badge tone="crit">Failed</Badge>
                 </div>
               ))}
             </div>

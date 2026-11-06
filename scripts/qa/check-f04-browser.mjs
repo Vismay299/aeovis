@@ -373,6 +373,78 @@ try {
   );
 
   await record(
+    "F04-B07",
+    "App routes (/portal, /portal/scans, /portal/scans/scan-1, /portal/measurement) carry exactly one h1, no horizontal scroll at 390px, and no legacy pv-app, pv-sidebar, pv-page-header classes.",
+    async (artifacts) => {
+      const routes = [
+        "/portal",
+        "/portal/scans",
+        "/portal/scans/scan-1",
+        "/portal/measurement",
+      ];
+      const viewports = [
+        { width: 1440, height: 1000, name: "1440" },
+        { width: 390, height: 844, name: "390" },
+      ];
+
+      for (const vp of viewports) {
+        const { context, page, blockedWrites } = await openPortal(browser, origin, {
+          viewport: { width: vp.width, height: vp.height },
+        });
+        try {
+          for (const route of routes) {
+            await page.goto(new URL(route, origin).href, { waitUntil: "networkidle" });
+
+            // Exactly one h1
+            const h1Count = await page.locator("h1").count();
+            assert.equal(
+              h1Count,
+              1,
+              `${route} at ${vp.name} must have exactly one h1, found ${h1Count}`
+            );
+
+            // No horizontal scroll at 390
+            if (vp.width === 390) {
+              const overflow = await page.evaluate(() => {
+                const doc = document.documentElement;
+                return {
+                  scrollWidth: doc.scrollWidth,
+                  innerWidth: window.innerWidth,
+                };
+              });
+              assert.ok(
+                overflow.scrollWidth <= overflow.innerWidth + 1,
+                `${route} at 390 horizontally overflows: scrollWidth ${overflow.scrollWidth} > innerWidth ${overflow.innerWidth} + 1`
+              );
+            }
+
+            // No .pv-app, .pv-sidebar, .pv-page-header
+            const legacyCount = await page
+              .locator(".pv-app, .pv-sidebar, .pv-page-header")
+              .count();
+            assert.equal(
+              legacyCount,
+              0,
+              `${route} at ${vp.name} still contains legacy classes (.pv-app, .pv-sidebar, .pv-page-header): found ${legacyCount}`
+            );
+
+            // Screenshot
+            const safeName = route.replace(/\//g, "-").replace(/^-/, "");
+            const shotName = `f04-p5-${safeName}-${vp.name}.png`;
+            const shotPath = path.join(output, shotName);
+            await page.screenshot({ path: shotPath, fullPage: true });
+            artifacts.push(shotName);
+          }
+          assert.deepEqual(blockedWrites, [], "the shell wrote to a customer route");
+        } finally {
+          await context.close();
+        }
+      }
+      return "All 4 workspace routes verified at 1440 and 390 (one h1, no overflow, no legacy layout classes).";
+    }
+  );
+
+  await record(
     "F04-B08",
     "App routes carry the notranslate marker and the app root is notranslatable; the public site is not.",
     async () => {
