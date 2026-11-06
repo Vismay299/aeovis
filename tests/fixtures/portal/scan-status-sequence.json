@@ -1,0 +1,36 @@
+{
+  "sequence": [
+    {
+      "job": {
+        "id": "scan-running-1",
+        "status": "probing",
+        "progress_pct": 25,
+        "poll_after_seconds": 2
+      }
+    },
+    {
+      "job": {
+        "id": "scan-running-1",
+        "status": "probing",
+        "progress_pct": 60,
+        "poll_after_seconds": 2
+      }
+    },
+    {
+      "job": {
+        "id": "scan-running-1",
+        "status": "scoring",
+        "progress_pct": 90,
+        "poll_after_seconds": 2
+      }
+    },
+    {
+      "job": {
+        "id": "scan-running-1",
+        "status": "complete",
+        "progress_pct": 100,
+        "poll_after_seconds": 0
+      }
+    }
+  ]
+}
