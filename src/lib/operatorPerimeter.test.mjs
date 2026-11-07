@@ -252,6 +252,11 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     // F04 — the client-visible feature flags. Self-gated like every other
     // customer route: it answers only for a workspace the caller belongs to.
     "/api/customer/features",
+    "/api/customer/ga4",
+    "/api/customer/ga4/accounts",
+    "/api/customer/ga4/accounts/[grantId]",
+    "/api/customer/ga4/callback",
+    "/api/customer/ga4/connect",
     "/api/customer/gsc",
       "/api/customer/gsc/callback",
       "/api/customer/gsc/connect",

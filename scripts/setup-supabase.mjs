@@ -460,6 +460,22 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "email_milestone_candidates" },
     { kind: "function", name: "prune_email_outbox" },
   ],
+  "135_f20_ga4.sql": [
+    { kind: "table", name: "ga4_oauth_attempts" },
+    { kind: "table", name: "ga4_grants" },
+    { kind: "table", name: "ga4_connections" },
+  ],
+  "136_f20_ga4_functions.sql": [
+    { kind: "function", name: "ga4_upsert_grant" },
+    { kind: "function", name: "ga4_purge_cache" },
+    { kind: "function", name: "ga4_set_connection" },
+    { kind: "function", name: "ga4_disconnect" },
+    { kind: "function", name: "ga4_grant_impact" },
+    { kind: "function", name: "ga4_remove_grant" },
+    { kind: "function", name: "ga4_list_unused_grants" },
+    { kind: "function", name: "ga4_delete_unused_grant" },
+    { kind: "function", name: "prune_ga4_oauth_attempts" },
+  ],
 };
 
 /**

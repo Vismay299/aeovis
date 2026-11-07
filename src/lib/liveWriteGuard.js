@@ -196,6 +196,10 @@ export const NEVER_WRITABLE = Object.freeze([
   "user_email_preferences",
   "email_outbox",
   "workspace_milestones",
+  // F20 — migration 135: GA4 attempts, grants, and connections.
+  "ga4_oauth_attempts",
+  "ga4_grants",
+  "ga4_connections",
 ]);
 
 /**
@@ -232,6 +236,14 @@ export const WRITING_FUNCTIONS = Object.freeze({
   claim_email_outbox: ["email_outbox"],
   close_exhausted_email_outbox: ["email_outbox"],
   prune_email_outbox: ["email_outbox"],
+  // F20 migration 136 — GA4 mutating functions.
+  ga4_upsert_grant: ["ga4_grants"],
+  ga4_purge_cache: ["provider_cache"],
+  ga4_set_connection: ["customer_brands", "ga4_grants", "ga4_connections"],
+  ga4_disconnect: ["ga4_connections"],
+  ga4_remove_grant: ["ga4_grants", "ga4_connections"],
+  ga4_delete_unused_grant: ["ga4_grants"],
+  prune_ga4_oauth_attempts: ["ga4_oauth_attempts"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */

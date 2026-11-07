@@ -26,9 +26,11 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/076_f08_question_backfill.sql
 \ir ../supabase/migrations/080_f09_price_approvals.sql
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
-\ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
+\ir ../supabase/migrations/135_f20_ga4.sql
+\ir ../supabase/migrations/136_f20_ga4_functions.sql
 \ir ../supabase/migrations/160_f25_email_tables.sql
 \ir ../supabase/migrations/161_f25_email_functions.sql
+\ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -424,4 +426,35 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 -- End F25 tenant check.
+-- F20: ga4_connections is tenant-isolated (workspace members read own only).
+-- ga4_grants and ga4_oauth_attempts are service-only (deny authenticated).
+INSERT INTO public.ga4_grants(id, user_id, google_sub, google_email) VALUES
+ ('50000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'sub-1', 'owner1@example.com'),
+ ('50000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', 'sub-2', 'owner2@example.com');
+INSERT INTO public.ga4_connections(brand_key, grant_id, connected_by, google_sub, property_id, property_display_name, property_time_zone, property_currency_code) VALUES
+ ('10000000-0000-0000-0000-000000000001', '50000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'sub-1', 'properties/123456789', 'Prop A', 'UTC', 'USD'),
+ ('10000000-0000-0000-0000-000000000002', '50000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', 'sub-2', 'properties/987654321', 'Prop B', 'UTC', 'USD');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.ga4_connections) <> 1
+  OR (SELECT brand_key FROM public.ga4_connections) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F20 ga4_connections leaked across customer workspaces'; END IF;
+ BEGIN
+  PERFORM 1 FROM public.ga4_grants;
+  RAISE EXCEPTION 'ga4_grants readable by authenticated';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
+  PERFORM 1 FROM public.ga4_oauth_attempts;
+  RAISE EXCEPTION 'ga4_oauth_attempts readable by authenticated';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.ga4_connections) <> 1
+  OR (SELECT brand_key FROM public.ga4_connections) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F20 ga4_connections leaked across customer workspaces'; END IF;
+END $$;
+RESET ROLE;
+-- End F20 tenant check.
 ROLLBACK;

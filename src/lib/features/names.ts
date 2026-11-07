@@ -17,6 +17,8 @@ export const FEATURES = {
   customer_scheduling: { spend: ["ai_visibility.scan"] as const },
   // F25: lifecycle email outbox, delivery, and transactional notifications.
   lifecycle_email: { spend: [] as const },
+  // F20: Google Analytics 4 integration and search opportunities
+  ga4: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

@@ -604,6 +604,11 @@ abandoned is not.
 - Apply 160 then 161; no data backfill: defaults apply to existing users, outbox starts empty, sweeps look back 30 minutes only.
 - Objects (160): `user_email_preferences` (per-user preferences across workspaces, RLS read-own), `email_outbox` (service-role only delivery queue with unique `dedupe_key`), `workspace_milestones` (workspace milestones reached, member readable).
 - Objects (161): `claim_email_outbox` (concurrent safe skip-locked claim), `close_exhausted_email_outbox` (closes 5-attempt exhausted claims as failed), `email_milestone_candidates` (dynamic query tolerant of optional F10/F18/F22 tables), `prune_email_outbox` (retention prune).
+### `135_f20_ga4` and `136_f20_ga4_functions` (F20 phase 1)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply 135 and 136 before deploying F20 phase 1.
+- Setup: create a second OAuth client `GA4_GOOGLE_CLIENT_ID` in the Search Console Google Cloud project, add the redirect URI and the `analytics.readonly` scope to the consent screen.
+- Objects: `ga4_oauth_attempts`, `ga4_grants`, `ga4_connections`; functions `ga4_upsert_grant`, `ga4_purge_cache`, `ga4_set_connection`, `ga4_disconnect`, `ga4_grant_impact`, `ga4_remove_grant`, `ga4_list_unused_grants`, `ga4_delete_unused_grant`, `prune_ga4_oauth_attempts`.
 
 ## D. Content approval — the human gate, and what it does not yet do
 

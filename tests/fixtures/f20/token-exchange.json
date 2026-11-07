@@ -1,0 +1,8 @@
+{
+  "access_token": "ya29.EXAMPLE-NOT-A-REAL-TOKEN-1",
+  "expires_in": 3600,
+  "refresh_token": "1//EXAMPLE-REFRESH-TOKEN-1",
+  "scope": "openid email https://www.googleapis.com/auth/analytics.readonly",
+  "token_type": "Bearer",
+  "id_token": "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhdWQiOiJnYTRfdGVzdF9jbGllbnRfaWQiLCJzdWIiOiIxMDk4NzY1NDMyMTA5ODc2NTQzMjEiLCJlbWFpbCI6Im93bmVyQGV4YW1wbGUuY29tIiwiZXhwIjoyNTI0NjA4MDAwfQ.c2lnbmF0dXJl"
+}
