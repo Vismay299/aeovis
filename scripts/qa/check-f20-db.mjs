@@ -87,6 +87,23 @@ async function addMember(brandKey, userId, role = "member") {
   );
 }
 
+// ga4_grants_touch resets updated_at on every UPDATE, so backdating needs the
+// trigger suppressed for this one statement (loopback QA superuser only).
+async function ageGrant(grantId, interval) {
+  const c = await pool.connect();
+  try {
+    await c.query("BEGIN");
+    await c.query("SET LOCAL session_replication_role = replica");
+    await c.query("UPDATE public.ga4_grants SET updated_at = now() - $2::interval WHERE id = $1", [grantId, interval]);
+    await c.query("COMMIT");
+  } catch (error) {
+    await c.query("ROLLBACK");
+    throw error;
+  } finally {
+    c.release();
+  }
+}
+
 async function asUser(userId, fn) {
   const c = await pool.connect();
   try {
@@ -203,7 +220,7 @@ async function run() {
   ).rows[0].id;
 
   // Manually age the grant's updated_at past 24 hours
-  await query("UPDATE public.ga4_grants SET updated_at = now() - interval '25 hours' WHERE id = $1", [grantId4]);
+  await ageGrant(grantId4, "25 hours");
 
   const unusedBefore = (
     await query("SELECT id FROM public.ga4_list_unused_grants(now() - interval '24 hours', 10)")
@@ -227,7 +244,7 @@ async function run() {
   assert.equal(discRes, true, "disconnect succeeded");
 
   // Age updated_at again
-  await query("UPDATE public.ga4_grants SET updated_at = now() - interval '25 hours' WHERE id = $1", [grantId4]);
+  await ageGrant(grantId4, "25 hours");
   const delSuccess = (
     await query("SELECT public.ga4_delete_unused_grant($1, now() - interval '24 hours') AS result", [grantId4])
   ).rows[0].result;
@@ -237,11 +254,13 @@ async function run() {
   const brandCache = await createBrand(user1);
   const brandOther = await createBrand(user1);
   await query(
-    `INSERT INTO public.provider_cache (brand_key, namespace, version, key, payload, expires_at, storage_path)
+    // Rows match 042's schema: 64-hex key, workspace scope, exactly one body
+    // (storage_path here, value NULL) and size_bytes.
+    `INSERT INTO public.provider_cache (key, namespace, version, scope, brand_key, storage_path, size_bytes, expires_at)
      VALUES
-     ($1, 'ga4.overview', 1, 'k1', '{}'::jsonb, now() + interval '1 hour', 'ga4/overview1.json'),
-     ($1, 'other.test', 1, 'k2', '{}'::jsonb, now() + interval '1 hour', 'other/body1.json'),
-     ($2, 'ga4.overview', 1, 'k3', '{}'::jsonb, now() + interval '1 hour', 'ga4/otherbrand.json')`,
+     (encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 'ga4.overview', 1, 'workspace', $1, 'ga4/overview1.json', 2, now() + interval '1 hour'),
+     (encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 'other.test', 1, 'workspace', $1, 'other/body1.json', 2, now() + interval '1 hour'),
+     (encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 'ga4.overview', 1, 'workspace', $2, 'ga4/otherbrand.json', 2, now() + interval '1 hour')`,
     [brandCache, brandOther],
   );
 
@@ -311,20 +330,18 @@ async function run() {
     assert.ok(brandsSeen.includes(rlsBrandA), "user1 can see own workspace connection");
     assert.ok(!brandsSeen.includes(rlsBrandB), "user1 cannot see another workspace connection");
 
-    // Denial on service-only tables
-    await assert.rejects(
-      c.query("SELECT * FROM public.ga4_grants"),
-      (err) => err.code === "42501",
-      "authenticated role denied SELECT on ga4_grants",
-    );
-    await assert.rejects(
-      c.query("SELECT * FROM public.ga4_oauth_attempts"),
-      (err) => err.code === "42501",
-      "authenticated role denied SELECT on ga4_oauth_attempts",
-    );
-    await assert.rejects(
-      c.query("DELETE FROM public.ga4_connections WHERE brand_key = $1", [rlsBrandA]),
-      (err) => err.code === "42501",
+    // Denial on service-only tables. Each refusal aborts the transaction, so
+    // every probe runs inside its own savepoint.
+    const denied = async (sql, params, message) => {
+      await c.query("SAVEPOINT probe");
+      await assert.rejects(c.query(sql, params), (err) => err.code === "42501", message);
+      await c.query("ROLLBACK TO SAVEPOINT probe");
+    };
+    await denied("SELECT * FROM public.ga4_grants", [], "authenticated role denied SELECT on ga4_grants");
+    await denied("SELECT * FROM public.ga4_oauth_attempts", [], "authenticated role denied SELECT on ga4_oauth_attempts");
+    await denied(
+      "DELETE FROM public.ga4_connections WHERE brand_key = $1",
+      [rlsBrandA],
       "authenticated role denied direct DELETE on ga4_connections",
     );
   });

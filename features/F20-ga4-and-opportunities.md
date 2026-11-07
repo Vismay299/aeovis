@@ -170,6 +170,8 @@ DROP POLICY IF EXISTS ga4_connections_read ON public.ga4_connections;
 CREATE POLICY ga4_connections_read ON public.ga4_connections FOR SELECT TO authenticated
   USING (public.customer_can_access_brand(brand_key));
 REVOKE INSERT, UPDATE, DELETE ON public.ga4_connections FROM anon, authenticated;
+GRANT SELECT ON public.ga4_connections TO authenticated;
+GRANT ALL ON public.ga4_connections TO service_role;
 NOTIFY pgrst, 'reload schema';
 ```
 

@@ -26,6 +26,8 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/076_f08_question_backfill.sql
 \ir ../supabase/migrations/080_f09_price_approvals.sql
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
+\ir ../supabase/migrations/135_f20_ga4.sql
+\ir ../supabase/migrations/136_f20_ga4_functions.sql
 \ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
 \ir ../supabase/migrations/160_f25_email_tables.sql
 \ir ../supabase/migrations/161_f25_email_functions.sql
