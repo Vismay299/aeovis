@@ -5,7 +5,7 @@
 /**
  * Per-page issue reporters.
  *
- * Evaluates OpenSEO and Perceev technical SEO issues on a single crawled page.
+ * Evaluates the ported and Perceev technical SEO issues on a single crawled page.
  */
 
 import type { AuditIssueType } from "../../../shared/audit-issues.ts";

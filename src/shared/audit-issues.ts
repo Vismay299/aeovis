@@ -27,7 +27,7 @@ export interface AuditIssueDescriptor {
 }
 
 export const AUDIT_ISSUE_TYPES = {
-  // --- 30 OpenSEO issue types ---
+  // --- 30 ported issue types ---
   "blocked-page": {
     severity: "critical",
     category: "crawl",

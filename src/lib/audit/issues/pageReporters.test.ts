@@ -99,7 +99,7 @@ test("runPageReporters classifies HTTP error statuses", () => {
   );
 });
 
-test("runPageReporters flags OpenSEO on-page issues", () => {
+test("runPageReporters flags the ported on-page issues", () => {
   assert.ok(issueTypes(makePage({ title: "" })).includes("missing-title"));
   assert.ok(issueTypes(makePage({ title: "x".repeat(70) })).includes("title-too-long"));
   assert.ok(issueTypes(makePage({ title: "Tiny" })).includes("title-too-short"));
