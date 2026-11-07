@@ -363,6 +363,10 @@ const FULL_CATALOG = [
   "workspace_question_settings", "workspace_questions", "workspace_questions.text_normalized", "workspace_question_events",
   "normalize_question_text", "add_workspace_question", "save_workspace_questions", "sync_panel_questions",
   "prune_workspace_question_events", "backfill_workspace_questions", "append_approved_panel_with_questions",
+  // 160_f25_email_tables.sql — lifecycle email preferences, outbox and milestones.
+  "user_email_preferences", "email_outbox", "workspace_milestones",
+  // 161_f25_email_functions.sql — outbox claim, exhausted close, milestone candidates and prune.
+  "claim_email_outbox", "close_exhausted_email_outbox", "email_milestone_candidates", "prune_email_outbox",
 ];
 
 function withRegister(dir) {

@@ -7,3 +7,4 @@ import { registerCostJobs } from "../costs/jobs.ts";
 registerCostJobs();
 import "../pricing/jobs.ts";
 import "../schedules/aiVisibilitySchedules.jobs.ts";
+import "../email/jobs.ts";

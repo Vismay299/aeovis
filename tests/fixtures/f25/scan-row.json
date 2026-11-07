@@ -1,0 +1,23 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "brand_key": "acme-corp",
+  "created_at": "2026-10-22T14:30:00Z",
+  "prompts_tracked": 30,
+  "prompts_mentioned": 12,
+  "visibility_pct": 40.0,
+  "raw_results": {
+    "summary_stats": {
+      "terminal_outcome": {
+        "outcome": "complete"
+      }
+    },
+    "answers": [
+      {
+        "question": "What is the best CRM software for startups?",
+        "text": "ACME is the best solution for startups, beating CompetitorX and CompetitorY in features.",
+        "citations": ["https://competitorx.example.com", "https://reviews.example.com/best-crm"]
+      }
+    ],
+    "competitors_mentioned": ["CompetitorX", "CompetitorY"]
+  }
+}

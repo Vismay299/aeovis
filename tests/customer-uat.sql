@@ -27,6 +27,8 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/080_f09_price_approvals.sql
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
 \ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
+\ir ../supabase/migrations/160_f25_email_tables.sql
+\ir ../supabase/migrations/161_f25_email_functions.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -384,4 +386,42 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 -- End F08 tenant check.
+-- F25: workspace_milestones (per workspace), user_email_preferences (per user),
+-- email_outbox (service role only, denied to authenticated).
+INSERT INTO public.workspace_milestones(brand_key, milestone, reached_at) VALUES
+ ('10000000-0000-0000-0000-000000000001', 'workspace_created', now()),
+ ('10000000-0000-0000-0000-000000000002', 'workspace_created', now());
+INSERT INTO public.user_email_preferences(user_id, product_updates, scan_results) VALUES
+ ('00000000-0000-0000-0000-000000000001', true, true),
+ ('00000000-0000-0000-0000-000000000002', false, true);
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.workspace_milestones) <> 1
+  OR (SELECT brand_key FROM public.workspace_milestones) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F25 workspace_milestones leaked across customer workspaces'; END IF;
+ IF (SELECT count(*) FROM public.user_email_preferences) <> 1
+  OR (SELECT user_id FROM public.user_email_preferences) <> '00000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F25 user_email_preferences leaked across users'; END IF;
+ BEGIN
+  PERFORM 1 FROM public.email_outbox;
+  RAISE EXCEPTION 'email_outbox readable by customer';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.workspace_milestones) <> 1
+  OR (SELECT brand_key FROM public.workspace_milestones) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F25 workspace_milestones leaked across customer workspaces'; END IF;
+ IF (SELECT count(*) FROM public.user_email_preferences) <> 1
+  OR (SELECT user_id FROM public.user_email_preferences) <> '00000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F25 user_email_preferences leaked across users'; END IF;
+ BEGIN
+  PERFORM 1 FROM public.email_outbox;
+  RAISE EXCEPTION 'email_outbox readable by customer';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+-- End F25 tenant check.
 ROLLBACK;

@@ -18,7 +18,10 @@ import type { FeatureName } from "./names.ts";
  * Flags whose on/off state the browser may read (sidebar items, optional UI).
  * Each spec appends its own names.
  */
-export const CLIENT_FEATURES: readonly FeatureName[] = ["product_analytics"];
+export const CLIENT_FEATURES: readonly FeatureName[] = [
+  "product_analytics",
+  "lifecycle_email",
+];
 
 export type ClientFeatureName = FeatureName;
 

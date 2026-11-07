@@ -15,6 +15,8 @@ export const FEATURES = {
   google_sign_in: { spend: [] as const },
   // F10: gates customer-managed scheduled scans and their routes/jobs.
   customer_scheduling: { spend: ["ai_visibility.scan"] as const },
+  // F25: lifecycle email outbox, delivery, and transactional notifications.
+  lifecycle_email: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

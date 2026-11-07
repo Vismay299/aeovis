@@ -1700,3 +1700,10 @@ invokes the backfill lazily; operators must not call it manually.
 ### Apply
 1. Apply 076 after 075 and before deploying F08. The backfill runs on the first `GET /api/customer/questions` or first approved legacy panel post and records `backfilled_at` for idempotency. Approved legacy panels use the atomic append function; append conflicts roll back backfill and question sync.
 2. Verified against loopback QA PostgreSQL by `scripts/qa/check-f08-db.mjs`.
+## `160_f25_email_tables.sql`
+
+- **Status:** in repo; **not yet applied to production**. Lifecycle email tables: `user_email_preferences` (per-user preferences across workspaces, RLS read-own), `email_outbox` (service-role only delivery queue with unique `dedupe_key`), `workspace_milestones` (workspace milestones reached, member readable). Additive and idempotent (`CREATE TABLE IF NOT EXISTS`), no data backfill needed. Verified against disposable PostgreSQL by `scripts/qa/check-f25-db.mjs` and tenant isolation by `tests/customer-uat.sql`.
+
+## `161_f25_email_functions.sql`
+
+- **Status:** in repo; **not yet applied to production**. Lifecycle email functions: `claim_email_outbox` (concurrent safe skip-locked claim), `close_exhausted_email_outbox` (closes 5-attempt exhausted claims as failed), `email_milestone_candidates` (dynamic query tolerant of optional F10/F18/F22 tables), `prune_email_outbox` (retention prune). Idempotent (`CREATE OR REPLACE FUNCTION`). Verified against disposable PostgreSQL by `scripts/qa/check-f25-db.mjs`.
