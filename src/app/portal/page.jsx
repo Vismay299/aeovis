@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Play, PenLine } from "lucide-react";
 import { usePortal } from "@/components/portal/PortalShell";
 import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
-import { Banner, Button, PageHeader } from "@/components/portal/ui";
+import { Button, PageHeader } from "@/components/portal/ui";
+import { QueryError } from "@/components/app/QueryState";
+import { panelQueryOptions } from "@/lib/query/portalQueries";
 import GettingStarted, { buildChecklist } from "@/components/portal/overview/GettingStarted";
 import KpiRow from "@/components/portal/overview/KpiRow";
 import VisibilityTrend from "@/components/portal/overview/VisibilityTrend";
@@ -14,27 +16,29 @@ import { websiteHost } from "@/components/portal/overview/overviewModel";
 
 /** true/false once the workspace's question panel is known; null while loading or unreadable. */
 function useApprovedPanel(brandKey) {
-  const [approved, setApproved] = useState(null);
-  useEffect(() => {
-    setApproved(null);
-    if (!brandKey) return undefined;
-    let live = true;
-    fetch(`/api/customer/repairs/panel?brand_key=${encodeURIComponent(brandKey)}`, { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => {
-        if (live && Array.isArray(body?.items)) {
-          // Same predicate POST /api/customer/scan uses before it will start a scan.
-          setApproved(body.items.some((panel) => panel.artifact_key === "default" && panel.state === "approved"));
-        }
-      })
-      .catch(() => {});
-    return () => { live = false; };
-  }, [brandKey]);
-  return approved;
+  const query = useQuery({
+    ...panelQueryOptions(brandKey),
+    select: (body) =>
+      Array.isArray(body?.items)
+        ? body.items.some(
+            (p) => p.artifact_key === "default" && p.state === "approved"
+          )
+        : null,
+  });
+  return query.isError ? null : query.data ?? null;
 }
 
 export default function OverviewPage() {
-  const { brand, brandKey, overview, overviewError, refreshOverview, gsc, scan } = usePortal();
+  const {
+    brand,
+    brandKey,
+    overview,
+    overviewError,
+    overviewQueryError,
+    refreshOverview,
+    gsc,
+    scan,
+  } = usePortal();
   const panelApproved = useApprovedPanel(brandKey);
 
   const name = brand?.display_name || overview?.brand?.display_name || "Your brand";
@@ -61,13 +65,13 @@ export default function OverviewPage() {
 
       <div className="space-y-6">
         {overviewError ? (
-          <Banner
-            tone="error"
+          <QueryError
+            error={overviewQueryError}
+            fallback={overviewError}
             title="Overview could not load"
-            action={<Button size="sm" variant="secondary" onClick={() => refreshOverview()}>Try again</Button>}
-          >
-            {overviewError}
-          </Banner>
+            onRetry={refreshOverview}
+            variant="card"
+          />
         ) : null}
 
         <ScanProgressCard showIdle={!overview?.scans?.length} />

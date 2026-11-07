@@ -7,6 +7,7 @@
 import type { ComponentType } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { PrefetchLink } from "@/components/app/PrefetchLink";
 import {
   Sidebar,
   SidebarContent,
@@ -46,7 +47,7 @@ const navButtonClass =
 export function AppSidebar({ ready }: { ready: boolean }) {
   const pathname = usePathname() || "/portal";
   const { setOpenMobile } = useSidebar();
-  const { features, isOwner, overview, gsc, scan } = usePortal();
+  const { brandKey, features, isOwner, overview, gsc, scan } = usePortal();
 
   const groups = visibleNavGroups(NAV_GROUPS, { features, isOwner });
   // One active row: the deepest visible match, never every row that matches.
@@ -88,6 +89,7 @@ export function AppSidebar({ ready }: { ready: boolean }) {
                     <SidebarNavLink
                       key={item.id}
                       item={item}
+                      brandKey={brandKey}
                       active={item.id === activeId}
                       placeholder={placeholder}
                       badge={navBadge(item, { scan, awaitingReview, gsc })}
@@ -171,11 +173,13 @@ function navBadge(
 
 function SidebarNavLink({
   item,
+  brandKey,
   active,
   placeholder = false,
   badge,
 }: {
   item: NavItem;
+  brandKey?: string;
   active: boolean;
   /** Show the row without its link, while the session is still loading. */
   placeholder?: boolean;
@@ -201,8 +205,14 @@ function SidebarNavLink({
       {placeholder ? (
         row
       ) : (
-        <Link
+        <PrefetchLink
           href={item.href}
+          {...({
+            prefetch:
+              item.prefetch && brandKey
+                ? () => item.prefetch!(brandKey)
+                : undefined,
+          } as any)}
           onClick={() => setOpenMobile(false)}
           aria-current={active ? "page" : undefined}
         >
@@ -211,7 +221,7 @@ function SidebarNavLink({
               `peer-data-[size=…]/menu-button`, which only reaches a later
               sibling of the button that carries the `peer` class. */}
           {badge}
-        </Link>
+        </PrefetchLink>
       )}
     </SidebarMenuItem>
   );

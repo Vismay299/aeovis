@@ -176,12 +176,29 @@ function QuestionRow({ question, engine }) {
 }
 
 /** Questions grouped by text, with tabs, search and an engine filter. */
-export function QuestionsCard({ results, planned }) {
-  const [view, setView] = useState("all");
-  const [search, setSearch] = useState("");
-  const [engine, setEngine] = useState("all");
+export function QuestionsCard({ results, planned, filters: externalFilters, onFiltersChange }) {
+  const [internalView, setInternalView] = useState("all");
+  const [internalSearch, setInternalSearch] = useState("");
+  const [internalEngine, setInternalEngine] = useState("all");
   const searchId = useId();
   const engineId = useId();
+
+  const view = externalFilters ? externalFilters.view : internalView;
+  const search = externalFilters ? externalFilters.search : internalSearch;
+  const engine = externalFilters ? externalFilters.engine : internalEngine;
+
+  const setView = (v) => {
+    if (onFiltersChange) onFiltersChange({ view: v });
+    else setInternalView(v);
+  };
+  const setSearch = (s) => {
+    if (onFiltersChange) onFiltersChange({ search: s });
+    else setInternalSearch(s);
+  };
+  const setEngine = (e) => {
+    if (onFiltersChange) onFiltersChange({ engine: e });
+    else setInternalEngine(e);
+  };
 
   const questions = useMemo(() => groupQuestions(results, planned), [results, planned]);
   const engines = useMemo(() => engineOptions(results, planned), [results, planned]);
@@ -194,7 +211,7 @@ export function QuestionsCard({ results, planned }) {
   const notNaming = scoped.filter((q) => questionHasAnswer(q, engine) && !questionNamesBrand(q, engine));
   const noAnswers = scoped.filter((q) => !questionHasAnswer(q, engine));
 
-  const needle = search.trim().toLowerCase();
+  const needle = (search || "").trim().toLowerCase();
   const visible = (view === "naming" ? naming : view === "missing" ? notNaming : view === "unanswered" ? noAnswers : scoped)
     .filter((q) => !needle || q.query.toLowerCase().includes(needle));
 
@@ -205,7 +222,16 @@ export function QuestionsCard({ results, planned }) {
     { value: "unanswered", label: "No answers", count: noAnswers.length },
   ];
 
-  const clear = () => { setSearch(""); setView("all"); setEngine("all"); };
+  const clear = () => {
+    if (onFiltersChange) {
+      onFiltersChange({ view: "all", engine: "all" });
+      onFiltersChange({ search: "" });
+    } else {
+      setInternalSearch("");
+      setInternalView("all");
+      setInternalEngine("all");
+    }
+  };
 
   return (
     <Card title="Questions" description="Each buyer question, and what every engine answered." flush>

@@ -7,6 +7,8 @@ import { compileJsx, renderToHtml, textOf } from "../../lib/renderHarness.mjs";
 import * as scanProgress from "../../lib/scanProgress.js";
 import * as reportData from "./scans/reportData.js";
 import {createMetric} from "../../lib/scoring/metricContract.js";
+import { createFakeReactQuery } from "../../lib/fakeReactQuery.mjs";
+import { z } from "zod";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const noop = () => {};
@@ -87,7 +89,14 @@ async function trackerLifecycle(t, fetch) {
   t.after(() => lifecycle.close());
   t.mock.method(globalThis, "fetch", fetch);
   const { useScanTracker } = await compileJsx(path.join(here, "useScanTracker.js"), {
-    modules: new Map([["react", lifecycle.react], ["@/lib/scanProgress", scanProgress]]),
+    modules: new Map([
+      ["react", lifecycle.react],
+      ["@/lib/scanProgress", scanProgress],
+      ["@tanstack/react-query", createFakeReactQuery(lifecycle.react)],
+      ["@/lib/query/polling", await import("../../lib/query/polling.ts")],
+      ["@/lib/query/keys", await import("../../lib/query/keys.ts")],
+      ["./scanTrackerModel", await import("./scanTrackerModel.js")],
+    ]),
   });
   return { lifecycle, useScanTracker };
 }
@@ -268,16 +277,28 @@ test("the report renders its By engine card from the actual worker payload shape
   t.after(() => lifecycle.close());
   const engineData = { aio: { engine: "aio", visibility_pct: 42 }, chatgpt: { engine: "chatgpt", visibility_pct: 0 } };
   t.mock.method(globalThis, "fetch", async () => response(200, { scan: { id: "scan-a", engines: engineData, engine_scores: null }, results: [] }));
+  const fakeRq = createFakeReactQuery(lifecycle.react);
   const nextLink = { __esModule: true, default: "a" };
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["next/link", nextLink]]), autoNull: ["lucide-react"] });
   const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
   const { default: ReportPage } = await compileJsx(path.join(here, "../../app/portal/scans/[scanId]/page.jsx"), {
     modules: new Map([
-      ["react", lifecycle.react], ["next/navigation", { useParams: () => ({ scanId: "scan-a" }) }],
+      ["react", lifecycle.react],
+      ["@tanstack/react-query", fakeRq],
+      ["next/navigation", { useParams: () => ({ scanId: "scan-a" }) }],
       ["@/components/portal/PortalShell", { usePortal: () => ({ redirectToLogin: noop }) }],
-      ["@/components/portal/ui", ui], ["@/components/portal/scans/ReportCards", cards],
-      ["@/components/portal/scans/reportData", reportData], ["@/components/portal/scans/scans.css", {}],
-    ]), autoNull: ["lucide-react"],
+      ["@/components/portal/ui", ui],
+      ["@/components/portal/scans/ReportCards", cards],
+      ["@/components/portal/scans/reportData", reportData],
+      ["@/components/portal/scans/scans.css", {}],
+      ["@/lib/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"], queryFn: async () => (await fetch("/api/customer/scans/" + id)).json() }) }],
+      ["@/lib/query/fetchJson", { isApiError: (err) => Boolean(err?.status) }],
+      ["@/lib/query/errors", { describeError: (err) => ({ title: "Error", message: err?.message || String(err) }) }],
+      ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (opts) => [opts?.defaults || { q: "", engine: "all", status: "all" }, noop] }],
+      ["@/components/app/hooks/useDebouncedDraft", { useDebouncedDraft: (opts) => [opts?.value || "", noop, noop] }],
+      ["zod", { z }],
+    ]),
+    autoNull: ["lucide-react"],
   });
   lifecycle.setRender(() => ReportPage()); await lifecycle.settle();
   const card = find(lifecycle.output, (node) => node.type === cards.EngineScoresCard);
@@ -416,17 +437,29 @@ async function finalizedReport(valid, planned = 30, mentions = valid) {
 async function renderCustomerReport(t, scan) {
   const lifecycle = createLifecycle();
   t.after(() => lifecycle.close());
+  const fakeRq = createFakeReactQuery(lifecycle.react);
   const body = { scan, results: [] };
   t.mock.method(globalThis, "fetch", async () => response(200, body));
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["next/link", { __esModule: true, default: "a" }]]), autoNull: ["lucide-react"] });
   const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
   const { default: ReportPage } = await compileJsx(path.join(here, "../../app/portal/scans/[scanId]/page.jsx"), {
     modules: new Map([
-      ["react", lifecycle.react], ["next/navigation", { useParams: () => ({ scanId: scan.id }) }],
+      ["react", lifecycle.react],
+      ["@tanstack/react-query", fakeRq],
+      ["next/navigation", { useParams: () => ({ scanId: scan.id }) }],
       ["@/components/portal/PortalShell", { usePortal: () => ({ redirectToLogin: noop }) }],
-      ["@/components/portal/ui", ui], ["@/components/portal/scans/ReportCards", cards],
-      ["@/components/portal/scans/reportData", reportData], ["@/components/portal/scans/scans.css", {}],
-    ]), autoNull: ["lucide-react"],
+      ["@/components/portal/ui", ui],
+      ["@/components/portal/scans/ReportCards", cards],
+      ["@/components/portal/scans/reportData", reportData],
+      ["@/components/portal/scans/scans.css", {}],
+      ["@/lib/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"], queryFn: async () => (await fetch("/api/customer/scans/" + id)).json() }) }],
+      ["@/lib/query/fetchJson", { isApiError: (err) => Boolean(err?.status) }],
+      ["@/lib/query/errors", { describeError: (err) => ({ title: "Error", message: err?.message || String(err) }) }],
+      ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (opts) => [opts?.defaults || { q: "", engine: "all", status: "all" }, noop] }],
+      ["@/components/app/hooks/useDebouncedDraft", { useDebouncedDraft: (opts) => [opts?.value || "", noop, noop] }],
+      ["zod", { z }],
+    ]),
+    autoNull: ["lucide-react"],
   });
   lifecycle.setRender(() => ReportPage()); await lifecycle.settle();
   const outcome = find(lifecycle.output, (node) => node.props?.["data-testid"] === "customer-collection-outcome");

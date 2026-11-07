@@ -10,8 +10,9 @@
 
 import "@/components/portal/portal.css";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useScanTracker } from "./useScanTracker";
@@ -22,6 +23,15 @@ import { SkeletonPageContent } from "@/components/app/SkeletonPresets";
 import { AppBanner } from "@/components/app/AppBanner";
 import { Button } from "@/components/ui/button";
 import { TopLoadingBar } from "./ui";
+import { keys } from "@/lib/query/keys";
+import {
+  featuresQueryOptions,
+  overviewQueryOptions,
+  gscQueryOptions,
+} from "@/lib/query/portalQueries";
+import { describeError } from "@/lib/query/errors";
+import { setUnauthorizedHandler } from "@/lib/query/fetchJson";
+import { WorkspaceProvider } from "@/components/app/workspace/WorkspaceContext";
 
 /**
  * @typedef {Object} PortalBrand
@@ -104,11 +114,11 @@ export default function PortalShell({ children }) {
   const [user, setUser] = useState(null);
   const [brands, setBrands] = useState([]);
   const [brandKey, setBrandKeyState] = useState("");
-  const [overview, setOverview] = useState(null);
-  const [overviewLoading, setOverviewLoading] = useState(false);
-  const [overviewError, setOverviewError] = useState("");
-  const [gsc, setGsc] = useState(null);
-  const [features, setFeatures] = useState(null);
+
+  const queryClient = useQueryClient();
+  if (typeof window !== "undefined") {
+    window.__REACT_QUERY_CLIENT__ = queryClient;
+  }
 
   // The redirect reads the CURRENT location at the moment it happens, so this
   // callback never changes identity. That matters: the effect below loads the
@@ -121,6 +131,21 @@ export default function PortalShell({ children }) {
         ? "/portal"
         : `${window.location.pathname}${window.location.search}`;
     router.replace(`/login?next=${encodeURIComponent(next)}`);
+  }, [router]);
+
+  const redirectedRef = useRef(false);
+  useEffect(() => {
+    const redirectOnce = () => {
+      if (redirectedRef.current) return;
+      redirectedRef.current = true;
+      const next =
+        typeof window === "undefined"
+          ? "/portal"
+          : `${window.location.pathname}${window.location.search}`;
+      router.replace(`/login?next=${encodeURIComponent(next)}`);
+    };
+    setUnauthorizedHandler(() => redirectOnce());
+    return () => setUnauthorizedHandler(null);
   }, [router]);
 
   // Google's OAuth callback lands on /portal; the property picker lives on
@@ -197,70 +222,51 @@ export default function PortalShell({ children }) {
 
   const setBrandKey = useCallback((key) => {
     setBrandKeyState(key);
-    setOverview(null);
-    setGsc(null);
-    // The flags belong to the workspace that was left, so they go with it.
-    setFeatures(null);
     storeBrand(key);
   }, []);
 
-  const refreshOverview = useCallback(async () => {
-    if (!brandKey) return;
-    setOverviewLoading(true);
-    try {
-      const response = await fetch(`/api/customer/overview?brand_key=${encodeURIComponent(brandKey)}`, { cache: "no-store" });
-      if (response.status === 401) { redirectToLogin(); return; }
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "Could not load your workspace.");
-      setOverview(body);
-      setOverviewError("");
-    } catch (loadError) {
-      setOverviewError(loadError.message || "Could not load your workspace.");
-    } finally {
-      setOverviewLoading(false);
-    }
-  }, [brandKey, redirectToLogin]);
+  const queryEnabled = phase === "ready" && Boolean(brandKey);
 
-  const refreshGsc = useCallback(async () => {
-    if (!brandKey) return;
-    try {
-      const response = await fetch(`/api/customer/gsc?brand_key=${encodeURIComponent(brandKey)}`, { cache: "no-store" });
-      if (response.status === 401) { redirectToLogin(); return; }
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || "Could not read your Search Console connection.");
-      setGsc(body);
-    } catch (gscError) {
-      // Settle to "not connected" with the reason, so no page waits forever.
-      setGsc({ connected: false, connection: null, error: gscError.message || "Could not read your Search Console connection." });
-    }
-  }, [brandKey, redirectToLogin]);
+  const featuresQuery = useQuery({
+    ...featuresQueryOptions(brandKey),
+    enabled: queryEnabled,
+  });
+  const overviewQuery = useQuery({
+    ...overviewQueryOptions(brandKey),
+    enabled: queryEnabled,
+  });
+  const gscQuery = useQuery({
+    ...gscQueryOptions(brandKey),
+    enabled: queryEnabled,
+  });
 
-  useEffect(() => {
-    if (phase !== "ready" || !brandKey) return;
-    // The flags are read for the workspace that is open now. A response that
-    // arrives after the reader has switched workspaces is dropped: the `live`
-    // flag closes when this effect is cleaned up, which happens on every
-    // brandKey change.
-    let live = true;
-    storeBrand(brandKey);
-    refreshOverview();
-    refreshGsc();
-    (async () => {
-      try {
-        const response = await fetch(`/api/customer/features?brand_key=${encodeURIComponent(brandKey)}`, { cache: "no-store" });
-        if (!response.ok) throw new Error("Could not read the workspace features.");
-        const body = await response.json().catch(() => ({}));
-        if (!live) return;
-        setFeatures(body.features && typeof body.features === "object" ? body.features : {});
-      } catch (featureError) {
-        if (!live) return;
-        // A flag that cannot be read is a flag that is off: nothing gated on it
-        // may be shown.
-        setFeatures({});
+  const overview = overviewQuery.data ?? null;
+  const overviewLoading = overviewQuery.isFetching;
+  const overviewError = overviewQuery.isError
+    ? describeError(overviewQuery.error, "Could not load your workspace.")
+    : "";
+  const overviewQueryError = overviewQuery.error;
+  const refreshOverview = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: keys.overview(brandKey) }),
+    [queryClient, brandKey]
+  );
+
+  const gsc = gscQuery.isError
+    ? {
+        connected: false,
+        connection: null,
+        error: describeError(
+          gscQuery.error,
+          "Could not read your Search Console connection."
+        ),
       }
-    })();
-    return () => { live = false; };
-  }, [phase, brandKey, refreshOverview, refreshGsc]);
+    : gscQuery.data ?? null;
+  const refreshGsc = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: keys.gsc(brandKey) }),
+    [queryClient, brandKey]
+  );
+
+  const features = featuresQuery.data?.features ?? null;
 
   const scan = useScanTracker({
     brandKey,
@@ -276,9 +282,9 @@ export default function PortalShell({ children }) {
 
   const value = useMemo(() => ({
     user, brands, brand, brandKey, setBrandKey, isOwner,
-    overview, overviewLoading, overviewError, refreshOverview,
+    overview, overviewLoading, overviewError, overviewQueryError, refreshOverview,
     gsc, refreshGsc, scan, features, redirectToLogin, signOut,
-  }), [user, brands, brand, brandKey, setBrandKey, isOwner, overview, overviewLoading, overviewError, refreshOverview, gsc, refreshGsc, scan, features, redirectToLogin, signOut]);
+  }), [user, brands, brand, brandKey, setBrandKey, isOwner, overview, overviewLoading, overviewError, overviewQueryError, refreshOverview, gsc, refreshGsc, scan, features, redirectToLogin, signOut]);
 
   if (phase === "loading") {
     // The shell renders before the session is confirmed, so the sidebar keeps
@@ -287,11 +293,13 @@ export default function PortalShell({ children }) {
     // reader never watches the page jump into place.
     return (
       <PortalContext.Provider value={value}>
-        <AppShell ready={false}>
-          <PageFrame>
-            <SkeletonPageContent />
-          </PageFrame>
-        </AppShell>
+        <WorkspaceProvider value={{ brandKey, features, isOwner }}>
+          <AppShell ready={false}>
+            <PageFrame>
+              <SkeletonPageContent />
+            </PageFrame>
+          </AppShell>
+        </WorkspaceProvider>
       </PortalContext.Provider>
     );
   }
@@ -321,10 +329,12 @@ export default function PortalShell({ children }) {
 
   return (
     <PortalContext.Provider value={value}>
-      <AppShell ready={phase === "ready"} banner={<WorkspaceBanners />}>
-        <TopLoadingBar show={overviewLoading && !overview} />
-        <PageFrame>{children}</PageFrame>
-      </AppShell>
+      <WorkspaceProvider value={{ brandKey, features, isOwner }}>
+        <AppShell ready={phase === "ready"} banner={<WorkspaceBanners />}>
+          <TopLoadingBar show={overviewLoading && !overview} />
+          <PageFrame>{children}</PageFrame>
+        </AppShell>
+      </WorkspaceProvider>
     </PortalContext.Provider>
   );
 }

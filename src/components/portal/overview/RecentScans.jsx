@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { Play, Radar } from "lucide-react";
+import { PrefetchLink } from "@/components/app/PrefetchLink";
+import { scanReportQueryOptions } from "@/lib/query/portalQueries";
 import { Badge, Button, Card, EmptyState, SkeletonRows, formatDate, formatPct } from "../ui";
 import { countText, scanTimestamp, toNumber, visibilityTone } from "./overviewModel";
 
@@ -31,9 +33,10 @@ export default function RecentScans({ overview, scan }) {
             ? "Results pending"
             : `${countText(tracked)} questions · ${countText(mentioned)} mentioned`;
           return (
-            <Link
+            <PrefetchLink
               key={item.id}
               href={`/portal/scans/${encodeURIComponent(item.id)}`}
+              prefetch={() => scanReportQueryOptions(item.id)}
               className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/50 pv-list__row"
             >
               <span className="flex flex-col min-w-0 pv-list__main">
@@ -43,7 +46,7 @@ export default function RecentScans({ overview, scan }) {
                 <span className="text-xs text-muted-foreground pv-list__meta">{meta}</span>
               </span>
               <Badge tone={visibilityTone(item.visibility_pct)}>{formatPct(item.visibility_pct)}</Badge>
-            </Link>
+            </PrefetchLink>
           );
         })}
       </div>

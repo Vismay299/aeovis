@@ -22,6 +22,8 @@ import * as scanProgress from "../../lib/scanProgress.js";
 import * as scanCompletion from "../../lib/scanCompletion.js";
 import { legacyTerminalOutcome } from "../../lib/scanOutcome.js";
 
+import { createFakeReactQuery } from "../../lib/fakeReactQuery.mjs";
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const nextLink = {
   __esModule: true,
@@ -37,7 +39,14 @@ async function loadUi() {
 
 async function loadTracker() {
   return compileJsx(path.join(here, "useScanTracker.js"), {
-    modules: new Map([["react", React], ["@/lib/scanProgress", scanProgress]]),
+    modules: new Map([
+      ["react", React],
+      ["@/lib/scanProgress", scanProgress],
+      ["@tanstack/react-query", createFakeReactQuery(React)],
+      ["@/lib/query/polling", await import("../../lib/query/polling.ts")],
+      ["@/lib/query/keys", await import("../../lib/query/keys.ts")],
+      ["./scanTrackerModel", await import("./scanTrackerModel.js")],
+    ]),
   });
 }
 
