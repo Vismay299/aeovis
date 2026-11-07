@@ -28,9 +28,9 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
 \ir ../supabase/migrations/135_f20_ga4.sql
 \ir ../supabase/migrations/136_f20_ga4_functions.sql
-\ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
 \ir ../supabase/migrations/160_f25_email_tables.sql
 \ir ../supabase/migrations/161_f25_email_functions.sql
+\ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
