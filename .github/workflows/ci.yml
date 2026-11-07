@@ -57,6 +57,7 @@ jobs:
         run: |
           node scripts/qa/check-probe-dispatch.mjs
           node scripts/qa/check-repair-workflows.mjs
+          node scripts/qa/check-f08-db.mjs
           node scripts/qa/check-f10-db.mjs
           node scripts/qa/check-f07-db.mjs
           node scripts/qa/check-f01-db.mjs

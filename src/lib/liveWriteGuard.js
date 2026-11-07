@@ -187,6 +187,11 @@ export const NEVER_WRITABLE = Object.freeze([
   "project_key_pages",
   "project_research_log",
   "project_memory_state",
+  // F08 phase 1 — migration 075: stable question identity is tenant data; live
+  // tests use the loopback-only check-f08-db.mjs harness.
+  "workspace_question_settings",
+  "workspace_questions",
+  "workspace_question_events",
 ]);
 
 /**

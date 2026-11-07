@@ -278,7 +278,7 @@ BEGIN
     IF r->>'op' = 'insert' THEN
       INSERT INTO workspace_questions(id, brand_key, text, topic, origin, status, branded, source_ref, created_by)
       VALUES ((r->>'id')::uuid, p_brand, r->>'text', coalesce(r->>'topic', 'General'), r->>'origin',
-              coalesce(r->>'status', 'active'), coalesce((r->>'branded')::boolean, false), r->'source_ref', p_actor);
+              coalesce(r->>'status', 'active'), coalesce((r->>'branded')::boolean, false), nullif(r->'source_ref', 'null'::jsonb), p_actor);
     ELSIF r->>'op' = 'update' THEN
       UPDATE workspace_questions SET topic = coalesce(r->>'topic', topic), status = coalesce(r->>'status', status),
         branded = coalesce((r->>'branded')::boolean, branded),
@@ -408,10 +408,99 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.backfill_workspace_questions(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.backfill_workspace_questions(text) TO service_role;
+
+-- Appends an approved legacy panel and syncs stable question IDs as one transaction.
+CREATE OR REPLACE FUNCTION public.append_approved_panel_with_questions(
+  p_brand text, p_key text, p_expected integer, p_canonical_payload text, p_actor uuid
+) RETURNS jsonb
+LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE
+  v_payload json;
+  v_sync jsonb;
+  v_prompts text;
+  v_payload_text text;
+  v_hash text;
+  v_artifact jsonb;
+BEGIN
+  IF p_canonical_payload IS NULL OR length(p_canonical_payload) > 500000 THEN
+    RAISE EXCEPTION 'invalid artifact';
+  END IF;
+  BEGIN
+    v_payload := p_canonical_payload::json;
+  EXCEPTION WHEN others THEN
+    RAISE EXCEPTION 'invalid artifact';
+  END;
+  IF json_typeof(v_payload) <> 'object' OR json_typeof(v_payload->'prompts') <> 'array'
+     OR json_array_length(v_payload->'prompts') NOT BETWEEN 1 AND 200 THEN
+    RAISE EXCEPTION 'reviewed panel requires reviewer and prompts';
+  END IF;
+
+  -- Any later error, including append_repair_artifact's version conflict,
+  -- rolls back this backfill and sync because the whole operation is one RPC.
+  PERFORM public.backfill_workspace_questions(p_brand);
+  v_sync := public.sync_panel_questions(
+    p_brand,
+    (v_payload::jsonb)->'prompts',
+    jsonb_build_object(
+      'persona', v_payload->>'persona',
+      'country', v_payload->'context'->>'country',
+      'language', v_payload->'context'->>'language'
+    ),
+    p_actor
+  );
+  IF jsonb_array_length(v_sync->'ids') <> json_array_length(v_payload->'prompts') THEN
+    RAISE EXCEPTION 'panel question identity mismatch';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM json_array_elements(v_payload->'prompts') AS p(prompt)
+     WHERE json_typeof(p.prompt) <> 'object'
+        OR NOT (p.prompt::jsonb ? 'id')
+        OR NOT (p.prompt::jsonb ? 'question_id')
+  ) THEN
+    RAISE EXCEPTION 'invalid artifact';
+  END IF;
+
+  -- The application sent canonical JSON so the stored sha256 remains identical
+  -- to artifactHash(payload). json (rather than jsonb) preserves number spelling
+  -- and object-key order while we replace only the two question ID fields.
+  SELECT '[' || string_agg(rewritten.json_text, ',' ORDER BY source.ordinality) || ']'
+    INTO v_prompts
+    FROM json_array_elements(v_payload->'prompts') WITH ORDINALITY AS source(prompt, ordinality)
+    CROSS JOIN LATERAL (
+      SELECT '{' || string_agg(
+        to_json(f.key)::text || ':' ||
+          CASE f.key
+            WHEN 'id' THEN to_json(v_sync->'ids'->((source.ordinality - 1)::integer)->>'question_id')::text
+            WHEN 'question_id' THEN to_json(v_sync->'ids'->((source.ordinality - 1)::integer)->>'question_id')::text
+            ELSE f.value::text
+          END,
+        ',' ORDER BY f.ordinality
+      ) || '}' AS json_text
+      FROM json_each(source.prompt) WITH ORDINALITY AS f(key, value, ordinality)
+    ) AS rewritten;
+
+  SELECT '{' || string_agg(
+    to_json(field.key)::text || ':' ||
+      CASE WHEN field.key = 'prompts' THEN v_prompts ELSE field.value::text END,
+    ',' ORDER BY field.ordinality
+  ) || '}'
+    INTO v_payload_text
+    FROM json_each(v_payload) WITH ORDINALITY AS field(key, value, ordinality);
+
+  v_hash := encode(sha256(convert_to(v_payload_text, 'UTF8')), 'hex');
+  v_artifact := public.append_repair_artifact(
+    p_brand, 'panel', p_key, p_expected, 'approved', v_payload_text::jsonb, v_hash, p_actor
+  );
+  RETURN v_artifact;
+END $$;
+REVOKE ALL ON FUNCTION public.append_approved_panel_with_questions(text,text,integer,text,uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.append_approved_panel_with_questions(text,text,integer,text,uuid)
+  TO service_role;
 NOTIFY pgrst, 'reload schema';
 ```
 
-**Paperwork:** `scripts/setup-supabase.mjs` required objects: `"075_f08_workspace_questions.sql": [{kind:"table",name:"workspace_question_settings"},{kind:"table",name:"workspace_questions"},{kind:"column",name:"workspace_questions.text_normalized"},{kind:"table",name:"workspace_question_events"},{kind:"function",name:"normalize_question_text"},{kind:"function",name:"add_workspace_question"},{kind:"function",name:"save_workspace_questions"},{kind:"function",name:"sync_panel_questions"},{kind:"function",name:"prune_workspace_question_events"}]`, `"076_f08_question_backfill.sql": [{kind:"function",name:"backfill_workspace_questions"}]`. `tests/customer-uat.sql`: one settings row, two questions and one event per tenant workspace; each user reads only their own. Retention: `workspace_question_events` 395 days (`questions.retention`); questions and settings are bounded per workspace.
+**Paperwork:** `scripts/setup-supabase.mjs` required objects: `"075_f08_workspace_questions.sql": [{kind:"table",name:"workspace_question_settings"},{kind:"table",name:"workspace_questions"},{kind:"column",name:"workspace_questions.text_normalized"},{kind:"table",name:"workspace_question_events"},{kind:"function",name:"normalize_question_text"},{kind:"function",name:"add_workspace_question"},{kind:"function",name:"save_workspace_questions"},{kind:"function",name:"sync_panel_questions"},{kind:"function",name:"prune_workspace_question_events"}]`, `"076_f08_question_backfill.sql": [{kind:"function",name:"backfill_workspace_questions"},{kind:"function",name:"append_approved_panel_with_questions"}]`. `tests/customer-uat.sql`: one settings row, two questions and one event per tenant workspace; each user reads only their own. Retention: `workspace_question_events` 395 days (`questions.retention`); questions and settings are bounded per workspace.
 
 **Forward compatibility with "locked core + rolling questions"** (not built): `cohort` already exists with only `core` allowed, and every panel prompt carries `cohort: "core"`. A later spec can (1) widen the CHECK to `('core','rolling')`, (2) store each scan's generated questions as `cohort 'rolling'`, `status 'archived'`, `origin 'ai_generate'` rows, so they get ids and F12 history without entering the working set, (3) freeze `core ∪ rolling` into the scan snapshot with each prompt's `cohort`, and (4) let trends read only `cohort = 'core'` prompts. "Locking" maps to the existing curation actions (active core vs not). No column or table added here would need to change.
 
@@ -508,7 +597,7 @@ export async function approveQuestionPanel(admin: SupabaseClient, ws: Workspace,
 
 #### 6.2.4 Legacy route sync — `src/app/api/customer/repairs/[kind]/route.js`
 
-In the `kind === "panel"` branch, after `validatePanel` and the persona/near-duplicate checks and only when `state === "approved"`: `const { ids } = await syncPanelQuestions(admin, { brandKey, prompts: payload.prompts.map(p => ({ text: p.text, topic: p.topic, purpose: p.purpose, origin: p.origin })), settings: { persona: payload.persona, country: payload.context.country, language: payload.context.language }, actor: ctx.user.id })`, then `payload.prompts = payload.prompts.map(p => ({ ...p, id: idFor(p.text), question_id: idFor(p.text) }))` where `idFor` matches by `normalizeQuestionText`. Drafts and retirements are unchanged. The request/response shapes are unchanged, so the demo setup script keeps working.
+In the `kind === "panel"` branch, after `validatePanel` and the persona/near-duplicate checks and only when `state === "approved"`, the route calls `append_approved_panel_with_questions` once with `canonicalJson(payload)` and the existing brand, key, `expectedVersion`, and actor. It does not call the backfill, sync, and append RPCs separately. The service-only function in 076 runs the lazy `backfill_workspace_questions`, then `sync_panel_questions`, rewrites each prompt's `id` and `question_id` from the returned IDs in prompt order, calculates the canonical artifact hash, and calls the existing `append_repair_artifact` in the same PostgreSQL transaction. An `artifact revision conflict` propagates from append; the failed RPC rolls back imports, question status/settings changes, events, the backfill marker, and revision bumps. The append function's locked expected-version check is authoritative under concurrent approvals; there is no application-side pre-check race. Drafts and retirements continue through the existing append path. Request and response shapes remain unchanged.
 
 #### 6.2.5 `src/lib/questions/state.ts` — `GET` payload
 
@@ -806,20 +895,20 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 ### Phase 1 — Identity, backfill, legacy sync (no UI change)
 **Goal:** every workspace has stable question ids, and every approved panel from any path carries them.
 
-- [ ] **P1.T1 Migrations and paperwork**
-  - [ ] **P1.T1.S1** *Files:* `supabase/migrations/075_f08_workspace_questions.sql`, `supabase/migrations/076_f08_question_backfill.sql`. *Do:* §6.1. *Verify:* CI `customer-database` → green.
-  - [ ] **P1.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`, `.github/workflows/ci.yml` (add `node scripts/qa/check-f08-db.mjs` after `check-repair-workflows.mjs`). *Verify:* `node --test src/lib/migrationsRunner.test.mjs` → pass.
-  - [ ] **P1.T1.S3** *Files:* `README.md` (rows `075_f08_workspace_questions` "Stable question identity under reviewed panels: questions, settings, events, normaliser." and `076_f08_question_backfill` "One-time import of existing panel versions into workspace questions."), `docs/OPERATOR_LEDGER.md` § C (both names, "apply before deploying F08; run the backfill only through the app (lazy)"), `docs/PROD_MIGRATIONS.md` (one bullet each). *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
-- [ ] **P1.T2 Helpers**
-  - [ ] **P1.T2.S1** *Files:* `src/lib/questions/workspaceQuestions.ts`, `workspaceQuestions.test.ts`, `tests/fixtures/f08/normalize-cases.json`. *Do:* §6.2.1; tests: normaliser cases; branded detection with `getBrandAliases("Offcult","https://offcult.in")`; error mapping table with a fake rpc. *Verify:* `node --test src/lib/questions/workspaceQuestions.test.ts` → pass (F08-AC-01 unit).
-  - [ ] **P1.T2.S2** *Files:* `src/lib/repairs/workflow.js` (export `matchesBrandAlias`, origin `search_questions`), `src/lib/repairs/r14-workflow-contract.test.mjs` (two new cases: `search_questions` accepted without evidence; `matchesBrandAlias` equals the branded result). *Verify:* `node --test src/lib/repairs/r14-workflow-contract.test.mjs` → pass.
-  - [ ] **P1.T2.S3** *Files:* `src/lib/questions/applyQuestionPatch.ts`, `applyQuestionPatch.test.ts`. *Do:* §6.2.2; port `aiVisibilityConfiguration.test.ts:45-145` cases plus case-only edit, `replaced_by`, events, `question_invalid` length. *Verify:* `node --test src/lib/questions/applyQuestionPatch.test.ts` → pass (F08-AC-04).
-- [ ] **P1.T3 Legacy sync**
-  - [ ] **P1.T3.S1** *Files:* `src/app/api/customer/repairs/[kind]/route.js`, `src/lib/questions/legacyPanelSync.route.test.mjs`. *Do:* §6.2.4. Cases: approved post → artifact prompts carry `question_id`; draft post → `sync_panel_questions` not called; response JSON unchanged. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/questions/legacyPanelSync.route.test.mjs src/lib/customerRoutes.test.mjs` → pass (F08-AC-08 route).
-- [ ] **P1.T4 Database harness**
-  - [ ] **P1.T4.S1** *Files:* `scripts/qa/check-f08-db.mjs` (loopback `_qa` guard). *Do:* groups `normalize` (SQL vs fixture), `schema` (unique, immutable text, enums), `rls`, `add` (create/existing/revive/import archived/caps), `revision` (stale and concurrent saves on two pool clients), `legacy-sync` (approve via `append_repair_artifact` + `sync_panel_questions`), `backfill` (3 versions, head draft, persona/context, second call `skipped`), `scan-snapshot` (approved artifact with `question_id` → `enqueue_measurement_window` copies it into `scan_jobs.panel_snapshot`; later working-set edit leaves it unchanged). *Verify:* `node scripts/qa/check-f08-db.mjs` → "ok 8 groups" (F08-AC-01, 02, 03, 05, 07, 08, 09).
+- [x] **P1.T1 Migrations and paperwork**
+  - [x] **P1.T1.S1** *Files:* `supabase/migrations/075_f08_workspace_questions.sql`, `supabase/migrations/076_f08_question_backfill.sql`. *Do:* §6.1. *Verify:* CI `customer-database` → green.
+  - [x] **P1.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`, `.github/workflows/ci.yml` (add `node scripts/qa/check-f08-db.mjs` after `check-repair-workflows.mjs`), `src/lib/migrationsRunner.test.mjs` (expected-object fixture), `src/lib/migrationsLedger.test.mjs` (inline generated columns), `src/lib/liveWriteGuard.js` and `src/lib/liveWriteGuard.test.mjs` (classify F08 tables). *Verify:* `node --test src/lib/migrationsRunner.test.mjs` → pass.
+  - [x] **P1.T1.S3** *Files:* `README.md` (rows `075_f08_workspace_questions` "Stable question identity under reviewed panels: questions, settings, events, normaliser." and `076_f08_question_backfill` "One-time import of existing panel versions into workspace questions; atomic approved legacy panel sync and append."), `docs/OPERATOR_LEDGER.md` § C (both names, "apply before deploying F08; run the backfill only through the app (lazy)"), `docs/PROD_MIGRATIONS.md` (one bullet each). *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+- [x] **P1.T2 Helpers**
+  - [x] **P1.T2.S1** *Files:* `src/lib/questions/workspaceQuestions.ts`, `workspaceQuestions.test.ts`, `tests/fixtures/f08/normalize-cases.json`. *Do:* §6.2.1; tests: normaliser cases; branded detection with `getBrandAliases("Offcult","https://offcult.in")`; error mapping table with a fake rpc. *Verify:* `node --test src/lib/questions/workspaceQuestions.test.ts` → pass (F08-AC-01 unit).
+  - [x] **P1.T2.S2** *Files:* `src/lib/repairs/workflow.js` (export `matchesBrandAlias`, origin `search_questions`), `src/lib/repairs/r14-workflow-contract.test.mjs` (two new cases: `search_questions` accepted without evidence; `matchesBrandAlias` equals the branded result). *Verify:* `node --test src/lib/repairs/r14-workflow-contract.test.mjs` → pass.
+  - [x] **P1.T2.S3** *Files:* `src/lib/questions/applyQuestionPatch.ts`, `applyQuestionPatch.test.ts`. *Do:* §6.2.2; port `aiVisibilityConfiguration.test.ts:45-145` cases plus case-only edit, `replaced_by`, events, `question_invalid` length. *Verify:* `node --test src/lib/questions/applyQuestionPatch.test.ts` → pass (F08-AC-04).
+- [x] **P1.T3 Legacy sync**
+  - [x] **P1.T3.S1** *Files:* `src/app/api/customer/repairs/[kind]/route.js`, `src/lib/questions/legacyPanelSync.route.test.mjs`, `scripts/qa/check-f08-db.mjs` group `legacy-sync`. *Do:* §6.2.4. Cases: approved post → artifact prompts carry `question_id`; draft post → atomic sync RPC not called; response JSON unchanged; stale expected version → 409 with no backfill/sync/revision changes (route and DB regression). *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/questions/legacyPanelSync.route.test.mjs src/lib/customerRoutes.test.mjs` and DB harness group `legacy-sync` → pass (F08-AC-08 route/DB).
+- [x] **P1.T4 Database harness**
+  - [x] **P1.T4.S1** *Files:* `scripts/qa/check-f08-db.mjs` (loopback `_qa` guard). *Do:* groups `normalize` (SQL vs fixture), `schema` (unique, immutable text, enums), `rls`, `add` (create/existing/revive/import archived/caps), `revision` (stale and concurrent saves on two pool clients), `legacy-sync` (atomic approved append/sync and stale expected-version rollback of backfill/sync/revision), `backfill` (3 versions, head draft, persona/context, second call `skipped`), `scan-snapshot` (approved artifact with `question_id` → `enqueue_measurement_window` copies it into `scan_jobs.panel_snapshot`; later working-set edit leaves it unchanged). *Verify:* `node scripts/qa/check-f08-db.mjs` → "ok 8 groups" (F08-AC-01, 02, 03, 05, 07, 08, 09).
 
-**Checkpoint:** `npm test`, `npm run typecheck`, `npm run build`, `check-f08-db.mjs`, `check-repair-workflows.mjs` pass. ACs 01–05, 07–09.
+- [x] **Checkpoint:** `npm test`, `npm run typecheck`, `npm run build`, `check-f08-db.mjs`, `check-repair-workflows.mjs` pass. ACs 01–05, 07–09.
 
 ### Phase 2 — Curation routes and approval
 **Goal:** the working set can be read, edited and approved through APIs.

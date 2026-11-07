@@ -359,6 +359,10 @@ const FULL_CATALOG = [
   "scan_schedules.last_skip_reason", "scan_schedules.schedule_time", "scan_schedules.last_skip_at",
   "scan_schedules.approval_id", "scan_schedules.customer_updated_by", "scan_schedules.customer_updated_at",
   "scan_schedules_f10_checks", "scan_schedules_customer_due_idx", "start_customer_window", "block_customer_window",
+  // 075_f08_workspace_questions.sql / 076_f08_question_backfill.sql — stable question identity and its backfill.
+  "workspace_question_settings", "workspace_questions", "workspace_questions.text_normalized", "workspace_question_events",
+  "normalize_question_text", "add_workspace_question", "save_workspace_questions", "sync_panel_questions",
+  "prune_workspace_question_events", "backfill_workspace_questions", "append_approved_panel_with_questions",
 ];
 
 function withRegister(dir) {

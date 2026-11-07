@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   validatePanel,
+  matchesBrandAlias,
   verifySourcePassage,
   makeSourceSnapshot,
   draftCheck,
@@ -58,6 +59,27 @@ test("R14: purpose and exact panel identities freeze before answers; duplicate a
     () => validatePanel({ ...p, context: { country: "zz" } }),
     /country/,
   );
+});
+test("search_questions is accepted as a conventional question origin without evidence", () => {
+  const panel = validatePanel({
+    persona: "Small business buyers",
+    context: { country: "in" },
+    prompts: [{ text: "Which invoicing tools suit small teams?", origin: "search_questions" }],
+  });
+  assert.equal(panel.prompts[0].origin, "search_questions");
+  assert.equal(panel.prompts[0].purpose, "recommendation");
+  assert.equal(panel.prompts[0].evidence_ref, undefined);
+});
+test("matchesBrandAlias returns the same branded result used by validatePanel", () => {
+  const aliases = ["Offcult", "offcult.in"];
+  const text = "Is Offcult a good streetwear choice?";
+  const panel = validatePanel({
+    persona: "Streetwear shoppers",
+    context: { country: "in" },
+    prompts: [{ text, origin: "manual" }],
+  }, { brandAliases: aliases });
+  assert.equal(matchesBrandAlias(text, aliases), true);
+  assert.equal(panel.prompts[0].purpose === "diagnostic", matchesBrandAlias(text, aliases));
 });
 test("R05: recommendation eligibility and unreviewed qualification survive summary and headline aggregation", () => {
   const rows = Array.from({ length: 30 }, (_, i) => ({

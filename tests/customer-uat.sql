@@ -22,6 +22,8 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/041_f01_spend.sql
 \ir ../supabase/migrations/043_f01_jobs_cron.sql
 \ir ../supabase/migrations/070_f07_project_memory.sql
+\ir ../supabase/migrations/075_f08_workspace_questions.sql
+\ir ../supabase/migrations/076_f08_question_backfill.sql
 \ir ../supabase/migrations/080_f09_price_approvals.sql
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
 \ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
@@ -348,4 +350,38 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 -- End F10 tenant check.
+
+-- F08: members read only their own settings, questions and question events.
+INSERT INTO public.workspace_question_settings(brand_key,revision,persona) VALUES
+ ('10000000-0000-0000-0000-000000000001',1,'Workspace A buyers'),
+ ('10000000-0000-0000-0000-000000000002',1,'Workspace B buyers');
+INSERT INTO public.workspace_questions(id,brand_key,text,topic,origin,created_by) VALUES
+ ('50000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','Which tools suit workspace A buyers?','General','manual','00000000-0000-0000-0000-000000000001'),
+ ('50000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','How does workspace A compare products?','General','manual','00000000-0000-0000-0000-000000000001'),
+ ('50000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000002','Which tools suit workspace B buyers?','General','manual','00000000-0000-0000-0000-000000000002'),
+ ('50000000-0000-0000-0000-000000000004','10000000-0000-0000-0000-000000000002','How does workspace B compare products?','General','manual','00000000-0000-0000-0000-000000000002');
+INSERT INTO public.workspace_question_events(brand_key,question_id,event,revision,actor) VALUES
+ ('10000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001','created',1,'00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','50000000-0000-0000-0000-000000000003','created',1,'00000000-0000-0000-0000-000000000002');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.workspace_question_settings) <> 1
+  OR (SELECT brand_key FROM public.workspace_question_settings) <> '10000000-0000-0000-0000-000000000001'
+  OR (SELECT count(*) FROM public.workspace_questions) <> 2
+  OR EXISTS(SELECT 1 FROM public.workspace_questions WHERE brand_key='10000000-0000-0000-0000-000000000002')
+  OR (SELECT count(*) FROM public.workspace_question_events) <> 1
+  THEN RAISE EXCEPTION 'F08 customer A read crossed workspace boundaries'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.workspace_question_settings) <> 1
+  OR (SELECT brand_key FROM public.workspace_question_settings) <> '10000000-0000-0000-0000-000000000002'
+  OR (SELECT count(*) FROM public.workspace_questions) <> 2
+  OR EXISTS(SELECT 1 FROM public.workspace_questions WHERE brand_key='10000000-0000-0000-0000-000000000001')
+  OR (SELECT count(*) FROM public.workspace_question_events) <> 1
+  THEN RAISE EXCEPTION 'F08 customer B read crossed workspace boundaries'; END IF;
+END $$;
+RESET ROLE;
+-- End F08 tenant check.
 ROLLBACK;

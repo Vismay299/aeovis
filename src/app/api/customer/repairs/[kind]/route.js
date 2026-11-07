@@ -3,6 +3,7 @@ import { customerRouteContext } from "@/lib/supabase/customerRoute";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { repairWorkflowStore } from "@/lib/db/repairWorkflow";
 import {
+  canonicalJson,
   validatePanel,
   makeSourceSnapshot,
   opportunityFromEvidence,
@@ -81,6 +82,12 @@ export async function POST(request, { params }) {
         throw new Error(
           "Review persona and near-duplicate questions before approval",
         );
+      if (state === "approved") {
+        payload.prompts = payload.prompts.map((p) => ({
+          ...p,
+          question_id: null,
+        }));
+      }
       if (state === "retired" && !body.reason)
         throw new Error("Panel retirement needs a relevance rationale");
       payload = {
@@ -174,15 +181,31 @@ export async function POST(request, { params }) {
         state = "unreviewed";
       }
     }
-    const item = await store.append({
-      brand: ctx.brand.brandKey,
-      kind,
-      key,
-      expectedVersion,
-      state,
-      payload,
-      actor: ctx.user.id,
-    });
+    let item;
+    if (kind === "panel" && state === "approved") {
+      const { data, error } = await admin.rpc(
+        "append_approved_panel_with_questions",
+        {
+          p_brand: ctx.brand.brandKey,
+          p_key: key,
+          p_expected: expectedVersion,
+          p_canonical_payload: canonicalJson(payload),
+          p_actor: ctx.user.id,
+        },
+      );
+      if (error) throw error;
+      item = data;
+    } else {
+      item = await store.append({
+        brand: ctx.brand.brandKey,
+        kind,
+        key,
+        expectedVersion,
+        state,
+        payload,
+        actor: ctx.user.id,
+      });
+    }
     return json({ item }, 201);
   } catch (error) {
     return json(
