@@ -307,7 +307,7 @@ test("loopsIdempotencyKey: short raw kept, 150 chars starts with h: and is 66 ch
   assert.equal(hashed.length, 66);
 });
 
-test("getContactNameParts matches OpenSEO test cases", () => {
+test("getContactNameParts matches the ported test cases", () => {
   assert.deepEqual(getContactNameParts(null), {});
   assert.deepEqual(getContactNameParts(undefined), {});
   assert.deepEqual(getContactNameParts(""), {});

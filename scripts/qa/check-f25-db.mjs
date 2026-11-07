@@ -144,6 +144,9 @@ async function main() {
         (err) => err.code === "23514",
         "non-object data must violate check constraint",
       );
+
+      // Leave nothing due behind: the claim group counts every due row.
+      await pool.query(`DELETE FROM public.email_outbox WHERE user_id = $1`, [userId]);
     });
 
     // 2. Group claim (F25-AC-03)
