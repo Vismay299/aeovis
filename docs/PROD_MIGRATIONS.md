@@ -1714,3 +1714,8 @@ invokes the backfill lazily; operators must not call it manually.
 ## `136_f20_ga4_functions.sql`
 
 - **Status:** in repo; **not yet applied to production**. Apply after `135_f20_ga4.sql` before deploying F20 phase 1. Creates service-role functions for grant upsert, cache purge, connection set/disconnect, impact, account removal, unused-grant purge, attempt pruning. Confirm with: `select to_regclass('public.ga4_grants');` and `select proname from pg_proc where proname = 'ga4_upsert_grant';`.
+
+## `130_f19_indexnow.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply before deploying F19 phase 2. Additive and idempotent, creates `indexnow_keys`, `indexnow_submissions`, and `indexnow_key_checks` tables with RLS and member-read policies, trigger `indexnow_keys_touch`, and functions `indexnow_ensure_key`, `indexnow_usage`, `indexnow_recently_submitted`, `prune_indexnow`. Confirm with: `select to_regclass('public.indexnow_keys');`.
+

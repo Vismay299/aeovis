@@ -316,3 +316,9 @@ SOFTWARE.
 - `src/lib/ga4/grants.ts` (from `src/server/features/google/GoogleAccountRepository.ts`)
 - `src/lib/ga4/accounts.ts` (from `src/server/features/google/GoogleAccountService.ts`, `googleDataRetention.ts`)
 - `src/lib/ga4/oauth.ts` (from `src/server/features/google/googleOAuth.ts`)
+- `src/shared/indexnow.ts` (from `src/client/features/settings/IndexNowSettings.tsx`)
+- `src/lib/indexnow/keys.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
+- `src/lib/indexnow/keyFile.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
+- `src/lib/indexnow/submit.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
+- `scripts/qa/check-f19-db.mjs` (from `src/server/features/projects/repositories/ProjectRepository.ts`)
+
