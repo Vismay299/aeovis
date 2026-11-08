@@ -23,11 +23,18 @@ export function isErrorCode(value: string): boolean {
   return ERROR_CODE_RE.test(value);
 }
 
+// Autocapture records link targets even with attribute masking on, and an
+// app link can point at a customer's page (a GSC row, a backlink source).
+const HREF_ATTRIBUTE = /(?:attr__)?href="(?:[^"\\]|\\.)*"/g;
+
 export function sanitizePostHogUrl(raw: string | undefined | null): string {
   if (!raw || typeof raw !== "string") return "";
   try {
+    const isPath = raw.startsWith("/") && !raw.startsWith("//");
     const base = "https://perceev.invalid";
-    const u = new URL(raw, base);
+    const u = new URL(raw, isPath ? base : undefined);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return raw;
+
     const kept = new URLSearchParams();
     for (const [k, v] of u.searchParams.entries()) {
       const key = k.toLowerCase();
@@ -37,13 +44,17 @@ export function sanitizePostHogUrl(raw: string | undefined | null): string {
     u.search = kept.toString() ? `?${kept.toString()}` : "";
     u.hash = "";
     // Return path+query only when same-origin relative; otherwise origin+path+query without hash.
-    if (raw.startsWith("/") || !/^https?:\/\//i.test(raw)) {
+    if (isPath) {
       return `${u.pathname}${u.search}`;
     }
     return `${u.origin}${u.pathname}${u.search}`;
   } catch {
-    return "";
+    return raw;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function cleanNestedUrls(value: unknown): unknown {
@@ -52,10 +63,9 @@ function cleanNestedUrls(value: unknown): unknown {
     return value;
   }
   if (Array.isArray(value)) return value.map(cleanNestedUrls);
-  if (value && typeof value === "object") {
+  if (isRecord(value)) {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      // Heatmap / autocapture keys that can carry link targets
+    for (const [k, v] of Object.entries(value)) {
       if (k === "$external_click_url" || k === "href" || k === "url" || k === "$current_url") {
         out[k] = typeof v === "string" ? sanitizePostHogUrl(v) : cleanNestedUrls(v);
         continue;
@@ -70,6 +80,8 @@ function cleanNestedUrls(value: unknown): unknown {
 export type PostHogEventLike = {
   event?: string;
   properties?: Record<string, unknown>;
+  $set?: Record<string, unknown>;
+  $set_once?: Record<string, unknown>;
   [key: string]: unknown;
 };
 
@@ -83,6 +95,32 @@ export function sanitizeEvent<T extends PostHogEventLike | null | undefined>(eve
   if (typeof props.$pathname === "string") {
     // Path only — strip query/hash if present
     props.$pathname = sanitizePostHogUrl(props.$pathname).split("?")[0];
+  }
+
+  // Heatmaps key their click positions by page URL
+  if (isRecord(props.$heatmap_data)) {
+    const byUrl: Record<string, unknown[]> = {};
+    for (const [url, points] of Object.entries(props.$heatmap_data)) {
+      const sanitized = sanitizePostHogUrl(url);
+      const merged = (byUrl[sanitized] ??= []);
+      if (Array.isArray(points)) {
+        for (const point of points) merged.push(point);
+      }
+    }
+    props.$heatmap_data = byUrl;
+  }
+
+  // Drop autocaptured link targets
+  delete props.$external_click_url;
+  if (typeof props.$elements_chain === "string") {
+    props.$elements_chain = props.$elements_chain.replace(HREF_ATTRIBUTE, "");
+  }
+  if (Array.isArray(props.$elements)) {
+    for (const element of props.$elements) {
+      if (typeof element === "object" && element !== null) {
+        Reflect.deleteProperty(element, "attr__href");
+      }
+    }
   }
 
   // Exception messages: blank unless bare error code
@@ -100,9 +138,17 @@ export function sanitizeEvent<T extends PostHogEventLike | null | undefined>(eve
     props.$exception_message = "";
   }
 
-  // Drop autocaptured link targets
-  delete props.$external_click_url;
-
   const cleaned = cleanNestedUrls(props) as Record<string, unknown>;
-  return { ...event, properties: cleaned };
+  const result: Record<string, unknown> = { ...event, properties: cleaned };
+
+  if (event.$set && isRecord(event.$set)) {
+    result.$set = cleanNestedUrls(event.$set) as Record<string, unknown>;
+  }
+  if (event.$set_once && isRecord(event.$set_once)) {
+    result.$set_once = cleanNestedUrls(event.$set_once) as Record<string, unknown>;
+  }
+
+  return result as T;
 }
+
+export const sanitizePostHogEvent = sanitizeEvent;

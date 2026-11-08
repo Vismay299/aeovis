@@ -47,6 +47,8 @@ SOFTWARE.
 - `src/shared/privacy-choices.ts` (and `privacy-choices.test.ts`)
 - `src/lib/telemetry/sanitize.ts` (and `sanitize.test.ts`)
 - `src/lib/telemetry/client.ts` (and `client.test.ts` buffer/opt-in cases)
+- `src/components/app/telemetry/TelemetryBootstrap.tsx`
+- `src/components/portal/privacy/PrivacySettings.tsx`
 - `supabase/migrations/041_f01_spend.sql`
 - `src/shared/project-context.ts`
 - `src/shared/project-context.test.ts`

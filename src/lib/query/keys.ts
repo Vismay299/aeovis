@@ -25,7 +25,14 @@ export const keys = {
     ["price", brandKey, action, inputKey] as const,
   // F07
   projectContext: (brandKey: string) => ["projectContext", brandKey] as const,
+  // F26
+  privacyChoice: () => ["privacyChoice"] as const,
 } as const;
+
+export const privacyKeys = {
+  choice: () => ["privacyChoice"] as const,
+} as const;
+
 
 /** Every domain above whose second element is a brandKey. */
 export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([

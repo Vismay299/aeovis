@@ -4,11 +4,26 @@ import { PRIVATE_ROUTE_PREFIXES, getRouteIndexingPolicy } from "./src/lib/public
 const nextConfig = {
     async headers() {
         const preview = !getRouteIndexingPolicy("/", process.env).index;
-        return (preview ? ["/:path*"] : PRIVATE_ROUTE_PREFIXES.map((prefix) => `${prefix}/:path*`)).map((source) => ({
+        const rules = (preview ? ["/:path*"] : PRIVATE_ROUTE_PREFIXES.map((prefix) => `${prefix}/:path*`)).map((source) => ({
             source,
             headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
         }));
+        rules.push({
+            source: "/ingest/:path*",
+            headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+        });
+        return rules;
     },
+    async rewrites() {
+        const ingest = process.env.POSTHOG_INGEST_ORIGIN || "https://eu.i.posthog.com";
+        const assets = process.env.POSTHOG_ASSETS_ORIGIN || "https://eu-assets.i.posthog.com";
+        return [
+            { source: "/ingest/static/:path*", destination: `${assets}/static/:path*` },
+            { source: "/ingest/:path*", destination: `${ingest}/:path*` },
+        ];
+    },
+    skipTrailingSlashRedirect: true,
+    productionBrowserSourceMaps: process.env.POSTHOG_SOURCEMAPS === "true",
     async redirects() {
         return [{ source: "/:path*", has: [{ type: "host", value: "www.perceev.com" }],
             destination: "https://perceev.com/:path*", permanent: true }];
