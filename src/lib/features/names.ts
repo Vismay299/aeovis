@@ -19,6 +19,8 @@ export const FEATURES = {
   lifecycle_email: { spend: [] as const },
   // F20: Google Analytics 4 integration and search opportunities
   ga4: { spend: [] as const },
+  // F19: IndexNow keys, submission, checks and history. Free (no spend).
+  indexnow: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;
