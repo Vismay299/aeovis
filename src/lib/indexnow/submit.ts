@@ -7,7 +7,7 @@ import { AppError } from "../http/errors.ts";
 import { pluralUrls, type SubmissionSource } from "../../shared/indexnow.ts";
 import { indexNowDomain, ensureKey } from "./keys.ts";
 import { checkKeyFile, keyFileProblem } from "./keyFile.ts";
-import { assertSubmitAllowed, type IndexNowLimits } from "./limits.ts";
+import { assertSubmitAllowed, readIndexNowLimits, type IndexNowLimits } from "./limits.ts";
 
 export const INDEXNOW_ENDPOINTS = [
   { engine: "bing", url: "https://www.bing.com/indexnow" },
@@ -260,7 +260,8 @@ export async function submitUrls(
   const { byHost, skipped } = groupUrlsByHost(domain, i.urls);
   const groupedCount = Array.from(byHost.values()).reduce((sum, list) => sum + list.length, 0);
 
-  await assertSubmitAllowed(admin, ws.brandKey, groupedCount, now, deps?.limits);
+  const limits = deps?.limits ?? readIndexNowLimits();
+  await assertSubmitAllowed(admin, ws.brandKey, groupedCount, now, limits);
 
   const keyResult = await ensureKey(admin, ws, deps);
   const key = keyResult.key;
@@ -269,7 +270,7 @@ export async function submitUrls(
   // Filter recently submitted URLs (submitted within last 600s)
   const allGroupedUrls = Array.from(byHost.values()).flat();
   if (allGroupedUrls.length > 0) {
-    const cooldownSecs = (deps?.limits ?? {}).resubmitCooldownSeconds ?? 600;
+    const cooldownSecs = limits.resubmitCooldownSeconds;
     const since = new Date(now.getTime() - cooldownSecs * 1000).toISOString();
     const { data: recentUrls } = await admin.rpc("indexnow_recently_submitted", {
       p_brand: ws.brandKey,

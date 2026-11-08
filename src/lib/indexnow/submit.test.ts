@@ -375,3 +375,44 @@ test("submitUrls refuses brand without website with 400 invalid_request (port :1
     (err: unknown) => err instanceof AppError && err.status === 400 && err.code === "invalid_request"
   );
 });
+
+test("submitUrls reads the resubmit cooldown from INDEXNOW_RESUBMIT_COOLDOWN_SECONDS when no limits are injected", async () => {
+  const prev = process.env.INDEXNOW_RESUBMIT_COOLDOWN_SECONDS;
+  process.env.INDEXNOW_RESUBMIT_COOLDOWN_SECONDS = "60";
+  let since: string | null = null;
+  const admin: any = {
+    from: (table: string) =>
+      table === "indexnow_submissions"
+        ? {
+            select: () => ({ eq: () => ({ eq: async () => ({ data: [], error: null }) }) }),
+            insert: async () => ({ error: null }),
+          }
+        : {},
+    rpc: async (fn: string, params: any) => {
+      if (fn === "indexnow_ensure_key") return { data: [{ key: KEY, created: false }], error: null };
+      if (fn === "indexnow_usage") return { data: { requestsLastHour: 0, urlsToday: 0, checksLastHour: 0 }, error: null };
+      if (fn === "indexnow_recently_submitted") {
+        since = params.p_since;
+        return { data: [], error: null };
+      }
+      return { data: null, error: null };
+    },
+  };
+  try {
+    const now = new Date("2026-01-01T00:10:00.000Z");
+    await submitUrls(
+      admin,
+      { brandKey: "b1", brand: { website_host: "example.com" }, user: { id: "u1" } },
+      { urls: ["https://example.com/p1"], source: "settings", requestId: "22222222-2222-2222-2222-222222222222" },
+      {
+        now,
+        safeFetch: (async () => ({ url: "", status: 200, headers: new Headers(), text: () => KEY })) as any,
+        fetchImpl: (async () => new Response(null, { status: 200 })) as any,
+      }
+    );
+    assert.equal(since, "2026-01-01T00:09:00.000Z");
+  } finally {
+    if (prev === undefined) delete process.env.INDEXNOW_RESUBMIT_COOLDOWN_SECONDS;
+    else process.env.INDEXNOW_RESUBMIT_COOLDOWN_SECONDS = prev;
+  }
+});
