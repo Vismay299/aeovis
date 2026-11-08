@@ -40,7 +40,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F04](./F04-design-system-and-app-shell.md) | Design system and app shell (OpenSEO UI/UX) | UI/UX decision; Frontend patterns | 0 | F01 (phase 1 TypeScript, phase 2 flags) | 055–059 | In progress |
 | [F05](./F05-client-data-layer.md) | Client data layer and interaction patterns | Frontend patterns | 0 | F04 | 060–064 | Merged |
 | [F06](./F06-data-tables-and-export.md) | Data tables and export | Tables and export | 0 | F04, F05 | 065–069 | In progress |
-| [F07](./F07-project-memory.md) | Project memory | Project memory | 1 | F01 | 070–074 | In progress |
+| [F07](./F07-project-memory.md) | Project memory | Project memory | 1 | F01 | 070–074 | Merged |
 | [F08](./F08-ai-question-setup.md) | AI-drafted question setup and curation | Questions at setup; question handling | 1 | F02, F03, F07, F09 | 075–079 | In progress |
 | [F09](./F09-price-before-running.md) | Price before running | Price before running | 1 | F03 | 080–084 | Merged |
 | [F10](./F10-customer-scheduling.md) | Customer scheduling | Scheduling | 1 | F01, F09 | 085–089 | In progress |
