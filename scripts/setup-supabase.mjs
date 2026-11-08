@@ -460,6 +460,15 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "email_milestone_candidates" },
     { kind: "function", name: "prune_email_outbox" },
   ],
+  "130_f19_indexnow.sql": [
+    { kind: "table", name: "indexnow_keys" },
+    { kind: "table", name: "indexnow_submissions" },
+    { kind: "table", name: "indexnow_key_checks" },
+    { kind: "function", name: "indexnow_ensure_key" },
+    { kind: "function", name: "indexnow_usage" },
+    { kind: "function", name: "indexnow_recently_submitted" },
+    { kind: "function", name: "prune_indexnow" },
+  ],
   "135_f20_ga4.sql": [
     { kind: "table", name: "ga4_oauth_attempts" },
     { kind: "table", name: "ga4_grants" },
