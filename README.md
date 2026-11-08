@@ -210,6 +210,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `161_f25_email_functions` | Lifecycle email: outbox claim and retention, milestone candidates tolerant of optional F10/F18/F22 tables. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `135_f20_ga4` | Google Analytics 4: OAuth attempts, per-user Analytics grants (encrypted tokens) and one connection per workspace; separate from Search Console. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `136_f20_ga4_functions` | Google Analytics 4 functions: grant upsert, connection set/disconnect, account removal, unused-grant purge, cache purge, attempt pruning. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `130_f19_indexnow` | IndexNow: per-workspace public key, submission history (13 months) and key-check log (7 days). **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

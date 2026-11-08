@@ -372,6 +372,9 @@ const FULL_CATALOG = [
   "ga4_upsert_grant", "ga4_purge_cache", "ga4_set_connection", "ga4_disconnect",
   "ga4_grant_impact", "ga4_remove_grant", "ga4_list_unused_grants", "ga4_delete_unused_grant",
   "prune_ga4_oauth_attempts",
+  // 130_f19_indexnow.sql — IndexNow keys, submissions, key checks and functions.
+  "indexnow_keys", "indexnow_submissions", "indexnow_key_checks",
+  "indexnow_ensure_key", "indexnow_usage", "indexnow_recently_submitted", "prune_indexnow",
 ];
 
 function withRegister(dir) {

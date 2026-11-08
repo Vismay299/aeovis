@@ -610,6 +610,11 @@ abandoned is not.
 - Setup: create a second OAuth client `GA4_GOOGLE_CLIENT_ID` in the Search Console Google Cloud project, add the redirect URI and the `analytics.readonly` scope to the consent screen.
 - Objects: `ga4_oauth_attempts`, `ga4_grants`, `ga4_connections`; functions `ga4_upsert_grant`, `ga4_purge_cache`, `ga4_set_connection`, `ga4_disconnect`, `ga4_grant_impact`, `ga4_remove_grant`, `ga4_list_unused_grants`, `ga4_delete_unused_grant`, `prune_ga4_oauth_attempts`.
 
+### `130_f19_indexnow` (F19 phase 1)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply 130 before deploying F19 phase 2.
+- Objects: tables `indexnow_keys`, `indexnow_submissions`, `indexnow_key_checks`; functions `indexnow_ensure_key`, `indexnow_usage`, `indexnow_recently_submitted`, `prune_indexnow`.
+
 ## D. Content approval — the human gate, and what it does not yet do
 
 The content pipeline is human-in-the-loop by design. `POST /api/content-items/[id]/decision`

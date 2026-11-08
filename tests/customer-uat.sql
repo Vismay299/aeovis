@@ -26,6 +26,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/076_f08_question_backfill.sql
 \ir ../supabase/migrations/080_f09_price_approvals.sql
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
+\ir ../supabase/migrations/130_f19_indexnow.sql
 \ir ../supabase/migrations/135_f20_ga4.sql
 \ir ../supabase/migrations/136_f20_ga4_functions.sql
 \ir ../supabase/migrations/160_f25_email_tables.sql
@@ -457,4 +458,41 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 -- End F20 tenant check.
+-- F19: indexnow_keys, indexnow_submissions, indexnow_key_checks are tenant-isolated.
+INSERT INTO public.indexnow_keys(brand_key, key, created_by) VALUES
+ ('10000000-0000-0000-0000-000000000001', '0123456789abcdef0123456789abcdef', '00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002', 'fedcba9876543210fedcba9876543210', '00000000-0000-0000-0000-000000000002');
+INSERT INTO public.indexnow_submissions(brand_key, request_id, source, host, url_count, urls, status, message, created_by) VALUES
+ ('10000000-0000-0000-0000-000000000001', gen_random_uuid(), 'settings', 'offcult.in', 1, ARRAY['https://offcult.in/p1'], 'submitted', 'Submitted 1 URL.', '00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002', gen_random_uuid(), 'settings', 'brand2.com', 1, ARRAY['https://brand2.com/p1'], 'submitted', 'Submitted 1 URL.', '00000000-0000-0000-0000-000000000002');
+INSERT INTO public.indexnow_key_checks(brand_key, host, status) VALUES
+ ('10000000-0000-0000-0000-000000000001', 'offcult.in', 'found'),
+ ('10000000-0000-0000-0000-000000000002', 'brand2.com', 'found');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.indexnow_keys) <> 1
+  OR (SELECT brand_key FROM public.indexnow_keys) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F19 indexnow_keys leaked across customer workspaces'; END IF;
+ IF (SELECT count(*) FROM public.indexnow_submissions) <> 1
+  OR (SELECT brand_key FROM public.indexnow_submissions) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F19 indexnow_submissions leaked across customer workspaces'; END IF;
+ IF (SELECT count(*) FROM public.indexnow_key_checks) <> 1
+  OR (SELECT brand_key FROM public.indexnow_key_checks) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F19 indexnow_key_checks leaked across customer workspaces'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $$ BEGIN
+ IF (SELECT count(*) FROM public.indexnow_keys) <> 1
+  OR (SELECT brand_key FROM public.indexnow_keys) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F19 indexnow_keys leaked across customer workspaces'; END IF;
+ IF (SELECT count(*) FROM public.indexnow_submissions) <> 1
+  OR (SELECT brand_key FROM public.indexnow_submissions) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F19 indexnow_submissions leaked across customer workspaces'; END IF;
+ IF (SELECT count(*) FROM public.indexnow_key_checks) <> 1
+  OR (SELECT brand_key FROM public.indexnow_key_checks) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F19 indexnow_key_checks leaked across customer workspaces'; END IF;
+END $$;
+RESET ROLE;
+-- End F19 tenant check.
 ROLLBACK;

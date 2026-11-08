@@ -200,6 +200,10 @@ export const NEVER_WRITABLE = Object.freeze([
   "ga4_oauth_attempts",
   "ga4_grants",
   "ga4_connections",
+  // F19 — migration 130: IndexNow keys, submissions, and key checks.
+  "indexnow_keys",
+  "indexnow_submissions",
+  "indexnow_key_checks",
 ]);
 
 /**
@@ -244,6 +248,9 @@ export const WRITING_FUNCTIONS = Object.freeze({
   ga4_remove_grant: ["ga4_grants", "ga4_connections"],
   ga4_delete_unused_grant: ["ga4_grants"],
   prune_ga4_oauth_attempts: ["ga4_oauth_attempts"],
+  // F19 migration 130 — IndexNow mutating functions.
+  indexnow_ensure_key: ["indexnow_keys"],
+  prune_indexnow: ["indexnow_submissions", "indexnow_key_checks"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */
