@@ -15,6 +15,7 @@
  */
 
 import {
+  BookOpen,
   LayoutDashboard,
   MessageSquareText,
   PenLine,
@@ -105,7 +106,15 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     // F07, F22 and F23 add their items here.
     id: "tools",
     label: "AI Tools",
-    items: [],
+    items: [
+      {
+        id: "context",
+        label: "Context",
+        href: "/portal/context",
+        icon: BookOpen,
+        flag: "project_memory",
+      },
+    ],
   },
   {
     id: "settings",

@@ -24,6 +24,7 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "ga4",
   "indexnow",
   "price_review",
+  "project_memory",
 ];
 
 export type ClientFeatureName = FeatureName;
