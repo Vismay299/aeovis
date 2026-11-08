@@ -31,6 +31,18 @@ export async function resolve(specifier, context, nextResolve) {
     `;
     return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true };
   }
+  if (
+    specifier === "@/lib/supabase/admin" ||
+    specifier.endsWith("/supabase/admin.js") ||
+    specifier.endsWith("/supabase/admin")
+  ) {
+    const source = `
+      export function getSupabaseAdmin() {
+        return globalThis.callbackRouteFixture?.getAdminClient ? globalThis.callbackRouteFixture.getAdminClient() : null;
+      }
+    `;
+    return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true };
+  }
   if (specifier.startsWith("@/")) {
     const base = path.join(SRC_DIR, specifier.slice(2));
     const hit = firstExistingFile([

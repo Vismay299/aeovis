@@ -337,3 +337,7 @@ SOFTWARE.
 - `src/components/portal/context/hooks/useProjectContext.ts` (from `src/client/features/projects/project-context/shared.tsx`)
 - `src/components/portal/context/editableList.ts` (from `src/client/features/projects/project-context/EditableListSection.tsx`)
 - `src/components/portal/context/editableList.test.ts` (from `src/client/features/projects/project-context/EditableListSection.test.ts`)
+- `src/lib/email/sweeps.ts` (from `src/server/features/audit/services/firstAuditEmails.ts`, `src/server/email/onboarding-drip.ts`)
+- `src/lib/email/spendCap.ts` (from `src/server/email/onboarding-drip.ts`)
+- `src/lib/email/signup.ts` (from `src/server/email/loops.ts`)
+

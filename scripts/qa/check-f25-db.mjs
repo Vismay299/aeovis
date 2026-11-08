@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 /**
  * F25 database harness:
- *   - outbox     (F25-AC-02: dedupe_key uniqueness, data size check constraint)
- *   - claim      (F25-AC-03: concurrency isolation, next_attempt_at filtering, expired claim recovery, attempt count)
- *   - retention  (F25-AC-15: deletion of old sent/skipped/failed rows, retention of pending and recent rows)
+ *   - outbox        (F25-AC-02: dedupe_key uniqueness, data size check constraint)
+ *   - claim         (F25-AC-03: concurrency isolation, next_attempt_at filtering, expired claim recovery, attempt count)
+ *   - retention     (F25-AC-15: deletion of old sent/skipped/failed rows, retention of pending and recent rows)
+ *   - milestones    (F25-AC-09: candidates returned, tolerance of optional tables, workspace_milestones idempotency)
+ *   - sweep-scans   (F25-AC-06: scan_finished outbox rows in DB)
+ *   - sweep-windows (F25-AC-07: schedule_skipped outbox rows in DB)
  *
  * Runs against a disposable loopback PostgreSQL database that has migrations applied.
  *
  * Usage:
  *   PGHOST=localhost PGDATABASE=perceev_qa node scripts/qa/check-f25-db.mjs
- *   PGHOST=localhost PGDATABASE=perceev_qa node scripts/qa/check-f25-db.mjs --only outbox,claim,retention
+ *   PGHOST=localhost PGDATABASE=perceev_qa node scripts/qa/check-f25-db.mjs --only milestones,sweep-scans,sweep-windows
  */
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -17,6 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
+import { sweepScans, sweepWindows } from "../../src/lib/email/sweeps.ts";
 
 const host = process.env.PGHOST || "";
 const database = process.env.PGDATABASE || "";
@@ -36,6 +40,7 @@ const MIGRATIONS = path.join(ROOT, "supabase/migrations");
 const pool = new pg.Pool({ max: 8 });
 const id = () => crypto.randomUUID();
 const createdUsers = [];
+const createdBrands = [];
 
 async function applyMigrations() {
   const m160 = fs.readFileSync(path.join(MIGRATIONS, "160_f25_email_tables.sql"), "utf8");
@@ -52,6 +57,122 @@ async function createUser(label) {
   );
   createdUsers.push(userId);
   return userId;
+}
+
+function createServiceClient(pgPool) {
+  return {
+    from(table) {
+      const filters = [];
+      const values = [];
+      let selectFields = "*";
+      let limitCount = null;
+      let orderClause = "";
+
+      const b = {
+        select(f) {
+          selectFields = f;
+          return b;
+        },
+        eq(col, val) {
+          values.push(val);
+          filters.push(`"${col}" = $${values.length}`);
+          return b;
+        },
+        in(col, vals) {
+          values.push(vals);
+          filters.push(`"${col}" = ANY($${values.length})`);
+          return b;
+        },
+        not(col, op, val) {
+          if (op === "is" && val === null) {
+            filters.push(`"${col}" IS NOT NULL`);
+          }
+          return b;
+        },
+        gte(col, val) {
+          values.push(val);
+          filters.push(`"${col}" >= $${values.length}`);
+          return b;
+        },
+        order(col, opts) {
+          orderClause = ` ORDER BY "${col}" ${opts?.ascending ? "ASC" : "DESC"}`;
+          return b;
+        },
+        limit(n) {
+          limitCount = n;
+          return {
+            then(resolve, reject) {
+              b.then(resolve, reject);
+            },
+          };
+        },
+        maybeSingle() {
+          limitCount = 1;
+          return b.then((res) => {
+            return { data: res.data?.[0] ?? null, error: res.error };
+          });
+        },
+        then(resolve, reject) {
+          let sql = `SELECT ${selectFields} FROM public.${table}`;
+          if (filters.length > 0) sql += " WHERE " + filters.join(" AND ");
+          if (orderClause) sql += orderClause;
+          if (limitCount !== null) sql += ` LIMIT ${limitCount}`;
+          pgPool
+            .query(sql, values)
+            .then((r) => resolve({ data: r.rows, error: null }))
+            .catch((err) => resolve({ data: null, error: err }));
+        },
+        async upsert(rows, opts) {
+          const list = Array.isArray(rows) ? rows : [rows];
+          const inserted = [];
+          for (const row of list) {
+            const cols = Object.keys(row);
+            const vals = Object.values(row);
+            const placeholders = vals.map((_, i) => `$${i + 1}`);
+            let sql = `INSERT INTO public.${table} ("${cols.join('","')}") VALUES (${placeholders.join(",")})`;
+            if (opts?.onConflict) {
+              sql += ` ON CONFLICT (${opts.onConflict}) DO NOTHING`;
+            }
+            sql += " RETURNING id";
+            try {
+              const res = await pgPool.query(
+                sql,
+                vals.map((v) => (typeof v === "object" && v !== null ? JSON.stringify(v) : v)),
+              );
+              if (res.rows.length > 0) inserted.push(res.rows[0]);
+            } catch (err) {
+              return {
+                data: null,
+                error: err,
+                select() {
+                  return Promise.resolve({ data: null, error: err });
+                },
+              };
+            }
+          }
+          return {
+            data: inserted,
+            error: null,
+            select() {
+              return Promise.resolve({ data: inserted, error: null });
+            },
+          };
+        },
+        async insert(rows) {
+          return b.upsert(rows);
+        },
+      };
+      return b;
+    },
+    async rpc(fn, params) {
+      try {
+        const res = await pgPool.query(`SELECT * FROM public.${fn}($1)`, [params?.p_limit ?? 500]);
+        return { data: res.rows, error: null };
+      } catch (err) {
+        return { data: null, error: err };
+      }
+    },
+  };
 }
 
 let onlyGroups = null;
@@ -289,7 +410,273 @@ async function main() {
       );
       assert.equal(checkOld.rowCount, 0, "old finished rows must be deleted");
     });
+
+    // 4. Group milestones (F25-AC-09)
+    await runTest("milestones", async () => {
+      const user = await createUser("milestones");
+      const brandKey = `qa-brand-${id()}`;
+      createdBrands.push(brandKey);
+
+      await pool.query(
+        `INSERT INTO public.customer_brands (brand_key, display_name, website, website_host, is_active)
+         VALUES ($1, 'Milestones Brand', 'https://example.test', 'example.test', true)`,
+        [brandKey],
+      );
+      await pool.query(
+        `INSERT INTO public.customer_brand_memberships (brand_key, user_id, role)
+         VALUES ($1, $2, 'owner')`,
+        [brandKey, user],
+      );
+
+      // Seed a scan
+      const scanId = id();
+      await pool.query(
+        `INSERT INTO public.scans (id, brand_key, created_at) VALUES ($1, $2, now())`,
+        [scanId, brandKey],
+      );
+
+      // Seed an enabled OAuth GSC connection
+      await pool.query(
+        `INSERT INTO public.gsc_connections (brand, brand_key, site_url, enabled, auth_mode, updated_at)
+         VALUES ($1, $1, 'https://example.test', true, 'oauth', now())`,
+        [brandKey],
+      );
+
+      // Seed an approved draft
+      await pool.query(
+        `INSERT INTO public.content_items (brand, status, updated_at)
+         VALUES ($1, 'approved', now())`,
+        [brandKey],
+      );
+
+      // Call email_milestone_candidates
+      const initialCand = await pool.query(
+        "SELECT * FROM public.email_milestone_candidates(500) WHERE brand_key = $1",
+        [brandKey],
+      );
+
+      const returnedMilestones = initialCand.rows.map((r) => r.milestone);
+      assert.ok(returnedMilestones.includes("workspace_created"), "workspace_created candidate");
+      assert.ok(returnedMilestones.includes("first_scan_completed"), "first_scan_completed candidate");
+      assert.ok(returnedMilestones.includes("gsc_connected"), "gsc_connected candidate");
+      assert.ok(returnedMilestones.includes("draft_approved"), "draft_approved candidate");
+
+      // Insert them into workspace_milestones
+      for (const row of initialCand.rows) {
+        await pool.query(
+          `INSERT INTO public.workspace_milestones (brand_key, milestone, reached_at)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (brand_key, milestone) DO NOTHING`,
+          [row.brand_key, row.milestone, row.reached_at],
+        );
+      }
+
+      // After inserting, none returned
+      const afterInsert = await pool.query(
+        "SELECT * FROM public.email_milestone_candidates(500) WHERE brand_key = $1",
+        [brandKey],
+      );
+      const remainingMilestones = afterInsert.rows.filter((r) =>
+        ["workspace_created", "first_scan_completed", "gsc_connected", "draft_approved"].includes(r.milestone),
+      );
+      assert.equal(remainingMilestones.length, 0, "inserted milestones must not be returned again");
+
+      // Create stub tables only when absent
+      const createdTables = [];
+      const hasSchedulesRes = await pool.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'scan_schedules'",
+      );
+      if (hasSchedulesRes.rowCount === 0) {
+        await pool.query(
+          `CREATE TABLE public.scan_schedules (
+            brand text PRIMARY KEY,
+            managed_by text,
+            enabled boolean,
+            customer_updated_at timestamptz,
+            updated_at timestamptz
+          )`,
+        );
+        createdTables.push("scan_schedules");
+      }
+
+      const hasAuditsRes = await pool.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'site_audits'",
+      );
+      if (hasAuditsRes.rowCount === 0) {
+        await pool.query(
+          `CREATE TABLE public.site_audits (
+            brand_key text,
+            status text,
+            completed_at timestamptz
+          )`,
+        );
+        createdTables.push("site_audits");
+      }
+
+      const hasTurnsRes = await pool.query(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'assistant_turns'",
+      );
+      if (hasTurnsRes.rowCount === 0) {
+        await pool.query(
+          `CREATE TABLE public.assistant_turns (
+            brand_key text,
+            status text,
+            created_at timestamptz
+          )`,
+        );
+        createdTables.push("assistant_turns");
+      }
+
+      // Seed one row each in the stub tables
+      await pool.query(
+        `INSERT INTO public.scan_schedules (brand, managed_by, enabled, customer_updated_at, updated_at)
+         VALUES ($1, 'customer', true, now(), now())
+         ON CONFLICT (brand) DO UPDATE SET managed_by = 'customer', enabled = true`,
+        [brandKey],
+      );
+      await pool.query(
+        `INSERT INTO public.site_audits (brand_key, status, completed_at)
+         VALUES ($1, 'completed', now())`,
+        [brandKey],
+      );
+      await pool.query(
+        `INSERT INTO public.assistant_turns (brand_key, status, created_at)
+         VALUES ($1, 'completed', now())`,
+        [brandKey],
+      );
+
+      const stubCand = await pool.query(
+        "SELECT * FROM public.email_milestone_candidates(500) WHERE brand_key = $1",
+        [brandKey],
+      );
+      const stubMilestones = stubCand.rows.map((r) => r.milestone);
+      assert.ok(stubMilestones.includes("schedule_set"), "schedule_set candidate returned");
+      assert.ok(stubMilestones.includes("audit_run"), "audit_run candidate returned");
+      assert.ok(stubMilestones.includes("assistant_used"), "assistant_used candidate returned");
+
+      // Drop any created stub tables to prove tolerance of their absence
+      for (const tbl of createdTables) {
+        await pool.query(`DROP TABLE IF EXISTS public.${tbl} CASCADE`);
+      }
+
+      // Run once with stubs dropped/absent to prove function tolerates absence
+      const tolCand = await pool.query(
+        "SELECT * FROM public.email_milestone_candidates(500) WHERE brand_key = $1",
+        [brandKey],
+      );
+      assert.ok(Array.isArray(tolCand.rows), "email_milestone_candidates succeeds when optional tables are absent");
+    });
+
+    // 5. Group sweep-scans (F25-AC-06 DB)
+    await runTest("sweep-scans", async () => {
+      const user = await createUser("sweep-scans");
+      const brandKey = `qa-brand-${id()}`;
+      createdBrands.push(brandKey);
+
+      await pool.query(
+        `INSERT INTO public.customer_brands (brand_key, display_name, website, website_host, is_active)
+         VALUES ($1, 'Sweep Scans Brand', 'https://example.test', 'example.test', true)`,
+        [brandKey],
+      );
+      await pool.query(
+        `INSERT INTO public.customer_brand_memberships (brand_key, user_id, role)
+         VALUES ($1, $2, 'owner')`,
+        [brandKey, user],
+      );
+      await pool.query(
+        `INSERT INTO public.user_email_preferences (user_id, scan_results, schedule_alerts, spend_alerts, product_updates)
+         VALUES ($1, true, true, true, false)
+         ON CONFLICT (user_id) DO UPDATE SET scan_results = true`,
+        [user],
+      );
+
+      const scanId = id();
+      await pool.query(
+        `INSERT INTO public.scans (id, brand_key, created_at, prompts_tracked, prompts_mentioned, raw_results)
+         VALUES ($1, $2, now(), 10, 5, '{"summary_stats": {"terminal_outcome": {"outcome": "complete"}}}'::jsonb)`,
+        [scanId, brandKey],
+      );
+
+      const serviceClient = createServiceClient(pool);
+      const res = await sweepScans(serviceClient, new Date(), { appUrl: "https://app.example.test" });
+      assert.ok(res.scans >= 1, "found at least 1 scan");
+
+      // Assert outbox row was inserted in PostgreSQL
+      const outboxRes = await pool.query(
+        `SELECT * FROM public.email_outbox WHERE dedupe_key = $1`,
+        [`scan_finished:${scanId}:${user}`],
+      );
+      assert.equal(outboxRes.rowCount, 1, "outbox row must be inserted in DB");
+      assert.equal(outboxRes.rows[0].template, "scan_finished");
+      assert.equal(outboxRes.rows[0].user_id, user);
+      assert.equal(outboxRes.rows[0].status, "pending");
+    });
+
+    // 6. Group sweep-windows (F25-AC-07 DB)
+    await runTest("sweep-windows", async () => {
+      const user = await createUser("sweep-windows");
+      const brandKey = `qa-brand-${id()}`;
+      createdBrands.push(brandKey);
+
+      await pool.query(
+        `INSERT INTO public.customer_brands (brand_key, display_name, website, website_host, is_active)
+         VALUES ($1, 'Sweep Windows Brand', 'https://example.test', 'example.test', true)`,
+        [brandKey],
+      );
+      await pool.query(
+        `INSERT INTO public.customer_brand_memberships (brand_key, user_id, role)
+         VALUES ($1, $2, 'owner')`,
+        [brandKey, user],
+      );
+      await pool.query(
+        `INSERT INTO public.user_email_preferences (user_id, scan_results, schedule_alerts, spend_alerts, product_updates)
+         VALUES ($1, true, true, true, false)
+         ON CONFLICT (user_id) DO UPDATE SET schedule_alerts = true, spend_alerts = true`,
+        [user],
+      );
+
+      // Ensure scan_schedules exists and has customer schedule
+      await pool.query(
+        `INSERT INTO public.scan_schedules (brand, managed_by, enabled, next_run_at, updated_at)
+         VALUES ($1, 'customer', true, now() + interval '1 day', now())
+         ON CONFLICT (brand) DO UPDATE SET managed_by = 'customer', enabled = true`,
+        [brandKey],
+      );
+
+      // Seed a blocked measurement window
+      await pool.query(
+        `INSERT INTO public.measurement_windows (brand, window_at, disposition, reason, recorded_at)
+         VALUES ($1, now(), 'blocked', 'price_changed', now())
+         ON CONFLICT (brand, window_at) DO UPDATE SET disposition = 'blocked', reason = 'price_changed'`,
+        [brandKey],
+      );
+
+      const serviceClient = createServiceClient(pool);
+      const now = new Date();
+      const res = await sweepWindows(serviceClient, now, { appUrl: "https://app.example.test" });
+      assert.ok(res.windows >= 1, "found at least 1 window");
+
+      const utcDay = now.toISOString().slice(0, 10);
+      const outboxRes = await pool.query(
+        `SELECT * FROM public.email_outbox WHERE dedupe_key = $1`,
+        [`schedule_skipped:${brandKey}:price_changed:${utcDay}:${user}`],
+      );
+      assert.equal(outboxRes.rowCount, 1, "schedule_skipped outbox row must be in DB");
+      assert.equal(outboxRes.rows[0].template, "schedule_skipped");
+      assert.equal(outboxRes.rows[0].user_id, user);
+    });
   } finally {
+    for (const brandKey of createdBrands) {
+      await pool.query("DELETE FROM public.email_outbox WHERE brand_key = $1", [brandKey]).catch(() => {});
+      await pool.query("DELETE FROM public.workspace_milestones WHERE brand_key = $1", [brandKey]).catch(() => {});
+      await pool.query("DELETE FROM public.measurement_windows WHERE brand = $1", [brandKey]).catch(() => {});
+      await pool.query("DELETE FROM public.scan_schedules WHERE brand = $1", [brandKey]).catch(() => {});
+      await pool.query("DELETE FROM public.content_items WHERE brand = $1", [brandKey]).catch(() => {});
+      await pool.query("DELETE FROM public.gsc_connections WHERE brand = $1", [brandKey]).catch(() => {});
+      await pool.query("DELETE FROM public.scans WHERE brand_key = $1", [brandKey]).catch(() => {});
+      await pool.query("DELETE FROM public.customer_brand_memberships WHERE brand_key = $1", [brandKey]).catch(() => {});
+      await pool.query("DELETE FROM public.customer_brands WHERE brand_key = $1", [brandKey]).catch(() => {});
+    }
     for (const userId of createdUsers) {
       await pool.query("DELETE FROM public.email_outbox WHERE user_id = $1", [userId]).catch(() => {});
       await pool.query("DELETE FROM auth.users WHERE id = $1", [userId]).catch(() => {});
