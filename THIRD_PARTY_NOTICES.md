@@ -321,4 +321,6 @@ SOFTWARE.
 - `src/lib/indexnow/keyFile.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
 - `src/lib/indexnow/submit.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
 - `scripts/qa/check-f19-db.mjs` (from `src/server/features/projects/repositories/ProjectRepository.ts`)
-
+- `src/components/app/cost/usePriceQuote.ts` (from `src/client/features/ai-visibility/TrackingCostReview.tsx`)
+- `src/components/app/cost/CostReviewDialog.tsx` (from `src/client/features/ai-visibility/TrackingCostReview.tsx`, `TrackerSetupReview.tsx`)
+- `src/components/app/cost/MonthlyProjection.tsx` (from `src/client/features/ai-visibility/TrackerSetupReview.tsx`)

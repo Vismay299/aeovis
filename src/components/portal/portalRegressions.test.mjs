@@ -120,9 +120,14 @@ test("a 404 scan is not re-adopted from stale or refreshed overview data", async
 for (const terminal of ["complete", "failed"]) {
   test(`a ${terminal} scan is not re-adopted, and a 409 adopts the next running scan`, async (t) => {
     const polled = [];
+    const postedBodies = [];
     let conflict = false;
     const { lifecycle, useScanTracker } = await trackerLifecycle(t, async (url, init) => {
-      if (init?.method === "POST") { conflict = true; return response(409, { error: "A scan is already running for this workspace.", code: "scan_already_running" }); }
+      if (init?.method === "POST") {
+        conflict = true;
+        postedBodies.push(JSON.parse(init.body || "{}"));
+        return response(409, { error: "A scan is already running for this workspace.", code: "scan_already_running" });
+      }
       polled.push(url);
       return url.includes("old-job")
         ? response(200, { status: terminal, result_id: "result-a" })
@@ -138,7 +143,8 @@ for (const terminal of ["complete", "failed"]) {
     await lifecycle.settle();
     assert.equal(lifecycle.output.job.status, terminal);
     assert.equal(polled.length, 1, "stale overview must not resurrect the terminal scan");
-    await lifecycle.output.start(); await lifecycle.settle();
+    await lifecycle.output.confirmStart(24); await lifecycle.settle();
+    assert.equal(postedBodies[0]?.maxUsd, 24);
     assert.equal(lifecycle.output.job.id, "new-job");
     assert.equal(lifecycle.output.active, true);
     assert.equal(lifecycle.output.percent, 15, "a new scan resets the old percentage");
@@ -149,8 +155,10 @@ for (const terminal of ["complete", "failed"]) {
 
 test("a 409 for an unapproved question panel is an actionable error, not an 'already running' notice", async (t) => {
   let finished = 0, polls = 0;
+  const postedBodies = [];
   const { lifecycle, useScanTracker } = await trackerLifecycle(t, async (url, init) => {
     if (init?.method === "POST") {
+      postedBodies.push(JSON.parse(init.body || "{}"));
       return response(409, { error: "Review and approve a question panel before starting measurement.", code: "panel_not_approved" });
     }
     polls++;
@@ -158,7 +166,8 @@ test("a 409 for an unapproved question panel is an actionable error, not an 'alr
   });
   lifecycle.setRender(() => useScanTracker({ brandKey: "brand-a", jobs: [], onFinished: () => { finished++; } }));
   await lifecycle.settle();
-  await lifecycle.output.start(); await lifecycle.settle();
+  await lifecycle.output.confirmStart(24); await lifecycle.settle();
+  assert.equal(postedBodies[0]?.maxUsd, 24);
   assert.equal(lifecycle.output.errorCode, "panel_not_approved");
   assert.match(lifecycle.output.error, /approved question panel/);
   assert.match(lifecycle.output.error, /Questions & evidence/);
@@ -173,18 +182,112 @@ test("a 409 for an unapproved question panel is an actionable error, not an 'alr
 
 test("a 409 for a scan already running keeps the progress notice and adopts the run", async (t) => {
   let finished = 0;
+  const postedBodies = [];
   const { lifecycle, useScanTracker } = await trackerLifecycle(t, async (url, init) => {
-    if (init?.method === "POST") return response(409, { error: "A scan is already running for this workspace.", code: "scan_already_running" });
+    if (init?.method === "POST") {
+      postedBodies.push(JSON.parse(init.body || "{}"));
+      return response(409, { error: "A scan is already running for this workspace.", code: "scan_already_running" });
+    }
     return response(200, { status: "probing", progress_pct: 20 });
   });
   lifecycle.setRender(() => useScanTracker({ brandKey: "brand-a", jobs: [], onFinished: () => { finished++; } }));
   await lifecycle.settle();
-  await lifecycle.output.start(); await lifecycle.settle();
+  await lifecycle.output.confirmStart(24); await lifecycle.settle();
+  assert.equal(postedBodies[0]?.maxUsd, 24);
   assert.equal(lifecycle.output.error, "");
   assert.equal(lifecycle.output.errorCode, null);
   assert.match(lifecycle.output.notice, /already running/);
   assert.equal(finished, 1, "the overview is refreshed so the running scan is adopted");
 });
+
+test("priceReview: true -> start() makes no fetch and sets review.open", async (t) => {
+  let fetchCount = 0;
+  const { lifecycle, useScanTracker } = await trackerLifecycle(t, async () => {
+    fetchCount++;
+    return response(200, {});
+  });
+  lifecycle.setRender(() => useScanTracker({ brandKey: "brand-a", jobs: [], priceReview: true }));
+  await lifecycle.settle();
+  assert.equal(lifecycle.output.review.open, false);
+  lifecycle.output.start();
+  await lifecycle.settle();
+  assert.equal(fetchCount, 0, "start() makes no fetch when priceReview is true");
+  assert.equal(lifecycle.output.review.open, true, "start() opens the review dialog");
+  assert.equal(lifecycle.output.review.error, null);
+  assert.equal(lifecycle.output.review.priceChanged, null);
+});
+
+test("priceReview: false -> start() POSTs without maxUsd", async (t) => {
+  const postedBodies = [];
+  const { lifecycle, useScanTracker } = await trackerLifecycle(t, async (url, init) => {
+    if (init?.method === "POST") {
+      postedBodies.push(JSON.parse(init.body || "{}"));
+      return response(201, { job_id: "0c2a4b1e-8d1f-4f35-9b5e-2e0c6f1a7d90", brand: "brand-a", status: "pending" });
+    }
+    return response(200, { status: "pending" });
+  });
+  lifecycle.setRender(() => useScanTracker({ brandKey: "brand-a", jobs: [], priceReview: false }));
+  await lifecycle.settle();
+  await lifecycle.output.start();
+  await lifecycle.settle();
+  assert.equal(postedBodies.length, 1);
+  assert.equal(postedBodies[0]?.brand_key, "brand-a");
+  assert.equal(postedBodies[0]?.maxUsd, undefined, "no maxUsd sent without price review");
+  assert.equal(lifecycle.output.review.open, false);
+});
+
+test("409 price_changed -> review.priceChanged.quote.totalUsd equals the response's", async (t) => {
+  const fakeQuote = {
+    action: "ai_visibility.scan.run",
+    currency: "USD",
+    totalUsd: 28.5,
+    expectedUsd: 8.0,
+    units: [{ key: "answers", label: "answers", count: 140 }],
+    lines: [],
+    monthly: null,
+    warnings: [],
+    blocked: null,
+    priceVersion: "v1",
+    quotedAt: new Date().toISOString(),
+    inputsHash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  };
+  const { lifecycle, useScanTracker } = await trackerLifecycle(t, async (url, init) => {
+    if (init?.method === "POST") {
+      return response(409, {
+        error: "This now costs up to $28.50, more than the $24.00 you approved. Review the new price.",
+        code: "price_changed",
+        details: { approvedMaxUsd: 24, quote: fakeQuote },
+      });
+    }
+    return response(200, {});
+  });
+  lifecycle.setRender(() => useScanTracker({ brandKey: "brand-a", jobs: [], priceReview: true }));
+  await lifecycle.settle();
+  await lifecycle.output.confirmStart(24);
+  await lifecycle.settle();
+  assert.equal(lifecycle.output.review.open, true, "dialog stays open on price_changed");
+  assert.equal(lifecycle.output.review.priceChanged?.approvedMaxUsd, 24);
+  assert.equal(lifecycle.output.review.priceChanged?.quote?.totalUsd, 28.5);
+  assert.equal(lifecycle.output.review.error, null);
+});
+
+test("402 daily_cap -> review.error is the API message", async (t) => {
+  const { lifecycle, useScanTracker } = await trackerLifecycle(t, async (url, init) => {
+    if (init?.method === "POST") {
+      return response(402, {
+        error: "Your workspace has reached its daily spend cap.",
+        code: "daily_cap",
+      });
+    }
+    return response(200, {});
+  });
+  lifecycle.setRender(() => useScanTracker({ brandKey: "brand-a", jobs: [], priceReview: true }));
+  await lifecycle.settle();
+  await lifecycle.output.confirmStart(24);
+  await lifecycle.settle();
+  assert.equal(lifecycle.output.review.error, "Your workspace has reached its daily spend cap.");
+});
+
 
 async function draftLifecycle(t, request) {
   const lifecycle = createLifecycle();

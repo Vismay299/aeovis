@@ -16,6 +16,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { useScanTracker } from "./useScanTracker";
+import { prefetchPriceQuote } from "@/components/app/cost/usePriceQuote";
+import { ScanCostReview } from "./ScanCostReview";
 import { AppShell } from "@/components/app/shell/AppShell";
 import { PageFrame } from "@/components/app/PageFrame";
 import { StatusScreen } from "@/components/app/StatusScreen";
@@ -44,8 +46,14 @@ import { WorkspaceProvider } from "@/components/app/workspace/WorkspaceContext";
 /**
  * @typedef {Object} PortalScan
  * @property {boolean} active
+ * @property {boolean} [starting]
  * @property {number | null} percent
  * @property {{ label: string } | null} stage
+ * @property {() => void} start
+ * @property {(maxUsd?: number) => Promise<void>} confirmStart
+ * @property {() => void} cancelReview
+ * @property {{ open: boolean, priceChanged: { approvedMaxUsd: number, quote: import("@/shared/pricing").PriceQuote } | null, error: string | null }} review
+ * @property {() => void} dismiss
  */
 
 /**
@@ -267,12 +275,24 @@ export default function PortalShell({ children }) {
   );
 
   const features = featuresQuery.data?.features ?? null;
+  const priceReview = Boolean(features?.price_review);
+
+  useEffect(() => {
+    if (brandKey && priceReview) {
+      prefetchPriceQuote(queryClient, {
+        brandKey,
+        action: "ai_visibility.scan.run",
+        input: { panelKey: "default" },
+      });
+    }
+  }, [brandKey, priceReview, queryClient]);
 
   const scan = useScanTracker({
     brandKey,
     jobs: overview?.scan_jobs,
     onFinished: refreshOverview,
     onUnauthorized: redirectToLogin,
+    priceReview,
   });
 
   const signOut = useCallback(async () => {
@@ -333,6 +353,7 @@ export default function PortalShell({ children }) {
         <AppShell ready={phase === "ready"} banner={<WorkspaceBanners />}>
           <TopLoadingBar show={overviewLoading && !overview} />
           <PageFrame>{children}</PageFrame>
+          <ScanCostReview />
         </AppShell>
       </WorkspaceProvider>
     </PortalContext.Provider>

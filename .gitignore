@@ -57,6 +57,7 @@ next-env.d.ts
 /test_reports/public-browser/
 /test_reports/repairs/
 /test_reports/f04-browser/
+/test_reports/f09-browser/
 
 # Playwright MCP browser session snapshots
 .playwright-mcp/

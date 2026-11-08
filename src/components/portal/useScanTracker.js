@@ -14,6 +14,8 @@ import {
   trackerView,
 } from "./scanTrackerModel";
 
+export const PRICE_CHANGED = "price_changed";
+
 export {
   ACTIVE_SCAN_STATUSES,
   PANEL_NOT_APPROVED,
@@ -23,8 +25,13 @@ export {
   SCAN_STALL_MS,
 } from "./scanTrackerModel";
 
-export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
+export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized, priceReview = false }) {
   const [state, setState] = useState(() => initialTrackerState(brandKey));
+  const [review, setReview] = useState({
+    open: false,
+    priceChanged: null,
+    error: null,
+  });
   const dispatch = useCallback(
     (action) => setState((s) => scanTrackerReducer(s, action)),
     []
@@ -100,13 +107,13 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
     }
   }, [state.notifySeq]);
 
-  const postStart = useCallback(
+  const confirmStart = useCallback(
     async (maxUsd) => {
       const requestedFor = brandKey;
       dispatch({ type: "startRequested" });
       try {
         const bodyPayload = { brand_key: requestedFor };
-        if (maxUsd !== undefined) bodyPayload.max_usd = maxUsd;
+        if (maxUsd !== undefined) bodyPayload.maxUsd = maxUsd;
         const response = await fetch("/api/customer/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -119,7 +126,28 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
         const body = await response.json().catch(() => ({}));
         if (brandRef.current !== requestedFor) return;
 
+        if (response.status === 409 && body.code === PRICE_CHANGED) {
+          setReview({
+            open: true,
+            priceChanged: {
+              approvedMaxUsd: body.details?.approvedMaxUsd,
+              quote: body.details?.quote,
+            },
+            error: null,
+          });
+          dispatch({
+            type: "startResolved",
+            brandKey: requestedFor,
+            outcome: {
+              kind: "error",
+              message: body.error || "The price changed.",
+            },
+          });
+          return;
+        }
+
         if (response.status === 409 && body.code === PANEL_NOT_APPROVED) {
+          setReview({ open: false, priceChanged: null, error: null });
           dispatch({
             type: "startResolved",
             brandKey: requestedFor,
@@ -128,6 +156,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
           return;
         }
         if (response.status === 409 && body.code === SCAN_ALREADY_RUNNING) {
+          setReview({ open: false, priceChanged: null, error: null });
           dispatch({
             type: "startResolved",
             brandKey: requestedFor,
@@ -136,6 +165,10 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
           return;
         }
         if (!response.ok) {
+          setReview((prev) => ({
+            ...prev,
+            error: body.error || "Could not start the scan.",
+          }));
           dispatch({
             type: "startResolved",
             brandKey: requestedFor,
@@ -146,6 +179,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
           });
           return;
         }
+        setReview({ open: false, priceChanged: null, error: null });
         dispatch({
           type: "startResolved",
           brandKey: requestedFor,
@@ -153,6 +187,10 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
         });
       } catch (startError) {
         if (brandRef.current !== requestedFor) return;
+        setReview((prev) => ({
+          ...prev,
+          error: startError.message || "Could not start the scan.",
+        }));
         dispatch({
           type: "startResolved",
           brandKey: requestedFor,
@@ -166,10 +204,18 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
     [brandKey, dispatch]
   );
 
+  const cancelReview = useCallback(() => {
+    setReview({ open: false, priceChanged: null, error: null });
+  }, []);
+
   const start = useCallback(() => {
     if (!brandKey || state.starting) return;
-    return postStart(undefined);
-  }, [brandKey, state.starting, postStart]);
+    if (priceReview) {
+      setReview({ open: true, priceChanged: null, error: null });
+      return;
+    }
+    return confirmStart(undefined);
+  }, [brandKey, state.starting, priceReview, confirmStart]);
 
   const dismiss = useCallback(() => {
     dispatch({ type: "dismissed" });
@@ -178,6 +224,10 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized }) {
   return {
     ...trackerView(state),
     start,
+    confirmStart,
+    cancelReview,
+    review,
     dismiss,
+    postStart: confirmStart,
   };
 }
