@@ -3,6 +3,7 @@
 import http from "node:http";
 import { SITES } from "./sites.ts";
 import { findFixture, FIXTURES } from "./registry.ts";
+import { renderDocument, escapeHtml, lorem } from "./fixtures/helpers.ts";
 import type { SiteId } from "./types.ts";
 
 export interface FixtureServer {
@@ -101,14 +102,33 @@ export async function startFixtureServer(): Promise<FixtureServer> {
 
     // 6. Homepage / catalog
     if (pathname === "/" || pathname === "/catalog") {
-      res.writeHead(200, { "content-type": "text/html" });
-      res.end(
-        "<!doctype html><html><head><title>Fixture Home</title></head><body><h1>Catalog</h1></body></html>",
-      );
+      const links = FIXTURES.filter(
+        (f) => (f.site ?? "main") === siteId && f.linkedFromCatalog !== false,
+      )
+        .map((f) => `<li><a href="${f.path}">${escapeHtml(f.name)}</a></li>`)
+        .join("\n");
+      const html = renderDocument({
+        title: pathname === "/" ? "Fixture Site Homepage" : "Fixture Site Catalog",
+        metaDescription:
+          "A valid meta description that is long enough to avoid being flagged as too short.",
+        ogTitle: pathname === "/" ? "Fixture Site Homepage" : "Fixture Site Catalog",
+        ogDescription: "A valid Open Graph description for the fixture site.",
+        ogImage: `http://${site.host}/images/og.png`,
+        bodyHtml: `<h1>${pathname === "/" ? "Fixture Catalog" : "Catalog"}</h1><p>${lorem(180)}</p><ul>${links}</ul>`,
+      });
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(html);
       return;
     }
 
-    // 7. Not found
+    // 7. Static dummy image / assets
+    if (pathname.startsWith("/images/")) {
+      res.writeHead(200, { "content-type": "image/png" });
+      res.end(Buffer.alloc(10));
+      return;
+    }
+
+    // 8. Not found
     res.writeHead(404, { "content-type": "text/plain" });
     res.end("Not Found");
   });

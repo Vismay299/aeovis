@@ -1719,3 +1719,12 @@ invokes the backfill lazily; operators must not call it manually.
 
 - **Status:** in repo; **not yet applied to production**. Apply before deploying F19 phase 2. Additive and idempotent, creates `indexnow_keys`, `indexnow_submissions`, and `indexnow_key_checks` tables with RLS and member-read policies, trigger `indexnow_keys_touch`, and functions `indexnow_ensure_key`, `indexnow_usage`, `indexnow_recently_submitted`, `prune_indexnow`. Confirm with: `select to_regclass('public.indexnow_keys');`.
 
+## `125_f18_site_audit.sql`
+
+- **Status:** in repo; **not yet applied to production**. Pre-check: `select to_regclass('public.site_audits');` returns null. Applied-check: `select to_regclass('public.site_audits');` returns `site_audits`. Creates `site_audits`, `site_audit_pages`, `site_audit_issues`, `site_audit_lighthouse`, `site_audit_frontier`, `site_audit_links`, and bucket `site-audit-lighthouse`. Apply before deploying F18 phase 2.
+
+## `126_f18_site_audit_functions.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply after `125_f18_site_audit.sql` before deploying F18 phase 2. Pre-check: `select proname from pg_proc where proname = 'site_audit_create';` returns no rows. Applied-check: `select proname from pg_proc where proname in ('site_audit_create', 'prune_site_audits');` returns 2 rows. Creates service-role functions for atomic audit start, frontier claims, link/orphan checks, issue summary, scratch destruction, and retention pruning.
+
+
