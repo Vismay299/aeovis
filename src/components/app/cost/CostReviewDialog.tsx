@@ -141,7 +141,7 @@ export function CostReviewDialog({
                 </Alert>
               )}
 
-              {error && !priceChanged && (
+              {error && (
                 <Alert variant="destructive">
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>

@@ -113,10 +113,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized, pri
       dispatch({ type: "startRequested" });
       try {
         const bodyPayload = { brand_key: requestedFor };
-        if (maxUsd !== undefined) {
-          bodyPayload.maxUsd = maxUsd;
-          bodyPayload.max_usd = maxUsd;
-        }
+        if (maxUsd !== undefined) bodyPayload.maxUsd = maxUsd;
         const response = await fetch("/api/customer/scan", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
