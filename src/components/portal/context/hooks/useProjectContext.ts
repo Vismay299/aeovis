@@ -47,9 +47,10 @@ export function useContextUpdate(brandKey: string) {
       queryClient.setQueryData(queryKey, context);
       toast.success("Context updated");
     },
-    // On failure the cache may be stale relative to the server; refetch then.
-    onError: async () => {
-      await queryClient.invalidateQueries({ queryKey });
+    // Refetch only after a failure. Not onError: a useMutation onError opts the
+    // mutation out of the shared error toast (src/lib/query/queryClient.ts).
+    onSettled: async (_data, error) => {
+      if (error) await queryClient.invalidateQueries({ queryKey });
     },
   });
 }
