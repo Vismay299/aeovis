@@ -683,13 +683,13 @@ Route `src/app/portal/context/page.tsx` (client component in the F04 shell). Com
 ### Phase 3 — `/portal/context` (requires F04 and F05 merged)
 **Goal:** customers read and edit memory in the app.
 
-- [ ] **P3.T1 Data hooks and keys**
-  - [ ] **P3.T1.S1** *Files:* `src/lib/query/keys.ts` (`projectContext`), `src/lib/query/keys.test.ts`, `src/components/portal/context/hooks/useProjectContext.ts`. *Verify:* `node --test src/lib/query/keys.test.ts` → pass.
-- [ ] **P3.T2 Page and sections**
-  - [ ] **P3.T2.S1** *Files:* `src/components/ui/textarea.tsx` (new; F04 ships none), `src/app/portal/context/page.tsx`, `src/components/portal/context/{ProjectContextPage,ProseSections,CustomSections,ResearchLog,CompetitorsSection,KeyPagesSection,EditableListSection,Provenance,BrandIdentityCard}.tsx`, `editableList.ts`, `editableList.test.ts`, `THIRD_PARTY_NOTICES.md` (the PORT files of this phase). *Do:* §6.6 with the exact copy. *Verify:* `node --test src/components/portal/context/editableList.test.ts` → pass; `npm run build` → exit 0.
-  - [ ] **P3.T2.S2** *Files:* `src/components/app/navigation/items.ts`, `src/lib/features/clientFeatures.ts`. *Do:* add the `context` item and `"project_memory"`. *Verify:* `node --test src/components/app/navigation/navModel.test.ts` → pass.
-- [ ] **P3.T3 Browser checks**
-  - [ ] **P3.T3.S1** *Files:* `scripts/qa/check-f07-browser.mjs` (Playwright from `worker/node_modules/playwright`, local app with fixture APIs). Scenarios: B1 loading → saved state; B2 edit overview + add competitor → toast "Context updated", provenance "Updated by you"; B3 cap error toast; B4 flag off → no sidebar item and page shows `feature_unavailable` copy; B5 375 px: `document.documentElement.scrollWidth <= 375`, Tab order reaches every control. *Verify:* `node scripts/qa/check-f07-browser.mjs` → "ok 5 scenarios" (F07-AC-16, F07-AC-17).
+- [x] **P3.T1 Data hooks and keys**
+  - [x] **P3.T1.S1** *Files:* `src/lib/query/keys.ts` (`projectContext`), `src/lib/query/keys.test.ts`, `src/components/portal/context/hooks/useProjectContext.ts`. *Verify:* `node --test src/lib/query/keys.test.ts` → pass.
+- [x] **P3.T2 Page and sections**
+  - [x] **P3.T2.S1** *Files:* `src/components/ui/textarea.tsx` (new; F04 ships none), `src/app/portal/context/page.tsx`, `src/components/portal/context/{ProjectContextPage,ProseSections,CustomSections,ResearchLog,CompetitorsSection,KeyPagesSection,EditableListSection,Provenance,BrandIdentityCard}.tsx`, `editableList.ts`, `editableList.test.ts`, `THIRD_PARTY_NOTICES.md` (the PORT files of this phase). *Do:* §6.6 with the exact copy. *Verify:* `node --test src/components/portal/context/editableList.test.ts` → pass; `npm run build` → exit 0.
+  - [x] **P3.T2.S2** *Files:* `src/components/app/navigation/items.ts`, `src/lib/features/clientFeatures.ts`. *Do:* add the `context` item and `"project_memory"`. *Verify:* `node --test src/components/app/navigation/navModel.test.ts` → pass.
+- [x] **P3.T3 Browser checks**
+  - [x] **P3.T3.S1** *Files:* `scripts/qa/check-f07-browser.mjs` (Playwright from `worker/node_modules/playwright`, local app with fixture APIs). Scenarios: B1 loading → saved state; B2 edit overview + add competitor → toast "Context updated", provenance "Updated by you"; B3 cap error toast; B4 flag off → no sidebar item and page shows `feature_unavailable` copy; B5 375 px: `document.documentElement.scrollWidth <= 375`, Tab order reaches every control. *Verify:* `node scripts/qa/check-f07-browser.mjs` → "ok 5 scenarios" (F07-AC-16, F07-AC-17).
 
 **Checkpoint:** build, unit suite, browser script. ACs 16–17.
 
