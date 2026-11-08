@@ -134,6 +134,9 @@ export function TelemetryBootstrap() {
 
   useEffect(() => {
     if (!isAllowedSurface(pathname)) {
+      // Client-side navigation can leave the app (e.g. the banner's /privacy
+      // link); the public site stays untracked, so stop capture there.
+      stopAnalyticsCapture();
       return;
     }
 

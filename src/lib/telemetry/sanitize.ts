@@ -33,7 +33,8 @@ export function sanitizePostHogUrl(raw: string | undefined | null): string {
     const isPath = raw.startsWith("/") && !raw.startsWith("//");
     const base = "https://perceev.invalid";
     const u = new URL(raw, isPath ? base : undefined);
-    if (u.protocol !== "http:" && u.protocol !== "https:") return raw;
+    // mailto:, tel:, data: and the like can carry personal data; never pass them through.
+    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
 
     const kept = new URLSearchParams();
     for (const [k, v] of u.searchParams.entries()) {
@@ -49,7 +50,8 @@ export function sanitizePostHogUrl(raw: string | undefined | null): string {
     }
     return `${u.origin}${u.pathname}${u.search}`;
   } catch {
-    return raw;
+    // Unparseable input may still hold a token or a customer URL: drop it.
+    return "";
   }
 }
 

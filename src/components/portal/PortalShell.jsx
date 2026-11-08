@@ -190,13 +190,18 @@ export default function PortalShell({ children }) {
         setPhase("error");
         return;
       }
-      const { data: memberships, error: membershipError } = await supabase
+      const loadMemberships = (brandColumns) => supabase
         .from("customer_brand_memberships")
-        .select("brand_key, role, customer_brands!inner(brand_key, display_name, website, is_active, telemetry_id)")
+        .select(`brand_key, role, customer_brands!inner(${brandColumns})`)
         .eq("user_id", signedIn.id)
         .eq("customer_brands.is_active", true)
         .order("brand_key");
-
+      const brandColumns = "brand_key, display_name, website, is_active";
+      let membershipResult = await loadMemberships(`${brandColumns}, telemetry_id`);
+      // telemetry_id arrives with migration 165. Until it is applied, sign-in must
+      // still work: retry without it and run analytics with no workspace group.
+      if (live && membershipResult.error) membershipResult = await loadMemberships(brandColumns);
+      const { data: memberships, error: membershipError } = membershipResult;
       if (!live) return;
       if (membershipError) {
         setBootError("We could not load your workspace access. Please refresh the page.");

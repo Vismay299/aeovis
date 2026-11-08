@@ -95,3 +95,10 @@ test("F26-AC-06 blanks exception messages that are not codes", () => {
   assert.equal(isErrorCode("PAYMENT_REQUIRED"), true);
   assert.equal(isErrorCode("site_audit.run"), false);
 });
+
+test("F26-AC-06 drops URLs it cannot parse and non-web schemes instead of passing them through", () => {
+  assert.equal(sanitizePostHogUrl("see https://acme.test/x?token=secret"), "");
+  assert.equal(sanitizePostHogUrl("mailto:owner@acme.test"), "");
+  const e = sanitizeEvent({ properties: { href: "relative/page?token=secret" } });
+  assert.equal(e?.properties?.href, "");
+});
