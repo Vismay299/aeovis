@@ -20,6 +20,7 @@ export function useProjectContext(brandKey: string) {
       fetchJson<ProjectContext>(
         `/api/customer/context?brand_key=${encodeURIComponent(brandKey)}`,
       ),
+    enabled: Boolean(brandKey),
     staleTime: 0,
   });
 }
@@ -46,7 +47,8 @@ export function useContextUpdate(brandKey: string) {
       queryClient.setQueryData(queryKey, context);
       toast.success("Context updated");
     },
-    onSettled: async () => {
+    // On failure the cache may be stale relative to the server; refetch then.
+    onError: async () => {
       await queryClient.invalidateQueries({ queryKey });
     },
   });
