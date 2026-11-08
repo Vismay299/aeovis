@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { POLICY_VERSION } from "../../lib/telemetry/events.ts";
 
 const privacyFile = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -29,5 +30,35 @@ test("F24-AC-15 - privacy policy contains Google Sign-in and Cloudflare Turnstil
   assert.ok(
     content.includes('id="google-sign-in"'),
     "Expected google-sign-in section id"
+  );
+});
+
+test("F26-AC-15 - privacy policy contains Product analytics and error reports section matching §6.7 and POLICY_VERSION", () => {
+  const content = fs.readFileSync(privacyFile, "utf8");
+
+  assert.ok(
+    content.includes('id="analytics"'),
+    "Expected analytics section id"
+  );
+  assert.ok(
+    content.includes("Product analytics and error reports"),
+    "Expected Product analytics and error reports heading"
+  );
+
+  const firstSentence = "If you turn on usage analytics (it is off until you do)";
+  assert.ok(
+    content.includes(firstSentence),
+    `Expected first sentence to include "${firstSentence}"`
+  );
+
+  assert.ok(
+    /When usage analytics is on, PostHog stores an identifier in your browser;\s*a small Perceev\s*cookie remembers your choice\./.test(content),
+    "Expected cookie sentence in analytics policy"
+  );
+
+  // Policy page's own last updated date equals POLICY_VERSION
+  assert.ok(
+    content.includes(`Last updated: {POLICY_VERSION}`) || content.includes(POLICY_VERSION),
+    `Expected policy page last updated date to equal POLICY_VERSION (${POLICY_VERSION})`
   );
 });

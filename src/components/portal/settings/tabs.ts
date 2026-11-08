@@ -21,4 +21,6 @@ export type SettingsTab = {
 
 export const SETTINGS_TABS: SettingsTab[] = [
   { href: "/portal/settings", label: "General", exact: true },
+  { href: "/portal/settings/privacy", label: "Privacy", flag: "product_analytics" },
 ];
+

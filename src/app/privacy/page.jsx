@@ -1,4 +1,8 @@
 import LegalPage, { LegalContact } from "@/components/legal/LegalPage";
+import { POLICY_VERSION } from "@/lib/telemetry/events.ts";
+
+export { POLICY_VERSION };
+export const LAST_UPDATED = POLICY_VERSION;
 
 export const metadata = {
   title: "Privacy Policy | Perceev",
@@ -11,6 +15,7 @@ export const metadata = {
 export default function PrivacyPage() {
   return (
     <LegalPage eyebrow="PRIVACY" title="Privacy Policy">
+      <p className="legal-page__updated">Last updated: {POLICY_VERSION}</p>
       <p>
         This policy explains how Perceev handles information when you use the Perceev website,
         customer workspace, and related services. For privacy questions or a data deletion
@@ -52,6 +57,23 @@ export default function PrivacyPage() {
         do not sell it, use it for advertising, or send it to AI model providers for model input
         or training. We do not allow people to read it except when needed to provide support you
         request, protect the service, or meet legal obligations.
+      </p>
+
+      <h2 id="analytics">Product analytics and error reports</h2>
+      <p>
+        If you turn on usage analytics (it is off until you do), Perceev uses PostHog, hosted in
+        the European Union, to record which pages and features of the customer workspace you use,
+        linked to a random account identifier. We never record your questions, AI answers,
+        website or Search Console data, keywords, or screen recordings, and we do not use
+        analytics for advertising. You can turn it off at any time in Settings → Privacy. We also
+        send error reports (the type of error and where in our code it happened, never its
+        content) so we can fix problems; they are linked to your account only if you turned on
+        usage analytics. We count a few anonymous events, such as an account being created,
+        without linking them to anyone.
+      </p>
+      <p>
+        When usage analytics is on, PostHog stores an identifier in your browser; a small Perceev
+        cookie remembers your choice.
       </p>
 
       <h2>How information is used and shared</h2>

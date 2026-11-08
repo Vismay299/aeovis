@@ -15,6 +15,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { setTelemetryIdentity, resetTelemetry } from "@/lib/telemetry/client";
+import { ConsentBanner } from "@/components/app/telemetry/ConsentBanner";
 import { useScanTracker } from "./useScanTracker";
 import { prefetchPriceQuote } from "@/components/app/cost/usePriceQuote";
 import { ScanCostReview } from "./ScanCostReview";
@@ -188,12 +190,18 @@ export default function PortalShell({ children }) {
         setPhase("error");
         return;
       }
-      const { data: memberships, error: membershipError } = await supabase
+      const loadMemberships = (brandColumns) => supabase
         .from("customer_brand_memberships")
-        .select("brand_key, role, customer_brands!inner(brand_key, display_name, website, is_active)")
+        .select(`brand_key, role, customer_brands!inner(${brandColumns})`)
         .eq("user_id", signedIn.id)
         .eq("customer_brands.is_active", true)
         .order("brand_key");
+      const brandColumns = "brand_key, display_name, website, is_active";
+      let membershipResult = await loadMemberships(`${brandColumns}, telemetry_id`);
+      // telemetry_id arrives with migration 165. Until it is applied, sign-in must
+      // still work: retry without it and run analytics with no workspace group.
+      if (live && membershipResult.error) membershipResult = await loadMemberships(brandColumns);
+      const { data: memberships, error: membershipError } = membershipResult;
       if (!live) return;
       if (membershipError) {
         setBootError("We could not load your workspace access. Please refresh the page.");
@@ -295,10 +303,21 @@ export default function PortalShell({ children }) {
     priceReview,
   });
 
+  useEffect(() => {
+    if (user?.id && brand) {
+      setTelemetryIdentity({
+        userId: user.id,
+        workspaceTelemetryId: brand.telemetry_id ?? null,
+      });
+    }
+  }, [user?.id, brand?.brandKey, brand?.telemetry_id]);
+
   const signOut = useCallback(async () => {
+    resetTelemetry();
     await getSupabaseBrowserClient()?.auth.signOut();
     router.replace("/login");
   }, [router]);
+
 
   const value = useMemo(() => ({
     user, brands, brand, brandKey, setBrandKey, isOwner,
@@ -368,12 +387,16 @@ function WorkspaceBanners() {
   const pathname = usePathname() || "/portal";
   const { overviewError, refreshOverview } = usePortal();
 
-  if (!overviewError || pathname === "/portal") return null;
-
   return (
-    <AppBanner variant="warning" icon={<AlertTriangle className="size-4" />}>
-      <span className="mr-2">Workspace data could not be refreshed. {overviewError}</span>
-      <Button size="xs" variant="outline" onClick={refreshOverview}>Try again</Button>
-    </AppBanner>
+    <>
+      <ConsentBanner />
+      {overviewError && pathname !== "/portal" ? (
+        <AppBanner variant="warning" icon={<AlertTriangle className="size-4" />}>
+          <span className="mr-2">Workspace data could not be refreshed. {overviewError}</span>
+          <Button size="xs" variant="outline" onClick={refreshOverview}>Try again</Button>
+        </AppBanner>
+      ) : null}
+    </>
   );
 }
+

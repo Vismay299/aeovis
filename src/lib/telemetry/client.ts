@@ -34,7 +34,12 @@ function defaultLoadPostHog(): Promise<PostHogClient | null> {
   if (!key || String(process.env.NEXT_PUBLIC_TELEMETRY_DISABLED ?? "") === "1") {
     return Promise.resolve(null);
   }
-  return import("posthog-js").then((mod) => mod.default as unknown as PostHogClient).catch(() => null);
+  return import("posthog-js")
+    .then(
+      (mod) =>
+        (mod.posthog ?? (mod.default as any)?.posthog ?? mod.default) as unknown as PostHogClient,
+    )
+    .catch(() => null);
 }
 
 const state: ClientModuleState = {
@@ -121,11 +126,14 @@ function getClient(): Promise<PostHogClient | null> {
   if (state.clientPromise) return state.clientPromise;
   state.clientPromise = state.loadPostHog().then((client) => {
     if (!client) return null;
-    const key = String(process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "phc_test").trim();
+    const key = String(process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "").trim();
     if (!key) return null;
     const opts = buildInitOptions();
     state.lastInitOptions = opts;
     client.init(key, opts);
+    if (typeof window !== "undefined") {
+      (window as any).posthog = client;
+    }
     return client;
   });
   return state.clientPromise;
@@ -136,8 +144,24 @@ function withClient(fn: (client: PostHogClient) => void): void {
     if (!client) return;
     try {
       fn(client);
-    } catch {
-      /* never throw from telemetry */
+    } catch (err) {
+      if (typeof console !== "undefined") {
+        console.error("[telemetry] withClient error:", err);
+      }
+    }
+  });
+}
+
+function withExistingClient(fn: (client: PostHogClient) => void): void {
+  if (!state.clientPromise) return;
+  void state.clientPromise.then((client) => {
+    if (!client) return;
+    try {
+      fn(client);
+    } catch (err) {
+      if (typeof console !== "undefined") {
+        console.error("[telemetry] withExistingClient error:", err);
+      }
     }
   });
 }
@@ -164,12 +188,15 @@ export function trackEvent<N extends ClientEventName>(name: N, props: EventProps
     }
     return;
   }
-  withClient((client) => client.capture(name, validated.props));
+  withClient((client) => {
+    client.capture(name, validated.props);
+  });
 }
 
 export function setTelemetryIdentity(args: {
   userId: string;
   workspaceTelemetryId: string | null;
+  brandKey?: string | null;
 }): void {
   state.identity = args;
   if (!state.analyticsCaptureEnabled) return;
@@ -179,7 +206,7 @@ export function setTelemetryIdentity(args: {
 /** Sign-out: drop the identity, PostHog's own state, and the cookie that carried the choice. */
 export function resetTelemetry(): void {
   state.identity = null;
-  withClient((client) => client.reset());
+  withExistingClient((client) => client.reset());
   clearPrivacyCookie();
 }
 
@@ -204,7 +231,7 @@ export function startAnalyticsCapture(): void {
 export function stopAnalyticsCapture(): void {
   state.analyticsCaptureEnabled = false;
   state.eventsBeforeChoices = null;
-  withClient((client) => {
+  withExistingClient((client) => {
     client.opt_out_capturing();
   });
 }
