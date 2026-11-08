@@ -1,0 +1,21 @@
+{
+  "key": "3f2a9c1e5b7d4f60a8c2e1b3d5f7a9c1",
+  "keyCreated": false,
+  "hosts": [
+    {
+      "host": "offcult.in",
+      "urlCount": 1,
+      "status": "submitted",
+      "engine": "bing",
+      "httpStatus": 200,
+      "reason": null,
+      "message": "Submitted 1 URL."
+    }
+  ],
+  "skipped": [
+    {
+      "url": "https://other.com/page",
+      "reason": "off_site"
+    }
+  ]
+}

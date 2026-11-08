@@ -1,0 +1,8 @@
+{
+  "hosts": [
+    { "host": "offcult.in", "status": "found" },
+    { "host": "www.offcult.in", "status": "moved" }
+  ],
+  "checkedAt": "2026-10-22T09:05:00.000Z",
+  "cached": false
+}
