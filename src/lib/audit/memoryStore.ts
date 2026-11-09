@@ -132,6 +132,21 @@ export function createMemoryAuditStore(opts?: { linkBudget?: number }): MemoryAu
       return true;
     },
 
+    async cancelAudit(auditId: string, info?: { errorDetail?: string | null; failedPhase?: string | null }): Promise<boolean> {
+      const a = audits.get(auditId);
+      if (!a) return false;
+      if (a.status !== "queued" && a.status !== "running") {
+        return false;
+      }
+      a.status = "cancelled";
+      a.current_phase = "cancelled";
+      a.error_code = "cancelled";
+      a.error_detail = info?.errorDetail ? info.errorDetail.slice(0, 500) : null;
+      a.failed_phase = info?.failedPhase ?? null;
+      a.completed_at = new Date().toISOString();
+      return true;
+    },
+
     async seedStart(auditId: string, url: string): Promise<void> {
       const key = frontierKey(auditId, url);
       if (!frontier.has(key)) {
@@ -237,9 +252,15 @@ export function createMemoryAuditStore(opts?: { linkBudget?: number }): MemoryAu
       }
 
       const audit = audits.get(auditId);
-      const newLinksCount = (input.links ?? []).reduce((acc, l) => acc + (l.targets?.length ?? 0), 0);
+      let netDelta = 0;
+      for (const link of input.links ?? []) {
+        const key = `${auditId}::${link.pageId}`;
+        const existing = links.get(key);
+        const existingCount = existing ? existing.targetUrls.length : 0;
+        netDelta += (link.targets?.length ?? 0) - existingCount;
+      }
       if (audit) {
-        if ((audit.link_targets_stored ?? 0) + newLinksCount <= linkBudget) {
+        if ((audit.link_targets_stored ?? 0) + netDelta <= linkBudget) {
           for (const link of input.links ?? []) {
             links.set(`${auditId}::${link.pageId}`, {
               auditId,
@@ -248,8 +269,8 @@ export function createMemoryAuditStore(opts?: { linkBudget?: number }): MemoryAu
               targetUrls: [...link.targets],
             });
           }
-          audit.link_targets_stored = (audit.link_targets_stored ?? 0) + newLinksCount;
-        } else if (newLinksCount > 0) {
+          audit.link_targets_stored = (audit.link_targets_stored ?? 0) + netDelta;
+        } else if (netDelta > 0) {
           audit.link_graph_complete = false;
         }
       }

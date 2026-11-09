@@ -13,13 +13,15 @@ const BRAND_KEY = "test-brand";
 const START = "https://site.test/";
 
 function makeAudit(patch?: Partial<AuditRow>): AuditRow {
+  const startUrl = patch?.start_url ?? START;
   return {
     id: AUDIT_ID,
     brand_key: BRAND_KEY,
     job_id: "22222222-2222-4222-8222-222222222222",
     status: "running",
     current_phase: "crawling",
-    start_url: START,
+    requested_url: patch?.requested_url ?? startUrl,
+    start_url: startUrl,
     start_host: "site.test",
     max_pages: 100,
     run_lighthouse: false,
@@ -432,5 +434,76 @@ describe("AuditStore: frontier link discovery and claims", () => {
     audit = await store.getAudit(AUDIT_ID);
     assert.equal(audit?.link_graph_complete, false);
     assert.equal(audit?.link_targets_stored, 2); // Not incremented when budget exceeded
+  });
+
+  it("updateAudit applies patch when job_id is null or matches jobId", async () => {
+    const store = createMemoryAuditStore();
+    store.seedAudit(makeAudit({ job_id: null }));
+
+    // job_id is null: update succeeds
+    await store.updateAudit(AUDIT_ID, "job-123", { max_pages: 75 });
+    let audit = await store.getAudit(AUDIT_ID);
+    assert.equal(audit?.max_pages, 75);
+
+    // set job_id to job-123
+    await store.updateAudit(AUDIT_ID, "job-123", { job_id: "job-123" });
+    audit = await store.getAudit(AUDIT_ID);
+    assert.equal(audit?.job_id, "job-123");
+
+    // job_id matches: update succeeds
+    await store.updateAudit(AUDIT_ID, "job-123", { max_pages: 90 });
+    audit = await store.getAudit(AUDIT_ID);
+    assert.equal(audit?.max_pages, 90);
+
+    // job_id does not match: update is a no-op
+    await store.updateAudit(AUDIT_ID, "job-other", { max_pages: 999 });
+    audit = await store.getAudit(AUDIT_ID);
+    assert.equal(audit?.max_pages, 90);
+  });
+
+  it("cancelAudit atomically cancels queued or running audit", async () => {
+    const store = createMemoryAuditStore();
+    store.seedAudit(makeAudit({ status: "running", current_phase: "crawling" }));
+
+    const flipped = await store.cancelAudit(AUDIT_ID, {
+      errorDetail: "User cancelled",
+      failedPhase: "crawling",
+    });
+    assert.equal(flipped, true);
+
+    const audit = await store.getAudit(AUDIT_ID);
+    assert.equal(audit?.status, "cancelled");
+    assert.equal(audit?.current_phase, "cancelled");
+    assert.equal(audit?.error_code, "cancelled");
+    assert.equal(audit?.error_detail, "User cancelled");
+    assert.equal(audit?.failed_phase, "crawling");
+    assert.ok(audit?.completed_at);
+
+    // Cancelling an already terminal audit returns false
+    const flippedAgain = await store.cancelAudit(AUDIT_ID);
+    assert.equal(flippedAgain, false);
+  });
+
+  it("recordBatch replay computes net delta and avoids double-counting link_targets_stored", async () => {
+    const store = createMemoryAuditStore();
+    store.seedAudit(makeAudit());
+
+    // Initial batch: 2 links
+    await store.recordBatch(AUDIT_ID, {
+      crawledUrls: [],
+      links: [{ pageId: "p1", url: "https://site.test/p1", targets: ["t1", "t2"] }],
+      discovered: [],
+    });
+    let audit = await store.getAudit(AUDIT_ID);
+    assert.equal(audit?.link_targets_stored, 2);
+
+    // Replay the exact same batch: net delta should be 0
+    await store.recordBatch(AUDIT_ID, {
+      crawledUrls: [],
+      links: [{ pageId: "p1", url: "https://site.test/p1", targets: ["t1", "t2"] }],
+      discovered: [],
+    });
+    audit = await store.getAudit(AUDIT_ID);
+    assert.equal(audit?.link_targets_stored, 2);
   });
 });

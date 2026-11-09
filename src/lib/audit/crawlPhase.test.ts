@@ -11,13 +11,15 @@ import type { AuditRow } from "./store.ts";
 import type { SafeFetchResult } from "../http/safeFetch.ts";
 
 function makeAudit(id: string, patch?: Partial<AuditRow>): AuditRow {
+  const startUrl = patch?.start_url ?? "https://example.com/";
   return {
     id,
     brand_key: "qa-brand",
     job_id: "job-1",
     status: "running",
     current_phase: "crawling",
-    start_url: "https://example.com/",
+    requested_url: patch?.requested_url ?? startUrl,
+    start_url: startUrl,
     start_host: "example.com",
     max_pages: 50,
     run_lighthouse: false,

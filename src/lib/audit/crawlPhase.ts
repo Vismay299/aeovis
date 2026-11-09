@@ -385,7 +385,9 @@ export async function runCrawlPhase(
   let rateLimited = false;
   let cancelled = false;
   let abandonedChunks = 0;
-  let lastStats = await store.stats(audit.id);
+  let lastStats = await ctx.step.do("crawl-stats-start", DB_STEP, async () => {
+    return store.stats(audit.id);
+  });
 
   while (lastStats.pending > 0 && lastStats.attempted < audit.max_pages) {
     chunkNo += 1;
@@ -418,7 +420,9 @@ export async function runCrawlPhase(
         if (abandonedChunks >= 3) {
           throw new AuditPhaseError("step_attempts_exhausted", "crawling", "Three crawl chunks failed permanently");
         }
-        lastStats = await store.stats(audit.id);
+        lastStats = await ctx.step.do(`crawl-stats-after-abandon-${chunkNo}`, DB_STEP, async () => {
+          return store.stats(audit.id);
+        });
         continue;
       }
       throw err;

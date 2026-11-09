@@ -349,4 +349,8 @@ SOFTWARE.
 - `src/lib/audit/reconcile.ts` (from `src/server/features/audit/auditReconciler.ts`)
 - `src/lib/audit/reconcile.test.ts` (from `src/server/features/audit/auditReconciler.test.ts`)
 - `src/lib/audit/issues/multipage.ts` (from `src/server/lib/audit/issues/multipage.ts`)
+- `src/lib/audit/cancel.ts` (from `src/server/features/audit/services/AuditService.ts`)
+- `src/lib/audit/retention.ts` (from `src/server/workflows/SiteAuditWorkflow.ts`)
+- `src/lib/audit/retention.test.ts` (from `src/server/workflows/SiteAuditWorkflow.test.ts`)
+- `src/lib/audit/telemetry.ts` (from `src/server/features/audit/telemetry.ts`)
 - `scripts/qa/check-f18-db.mjs` (from `src/server/features/audit/AuditScratchpad.test.ts`)

@@ -308,6 +308,7 @@ async function main() {
     job_id: id(),
     status: "running",
     current_phase: "crawling",
+    requested_url: startUrl,
     start_url: startUrl,
     start_host: brandA,
     max_pages: 50,
@@ -335,9 +336,9 @@ async function main() {
   };
 
   await query(
-    `INSERT INTO public.site_audits (id, brand_key, job_id, status, current_phase, start_url, start_host, max_pages)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-    [auditId, brandA, auditRow.job_id, auditRow.status, auditRow.current_phase, auditRow.start_url, auditRow.start_host, auditRow.max_pages]
+    `INSERT INTO public.site_audits (id, brand_key, job_id, status, current_phase, requested_url, start_url, start_host, max_pages)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [auditId, brandA, auditRow.job_id, auditRow.status, auditRow.current_phase, auditRow.requested_url, auditRow.start_url, auditRow.start_host, auditRow.max_pages]
   );
   memStore.seedAudit(auditRow);
 
@@ -575,11 +576,11 @@ async function main() {
   const rlsAuditBId = id();
 
   await query(
-    `INSERT INTO public.site_audits (id, brand_key, start_url, start_host, max_pages) VALUES ($1, $2, $3, $2, 50)`,
+    `INSERT INTO public.site_audits (id, brand_key, requested_url, start_url, start_host, max_pages) VALUES ($1, $2, $3, $3, $2, 50)`,
     [rlsAuditAId, brandA, `https://${brandA}/`]
   );
   await query(
-    `INSERT INTO public.site_audits (id, brand_key, start_url, start_host, max_pages) VALUES ($1, $2, $3, $2, 50)`,
+    `INSERT INTO public.site_audits (id, brand_key, requested_url, start_url, start_host, max_pages) VALUES ($1, $2, $3, $3, $2, 50)`,
     [rlsAuditBId, brandB, `https://${brandB}/`]
   );
 
@@ -621,8 +622,8 @@ async function main() {
 
   // Old audit (completed 400 days ago, created 400 days ago)
   await query(
-    `INSERT INTO public.site_audits (id, brand_key, start_url, start_host, max_pages, status, created_at, completed_at)
-     VALUES ($1, $2, $3, $2, 50, 'completed', $4, $4)`,
+    `INSERT INTO public.site_audits (id, brand_key, requested_url, start_url, start_host, max_pages, status, created_at, completed_at)
+     VALUES ($1, $2, $3, $3, $2, 50, 'completed', $4, $4)`,
     [oldAuditId, brandA, `https://${brandA}/old`, daysAgo400]
   );
   await query(
@@ -632,8 +633,8 @@ async function main() {
 
   // Recent finished audit (completed 2 days ago)
   await query(
-    `INSERT INTO public.site_audits (id, brand_key, start_url, start_host, max_pages, status, created_at, completed_at)
-     VALUES ($1, $2, $3, $2, 50, 'completed', $4, $4)`,
+    `INSERT INTO public.site_audits (id, brand_key, requested_url, start_url, start_host, max_pages, status, created_at, completed_at)
+     VALUES ($1, $2, $3, $3, $2, 50, 'completed', $4, $4)`,
     [recentAuditId, brandA, `https://${brandA}/recent`, daysAgo2]
   );
   await query(
@@ -643,8 +644,8 @@ async function main() {
 
   // Running audit
   await query(
-    `INSERT INTO public.site_audits (id, brand_key, start_url, start_host, max_pages, status, created_at)
-     VALUES ($1, $2, $3, $2, 50, 'running', $4)`,
+    `INSERT INTO public.site_audits (id, brand_key, requested_url, start_url, start_host, max_pages, status, created_at)
+     VALUES ($1, $2, $3, $3, $2, 50, 'running', $4)`,
     [runningAuditId, brandA, `https://${brandA}/running`, daysAgo10]
   );
   await query(

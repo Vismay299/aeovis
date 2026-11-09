@@ -174,6 +174,7 @@ BEGIN
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', t || '_read', t);
     EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (public.customer_can_access_brand(brand_key))', t || '_read', t);
+    EXECUTE format('GRANT SELECT ON public.%I TO authenticated', t);
     EXECUTE format('REVOKE INSERT, UPDATE, DELETE ON public.%I FROM anon, authenticated', t);
   END LOOP;
   FOREACH t IN ARRAY ARRAY['site_audit_frontier','site_audit_links'] LOOP

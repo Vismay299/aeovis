@@ -13,13 +13,15 @@ import type { AuditRow } from "./store.ts";
 import type { SafeFetchResult } from "../http/safeFetch.ts";
 
 function makeAudit(id: string, patch?: Partial<AuditRow>): AuditRow {
+  const startUrl = patch?.start_url ?? "https://example.com/";
   return {
     id,
     brand_key: "qa-brand",
     job_id: null,
     status: "queued",
     current_phase: "queued",
-    start_url: "https://example.com/",
+    requested_url: patch?.requested_url ?? startUrl,
+    start_url: startUrl,
     start_host: "example.com",
     max_pages: 10,
     run_lighthouse: false,
@@ -119,7 +121,7 @@ test("job: site_audit.run executes steps 1-10 and completes successfully", async
   const outcome = await runJob(claimed[0], {
     store: jobStore,
     owner: "worker:1",
-    deadlineMs: Date.now() + 600_000,
+    deadlineMs: Date.now() + 3_600_000,
     now: () => Date.now(),
     selfContinue: () => {},
   });
@@ -130,8 +132,13 @@ test("job: site_audit.run executes steps 1-10 and completes successfully", async
   assert.ok(finalAudit);
   assert.equal(finalAudit.status, "completed");
   assert.equal(finalAudit.current_phase, "completed");
+  assert.equal(finalAudit.job_id, jobId);
   assert.ok(finalAudit.pages_crawled >= 2);
   assert.ok(finalAudit.completed_at !== null);
+
+  const finishedJob = await jobStore.getJob(jobId!);
+  assert.equal((finishedJob?.result as any)?.pagesCrawled, finalAudit.pages_crawled);
+  assert.ok((finishedJob?.result as any)?.pagesCrawled >= 2);
 
   // Scratchpad is cleaned up
   const stats = await auditStore.stats(auditId);
@@ -193,7 +200,7 @@ test("job: AuditPhaseError in step triggers mark-failed and sets failed status",
   const outcome = await runJob(claimed[0], {
     store: jobStore,
     owner: "worker:1",
-    deadlineMs: Date.now() + 600_000,
+    deadlineMs: Date.now() + 3_600_000,
     now: () => Date.now(),
     selfContinue: () => {},
   });
@@ -205,4 +212,108 @@ test("job: AuditPhaseError in step triggers mark-failed and sets failed status",
   assert.equal(finalAudit.status, "failed");
   assert.equal(finalAudit.error_code, "start_url_off_site");
   assert.equal(finalAudit.failed_phase, "starting");
+});
+
+test("job: already terminal audit returns early with terminal job status and does not touch audit row", async () => {
+  const auditStore = createMemoryAuditStore();
+  const jobStore = createMemoryJobStore();
+  const auditId = "00000000-0000-4000-8000-000000000012";
+
+  const originalCreatedAt = new Date(Date.now() - 60_000).toISOString();
+  auditStore.seedAudit(
+    makeAudit(auditId, {
+      status: "cancelled",
+      current_phase: "cancelled",
+      created_at: originalCreatedAt,
+      pages_crawled: 0,
+    }),
+  );
+
+  let fetchCalled = false;
+  setSiteAuditJobBindings(auditStore, null, {
+    safeFetch: async () => {
+      fetchCalled = true;
+      return mockResponse("https://example.com/", 200, "OK");
+    },
+    lookup: async () => ["93.184.216.34"],
+    initialIntervalMs: 0,
+  });
+
+  registerSiteAuditJob();
+
+  const { jobId } = await jobStore.enqueue({
+    kind: "site_audit.run",
+    brandKey: "qa-brand",
+    payload: { auditId },
+    trigger: "manual",
+    dedupeKey: null,
+    singleActiveKey: null,
+    runAt: null,
+    createdBy: null,
+    deadlineSeconds: 3600,
+    maxInvocations: 10,
+  });
+
+  const claimed = await jobStore.claimDue("worker:1", 1, 300, jobId);
+  const outcome = await runJob(claimed[0], {
+    store: jobStore,
+    owner: "worker:1",
+    deadlineMs: Date.now() + 3_600_000,
+    now: () => Date.now(),
+    selfContinue: () => {},
+  });
+
+  assert.equal(outcome, "cancelled");
+  assert.equal(fetchCalled, false, "crawl must not run for terminal audit");
+
+  const auditAfter = await auditStore.getAudit(auditId);
+  assert.equal(auditAfter?.status, "cancelled");
+  assert.equal(auditAfter?.job_id, null, "audit row must not be touched");
+});
+
+test("job: validate step claims job_id when audit is already running but job_id is null", async () => {
+  const auditStore = createMemoryAuditStore();
+  const jobStore = createMemoryJobStore();
+  const auditId = "00000000-0000-4000-8000-000000000013";
+
+  auditStore.seedAudit(
+    makeAudit(auditId, {
+      status: "running",
+      job_id: null,
+    }),
+  );
+
+  setSiteAuditJobBindings(auditStore, null, {
+    safeFetch: async (u: string | URL) => mockResponse(u.toString(), 200, "<!DOCTYPE html><html><head><title>T</title></head><body>OK</body></html>"),
+    lookup: async () => ["93.184.216.34"],
+    initialIntervalMs: 0,
+  });
+
+  registerSiteAuditJob();
+
+  const { jobId } = await jobStore.enqueue({
+    kind: "site_audit.run",
+    brandKey: "qa-brand",
+    payload: { auditId },
+    trigger: "manual",
+    dedupeKey: null,
+    singleActiveKey: null,
+    runAt: null,
+    createdBy: null,
+    deadlineSeconds: 3600,
+    maxInvocations: 10,
+  });
+
+  const claimed = await jobStore.claimDue("worker:1", 1, 300, jobId);
+  const outcome = await runJob(claimed[0], {
+    store: jobStore,
+    owner: "worker:1",
+    deadlineMs: Date.now() + 3_600_000,
+    now: () => Date.now(),
+    selfContinue: () => {},
+  });
+
+  assert.equal(outcome, "completed");
+  const finalAudit = await auditStore.getAudit(auditId);
+  assert.equal(finalAudit?.job_id, jobId);
 });

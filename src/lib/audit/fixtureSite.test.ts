@@ -22,6 +22,7 @@ function makeAudit(id: string, startUrl: string, startHost: string, patch?: Part
     job_id: null,
     status: "queued",
     current_phase: "queued",
+    requested_url: patch?.requested_url ?? startUrl,
     start_url: startUrl,
     start_host: startHost,
     max_pages: 200,

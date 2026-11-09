@@ -11,7 +11,7 @@ import { DB_STEP } from "../jobs/stepConfigs.ts";
 import { StepFailedError } from "../jobs/runner.ts";
 import { AppError } from "../http/errors.ts";
 import { getSupabaseAdmin } from "../supabase/admin.js";
-import { createSqlAuditStore, type AuditStore } from "./store.ts";
+import { createSqlAuditStore, type AuditStore, type AuditRow } from "./store.ts";
 import { AuditPhaseError, classifyAuditFailure } from "./errors.ts";
 import { captureAuditEvent } from "./telemetry.ts";
 import {
@@ -89,15 +89,44 @@ export function registerSiteAuditJob(): void {
         if (!row) {
           throw new AuditPhaseError("job_lost", "starting", `Audit ${auditId} not found`);
         }
-        if (row.status === "queued") {
-          await store.updateAudit(auditId, ctx.jobId, {
-            status: "running",
-            current_phase: "starting",
-            started_at: new Date().toISOString(),
-          });
+        const isTerminal = ["completed", "partial", "failed", "cancelled"].includes(row.status);
+        if (isTerminal) {
+          return row;
         }
-        return row;
+
+        const claimPatch: Partial<AuditRow> = {};
+        if (row.job_id === null) {
+          claimPatch.job_id = ctx.jobId;
+        }
+        if (row.status === "queued") {
+          claimPatch.status = "running";
+          claimPatch.current_phase = "starting";
+          claimPatch.started_at = new Date().toISOString();
+        }
+
+        if (Object.keys(claimPatch).length > 0) {
+          await store.updateAudit(auditId, ctx.jobId, claimPatch);
+        }
+        return { ...row, ...claimPatch };
       });
+
+      if (["completed", "partial", "failed", "cancelled"].includes(audit.status)) {
+        const terminalStatus: "completed" | "partial" | "failed" | "cancelled" =
+          audit.status === "completed"
+            ? "completed"
+            : audit.status === "partial"
+              ? "partial"
+              : audit.status === "cancelled"
+                ? "cancelled"
+                : "failed";
+        return {
+          status: terminalStatus,
+          result: {
+            status: audit.status,
+            pagesCrawled: audit.pages_crawled ?? 0,
+          },
+        };
+      }
 
       currentPhase = "starting";
 
@@ -130,7 +159,9 @@ export function registerSiteAuditJob(): void {
 
         // 5. crawl phase
         currentPhase = "crawling";
-        const freshForCrawl = (await store.getAudit(auditId)) ?? audit;
+        const freshForCrawl = await ctx.step.do("crawl-audit-read", DB_STEP, async () => {
+          return (await store.getAudit(auditId)) ?? audit;
+        });
         const crawlOutcome = await runCrawlPhase(ctx, {
           audit: freshForCrawl,
           store,
@@ -221,7 +252,7 @@ export function registerSiteAuditJob(): void {
           status: finalStatus.status === "completed" ? "completed" : "partial",
           result: {
             status: finalStatus.status,
-            pagesCrawled: freshForCrawl.pages_crawled,
+            pagesCrawled: crawlOutcome.attempted,
           },
         };
       } catch (err: unknown) {

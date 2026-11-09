@@ -98,13 +98,18 @@ END $$;
 CREATE OR REPLACE FUNCTION public.site_audit_record_batch(p_audit_id uuid, p_crawled text[], p_links jsonb,
   p_discovered jsonb, p_link_budget integer)
 RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
-DECLARE v_stored integer; v_new integer;
+DECLARE v_stored integer; v_incoming integer; v_existing integer; v_new integer;
 BEGIN
   UPDATE site_audit_frontier SET state = 'crawled'
    WHERE audit_id = p_audit_id AND url = ANY (p_crawled) AND state IN ('leased','pending');
   SELECT link_targets_stored INTO v_stored FROM site_audits WHERE id = p_audit_id FOR UPDATE;
-  SELECT coalesce(sum(jsonb_array_length(l -> 'targets')), 0)::integer INTO v_new
+  SELECT coalesce(sum(jsonb_array_length(l -> 'targets')), 0)::integer INTO v_incoming
     FROM jsonb_array_elements(coalesce(p_links, '[]'::jsonb)) l;
+  SELECT coalesce(sum(coalesce(cardinality(target_hashes), 0)), 0)::integer INTO v_existing
+    FROM site_audit_links
+   WHERE audit_id = p_audit_id
+     AND page_id IN (SELECT (l ->> 'pageId')::uuid FROM jsonb_array_elements(coalesce(p_links, '[]'::jsonb)) l);
+  v_new := v_incoming - v_existing;
   IF v_stored + v_new <= p_link_budget THEN
     INSERT INTO site_audit_links (audit_id, page_id, url, target_hashes)
     SELECT p_audit_id, (l ->> 'pageId')::uuid, l ->> 'url',

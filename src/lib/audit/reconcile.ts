@@ -96,17 +96,10 @@ export async function reconcileRunningAudit(
   }
 
   if (jobStatusResult.status === "cancelled") {
-    const flipped = await store.failAudit(audit.id, {
-      errorCode: "cancelled",
+    const flipped = await store.cancelAudit(audit.id, {
       errorDetail: "Audit job was cancelled.",
       failedPhase: audit.current_phase,
     });
-    if (flipped) {
-      await store.updateAudit(audit.id, audit.job_id, {
-        status: "cancelled",
-        current_phase: "cancelled",
-      });
-    }
     return { flipped, newStatus: flipped ? "cancelled" : undefined };
   }
 

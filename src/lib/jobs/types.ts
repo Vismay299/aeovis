@@ -8,7 +8,7 @@ export type StepOptions = { timeoutMs: number; retries: number; billed?: boolean
 
 export type JobProgress = { done: number; total: number; label?: string };
 
-export type JobResult = { status?: "completed" | "partial"; result?: unknown };
+export type JobResult = { status?: "completed" | "partial" | "failed" | "cancelled"; result?: unknown };
 
 export type JobContext<P> = {
   jobId: string;

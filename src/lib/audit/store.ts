@@ -101,6 +101,7 @@ export interface AuditStore {
   getAudit(auditId: string): Promise<AuditRow | null>;
   updateAudit(auditId: string, jobId: string, patch: Partial<AuditRow>): Promise<void>;
   failAudit(auditId: string, info: { errorCode: string; errorDetail: string; failedPhase: string | null }): Promise<boolean>;
+  cancelAudit(auditId: string, info?: { errorDetail?: string | null; failedPhase?: string | null }): Promise<boolean>;
   seedStart(auditId: string, url: string): Promise<void>;
   seedSitemap(auditId: string, urls: string[]): Promise<void>;
   claimChunk(auditId: string, chunkNo: number, limit: number): Promise<{ urls: ClaimedUrl[]; isRetry: boolean }>;
@@ -145,7 +146,7 @@ export function createSqlAuditStore(admin: any, opts?: { linkBudget?: number }):
         .from("site_audits")
         .update(patch)
         .eq("id", auditId)
-        .eq("job_id", jobId);
+        .or(`job_id.is.null,job_id.eq.${jobId}`);
       if (error) throw error;
     },
 
@@ -158,6 +159,24 @@ export function createSqlAuditStore(admin: any, opts?: { linkBudget?: number }):
           error_code: info.errorCode,
           error_detail: info.errorDetail ? info.errorDetail.slice(0, 500) : null,
           failed_phase: info.failedPhase,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("id", auditId)
+        .in("status", ["queued", "running"])
+        .select("id");
+      if (error) throw error;
+      return Boolean(data && data.length > 0);
+    },
+
+    async cancelAudit(auditId: string, info?: { errorDetail?: string | null; failedPhase?: string | null }): Promise<boolean> {
+      const { data, error } = await admin
+        .from("site_audits")
+        .update({
+          status: "cancelled",
+          current_phase: "cancelled",
+          error_code: "cancelled",
+          error_detail: info?.errorDetail ? info.errorDetail.slice(0, 500) : null,
+          failed_phase: info?.failedPhase ?? null,
           completed_at: new Date().toISOString(),
         })
         .eq("id", auditId)
