@@ -66,21 +66,29 @@ if (process.argv.includes("--only") && process.argv[process.argv.indexOf("--only
 }
 
 const JSONB_PARAMS = new Set(["p_links", "p_discovered"]);
+const JSONB_COLS = new Set(["hreflang", "details", "throttle_state", "ai_access", "llms_txt", "price_quote"]);
+
+// pg serialises JS arrays as Postgres arrays (text[], bigint[]); jsonb columns need JSON text.
+function toPgValue(name, v) {
+  if (v === null || v === undefined) return null;
+  if (Array.isArray(v) && !JSONB_COLS.has(name) && !JSONB_PARAMS.has(name)) return v;
+  if (typeof v === "object") return JSON.stringify(v);
+  return v;
+}
 
 function createPgAdminAdapter(client) {
   return {
     async rpc(name, params = {}) {
       const entries = Object.entries(params);
-      const sql = `SELECT ${name}(${entries.map(([k], i) => `${k} => $${i + 1}`).join(", ")}) AS result`;
-      const values = entries.map(([k, v]) => {
-        if (v === null || v === undefined) return null;
-        // text[] params go to pg as native arrays; jsonb params (arrays of objects, objects) as JSON text.
-        if (Array.isArray(v) && v.every((x) => typeof x === "string") && !JSONB_PARAMS.has(k)) return v;
-        if (typeof v === "object") return JSON.stringify(v);
-        return v;
-      });
+      // SELECT * FROM fn(...) serves both scalar functions (one column named after the function) and
+      // set-returning ones (PostgREST returns every row for those).
+      const sql = `SELECT * FROM ${name}(${entries.map(([k], i) => `${k} => $${i + 1}`).join(", ")})`;
+      const values = entries.map(([k, v]) => toPgValue(k, v));
       const res = await client.query(sql, values);
-      return { data: res.rows[0]?.result ?? null, error: null };
+      if (res.fields.length === 1 && res.fields[0].name === name) {
+        return { data: res.rows[0]?.[name] ?? null, error: null };
+      }
+      return { data: res.rows, error: null };
     },
 
     from(table) {
@@ -170,13 +178,7 @@ function createPgAdminAdapter(client) {
                 const setClauses = patchEntries.map(
                   ([k], i) => `${k} = $${whereValues.length + i + 1}`
                 );
-                const patchVals = patchEntries.map(([, v]) => {
-                  if (v === null || v === undefined) return null;
-                  // text[] params go to pg as native arrays; jsonb params (arrays of objects, objects) as JSON text.
-        if (Array.isArray(v) && v.every((x) => typeof x === "string") && !JSONB_PARAMS.has(k)) return v;
-        if (typeof v === "object") return JSON.stringify(v);
-                  return v;
-                });
+                const patchVals = patchEntries.map(([k, v]) => toPgValue(k, v));
                 const allVals = [...whereValues, ...patchVals];
                 const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
                 const sql = `UPDATE public.${table} SET ${setClauses.join(", ")} ${whereSql} RETURNING ${selectedCols}`;
@@ -201,7 +203,7 @@ function createPgAdminAdapter(client) {
             const placeholders = [];
             for (const col of cols) {
               const val = row[col];
-              allVals.push(val !== null && typeof val === "object" ? JSON.stringify(val) : val);
+              allVals.push(toPgValue(col, val));
               placeholders.push(`$${allVals.length}`);
             }
             valueRows.push(`(${placeholders.join(", ")})`);
@@ -519,6 +521,12 @@ async function main() {
   // --- Group: site_audit_create concurrency and limits ---
   console.log("Running site_audit_create race & limits tests...");
   const raceMonthStart = new Date(Date.UTC(2026, 9, 1)).toISOString();
+  // The parity group above leaves its audit running; finish it so this group starts with no active audit.
+  await query(
+    `UPDATE public.site_audits SET status = 'completed', current_phase = 'completed', completed_at = now()
+      WHERE brand_key = $1 AND status IN ('queued','running')`,
+    [brandA]
+  );
 
   // 1. Concurrent creates for the same workspace
   const create1Id = id();
@@ -542,7 +550,7 @@ async function main() {
   assert.equal(failedOne.reason, "audit_already_running", "Second create receives audit_already_running");
 
   // 2. Host cap
-  const sharedHost = "multi-tenant-host.test";
+  const sharedHost = `multi-tenant-${id().slice(0, 8)}.test`; // unique per run: active audits persist across runs
   const brandC = await createBrand(userA);
   const brandD = await createBrand(userB);
   const brandE = await createBrand(userA);
@@ -582,11 +590,11 @@ async function main() {
   const rlsAuditBId = id();
 
   await query(
-    `INSERT INTO public.site_audits (id, brand_key, requested_url, start_url, start_host, max_pages) VALUES ($1, $2, $3, $3, $2, 50)`,
+    `INSERT INTO public.site_audits (id, brand_key, requested_url, start_url, start_host, max_pages, status) VALUES ($1, $2, $3, $3, $2, 50, 'completed')`,
     [rlsAuditAId, brandA, `https://${brandA}/`]
   );
   await query(
-    `INSERT INTO public.site_audits (id, brand_key, requested_url, start_url, start_host, max_pages) VALUES ($1, $2, $3, $3, $2, 50)`,
+    `INSERT INTO public.site_audits (id, brand_key, requested_url, start_url, start_host, max_pages, status) VALUES ($1, $2, $3, $3, $2, 50, 'completed')`,
     [rlsAuditBId, brandB, `https://${brandB}/`]
   );
 
@@ -597,20 +605,25 @@ async function main() {
     assert.ok(!audits.some((a) => a.id === rlsAuditBId), "userA cannot see brandB audit");
 
     // Scratch tables return permission denied
+    // Savepoints: a denied query aborts the transaction, so each probe rolls back to its own savepoint.
     let deniedFrontier = false;
+    await c.query("SAVEPOINT probe_frontier");
     try {
       await c.query("SELECT * FROM public.site_audit_frontier");
     } catch (err) {
       deniedFrontier = err.code === "42501";
     }
+    await c.query("ROLLBACK TO SAVEPOINT probe_frontier");
     assert.ok(deniedFrontier, "site_audit_frontier denied for authenticated");
 
     let deniedLinks = false;
+    await c.query("SAVEPOINT probe_links");
     try {
       await c.query("SELECT * FROM public.site_audit_links");
     } catch (err) {
       deniedLinks = err.code === "42501";
     }
+    await c.query("ROLLBACK TO SAVEPOINT probe_links");
     assert.ok(deniedLinks, "site_audit_links denied for authenticated");
   });
 
@@ -618,6 +631,12 @@ async function main() {
 
   // --- Group: Retention ---
   console.log("Running retention tests...");
+  // The race group left one brandA audit active; this group inserts its own running audit for brandA.
+  await query(
+    `UPDATE public.site_audits SET status = 'completed', current_phase = 'completed', completed_at = now()
+      WHERE brand_key = $1 AND status IN ('queued','running')`,
+    [brandA]
+  );
   const oldAuditId = id();
   const recentAuditId = id();
   const runningAuditId = id();
