@@ -615,6 +615,13 @@ abandoned is not.
 - Apply 130 before deploying F19 phase 2.
 - Objects: tables `indexnow_keys`, `indexnow_submissions`, `indexnow_key_checks`; functions `indexnow_ensure_key`, `indexnow_usage`, `indexnow_recently_submitted`, `prune_indexnow`.
 
+### `125_f18_site_audit` and `126_f18_site_audit_functions` (F18 phase 2)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply 125 and 126 before deploying F18 phase 2.
+- Objects (125): tables `site_audits`, `site_audit_pages`, `site_audit_issues`, `site_audit_lighthouse`, `site_audit_frontier`, `site_audit_links`; bucket `site-audit-lighthouse`.
+- Objects (126): functions `site_audit_create`, `site_audit_seed`, `site_audit_frontier_stats`, `site_audit_claim_chunk`, `site_audit_record_batch`, `site_audit_release`, `site_audit_abandon_chunk`, `site_audit_broken_links`, `site_audit_orphan_pages`, `site_audit_issue_summary`, `site_audit_destroy_scratch`, `prune_site_audits`.
+
+
 ## D. Content approval — the human gate, and what it does not yet do
 
 The content pipeline is human-in-the-loop by design. `POST /api/content-items/[id]/decision`

@@ -90,15 +90,19 @@ export const headTagsFixtures: Fixture[] = [
     path: "/head/canonical-conflict",
     name: "Canonical conflict",
     category: "head",
-    expectedIssues: ["canonical-conflict"],
+    expectedIssues: ["canonical-conflict", "canonicalized-page"],
     handler: () =>
       htmlResponse(
         renderDocument({
           title: "Canonical Conflict Page",
           metaDescription: "A valid meta description that is long enough to avoid being flagged as too short.",
-          canonicalUrl: "https://conflict.external.com/page",
+          canonicalUrl: "https://main.audit.test/head/canonical-html",
           bodyHtml: `<h1>Page with Conflict Canonical</h1><p>${lorem(180)}</p>`,
         }),
+        200,
+        {
+          Link: '<https://main.audit.test/head/canonical-header>; rel="canonical"',
+        },
       ),
   },
   {
