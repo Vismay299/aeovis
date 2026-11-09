@@ -376,12 +376,7 @@ export async function runJob(job: JobRow, env: RunEnv): Promise<RunOutcome> {
   try {
     const outcome = await def.handler(ctx);
     await flushProgress();
-    const status =
-      outcome?.status === "partial" ||
-      outcome?.status === "failed" ||
-      outcome?.status === "cancelled"
-        ? outcome.status
-        : "completed";
+    const status = outcome?.status === "partial" ? "partial" : "completed";
     const value = outcome?.result ?? null;
     if (value !== null) {
       const size = jsonBytes(value);

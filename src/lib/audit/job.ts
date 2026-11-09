@@ -111,18 +111,13 @@ export function registerSiteAuditJob(): void {
       });
 
       if (["completed", "partial", "failed", "cancelled"].includes(audit.status)) {
-        const terminalStatus: "completed" | "partial" | "failed" | "cancelled" =
-          audit.status === "completed"
-            ? "completed"
-            : audit.status === "partial"
-              ? "partial"
-              : audit.status === "cancelled"
-                ? "cancelled"
-                : "failed";
+        // The audit already ended (e.g. cancelled before this job ran): nothing to do. The job itself
+        // completed normally; the audit's own status is reported in the result.
         return {
-          status: terminalStatus,
+          status: "completed",
           result: {
             status: audit.status,
+            skipped: true,
             pagesCrawled: audit.pages_crawled ?? 0,
           },
         };

@@ -214,7 +214,7 @@ test("job: AuditPhaseError in step triggers mark-failed and sets failed status",
   assert.equal(finalAudit.failed_phase, "starting");
 });
 
-test("job: already terminal audit returns early with terminal job status and does not touch audit row", async () => {
+test("job: already terminal audit returns early as a completed job and does not touch audit row", async () => {
   const auditStore = createMemoryAuditStore();
   const jobStore = createMemoryJobStore();
   const auditId = "00000000-0000-4000-8000-000000000012";
@@ -263,7 +263,7 @@ test("job: already terminal audit returns early with terminal job status and doe
     selfContinue: () => {},
   });
 
-  assert.equal(outcome, "cancelled");
+  assert.equal(outcome, "completed");
   assert.equal(fetchCalled, false, "crawl must not run for terminal audit");
 
   const auditAfter = await auditStore.getAudit(auditId);
