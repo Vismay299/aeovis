@@ -65,13 +65,17 @@ if (process.argv.includes("--only") && process.argv[process.argv.indexOf("--only
   }
 }
 
+const JSONB_PARAMS = new Set(["p_links", "p_discovered"]);
+
 function createPgAdminAdapter(client) {
   return {
     async rpc(name, params = {}) {
       const entries = Object.entries(params);
       const sql = `SELECT ${name}(${entries.map(([k], i) => `${k} => $${i + 1}`).join(", ")}) AS result`;
-      const values = entries.map(([, v]) => {
+      const values = entries.map(([k, v]) => {
         if (v === null || v === undefined) return null;
+        // text[] params go to pg as native arrays; jsonb params (arrays of objects, objects) as JSON text.
+        if (Array.isArray(v) && v.every((x) => typeof x === "string") && !JSONB_PARAMS.has(k)) return v;
         if (typeof v === "object") return JSON.stringify(v);
         return v;
       });
@@ -168,7 +172,9 @@ function createPgAdminAdapter(client) {
                 );
                 const patchVals = patchEntries.map(([, v]) => {
                   if (v === null || v === undefined) return null;
-                  if (typeof v === "object") return JSON.stringify(v);
+                  // text[] params go to pg as native arrays; jsonb params (arrays of objects, objects) as JSON text.
+        if (Array.isArray(v) && v.every((x) => typeof x === "string") && !JSONB_PARAMS.has(k)) return v;
+        if (typeof v === "object") return JSON.stringify(v);
                   return v;
                 });
                 const allVals = [...whereValues, ...patchVals];
