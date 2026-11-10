@@ -125,7 +125,7 @@ describe("backlinks provider", () => {
   });
 
   describe("fetchBacklinksRows", () => {
-    it("sends OpenSEO common payload, defaults, and preserves user filters and pagination with hideSpam=true/false", async () => {
+    it("sends the common payload, defaults, and preserves user filters and pagination with hideSpam=true/false", async () => {
       for (const hideSpam of [undefined, true, false]) {
         let capturedUrl: string | undefined;
         let capturedBody: unknown;
@@ -135,10 +135,10 @@ describe("backlinks provider", () => {
           return okResponse([], ["v3", "backlinks", "backlinks", "live"]);
         };
 
-        const filters = [["domain_from", "=", "openseo.so"]];
+        const filters = [["domain_from", "=", "example.com"]];
         await fetchBacklinksRows(
           {
-            target: "openseo.so",
+            target: "example.com",
             mode: "as_is",
             offset: 50,
             limit: 50,
@@ -164,7 +164,7 @@ describe("backlinks provider", () => {
 
         assert.deepEqual(capturedBody, [
           {
-            target: "openseo.so",
+            target: "example.com",
             include_subdomains: true,
             include_indirect_links: true,
             exclude_internal_backlinks: true,
