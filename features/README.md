@@ -47,7 +47,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F11](./F11-prompt-explorer.md) | Prompt Explorer (ask one question now) | Ask one question now | 1 | F02, F03, F04, F05, F08, F09 | 090–094 | Spec ✓ |
 | [F12](./F12-question-detail-history.md) | Question detail and answer history | Answer detail view | 1 | F05, F08 | 095–099 | Spec ✓ |
 | [F13](./F13-keyword-research.md) | Keyword research and saved keywords | Keyword research | 2 | F01, F02, F03, F06, F07 phase 1 | 100–104 | In progress |
-| [F14](./F14-domain-overview.md) | Domain overview and competitor research | Domain and competitor research | 2 | F07 phase 1, F13 | 105–109 | Spec ✓ |
+| [F14](./F14-domain-overview.md) | Domain overview and competitor research | Domain and competitor research | 2 | F07 phase 1, F13 | 105–109 | In progress |
 | [F15](./F15-rank-tracking.md) | Rank tracking with AI Overview presence | Rank tracking | 2 | F01, F02, F03, F06, F07 phase 1, F09, F10, F13, F14 (phase 1); F08 + F12 for phase 6 | 110–114 | Spec ✓ |
 | [F16](./F16-backlinks.md) | Backlinks | Backlinks | 2 | F02, F06, F07 phase 1, F13 (phase 1 research kit) | 115–119 | Spec ✓ |
 | [F17](./F17-local-seo.md) | Local SEO | Local SEO | 2 | F02, F07, F09, F13 | 120–124 | In progress |
