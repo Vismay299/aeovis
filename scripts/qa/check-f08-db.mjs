@@ -662,11 +662,11 @@ await group("approve", async (client) => {
 
   // Check stored artifact in repair_artifacts table
   const { rows: artRows } = await client.query(
-    "SELECT id, hash, state, payload FROM public.repair_artifacts WHERE id=$1",
+    "SELECT id, sha256, state, payload FROM public.repair_artifacts WHERE id=$1",
     [v2.id],
   );
   assert.equal(artRows.length, 1);
-  assert.equal(artRows[0].hash, hash);
+  assert.equal(artRows[0].sha256, hash);
   assert.equal(artRows[0].state, "approved");
 
   // Check head
