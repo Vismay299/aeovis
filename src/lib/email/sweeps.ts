@@ -279,36 +279,23 @@ export async function sweepMilestones(
     return { candidates: 0, milestones: 0, contacts: 0 };
   }
 
-  let milestonesInserted = 0;
-  const brandMilestones = new Map<string, Array<{ milestone: string; reached_at: string }>>();
-
-  for (const c of candidates as Array<{ brand_key: string; milestone: string; reached_at: string }>) {
-    const { error: insError } = await admin
-      .from("workspace_milestones")
-      .insert({
-        brand_key: c.brand_key,
-        milestone: c.milestone,
-        reached_at: c.reached_at,
-      });
-
-    if (!insError) {
-      milestonesInserted++;
-      const list = brandMilestones.get(c.brand_key) ?? [];
-      list.push(c);
-      brandMilestones.set(c.brand_key, list);
-    }
+  const rows = candidates as Array<{ brand_key: string; milestone: string; reached_at: string }>;
+  const byBrand = new Map<string, Array<{ milestone: string; reached_at: string }>>();
+  for (const c of rows) {
+    const list = byBrand.get(c.brand_key) ?? [];
+    list.push(c);
+    byBrand.set(c.brand_key, list);
   }
 
-  if (brandMilestones.size === 0) {
-    return { candidates: candidates.length, milestones: milestonesInserted, contacts: 0 };
-  }
-
-  // Find workspace members of active brands that achieved milestones
-  const activeBrands = [...brandMilestones.keys()];
-  const { data: brandRows } = await admin
+  const brandKeys = [...byBrand.keys()];
+  const { data: brandRows, error: brandRowsError } = await admin
     .from("customer_brands")
     .select("brand_key, is_active")
-    .in("brand_key", activeBrands);
+    .in("brand_key", brandKeys);
+
+  if (brandRowsError) {
+    throw brandRowsError;
+  }
 
   const activeSet = new Set(
     (brandRows ?? []).filter((b) => b.is_active).map((b) => b.brand_key),
@@ -317,33 +304,55 @@ export async function sweepMilestones(
   const slot = now.toISOString().slice(0, 16);
   const enqueuedUsers = new Set<string>();
   let contactsEnqueued = 0;
+  let milestonesInserted = 0;
 
-  for (const brandKey of activeBrands) {
-    if (!activeSet.has(brandKey)) continue;
+  for (const [brandKey, milestones] of byBrand) {
+    // Enqueue contacts BEFORE recording the milestones: the candidate RPC only
+    // returns unrecorded milestones, so if this step fails after the inserts the
+    // retry would find nothing and the contacts would be lost. enqueueEmail is
+    // idempotent via dedupeKey (stable slot), so re-running is safe.
+    if (activeSet.has(brandKey)) {
+      const { data: members, error: memError } = await admin
+        .from("customer_brand_memberships")
+        .select("user_id")
+        .eq("brand_key", brandKey);
 
-    const { data: members, error: memError } = await admin
-      .from("customer_brand_memberships")
-      .select("user_id")
-      .eq("brand_key", brandKey);
-
-    if (memError || !members) continue;
-
-    for (const member of members) {
-      if (enqueuedUsers.has(member.user_id)) continue;
-      enqueuedUsers.add(member.user_id);
-
-      const dedupeKey = `contact_milestones:${member.user_id}:${slot}`;
-      const res = await enqueueEmail(admin, {
-        kind: "contact",
-        template: "contact_milestones",
-        userId: member.user_id,
-        brandKey,
-        dedupeKey,
-        data: { reason: "milestone" },
-      });
-      if (res.created) {
-        contactsEnqueued++;
+      if (memError) {
+        throw memError;
       }
+
+      for (const member of members ?? []) {
+        if (enqueuedUsers.has(member.user_id)) continue;
+        enqueuedUsers.add(member.user_id);
+
+        const dedupeKey = `contact_milestones:${member.user_id}:${slot}`;
+        const res = await enqueueEmail(admin, {
+          kind: "contact",
+          template: "contact_milestones",
+          userId: member.user_id,
+          brandKey,
+          dedupeKey,
+          data: { reason: "milestone" },
+        });
+        if (res.created) {
+          contactsEnqueued++;
+        }
+      }
+    }
+
+    for (const c of milestones) {
+      const { error: insError } = await admin.from("workspace_milestones").insert({
+        brand_key: brandKey,
+        milestone: c.milestone,
+        reached_at: c.reached_at,
+      });
+
+      if (insError) {
+        // 23505 = unique_violation: milestone already recorded, safe to skip.
+        if ((insError as { code?: string }).code === "23505") continue;
+        throw insError;
+      }
+      milestonesInserted++;
     }
   }
 

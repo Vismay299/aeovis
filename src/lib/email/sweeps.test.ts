@@ -31,7 +31,10 @@ type MockStore = {
   rpcMilestones: Array<Record<string, unknown>>;
 };
 
-function createMockAdmin(initial: Partial<MockStore> = {}) {
+function createMockAdmin(
+  initial: Partial<MockStore> = {},
+  hooks: { insertError?: (table: string, rec: Record<string, any>) => Record<string, unknown> | null } = {},
+) {
   const store: MockStore = {
     scans: initial.scans ?? [],
     customer_brands: initial.customer_brands ?? [],
@@ -98,6 +101,17 @@ function createMockAdmin(initial: Partial<MockStore> = {}) {
         insert(recordOrRecords: any) {
           const records = Array.isArray(recordOrRecords) ? recordOrRecords : [recordOrRecords];
           for (const rec of records) {
+            const hookError = hooks.insertError?.(table, rec);
+            if (hookError) {
+              return {
+                then(resolve: (res: { data: null; error: unknown }) => void) {
+                  resolve({ data: null, error: hookError });
+                },
+                select() {
+                  return Promise.resolve({ data: null, error: hookError });
+                },
+              };
+            }
             if (table === "workspace_milestones") {
               const exists = store.workspace_milestones.some(
                 (m) => m.brand_key === rec.brand_key && m.milestone === rec.milestone,
@@ -105,10 +119,10 @@ function createMockAdmin(initial: Partial<MockStore> = {}) {
               if (exists) {
                 return {
                   then(resolve: (res: { data: null; error: Error }) => void) {
-                    resolve({ data: null, error: new Error("duplicate milestone") });
+                    resolve({ data: null, error: Object.assign(new Error("duplicate milestone"), { code: "23505" }) });
                   },
                   select() {
-                    return Promise.resolve({ data: null, error: new Error("duplicate milestone") });
+                    return Promise.resolve({ data: null, error: Object.assign(new Error("duplicate milestone"), { code: "23505" }) });
                   },
                 };
               }
@@ -300,4 +314,65 @@ test("sweepMilestones: processes candidates, inserts workspace_milestones, and f
   assert.equal(store.email_outbox[0].dedupe_key, "contact_milestones:u1:2026-10-22T10:00");
   assert.equal(store.email_outbox[1].template, "contact_milestones");
   assert.equal(store.email_outbox[1].dedupe_key, "contact_milestones:u2:2026-10-22T10:00");
+});
+
+test("sweepMilestones: non-23505 insert error is thrown (not swallowed) so the step retries", async () => {
+  const now = new Date("2026-10-22T10:00:00.000Z");
+  const { admin } = createMockAdmin(
+    {
+      customer_brands: [{ brand_key: "brand_acme", display_name: "Acme Corp", is_active: true }],
+      customer_brand_memberships: [{ brand_key: "brand_acme", user_id: "u1", role: "owner" }],
+      rpcMilestones: milestoneCandidatesFixture,
+    },
+    {
+      insertError: (table) =>
+        table === "workspace_milestones" ? { code: "XX000", message: "db down" } : null,
+    },
+  );
+
+  await assert.rejects(() => sweepMilestones(admin, now), (e: any) => e.code === "XX000");
+});
+
+test("sweepMilestones: duplicate (23505) milestone inserts are skipped, not thrown", async () => {
+  const now = new Date("2026-10-22T10:00:00.000Z");
+  const { admin, store } = createMockAdmin({
+    customer_brands: [{ brand_key: "brand_acme", display_name: "Acme Corp", is_active: true }],
+    customer_brand_memberships: [{ brand_key: "brand_acme", user_id: "u1", role: "owner" }],
+    workspace_milestones: [{ brand_key: "brand_acme", milestone: "workspace_created" }],
+    rpcMilestones: milestoneCandidatesFixture,
+  });
+
+  const res = await sweepMilestones(admin, now);
+  assert.equal(res.milestones, 2);
+  assert.equal(store.workspace_milestones.length, 3);
+});
+
+test("sweepMilestones: contact rows are enqueued even when a milestone insert fails afterwards, and a retry does not duplicate them", async () => {
+  const now = new Date("2026-10-22T10:00:00.000Z");
+  let fail = true;
+  const { admin, store } = createMockAdmin(
+    {
+      customer_brands: [{ brand_key: "brand_acme", display_name: "Acme Corp", is_active: true }],
+      customer_brand_memberships: [
+        { brand_key: "brand_acme", user_id: "u1", role: "owner" },
+        { brand_key: "brand_acme", user_id: "u2", role: "member" },
+      ],
+      rpcMilestones: milestoneCandidatesFixture,
+    },
+    {
+      insertError: (table, rec) =>
+        fail && table === "workspace_milestones" && rec.milestone === "draft_approved"
+          ? { code: "XX000", message: "db down" }
+          : null,
+    },
+  );
+
+  await assert.rejects(() => sweepMilestones(admin, now));
+  assert.equal(store.email_outbox.length, 2);
+  assert.ok(store.email_outbox.every((r) => r.template === "contact_milestones"));
+
+  fail = false;
+  const retry = await sweepMilestones(admin, now);
+  assert.equal(retry.contacts, 0);
+  assert.equal(store.email_outbox.length, 2);
 });

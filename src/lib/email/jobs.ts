@@ -156,7 +156,9 @@ export function registerEmailJobs(): void {
         if (!admin) {
           throw new AppError(503, "database_unavailable", "Database is unavailable.");
         }
-        const now = new Date();
+        // Stable across step retries/replays so contact dedupe slots don't drift.
+        const nowIso = await ctx.step.do("now", DB_STEP, async () => new Date().toISOString());
+        const now = new Date(nowIso);
 
         // 1. milestones — DB_STEP
         const milestones = await ctx.step.do("milestones", DB_STEP, async () => {

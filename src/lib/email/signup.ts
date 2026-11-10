@@ -20,7 +20,7 @@ export async function enqueueSignupEmails(
 ): Promise<void> {
   try {
     // 1. Upsert default preferences on conflict do nothing
-    await admin.from("user_email_preferences").upsert(
+    const { error: prefsError } = await admin.from("user_email_preferences").upsert(
       {
         user_id: user.id,
         product_updates: false,
@@ -31,6 +31,12 @@ export async function enqueueSignupEmails(
       },
       { onConflict: "user_id", ignoreDuplicates: true },
     );
+    if (prefsError) {
+      console.warn("[email] signup preferences upsert failed", {
+        userId: user.id,
+        error: prefsError,
+      });
+    }
 
     // 2. Enqueue contact_signup outbox row
     await enqueueEmail(admin, {
