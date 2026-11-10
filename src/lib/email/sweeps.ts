@@ -50,7 +50,7 @@ export async function sweepScans(
   const brandKeys = [...new Set(scans.map((s) => s.brand_key).filter(Boolean))];
   const { data: brands, error: brandsError } = await admin
     .from("customer_brands")
-    .select("brand_key, display_name, name, is_active")
+    .select("brand_key, display_name, is_active")
     .in("brand_key", brandKeys);
 
   if (brandsError) {
@@ -169,7 +169,7 @@ export async function sweepWindows(
   const brandKeys = [...new Set(filteredWindows.map((w) => w.brand))];
   const { data: brands, error: brandsError } = await admin
     .from("customer_brands")
-    .select("brand_key, display_name, name, is_active")
+    .select("brand_key, display_name, is_active")
     .in("brand_key", brandKeys);
 
   if (brandsError) {

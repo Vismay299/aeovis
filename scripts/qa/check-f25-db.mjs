@@ -108,9 +108,11 @@ function createServiceClient(pgPool) {
         },
         maybeSingle() {
           limitCount = 1;
-          return b.then((res) => {
-            return { data: res.data?.[0] ?? null, error: res.error };
-          });
+          // b.then is a callback-style thenable that returns nothing, so wrap it in a real Promise.
+          return new Promise((resolve, reject) => b.then(resolve, reject)).then((res) => ({
+            data: res.data?.[0] ?? null,
+            error: res.error,
+          }));
         },
         then(resolve, reject) {
           let sql = `SELECT ${selectFields} FROM public.${table}`;
@@ -122,7 +124,12 @@ function createServiceClient(pgPool) {
             .then((r) => resolve({ data: r.rows, error: null }))
             .catch((err) => resolve({ data: null, error: err }));
         },
-        async upsert(rows, opts) {
+        upsert(rows, opts) {
+          // supabase-js builders are thenables that also chain .select(); an async method can't do both.
+          const p = b._upsert(rows, opts);
+          return { select: () => p, then: (resolve, reject) => p.then(resolve, reject) };
+        },
+        async _upsert(rows, opts) {
           const list = Array.isArray(rows) ? rows : [rows];
           const inserted = [];
           for (const row of list) {
@@ -141,22 +148,10 @@ function createServiceClient(pgPool) {
               );
               if (res.rows.length > 0) inserted.push(res.rows[0]);
             } catch (err) {
-              return {
-                data: null,
-                error: err,
-                select() {
-                  return Promise.resolve({ data: null, error: err });
-                },
-              };
+              return { data: null, error: err };
             }
           }
-          return {
-            data: inserted,
-            error: null,
-            select() {
-              return Promise.resolve({ data: inserted, error: null });
-            },
-          };
+          return { data: inserted, error: null };
         },
         async insert(rows) {
           return b.upsert(rows);
@@ -431,7 +426,7 @@ async function main() {
       // Seed a scan
       const scanId = id();
       await pool.query(
-        `INSERT INTO public.scans (id, brand_key, created_at) VALUES ($1, $2, now())`,
+        `INSERT INTO public.scans (id, brand, brand_key, created_at) VALUES ($1, $2, $2, now())`,
         [scanId, brandKey],
       );
 
@@ -444,8 +439,8 @@ async function main() {
 
       // Seed an approved draft
       await pool.query(
-        `INSERT INTO public.content_items (brand, status, updated_at)
-         VALUES ($1, 'approved', now())`,
+        `INSERT INTO public.content_items (brand, playbook, status, updated_at)
+         VALUES ($1, 'geo_article', 'approved', now())`,
         [brandKey],
       );
 
@@ -529,14 +524,14 @@ async function main() {
 
       // Seed one row each in the stub tables
       await pool.query(
-        `INSERT INTO public.scan_schedules (brand, managed_by, enabled, customer_updated_at, updated_at)
-         VALUES ($1, 'customer', true, now(), now())
-         ON CONFLICT (brand) DO UPDATE SET managed_by = 'customer', enabled = true`,
+        `INSERT INTO public.scan_schedules (brand, display_name, cadence, managed_by, schedule_interval, approved_max_usd, enabled, customer_updated_at, updated_at)
+         VALUES ($1, $1, 'daily', 'customer', 'daily', 1, true, now(), now())
+         ON CONFLICT (brand) DO UPDATE SET managed_by = 'customer', schedule_interval = 'daily', approved_max_usd = 1, enabled = true`,
         [brandKey],
       );
       await pool.query(
-        `INSERT INTO public.site_audits (brand_key, status, completed_at)
-         VALUES ($1, 'completed', now())`,
+        `INSERT INTO public.site_audits (brand_key, requested_url, start_url, start_host, max_pages, status, completed_at)
+         VALUES ($1, 'https://' || $1 || '/', 'https://' || $1 || '/', $1, 50, 'completed', now())`,
         [brandKey],
       );
       await pool.query(
@@ -592,8 +587,8 @@ async function main() {
 
       const scanId = id();
       await pool.query(
-        `INSERT INTO public.scans (id, brand_key, created_at, prompts_tracked, prompts_mentioned, raw_results)
-         VALUES ($1, $2, now(), 10, 5, '{"summary_stats": {"terminal_outcome": {"outcome": "complete"}}}'::jsonb)`,
+        `INSERT INTO public.scans (id, brand, brand_key, created_at, prompts_tracked, prompts_mentioned, raw_results)
+         VALUES ($1, $2, $2, now(), 10, 5, '{"summary_stats": {"terminal_outcome": {"outcome": "complete"}}}'::jsonb)`,
         [scanId, brandKey],
       );
 
@@ -637,9 +632,9 @@ async function main() {
 
       // Ensure scan_schedules exists and has customer schedule
       await pool.query(
-        `INSERT INTO public.scan_schedules (brand, managed_by, enabled, next_run_at, updated_at)
-         VALUES ($1, 'customer', true, now() + interval '1 day', now())
-         ON CONFLICT (brand) DO UPDATE SET managed_by = 'customer', enabled = true`,
+        `INSERT INTO public.scan_schedules (brand, display_name, cadence, managed_by, schedule_interval, approved_max_usd, enabled, next_run_at, updated_at)
+         VALUES ($1, $1, 'daily', 'customer', 'daily', 1, true, now() + interval '1 day', now())
+         ON CONFLICT (brand) DO UPDATE SET managed_by = 'customer', schedule_interval = 'daily', approved_max_usd = 1, enabled = true`,
         [brandKey],
       );
 

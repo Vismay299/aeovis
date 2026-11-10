@@ -44,7 +44,7 @@ export async function notifySpendCapRefused(
 
     const { data: brand, error: brandError } = await admin
       .from("customer_brands")
-      .select("brand_key, display_name, name, is_active")
+      .select("brand_key, display_name, is_active")
       .eq("brand_key", i.brandKey)
       .maybeSingle();
 
