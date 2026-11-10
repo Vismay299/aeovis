@@ -1,4 +1,7 @@
-export const SPEND_FEATURES = ["platform.selftest"] as const;
+export const SPEND_FEATURES = [
+  "platform.selftest",
+  "providers.dataforseo.selftest",
+] as const;
 
 export type SpendFeature = (typeof SPEND_FEATURES)[number];
 
@@ -16,6 +19,7 @@ export function isSpendFeature(v: string): v is SpendFeature {
 export const SPEND_FEATURE_LABELS: Record<string, string> = {
   "ai_visibility.scan": "AI visibility scans",
   "platform.selftest": "Platform check",
+  "providers.dataforseo.selftest": "DataForSEO self-test",
 };
 
 /** The label for a ledger feature; an unknown key is "Other", never an empty string. */

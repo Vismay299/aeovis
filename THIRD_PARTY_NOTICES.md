@@ -363,3 +363,8 @@ SOFTWARE.
 - `src/lib/audit/retention.test.ts` (from `src/server/workflows/SiteAuditWorkflow.test.ts`)
 - `src/lib/audit/telemetry.ts` (from `src/server/features/audit/telemetry.ts`)
 - `scripts/qa/check-f18-db.mjs` (from `src/server/features/audit/AuditScratchpad.test.ts`)
+- `src/lib/providers/dataforseo/client.ts`
+- `src/lib/providers/dataforseo/client.test.ts`
+- `src/lib/providers/dataforseo/serp.ts`
+- `src/lib/providers/dataforseo/serp.test.ts`
+- `src/lib/providers/dataforseo/index.ts`

@@ -9,6 +9,7 @@ import { toErrorResponse } from "../../http/errors.ts";
 import { z } from "zod";
 import {
   assertOk,
+  isNoResultsTask,
   isTaskInProgress,
   isUpstreamFailureStatus,
   parseTaskItems,
@@ -124,6 +125,19 @@ test("40501 No Search Results is an empty success only when allowed", () => {
     () => assertOk({ status_code: 20000, tasks: [task] }),
     (error: unknown) => error instanceof ChargedCallError && error.actualUsd === 0,
   );
+});
+
+test("No Search Results text counts as empty only with a no-results status code", () => {
+  const path = ["v3", "serp", "google", "organic", "live", "advanced"];
+  const documented = { status_code: 40102, status_message: "No Search Results.", path, cost: 0.002 };
+  assert.equal(isNoResultsTask(documented), true);
+  assert.equal(
+    assertOk({ status_code: 20000, tasks: [documented] }, { treatNoResultsAsEmpty: true }),
+    documented,
+  );
+  for (const status_code of [40000, 50000, 40400]) {
+    assert.equal(isNoResultsTask({ status_code, status_message: "No Search Results", path, cost: 0 }), false);
+  }
 });
 
 test("a charged 40501 Invalid Field still surfaces with its cost", () => {

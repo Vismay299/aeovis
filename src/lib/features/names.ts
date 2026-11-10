@@ -21,6 +21,8 @@ export const FEATURES = {
   ga4: { spend: [] as const },
   // F19: IndexNow keys, submission, checks and history. Free (no spend).
   indexnow: { spend: [] as const },
+  // F02: routes answer engines through DataForSEO
+  dataforseo_engines: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

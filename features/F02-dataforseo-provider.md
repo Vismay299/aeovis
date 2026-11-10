@@ -735,15 +735,15 @@ The phase 3 PR sets `DATAFORSEO_APPROVED_ENGINES` to the record's approved list;
 
 **Goal:** one metered DataForSEO client that F13–F20 build on.
 
-- [ ] **P2.T1 Client**
-  - [ ] **P2.T1.S1** *Files:* `src/lib/providers/dataforseo/client.ts`, `client.test.ts`, `index.ts`. *Do:* §6.2.3. Port `client.test.ts:185-296` cases with F01's `memoryStore` spend deps: estimate held, settle at billed cost, charged failure settled, unbilled invalid field released, transport failure before billing released (Unbilled) vs ambiguous counted; batch: one hold, per-call costs. *Verify:* `node --test src/lib/providers/dataforseo/client.test.ts` → pass (F02-AC-13, 14).
-  - [ ] **P2.T1.S2** *Files:* `serp.ts`, `serp.test.ts`, fixtures. *Verify:* `node --test src/lib/providers/dataforseo/serp.test.ts` → pass (F02-AC-17).
-  - [ ] **P2.T1.S3** *Files:* `client.test.ts` ("every entry is priced": walk the client object, call each entry with a stub fetcher, assert `metered` received an `estimateUsd > 0`), `noPrices.test.mjs` (scan `src/lib/providers/dataforseo/*.ts` excluding tests for numeric literals assigned to names ending `_USD`). *Verify:* pass (F02-AC-15).
-  - [ ] **P2.T1.S4** *Files:* `answerImportGuard.test.mjs`. *Do:* walk `src/` and `scripts/` (excluding `node_modules`, `.next`, `.env*`), parse import specifiers; fail when `ai-tracking.ts`, `answers.ts` or `fetchLlmResponse` is imported outside the allowed list; fail if any F02 file contains `set_probe_rollout` or `probe_dispatch_control`. *Verify:* pass (F02-AC-16, 31).
-  - [ ] **P2.T1.S5** *Files:* `src/shared/spend-features.ts`, `src/lib/features/names.ts`, `.env.example`. *Do:* add `providers.dataforseo.selftest` and `dataforseo_engines`; env names. *Verify:* `node --test src/lib/features/flags.test.ts` → pass; `grep -c "^DATAFORSEO_API_KEY=$" .env.example` → 1.
-- [ ] **P2.T2 Owner live check of the client**
-  - [ ] **P2.T2.S1** *Files:* `scripts/qa/check-dataforseo-live.mjs` (`--mode client`). *Do:* refuses unless `--brand <key> --max-spend-usd 0.01` and `paid_feature_controls('providers.dataforseo.selftest')` enabled for the brand; one `serp.live` (depth 10, keyword "readiness canary", India) through the metered client; prints ledger `cost_source` and `accounted_usd` only. *Verify:* without flags → exit 2 "Missing --brand".
-  - [ ] **P2.T2.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `thirdPartyNotices.test.mjs` → pass.
+- [x] **P2.T1 Client**
+  - [x] **P2.T1.S1** *Files:* `src/lib/providers/dataforseo/client.ts`, `client.test.ts`, `index.ts`. *Do:* §6.2.3. Port `client.test.ts:185-296` cases with F01's `memoryStore` spend deps: estimate held, settle at billed cost, charged failure settled, unbilled invalid field released, transport failure before billing released (Unbilled) vs ambiguous counted; batch: one hold, per-call costs. *Verify:* `node --test src/lib/providers/dataforseo/client.test.ts` → pass (F02-AC-13, 14).
+  - [x] **P2.T1.S2** *Files:* `serp.ts`, `serp.test.ts`, fixtures. *Verify:* `node --test src/lib/providers/dataforseo/serp.test.ts` → pass (F02-AC-17).
+  - [x] **P2.T1.S3** *Files:* `client.test.ts` ("every entry is priced": walk the client object, call each entry with a stub fetcher, assert `metered` received an `estimateUsd > 0`), `noPrices.test.mjs` (scan `src/lib/providers/dataforseo/*.ts` excluding tests for numeric literals assigned to names ending `_USD`). *Verify:* pass (F02-AC-15).
+  - [x] **P2.T1.S4** *Files:* `answerImportGuard.test.mjs`. *Do:* walk `src/` and `scripts/` (excluding `node_modules`, `.next`, `.env*`), parse import specifiers; fail when `ai-tracking.ts`, `answers.ts` or `fetchLlmResponse` is imported outside the allowed list; fail if any F02 file contains `set_probe_rollout` or `probe_dispatch_control`. *Verify:* pass (F02-AC-16, 31).
+  - [x] **P2.T1.S5** *Files:* `src/shared/spend-features.ts`, `src/lib/features/names.ts`, `.env.example`. *Do:* add `providers.dataforseo.selftest` and `dataforseo_engines`; env names. *Verify:* `node --test src/lib/features/flags.test.ts` → pass; `grep -c "^DATAFORSEO_API_KEY=$" .env.example` → 1.
+- [x] **P2.T2 Owner live check of the client**
+  - [x] **P2.T2.S1** *Files:* `scripts/qa/check-dataforseo-live.mjs` (`--mode client`). *Do:* refuses unless `--brand <key> --max-spend-usd 0.01` and `paid_feature_controls('providers.dataforseo.selftest')` enabled for the brand; one `serp.live` (depth 10, keyword "readiness canary", India) through the metered client; prints ledger `cost_source` and `accounted_usd` only. *Verify:* without flags → exit 2 "Missing --brand".
+  - [x] **P2.T2.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `thirdPartyNotices.test.mjs` → pass.
 
 **Checkpoint:** full suite, typecheck, build. Completes F02-AC-13…17.
 
