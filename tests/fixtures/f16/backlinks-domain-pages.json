@@ -1,0 +1,40 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.123 sec.",
+  "cost": 0.0276,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "16010000-0000-0000-0000-000000000006",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.120 sec.",
+      "cost": 0.0276,
+      "result_count": 1,
+      "path": ["v3", "backlinks", "domain_pages_summary", "live"],
+      "data": {
+        "api": "backlinks",
+        "function": "domain_pages_summary"
+      },
+      "result": [
+        {
+          "total_count": 1,
+          "items_count": 1,
+          "items": [
+            {
+              "page": "/pricing",
+              "url": "https://example.com/pricing",
+              "backlinks": 120,
+              "referring_domains": 45,
+              "rank": 30,
+              "broken_backlinks": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
