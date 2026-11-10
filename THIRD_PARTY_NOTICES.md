@@ -392,3 +392,7 @@ SOFTWARE.
 - `src/components/app/ResearchScopeSelect.tsx` (from `src/client/components/ResearchScopeSelect.tsx`)
 - `src/components/app/SearchCard.tsx` (from `src/client/components/SearchCard.tsx`)
 
+- `src/lib/providers/dataforseo/backlinks.ts` (from `src/server/lib/dataforseo/backlinks.ts`)
+- `src/lib/providers/dataforseo/backlinks.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)
+- `src/lib/providers/dataforseo/backlinksTarget.ts` (from `src/server/lib/dataforseoBacklinksTarget.ts`)
+- `src/lib/providers/dataforseo/backlinksTarget.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)
