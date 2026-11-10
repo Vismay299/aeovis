@@ -1,0 +1,23 @@
+{
+  "total_count": 42,
+  "items": [
+    {
+      "page_address": "https://offcult.in/collections/oversized",
+      "metrics": {
+        "organic": {
+          "etv": 1290.5,
+          "count": 34
+        }
+      }
+    },
+    {
+      "page_address": "https://offcult.in/collections/anime",
+      "metrics": {
+        "organic": {
+          "etv": 450.2,
+          "count": 18
+        }
+      }
+    }
+  ]
+}

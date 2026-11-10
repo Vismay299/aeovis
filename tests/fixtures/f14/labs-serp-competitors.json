@@ -1,0 +1,42 @@
+[
+  {
+    "domain": "bewakoof.com",
+    "avg_position": 4.2,
+    "median_position": 3,
+    "visibility": 0.41,
+    "etv": 18120.5,
+    "keywords_count": 31
+  },
+  {
+    "domain": "souledstore.com",
+    "avg_position": 6.1,
+    "median_position": 5,
+    "visibility": 0.35,
+    "etv": 14200.0,
+    "keywords_count": 28
+  },
+  {
+    "domain": "offcult.in",
+    "avg_position": 7.0,
+    "median_position": 7,
+    "visibility": 0.25,
+    "etv": 1840.0,
+    "keywords_count": 22
+  },
+  {
+    "domain": "www.offcult.in",
+    "avg_position": 7.5,
+    "median_position": 7,
+    "visibility": 0.24,
+    "etv": 1800.0,
+    "keywords_count": 20
+  },
+  {
+    "domain": "blog.offcult.in",
+    "avg_position": 15.0,
+    "median_position": 14,
+    "visibility": 0.05,
+    "etv": 120.0,
+    "keywords_count": 5
+  }
+]

@@ -1,4 +1,4 @@
-// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, Â© 2026 Ben Senescu):
 //   src/shared/keyword-locations.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 /* eslint-disable max-lines -- country data table */

@@ -391,6 +391,13 @@ SOFTWARE.
 - `src/shared/saved-keywords-filters.ts` (from `src/shared/saved-keywords-filters.ts`)
 - `src/components/app/ResearchScopeSelect.tsx` (from `src/client/components/ResearchScopeSelect.tsx`)
 - `src/components/app/SearchCard.tsx` (from `src/client/components/SearchCard.tsx`)
+- `src/lib/domain/domain.contract.ts` (from `src/types/schemas/domain.ts`)
+- `src/lib/domain/domainKeywordFilters.ts` (from `src/server/features/domain/services/domainKeywordFilters.ts`)
+- `src/lib/domain/domainKeywordMapper.ts` (from `src/server/features/domain/services/domainKeywordMapper.ts`)
+- `src/lib/domain/domainPagesFilters.ts` (from `src/server/features/domain/services/domainPagesPage.ts`)
+- `src/lib/domain/domainService.ts` (from `src/server/features/domain/services/DomainService.ts`, `domainKeywordsPage.ts`, `domainPagesPage.ts`)
+- `src/lib/domain/pagination.ts` (from `src/server/features/domain/services/pagination.ts`)
+- `src/lib/pricing/actions/domain.ts` (from `src/serverFunctions/domain.ts`)
 
 - `src/lib/providers/dataforseo/backlinks.ts` (from `src/server/lib/dataforseo/backlinks.ts`)
 - `src/lib/providers/dataforseo/backlinks.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)

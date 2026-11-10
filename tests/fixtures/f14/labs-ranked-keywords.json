@@ -1,0 +1,71 @@
+{
+  "total_count": 312,
+  "items": [
+    {
+      "keyword": "oversized t shirt",
+      "keyword_data": {
+        "keyword": "oversized t shirt",
+        "keyword_info": {
+          "search_volume": 74000,
+          "cpc": 0.41,
+          "keyword_difficulty": 38
+        },
+        "keyword_properties": {
+          "keyword_difficulty": 38
+        }
+      },
+      "ranked_serp_element": {
+        "serp_item": {
+          "rank_absolute": 7,
+          "etv": 1290.5,
+          "url": "https://offcult.in/collections/oversized",
+          "relative_url": "/collections/oversized"
+        }
+      }
+    },
+    {
+      "keyword": "anime t shirt",
+      "keyword_data": {
+        "keyword": "anime t shirt",
+        "keyword_info": {
+          "search_volume": 49500,
+          "cpc": 0.35,
+          "keyword_difficulty": 42
+        },
+        "keyword_properties": {
+          "keyword_difficulty": 42
+        }
+      },
+      "ranked_serp_element": {
+        "serp_item": {
+          "rank_absolute": 12,
+          "etv": 450.2,
+          "url": "https://offcult.in/collections/anime",
+          "relative_url": "/collections/anime"
+        }
+      }
+    },
+    {
+      "keyword": "graphic tees india",
+      "keyword_data": {
+        "keyword": "graphic tees india",
+        "keyword_info": {
+          "search_volume": 12000,
+          "cpc": 0.28,
+          "keyword_difficulty": 29
+        },
+        "keyword_properties": {
+          "keyword_difficulty": 29
+        }
+      },
+      "ranked_serp_element": {
+        "serp_item": {
+          "rank_absolute": 4,
+          "etv": 320.0,
+          "url": "https://offcult.in/collections/graphic",
+          "relative_url": "/collections/graphic"
+        }
+      }
+    }
+  ]
+}

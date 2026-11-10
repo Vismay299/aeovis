@@ -1,6 +1,8 @@
 export const SPEND_FEATURES = [
   "platform.selftest",
   "providers.dataforseo.selftest",
+  "domain.research",
+  "domain.competitors",
   "local.business",
   "local.reviews",
   "local.serp",
@@ -24,6 +26,8 @@ export const SPEND_FEATURE_LABELS: Record<string, string> = {
   "ai_visibility.scan": "AI visibility scans",
   "platform.selftest": "Platform check",
   "providers.dataforseo.selftest": "DataForSEO self-test",
+  "domain.research": "Domain research",
+  "domain.competitors": "SERP competitor research",
   "local.business": "Local business profiles and listings",
   "local.reviews": "Business reviews",
   "local.serp": "Local search results",
