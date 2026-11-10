@@ -273,6 +273,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/jobs/[jobId]/cancel",
       "/api/customer/price/estimate",
       "/api/customer/privacy",
+      "/api/customer/questions",
+      "/api/customer/questions/approve",
       "/api/customer/scan",
       "/api/customer/scan/mock",
       "/api/customer/scan/report/[scan_id]",
