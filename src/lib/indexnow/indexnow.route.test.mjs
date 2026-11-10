@@ -439,3 +439,42 @@ test("GET /api/customer/indexnow/submissions returns list", async () => {
   assert.equal(res.body.submissions.length, 1);
   assert.equal(res.body.submissions[0].engine, "bing");
 });
+
+test("a database error from the real lib -> 503 indexnow_unavailable (spec: API errors)", async () => {
+  // No getSetup override: the route runs the real lib against a failing admin client.
+  const failingQuery = {
+    select: () => failingQuery,
+    eq: () => failingQuery,
+    maybeSingle: async () => ({ data: null, error: { message: "connection refused", code: "08006" } }),
+  };
+  const deps = baseDeps({
+    getSupabaseAdmin: () => ({ from: () => failingQuery }),
+  });
+
+  const res = await read(
+    await INDEXNOW_ROUTE.GET(
+      new Request(`https://app.test/api/customer/indexnow?brand_key=${BRAND_KEY}`),
+      {},
+      deps
+    )
+  );
+
+  assert.equal(res.status, 503);
+  assert.equal(res.body.code, "indexnow_unavailable");
+  assert.equal(res.body.error, "IndexNow could not be reached. Please retry.");
+});
+
+test("POST setup/check accept an empty body (all fields optional) via the shared body reader", async () => {
+  const res = await read(
+    await SETUP_ROUTE.POST(
+      new Request("https://app.test/api/customer/indexnow/setup", { method: "POST" }),
+      {},
+      baseDeps({
+        isFeatureEnabled: async () => false,
+      })
+    )
+  );
+  // Reaches the flag gate (404) rather than failing body parsing (400).
+  assert.equal(res.status, 404);
+  assert.equal(res.body.code, "feature_unavailable");
+});

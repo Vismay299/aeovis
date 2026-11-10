@@ -37,6 +37,26 @@ export async function readJsonBody(request: Request): Promise<unknown> {
   }
 }
 
+/**
+ * Like `readJsonBody`, but a missing or blank body is `{}` instead of a 400, for
+ * routes whose every field is optional. An unreadable body is `invalid_request`;
+ * a body that is not JSON is `invalid_json`.
+ */
+export async function readOptionalJsonBody(request: Request): Promise<unknown> {
+  let text: string;
+  try {
+    text = await request.text();
+  } catch {
+    throw new AppError(400, "invalid_request", "The request body could not be read.");
+  }
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new AppError(400, "invalid_json", "The request body must be JSON.");
+  }
+}
+
 export function toErrorResponse(err: unknown): Response {
   if (err instanceof AppError) {
     const body: Record<string, unknown> = { error: err.message, code: err.code };
