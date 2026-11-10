@@ -25,6 +25,15 @@ export const FEATURES = {
   dataforseo_engines: { spend: [] as const },
   // F08: gates question curation routes, approval, and workspace questions
   question_curation: { spend: [] as const },
+  // F17: Local SEO page, routes, sidebar item.
+  local_seo: {
+    spend: [
+      "local.business",
+      "local.reviews",
+      "local.serp",
+      "local.grid",
+    ] as const,
+  },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;
