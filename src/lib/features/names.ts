@@ -27,6 +27,15 @@ export const FEATURES = {
   question_curation: { spend: [] as const },
   // F14: domain overview and competitor research
   domain_research: { spend: ["domain.research"] as const },
+  // F17: Local SEO page, routes, sidebar item.
+  local_seo: {
+    spend: [
+      "local.business",
+      "local.reviews",
+      "local.serp",
+      "local.grid",
+    ] as const,
+  },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

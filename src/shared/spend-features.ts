@@ -3,6 +3,10 @@ export const SPEND_FEATURES = [
   "providers.dataforseo.selftest",
   "domain.research",
   "domain.competitors",
+  "local.business",
+  "local.reviews",
+  "local.serp",
+  "local.grid",
 ] as const;
 
 export type SpendFeature = (typeof SPEND_FEATURES)[number];
@@ -24,6 +28,10 @@ export const SPEND_FEATURE_LABELS: Record<string, string> = {
   "providers.dataforseo.selftest": "DataForSEO self-test",
   "domain.research": "Domain research",
   "domain.competitors": "SERP competitor research",
+  "local.business": "Local business profiles and listings",
+  "local.reviews": "Business reviews",
+  "local.serp": "Local search results",
+  "local.grid": "Local rank grids",
 };
 
 /** The label for a ledger feature; an unknown key is "Other", never an empty string. */

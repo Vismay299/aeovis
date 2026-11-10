@@ -12,3 +12,4 @@ export {
   domainPagesPageAction,
   domainCompetitorsRunAction,
 } from "./domain.ts";
+import "./local.ts";
