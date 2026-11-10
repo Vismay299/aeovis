@@ -381,6 +381,9 @@ test("usd6 rounds half-up to six decimals and SPEND_FEATURES is a closed union",
     "local.reviews",
     "local.serp",
     "local.grid",
+    "questions.setup",
+    "questions.generate",
+    "questions.research",
   ]);
   assert.strictEqual(SPEND_FEATURES, SHARED_SPEND_FEATURES, "the lib path re-exports the shared array");
   assert.equal(isSpendFeature("platform.selftest"), true);
@@ -388,6 +391,9 @@ test("usd6 rounds half-up to six decimals and SPEND_FEATURES is a closed union",
   assert.equal(isSpendFeature("domain.research"), true);
   assert.equal(isSpendFeature("domain.competitors"), true);
   assert.equal(isSpendFeature("local.business"), true);
+  assert.equal(isSpendFeature("questions.setup"), true);
+  assert.equal(isSpendFeature("questions.generate"), true);
+  assert.equal(isSpendFeature("questions.research"), true);
   assert.equal(isSpendFeature("platform.selftest.extra"), false);
 });
 

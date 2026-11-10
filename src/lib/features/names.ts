@@ -40,6 +40,10 @@ export const FEATURES = {
       "local.grid",
     ] as const,
   },
+  // F08: gates AI question setup research and drafting Generate button
+  question_setup: { spend: ["questions.setup", "questions.generate"] as const },
+  // F08: gates question research from LLM mentions search
+  prompt_research: { spend: ["questions.research"] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;
