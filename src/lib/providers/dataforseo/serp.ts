@@ -236,10 +236,10 @@ export async function postRankCheckTasks(
   options?: DataforseoRequestOptions,
 ): Promise<DataforseoApiResponse<PostedRankCheckTask[]>> {
   if (input.tasks.length === 0 || input.tasks.length > MAX_TASKS_PER_POST) {
-    throw new AppError(
-      400,
-      "dataforseo_invalid_request",
+    // Unbilled: refused before dispatch, so a metered caller releases the hold.
+    throw new UnbilledCallError(
       `task_post accepts 1-${MAX_TASKS_PER_POST} tasks, got ${input.tasks.length}`,
+      { status: 400, code: "dataforseo_invalid_request" },
     );
   }
   const depth = clampSerpDepth(input.depth);
@@ -439,6 +439,13 @@ export async function postLocalSerpTasks(
   input: PostLocalSerpInput,
   options?: DataforseoRequestOptions,
 ): Promise<DataforseoApiResponse<Array<string | null>>> {
+  const count = input.locationCoordinates.length;
+  if (count === 0 || count > MAX_TASKS_PER_POST) {
+    throw new UnbilledCallError(
+      `task_post accepts 1-${MAX_TASKS_PER_POST} tasks, got ${count}`,
+      { status: 400, code: "dataforseo_invalid_request" },
+    );
+  }
   const path = "/v3/serp/google/maps/task_post";
   const response = await dataforseoPost<
     DataforseoTaskLike & { id?: string; data?: Record<string, unknown> }

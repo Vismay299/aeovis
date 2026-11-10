@@ -47,8 +47,10 @@ test("answer fetchers are imported only by allowed F02 engine/provider modules",
 
   const violations = [];
 
-  const importTargetRe = /(?:from|import)\s+['"]([^'"]+)['"]/g;
-  const fetchLlmImportRe = /\bimport\s+[^'"]*\bfetchLlmResponse\b[^'"]*from/g;
+  // Static `from "x"`, side-effect `import "x"` and dynamic `import("x")`.
+  const importTargetRe = /(?:\bfrom\s+|\bimport\s*\(?\s*)['"]([^'"]+)['"]/g;
+  const answerModule = /(?:^|\/)(?:ai-tracking|answers)(?:\.(?:ts|js|mjs))?$/;
+  const fetchLlmImportRe = /\b(?:import|export)\s+[^'"]*\bfetchLlmResponse\b[^'"]*from/g;
 
   for (const file of codeFiles) {
     const norm = normalizePath(file);
@@ -61,14 +63,7 @@ test("answer fetchers are imported only by allowed F02 engine/provider modules",
     importTargetRe.lastIndex = 0;
     while ((match = importTargetRe.exec(content)) !== null) {
       const specifier = match[1];
-      if (
-        specifier.endsWith("ai-tracking") ||
-        specifier.endsWith("ai-tracking.ts") ||
-        specifier.endsWith("ai-tracking.js") ||
-        specifier.endsWith("answers") ||
-        specifier.endsWith("answers.ts") ||
-        specifier.endsWith("answers.js")
-      ) {
+      if (answerModule.test(specifier)) {
         if (!isAllowedAnswerImporter(norm)) {
           violations.push({ file: norm, specifier, reason: "imported answer module" });
         }

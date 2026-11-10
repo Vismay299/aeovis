@@ -82,9 +82,15 @@ export function invalidFieldName(message: string): string | null {
   return message.match(INVALID_FIELD_RE)?.[1] ?? null;
 }
 
+// DataForSEO documents "No Search Results." as 40102; the AI-tracking endpoints
+// have returned it as 40501. Any other status with that text is not an empty success.
+const NO_RESULTS_STATUS_CODES = new Set([40102, 40501]);
+
 export function isNoResultsTask(task: DataforseoTaskLike): boolean {
   return (
-    task.status_message?.toLowerCase().includes("no search results") ?? false
+    task.status_code !== undefined &&
+    NO_RESULTS_STATUS_CODES.has(task.status_code) &&
+    (task.status_message?.toLowerCase().includes("no search results") ?? false)
   );
 }
 

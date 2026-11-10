@@ -297,6 +297,30 @@ test("meterBatch releases hold when no calls were billed", async () => {
   assert.equal(hold.releaseReason, "not_billed");
 });
 
+test("meterBatch returns the call outcomes when releasing an unbilled hold fails", async () => {
+  const { deps } = makeHarness();
+  const errors: unknown[] = [];
+  const fetcher = async (): Promise<DataforseoApiResponse<unknown>> => {
+    throw new UnbilledCallError("Bad request", { status: 400, code: "dataforseo_request_refused" });
+  };
+  const batchRunner = meterBatch(fetcher, () => 0.002, FEATURE, {
+    ...deps,
+    spendDeps: { ...deps.spendDeps, logger: { error: (...a: unknown[]) => errors.push(a), warn: () => {} } },
+    releaseSpend: async () => {
+      throw new Error("store down");
+    },
+  });
+
+  const outcomes = await batchRunner(
+    { brandKey: BRAND, idempotencyKey: "batch-release-fails" },
+    [{ id: "1" }],
+  );
+  assert.equal(outcomes.length, 1);
+  assert.equal(outcomes[0].status, "rejected");
+  assert.ok((outcomes[0] as PromiseRejectedResult).reason instanceof UnbilledCallError);
+  assert.equal(errors.length, 1);
+});
+
 test("every entry of createDataforseoClient is priced with estimateUsd > 0", async () => {
   const observedEstimates: Array<{ name: string; estimateUsd: number }> = [];
 

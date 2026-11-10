@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ChargedCallError } from "../../spend/errors.ts";
+import { ChargedCallError, UnbilledCallError } from "../../spend/errors.ts";
 import {
   fetchLiveSerp,
   fetchLocalSerpTaskResult,
@@ -350,6 +350,27 @@ test("reads a queued Maps task as pending, its items once done, and No Search Re
       status: "completed",
       items: [],
     });
+  } finally {
+    restore();
+  }
+});
+
+test("task_post refuses an empty or oversized batch before dispatch as unbilled", async () => {
+  let calls = 0;
+  setup(async () => {
+    calls += 1;
+    return Response.json({ status_code: 20000, tasks: [] });
+  });
+  try {
+    await assert.rejects(
+      postLocalSerpTasks({ keyword: "k", locationCoordinates: [], languageCode: "en", device: "desktop", depth: 10 }),
+      (error: unknown) => error instanceof UnbilledCallError,
+    );
+    await assert.rejects(
+      postRankCheckTasks({ tasks: [], locationCode: 2356, languageCode: "en", depth: 10, targetDomain: "example.com" }),
+      (error: unknown) => error instanceof UnbilledCallError,
+    );
+    assert.equal(calls, 0);
   } finally {
     restore();
   }

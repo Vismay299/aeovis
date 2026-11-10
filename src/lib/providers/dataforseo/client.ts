@@ -135,6 +135,7 @@ export function meterBatch<I, T>(
   const settleSpendBatchFn = deps?.settleSpendBatch ?? defaultSettleSpendBatch;
   const releaseSpendFn = deps?.releaseSpend ?? defaultReleaseSpend;
   const keepAliveFn = deps?.keepAlive ?? defaultKeepAlive;
+  const logger = deps?.spendDeps?.logger ?? console;
 
   return async (
     ctx: DataforseoCallContext,
@@ -229,7 +230,14 @@ export function meterBatch<I, T>(
       if (activeCosts.length > 0) {
         await settleSpendBatchFn(holdId, activeCosts, deps?.spendDeps);
       } else {
-        await releaseSpendFn(holdId, "not_billed", deps?.spendDeps);
+        // A release failure must not replace the calls' own outcomes; the hold expires
+        // and is counted at its estimate, so it is only logged (as in F01 metered).
+        try {
+          const released = await releaseSpendFn(holdId, "not_billed", deps?.spendDeps);
+          if (!released) logger.error("[spend] release failed", { holdId, reason: "not_billed" });
+        } catch {
+          logger.error("[spend] release failed", { holdId, reason: "not_billed" });
+        }
       }
 
       return settled;
