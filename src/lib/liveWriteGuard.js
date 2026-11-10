@@ -211,6 +211,8 @@ export const NEVER_WRITABLE = Object.freeze([
   "site_audit_lighthouse",
   "site_audit_frontier",
   "site_audit_links",
+  // F13 phase 2 — migration 101: keyword metrics cache table.
+  "keyword_metrics",
 ]);
 
 /**
@@ -258,6 +260,9 @@ export const WRITING_FUNCTIONS = Object.freeze({
   // F19 migration 130 — IndexNow mutating functions.
   indexnow_ensure_key: ["indexnow_keys"],
   prune_indexnow: ["indexnow_submissions", "indexnow_key_checks"],
+  // F13 migration 101 — keyword metrics cache functions.
+  upsert_keyword_metrics: ["keyword_metrics"],
+  prune_keyword_metrics: ["keyword_metrics"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */
