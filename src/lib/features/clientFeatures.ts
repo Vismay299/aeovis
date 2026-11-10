@@ -25,6 +25,8 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "indexnow",
   "price_review",
   "project_memory",
+  "keyword_research",
+  "keyword_clustering",
   "domain_research",
   "local_seo",
 ];

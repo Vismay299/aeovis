@@ -25,6 +25,10 @@ export const FEATURES = {
   dataforseo_engines: { spend: [] as const },
   // F08: gates question curation routes, approval, and workspace questions
   question_curation: { spend: [] as const },
+  // F13: keyword research and SERP analysis
+  keyword_research: { spend: ["keywords.research"] as const },
+  // F13: AI topic grouping
+  keyword_clustering: { spend: ["keywords.clustering"] as const },
   // F14: domain overview and competitor research
   domain_research: { spend: ["domain.research"] as const },
   // F17: Local SEO page, routes, sidebar item.

@@ -1727,4 +1727,11 @@ invokes the backfill lazily; operators must not call it manually.
 
 - **Status:** in repo; **not yet applied to production**. Apply after `125_f18_site_audit.sql` before deploying F18 phase 2. Pre-check: `select proname from pg_proc where proname = 'site_audit_create';` returns no rows. Applied-check: `select proname from pg_proc where proname in ('site_audit_create', 'prune_site_audits');` returns 2 rows. Creates service-role functions for atomic audit start, frontier claims, link/orphan checks, issue summary, scratch destruction, and retention pruning.
 
+## `101_f13_keyword_metrics.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply before deploying F13 phase 2.
+- Pre-check: `select to_regclass('public.keyword_metrics');` returns null.
+- Applied-check: `select to_regclass('public.keyword_metrics');` returns `keyword_metrics`; `select proname from pg_proc where proname in ('upsert_keyword_metrics', 'prune_keyword_metrics');` returns 2 rows.
+- Creates `keyword_metrics` table with service-only grants and RLS, and functions `upsert_keyword_metrics` and `prune_keyword_metrics`.
+
 

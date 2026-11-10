@@ -508,6 +508,11 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "site_audit_destroy_scratch" },
     { kind: "function", name: "prune_site_audits" },
   ],
+  "101_f13_keyword_metrics.sql": [
+    { kind: "table", name: "keyword_metrics" },
+    { kind: "function", name: "upsert_keyword_metrics" },
+    { kind: "function", name: "prune_keyword_metrics" },
+  ],
 };
 
 /**
