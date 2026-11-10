@@ -1,0 +1,16 @@
+{
+  "domain": "offcult.in",
+  "key": "3f2a9c1e5b7d4f60a8c2e1b3d5f7a9c1",
+  "hosts": [
+    { "host": "offcult.in", "status": "found" },
+    { "host": "www.offcult.in", "status": "moved" }
+  ],
+  "checkedAt": "2026-10-22T09:05:00.000Z",
+  "ready": true,
+  "limits": {
+    "requestsLastHour": 0,
+    "maxRequestsPerHour": 30,
+    "urlsToday": 0,
+    "maxUrlsPerDay": 10000
+  }
+}

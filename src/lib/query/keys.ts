@@ -27,6 +27,19 @@ export const keys = {
   projectContext: (brandKey: string) => ["projectContext", brandKey] as const,
   // F26
   privacyChoice: () => ["privacyChoice"] as const,
+  // F19
+  indexnowSetup: (brandKey: string) => ["indexnowSetup", brandKey] as const,
+  indexnowSubmissions: (
+    brandKey: string,
+    source?: string,
+    sourceRef?: string,
+  ) =>
+    [
+      "indexnowSubmissions",
+      brandKey,
+      source ?? null,
+      sourceRef ?? null,
+    ] as const,
 } as const;
 
 export const privacyKeys = {

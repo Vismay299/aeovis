@@ -1,0 +1,17 @@
+{
+  "submissions": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "createdAt": "2026-10-22T09:10:00.000Z",
+      "source": "settings",
+      "sourceRef": null,
+      "host": "offcult.in",
+      "urlCount": 1,
+      "urls": ["https://offcult.in/new-page"],
+      "status": "submitted",
+      "engine": "bing",
+      "httpStatus": 200,
+      "message": "Submitted 1 URL."
+    }
+  ]
+}
