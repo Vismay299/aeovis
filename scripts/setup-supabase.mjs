@@ -485,6 +485,29 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "ga4_delete_unused_grant" },
     { kind: "function", name: "prune_ga4_oauth_attempts" },
   ],
+  "125_f18_site_audit.sql": [
+    { kind: "table", name: "site_audits" },
+    { kind: "table", name: "site_audit_pages" },
+    { kind: "table", name: "site_audit_issues" },
+    { kind: "table", name: "site_audit_lighthouse" },
+    { kind: "table", name: "site_audit_frontier" },
+    { kind: "table", name: "site_audit_links" },
+    { kind: "bucket", name: "site-audit-lighthouse" },
+  ],
+  "126_f18_site_audit_functions.sql": [
+    { kind: "function", name: "site_audit_create" },
+    { kind: "function", name: "site_audit_seed" },
+    { kind: "function", name: "site_audit_frontier_stats" },
+    { kind: "function", name: "site_audit_claim_chunk" },
+    { kind: "function", name: "site_audit_record_batch" },
+    { kind: "function", name: "site_audit_release" },
+    { kind: "function", name: "site_audit_abandon_chunk" },
+    { kind: "function", name: "site_audit_broken_links" },
+    { kind: "function", name: "site_audit_orphan_pages" },
+    { kind: "function", name: "site_audit_issue_summary" },
+    { kind: "function", name: "site_audit_destroy_scratch" },
+    { kind: "function", name: "prune_site_audits" },
+  ],
 };
 
 /**

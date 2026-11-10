@@ -8,7 +8,7 @@ export const performanceFixtures: Fixture[] = [
     category: "performance",
     expectedIssues: ["slow-response"],
     handler: async () => {
-      // Simulate slow response if needed or just return immediately for test speed
+      await new Promise((r) => setTimeout(r, 1550));
       return htmlResponse(
         renderDocument({
           title: "Slow Responding Web Page",

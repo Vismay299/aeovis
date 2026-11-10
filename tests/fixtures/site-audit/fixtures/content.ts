@@ -53,7 +53,7 @@ export const contentFixtures: Fixture[] = [
       htmlResponse(
         renderDocument({
           title: "Identical Shared Title Across Pages",
-          metaDescription: "Meta description specifically for the first duplicate title page.",
+          metaDescription: "This is a valid meta description specifically written for the first duplicate title page.",
           bodyHtml: `<h1>First Duplicate Title Page</h1><p>${lorem(180)}</p>`,
         }),
       ),
@@ -67,7 +67,7 @@ export const contentFixtures: Fixture[] = [
       htmlResponse(
         renderDocument({
           title: "Identical Shared Title Across Pages",
-          metaDescription: "Meta description specifically for the second duplicate title page.",
+          metaDescription: "This is a valid meta description specifically written for the second duplicate title page.",
           bodyHtml: `<h1>Second Duplicate Title Page</h1><p>${lorem(180)}</p>`,
         }),
       ),
@@ -109,7 +109,7 @@ export const contentFixtures: Fixture[] = [
       htmlResponse(
         renderDocument({
           title: "First Duplicate Content Page Title",
-          metaDescription: "First unique meta description for duplicate content test.",
+          metaDescription: "First unique and valid meta description written specifically for the duplicate content test.",
           bodyHtml: `<h1>Shared Article Body</h1><p>This exact body text paragraph repeats completely identically across both pages to produce matching contentHash values. ${lorem(180)}</p>`,
         }),
       ),
@@ -123,7 +123,7 @@ export const contentFixtures: Fixture[] = [
       htmlResponse(
         renderDocument({
           title: "Second Duplicate Content Page Title",
-          metaDescription: "Second unique meta description for duplicate content test.",
+          metaDescription: "Second unique and valid meta description written specifically for the duplicate content test.",
           bodyHtml: `<h1>Shared Article Body</h1><p>This exact body text paragraph repeats completely identically across both pages to produce matching contentHash values. ${lorem(180)}</p>`,
         }),
       ),

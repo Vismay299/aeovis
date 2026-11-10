@@ -28,6 +28,7 @@ export interface SlimPage {
   canonicalUrl: string | null;
   headerCanonicalUrl: string | null;
   javascriptShell?: boolean;
+  hreflang?: HreflangEntry[];
 }
 
 function isOkHtmlPage(page: SlimPage): boolean {

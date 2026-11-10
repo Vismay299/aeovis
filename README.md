@@ -211,6 +211,8 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `135_f20_ga4` | Google Analytics 4: OAuth attempts, per-user Analytics grants (encrypted tokens) and one connection per workspace; separate from Search Console. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `136_f20_ga4_functions` | Google Analytics 4 functions: grant upsert, connection set/disconnect, account removal, unused-grant purge, cache purge, attempt pruning. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `130_f19_indexnow` | IndexNow: per-workspace public key, submission history (13 months) and key-check log (7 days). **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `125_f18_site_audit` | Site audit tables: audits, pages, issues, Lighthouse results and crawl scratch tables (frontier, link hashes); private bucket site-audit-lighthouse. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `126_f18_site_audit_functions` | Site audit functions: atomic start with workspace, host and monthly limits; chunk-idempotent frontier claims; broken-link and orphan checks; issue summary; retention. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.
