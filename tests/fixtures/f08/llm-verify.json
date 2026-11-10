@@ -1,0 +1,28 @@
+{
+  "competitors": [
+    {
+      "name": "Bewakoof",
+      "domain": "bewakoof.com",
+      "notes": "Sells oversized graphic T-shirts to young Indian shoppers online.",
+      "sourceUrl": "https://www.bewakoof.com/men-oversized-t-shirts"
+    },
+    {
+      "name": "The Souled Store",
+      "domain": "thesouledstore.com",
+      "notes": "Popular casual and anime pop-culture streetwear brand.",
+      "sourceUrl": "https://www.thesouledstore.com/men/oversized-t-shirts"
+    },
+    {
+      "name": "Unverified Competitor",
+      "domain": "unverified.com",
+      "notes": "A competitor whose page was never actually read in this run.",
+      "sourceUrl": "https://unverified.com/never-read-page"
+    },
+    {
+      "name": "Offcult Competitor",
+      "domain": "offcult.in",
+      "notes": "Matches the workspace's own domain.",
+      "sourceUrl": "https://offcult.in/about.html"
+    }
+  ]
+}

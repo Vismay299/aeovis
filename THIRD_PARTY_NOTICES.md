@@ -282,6 +282,20 @@ SOFTWARE.
 - `src/lib/questions/questions.contract.ts`
 - `src/app/api/customer/questions/route.ts`
 - `src/app/api/customer/questions/approve/route.ts`
+- `src/lib/questions/setup/readSite.ts` (from `src/server/lib/scrape.ts`)
+- `src/lib/questions/setup/promptgenSource.ts` (from `src/server/features/ai-visibility/services/promptGen.ts`)
+- `src/lib/questions/setup/prompts.ts`
+- `src/lib/questions/setup/schemas.ts`
+- `src/lib/questions/setup/research.ts` (from `src/server/features/projects/services/websiteResearch.ts`)
+- `src/lib/questions/setup/candidates.ts` (from `src/server/features/ai-visibility/services/websiteTrackingSetup.ts`)
+- `src/lib/questions/setup/save.ts` (from `src/server/features/projects/services/ProjectWebsiteService.ts`, `websiteTrackingSetup.ts`)
+- `src/lib/questions/generate.ts` (from `src/server/features/ai-visibility/services/aiPromptSuggestions.ts`)
+- `src/lib/questions/promptResearch.ts` (from `src/server/features/ai-visibility/services/aiPromptResearch.ts`)
+- `src/app/api/customer/questions/setup/route.ts`
+- `src/app/api/customer/questions/setup/save/route.ts`
+- `src/app/api/customer/questions/generate/route.ts`
+- `src/app/api/customer/questions/research/route.ts`
+- `src/app/api/customer/questions/research/keywords/route.ts`
 - `src/shared/audit-fetch-class.ts` (from `src/shared/audit-fetch-class.ts`)
 - `src/shared/audit-issues.ts` (from `src/shared/audit-issues.ts`)
 - `src/shared/audit-limits.ts` (from `src/shared/audit-limits.ts`)

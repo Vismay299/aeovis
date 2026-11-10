@@ -694,7 +694,121 @@ await group("approve", async (client) => {
   );
   assert.equal(eventRows.length, 2);
   assert.equal(eventRows[0].event, "approved");
-  assert.equal(eventRows[1].event, "approved");
+});
+
+group("setup-save", async (client) => {
+  const brandKey = await makeBrand(client, "setup-save");
+  const actor = await makeUser(client, "setup-save");
+  const jobId = id();
+
+  // Working set settings
+  await client.query(
+    "INSERT INTO public.workspace_question_settings(brand_key,revision,country,language,setup_job_id) VALUES($1,0,'in','en',$2)",
+    [brandKey, jobId],
+  );
+
+  // Apply context ops: overview and competitor
+  const contextOps = [
+    {
+      kind: "insert_section_if_missing",
+      key: "business_overview",
+      title: null,
+      content: "Offcult sells oversized streetwear online.",
+    },
+    {
+      kind: "insert_competitors_if_none",
+      rows: [
+        {
+          domain: "bewakoof.com",
+          name: "Bewakoof",
+          notes: "Rival store",
+          source: "setup_research",
+          source_url: "https://bewakoof.com/oversized",
+        },
+      ],
+    },
+  ];
+  await client.query(
+    "SELECT public.apply_project_context_ops($1,$2::jsonb,'user',$3)",
+    [brandKey, JSON.stringify(contextOps), actor],
+  );
+
+  // Verify context was written
+  const { rows: secRows } = await client.query(
+    "SELECT key, content FROM public.project_context_sections WHERE brand_key=$1 AND key='business_overview'",
+    [brandKey],
+  );
+  assert.equal(secRows.length, 1);
+  assert.equal(secRows[0].content, "Offcult sells oversized streetwear online.");
+
+  const { rows: compRows } = await client.query(
+    "SELECT domain, source, source_url FROM public.project_competitors WHERE brand_key=$1 AND domain='bewakoof.com'",
+    [brandKey],
+  );
+  assert.equal(compRows.length, 1);
+  assert.equal(compRows[0].source, "setup_research");
+  assert.equal(compRows[0].source_url, "https://bewakoof.com/oversized");
+
+  // Save workspace questions patch with setup_saved_job_id
+  const q1Id = id();
+  const q2Id = id();
+  const rows = [
+    {
+      op: "insert",
+      id: q1Id,
+      text: "Which streetwear brand is best in India?",
+      topic: "Streetwear",
+      origin: "ai_setup",
+      status: "active",
+      branded: false,
+      source_ref: { kind: "setup", jobId },
+    },
+    {
+      op: "insert",
+      id: q2Id,
+      text: "Where can I buy oversized anime tees?",
+      topic: "Anime Tees",
+      origin: "promptgen",
+      status: "active",
+      branded: false,
+      source_ref: { kind: "setup", jobId },
+    },
+  ];
+  const events = [
+    { question_id: q1Id, event: "created" },
+    { question_id: q2Id, event: "created" },
+  ];
+  const settings = {
+    persona: "Young Indian streetwear buyers",
+    country: "in",
+    language: "en",
+    research_keywords: ["streetwear", "anime tees", "oversized t-shirts"],
+    setup_saved_job_id: jobId,
+  };
+
+  const { rows: saveResult } = await client.query(
+    "SELECT public.save_workspace_questions($1,0,$2::jsonb,$3::jsonb,$4::jsonb,$5) AS result",
+    [brandKey, JSON.stringify(rows), JSON.stringify(events), JSON.stringify(settings), actor],
+  );
+  assert.equal(saveResult[0].result.revision, 1);
+
+  // Verify questions stored
+  const { rows: qRows } = await client.query(
+    "SELECT text, topic, origin, status FROM public.workspace_questions WHERE brand_key=$1 ORDER BY origin",
+    [brandKey],
+  );
+  assert.equal(qRows.length, 2);
+  assert.equal(qRows[0].origin, "ai_setup");
+  assert.equal(qRows[1].origin, "promptgen");
+
+  // Verify settings updated
+  const { rows: settingsRows } = await client.query(
+    "SELECT persona, setup_saved_job_id, array_to_json(research_keywords) as keywords FROM public.workspace_question_settings WHERE brand_key=$1",
+    [brandKey],
+  );
+  assert.equal(settingsRows[0].persona, "Young Indian streetwear buyers");
+  assert.equal(settingsRows[0].setup_saved_job_id, jobId);
+  assert.deepEqual(settingsRows[0].keywords, ["streetwear", "anime tees", "oversized t-shirts"]);
 });
 
 await pool.end();
