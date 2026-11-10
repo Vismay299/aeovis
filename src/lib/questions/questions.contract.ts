@@ -201,6 +201,9 @@ export const questionsGetContract = defineRouteContract({
     "membership_unavailable",
     "workspace_not_found",
     "workspace_suspended",
+    "feature_disabled",
+    "daily_cap",
+    "workspace_cap",
   ],
   examples: [{ response: EXAMPLE_STATE }],
 });
@@ -282,8 +285,298 @@ export const questionsApproveContract = defineRouteContract({
   ],
 });
 
+export const questionsSetupBody = z.strictObject({
+  brand_key: z.string().min(1).max(200).optional(),
+  maxUsd: z.number().positive().max(1000).optional(),
+});
+
+export const questionsSetupResponse = z.looseObject({
+  jobId: z.string().uuid(),
+  status: z.literal("queued"),
+  pollAfterSeconds: z.literal(3),
+});
+
+export const questionsSetupSaveBody = z.strictObject({
+  brand_key: z.string().min(1).max(200).optional(),
+  jobId: z.string().uuid(),
+  expectedRevision: z.number().int().min(0),
+  overview: z.string().trim().min(1).max(4000).optional(),
+  competitors: z
+    .array(
+      z.strictObject({
+        name: z.string().trim().min(1).max(120),
+        domain: z.string().trim().min(1).max(255),
+        notes: z.string().trim().max(500).default(""),
+      }),
+    )
+    .max(100),
+  selectedCandidateIds: z.array(z.string().regex(/^c\d{1,3}$/)).max(100),
+  persona: z.string().trim().min(1).max(500),
+  country: z.enum(SUPPORTED_COUNTRIES),
+  language: z.string().regex(/^[a-z]{2,3}(-[a-z0-9]{2,8})?$/),
+  approve: z.boolean(),
+});
+
+export const questionsSetupSaveResponse = z.looseObject({
+  saved: z.looseObject({
+    questionsAdded: z.number(),
+    revived: z.number(),
+    competitorsSaved: z.number(),
+    overviewSaved: z.boolean(),
+  }),
+  panel: z
+    .looseObject({
+      version: z.number(),
+      approvedAt: z.string(),
+      questionCount: z.number(),
+      diagnosticCount: z.number(),
+      summary: z.record(z.string(), z.number()),
+    })
+    .nullable(),
+  state: questionsStateSchema,
+  approveError: z
+    .looseObject({
+      code: z.string(),
+      message: z.string(),
+    })
+    .optional(),
+});
+
+export const questionsGenerateBody = z.strictObject({
+  brand_key: z.string().min(1).max(200).optional(),
+  requestId: z.string().uuid(),
+  topic: z.string().trim().max(100).optional(),
+  excludeQuestions: z.array(z.string().trim().max(1500)).max(10).default([]),
+  maxUsd: z.number().positive().max(1000).optional(),
+});
+
+export const questionsGenerateResponse = z.looseObject({
+  topic: z.string(),
+  questions: z.array(z.string()),
+});
+
+export const questionsResearchBody = z.strictObject({
+  brand_key: z.string().min(1).max(200).optional(),
+  requestId: z.string().uuid(),
+  keyword: z.string().trim().min(1).max(100),
+  maxUsd: z.number().positive().max(1000).optional(),
+});
+
+export const questionsResearchResponse = z.looseObject({
+  keyword: z.string(),
+  questions: z.array(
+    z.looseObject({
+      text: z.string(),
+      variants: z.array(z.string()),
+      sources: z.array(
+        z.looseObject({
+          domain: z.string(),
+          url: z.string(),
+          title: z.string(),
+          own: z.boolean(),
+        }),
+      ),
+      ownDomainCited: z.boolean(),
+      brandMentioned: z.boolean(),
+      tracked: z.boolean(),
+    }),
+  ),
+  recent: z
+    .looseObject({
+      entryDate: z.string(),
+      summary: z.string(),
+    })
+    .nullable(),
+  dataset: z.literal("us-en"),
+});
+
+export const questionsResearchKeywordsResponse = z.looseObject({
+  keywords: z.array(z.string()),
+});
+
+export const questionsSetupContract = defineRouteContract({
+  id: "questions.setup",
+  method: "POST",
+  path: "/api/customer/questions/setup",
+  file: "src/app/api/customer/questions/setup/route.ts",
+  auth: "workspace",
+  request: questionsSetupBody,
+  response: questionsSetupResponse,
+  errorCodes: [
+    "invalid_request",
+    "approval_required",
+    "price_changed",
+    "setup_running",
+    "job_already_running",
+    "question_limit",
+    "feature_unavailable",
+    "feature_disabled",
+    "daily_cap",
+    "workspace_cap",
+    "questions_unavailable",
+    "auth_not_configured",
+    "unauthenticated",
+    "membership_unavailable",
+    "workspace_not_found",
+    "workspace_suspended",
+  ],
+  examples: [
+    {
+      response: {
+        jobId: "a0000000-0000-4000-8000-000000000002",
+        status: "queued",
+        pollAfterSeconds: 3,
+      },
+    },
+  ],
+});
+
+export const questionsSetupSaveContract = defineRouteContract({
+  id: "questions.setup.save",
+  method: "POST",
+  path: "/api/customer/questions/setup/save",
+  file: "src/app/api/customer/questions/setup/save/route.ts",
+  auth: "workspace",
+  request: questionsSetupSaveBody,
+  response: questionsSetupSaveResponse,
+  errorCodes: [
+    "invalid_request",
+    "setup_not_found",
+    "setup_not_ready",
+    "setup_already_saved",
+    "context_invalid",
+    "feature_unavailable",
+    "questions_unavailable",
+    "auth_not_configured",
+    "unauthenticated",
+    "membership_unavailable",
+    "workspace_not_found",
+    "workspace_suspended",
+  ],
+  examples: [
+    {
+      response: {
+        saved: {
+          questionsAdded: 28,
+          revived: 2,
+          competitorsSaved: 4,
+          overviewSaved: true,
+        },
+        panel: null,
+        state: EXAMPLE_STATE,
+      },
+    },
+  ],
+});
+
+export const questionsGenerateContract = defineRouteContract({
+  id: "questions.generate",
+  method: "POST",
+  path: "/api/customer/questions/generate",
+  file: "src/app/api/customer/questions/generate/route.ts",
+  auth: "workspace",
+  request: questionsGenerateBody,
+  response: questionsGenerateResponse,
+  errorCodes: [
+    "invalid_request",
+    "topic_limit",
+    "question_limit",
+    "price_changed",
+    "duplicate_paid_call",
+    "no_new_questions",
+    "llm_bad_output",
+    "llm_not_configured",
+    "feature_unavailable",
+    "feature_disabled",
+    "daily_cap",
+    "workspace_cap",
+    "questions_unavailable",
+    "auth_not_configured",
+    "unauthenticated",
+    "membership_unavailable",
+    "workspace_not_found",
+    "workspace_suspended",
+  ],
+  examples: [
+    {
+      response: {
+        topic: "Anime t-shirts",
+        questions: ["Where can I buy anime T-shirts in India that don't fade?"],
+      },
+    },
+  ],
+});
+
+export const questionsResearchContract = defineRouteContract({
+  id: "questions.research",
+  method: "POST",
+  path: "/api/customer/questions/research",
+  file: "src/app/api/customer/questions/research/route.ts",
+  auth: "workspace",
+  request: questionsResearchBody,
+  response: questionsResearchResponse,
+  errorCodes: [
+    "invalid_request",
+    "price_changed",
+    "duplicate_paid_call",
+    "research_unavailable",
+    "feature_unavailable",
+    "feature_disabled",
+    "daily_cap",
+    "workspace_cap",
+    "questions_unavailable",
+    "auth_not_configured",
+    "unauthenticated",
+    "membership_unavailable",
+    "workspace_not_found",
+    "workspace_suspended",
+  ],
+  examples: [
+    {
+      response: {
+        keyword: "oversized t-shirts",
+        questions: [],
+        recent: null,
+        dataset: "us-en",
+      },
+    },
+  ],
+});
+
+export const questionsResearchKeywordsContract = defineRouteContract({
+  id: "questions.research.keywords",
+  method: "GET",
+  path: "/api/customer/questions/research/keywords",
+  file: "src/app/api/customer/questions/research/keywords/route.ts",
+  auth: "workspace",
+  query: questionsGetQuery,
+  response: questionsResearchKeywordsResponse,
+  errorCodes: [
+    "invalid_request",
+    "feature_unavailable",
+    "questions_unavailable",
+    "auth_not_configured",
+    "unauthenticated",
+    "membership_unavailable",
+    "workspace_not_found",
+    "workspace_suspended",
+  ],
+  examples: [
+    {
+      response: {
+        keywords: ["oversized t-shirts", "anime t-shirts", "streetwear"],
+      },
+    },
+  ],
+});
+
 export const contracts: RouteContract[] = [
   questionsGetContract,
   questionsPatchContract,
   questionsApproveContract,
+  questionsSetupContract,
+  questionsSetupSaveContract,
+  questionsGenerateContract,
+  questionsResearchContract,
+  questionsResearchKeywordsContract,
 ];

@@ -1,0 +1,71 @@
+import { AppError } from "../../../../../../lib/http/appError.ts";
+import { toErrorResponse } from "../../../../../../lib/http/errors.ts";
+import { requireWorkspace, type Workspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
+import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
+import {
+  saveSetupBodySchema,
+  saveSetupReview,
+  type SaveSetupDeps,
+} from "../../../../../../lib/questions/setup/save.ts";
+
+export const maxDuration = 90;
+export const dynamic = "force-dynamic";
+
+export type SetupSaveRouteDeps = SaveSetupDeps & {
+  requireWorkspace?: typeof requireWorkspace;
+  isFeatureEnabled?: typeof isFeatureEnabled;
+  saveSetupReview?: typeof saveSetupReview;
+};
+
+export async function POST(
+  request: Request,
+  _ctx: unknown,
+  deps?: SetupSaveRouteDeps,
+): Promise<Response> {
+  try {
+    let rawBody: unknown = {};
+    const text = await request.text();
+    if (text.trim()) {
+      try {
+        rawBody = JSON.parse(text);
+      } catch {
+        throw new AppError(400, "invalid_json", "The request body must be JSON.");
+      }
+    }
+
+    const parsed = saveSetupBodySchema.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new AppError(400, "invalid_request", "Invalid request body.", {
+        details: { issues: parsed.error.issues },
+      });
+    }
+    const body = parsed.data;
+
+    const loadWorkspace = deps?.requireWorkspace ?? requireWorkspace;
+    const ws: Workspace = await loadWorkspace(request, { brandKey: body.brand_key }, deps as any);
+
+    const gate = deps?.isFeatureEnabled ?? isFeatureEnabled;
+    const curationOn = await gate("question_curation", ws.brandKey);
+    const setupOn = await gate("question_setup", ws.brandKey);
+    if (!curationOn || !setupOn) {
+      throw new AppError(
+        404,
+        "feature_unavailable",
+        "This page is not available for your workspace yet.",
+      );
+    }
+
+    const saveFn = deps?.saveSetupReview ?? saveSetupReview;
+    const result = await saveFn(ws.admin, ws, body, deps);
+
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
