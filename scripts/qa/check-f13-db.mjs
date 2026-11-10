@@ -115,7 +115,7 @@ try {
     assert.equal(row.keyword_difficulty, 50, "keyword_difficulty updated");
     assert.equal(Number(row.competition), 0.5, "competition preserved from labs");
     assert.equal(row.intent, "commercial", "intent preserved from labs");
-    assert.equal(row.source, "labs_ranked", "source updated to labs_ranked");
+    assert.equal(row.source, "labs", "a partial labs_ranked row keeps the stored source");
     assert.equal(row.monthly_searches.length, 1, "empty monthly_searches kept stored series");
     assert.equal(row.monthly_searches[0].search_volume, 1000);
 
@@ -152,19 +152,23 @@ try {
     // 4. Authenticated denied
     await client.query("SET LOCAL ROLE authenticated");
     let deniedSelect = false;
+    await client.query("SAVEPOINT denied_select");
     try {
       await client.query("SELECT * FROM public.keyword_metrics LIMIT 1");
     } catch (err) {
       if (err.code === "42501") deniedSelect = true;
     }
+    await client.query("ROLLBACK TO SAVEPOINT denied_select");
     assert.equal(deniedSelect, true, "authenticated denied SELECT on keyword_metrics");
 
     let deniedUpsert = false;
+    await client.query("SAVEPOINT denied_upsert");
     try {
       await client.query("SELECT public.upsert_keyword_metrics('[]'::jsonb)");
     } catch (err) {
       if (err.code === "42501") deniedUpsert = true;
     }
+    await client.query("ROLLBACK TO SAVEPOINT denied_upsert");
     assert.equal(deniedUpsert, true, "authenticated denied EXECUTE on upsert_keyword_metrics");
 
     await client.query("RESET ROLE");
