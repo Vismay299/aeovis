@@ -12,7 +12,7 @@ import {
   type DataforseoItemsTask,
 } from "./envelope.ts";
 import { meter } from "./client.ts";
-import type { SpendFeature } from "../../../shared/spend-features.ts";
+import { KEYWORDS_RESEARCH_FEATURE } from "./researchFeature.ts";
 import { dataforseoPricing } from "../../pricing/dataforseo.ts";
 
 // Labs payload types: the fields the app reads, typed honestly (the wire nulls
@@ -454,7 +454,7 @@ export function createLabsClient(deps?: { meter?: typeof meter }) {
             limit: i.limit,
             includeClickstreamData: i.includeClickstreamData,
           }),
-        "keywords.research" as unknown as SpendFeature,
+        KEYWORDS_RESEARCH_FEATURE,
       ),
       suggestions: m(
         fetchKeywordSuggestions,
@@ -463,7 +463,7 @@ export function createLabsClient(deps?: { meter?: typeof meter }) {
             limit: i.limit,
             includeClickstreamData: i.includeClickstreamData,
           }),
-        "keywords.research" as unknown as SpendFeature,
+        KEYWORDS_RESEARCH_FEATURE,
       ),
       ideas: m(
         fetchKeywordIdeas,
@@ -472,7 +472,7 @@ export function createLabsClient(deps?: { meter?: typeof meter }) {
             limit: i.limit,
             includeClickstreamData: i.includeClickstreamData,
           }),
-        "keywords.research" as unknown as SpendFeature,
+        KEYWORDS_RESEARCH_FEATURE,
       ),
     },
     labs: {

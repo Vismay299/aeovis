@@ -34,7 +34,9 @@ export async function peekCached<T>(
     );
     return { value: res.value, fetchedAt: res.fetchedAt };
   } catch (err) {
-    if (err instanceof CacheOnlyMiss) {
+    // SkipCache: a concurrent cachedIf flight fetched a value it chose not to
+    // keep, so nothing is cached and the peek is a miss.
+    if (err instanceof CacheOnlyMiss || err instanceof SkipCache) {
       return null;
     }
     throw err;
@@ -48,8 +50,8 @@ export async function cachedIf<T>(
   deps?: { cached?: typeof cached; cacheDeps?: CacheDeps },
 ): Promise<{ value: T; hit: boolean; fetchedAt: string }> {
   const cachedFn = deps?.cached ?? cached;
-  try {
-    return await cachedFn(
+  const run = () =>
+    cachedFn(
       i,
       async () => {
         const value = await fetcher();
@@ -60,6 +62,15 @@ export async function cachedIf<T>(
       },
       deps?.cacheDeps,
     );
+  try {
+    try {
+      return await run();
+    } catch (err) {
+      // F01 single-flight shares one fetch per key: a concurrent peekCached on
+      // the same key hands its CacheOnlyMiss to this call. Fetch for real once.
+      if (err instanceof CacheOnlyMiss) return await run();
+      throw err;
+    }
   } catch (err) {
     if (err instanceof SkipCache) {
       const nowMs = deps?.cacheDeps?.now?.() ?? Date.now();

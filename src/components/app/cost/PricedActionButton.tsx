@@ -65,6 +65,9 @@ export function PricedActionButton({
   );
 
   const quoteData = quote.data;
+  // During the debounce the quote still prices the previous input; never run
+  // directly on it (the dialog shows the refreshed quote instead).
+  const isStale = inputKey !== stableStringify(debouncedInput);
   const isFirstLoading = quote.isPending && !quoteData && !quote.isError;
   const isBlocked = Boolean(quoteData?.blocked);
   const isError = quote.isError;
@@ -77,6 +80,7 @@ export function PricedActionButton({
 
   const canDirectRun =
     !alwaysConfirm &&
+    !isStale &&
     quoteData != null &&
     quoteData.totalUsd <= dialogThresholdUsd &&
     !hasBlockingWarnings &&

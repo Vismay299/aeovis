@@ -133,3 +133,54 @@ test("cachedIf with keep=true caches value and subsequent call returns hit: true
   assert.equal(second.hit, true);
   assert.deepEqual(second.value, { keywords: ["perceev"], count: 1 });
 });
+
+test("a concurrent peek on the same key does not turn a real fetch into a cache-only miss", async () => {
+  const { cacheDeps } = createTestHarness();
+  const input = {
+    namespace: "test.research",
+    version: 1,
+    keyParts: ["race-peek-first"],
+    ttlSeconds: 600,
+    schema: testSchema,
+    scope: "global" as const,
+  };
+  let fetches = 0;
+  const [peek, real] = await Promise.all([
+    peekCached(input, { cacheDeps }),
+    cachedIf(
+      input,
+      async () => {
+        fetches += 1;
+        return { keywords: ["a"], count: 1 };
+      },
+      () => true,
+      { cacheDeps },
+    ),
+  ]);
+  assert.equal(peek, null);
+  assert.deepEqual(real.value, { keywords: ["a"], count: 1 });
+  assert.equal(fetches, 1);
+});
+
+test("a peek that joins a cachedIf flight whose value is not kept is a miss, not an error", async () => {
+  const { cacheDeps } = createTestHarness();
+  const input = {
+    namespace: "test.research",
+    version: 1,
+    keyParts: ["race-skip-first"],
+    ttlSeconds: 600,
+    schema: testSchema,
+    scope: "global" as const,
+  };
+  const [real, peek] = await Promise.all([
+    cachedIf(
+      input,
+      async () => ({ keywords: [], count: 0 }),
+      (v) => v.count > 0,
+      { cacheDeps },
+    ),
+    peekCached(input, { cacheDeps }),
+  ]);
+  assert.equal(real.hit, false);
+  assert.equal(peek, null);
+});

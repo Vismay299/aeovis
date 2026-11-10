@@ -11,7 +11,7 @@ import {
   type DataforseoTaskLike,
 } from "./envelope.ts";
 import { meter } from "./client.ts";
-import type { SpendFeature } from "../../../shared/spend-features.ts";
+import { KEYWORDS_RESEARCH_FEATURE } from "./researchFeature.ts";
 import { dataforseoPricing } from "../../pricing/dataforseo.ts";
 
 // Google Ads keyword data for countries DataForSEO Labs doesn't cover (see
@@ -124,7 +124,7 @@ export function createGoogleAdsClient(deps?: { meter?: typeof meter }) {
     adsIdeas: m(
       fetchAdsKeywordIdeas,
       () => dataforseoPricing.keywords.adsIdeas({}),
-      "keywords.research" as unknown as SpendFeature,
+      KEYWORDS_RESEARCH_FEATURE,
     ),
     adsSearchVolume: m(
       fetchAdsSearchVolume,
