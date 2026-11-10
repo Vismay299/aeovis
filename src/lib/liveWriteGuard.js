@@ -204,6 +204,13 @@ export const NEVER_WRITABLE = Object.freeze([
   "indexnow_keys",
   "indexnow_submissions",
   "indexnow_key_checks",
+  // F18 — migration 125: site audit tables.
+  "site_audits",
+  "site_audit_pages",
+  "site_audit_issues",
+  "site_audit_lighthouse",
+  "site_audit_frontier",
+  "site_audit_links",
 ]);
 
 /**

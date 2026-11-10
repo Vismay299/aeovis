@@ -1,0 +1,17 @@
+[
+  {
+    "brand_key": "brand_acme",
+    "milestone": "workspace_created",
+    "reached_at": "2026-10-20T10:00:00.000Z"
+  },
+  {
+    "brand_key": "brand_acme",
+    "milestone": "first_scan_completed",
+    "reached_at": "2026-10-21T11:00:00.000Z"
+  },
+  {
+    "brand_key": "brand_acme",
+    "milestone": "draft_approved",
+    "reached_at": "2026-10-22T12:00:00.000Z"
+  }
+]

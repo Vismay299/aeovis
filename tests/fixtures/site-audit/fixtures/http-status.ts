@@ -6,6 +6,7 @@ export const httpStatusFixtures: Fixture[] = [
     path: "/status/500",
     name: "Internal Server Error",
     category: "http-status",
+    linkedFromCatalog: false,
     expectedIssues: ["server-error"],
     handler: () =>
       htmlResponse(
@@ -21,6 +22,7 @@ export const httpStatusFixtures: Fixture[] = [
     path: "/status/404",
     name: "Page Not Found",
     category: "http-status",
+    linkedFromCatalog: false,
     expectedIssues: ["broken-page"],
     handler: () =>
       htmlResponse(

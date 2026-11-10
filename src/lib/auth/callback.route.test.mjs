@@ -6,18 +6,67 @@ register("./callback.route.hooks.mjs", import.meta.url);
 
 const { GET } = await import("../../app/auth/callback/route.js");
 const { setAuthServerTracker } = await import("./telemetry.ts");
+const { invalidateFeatureFlagCache } = await import("../features/flags.ts");
 
 function createFixture({
   exchangeError = null,
   otpError = null,
   inviteError = null,
   user = null,
+  existingPreferences = [],
+  existingOutbox = [],
 } = {}) {
   const calls = {
     exchangeCode: 0,
     verifyOtp: 0,
     getUser: 0,
     rpc: [],
+  };
+
+  const preferences = [...existingPreferences];
+  const outbox = [...existingOutbox];
+
+  const adminClient = {
+    from(table) {
+      return {
+        upsert(data, opts) {
+          const list = Array.isArray(data) ? data : [data];
+          const inserted = [];
+          if (table === "user_email_preferences") {
+            for (const item of list) {
+              const idx = preferences.findIndex((p) => p.user_id === item.user_id);
+              if (idx === -1) {
+                preferences.push(item);
+                inserted.push(item);
+              } else if (!opts?.ignoreDuplicates) {
+                preferences[idx] = { ...preferences[idx], ...item };
+                inserted.push(preferences[idx]);
+              }
+            }
+          } else if (table === "email_outbox") {
+            for (const item of list) {
+              const idx = outbox.findIndex((o) => o.dedupe_key === item.dedupe_key);
+              if (idx === -1) {
+                const row = { id: `outbox-${outbox.length + 1}`, ...item };
+                outbox.push(row);
+                inserted.push(row);
+              } else if (!opts?.ignoreDuplicates) {
+                outbox[idx] = { ...outbox[idx], ...item };
+                inserted.push(outbox[idx]);
+              }
+            }
+          }
+          return {
+            then(resolve) {
+              resolve({ data: inserted, error: null });
+            },
+            select() {
+              return Promise.resolve({ data: inserted, error: null });
+            },
+          };
+        },
+      };
+    },
   };
 
   const client = {
@@ -43,10 +92,13 @@ function createFixture({
 
   globalThis.callbackRouteFixture = {
     createClient: () => client,
+    getAdminClient: () => adminClient,
     calls,
+    preferences,
+    outbox,
   };
 
-  return { client, calls };
+  return { client, adminClient, calls, preferences, outbox };
 }
 
 test("F24-AC-09 - ?error=access_denied redirects to 303 /auth/error?error=access_denied and skips exchange", async () => {
@@ -241,3 +293,89 @@ test("isFirstSession: Google timestamps straddling a second, and a later sign-in
   assert.equal(isFirstSession({ created_at: "2026-11-04T12:00:00.000Z", last_sign_in_at: "2026-11-04T12:00:00.000Z" }, now), false);
   assert.equal(isFirstSession(null, now), false);
 });
+
+test("F25-AC-10 - first session with flag on: preferences row upserted with defaults and two outbox rows enqueued, redirect unchanged", async () => {
+  const prevFlag = process.env.FEATURE_LIFECYCLE_EMAIL;
+  process.env.FEATURE_LIFECYCLE_EMAIL = "on";
+  invalidateFeatureFlagCache();
+  try {
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+    const user = {
+      id: "user-f25-new",
+      email: "newuser@example.test",
+      created_at: oneMinuteAgo,
+      last_sign_in_at: oneMinuteAgo,
+      app_metadata: { provider: "google" },
+      user_metadata: { full_name: "Jane Doe" },
+    };
+
+    const { preferences, outbox } = createFixture({ user });
+    const request = new Request("https://app.example.test/auth/callback?code=test-code&next=" + encodeURIComponent("/onboarding?domain=acme.com"));
+    const response = await GET(request);
+
+    // Redirect unchanged
+    const location = response.headers.get("location");
+    assert.ok(location.endsWith("/onboarding?domain=acme.com"));
+
+    // Preferences row upserted with defaults
+    assert.equal(preferences.length, 1);
+    assert.equal(preferences[0].user_id, "user-f25-new");
+    assert.equal(preferences[0].product_updates, false);
+    assert.equal(preferences[0].product_updates_source, "signup_default");
+    assert.equal(preferences[0].scan_results, true);
+    assert.equal(preferences[0].schedule_alerts, true);
+    assert.equal(preferences[0].spend_alerts, true);
+
+    // Two outbox rows: contact_signup and event_signed_up
+    assert.equal(outbox.length, 2);
+    const contactRow = outbox.find((r) => r.template === "contact_signup");
+    const eventRow = outbox.find((r) => r.template === "signed_up");
+    assert.ok(contactRow, "contact_signup row must be enqueued");
+    assert.ok(eventRow, "event_signed_up row must be enqueued");
+    assert.equal(contactRow.dedupe_key, "contact_signup:user-f25-new");
+    assert.equal(eventRow.dedupe_key, "event_signed_up:user-f25-new");
+
+    // Second call for same user: returns without adding new rows
+    const secondCall = await GET(request);
+    assert.equal(secondCall.headers.get("location"), location);
+    assert.equal(preferences.length, 1);
+    assert.equal(outbox.length, 2);
+  } finally {
+    if (prevFlag === undefined) delete process.env.FEATURE_LIFECYCLE_EMAIL;
+    else process.env.FEATURE_LIFECYCLE_EMAIL = prevFlag;
+    invalidateFeatureFlagCache();
+  }
+});
+
+test("F25-AC-10 - flag off: first session does not insert preferences or outbox rows, redirect unchanged", async () => {
+  const prevFlag = process.env.FEATURE_LIFECYCLE_EMAIL;
+  process.env.FEATURE_LIFECYCLE_EMAIL = "off";
+  invalidateFeatureFlagCache();
+  try {
+    const oneMinuteAgo = new Date(Date.now() - 60 * 1000).toISOString();
+    const user = {
+      id: "user-f25-flag-off",
+      email: "flagoff@example.test",
+      created_at: oneMinuteAgo,
+      last_sign_in_at: oneMinuteAgo,
+      app_metadata: { provider: "email" },
+    };
+
+    const { preferences, outbox } = createFixture({ user });
+    const request = new Request("https://app.example.test/auth/callback?code=test-code&next=" + encodeURIComponent("/onboarding?domain=acme.com"));
+    const response = await GET(request);
+
+    // Redirect unchanged
+    const location = response.headers.get("location");
+    assert.ok(location.endsWith("/onboarding?domain=acme.com"));
+
+    // No rows created
+    assert.equal(preferences.length, 0);
+    assert.equal(outbox.length, 0);
+  } finally {
+    if (prevFlag === undefined) delete process.env.FEATURE_LIFECYCLE_EMAIL;
+    else process.env.FEATURE_LIFECYCLE_EMAIL = prevFlag;
+    invalidateFeatureFlagCache();
+  }
+});
+

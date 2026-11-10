@@ -55,10 +55,10 @@ export const structureFixtures: Fixture[] = [
 <html lang="en">
 <head>
 <title>Page With Zero Links</title>
-<meta name="description" content="A valid meta description that is long enough to avoid being flagged as too short.">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"No Links"}</script>
+<meta name="description" content="A valid meta description for the page with absolutely zero outgoing links.">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage"}</script>
 <meta property="og:title" content="Page With Zero Links">
-<meta property="og:description" content="A valid meta description that is long enough to avoid being flagged as too short.">
+<meta property="og:description" content="A valid meta description for the page with absolutely zero outgoing links.">
 <meta property="og:image" content="https://main.audit.test/og-image.jpg">
 </head>
 <body>
@@ -85,9 +85,79 @@ export const structureFixtures: Fixture[] = [
       ),
   },
   {
+    path: "/structure/depth-1",
+    name: "Crawl depth step 1",
+    category: "structure",
+    support: true,
+    inSitemap: false,
+    linkedFromCatalog: true,
+    expectedIssues: [],
+    handler: () =>
+      htmlResponse(
+        renderDocument({
+          title: "Crawl Depth Step 1",
+          metaDescription: "The first step in a deep link chain demonstrating nested crawl depth safely.",
+          bodyHtml: `<h1>Depth 1</h1><p><a href="/structure/depth-2">Go to depth 2</a></p><p>${lorem(180)}</p>`,
+        }),
+      ),
+  },
+  {
+    path: "/structure/depth-2",
+    name: "Crawl depth step 2",
+    category: "structure",
+    support: true,
+    inSitemap: false,
+    linkedFromCatalog: false,
+    expectedIssues: [],
+    handler: () =>
+      htmlResponse(
+        renderDocument({
+          title: "Crawl Depth Step 2",
+          metaDescription: "The second step in a deep link chain demonstrating nested crawl depth safely.",
+          bodyHtml: `<h1>Depth 2</h1><p><a href="/structure/depth-3">Go to depth 3</a></p><p>${lorem(180)}</p>`,
+        }),
+      ),
+  },
+  {
+    path: "/structure/depth-3",
+    name: "Crawl depth step 3",
+    category: "structure",
+    support: true,
+    inSitemap: false,
+    linkedFromCatalog: false,
+    expectedIssues: [],
+    handler: () =>
+      htmlResponse(
+        renderDocument({
+          title: "Crawl Depth Step 3",
+          metaDescription: "The third step in a deep link chain demonstrating nested crawl depth safely.",
+          bodyHtml: `<h1>Depth 3</h1><p><a href="/structure/depth-4">Go to depth 4</a></p><p>${lorem(180)}</p>`,
+        }),
+      ),
+  },
+  {
+    path: "/structure/depth-4",
+    name: "Crawl depth step 4",
+    category: "structure",
+    support: true,
+    inSitemap: false,
+    linkedFromCatalog: false,
+    expectedIssues: [],
+    handler: () =>
+      htmlResponse(
+        renderDocument({
+          title: "Crawl Depth Step 4",
+          metaDescription: "The fourth step in a deep link chain demonstrating nested crawl depth safely.",
+          bodyHtml: `<h1>Depth 4</h1><p><a href="/structure/deep-page">Go to deep page</a></p><p>${lorem(180)}</p>`,
+        }),
+      ),
+  },
+  {
     path: "/structure/deep-page",
     name: "Deep crawl depth page",
     category: "structure",
+    inSitemap: false,
+    linkedFromCatalog: false,
     expectedIssues: ["deep-page"],
     handler: () =>
       htmlResponse(

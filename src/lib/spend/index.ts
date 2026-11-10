@@ -50,6 +50,7 @@ export type SpendDeps = {
   env?: Record<string, string | undefined>;
   keepAlive?: typeof defaultKeepAlive;
   logger?: Pick<Console, "error" | "warn">;
+  notifyCap?: boolean;
 };
 
 export type SpendCost = {
@@ -157,11 +158,23 @@ export async function reserveSpend(
   }
   const reason = REFUSAL_REASONS.find((candidate) => candidate === result.reason);
   if (!reason) throw refused("Spend control is unavailable, so paid work is paused.");
-  throw new SpendRefused(reason, {
+  const err = new SpendRefused(reason, {
     scope: result.scope,
     limitUsd: result.limitUsd,
     estimateUsd: result.estimateUsd,
   });
+
+  const keepAlive = deps?.keepAlive ?? defaultKeepAlive;
+  if (err.scope === "workspace" && (err.reason === "daily_cap" || err.reason === "workspace_cap") && deps?.notifyCap !== false) {
+    keepAlive(
+      import("../email/spendCap.ts")
+        .then((m) => m.notifySpendCapRefused({ brandKey: i.brandKey, reason: err.reason as "daily_cap" | "workspace_cap", limitUsd: err.limitUsd }))
+        .catch(() => {}),
+      { label: "email:spend-cap" },
+    );
+  }
+
+  throw err;
 }
 
 export async function settleSpend(

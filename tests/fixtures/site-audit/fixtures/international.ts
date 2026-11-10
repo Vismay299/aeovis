@@ -12,7 +12,10 @@ export const internationalFixtures: Fixture[] = [
         renderDocument({
           title: "Page with Invalid Hreflang Tag",
           metaDescription: "A valid meta description that is long enough to avoid being flagged as too short.",
-          headExtra: '<link rel="alternate" hreflang="invalid-country-code-12345" href="https://main.audit.test/intl/other">',
+          headExtra: `
+            <link rel="alternate" hreflang="en" href="http://main.audit.test/intl/invalid">
+            <link rel="alternate" hreflang="invalid-country-code-12345" href="http://main.audit.test/intl/other">
+          `,
           bodyHtml: `<h1>Invalid Hreflang</h1><p>${lorem(180)}</p>`,
         }),
       ),
@@ -27,7 +30,7 @@ export const internationalFixtures: Fixture[] = [
         renderDocument({
           title: "Page with Hreflang Missing Self",
           metaDescription: "A valid meta description that is long enough to avoid being flagged as too short.",
-          headExtra: '<link rel="alternate" hreflang="fr" href="https://main.audit.test/intl/french">',
+          headExtra: '<link rel="alternate" hreflang="fr" href="http://main.audit.test/intl/french">',
           bodyHtml: `<h1>Hreflang Missing Self</h1><p>${lorem(180)}</p>`,
         }),
       ),
@@ -43,8 +46,8 @@ export const internationalFixtures: Fixture[] = [
           title: "Hreflang One Way Link Source",
           metaDescription: "A valid meta description that is long enough to avoid being flagged as too short.",
           headExtra: `
-            <link rel="alternate" hreflang="en" href="https://main.audit.test/intl/one-way-a">
-            <link rel="alternate" hreflang="fr" href="https://main.audit.test/intl/one-way-b">
+            <link rel="alternate" hreflang="en" href="http://main.audit.test/intl/one-way-a">
+            <link rel="alternate" hreflang="fr" href="http://main.audit.test/intl/one-way-b">
           `,
           bodyHtml: `<h1>One Way Hreflang Source</h1><p>${lorem(180)}</p>`,
         }),
@@ -62,7 +65,7 @@ export const internationalFixtures: Fixture[] = [
           title: "Hreflang One Way Link Target",
           metaDescription: "A valid meta description that is long enough to avoid being flagged as too short.",
           headExtra: `
-            <link rel="alternate" hreflang="fr" href="https://main.audit.test/intl/one-way-b">
+            <link rel="alternate" hreflang="fr" href="http://main.audit.test/intl/one-way-b">
           `,
           bodyHtml: `<h1>One Way Hreflang Target</h1><p>${lorem(180)}</p>`,
         }),

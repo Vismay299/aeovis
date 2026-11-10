@@ -6,6 +6,7 @@ import { DB_STEP } from "../jobs/stepConfigs.ts";
 import { isFeatureEnabled } from "../features/flags.ts";
 import { getSupabaseAdmin } from "../supabase/admin.js";
 import { deliverOutboxRow } from "./deliver.ts";
+import { sweepMilestones, sweepScans, sweepWindows } from "./sweeps.ts";
 import type { EmailOutboxRow } from "./types.ts";
 
 export function registerEmailJobs(): void {
@@ -35,7 +36,34 @@ export function registerEmailJobs(): void {
     });
   }
 
-  // 2. email.retention periodic (every 86400s)
+  // 2. email.sweep periodic (every 300s)
+  if (!listPeriodics().some((p) => p.name === "email.sweep")) {
+    definePeriodic({
+      name: "email.sweep",
+      everySeconds: 300,
+      run: async (now: Date) => {
+        const isEnabled = await isFeatureEnabled("lifecycle_email");
+        if (!isEnabled) return;
+        const slotMinutes = Math.floor(now.getUTCMinutes() / 5) * 5;
+        const slot = `${now.toISOString().slice(0, 14)}${String(slotMinutes).padStart(2, "0")}`;
+        try {
+          await enqueueSystemJob(
+            "email.sweep",
+            {},
+            {
+              dedupeKey: `email.sweep:${slot}`,
+              singleActiveKey: "email.sweep",
+            },
+          );
+        } catch (err: unknown) {
+          if (err instanceof AppError && err.code === "job_already_running") return;
+          throw err;
+        }
+      },
+    });
+  }
+
+  // 3. email.retention periodic (every 86400s)
   if (!listPeriodics().some((p) => p.name === "email.retention")) {
     definePeriodic({
       name: "email.retention",
@@ -60,7 +88,7 @@ export function registerEmailJobs(): void {
     });
   }
 
-  // 3. email.deliver job definition
+  // 4. email.deliver job definition
   if (!getJobDefinition("email.deliver")) {
     defineJob(
       "email.deliver",
@@ -119,7 +147,46 @@ export function registerEmailJobs(): void {
     );
   }
 
-  // 4. email.retention job definition
+  // 5. email.sweep job definition
+  if (!getJobDefinition("email.sweep")) {
+    defineJob(
+      "email.sweep",
+      async (ctx) => {
+        const admin = getSupabaseAdmin();
+        if (!admin) {
+          throw new AppError(503, "database_unavailable", "Database is unavailable.");
+        }
+        // Stable across step retries/replays so contact dedupe slots don't drift.
+        const nowIso = await ctx.step.do("now", DB_STEP, async () => new Date().toISOString());
+        const now = new Date(nowIso);
+
+        // 1. milestones — DB_STEP
+        const milestones = await ctx.step.do("milestones", DB_STEP, async () => {
+          return await sweepMilestones(admin, now);
+        });
+
+        // 2. scans — DB_STEP
+        const scans = await ctx.step.do("scans", DB_STEP, async () => {
+          return await sweepScans(admin, now);
+        });
+
+        // 3. windows — DB_STEP
+        const windows = await ctx.step.do("windows", DB_STEP, async () => {
+          return await sweepWindows(admin, now);
+        });
+
+        return {
+          status: "completed",
+          result: { milestones, scans, windows },
+        };
+      },
+      {
+        deadlineSeconds: 240,
+      },
+    );
+  }
+
+  // 6. email.retention job definition
   if (!getJobDefinition("email.retention")) {
     defineJob(
       "email.retention",

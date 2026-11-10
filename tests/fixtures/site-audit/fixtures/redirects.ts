@@ -35,7 +35,7 @@ export const redirectsFixtures: Fixture[] = [
       htmlResponse(
         renderDocument({
           title: "Redirect Chain Final Destination",
-          metaDescription: "The final landing page following the multiple redirect hops.",
+          metaDescription: "The final landing page following the multiple redirect hops successfully.",
           bodyHtml: `<h1>Final Destination</h1><p>${lorem(180)}</p>`,
         }),
       ),
