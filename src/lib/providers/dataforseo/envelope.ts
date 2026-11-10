@@ -83,8 +83,9 @@ export function invalidFieldName(message: string): string | null {
 }
 
 export function isNoResultsTask(task: DataforseoTaskLike): boolean {
-  return task.status_code === 40501 &&
-    (task.status_message?.toLowerCase().includes("no search results") ?? false);
+  return (
+    task.status_message?.toLowerCase().includes("no search results") ?? false
+  );
 }
 
 const UPSTREAM_FAILURE_STATUS_CODES = new Set([
