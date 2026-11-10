@@ -25,6 +25,8 @@ export const FEATURES = {
   dataforseo_engines: { spend: [] as const },
   // F08: gates question curation routes, approval, and workspace questions
   question_curation: { spend: [] as const },
+  // F14: domain overview and competitor research
+  domain_research: { spend: ["domain.research"] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

@@ -1,6 +1,8 @@
 export const SPEND_FEATURES = [
   "platform.selftest",
   "providers.dataforseo.selftest",
+  "domain.research",
+  "domain.competitors",
 ] as const;
 
 export type SpendFeature = (typeof SPEND_FEATURES)[number];
@@ -20,6 +22,8 @@ export const SPEND_FEATURE_LABELS: Record<string, string> = {
   "ai_visibility.scan": "AI visibility scans",
   "platform.selftest": "Platform check",
   "providers.dataforseo.selftest": "DataForSEO self-test",
+  "domain.research": "Domain research",
+  "domain.competitors": "SERP competitor research",
 };
 
 /** The label for a ledger feature; an unknown key is "Other", never an empty string. */
