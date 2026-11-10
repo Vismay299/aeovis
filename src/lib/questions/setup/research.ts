@@ -21,6 +21,9 @@ import {
   buildDraftSystem,
   PICK_SYSTEM,
   VERIFY_SYSTEM,
+  estimateQuestionLlmUsd,
+  fitJsonPrompt,
+  QUESTIONS_LLM_BOUNDS,
 } from "./prompts.ts";
 import {
   setupPayloadSchema,
@@ -34,7 +37,6 @@ import {
   MAX_SUGGESTED_KEYWORDS,
 } from "./schemas.ts";
 import { llmObject } from "../../llm/index.ts";
-import { estimateLlmUsd } from "../../llm/openrouter.ts";
 import { getLlmModel } from "../../llmConfig.js";
 import { createDataforseoClient } from "../../providers/dataforseo/client.ts";
 import { dataforseoMarket } from "../../providers/dataforseo/locations.ts";
@@ -42,6 +44,7 @@ import { dataforseoPricing } from "../../pricing/dataforseo.ts";
 import { firecrawlScrapeUsd } from "../../pricing/firecrawl.ts";
 import { serpQueryUsd } from "../../pricing/perceev.ts";
 import { metered } from "../../spend/index.ts";
+import { fromMicros, toMicros, usd6 } from "../../spend/money.ts";
 import type { MeterFunction, ReadSiteDeps } from "./readSite.ts";
 
 export { setupPayloadSchema };
@@ -87,20 +90,22 @@ export async function runQuestionSetup(
     throw new AppError(503, "workspace_unavailable", "Supabase admin is unavailable.");
   }
   const payload = ctx.payload;
-  let model = deps?.model ?? env.LLM_HELPER_MODEL;
-  if (!model) {
-    try {
-      model = getLlmModel(env as NodeJS.ProcessEnv);
-    } catch {
-      model = "openrouter/auto";
-    }
+  let model: string;
+  try {
+    model = deps?.model ?? env.LLM_HELPER_MODEL ?? getLlmModel(env as NodeJS.ProcessEnv);
+  } catch {
+    model = "openrouter/auto";
   }
 
-  let accumulatedEstimateUsd = 0;
+  let accumulatedEstimateMicros = 0;
+  // F01's LLM helpers do not accept jobId, so their returned charges are tracked here.
+  let trackedLlmSpendMicros = 0;
+  const approvedMaxMicros = toMicros(payload.approvedMaxUsd);
   const warnings: Array<{ code: string; message: string }> = [];
 
   function checkBudget(stepEstimateUsd: number): boolean {
-    if (accumulatedEstimateUsd + stepEstimateUsd > payload.approvedMaxUsd) {
+    const stepEstimateMicros = toMicros(stepEstimateUsd);
+    if (accumulatedEstimateMicros + stepEstimateMicros > approvedMaxMicros) {
       if (!warnings.some((w) => w.code === "budget_reached")) {
         warnings.push({
           code: "budget_reached",
@@ -109,8 +114,35 @@ export async function runQuestionSetup(
       }
       return false;
     }
-    accumulatedEstimateUsd += stepEstimateUsd;
+    accumulatedEstimateMicros += stepEstimateMicros;
     return true;
+  }
+
+  function remainingApprovedUsd(stepEstimateUsd: number): number {
+    const priorSpendMicros = accumulatedEstimateMicros - toMicros(stepEstimateUsd);
+    return fromMicros(Math.max(0, approvedMaxMicros - priorSpendMicros));
+  }
+
+  function recordLlmSpend(
+    reportedUsd: number | null | undefined,
+    system: string,
+    prompt: string,
+    maxOutputTokens: number,
+    stepEstimateUsd: number,
+  ): void {
+    const estimateUsd = estimateQuestionLlmUsd(
+      model,
+      (system + prompt).length,
+      maxOutputTokens,
+      env,
+    );
+    const accountedUsd =
+      typeof reportedUsd === "number" && Number.isFinite(reportedUsd) && reportedUsd >= 0
+        ? usd6(reportedUsd)
+        : estimateUsd;
+    const accountedMicros = toMicros(accountedUsd);
+    trackedLlmSpendMicros += accountedMicros;
+    accumulatedEstimateMicros += accountedMicros - toMicros(stepEstimateUsd);
   }
 
   // 1. load (DB_STEP, always)
@@ -232,8 +264,13 @@ export async function runQuestionSetup(
   }
 
   // 4. draft (SINGLE_ATTEMPT, always)
-  await ctx.progress(3, 5, "Drafting questions");
-  const draftEstUsd = estimateLlmUsd(model, 18000, 6000, env);
+  await ctx.progress(2, 5, "Drafting questions");
+  const draftEstUsd = estimateQuestionLlmUsd(
+    model,
+    QUESTIONS_LLM_BOUNDS.setupDraft.inputChars,
+    QUESTIONS_LLM_BOUNDS.setupDraft.outputTokens,
+    env,
+  );
   if (!checkBudget(draftEstUsd)) {
     throw new AppError(402, "budget_reached", "Research stopped early to stay within the approved amount.");
   }
@@ -258,18 +295,29 @@ export async function runQuestionSetup(
           content: p.content.slice(0, 4000),
         })),
       };
+      const prompt = fitJsonPrompt(
+        promptObj,
+        QUESTIONS_LLM_BOUNDS.setupDraft.inputChars - system.length,
+      );
 
-      const { object } = await llmObjectCaller({
+      const { object, usd } = await llmObjectCaller({
         brandKey: payload.brandKey,
         feature: "questions.setup",
         schema,
         system,
-        prompt: JSON.stringify(promptObj),
-        maxOutputTokens: 6000,
+        prompt,
+        maxOutputTokens: QUESTIONS_LLM_BOUNDS.setupDraft.outputTokens,
         timeoutMs: 120_000,
         idempotencyKey: `${jobStepKey(ctx, "draft")}:1`,
-        maxUsd: payload.approvedMaxUsd,
+        maxUsd: remainingApprovedUsd(draftEstUsd),
       });
+      recordLlmSpend(
+        usd,
+        system,
+        prompt,
+        QUESTIONS_LLM_BOUNDS.setupDraft.outputTokens,
+        draftEstUsd,
+      );
 
       return { draft: object, estimateUsd: draftEstUsd };
     },
@@ -283,7 +331,7 @@ export async function runQuestionSetup(
   let serpSearchOutage = false;
 
   if (missing.competitors && draft.searchQueries && draft.searchQueries.length > 0) {
-    await ctx.progress(2, 5, "Finding competitors");
+    await ctx.progress(3, 5, "Finding competitors");
     const queries: string[] = draft.searchQueries.slice(0, 2);
     const m = dataforseoMarket({
       country: payload.market.country,
@@ -350,28 +398,45 @@ export async function runQuestionSetup(
   // 6. pick (SINGLE_ATTEMPT, runs when >= 1 organic result)
   let pickedDomains: string[] = [];
   if (missing.competitors && !serpSearchOutage && organicSerpResults.length > 0) {
-    const pickEstUsd = estimateLlmUsd(model, 8000, 1000, env);
+    const pickEstUsd = estimateQuestionLlmUsd(
+      model,
+      QUESTIONS_LLM_BOUNDS.setupPick.inputChars,
+      QUESTIONS_LLM_BOUNDS.setupPick.outputTokens,
+      env,
+    );
     if (checkBudget(pickEstUsd)) {
       const pickRes = await ctx.step.do<{ domains: string[]; estimateUsd: number }>(
         "pick",
         SINGLE_ATTEMPT,
         async () => {
-          const { object } = await llmObjectCaller({
-            brandKey: payload.brandKey,
-            feature: "questions.setup",
-            schema: pickOutputSchema,
-            system: PICK_SYSTEM,
-            prompt: JSON.stringify({
+          const system = PICK_SYSTEM;
+          const prompt = fitJsonPrompt(
+            {
               businessName: payload.displayName,
               domain: payload.ownHost,
               market: payload.market,
               organicResults: organicSerpResults,
-            }),
-            maxOutputTokens: 1000,
+            },
+            QUESTIONS_LLM_BOUNDS.setupPick.inputChars - system.length,
+          );
+          const { object, usd } = await llmObjectCaller({
+            brandKey: payload.brandKey,
+            feature: "questions.setup",
+            schema: pickOutputSchema,
+            system,
+            prompt,
+            maxOutputTokens: QUESTIONS_LLM_BOUNDS.setupPick.outputTokens,
             timeoutMs: 60_000,
             idempotencyKey: `${jobStepKey(ctx, "pick")}:1`,
-            maxUsd: payload.approvedMaxUsd,
+            maxUsd: remainingApprovedUsd(pickEstUsd),
           });
+          recordLlmSpend(
+            usd,
+            system,
+            prompt,
+            QUESTIONS_LLM_BOUNDS.setupPick.outputTokens,
+            pickEstUsd,
+          );
           return { domains: object.domains, estimateUsd: pickEstUsd };
         },
       );
@@ -468,18 +533,20 @@ export async function runQuestionSetup(
   }> = [];
 
   if (missing.competitors && allCompetitorPages.length > 0) {
-    const verifyEstUsd = estimateLlmUsd(model, 40000, 2000, env);
+    const verifyEstUsd = estimateQuestionLlmUsd(
+      model,
+      QUESTIONS_LLM_BOUNDS.setupVerify.inputChars,
+      QUESTIONS_LLM_BOUNDS.setupVerify.outputTokens,
+      env,
+    );
     if (checkBudget(verifyEstUsd)) {
       const verifyRes = await ctx.step.do<{
         competitors: Array<{ name: string; domain: string; notes: string; sourceUrl: string }>;
         estimateUsd: number;
       }>("verify", SINGLE_ATTEMPT, async () => {
-        const { object } = await llmObjectCaller({
-          brandKey: payload.brandKey,
-          feature: "questions.setup",
-          schema: verifyOutputSchema,
-          system: VERIFY_SYSTEM,
-          prompt: JSON.stringify({
+        const system = VERIFY_SYSTEM;
+        const prompt = fitJsonPrompt(
+          {
             businessName: payload.displayName,
             domain: payload.ownHost,
             pages: allCompetitorPages.map((p) => ({
@@ -487,12 +554,27 @@ export async function runQuestionSetup(
               title: p.title,
               content: p.content.slice(0, 4000),
             })),
-          }),
-          maxOutputTokens: 2000,
+          },
+          QUESTIONS_LLM_BOUNDS.setupVerify.inputChars - system.length,
+        );
+        const { object, usd } = await llmObjectCaller({
+          brandKey: payload.brandKey,
+          feature: "questions.setup",
+          schema: verifyOutputSchema,
+          system,
+          prompt,
+          maxOutputTokens: QUESTIONS_LLM_BOUNDS.setupVerify.outputTokens,
           timeoutMs: 60_000,
           idempotencyKey: `${jobStepKey(ctx, "verify")}:1`,
-          maxUsd: payload.approvedMaxUsd,
+          maxUsd: remainingApprovedUsd(verifyEstUsd),
         });
+        recordLlmSpend(
+          usd,
+          system,
+          prompt,
+          QUESTIONS_LLM_BOUNDS.setupVerify.outputTokens,
+          verifyEstUsd,
+        );
         return { competitors: object.competitors, estimateUsd: verifyEstUsd };
       });
 
@@ -537,7 +619,13 @@ export async function runQuestionSetup(
 
   if (env.QUESTION_SETUP_PROMPTGEN !== "off") {
     const promptgenEstUsd =
-      3 * serpQueryUsd("brightdata", 1, env) + 2 * estimateLlmUsd(model, 8000, 3000, env);
+      3 * serpQueryUsd("brightdata", 1, env) +
+      2 * estimateQuestionLlmUsd(
+        model,
+        QUESTIONS_LLM_BOUNDS.promptgen.inputChars,
+        QUESTIONS_LLM_BOUNDS.promptgen.outputTokens,
+        env,
+      );
 
     if (checkBudget(promptgenEstUsd)) {
       const pgenFn = deps?.promptgenCandidates ?? promptgenCandidates;
@@ -556,9 +644,13 @@ export async function runQuestionSetup(
               {
                 brandKey: payload.brandKey,
                 jobId: ctx.jobId,
-                maxUsd: payload.approvedMaxUsd,
-        idempotencyKeyPrefix: jobStepKey(ctx, "promptgen"),
+                maxUsd: remainingApprovedUsd(promptgenEstUsd),
+                idempotencyKeyPrefix: jobStepKey(ctx, "promptgen"),
                 market: payload.market,
+                model,
+                onLlmSpend: (usd: number) => {
+                  trackedLlmSpendMicros += toMicros(usd);
+                },
               },
               {
                 brand: payload.displayName,
@@ -671,16 +763,17 @@ export async function runQuestionSetup(
   await ctx.step.do("log", DB_STEP, async () => {
     let spendUsd: number | null = null;
     try {
-      const { data: spendRows } = await admin
+      const { data: spendRows, error } = await admin
         .from("spend_ledger")
         .select("accounted_usd")
         .eq("job_id", ctx.jobId);
-      if (spendRows && spendRows.length > 0) {
-        spendUsd = spendRows.reduce(
-          (sum: number, r: { accounted_usd: number | null }) => sum + Number(r.accounted_usd || 0),
-          0,
-        );
-      }
+      if (error) throw error;
+      const providerSpendMicros = (spendRows ?? []).reduce(
+        (sum: number, r: { accounted_usd: number | null }) =>
+          sum + toMicros(Number(r.accounted_usd ?? 0)),
+        0,
+      );
+      spendUsd = fromMicros(providerSpendMicros + trackedLlmSpendMicros);
     } catch {
       // ledger read fallback
     }

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { definePricedAction, type PricingContext, type PricedActionEstimateResult } from "../pricedActions.ts";
 import { dataforseoPricing } from "../dataforseo.ts";
 import { serpQueryUsd } from "../perceev.ts";
-import { estimateLlmUsd } from "../../llm/openrouter.ts";
+import { estimateQuestionLlmUsd, QUESTIONS_LLM_BOUNDS } from "../../questions/setup/prompts.ts";
 import { getLlmModel } from "../../llmConfig.js";
 import { firecrawlScrapeUsd } from "../firecrawl.ts";
 import { toMicros, fromMicros, usd6 } from "../../spend/money.ts";
@@ -155,9 +155,26 @@ export async function estimateQuestionsSetup(
   }
 
   // AI drafting: 18k in, 6k out + (if competitors missing: 8k in, 1k out + 40k in, 2k out)
-  let draftingUsd = estimateLlmUsd(model, 18000, 6000, ctx.env);
+  let draftingUsd = estimateQuestionLlmUsd(
+    model,
+    QUESTIONS_LLM_BOUNDS.setupDraft.inputChars,
+    QUESTIONS_LLM_BOUNDS.setupDraft.outputTokens,
+    ctx.env,
+  );
   if (competitorsMissing) {
-    draftingUsd += estimateLlmUsd(model, 8000, 1000, ctx.env) + estimateLlmUsd(model, 40000, 2000, ctx.env);
+    draftingUsd +=
+      estimateQuestionLlmUsd(
+        model,
+        QUESTIONS_LLM_BOUNDS.setupPick.inputChars,
+        QUESTIONS_LLM_BOUNDS.setupPick.outputTokens,
+        ctx.env,
+      ) +
+      estimateQuestionLlmUsd(
+        model,
+        QUESTIONS_LLM_BOUNDS.setupVerify.inputChars,
+        QUESTIONS_LLM_BOUNDS.setupVerify.outputTokens,
+        ctx.env,
+      );
   }
   lines.push({
     label: "AI drafting",
@@ -169,7 +186,13 @@ export async function estimateQuestionsSetup(
   // Search-grounded questions: 3 x Bright Data + 2 x (8k in, 3k out)
   if (ctx.env.QUESTION_SETUP_PROMPTGEN !== "off") {
     const searchGroundedUsd =
-      3 * serpQueryUsd("brightdata", 1, ctx.env) + 2 * estimateLlmUsd(model, 8000, 3000, ctx.env);
+      3 * serpQueryUsd("brightdata", 1, ctx.env) +
+      2 * estimateQuestionLlmUsd(
+        model,
+        QUESTIONS_LLM_BOUNDS.promptgen.inputChars,
+        QUESTIONS_LLM_BOUNDS.promptgen.outputTokens,
+        ctx.env,
+      );
     lines.push({
       label: "Search-grounded questions",
       quantity: 1,
@@ -197,7 +220,14 @@ export async function estimateQuestionsGenerate(
   deps?: QuestionsQuoteDeps,
 ): Promise<PricedActionEstimateResult> {
   const model = resolveModel(ctx, deps);
-  const draftingUsd = usd6(estimateLlmUsd(model, 12000, 2000, ctx.env));
+  const draftingUsd = usd6(
+    estimateQuestionLlmUsd(
+      model,
+      QUESTIONS_LLM_BOUNDS.generate.inputChars,
+      QUESTIONS_LLM_BOUNDS.generate.outputTokens,
+      ctx.env,
+    ),
+  );
   const lines = [
     {
       label: "AI drafting",
@@ -225,7 +255,7 @@ export async function estimateQuestionsResearch(
 ): Promise<PricedActionEstimateResult> {
   const model = resolveModel(ctx, deps);
   const datasetUsd = usd6(dataforseoPricing.aiSearch.mentionsSearch({ limit: 100 }));
-  const relevanceUsd = usd6(estimateLlmUsd(model, 40000, 4000, ctx.env));
+  const relevanceUsd = usd6(estimateQuestionLlmUsd(model, 40000, 4000, ctx.env));
 
   const lines = [
     {

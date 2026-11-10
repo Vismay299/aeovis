@@ -11,6 +11,8 @@ import {
   CACHE_NOTE_WARNING,
 } from "./questions.ts";
 import type { PricingContext } from "../pricedActions.ts";
+import { estimateQuestionLlmUsd, QUESTIONS_LLM_BOUNDS } from "../../questions/setup/prompts.ts";
+import { serpQueryUsd } from "../perceev.ts";
 
 function fakeContext(overrides?: Partial<PricingContext>): PricingContext {
   return {
@@ -163,6 +165,51 @@ describe("questions priced actions (F08-AC-11)", () => {
     assert.equal(result.totalUsd, result.expectedUsd);
     assert.equal(result.blocked, null);
     assert.deepEqual(result.warnings, []);
+  });
+
+  it("quotes the enforced maximum input and output for setup and Generate", async () => {
+    const model = "openai/gpt-4o-mini";
+    const ctx = fakeContext({ env: { LLM_HELPER_MODEL: model, QUESTION_SETUP_PROMPTGEN: "on" } });
+    const setup = await estimateQuestionsSetup(ctx, {}, {
+      checkOverviewMissing: async () => true,
+      checkCompetitorsMissing: async () => true,
+      checkSetupRunning: async () => false,
+      countUnarchivedQuestions: async () => 0,
+      model,
+    });
+    const setupAi = setup.lines.find((line) => line.label === "AI drafting");
+    const setupExpected =
+      estimateQuestionLlmUsd(model, QUESTIONS_LLM_BOUNDS.setupDraft.inputChars, QUESTIONS_LLM_BOUNDS.setupDraft.outputTokens, ctx.env) +
+      estimateQuestionLlmUsd(model, QUESTIONS_LLM_BOUNDS.setupPick.inputChars, QUESTIONS_LLM_BOUNDS.setupPick.outputTokens, ctx.env) +
+      estimateQuestionLlmUsd(model, QUESTIONS_LLM_BOUNDS.setupVerify.inputChars, QUESTIONS_LLM_BOUNDS.setupVerify.outputTokens, ctx.env);
+    assert.equal(setupAi?.totalUsd, Math.round(setupExpected * 1_000_000) / 1_000_000);
+
+    const promptgen = setup.lines.find((line) => line.label === "Search-grounded questions");
+    assert.ok(promptgen);
+    assert.equal(
+      promptgen.totalUsd,
+      Math.round(
+        (3 * serpQueryUsd("brightdata", 1, ctx.env) +
+          2 * estimateQuestionLlmUsd(
+            model,
+            QUESTIONS_LLM_BOUNDS.promptgen.inputChars,
+            QUESTIONS_LLM_BOUNDS.promptgen.outputTokens,
+            ctx.env,
+          )) *
+          1_000_000,
+      ) / 1_000_000,
+    );
+
+    const generate = await estimateQuestionsGenerate(ctx, { topic: "Streetwear" }, { model });
+    assert.equal(
+      generate.totalUsd,
+      estimateQuestionLlmUsd(
+        model,
+        QUESTIONS_LLM_BOUNDS.generate.inputChars,
+        QUESTIONS_LLM_BOUNDS.generate.outputTokens,
+        ctx.env,
+      ),
+    );
   });
 
   it("quotes questions.research.run with dataset and relevance lines", async () => {

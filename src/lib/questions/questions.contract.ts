@@ -6,6 +6,37 @@ import { z } from "zod";
 import { defineRouteContract, type RouteContract } from "../http/routeContract.ts";
 import { QUESTION_ORIGINS } from "./workspaceQuestions.ts";
 import { questionPatchSchema } from "./applyQuestionPatch.ts";
+import { AppError } from "../http/appError.ts";
+import { resolveNodeEnv } from "../operatorPerimeter.js";
+
+export type AiQuestionFeature = "question_setup" | "prompt_research";
+
+/** Keep feature-off (404) distinct from a linked spend-control refusal (403). */
+export function aiQuestionFeatureGateError(
+  name: AiQuestionFeature,
+  brandKey: string,
+  env: Record<string, string | undefined> = process.env,
+): AppError {
+  const envName = `FEATURE_${name.toUpperCase()}`;
+  const mode = String(env[envName] ?? "").trim().toLowerCase();
+  let featureFlagOn = false;
+  if (mode === "on") {
+    featureFlagOn = true;
+  } else if (mode === "allowlist") {
+    const brands = String(env[`${envName}_BRANDS`] ?? "")
+      .split(",")
+      .map((brand) => brand.trim())
+      .filter(Boolean);
+    featureFlagOn = brands.includes(brandKey);
+  } else if (mode !== "off") {
+    featureFlagOn =
+      resolveNodeEnv({ NODE_ENV: env.NODE_ENV, VERCEL_ENV: env.VERCEL_ENV }) !== "production";
+  }
+
+  return featureFlagOn
+    ? new AppError(403, "feature_disabled", "This feature is disabled for your workspace.")
+    : new AppError(404, "feature_unavailable", "This page is not available for your workspace yet.");
+}
 
 export const SUPPORTED_COUNTRIES = ["in", "us", "uk", "sg", "ae", "ca", "au"] as const;
 
@@ -446,6 +477,7 @@ export const questionsSetupSaveContract = defineRouteContract({
     "setup_already_saved",
     "context_invalid",
     "feature_unavailable",
+    "feature_disabled",
     "questions_unavailable",
     "auth_not_configured",
     "unauthenticated",
@@ -554,6 +586,7 @@ export const questionsResearchKeywordsContract = defineRouteContract({
   errorCodes: [
     "invalid_request",
     "feature_unavailable",
+    "feature_disabled",
     "questions_unavailable",
     "auth_not_configured",
     "unauthenticated",

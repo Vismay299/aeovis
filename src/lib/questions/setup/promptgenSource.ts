@@ -4,6 +4,41 @@ import { fetchPeopleAlsoAsk, fetchAutocomplete } from "../../engines/serp.js";
 import { metered } from "../../spend/index.ts";
 import { serpQueryUsd } from "../../pricing/perceev.ts";
 import { AppError } from "../../http/errors.ts";
+import { getLlmModel } from "../../llmConfig.js";
+import { isUnpricedModel } from "../../llmPricing.js";
+import { fromMicros, toMicros, usd6 } from "../../spend/money.ts";
+import { SpendRefused, UnbilledCallError } from "../../spend/errors.ts";
+import {
+  estimateQuestionLlmUsd,
+  fitTextPrompt,
+  QUESTIONS_LLM_BOUNDS,
+} from "./prompts.ts";
+
+const PROMPTGEN_LLM_SYSTEM =
+  "You generate unbranded search queries for a brand based on its site text. Output JSON only.";
+
+const PRE_RESERVATION_LLM_CODES = new Set([
+  "duplicate_paid_call",
+  "llm_not_configured",
+  "spend_config_invalid",
+  "spend_invalid",
+  "spend_unavailable",
+]);
+
+function wasSettledAtEstimate(error: unknown): boolean {
+  const name = error && typeof error === "object" ? (error as { name?: unknown }).name : undefined;
+  if (name === "UnbilledCallError" || name === "SpendRefused" || error instanceof UnbilledCallError || error instanceof SpendRefused) {
+    return false;
+  }
+  if (name === "UnpricedModelError" || isUnpricedModel(error)) return false;
+  if (name === "AmbiguousCallError") return true;
+  if (error instanceof AppError) {
+    if (PRE_RESERVATION_LLM_CODES.has(error.code) || error.status < 500) return false;
+    return true;
+  }
+  // llmText settles unexpected post-reservation failures at its estimate.
+  return true;
+}
 
 export type PromptgenContext = {
   brandKey: string;
@@ -11,6 +46,8 @@ export type PromptgenContext = {
   maxUsd?: number;
   idempotencyKeyPrefix?: string;
   market?: { country: string; language: string };
+  model?: string;
+  onLlmSpend?: (usd: number) => void;
 };
 
 export type PromptgenCandidate = {
@@ -40,6 +77,21 @@ export async function promptgenCandidates(
   deps?: PromptgenDeps,
 ): Promise<PromptgenCandidate[]> {
   const count = i.count ?? 20;
+  const env = deps?.env ?? process.env;
+  let model = ctx.model ?? env.LLM_HELPER_MODEL;
+  if (!model) {
+    try {
+      model = getLlmModel(env as NodeJS.ProcessEnv);
+    } catch {
+      model = "openrouter/auto";
+    }
+  }
+  let remainingUsd = ctx.maxUsd;
+
+  function subtractRemaining(spendUsd: number): void {
+    if (remainingUsd === undefined) return;
+    remainingUsd = fromMicros(Math.max(0, toMicros(remainingUsd) - toMicros(spendUsd)));
+  }
 
   // Provide spy scraper that returns the provided siteText without scraping
   const scrapeSiteSpy = async () => ({
@@ -56,19 +108,48 @@ export async function promptgenCandidates(
   const llmJsonAdapter = async (prompt: string, _options?: any) => {
     llmCount += 1;
     const caller = deps?.llmText ?? llmText;
-    const res = await caller(
-      {
-        brandKey: ctx.brandKey,
-        feature: "questions.setup",
-        system: "You generate unbranded search queries for a brand based on its site text. Output JSON only.",
-        prompt,
-        maxUsd: ctx.maxUsd,
-        idempotencyKey: `${ctx.idempotencyKeyPrefix ?? "questions.setup"}:llm:${llmCount}`,
-        maxOutputTokens: 8000,
-        timeoutMs: 60000,
-      },
-      deps?.llmDeps,
+    const boundedPrompt = fitTextPrompt(
+      prompt,
+      QUESTIONS_LLM_BOUNDS.promptgen.inputChars - PROMPTGEN_LLM_SYSTEM.length,
     );
+    const estimateUsd = estimateQuestionLlmUsd(
+      model,
+      PROMPTGEN_LLM_SYSTEM.length + boundedPrompt.length,
+      QUESTIONS_LLM_BOUNDS.promptgen.outputTokens,
+      env,
+    );
+    if (remainingUsd !== undefined && toMicros(estimateUsd) > toMicros(remainingUsd)) {
+      throw new AppError(402, "budget_reached", "Research stopped early to stay within the approved amount.");
+    }
+    let res: Awaited<ReturnType<typeof llmText>>;
+    try {
+      res = await caller(
+        {
+          brandKey: ctx.brandKey,
+          feature: "questions.setup",
+          system: PROMPTGEN_LLM_SYSTEM,
+          prompt: boundedPrompt,
+          model,
+          maxUsd: remainingUsd,
+          idempotencyKey: `${ctx.idempotencyKeyPrefix ?? "questions.setup"}:llm:${llmCount}`,
+          maxOutputTokens: QUESTIONS_LLM_BOUNDS.promptgen.outputTokens,
+          timeoutMs: 60000,
+        },
+        deps?.llmDeps,
+      );
+    } catch (error) {
+      if (wasSettledAtEstimate(error)) {
+        ctx.onLlmSpend?.(estimateUsd);
+        subtractRemaining(estimateUsd);
+      }
+      throw error;
+    }
+    const accountedUsd =
+      typeof res.usd === "number" && Number.isFinite(res.usd) && res.usd >= 0
+        ? usd6(res.usd)
+        : estimateUsd;
+    ctx.onLlmSpend?.(accountedUsd);
+    subtractRemaining(accountedUsd);
 
     const clean = res.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
     try {
@@ -90,12 +171,16 @@ export async function promptgenCandidates(
     const meter = deps?.metered ?? metered;
     const termStr = Array.isArray(term) ? term[0] : term;
 
+    if (remainingUsd !== undefined && toMicros(estimateUsd) > toMicros(remainingUsd)) return [];
+    const maxUsd = remainingUsd;
+    subtractRemaining(estimateUsd);
+
     return await meter(
       {
         brandKey: ctx.brandKey,
         feature: "questions.setup",
         estimateUsd,
-        maxUsd: ctx.maxUsd,
+        maxUsd,
         idempotencyKey: `${ctx.idempotencyKeyPrefix ?? "questions.setup"}:paa:${paaCount}`,
         jobId: ctx.jobId,
       },

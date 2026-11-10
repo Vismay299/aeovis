@@ -4,6 +4,11 @@ import { runQuestionSetup } from "./research.ts";
 import type { SetupPayload } from "./schemas.ts";
 import type { JobContext, StepOptions } from "../../jobs/types.ts";
 import { AppError } from "../../http/appError.ts";
+import { estimateQuestionLlmUsd, QUESTIONS_LLM_BOUNDS } from "./prompts.ts";
+import { dataforseoPricing } from "../../pricing/dataforseo.ts";
+import { fromMicros, toMicros } from "../../spend/money.ts";
+import { AmbiguousCallError } from "../../spend/errors.ts";
+import { promptgenCandidates } from "./promptgenSource.ts";
 
 function createMockContext(payload: SetupPayload): JobContext<SetupPayload> & {
   stepsRun: Array<{ name: string; opts: StepOptions }>;
@@ -42,7 +47,8 @@ function createMockDeps(overrides: any = {}) {
   };
 
   const mockAdmin: any = {
-    from(_table: string) {
+    from(table: string) {
+      const rows = table === "spend_ledger" ? overrides.spendLedgerRows ?? [] : overrides.questions ?? [];
       return {
         select() {
           const chain: any = {
@@ -52,13 +58,13 @@ function createMockDeps(overrides: any = {}) {
             order() {
               return chain;
             },
-            data: overrides.questions ?? [],
+            data: rows,
             error: null,
             async maybeSingle() {
               return { data: null, error: null };
             },
             then(resolve: any) {
-              return Promise.resolve({ data: overrides.questions ?? [], error: null }).then(resolve);
+              return Promise.resolve({ data: rows, error: null }).then(resolve);
             },
           };
           return chain;
@@ -166,15 +172,16 @@ describe("questions.setup job runner (F08-AC-13, F08-AC-14)", () => {
 
     const mockDeps = createMockDeps({
       env: { QUESTION_SETUP_PROMPTGEN: "on" },
+      spendLedgerRows: [{ accounted_usd: "0.03" }, { accounted_usd: "0.02" }],
       appendResearch: async (_admin: any, input: any) => {
         researchLog = input;
       },
       llmObject: async (opts: any) => {
         if (opts.system.includes("Fill only the missing")) {
-          return { object: syntheticDraft };
+          return { object: syntheticDraft, usd: 0.01 };
         }
         if (opts.system.includes("Choose candidate competitors")) {
-          return { object: { domains: ["bewakoof.com", "thesouledstore.com"] } };
+          return { object: { domains: ["bewakoof.com", "thesouledstore.com"] }, usd: 0.02 };
         }
         if (opts.system.includes("Verify competitors")) {
           return {
@@ -188,6 +195,7 @@ describe("questions.setup job runner (F08-AC-13, F08-AC-14)", () => {
                 },
               ],
             },
+            usd: 0.03,
           };
         }
         throw new Error(`Unexpected system prompt: ${opts.system}`);
@@ -204,13 +212,16 @@ describe("questions.setup job runner (F08-AC-13, F08-AC-14)", () => {
           ],
         },
       } as any,
-      promptgenCandidates: async () => [
-        {
-          text: "What are the best streetwear clothing brands in India?",
-          topic: "Streetwear",
-          source: "promptgen",
-        },
-      ],
+      promptgenCandidates: async (promptgenContext: any) => {
+        promptgenContext.onLlmSpend(0.04);
+        return [
+          {
+            text: "What are the best streetwear clothing brands in India?",
+            topic: "Streetwear",
+            source: "promptgen",
+          },
+        ];
+      },
     });
 
     const res = await runQuestionSetup(ctx, mockDeps as any);
@@ -229,6 +240,7 @@ describe("questions.setup job runner (F08-AC-13, F08-AC-14)", () => {
     assert.equal(researchLog.kind, "questions.setup");
     assert.equal(researchLog.researchKey, "offcult.in");
     assert.equal(researchLog.jobId, ctx.jobId);
+    assert.equal(researchLog.spendUsd, 0.15);
 
     // Check steps run
     const stepNames = ctx.stepsRun.map((s) => s.name);
@@ -248,16 +260,143 @@ describe("questions.setup job runner (F08-AC-13, F08-AC-14)", () => {
       assert.equal(step.opts.billed, true, `${name} must be billed`);
       assert.equal(step.opts.retries, 0, `${name} must not retry`);
     }
-    const labels = ctx.progressCalls.map((entry) => entry.label);
-    for (const label of [
-      "Reading your website",
-      "Finding competitors",
-      "Drafting questions",
-      "Adding search-grounded questions",
-      "Preparing your review",
-    ]) {
-      assert.ok(labels.includes(label), `missing progress label: ${label}`);
+    assert.deepEqual(ctx.progressCalls, [
+      { done: 1, total: 5, label: "Reading your website" },
+      { done: 2, total: 5, label: "Drafting questions" },
+      { done: 3, total: 5, label: "Finding competitors" },
+      { done: 4, total: 5, label: "Adding search-grounded questions" },
+      { done: 5, total: 5, label: "Preparing your review" },
+    ]);
+  });
+
+  it("bounds each setup LLM request and passes only the remaining approved aggregate", async () => {
+    const approvedMaxUsd = 5;
+    const ctx = createMockContext({ ...basePayload, approvedMaxUsd });
+    const llmCalls: any[] = [];
+    const searchQueries = ["oversized streetwear t-shirts india", "anime oversized tees brands"];
+    const rivals = Array.from({ length: 10 }, (_, i) => `rival${i}.example`);
+
+    const result = await runQuestionSetup(
+      ctx,
+      createMockDeps({
+        env: { QUESTION_SETUP_PROMPTGEN: "off" },
+        readPagesFree: async (urls: string[]) => ({
+          pages: urls.map((url) => ({
+            url,
+            title: "Very long title ".repeat(300),
+            content: "Very long page copy ".repeat(300),
+          })),
+          failed: [],
+        }),
+        dataforseoClient: {
+          serp: {
+            live: async () =>
+              rivals.map((domain, i) => ({
+                type: "organic",
+                title: `Result ${i} ${"title ".repeat(300)}`,
+                url: `https://${domain}/category`,
+                description: "Competitor description ".repeat(300),
+              })),
+          },
+        } as any,
+        llmObject: async (opts: any) => {
+          llmCalls.push(opts);
+          if (opts.system.includes("Fill only the missing")) {
+            return { object: { ...syntheticDraft, searchQueries }, usd: 0.01 };
+          }
+          if (opts.system.includes("Choose candidate competitors")) {
+            return { object: { domains: rivals.slice(0, 5) }, usd: 0.02 };
+          }
+          if (opts.system.includes("Verify competitors")) {
+            return {
+              object: {
+                competitors: [
+                  {
+                    name: "Rival 0",
+                    domain: rivals[0],
+                    notes: "Competing business",
+                    sourceUrl: `https://${rivals[0]}/oversized`,
+                  },
+                ],
+              },
+              usd: 0.03,
+            };
+          }
+          throw new Error(`Unexpected system prompt: ${opts.system}`);
+        },
+      }) as any,
+    );
+
+    assert.equal(llmCalls.length, 3);
+    const bounds = [
+      QUESTIONS_LLM_BOUNDS.setupDraft,
+      QUESTIONS_LLM_BOUNDS.setupPick,
+      QUESTIONS_LLM_BOUNDS.setupVerify,
+    ];
+    for (const [index, call] of llmCalls.entries()) {
+      assert.ok(
+        (call.system + call.prompt).length <= bounds[index].inputChars,
+        `call ${index + 1} exceeded its quoted input bound`,
+      );
+      assert.equal(call.maxOutputTokens, bounds[index].outputTokens);
     }
+
+    const serp1 = dataforseoPricing.serp.live({ depth: 10, keyword: searchQueries[0] });
+    const serp2 = dataforseoPricing.serp.live({ depth: 10, keyword: searchQueries[1] });
+    const expectedPickMax = fromMicros(
+      toMicros(approvedMaxUsd) - toMicros(0.01) - toMicros(serp1) - toMicros(serp2),
+    );
+    const expectedVerifyMax = fromMicros(
+      toMicros(expectedPickMax) - toMicros(0.02),
+    );
+    assert.deepEqual(
+      llmCalls.map((call) => call.maxUsd),
+      [approvedMaxUsd, expectedPickMax, expectedVerifyMax],
+    );
+  });
+
+  it("logs the estimate for a PromptGen LLM failure that was settled as ambiguous", async () => {
+    const ctx = createMockContext(basePayload);
+    const model = "openai/gpt-4o-mini";
+    const promptgenEnv = { LLM_HELPER_MODEL: model };
+    let promptgenCall: any;
+    let researchLog: any;
+
+    const result = await runQuestionSetup(
+      ctx,
+      createMockDeps({
+        env: { QUESTION_SETUP_PROMPTGEN: "on" },
+        appendResearch: async (_admin: any, input: any) => {
+          researchLog = input;
+        },
+        llmObject: async () => ({ object: syntheticDraft, usd: 0.01 }),
+        dataforseoClient: { serp: { live: async () => [] } } as any,
+        promptgenCandidates: async (promptgenContext: any, input: any) =>
+          promptgenCandidates(promptgenContext, input, {
+            env: promptgenEnv,
+            fetchPeopleAlsoAsk: async () => [],
+            fetchAutocomplete: async () => [],
+            metered: async (_opts: any, call: any) => (await call()).value,
+            llmText: async (opts: any) => {
+              promptgenCall = opts;
+              throw new AmbiguousCallError("The provider outcome is unknown.");
+            },
+          } as any),
+      }) as any,
+    );
+
+    assert.ok(promptgenCall);
+    assert.ok(result.result);
+    assert.ok(
+      (result.result as any).review.warnings.some((warning: any) => warning.code === "promptgen_unavailable"),
+    );
+    const promptgenEstimateUsd = estimateQuestionLlmUsd(
+      model,
+      (promptgenCall.system + promptgenCall.prompt).length,
+      promptgenCall.maxOutputTokens,
+      promptgenEnv,
+    );
+    assert.equal(toMicros(researchLog.spendUsd), toMicros(0.01) + toMicros(promptgenEstimateUsd));
   });
 
   it("skips all site and competitor reads when the workspace fields already exist", async () => {

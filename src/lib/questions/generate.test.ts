@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { generateQuestions } from "./generate.ts";
 import { AppError } from "../http/appError.ts";
 import type { Workspace } from "../workspace/requireWorkspace.ts";
+import { estimateQuestionsGenerate } from "../pricing/actions/questions.ts";
+import { estimateQuestionLlmUsd, QUESTIONS_LLM_BOUNDS } from "./setup/prompts.ts";
 
 describe("generateQuestions (F08-AC-17)", () => {
   const mockAdmin: any = {};
@@ -62,6 +64,87 @@ describe("generateQuestions (F08-AC-17)", () => {
 
     assert.strictEqual(res.topic, "Oversized Tees");
     assert.strictEqual(res.questions.length, 5);
+  });
+
+  it("fits large context and question history within the input reserved by its quote", async () => {
+    const model = "openai/gpt-4o-mini";
+    const env = { LLM_HELPER_MODEL: model };
+    const quote = await estimateQuestionsGenerate(
+      {
+        brandKey: "offcult.in",
+        admin: {} as any,
+        env,
+        now: new Date(),
+      },
+      { topic: "Existing Topic 0" },
+      { model },
+    );
+    const existing = Array.from({ length: 50 }, (_, i) => ({
+      id: `q-${i}`,
+      text: `Existing question ${i} ${"streetwear ".repeat(120)}`,
+      textNormalized: `existing question ${i}`,
+      topic: `Existing Topic ${i % 30}`,
+      status: "active" as const,
+    }));
+    let llmInput: any;
+    const mockDeps = {
+      listWorkspaceQuestions: async () => existing as any,
+      readQuestionSettings: async () => ({ country: "in", language: "en" } as any),
+      repo: {
+        listSections: async () =>
+          Array.from({ length: 20 }, (_, i) => ({
+            key: `context-${i}`,
+            content: `Business context ${i} ${"oversized streetwear ".repeat(300)}`,
+          })),
+        listCompetitors: async () =>
+          Array.from({ length: 50 }, (_, i) => ({
+            name: `Competitor ${i} ${"brand ".repeat(20)}`,
+            domain: `competitor-${i}.example`,
+          })),
+      } as any,
+      llmObject: async (opts: any) => {
+        llmInput = opts;
+        return {
+          object: {
+            name: "Existing Topic 0",
+            questions: [
+              "Which streetwear brands are popular in India?",
+              "Where can I find premium graphic tees?",
+              "What brands make heavyweight oversized shirts?",
+              "Which labels sell anime inspired streetwear?",
+              "What are trusted streetwear shops in India?",
+            ],
+          },
+        };
+      },
+    };
+
+    const result = await generateQuestions(
+      mockAdmin,
+      dummyWorkspace,
+      {
+        requestId: "00000000-0000-0000-0000-000000000099",
+        topic: "Existing Topic 0",
+        excludeQuestions: Array.from({ length: 10 }, (_, i) => `Excluded ${i} ${"streetwear ".repeat(120)}`),
+        maxUsd: quote.totalUsd,
+      },
+      mockDeps as any,
+    );
+
+    assert.equal(result.questions.length, 5);
+    assert.ok(
+      (llmInput.system + llmInput.prompt).length <= QUESTIONS_LLM_BOUNDS.generate.inputChars,
+    );
+    assert.equal(llmInput.maxOutputTokens, QUESTIONS_LLM_BOUNDS.generate.outputTokens);
+    assert.equal(llmInput.maxUsd, quote.totalUsd);
+    assert.ok(
+      estimateQuestionLlmUsd(
+        model,
+        (llmInput.system + llmInput.prompt).length,
+        llmInput.maxOutputTokens,
+        env,
+      ) <= quote.totalUsd,
+    );
   });
 
   it("rejects with question_limit when 100 unarchived questions exist", async () => {

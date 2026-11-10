@@ -2,6 +2,7 @@ import { AppError } from "../../../../../../lib/http/appError.ts";
 import { toErrorResponse } from "../../../../../../lib/http/errors.ts";
 import { requireWorkspace, type Workspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
 import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
+import { aiQuestionFeatureGateError } from "../../../../../../lib/questions/questions.contract.ts";
 import {
   listResearchKeywords,
   type PromptResearchDeps,
@@ -15,6 +16,7 @@ export type KeywordsRouteDeps = PromptResearchDeps & {
   requireWorkspace?: typeof requireWorkspace;
   isFeatureEnabled?: typeof isFeatureEnabled;
   listResearchKeywords?: typeof listResearchKeywords;
+  env?: Record<string, string | undefined>;
 };
 
 export async function GET(
@@ -38,11 +40,18 @@ export async function GET(
     const gate = deps?.isFeatureEnabled ?? isFeatureEnabled;
     const curationOn = await gate("question_curation", ws.brandKey);
     const researchOn = await gate("prompt_research", ws.brandKey);
-    if (!curationOn || !researchOn) {
+    if (!curationOn) {
       throw new AppError(
         404,
         "feature_unavailable",
         "This page is not available for your workspace yet.",
+      );
+    }
+    if (!researchOn) {
+      throw aiQuestionFeatureGateError(
+        "prompt_research",
+        ws.brandKey,
+        deps?.env ?? (process.env as Record<string, string | undefined>),
       );
     }
 

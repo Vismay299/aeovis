@@ -1,6 +1,7 @@
 ﻿import test from "node:test";
 import assert from "node:assert/strict";
 import { AppError } from "../http/appError.ts";
+import { invalidateFeatureFlagCache, isFeatureEnabled } from "../features/flags.ts";
 import { POST as setupPost } from "../../app/api/customer/questions/setup/route.ts";
 import { POST as savePost } from "../../app/api/customer/questions/setup/save/route.ts";
 import { POST as generatePost } from "../../app/api/customer/questions/generate/route.ts";
@@ -77,6 +78,7 @@ test("setup route gates flags, requires approval, and starts a priced job", asyn
   const gated = await setupPost(setupRequest(), {}, {
     requireWorkspace: async () => dummyWorkspace,
     isFeatureEnabled: async (name) => name === "question_curation",
+    env: { NODE_ENV: "production", FEATURE_QUESTION_SETUP: "off" },
   });
   await expectError(gated, 404, "feature_unavailable");
 
@@ -153,6 +155,7 @@ test("generate gates flags, forwards the approved ceiling, and maps provider ref
   const gated = await generatePost(generateRequest(), {}, {
     requireWorkspace: async () => dummyWorkspace,
     isFeatureEnabled: async (name) => name === "question_curation",
+    env: { NODE_ENV: "production", FEATURE_QUESTION_SETUP: "off" },
   });
   await expectError(gated, 404, "feature_unavailable");
 
@@ -190,6 +193,7 @@ test("research gates flags, forwards the approved ceiling, and maps provider ref
   const gated = await researchPost(researchRequest(), {}, {
     requireWorkspace: async () => dummyWorkspace,
     isFeatureEnabled: async (name) => name === "question_curation",
+    env: { NODE_ENV: "production", FEATURE_PROMPT_RESEARCH: "off" },
   });
   await expectError(gated, 404, "feature_unavailable");
 
@@ -230,6 +234,7 @@ test("research keyword route validates query flags and returns keywords", async 
     {
       requireWorkspace: async () => dummyWorkspace,
       isFeatureEnabled: async (name) => name === "question_curation",
+      env: { NODE_ENV: "production", FEATURE_PROMPT_RESEARCH: "off" },
     },
   );
   await expectError(gated, 404, "feature_unavailable");
@@ -252,4 +257,95 @@ test("research keyword route validates query flags and returns keywords", async 
   });
   assert.equal(res.status, 200);
   assert.deepEqual((await res.json()).keywords, ["streetwear", "anime tees"]);
+});
+
+function flagAdmin(rows) {
+  return {
+    from() {
+      return {
+        select() {
+          return {
+            in: async () => ({ data: rows, error: null }),
+          };
+        },
+      };
+    },
+  };
+}
+
+function realFlagGate(env, admin) {
+  return (name, brandKey) => isFeatureEnabled(name, brandKey, { env, admin });
+}
+
+test("AC-21 distinguishes feature-off from an enabled feature with disabled spend controls", async () => {
+  const baseEnv = {
+    NODE_ENV: "production",
+    FEATURE_QUESTION_CURATION: "on",
+  };
+  const disabledControls = [
+    { feature: "questions.setup", enabled: false, mode: "all", brand_allowlist: [] },
+    { feature: "questions.generate", enabled: true, mode: "all", brand_allowlist: [] },
+    { feature: "questions.research", enabled: false, mode: "all", brand_allowlist: [] },
+  ];
+
+  const setupOffEnv = { ...baseEnv, FEATURE_QUESTION_SETUP: "off" };
+  const setupOffAdmin = flagAdmin(disabledControls);
+  invalidateFeatureFlagCache();
+  const setupOff = await setupPost(setupRequest(), {}, {
+    requireWorkspace: async () => ({ ...dummyWorkspace, brandKey: "setup-off.example", admin: setupOffAdmin }),
+    isFeatureEnabled: realFlagGate(setupOffEnv, setupOffAdmin),
+    env: setupOffEnv,
+  });
+  await expectError(setupOff, 404, "feature_unavailable");
+
+  const setupOnEnv = { ...baseEnv, FEATURE_QUESTION_SETUP: "on" };
+  const setupOnAdmin = flagAdmin(disabledControls);
+  invalidateFeatureFlagCache();
+  const setupDisabled = await setupPost(setupRequest(), {}, {
+    requireWorkspace: async () => ({ ...dummyWorkspace, brandKey: "setup-disabled.example", admin: setupOnAdmin }),
+    isFeatureEnabled: realFlagGate(setupOnEnv, setupOnAdmin),
+    env: setupOnEnv,
+  });
+  await expectError(setupDisabled, 403, "feature_disabled");
+
+  invalidateFeatureFlagCache();
+  const generateDisabled = await generatePost(generateRequest(), {}, {
+    requireWorkspace: async () => ({ ...dummyWorkspace, brandKey: "generate-disabled.example", admin: setupOnAdmin }),
+    isFeatureEnabled: realFlagGate(setupOnEnv, setupOnAdmin),
+    env: setupOnEnv,
+  });
+  await expectError(generateDisabled, 403, "feature_disabled");
+
+  const researchOffEnv = { ...baseEnv, FEATURE_PROMPT_RESEARCH: "off" };
+  const researchOffAdmin = flagAdmin(disabledControls);
+  invalidateFeatureFlagCache();
+  const researchOff = await researchPost(researchRequest(), {}, {
+    requireWorkspace: async () => ({ ...dummyWorkspace, brandKey: "research-off.example", admin: researchOffAdmin }),
+    isFeatureEnabled: realFlagGate(researchOffEnv, researchOffAdmin),
+    env: researchOffEnv,
+  });
+  await expectError(researchOff, 404, "feature_unavailable");
+
+  const researchOnEnv = { ...baseEnv, FEATURE_PROMPT_RESEARCH: "on" };
+  const researchOnAdmin = flagAdmin(disabledControls);
+  invalidateFeatureFlagCache();
+  const researchDisabled = await researchPost(researchRequest(), {}, {
+    requireWorkspace: async () => ({ ...dummyWorkspace, brandKey: "research-disabled.example", admin: researchOnAdmin }),
+    isFeatureEnabled: realFlagGate(researchOnEnv, researchOnAdmin),
+    env: researchOnEnv,
+  });
+  await expectError(researchDisabled, 403, "feature_disabled");
+
+  invalidateFeatureFlagCache();
+  const keywordDisabled = await keywordsGet(
+    new Request("https://app.test/api/customer/questions/research/keywords?brand_key=research-keywords-disabled.example"),
+    {},
+    {
+      requireWorkspace: async () => ({ ...dummyWorkspace, brandKey: "research-keywords-disabled.example", admin: researchOnAdmin }),
+      isFeatureEnabled: realFlagGate(researchOnEnv, researchOnAdmin),
+      env: researchOnEnv,
+    },
+  );
+  await expectError(keywordDisabled, 403, "feature_disabled");
+  invalidateFeatureFlagCache();
 });

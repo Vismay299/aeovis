@@ -13,7 +13,11 @@ import {
   listWorkspaceQuestions,
   readQuestionSettings,
 } from "./workspaceQuestions.ts";
-import { GENERATE_SYSTEM } from "./setup/prompts.ts";
+import {
+  fitJsonPrompt,
+  GENERATE_SYSTEM,
+  QUESTIONS_LLM_BOUNDS,
+} from "./setup/prompts.ts";
 import { suggestedTopicSchema } from "./setup/schemas.ts";
 import { llmObject } from "../llm/index.ts";
 
@@ -102,6 +106,10 @@ export async function generateQuestions(
     existingQuestions: unarchived.map((q) => q.text).slice(0, 50),
     excludedQuestions: (input.excludeQuestions || []).filter(Boolean),
   };
+  const prompt = fitJsonPrompt(
+    promptObj,
+    QUESTIONS_LLM_BOUNDS.generate.inputChars - GENERATE_SYSTEM.length,
+  );
 
   const llmCaller = deps?.llmObject ?? llmObject;
   const { object } = await llmCaller<{ name: string; questions: string[] }>({
@@ -109,8 +117,8 @@ export async function generateQuestions(
     feature: "questions.generate",
     schema: outputSchema,
     system: GENERATE_SYSTEM,
-    prompt: JSON.stringify(promptObj),
-    maxOutputTokens: 2000,
+    prompt,
+    maxOutputTokens: QUESTIONS_LLM_BOUNDS.generate.outputTokens,
     timeoutMs: 60_000,
     idempotencyKey: `questions.generate:${input.requestId}`,
     maxUsd: input.maxUsd,

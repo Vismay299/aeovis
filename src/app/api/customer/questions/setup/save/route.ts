@@ -2,6 +2,7 @@ import { AppError } from "../../../../../../lib/http/appError.ts";
 import { toErrorResponse } from "../../../../../../lib/http/errors.ts";
 import { requireWorkspace, type Workspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
 import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
+import { aiQuestionFeatureGateError } from "../../../../../../lib/questions/questions.contract.ts";
 import {
   saveSetupBodySchema,
   saveSetupReview,
@@ -15,6 +16,7 @@ export type SetupSaveRouteDeps = SaveSetupDeps & {
   requireWorkspace?: typeof requireWorkspace;
   isFeatureEnabled?: typeof isFeatureEnabled;
   saveSetupReview?: typeof saveSetupReview;
+  env?: Record<string, string | undefined>;
 };
 
 export async function POST(
@@ -47,11 +49,18 @@ export async function POST(
     const gate = deps?.isFeatureEnabled ?? isFeatureEnabled;
     const curationOn = await gate("question_curation", ws.brandKey);
     const setupOn = await gate("question_setup", ws.brandKey);
-    if (!curationOn || !setupOn) {
+    if (!curationOn) {
       throw new AppError(
         404,
         "feature_unavailable",
         "This page is not available for your workspace yet.",
+      );
+    }
+    if (!setupOn) {
+      throw aiQuestionFeatureGateError(
+        "question_setup",
+        ws.brandKey,
+        deps?.env ?? (process.env as Record<string, string | undefined>),
       );
     }
 
