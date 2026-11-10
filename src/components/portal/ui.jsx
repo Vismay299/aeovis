@@ -157,7 +157,7 @@ const BADGE_VARIANTS = {
 };
 
 /** tone: neutral | brand | good | warn | crit. `live` pulses the dot. */
-export function Badge({ tone = "neutral", dot, live, className, children }) {
+export function Badge({ tone = "neutral", dot, live, className, children, ...rest }) {
   const variantClass = BADGE_VARIANTS[tone] || BADGE_VARIANTS.neutral;
   return (
     <span
@@ -169,6 +169,7 @@ export function Badge({ tone = "neutral", dot, live, className, children }) {
         live && "pv-badge--live",
         className,
       )}
+      {...rest}
     >
       {dot || live ? <i className="pv-badge__dot inline-block size-1.5 rounded-full bg-current" aria-hidden="true" /> : null}
       {children}
