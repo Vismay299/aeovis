@@ -63,7 +63,7 @@ Checked by the owner against DataForSEO's terms (version updated 12 June 2026). 
 | gemini | go | queued | 32/32 queued, 0 failures. Live Gemini was unreliable and is not approved. |
 | perplexity | no-go (not tested) | — | `dfs_model` arm not run; revisit after a credit top-up. |
 
-Live mode is undecided. Only F11 needs it; F11 records that decision.
+Live scraper mode is not approved; scheduled scans use queued mode. F11 (ask one question now) does not use the scraper: it uses DataForSEO LLM Responses (model API) for ChatGPT, Gemini and Perplexity, which this bake-off did not test. F11 needs a short LLM Responses check before it ships.
 
 ## Decision rules applied
 
@@ -84,5 +84,6 @@ The F02 default rules (a)–(e) are met for the approved engines in queued mode.
 - Perplexity through DataForSEO.
 - A same-run comparison with the current providers or Bright Data (rule (g)).
 - Live AI Overviews; live Gemini reliability.
+- DataForSEO LLM Responses (model API) for any engine, which F11 needs.
 - Which model answered each scraper request: LLM Scraper responses carry no model name.
 - Answers come from logged-out sessions; logged-in users may see personalised answers.
