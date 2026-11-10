@@ -1,0 +1,66 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.1 sec.",
+  "cost": 0.0054,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "qa-task-1",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "cost": 0.0054,
+      "path": ["v3", "business_data", "google", "questions_and_answers", "live"],
+      "result": [
+        {
+          "items": [
+            {
+              "question_id": "q1",
+              "question_text": "Do you offer vegan options?",
+              "profile_name": "Reviewer A",
+              "time_ago": "2 weeks ago",
+              "timestamp": "2026-10-25T12:00:00Z",
+              "items": [
+                {
+                  "answer_id": "a1",
+                  "answer_text": "Yes, we have vegan pastries and oat milk.",
+                  "profile_name": "Acme Cafe (Owner)",
+                  "time_ago": "2 weeks ago",
+                  "timestamp": "2026-10-25T14:00:00Z"
+                }
+              ]
+            },
+            {
+              "question_id": "q2",
+              "question_text": "Is there outdoor seating?",
+              "profile_name": "Reviewer B",
+              "time_ago": "1 month ago",
+              "timestamp": "2026-10-10T09:00:00Z",
+              "items": [
+                {
+                  "answer_id": "a2",
+                  "answer_text": "Yes, we have 4 outdoor tables.",
+                  "profile_name": "Reviewer C",
+                  "time_ago": "3 weeks ago",
+                  "timestamp": "2026-10-17T11:00:00Z"
+                }
+              ]
+            }
+          ],
+          "items_without_answers": [
+            {
+              "question_id": "q3",
+              "question_text": "Are dogs allowed inside?",
+              "profile_name": "Reviewer D",
+              "time_ago": "3 days ago",
+              "timestamp": "2026-11-07T16:00:00Z",
+              "items": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

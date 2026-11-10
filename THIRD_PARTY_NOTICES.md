@@ -392,3 +392,11 @@ SOFTWARE.
 - `src/components/app/ResearchScopeSelect.tsx` (from `src/client/components/ResearchScopeSelect.tsx`)
 - `src/components/app/SearchCard.tsx` (from `src/client/components/SearchCard.tsx`)
 
+- `src/lib/providers/dataforseo/business.ts` (from `src/server/lib/dataforseo/business.ts`)
+- `src/lib/providers/dataforseo/business.test.ts` (from `src/server/lib/dataforseo/business.test.ts`)
+- `src/lib/local/shared.ts` (from `src/server/mcp/tools/local-seo-shared.ts`, `src/server/mcp/table.ts`, `src/server/mcp/tools/dataforseo-research-tools.ts`)
+- `src/lib/local/shared.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
+- `src/lib/local/rowFields.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`, `src/server/mcp/tools/local-seo-tools.ts`)
+- `src/lib/local/rowFields.test.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`, `src/server/mcp/tools/local-seo-tools.ts`)
+- `src/lib/local/grid.ts` (from `src/server/mcp/tools/local-seo-tools.ts`)
+- `src/lib/local/grid.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)

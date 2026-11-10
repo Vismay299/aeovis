@@ -50,7 +50,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F14](./F14-domain-overview.md) | Domain overview and competitor research | Domain and competitor research | 2 | F07 phase 1, F13 | 105–109 | Spec ✓ |
 | [F15](./F15-rank-tracking.md) | Rank tracking with AI Overview presence | Rank tracking | 2 | F01, F02, F03, F06, F07 phase 1, F09, F10, F13, F14 (phase 1); F08 + F12 for phase 6 | 110–114 | Spec ✓ |
 | [F16](./F16-backlinks.md) | Backlinks | Backlinks | 2 | F02, F06, F07 phase 1, F13 (phase 1 research kit) | 115–119 | Spec ✓ |
-| [F17](./F17-local-seo.md) | Local SEO | Local SEO | 2 | F02, F07, F09, F13 | 120–124 | Spec ✓ |
+| [F17](./F17-local-seo.md) | Local SEO | Local SEO | 2 | F02, F07, F09, F13 | 120–124 | In progress |
 | [F18](./F18-site-audit.md) | Site audit crawler (plus Perceev's AEO checks) | Site audit | 3 | F01, F02, F06, F08 (Firecrawl price), F09 | 125–129 | In progress |
 | [F19](./F19-indexnow.md) | IndexNow | IndexNow | 3 | F01, F04, F05; F18 for phase 3 | 130–134 | In progress |
 | [F20](./F20-ga4-and-opportunities.md) | Google Analytics 4 and search opportunities | Google Analytics 4 | 3 | F01, F04, F05 | 135–139 | In progress |
