@@ -368,3 +368,20 @@ SOFTWARE.
 - `src/lib/providers/dataforseo/serp.ts`
 - `src/lib/providers/dataforseo/serp.test.ts`
 - `src/lib/providers/dataforseo/index.ts`
+- `src/lib/providers/dataforseo/labs.ts` (from `src/server/lib/dataforseo/labs.ts`)
+- `src/lib/providers/dataforseo/google-ads.ts` (from `src/server/lib/dataforseo/google-ads.ts`)
+- `src/lib/providers/dataforseo/keyword-metrics.ts` (from `src/server/lib/dataforseo/keyword-metrics.ts`)
+- `src/lib/providers/dataforseo/keyword-metrics.test.ts` (from `src/server/lib/dataforseo/keyword-metrics.test.ts`)
+- `src/lib/providers/dataforseo/filters.ts` (from `src/server/lib/dataforseo/filters.ts`)
+- `src/lib/providers/dataforseo/researchScopeFilters.ts` (from `src/server/lib/dataforseo/researchScopeFilters.ts`)
+- `src/lib/research/target.ts` (from `src/server/lib/domainUtils.ts`)
+- `src/shared/researchScope.ts` (from `src/shared/researchScope.ts`)
+- `src/shared/keyword-locations.ts` (from `src/shared/keyword-locations.ts`)
+- `src/shared/keywords.ts` (from `src/shared/keywords.ts`)
+- `src/shared/keyword-filtering.ts` (from `src/shared/keyword-filtering.ts`)
+- `src/shared/saved-keyword-tags.ts` (from `src/shared/saved-keyword-tags.ts`)
+- `src/shared/tag-colors.ts` (from `src/shared/tag-colors.ts`)
+- `src/shared/saved-keywords-filters.ts` (from `src/shared/saved-keywords-filters.ts`)
+- `src/components/app/ResearchScopeSelect.tsx` (from `src/client/components/ResearchScopeSelect.tsx`)
+- `src/components/app/SearchCard.tsx` (from `src/client/components/SearchCard.tsx`)
+

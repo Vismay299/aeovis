@@ -1,0 +1,54 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.123 sec.",
+  "cost": 0.01212,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "13010000-0000-0000-0000-000000000003",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.120 sec.",
+      "cost": 0.01212,
+      "result_count": 1,
+      "path": ["v3", "dataforseo_labs", "google", "keyword_ideas", "live"],
+      "data": {
+        "api": "dataforseo_labs",
+        "function": "keyword_ideas"
+      },
+      "result": [
+        {
+          "se_type": "google",
+          "seed_keywords": ["caregiving"],
+          "location_code": 2840,
+          "language_code": "en",
+          "total_count": 1,
+          "items_count": 1,
+          "items": [
+            {
+              "keyword": "in home care",
+              "keyword_info": {
+                "search_volume": 4400,
+                "cpc": 4.1,
+                "competition": 0.6,
+                "competition_level": "MEDIUM",
+                "monthly_searches": [
+                  { "year": 2026, "month": 8, "search_volume": 4400 }
+                ]
+              },
+              "keyword_properties": {
+                "keyword_difficulty": 55
+              },
+              "search_intent_info": {
+                "main_intent": "commercial"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
