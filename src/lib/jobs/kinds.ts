@@ -11,3 +11,4 @@ import "../email/jobs.ts";
 import "../ga4/retention.ts";
 import "../indexnow/jobs.ts";
 import "../audit/job.ts";
+import "../questions/jobs.ts";
