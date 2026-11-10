@@ -1,0 +1,118 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.2 sec.",
+  "cost": 0.0138,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "09011234-1234-0123-0000-000000000003",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "cost": 0.0138,
+      "result_count": 1,
+      "path": ["v3", "business_data", "business_listings", "search", "live"],
+      "result": [
+        {
+          "total_count": 5,
+          "count": 5,
+          "offset": 0,
+          "items": [
+            {
+              "title": "Business 1",
+              "description": "First local business",
+              "category": "Coffee shop",
+              "additional_categories": ["Bakery"],
+              "address": "1 First St",
+              "phone": "+1 555-0101",
+              "url": "https://b1.example.com",
+              "domain": "b1.example.com",
+              "rating": { "value": 4.8, "votes_count": 120 },
+              "is_claimed": true,
+              "cid": "1001",
+              "place_id": "place_1001",
+              "latitude": 37.77,
+              "longitude": -122.41,
+              "total_photos": 15,
+              "check_url": "https://maps.google.com/?cid=1001"
+            },
+            {
+              "title": "Business 2",
+              "description": "Second local business",
+              "category": "Cafe",
+              "additional_categories": [],
+              "address": "2 Second St",
+              "phone": "+1 555-0102",
+              "url": "https://b2.example.com",
+              "domain": "b2.example.com",
+              "rating": { "value": 4.2, "votes_count": 85 },
+              "is_claimed": false,
+              "cid": "1002",
+              "place_id": "place_1002",
+              "latitude": 37.78,
+              "longitude": -122.42,
+              "total_photos": 8,
+              "check_url": "https://maps.google.com/?cid=1002"
+            },
+            {
+              "title": "Business 3",
+              "description": "Third local business",
+              "category": "Bakery",
+              "additional_categories": [],
+              "address": "3 Third St",
+              "phone": "+1 555-0103",
+              "url": "https://b3.example.com",
+              "domain": "b3.example.com",
+              "rating": { "value": 4.5, "votes_count": 45 },
+              "is_claimed": true,
+              "cid": "1003",
+              "place_id": "place_1003",
+              "latitude": 37.76,
+              "longitude": -122.40,
+              "total_photos": 12,
+              "check_url": "https://maps.google.com/?cid=1003"
+            },
+            {
+              "title": "Business 4",
+              "description": "Fourth local business",
+              "category": "Restaurant",
+              "additional_categories": [],
+              "address": "4 Fourth St",
+              "phone": "+1 555-0104",
+              "url": "https://b4.example.com",
+              "domain": "b4.example.com",
+              "rating": { "value": 3.9, "votes_count": 30 },
+              "is_claimed": false,
+              "cid": "1004",
+              "place_id": "place_1004",
+              "latitude": 37.75,
+              "longitude": -122.43,
+              "total_photos": 5,
+              "check_url": "https://maps.google.com/?cid=1004"
+            },
+            {
+              "title": "Business 5",
+              "description": "Fifth local business",
+              "category": "Tea house",
+              "additional_categories": [],
+              "address": "5 Fifth St",
+              "phone": "+1 555-0105",
+              "url": "https://b5.example.com",
+              "domain": "b5.example.com",
+              "rating": { "value": 4.9, "votes_count": 200 },
+              "is_claimed": true,
+              "cid": "1005",
+              "place_id": "place_1005",
+              "latitude": 37.79,
+              "longitude": -122.39,
+              "total_photos": 25,
+              "check_url": "https://maps.google.com/?cid=1005"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

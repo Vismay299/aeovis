@@ -5,3 +5,4 @@ import "./scanRun.ts";
 import "./scheduleSave.ts";
 export { scanRunAction } from "./scanRun.ts";
 export { scheduleSaveAction } from "./scheduleSave.ts";
+import "./local.ts";

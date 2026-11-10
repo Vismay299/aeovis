@@ -1,0 +1,75 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.1234 sec.",
+  "cost": 0.0054,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "09011234-1234-0123-0000-000000000001",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.1200 sec.",
+      "cost": 0.0054,
+      "result_count": 1,
+      "path": ["v3", "business_data", "google", "my_business_info", "live"],
+      "data": {
+        "api": "business_data",
+        "function": "my_business_info",
+        "se": "google"
+      },
+      "result": [
+        {
+          "keyword": "cid:123456789",
+          "type": "google_business_info",
+          "check_url": "https://www.google.com/maps?cid=123456789",
+          "items_count": 1,
+          "items": [
+            {
+              "type": "google_business_info",
+              "title": "Acme Cafe",
+              "category": "Coffee shop",
+              "additional_categories": ["Bakery", "Espresso bar"],
+              "address": "123 Main St, Springfield",
+              "phone": "+1 555-0199",
+              "url": "https://example.com",
+              "domain": "example.com",
+              "rating": {
+                "rating_type": "Max5",
+                "value": 4.6,
+                "votes_count": 210
+              },
+              "rating_distribution": {
+                "1": 5,
+                "2": 5,
+                "3": 10,
+                "4": 40,
+                "5": 150
+              },
+              "is_claimed": true,
+              "cid": "123456789",
+              "place_id": "ChIJ1234567890",
+              "latitude": 37.7749,
+              "longitude": -122.4194,
+              "total_photos": 42,
+              "work_hours": {
+                "timetable": {
+                  "monday": [{"open": {"hour": 8, "minute": 0}, "close": {"hour": 17, "minute": 0}}],
+                  "tuesday": [{"open": {"hour": 8, "minute": 0}, "close": {"hour": 17, "minute": 0}}],
+                  "wednesday": [{"open": {"hour": 8, "minute": 0}, "close": {"hour": 17, "minute": 0}}],
+                  "thursday": [{"open": {"hour": 8, "minute": 0}, "close": {"hour": 17, "minute": 0}}],
+                  "friday": [{"open": {"hour": 8, "minute": 0}, "close": {"hour": 18, "minute": 0}}],
+                  "saturday": [{"open": {"hour": 9, "minute": 0}, "close": {"hour": 16, "minute": 0}}],
+                  "sunday": []
+                },
+                "current_status": "open"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
