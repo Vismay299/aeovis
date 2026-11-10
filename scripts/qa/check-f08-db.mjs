@@ -696,9 +696,13 @@ await group("approve", async (client) => {
   assert.equal(eventRows[0].event, "approved");
 });
 
-group("setup-save", async (client) => {
+await group("setup-save", async (client) => {
   const brandKey = await makeBrand(client, "setup-save");
   const actor = await makeUser(client, "setup-save");
+  await client.query(
+    "INSERT INTO public.customer_brand_memberships(user_id,brand_key,role) VALUES($1,$2,'owner')",
+    [actor, brandKey],
+  );
   const jobId = id();
 
   // Working set settings
