@@ -1,0 +1,47 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.123 sec.",
+  "cost": 0.09,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "13020000-0000-0000-0000-000000000002",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.120 sec.",
+      "cost": 0.09,
+      "result_count": 3,
+      "path": ["v3", "keywords_data", "google_ads", "keywords_for_keywords", "live"],
+      "data": {
+        "api": "keywords_data",
+        "function": "keywords_for_keywords"
+      },
+      "result": [
+        {
+          "keyword": "hotel reykjavik",
+          "search_volume": 1300,
+          "cpc": 2.54,
+          "competition": "HIGH",
+          "competition_index": 42
+        },
+        {
+          "keyword": "best hotel reykjavik",
+          "search_volume": 800,
+          "cpc": 2.1,
+          "competition": "MEDIUM",
+          "competition_index": 35
+        },
+        {
+          "keyword": "cheap hotel reykjavik",
+          "search_volume": 600,
+          "cpc": 1.9,
+          "competition": "LOW",
+          "competition_index": 20
+        }
+      ]
+    }
+  ]
+}

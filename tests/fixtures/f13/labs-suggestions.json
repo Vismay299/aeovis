@@ -1,0 +1,54 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.123 sec.",
+  "cost": 0.01212,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "13010000-0000-0000-0000-000000000002",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.120 sec.",
+      "cost": 0.01212,
+      "result_count": 1,
+      "path": ["v3", "dataforseo_labs", "google", "keyword_suggestions", "live"],
+      "data": {
+        "api": "dataforseo_labs",
+        "function": "keyword_suggestions"
+      },
+      "result": [
+        {
+          "se_type": "google",
+          "seed_keyword": "caregiving",
+          "location_code": 2840,
+          "language_code": "en",
+          "total_count": 1,
+          "items_count": 1,
+          "items": [
+            {
+              "keyword": "caregiving tips",
+              "keyword_info": {
+                "search_volume": 3200,
+                "cpc": 1.2,
+                "competition": 0.2,
+                "competition_level": "LOW",
+                "monthly_searches": [
+                  { "year": 2026, "month": 8, "search_volume": 3200 }
+                ]
+              },
+              "keyword_properties": {
+                "keyword_difficulty": 30
+              },
+              "search_intent_info": {
+                "main_intent": "informational"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
