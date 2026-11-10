@@ -275,6 +275,13 @@ SOFTWARE.
 - `src/lib/questions/workspaceQuestions.ts` (from `src/shared/ai-prompt-suggestions.ts`)
 - `src/lib/questions/applyQuestionPatch.ts` (from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts`)
 - `src/lib/questions/applyQuestionPatch.test.ts` (cases ported from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.test.ts`)
+- `src/lib/questions/panel.ts` (from `src/shared/ai-prompt-suggestions.ts`)
+- `src/lib/questions/state.ts` (from `src/server/features/ai-visibility/services/aiResearchKeywords.ts`)
+- `src/lib/questions/tools.ts` (from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts`)
+- `src/lib/questions/jobs.ts`
+- `src/lib/questions/questions.contract.ts`
+- `src/app/api/customer/questions/route.ts`
+- `src/app/api/customer/questions/approve/route.ts`
 - `src/shared/audit-fetch-class.ts` (from `src/shared/audit-fetch-class.ts`)
 - `src/shared/audit-issues.ts` (from `src/shared/audit-issues.ts`)
 - `src/shared/audit-limits.ts` (from `src/shared/audit-limits.ts`)
