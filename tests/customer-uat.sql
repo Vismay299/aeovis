@@ -497,4 +497,17 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 -- End F19 tenant check.
+-- F13: keyword_metrics is unreadable by authenticated customers (service role only).
+INSERT INTO public.keyword_metrics(keyword, location_code, language_code, search_volume, source)
+VALUES ('oversized tees', 2356, 'en', 8100, 'labs');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+  BEGIN
+    PERFORM count(*) FROM public.keyword_metrics;
+    RAISE EXCEPTION 'keyword_metrics is readable by customers';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+-- End F13 keyword_metrics check.
 ROLLBACK;

@@ -621,6 +621,11 @@ abandoned is not.
 - Objects (125): tables `site_audits`, `site_audit_pages`, `site_audit_issues`, `site_audit_lighthouse`, `site_audit_frontier`, `site_audit_links`; bucket `site-audit-lighthouse`.
 - Objects (126): functions `site_audit_create`, `site_audit_seed`, `site_audit_frontier_stats`, `site_audit_claim_chunk`, `site_audit_record_batch`, `site_audit_release`, `site_audit_abandon_chunk`, `site_audit_broken_links`, `site_audit_orphan_pages`, `site_audit_issue_summary`, `site_audit_destroy_scratch`, `prune_site_audits`.
 
+### `101_f13_keyword_metrics` (F13 phase 2)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply before deploying F13 phase 2.
+- Objects: table `keyword_metrics` (service-role only, RLS enabled), functions `upsert_keyword_metrics`, `prune_keyword_metrics`.
+
 
 ## D. Content approval — the human gate, and what it does not yet do
 

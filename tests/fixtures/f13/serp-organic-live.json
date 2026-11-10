@@ -1,0 +1,88 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.150 sec.",
+  "cost": 0.002,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "13010000-0000-0000-0000-000000000004",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.148 sec.",
+      "cost": 0.002,
+      "result_count": 1,
+      "path": ["v3", "serp", "google", "organic", "live", "advanced"],
+      "data": {
+        "api": "serp",
+        "function": "live",
+        "se": "google",
+        "se_type": "organic"
+      },
+      "result": [
+        {
+          "keyword": "in home care",
+          "type": "organic",
+          "se_domain": "google.com",
+          "location_code": 2840,
+          "language_code": "en",
+          "check_url": "https://www.google.com/search?q=in+home+care",
+          "datetime": "2026-11-10 12:00:00 +00:00",
+          "items_count": 4,
+          "items": [
+            {
+              "type": "ai_overview",
+              "rank_group": 1,
+              "rank_absolute": 1,
+              "title": "AI Overview"
+            },
+            {
+              "type": "organic",
+              "rank_group": 1,
+              "rank_absolute": 2,
+              "domain": "acme.example.com",
+              "title": "Acme Care - Best In Home Care",
+              "url": "https://acme.example.com/in-home-care",
+              "description": "Leading in-home caregiving services.",
+              "breadcrumb": "https://acme.example.com > in-home-care",
+              "etv": 1250.5,
+              "estimated_paid_traffic_cost": 340.0,
+              "backlinks_info": {
+                "referring_domains": 42,
+                "backlinks": 120
+              },
+              "rank_changes": {
+                "previous_rank_absolute": 3,
+                "is_new": false,
+                "is_up": true,
+                "is_down": false
+              }
+            },
+            {
+              "type": "people_also_ask",
+              "rank_group": 2,
+              "rank_absolute": 3,
+              "title": "People Also Ask"
+            },
+            {
+              "type": "organic",
+              "rank_group": 2,
+              "rank_absolute": 4,
+              "domain": "care.example.org",
+              "title": "Care Options Guide",
+              "url": "https://care.example.org/guide",
+              "description": "Comprehensive guide to care options.",
+              "breadcrumb": "https://care.example.org > guide",
+              "etv": null,
+              "estimated_paid_traffic_cost": null,
+              "backlinks_info": null,
+              "rank_changes": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

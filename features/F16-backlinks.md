@@ -395,9 +395,9 @@ Accessibility and phone: as F14 §6.6; charts have `aria-label` "Backlink trend 
 
 **Goal:** the metered Backlinks client and target normalisation.
 
-- [ ] **P1.T1 Client**
-  - [ ] **P1.T1.S1** *Files:* `src/lib/providers/dataforseo/backlinks.ts`, `backlinks.test.ts`, `backlinksTarget.ts`, `backlinksTarget.test.ts`, fixtures `tests/fixtures/f16/backlinks-*.json`. *Do:* §6.2.1; port `backlinks.test.ts:31-200` (target normalisation cases; "rejects exact-url targets with query strings or fragments"; summary top-level error classified through F02 to `UnbilledCallError`/`dataforseo_balance`; domain scope sends `include_subdomains: false`); add body assertions for each fetcher, spam conditions with `hideSpam` true/false, and "every entry is priced" with a spy `meter`. *Verify:* `node --test src/lib/providers/dataforseo/backlinks.test.ts src/lib/providers/dataforseo/backlinksTarget.test.ts` → pass (F16-AC-01, 02).
-  - [ ] **P1.T1.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
+- [x] **P1.T1 Client**
+  - [x] **P1.T1.S1** *Files:* `src/lib/providers/dataforseo/backlinks.ts`, `backlinks.test.ts`, `backlinksTarget.ts`, `backlinksTarget.test.ts`, fixtures `tests/fixtures/f16/backlinks-*.json`. *Do:* §6.2.1; port `backlinks.test.ts:31-200` (target normalisation cases; "rejects exact-url targets with query strings or fragments"; summary top-level error classified through F02 to `UnbilledCallError`/`dataforseo_balance`; domain scope sends `include_subdomains: false`); add body assertions for each fetcher, spam conditions with `hideSpam` true/false, and "every entry is priced" with a spy `meter`. *Verify:* `node --test src/lib/providers/dataforseo/backlinks.test.ts src/lib/providers/dataforseo/backlinksTarget.test.ts` → pass (F16-AC-01, 02).
+  - [x] **P1.T1.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
 
 **Checkpoint:** full suite `node --import ./src/lib/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'`, `npm run typecheck`, `npm run build`, F02's `noPrices.test.mjs` and `answerImportGuard.test.mjs` pass. Completes F16-AC-01, 02.
 

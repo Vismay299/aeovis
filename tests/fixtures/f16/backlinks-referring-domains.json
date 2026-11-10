@@ -1,0 +1,43 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.123 sec.",
+  "cost": 0.0276,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "16010000-0000-0000-0000-000000000005",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.120 sec.",
+      "cost": 0.0276,
+      "result_count": 1,
+      "path": ["v3", "backlinks", "referring_domains", "live"],
+      "data": {
+        "api": "backlinks",
+        "function": "referring_domains"
+      },
+      "result": [
+        {
+          "total_count": 1,
+          "items_count": 1,
+          "items": [
+            {
+              "domain": "partner.com",
+              "backlinks": 45,
+              "referring_pages": 12,
+              "rank": 38,
+              "first_seen": "2025-11-01 00:00:00 +00:00",
+              "broken_backlinks": 0,
+              "broken_pages": 0,
+              "backlinks_spam_score": 8,
+              "target_spam_score": 2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
