@@ -30,8 +30,10 @@ OpenSEO reference code: ~/.cache/aeovis/open-seo at commit c5f8db19c7ca9e750836b
 (clone it there and check out that commit if missing).
 
 Preflight — STOP and report to the user (do not start any role) if any of these fail:
-  - Every feature in the spec's "Depends on" (and any "requires … merged" note on this phase) is merged into main.
-  - Earlier phases of this feature are merged (Phase <PHASE> − 1 checkpoint is ticked in the spec on main).
+  - Every feature in the spec's "Depends on" (and any "requires … merged" note on this phase) is merged into origin/main.
+    Check against origin/main after `git fetch origin` (git log --oneline origin/main), never against the
+    local main branch: it is not updated by merges on GitHub and can be many commits behind.
+  - Earlier phases of this feature are merged (Phase <PHASE> − 1 checkpoint is ticked in the spec on origin/main).
   - Work in your own git worktree, never in the shared checkout: other sessions use it, and it may sit in a
     synced folder (Google Drive, OneDrive). Put the worktree outside any synced folder, e.g.
     ~/work/aeovis-wt/<feature-lowercase>-p<PHASE> on macOS or C:\work\aeovis-wt\<feature-lowercase>-p<PHASE> on Windows:
@@ -39,6 +41,10 @@ Preflight — STOP and report to the user (do not start any role) if any of thes
       git worktree add <worktree-path> -b feat/<feature-lowercase>-p<PHASE>-<short-name> origin/main
     Then do everything below, and every role's work, inside that worktree. If the path or branch already
     exists, stop and report. `git status` must be clean there.
+  - Confirm the worktree starts from the current origin/main (a stale base builds on old code):
+      git fetch origin
+      git merge-base --is-ancestor origin/main HEAD
+    It must succeed (exit code 0). If it fails, remove the worktree and branch, then create them again.
   - `npm ci && npm test` passes in the worktree (record the baseline pass count).
 
 ══════════════════════════════════════════════════════════════
