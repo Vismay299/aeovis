@@ -33,10 +33,10 @@ export const hashIdentity = (value) =>
     .update(JSON.stringify(canonical(value)))
     .digest("hex");
 
-export function dispatchIdentity(engine, env = process.env) {
+export function dispatchIdentity(engine, env = process.env, opts = {}) {
   return {
-    config_version: configVersion(engine, env),
-    circuit_key: hashIdentity(circuitIdentity(engine, env)),
+    config_version: configVersion(engine, env, opts),
+    circuit_key: hashIdentity(circuitIdentity(engine, env, opts)),
   };
 }
 
@@ -59,13 +59,17 @@ export function resultDecision(
       next_at: null,
     };
   }
-  const failure =
+  const classifiedFailure =
     result?.provider_failure ||
     (result?.error
       ? classifyProviderFailureEnvelope(null, result)
       : classifyProviderFailure({
           parseError: new Error("Unreadable measurement"),
         }));
+  const failure =
+    classifiedFailure?.ambiguous_call === true && classifiedFailure.retryable !== false
+      ? { ...classifiedFailure, retryable: false }
+      : classifiedFailure;
   const retry = planRetry({
     failure,
     attemptNumber: attempt,
@@ -185,16 +189,18 @@ export async function readProviderReadiness({
   store = createProbeDispatchStore(),
   env = process.env,
   now = new Date().toISOString(),
+  opts = {},
 } = {}) {
   const [canaries, circuits] = await Promise.all([
     store.canaries(),
     store.circuits ? store.circuits() : [],
   ]);
-  const report = buildProviderReadiness({ env, now, canaries });
+  const report = buildProviderReadiness({ env, now, canaries, opts });
   // An older valid canary cannot conceal a newer permanent account fault.
   // The circuit remains open to questions until a recovery canary closes it.
   for (const [engine, reading] of Object.entries(report.engines)) {
-    const identity = dispatchIdentity(engine, env);
+    const route = reading.adapter === "vendor_api" && reading.provider === "dataforseo" ? "dataforseo" : opts.route;
+    const identity = dispatchIdentity(engine, env, route ? { route } : undefined);
     const open = circuits.find(
       (c) => c.circuit_key === identity.circuit_key && c.open_until,
     );
@@ -215,4 +221,26 @@ export async function readProviderReadiness({
     report.degraded_reason = `${reading.label} is blocked by a measured provider failure`;
   }
   return report;
+}
+
+/**
+ * Runs fn() while renewing the dispatch lease every 60s until fn settles.
+ * Never throws from a failed renewal.
+ */
+export async function withLeaseRenewal(store, id, token, seconds, fn) {
+  const timer = setInterval(async () => {
+    try {
+      const res = await store.renew(id, token, seconds);
+      if (res === false || res?.accepted === false) {
+        console.warn(`[dispatch] lease renewal failed ${id}`);
+      }
+    } catch {
+      console.warn(`[dispatch] lease renewal failed ${id}`);
+    }
+  }, 60_000);
+  try {
+    return await fn();
+  } finally {
+    clearInterval(timer);
+  }
 }

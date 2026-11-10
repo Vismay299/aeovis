@@ -81,6 +81,7 @@ export const VENDORS = Object.freeze(
     { key: "gsc", env: ["GSC_SERVICE_ACCOUNT_KEY"], required: false },
     { key: "gsc_oauth", env: ["GSC_GOOGLE_CLIENT_ID", "GSC_GOOGLE_CLIENT_SECRET", "GSC_OAUTH_REDIRECT_URI", "GSC_TOKEN_ENCRYPTION_KEY"], required: false },
     { key: "cron", env: ["CRON_SECRET"], required: true },
+    { key: "dataforseo", env: ["DATAFORSEO_API_KEY"], required: false },
   ].map((v) => Object.freeze(v))
 );
 

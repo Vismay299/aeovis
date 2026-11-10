@@ -53,6 +53,8 @@ import {
   formatEngineList,
   parseEngineList,
 } from "../src/lib/engines/deployedEngines.js";
+import { routeOrder, isRouteConfigured } from "../src/lib/engines/engineRoutes.ts";
+import { fetchUserData } from "../src/lib/providers/dataforseo/appendix.ts";
 
 const PASS = "PASS";
 const FAIL = "FAIL";
@@ -379,6 +381,15 @@ export const VENDOR_CHECKS = {
 
     return { verdict: PASS, detail: `client ID ${clientId.slice(0, 12)}…, redirect ${redirectUri}, encryption key set` };
   },
+
+  async dataforseo() {
+    try {
+      await fetchUserData({ env: process.env });
+      return { verdict: PASS, detail: "user_data answered" };
+    } catch {
+      return { verdict: FAIL, detail: "DataForSEO request failed" };
+    }
+  },
 };
 
 /**
@@ -477,9 +488,17 @@ const OPENROUTER_ENGINES = new Set(["chatgpt", "gemini", "perplexity"]);
 /** resolveEnabledEngines' own fallback when ENGINES is unset (enginePipeline.js). */
 const FLEET_DEFAULT = "aio";
 
-function checkEngineAdvertising() {
-  const label = (names) => formatEngineList(names.map((n) => ENGINE_LABELS[n]));
-  const drift = engineDriftWarning(process.env);
+export function checkRouteFunding(engine, env = process.env) {
+  const routes = routeOrder(engine, env);
+  return routes.some((r) => isRouteConfigured(engine, r, env));
+}
+
+export function checkEngineAdvertising(env = process.env) {
+  const label = (names) => formatEngineList(names.map((n) => ENGINE_LABELS[n] || n));
+  const drift =
+    env === process.env
+      ? engineDriftWarning(process.env)
+      : engineDriftWarning(env);
   if (drift) return { ok: false, line: `MISMATCH: ${drift}` };
 
   // engineDriftWarning returns null when only ONE of the pair is set, because
@@ -488,8 +507,8 @@ function checkEngineAdvertising() {
   // ENGINES is server-only, so SSR renders the real list and the browser
   // renders the "aio" default (deployedEngines.js, the fallback path). Same
   // page, two answers, plus a React hydration mismatch.
-  const pub = parseEngineList(process.env.NEXT_PUBLIC_ENGINES);
-  const srv = parseEngineList(process.env.ENGINES);
+  const pub = parseEngineList(env.NEXT_PUBLIC_ENGINES);
+  const srv = parseEngineList(env.ENGINES);
 
   if (srv.length && !pub.length) {
     return {
@@ -515,26 +534,32 @@ function checkEngineAdvertising() {
     };
   }
 
-  const advertised = deployedEngines(process.env);
-  const unfunded = advertised.filter(
-    (name) => OPENROUTER_ENGINES.has(name) && !isOpenRouterEngineConfigured(name)
-  );
+  const advertised = deployedEngines(env);
+  const unfunded = advertised.filter((name) => {
+    // aio probing through Bright Data is governed by the brightdata vendor check
+    // row (required). Treating an unconfigured Bright Data credential as an
+    // advertising mismatch would cause `check:secrets` to exit 1 on clean deployments
+    // holding no credentials, violating "UNCONFIGURED is not a failure: exit 0".
+    if (name === "aio" && routeOrder(name, env).includes("brightdata")) {
+      return false;
+    }
+    return !checkRouteFunding(name, env);
+  });
   if (unfunded.length) {
     const one = unfunded.length === 1;
+    const routesStr = unfunded.map((name) => routeOrder(name, env).join(">")).join(", ");
     return {
       ok: false,
       line:
         `MISMATCH: the page advertises ${label(unfunded)}, but ` +
-        `the shared LLM_API_KEY / OpenRouter gateway is not ready, so ` +
-        `resolveEnabledEngines skips ${one ? "it" : "them"} on every scan. ` +
-        `Configure the shared key and gateway, or drop ${one ? "it" : "them"} ` +
-        `from ENGINES and NEXT_PUBLIC_ENGINES.`,
+        `no answer route for ${one ? "it" : "them"} is configured (routes: ${routesStr}). ` +
+        `Configure one, or drop ${one ? "it" : "them"} from ENGINES and NEXT_PUBLIC_ENGINES.`,
     };
   }
 
-  const from = env("NEXT_PUBLIC_ENGINES")
+  const from = env.NEXT_PUBLIC_ENGINES
     ? "NEXT_PUBLIC_ENGINES"
-    : env("ENGINES")
+    : env.ENGINES
       ? "ENGINES"
       : "the aio default";
   return {

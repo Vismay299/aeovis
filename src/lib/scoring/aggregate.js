@@ -127,13 +127,13 @@ export function aggregateMultiEnginePromptRuns(runs) {
   // Normalize weights for active engines
   let totalWeight = 0.0;
   activeEngines.forEach(eng => {
-    totalWeight += weightsDict[eng] ?? 0.25;
+    totalWeight += weightsDict[eng] ?? 0;
   });
   if (totalWeight === 0) totalWeight = 1.0;
   
   const normalizedWeights = {};
   activeEngines.forEach(eng => {
-    normalizedWeights[eng] = (weightsDict[eng] ?? 0.25) / totalWeight;
+    normalizedWeights[eng] = (weightsDict[eng] ?? 0) / totalWeight;
   });
   
   // Calculate weighted prompt score and mentioned rate
@@ -150,7 +150,7 @@ export function aggregateMultiEnginePromptRuns(runs) {
   
   // Sort engines by weight descending to find primary engine
   const sortedActive = [...activeEngines].sort((a, b) => {
-    return (weightsDict[b] ?? 0.25) - (weightsDict[a] ?? 0.25);
+    return (weightsDict[b] ?? 0) - (weightsDict[a] ?? 0);
   });
   const primaryEngine = sortedActive[0];
   const primaryAgg = engineAggs[primaryEngine];
