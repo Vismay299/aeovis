@@ -81,7 +81,7 @@ export async function promptgenCandidates(
   let paaCount = 0;
   const paaAdapter = async (term: string | string[]) => {
     paaCount += 1;
-    // OpenSEO's prompt generator can request more seed and blend terms than this
+    // The prompt generator can request more seed and blend terms than this
     // feature's approved quote allows. Stop at the F08 budget of three PAA calls.
     if (paaCount > 3) return [];
     const paaFetcher = deps?.fetchPeopleAlsoAsk ?? fetchPeopleAlsoAsk;
