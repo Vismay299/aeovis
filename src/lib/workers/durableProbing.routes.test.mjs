@@ -288,7 +288,15 @@ test("P3.T3.S1 Case 4: circuit opening mid-scan -> remaining rows of that engine
   assert.equal(outcome.checkpoint.blocked?.reason, "provider_circuit_open");
 });
 
-test("P3.T3.S1 Case 5: dataforseo live claim uses lease 180 and deadline 140 s", async () => {
+// Deferred to phase 4 (owner decision, 2026-11-11). Every approved DataForSEO
+// engine (aio, chatgpt, gemini) is a queued mode that phase 3 refuses for
+// scans, and perplexity, the only live mode, is not approved. No approved
+// engine can reach the live lease path until P4.T2.S2 makes queued engines
+// scan-capable; re-enable these two cases there with an approved engine.
+const DEFERRED_TO_PHASE_4 =
+  "deferred to F02 phase 4: no approved DataForSEO engine is live-scan capable in phase 3";
+
+test("P3.T3.S1 Case 5: dataforseo live claim uses lease 180 and deadline 140 s", { skip: DEFERRED_TO_PHASE_4 }, async () => {
   const env = {
     FEATURE_DATAFORSEO_ENGINES: "on",
     DATAFORSEO_API_KEY: "test-dfs-key",
@@ -328,7 +336,7 @@ test("P3.T3.S1 Case 5: dataforseo live claim uses lease 180 and deadline 140 s",
   assert.equal(probeDeadlineAt, 1000000 + 100000);
 });
 
-test("P3.T3.S1 Case 6: renewal every 60 s (fake timers)", async () => {
+test("P3.T3.S1 Case 6: renewal every 60 s (fake timers)", { skip: DEFERRED_TO_PHASE_4 }, async () => {
   const env = {
     FEATURE_DATAFORSEO_ENGINES: "on",
     DATAFORSEO_API_KEY: "test-dfs-key",
