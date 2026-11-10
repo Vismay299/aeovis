@@ -3,5 +3,7 @@
 
 import "./scanRun.ts";
 import "./scheduleSave.ts";
+import "./keywords.ts";
 export { scanRunAction } from "./scanRun.ts";
 export { scheduleSaveAction } from "./scheduleSave.ts";
+export { keywordResearchAction, serpRunAction } from "./keywords.ts";

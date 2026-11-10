@@ -371,6 +371,10 @@ test("usd6 rounds half-up to six decimals and SPEND_FEATURES is a closed union",
   assert.deepEqual([...SPEND_FEATURES], [
     "platform.selftest",
     "providers.dataforseo.selftest",
+    "keywords.research",
+    "keywords.serp",
+    "keywords.metrics_refresh",
+    "keywords.clustering",
   ]);
   assert.strictEqual(SPEND_FEATURES, SHARED_SPEND_FEATURES, "the lib path re-exports the shared array");
   assert.equal(isSpendFeature("platform.selftest"), true);
