@@ -410,6 +410,10 @@ SOFTWARE.
 - `src/lib/domain/pagination.ts` (from `src/server/features/domain/services/pagination.ts`)
 - `src/lib/pricing/actions/domain.ts` (from `src/serverFunctions/domain.ts`)
 
+- `src/lib/providers/dataforseo/backlinks.ts` (from `src/server/lib/dataforseo/backlinks.ts`)
+- `src/lib/providers/dataforseo/backlinks.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)
+- `src/lib/providers/dataforseo/backlinksTarget.ts` (from `src/server/lib/dataforseoBacklinksTarget.ts`)
+- `src/lib/providers/dataforseo/backlinksTarget.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)
 - `src/lib/providers/dataforseo/business.ts` (from `src/server/lib/dataforseo/business.ts`)
 - `src/lib/providers/dataforseo/business.test.ts` (from `src/server/lib/dataforseo/business.test.ts`)
 - `src/lib/local/shared.ts` (from `src/server/mcp/tools/local-seo-shared.ts`, `src/server/mcp/table.ts`, `src/server/mcp/tools/dataforseo-research-tools.ts`)

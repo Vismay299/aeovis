@@ -1,0 +1,95 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.123 sec.",
+  "cost": 0.0276,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "16010000-0000-0000-0000-000000000004",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.120 sec.",
+      "cost": 0.0276,
+      "result_count": 1,
+      "path": ["v3", "backlinks", "backlinks", "live"],
+      "data": {
+        "api": "backlinks",
+        "function": "backlinks"
+      },
+      "result": [
+        {
+          "total_count": 3,
+          "items_count": 3,
+          "items": [
+            {
+              "domain_from": "source-clean.com",
+              "url_from": "https://source-clean.com/post-1",
+              "url_to": "https://example.com/target-1",
+              "anchor": "Great Article",
+              "item_type": "anchor",
+              "dofollow": true,
+              "rank": 35,
+              "domain_from_rank": 40,
+              "page_from_rank": 30,
+              "backlinks_spam_score": 0,
+              "backlink_spam_score": 0,
+              "first_seen": "2026-01-15 10:00:00 +00:00",
+              "last_seen": "2026-10-20 12:00:00 +00:00",
+              "is_new": false,
+              "is_lost": false,
+              "is_broken": false,
+              "links_count": 1,
+              "rel_attributes": ["noopener"],
+              "attributes": null
+            },
+            {
+              "domain_from": "source-unknown.org",
+              "url_from": "https://source-unknown.org/reference",
+              "url_to": "https://example.com/target-2",
+              "anchor": "Resource",
+              "item_type": "anchor",
+              "dofollow": false,
+              "rank": 22,
+              "domain_from_rank": 25,
+              "page_from_rank": 20,
+              "backlinks_spam_score": null,
+              "backlink_spam_score": null,
+              "first_seen": "2026-03-01 08:30:00 +00:00",
+              "last_seen": "2026-10-18 14:00:00 +00:00",
+              "is_new": false,
+              "is_lost": false,
+              "is_broken": false,
+              "links_count": 1,
+              "rel_attributes": ["nofollow"],
+              "attributes": null
+            },
+            {
+              "domain_from": "source-spammy.net",
+              "url_from": "https://source-spammy.net/links",
+              "url_to": "https://example.com/target-3",
+              "anchor": "Click Here",
+              "item_type": "anchor",
+              "dofollow": true,
+              "rank": 10,
+              "domain_from_rank": 12,
+              "page_from_rank": 8,
+              "backlinks_spam_score": 55,
+              "backlink_spam_score": 55,
+              "first_seen": "2026-05-10 11:20:00 +00:00",
+              "last_seen": "2026-09-01 16:00:00 +00:00",
+              "is_new": false,
+              "is_lost": true,
+              "is_broken": true,
+              "links_count": 2,
+              "rel_attributes": null,
+              "attributes": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

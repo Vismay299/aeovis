@@ -1,0 +1,43 @@
+{
+  "version": "0.1.20260901",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.123 sec.",
+  "cost": 0.024036,
+  "tasks_count": 1,
+  "tasks_error": 0,
+  "tasks": [
+    {
+      "id": "16010000-0000-0000-0000-000000000001",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "time": "0.120 sec.",
+      "cost": 0.024036,
+      "result_count": 1,
+      "path": ["v3", "backlinks", "summary", "live"],
+      "data": {
+        "api": "backlinks",
+        "function": "summary"
+      },
+      "result": [
+        {
+          "target": "example.com",
+          "rank": 21,
+          "backlinks": 4120,
+          "referring_pages": 2980,
+          "referring_domains": 312,
+          "broken_backlinks": 14,
+          "broken_pages": 3,
+          "new_backlinks": 85,
+          "lost_backlinks": 40,
+          "new_reffering_domains": 9,
+          "lost_reffering_domains": 5,
+          "backlinks_spam_score": 12,
+          "info": {
+            "target_spam_score": 4
+          }
+        }
+      ]
+    }
+  ]
+}
