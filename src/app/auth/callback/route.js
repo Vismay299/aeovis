@@ -3,6 +3,9 @@ import { createCustomerSupabaseClient } from "@/lib/supabase/customer";
 import { authErrorCodeFrom } from "@/shared/auth-errors";
 import { normalizeAuthRedirect } from "@/shared/auth-redirect";
 import { isFirstSession, trackAuthServerEvent } from "@/lib/auth/telemetry";
+import { isFeatureEnabled } from "@/lib/features/flags";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { enqueueSignupEmails } from "@/lib/email/signup";
 
 export const dynamic = "force-dynamic";
 
@@ -72,9 +75,15 @@ export async function GET(request) {
           },
           user.id
         );
+        if (await isFeatureEnabled("lifecycle_email")) {
+          const admin = getSupabaseAdmin();
+          if (admin) {
+            await enqueueSignupEmails(admin, user);
+          }
+        }
       }
     } catch {
-      // Best-effort telemetry
+      // Best-effort telemetry and email enqueue
     }
 
     const { error: inviteError } = await client.rpc("accept_customer_team_invites");

@@ -1,0 +1,44 @@
+[
+  {
+    "brand": "brand_acme",
+    "window_at": "2026-10-22T09:32:00.000Z",
+    "disposition": "blocked",
+    "reason": "active_scan_overlap",
+    "recorded_at": "2026-10-22T09:32:00.000Z"
+  },
+  {
+    "brand": "brand_acme",
+    "window_at": "2026-10-22T09:35:00.000Z",
+    "disposition": "blocked",
+    "reason": "bounded_catchup_elapsed",
+    "recorded_at": "2026-10-22T09:35:00.000Z"
+  },
+  {
+    "brand": "brand_acme",
+    "window_at": "2026-10-22T09:40:00.000Z",
+    "disposition": "blocked",
+    "reason": "price_changed",
+    "recorded_at": "2026-10-22T09:40:00.000Z"
+  },
+  {
+    "brand": "brand_acme",
+    "window_at": "2026-10-22T09:42:00.000Z",
+    "disposition": "blocked",
+    "reason": "price_changed",
+    "recorded_at": "2026-10-22T09:42:00.000Z"
+  },
+  {
+    "brand": "brand_acme",
+    "window_at": "2026-10-22T09:45:00.000Z",
+    "disposition": "blocked",
+    "reason": "daily_cap",
+    "recorded_at": "2026-10-22T09:45:00.000Z"
+  },
+  {
+    "brand": "brand_acme",
+    "window_at": "2026-10-22T09:50:00.000Z",
+    "disposition": "blocked",
+    "reason": "workspace_cap",
+    "recorded_at": "2026-10-22T09:50:00.000Z"
+  }
+]

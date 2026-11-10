@@ -337,6 +337,10 @@ SOFTWARE.
 - `src/components/portal/context/hooks/useProjectContext.ts` (from `src/client/features/projects/project-context/shared.tsx`)
 - `src/components/portal/context/editableList.ts` (from `src/client/features/projects/project-context/EditableListSection.tsx`)
 - `src/components/portal/context/editableList.test.ts` (from `src/client/features/projects/project-context/EditableListSection.test.ts`)
+- `src/lib/email/sweeps.ts` (from `src/server/features/audit/services/firstAuditEmails.ts`, `src/server/email/onboarding-drip.ts`)
+- `src/lib/email/spendCap.ts` (from `src/server/email/onboarding-drip.ts`)
+- `src/lib/email/signup.ts` (from `src/server/email/loops.ts`)
+
 - `src/lib/audit/store.ts` (from `src/server/features/audit/AuditScratchpad.ts`, `src/server/features/audit/AuditRepository.ts`)
 - `src/lib/audit/memoryStore.ts` (from `src/server/features/audit/AuditScratchpad.ts`, `src/server/features/audit/AuditRepository.ts`)
 - `src/lib/audit/store.test.ts` (from `src/server/features/audit/AuditScratchpad.test.ts`)
