@@ -913,20 +913,20 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 ### Phase 2 — Curation routes and approval
 **Goal:** the working set can be read, edited and approved through APIs.
 
-- [ ] **P2.T1 Flags**
-  - [ ] **P2.T1.S1** *Files:* `src/lib/features/names.ts` (`question_curation: { spend: [] }`), `.env.example` (`FEATURE_QUESTION_CURATION=`, `FEATURE_QUESTION_CURATION_BRANDS=`). *Verify:* `node --test src/lib/features/*.test.ts` → pass.
-- [ ] **P2.T2 Panel and state**
-  - [ ] **P2.T2.S1** *Files:* `src/lib/questions/panel.ts`, `panel.test.ts`. *Do:* §6.2.3; tests: active-only, order, `question_id`/`cohort`/origin mapping, branded → diagnostic, persona/nothing/near-duplicate refusals, `duplicate_reason` clears a pair, diff counts. *Verify:* `node --test src/lib/questions/panel.test.ts` → pass (F08-AC-06 unit).
-  - [ ] **P2.T2.S2** *Files:* `src/lib/questions/state.ts`, `state.test.ts`. *Verify:* `node --test src/lib/questions/state.test.ts` → pass.
-- [ ] **P2.T3 Routes**
-  - [ ] **P2.T3.S1** *Files:* `src/app/api/customer/questions/route.ts` (GET, PATCH), `src/app/api/customer/questions/approve/route.ts`, `src/lib/questions/questions.contract.ts`. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [ ] **P2.T3.S2** *Files:* `src/lib/questions/questions.route.test.mjs`. *Do:* GET shape (lazy backfill once); PATCH create/edit/archive/revive; `revision_conflict`; approve success and each refusal; flag off → 404. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/questions/questions.route.test.mjs` → pass (F08-AC-06, 10, 21 partial).
-  - [ ] **P2.T3.S3** *Files:* `scripts/qa/check-f08-db.mjs` group `approve` (F08 approval produces version n+1 of `panel/default` with the same kind/key/state as a legacy approval; artifact `sha256` = `artifactHash(payload)`). *Verify:* `node scripts/qa/check-f08-db.mjs --group approve` → ok (F08-AC-06 DB, F08-AC-25).
-- [ ] **P2.T4 Retention and tools**
-  - [ ] **P2.T4.S1** *Files:* `src/lib/questions/jobs.ts` (`questions.retention`), `src/lib/jobs/kinds.ts`. *Verify:* `node --test src/lib/jobs/*.test.ts` → pass.
-  - [ ] **P2.T4.S2** *Files:* `src/lib/questions/tools.ts`, `tools.test.ts`. *Verify:* `node --test src/lib/questions/tools.test.ts` → pass.
+- [x] **P2.T1 Flags**
+  - [x] **P2.T1.S1** *Files:* `src/lib/features/names.ts` (`question_curation: { spend: [] }`), `.env.example` (`FEATURE_QUESTION_CURATION=`, `FEATURE_QUESTION_CURATION_BRANDS=`). *Verify:* `node --test src/lib/features/*.test.ts` → pass.
+- [x] **P2.T2 Panel and state**
+  - [x] **P2.T2.S1** *Files:* `src/lib/questions/panel.ts`, `panel.test.ts`. *Do:* §6.2.3; tests: active-only, order, `question_id`/`cohort`/origin mapping, branded → diagnostic, persona/nothing/near-duplicate refusals, `duplicate_reason` clears a pair, diff counts. *Verify:* `node --test src/lib/questions/panel.test.ts` → pass (F08-AC-06 unit).
+  - [x] **P2.T2.S2** *Files:* `src/lib/questions/state.ts`, `state.test.ts`. *Verify:* `node --test src/lib/questions/state.test.ts` → pass.
+- [x] **P2.T3 Routes**
+  - [x] **P2.T3.S1** *Files:* `src/app/api/customer/questions/route.ts` (GET, PATCH), `src/app/api/customer/questions/approve/route.ts`, `src/lib/questions/questions.contract.ts`. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
+  - [x] **P2.T3.S2** *Files:* `src/lib/questions/questions.route.test.mjs`. *Do:* GET shape (lazy backfill once); PATCH create/edit/archive/revive; `revision_conflict`; approve success and each refusal; flag off → 404. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/questions/questions.route.test.mjs` → pass (F08-AC-06, 10, 21 partial).
+  - [x] **P2.T3.S3** *Files:* `scripts/qa/check-f08-db.mjs` group `approve` (F08 approval produces version n+1 of `panel/default` with the same kind/key/state as a legacy approval; artifact `sha256` = `artifactHash(payload)`). *Verify:* `node scripts/qa/check-f08-db.mjs --group approve` → ok (F08-AC-06 DB, F08-AC-25).
+- [x] **P2.T4 Retention and tools**
+  - [x] **P2.T4.S1** *Files:* `src/lib/questions/jobs.ts` (`questions.retention`), `src/lib/jobs/kinds.ts`. *Verify:* `node --test src/lib/jobs/*.test.ts` → pass.
+  - [x] **P2.T4.S2** *Files:* `src/lib/questions/tools.ts`, `tools.test.ts`. *Verify:* `node --test src/lib/questions/tools.test.ts` → pass.
 
-**Checkpoint:** suite, typecheck, build, DB harness. ACs 06, 10, 25.
+- [x] **Checkpoint:** suite, typecheck, build, DB harness. ACs 06, 10, 25.
 
 ### Phase 3 — AI sources: setup research, Generate, question research
 **Goal:** paid drafting works end to end behind flags and price approval.

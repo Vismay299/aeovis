@@ -23,6 +23,8 @@ export const FEATURES = {
   indexnow: { spend: [] as const },
   // F02: routes answer engines through DataForSEO
   dataforseo_engines: { spend: [] as const },
+  // F08: gates question curation routes, approval, and workspace questions
+  question_curation: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

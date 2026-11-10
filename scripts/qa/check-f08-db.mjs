@@ -17,12 +17,15 @@ if (
 
 const pool = new pg.Pool({ max: 4 });
 const passed = [];
+const groupFlagIdx = process.argv.indexOf("--group");
+const targetGroup = groupFlagIdx !== -1 ? process.argv[groupFlagIdx + 1] : null;
 const fixtures = JSON.parse(
   readFileSync(new URL("../../tests/fixtures/f08/normalize-cases.json", import.meta.url), "utf8"),
 );
 const id = () => randomUUID();
 
 async function group(name, fn) {
+  if (targetGroup && targetGroup !== name) return;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -564,5 +567,139 @@ await group("scan-snapshot", async (client) => {
   assert.deepEqual(after[0].panel_snapshot, snapshot, "editing the working set must not mutate a queued scan snapshot");
 });
 
+await group("approve", async (client) => {
+  const brandKey = await makeBrand(client, "approve");
+  const actor = await makeUser(client, "approve");
+  await client.query(
+    "INSERT INTO public.customer_brand_memberships(user_id,brand_key,role) VALUES($1,$2,'owner')",
+    [actor, brandKey],
+  );
+  await client.query("SET LOCAL ROLE service_role");
+
+  // Initial legacy approved panel v1
+  const initialPrompt = {
+    id: id(),
+    question_id: id(),
+    cohort: "core",
+    text: "Which initial accounting software works for teams?",
+    topic: "Tools",
+    origin: "manual",
+    purpose: "recommendation",
+    weight: 1,
+  };
+  const v1 = await appendPanel(client, brandKey, {
+    prompts: [initialPrompt],
+    version: 0,
+    state: "approved",
+    actor,
+  });
+  assert.equal(v1.version, 1);
+  assert.equal(v1.state, "approved");
+  assert.equal(v1.kind, "panel");
+  assert.equal(v1.artifact_key, "default");
+
+  // Working set settings and questions for F08
+  await client.query(
+    "INSERT INTO public.workspace_question_settings(brand_key,revision,persona,country,language) VALUES($1,1,'Finance buyers','in','en')",
+    [brandKey],
+  );
+  const q1Id = id();
+  const q2Id = id();
+  await client.query(
+    "INSERT INTO public.workspace_questions(id,brand_key,text,topic,origin,status,branded) VALUES($1,$2,'Which new accounting software works for teams?','Tools','ai_generate','active',false), ($3,$2,'Is F08 approve good?','General','manual','active',true)",
+    [q1Id, brandKey, q2Id],
+  );
+
+  // F08 approval constructs payload and appends via append_repair_artifact
+  const prompts = [
+    {
+      id: q1Id,
+      question_id: q1Id,
+      text: "Which new accounting software works for teams?",
+      topic: "Tools",
+      origin: "generated",
+      workspace_origin: "ai_generate",
+      cohort: "core",
+      weight: 1,
+      purpose: "recommendation",
+    },
+    {
+      id: q2Id,
+      question_id: q2Id,
+      text: "Is F08 approve good?",
+      topic: "General",
+      origin: "manual",
+      workspace_origin: "manual",
+      cohort: "core",
+      weight: 1,
+      purpose: "diagnostic",
+    },
+  ];
+  const payload = {
+    persona: "Finance buyers",
+    context: { country: "in", language: "en", device: "desktop", session_policy: "fresh_anonymous" },
+    source: "workspace_questions",
+    workspace_revision: 1,
+    prompts,
+    reviewer: actor,
+    reviewed_at: new Date().toISOString(),
+    reason: null,
+  };
+  const hash = artifactHash(payload);
+
+  const { rows: approveRows } = await client.query(
+    "SELECT public.append_repair_artifact($1,'panel','default',1,'approved',$2::jsonb,$3,$4) AS artifact",
+    [brandKey, JSON.stringify(payload), hash, actor],
+  );
+  const v2 = approveRows[0].artifact;
+
+  // F08-AC-25: produces version n+1 of panel/default with same kind/key/state as legacy approval
+  assert.equal(v2.version, 2);
+  assert.equal(v2.state, "approved");
+  assert.equal(v2.kind, "panel");
+  assert.equal(v2.artifact_key, "default");
+  assert.equal(v2.brand, brandKey);
+
+  // Check stored artifact in repair_artifacts table
+  const { rows: artRows } = await client.query(
+    "SELECT id, sha256, state, payload FROM public.repair_artifacts WHERE id=$1",
+    [v2.id],
+  );
+  assert.equal(artRows.length, 1);
+  assert.equal(artRows[0].sha256, hash);
+  assert.equal(artRows[0].state, "approved");
+
+  // Check head
+  const { rows: headRows } = await client.query(
+    "SELECT version, artifact_id FROM public.repair_artifact_heads WHERE brand=$1 AND kind='panel' AND artifact_key='default'",
+    [brandKey],
+  );
+  assert.equal(headRows[0].version, 2);
+  assert.equal(headRows[0].artifact_id, v2.id);
+
+  // Record approved events and bump revision
+  const events = [
+    { question_id: q1Id, event: "approved", detail: { panel_version: 2 } },
+    { question_id: q2Id, event: "approved", detail: { panel_version: 2 } },
+  ];
+  const { rows: saveRows } = await client.query(
+    "SELECT public.save_workspace_questions($1,1,'[]'::jsonb,$2::jsonb,NULL,$3) AS result",
+    [brandKey, JSON.stringify(events), actor],
+  );
+  assert.equal(saveRows[0].result.revision, 2);
+
+  const { rows: eventRows } = await client.query(
+    "SELECT question_id, event, revision FROM public.workspace_question_events WHERE brand_key=$1 ORDER BY created_at",
+    [brandKey],
+  );
+  assert.equal(eventRows.length, 2);
+  assert.equal(eventRows[0].event, "approved");
+  assert.equal(eventRows[1].event, "approved");
+});
+
 await pool.end();
-console.log(`ok ${passed.length} groups: ${passed.join(", ")}`);
+if (targetGroup) {
+  console.log(`ok 1 group (${targetGroup})`);
+} else {
+  console.log(`ok ${passed.length} groups: ${passed.join(", ")}`);
+}

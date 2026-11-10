@@ -78,7 +78,8 @@ export type QuestionEvent = {
     | "resumed"
     | "topic_changed"
     | "replaced"
-    | "duplicate_reason";
+    | "duplicate_reason"
+    | "approved";
   detail?: Record<string, unknown>;
 };
 
