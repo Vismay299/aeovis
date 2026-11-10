@@ -14,6 +14,7 @@ import {
   planEngineCanary,
 } from "../engines/providerReadiness.js";
 import { classifyProviderFailure } from "../engines/providerFailure.js";
+import { routeOrder } from "../engines/engineRoutes.ts";
 
 export async function dispatchCanaries({
   engines,
@@ -25,6 +26,8 @@ export async function dispatchCanaries({
   registry = resolveEnabledEngines({ allowFallback: false }),
   env = process.env,
   now = Date.now,
+  route,
+  routes,
 }) {
   if (
     !slot ||
@@ -45,7 +48,9 @@ export async function dispatchCanaries({
   const scope = `provider-canary:${slot}`;
   const outcomes = [];
   for (const name of engines) {
-    const config = validateEngineConfig(name, env);
+    const effectiveRoute = route ?? routes?.[name] ?? routeOrder(name, env)[0];
+    const routeOpts = effectiveRoute ? { route: effectiveRoute } : {};
+    const config = validateEngineConfig(name, env, routeOpts);
     const engine = registry.find((e) => e.name === name);
     if (!config.ok || !engine) {
       outcomes.push({
@@ -55,14 +60,16 @@ export async function dispatchCanaries({
       });
       continue;
     }
-    const identity = dispatchIdentity(name, env);
+    const identity = dispatchIdentity(name, env, routeOpts);
     const requestUnits =
-      name === "perplexity" &&
-      planEngineCanary(name, env).provider === "perplexity"
-        ? 2
-        : name === "aio"
+      effectiveRoute === "dataforseo"
+        ? 1
+        : name === "perplexity" &&
+          planEngineCanary(name, env, routeOpts).provider === "perplexity"
           ? 2
-          : 1;
+          : name === "aio"
+            ? 2
+            : 1;
     const id = hashIdentity({ scope, name, geo, ...identity });
     await store.seed([
       {
@@ -106,7 +113,7 @@ export async function dispatchCanaries({
         "acme.example",
         [],
         {},
-        { geo,measurementContext:context,captureEvidence,durableDispatch: true, deadlineAt: now() + PROBE_REQUEST_MS },
+        { geo,measurementContext:context,captureEvidence,durableDispatch: true, deadlineAt: now() + PROBE_REQUEST_MS, ...(effectiveRoute ? { route: effectiveRoute } : {}) },
       );
     } catch (error) {
       result = {

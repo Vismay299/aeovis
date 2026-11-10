@@ -37,8 +37,9 @@
 import { createHash } from "node:crypto";
 
 import { VENDORS, credentialStatus } from "../vendorRegistry.js";
+import { resolveNodeEnv } from "../operatorPerimeter.js";
 import { getLlmBaseUrl, getLlmProvider } from "../llmConfig.js";
-import { getOpenRouterEngineModel, isOpenRouterEngineConfigured } from "./openRouterProbe.js";
+import { DATAFORSEO_APPROVED_ENGINES, getOpenRouterEngineModel, isOpenRouterEngineConfigured } from "./openRouterProbe.js";
 import { OPENAI_PROVIDER, getOpenAiModel } from "./openai.js";
 import { PERPLEXITY_PROVIDER, getPerplexityModel } from "./perplexity.js";
 import { resolveSerpGeo } from "./serpGeo.js";
@@ -136,6 +137,26 @@ export const ENGINE_KEYS = Object.freeze(Object.keys(ENGINE_SURFACES));
  */
 export const CANARY_QUERY = "readiness canary";
 
+function dataforseoRouteRefusal(engine, env = {}) {
+  if (!DATAFORSEO_APPROVED_ENGINES.includes(engine)) {
+    return {
+      reason: "engine_not_approved",
+      detail: `DataForSEO is not approved for ${ENGINE_SURFACES[engine]?.label ?? engine}`,
+      corrective_action: "Use an approved DataForSEO engine route",
+    };
+  }
+  const mode = String(env?.FEATURE_DATAFORSEO_ENGINES ?? "").trim().toLowerCase();
+  const enabled = mode === "on" || (!mode && resolveNodeEnv(env) !== "production");
+  if (!enabled) {
+    return {
+      reason: "feature_disabled",
+      detail: "DataForSEO answer engines are disabled",
+      corrective_action: "Set FEATURE_DATAFORSEO_ENGINES=on",
+    };
+  }
+  return null;
+}
+
 const present = (env, name) => String(env?.[name] ?? "").trim().length > 0;
 
 function registryEntry(key) {
@@ -154,9 +175,24 @@ export function credentialNamesFor(engine) {
   );
 }
 
+export function effectiveEngineRoute(engine, env, opts = {}) {
+  if (opts.route) return opts.route;
+  const raw = env?.ANSWER_ENGINE_ROUTES ?? process.env.ANSWER_ENGINE_ROUTES;
+  if (!raw) return undefined;
+  const match = raw.split(";").map((s) => s.trim()).find((s) => s.startsWith(`${engine}=`));
+  if (!match) return undefined;
+  const routes = match.split("=")[1]?.split(">").map((s) => s.trim()).filter(Boolean);
+  return routes?.[0];
+}
+
 /** Is any one credential route for this engine fully configured? */
-function routeSatisfied(engine, env) {
+function routeSatisfied(engine, env, opts = {}) {
+  const route = opts.route ?? effectiveEngineRoute(engine, env, opts);
+  if (route === "dataforseo") {
+    return present(env, "DATAFORSEO_API_KEY");
+  }
   const surface = ENGINE_SURFACES[engine];
+  if (!surface) return false;
   for (const group of surface.required_groups) {
     if (group.registry) {
       const vendor = registryEntry(group.registry);
@@ -207,9 +243,52 @@ function groupCredentialNames(group, env) {
  * adapter still accepts is not "unconfigured" merely because the canonical name
  * it renames is absent.
  */
-function resolveRoute(engine, env) {
+export function dataforseoModelLabel(engine) {
+  if (engine === "chatgpt") return "llm_scraper:chatgpt";
+  if (engine === "gemini") return "llm_scraper:gemini";
+  if (engine === "aio") return "serp:google_organic:async_aio";
+  return `llm_responses:${engine}:catalogue`;
+}
+
+export function resolveRoute(engine, env, opts = {}) {
   const surface = ENGINE_SURFACES[engine];
   if (!surface) return { adapter: null, provider: null, gateway: null, model: null, credential_names: [] };
+
+  if (opts.route === "dataforseo") {
+    const creds = present(env, "DATAFORSEO_API_KEY") ? ["DATAFORSEO_API_KEY"] : [];
+    return {
+      adapter: "vendor_api",
+      provider: "dataforseo",
+      gateway: null,
+      model: opts.model ?? dataforseoModelLabel(engine),
+      credential_names: creds,
+    };
+  }
+
+  if (opts.route === "openrouter") {
+    const registryGroup = surface.required_groups.find((group) => group.registry);
+    return {
+      adapter: "shared_gateway",
+      provider: getLlmProvider(getLlmBaseUrl(env)),
+      gateway: surface.gateway || "openrouter",
+      model: opts.model ?? resolvedModel(engine, env),
+      credential_names: registryGroup ? groupCredentialNames(registryGroup, env) : [],
+    };
+  }
+
+  if (opts.route === "vendor_api" || opts.route === "brightdata") {
+    const direct = surface.direct_variables.filter((name) => present(env, name));
+    const credentialNames = direct.length
+      ? direct
+      : (surface.required_groups.map((group) => groupCredentialNames(group, env)).find((names) => names.length) ?? []);
+    return {
+      adapter: "vendor_api",
+      provider: surface.provider,
+      gateway: null,
+      model: opts.model ?? resolvedModel(engine, env),
+      credential_names: credentialNames,
+    };
+  }
 
   if (directKeyPresent(engine, env) || !surface.gateway) {
     // Native path. The credential is the direct variable when the surface has
@@ -223,7 +302,7 @@ function resolveRoute(engine, env) {
       adapter: "vendor_api",
       provider: surface.provider,
       gateway: null,
-      model: resolvedModel(engine, env),
+      model: opts.model ?? resolvedModel(engine, env),
       credential_names: credentialNames,
     };
   }
@@ -236,7 +315,7 @@ function resolveRoute(engine, env) {
     adapter: "shared_gateway",
     provider: getLlmProvider(getLlmBaseUrl(env)),
     gateway: surface.gateway,
-    model: resolvedModel(engine, env),
+    model: opts.model ?? resolvedModel(engine, env),
     credential_names: registryGroup ? groupCredentialNames(registryGroup, env) : [],
   };
 }
@@ -254,9 +333,9 @@ function resolveRoute(engine, env) {
  * Returns the NAME of each variable alongside its digest, because an operator
  * needs to know which variable moved without being told what it moved to.
  */
-export function credentialFingerprint(engine, env = {}) {
+export function credentialFingerprint(engine, env = {}, opts = {}) {
   const parts = [];
-  for (const name of resolveRoute(engine, env).credential_names) {
+  for (const name of resolveRoute(engine, env, opts).credential_names) {
     if (!present(env, name)) continue;
     const digest = createHash("sha256").update(`${name}:${String(env[name])}`).digest("hex").slice(0, 16);
     parts.push(`${name}#${digest}`);
@@ -275,17 +354,17 @@ export function credentialFingerprint(engine, env = {}) {
  * string is the SELECTED route's, so a native key and the shared gateway cannot
  * share a version.
  */
-export function configVersion(engine, env = {}) {
+export function configVersion(engine, env = {}, opts = {}) {
   const surface = ENGINE_SURFACES[engine];
   if (!surface) return null;
-  const route = resolveRoute(engine, env);
+  const route = resolveRoute(engine, env, opts);
   return [
     "v1",
     route.provider || "unknown-provider",
     route.adapter === "shared_gateway" ? "gateway" : "direct",
     route.gateway || "n/a",
     route.model || "unknown-model",
-    credentialFingerprint(engine, env) || "unconfigured",
+    credentialFingerprint(engine, env, opts) || "unconfigured",
   ].join(":");
 }
 
@@ -317,13 +396,14 @@ const GATEWAY_MODEL_RE = /^[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
  *
  * @param {string} engine
  * @param {Record<string, string|undefined>} [env]
+ * @param {object} [opts]
  * @returns {{provider: string|null, account: string|null}}
  */
-export function circuitIdentity(engine, env = {}) {
-  const route = resolveRoute(engine, env);
+export function circuitIdentity(engine, env = {}, opts = {}) {
+  const route = resolveRoute(engine, env, opts);
   return {
     provider: route.provider ?? null,
-    account: credentialFingerprint(engine, env),
+    account: credentialFingerprint(engine, env, opts),
   };
 }
 
@@ -332,11 +412,12 @@ export function circuitIdentity(engine, env = {}) {
  *
  * @param {string} engine
  * @param {Record<string, string|undefined>} [env]
+ * @param {object} [opts]
  * @returns {{ok: boolean, configured: boolean, missing: string[], reason: string|null,
  *            detail: string|null, corrective_action: string|null,
  *            provider_requests: 0}}
  */
-export function validateEngineConfig(engine, env = {}) {
+export function validateEngineConfig(engine, env = {}, opts = {}) {
   if (!ENGINE_SURFACES[engine]) {
     return {
       ok: false,
@@ -345,6 +426,19 @@ export function validateEngineConfig(engine, env = {}) {
       reason: "unsupported_engine",
       detail: `${engine} is not an offered surface`,
       corrective_action: `Choose one of the offered engines: ${ENGINE_KEYS.join(", ")}`,
+      provider_requests: 0,
+    };
+  }
+  if (opts.route === "dataforseo") {
+    const routeRefusal = dataforseoRouteRefusal(engine, env);
+    const configured = present(env, "DATAFORSEO_API_KEY");
+    return {
+      ok: configured && !routeRefusal,
+      configured,
+      missing: configured ? [] : ["DATAFORSEO_API_KEY"],
+      reason: routeRefusal?.reason ?? (configured ? null : "missing_credential"),
+      detail: routeRefusal?.detail ?? (configured ? null : "DataForSEO has no DATAFORSEO_API_KEY configured"),
+      corrective_action: routeRefusal?.corrective_action ?? (configured ? null : "Set DATAFORSEO_API_KEY"),
       provider_requests: 0,
     };
   }
@@ -362,7 +456,7 @@ export function validateEngineConfig(engine, env = {}) {
       provider_requests: 0,
     };
   }
-  const plan = planEngineCanary(engine, env);
+  const plan = planEngineCanary(engine, env, opts);
   return {
     ok: plan.dispatch,
     configured: true,
@@ -395,9 +489,9 @@ export function validateEngineConfig(engine, env = {}) {
  *   refusal: null|{reason: string, detail: string, corrective_action: string}
  * }}
  */
-export function planEngineCanary(engine, env = {}) {
+export function planEngineCanary(engine, env = {}, opts = {}) {
   const surface = ENGINE_SURFACES[engine];
-  const route = resolveRoute(engine, env);
+  const route = resolveRoute(engine, env, opts);
   const gatewayUsed = route.adapter === "shared_gateway" ? route.provider : null;
   const empty = {
     engine,
@@ -414,12 +508,12 @@ export function planEngineCanary(engine, env = {}) {
       gateway: gatewayUsed,
       model: route.model,
       credential_variables: route.credential_names,
-      credential_fingerprint: credentialFingerprint(engine, env),
+      credential_fingerprint: credentialFingerprint(engine, env, opts),
     },
     dispatch_plan: [],
     provider_requests: 0,
     refusal: null,
-    circuit_identity: circuitIdentity(engine, env),
+    circuit_identity: circuitIdentity(engine, env, opts),
   };
 
   if (!surface) {
@@ -430,6 +524,27 @@ export function planEngineCanary(engine, env = {}) {
         detail: `${engine} is not an offered surface`,
         corrective_action: `Choose one of the offered engines: ${ENGINE_KEYS.join(", ")}`,
       },
+    };
+  }
+
+  if (opts.route === "dataforseo") {
+    const routeRefusal = dataforseoRouteRefusal(engine, env);
+    if (routeRefusal) return { ...empty, refusal: routeRefusal };
+    if (!present(env, "DATAFORSEO_API_KEY")) {
+      return {
+        ...empty,
+        refusal: {
+          reason: "missing_credential",
+          detail: "DataForSEO has no configured credential route",
+          corrective_action: "Set DATAFORSEO_API_KEY",
+        },
+      };
+    }
+    return {
+      ...empty,
+      dispatch: true,
+      config_version: configVersion(engine, env, opts),
+      dispatch_plan: [{ adapter: route.adapter, provider: route.provider }],
     };
   }
 
@@ -471,7 +586,7 @@ export function planEngineCanary(engine, env = {}) {
     return {
       ...empty,
       dispatch: true,
-      config_version: configVersion(engine, env),
+      config_version: configVersion(engine, env, opts),
       dispatch_plan: [{ adapter: route.adapter, provider: route.provider }],
     };
   }
@@ -482,7 +597,7 @@ export function planEngineCanary(engine, env = {}) {
   return {
     ...empty,
     dispatch: true,
-    config_version: configVersion(engine, env),
+    config_version: configVersion(engine, env, opts),
     dispatch_plan: [{ adapter: route.adapter, provider: route.provider }],
   };
 }
@@ -510,6 +625,9 @@ function policyFor(deps = {}) {
  */
 function classifyAttempt({ probeResult, thrown, plan }) {
   if (thrown) return classifyProviderFailure({ provider: plan.provider, error: thrown });
+  if (probeResult?.provider_failure?.ambiguous_call === true) {
+    return { ...probeResult.provider_failure, retryable: false };
+  }
   const carrier = probeResult?.failure || {};
   // A failure carrier that names a status or a body is evidence about a real
   // response, and must be classified as such — treating it as a parse error
@@ -786,10 +904,18 @@ function attemptRecord({ attemptNumber, attemptStartedAt, attemptEndedAt, classi
  * @param {string} input.now ISO timestamp
  * @param {number} [input.ttlMs]
  */
-export function readinessForEngine({ engine, env = {}, canary = null, now, ttlMs = READY_TTL_MS }) {
-  const plan = planEngineCanary(engine, env);
+export function readinessForEngine({ engine, env = {}, canary = null, now, ttlMs = READY_TTL_MS, opts = {} }) {
+  const effectiveRoute = opts.route ?? effectiveEngineRoute(engine, env, opts);
+  const routeOpts = effectiveRoute ? { ...opts, route: effectiveRoute } : opts;
+  const plan = planEngineCanary(engine, env, routeOpts);
   const nowMs = Date.parse(now);
-  const configured = ENGINE_SURFACES[engine] ? routeSatisfied(engine, env) : false;
+  const configured = ENGINE_SURFACES[engine]
+    ? effectiveRoute === "dataforseo"
+      ? present(env, "DATAFORSEO_API_KEY")
+      : routeSatisfied(engine, env, routeOpts)
+    : false;
+  const dataforseoRefusal =
+    effectiveRoute === "dataforseo" ? dataforseoRouteRefusal(engine, env) : null;
 
   const base = {
     engine,
@@ -826,13 +952,24 @@ export function readinessForEngine({ engine, env = {}, canary = null, now, ttlMs
     };
   }
 
+  if (dataforseoRefusal) {
+    return {
+      ...base,
+      readiness: READINESS.BLOCKED,
+      reason: dataforseoRefusal.reason,
+      detail: dataforseoRefusal.detail,
+      operator_action: dataforseoRefusal.corrective_action,
+    };
+  }
+
   if (!configured) {
+    const credNames = effectiveRoute === "dataforseo" ? ["DATAFORSEO_API_KEY"] : credentialNamesFor(engine);
     return {
       ...base,
       readiness: READINESS.BLOCKED,
       reason: "missing_credential",
       detail: `no credential route is configured for ${ENGINE_SURFACES[engine].label}`,
-      operator_action: `Set ${credentialNamesFor(engine).join(" or ")}`,
+      operator_action: `Set ${credNames.join(" or ")}`,
     };
   }
 
@@ -907,11 +1044,11 @@ export function readinessForEngine({ engine, env = {}, canary = null, now, ttlMs
  * `provider_requests: 0` is not decoration: it is the number this function made,
  * and R01-12 asserts a hundred calls to it leave the provider untouched.
  */
-export function buildProviderReadiness({ engines = ENGINE_KEYS, env = {}, canaries = {}, now, ttlMs = READY_TTL_MS }) {
+export function buildProviderReadiness({ engines = ENGINE_KEYS, env = {}, canaries = {}, now, ttlMs = READY_TTL_MS, opts = {} }) {
   const reports = {};
   const summary = { ready: [], unverified: [], degraded: [], blocked: [], stale: [] };
   for (const engine of engines) {
-    const report = readinessForEngine({ engine, env, canary: canaries?.[engine] ?? null, now, ttlMs });
+    const report = readinessForEngine({ engine, env, canary: canaries?.[engine] ?? null, now, ttlMs, opts: opts[engine] || opts });
     reports[engine] = report;
     const bucket = summary[report.readiness];
     if (bucket) bucket.push(engine);

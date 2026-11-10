@@ -85,6 +85,7 @@ function unpricedOutcome(stats, state, detail, error = null) {
     cost_source: null,
     cost_state: state,
     cost_state_detail: detail,
+    gateway: "openai",
     error,
   };
 }
@@ -125,6 +126,7 @@ export async function probeChatGpt(query, options = {}) {
         error: result.error,
         error_kind: result.error_kind,
         provider_failure: result.provider_failure,
+        gateway: "openrouter",
       };
     }
     console.warn("[chatgpt] no OPENAI_API_KEY or shared OpenRouter LLM_API_KEY — skipping");
@@ -321,6 +323,7 @@ export async function probeChatGpt(query, options = {}) {
         provider_request_id: resJson?.id || null,
         search_requests: Array.isArray(resJson?.output) ? resJson.output.filter(item => item.type === "web_search_call").length : null,
         usage: resJson?.usage || null,
+        gateway: "openai",
         error: null,
       };
     } catch (e) {

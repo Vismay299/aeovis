@@ -21,6 +21,7 @@ if (
       maxRequests: Number(args["max-requests"]),
       maxSpendUsd: Number(args["max-spend-usd"]),
       reserveUsd: Number(args["reserve-usd"]),
+      route: args.route || undefined,
     });
     console.log(JSON.stringify(result, null, 2));
     if (result.some((r) => !["answered", "valid_no_aio"].includes(r.state)))
