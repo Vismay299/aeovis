@@ -27,6 +27,8 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "project_memory",
   "keyword_research",
   "keyword_clustering",
+  "domain_research",
+  "local_seo",
 ];
 
 export type ClientFeatureName = FeatureName;
