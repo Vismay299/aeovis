@@ -751,25 +751,27 @@ The phase 3 PR sets `DATAFORSEO_APPROVED_ENGINES` to the record's approved list;
 
 **Goal:** answer engines can run on DataForSEO inside the P0 fence and every result names its gateway. (Claude as an engine is deferred.)
 
-- [ ] **P3.T1 Routes**
+- [x] **P3.T1 Routes**
   - [x] **P3.T1.S1** *Files:* `src/lib/engines/engineRoutes.ts`, `engineRoutes.test.ts`, fixture `tests/fixtures/f02/config-versions-today.json` (recorded by running `configVersion`/`circuitIdentity` for the four engines on `main` before this PR with a synthetic env: `LLM_API_KEY=k1`, `LLM_BASE_URL=https://openrouter.ai/api/v1`, `BRIGHTDATA_API_KEY=k2`, `OPENROUTER_GEMINI_MODEL=google/gemini-3.8-flash`). *Verify:* `node --test src/lib/engines/engineRoutes.test.ts` → pass (F02-AC-21, 22).
   - [x] **P3.T1.S2** *Files:* `src/lib/engines/providerReadiness.js`, `src/lib/vendorRegistry.js`. *Do:* §6.2.6 rows. *Verify:* `node --test src/lib/engines/*.test.mjs src/lib/vendorRegistry*.test.mjs` → pass (existing readiness tests unchanged).
-- [ ] **P3.T2 Adapters**
+- [x] **P3.T2 Adapters**
   - [x] **P3.T2.S1** *Files:* `src/lib/engines/dataforseo.ts`, `dataforseo.test.ts`. *Do:* §6.2.4 with fixtures; evidence capture asserted (`evidenceDocument` succeeds, payload has no `headers` key). *Verify:* `node --test src/lib/engines/dataforseo.test.ts` → pass (F02-AC-18, 25).
   - [x] **P3.T2.S2** *Files:* `src/lib/engines/providerFailure.js`, `providerFailure.dataforseo.test.mjs`. *Verify:* pass (F02-AC-23).
   - [x] **P3.T2.S3** *Files:* `src/lib/scoring/enginePipeline.js` (`probeTextEngine` gateway/method, registry selection, `probeAioDataforseo`), `src/lib/engines/openRouterProbe.js`, `openai.js`, `perplexity.js`, `serpGeo.js`, `gatewayProvenance.test.mjs`. *Verify:* `node --test src/lib/engines/gatewayProvenance.test.mjs src/lib/scoring/enginePipeline.test.mjs` → pass (F02-AC-19).
-- [ ] **P3.T3 Durable dispatch wiring**
+- [x] **P3.T3 Durable dispatch wiring**
   - [x] **P3.T3.S1** *Files:* `src/lib/db/probeDispatch.js` (`dispatchIdentity` opts), `src/lib/workers/durableProbing.js` (routes freeze, lease/budget per route, `withLeaseRenewal`, lane concurrency), `src/lib/workers/durableProbing.routes.test.mjs`. Cases: checkpoint without `routes` behaves exactly as before (snapshot of claim calls); frozen route reused across chunks; circuit open at freeze → fallback frozen with `fallbackFrom`; circuit opening mid-scan → remaining rows of that engine blocked, no switch; dataforseo live claim uses lease 180 and deadline 140 s; renewal every 60 s (fake timers); lane stops new claims after an `opens_circuit` result; `dataforseo` scraper route refused for scans while `QUEUED_COLLECTION_READY` is absent. *Verify:* `node --test src/lib/workers/durableProbing.routes.test.mjs src/lib/workers/*.test.mjs` → pass (F02-AC-22, 26). **Deferred (owner, 2026-11-11):** the two live-lease cases (lease 180 / deadline, renewal every 60 s) are skipped until P4.T2.S2, because every approved DataForSEO engine is queued and perplexity (the only live mode) is not approved; F02-AC-26 moves to phase 4.
   - [x] **P3.T3.S2** *Files:* `src/lib/ops/providerCanary.js` (request units 1 for dataforseo routes; passes `{ route }` from `routeOrder(engine, env)[0]` or a `--route` override in `scripts/ops/provider-canary.mjs`), `src/lib/ops/providerCanary.dataforseo.test.mjs`. *Verify:* pass (F02-AC-24).
-- [ ] **P3.T4 Marketing guard and report badge** (Claude parts deferred)
+- [x] **P3.T4 Marketing guard and report badge** (Claude parts deferred) — S2–S4 done; S1 deferred by owner decision (Claude not offered)
   - [ ] **P3.T4.S1 (deferred — skip)** *Files:* `src/lib/engines/deployedEngines.js`, `src/app/page.js`, `src/lib/scoring/enginePipeline.js` (`claude` registry entry, `ENGINE_WEIGHTS.claude`), `src/lib/engines/types.js`, `src/lib/engines/claudeEngine.test.mjs`. *Verify:* `node --test src/lib/engines/claudeEngine.test.mjs src/lib/landingHonesty.test.mjs src/lib/landingProbeCounter.test.mjs` → pass (F02-AC-20).
   - [x] **P3.T4.S2** *Files:* `scripts/check-secrets.mjs`, `src/lib/checkSecretsEngines.test.mjs` (new; imports the exported `checkEngineAdvertising` after it is exported). Cases: `ENGINES=perplexity` without a route → MISMATCH line; `perplexity=dataforseo>openrouter` with only `LLM_API_KEY` → ok (fallback funds it); DataForSEO vendor check prints only PASS/FAIL. *Verify:* `node --test src/lib/checkSecretsEngines.test.mjs` → pass.
   - [x] **P3.T4.S3** *Files:* `src/components/portal/scans/ReportCards.jsx`, `scripts/qa/check-dataforseo-browser.mjs` (local app with the existing report fixture plus one `consumer_capture` row; asserts badge text "Consumer app" and "Model API"). *Verify:* `node scripts/qa/check-dataforseo-browser.mjs` → "2 passed" (F02-AC-30).
   - [x] **P3.T4.S4** *Do:* confirm `src/lib/scoring/aggregate.js` ignores engines missing from `ENGINE_DEFAULT_WEIGHTS`: `git grep -n "ENGINE_DEFAULT_WEIGHTS\|ENGINE_HYBRID_WEIGHTS" src/lib/scoring/aggregate.js`; if it indexes weights without a guard, add `?? 0` there and a case in its test. *Verify:* `node --test src/lib/scoring/*.test.mjs` → pass.
-- [ ] **P3.T5 Gate**
+- [x] **P3.T5 Gate**
   - [x] **P3.T5.S1** *Files:* `src/lib/engines/engineRoutes.ts` (`DATAFORSEO_APPROVED_ENGINES` from the decision record), `src/lib/engines/dataforseoGate.test.mjs`. *Verify:* pass (F02-AC-12).
 
 **Checkpoint:** full suite, typecheck, build, `node scripts/check-secrets.mjs` (owner, optional), CI `customer-database` (`check-probe-dispatch.mjs` unchanged). Completes F02-AC-12, 18–26, 30. Production behaviour is unchanged until the owner sets `ANSWER_ENGINE_ROUTES` and `FEATURE_DATAFORSEO_ENGINES`.
+
+**Checkpoint passed:** merged in #74 (3840a57) with CI green. P3.T4.S1 is deferred, not outstanding; it does not block phase 4.
 
 ### Phase 4 — Queued collection in scans
 
