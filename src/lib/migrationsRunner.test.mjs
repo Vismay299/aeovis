@@ -388,6 +388,8 @@ const FULL_CATALOG = [
   "probe_observations_explore_run_idx", "probe_observations_explore_reuse_idx", "seed_explore_observations",
   "explore_runs", "explore_runs_brand_idx", "explore_runs_user_idx", "explore_runs_active_idx",
   "f11_upsert_explore_attempt_rows", "settle_explore_hold", "settle_finished_explore_holds", "prune_explore_runs",
+  // 045_f02_queued_dispatch.sql — F02 queued post/collect lifecycle.
+  "post_probe_dispatch", "reschedule_probe_collection", "collect_probe_dispatch", "expire_posted_probe_dispatch",
 ];
 
 function withRegister(dir) {
