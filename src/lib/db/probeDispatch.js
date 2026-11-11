@@ -122,6 +122,44 @@ export function createProbeDispatchStore(client = supabase) {
         p_failure: decision.failure,
         p_next_at: decision.next_at,
       }),
+    post: (id, token, taskId, postCost, nextAt, collectUntil) =>
+      rpc("post_probe_dispatch", {
+        p_id: id,
+        p_token: token,
+        p_task_id: taskId,
+        p_post_cost: postCost,
+        p_next_at: nextAt,
+        p_collect_until: collectUntil,
+      }),
+    collect: (id, token, result, state, failure = null, nextAt = null, settledCost = null) =>
+      rpc("collect_probe_dispatch", {
+        p_id: id,
+        p_token: token,
+        p_result: result,
+        p_state: state,
+        p_failure: failure,
+        p_next_at: nextAt,
+        p_settled_cost: settledCost,
+      }),
+    reschedule: (id, token, nextAt) =>
+      rpc("reschedule_probe_collection", {
+        p_id: id,
+        p_token: token,
+        p_next_at: nextAt,
+      }),
+    async listPosted(jobId) {
+      const { data, error } = await client
+        .from("probe_observations")
+        .select("*,probe_attempts!probe_attempts_observation_id_fkey(lease_token,attempt_no,provider_task_id,posted_at,collect_until,charged_usd,dispatch_state)")
+        .eq("job_id", jobId)
+        .eq("state", "posted")
+        .order("next_attempt_at");
+      if (error) throw error;
+      return (data || []).map((row) => {
+        const attempt = (row.probe_attempts || []).find((item) => item.dispatch_state === "posted") || null;
+        return { ...row, attempt };
+      });
+    },
     async list(jobId) {
       const { data, error } = await client
         .from("probe_observations")
