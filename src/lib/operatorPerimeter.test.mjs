@@ -256,6 +256,11 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     "/api/customer/domain/keywords",
     "/api/customer/domain/overview",
     "/api/customer/domain/pages",
+    // F16 — backlinks research routes. Self-gated via requireWorkspace.
+    "/api/customer/backlinks/overview",
+    "/api/customer/backlinks/referring-domains",
+    "/api/customer/backlinks/rows",
+    "/api/customer/backlinks/top-pages",
     // F04 — the client-visible feature flags. Self-gated like every other
     // customer route: it answers only for a workspace the caller belongs to.
     "/api/customer/features",
