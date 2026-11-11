@@ -508,6 +508,30 @@ DO $$ BEGIN
     RAISE EXCEPTION 'keyword_metrics is readable by customers';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
+-- F13: saved keywords, tags, and tag assignments tenant isolation.
+INSERT INTO public.saved_keywords(id, brand_key, keyword, location_code, language_code) VALUES
+ ('13000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','oversized tees',2356,'en'),
+ ('13000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','oversized tees',2356,'en');
+INSERT INTO public.saved_keyword_tags(id, brand_key, name, normalized_name) VALUES
+ ('13100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','Tees','tees'),
+ ('13100000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','Tees','tees');
+INSERT INTO public.saved_keyword_tag_assignments(brand_key, saved_keyword_id, tag_id) VALUES
+ ('10000000-0000-0000-0000-000000000001','13000000-0000-0000-0000-000000000001','13100000-0000-0000-0000-000000000001');
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO public.saved_keyword_tag_assignments(brand_key, saved_keyword_id, tag_id) VALUES
+     ('10000000-0000-0000-0000-000000000001','13000000-0000-0000-0000-000000000001','13100000-0000-0000-0000-000000000002');
+    RAISE EXCEPTION 'Cross-workspace tag assignment was allowed';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+END $$;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.saved_keywords) <> 1 OR (SELECT count(*) FROM public.saved_keyword_tags) <> 1
+     OR (SELECT count(*) FROM public.saved_keyword_tag_assignments) <> 1
+    THEN RAISE EXCEPTION 'Saved keywords leaked across tenants'; END IF;
+END $$;
 RESET ROLE;
--- End F13 keyword_metrics check.
+-- End F13 saved keywords check.
 ROLLBACK;
+

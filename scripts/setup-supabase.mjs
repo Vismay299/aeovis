@@ -508,10 +508,23 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "site_audit_destroy_scratch" },
     { kind: "function", name: "prune_site_audits" },
   ],
+  "100_f13_saved_keywords.sql": [
+    { kind: "table", name: "saved_keywords" },
+    { kind: "table", name: "saved_keyword_tags" },
+    { kind: "table", name: "saved_keyword_tag_assignments" },
+  ],
   "101_f13_keyword_metrics.sql": [
     { kind: "table", name: "keyword_metrics" },
     { kind: "function", name: "upsert_keyword_metrics" },
     { kind: "function", name: "prune_keyword_metrics" },
+  ],
+  "102_f13_saved_keyword_functions.sql": [
+    { kind: "function", name: "save_keywords" },
+    { kind: "function", name: "list_saved_keywords" },
+    { kind: "function", name: "update_saved_keyword_tags" },
+    { kind: "function", name: "delete_saved_keyword_tag" },
+    { kind: "function", name: "remove_saved_keywords" },
+    { kind: "function", name: "f13_filtered_saved_keywords" },
   ],
 };
 

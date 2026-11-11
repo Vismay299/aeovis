@@ -213,6 +213,10 @@ export const NEVER_WRITABLE = Object.freeze([
   "site_audit_links",
   // F13 phase 2 — migration 101: keyword metrics cache table.
   "keyword_metrics",
+  // F13 phase 3 — migration 100: saved keywords, tags, tag assignments.
+  "saved_keywords",
+  "saved_keyword_tags",
+  "saved_keyword_tag_assignments",
 ]);
 
 /**
@@ -263,6 +267,11 @@ export const WRITING_FUNCTIONS = Object.freeze({
   // F13 migration 101 — keyword metrics cache functions.
   upsert_keyword_metrics: ["keyword_metrics"],
   prune_keyword_metrics: ["keyword_metrics"],
+  // F13 migration 102 — saved keyword mutating functions.
+  save_keywords: ["saved_keywords", "saved_keyword_tags", "saved_keyword_tag_assignments"],
+  update_saved_keyword_tags: ["saved_keyword_tags", "saved_keyword_tag_assignments"],
+  delete_saved_keyword_tag: ["saved_keyword_tags", "saved_keyword_tag_assignments"],
+  remove_saved_keywords: ["saved_keywords", "saved_keyword_tag_assignments"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */

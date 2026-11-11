@@ -378,6 +378,9 @@ const FULL_CATALOG = [
   // 125_f18_site_audit.sql & 126_f18_site_audit_functions.sql — F18 site audit tables, bucket and functions.
   "site_audits", "site_audit_pages", "site_audit_issues", "site_audit_lighthouse", "site_audit_frontier", "site_audit_links", "site-audit-lighthouse",
   "site_audit_create", "site_audit_seed", "site_audit_frontier_stats", "site_audit_claim_chunk", "site_audit_record_batch", "site_audit_release", "site_audit_abandon_chunk", "site_audit_broken_links", "site_audit_orphan_pages", "site_audit_issue_summary", "site_audit_destroy_scratch", "prune_site_audits",
+  // 100_f13_saved_keywords.sql & 102_f13_saved_keyword_functions.sql — F13 saved keywords tables and functions.
+  "saved_keywords", "saved_keyword_tags", "saved_keyword_tag_assignments",
+  "save_keywords", "list_saved_keywords", "update_saved_keyword_tags", "delete_saved_keyword_tag", "remove_saved_keywords", "f13_filtered_saved_keywords",
   // 101_f13_keyword_metrics.sql — shared keyword metrics table and functions.
   "keyword_metrics", "upsert_keyword_metrics", "prune_keyword_metrics",
 ];

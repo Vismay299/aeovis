@@ -1734,4 +1734,19 @@ invokes the backfill lazily; operators must not call it manually.
 - Applied-check: `select to_regclass('public.keyword_metrics');` returns `keyword_metrics`; `select proname from pg_proc where proname in ('upsert_keyword_metrics', 'prune_keyword_metrics');` returns 2 rows.
 - Creates `keyword_metrics` table with service-only grants and RLS, and functions `upsert_keyword_metrics` and `prune_keyword_metrics`.
 
+## `100_f13_saved_keywords.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply before `102_f13_saved_keyword_functions.sql` before deploying F13 phase 3.
+- Pre-check: `select to_regclass('public.saved_keywords');` returns null.
+- Applied-check: `select to_regclass('public.saved_keywords');` returns `saved_keywords`; `select to_regclass('public.saved_keyword_tags');` returns `saved_keyword_tags`; `select to_regclass('public.saved_keyword_tag_assignments');` returns `saved_keyword_tag_assignments`.
+- Creates `saved_keywords`, `saved_keyword_tags`, and `saved_keyword_tag_assignments` tables with RLS policies, trigger `saved_keyword_tags_touch`, and tenant isolation.
+
+## `102_f13_saved_keyword_functions.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply after `100_f13_saved_keywords.sql` and `101_f13_keyword_metrics.sql` before deploying F13 phase 3.
+- Pre-check: `select proname from pg_proc where proname = 'save_keywords';` returns no rows.
+- Applied-check: `select count(*) from pg_proc where proname in ('f13_like_escape', 'f13_upsert_tags', 'save_keywords', 'f13_filtered_saved_keywords', 'list_saved_keywords', 'update_saved_keyword_tags', 'delete_saved_keyword_tag', 'remove_saved_keywords');` returns 8.
+- Creates atomic service-role functions for saved keywords: `f13_like_escape`, `f13_upsert_tags`, `save_keywords`, `f13_filtered_saved_keywords`, `list_saved_keywords`, `update_saved_keyword_tags`, `delete_saved_keyword_tag`, and `remove_saved_keywords`.
+
+
 
