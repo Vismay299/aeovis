@@ -92,7 +92,7 @@ function toRatingDistribution(raw: unknown): BusinessProfileView["ratingDistribu
   return any ? out : null;
 }
 
-/** Structured profile from a `my_business_info` item (OpenSEO formatProfileText/Timetable/RatingDistribution). */
+/** Structured profile from a `my_business_info` item (formatProfileText, Timetable and RatingDistribution are ported; see THIRD_PARTY_NOTICES.md). */
 export function toProfileView(raw: Record<string, unknown>): BusinessProfileView {
   const additional = readPath(raw, "additional_categories");
   const claimed = readPath(raw, "is_claimed");
