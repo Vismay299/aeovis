@@ -271,6 +271,8 @@ SOFTWARE.
 - `src/lib/schedules/aiVisibilitySchedules.jobs.ts` (from `src/server/features/ai-visibility/services/scheduledAiVisibility.ts`)
 - `src/lib/schedules/customerSchedule.ts` (from `src/server/features/ai-visibility/services/aiVisibilitySchedule.ts`)
 - `src/app/api/customer/schedule/route.ts` (from `src/server/features/ai-visibility/services/aiVisibilitySchedule.ts`)
+- `src/components/portal/schedule/ScheduleField.tsx` (from `src/client/features/rank-tracking/ScheduleField.tsx`, `scheduleTime.ts`)
+- `src/components/portal/schedule/ScheduleSummary.tsx` (from `src/client/features/ai-visibility/TrackingScheduleSummary.tsx`)
 
 - `src/lib/questions/workspaceQuestions.ts` (from `src/shared/ai-prompt-suggestions.ts`)
 - `src/lib/questions/applyQuestionPatch.ts` (from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts`)
