@@ -26,6 +26,8 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/076_f08_question_backfill.sql
 \ir ../supabase/migrations/080_f09_price_approvals.sql
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
+\ir ../supabase/migrations/100_f13_saved_keywords.sql
+\ir ../supabase/migrations/102_f13_saved_keyword_functions.sql
 \ir ../supabase/migrations/125_f18_site_audit.sql
 \ir ../supabase/migrations/126_f18_site_audit_functions.sql
 \ir ../supabase/migrations/130_f19_indexnow.sql
@@ -508,6 +510,7 @@ DO $$ BEGIN
     RAISE EXCEPTION 'keyword_metrics is readable by customers';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
+RESET ROLE;
 -- F13: saved keywords, tags, and tag assignments tenant isolation.
 INSERT INTO public.saved_keywords(id, brand_key, keyword, location_code, language_code) VALUES
  ('13000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','oversized tees',2356,'en'),

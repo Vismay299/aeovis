@@ -39,11 +39,16 @@ async function group(name, fn) {
   }
 }
 
+const ARRAY_PARAMS = new Set(["p_keywords", "p_ids", "p_remove"]);
+
 async function rpc(client, name, values) {
   const entries = Object.entries(values);
   const r = await client.query(
     `SELECT ${name}(${entries.map(([k], i) => `${k}=>$${i + 1}`).join(",")}) AS result`,
-    entries.map(([, v]) => (v && typeof v === "object" ? JSON.stringify(v) : v))
+    entries.map(([k, v]) =>
+      // text[]/uuid[] parameters go as Postgres arrays; every other object is jsonb.
+      ARRAY_PARAMS.has(k) ? v : v && typeof v === "object" ? JSON.stringify(v) : v
+    )
   );
   return r.rows[0].result;
 }
