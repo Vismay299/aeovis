@@ -297,8 +297,170 @@ export const domainPagesContract = defineRouteContract({
   examples: [{ response: EXAMPLE_PAGES_RESPONSE }],
 });
 
+// --- 4. POST /api/customer/domain/competitors ---
+export const SERP_COMPETITOR_RESULT_TYPES = [
+  "organic",
+  "paid",
+  "featured_snippet",
+  "local_pack",
+] as const;
+
+export const domainCompetitorsRequestBody = z.strictObject({
+  domain: z.string().trim().min(1).max(2048),
+  scope: researchScopeSchema.optional(),
+  locationCode: z.number().int().positive().optional(),
+  languageCode: z.string().min(2).max(8).optional(),
+  keywords: z.array(z.string().trim().min(1).max(120)).min(1).max(100),
+  resultTypes: z
+    .array(z.enum(SERP_COMPETITOR_RESULT_TYPES))
+    .min(1)
+    .max(4)
+    .default(["organic", "local_pack"]),
+  includeSubdomains: z.boolean().default(true),
+  sortBy: z
+    .enum(["visibility", "traffic_estimate", "avg_position", "keyword_count"])
+    .default("visibility"),
+  limit: z.number().int().min(10).max(100).default(50),
+  cacheOnly: z.boolean().default(false),
+  maxUsd: z.number().positive().max(1000).optional(),
+  requestId: z.string().uuid(),
+});
+
+export const domainCompetitorsResponseSchema = z.union([
+  z.looseObject({
+    status: z.literal("ok"),
+    keywordCount: z.number(),
+    competitors: z.array(
+      z.looseObject({
+        domain: z.string(),
+        keywordsCount: z.number().nullable(),
+        avgPosition: z.number().nullable(),
+        medianPosition: z.number().nullable(),
+        visibility: z.number().nullable(),
+        etv: z.number().nullable(),
+        isOwnSite: z.boolean(),
+        isDeclaredCompetitor: z.boolean(),
+      }),
+    ),
+    cached: z.boolean(),
+    fetchedAt: z.string(),
+    provenance: z.looseObject({ gateway: z.literal("dataforseo") }),
+  }),
+  z.looseObject({
+    status: z.literal("not_cached"),
+    keywordCount: z.number(),
+    competitors: z.array(z.any()).default([]),
+  }),
+]);
+
+const EXAMPLE_COMPETITORS_RESPONSE = {
+  status: "ok" as const,
+  keywordCount: 50,
+  competitors: [
+    {
+      domain: "bewakoof.com",
+      keywordsCount: 31,
+      avgPosition: 4.2,
+      medianPosition: 3,
+      visibility: 0.41,
+      etv: 18120.5,
+      isOwnSite: false,
+      isDeclaredCompetitor: true,
+    },
+  ],
+  cached: false,
+  fetchedAt: "2026-10-21T09:31:00.000Z",
+  provenance: { gateway: "dataforseo" as const },
+};
+
+export const domainCompetitorsContract = defineRouteContract({
+  id: "customer.domain.competitors",
+  method: "POST",
+  path: "/api/customer/domain/competitors",
+  file: "src/app/api/customer/domain/competitors/route.ts",
+  auth: "workspace",
+  query: domainBrandQuery,
+  request: domainCompetitorsRequestBody,
+  response: domainCompetitorsResponseSchema,
+  errorCodes: DOMAIN_COMMON_ERROR_CODES,
+  examples: [{ response: EXAMPLE_COMPETITORS_RESPONSE }],
+});
+
+// --- 5. POST /api/customer/domain/competitors/add ---
+export const domainCompetitorAddRequestBody = z.strictObject({
+  domain: z.string().trim().min(3).max(255),
+  name: z.string().trim().min(1).max(120).optional(),
+});
+
+export const domainCompetitorAddResponseSchema = z.looseObject({
+  competitor: z.looseObject({
+    domain: z.string(),
+    name: z.string().nullable(),
+  }),
+  added: z.boolean(),
+});
+
+const EXAMPLE_COMPETITOR_ADD_RESPONSE = {
+  competitor: {
+    domain: "bewakoof.com",
+    name: null,
+  },
+  added: true,
+};
+
+export const domainCompetitorAddContract = defineRouteContract({
+  id: "customer.domain.competitors.add",
+  method: "POST",
+  path: "/api/customer/domain/competitors/add",
+  file: "src/app/api/customer/domain/competitors/add/route.ts",
+  auth: "workspace",
+  query: domainBrandQuery,
+  request: domainCompetitorAddRequestBody,
+  response: domainCompetitorAddResponseSchema,
+  errorCodes: [
+    ...DOMAIN_COMMON_ERROR_CODES,
+    "context_invalid",
+    "context_cap",
+    "context_unavailable",
+  ],
+  examples: [{ response: EXAMPLE_COMPETITOR_ADD_RESPONSE }],
+});
+
+// --- 6. GET /api/customer/domain/competitors/declared ---
+export const domainCompetitorsDeclaredResponseSchema = z.looseObject({
+  available: z.boolean(),
+  competitors: z.array(
+    z.looseObject({
+      domain: z.string(),
+      name: z.string().nullable(),
+    }),
+  ),
+  ownHost: z.string().optional(),
+});
+
+const EXAMPLE_COMPETITORS_DECLARED_RESPONSE = {
+  available: true,
+  competitors: [{ domain: "bewakoof.com", name: "Bewakoof" }],
+  ownHost: "offcult.in",
+};
+
+export const domainCompetitorsDeclaredContract = defineRouteContract({
+  id: "customer.domain.competitors.declared",
+  method: "GET",
+  path: "/api/customer/domain/competitors/declared",
+  file: "src/app/api/customer/domain/competitors/declared/route.ts",
+  auth: "workspace",
+  query: domainBrandQuery,
+  response: domainCompetitorsDeclaredResponseSchema,
+  errorCodes: DOMAIN_COMMON_ERROR_CODES,
+  examples: [{ response: EXAMPLE_COMPETITORS_DECLARED_RESPONSE }],
+});
+
 export const contracts: RouteContract[] = [
   domainOverviewContract,
   domainKeywordsContract,
   domainPagesContract,
+  domainCompetitorsContract,
+  domainCompetitorAddContract,
+  domainCompetitorsDeclaredContract,
 ];
