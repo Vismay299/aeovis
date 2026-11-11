@@ -13,6 +13,7 @@ import {
   localSerpNearSchema,
   nearSchema,
 } from "../../local/shared.ts";
+import { fetchQuoteDeps, gridQuoteDeps, listingsQuoteDeps, profileQuoteDeps } from "../../local/quoteDeps.ts";
 
 export type LocalPricingDeps = {
   checkGridLimitToday?: (brandKey: string) => Promise<number>;
@@ -69,7 +70,7 @@ export const localProfileLookupAction = definePricedAction({
   feature: "local.business",
   input: localProfileLookupInput,
   requireApproval: false,
-  estimate: (ctx, input) => estimateLocalProfileLookup(ctx, input),
+  estimate: (ctx, input) => estimateLocalProfileLookup(ctx, input, profileQuoteDeps(ctx, input)),
 });
 
 // 2. local.listings.search
@@ -125,7 +126,7 @@ export const localListingsSearchAction = definePricedAction({
   feature: "local.business",
   input: localListingsSearchInput,
   requireApproval: false,
-  estimate: (ctx, input) => estimateLocalListingsSearch(ctx, input),
+  estimate: (ctx, input) => estimateLocalListingsSearch(ctx, input, listingsQuoteDeps(ctx, input)),
 });
 
 // 3. local.reviews.collect
@@ -183,7 +184,7 @@ export const localReviewsCollectAction = definePricedAction({
   feature: "local.reviews",
   input: localReviewsCollectInput,
   requireApproval: false,
-  estimate: (ctx, input) => estimateLocalReviewsCollect(ctx, input),
+  estimate: (ctx, input) => estimateLocalReviewsCollect(ctx, input, fetchQuoteDeps(ctx, input, "reviews")),
 });
 
 // 4. local.updates.collect
@@ -233,7 +234,7 @@ export const localUpdatesCollectAction = definePricedAction({
   feature: "local.business",
   input: localUpdatesCollectInput,
   requireApproval: false,
-  estimate: (ctx, input) => estimateLocalUpdatesCollect(ctx, input),
+  estimate: (ctx, input) => estimateLocalUpdatesCollect(ctx, input, fetchQuoteDeps(ctx, input, "updates")),
 });
 
 // 5. local.questions.collect
@@ -283,7 +284,7 @@ export const localQuestionsCollectAction = definePricedAction({
   feature: "local.business",
   input: localQuestionsCollectInput,
   requireApproval: false,
-  estimate: (ctx, input) => estimateLocalQuestionsCollect(ctx, input),
+  estimate: (ctx, input) => estimateLocalQuestionsCollect(ctx, input, fetchQuoteDeps(ctx, input, "questions")),
 });
 
 // 6. local.serp.search
@@ -415,5 +416,5 @@ export const localGridRunAction = definePricedAction({
   feature: "local.grid",
   input: localGridRunInput,
   requireApproval: true,
-  estimate: (ctx, input) => estimateLocalGridRun(ctx, input),
+  estimate: (ctx, input) => estimateLocalGridRun(ctx, input, gridQuoteDeps(ctx)),
 });

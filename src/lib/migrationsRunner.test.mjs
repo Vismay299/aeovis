@@ -390,6 +390,9 @@ const FULL_CATALOG = [
   "f11_upsert_explore_attempt_rows", "settle_explore_hold", "settle_finished_explore_holds", "prune_explore_runs",
   // 045_f02_queued_dispatch.sql — F02 queued post/collect lifecycle.
   "post_probe_dispatch", "reschedule_probe_collection", "collect_probe_dispatch", "expire_posted_probe_dispatch",
+  // 120_f17_local_seo.sql & 121_f17_local_seo_functions.sql — F17 local SEO tables and functions.
+  "local_businesses", "local_fetches", "local_fetch_items", "local_grid_runs", "local_searches",
+  "save_local_business", "find_local_reuse", "claim_local_poll", "prune_local_seo",
 ];
 
 function withRegister(dir) {

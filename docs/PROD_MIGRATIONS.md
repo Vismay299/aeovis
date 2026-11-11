@@ -1727,6 +1727,14 @@ invokes the backfill lazily; operators must not call it manually.
 
 - **Status:** in repo; **not yet applied to production**. Apply after `125_f18_site_audit.sql` before deploying F18 phase 2. Pre-check: `select proname from pg_proc where proname = 'site_audit_create';` returns no rows. Applied-check: `select proname from pg_proc where proname in ('site_audit_create', 'prune_site_audits');` returns 2 rows. Creates service-role functions for atomic audit start, frontier claims, link/orphan checks, issue summary, scratch destruction, and retention pruning.
 
+## `120_f17_local_seo.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply before deploying F17 phase 2. Pre-check: `select to_regclass('public.local_businesses');` returns null. Applied-check: `select to_regclass('public.local_businesses');` returns `local_businesses`. Additive and idempotent; creates `local_businesses`, `local_fetches`, `local_fetch_items`, `local_grid_runs`, `local_searches` with RLS and member-read policies.
+
+## `121_f17_local_seo_functions.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply after `120_f17_local_seo.sql` before deploying F17 phase 2. Pre-check: `select proname from pg_proc where proname = 'save_local_business';` returns no rows. Applied-check: `select proname from pg_proc where proname in ('save_local_business', 'find_local_reuse', 'claim_local_poll', 'prune_local_seo');` returns 4 rows. Idempotent (`CREATE OR REPLACE FUNCTION`); service-role execute only.
+
 ## `101_f13_keyword_metrics.sql`
 
 - **Status:** in repo; **not yet applied to production**. Apply before deploying F13 phase 2.

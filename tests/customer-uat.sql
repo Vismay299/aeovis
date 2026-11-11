@@ -28,6 +28,8 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
 \ir ../supabase/migrations/100_f13_saved_keywords.sql
 \ir ../supabase/migrations/102_f13_saved_keyword_functions.sql
+\ir ../supabase/migrations/120_f17_local_seo.sql
+\ir ../supabase/migrations/121_f17_local_seo_functions.sql
 \ir ../supabase/migrations/125_f18_site_audit.sql
 \ir ../supabase/migrations/126_f18_site_audit_functions.sql
 \ir ../supabase/migrations/130_f19_indexnow.sql
@@ -536,5 +538,64 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 -- End F13 saved keywords check.
+-- End F13 keyword_metrics check.
+
+-- F17: one own business, one fetch with one item, one grid and one search per
+-- workspace; members read only their workspace's rows; an item insert with
+-- workspace 2's brand_key and workspace 1's fetch_id fails the composite FK.
+INSERT INTO public.local_businesses(brand_key, role, title, cid, place_id, latitude, longitude, created_by) VALUES
+ ('10000000-0000-0000-0000-000000000001','own','Workspace A Store','1234567890123456789','ChIJF17A',19.0760,72.8777,'00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','own','Workspace B Store','9876543210987654321','ChIJF17B',48.8566,2.3522,'00000000-0000-0000-0000-000000000002');
+INSERT INTO public.local_fetches(brand_key, request_id, business_id, kind, identifier, params, params_hash, item_count, requested_by) VALUES
+ ('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-0000000000f1',
+  (SELECT id FROM public.local_businesses WHERE brand_key='10000000-0000-0000-0000-000000000001' AND role='own'),
+  'reviews','{"cid":"1234567890123456789"}','{"depth":20}','1111111111111111111111111111111111111111111111111111111111111111',1,'00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-0000000000f2',
+  (SELECT id FROM public.local_businesses WHERE brand_key='10000000-0000-0000-0000-000000000002' AND role='own'),
+  'reviews','{"cid":"9876543210987654321"}','{"depth":20}','2222222222222222222222222222222222222222222222222222222222222222',1,'00000000-0000-0000-0000-000000000002');
+INSERT INTO public.local_fetch_items(fetch_id, brand_key, idx, item) VALUES
+ ((SELECT id FROM public.local_fetches WHERE request_id='30000000-0000-0000-0000-0000000000f1'),
+  '10000000-0000-0000-0000-000000000001',0,'{"rank_absolute":1}'),
+ ((SELECT id FROM public.local_fetches WHERE request_id='30000000-0000-0000-0000-0000000000f2'),
+  '10000000-0000-0000-0000-000000000002',0,'{"rank_absolute":1}');
+INSERT INTO public.local_grid_runs(brand_key, request_id, business_id, keyword, center_lat, center_lng, grid_size, spacing_km, zoom, device, language_code, target, params_hash, requested_by) VALUES
+ ('10000000-0000-0000-0000-000000000001','30000000-0000-0000-0000-0000000000a1',
+  (SELECT id FROM public.local_businesses WHERE brand_key='10000000-0000-0000-0000-000000000001' AND role='own'),
+  'coffee store',19.0760,72.8777,3,2,13,'mobile','en','{"cid":"1234567890123456789"}','3333333333333333333333333333333333333333333333333333333333333333','00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-0000000000a2',
+  (SELECT id FROM public.local_businesses WHERE brand_key='10000000-0000-0000-0000-000000000002' AND role='own'),
+  'coffee store',48.8566,2.3522,3,2,13,'mobile','en','{"cid":"9876543210987654321"}','4444444444444444444444444444444444444444444444444444444444444444','00000000-0000-0000-0000-000000000002');
+INSERT INTO public.local_searches(brand_key, kind, params, result_count, own_rank, cache_key, cached, requested_by) VALUES
+ ('10000000-0000-0000-0000-000000000001','local_serp','{"keyword":"coffee store"}',20,4,'5555555555555555555555555555555555555555555555555555555555555555',false,'00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','local_serp','{"keyword":"coffee store"}',20,NULL,'6666666666666666666666666666666666666666666666666666666666666666',false,'00000000-0000-0000-0000-000000000002');
+DO $f17$ BEGIN
+  BEGIN
+    INSERT INTO public.local_fetch_items(fetch_id, brand_key, idx, item)
+    VALUES ((SELECT id FROM public.local_fetches WHERE request_id='30000000-0000-0000-0000-0000000000f1'),
+            '10000000-0000-0000-0000-000000000002',1,'{"rank_absolute":2}');
+    RAISE EXCEPTION 'F17 cross-workspace fetch item was allowed';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+END $f17$;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $f17$ BEGIN
+  IF (SELECT count(*) FROM public.local_businesses) <> 1
+   OR (SELECT count(*) FROM public.local_fetches) <> 1
+   OR (SELECT count(*) FROM public.local_fetch_items) <> 1
+   OR (SELECT count(*) FROM public.local_grid_runs) <> 1
+   OR (SELECT count(*) FROM public.local_searches) <> 1
+  THEN RAISE EXCEPTION 'F17 local SEO rows leaked across customer workspaces'; END IF;
+END $f17$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $f17$ BEGIN
+  IF (SELECT count(*) FROM public.local_businesses) <> 1
+   OR (SELECT count(*) FROM public.local_fetches) <> 1
+   OR (SELECT count(*) FROM public.local_fetch_items) <> 1
+   OR (SELECT count(*) FROM public.local_grid_runs) <> 1
+   OR (SELECT count(*) FROM public.local_searches) <> 1
+  THEN RAISE EXCEPTION 'F17 local SEO rows leaked across customer workspaces'; END IF;
+END $f17$;
+RESET ROLE;
+-- End F17 tenant check.
 ROLLBACK;
 

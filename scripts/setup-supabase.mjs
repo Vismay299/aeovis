@@ -551,6 +551,19 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "settle_finished_explore_holds" },
     { kind: "function", name: "prune_explore_runs" },
   ],
+  "120_f17_local_seo.sql": [
+    { kind: "table", name: "local_businesses" },
+    { kind: "table", name: "local_fetches" },
+    { kind: "table", name: "local_fetch_items" },
+    { kind: "table", name: "local_grid_runs" },
+    { kind: "table", name: "local_searches" },
+  ],
+  "121_f17_local_seo_functions.sql": [
+    { kind: "function", name: "save_local_business" },
+    { kind: "function", name: "find_local_reuse" },
+    { kind: "function", name: "claim_local_poll" },
+    { kind: "function", name: "prune_local_seo" },
+  ],
 };
 
 /**
