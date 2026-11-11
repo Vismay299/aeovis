@@ -219,6 +219,12 @@ export const NEVER_WRITABLE = Object.freeze([
   "saved_keyword_tag_assignments",
   // F11 phase 1 — migration 091: explore runs.
   "explore_runs",
+  // F17 — migration 120: local SEO tenant tables (businesses, fetches, items, grids, searches).
+  "local_businesses",
+  "local_fetches",
+  "local_fetch_items",
+  "local_grid_runs",
+  "local_searches",
 ]);
 
 /**
@@ -280,6 +286,10 @@ export const WRITING_FUNCTIONS = Object.freeze({
   settle_explore_hold: ["spend_ledger", "spend_holds"],
   settle_finished_explore_holds: ["spend_ledger", "spend_holds"],
   prune_explore_runs: ["explore_runs"],
+  // F17 migration 121 — local SEO mutating functions.
+  save_local_business: ["local_businesses"],
+  claim_local_poll: ["local_fetches", "local_grid_runs"],
+  prune_local_seo: ["local_fetches", "local_fetch_items", "local_grid_runs", "local_searches"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */

@@ -14,3 +14,4 @@ import "../audit/job.ts";
 import "../questions/jobs.ts";
 import "../keywords/jobs.ts";
 import "../workers/queuedCollection.jobs.ts";
+import "../local/jobs.ts";
