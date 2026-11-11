@@ -1734,6 +1734,22 @@ invokes the backfill lazily; operators must not call it manually.
 - Applied-check: `select to_regclass('public.keyword_metrics');` returns `keyword_metrics`; `select proname from pg_proc where proname in ('upsert_keyword_metrics', 'prune_keyword_metrics');` returns 2 rows.
 - Creates `keyword_metrics` table with service-only grants and RLS, and functions `upsert_keyword_metrics` and `prune_keyword_metrics`.
 
+## `045_f02_queued_dispatch.sql`
+
+**Status:** in repo; **not yet applied to production**.
+
+Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is added to the probe observation/attempt state checks, queued-task metadata is added to `probe_attempts`, and service-role-only functions post, reschedule, collect, and expire queued dispatches. No customer table or route is added, and `authenticated` receives no function grants.
+
+### Objects to check in the catalog
+- functions `public.post_probe_dispatch`, `public.reschedule_probe_collection`, `public.collect_probe_dispatch`, `public.expire_posted_probe_dispatch`
+- columns `public.probe_attempts.provider_task_id`, `public.probe_attempts.posted_at`, `public.probe_attempts.collect_until`
+- indexes `public.probe_attempts_provider_task_idx`, `public.probe_observations_posted_idx`
+
+### Apply and verify
+1. Apply `045_f02_queued_dispatch.sql` after the existing P0 dispatch migrations and before deploying F02 phase 4.
+2. Confirm each function is executable by `service_role` and not by `PUBLIC`, `anon`, or `authenticated`.
+3. Verify with `scripts/qa/check-dataforseo-db.mjs --group posted-states,collect-projection,posted-sweep,queued-flow` against a loopback QA database. Do not run the harness against production.
+
 ## `100_f13_saved_keywords.sql`
 
 - **Status:** in repo; **not yet applied to production**. Apply before `102_f13_saved_keyword_functions.sql` before deploying F13 phase 3.

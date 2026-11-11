@@ -638,6 +638,11 @@ abandoned is not.
 - Apply 100 and 102 in order before deploying F13 phase 3.
 - Objects: functions `save_keywords`, `list_saved_keywords`, `update_saved_keyword_tags`, `delete_saved_keyword_tag`, `remove_saved_keywords`, `f13_filtered_saved_keywords`.
 
+### `045_f02_queued_dispatch` (F02 phase 4)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply before deploying F02 phase 4. This migration is additive and modifies the existing observation/attempt state checks, adds three attempt metadata columns and two indexes, and creates four service-role-only functions: `post_probe_dispatch`, `reschedule_probe_collection`, `collect_probe_dispatch`, and `expire_posted_probe_dispatch`.
+- Verified against a disposable loopback PostgreSQL database with `scripts/qa/check-dataforseo-db.mjs`.
+
 
 ## D. Content approval — the human gate, and what it does not yet do
 
