@@ -11,6 +11,9 @@ export const SPEND_FEATURES = [
   "local.reviews",
   "local.serp",
   "local.grid",
+  "questions.setup",
+  "questions.generate",
+  "questions.research",
 ] as const;
 
 export type SpendFeature = (typeof SPEND_FEATURES)[number];
@@ -40,6 +43,9 @@ export const SPEND_FEATURE_LABELS: Record<string, string> = {
   "local.reviews": "Business reviews",
   "local.serp": "Local search results",
   "local.grid": "Local rank grids",
+  "questions.setup": "Question setup research",
+  "questions.generate": "Question drafting",
+  "questions.research": "Question research",
 };
 
 /** The label for a ledger feature; an unknown key is "Other", never an empty string. */

@@ -51,7 +51,7 @@ test("append research log validates the feature kind and key", () => {
   );
   assert.equal(
     updateProjectContextBody.safeParse({
-      updates: [{ appendResearchLog: { summary: "Questions checked", kind: "questions.setup" } }],
+      updates: [{ appendResearchLog: { summary: "Questions checked", kind: "unregistered.feature" } }],
     }).success,
     false,
   );

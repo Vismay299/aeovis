@@ -21,7 +21,10 @@ const DAY_MS = 86_400_000;
 const RETENTION_DAYS = 395;
 const PRUNE_LIMIT = 5_000;
 
+import { registerQuestionsSetupJob } from "./setup/research.ts";
+
 export const QUESTIONS_RETENTION_KIND = "questions.retention";
+export const QUESTIONS_SETUP_KIND = "questions.setup";
 
 export type PruneQuestionEvents = (before: string, limit: number) => Promise<number>;
 
@@ -109,6 +112,10 @@ export function registerQuestionJobs(deps: QuestionJobsDeps = {}): void {
         );
       },
     });
+  }
+
+  if (!jobDefined(QUESTIONS_SETUP_KIND)) {
+    registerQuestionsSetupJob();
   }
 }
 

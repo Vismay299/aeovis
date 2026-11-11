@@ -1,0 +1,17 @@
+[
+  {
+    "text": "What is the best oversized t-shirt for streetwear?",
+    "topic": "Streetwear",
+    "intent_tier": "commercial"
+  },
+  {
+    "text": "How do anime oversized tees fit compared to regular tees?",
+    "topic": "Sizing & Fit",
+    "intent_tier": "informational"
+  },
+  {
+    "text": "Where to buy high quality heavy cotton graphic tees?",
+    "topic": "Materials",
+    "intent_tier": "commercial"
+  }
+]

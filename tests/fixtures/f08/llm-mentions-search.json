@@ -1,0 +1,55 @@
+[
+  {
+    "question": "What are the best oversized t-shirts for streetwear?",
+    "answer": "Top streetwear brands offering oversized tees include Offcult, Bewakoof, and The Souled Store.",
+    "ai_search_volume": 420,
+    "sources": [
+      {
+        "domain": "offcult.in",
+        "url": "https://offcult.in/collections/oversized",
+        "title": "Offcult Streetwear"
+      },
+      {
+        "domain": "bewakoof.com",
+        "url": "https://bewakoof.com/oversized",
+        "title": "Bewakoof Oversized Tees"
+      }
+    ]
+  },
+  {
+    "question": "What are the best oversized t-shirts for streetwear in 2025?",
+    "answer": "Offcult and other Indian brands offer oversized streetwear tees.",
+    "ai_search_volume": 360,
+    "sources": [
+      {
+        "domain": "bewakoof.com",
+        "url": "https://www.bewakoof.com/oversized",
+        "title": "Oversized T-shirts"
+      }
+    ]
+  },
+  {
+    "question": "How to style oversized t-shirts?",
+    "answer": "Pair them with baggy cargo pants or shorts for a clean streetwear look.",
+    "ai_search_volume": 310,
+    "sources": [
+      {
+        "domain": "gq.com",
+        "url": "https://gq.com/style/oversized-tshirts",
+        "title": "GQ Style Guide"
+      }
+    ]
+  },
+  {
+    "question": "What is the best enterprise database?",
+    "answer": "Postgres and Oracle are popular choices.",
+    "ai_search_volume": 500,
+    "sources": [
+      {
+        "domain": "oracle.com",
+        "url": "https://oracle.com",
+        "title": "Oracle"
+      }
+    ]
+  }
+]
