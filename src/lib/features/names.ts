@@ -44,6 +44,10 @@ export const FEATURES = {
   question_setup: { spend: ["questions.setup", "questions.generate"] as const },
   // F08: gates question research from LLM mentions search
   prompt_research: { spend: ["questions.research"] as const },
+  // F16: backlinks page, routes, sidebar item
+  backlinks: { spend: ["backlinks.research"] as const },
+  backlinks_ahrefs_dr: { spend: [] as const },
+  backlink_snapshots: { spend: ["backlinks.snapshots"] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

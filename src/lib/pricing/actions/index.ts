@@ -21,3 +21,9 @@ export {
   questionsGenerateAction,
   questionsResearchAction,
 } from "./questions.ts";
+import "./backlinks.ts";
+export {
+  backlinksLookupRunAction,
+  backlinksPageAction,
+  backlinksExpandDomainAction,
+} from "./backlinks.ts";
