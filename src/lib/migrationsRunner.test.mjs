@@ -383,6 +383,11 @@ const FULL_CATALOG = [
   "save_keywords", "list_saved_keywords", "update_saved_keyword_tags", "delete_saved_keyword_tag", "remove_saved_keywords", "f13_filtered_saved_keywords",
   // 101_f13_keyword_metrics.sql — shared keyword metrics table and functions.
   "keyword_metrics", "upsert_keyword_metrics", "prune_keyword_metrics",
+  // 090_f11_explore_dispatch.sql & 091_f11_explore_runs.sql — F11 explore fence and storage.
+  "probe_observations.brand_key", "probe_observations_purpose_check", "probe_observations_explore_shape",
+  "probe_observations_explore_run_idx", "probe_observations_explore_reuse_idx", "seed_explore_observations",
+  "explore_runs", "explore_runs_brand_idx", "explore_runs_user_idx", "explore_runs_active_idx",
+  "f11_upsert_explore_attempt_rows", "settle_explore_hold", "settle_finished_explore_holds", "prune_explore_runs",
 ];
 
 function withRegister(dir) {

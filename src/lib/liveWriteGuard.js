@@ -217,6 +217,8 @@ export const NEVER_WRITABLE = Object.freeze([
   "saved_keywords",
   "saved_keyword_tags",
   "saved_keyword_tag_assignments",
+  // F11 phase 1 — migration 091: explore runs.
+  "explore_runs",
 ]);
 
 /**
@@ -272,6 +274,12 @@ export const WRITING_FUNCTIONS = Object.freeze({
   update_saved_keyword_tags: ["saved_keyword_tags", "saved_keyword_tag_assignments"],
   delete_saved_keyword_tag: ["saved_keyword_tags", "saved_keyword_tag_assignments"],
   remove_saved_keywords: ["saved_keywords", "saved_keyword_tag_assignments"],
+  // F11 migrations 090–091 — explore seeding, settlement and retention.
+  seed_explore_observations: ["probe_observations"],
+  f11_upsert_explore_attempt_rows: ["spend_ledger"],
+  settle_explore_hold: ["spend_ledger", "spend_holds"],
+  settle_finished_explore_holds: ["spend_ledger", "spend_holds"],
+  prune_explore_runs: ["explore_runs"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */
