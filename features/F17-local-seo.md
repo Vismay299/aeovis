@@ -245,6 +245,9 @@ BEGIN
       IF v_competitors > 10 THEN RAISE EXCEPTION 'local_business_cap:competitors'; END IF;
     END IF;
   END IF;
+  -- Final cap check: an own-business demotion above also adds a competitor.
+  SELECT count(*) INTO v_competitors FROM local_businesses WHERE brand_key = p_brand AND role = 'competitor';
+  IF v_competitors > 10 THEN RAISE EXCEPTION 'local_business_cap:competitors'; END IF;
   RETURN v_id;
 END $$;
 
@@ -305,6 +308,8 @@ NOTIFY pgrst, 'reload schema';
 ```
 
 Error mapping: `local_business_cap:competitors` → `AppError(409,"competitor_limit","You can save up to 10 local competitors. Remove one first.")`; `local_business_invalid:*` → `400 invalid_request`; unique violation on CID/place_id from a concurrent save → retried once; anything else → `AppError(503,"local_unavailable","Local data could not be saved. Please retry.")`.
+
+> **Phase 2 deviation note (CTO round 1):** the `save_local_business` SQL above carries one line the first draft of this section did not: the final competitor count before `RETURN v_id`. Without it, saving a new own business while 1 own and 10 competitors exist demoted the old own business, leaving 11 competitors and no error, which broke F17-AC-01 and F17-AC-10. The exception rolls the demotion back. Promoting an existing competitor to own is net zero and still works.
 
 **Required objects** (`scripts/setup-supabase.mjs`): `"120_f17_local_seo.sql"`: tables `local_businesses`, `local_fetches`, `local_fetch_items`, `local_grid_runs`, `local_searches`; `"121_f17_local_seo_functions.sql"`: functions `save_local_business`, `find_local_reuse`, `claim_local_poll`, `prune_local_seo`.
 
@@ -649,22 +654,22 @@ Form: "Search term", "Near" (default the business coordinates; Maps link or coor
 
 **Goal:** every local lookup works through the API with storage, reuse and research logging.
 
-- [ ] **P2.T1 Database**
-  - [ ] **P2.T1.S1** *Files:* `supabase/migrations/120_f17_local_seo.sql`, `121_f17_local_seo_functions.sql`. *Do:* §6.1. *Verify:* `node --test src/lib/migrationsRunner.test.mjs src/lib/migrationsLedger.test.mjs` → pass.
-  - [ ] **P2.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`. *Verify:* CI customer-database commands against local Postgres 16 → exit 0.
-  - [ ] **P2.T1.S3** *Files:* `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
-  - [ ] **P2.T1.S4** *Files:* `scripts/qa/check-f17-db.mjs`. *Do:* groups `schema`, `rls`, `caps` (second own demotes the first to competitor; 11th competitor raises), `reuse` (`find_local_reuse` window and failed exclusion), `poll` (`claim_local_poll` twice within 4 s → second false), `retention`. *Verify:* `node scripts/qa/check-f17-db.mjs` → "ok 6 groups" (F17-AC-01, 10 DB half, 16 DB half).
-- [ ] **P2.T2 Services**
-  - [ ] **P2.T2.S1** *Files:* `src/lib/local/businesses.ts`, `businesses.test.ts`, `src/lib/local/profile.ts`, `profile.test.ts`. *Do:* §6.2.3, §6.2.8; `toProfileView` from `business-info.json` (hours spans, rating distribution, unsafe URL → null); save own/competitor; research log entry. *Verify:* `node --test src/lib/local/businesses.test.ts src/lib/local/profile.test.ts` → pass (F17-AC-10).
-  - [ ] **P2.T2.S2** *Files:* `src/lib/local/listings.ts`, `listings.test.ts`. *Do:* §6.2.4; port `local-seo-tools.test.ts:448` (categories cached and filtered in memory); filter/order mapping; cache hit costs nothing. *Verify:* `node --test src/lib/local/listings.test.ts` → pass (F17-AC-09).
-  - [ ] **P2.T2.S3** *Files:* `src/lib/local/fetches.ts`, `fetches.test.ts`. *Do:* §6.2.5 with F01 memory spend and a fake clock; ports of `local-seo-tools.test.ts:136-240` (resumable when queued; collection failure keeps the fetch; resume without a new post); reuse within 60 minutes; repeated `requestId`; Q&A combine (F17-AC-06). *Verify:* `node --test src/lib/local/fetches.test.ts` → pass (F17-AC-05, 06).
-  - [ ] **P2.T2.S4** *Files:* `src/lib/local/grid.ts` (service half), `grid.service.test.ts`. *Do:* §6.2.6; ports of `local-seo-tools.test.ts:281`, `:375`, `:392`, `:410`, `:431` (posts 9 searches; one refused point; all failing → error and no reuse; processing then free collect; different arguments post again); re-match for another target from stored rows; daily limit. *Verify:* `node --test src/lib/local/grid.service.test.ts` → pass (F17-AC-07).
-  - [ ] **P2.T2.S5** *Files:* `src/lib/local/localSerp.ts`, `localSerp.test.ts`. *Do:* §6.2.7; defaults; `isOwn` by CID and by domain; cached second call has no spend. *Verify:* `node --test src/lib/local/localSerp.test.ts` → pass (F17-AC-08).
-  - [ ] **P2.T2.S6** *Files:* `src/lib/local/research.ts`, `research.test.ts`. *Do:* summaries and keys of §6.2.3–6.2.7; `recent_research` warning in quotes. *Verify:* `node --test src/lib/local/research.test.ts` → pass (F17-AC-12).
-  - [ ] **P2.T2.S7** *Files:* `src/lib/local/jobs.ts`, `retention.test.ts`, `src/lib/jobs/kinds.ts` (one import). *Verify:* `node --test src/lib/local/retention.test.ts` → pass; `node scripts/qa/check-f17-db.mjs --only retention` → ok (F17-AC-16 retention half).
-- [ ] **P2.T3 Routes**
-  - [ ] **P2.T3.S1** *Files:* `src/app/api/customer/local/{businesses,businesses/[businessId],businesses/[businessId]/profile,profile,listings,categories,fetches,fetches/[fetchId],serp,grids,grids/[gridId]}/route.ts`, `src/lib/local/local.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [ ] **P2.T3.S2** *Files:* `src/lib/local/local.route.test.mjs`. *Do:* flag off → 404; disabled spend → 403; grid without `maxUsd` → 400 `approval_required`; lower `maxUsd` → 409 `price_changed`; `POST /fetches` → 202 then `GET` → 200 completed (fixtures); foreign `businessId` → 404; extra field → 400. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/local/local.route.test.mjs` → pass (F17-AC-05 route half, 11, 15).
+- [x] **P2.T1 Database**
+  - [x] **P2.T1.S1** *Files:* `supabase/migrations/120_f17_local_seo.sql`, `121_f17_local_seo_functions.sql`. *Do:* §6.1. *Verify:* `node --test src/lib/migrationsRunner.test.mjs src/lib/migrationsLedger.test.mjs` → pass.
+  - [x] **P2.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`. *Verify:* CI customer-database commands against local Postgres 16 → exit 0.
+  - [x] **P2.T1.S3** *Files:* `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+  - [x] **P2.T1.S4** *Files:* `scripts/qa/check-f17-db.mjs`. *Do:* groups `schema`, `rls`, `caps` (second own demotes the first to competitor; 11th competitor raises), `reuse` (`find_local_reuse` window and failed exclusion), `poll` (`claim_local_poll` twice within 4 s → second false), `retention`. *Verify:* `node scripts/qa/check-f17-db.mjs` → "ok 6 groups" (F17-AC-01, 10 DB half, 16 DB half).
+- [x] **P2.T2 Services**
+  - [x] **P2.T2.S1** *Files:* `src/lib/local/businesses.ts`, `businesses.test.ts`, `src/lib/local/profile.ts`, `profile.test.ts`. *Do:* §6.2.3, §6.2.8; `toProfileView` from `business-info.json` (hours spans, rating distribution, unsafe URL → null); save own/competitor; research log entry. *Verify:* `node --test src/lib/local/businesses.test.ts src/lib/local/profile.test.ts` → pass (F17-AC-10).
+  - [x] **P2.T2.S2** *Files:* `src/lib/local/listings.ts`, `listings.test.ts`. *Do:* §6.2.4; port `local-seo-tools.test.ts:448` (categories cached and filtered in memory); filter/order mapping; cache hit costs nothing. *Verify:* `node --test src/lib/local/listings.test.ts` → pass (F17-AC-09).
+  - [x] **P2.T2.S3** *Files:* `src/lib/local/fetches.ts`, `fetches.test.ts`. *Do:* §6.2.5 with F01 memory spend and a fake clock; ports of `local-seo-tools.test.ts:136-240` (resumable when queued; collection failure keeps the fetch; resume without a new post); reuse within 60 minutes; repeated `requestId`; Q&A combine (F17-AC-06). *Verify:* `node --test src/lib/local/fetches.test.ts` → pass (F17-AC-05, 06).
+  - [x] **P2.T2.S4** *Files:* `src/lib/local/grid.ts` (service half), `grid.service.test.ts`. *Do:* §6.2.6; ports of `local-seo-tools.test.ts:281`, `:375`, `:392`, `:410`, `:431` (posts 9 searches; one refused point; all failing → error and no reuse; processing then free collect; different arguments post again); re-match for another target from stored rows; daily limit. *Verify:* `node --test src/lib/local/grid.service.test.ts` → pass (F17-AC-07).
+  - [x] **P2.T2.S5** *Files:* `src/lib/local/localSerp.ts`, `localSerp.test.ts`. *Do:* §6.2.7; defaults; `isOwn` by CID and by domain; cached second call has no spend. *Verify:* `node --test src/lib/local/localSerp.test.ts` → pass (F17-AC-08).
+  - [x] **P2.T2.S6** *Files:* `src/lib/local/research.ts`, `research.test.ts`. *Do:* summaries and keys of §6.2.3–6.2.7; `recent_research` warning in quotes. *Verify:* `node --test src/lib/local/research.test.ts` → pass (F17-AC-12).
+  - [x] **P2.T2.S7** *Files:* `src/lib/local/jobs.ts`, `retention.test.ts`, `src/lib/jobs/kinds.ts` (one import). *Verify:* `node --test src/lib/local/retention.test.ts` → pass; `node scripts/qa/check-f17-db.mjs --only retention` → ok (F17-AC-16 retention half).
+- [x] **P2.T3 Routes**
+  - [x] **P2.T3.S1** *Files:* `src/app/api/customer/local/{businesses,businesses/[businessId],businesses/[businessId]/profile,profile,listings,categories,fetches,fetches/[fetchId],serp,grids,grids/[gridId]}/route.ts`, `src/lib/local/local.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
+  - [x] **P2.T3.S2** *Files:* `src/lib/local/local.route.test.mjs`. *Do:* flag off → 404; disabled spend → 403; grid without `maxUsd` → 400 `approval_required`; lower `maxUsd` → 409 `price_changed`; `POST /fetches` → 202 then `GET` → 200 completed (fixtures); foreign `businessId` → 404; extra field → 400. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/local/local.route.test.mjs` → pass (F17-AC-05 route half, 11, 15).
 
 **Checkpoint:** full suite, `npm run build`, `check-f17-db.mjs` pass. Completes F17-AC-01, 05–12, 15.
 

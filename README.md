@@ -215,6 +215,8 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `125_f18_site_audit` | Site audit tables: audits, pages, issues, Lighthouse results and crawl scratch tables (frontier, link hashes); private bucket site-audit-lighthouse. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `126_f18_site_audit_functions` | Site audit functions: atomic start with workspace, host and monthly limits; chunk-idempotent frontier claims; broken-link and orphan checks; issue summary; retention. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `100_f13_saved_keywords` | Saved keywords, tags and tag assignments per workspace. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `120_f17_local_seo` | Local SEO: saved businesses, review/post/Q&A fetches and items, map rank grids, local search history; 13-month retention. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `121_f17_local_seo_functions` | Local SEO functions: business save with caps, one-hour reuse, poll throttling, retention. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `101_f13_keyword_metrics` | Shared keyword market metrics (no tenant data) with batch upsert and retention. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `102_f13_saved_keyword_functions` | Atomic save, list, tag and remove functions for saved keywords. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `090_f11_explore_dispatch` | Adds workspace ownership to explore probe observations, seeds immutable explore rows, and extends the P0 claim fence for allowlist, run spend cap, and claim accounting. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |

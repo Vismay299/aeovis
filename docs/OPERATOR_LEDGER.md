@@ -623,6 +623,13 @@ abandoned is not.
 - Objects (125): tables `site_audits`, `site_audit_pages`, `site_audit_issues`, `site_audit_lighthouse`, `site_audit_frontier`, `site_audit_links`; bucket `site-audit-lighthouse`.
 - Objects (126): functions `site_audit_create`, `site_audit_seed`, `site_audit_frontier_stats`, `site_audit_claim_chunk`, `site_audit_record_batch`, `site_audit_release`, `site_audit_abandon_chunk`, `site_audit_broken_links`, `site_audit_orphan_pages`, `site_audit_issue_summary`, `site_audit_destroy_scratch`, `prune_site_audits`.
 
+### `120_f17_local_seo` and `121_f17_local_seo_functions` (F17 phase 2)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply 120 then 121 before deploying F17 phase 2. Additive; no data backfill.
+- Objects (120): tables `local_businesses`, `local_fetches`, `local_fetch_items`, `local_grid_runs`, `local_searches` (RLS on, member read policies, service-role writes).
+- Objects (121): functions `save_local_business`, `find_local_reuse`, `claim_local_poll`, `prune_local_seo` (service-role only).
+- Note: the F17 flag `FEATURE_LOCAL_SEO` and its four spend controls ship off; applying the migrations changes nothing customer-visible.
+
 ### `101_f13_keyword_metrics` (F13 phase 2)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply before deploying F13 phase 2.
