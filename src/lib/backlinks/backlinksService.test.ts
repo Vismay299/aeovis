@@ -145,7 +145,7 @@ const pageInputDefaults = {
   filters: {},
 };
 
-describe("BacklinksService (ported OpenSEO billing cases)", () => {
+describe("BacklinksService (ported billing cases)", () => {
   it("profiles only the summary and history for the overview and reuses cache on repeat", async () => {
     const { calls, makeDeps } = createHarness();
     const deps = makeDeps();
