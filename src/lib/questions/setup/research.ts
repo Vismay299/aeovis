@@ -123,24 +123,25 @@ export async function runQuestionSetup(
     return fromMicros(Math.max(0, approvedMaxMicros - priorSpendMicros));
   }
 
-  function recordLlmSpend(
+  // Step bodies run once: on a resumed invocation a finished step returns its
+  // memoized output without re-running. So each paid step only *computes* its
+  // accounted cost and returns it; the budget and the logged total are updated
+  // here, outside the step, from that (memoized) value.
+  function llmAccountedUsd(
     reportedUsd: number | null | undefined,
     system: string,
     prompt: string,
     maxOutputTokens: number,
-    stepEstimateUsd: number,
-  ): void {
-    const estimateUsd = estimateQuestionLlmUsd(
-      model,
-      (system + prompt).length,
-      maxOutputTokens,
-      env,
+  ): number {
+    return typeof reportedUsd === "number" && Number.isFinite(reportedUsd) && reportedUsd >= 0
+      ? usd6(reportedUsd)
+      : estimateQuestionLlmUsd(model, (system + prompt).length, maxOutputTokens, env);
+  }
+
+  function applyLlmSpend(accountedUsd: number | undefined, stepEstimateUsd: number): void {
+    const accountedMicros = toMicros(
+      typeof accountedUsd === "number" && Number.isFinite(accountedUsd) ? accountedUsd : stepEstimateUsd,
     );
-    const accountedUsd =
-      typeof reportedUsd === "number" && Number.isFinite(reportedUsd) && reportedUsd >= 0
-        ? usd6(reportedUsd)
-        : estimateUsd;
-    const accountedMicros = toMicros(accountedUsd);
     trackedLlmSpendMicros += accountedMicros;
     accumulatedEstimateMicros += accountedMicros - toMicros(stepEstimateUsd);
   }
@@ -276,7 +277,7 @@ export async function runQuestionSetup(
   }
 
   const llmObjectCaller = deps?.llmObject ?? llmObject;
-  const draftRes = await ctx.step.do<{ draft: any; estimateUsd: number }>(
+  const draftRes = await ctx.step.do<{ draft: any; estimateUsd: number; accountedUsd?: number }>(
     "draft",
     SINGLE_ATTEMPT,
     async () => {
@@ -311,18 +312,13 @@ export async function runQuestionSetup(
         idempotencyKey: `${jobStepKey(ctx, "draft")}:1`,
         maxUsd: remainingApprovedUsd(draftEstUsd),
       });
-      recordLlmSpend(
-        usd,
-        system,
-        prompt,
-        QUESTIONS_LLM_BOUNDS.setupDraft.outputTokens,
-        draftEstUsd,
-      );
+      const accountedUsd = llmAccountedUsd(usd, system, prompt, QUESTIONS_LLM_BOUNDS.setupDraft.outputTokens);
 
-      return { draft: object, estimateUsd: draftEstUsd };
+      return { draft: object, estimateUsd: draftEstUsd, accountedUsd };
     },
   );
 
+  applyLlmSpend(draftRes.accountedUsd, draftEstUsd);
   const draft = draftRes.draft;
   let finalOverviewText = loadData.overviewText || (draft.overview ? String(draft.overview).trim() : "");
 
@@ -405,7 +401,7 @@ export async function runQuestionSetup(
       env,
     );
     if (checkBudget(pickEstUsd)) {
-      const pickRes = await ctx.step.do<{ domains: string[]; estimateUsd: number }>(
+      const pickRes = await ctx.step.do<{ domains: string[]; estimateUsd: number; accountedUsd?: number }>(
         "pick",
         SINGLE_ATTEMPT,
         async () => {
@@ -430,17 +426,12 @@ export async function runQuestionSetup(
             idempotencyKey: `${jobStepKey(ctx, "pick")}:1`,
             maxUsd: remainingApprovedUsd(pickEstUsd),
           });
-          recordLlmSpend(
-            usd,
-            system,
-            prompt,
-            QUESTIONS_LLM_BOUNDS.setupPick.outputTokens,
-            pickEstUsd,
-          );
-          return { domains: object.domains, estimateUsd: pickEstUsd };
+          const accountedUsd = llmAccountedUsd(usd, system, prompt, QUESTIONS_LLM_BOUNDS.setupPick.outputTokens);
+          return { domains: object.domains, estimateUsd: pickEstUsd, accountedUsd };
         },
       );
 
+      applyLlmSpend(pickRes.accountedUsd, pickEstUsd);
       const seen = new Set<string>();
       const ownHostNorm = normalizeCompetitorDomain(payload.ownHost);
       for (const d of pickRes.domains) {
@@ -543,6 +534,7 @@ export async function runQuestionSetup(
       const verifyRes = await ctx.step.do<{
         competitors: Array<{ name: string; domain: string; notes: string; sourceUrl: string }>;
         estimateUsd: number;
+        accountedUsd?: number;
       }>("verify", SINGLE_ATTEMPT, async () => {
         const system = VERIFY_SYSTEM;
         const prompt = fitJsonPrompt(
@@ -568,16 +560,11 @@ export async function runQuestionSetup(
           idempotencyKey: `${jobStepKey(ctx, "verify")}:1`,
           maxUsd: remainingApprovedUsd(verifyEstUsd),
         });
-        recordLlmSpend(
-          usd,
-          system,
-          prompt,
-          QUESTIONS_LLM_BOUNDS.setupVerify.outputTokens,
-          verifyEstUsd,
-        );
-        return { competitors: object.competitors, estimateUsd: verifyEstUsd };
+        const accountedUsd = llmAccountedUsd(usd, system, prompt, QUESTIONS_LLM_BOUNDS.setupVerify.outputTokens);
+        return { competitors: object.competitors, estimateUsd: verifyEstUsd, accountedUsd };
       });
 
+      applyLlmSpend(verifyRes.accountedUsd, verifyEstUsd);
       const validUrls = new Set(allCompetitorPages.map((p) => p.url));
       const ownHostNorm = normalizeCompetitorDomain(payload.ownHost);
       let droppedCount = 0;
@@ -638,7 +625,9 @@ export async function runQuestionSetup(
         const pgenRes = await ctx.step.do<{
           items: Array<{ text: string; topic: string; source: string }>;
           warning?: string;
+          llmUsd?: number;
         }>("promptgen", LONG_PAID_STEP, async () => {
+          let llmUsd = 0;
           try {
             const items = await pgenFn(
               {
@@ -649,7 +638,7 @@ export async function runQuestionSetup(
                 market: payload.market,
                 model,
                 onLlmSpend: (usd: number) => {
-                  trackedLlmSpendMicros += toMicros(usd);
+                  llmUsd += usd;
                 },
               },
               {
@@ -659,11 +648,12 @@ export async function runQuestionSetup(
                 count: 20,
               },
             );
-            return { items };
+            return { items, llmUsd };
           } catch {
-            return { items: [], warning: "promptgen_unavailable" };
+            return { items: [], warning: "promptgen_unavailable", llmUsd };
           }
         });
+        trackedLlmSpendMicros += toMicros(pgenRes.llmUsd ?? 0);
 
         if (pgenRes.warning) {
           warnings.push({

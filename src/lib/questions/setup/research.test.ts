@@ -269,6 +269,81 @@ describe("questions.setup job runner (F08-AC-13, F08-AC-14)", () => {
     ]);
   });
 
+  it("keeps LLM charges in the budget and the log when a resumed run replays memoized steps", async () => {
+    // A finished step returns its memoized output on a later invocation without
+    // re-running its body, so spend must come from step outputs, not side effects.
+    const memo = new Map<string, unknown>();
+    function memoContext(replay: boolean) {
+      const ctx = createMockContext(basePayload);
+      ctx.step.do = async function <T>(name: string, opts: StepOptions, fn: () => Promise<T>): Promise<T> {
+        ctx.stepsRun.push({ name, opts });
+        if (replay && memo.has(name)) return memo.get(name) as T;
+        const out = await fn();
+        memo.set(name, out);
+        return out;
+      };
+      return ctx;
+    }
+    const logs: any[] = [];
+    let llmCalls = 0;
+    const deps = () =>
+      createMockDeps({
+        env: { QUESTION_SETUP_PROMPTGEN: "on" },
+        spendLedgerRows: [{ accounted_usd: "0.03" }, { accounted_usd: "0.02" }],
+        appendResearch: async (_admin: any, input: any) => {
+          logs.push(input);
+        },
+        llmObject: async (opts: any) => {
+          llmCalls += 1;
+          if (opts.system.includes("Fill only the missing")) return { object: syntheticDraft, usd: 0.01 };
+          if (opts.system.includes("Choose candidate competitors")) {
+            return { object: { domains: ["bewakoof.com"] }, usd: 0.02 };
+          }
+          if (opts.system.includes("Verify competitors")) {
+            return {
+              object: {
+                competitors: [
+                  {
+                    name: "Bewakoof",
+                    domain: "bewakoof.com",
+                    notes: "Sells oversized anime and graphic tees online.",
+                    sourceUrl: "https://bewakoof.com/oversized",
+                  },
+                ],
+              },
+              usd: 0.03,
+            };
+          }
+          throw new Error(`Unexpected system prompt: ${opts.system}`);
+        },
+        dataforseoClient: {
+          serp: {
+            live: async () => [
+              {
+                type: "organic",
+                title: "Bewakoof Oversized Tees",
+                url: "https://bewakoof.com/oversized",
+                description: "Shop cool streetwear tees online in India.",
+              },
+            ],
+          },
+        } as any,
+        promptgenCandidates: async (promptgenContext: any) => {
+          promptgenContext.onLlmSpend(0.04);
+          return [{ text: "What are the best streetwear clothing brands in India?", topic: "Streetwear", source: "promptgen" }];
+        },
+      });
+
+    await runQuestionSetup(memoContext(false), deps() as any);
+    const callsAfterFirst = llmCalls;
+    memo.delete("log");
+    await runQuestionSetup(memoContext(true), deps() as any);
+
+    assert.equal(llmCalls, callsAfterFirst, "a replay must not call the model again");
+    assert.equal(logs[0].spendUsd, 0.15);
+    assert.equal(logs[1].spendUsd, 0.15, "replayed LLM charges stay in the logged total");
+  });
+
   it("bounds each setup LLM request and passes only the remaining approved aggregate", async () => {
     const approvedMaxUsd = 5;
     const ctx = createMockContext({ ...basePayload, approvedMaxUsd });
