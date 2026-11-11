@@ -13,7 +13,7 @@ import {
 } from "./savedKeywords.ts";
 
 describe("savedKeywords service", () => {
-  // Case 1: Ported from OpenSEO saved-keywords.test.ts: attaches tags after saving (normalises and dedupes keywords)
+  // Case 1: Ported from upstream saved-keywords.test.ts: attaches tags after saving (normalises and dedupes keywords)
   test("attaches tags to saved keyword rows after saving (normalises & dedupes)", async () => {
     const repo = createMemorySavedKeywordsRepository();
 
@@ -44,7 +44,7 @@ describe("savedKeywords service", () => {
     );
   });
 
-  // Case 2: Ported from OpenSEO saved-keywords.test.ts: replaces tags when tagMode is replace
+  // Case 2: Ported from upstream saved-keywords.test.ts: replaces tags when tagMode is replace
   test("replaces tags when tagMode is replace", async () => {
     const repo = createMemorySavedKeywordsRepository();
 
@@ -73,7 +73,7 @@ describe("savedKeywords service", () => {
     assert.equal(list.rows[0].tags[0].name, "US");
   });
 
-  // Case 3: Ported from OpenSEO saved-keywords.test.ts: rejects replace mode without replacement tags
+  // Case 3: Ported from upstream saved-keywords.test.ts: rejects replace mode without replacement tags
   test("rejects replace mode without replacement tags", async () => {
     const repo = createMemorySavedKeywordsRepository();
 
