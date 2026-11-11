@@ -216,6 +216,8 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `100_f13_saved_keywords` | Saved keywords, tags and tag assignments per workspace. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `101_f13_keyword_metrics` | Shared keyword market metrics (no tenant data) with batch upsert and retention. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `102_f13_saved_keyword_functions` | Atomic save, list, tag and remove functions for saved keywords. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `090_f11_explore_dispatch` | Adds workspace ownership to explore probe observations, seeds immutable explore rows, and extends the P0 claim fence for allowlist, run spend cap, and claim accounting. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `091_f11_explore_runs` | Adds tenant-readable `explore_runs`, run indexes, attempt-to-ledger settlement, hold settlement, and 395-day run retention. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

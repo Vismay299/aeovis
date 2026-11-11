@@ -738,8 +738,8 @@ Body: country line ("Country hint sent: {Country}. This is not a verified search
   - [ ] **P1.T1.S2** *Files:* `supabase/migrations/091_f11_explore_runs.sql`, `scripts/setup-supabase.mjs` (required objects), `.github/workflows/ci.yml` (tenant RLS list adds `explore_runs`). *Verify:* CI job green.
 - [ ] **P1.T2 DB tests**
   - [ ] **P1.T2.S1** *Files:* `scripts/qa/check-f11-db.mjs` (loopback `_qa` database, pattern `scripts/qa/check-repair-workflows.mjs:13-18`). Groups: `explore-shape` (AC-01, 06), `explore-fence` (AC-02, 03, 05: paused + allowlisted brand granted; paused + other brand blocked; canaries_allowed does not admit explore; run cap counts only same run; missing cap raises; open circuit blocks), `claim-regression` (AC-04: a 12-case matrix executed against a copy of 035's function created as `claim_probe_dispatch_035` inside the test database, comparing JSON results and resulting row states with the new function), `explore-isolation` (AC-11: finish on an explore row writes no `prompt_results`), `explore-ledger` (AC-12), `explore-retention` (AC-20). *Verify:* `node scripts/qa/check-f11-db.mjs` → "ok 6 groups".
-- [ ] **P1.T3 Store**
-  - [ ] **P1.T3.S1** *Files:* `src/lib/explore/store.ts` (RPC wrappers `seedExplore`, `listRunObservations`, `findReusable` query, run CRUD), `src/lib/explore/memoryStore.ts` (same semantics for unit tests). *Verify:* `node --test src/lib/explore/store.test.ts` → pass.
+- [x] **P1.T3 Store**
+  - [x] **P1.T3.S1** *Files:* `src/lib/explore/store.ts` (RPC wrappers `seedExplore`, `listRunObservations`, `findReusable` query, run CRUD), `src/lib/explore/memoryStore.ts` (same semantics for unit tests). *Verify:* `node --test src/lib/explore/store.test.ts` → pass.
 
 **Checkpoint:** CI database job and `check-f11-db.mjs` green; full suite and build green. Completes F11-AC-01…06, 11, 12, 20.
 
