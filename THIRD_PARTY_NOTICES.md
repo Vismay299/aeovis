@@ -423,6 +423,7 @@ SOFTWARE.
 - `src/lib/domain/domainService.ts` (from `src/server/features/domain/services/DomainService.ts`, `domainKeywordsPage.ts`, `domainPagesPage.ts`)
 - `src/lib/domain/pagination.ts` (from `src/server/features/domain/services/pagination.ts`)
 - `src/lib/pricing/actions/domain.ts` (from `src/serverFunctions/domain.ts`)
+- `src/lib/domain/serpCompetitors.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`)
 
 - `src/lib/providers/dataforseo/backlinks.ts` (from `src/server/lib/dataforseo/backlinks.ts`)
 - `src/lib/providers/dataforseo/backlinks.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)

@@ -280,9 +280,9 @@ Accessibility and phone: inputs labelled; tables keep `aria-sort`; tabs are `rol
 
 **Goal:** SERP competitors and the F07 bridge.
 
-- [ ] **P2.T1 Competitor search and F07 bridge**
-  - [ ] **P2.T1.S1** *Files:* `src/lib/domain/serpCompetitors.ts`, `serpCompetitors.test.ts`, fixture `labs-serp-competitors.json`. *Do:* §6.2; tests: four sort modes (avg position ascending), exclusion of `www.` and subdomains of the target, `isOwnSite`, `isDeclaredCompetitor`, metered feature `domain.competitors`, cache keep only when rows > 0. *Verify:* `node --test src/lib/domain/serpCompetitors.test.ts` → pass (F14-AC-08).
-  - [ ] **P2.T1.S2** *Files:* `src/lib/domain/addCompetitor.ts`, `addCompetitor.test.ts`, `src/app/api/customer/domain/competitors/route.ts`, `competitors/add/route.ts`, `competitors/declared/route.ts`, contracts, `domain.route.test.mjs` (extend: `project_memory` off → add 404 and declared `available:false`; own host → 400 `context_invalid` with F07 copy; competitors without `maxUsd` → 400 `approval_required`; research-log append on a miss). *Verify:* `node --test src/lib/domain/addCompetitor.test.ts src/lib/domain/domain.route.test.mjs src/lib/http/routeContract.test.ts` → pass (F14-AC-09 route half, F14-AC-13).
+- [x] **P2.T1 Competitor search and F07 bridge**
+  - [x] **P2.T1.S1** *Files:* `src/lib/domain/serpCompetitors.ts`, `serpCompetitors.test.ts`, fixture `labs-serp-competitors.json`. *Do:* §6.2; tests: four sort modes (avg position ascending), exclusion of `www.` and subdomains of the target, `isOwnSite`, `isDeclaredCompetitor`, metered feature `domain.competitors`, cache keep only when rows > 0. *Verify:* `node --test src/lib/domain/serpCompetitors.test.ts` → pass (F14-AC-08).
+  - [x] **P2.T1.S2** *Files:* `src/lib/domain/addCompetitor.ts`, `addCompetitor.test.ts`, `src/app/api/customer/domain/competitors/route.ts`, `competitors/add/route.ts`, `competitors/declared/route.ts`, contracts, `domain.route.test.mjs` (extend: `project_memory` off → add 404 and declared `available:false`; own host → 400 `context_invalid` with F07 copy; competitors without `maxUsd` → 400 `approval_required`; research-log append on a miss). *Verify:* `node --test src/lib/domain/addCompetitor.test.ts src/lib/domain/domain.route.test.mjs src/lib/http/routeContract.test.ts` → pass (F14-AC-09 route half, F14-AC-13).
 
 **Checkpoint:** full suite, typecheck, build. Completes F14-AC-08, 09 (server), 13.
 

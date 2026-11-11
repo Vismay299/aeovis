@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
+import { AppError } from "../http/appError.ts";
 import { SpendRefused } from "../spend/errors.ts";
 import "../pricing/actions/index.ts";
 
@@ -14,6 +15,15 @@ const KEYWORDS_ROUTE = await import(
 );
 const PAGES_ROUTE = await import(
   new URL("../../app/api/customer/domain/pages/route.ts", import.meta.url).href
+);
+const COMPETITORS_ROUTE = await import(
+  new URL("../../app/api/customer/domain/competitors/route.ts", import.meta.url).href
+);
+const COMPETITORS_ADD_ROUTE = await import(
+  new URL("../../app/api/customer/domain/competitors/add/route.ts", import.meta.url).href
+);
+const COMPETITORS_DECLARED_ROUTE = await import(
+  new URL("../../app/api/customer/domain/competitors/declared/route.ts", import.meta.url).href
 );
 
 const USER = { id: "user-1", email: "owner@example.test" };
@@ -292,3 +302,229 @@ test("pages route returns paged results", async () => {
   assert.equal(data.totalCount, 42);
   assert.equal(data.pages.length, 1);
 });
+
+test("competitors route: flag off returns 404 feature_unavailable", async () => {
+  const req = makeRequest("/api/customer/domain/competitors", {
+    domain: "offcult.in",
+    keywords: ["oversized tee"],
+    requestId: "b7e4f9b8-3f51-40be-a237-7729f64bf501",
+  });
+  const res = await COMPETITORS_ROUTE.POST(req, {}, makeDeps({ flagOn: false }));
+  assert.equal(res.status, 404);
+  const data = await res.json();
+  assert.equal(data.code, "feature_unavailable");
+});
+
+test("competitors route: requires maxUsd when not cacheOnly (400 approval_required)", async () => {
+  const req = makeRequest("/api/customer/domain/competitors", {
+    domain: "offcult.in",
+    keywords: ["oversized tee"],
+    requestId: "b7e4f9b8-3f51-40be-a237-7729f64bf501",
+  });
+  const res = await COMPETITORS_ROUTE.POST(req, {}, makeDeps());
+  assert.equal(res.status, 400);
+  const data = await res.json();
+  assert.equal(data.code, "approval_required");
+  assert.equal(data.error, "Review and approve the price before running this.");
+});
+
+test("competitors route: stale maxUsd returns 409 price_changed", async () => {
+  const req = makeRequest("/api/customer/domain/competitors", {
+    domain: "offcult.in",
+    keywords: ["oversized tee"],
+    maxUsd: 0.001,
+    requestId: "b7e4f9b8-3f51-40be-a237-7729f64bf501",
+  });
+  const res = await COMPETITORS_ROUTE.POST(req, {}, makeDeps());
+  assert.equal(res.status, 409);
+  const data = await res.json();
+  assert.equal(data.code, "price_changed");
+});
+
+test("competitors route: cacheOnly miss returns not_cached and makes zero spend calls", async () => {
+  let labsCalled = false;
+  const deps = makeDeps({
+    runSerpCompetitorsRequest: async () => ({
+      status: "not_cached",
+      keywordCount: 1,
+      competitors: [],
+    }),
+  });
+
+  const req = makeRequest("/api/customer/domain/competitors", {
+    domain: "offcult.in",
+    keywords: ["oversized tee"],
+    cacheOnly: true,
+    requestId: "b7e4f9b8-3f51-40be-a237-7729f64bf501",
+  });
+  const res = await COMPETITORS_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.status, "not_cached");
+  assert.equal(data.competitors.length, 0);
+  assert.equal(labsCalled, false);
+});
+
+test("competitors route: success returns competitors list and flags own site & declared competitor", async () => {
+  let appendedKind = null;
+  const deps = makeDeps({
+    labs: {
+      keywords: {},
+      domain: {},
+      labs: {
+        serpCompetitors: async () => ({
+          data: [
+            {
+              domain: "bewakoof.com",
+              avg_position: 4.2,
+              median_position: 3,
+              visibility: 0.41,
+              etv: 18120.5,
+              keywords_count: 31,
+            },
+            {
+              domain: "offcult.in",
+              avg_position: 7.0,
+              visibility: 0.25,
+              etv: 1840.0,
+              keywords_count: 22,
+            },
+          ],
+        }),
+      },
+    },
+    declaredCompetitors: async () => [
+      { domain: "bewakoof.com", name: "Bewakoof", notes: null },
+    ],
+    appendResearch: async (_admin, input) => {
+      appendedKind = input.kind;
+    },
+  });
+
+  const req = makeRequest("/api/customer/domain/competitors", {
+    domain: "souledstore.com", // researching competitor domain
+    keywords: ["oversized tee"],
+    maxUsd: 0.1,
+    requestId: "b7e4f9b8-3f51-40be-a237-7729f64bf501",
+  });
+
+  const res = await COMPETITORS_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.status, "ok");
+  assert.equal(data.keywordCount, 1);
+  assert.equal(data.competitors.length, 2);
+
+  const bewakoof = data.competitors.find((c) => c.domain === "bewakoof.com");
+  assert.ok(bewakoof);
+  assert.equal(bewakoof.isDeclaredCompetitor, true);
+  assert.equal(bewakoof.isOwnSite, false);
+
+  const offcult = data.competitors.find((c) => c.domain === "offcult.in");
+  assert.ok(offcult);
+  assert.equal(offcult.isOwnSite, true);
+  assert.equal(offcult.isDeclaredCompetitor, false);
+
+  assert.equal(appendedKind, "domain.competitors");
+});
+
+test("competitors add route: project_memory off returns 404 feature_unavailable", async () => {
+  const deps = makeDeps({
+    isFeatureEnabled: async (feature) => {
+      if (feature === "project_memory") return false;
+      return true;
+    },
+  });
+
+  const req = makeRequest("/api/customer/domain/competitors/add", {
+    domain: "bewakoof.com",
+  });
+  const res = await COMPETITORS_ADD_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 404);
+  const data = await res.json();
+  assert.equal(data.code, "feature_unavailable");
+  assert.equal(data.error, "Project memory is not enabled for this workspace.");
+});
+
+test("competitors add route: own host returns 400 context_invalid with F07 copy", async () => {
+  const deps = makeDeps({
+    addDomainAsCompetitor: async () => {
+      throw new AppError(
+        400,
+        "context_invalid",
+        "updates[0] was rejected (nothing in this batch was applied): Your own website cannot be a competitor.",
+      );
+    },
+  });
+
+  const req = makeRequest("/api/customer/domain/competitors/add", {
+    domain: "offcult.in",
+  });
+  const res = await COMPETITORS_ADD_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 400);
+  const data = await res.json();
+  assert.equal(data.code, "context_invalid");
+  assert.match(data.error, /Your own website cannot be a competitor/);
+});
+
+test("competitors add route: success returns competitor object and added true", async () => {
+  const deps = makeDeps({
+    addDomainAsCompetitor: async () => ({
+      competitor: { domain: "bewakoof.com", name: null },
+      added: true,
+    }),
+  });
+
+  const req = makeRequest("/api/customer/domain/competitors/add", {
+    domain: "bewakoof.com",
+  });
+  const res = await COMPETITORS_ADD_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.deepEqual(data, {
+    competitor: { domain: "bewakoof.com", name: null },
+    added: true,
+  });
+});
+
+test("competitors declared route: project_memory off returns available false and empty array", async () => {
+  const deps = makeDeps({
+    isFeatureEnabled: async (feature) => {
+      if (feature === "project_memory") return false;
+      return true;
+    },
+  });
+
+  const req = new Request(`https://perceev.test/api/customer/domain/competitors/declared?brand_key=${BRAND_KEY}`, {
+    method: "GET",
+  });
+  const res = await COMPETITORS_DECLARED_ROUTE.GET(req, {}, deps);
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.deepEqual(data, {
+    available: false,
+    competitors: [],
+  });
+});
+
+test("competitors declared route: project_memory on returns competitors and ownHost", async () => {
+  const deps = makeDeps({
+    isFeatureEnabled: async () => true,
+    declaredCompetitors: async () => [
+      { domain: "bewakoof.com", name: "Bewakoof", notes: null },
+    ],
+  });
+
+  const req = new Request(`https://perceev.test/api/customer/domain/competitors/declared?brand_key=${BRAND_KEY}`, {
+    method: "GET",
+  });
+  const res = await COMPETITORS_DECLARED_ROUTE.GET(req, {}, deps);
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.available, true);
+  assert.equal(data.ownHost, "offcult.in");
+  assert.deepEqual(data.competitors, [
+    { domain: "bewakoof.com", name: "Bewakoof" },
+  ]);
+});
+
