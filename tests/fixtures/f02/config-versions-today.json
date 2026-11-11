@@ -1,0 +1,30 @@
+{
+  "aio": {
+    "configVersion": "v1:brightdata:direct:n/a:unknown-model:BRIGHTDATA_API_KEY#504690069ab0b2e7",
+    "circuitIdentity": {
+      "provider": "brightdata",
+      "account": "BRIGHTDATA_API_KEY#504690069ab0b2e7"
+    }
+  },
+  "chatgpt": {
+    "configVersion": "v1:openrouter:gateway:openrouter:openai/gpt-6-luna:LLM_API_KEY#638c6b0f5cd01430",
+    "circuitIdentity": {
+      "provider": "openrouter",
+      "account": "LLM_API_KEY#638c6b0f5cd01430"
+    }
+  },
+  "gemini": {
+    "configVersion": "v1:openrouter:gateway:openrouter:google/gemini-3.8-flash:LLM_API_KEY#638c6b0f5cd01430",
+    "circuitIdentity": {
+      "provider": "openrouter",
+      "account": "LLM_API_KEY#638c6b0f5cd01430"
+    }
+  },
+  "perplexity": {
+    "configVersion": "v1:openrouter:gateway:openrouter:perplexity/sonar:LLM_API_KEY#638c6b0f5cd01430",
+    "circuitIdentity": {
+      "provider": "openrouter",
+      "account": "LLM_API_KEY#638c6b0f5cd01430"
+    }
+  }
+}

@@ -107,6 +107,9 @@ function AnswerBlock({ row }) {
     <div className="bg-muted/50 rounded-md p-3 text-sm space-y-2 pv-scans-answer">
       <div className="flex flex-wrap items-center gap-2 pv-scans-answer__head">
         <span className="font-medium text-foreground pv-scans-answer__engine">{engineLabel(row.engine)}</span>
+        {row.raw?.measurement_method === "consumer_capture" ? (
+          <Badge title="Captured from the consumer app through DataForSEO.">Consumer app</Badge>
+        ) : null}
         {row.raw?.measurement_method === "model_api" ? <Badge>Model API</Badge> : null}
         {!failed && row.answered === true && position !== null ? <Badge>#{position}</Badge> : null}
         {!failed && row.answered === true && row.brand_cited ? <Badge tone="brand">Cited</Badge> : null}

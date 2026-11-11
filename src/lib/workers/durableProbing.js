@@ -7,6 +7,7 @@ import {
   PROBE_LEASE_SECONDS,
   PROBE_REQUEST_MS,
   resultDecision,
+  withLeaseRenewal,
 } from "../db/probeDispatch.js";
 import { validateEngineConfig } from "../engines/providerReadiness.js";
 import {
@@ -15,6 +16,13 @@ import {
 } from "../engines/providerFailure.js";
 import { getBrandAliases } from "../scoring/aliases.js";
 import { extractBrandDomain } from "../scoring/citations.js";
+import {
+  isRouteScanCapable,
+  resolveFrozenRoutes,
+  requestBudgetMs,
+  leaseSecondsFor,
+  laneConcurrency,
+} from "../engines/engineRoutes.ts";
 
 const terminal = new Set([
   "answered",
@@ -57,12 +65,17 @@ export function freezeDispatch({
   stats = {},
   env = process.env,
   now = Date.now,
+  routes,
 }) {
   return {
     version: DISPATCH_VERSION,
     deadline_at: new Date(now() + 24 * 60 * 60_000).toISOString(),
+    ...(routes ? { routes } : {}),
     identities: Object.fromEntries(
-      engines.map((name) => [name, dispatchIdentity(name, env)]),
+      engines.map((name) => [
+        name,
+        dispatchIdentity(name, env, routes?.[name] ? { route: routes[name].route, model: routes[name].model } : undefined),
+      ]),
     ),
     sourcing_cost: Number(stats.cost || 0),
     sourcing_unknown: Number(stats.cost_unmeasured_calls || 0),
@@ -86,26 +99,42 @@ export async function runDurableProbing({
 }) {
   const cp = { ...checkpoint };
   const stored = await getResults(jobId);
-  cp.dispatch ||= {
-    version: DISPATCH_VERSION,
-    deadline_at: new Date(now() + 24 * 60 * 60_000).toISOString(),
-    identities: Object.fromEntries(
-      (cp.engines || engines.map((e) => e.name)).map((name) => [
-        name,
-        dispatchIdentity(name, env),
-      ]),
-    ),
-    sourcing_cost: Math.max(
+  const names = cp.engines || engines.map((e) => e.name);
+
+  if (!cp.dispatch) {
+    let openCircuitKeys = new Set();
+    if (store && typeof store.circuits === "function") {
+      try {
+        const circuits = await store.circuits();
+        openCircuitKeys = new Set(
+          circuits
+            .filter((c) => c.open_until && Date.parse(c.open_until) > now())
+            .map((c) => c.circuit_key),
+        );
+      } catch {
+        // ignore circuit read failures
+      }
+    }
+    const routes = await resolveFrozenRoutes(names, { env, openCircuitKeys });
+    cp.dispatch = freezeDispatch({
+      engines: names,
+      stats: cp.stats,
+      env,
+      now,
+      routes,
+    });
+    cp.dispatch.sourcing_cost = Math.max(
       0,
       Number(cp.stats?.cost || 0) -
         stored.reduce((n, r) => n + (Number(r.raw?.cost) || 0), 0),
-    ),
-    sourcing_unknown: Math.max(
+    );
+    cp.dispatch.sourcing_unknown = Math.max(
       0,
       Number(cp.stats?.cost_unmeasured_calls || 0) -
         stored.filter((r) => r.raw?.cost == null).length,
-    ),
-  };
+    );
+  }
+
   cp.measurement_context ||= resolveMeasurementContext({country:typeof cp.geo === "string" ? cp.geo : cp.geo?.country});
   const queries = cp.queries;
   if (
@@ -116,7 +145,6 @@ export async function runDurableProbing({
   const historical = new Map(
     stored.map((r) => [`${r.engine}|${r.query}`, r.raw]),
   );
-  const names = cp.engines || engines.map((e) => e.name);
   const context = {
     version: cp.dispatch.version,
     panel: hashIdentity(queries),
@@ -166,10 +194,24 @@ export async function runDurableProbing({
   // engine's prefix. SQL owns all authorization; claims serialize on its lock.
   async function dispatchRow(row) {
     const engine = engines.find((e) => e.name === row.engine);
+    const routeInfo = cp.dispatch?.routes?.[row.engine];
+    const route = routeInfo?.route;
+    const model = routeInfo?.model;
+    const routeOpts = routeInfo ? { route, model } : undefined;
+
+    if (route && !isRouteScanCapable(row.engine, route)) {
+      cp.blocked = {
+        reason: "route_not_scan_capable",
+        detail: `Route ${route} is not scan-capable for ${row.engine}`,
+      };
+      await store.block(row.id, "route_not_scan_capable");
+      return;
+    }
+
     if (
       !engine ||
-      !validateEngineConfig(row.engine, env).ok ||
-      dispatchIdentity(row.engine, env).config_version !== row.config_version
+      !validateEngineConfig(row.engine, env, routeOpts).ok ||
+      dispatchIdentity(row.engine, env, routeOpts).config_version !== row.config_version
     ) {
       cp.blocked = {
         reason: "engine_not_registered",
@@ -178,7 +220,9 @@ export async function runDurableProbing({
       await store.block(row.id, "configuration_changed");
       return;
     }
-    const claim = await store.claim(row.id, budget);
+
+    const leaseSeconds = leaseSecondsFor(row.engine, route);
+    const claim = await store.claim(row.id, route ? { ...budget, leaseSeconds } : budget);
     if (!claim?.granted) {
       if (
         [
@@ -195,24 +239,45 @@ export async function runDurableProbing({
     }
     tally.probesAttempted = (tally.probesAttempted || 0) + 1;
     let result;
-    const captures=[];
-    const evidence=store.evidence;
-    const captureEvidence=evidence ? async input=>{captures.push(await evidence.capture({observationId:row.id,token:claim.lease_token,index:captures.length,...input}));} : null;
-    const startedAt=new Date(now()).toISOString();
+    const captures = [];
+    const evidence = store.evidence;
+    const captureEvidence = evidence
+      ? async (input) => {
+          captures.push(
+            await evidence.capture({
+              observationId: row.id,
+              token: claim.lease_token,
+              index: captures.length,
+              ...input,
+            }),
+          );
+        }
+      : null;
+    const startedAt = new Date(now()).toISOString();
+    const probeTimeoutMs = requestBudgetMs(row.engine, route);
     try {
-      result = await engine.probe(
-        queries.find((q) => q.text === row.query),
-        cp.brand,
-        aliases,
-        domain,
-        cp.competitors,
-        stats,
-        {
-          geo: cp.geo,
-          measurementContext:{...cp.measurement_context,surface:row.engine},
-          captureEvidence,
-          durableDispatch: true,
-          deadlineAt: now() + PROBE_REQUEST_MS,
+      result = await withLeaseRenewal(
+        store,
+        row.id,
+        claim.lease_token,
+        leaseSeconds,
+        async () => {
+          return await engine.probe(
+            queries.find((q) => q.text === row.query),
+            cp.brand,
+            aliases,
+            domain,
+            cp.competitors,
+            stats,
+            {
+              geo: cp.geo,
+              measurementContext: { ...cp.measurement_context, surface: row.engine },
+              captureEvidence,
+              durableDispatch: true,
+              deadlineAt: now() + probeTimeoutMs,
+              ...(route ? { route, model } : {}),
+            },
+          );
         },
       );
     } catch (error) {
@@ -225,20 +290,49 @@ export async function runDurableProbing({
         provider_failure: classifyProviderFailure({ error }),
       };
     }
-    result={...result,measurement_context:{...cp.measurement_context,surface:row.engine},
-      observed_location:null,location_verification:"unverified",capture_started_at:startedAt,capture_completed_at:new Date(now()).toISOString(),
-      evidence_state:evidence ? (captures.length && captures.every(c=>c.state==="stored") ? "stored" : "incomplete") : "unverified",
-      evidence_captures:captures};
-    result.attempt_id=claim.lease_token;
-    result.provenance=createObservationEnvelope({...result.provenance,...result,
-      observation_id:row.id,attempt_id:claim.lease_token,attempt_number:claim.attempt_no,
-      surface:result.provenance?.surface || row.engine,method:result.provenance?.method || result.measurement_method || "model_api",
-      gateway:result.provenance?.gateway || (row.engine==="aio"?"brightdata":"unknown"),
-      requested_location:cp.measurement_context.country,language:cp.measurement_context.language,device:cp.measurement_context.device,
-      session_policy:cp.measurement_context.session_policy,started_at:startedAt,completed_at:result.capture_completed_at,
-      evidence_identities:captures.map(c=>c.sha256).filter(Boolean),evidence_state:result.evidence_state});
-    if(evidence && ["unknown_schema","malformed"].includes(result.serp_state)) {
-      await evidence.incident({observationId:row.id,engine:row.engine,parserVersion:result.parser_version,shape:JSON.stringify(result.validation_errors || [])});
+    result = {
+      ...result,
+      measurement_context: { ...cp.measurement_context, surface: row.engine },
+      observed_location: null,
+      location_verification: "unverified",
+      capture_started_at: startedAt,
+      capture_completed_at: new Date(now()).toISOString(),
+      evidence_state: evidence
+        ? captures.length && captures.every((c) => c.state === "stored")
+          ? "stored"
+          : "incomplete"
+        : "unverified",
+      evidence_captures: captures,
+    };
+    result.attempt_id = claim.lease_token;
+    result.provenance = createObservationEnvelope({
+      ...result.provenance,
+      ...result,
+      observation_id: row.id,
+      attempt_id: claim.lease_token,
+      attempt_number: claim.attempt_no,
+      surface: result.provenance?.surface || row.engine,
+      method: result.provenance?.method || result.measurement_method || "model_api",
+      gateway:
+        result.provenance?.gateway ||
+        result.gateway ||
+        (row.engine === "aio" ? "brightdata" : "unknown"),
+      requested_location: cp.measurement_context.country,
+      language: cp.measurement_context.language,
+      device: cp.measurement_context.device,
+      session_policy: cp.measurement_context.session_policy,
+      started_at: startedAt,
+      completed_at: result.capture_completed_at,
+      evidence_identities: captures.map((c) => c.sha256).filter(Boolean),
+      evidence_state: result.evidence_state,
+    });
+    if (evidence && ["unknown_schema", "malformed"].includes(result.serp_state)) {
+      await evidence.incident({
+        observationId: row.id,
+        engine: row.engine,
+        parserVersion: result.parser_version,
+        shape: JSON.stringify(result.validation_errors || []),
+      });
     }
     const decision = resultDecision(
       result,
@@ -273,18 +367,39 @@ export async function runDurableProbing({
     else tally.probesSucceeded = (tally.probesSucceeded || 0) + 1;
     // Reconstruct spend from the durable ledger below, including recovered work.
     await updateJob(jobId, { checkpoint: { ...cp, stats }, attempts: 0 });
+    return result;
   }
   const lanes = new Map();
   for (const row of rows) {
     if (!lanes.has(row.engine)) lanes.set(row.engine, []);
     lanes.get(row.engine).push(row);
   }
-  const settled = await Promise.allSettled([...lanes.values()].map(async (lane) => {
-    for (const row of lane) {
-      if (now() - chunkStartMs + PROBE_REQUEST_MS + 5_000 > budgetMs) break;
-      await dispatchRow(row);
-    }
-  }));
+  const settled = await Promise.allSettled(
+    [...lanes.entries()].map(async ([engineName, lane]) => {
+      const routeInfo = cp.dispatch?.routes?.[engineName];
+      const route = routeInfo?.route;
+      const concurrency = laneConcurrency(engineName, route, env);
+      let laneStopped = false;
+      let index = 0;
+
+      async function worker() {
+        while (index < lane.length && !laneStopped) {
+          const row = lane[index++];
+          const reqBudget = requestBudgetMs(row.engine, route);
+          if (now() - chunkStartMs + reqBudget + 5_000 > budgetMs) {
+            break;
+          }
+          const res = await dispatchRow(row);
+          if (res?.provider_failure?.opens_circuit) {
+            laneStopped = true;
+          }
+        }
+      }
+
+      const workers = Array.from({ length: Math.min(concurrency, lane.length) }, () => worker());
+      await Promise.all(workers);
+    }),
+  );
   const laneFailure = settled.find((s) => s.status === "rejected");
   if (laneFailure) throw laneFailure.reason;
   const observations = await store.list(jobId);
@@ -324,11 +439,13 @@ export async function runDurableProbing({
       ),
   );
   await updateJob(jobId, { checkpoint: cp, progress_pct: progressPct });
-  const dueTimes = remaining.map((o) =>
-    o.state === "leased"
-      ? Date.parse(o.lease_until)
-      : Date.parse(o.next_attempt_at),
-  );
+  const dueTimes = remaining
+    .map((o) =>
+      o.state === "leased"
+        ? Date.parse(o.lease_until)
+        : Date.parse(o.next_attempt_at),
+    )
+    .filter(Number.isFinite);
   const resumeAt = dueTimes.length
     ? new Date(Math.min(...dueTimes)).toISOString()
     : null;

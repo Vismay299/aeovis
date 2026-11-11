@@ -213,6 +213,25 @@ const PROVIDER_CODE_KINDS = Object.freeze({
   invalid_response: PROVIDER_FAILURE.PARSE,
   malformed_response: PROVIDER_FAILURE.PARSE,
   unparseable_response: PROVIDER_FAILURE.PARSE,
+  // DataForSEO codes (§6.2.6)
+  dataforseo_http_401: PROVIDER_FAILURE.AUTHENTICATION,
+  dataforseo_40100: PROVIDER_FAILURE.AUTHENTICATION,
+  dataforseo_40200: PROVIDER_FAILURE.SPEND_LIMIT,
+  dataforseo_40210: PROVIDER_FAILURE.SPEND_LIMIT,
+  dataforseo_http_402: PROVIDER_FAILURE.SPEND_LIMIT,
+  dataforseo_http_429: PROVIDER_FAILURE.RATE_LIMIT,
+  dataforseo_40101: PROVIDER_FAILURE.TRANSIENT,
+  dataforseo_40103: PROVIDER_FAILURE.TRANSIENT,
+  dataforseo_50000: PROVIDER_FAILURE.TRANSIENT,
+  dataforseo_50301: PROVIDER_FAILURE.TRANSIENT,
+  dataforseo_50302: PROVIDER_FAILURE.TRANSIENT,
+  dataforseo_50303: PROVIDER_FAILURE.TRANSIENT,
+  dataforseo_50304: PROVIDER_FAILURE.TRANSIENT,
+  dataforseo_50401: PROVIDER_FAILURE.TRANSIENT,
+  dataforseo_50402: PROVIDER_FAILURE.TRANSIENT,
+  dataforseo_40501: PROVIDER_FAILURE.REQUEST,
+  dataforseo_50100: PROVIDER_FAILURE.REQUEST,
+  dataforseo_timeout: PROVIDER_FAILURE.TIMEOUT,
 });
 
 /** Header names that mean "come back after <x>" or "the window resets at <t>". */
@@ -404,6 +423,7 @@ export function retryAfterFrom({ headers = null, body = null, nowMs = Date.now()
  */
 function providerCodeFrom({ body = null, error = null, headers = null } = {}) {
   const candidates = [
+    error?.details?.providerCode,
     error?.providerCode,
     error?.error_code,
     error?.code,
@@ -458,7 +478,16 @@ function isParseError(error) {
 function kindFor({ code, status, bodyText, error, parseError }) {
   if (parseError || isParseError(error)) return PROVIDER_FAILURE.PARSE;
   if (isTimeoutError(error)) return PROVIDER_FAILURE.TIMEOUT;
-  if (code) return PROVIDER_CODE_KINDS[code];
+  if (code) {
+    const mapped = PROVIDER_CODE_KINDS[code];
+    if (mapped) return mapped;
+    const dataforseoHttpStatus = /^dataforseo_http_(\d{3})$/.exec(code);
+    if (dataforseoHttpStatus) {
+      return Number(dataforseoHttpStatus[1]) >= 500
+        ? PROVIDER_FAILURE.TRANSIENT
+        : PROVIDER_FAILURE.REQUEST;
+    }
+  }
   if (CHALLENGE_TEXT.test(bodyText)) return PROVIDER_FAILURE.CHALLENGE;
   if (AUTH_TEXT.test(bodyText)) return PROVIDER_FAILURE.AUTHENTICATION;
   if (SPEND_TEXT.test(bodyText)) return PROVIDER_FAILURE.SPEND_LIMIT;
@@ -502,6 +531,7 @@ function kindFor({ code, status, bodyText, error, parseError }) {
  *   kind: string, retryable: boolean, opens_circuit: boolean, action: string,
  *   provider: string|null, status: number|null, provider_code: string|null,
  *   retry_after_ms: number|null, reset_observed: boolean, reset_source: string|null,
+ *   ambiguous_call: boolean,
  *   evidence: string, brand_absence: false, observation: null, message: string, detail: string|null
  * }}
  */
@@ -529,6 +559,7 @@ export function classifyProviderFailure({
   });
   const policy = POLICY[kind];
   const timing = retryAfterFrom({ headers, body: typeof body === "string" ? null : body, nowMs });
+  const ambiguousCall = error?.name === "AmbiguousCallError";
 
   // The retry verdict is the shared classifier's, narrowed — never widened. A
   // permanent status cannot be made retryable by a provider code claiming
@@ -538,6 +569,7 @@ export function classifyProviderFailure({
   // repeat of the incident.
   const sharedVerdict = httpStatus === null ? null : classifyHttpStatus(httpStatus);
   const retryable =
+    !ambiguousCall &&
     policy.retryable && (sharedVerdict === null || sharedVerdict === FAILURE_KIND.TRANSIENT);
 
   const evidence = code
@@ -551,6 +583,7 @@ export function classifyProviderFailure({
   return {
     kind,
     retryable,
+    ambiguous_call: ambiguousCall,
     opens_circuit: policy.opens_circuit,
     action: policy.action,
     provider: provider || error?.provider || null,

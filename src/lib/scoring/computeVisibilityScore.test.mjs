@@ -306,3 +306,18 @@ test('aggregateMultiEnginePromptRuns - hybrid weights when serp present', () => 
   assert.equal(agg.engine_scores.gemini, 80.0);
 });
 
+test('aggregateMultiEnginePromptRuns - ignores engines missing from ENGINE_DEFAULT_WEIGHTS', () => {
+  const runs = [
+    // OpenAI (weight 0.35, score 100)
+    { prompt: "crm tool", engine: "openai", prompt_score: 100.0, mentioned: true, position: "recommended", sentiment: "positive" },
+    // Unweighted engine (missing from ENGINE_DEFAULT_WEIGHTS, weight 0, score 0)
+    { prompt: "crm tool", engine: "unweighted_future_engine", prompt_score: 0.0, mentioned: false },
+  ];
+  // Active: openai (weight 0.35), unweighted_future_engine (weight 0).
+  // Total weight = 0.35.
+  // Normalized: openai = 1.0, unweighted = 0.0.
+  // Weighted score = 100 * 1.0 + 0 * 0.0 = 100.0.
+  const agg = aggregateMultiEnginePromptRuns(runs);
+  assert.equal(agg.prompt_score, 100.0);
+});
+

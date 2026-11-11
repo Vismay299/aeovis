@@ -9,7 +9,7 @@ import { isBrandedQuery, resolveQueryIntentTier } from "./aioQueryClassify.js";
 import { detectMention, judgeBrandsSymmetric } from "./judge.js";
 import { applyEntityEvidence, ENTITY_RESOLUTION_VERSION } from "./entityEvidence.js";
 import { countBrandsElicited } from "./promptQuality.js";
-import { extractBrandDomain } from "./citations.js";
+import { extractBrandDomain, normalizeUrl } from "./citations.js";
 import { measuredNumberOrNull, ratioPctOrNull } from "./measuredNumber.js";
 import {
   ELIGIBILITY_POLICY_V1,
@@ -33,6 +33,8 @@ import {
 import { ENGINE_LABELS, formatEngineList } from "../engines/deployedEngines.js";
 import { createObservationEnvelope, SEARCH_STATE } from "../provenance.js";
 import { scanHeadline } from "./scanHeadline.js";
+import { routeOrder, isRouteConfigured } from "../engines/openRouterProbe.js";
+import { probeDataforseoScraper, probeDataforseoModel, fetchDataforseoAioSerp } from "../engines/dataforseo.ts";
 
 const CHATGPT_CONCURRENCY = 4;
 const PERPLEXITY_CONCURRENCY = 4;
@@ -97,6 +99,7 @@ export function domainMatches(candidateDomain, target) {
 async function probeAio(query, brand, brandAliases, brandDomain, competitors, stats, options = {}) {
   const result = {
     engine: "aio",
+    gateway: "brightdata",
     measurement_method: "google_serp",
     prompt: query.text,
     is_branded_query: isBrandedQuery(query.text, brandAliases),
@@ -211,10 +214,141 @@ async function probeAio(query, brand, brandAliases, brandDomain, competitors, st
     result.parser_version = err.evidence?.parser_version || null;
     result.validation_errors = err.evidence?.validation_errors || [];
     result.provider_failure = err.provider_failure || classifyProviderFailure({provider:"brightdata",error:err});
+    result.provenance = createObservationEnvelope({
+      surface: "aio",
+      gateway: "brightdata",
+      method: "google_serp",
+      provider_request_id: result.provider_request_id,
+      cost: null,
+    });
     console.warn(`[aio] Query failed: "${query.text}" — ${result.error}`);
   }
 
+  result.provenance ??= createObservationEnvelope({
+    surface: "aio",
+    gateway: "brightdata",
+    method: "google_serp",
+    provider_request_id: result.provider_request_id,
+    cost: result.cost,
+  });
+
   return applyEntityEvidence(result, {brand, website:brandDomain, aliases:brandAliases});
+}
+
+/**
+ * DataForSEO live AIO adapter. Consumes fetchDataforseoAioSerp.
+ */
+export async function probeAioDataforseo(query, brand, brandAliases, brandDomain, competitors, stats, options = {}) {
+  const result = {
+    engine: "aio",
+    gateway: "dataforseo",
+    measurement_method: "google_serp",
+    prompt: query.text,
+    is_branded_query: isBrandedQuery(query.text, brandAliases),
+    topic: query.topic || "General",
+    source: query.source || "unknown",
+    intent_tier: resolveQueryIntentTier(query),
+    answer_present: false,
+    aio_present: false,
+    answer_markdown: null,
+    text: "",
+    citations: [],
+    references: [],
+    brand_mentioned_in_text: false,
+    brand_cited: false,
+    visible: false,
+    competitors_found_in_text: [],
+    competitors_cited: [],
+    brands: [],
+    error: null,
+    cost: 0,
+    organic: [],
+  };
+
+  try {
+    const data = await fetchDataforseoAioSerp(query.text, {
+      ...options,
+      stats,
+      measurementContext: options.measurementContext || { country: "in", language: "en" },
+      captureEvidence: options.captureEvidence,
+    });
+
+    result.serp_state = data.serp_state;
+    result.aio_present = data.aio_present;
+    result.aio_capture_mode = "dataforseo_async";
+    result.organic = data.organic;
+    result.cost = data.cost;
+    result.provider_request_id = data.provider_request_id;
+    result.provider_task_id = data.provider_request_id;
+    result.location_code = data.location_code;
+
+    if (brandDomain && data.organic.length > 0) {
+      const brandPos = data.organic.findIndex(
+        (o) => o.domain === brandDomain || o.domain.endsWith("." + brandDomain)
+      );
+      result.brand_organic_position = brandPos >= 0 ? brandPos + 1 : null;
+    }
+
+    if (data.parsedAnswer) {
+      result.answer_markdown = data.parsedAnswer.answerMarkdown ?? null;
+      const text = data.parsedAnswer.answerText || "";
+      const citations = data.parsedAnswer.citations || [];
+      const hasText = Boolean(text && text.trim());
+      const hasCitations = citations.length > 0;
+
+      if (hasText || hasCitations) {
+        result.answer_present = true;
+        result.text = text;
+        result.references = citations.map((r) => ({
+          href: r.url,
+          title: r.title || "",
+          source: r.domain || "",
+          domain: extractBrandDomain(r.url),
+        }));
+        result.citations = result.references
+          .map((r) => normalizeUrl(r.href))
+          .filter(Boolean);
+
+        if (hasText) {
+          result.brand_mentioned_in_text = detectMention(text, brandAliases);
+          result.competitors_found_in_text = findCompetitorsInText(text, competitors);
+          result.brands = judgeBrandsSymmetric(text, buildTrackedBrandRoster(brand, brandAliases, competitors));
+        }
+
+        if (brandDomain) {
+          result.brand_cited = result.references.some(
+            (ref) => domainMatches(ref.domain || extractBrandDomain(ref.href), brandDomain)
+          );
+        }
+
+        result.visible = result.brand_mentioned_in_text || result.brand_cited;
+        result.competitors_cited = findCompetitorsCited(result.references, competitors);
+      }
+    }
+
+    result.provenance = createObservationEnvelope({
+      surface: "aio",
+      gateway: "dataforseo",
+      method: "google_serp",
+      provider_request_id: result.provider_request_id,
+      cost: result.cost,
+    });
+  } catch (err) {
+    result.error = sanitizeProviderText(err.message || String(err));
+    result.cost = null;
+    result.serp_state = err.serp_state || null;
+    result.provider_failure = err.provider_failure || classifyProviderFailure({ provider: "dataforseo", error: err });
+    result.provenance = createObservationEnvelope({
+      surface: "aio",
+      gateway: "dataforseo",
+      method: "google_serp",
+      provider_request_id: result.provider_request_id,
+      cost: null,
+    });
+    console.warn(`[aio:dataforseo] Query failed: "${query.text}" — ${result.error}`);
+  }
+
+  return applyEntityEvidence(result, { brand, website: brandDomain, aliases: brandAliases });
 }
 
 /**
@@ -277,20 +411,29 @@ export async function probeTextEngine(engine, query, brand, brandAliases, brandD
   };
 
   const probeResult = await probeFn(query.text, { ...options, stats });
-  result.measurement_method = "model_api";
+  const gateway = probeResult.gateway ?? "openrouter";
+  const measurementMethod = probeResult.measurement_method ?? "model_api";
+  result.gateway = gateway;
+  result.measurement_method = measurementMethod;
   result.model_used = probeResult.model || probeResult.model_used || null;
   result.requested_model = probeResult.requested_model || probeResult.model || null;
   result.returned_model = Object.hasOwn(probeResult, "returned_model") ? probeResult.returned_model : (probeResult.model || null);
   result.provider_request_id = probeResult.provider_request_id || null;
+  result.provider_task_id = probeResult.provider_task_id || probeResult.provider_request_id || null;
   result.search_requests = probeResult.search_requests !== undefined ? probeResult.search_requests : null;
   result.search_used =
     probeResult.search_requests > 0
       ? SEARCH_STATE.OBSERVED_USED
       : (probeResult.search_requests === 0 ? SEARCH_STATE.OBSERVED_NOT_USED : SEARCH_STATE.UNKNOWN);
+  result.answer_markdown = probeResult.answer_markdown ?? null;
+  result.fan_out_queries = probeResult.fan_out_queries ?? [];
+  result.output_tokens = probeResult.output_tokens ?? null;
+  result.web_search = probeResult.web_search ?? null;
+  result.location_code = probeResult.location_code ?? null;
   result.provenance = createObservationEnvelope({
     surface: engineName,
-    gateway: "openrouter",
-    method: "model_api",
+    gateway: gateway,
+    method: measurementMethod,
     requested_model: result.requested_model,
     returned_model: result.returned_model,
     provider_request_id: result.provider_request_id,
@@ -2136,11 +2279,14 @@ const ENGINE_REGISTRY = [
   {
     name: "gemini",
     label: "Gemini",
-    isConfigured: () => isOpenRouterEngineConfigured("gemini"),
+    isConfigured: (env = process.env) => routeOrder("gemini", env).some((r) => isRouteConfigured("gemini", r, env)),
     probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
-        { name: "gemini", probe: async (prompt, options) => {
-          const result = await probeOpenRouterEngine({ engine: "gemini", query: prompt, stats: options?.stats, durableDispatch: options?.durableDispatch, deadlineAt: options?.deadlineAt, measurementContext: options?.measurementContext, captureEvidence: options?.captureEvidence });
+        { name: "gemini", probe: async (prompt, opts) => {
+          if (options?.route === "dataforseo") {
+            return probeDataforseoScraper("gemini", prompt, opts);
+          }
+          const result = await probeOpenRouterEngine({ engine: "gemini", query: prompt, stats: opts?.stats, durableDispatch: opts?.durableDispatch, deadlineAt: opts?.deadlineAt, measurementContext: opts?.measurementContext, captureEvidence: opts?.captureEvidence });
           const observed = !result.error && (result.search_requests > 0 || result.references.length > 0);
           return {
             ...result,
@@ -2156,39 +2302,73 @@ const ENGINE_REGISTRY = [
   {
     name: "aio",
     label: "Google AIO",
-    isConfigured: () => !!process.env.BRIGHTDATA_API_KEY,
-    probe: probeAio,
+    isConfigured: (env = process.env) => routeOrder("aio", env).some((r) => isRouteConfigured("aio", r, env)),
+    probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) => {
+      if (options?.route === "dataforseo") {
+        return probeAioDataforseo(query, brand, brandAliases, brandDomain, competitors, stats, options);
+      }
+      return probeAio(query, brand, brandAliases, brandDomain, competitors, stats, options);
+    },
     concurrency: AIO_CONCURRENCY,
   },
   {
     name: "chatgpt",
     label: "ChatGPT",
-    isConfigured: isChatGptConfigured,
+    isConfigured: (env = process.env) => routeOrder("chatgpt", env).some((r) => isRouteConfigured("chatgpt", r, env)),
     probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
-        { name: "chatgpt", probe: probeChatGpt },
+        {
+          name: "chatgpt",
+          probe: async (prompt, opts) => {
+            if (options?.route === "dataforseo") {
+              return probeDataforseoScraper("chatgpt", prompt, opts);
+            }
+            if (options?.route === "openrouter") {
+              return probeOpenRouterEngine({
+                engine: "chatgpt",
+                query: prompt,
+                stats: opts?.stats,
+                durableDispatch: opts?.durableDispatch,
+                deadlineAt: opts?.deadlineAt,
+                measurementContext: opts?.measurementContext,
+                captureEvidence: opts?.captureEvidence,
+              });
+            }
+            return probeChatGpt(prompt, opts);
+          },
+        },
         query,
         brand,
         brandAliases,
         brandDomain,
         competitors,
-        stats, options
+        stats,
+        options
       ),
     concurrency: CHATGPT_CONCURRENCY,
   },
   {
     name: "perplexity",
     label: "Perplexity",
-    isConfigured: isPerplexityConfigured,
+    isConfigured: (env = process.env) => routeOrder("perplexity", env).some((r) => isRouteConfigured("perplexity", r, env)),
     probe: async (query, brand, brandAliases, brandDomain, competitors, stats, options = {}) =>
       probeTextEngine(
-        { name: "perplexity", probe: probePerplexity },
+        {
+          name: "perplexity",
+          probe: async (prompt, opts) => {
+            if (options?.route === "dataforseo") {
+              return probeDataforseoModel("perplexity", prompt, opts);
+            }
+            return probePerplexity(prompt, opts);
+          },
+        },
         query,
         brand,
         brandAliases,
         brandDomain,
         competitors,
-        stats, options
+        stats,
+        options
       ),
     concurrency: PERPLEXITY_CONCURRENCY,
   },

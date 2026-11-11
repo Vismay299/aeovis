@@ -1,4 +1,5 @@
 import { classifyProviderFailure, sanitizeProviderText } from './providerFailure.js';
+import { AppError } from "../http/appError.ts";
 import { normalizeUrl } from "../scoring/citations.js";
 import { getLlmApiKey, getLlmBaseUrl, getLlmProvider } from "../llmConfig.js";
 import { assertModelPriceable, isUnpricedModel, resolveCost } from "../llmPricing.js";
@@ -26,7 +27,79 @@ const MODEL_ENV = Object.freeze({
   gemini: ["OPENROUTER_GEMINI_MODEL", "GEMINI_MODEL"],
 });
 
+export const DEFAULT_ROUTE_ORDER = Object.freeze({
+  aio: ["brightdata"],
+  chatgpt: ["vendor_api", "openrouter"],
+  gemini: ["openrouter"],
+  perplexity: ["vendor_api", "openrouter"],
+});
+
+export const DATAFORSEO_APPROVED_ENGINES = Object.freeze(["aio", "chatgpt", "gemini"]);
+
+const VALID_ENGINES = new Set(["aio", "chatgpt", "gemini", "perplexity"]);
+const VALID_ROUTES = new Set(["dataforseo", "brightdata", "openrouter", "vendor_api"]);
+
+/**
+ * @param {string|undefined} raw
+ * @returns {Partial<Record<"aio"|"chatgpt"|"gemini"|"perplexity", Array<"dataforseo"|"brightdata"|"openrouter"|"vendor_api">>>}
+ */
+export function parseAnswerEngineRoutes(raw) {
+  if (!raw || !String(raw).trim()) return {};
+
+  const result = {};
+  const entries = String(raw).split(";").map((s) => s.trim()).filter(Boolean);
+  for (const entry of entries) {
+    const [engine, routesRaw] = entry.split("=").map((s) => s.trim());
+    if (!engine || !routesRaw || !VALID_ENGINES.has(engine)) {
+      throw new AppError(500, "answer_engine_routes_invalid", `Invalid engine route: ${entry}`);
+    }
+    const routes = routesRaw.split(">").map((s) => s.trim()).filter(Boolean);
+    if (routes.length === 0 || routes.some((route) => !VALID_ROUTES.has(route))) {
+      throw new AppError(500, "answer_engine_routes_invalid", `Invalid route id in: ${entry}`);
+    }
+    result[engine] = routes;
+  }
+  return result;
+}
+
+/**
+ * @param {"aio"|"chatgpt"|"gemini"|"perplexity"} engine
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {Array<"dataforseo"|"brightdata"|"openrouter"|"vendor_api">}
+ */
+export function routeOrder(engine, env = process.env) {
+  const raw = env?.ANSWER_ENGINE_ROUTES ?? process.env.ANSWER_ENGINE_ROUTES;
+  const parsed = parseAnswerEngineRoutes(raw);
+  return parsed[engine] ?? DEFAULT_ROUTE_ORDER[engine] ?? [];
+}
+
+function routeVariablePresent(env, name) {
+  const value = env?.[name];
+  return Boolean(value && String(value).trim());
+}
+
+/**
+ * @param {"aio"|"chatgpt"|"gemini"|"perplexity"} engine
+ * @param {"dataforseo"|"brightdata"|"openrouter"|"vendor_api"} route
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {boolean}
+ */
+export function isRouteConfigured(engine, route, env = process.env) {
+  if (route === "dataforseo") return routeVariablePresent(env, "DATAFORSEO_API_KEY");
+  if (route === "brightdata") return routeVariablePresent(env, "BRIGHTDATA_API_KEY");
+  if (route === "openrouter") return isOpenRouterEngineConfigured(engine, env);
+  if (route === "vendor_api") {
+    if (engine === "chatgpt") return routeVariablePresent(env, "OPENAI_API_KEY");
+    if (engine === "perplexity") return routeVariablePresent(env, "PERPLEXITY_API_KEY");
+  }
+  return false;
+}
+
 /** The provider model chosen for an answer engine; model ids stay configurable per deployment. */
+/**
+ * @param {string} engine
+ * @param {Record<string, string|undefined>} [env]
+ */
 export function getOpenRouterEngineModel(engine, env = process.env) {
   const names = MODEL_ENV[engine];
   if (!names) throw new Error(`Unknown OpenRouter answer engine: ${engine}`);
@@ -38,6 +111,10 @@ export function getOpenRouterEngineModel(engine, env = process.env) {
 }
 
 /** Whether the shared gateway and this engine's model are ready to call. */
+/**
+ * @param {string} engine
+ * @param {Record<string, string|undefined>} [env]
+ */
 export function isOpenRouterEngineConfigured(engine, env = process.env) {
   return Boolean(
     getLlmApiKey(env) &&
@@ -207,6 +284,7 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
         provider_request_id: data?.id || null,
         search_requests: Number.isFinite(usage?.server_tool_use?.web_search_requests) ? usage.server_tool_use.web_search_requests : null,
         ...cost,
+        gateway: "openrouter",
         error: null,
         error_kind: null,
       };
@@ -230,6 +308,7 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
     cost_source: null,
     cost_state: "probe_failed",
     cost_state_detail: message,
+    gateway: "openrouter",
     error: message,
     error_kind: failureKindOf(lastError),
     provider_failure: lastError?.provider_failure || classifyProviderFailure({provider:"openrouter",error:lastError}),

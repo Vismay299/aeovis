@@ -612,6 +612,7 @@ export async function probePerplexity(query, options = {}) {
         error: result.error,
         error_kind: result.error_kind,
         provider_failure: result.provider_failure,
+        gateway: "openrouter",
         ...citationsState,
       };
     }
@@ -636,6 +637,7 @@ export async function probePerplexity(query, options = {}) {
       citations_state: CITATIONS_STATE.UNVERIFIED,
       citations_state_reason: CITATIONS_STATE_REASON.NOT_CONFIGURED,
       citations_state_detail: null,
+      gateway: "perplexity",
     };
   }
 
@@ -691,6 +693,7 @@ export async function probePerplexity(query, options = {}) {
       error: answer.error,
       error_kind: answer.error_kind,
       provider_failure: answer.provider_failure,
+      gateway: "perplexity",
       ...citationsState,
     };
   }
@@ -738,6 +741,7 @@ export async function probePerplexity(query, options = {}) {
     error: null,
     error_kind: null,
     provider_failure: search.provider_failure || null,
+    gateway: "perplexity",
     ...citationsState,
   };
 }

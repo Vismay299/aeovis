@@ -8,6 +8,8 @@
  *   4. Freezing context to prevent cross-context comparisons or silent fallback overrides
  */
 
+import { dataforseoMarket } from "../providers/dataforseo/locations.ts";
+
 export const DEFAULT_SERP_GEO = "in";
 export const DEFAULT_LANGUAGE = "en";
 export const DEFAULT_DEVICE = "desktop";
@@ -50,6 +52,41 @@ export const ADAPTER_CAPABILITIES = Object.freeze({
     observedLocationAttested: false,
   },
   perplexity_sonar: {
+    countryControl: false,
+    cityControl: false,
+    languageControl: false,
+    deviceControl: false,
+    observedLocationAttested: false,
+  },
+  chatgpt_dataforseo: {
+    countryControl: true,
+    cityControl: false,
+    languageControl: true,
+    deviceControl: false,
+    observedLocationAttested: false,
+  },
+  gemini_dataforseo: {
+    countryControl: true,
+    cityControl: false,
+    languageControl: true,
+    deviceControl: false,
+    observedLocationAttested: false,
+  },
+  aio_dataforseo: {
+    countryControl: true,
+    cityControl: false,
+    languageControl: true,
+    deviceControl: false,
+    observedLocationAttested: false,
+  },
+  perplexity_dataforseo: {
+    countryControl: true,
+    cityControl: false,
+    languageControl: false,
+    deviceControl: false,
+    observedLocationAttested: false,
+  },
+  gemini_dataforseo_model: {
     countryControl: false,
     cityControl: false,
     languageControl: false,
@@ -118,7 +155,18 @@ export function resolveMeasurementContext(input = {}) {
 export function buildAdapterContextParams(engine, context, branch = "default") {
   const ctx = resolveMeasurementContext(context);
   const adapterKey = `${engine}_${branch}` in ADAPTER_CAPABILITIES ? `${engine}_${branch}` : engine;
-  const capability = ADAPTER_CAPABILITIES[adapterKey] || { countryControl: false };
+  if (branch === "dataforseo") {
+    const market = dataforseoMarket(ctx);
+    if (engine === "perplexity" || engine === "gemini_model" || engine === "gemini_dataforseo_model") {
+      return {
+        web_search_country_iso_code: market.isoCountry,
+      };
+    }
+    return {
+      location_code: market.locationCode,
+      language_code: market.languageCode,
+    };
+  }
 
   if (engine === "aio" || engine === "brightdata") {
     return {
