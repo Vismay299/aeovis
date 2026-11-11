@@ -29,6 +29,15 @@ import { createGoogleAdsClient } from "../providers/dataforseo/google-ads.ts";
 import { keepAlive as defaultKeepAlive } from "../keepAlive.js";
 import type { CacheDeps } from "../cache/providerCache.ts";
 
+import {
+  saveKeywords,
+  getSavedKeywords,
+} from "./savedKeywords.ts";
+import {
+  createSavedKeywordsRepository,
+  type SavedKeywordsRepository,
+} from "./repository.ts";
+
 export type KeywordToolBrand = {
   brandKey: string;
   website_host?: string;
@@ -46,6 +55,7 @@ export type KeywordToolContext = {
     ads?: ResearchDeps["ads"];
     upsertMetrics?: ResearchDeps["upsertMetrics"];
     cacheDeps?: CacheDeps;
+    repo?: SavedKeywordsRepository;
   };
 };
 
@@ -151,6 +161,92 @@ export const researchKeywordsTool = {
       rows: res.result.rows,
       source: res.result.source,
       cached: res.cached,
+    };
+  },
+};
+
+export const listSavedKeywordsInput = z.strictObject({
+  tagNames: z.array(z.string().min(1).max(64)).max(20).optional(),
+  search: z.string().max(200).optional(),
+  sort: z
+    .enum(["searchVolume", "keywordDifficulty", "cpc", "keyword", "fetchedAt"])
+    .default("searchVolume"),
+  limit: z.number().int().min(1).max(250).default(100),
+});
+
+export const listSavedKeywordsOutput = z.looseObject({
+  rows: z.array(z.looseObject({})),
+  totalCount: z.number().int(),
+});
+
+export const listSavedKeywordsTool = {
+  name: "list_saved_keywords",
+  description:
+    "List this workspace's saved keywords with volume, CPC, difficulty, intent and tags. Filter by tag names or text. Free.",
+  input: listSavedKeywordsInput,
+  output: listSavedKeywordsOutput,
+  handler: async (
+    ctx: KeywordToolContext,
+    rawInput: unknown,
+  ): Promise<z.infer<typeof listSavedKeywordsOutput>> => {
+    const input = listSavedKeywordsInput.parse(rawInput);
+    const repo =
+      ctx.deps?.repo ?? createSavedKeywordsRepository(ctx.admin);
+    const result = await getSavedKeywords(repo, {
+      brandKey: ctx.brand.brandKey,
+      search: input.search,
+      tagNames: input.tagNames,
+      sort: input.sort,
+      pageSize: input.limit,
+    });
+    return {
+      rows: result.rows,
+      totalCount: result.totalCount,
+    };
+  },
+};
+
+export const saveKeywordsInput = z.strictObject({
+  keywords: z.array(z.string().min(1).max(200)).min(1).max(100),
+  tags: z.array(z.string().min(1).max(64)).max(5).optional(),
+  locationCode: z.number().int().positive().optional(),
+});
+
+export const saveKeywordsOutput = z.looseObject({
+  savedKeywordIds: z.array(z.string()),
+  created: z.number().int(),
+});
+
+export const saveKeywordsTool = {
+  name: "save_keywords",
+  description:
+    "Save keywords to this workspace's list, optionally adding tags (append only). Free. Ask the user before tagging broadly.",
+  input: saveKeywordsInput,
+  output: saveKeywordsOutput,
+  handler: async (
+    ctx: KeywordToolContext,
+    rawInput: unknown,
+  ): Promise<z.infer<typeof saveKeywordsOutput>> => {
+    const input = saveKeywordsInput.parse(rawInput);
+    const repo =
+      ctx.deps?.repo ?? createSavedKeywordsRepository(ctx.admin);
+    const host = ctx.brand.website_host ?? ctx.brand.brandKey;
+    const market = resolveResearchMarket(
+      { locationCode: input.locationCode },
+      { website_host: host },
+    );
+    const result = await saveKeywords(repo, {
+      brandKey: ctx.brand.brandKey,
+      keywords: input.keywords,
+      locationCode: market.locationCode,
+      languageCode: market.languageCode,
+      tags: input.tags,
+      tagMode: "append",
+      actorUserId: ctx.userId,
+    });
+    return {
+      savedKeywordIds: result.savedKeywordIds,
+      created: result.created,
     };
   },
 };

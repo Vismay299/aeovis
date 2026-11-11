@@ -5,8 +5,15 @@ import {
   researchKeywordsTool,
   researchKeywordsInput,
   researchKeywordsOutput,
+  listSavedKeywordsTool,
+  listSavedKeywordsInput,
+  listSavedKeywordsOutput,
+  saveKeywordsTool,
+  saveKeywordsInput,
+  saveKeywordsOutput,
   type KeywordToolContext,
 } from "./tools.ts";
+import { createMemorySavedKeywordsRepository } from "./memoryRepository.ts";
 
 test("research_keywords tool", async (t) => {
   await t.test("input schema is closed (rejects unknown properties)", () => {
@@ -102,5 +109,119 @@ test("research_keywords tool", async (t) => {
     assert.equal(result.cached, false);
     assert.equal(result.source, "blended");
     assert.equal(result.rows.length, 1);
+  });
+});
+
+test("list_saved_keywords tool", async (t) => {
+  await t.test("input schema is closed", () => {
+    assert.throws(
+      () =>
+        listSavedKeywordsInput.parse({
+          search: "test",
+          extra: "rejected",
+        }),
+      (err: unknown) => err instanceof z.ZodError,
+    );
+  });
+
+  await t.test("input schema applies defaults", () => {
+    const parsed = listSavedKeywordsInput.parse({});
+    assert.equal(parsed.sort, "searchVolume");
+    assert.equal(parsed.limit, 100);
+  });
+
+  await t.test("output schema accepts rows and totalCount loosely", () => {
+    const output = listSavedKeywordsOutput.parse({
+      rows: [{ id: "kw-1", keyword: "seo" }],
+      totalCount: 1,
+      extra: true,
+    });
+    assert.equal(output.totalCount, 1);
+    assert.equal(output.rows.length, 1);
+  });
+
+  await t.test("handler queries saved keywords with repo", async () => {
+    const repo = createMemorySavedKeywordsRepository();
+    await repo.save({
+      brandKey: "example.com",
+      keywords: ["seo tool", "keyword research"],
+      locationCode: 2840,
+      languageCode: "en",
+    });
+
+    const ctx: KeywordToolContext = {
+      admin: {} as any,
+      brand: { brandKey: "example.com", website_host: "example.com" },
+      userId: "user-1",
+      deps: { repo },
+    };
+
+    const result = await listSavedKeywordsTool.handler(ctx, {
+      search: "tool",
+    });
+
+    assert.equal(result.totalCount, 1);
+    assert.equal(result.rows.length, 1);
+    assert.equal((result.rows[0] as any).keyword, "seo tool");
+  });
+});
+
+test("save_keywords tool", async (t) => {
+  await t.test("input schema is closed", () => {
+    assert.throws(
+      () =>
+        saveKeywordsInput.parse({
+          keywords: ["seo"],
+          extra: "rejected",
+        }),
+      (err: unknown) => err instanceof z.ZodError,
+    );
+  });
+
+  await t.test("input schema rejects empty keyword array", () => {
+    assert.throws(
+      () =>
+        saveKeywordsInput.parse({
+          keywords: [],
+        }),
+      (err: unknown) => err instanceof z.ZodError,
+    );
+  });
+
+  await t.test("output schema validates output", () => {
+    const output = saveKeywordsOutput.parse({
+      savedKeywordIds: ["id-1", "id-2"],
+      created: 2,
+      extra: "allowed",
+    });
+    assert.equal(output.created, 2);
+    assert.equal(output.savedKeywordIds.length, 2);
+  });
+
+  await t.test("handler saves keywords and returns created count and ids", async () => {
+    const repo = createMemorySavedKeywordsRepository();
+    const ctx: KeywordToolContext = {
+      admin: {} as any,
+      brand: { brandKey: "example.com", website_host: "example.com" },
+      userId: "user-1",
+      deps: { repo },
+    };
+
+    const result = await saveKeywordsTool.handler(ctx, {
+      keywords: ["ranking checker", "seo audit"],
+      tags: ["priority"],
+      locationCode: 2840,
+    });
+
+    assert.equal(result.created, 2);
+    assert.equal(result.savedKeywordIds.length, 2);
+
+    // Save again: idempotent, created = 0
+    const result2 = await saveKeywordsTool.handler(ctx, {
+      keywords: ["ranking checker"],
+      locationCode: 2840,
+    });
+    assert.equal(result2.created, 0);
+    assert.equal(result2.savedKeywordIds[0], result.savedKeywordIds[0]);
   });
 });

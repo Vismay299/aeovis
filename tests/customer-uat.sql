@@ -26,6 +26,8 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/076_f08_question_backfill.sql
 \ir ../supabase/migrations/080_f09_price_approvals.sql
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
+\ir ../supabase/migrations/100_f13_saved_keywords.sql
+\ir ../supabase/migrations/102_f13_saved_keyword_functions.sql
 \ir ../supabase/migrations/125_f18_site_audit.sql
 \ir ../supabase/migrations/126_f18_site_audit_functions.sql
 \ir ../supabase/migrations/130_f19_indexnow.sql
@@ -509,5 +511,30 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
--- End F13 keyword_metrics check.
+-- F13: saved keywords, tags, and tag assignments tenant isolation.
+INSERT INTO public.saved_keywords(id, brand_key, keyword, location_code, language_code) VALUES
+ ('13000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','oversized tees',2356,'en'),
+ ('13000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','oversized tees',2356,'en');
+INSERT INTO public.saved_keyword_tags(id, brand_key, name, normalized_name) VALUES
+ ('13100000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','Tees','tees'),
+ ('13100000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','Tees','tees');
+INSERT INTO public.saved_keyword_tag_assignments(brand_key, saved_keyword_id, tag_id) VALUES
+ ('10000000-0000-0000-0000-000000000001','13000000-0000-0000-0000-000000000001','13100000-0000-0000-0000-000000000001');
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO public.saved_keyword_tag_assignments(brand_key, saved_keyword_id, tag_id) VALUES
+     ('10000000-0000-0000-0000-000000000001','13000000-0000-0000-0000-000000000001','13100000-0000-0000-0000-000000000002');
+    RAISE EXCEPTION 'Cross-workspace tag assignment was allowed';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+END $$;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $$ BEGIN
+  IF (SELECT count(*) FROM public.saved_keywords) <> 1 OR (SELECT count(*) FROM public.saved_keyword_tags) <> 1
+     OR (SELECT count(*) FROM public.saved_keyword_tag_assignments) <> 1
+    THEN RAISE EXCEPTION 'Saved keywords leaked across tenants'; END IF;
+END $$;
+RESET ROLE;
+-- End F13 saved keywords check.
 ROLLBACK;
+

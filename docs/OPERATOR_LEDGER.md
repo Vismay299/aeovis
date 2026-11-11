@@ -626,6 +626,16 @@ abandoned is not.
 - Apply before deploying F13 phase 2.
 - Objects: table `keyword_metrics` (service-role only, RLS enabled), functions `upsert_keyword_metrics`, `prune_keyword_metrics`.
 
+### `100_f13_saved_keywords` (F13 phase 3)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply 100 and 102 in order before deploying F13 phase 3.
+- Objects: tables `saved_keywords`, `saved_keyword_tags`, `saved_keyword_tag_assignments`.
+
+### `102_f13_saved_keyword_functions` (F13 phase 3)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply 100 and 102 in order before deploying F13 phase 3.
+- Objects: functions `save_keywords`, `list_saved_keywords`, `update_saved_keyword_tags`, `delete_saved_keyword_tag`, `remove_saved_keywords`, `f13_filtered_saved_keywords`.
+
 
 ## D. Content approval — the human gate, and what it does not yet do
 

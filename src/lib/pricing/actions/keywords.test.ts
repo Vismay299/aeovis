@@ -3,8 +3,10 @@ import { describe, it } from "node:test";
 import {
   estimateKeywordResearch,
   estimateSerpRun,
+  estimateMetricsRefresh,
   keywordResearchAction,
   serpRunAction,
+  metricsRefreshAction,
 } from "./keywords.ts";
 import type { PricingContext } from "../pricedActions.ts";
 
@@ -196,5 +198,73 @@ describe("keywords priced actions", () => {
     assert.equal(quote100.expectedUsd, 0.0155);
     assert.equal(quote100.lines[0].label, "Top 100 Google results");
     assert.equal(quote100.warnings[0].code, "cache_note");
+  });
+
+  it("metrics refresh action requires approval and estimates stale batches per market", async () => {
+    assert.equal(metricsRefreshAction.requireApproval, true);
+
+    const mockRepo = {
+      staleMarkets: async () => ({
+        markets: [
+          {
+            locationCode: 2840, // US (Labs)
+            languageCode: "en",
+            stale: 1000,
+            fresh: 50,
+            batches: 2,
+          },
+        ],
+        fresh: 50,
+      }),
+    } as any;
+
+    const quote = await estimateMetricsRefresh(
+      fakeContext(),
+      {},
+      { repo: mockRepo, isRefreshRunning: async () => false },
+    );
+
+    assert.equal(quote.blocked, null);
+    assert.equal(quote.lines.length, 1);
+    assert.equal(quote.lines[0].label, "1000 keywords in United States (2 requests)");
+    assert.equal(quote.units[0].count, 1000);
+    assert.equal(quote.units[1].count, 50);
+  });
+
+  it("metrics refresh action blocks when nothing to refresh", async () => {
+    const mockRepo = {
+      staleMarkets: async () => ({
+        markets: [],
+        fresh: 10,
+      }),
+    } as any;
+
+    const quote = await estimateMetricsRefresh(
+      fakeContext(),
+      {},
+      { repo: mockRepo, isRefreshRunning: async () => false },
+    );
+
+    assert.ok(quote.blocked);
+    assert.equal(quote.blocked?.code, "nothing_to_refresh");
+    assert.equal(
+      quote.blocked?.message,
+      "Every saved keyword was updated in the last 7 days.",
+    );
+  });
+
+  it("metrics refresh action blocks when refresh is already running", async () => {
+    const quote = await estimateMetricsRefresh(
+      fakeContext(),
+      {},
+      { isRefreshRunning: async () => true },
+    );
+
+    assert.ok(quote.blocked);
+    assert.equal(quote.blocked?.code, "refresh_running");
+    assert.equal(
+      quote.blocked?.message,
+      "Keyword stats are already updating.",
+    );
   });
 });
