@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,32 +37,46 @@ function countCR(str) {
 }
 
 /**
- * Read every tracked text file from the git index and check for CR bytes.
- * Uses `git show :<path>` for each file — one subprocess per file, but
- * only for files that pass the binary-extension filter.
+ * Read every tracked text file from the git INDEX and check for CR bytes.
+ * One `git ls-files -s -z` plus one `git cat-file --batch` for all blobs:
+ * no shell, so paths with spaces work, and no per-file subprocess, which
+ * made the suite hang on Windows (one spawn per tracked file).
  */
 function checkIndexForCRLF() {
-  const raw = execSync("git ls-files", { encoding: "utf8", cwd: REPO });
-  const files = raw.trim().split("\n").filter(Boolean);
+  const listing = execFileSync("git", ["ls-files", "-s", "-z"], {
+    cwd: REPO,
+    maxBuffer: 32 * 1024 * 1024,
+  }).toString("utf8");
+  const entries = [];
+  for (const record of listing.split("\0")) {
+    if (!record) continue;
+    const tab = record.indexOf("\t");
+    const [mode, sha] = record.slice(0, tab).split(" ");
+    const rel = record.slice(tab + 1);
+    if (mode === "160000" || mode === "120000") continue; // submodule, symlink
+    if (BINARY_RE.test(rel)) continue;
+    entries.push({ rel, sha });
+  }
+
+  const blobs = execFileSync("git", ["cat-file", "--batch"], {
+    cwd: REPO,
+    input: entries.map((e) => e.sha).join("\n") + "\n",
+    maxBuffer: 512 * 1024 * 1024,
+  });
 
   const crlfFiles = [];
   let checked = 0;
-
-  for (const rel of files) {
-    // Skip known binary extensions.
-    if (BINARY_RE.test(rel)) continue;
-
-    let content;
-    try {
-      content = execSync(`git show :${rel}`, { encoding: "utf8", cwd: REPO });
-    } catch {
-      continue; // newly added, not in index yet
-    }
-
+  let offset = 0;
+  for (const { rel } of entries) {
+    const headerEnd = blobs.indexOf(0x0a, offset);
+    const header = blobs.toString("utf8", offset, headerEnd);
+    const size = Number(header.split(" ")[2]);
+    offset = headerEnd + 1;
+    if (!Number.isFinite(size)) continue; // "<sha> missing"
+    const content = blobs.toString("utf8", offset, offset + size);
+    offset += size + 1; // content plus trailing LF
     const crCount = countCR(content);
-    if (crCount > 0) {
-      crlfFiles.push({ file: rel, crCount });
-    }
+    if (crCount > 0) crlfFiles.push({ file: rel, crCount });
     checked++;
   }
 
