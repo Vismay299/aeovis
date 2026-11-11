@@ -2,6 +2,7 @@ import { resolveLatestLlmModelName } from "../providers/dataforseo/llm-models.ts
 import { circuitIdentity } from "./providerReadiness.js";
 import { hashIdentity } from "../db/probeDispatch.js";
 import { isFeatureEnabled } from "../features/flags.ts";
+import { QUEUED_COLLECTION_READY } from "../workers/queuedCollection.js";
 import {
   DATAFORSEO_APPROVED_ENGINES,
   DEFAULT_ROUTE_ORDER,
@@ -27,7 +28,9 @@ export const DATAFORSEO_SCAN_MODES: Record<EngineName, DataforseoRouteMode> = {
 };
 export { DATAFORSEO_APPROVED_ENGINES, DEFAULT_ROUTE_ORDER, isRouteConfigured, parseAnswerEngineRoutes, routeOrder };
 export function isRouteScanCapable(engine: EngineName, route: RouteId): boolean {
-  return route === "dataforseo" ? DATAFORSEO_SCAN_MODES[engine] === "model_live" : true;
+  if (route !== "dataforseo") return true;
+  const mode = DATAFORSEO_SCAN_MODES[engine];
+  return mode === "model_live" || (QUEUED_COLLECTION_READY && mode.endsWith("_queued"));
 }
 
 export async function resolveFrozenRoutes(

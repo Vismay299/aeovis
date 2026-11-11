@@ -16,6 +16,8 @@ function createMockStore({ circuits = [], claimHandler } = {}) {
   const rows = [];
   const blocked = [];
   const claims = [];
+  const posted = [];
+  const collected = [];
   const renewals = [];
   const finishes = [];
 
@@ -23,6 +25,8 @@ function createMockStore({ circuits = [], claimHandler } = {}) {
     rows,
     blocked,
     claims,
+    posted,
+    collected,
     renewals,
     finishes,
     circuits: async () => circuits,
@@ -32,10 +36,17 @@ function createMockStore({ circuits = [], claimHandler } = {}) {
     claim: async (id, budget) => {
       claims.push({ id, budget: { ...budget } });
       if (claimHandler) return claimHandler(id, budget);
+      const row = rows.find((item) => item.id === id);
+      if (row) {
+        row.state = "leased";
+        row.attempt_count += 1;
+        row.lease_token = `token-${id}`;
+        row.attempt = { lease_token: row.lease_token, attempt_no: row.attempt_count, dispatch_state: "intent" };
+      }
       return {
         granted: true,
         lease_token: `token-${id}`,
-        attempt_no: 1,
+        attempt_no: row?.attempt_count || 1,
       };
     },
     renew: async (id, token, seconds) => {
@@ -44,8 +55,39 @@ function createMockStore({ circuits = [], claimHandler } = {}) {
     },
     finish: async (id, token, result, decision) => {
       finishes.push({ id, token, result, decision });
+      const row = rows.find((item) => item.id === id);
+      if (row) row.state = decision.state;
       return { accepted: true };
     },
+    post: async (id, token, taskId, cost, nextAt, collectUntil) => {
+      const row = rows.find((item) => item.id === id);
+      if (row) {
+        row.state = "posted";
+        row.next_attempt_at = nextAt;
+        row.attempt = {
+          ...row.attempt,
+          dispatch_state: "posted",
+          provider_task_id: taskId,
+          posted_at: new Date().toISOString(),
+          collect_until: collectUntil,
+          charged_usd: cost,
+        };
+      }
+      posted.push({ id, token, taskId, cost, nextAt, collectUntil });
+      return { accepted: true };
+    },
+    collect: async (id, token, result, state, failure, nextAt, settledCost) => {
+      const row = rows.find((item) => item.id === id);
+      if (row) row.state = state;
+      collected.push({ id, token, result, state, failure, nextAt, settledCost });
+      return { accepted: true };
+    },
+    reschedule: async (id, token, nextAt) => {
+      const row = rows.find((item) => item.id === id);
+      if (row) row.next_attempt_at = nextAt;
+      return true;
+    },
+    listPosted: async (jobId) => rows.filter((row) => row.job_id === jobId && row.state === "posted"),
     block: async (id, reason) => {
       blocked.push({ id, reason });
       const row = rows.find((r) => r.id === id);
@@ -444,7 +486,7 @@ test("P3.T3.S1 Case 7: lane stops new claims after an opens_circuit result", asy
   assert.equal(store.claims.length, 1);
 });
 
-test("P3.T3.S1 Case 8: dataforseo scraper route refused for scans while QUEUED_COLLECTION_READY is absent", async () => {
+test("P4.T2.S2: approved DataForSEO scraper routes enter the queued lane", async () => {
   const env = {
     FEATURE_DATAFORSEO_ENGINES: "on",
     DATAFORSEO_API_KEY: "test-dfs-key",
@@ -453,14 +495,34 @@ test("P3.T3.S1 Case 8: dataforseo scraper route refused for scans while QUEUED_C
   const store = createMockStore();
   let probed = false;
 
-  const outcome = await runDurableProbing({
+  const routes = {
+    chatgpt: { route: "dataforseo", model: null, fallbackFrom: null },
+  };
+  const checkpoint = {
+    brand: "Acme",
+    url: "https://acme.example",
+    engines: ["chatgpt"],
+    queries: [{ text: "Q1?" }],
+    dispatch: freezeDispatch({ engines: ["chatgpt"], env, routes, now: () => 1000000 }),
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    const tasks = JSON.parse(String(init.body)).map((entry) => ({
+      id: `task-${entry.tag}`,
+      status_code: 20100,
+      cost: 0.0012,
+      data: { tag: entry.tag },
+    }));
+    return new Response(JSON.stringify({ status_code: 20000, tasks }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  let outcome;
+  try {
+    outcome = await runDurableProbing({
     jobId: "job-dfs-scraper-1",
-    checkpoint: {
-      brand: "Acme",
-      url: "https://acme.example",
-      engines: ["chatgpt"],
-      queries: [{ text: "Q1?" }],
-    },
+    checkpoint,
     engines: [
       {
         name: "chatgpt",
@@ -478,9 +540,67 @@ test("P3.T3.S1 Case 8: dataforseo scraper route refused for scans while QUEUED_C
     budgetMs: 200000,
     env,
   });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
   assert.equal(probed, false);
-  assert.equal(outcome.checkpoint.blocked?.reason, "route_not_scan_capable");
-  assert.equal(store.blocked.length, 1);
-  assert.equal(store.blocked[0].reason, "route_not_scan_capable");
+  assert.equal(store.claims.length, 1);
+  assert.equal(store.claims[0].budget.leaseSeconds, 120);
+  assert.equal(store.posted.length, 1);
+  assert.equal(outcome.budgetHit, true);
+  assert.equal(outcome.resumeAt, new Date(1000000 + 120000).toISOString());
+});
+
+test("F02-AC-29: a queued scan resumes at the earliest posted poll", async () => {
+  const nowMs = 1000000;
+  const env = {
+    FEATURE_DATAFORSEO_ENGINES: "on",
+    DATAFORSEO_API_KEY: "test-dfs-key",
+    ANSWER_ENGINE_ROUTES: "chatgpt=dataforseo",
+  };
+  const store = createMockStore();
+  const seed = store.seed;
+  store.seed = async (values) => {
+    await seed(values);
+    for (const [index, row] of store.rows.entries()) {
+      const nextAt = nowMs + (index === 0 ? 240_000 : 120_000);
+      row.state = "posted";
+      row.next_attempt_at = new Date(nextAt).toISOString();
+      row.lease_token = `posted-${index}`;
+      row.attempt = {
+        lease_token: row.lease_token,
+        attempt_no: 1,
+        dispatch_state: "posted",
+        provider_task_id: `task-${index}`,
+        posted_at: new Date(nowMs - 60_000).toISOString(),
+        charged_usd: 0.0012,
+      };
+    }
+  };
+  const routes = {
+    chatgpt: { route: "dataforseo", model: null, fallbackFrom: null },
+  };
+  const outcome = await runDurableProbing({
+    jobId: "job-posted-resume",
+    checkpoint: {
+      brand: "Acme",
+      url: "https://acme.example",
+      engines: ["chatgpt"],
+      queries: [{ text: "Q1?" }, { text: "Q2?" }],
+      dispatch: freezeDispatch({ engines: ["chatgpt"], env, routes, now: () => nowMs }),
+    },
+    engines: [{ name: "chatgpt", probe: async () => { throw new Error("queued route must not call live probe"); } }],
+    store,
+    getResults: async () => [],
+    updateJob: async () => {},
+    now: () => nowMs,
+    chunkStartMs: nowMs,
+    budgetMs: 200_000,
+    env,
+  });
+
+  assert.equal(outcome.budgetHit, true);
+  assert.equal(outcome.resumeAt, new Date(nowMs + 120_000).toISOString());
+  assert.equal(store.claims.length, 0);
 });

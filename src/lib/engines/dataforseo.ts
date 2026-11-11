@@ -1,3 +1,7 @@
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/server/features/ai-visibility/services/aiVisibilityCollection.ts
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
+
 import { AppError } from "../http/appError.ts";
 import { normalizeUrl, extractBrandDomain } from "../scoring/citations.js";
 import { classifyProviderFailure, sanitizeProviderText } from "./providerFailure.js";
@@ -12,10 +16,12 @@ import {
   resolveLatestLlmModelName,
   type LlmResponseModelSlug,
 } from "../providers/dataforseo/llm-models.ts";
-import { dataforseoPost } from "../providers/dataforseo/core.ts";
+import { dataforseoGet, dataforseoPost } from "../providers/dataforseo/core.ts";
+import { AmbiguousCallError, UnbilledCallError } from "../spend/errors.ts";
 import {
   assertOk,
   isNoResultsTask,
+  isTaskInProgress,
   type DataforseoTaskLike,
 } from "../providers/dataforseo/envelope.ts";
 import { llmResponseResultSchema } from "../providers/dataforseo/llmSchemas.ts";
@@ -43,6 +49,8 @@ export type DfsProbeOptions = {
   maxOutputTokens?: number; // llm_responses only; default 4096 (clamped 256-4096)
   env?: Record<string, string | undefined>;
   fetchImpl?: typeof fetch;
+  /** Internal only: process a task already returned by the free queued read. */
+  prefetchedTask?: DataforseoEngineTask;
 };
 
 export interface TextProbeResult {
@@ -94,7 +102,7 @@ export type DataforseoMarket = {
 };
 
 export type PostOutcome = {
-  posted: Array<{ observationId: string; taskId: string }>;
+  posted: Array<{ observationId: string; taskId: string; costUsd: number }>;
   rejected: Array<{ observationId: string; statusCode: number; message: string; costUsd: number }>;
   costUsd: number;
 };
@@ -102,7 +110,7 @@ export type PostOutcome = {
 export type CollectOutcome =
   | { status: "pending" }
   | { status: "completed"; result: unknown; statusCode?: number; costUsd?: number }
-  | { status: "failed"; message: string; statusCode?: number; costUsd?: number };
+  | { status: "failed"; message: string; statusCode?: number; costUsd?: number; result?: unknown };
 
 type DataforseoEngineTask = DataforseoTaskLike & {
   id?: string;
@@ -271,18 +279,20 @@ export async function probeDataforseoScraper(
       },
     ];
 
-    const response = await dataforseoPost<DataforseoEngineTask>(path, body, {
-      timeoutMs: 140_000,
-      env: o.env,
-      fetchImpl: o.fetchImpl,
-    });
+    const response = o.prefetchedTask
+      ? null
+      : await dataforseoPost<DataforseoEngineTask>(path, body, {
+          timeoutMs: 140_000,
+          env: o.env,
+          fetchImpl: o.fetchImpl,
+        });
 
-    const task = response?.tasks?.[0];
+    const task = o.prefetchedTask ?? response?.tasks?.[0];
     if (task) {
       taskInfo = { id: task.id, cost: typeof task.cost === "number" ? task.cost : undefined };
     }
 
-    if (!response || response.status_code !== 20000 || !task) {
+    if ((!o.prefetchedTask && (!response || response.status_code !== 20000)) || !task) {
       assertOk(response, { classifyPath: path });
       throw new AppError(502, "dataforseo_bad_response", "DataForSEO live response omitted its task.");
     }
@@ -469,16 +479,18 @@ export async function fetchDataforseoAioSerp(
     load_async_ai_overview: true,
   };
 
-  const response = await dataforseoPost<DataforseoEngineTask & {
-    result?: Array<{ items?: unknown[] }> | null;
-  }>(path, [fields], {
-    timeoutMs: 140_000,
-    env: o.env,
-    fetchImpl: o.fetchImpl,
-  });
+  const response = o.prefetchedTask
+    ? null
+    : await dataforseoPost<DataforseoEngineTask & {
+        result?: Array<{ items?: unknown[] }> | null;
+      }>(path, [fields], {
+        timeoutMs: 140_000,
+        env: o.env,
+        fetchImpl: o.fetchImpl,
+      });
 
-  const task = response?.tasks?.[0];
-  if (!response || response.status_code !== 20000 || !task) {
+  const task = o.prefetchedTask ?? response?.tasks?.[0];
+  if ((!o.prefetchedTask && (!response || response.status_code !== 20000)) || !task) {
     assertOk(response, { classifyPath: path });
     throw new AppError(502, "dataforseo_bad_response", "DataForSEO AIO response omitted its task.");
   }
@@ -501,7 +513,7 @@ export async function fetchDataforseoAioSerp(
     );
   }
 
-  const first = task.result?.[0];
+  const first = task.result?.[0] as { items?: unknown[] } | undefined;
   const items = Array.isArray(first?.items) ? first.items : [];
   if (items.length === 0) {
     throw Object.assign(
@@ -539,18 +551,120 @@ export async function fetchDataforseoAioSerp(
 }
 
 export async function postDataforseoBatch(
-  _engine: "chatgpt" | "gemini" | "google_ai_overview",
-  _rows: { observationId: string; query: string }[],
-  _market: DataforseoMarket,
-  _o?: unknown,
+  engine: "chatgpt" | "gemini" | "google_ai_overview",
+  rows: { observationId: string; query: string }[],
+  market: DataforseoMarket,
+  o: Pick<DfsProbeOptions, "env" | "fetchImpl"> = {},
 ): Promise<PostOutcome> {
-  throw new Error("postDataforseoBatch is implemented in Phase 4");
+  if (rows.length < 1 || rows.length > 100 || new Set(rows.map((row) => row.observationId)).size !== rows.length) {
+    throw new UnbilledCallError("task_post accepts 1-100 unique observations.", {
+      status: 400,
+      code: "dataforseo_task_count_invalid",
+    });
+  }
+  const isAio = engine === "google_ai_overview";
+  const apiEngine = engine === "chatgpt" ? "chat_gpt" : engine;
+  const path = isAio
+    ? "/v3/serp/google/organic/task_post"
+    : `/v3/ai_optimization/${apiEngine}/llm_scraper/task_post`;
+  const body = rows.map((row) => ({
+    keyword: row.query.replace(/%/g, "%25").replace(/\+/g, "%2B"),
+    location_code: market.locationCode,
+    language_code: providerLanguageCode(engine, market.languageCode),
+    ...(isAio ? { depth: 10, load_async_ai_overview: true } : {}),
+    tag: row.observationId,
+  }));
+  const response = await dataforseoPost<DataforseoEngineTask>(path, body, {
+    timeoutMs: 60_000,
+    env: o.env,
+    fetchImpl: o.fetchImpl,
+  });
+  if (!response || response.status_code !== 20000 || !Array.isArray(response.tasks)) {
+    assertOk(response, { classifyPath: path });
+    // A successful HTTP request without a task list may have been accepted.
+    // Leave the leases unresolved so the claim path records them ambiguous.
+    throw new AmbiguousCallError("DataForSEO accepted an unclear task_post response.");
+  }
+
+  const byId = new Map(rows.map((row) => [row.observationId, row]));
+  const returned = new Set<string>();
+  const posted: PostOutcome["posted"] = [];
+  const rejected: PostOutcome["rejected"] = [];
+  let costUsd = 0;
+  for (const entry of response.tasks) {
+    const tag = typeof entry.data?.tag === "string" ? entry.data.tag : null;
+    const row = tag ? byId.get(tag) : undefined;
+    if (!row || returned.has(row.observationId)) {
+      throw new AmbiguousCallError("DataForSEO returned an unmatched queued task response.");
+    }
+    returned.add(row.observationId);
+    const entryCost = typeof entry.cost === "number" && Number.isFinite(entry.cost) && entry.cost >= 0
+      ? entry.cost
+      : null;
+    if (entryCost === null) {
+      // Keep an accepted task with missing billing metadata in the ambiguous
+      // state: the worker must not invent a zero or retry a billed request.
+      if (entry.status_code === 20100 && entry.id) {
+        throw new AmbiguousCallError("DataForSEO accepted a queued task without billing metadata.");
+      }
+      throw new AmbiguousCallError("DataForSEO omitted billing metadata for a rejected queued task.");
+    }
+    costUsd += entryCost;
+    if (entry.status_code === 20100 && typeof entry.id === "string" && entry.id.length > 0) {
+      posted.push({ observationId: row.observationId, taskId: entry.id, costUsd: entryCost });
+    } else {
+      rejected.push({
+        observationId: row.observationId,
+        statusCode: entry.status_code ?? 0,
+        message: entry.status_message ?? "DataForSEO rejected the task.",
+        costUsd: entryCost,
+      });
+    }
+  }
+  if (returned.size !== rows.length) {
+    throw new AmbiguousCallError("DataForSEO omitted queued task outcomes.");
+  }
+  return { posted, rejected, costUsd };
 }
 
 export async function collectDataforseoTask(
-  _engine: unknown,
-  _taskId: string,
-  _o?: unknown,
+  engine: "chatgpt" | "gemini" | "google_ai_overview",
+  taskId: string,
+  o: Pick<DfsProbeOptions, "env" | "fetchImpl"> = {},
 ): Promise<CollectOutcome> {
-  throw new Error("collectDataforseoTask is implemented in Phase 4");
+  if (!taskId || taskId.length > 200) {
+    throw new UnbilledCallError("A queued task id is required.", {
+      status: 400,
+      code: "dataforseo_task_id_invalid",
+    });
+  }
+  const isAio = engine === "google_ai_overview";
+  const apiEngine = engine === "chatgpt" ? "chat_gpt" : engine;
+  const base = isAio
+    ? "/v3/serp/google/organic"
+    : `/v3/ai_optimization/${apiEngine}/llm_scraper`;
+  const path = `${base}/task_get/advanced/${encodeURIComponent(taskId)}`;
+  const response = await dataforseoGet<DataforseoEngineTask>(path, {
+    env: o.env,
+    fetchImpl: o.fetchImpl,
+  });
+  const task = response?.tasks?.[0];
+  if (!response || response.status_code !== 20000 || !task) {
+    assertOk(response, { classifyPath: path });
+    throw new AppError(502, "dataforseo_bad_response", "DataForSEO task_get omitted its task.");
+  }
+  const costUsd = typeof task.cost === "number" && Number.isFinite(task.cost) && task.cost >= 0
+    ? task.cost
+    : undefined;
+  if (isTaskInProgress(task)) return { status: "pending" };
+  if (task.status_code !== 20000 && !isNoResultsTask(task)) {
+    return {
+      status: "failed",
+      message: task.status_message || "DataForSEO task failed.",
+      statusCode: task.status_code,
+      costUsd,
+      result: task,
+    };
+  }
+  return { status: "completed", result: task, statusCode: task.status_code, costUsd };
 }

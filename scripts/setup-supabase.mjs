@@ -136,6 +136,12 @@ const EXPECTED_OBJECTS = {
     { kind: "bucket", name: "provider-cache" },
   ],
   "043_f01_jobs_cron.sql": [{ kind: "function", name: "jobs_tick_http" }],
+  "045_f02_queued_dispatch.sql": [
+    { kind: "function", name: "post_probe_dispatch" },
+    { kind: "function", name: "reschedule_probe_collection" },
+    { kind: "function", name: "collect_probe_dispatch" },
+    { kind: "function", name: "expire_posted_probe_dispatch" },
+  ],
   "165_f26_privacy_and_telemetry_ids.sql": [
     { kind: "column", name: "customer_brands.telemetry_id" },
     { kind: "table", name: "user_privacy_choices" },

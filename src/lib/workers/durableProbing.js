@@ -22,7 +22,9 @@ import {
   requestBudgetMs,
   leaseSecondsFor,
   laneConcurrency,
+  DATAFORSEO_SCAN_MODES,
 } from "../engines/engineRoutes.ts";
+import { runQueuedLane } from "./queuedCollection.js";
 
 const terminal = new Set([
   "answered",
@@ -385,6 +387,44 @@ export async function runDurableProbing({
       async function worker() {
         while (index < lane.length && !laneStopped) {
           const row = lane[index++];
+          if (
+            route === "dataforseo" &&
+            DATAFORSEO_SCAN_MODES[engineName]?.endsWith("_queued")
+          ) {
+            const engine = engines.find((item) => item.name === engineName);
+            const routeOpts = routeInfo ? { route, model: routeInfo.model } : undefined;
+            const blockedReason = !isRouteScanCapable(engineName, route)
+              ? "route_not_scan_capable"
+              : !engine || !validateEngineConfig(engineName, env, routeOpts).ok ||
+                  dispatchIdentity(engineName, env, routeOpts).config_version !== lane[0]?.config_version
+                ? "configuration_changed"
+                : null;
+            if (blockedReason) {
+              cp.blocked = {
+                reason: blockedReason === "configuration_changed" ? "engine_not_registered" : blockedReason,
+                detail: blockedReason === "configuration_changed"
+                  ? `Frozen configuration unavailable: ${engineName}`
+                  : `Route ${route} is not scan-capable for ${engineName}`,
+              };
+              await Promise.all(lane.map((item) => store.block(item.id, blockedReason)));
+              laneStopped = true;
+              continue;
+            }
+            await runQueuedLane({
+              engine: engineName,
+              rows: lane,
+              cp,
+              store,
+              budget,
+              now,
+              env,
+              chunkStartMs,
+              budgetMs,
+              tally,
+            });
+            laneStopped = true;
+            continue;
+          }
           const reqBudget = requestBudgetMs(row.engine, route);
           if (now() - chunkStartMs + reqBudget + 5_000 > budgetMs) {
             break;
