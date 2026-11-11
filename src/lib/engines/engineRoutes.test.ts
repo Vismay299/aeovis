@@ -100,11 +100,11 @@ test("isRouteConfigured checks required environment credentials", () => {
   assert.equal(isRouteConfigured("aio", "brightdata", {}), false);
 });
 
-test("isRouteScanCapable distinguishes model_live from queued routes before phase 4", () => {
+test("isRouteScanCapable enables queued routes only after queue collection is ready", () => {
   assert.equal(isRouteScanCapable("perplexity", "dataforseo"), true);
-  assert.equal(isRouteScanCapable("chatgpt", "dataforseo"), false);
-  assert.equal(isRouteScanCapable("gemini", "dataforseo"), false);
-  assert.equal(isRouteScanCapable("aio", "dataforseo"), false);
+  assert.equal(isRouteScanCapable("chatgpt", "dataforseo"), true);
+  assert.equal(isRouteScanCapable("gemini", "dataforseo"), true);
+  assert.equal(isRouteScanCapable("aio", "dataforseo"), true);
   assert.equal(isRouteScanCapable("chatgpt", "openrouter"), true);
 });
 
@@ -125,15 +125,17 @@ test("F02-AC-22: resolveFrozenRoutes selects first valid route, handles fallback
   assert.equal(r1.perplexity.fallbackFrom, "dataforseo");
   assert.equal(r1.chatgpt.route, "openrouter");
 
-  // 2. With dataforseo_engines ON: perplexity (approved model_live) selects dataforseo, chatgpt is not scan-capable so falls back to openrouter
+  // 2. With dataforseo_engines ON, approved queued engines select DataForSEO now that phase 4 is ready.
   const r2 = await resolveFrozenRoutes(["perplexity", "chatgpt"], {
     env,
     isFeatureEnabled: async () => true,
     openCircuitKeys: new Set(),
     resolveModel: async () => "sonar",
   });
-  // Note: perplexity is in DATAFORSEO_SCAN_MODES as model_live, but check DATAFORSEO_APPROVED_ENGINES
-  // If perplexity is NOT in DATAFORSEO_APPROVED_ENGINES (decision record was aio, chatgpt, gemini), it should not be allowed!
+  assert.equal(
+    r2.chatgpt.route,
+    DATAFORSEO_APPROVED_ENGINES.includes("chatgpt") ? "dataforseo" : "openrouter",
+  );
   if (!DATAFORSEO_APPROVED_ENGINES.includes("perplexity")) {
     assert.equal(r2.perplexity.route, "openrouter");
     assert.equal(r2.perplexity.fallbackFrom, "dataforseo");

@@ -175,6 +175,65 @@ test("F02-AC-18 & F02-AC-25: probeDataforseoModel returns model_api shape and ca
   assert.equal(redaction.safe, true, "evidence capture must pass evidenceRedactionStatus");
 });
 
+test("F02 phase 4: queued posts map accepted and rejected tags with per-entry costs", async () => {
+  const capturedRequest: { value: RequestInit | null } = { value: null };
+  let url = "";
+  const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+    url = String(input);
+    capturedRequest.value = init ?? null;
+    return new Response(JSON.stringify({
+      status_code: 20000,
+      tasks: [
+        { id: "task-1", status_code: 20100, cost: 0.0012, data: { tag: "obs-1" } },
+        { status_code: 40501, status_message: "No Search Results.", cost: 0.0004, data: { tag: "obs-2" } },
+      ],
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  };
+  const result = await postDataforseoBatch(
+    "chatgpt",
+    [{ observationId: "obs-1", query: "Question one?" }, { observationId: "obs-2", query: "Question two?" }],
+    { locationCode: 2356, languageCode: "en", isoCountry: "IN" },
+    { env: FAKE_ENV, fetchImpl: fetchImpl as unknown as typeof fetch },
+  );
+  assert.equal(url, "https://api.dataforseo.com/v3/ai_optimization/chat_gpt/llm_scraper/task_post");
+  assert.equal(capturedRequest.value?.method, "POST");
+  const body = JSON.parse(String(capturedRequest.value?.body));
+  assert.equal(body.length, 2);
+  assert.equal(body[0].tag, "obs-1");
+  assert.deepEqual(result.posted, [{ observationId: "obs-1", taskId: "task-1", costUsd: 0.0012 }]);
+  assert.deepEqual(result.rejected, [{
+    observationId: "obs-2",
+    statusCode: 40501,
+    message: "No Search Results.",
+    costUsd: 0.0004,
+  }]);
+});
+
+test("F02 phase 4: queued task_get distinguishes pending and completed free reads", async () => {
+  const responses = [
+    { status_code: 20000, tasks: [{ id: "task-1", status_code: 40601, cost: 0 }] },
+    { status_code: 20000, tasks: [{ id: "task-1", status_code: 20000, cost: 0, result: [{ markdown: "An answer" }] }] },
+  ];
+  const fetchImpl = async () => new Response(JSON.stringify(responses.shift()), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+  const pending = await collectDataforseoTask("chatgpt", "task-1", {
+    env: FAKE_ENV,
+    fetchImpl: fetchImpl as unknown as typeof fetch,
+  });
+  assert.deepEqual(pending, { status: "pending" });
+  const completed = await collectDataforseoTask("chatgpt", "task-1", {
+    env: FAKE_ENV,
+    fetchImpl: fetchImpl as unknown as typeof fetch,
+  });
+  assert.equal(completed.status, "completed");
+  if (completed.status === "completed") {
+    assert.equal((completed.result as any).result[0].markdown, "An answer");
+    assert.equal(completed.costUsd, 0);
+  }
+});
+
 test("F02-AC-18 & F02-AC-25: fetchDataforseoAioSerp returns valid SERP and captures evidence", async () => {
   const taskId = "10201100-2356-0275-0000-serpaio001";
   const fakeResponse = {
@@ -335,13 +394,13 @@ test("F02-AC-18: dataforseoTextResult handles empty citations and web search unv
   assert.equal(result.citations_state_reason, "web_search_not_used");
 });
 
-test("Phase 4 stubs throw Phase 4 exception", async () => {
+test("Phase 4 adapters refuse invalid batches and task identifiers before network access", async () => {
   await assert.rejects(
     async () => postDataforseoBatch("chatgpt", [], { locationCode: 2356, languageCode: "en", isoCountry: "IN" }),
-    /Phase 4/,
+    (error: any) => error.code === "dataforseo_task_count_invalid",
   );
   await assert.rejects(
-    async () => collectDataforseoTask("chatgpt", "t1"),
-    /Phase 4/,
+    async () => collectDataforseoTask("chatgpt", ""),
+    (error: any) => error.code === "dataforseo_task_id_invalid",
   );
 });
