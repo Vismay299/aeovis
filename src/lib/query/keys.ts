@@ -40,6 +40,21 @@ export const keys = {
       source ?? null,
       sourceRef ?? null,
     ] as const,
+  // F17
+  localBusinesses: (brandKey: string) => ["localBusinesses", brandKey] as const,
+  localFetch: (brandKey: string, fetchId: string) =>
+    ["localFetch", brandKey, fetchId] as const,
+  localFetches: (
+    brandKey: string,
+    businessId?: string | null,
+    kind?: string | null,
+  ) =>
+    ["localFetches", brandKey, businessId ?? null, kind ?? null] as const,
+  localGrid: (brandKey: string, gridId: string) =>
+    ["localGrid", brandKey, gridId] as const,
+  localGrids: (brandKey: string) => ["localGrids", brandKey] as const,
+  localCategories: (query?: string) =>
+    ["localCategories", query ?? ""] as const,
 } as const;
 
 export const privacyKeys = {
@@ -58,6 +73,11 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "usage",
   "price",
   "projectContext",
+  "localBusinesses",
+  "localFetch",
+  "localFetches",
+  "localGrid",
+  "localGrids",
 ]);
 
 export function isWorkspaceKey(
