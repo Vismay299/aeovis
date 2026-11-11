@@ -136,16 +136,22 @@ async function main() {
     // Insert observations and attempts from fixture
     for (const item of fixtureData) {
       let targetJobId = jobIdA;
+      let brandKey = null;
+      let context = {};
       if (item.purpose === "explore") {
         if (!exploreAllowed) continue;
-        targetJobId = null; // Explore has no scan_job
+        // F11's probe_observations_explore_shape: no scan_job, an owning
+        // workspace, and an explore_run_id in context.
+        targetJobId = null;
+        brandKey = brandA;
+        context = { explore_run_id: id() };
       }
 
       await q(
-        `INSERT INTO public.probe_observations(id, job_id, purpose, engine, query, context, config_version, circuit_key, deadline_at)
-         VALUES($1, $2, $3, $4, $5, '{}', '1.0', 'default', now() + interval '1 hour')
+        `INSERT INTO public.probe_observations(id, job_id, brand_key, purpose, engine, query, context, config_version, circuit_key, deadline_at)
+         VALUES($1, $2, $3, $4, $5, $6, $7::jsonb, '1.0', 'default', now() + interval '1 hour')
          ON CONFLICT (id) DO NOTHING`,
-        [item.observation_id, targetJobId, item.purpose, item.engine, item.query]
+        [item.observation_id, targetJobId, brandKey, item.purpose, item.engine, item.query, JSON.stringify(context)]
       );
 
       await q(

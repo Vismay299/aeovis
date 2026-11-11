@@ -526,6 +526,25 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "remove_saved_keywords" },
     { kind: "function", name: "f13_filtered_saved_keywords" },
   ],
+  "090_f11_explore_dispatch.sql": [
+    { kind: "column", name: "probe_observations.brand_key" },
+    { kind: "constraint", name: "probe_observations_purpose_check" },
+    { kind: "constraint", name: "probe_observations_explore_shape" },
+    { kind: "index", name: "probe_observations_explore_run_idx" },
+    { kind: "index", name: "probe_observations_explore_reuse_idx" },
+    { kind: "function", name: "seed_explore_observations" },
+    { kind: "function", name: "claim_probe_dispatch" },
+  ],
+  "091_f11_explore_runs.sql": [
+    { kind: "table", name: "explore_runs" },
+    { kind: "index", name: "explore_runs_brand_idx" },
+    { kind: "index", name: "explore_runs_user_idx" },
+    { kind: "index", name: "explore_runs_active_idx" },
+    { kind: "function", name: "f11_upsert_explore_attempt_rows" },
+    { kind: "function", name: "settle_explore_hold" },
+    { kind: "function", name: "settle_finished_explore_holds" },
+    { kind: "function", name: "prune_explore_runs" },
+  ],
 };
 
 /**

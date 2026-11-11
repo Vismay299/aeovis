@@ -1750,3 +1750,15 @@ invokes the backfill lazily; operators must not call it manually.
 
 
 
+
+## `090_f11_explore_dispatch.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply 090 before 091 and before deploying F11.
+- Adds `probe_observations.brand_key`, the `explore` purpose and shape checks, run/reuse indexes, `seed_explore_observations`, and the F11 extension of `claim_probe_dispatch`.
+- Verify the function and schema with the `explore-shape` group of `scripts/qa/check-f11-db.mjs`; verify unchanged scan/canary behavior with `scripts/qa/check-probe-dispatch.mjs` against loopback QA PostgreSQL.
+
+## `091_f11_explore_runs.sql`
+
+- **Status:** in repo; **not yet applied to production**. Apply after 090 and before deploying F11.
+- Adds tenant-readable `explore_runs`, its three indexes, `f11_upsert_explore_attempt_rows`, `settle_explore_hold`, `settle_finished_explore_holds`, and `prune_explore_runs` (395-day retention caller is Phase 2).
+- Verify with the `explore-shape`, `explore-ledger`, and `explore-retention` groups of `scripts/qa/check-f11-db.mjs`; verify tenant isolation through `tests/customer-uat.sql`.

@@ -352,6 +352,8 @@ functions; its tenant isolation is verified by `tests/customer-uat.sql` and
 
 `080_f09_price_approvals` is additive and must be applied before deploying F09 phase 2. It adds `approved_max_usd` and `price_quote` columns to `scan_jobs`, creates the customer-readable `price_approvals` table with RLS, and adds the service-role `prune_price_approvals` retention function. Existing scans continue without disruption (legacy callers without `maxUsd` are capped at the fresh quote). Verified against loopback PostgreSQL by `scripts/qa/check-f09-db.mjs` and `tests/customer-uat.sql`.
 
+`090_f11_explore_dispatch` and `091_f11_explore_runs` are additive and must be applied in filename order before deploying F11. They add fenced explore observations and the tenant-readable `explore_runs` table, ledger settlement functions, and 395-day run retention. Verify against loopback QA PostgreSQL with `scripts/qa/check-f11-db.mjs` and tenant isolation with `tests/customer-uat.sql`. Both are **NOT applied to production**.
+
 
 `040_f01_jobs` is implemented and verified on disposable PostgreSQL — the
 `jobs-enqueue`, `jobs-leases`, `jobs-steps`, `jobs-watchdog`, `jobs-cancel`
