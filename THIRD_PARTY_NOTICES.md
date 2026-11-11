@@ -455,3 +455,5 @@ SOFTWARE.
 - `src/lib/backlinks/backlinksSubfolderOverview.ts` (from `src/server/features/backlinks/services/backlinksSubfolderOverview.ts`)
 - `src/lib/backlinks/backlinksService.ts` (from `src/server/features/backlinks/services/BacklinksService.ts`, `backlinksServiceData.ts`)
 - `src/lib/backlinks/backlinks.contract.ts` (from `src/types/schemas/backlinks.ts`)
+- `src/lib/workers/queuedCollection.js` (from `src/server/features/ai-visibility/services/aiVisibilityCollection.ts`, `src/server/workflows/AiVisibilityWorkflow.ts`)
+- `src/lib/engines/dataforseo.ts` (from `src/server/features/ai-visibility/services/aiVisibilityCollection.ts`)
