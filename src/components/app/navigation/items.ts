@@ -16,8 +16,10 @@
 
 import {
   BookOpen,
+  Globe,
   LayoutDashboard,
   MapPin,
+  Link2,
   MessageSquareText,
   PenLine,
   Radar,
@@ -88,6 +90,20 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/portal/local",
         icon: MapPin,
         flag: "local_seo",
+      },
+      {
+        id: "domain",
+        label: "Domain",
+        href: "/portal/domain",
+        icon: Globe,
+        flag: "domain_research",
+      },
+      {
+        id: "backlinks",
+        label: "Backlinks",
+        href: "/portal/backlinks",
+        icon: Link2,
+        flag: "backlinks",
       },
     ],
   },

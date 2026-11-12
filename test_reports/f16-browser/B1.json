@@ -1,0 +1,8 @@
+{
+  "case": "B1",
+  "suite": "f16-browser",
+  "startedAt": "2026-11-12T18:27:54.391Z",
+  "description": "flag off -> empty state copy and hidden sidebar link",
+  "outcome": "pass",
+  "endedAt": "2026-11-12T18:27:57.079Z"
+}

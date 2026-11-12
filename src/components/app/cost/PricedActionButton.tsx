@@ -68,6 +68,9 @@ export function PricedActionButton({
   // During the debounce the quote still prices the previous input; never run
   // directly on it (the dialog shows the refreshed quote instead).
   const isStale = inputKey !== stableStringify(debouncedInput);
+  // A quote that prices this exact input: not mid-debounce and not the
+  // previous input's placeholder. Only a fresh quote may become an approval.
+  const isFresh = !isStale && !quote.isPlaceholderData;
   const isFirstLoading = quote.isPending && !quoteData && !quote.isError;
   const isBlocked = Boolean(quoteData?.blocked);
   const isError = quote.isError;
@@ -154,12 +157,19 @@ export function PricedActionButton({
         title={dialogTitle}
         confirmLabel={confirmLabel}
         pendingLabel={pendingLabel}
-        quote={quote}
+        // Until the quote prices the current input the dialog shows it as
+        // loading, so Confirm cannot approve the previous input's price.
+        quote={
+          isFresh
+            ? quote
+            : { ...quote, data: undefined, isPending: true, isError: false }
+        }
         pending={pending}
         priceChanged={priceChanged}
         error={error}
         detail={detail}
         onConfirm={(maxUsd) => {
+          if (!isFresh && !priceChanged) return;
           onRun(maxUsd);
         }}
         onClose={() => {
