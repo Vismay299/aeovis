@@ -651,6 +651,12 @@ abandoned is not.
 - Verified against a disposable loopback PostgreSQL database with `scripts/qa/check-dataforseo-db.mjs`.
 
 
+### `110_f15_rank_tracking` and `111_f15_rank_tracking_functions` (F15 phase 1)
+- Status: implemented in repo; NOT YET APPLIED to production.
+- Apply 110, then 111, before deploying F15 phase 2.
+- Migration 110 creates the five tenant-readable rank tracking tables with RLS and composite brand foreign keys. Migration 111 adds service-role-only keyword, schedule claim, run, reserve, result, summary, and pruning functions.
+- Verify with scripts/qa/check-f15-db.mjs against a loopback _qa database and tests/customer-uat.sql.
+
 ## D. Content approval — the human gate, and what it does not yet do
 
 The content pipeline is human-in-the-loop by design. `POST /api/content-items/[id]/decision`
