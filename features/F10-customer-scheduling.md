@@ -506,13 +506,13 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 ### Phase 4 — Settings tab and next-run badges (requires F04, F05, F09 phase 3)
 **Goal:** owners schedule scans and everyone sees the next one.
 
-- [ ] **P4.T1 Hooks**
-  - [ ] **P4.T1.S1** *Files:* `src/lib/query/keys.ts` (+ test), `src/components/portal/schedule/hooks/useSchedule.ts`, `src/lib/features/clientFeatures.ts`. *Verify:* `node --test src/lib/query/keys.test.ts` → pass.
-- [ ] **P4.T2 Components**
-  - [ ] **P4.T2.S1** *Files:* `src/components/portal/schedule/{ScheduleSettings,ScheduleField,ScheduleSummary,ScheduleHistory}.tsx`, `src/app/portal/settings/schedule/page.tsx`, `src/components/portal/settings/tabs.ts`. *Do:* §6.6 with exact copy. *Verify:* `npm run build` → exit 0.
-  - [ ] **P4.T2.S2** *Files:* `src/components/portal/schedule/NextRunBadge.tsx`, `nextRunBadge.test.ts` (render harness: each state's text; nothing when flag off), `src/app/portal/page.jsx`, `src/app/portal/scans/page.jsx`, `src/components/portal/portalRegressions.test.mjs` and `src/components/portal/portalProgress.test.mjs` (add `@/components/portal/schedule/NextRunBadge` to their module maps as `autoNull`). *Verify:* `node --test src/components/portal/schedule/nextRunBadge.test.ts src/components/portal/portalRegressions.test.mjs` → pass (F10-AC-14).
-- [ ] **P4.T3 Browser**
-  - [ ] **P4.T3.S1** *Files:* `scripts/qa/check-f10-browser.mjs` (fixture APIs). Scenarios: B1 `off` → pick weekly Monday 09:00 → price block shows per-scan and monthly → dialog → saved toast; B2 daily warning visible; B3 `on` → Pause → `paused` state; B4 last skip `price_changed` → "Review price" opens the dialog; B5 member view: picker disabled with the permission hint, Pause enabled; B6 Overview and Scans badges for `on`, skipped and `off`; B7 375 px: no horizontal scroll; keyboard reaches select, time input and buttons. *Verify:* `node scripts/qa/check-f10-browser.mjs` → "ok 7 scenarios" (F10-AC-13, 14, 17).
+- [x] **P4.T1 Hooks**
+  - [x] **P4.T1.S1** *Files:* `src/lib/query/keys.ts` (+ test), `src/components/portal/schedule/hooks/useSchedule.ts`, `src/lib/features/clientFeatures.ts`. *Verify:* `node --test src/lib/query/keys.test.ts` → pass.
+- [x] **P4.T2 Components**
+  - [x] **P4.T2.S1** *Files:* `src/components/portal/schedule/{ScheduleSettings,ScheduleField,ScheduleSummary,ScheduleHistory}.tsx`, `src/app/portal/settings/schedule/page.tsx`, `src/components/portal/settings/tabs.ts`. *Do:* §6.6 with exact copy. *Verify:* `npm run build` → exit 0.
+  - [x] **P4.T2.S2** *Files:* `src/components/portal/schedule/NextRunBadge.tsx`, `nextRunBadge.test.ts` (render harness: each state's text; nothing when flag off), `src/app/portal/page.jsx`, `src/app/portal/scans/page.jsx`, `src/components/portal/portalRegressions.test.mjs` and `src/components/portal/portalProgress.test.mjs` (add `@/components/portal/schedule/NextRunBadge` to their module maps as `autoNull`). *Verify:* `node --test src/components/portal/schedule/nextRunBadge.test.ts src/components/portal/portalRegressions.test.mjs` → pass (F10-AC-14).
+- [x] **P4.T3 Browser**
+  - [x] **P4.T3.S1** *Files:* `scripts/qa/check-f10-browser.mjs` (fixture APIs). Scenarios: B1 `off` → pick weekly Monday 09:00 → price block shows per-scan and monthly → dialog → saved toast; B2 daily warning visible; B3 `on` → Pause → `paused` state; B4 last skip `price_changed` → "Review price" opens the dialog; B5 member view: picker disabled with the permission hint, Pause enabled; B6 Overview and Scans badges for `on`, skipped and `off`; B7 375 px: no horizontal scroll; keyboard reaches select, time input and buttons. *Verify:* `node scripts/qa/check-f10-browser.mjs` → "ok 7 scenarios" (F10-AC-13, 14, 17).
 
 **Checkpoint:** build, suite, browser script. ACs 13, 14, 17.
 
@@ -561,8 +561,8 @@ Fixtures: `tests/fixtures/f10/schedules.json` (customer and operator rows, windo
 ## 12. Definition of done
 
 - [ ] Phases 1–4 merged; every subtask ticked.
-- [ ] F10-AC-01..17 covered by passing tests in §9.
-- [ ] `npm test`, `npm run typecheck`, `npm run build`, `check-f10-db.mjs`, `check-repair-workflows.mjs`, `check-f10-browser.mjs` green.
-- [ ] Migration paperwork (README, OPERATOR_LEDGER § C, PROD_MIGRATIONS) and `THIRD_PARTY_NOTICES.md` updated.
+- [x] F10-AC-01..17 covered by passing tests in §9.
+- [x] `npm test`, `npm run typecheck`, `npm run build`, `check-f10-db.mjs`, `check-repair-workflows.mjs`, `check-f10-browser.mjs` green.
+- [x] Migration paperwork (README, OPERATOR_LEDGER § C, PROD_MIGRATIONS) and `THIRD_PARTY_NOTICES.md` updated.
 - [ ] `features/README.md` F10 status updated.
 - [ ] R11 soak result recorded before the flag is widened beyond the QA workspace (owner).

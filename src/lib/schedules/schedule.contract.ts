@@ -49,6 +49,9 @@ export const customerScheduleViewSchema = z.looseObject({
   windows: z.array(customerScheduleWindowSchema),
 });
 
+export type CustomerScheduleView = z.infer<typeof customerScheduleViewSchema>;
+export type CustomerScheduleWindow = z.infer<typeof customerScheduleWindowSchema>;
+
 const exampleSchedule = {
   brandKey: "offcult.in",
   status: "on" as const,

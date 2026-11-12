@@ -76,6 +76,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "Research",
     items: [
       {
+        id: "keywords",
+        label: "Keywords",
+        href: "/portal/keywords",
+        icon: Search,
+        flag: "keyword_research",
+      },
+      {
         id: "local",
         label: "Local",
         href: "/portal/local",

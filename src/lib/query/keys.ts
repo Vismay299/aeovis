@@ -27,6 +27,8 @@ export const keys = {
   projectContext: (brandKey: string) => ["projectContext", brandKey] as const,
   // F26
   privacyChoice: () => ["privacyChoice"] as const,
+  // F10
+  schedule: (brandKey: string) => ["schedule", brandKey] as const,
   // F19
   indexnowSetup: (brandKey: string) => ["indexnowSetup", brandKey] as const,
   indexnowSubmissions: (
@@ -55,6 +57,15 @@ export const keys = {
   localGrids: (brandKey: string) => ["localGrids", brandKey] as const,
   localCategories: (query?: string) =>
     ["localCategories", query ?? ""] as const,
+  // F13 — all keyword data is scoped to its workspace.
+  keywordResearch: (brandKey: string, inputKey: string) =>
+    ["keywordResearch", brandKey, inputKey] as const,
+  keywordSerp: (brandKey: string, inputKey: string) =>
+    ["keywordSerp", brandKey, inputKey] as const,
+  savedKeywords: (brandKey: string, inputKey: string) =>
+    ["savedKeywords", brandKey, inputKey] as const,
+  keywordLocations: (brandKey: string, iso: string, q: string) =>
+    ["keywordLocations", brandKey, iso, q] as const,
 } as const;
 
 export const privacyKeys = {
@@ -78,6 +89,11 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "localFetches",
   "localGrid",
   "localGrids",
+  "keywordResearch",
+  "keywordSerp",
+  "savedKeywords",
+  "keywordLocations",
+  "schedule",
 ]);
 
 export function isWorkspaceKey(
