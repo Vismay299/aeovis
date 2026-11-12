@@ -66,7 +66,7 @@ test("tenant Scans renders a runnable mock inside the tenant page rather than li
       ["zod", await import("zod")],
     ]),
     autoStub: ["@/components/app/table/", "@/components/app/ExportMenu", "@/components/app/export/", "@/lib/table/"],
-    autoNull: ["lucide-react", "@/components/portal/ScanProgressCard", "@/components/portal/scans/scans.css"],
+    autoNull: ["lucide-react", "@/components/portal/ScanProgressCard", "@/components/portal/scans/scans.css", "@/components/portal/schedule/NextRunBadge"],
   });
   const html = renderToHtml(page.default);
   assert.match(html, /Run mock scan/);

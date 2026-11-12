@@ -46,6 +46,7 @@ import {
   platformLabel,
   scanVisibilityState,
 } from "@/components/portal/scans/reportData";
+import { NextRunBadge } from "@/components/portal/schedule/NextRunBadge";
 import "@/components/portal/scans/scans.css";
 
 const FAILED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -355,14 +356,17 @@ export default function ScansPage() {
         title="Scans"
         description="Every AI visibility scan for this workspace."
         actions={(
-          <Button
-            icon={Play}
-            loading={scan.starting}
-            disabled={scan.active || !brandKey}
-            onClick={() => scan.start()}
-          >
-            Run scan
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <NextRunBadge />
+            <Button
+              icon={Play}
+              loading={scan.starting}
+              disabled={scan.active || !brandKey}
+              onClick={() => scan.start()}
+            >
+              Run scan
+            </Button>
+          </div>
         )}
       />
 

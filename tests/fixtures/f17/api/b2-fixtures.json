@@ -1,0 +1,55 @@
+{
+  "quoteListings": {
+    "action": "local.listings.search",
+    "currency": "USD",
+    "totalUsd": 0.0192,
+    "lines": [
+      {
+        "label": "Up to 20 nearby businesses",
+        "quantity": 20,
+        "unitUsd": 0.00096,
+        "totalUsd": 0.0192
+      }
+    ],
+    "warnings": []
+  },
+  "listingsResult": {
+    "businesses": [
+      {
+        "title": "Competitor Cafe",
+        "category": "Coffee shop",
+        "additionalCategories": ["Bakery"],
+        "rating": 4.5,
+        "votes": 85,
+        "isClaimed": true,
+        "domain": "competitor.example",
+        "url": "https://competitor.example",
+        "phone": "+1 555-0144",
+        "address": "456 Elm St, Springfield",
+        "cid": "9876543210987654321",
+        "placeId": "ChIJComp456",
+        "latitude": 39.782,
+        "longitude": -89.652,
+        "totalPhotos": 8,
+        "isSaved": null
+      }
+    ],
+    "cached": false,
+    "fetchedAt": "2026-10-22T08:00:00.000Z"
+  },
+  "savedCompetitor": {
+    "business": {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "role": "competitor",
+      "title": "Competitor Cafe",
+      "cid": "9876543210987654321",
+      "placeId": "ChIJComp456",
+      "latitude": 39.782,
+      "longitude": -89.652,
+      "locationCode": 2840,
+      "languageCode": "en",
+      "profile": null,
+      "profileFetchedAt": null
+    }
+  }
+}

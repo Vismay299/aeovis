@@ -675,10 +675,10 @@ Form: "Search term", "Near" (default the business coordinates; Maps link or coor
 
 ### Phase 3 — Page: picker, profile, reviews, posts, questions (requires F04, F05, F06, F09 phase 3, F13 phase 1 merged)
 
-- [ ] **P3.T1 Components**
-  - [ ] **P3.T1.S1** *Files:* `src/app/portal/local/page.tsx`, `src/components/portal/local/{LocalSeoPage,BusinessPicker,CompetitorList,ProfileTab}.tsx`, `hooks/{useLocalBusinesses,useLocalFetch}.ts`, `telemetry.ts`, `src/components/app/navigation/items.ts` (entry), `src/lib/query/keys.ts`. *Do:* §6.6.1–6.6.2. *Verify:* `npm run build` → exit 0.
-  - [ ] **P3.T1.S2** *Files:* `src/components/portal/local/{ReviewsTab,ReviewCard,PostsTab,QuestionsTab}.tsx`. *Do:* §6.6.3–6.6.4; polling with F05 `useServerPacedQuery` (`isActive = status === "processing"`, stop after 10 minutes). *Verify:* `npm run build` → exit 0.
-  - [ ] **P3.T1.S3** *Files:* `scripts/qa/check-f17-browser.mjs`, `tests/fixtures/f17/api/*.json`. *Do:* fixture API server; B1 no business → "By name" lookup shows the price and the result card; B2 "Nearby" search table and "Save as competitor"; B3 profile head-to-head shows "Not loaded" (not 0) for a competitor without a profile; B4 reviews: processing then completed, "owner replied to 6 of 20", page 2 of 2, rating filter; B5 posts and questions empty states. *Verify:* `node scripts/qa/check-f17-browser.mjs --only B1,B2,B3,B4,B5` → "ok 5 scenarios".
+- [x] **P3.T1 Components**
+  - [x] **P3.T1.S1** *Files:* `src/app/portal/local/page.tsx`, `src/components/portal/local/{LocalSeoPage,BusinessPicker,CompetitorList,ProfileTab}.tsx`, `hooks/{useLocalBusinesses,useLocalFetch}.ts`, `telemetry.ts`, `src/components/app/navigation/items.ts` (entry), `src/lib/query/keys.ts`. *Do:* §6.6.1–6.6.2. *Verify:* `npm run build` → exit 0.
+  - [x] **P3.T1.S2** *Files:* `src/components/portal/local/{ReviewsTab,ReviewCard,PostsTab,QuestionsTab}.tsx`. *Do:* §6.6.3–6.6.4; polling with F05 `useServerPacedQuery` (`isActive = status === "processing"`, stop after 10 minutes). *Verify:* `npm run build` → exit 0.
+  - [x] **P3.T1.S3** *Files:* `scripts/qa/check-f17-browser.mjs`, `tests/fixtures/f17/api/*.json`. *Do:* fixture API server; B1 no business → "By name" lookup shows the price and the result card; B2 "Nearby" search table and "Save as competitor"; B3 profile head-to-head shows "Not loaded" (not 0) for a competitor without a profile; B4 reviews: processing then completed, "owner replied to 6 of 20", page 2 of 2, rating filter; B5 posts and questions empty states. *Verify:* `node scripts/qa/check-f17-browser.mjs --only B1,B2,B3,B4,B5` → "ok 5 scenarios".
 
 **Checkpoint:** full suite, build, B1–B5 pass.
 
