@@ -41,7 +41,8 @@ export function NextRunBadge(props?: NextRunBadgeProps) {
   const isFeatureEnabled = props?.enabled ?? portalFeatureEnabled;
   const isOwner = props?.isOwner ?? portalIsOwner;
 
-  const query = useSchedule(props?.schedule !== undefined ? "" : portalBrandKey);
+  // No request when the badge will not render (flag off, or a schedule passed in).
+  const query = useSchedule(props?.schedule !== undefined || !isFeatureEnabled ? "" : portalBrandKey);
   const isLoading = props?.isLoading ?? (props?.schedule === undefined && query.isLoading);
   const schedule = props?.schedule !== undefined ? props.schedule : query.data;
 

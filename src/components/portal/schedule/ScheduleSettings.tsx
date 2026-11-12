@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { AlertTriangle, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -16,6 +16,9 @@ import { isApiError } from "@/lib/query/fetchJson";
 import { formatUsd, type PriceQuote } from "@/shared/pricing";
 import {
   formatNextRun,
+  localScheduleTimeFrom,
+  randomScheduleDate,
+  withBrowserTimeZone,
   type ScheduleInterval,
   type ScheduleTime,
 } from "@/shared/schedule";
@@ -32,10 +35,27 @@ export function ScheduleSettings() {
   const schedule = scheduleQuery.data;
   const status = schedule?.status ?? "off";
 
-  // Interval & ScheduleTime draft state
-  const [fieldValue, setFieldValue] = useState<ScheduleFieldValue>({
-    interval: "weekly",
-  });
+  // The default slot shown in the picker is the slot that is saved: without
+  // it the picker described a random local time while the PUT sent none and
+  // the server chose a different one.
+  const [defaultTime] = useState<ScheduleTime>(() =>
+    withBrowserTimeZone(localScheduleTimeFrom(randomScheduleDate())),
+  );
+  // null = untouched: seed from the stored schedule (a paused schedule resumes
+  // with its own interval and time) or the default slot.
+  const [draft, setFieldValue] = useState<ScheduleFieldValue | null>(null);
+  const storedTime: ScheduleTime | undefined = schedule?.scheduleTime
+    ? {
+        weekday: schedule.scheduleTime.weekday,
+        hour: schedule.scheduleTime.hour,
+        minute: schedule.scheduleTime.minute,
+        timeZone: schedule.scheduleTime.timeZone,
+      }
+    : undefined;
+  const fieldValue: ScheduleFieldValue = draft ?? {
+    interval: schedule?.interval ?? "weekly",
+    scheduleTime: storedTime ?? defaultTime,
+  };
   const [editingSchedule, setEditingSchedule] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [priceChangedState, setPriceChangedState] = useState<{
@@ -78,7 +98,9 @@ export function ScheduleSettings() {
         brand_key: brandKey,
         enabled: true,
         interval: quoteInterval,
-        scheduleTime: fieldValue.scheduleTime,
+        // Re-approving the price of an unchanged schedule ("Review price")
+        // must keep its slot; sending no time would clear it.
+        scheduleTime: status === "on" && !editingSchedule ? storedTime : fieldValue.scheduleTime,
         maxUsd: approvedMaxUsd,
       });
       setDialogOpen(false);
@@ -230,19 +252,7 @@ export function ScheduleSettings() {
                 onPause={handlePause}
                 pausePending={saveSchedule.isPending}
                 onChangeSchedule={() => {
-                  if (schedule?.interval) {
-                    setFieldValue({
-                      interval: schedule.interval,
-                      scheduleTime: schedule.scheduleTime
-                        ? {
-                            weekday: schedule.scheduleTime.weekday,
-                            hour: schedule.scheduleTime.hour,
-                            minute: schedule.scheduleTime.minute,
-                            timeZone: schedule.scheduleTime.timeZone,
-                          }
-                        : undefined,
-                    });
-                  }
+                  setFieldValue(null);
                   setEditingSchedule(true);
                 }}
               />
@@ -339,7 +349,10 @@ export function ScheduleSettings() {
                           type="button"
                           variant="ghost"
                           disabled={saveSchedule.isPending}
-                          onClick={() => setEditingSchedule(false)}
+                          onClick={() => {
+                            setEditingSchedule(false);
+                            setFieldValue(null);
+                          }}
                         >
                           Cancel
                         </Button>

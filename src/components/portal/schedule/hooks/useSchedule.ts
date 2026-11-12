@@ -31,6 +31,9 @@ export function useSaveSchedule(brandKey: string) {
   const queryKey = keys.schedule(brandKey);
 
   return useMutation({
+    // ScheduleSettings reports every failure itself (dialog error, price-changed
+    // state, pause toast); the global toast would duplicate it.
+    meta: { errorToast: false },
     mutationFn: (body: SaveScheduleInput) =>
       fetchJson<CustomerScheduleView>("/api/customer/schedule", {
         method: "PUT",
