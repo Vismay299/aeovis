@@ -15,7 +15,7 @@ import { usePortal } from "@/components/portal/PortalShell";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { useLocalPref } from "@/components/app/hooks/useLocalPref";
 import { useKeywordResearchData, type KeywordRow } from "./useKeywordResearchData";
-import { useKeywordSerpAnalysis } from "./useKeywordSerpAnalysis";
+import { useKeywordSerpAnalysis, type KeywordSerpResponse } from "./useKeywordSerpAnalysis";
 import { useKeywordHistory } from "./useKeywordHistory";
 import { useKeywordSearchTabs } from "./useKeywordSearchTabs";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
@@ -30,13 +30,13 @@ const searchSchema = z.object({
   mode: z.enum(["auto", "related", "suggestions", "ideas"]),
   cs: z.preprocess((value) => value === "true" ? true : value === "false" ? false : value, z.boolean()),
   grp: z.preprocess((value) => value === "true" ? true : value === "false" ? false : value, z.boolean()),
-  sort: z.string(),
+  sort: z.enum(["searchVolume", "keywordDifficulty", "cpc", "competition", "keyword"]),
   order: z.enum(["asc", "desc"]),
 });
 
 const defaults = {
   q: "", loc: DEFAULT_LOCATION_CODE, locName: "", kLimit: 150 as const,
-  mode: "auto" as const, cs: false, grp: false, sort: "searchVolume", order: "desc" as const,
+  mode: "auto" as const, cs: false, grp: false, sort: "searchVolume" as const, order: "desc" as const,
 };
 
 export function useKeywordResearchController() {
@@ -45,8 +45,12 @@ export function useKeywordResearchController() {
   const [locationPref, setLocationPref] = useLocalPref("keyword-location", z.number().int().positive(), market.locationCode, { brandKey });
   const [params, setParams] = useUrlSearchState(searchSchema, { ...defaults, loc: locationPref });
   const [draft, setDraft] = useState(params.q);
-  const [liveMode, setLiveMode] = useState(false);
-  const [approvedMaxUsd, setApprovedMaxUsd] = useState<number | undefined>();
+  const [researchLiveMode, setResearchLiveMode] = useState(false);
+  const [researchApprovedMaxUsd, setResearchApprovedMaxUsd] = useState<number | undefined>();
+  const [serpLiveMode, setSerpLiveMode] = useState(false);
+  const [serpApproval, setSerpApproval] = useState<{ keyword: string; depth: 20 | 100; maxUsd: number } | undefined>();
+  const [serpDepth, setSerpDepth] = useState<20 | 100>(20);
+  const [serpTop20Result, setSerpTop20Result] = useState<KeywordSerpResponse | undefined>();
   const [selectedKeyword, setSelectedKeyword] = useState(params.q);
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -59,7 +63,14 @@ export function useKeywordResearchController() {
   const tabs = useKeywordSearchTabs(brandKey);
 
   useEffect(() => { setDraft(params.q); setSelectedKeyword(params.q); }, [params.q]);
-  useEffect(() => { setLiveMode(false); setApprovedMaxUsd(undefined); }, [brandKey]);
+  useEffect(() => {
+    setResearchLiveMode(false);
+    setResearchApprovedMaxUsd(undefined);
+    setSerpLiveMode(false);
+    setSerpApproval(undefined);
+    setSerpDepth(20);
+    setSerpTop20Result(undefined);
+  }, [brandKey]);
 
   const location = LOCATION_OPTIONS.find((item) => item.code === params.loc) ?? LOCATION_OPTIONS[0];
   const researchQuote = usePriceQuote({
@@ -85,9 +96,9 @@ export function useKeywordResearchController() {
     mode: params.mode,
     clickstream: params.cs,
     groupKeywords: params.grp,
-    cacheOnly: !liveMode,
-    ...(liveMode && approvedMaxUsd !== undefined ? { maxUsd: approvedMaxUsd } : {}),
-  }) : null, [approvedMaxUsd, brandKey, liveMode, location?.languageCode, locationPref, params]);
+    cacheOnly: !researchLiveMode,
+    ...(researchLiveMode && researchApprovedMaxUsd !== undefined ? { maxUsd: researchApprovedMaxUsd } : {}),
+  }) : null, [brandKey, location?.languageCode, locationPref, params, researchApprovedMaxUsd, researchLiveMode]);
   const research = useKeywordResearchData(queryInput);
   const rows: KeywordRow[] = research.data?.rows ?? [];
 
@@ -106,18 +117,35 @@ export function useKeywordResearchController() {
     action: "keywords.serp.run",
     input: { keyword: selectedKeyword || params.q || "keyword", locationCode: params.loc, languageCode: location?.languageCode ?? "en", depth: 20 },
   }, { enabled: Boolean(brandKey && (selectedKeyword || params.q)) });
+  const serpDeepQuote = usePriceQuote({
+    brandKey,
+    action: "keywords.serp.run",
+    input: { keyword: selectedKeyword || params.q || "keyword", locationCode: params.loc, languageCode: location?.languageCode ?? "en", depth: 100 },
+  }, { enabled: Boolean(brandKey && (selectedKeyword || params.q)) });
   const serpMaxUsd = researchQuote.data?.lines.find((line) => /serp/i.test(line.label))?.totalUsd
     ?? serpQuote.data?.totalUsd;
+  const serpDeepMaxUsd = serpDeepQuote.data?.totalUsd;
+  const approvedSerpMaxUsd = serpApproval?.keyword === selectedKeyword && serpApproval.depth === serpDepth
+    ? serpApproval.maxUsd
+    : (serpDepth === 20 ? serpMaxUsd : serpDeepMaxUsd);
   const serpInput = selectedKeyword && rows.length && !research.data?.notCached ? {
     brand_key: brandKey,
     keyword: selectedKeyword,
     locationCode: params.loc,
     languageCode: location?.languageCode ?? "en",
-    depth: 20 as const,
-    cacheOnly: !liveMode,
-    ...(liveMode && serpMaxUsd !== undefined ? { maxUsd: serpMaxUsd } : {}),
+    depth: serpDepth,
+    cacheOnly: !serpLiveMode,
+    ...(serpLiveMode && approvedSerpMaxUsd !== undefined ? { maxUsd: approvedSerpMaxUsd } : {}),
   } : null;
   const serp = useKeywordSerpAnalysis(serpInput);
+
+  useEffect(() => {
+    setSerpDepth(20);
+    setSerpTop20Result(undefined);
+  }, [selectedKeyword]);
+  useEffect(() => {
+    if (serpDepth === 20 && serp.data?.items?.length) setSerpTop20Result(serp.data);
+  }, [serp.data, serpDepth]);
 
   const runSearch = (maxUsd: number) => {
     const keywords = draft.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, MAX_KEYWORDS_PER_SUBMIT);
@@ -127,8 +155,14 @@ export function useKeywordResearchController() {
       const input = { keyword: tabKeyword, locationCode: locationPref, locationName: params.locName || null };
       tabs.openTab({ label: params.locName ? `${tabKeyword} · ${params.locName}` : tabKeyword, input });
     }
-    setApprovedMaxUsd(maxUsd);
-    setLiveMode(true);
+    const seedSerpCeiling = researchQuote.data?.lines.find((line) => /serp/i.test(line.label))?.totalUsd;
+    setResearchApprovedMaxUsd(maxUsd);
+    setResearchLiveMode(true);
+    setSerpDepth(20);
+    if (seedSerpCeiling !== undefined) {
+      setSerpApproval({ keyword, depth: 20, maxUsd: seedSerpCeiling });
+      setSerpLiveMode(true);
+    }
     setSelectedKeyword(keyword);
     setPage(1);
     setSelectedKeywords([]);
@@ -136,15 +170,23 @@ export function useKeywordResearchController() {
   };
 
   const runSerp = (maxUsd: number) => {
-    setApprovedMaxUsd(maxUsd);
-    setLiveMode(true);
-    void serp.refetch();
+    setSerpDepth(20);
+    setSerpApproval({ keyword: selectedKeyword, depth: 20, maxUsd });
+    setSerpLiveMode(true);
   };
+
+  const runSerpDeep = (maxUsd: number) => {
+    setSerpDepth(100);
+    setSerpApproval({ keyword: selectedKeyword, depth: 100, maxUsd });
+    setSerpLiveMode(true);
+  };
+
+  const showSerpTop20 = () => setSerpDepth(20);
 
   const retryResearch = () => { void research.refetch(); };
   const handleResearchError = (error: unknown) => {
     if (isApiError(error) && error.code === "price_changed" && researchQuote.data) {
-      setPriceChanged({ approvedMaxUsd: approvedMaxUsd ?? 0, quote: researchQuote.data });
+      setPriceChanged({ approvedMaxUsd: researchApprovedMaxUsd ?? 0, quote: researchQuote.data });
     }
   };
   useEffect(() => { if (research.error) handleResearchError(research.error); }, [research.error]);
@@ -159,8 +201,9 @@ export function useKeywordResearchController() {
     brandKey, brand, featureEnabled, params, setParams, draft, setDraft, locationPref,
     setLocationPref, location, research, researchQuote, rows, selectedKeyword,
     setSelectedKeyword, selectedKeywords, toggleSelected, clearSelectedKeywords, filtersOpen, setFiltersOpen,
-    mobileTab, setMobileTab, pageSize, setPageSize, page, setPage, liveMode,
-    approvedMaxUsd, runSearch, runSerp, serp, serpQuote, serpMaxUsd, retryResearch,
+    mobileTab, setMobileTab, pageSize, setPageSize, page, setPage,
+    liveMode: researchLiveMode, runSearch, runSerp, runSerpDeep, showSerpTop20,
+    serp, serpQuote, serpDeepQuote, serpMaxUsd, serpDeepMaxUsd, serpDepth, serpTop20Result, retryResearch,
     priceChanged, setPriceChanged, history, tabs,
   };
 }

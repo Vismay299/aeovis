@@ -7,6 +7,6 @@
 import type { KeywordRow } from "./hooks/useKeywordResearchData";
 import { KeywordResearchTable } from "./KeywordResearchTable";
 
-export function KeywordResearchResults(props: { brandKey: string; rows: KeywordRow[]; seed: string; groupKeywords: boolean; selectedKeyword: string; onSelectKeyword: (keyword: string) => void; selectedKeywords: string[]; onToggleKeyword: (keyword: string) => void; mode: string; page: number; pageSize: 50 | 100 | 300 | 500; onPage: (page: number) => void; onPageSize: (size: 50 | 100 | 300 | 500) => void; onSaveSelected: () => void }) {
+export function KeywordResearchResults(props: { brandKey: string; rows: KeywordRow[]; seed: string; groupKeywords: boolean; selectedKeyword: string; onSelectKeyword: (keyword: string) => void; selectedKeywords: string[]; onToggleKeyword: (keyword: string) => void; mode: string; page: number; pageSize: 50 | 100 | 300 | 500; sort: "searchVolume" | "keywordDifficulty" | "cpc" | "competition" | "keyword"; order: "asc" | "desc"; onSort: (field: "searchVolume" | "keywordDifficulty" | "cpc" | "competition" | "keyword") => void; onPage: (page: number) => void; onPageSize: (size: 50 | 100 | 300 | 500) => void; onSaveSelected: () => void }) {
   return <KeywordResearchTable {...props} />;
 }

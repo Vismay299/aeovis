@@ -29,7 +29,6 @@ import { isApiError } from "@/lib/query/fetchJson";
 export function KeywordResearchPage() {
   const c = useKeywordResearchController();
   const [saveOpen, setSaveOpen] = useState(false);
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const selectedRow = c.rows.find((row) => row.keyword === c.selectedKeyword) ?? c.rows[0];
   const locationLabel = LOCATION_OPTIONS.find((loc) => loc.code === c.params.loc)?.label ?? "your selected country";
   const options = { resultLimit: c.params.kLimit, mode: c.params.mode, clickstream: c.params.cs, groupKeywords: c.params.grp };
@@ -44,9 +43,24 @@ export function KeywordResearchPage() {
     groupKeywords: c.params.grp,
   };
   const sortedRows = [...c.rows].sort((a, b) => {
-    const av = a.searchVolume ?? -1; const bv = b.searchVolume ?? -1;
-    return sortOrder === "desc" ? bv - av : av - bv;
+    if (c.params.sort === "keyword") {
+      const comparison = a.keyword.localeCompare(b.keyword);
+      return c.params.order === "desc" ? -comparison : comparison;
+    }
+    const value = (row: typeof a) => {
+      switch (c.params.sort) {
+        case "keywordDifficulty": return row.keywordDifficulty ?? -1;
+        case "cpc": return row.cpc ?? -1;
+        case "competition": return row.competition ?? -1;
+        default: return row.searchVolume ?? -1;
+      }
+    };
+    const difference = value(a) - value(b);
+    return c.params.order === "desc" ? -difference : difference;
   });
+  const sortRows = (field: "searchVolume" | "keywordDifficulty" | "cpc" | "competition" | "keyword") => {
+    c.setParams({ sort: field, order: c.params.sort === field ? (c.params.order === "desc" ? "asc" : "desc") : "desc" });
+  };
   const isCacheMiss = Boolean(c.params.q && !c.liveMode && c.research.data?.notCached);
   const isLoadingCache = Boolean(c.params.q && c.research.isPending);
   const retryUnavailable = c.research.error && isApiError(c.research.error) && ["unknown_location", "research_invalid"].includes(c.research.error.code);
@@ -82,14 +96,13 @@ export function KeywordResearchPage() {
           <div className="hidden xl:block">{selectedRow ? <OverviewStats keyword={selectedRow.keyword} volume={selectedRow.searchVolume} cpc={selectedRow.cpc} competition={selectedRow.competition} difficulty={selectedRow.keywordDifficulty} intent={selectedRow.intent} /> : null}</div>
           <div className="md:hidden"><Tabs value={c.mobileTab} onValueChange={c.setMobileTab}><TabsList className="grid w-full grid-cols-2"><TabsTrigger value="keywords">Keywords ({c.rows.length})</TabsTrigger><TabsTrigger value="serp">SERP Analysis</TabsTrigger></TabsList></Tabs></div>
           <div className={c.mobileTab === "serp" ? "hidden md:block xl:hidden" : ""}>
-            <div className="mb-2 flex justify-end"><Button variant="ghost" size="sm" onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}>Sort volume {sortOrder === "desc" ? "↓" : "↑"}</Button></div>
-            <KeywordResearchResults brandKey={c.brandKey} rows={sortedRows} seed={c.params.q} groupKeywords={c.params.grp} selectedKeyword={c.selectedKeyword} onSelectKeyword={c.setSelectedKeyword} selectedKeywords={c.selectedKeywords} onToggleKeyword={c.toggleSelected} mode={c.params.mode} page={c.page} pageSize={c.pageSize} onPage={c.setPage} onPageSize={c.setPageSize} onSaveSelected={showSaveDialog} />
+            <KeywordResearchResults brandKey={c.brandKey} rows={sortedRows} seed={c.params.q} groupKeywords={c.params.grp} selectedKeyword={c.selectedKeyword} onSelectKeyword={c.setSelectedKeyword} selectedKeywords={c.selectedKeywords} onToggleKeyword={c.toggleSelected} mode={c.params.mode} page={c.page} pageSize={c.pageSize} sort={c.params.sort} order={c.params.order} onSort={sortRows} onPage={c.setPage} onPageSize={c.setPageSize} onSaveSelected={showSaveDialog} />
           </div>
         </section>
         <aside className={`min-w-0 space-y-4 xl:col-span-2 ${c.mobileTab === "keywords" ? "hidden md:block" : ""}`}>
           {selectedRow ? <div className="hidden md:block xl:hidden"><OverviewStats keyword={selectedRow.keyword} volume={selectedRow.searchVolume} cpc={selectedRow.cpc} competition={selectedRow.competition} difficulty={selectedRow.keywordDifficulty} intent={selectedRow.intent} /></div> : null}
           {selectedRow ? <div className="hidden md:block"><AreaTrendChart row={selectedRow} /></div> : null}
-          {c.selectedKeyword ? <SerpAnalysisCard brandKey={c.brandKey} keyword={c.selectedKeyword} result={c.serp.data} pending={c.serp.isFetching} cacheOnlyMiss={Boolean(c.serp.data?.notCached)} maxUsd={c.serpMaxUsd} onRun={requestSerp} onRetry={() => void c.serp.refetch()} error={c.serp.isError ? (c.serp.error instanceof Error ? c.serp.error.message : "Search results are unavailable right now. Please retry.") : undefined} /> : null}
+          {c.selectedKeyword ? <SerpAnalysisCard brandKey={c.brandKey} keyword={c.selectedKeyword} locationCode={c.params.loc} languageCode={c.location?.languageCode ?? "en"} result={c.serp.data} top20Result={c.serpTop20Result} pending={c.serp.isFetching} cacheOnlyMiss={Boolean(c.serp.data?.notCached)} maxUsd={c.serpMaxUsd} depth={c.serpDepth} onRun={requestSerp} onLoadTop100={c.runSerpDeep} onShowTop20={c.showSerpTop20} onRetry={() => void c.serp.refetch()} deepCrawlFailed={c.serpDepth === 100 && c.serp.isError} error={c.serp.isError ? (c.serp.error instanceof Error ? c.serp.error.message : "Search results are unavailable right now. Please retry.") : undefined} /> : null}
         </aside>
       </div>
       <SaveKeywordsDialog open={saveOpen} onOpenChange={setSaveOpen} brandKey={c.brandKey} keywords={c.selectedKeywords} locationCode={c.params.loc} languageCode={c.location?.languageCode ?? "en"} onSaved={c.clearSelectedKeywords} />

@@ -36,7 +36,8 @@ export function KeywordPricedButton({ label, pendingLabel, brandKey, action, inp
   const loading = !data && (quote.isPending || quote.isFetching || isStale);
   const blocked = Boolean(data?.blocked);
   const direct = Boolean(data && data.totalUsd <= 0.25 && !blocked && !data.warnings.some((warning) => !["cache_note", "recent_research"].includes(warning.code)));
-  const cents = data ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(data.totalUsd) : "";
+  const displayUsd = data ? Math.ceil((data.totalUsd - Number.EPSILON) * 100) / 100 : 0;
+  const cents = data ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(displayUsd) : "";
   return <div className="inline-flex flex-col gap-1">
     <Button id={buttonId} type="button" disabled={!enabled || pending || loading || !data || blocked || quote.isError} pending={pending || loading} onClick={() => {
       if (!data || isStale || quote.isFetching || quote.isPlaceholderData) return;
