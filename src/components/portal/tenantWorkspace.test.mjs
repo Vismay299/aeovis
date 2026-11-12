@@ -53,7 +53,19 @@ test("tenant Scans renders a runnable mock inside the tenant page rather than li
       ["@/components/portal/scans/MockScanPanel", mock],
       ["@/components/portal/scans/reportData", reportData],
       ["@/lib/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"] }) }],
+      ["@/components/app/table/DataTable", {
+        DataTable: () => null,
+        makeSelectionColumn: () => ({}),
+        useDataTable: () => ({ getSelectedRowModel: () => ({ rows: [] }) }),
+        useSelectionAnchor: () => ({ current: null }),
+      }],
+      ["@/components/app/export/useExportRows", { useExportRows: () => () => {} }],
+      ["@/components/app/QueryState", { QueryError: () => null }],
+      ["@/lib/export/filenames", await import("../../lib/export/filenames.ts")],
+      ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (_schema, defaults) => [defaults, () => {}] }],
+      ["zod", await import("zod")],
     ]),
+    autoStub: ["@/components/app/table/", "@/components/app/ExportMenu", "@/components/app/export/", "@/lib/table/"],
     autoNull: ["lucide-react", "@/components/portal/ScanProgressCard", "@/components/portal/scans/scans.css", "@/components/portal/schedule/NextRunBadge"],
   });
   const html = renderToHtml(page.default);

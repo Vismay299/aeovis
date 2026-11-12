@@ -1,12 +1,14 @@
 "use client";
 /* eslint-disable @next/next/no-html-link-for-pages */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { usePortal } from "@/components/portal/PortalShell";
+import { ExportMenu } from "@/components/app/ExportMenu";
+import { useExportRows } from "@/components/app/export/useExportRows";
 import {
   Banner,
   Button,
@@ -30,6 +32,8 @@ import {
   readEngineScores,
   roundedPct,
 } from "@/components/portal/scans/reportData";
+import { questionExportRows } from "@/components/portal/scans/reportExport";
+import { exportFilename } from "@/lib/export/filenames";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { useDebouncedDraft } from "@/components/app/hooks/useDebouncedDraft";
 import { scanReportQueryOptions } from "@/lib/query/portalQueries";
@@ -55,9 +59,11 @@ function KpiSkeleton() {
 export default function ScanReportPage() {
   const params = useParams();
   const scanId = typeof params?.scanId === "string" ? params.scanId : "";
-  usePortal();
+  const { brandKey } = usePortal();
 
   const query = useQuery(scanReportQueryOptions(scanId));
+  const runExportRows = useExportRows();
+  const [exportBusy, setExportBusy] = useState(false);
 
   const [filters, setFilters] = useUrlSearchState(questionFiltersSchema, {
     view: "all",
@@ -99,6 +105,7 @@ export default function ScanReportPage() {
   const mentioned = finiteNumber(scan?.prompts_mentioned);
   const quality = customerReportQuality(scan);
   const outcome = quality.outcome;
+  const filtersActive = filters.view !== "all" || Boolean(search.trim()) || filters.engine !== "all";
 
   function downloadMeasurement() {
     const link = document.createElement("a");
@@ -109,6 +116,31 @@ export default function ScanReportPage() {
     link.download = `measurement-${scan.id}.json`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function onExport(action, scope) {
+    if (scope === "report") {
+      downloadMeasurement();
+      return;
+    }
+    if (scope !== "questions" || !scan) return;
+
+    const exported = questionExportRows(results, scan.planned_questions, {
+      view: filters.view,
+      search,
+      engine: filters.engine,
+    });
+    setExportBusy(true);
+    try {
+      await runExportRows({
+        format: action,
+        feature: "scan_report_questions",
+        ...exported,
+        filename: exportFilename([brandKey || "workspace", "scan", scanId, "questions"]),
+      });
+    } finally {
+      setExportBusy(false);
+    }
   }
 
   if (notFound) {
@@ -186,14 +218,19 @@ export default function ScanReportPage() {
                 ? "Historical collection quality is unknown; no modern qualification is inferred."
                 : `${outcome.counts.valid} of ${outcome.counts.planned} valid observations: ${outcome.counts.answered} answered, ${outcome.counts.valid_no_aio} valid without AIO, ${outcome.counts.failed} failed, ${outcome.counts.not_attempted} not attempted. Diagnostics: ${outcome.counts.diagnostics}.`}
             </Banner>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={downloadMeasurement}
-              className="shrink-0"
-            >
-              Download measurement JSON
-            </Button>
+            <ExportMenu
+              actions={["json"]}
+              busy={exportBusy}
+              scopes={[
+                { id: "report", label: "This report", actions: ["json"] },
+                {
+                  id: "questions",
+                  label: filtersActive ? "Questions (filtered)" : "Questions",
+                  actions: ["sheets", "csv", "excel", "copy-json"],
+                },
+              ]}
+              onExport={onExport}
+            />
           </div>
         ) : null}
 
