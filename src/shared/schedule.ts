@@ -373,3 +373,38 @@ const SKIP_MESSAGES: Readonly<Record<string, string>> = {
 export function skipReasonMessage(reason: string): string {
   return SKIP_MESSAGES[reason] ?? "The scheduled scan could not start.";
 }
+
+export type LocalScheduleTime = {
+  weekday: number;
+  hour: number;
+  minute: number;
+};
+
+export function localScheduleTimeFrom(date: Date): LocalScheduleTime {
+  return {
+    weekday: date.getDay(),
+    hour: date.getHours(),
+    minute: date.getMinutes(),
+  };
+}
+
+/** Same default the server picks: a random minute between 04:00 and 10:00 UTC. */
+export function randomScheduleDate(): Date {
+  const date = new Date();
+  date.setUTCHours(
+    4 + Math.floor(Math.random() * 6),
+    Math.floor(Math.random() * 60),
+    0,
+    0,
+  );
+  return date;
+}
+
+export function withBrowserTimeZone(
+  time: LocalScheduleTime,
+): ScheduleTime {
+  return {
+    ...time,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+}

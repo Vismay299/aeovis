@@ -24,6 +24,17 @@ test("every builder returns its documented shape", () => {
   assert.deepEqual(keys.usage("a", "30d", "UTC"), ["usage", "a", "30d", "UTC"]);
   assert.deepEqual(keys.price("a", "scan", "{}"), ["price", "a", "scan", "{}"]);
   assert.deepEqual(keys.projectContext("a"), ["projectContext", "a"]);
+  assert.deepEqual(keys.localBusinesses("a"), ["localBusinesses", "a"]);
+  assert.deepEqual(keys.localFetch("a", "f1"), ["localFetch", "a", "f1"]);
+  assert.deepEqual(keys.localFetches("a", "b1", "reviews"), ["localFetches", "a", "b1", "reviews"]);
+  assert.deepEqual(keys.localGrid("a", "g1"), ["localGrid", "a", "g1"]);
+  assert.deepEqual(keys.localGrids("a"), ["localGrids", "a"]);
+  assert.deepEqual(keys.localCategories("q"), ["localCategories", "q"]);
+  assert.deepEqual(keys.keywordResearch("a", "input"), ["keywordResearch", "a", "input"]);
+  assert.deepEqual(keys.keywordSerp("a", "input"), ["keywordSerp", "a", "input"]);
+  assert.deepEqual(keys.savedKeywords("a", "input"), ["savedKeywords", "a", "input"]);
+  assert.deepEqual(keys.keywordLocations("a", "US", "shoes"), ["keywordLocations", "a", "US", "shoes"]);
+  assert.deepEqual(keys.schedule("a"), ["schedule", "a"]);
 });
 
 test("every workspace-scoped builder puts brandKey second and is a workspace domain", () => {
@@ -37,6 +48,16 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.usage("acme", "30d", "UTC"),
     keys.price("acme", "scan", "{}"),
     keys.projectContext("acme"),
+    keys.localBusinesses("acme"),
+    keys.localFetch("acme", "f1"),
+    keys.localFetches("acme", "b1", "reviews"),
+    keys.localGrid("acme", "g1"),
+    keys.localGrids("acme"),
+    keys.keywordResearch("acme", "research-input"),
+    keys.keywordSerp("acme", "serp-input"),
+    keys.savedKeywords("acme", "saved-input"),
+    keys.keywordLocations("acme", "US", "shoes"),
+    keys.schedule("acme"),
     keys.backlinksOverview("acme", "overview-input"),
     keys.backlinksTab("acme", "backlinks", "tab-input"),
     keys.backlinksDomainLinks("acme", "domain-links-input"),
@@ -120,8 +141,16 @@ test("invalidateWorkspace passes a predicate matching only that workspace's keys
   assert.equal(matches(keys.overview("a")), true);
   assert.equal(matches(keys.panel("a", "geo")), true);
   assert.equal(matches(keys.scanStatus("a", "j")), true);
+  assert.equal(matches(keys.keywordResearch("a", "input")), true);
+  assert.equal(matches(keys.keywordSerp("a", "input")), true);
+  assert.equal(matches(keys.savedKeywords("a", "input")), true);
+  assert.equal(matches(keys.keywordLocations("a", "US", "shoes")), true);
   assert.equal(matches(keys.overview("b")), false);
   assert.equal(matches(keys.gsc("b")), false);
+  assert.equal(matches(keys.keywordResearch("b", "input")), false);
+  assert.equal(matches(keys.keywordSerp("b", "input")), false);
+  assert.equal(matches(keys.savedKeywords("b", "input")), false);
+  assert.equal(matches(keys.keywordLocations("b", "US", "shoes")), false);
   assert.equal(matches(keys.scanReport("a")), false);
 });
 

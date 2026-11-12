@@ -564,6 +564,26 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "claim_local_poll" },
     { kind: "function", name: "prune_local_seo" },
   ],
+  "110_f15_rank_tracking.sql": [
+    { kind: "table", name: "rank_tracking_configs" },
+    { kind: "table", name: "rank_tracking_keywords" },
+    { kind: "table", name: "rank_check_runs" },
+    { kind: "table", name: "rank_snapshots" },
+    { kind: "table", name: "rank_check_tasks" },
+  ],
+  "111_f15_rank_tracking_functions.sql": [
+    { kind: "function", name: "add_rank_tracking_keywords" },
+    { kind: "function", name: "claim_rank_config" },
+    { kind: "function", name: "try_create_rank_run" },
+    { kind: "function", name: "rank_check_reserve" },
+    { kind: "function", name: "rank_latest_snapshots" },
+    { kind: "function", name: "rank_earliest_snapshots" },
+    { kind: "function", name: "rank_best_positions" },
+    { kind: "function", name: "rank_config_trend" },
+    { kind: "function", name: "rank_position_matrix" },
+    { kind: "function", name: "rank_config_summaries" },
+    { kind: "function", name: "prune_rank_tracking" },
+  ],
 };
 
 /**
