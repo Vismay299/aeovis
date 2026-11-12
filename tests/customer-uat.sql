@@ -28,6 +28,8 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
 \ir ../supabase/migrations/100_f13_saved_keywords.sql
 \ir ../supabase/migrations/102_f13_saved_keyword_functions.sql
+\ir ../supabase/migrations/110_f15_rank_tracking.sql
+\ir ../supabase/migrations/111_f15_rank_tracking_functions.sql
 \ir ../supabase/migrations/120_f17_local_seo.sql
 \ir ../supabase/migrations/121_f17_local_seo_functions.sql
 \ir ../supabase/migrations/125_f18_site_audit.sql
@@ -539,6 +541,52 @@ END $$;
 RESET ROLE;
 -- End F13 saved keywords check.
 -- End F13 keyword_metrics check.
+
+-- F15: each workspace sees its own rank tracker, keyword, run, snapshot and task.
+INSERT INTO public.rank_tracking_configs(id,brand_key,domain,location_code,language_code,devices,serp_depth,created_by) VALUES
+ ('15000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','rank-a.example',2840,'en','mobile',40,'00000000-0000-0000-0000-000000000001'),
+ ('15000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000002','rank-b.example',2840,'en','mobile',40,'00000000-0000-0000-0000-000000000002');
+INSERT INTO public.rank_tracking_keywords(id,brand_key,config_id,keyword,match_case) VALUES
+ ('15000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','15000000-0000-0000-0000-000000000001','alpha',false),
+ ('15000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002','15000000-0000-0000-0000-000000000002','beta',false);
+INSERT INTO public.rank_check_runs(id,brand_key,config_id,trigger,method,domain,location_code,language_code,devices,serp_depth,approved_max_usd,created_by) VALUES
+ ('15000000-0000-0000-0000-000000000021','10000000-0000-0000-0000-000000000001','15000000-0000-0000-0000-000000000001','manual','live','rank-a.example',2840,'en','mobile',40,1,'00000000-0000-0000-0000-000000000001'),
+ ('15000000-0000-0000-0000-000000000022','10000000-0000-0000-0000-000000000002','15000000-0000-0000-0000-000000000002','manual','live','rank-b.example',2840,'en','mobile',40,1,'00000000-0000-0000-0000-000000000002');
+INSERT INTO public.rank_snapshots(brand_key,run_id,tracking_keyword_id,keyword,device,position) VALUES
+ ('10000000-0000-0000-0000-000000000001','15000000-0000-0000-0000-000000000021','15000000-0000-0000-0000-000000000011','alpha','mobile',1),
+ ('10000000-0000-0000-0000-000000000002','15000000-0000-0000-0000-000000000022','15000000-0000-0000-0000-000000000012','beta','mobile',2);
+INSERT INTO public.rank_check_tasks(brand_key,run_id,round,tracking_keyword_id,keyword,device) VALUES
+ ('10000000-0000-0000-0000-000000000001','15000000-0000-0000-0000-000000000021',0,'15000000-0000-0000-0000-000000000011','alpha','mobile'),
+ ('10000000-0000-0000-0000-000000000002','15000000-0000-0000-0000-000000000022',0,'15000000-0000-0000-0000-000000000012','beta','mobile');
+DO $f15$ BEGIN
+  BEGIN
+    INSERT INTO public.rank_check_tasks(brand_key,run_id,round,tracking_keyword_id,keyword,device)
+    VALUES ('10000000-0000-0000-0000-000000000002','15000000-0000-0000-0000-000000000021',1,
+      '15000000-0000-0000-0000-000000000011','alpha','mobile');
+    RAISE EXCEPTION 'F15 cross-workspace task was allowed';
+  EXCEPTION WHEN foreign_key_violation THEN NULL; END;
+END $f15$;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $f15$ BEGIN
+  IF (SELECT count(*) FROM public.rank_tracking_configs) <> 1
+   OR (SELECT count(*) FROM public.rank_tracking_keywords) <> 1
+   OR (SELECT count(*) FROM public.rank_check_runs) <> 1
+   OR (SELECT count(*) FROM public.rank_snapshots) <> 1
+   OR (SELECT count(*) FROM public.rank_check_tasks) <> 1
+  THEN RAISE EXCEPTION 'F15 rank tracking rows leaked across customer workspaces'; END IF;
+END $f15$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $f15$ BEGIN
+  IF (SELECT count(*) FROM public.rank_tracking_configs) <> 1
+   OR (SELECT count(*) FROM public.rank_tracking_keywords) <> 1
+   OR (SELECT count(*) FROM public.rank_check_runs) <> 1
+   OR (SELECT count(*) FROM public.rank_snapshots) <> 1
+   OR (SELECT count(*) FROM public.rank_check_tasks) <> 1
+  THEN RAISE EXCEPTION 'F15 rank tracking rows leaked across customer workspaces'; END IF;
+END $f15$;
+RESET ROLE;
+-- End F15 tenant check.
 
 -- F17: one own business, one fetch with one item, one grid and one search per
 -- workspace; members read only their workspace's rows; an item insert with

@@ -225,6 +225,8 @@ export const NEVER_WRITABLE = Object.freeze([
   "local_fetch_items",
   "local_grid_runs",
   "local_searches",
+  // F15 phase 1 — migration 110 rank tracking tenant tables.
+  "rank_tracking_configs", "rank_tracking_keywords", "rank_check_runs", "rank_snapshots", "rank_check_tasks",
 ]);
 
 /**
