@@ -66,6 +66,17 @@ export const keys = {
     ["savedKeywords", brandKey, inputKey] as const,
   keywordLocations: (brandKey: string, iso: string, q: string) =>
     ["keywordLocations", brandKey, iso, q] as const,
+  // F14
+  domainOverview: (brandKey: string, inputKey: string) =>
+    ["domainOverview", brandKey, inputKey] as const,
+  domainKeywords: (brandKey: string, inputKey: string) =>
+    ["domainKeywords", brandKey, inputKey] as const,
+  domainPages: (brandKey: string, inputKey: string) =>
+    ["domainPages", brandKey, inputKey] as const,
+  domainCompetitors: (brandKey: string, inputKey: string) =>
+    ["domainCompetitors", brandKey, inputKey] as const,
+  declaredCompetitors: (brandKey: string) =>
+    ["declaredCompetitors", brandKey] as const,
 } as const;
 
 export const privacyKeys = {

@@ -66,13 +66,23 @@ export function CostReviewDialog({
   const isRefreshing = Boolean(currentQuote && quote.isFetching && !pending);
   const isBlocked = Boolean(currentQuote?.blocked);
 
-  const answers =
-    currentQuote?.units?.find((u) => u.key === "answers")?.count ?? 0;
+  // Only scan-shaped quotes (ai_visibility.scan, ai_visibility.schedule.save)
+  // count answers. Every other priced action (keywords, SERP, domain,
+  // backlinks, local, site audit) prices other units, so the zero-answer
+  // guard and the answers × engines breakdown apply to scan quotes only;
+  // applying them to all quotes disabled Confirm for every non-scan action.
+  const answersUnit = currentQuote?.units?.find((u) => u.key === "answers");
+  const isScanQuote = Boolean(answersUnit);
+  const answers = answersUnit?.count ?? 0;
   const questions =
     currentQuote?.units?.find((u) => u.key === "questions")?.count ?? 0;
   const engines =
     currentQuote?.units?.find((u) => u.key === "engines")?.count ?? 0;
-  const isZeroAnswers = Boolean(currentQuote && !isBlocked && answers === 0);
+  const isZeroAnswers = Boolean(currentQuote && isScanQuote && !isBlocked && answers === 0);
+  const unitSummary = (currentQuote?.units ?? [])
+    .filter((u) => u.count > 0)
+    .map((u) => `${u.count.toLocaleString("en-US")} ${u.label}`)
+    .join(" · ");
 
   const confirmDisabled =
     isLoading ||
@@ -132,7 +142,7 @@ export function CostReviewDialog({
                 <Alert variant="warning">
                   <AlertTitle>The price changed</AlertTitle>
                   <AlertDescription>
-                    {`This scan now costs up to ${formatUsd(
+                    {`${isScanQuote ? "This scan now costs" : "This now costs"} up to ${formatUsd(
                       priceChanged.quote.totalUsd,
                     )}. You approved ${formatUsd(
                       priceChanged.approvedMaxUsd,
@@ -199,24 +209,28 @@ export function CostReviewDialog({
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {`${answers} ${
-                        answers === 1 ? "answer" : "answers"
-                      } (${questions} ${
-                        questions === 1 ? "question" : "questions"
-                      } × ${engines} ${
-                        engines === 1 ? "engine" : "engines"
-                      })`}
-                    </p>
+                    {isScanQuote ? (
+                      <p className="text-xs text-muted-foreground">
+                        {`${answers} ${
+                          answers === 1 ? "answer" : "answers"
+                        } (${questions} ${
+                          questions === 1 ? "question" : "questions"
+                        } × ${engines} ${
+                          engines === 1 ? "engine" : "engines"
+                        })`}
+                      </p>
+                    ) : unitSummary ? (
+                      <p className="text-xs text-muted-foreground">{unitSummary}</p>
+                    ) : null}
                     {currentQuote.lines?.[0]?.label && (
                       <p className="text-xs text-muted-foreground">
                         {currentQuote.lines[0].label}
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground pt-1">
-                      You are only charged the provider cost of answers
-                      collected. Unused reservation is released when the scan
-                      finishes.
+                      {isScanQuote
+                        ? "You are only charged the provider cost of answers collected. Unused reservation is released when the scan finishes."
+                        : "This is the most it can cost. You are charged only what the provider bills, up to this amount."}
                     </p>
                   </div>
                 )
