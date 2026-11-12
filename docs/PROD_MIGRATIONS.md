@@ -1786,3 +1786,16 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - **Status:** in repo; **not yet applied to production**. Apply after 090 and before deploying F11.
 - Adds tenant-readable `explore_runs`, its three indexes, `f11_upsert_explore_attempt_rows`, `settle_explore_hold`, `settle_finished_explore_holds`, and `prune_explore_runs` (395-day retention caller is Phase 2).
 - Verify with the `explore-shape`, `explore-ledger`, and `explore-retention` groups of `scripts/qa/check-f11-db.mjs`; verify tenant isolation through `tests/customer-uat.sql`.
+
+
+## `110_f15_rank_tracking.sql`
+
+- Status: in repo; NOT YET APPLIED to production. Apply before 111 and before deploying F15 phase 2.
+- Creates rank_tracking_configs, rank_tracking_keywords, rank_check_runs, rank_snapshots, and rank_check_tasks. All five tables use RLS and tenant-scoped member read policies. Snapshots intentionally have no keyword foreign key, preserving history after keyword removal.
+- Pre-check: select to_regclass(`public.rank_tracking_configs`); returns null. Applied-check: the five table names resolve with to_regclass.
+
+## `111_f15_rank_tracking_functions.sql`
+
+- Status: in repo; NOT YET APPLIED to production. Apply after migration 110 and before deploying F15 phase 2.
+- Adds service-role-only keyword add, scheduler claim, run and spend guards, snapshot/result queries, tracker summaries, and retention pruning functions.
+- Verify with scripts/qa/check-f15-db.mjs against a loopback _qa database. Never run this harness against production.

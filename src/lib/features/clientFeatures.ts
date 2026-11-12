@@ -32,6 +32,7 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "backlinks",
   "backlinks_ahrefs_dr",
   "backlink_snapshots",
+  "customer_scheduling",
   "site_audit",
   "site_audit_lighthouse",
   "site_audit_render",
