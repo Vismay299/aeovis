@@ -1,4 +1,8 @@
-/* Scans list and scan report meter rules kept for F04 Phase 5. */
+/* Scan report meter rules kept from F04 Phase 5. */
+
+.f06-scans-page [role="toolbar"][aria-label="Bulk actions"] {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
 
 .pv-scans-meter {
   position: relative;

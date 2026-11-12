@@ -1,0 +1,17 @@
+{
+  "scans": [
+    { "id": "scan-1", "visibility_pct": 72, "prompts_tracked": 30, "prompts_mentioned": 22, "platform": ["chatgpt", "gemini"], "scanned_at": "2026-10-21T09:00:00.000Z", "created_at": "2026-10-21T09:00:00.000Z" },
+    { "id": "scan-2", "visibility_pct": 64, "prompts_tracked": 30, "prompts_mentioned": 19, "platform": ["chatgpt", "gemini"], "scanned_at": "2026-10-20T09:00:00.000Z", "created_at": "2026-10-20T09:00:00.000Z" },
+    { "id": "scan-3", "visibility_pct": null, "prompts_tracked": 30, "prompts_mentioned": null, "platform": ["chatgpt"], "scanned_at": "2026-10-19T09:00:00.000Z", "created_at": "2026-10-19T09:00:00.000Z" },
+    { "id": "scan-4", "visibility_pct": 51, "prompts_tracked": 30, "prompts_mentioned": 15, "collection_partial": true, "platform": ["chatgpt", "gemini"], "scanned_at": "2026-10-18T09:00:00.000Z", "created_at": "2026-10-18T09:00:00.000Z" },
+    { "id": "scan-5", "visibility_pct": 43, "prompts_tracked": 30, "prompts_mentioned": 13, "platform": ["gemini"], "scanned_at": "2026-10-17T09:00:00.000Z", "created_at": "2026-10-17T09:00:00.000Z" },
+    { "id": "scan-6", "visibility_pct": 36, "prompts_tracked": 30, "prompts_mentioned": 11, "platform": ["chatgpt", "gemini"], "scanned_at": "2026-10-16T09:00:00.000Z", "created_at": "2026-10-16T09:00:00.000Z" },
+    { "id": "scan-7", "visibility_pct": 29, "prompts_tracked": 30, "prompts_mentioned": 9, "platform": ["chatgpt"], "scanned_at": "2026-10-15T09:00:00.000Z", "created_at": "2026-10-15T09:00:00.000Z" },
+    { "id": "scan-8", "visibility_pct": 22, "prompts_tracked": 30, "prompts_mentioned": 7, "platform": ["chatgpt", "gemini"], "scanned_at": "2026-10-14T09:00:00.000Z", "created_at": "2026-10-14T09:00:00.000Z" },
+    { "id": "scan-9", "visibility_pct": null, "prompts_tracked": 30, "prompts_mentioned": null, "platform": ["gemini"], "scanned_at": "2026-10-13T09:00:00.000Z", "created_at": "2026-10-13T09:00:00.000Z" },
+    { "id": "scan-10", "visibility_pct": 14, "prompts_tracked": 30, "prompts_mentioned": 4, "platform": ["chatgpt", "gemini"], "scanned_at": "2026-10-12T09:00:00.000Z", "created_at": "2026-10-12T09:00:00.000Z" },
+    { "id": "scan-11", "visibility_pct": 8, "prompts_tracked": 30, "prompts_mentioned": 2, "platform": ["chatgpt"], "scanned_at": "2026-10-11T09:00:00.000Z", "created_at": "2026-10-11T09:00:00.000Z" },
+    { "id": "scan-12", "visibility_pct": 0, "prompts_tracked": 30, "prompts_mentioned": 0, "platform": ["chatgpt", "gemini"], "scanned_at": "2026-10-10T09:00:00.000Z", "created_at": "2026-10-10T09:00:00.000Z" }
+  ],
+  "jobs": []
+}
