@@ -49,7 +49,7 @@ Every list of rows in the customer app becomes one shared table: sortable header
 
 | ID | Statement | Verified by |
 |---|---|---|
-| F06-AC-01 | While the first page loads, a table shows its real headers and exactly 8 skeleton rows; no rows with active filters shows "No rows match these filters" with "Clear filters"; a load error with no rows replaces the table, with rows it sits above them. | browser `scripts/qa/check-f06-browser.mjs` `F06-B01` |
+| F06-AC-01 | While the first page loads, a table shows its real headers and exactly 8 skeleton rows; no rows with active filters shows "No rows match these filters" with "Clear filters"; a load error with no rows replaces the table, with rows it sits above them. | browser `scripts/qa/check-f06-browser.mjs` `F06-B01` (loading, error); filtered-empty clause: unit `src/components/app/table/dataTableEmpty.test.mjs` (see the Phase 2 note) |
 | F06-AC-02 | Shift-click selection: a plain click sets the anchor; a shift-click applies the anchor's selected state to every selectable row between anchor and target (selecting or clearing) and skips locked rows. | unit `src/lib/table/tableSelection.test.ts`; browser `F06-B02` |
 | F06-AC-03 | The bulk bar appears only with ≥ 1 selected row, shows the count, "Clear selection" empties the selection, and "Export" in the bar exports only the selected rows. | browser `F06-B02` |
 | F06-AC-04 | `numericNullsLast` keeps blank values last in both sort directions. | unit `src/lib/table/nullSafeSort.test.ts` |
@@ -379,6 +379,8 @@ Branches `feat/f06-tables-export-p<N>`.
     *Verify:* local `next start -p 3328` with CI's placeholder env → all pass (F06-AC-01, -02, -03, -09, -10, -11).
 
 **Checkpoint:** suite, typecheck, build, browser checks F04/F05/F06, public browser → pass. Completes F06-AC-01, -02, -03, -09, -10, -11.
+
+**Owner decision (2026-11-12), F06-AC-01 filtered-empty clause:** the Scans history defines no filters (§6.6.4), so "No rows match these filters" cannot be reached on that page. The clause is a property of the shared `DataTable` and is verified there by `src/components/app/table/dataTableEmpty.test.mjs` (filtered + no rows → the message and "Clear filters"; unfiltered → the caller's empty state; no `onClearFilters` → no button; matching rows → no empty state). Pages that add filters inherit it. Server-side filtering and paging of the full Scans history (the page loads only the latest 20 scans) is a separate follow-up spec.
 
 ### Phase 3 — Server-side export
 
