@@ -24,6 +24,7 @@ test("every builder returns its documented shape", () => {
   assert.deepEqual(keys.usage("a", "30d", "UTC"), ["usage", "a", "30d", "UTC"]);
   assert.deepEqual(keys.price("a", "scan", "{}"), ["price", "a", "scan", "{}"]);
   assert.deepEqual(keys.projectContext("a"), ["projectContext", "a"]);
+  assert.deepEqual(keys.schedule("a"), ["schedule", "a"]);
 });
 
 test("every workspace-scoped builder puts brandKey second and is a workspace domain", () => {
@@ -37,6 +38,7 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.usage("acme", "30d", "UTC"),
     keys.price("acme", "scan", "{}"),
     keys.projectContext("acme"),
+    keys.schedule("acme"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
