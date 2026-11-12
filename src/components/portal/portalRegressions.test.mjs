@@ -12,6 +12,7 @@ import { z } from "zod";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const noop = () => {};
+const named = (name) => Object.defineProperty(() => null, "name", { value: name });
 const response = (status, body) => ({ status, ok: status >= 200 && status < 300, json: async () => body });
 const deferred = () => {
   let resolve;
@@ -393,11 +394,15 @@ test("the report renders its By engine card from the actual worker payload shape
       ["@/components/portal/ui", ui],
       ["@/components/portal/scans/ReportCards", cards],
       ["@/components/portal/scans/reportData", reportData],
+      ["@/components/app/ExportMenu", { ExportMenu: named("ExportMenu") }],
+      ["@/components/app/export/useExportRows", { useExportRows: () => noop }],
+      ["@/lib/export/filenames", await import("../../lib/export/filenames.ts")],
+      ["@/components/portal/scans/reportExport", await import("./scans/reportExport.js")],
       ["@/components/portal/scans/scans.css", {}],
       ["@/lib/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"], queryFn: async () => (await fetch("/api/customer/scans/" + id)).json() }) }],
       ["@/lib/query/fetchJson", { isApiError: (err) => Boolean(err?.status) }],
       ["@/lib/query/errors", { describeError: (err) => ({ title: "Error", message: err?.message || String(err) }) }],
-      ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (opts) => [opts?.defaults || { q: "", engine: "all", status: "all" }, noop] }],
+      ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (_schema, defaults) => [defaults, noop] }],
       ["@/components/app/hooks/useDebouncedDraft", { useDebouncedDraft: (opts) => [opts?.value || "", noop, noop] }],
       ["zod", { z }],
     ]),
@@ -554,11 +559,15 @@ async function renderCustomerReport(t, scan) {
       ["@/components/portal/ui", ui],
       ["@/components/portal/scans/ReportCards", cards],
       ["@/components/portal/scans/reportData", reportData],
+      ["@/components/app/ExportMenu", { ExportMenu: named("ExportMenu") }],
+      ["@/components/app/export/useExportRows", { useExportRows: () => noop }],
+      ["@/lib/export/filenames", await import("../../lib/export/filenames.ts")],
+      ["@/components/portal/scans/reportExport", await import("./scans/reportExport.js")],
       ["@/components/portal/scans/scans.css", {}],
       ["@/lib/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"], queryFn: async () => (await fetch("/api/customer/scans/" + id)).json() }) }],
       ["@/lib/query/fetchJson", { isApiError: (err) => Boolean(err?.status) }],
       ["@/lib/query/errors", { describeError: (err) => ({ title: "Error", message: err?.message || String(err) }) }],
-      ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (opts) => [opts?.defaults || { q: "", engine: "all", status: "all" }, noop] }],
+      ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (_schema, defaults) => [defaults, noop] }],
       ["@/components/app/hooks/useDebouncedDraft", { useDebouncedDraft: (opts) => [opts?.value || "", noop, noop] }],
       ["zod", { z }],
     ]),
@@ -572,7 +581,7 @@ async function renderCustomerReport(t, scan) {
   return {
     body, banner: banner && { title: banner.props.title, text: [].concat(banner.props.children).join("") },
     visibility: stat("AI visibility"), engineText: card ? textOf(renderToHtml(cards.EngineScoresCard, card.props)) : "",
-    download: find(outcome, (node) => node.type === ui.Button)?.props.onClick,
+    download: () => find(outcome, (node) => node.type?.name === "ExportMenu")?.props.onExport("json", "report"),
   };
 }
 

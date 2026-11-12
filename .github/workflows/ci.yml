@@ -196,6 +196,7 @@ jobs:
           node scripts/qa/check-repair-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f04-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f05-browser.mjs http://127.0.0.1:3328
+          node scripts/qa/check-f06-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f09-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f07-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f10-browser.mjs http://127.0.0.1:3328

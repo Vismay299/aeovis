@@ -144,6 +144,8 @@ export function textOf(html) {
  * @param {boolean}  [opts.shimUseEffect]  Patch React.useEffect to run
  *     synchronously during render.  Required when the component fills state
  *     from an effect.
+ * @param {boolean}  [opts.typescript]  Also strip TypeScript syntax, for
+ *     `.tsx` components.
  * @param {string[]} [opts.exposeInternals]  Module-scope function names to
  *     add to `module.exports` so the test can render them directly.  Useful
  *     for non-exported sub-components (e.g. RivalCrawlRow inside
@@ -153,7 +155,7 @@ export function textOf(html) {
 export async function compileJsx(filePath, opts = {}) {
   const source = await readFile(filePath, "utf8");
   const { code: compiledCode } = transform(source, {
-    transforms: ["jsx", "imports"],
+    transforms: opts.typescript ? ["jsx", "typescript", "imports"] : ["jsx", "imports"],
     jsxPragma: "React.createElement",
     jsxFragmentPragma: "React.Fragment",
     filePath,

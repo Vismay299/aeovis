@@ -48,6 +48,11 @@ export const FEATURES = {
   backlinks: { spend: ["backlinks.research"] as const },
   backlinks_ahrefs_dr: { spend: [] as const },
   backlink_snapshots: { spend: ["backlinks.snapshots"] as const },
+  // F18: site audit API and its separately controlled paid options.
+  site_audit: { spend: [] as const },
+  site_audit_lighthouse: { spend: ["site_audit.lighthouse"] as const },
+  site_audit_render: { spend: ["site_audit.render"] as const },
+  site_audit_crawler_access: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;
