@@ -468,6 +468,26 @@ SOFTWARE.
 - `src/lib/local/localSerp.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`)
 - `src/lib/local/localSerp.test.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`)
 
+- `src/components/portal/keywords/research/AreaTrendChart.tsx` (from `openseo:src/client/features/keywords/components/DisplayPrimitives.tsx`)
+- `src/components/portal/keywords/research/IntentBadge.tsx` (from `openseo:src/client/features/keywords/components/IntentBadge.tsx`)
+- `src/components/portal/keywords/research/KeywordNotLoadedCard.tsx` (from `openseo:src/client/features/keywords/page/KeywordResearchPage.tsx`)
+- `src/components/portal/keywords/research/KeywordResearchEmptyState.tsx` (from `openseo:src/client/features/keywords/page/KeywordResearchEmptyState.tsx`)
+- `src/components/portal/keywords/research/KeywordResearchFilters.tsx` (from `openseo:src/client/features/keywords/page/keywordResearchFilters.tsx`)
+- `src/components/portal/keywords/research/KeywordResearchLoadingState.tsx` (from `openseo:src/client/features/keywords/page/KeywordResearchLoadingState.tsx`)
+- `src/components/portal/keywords/research/KeywordResearchPage.tsx` (from `openseo:src/client/features/keywords/page/KeywordResearchPage.tsx`)
+- `src/components/portal/keywords/research/KeywordResearchPagination.tsx` (from `openseo:src/client/features/keywords/page/KeywordResearchPagination.tsx`)
+- `src/components/portal/keywords/research/KeywordResearchResults.tsx` (from `openseo:src/client/features/keywords/page/KeywordResearchResults.tsx`)
+- `src/components/portal/keywords/research/KeywordResearchSearchBar.tsx` (from `openseo:src/client/features/keywords/page/KeywordResearchSearchBar.tsx`)
+- `src/components/portal/keywords/research/KeywordResearchTable.tsx` (from `openseo:src/client/features/keywords/page/KeywordResearchTable.tsx`)
+- `src/components/portal/keywords/research/KeywordSearchOptions.tsx` (from `openseo:src/client/features/keywords/page/KeywordSearchOptions.tsx`)
+- `src/components/portal/keywords/research/OverviewStats.tsx` (from `openseo:src/client/features/keywords/components/KeywordUi.tsx`)
+- `src/components/portal/keywords/research/SaveKeywordsDialog.tsx` (from `openseo:src/client/features/keywords/page/KeywordResearchPage.tsx`)
+- `src/components/portal/keywords/research/SerpAnalysisCard.tsx` (from `openseo:src/client/features/keywords/components/SerpAnalysisCard.tsx`)
+- `src/components/portal/keywords/research/hooks/useKeywordHistory.ts` (from `openseo:src/client/hooks/useTimestampedSearchHistory.ts`)
+- `src/components/portal/keywords/research/hooks/useKeywordResearchController.ts` (from `openseo:src/client/features/keywords/state/useKeywordResearchController.ts`, `openseo:src/client/features/keywords/state/keywordControllerActions.ts`, `openseo:src/client/features/keywords/state/keywordControllerInternals.ts`, `openseo:src/client/features/keywords/hooks/useKeywordControlsForm.ts`, `openseo:src/client/features/keywords/state/useKeywordOverviewState.ts`)
+- `src/components/portal/keywords/research/hooks/useKeywordResearchData.ts` (from `openseo:src/client/features/keywords/hooks/useKeywordResearchData.ts`)
+- `src/components/portal/keywords/research/hooks/useKeywordSearchTabs.ts` (from `openseo:src/client/features/search-tabs/useSearchTabs.ts`, `openseo:src/client/features/keywords/page/KeywordResearchPage.tsx`)
+- `src/components/portal/keywords/research/hooks/useKeywordSerpAnalysis.ts` (from `openseo:src/client/features/keywords/hooks/useKeywordSerpAnalysis.ts`)
 
 ### F15 Phase 1 ports
 - src/shared/rank-tracking.ts

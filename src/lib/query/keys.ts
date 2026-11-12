@@ -42,6 +42,15 @@ export const keys = {
       source ?? null,
       sourceRef ?? null,
     ] as const,
+  // F13 — all keyword data is scoped to its workspace.
+  keywordResearch: (brandKey: string, inputKey: string) =>
+    ["keywordResearch", brandKey, inputKey] as const,
+  keywordSerp: (brandKey: string, inputKey: string) =>
+    ["keywordSerp", brandKey, inputKey] as const,
+  savedKeywords: (brandKey: string, inputKey: string) =>
+    ["savedKeywords", brandKey, inputKey] as const,
+  keywordLocations: (brandKey: string, iso: string, q: string) =>
+    ["keywordLocations", brandKey, iso, q] as const,
 } as const;
 
 export const privacyKeys = {
@@ -60,6 +69,10 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "usage",
   "price",
   "projectContext",
+  "keywordResearch",
+  "keywordSerp",
+  "savedKeywords",
+  "keywordLocations",
   "schedule",
 ]);
 
