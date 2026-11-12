@@ -17,7 +17,7 @@ import {
 } from "./domain.ts";
 import { toScopeSearchParam } from "./researchScope.ts";
 
-describe("research scope resolution (ported from OpenSEO)", () => {
+describe("research scope resolution (ported cases)", () => {
   const cases: Array<[Record<string, unknown>, string]> = [
     [{ domain: "example.com" }, "subdomains"],
     [{ domain: "example.com/blog" }, "subfolder"],
@@ -41,7 +41,7 @@ describe("research scope resolution (ported from OpenSEO)", () => {
   });
 });
 
-describe("getDomainRouteState location and markets (ported from OpenSEO)", () => {
+describe("getDomainRouteState location and markets (ported cases)", () => {
   const project = { locationCode: 2704, languageCode: "vi" };
 
   it("uses the Labs-backed project market unless URL names a location", () => {
