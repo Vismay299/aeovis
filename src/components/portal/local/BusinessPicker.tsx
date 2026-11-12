@@ -22,6 +22,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { parseMapsLocation } from "@/shared/local-coordinates";
 import { DEFAULT_LOCATION_CODE, LOCATION_OPTIONS } from "@/shared/keyword-locations";
 import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { describeError, isSpendRefused, spendRefusedView } from "@/lib/query/errors";
+import { toast } from "sonner";
 import { Building2, MapPin, Hash, Search } from "lucide-react";
 import type { BusinessProfileView, SavedBusinessView } from "./hooks/useLocalBusinesses";
 import { CompetitorList } from "./CompetitorList";
@@ -75,6 +77,17 @@ const MODES: SegmentedToggleItem<Mode>[] = [
   { value: "nearby", label: "Nearby", icon: <MapPin className="h-4 w-4" /> },
   { value: "ids", label: "Google IDs", icon: <Hash className="h-4 w-4" /> },
 ];
+
+/** Lookups call fetchJson directly, so no global mutation toast reports a
+ *  failure (price changed, spend refused, provider down); report it here. */
+function reportLookupError(error: unknown) {
+  if (isSpendRefused(error)) {
+    const view = spendRefusedView(error);
+    toast.error(view.title, { description: view.text });
+    return;
+  }
+  toast.error(describeError(error, "The lookup failed. Please retry."));
+}
 
 export function BusinessPicker({
   brandKey,
@@ -152,6 +165,8 @@ export function BusinessPicker({
         { method: "POST", body }
       );
       setNameLookupResult({ profile: res?.profile ?? null, searched: true });
+    } catch (error) {
+      reportLookupError(error);
     } finally {
       setIsLookingUpName(false);
     }
@@ -187,6 +202,8 @@ export function BusinessPicker({
       setNearbyResults(res?.businesses ?? []);
       setNearbyOffset(offset);
       setHasSearchedNearby(true);
+    } catch (error) {
+      reportLookupError(error);
     } finally {
       setIsSearchingNearby(false);
     }
@@ -219,6 +236,8 @@ export function BusinessPicker({
         }
       );
       setIdsLookupResult({ profile: res?.profile ?? null, searched: true });
+    } catch (error) {
+      reportLookupError(error);
     } finally {
       setIsLookingUpIds(false);
     }

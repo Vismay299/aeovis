@@ -130,8 +130,10 @@ export function useLocalBusinesses(brandKey: string) {
     isUpdatingRole: updateRoleMutation.isPending,
     removeBusiness: removeMutation.mutateAsync,
     isRemoving: removeMutation.isPending,
+    // The global mutation toast reports a failure; resolve null so the
+    // priced buttons' onRun leaves no unhandled rejection.
     refreshProfile: (businessId: string, maxUsd?: number) =>
-      refreshProfileMutation.mutateAsync({ businessId, maxUsd }),
+      refreshProfileMutation.mutateAsync({ businessId, maxUsd }).catch(() => null),
     isRefreshingProfile: refreshProfileMutation.isPending,
   };
 }
