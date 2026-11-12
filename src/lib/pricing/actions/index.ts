@@ -27,3 +27,4 @@ export {
   backlinksPageAction,
   backlinksExpandDomainAction,
 } from "./backlinks.ts";
+import "./siteAudit.ts";

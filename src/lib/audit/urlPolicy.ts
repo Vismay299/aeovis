@@ -6,6 +6,7 @@ import dns from "node:dns/promises";
 import { AppError } from "../http/appError.ts";
 import { isBlockedHostName, normalizeHost } from "../http/hostPolicy.ts";
 import { safeFetch as defaultSafeFetch } from "../http/safeFetch.ts";
+import { assertPublicUrl, SsrfBlockedError, UNUSABLE_TARGET_CODES } from "../ssrfGuard.js";
 
 async function defaultLookup(hostname: string): Promise<string[]> {
   try {
@@ -158,47 +159,61 @@ export async function isShopifyHost(
   }
 }
 
+const INVALID_START_URL = "Enter a full website address, for example https://example.com.";
+
+/**
+ * F18 §6.2.4: pure start-URL normalization. Adds `https://` when no scheme is
+ * given, drops the hash, and refuses non-http(s) schemes, credentials and
+ * unparseable input with 422 `invalid_url`. No DNS: the address policy is
+ * `assertPublicUrl`'s job.
+ */
+export function normalizeStartUrl(input: string): string {
+  const trimmed = input.trim();
+  // "example.com:8080/shop" is a host and port, not a scheme: a colon followed
+  // only by digits up to the path is a port.
+  const hasScheme = /^[a-z][a-z0-9+.-]*:(?!\d+(?:[/?#]|$))/i.test(trimmed);
+  if (hasScheme && !/^https?:\/\//i.test(trimmed)) {
+    throw new AppError(422, "invalid_url", INVALID_START_URL);
+  }
+  const candidate = hasScheme ? trimmed : `https://${trimmed}`;
+  let url: URL;
+  try {
+    url = new URL(candidate);
+  } catch {
+    throw new AppError(422, "invalid_url", INVALID_START_URL);
+  }
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password || !url.hostname) {
+    throw new AppError(422, "invalid_url", INVALID_START_URL);
+  }
+  url.hash = "";
+  return url.toString();
+}
+
+/** Maps a shared SSRF-guard refusal to the audit's 422 codes. */
+export function startUrlAppError(err: unknown): AppError {
+  if (err instanceof AppError) return err;
+  if (err instanceof SsrfBlockedError && UNUSABLE_TARGET_CODES.has(err.code)) {
+    return new AppError(422, "url_unreachable", "We couldn't find that website. Check the address and try again.", { cause: err });
+  }
+  return new AppError(422, "url_blocked", "That address cannot be fetched.", { cause: err });
+}
+
+/**
+ * `normalizeStartUrl` plus the shared SSRF guard (`assertPublicUrl`), so every
+ * start URL and redirect hop gets the same address policy: every resolved
+ * address checked, and a name that does not resolve refused, not let through.
+ */
 export async function normalizeAndValidateStartUrl(
   input: string,
   deps?: { lookup?: (host: string) => Promise<string[]> },
 ): Promise<string> {
-  let raw = input.trim();
-  if (!raw) {
-    throw new AppError(422, "validation_error", "Empty start URL");
-  }
-
-  if (!raw.startsWith("http://") && !raw.startsWith("https://")) {
-    raw = `https://${raw}`;
-  }
-
-  let parsed: URL;
+  const url = normalizeStartUrl(input);
   try {
-    parsed = new URL(raw);
-  } catch {
-    throw new AppError(422, "validation_error", "Invalid start URL");
+    await assertPublicUrl(url, deps?.lookup ? { lookup: deps.lookup } : {});
+  } catch (err) {
+    throw startUrlAppError(err);
   }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new AppError(422, "validation_error", "Unsupported scheme; only http and https are allowed");
-  }
-
-  if (isBlockedHost(parsed.hostname)) {
-    throw new AppError(422, "url_blocked", "Crawl target host is blocked");
-  }
-
-  const lookup = deps?.lookup ?? defaultLookup;
-  try {
-    const addresses = await lookup(normalizeHost(parsed.hostname));
-    if (addresses.some((addr) => isPrivateIpv4(addr) || isPrivateIpv6(addr))) {
-      throw new AppError(422, "url_blocked", "Hostname resolves to a private IP");
-    }
-  } catch (err: unknown) {
-    if (err instanceof AppError) throw err;
-    throw new AppError(422, "url_unreachable", "DNS lookup failed for crawl target");
-  }
-
-  parsed.hash = "";
-  return parsed.toString();
+  return url;
 }
 
 const START_URL_REDIRECT_HOPS = 5;
