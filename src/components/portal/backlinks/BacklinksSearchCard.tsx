@@ -25,11 +25,14 @@ export function BacklinksSearchCard({
   brandKey,
   initialValues,
   onSubmit,
+  pageSize = 50,
   pending = false,
 }: {
   brandKey: string;
   initialValues: SearchDraft;
   onSubmit: (values: SearchDraft, maxUsd?: number) => void;
+  /** The page size the lookup will request; the quote must price the same input. */
+  pageSize?: number;
   pending?: boolean;
 }) {
   const [draftTarget, setDraftTarget] = useState(initialValues.target);
@@ -109,7 +112,8 @@ export function BacklinksSearchCard({
             <PricedActionButton
               brandKey={brandKey}
               action="backlinks.lookup.run"
-              input={{ target: draftTarget.trim(), scope: draftScope }}
+              // Same input the overview route re-prices: a new search opens on the backlinks tab.
+              input={{ target: draftTarget.trim(), scope: draftScope, tab: "backlinks", pageSize }}
               label="Search"
               pendingLabel="Searching…"
               dialogTitle="Run backlink lookup"

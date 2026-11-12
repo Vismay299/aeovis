@@ -9,6 +9,8 @@ export function BacklinksNotLoadedCard({
   target,
   displayTarget,
   scope,
+  tab = "backlinks",
+  pageSize = 50,
   onRunLookup,
   pending = false,
 }: {
@@ -16,6 +18,9 @@ export function BacklinksNotLoadedCard({
   target: string;
   displayTarget: string;
   scope: BacklinksTargetScope;
+  /** Tab and page size the overview request sends; the quote must price the same input. */
+  tab?: "backlinks" | "domains" | "pages";
+  pageSize?: number;
   onRunLookup: (maxUsd: number) => void;
   pending?: boolean;
 }) {
@@ -33,7 +38,7 @@ export function BacklinksNotLoadedCard({
         <PricedActionButton
           brandKey={brandKey}
           action="backlinks.lookup.run"
-          input={{ target, scope }}
+          input={{ target, scope, tab, pageSize }}
           label="Run lookup"
           pendingLabel="Loading…"
           dialogTitle="Run backlink lookup"

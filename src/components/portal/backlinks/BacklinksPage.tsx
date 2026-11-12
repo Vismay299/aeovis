@@ -28,7 +28,7 @@ import {
   useBacklinksSearchTabs,
   type BacklinksTabInput,
 } from "./hooks/useBacklinksSearchTabs";
-import { useBacklinksLiveMode } from "./hooks/useBacklinksLiveMode";
+import { backlinksLookupKey, useBacklinksLiveMode } from "./hooks/useBacklinksLiveMode";
 import {
   useBacklinksPageData,
   type BacklinksSearchState,
@@ -77,7 +77,9 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
   );
 
   const filters = useBacklinksFilters();
-  const { isLive, lookupMaxUsd, enterLiveMode } = useBacklinksLiveMode(searchState.target);
+  const { isLive, lookupMaxUsd, enterLiveMode } = useBacklinksLiveMode(
+    backlinksLookupKey(brandKey, searchState.target, resolveBacklinksScope(searchState.target, searchState.scope)),
+  );
 
   const { history, isLoaded: historyLoaded, addSearch, removeHistoryItem } =
     useBacklinksSearchHistory(brandKey);
@@ -117,7 +119,7 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
       maxUsd?: number,
     ) => {
       if (maxUsd != null) {
-        enterLiveMode(values.target, maxUsd);
+        enterLiveMode(maxUsd, backlinksLookupKey(brandKey, values.target, values.scope));
       }
       addSearch({ target: values.target, scope: values.scope });
       trackBacklinksEvent("backlinks:lookup", {
@@ -133,7 +135,7 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
         order: undefined,
       });
     },
-    [addSearch, enterLiveMode, updateSearch],
+    [addSearch, brandKey, enterLiveMode, updateSearch],
   );
 
   const handleTabNavigate = useCallback(
@@ -263,6 +265,7 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
           scope: resolveBacklinksScope(searchState.target, searchState.scope),
         }}
         onSubmit={handleSearchSubmit}
+        pageSize={searchState.size ?? 50}
         pending={pageData.overviewQuery.isFetching}
       />
 
@@ -277,7 +280,7 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
         domainExpansion={domainExpansion}
         tabControls={tabControls}
         onRunLookup={(maxUsd) => {
-          enterLiveMode(undefined, maxUsd);
+          enterLiveMode(maxUsd);
         }}
         onPageChange={(page) => updateSearch({ page })}
         onPageSizeChange={(size) => updateSearch({ size, page: 1 })}

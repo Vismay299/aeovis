@@ -139,6 +139,8 @@ export function BacklinksBody({
           target={searchState.target}
           displayTarget={searchState.target}
           scope={resolveBacklinksScope(searchState.target, searchState.scope)}
+          tab={searchState.tab ?? "backlinks"}
+          pageSize={searchState.size ?? 50}
           onRunLookup={onRunLookup}
           pending={data.overviewQuery.isFetching}
         />
