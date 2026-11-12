@@ -2,8 +2,10 @@
 //   src/client/features/backlinks/useBacklinksPageData.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
+import { defaultScopeForInput } from "@/shared/researchScope";
 import { useMemo } from "react";
 import { useQuery, type QueryKey } from "@tanstack/react-query";
+import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
 import { fetchJson, isApiError } from "@/lib/query/fetchJson";
 import { keys, stableStringify } from "@/lib/query/keys";
 import {
@@ -27,7 +29,28 @@ import {
 } from "@/shared/backlinks";
 import type { BacklinksFiltersState } from "./useBacklinksFilters";
 
+/**
+ * The scope a lookup uses. The URL omits the scope when it equals the
+ * input's default (toScopeSearchParam), so read it back the same way: a
+ * subfolder URL defaults to "subfolder", not "subdomains".
+ */
+export function resolveBacklinksScope(target: string | undefined, scope: BacklinksTargetScope | undefined): BacklinksTargetScope {
+  if (scope) return scope;
+  return target?.trim() ? defaultScopeForInput(target.trim()) : "subdomains";
+}
+
 const BACKLINKS_QUERY_STALE_TIME_MS = 5 * 60 * 1000;
+
+/**
+ * A live query is a billed provider call and every execution sends a fresh
+ * requestId, so an automatic retry or refetch would buy it again. Only an
+ * explicit customer action re-runs one (F13 paid-call rules).
+ */
+export function paidQueryOptions(isLive: boolean) {
+  return isLive
+    ? { retry: false as const, refetchOnWindowFocus: false, refetchOnReconnect: false }
+    : {};
+}
 
 export type BacklinksSearchState = {
   target?: string;
@@ -118,14 +141,17 @@ export function useBacklinksPageData({
   searchState,
   filters,
   isLive,
+  lookupMaxUsd,
 }: {
   brandKey: string;
   searchState: BacklinksSearchState;
   filters: BacklinksFiltersState;
   isLive: boolean;
+  /** The approved lookup ceiling; a live overview is never sent without it. */
+  lookupMaxUsd?: number;
 }) {
   const target = searchState.target?.trim() || "";
-  const scope: BacklinksTargetScope = searchState.scope ?? "subdomains";
+  const scope: BacklinksTargetScope = resolveBacklinksScope(target, searchState.scope);
   const tab = searchState.tab ?? "backlinks";
   const page = searchState.page ?? 1;
   const pageSize = searchState.size ?? 50;
@@ -144,6 +170,17 @@ export function useBacklinksPageData({
       ? previous
       : undefined;
 
+  // Tab pages are priced as backlinks.page {tab, pageSize}; in live mode each
+  // request carries this quote as its ceiling, and waits for it.
+  const pageQuote = usePriceQuote(
+    { brandKey, action: "backlinks.page", input: { tab, pageSize } },
+    { enabled: isLive && targetReady },
+  );
+  const pageMaxUsd = pageQuote.isPlaceholderData ? undefined : pageQuote.data?.totalUsd;
+  const liveReady = (maxUsd: number | undefined) => !isLive || maxUsd !== undefined;
+  const liveBody = (maxUsd: number | undefined) =>
+    isLive && maxUsd !== undefined ? { maxUsd } : {};
+
   const overviewInputKey = stableStringify({
     target,
     scope,
@@ -152,8 +189,9 @@ export function useBacklinksPageData({
 
   const overviewQuery = useQuery({
     queryKey: keys.backlinksOverview(brandKey, overviewInputKey),
-    enabled: targetReady,
+    enabled: targetReady && liveReady(lookupMaxUsd),
     staleTime: BACKLINKS_QUERY_STALE_TIME_MS,
+    ...paidQueryOptions(isLive),
     queryFn: () =>
       fetchJson<OverviewApiResponse>("/api/customer/backlinks/overview", {
         method: "POST",
@@ -163,6 +201,7 @@ export function useBacklinksPageData({
           tab,
           pageSize,
           cacheOnly: !isLive,
+          ...liveBody(lookupMaxUsd),
           requestId: crypto.randomUUID(),
         },
       }),
@@ -210,7 +249,9 @@ export function useBacklinksPageData({
       tab === "backlinks" &&
       !rowsFilterError &&
       !isNotCached &&
-      (isLive || overviewData != null),
+      (isLive || overviewData != null) &&
+      liveReady(pageMaxUsd),
+    ...paidQueryOptions(isLive),
     staleTime: BACKLINKS_QUERY_STALE_TIME_MS,
     placeholderData: rowsFilterError ? undefined : keepSameTarget,
     queryFn: () =>
@@ -227,6 +268,7 @@ export function useBacklinksPageData({
           mode: rowsMode,
           hideSpam: !includeSpam,
           cacheOnly: !isLive,
+          ...liveBody(pageMaxUsd),
           requestId: crypto.randomUUID(),
         },
       }),
@@ -261,7 +303,9 @@ export function useBacklinksPageData({
       tab === "domains" &&
       scope !== "subfolder" &&
       !isNotCached &&
-      (isLive || overviewData != null),
+      (isLive || overviewData != null) &&
+      liveReady(pageMaxUsd),
+    ...paidQueryOptions(isLive),
     staleTime: BACKLINKS_QUERY_STALE_TIME_MS,
     placeholderData: keepSameTarget,
     queryFn: () =>
@@ -278,6 +322,7 @@ export function useBacklinksPageData({
             sortOrder: domainsSort.order,
             filters: domainsFilters,
             cacheOnly: !isLive,
+            ...liveBody(pageMaxUsd),
             requestId: crypto.randomUUID(),
           },
         },
@@ -312,7 +357,9 @@ export function useBacklinksPageData({
       targetReady &&
       tab === "pages" &&
       !isNotCached &&
-      (isLive || overviewData != null),
+      (isLive || overviewData != null) &&
+      liveReady(pageMaxUsd),
+    ...paidQueryOptions(isLive),
     staleTime: BACKLINKS_QUERY_STALE_TIME_MS,
     placeholderData: keepSameTarget,
     queryFn: () =>
@@ -329,6 +376,7 @@ export function useBacklinksPageData({
             sortOrder: pagesSort.order,
             filters: pagesFilters,
             cacheOnly: !isLive,
+            ...liveBody(pageMaxUsd),
             requestId: crypto.randomUUID(),
           },
         },

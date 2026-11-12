@@ -4,6 +4,7 @@
 //   src/client/features/backlinks/BacklinksPageContent.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
+import { resolveBacklinksScope } from "./hooks/useBacklinksPageData";
 import { useMemo, type ReactNode } from "react";
 import { Link2 } from "lucide-react";
 import type { OnChangeFn, SortingState } from "@tanstack/react-table";
@@ -137,7 +138,7 @@ export function BacklinksBody({
           brandKey={brandKey}
           target={searchState.target}
           displayTarget={searchState.target}
-          scope={searchState.scope ?? "subdomains"}
+          scope={resolveBacklinksScope(searchState.target, searchState.scope)}
           onRunLookup={onRunLookup}
           pending={data.overviewQuery.isFetching}
         />
@@ -175,7 +176,7 @@ export function BacklinksBody({
           <BacklinksResultsCard
             brandKey={brandKey}
             activeTab={searchState.tab ?? "backlinks"}
-            scope={searchState.scope ?? "subdomains"}
+            scope={resolveBacklinksScope(searchState.target, searchState.scope)}
             tabRows={tabRows}
             filters={filters}
             sorting={sorting}

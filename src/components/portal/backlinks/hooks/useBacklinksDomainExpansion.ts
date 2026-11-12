@@ -6,6 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { keys, stableStringify } from "@/lib/query/keys";
 import { fetchJson } from "@/lib/query/fetchJson";
+import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
+import { paidQueryOptions } from "./useBacklinksPageData";
 import type { BacklinksRow, BacklinksTargetScope } from "@/shared/backlinks";
 
 const DOMAIN_LINKS_PAGE_SIZE = 100;
@@ -58,6 +60,14 @@ export function useBacklinksDomainExpansion({
     setExpanded([]);
   }, [brandKey, target, scope]);
 
+  // Expansions are priced as backlinks.expand_domain; live ones carry that
+  // quote as their ceiling and wait for it.
+  const expandQuote = usePriceQuote(
+    { brandKey, action: "backlinks.expand_domain", input: {} },
+    { enabled: isLive && expanded.length > 0 && Boolean(target) },
+  );
+  const expandMaxUsd = expandQuote.isPlaceholderData ? undefined : expandQuote.data?.totalUsd;
+
   const queries = useQueries({
     queries: expanded.map((domain) => {
       const input = {
@@ -74,7 +84,9 @@ export function useBacklinksDomainExpansion({
           Boolean(target) &&
           tab === "backlinks" &&
           view !== "all" &&
-          rows.some((row) => row.domainFrom === domain),
+          rows.some((row) => row.domainFrom === domain) &&
+          (!isLive || expandMaxUsd !== undefined),
+        ...paidQueryOptions(isLive),
         queryKey: keys.backlinksDomainLinks(brandKey, inputKey),
         staleTime: DOMAIN_LINKS_STALE_TIME_MS,
         queryFn: () =>
@@ -93,6 +105,7 @@ export function useBacklinksDomainExpansion({
                 mode: "as_is",
                 hideSpam: !includeSpam,
                 cacheOnly: !isLive,
+                ...(isLive && expandMaxUsd !== undefined ? { maxUsd: expandMaxUsd } : {}),
                 requestId: crypto.randomUUID(),
               },
             },

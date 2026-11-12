@@ -4,6 +4,7 @@
 //   src/client/features/backlinks/BacklinksPage.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
+import { resolveBacklinksScope } from "./hooks/useBacklinksPageData";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { SortingState, Updater } from "@tanstack/react-table";
 import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
@@ -76,7 +77,7 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
   );
 
   const filters = useBacklinksFilters();
-  const { isLive, enterLiveMode } = useBacklinksLiveMode(searchState.target);
+  const { isLive, lookupMaxUsd, enterLiveMode } = useBacklinksLiveMode(searchState.target);
 
   const { history, isLoaded: historyLoaded, addSearch, removeHistoryItem } =
     useBacklinksSearchHistory(brandKey);
@@ -116,7 +117,7 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
       maxUsd?: number,
     ) => {
       if (maxUsd != null) {
-        enterLiveMode(values.target);
+        enterLiveMode(values.target, maxUsd);
       }
       addSearch({ target: values.target, scope: values.scope });
       trackBacklinksEvent("backlinks:lookup", {
@@ -172,6 +173,7 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
     searchState,
     filters,
     isLive,
+    lookupMaxUsd,
   });
 
   const lastRecordedSearchRef = useRef<string>("");
@@ -192,7 +194,7 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
   const domainExpansion = useBacklinksDomainExpansion({
     brandKey,
     target: searchState.target,
-    scope: searchState.scope,
+    scope: resolveBacklinksScope(searchState.target, searchState.scope),
     tab: searchState.tab ?? "backlinks",
     view: searchState.view,
     includeSpam: searchState.includeSpam,
@@ -258,7 +260,7 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
         brandKey={brandKey}
         initialValues={{
           target: searchState.target ?? "",
-          scope: searchState.scope ?? "subdomains",
+          scope: resolveBacklinksScope(searchState.target, searchState.scope),
         }}
         onSubmit={handleSearchSubmit}
         pending={pageData.overviewQuery.isFetching}
@@ -274,8 +276,8 @@ export function BacklinksPage({ brandKey: propBrandKey }: { brandKey?: string })
         sorting={sorting}
         domainExpansion={domainExpansion}
         tabControls={tabControls}
-        onRunLookup={(_maxUsd) => {
-          enterLiveMode();
+        onRunLookup={(maxUsd) => {
+          enterLiveMode(undefined, maxUsd);
         }}
         onPageChange={(page) => updateSearch({ page })}
         onPageSizeChange={(size) => updateSearch({ size, page: 1 })}

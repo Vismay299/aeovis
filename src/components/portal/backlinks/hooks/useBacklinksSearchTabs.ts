@@ -4,6 +4,7 @@
 //   src/client/features/backlinks/useBacklinksPageData.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
+import { resolveBacklinksScope } from "./useBacklinksPageData";
 import { useCallback, useMemo } from "react";
 import { useSearchTabNavigation } from "@/components/app/search-tabs/useSearchTabNavigation";
 import { researchScopeSchema, type ResearchScope } from "@/shared/researchScope";
@@ -36,7 +37,7 @@ export function useBacklinksSearchTabs({
   }, []);
 
   const urlInput: BacklinksTabInput | null = useMemo(
-    () => (target ? { target, scope: scope ?? "subdomains" } : null),
+    () => (target ? { target, scope: resolveBacklinksScope(target, scope) } : null),
     [target, scope],
   );
 
