@@ -127,6 +127,18 @@ export function mapRepositoryError(error: { message?: string; code?: string }): 
   return new AppError(503, "rank_tracking_unavailable", "Rank tracking could not be saved. Please retry.");
 }
 
+// PostgREST caps every response at max_rows (1000 on hosted Supabase). A run holds up to
+// 1,000 keywords x 2 devices, so reads that can exceed that page until a short page.
+const PAGE_SIZE = 1000;
+async function pageAll<T>(fetchPage: (from: number, to: number) => PromiseLike<{ data: unknown; error: DbError }>): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const page = data<T[] | null>(await fetchPage(from, from + PAGE_SIZE - 1)) ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return rows;
+  }
+}
+
 function chunks<T>(items: T[], size = 500): T[][] {
   const result: T[][] = [];
   for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
@@ -178,8 +190,8 @@ export function createRankTrackingRepository(admin: SupabaseClient): RankTrackin
     },
     async keywordCounts(brandKey, configIds) {
       if (configIds.length === 0) return new Map();
-      const result = await admin.from("rank_tracking_keywords").select("config_id").eq("brand_key", brandKey).in("config_id", configIds);
-      const rows = data<Array<{ config_id: string }>>(result);
+      const rows = await pageAll<{ config_id: string }>((from, to) => admin.from("rank_tracking_keywords").select("config_id")
+        .eq("brand_key", brandKey).in("config_id", configIds).order("id", { ascending: true }).range(from, to));
       const counts = new Map(configIds.map((id) => [id, 0]));
       for (const row of rows) counts.set(row.config_id, (counts.get(row.config_id) ?? 0) + 1);
       return counts;
@@ -263,16 +275,21 @@ export function createRankTrackingRepository(admin: SupabaseClient): RankTrackin
       return removed;
     },
     async snapshotsForRun(brandKey, runId) {
-      return data<RankSnapshot[]>(await admin.from("rank_snapshots").select("*").eq("brand_key", brandKey).eq("run_id", runId).order("id", { ascending: true }));
+      return pageAll<RankSnapshot>((from, to) => admin.from("rank_snapshots").select("*").eq("brand_key", brandKey).eq("run_id", runId)
+        .order("id", { ascending: true }).range(from, to));
     },
     async latestSnapshots(brandKey, configId, before) {
-      return data<Array<RankSnapshot & { keyword: string }>>(await admin.rpc("rank_latest_snapshots", { p_brand: brandKey, p_config: configId, p_before: before ?? null }));
+      return pageAll<RankSnapshot & { keyword: string }>((from, to) => admin.rpc("rank_latest_snapshots", { p_brand: brandKey, p_config: configId, p_before: before ?? null })
+        .order("tracking_keyword_id", { ascending: true }).order("device", { ascending: true }).range(from, to));
     },
     async earliestSnapshots(brandKey, configId, ids) {
-      return data<Array<Pick<RankSnapshot, "tracking_keyword_id" | "device" | "position" | "checked_at">>>(await admin.rpc("rank_earliest_snapshots", { p_brand: brandKey, p_config: configId, p_keyword_ids: ids }));
+      return pageAll<Pick<RankSnapshot, "tracking_keyword_id" | "device" | "position" | "checked_at">>((from, to) => admin.rpc("rank_earliest_snapshots", { p_brand: brandKey, p_config: configId, p_keyword_ids: ids })
+        .order("tracking_keyword_id", { ascending: true }).order("device", { ascending: true }).range(from, to));
     },
     async bestPositions(brandKey, configId) {
-      return data<Array<{ tracking_keyword_id: string; position: number }>>(await admin.rpc("rank_best_positions", { p_brand: brandKey, p_config: configId }));
+      // Snapshots outlive removed keywords, so this can exceed the 1,000-keyword cap.
+      return pageAll<{ tracking_keyword_id: string; position: number }>((from, to) => admin.rpc("rank_best_positions", { p_brand: brandKey, p_config: configId })
+        .order("tracking_keyword_id", { ascending: true }).range(from, to));
     },
     async keywordHistory(brandKey, configId, keywordId, since) {
       const result = await admin.from("rank_snapshots").select("device, checked_at, position, rank_check_runs!inner(config_id,status,brand_key)")
@@ -284,7 +301,10 @@ export function createRankTrackingRepository(admin: SupabaseClient): RankTrackin
       return data<RankTrendPoint[]>(await admin.rpc("rank_config_trend", { p_brand: brandKey, p_config: configId, p_device: device, p_since: since }));
     },
     async positionMatrix(brandKey, configId, device, runLimit) {
-      return data<RankMatrixCell[]>(await admin.rpc("rank_position_matrix", { p_brand: brandKey, p_config: configId, p_device: device, p_run_limit: runLimit }));
+      // Up to 26 runs x 1,000 keywords.
+      return pageAll<RankMatrixCell>((from, to) => admin.rpc("rank_position_matrix", { p_brand: brandKey, p_config: configId, p_device: device, p_run_limit: runLimit })
+        .order("checked_at", { ascending: true }).order("run_id", { ascending: true })
+        .order("tracking_keyword_id", { ascending: true, nullsFirst: false }).range(from, to));
     },
     async insertTasks(rows) {
       for (const group of chunks(rows)) {

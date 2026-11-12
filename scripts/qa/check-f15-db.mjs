@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import pg from "pg";
 
-if (!["127.0.0.1", "localhost", "::1"].includes(process.env.PGHOST) || !/(?:_qa)$/.test(process.env.PGDATABASE || "") || process.env.DATABASE_URL) {
-  throw Error("Explicit loopback _qa database required; DATABASE_URL refused");
+if (!["127.0.0.1", "localhost", "::1"].includes(process.env.PGHOST) || !/(?:_qa|_uat)$/.test(process.env.PGDATABASE || "") || process.env.DATABASE_URL) {
+  throw Error("Explicit loopback _qa/_uat database required; DATABASE_URL refused");
 }
 const pool = new pg.Pool({ max: 1 });
 const passed = [];
