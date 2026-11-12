@@ -5,8 +5,8 @@ import { randomUUID } from "node:crypto";
 import type { Workspace } from "../workspace/requireWorkspace.ts";
 import { AppError } from "../http/errors.ts";
 import { isFeatureEnabled } from "../features/flags.ts";
-import { assertPublicUrl, SsrfBlockedError, UNUSABLE_TARGET_CODES } from "../ssrfGuard.js";
-import { isOwnedHost } from "./urlPolicy.ts";
+import { assertPublicUrl } from "../ssrfGuard.js";
+import { isOwnedHost, normalizeStartUrl, startUrlAppError } from "./urlPolicy.ts";
 import { requireApprovedPrice, recordApproval } from "../pricing/pricedActions.ts";
 import type { PriceQuote } from "../../shared/pricing.ts";
 import { reserveSpend, releaseSpend } from "../spend/index.ts";
@@ -52,37 +52,9 @@ function configInt(env: Record<string, string | undefined>, key: string, fallbac
   return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
 }
 
-/** Pure URL normalization; address policy and DNS are checked separately below. */
-function normalizeStartUrl(input: string): string {
-  const trimmed = input.trim();
-  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(trimmed);
-  if (hasScheme && !/^https?:\/\//i.test(trimmed)) {
-    throw new AppError(422, "invalid_url", "Enter a full website address, for example https://example.com.");
-  }
-  const candidate = hasScheme ? trimmed : `https://${trimmed}`;
-  let url: URL;
-  try {
-    url = new URL(candidate);
-  } catch {
-    throw new AppError(422, "invalid_url", "Enter a full website address, for example https://example.com.");
-  }
-  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password || !url.hostname) {
-    throw new AppError(422, "invalid_url", "Enter a full website address, for example https://example.com.");
-  }
-  url.hash = "";
-  return url.toString();
-}
-
 function isOwnedAuditHost(host: string, websiteHost: string): boolean {
   const stripWww = (value: string) => value.replace(/^www\./i, "");
   return isOwnedHost(stripWww(host), stripWww(websiteHost));
-}
-
-function appErrorForSsrF(err: unknown): AppError {
-  if (err instanceof SsrfBlockedError && UNUSABLE_TARGET_CODES.has(err.code)) {
-    return new AppError(422, "url_unreachable", "We couldn't find that website. Check the address and try again.", { cause: err });
-  }
-  return new AppError(422, "url_blocked", "That address cannot be fetched.", { cause: err });
 }
 
 async function deleteAuditRow(admin: any, auditId: string, brandKey: string): Promise<void> {
@@ -137,7 +109,7 @@ export async function startSiteAudit(
   try {
     await (deps?.assertPublicUrl ?? assertPublicUrl)(startUrl);
   } catch (err) {
-    throw appErrorForSsrF(err);
+    throw startUrlAppError(err);
   }
 
   const quoteCtx = { brandKey: ws.brandKey, admin: ws.admin, env, now: (deps?.now ?? (() => new Date()))() };
