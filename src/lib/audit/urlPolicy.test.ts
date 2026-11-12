@@ -6,6 +6,7 @@ import {
   isBlockedHost,
   isShopifyHost,
   normalizeAndValidateStartUrl,
+  normalizeStartUrl,
   resolveStartUrlRedirects,
 } from "./urlPolicy.ts";
 
@@ -120,4 +121,52 @@ test("resolveStartUrlRedirects follows safe redirects and refuses hops to privat
   });
   // Must stop at the last valid URL before the refused hop
   assert.equal(result2.url, "https://example.com/hop1");
+});
+
+test("normalizeStartUrl (F18 §6.2.4) adds https, drops the hash and refuses other schemes and credentials", () => {
+  assert.equal(normalizeStartUrl("example.com"), "https://example.com/");
+  assert.equal(normalizeStartUrl("  https://example.com/a?b=1#top "), "https://example.com/a?b=1");
+  assert.equal(normalizeStartUrl("HTTP://Example.com"), "http://example.com/");
+  // A host with a port is not a scheme.
+  assert.equal(normalizeStartUrl("example.com:8080/shop"), "https://example.com:8080/shop");
+  assert.equal(normalizeStartUrl("localhost:3000"), "https://localhost:3000/");
+  for (const bad of ["ftp://example.com", "javascript:alert(1)", "mailto:a@example.com", "https://user:pw@example.com", "https://:pw@example.com", "", "https://"]) {
+    assert.throws(() => normalizeStartUrl(bad), { code: "invalid_url" }, bad);
+  }
+});
+
+test("normalizeAndValidateStartUrl uses the shared SSRF guard: every address checked, unresolvable names refused", async () => {
+  const lookup = async (host: string) => {
+    if (host === "example.com") return ["93.184.216.34"];
+    if (host === "rebind.example.com") return ["93.184.216.34", "10.0.0.1"];
+    if (host === "mapped.example.com") return ["::ffff:10.0.0.1"];
+    throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" });
+  };
+  // Any private answer among public ones is refused (DNS rebinding).
+  await assert.rejects(() => normalizeAndValidateStartUrl("rebind.example.com", { lookup }), { code: "url_blocked" });
+  await assert.rejects(() => normalizeAndValidateStartUrl("mapped.example.com", { lookup }), { code: "url_blocked" });
+  await assert.rejects(() => normalizeAndValidateStartUrl("[::1]", { lookup }), { code: "url_blocked" });
+  // A name that does not resolve was let through before (the lookup swallowed the error).
+  await assert.rejects(() => normalizeAndValidateStartUrl("nowhere.example", { lookup }), { code: "url_unreachable" });
+  await assert.rejects(() => normalizeAndValidateStartUrl("https://user:pw@example.com", { lookup }), { code: "invalid_url" });
+});
+
+test("resolveStartUrlRedirects stops before a hop with credentials or an unresolvable host", async () => {
+  const hops: Record<string, string> = {
+    "https://example.com/creds": "https://user:pw@example.com/next",
+    "https://example.com/ghost": "https://nowhere.example/next",
+  };
+  const safeFetch = async (url: string) => ({
+    status: hops[url] ? 302 : 200,
+    headers: new Headers(hops[url] ? { location: hops[url] } : {}),
+    body: new Uint8Array(),
+  });
+  const lookup = async (host: string) => {
+    if (host === "example.com") return ["93.184.216.34"];
+    throw new Error("ENOTFOUND");
+  };
+  for (const start of Object.keys(hops)) {
+    const result = await resolveStartUrlRedirects(start, { safeFetch: safeFetch as any, lookup });
+    assert.equal(result.url, start, start);
+  }
 });
