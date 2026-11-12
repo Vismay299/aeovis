@@ -18,6 +18,7 @@ import {
   BookOpen,
   Globe,
   LayoutDashboard,
+  MapPin,
   MessageSquareText,
   PenLine,
   Radar,
@@ -75,6 +76,20 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     id: "research",
     label: "Research",
     items: [
+      {
+        id: "keywords",
+        label: "Keywords",
+        href: "/portal/keywords",
+        icon: Search,
+        flag: "keyword_research",
+      },
+      {
+        id: "local",
+        label: "Local",
+        href: "/portal/local",
+        icon: MapPin,
+        flag: "local_seo",
+      },
       {
         id: "domain",
         label: "Domain",

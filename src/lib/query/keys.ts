@@ -27,6 +27,8 @@ export const keys = {
   projectContext: (brandKey: string) => ["projectContext", brandKey] as const,
   // F26
   privacyChoice: () => ["privacyChoice"] as const,
+  // F10
+  schedule: (brandKey: string) => ["schedule", brandKey] as const,
   // F19
   indexnowSetup: (brandKey: string) => ["indexnowSetup", brandKey] as const,
   indexnowSubmissions: (
@@ -40,6 +42,30 @@ export const keys = {
       source ?? null,
       sourceRef ?? null,
     ] as const,
+  // F17
+  localBusinesses: (brandKey: string) => ["localBusinesses", brandKey] as const,
+  localFetch: (brandKey: string, fetchId: string) =>
+    ["localFetch", brandKey, fetchId] as const,
+  localFetches: (
+    brandKey: string,
+    businessId?: string | null,
+    kind?: string | null,
+  ) =>
+    ["localFetches", brandKey, businessId ?? null, kind ?? null] as const,
+  localGrid: (brandKey: string, gridId: string) =>
+    ["localGrid", brandKey, gridId] as const,
+  localGrids: (brandKey: string) => ["localGrids", brandKey] as const,
+  localCategories: (query?: string) =>
+    ["localCategories", query ?? ""] as const,
+  // F13 — all keyword data is scoped to its workspace.
+  keywordResearch: (brandKey: string, inputKey: string) =>
+    ["keywordResearch", brandKey, inputKey] as const,
+  keywordSerp: (brandKey: string, inputKey: string) =>
+    ["keywordSerp", brandKey, inputKey] as const,
+  savedKeywords: (brandKey: string, inputKey: string) =>
+    ["savedKeywords", brandKey, inputKey] as const,
+  keywordLocations: (brandKey: string, iso: string, q: string) =>
+    ["keywordLocations", brandKey, iso, q] as const,
   // F14
   domainOverview: (brandKey: string, inputKey: string) =>
     ["domainOverview", brandKey, inputKey] as const,
@@ -69,6 +95,16 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "usage",
   "price",
   "projectContext",
+  "localBusinesses",
+  "localFetch",
+  "localFetches",
+  "localGrid",
+  "localGrids",
+  "keywordResearch",
+  "keywordSerp",
+  "savedKeywords",
+  "keywordLocations",
+  "schedule",
 ]);
 
 export function isWorkspaceKey(

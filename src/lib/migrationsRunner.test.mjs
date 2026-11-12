@@ -393,6 +393,11 @@ const FULL_CATALOG = [
   // 120_f17_local_seo.sql & 121_f17_local_seo_functions.sql — F17 local SEO tables and functions.
   "local_businesses", "local_fetches", "local_fetch_items", "local_grid_runs", "local_searches",
   "save_local_business", "find_local_reuse", "claim_local_poll", "prune_local_seo",
+  // F15 phase 1 migration objects.
+  "rank_tracking_configs", "rank_tracking_keywords", "rank_check_runs", "rank_snapshots", "rank_check_tasks",
+  "add_rank_tracking_keywords", "claim_rank_config", "try_create_rank_run", "rank_check_reserve",
+  "rank_latest_snapshots", "rank_earliest_snapshots", "rank_best_positions", "rank_config_trend",
+  "rank_position_matrix", "rank_config_summaries", "prune_rank_tracking",
 ];
 
 function withRegister(dir) {

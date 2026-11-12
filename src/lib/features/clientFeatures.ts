@@ -32,6 +32,7 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "backlinks",
   "backlinks_ahrefs_dr",
   "backlink_snapshots",
+  "customer_scheduling",
 ];
 
 export type ClientFeatureName = FeatureName;
