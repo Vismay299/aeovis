@@ -24,6 +24,12 @@ test("every builder returns its documented shape", () => {
   assert.deepEqual(keys.usage("a", "30d", "UTC"), ["usage", "a", "30d", "UTC"]);
   assert.deepEqual(keys.price("a", "scan", "{}"), ["price", "a", "scan", "{}"]);
   assert.deepEqual(keys.projectContext("a"), ["projectContext", "a"]);
+  assert.deepEqual(keys.localBusinesses("a"), ["localBusinesses", "a"]);
+  assert.deepEqual(keys.localFetch("a", "f1"), ["localFetch", "a", "f1"]);
+  assert.deepEqual(keys.localFetches("a", "b1", "reviews"), ["localFetches", "a", "b1", "reviews"]);
+  assert.deepEqual(keys.localGrid("a", "g1"), ["localGrid", "a", "g1"]);
+  assert.deepEqual(keys.localGrids("a"), ["localGrids", "a"]);
+  assert.deepEqual(keys.localCategories("q"), ["localCategories", "q"]);
   assert.deepEqual(keys.keywordResearch("a", "input"), ["keywordResearch", "a", "input"]);
   assert.deepEqual(keys.keywordSerp("a", "input"), ["keywordSerp", "a", "input"]);
   assert.deepEqual(keys.savedKeywords("a", "input"), ["savedKeywords", "a", "input"]);
@@ -42,6 +48,11 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.usage("acme", "30d", "UTC"),
     keys.price("acme", "scan", "{}"),
     keys.projectContext("acme"),
+    keys.localBusinesses("acme"),
+    keys.localFetch("acme", "f1"),
+    keys.localFetches("acme", "b1", "reviews"),
+    keys.localGrid("acme", "g1"),
+    keys.localGrids("acme"),
     keys.keywordResearch("acme", "research-input"),
     keys.keywordSerp("acme", "serp-input"),
     keys.savedKeywords("acme", "saved-input"),

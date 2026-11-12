@@ -1,0 +1,59 @@
+{
+  "emptyBusinesses": {
+    "businesses": []
+  },
+  "quoteProfile": {
+    "action": "local.profile.lookup",
+    "currency": "USD",
+    "totalUsd": 0.0054,
+    "lines": [
+      {
+        "label": "Google Business Profile lookup",
+        "quantity": 1,
+        "unitUsd": 0.0054,
+        "totalUsd": 0.0054
+      }
+    ],
+    "warnings": []
+  },
+  "profileResult": {
+    "profile": {
+      "title": "Acme Coffee",
+      "category": "Coffee shop",
+      "additionalCategories": ["Cafe"],
+      "rating": { "value": 4.8, "votes": 120 },
+      "ratingDistribution": { "1": 1, "2": 2, "3": 5, "4": 12, "5": 100 },
+      "address": "123 Main St, Springfield",
+      "phone": "+1 555-0199",
+      "website": "https://acme.example",
+      "domain": "acme.example",
+      "isClaimed": true,
+      "currentStatus": "Open",
+      "hours": [
+        { "day": "monday", "spans": [{ "open": "08:00", "close": "18:00" }] }
+      ],
+      "totalPhotos": 15,
+      "cid": "1234567890123456789",
+      "placeId": "ChIJAcme123",
+      "latitude": 39.7817,
+      "longitude": -89.6501,
+      "checkUrl": "https://maps.google.com/?cid=1234567890123456789"
+    },
+    "businessId": null
+  },
+  "savedOwn": {
+    "business": {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "role": "own",
+      "title": "Acme Coffee",
+      "cid": "1234567890123456789",
+      "placeId": "ChIJAcme123",
+      "latitude": 39.7817,
+      "longitude": -89.6501,
+      "locationCode": 2840,
+      "languageCode": "en",
+      "profile": null,
+      "profileFetchedAt": null
+    }
+  }
+}

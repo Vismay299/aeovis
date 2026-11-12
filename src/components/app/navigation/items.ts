@@ -17,6 +17,7 @@
 import {
   BookOpen,
   LayoutDashboard,
+  MapPin,
   MessageSquareText,
   PenLine,
   Radar,
@@ -80,6 +81,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/portal/keywords",
         icon: Search,
         flag: "keyword_research",
+      },
+      {
+        id: "local",
+        label: "Local",
+        href: "/portal/local",
+        icon: MapPin,
+        flag: "local_seo",
       },
     ],
   },
