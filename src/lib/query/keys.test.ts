@@ -58,6 +58,12 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.savedKeywords("acme", "saved-input"),
     keys.keywordLocations("acme", "US", "shoes"),
     keys.schedule("acme"),
+    keys.backlinksOverview("acme", "overview-input"),
+    keys.backlinksTab("acme", "backlinks", "tab-input"),
+    keys.backlinksDomainLinks("acme", "domain-links-input"),
+    keys.ahrefsRatings("acme", "ratings-input"),
+    keys.backlinkSnapshotTargets("acme"),
+    keys.backlinkSnapshots("acme", "example.com", "subdomains"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
@@ -67,6 +73,47 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     assert.equal(isWorkspaceKey(key, "other"), false, key[0]);
   }
   assert.equal(WORKSPACE_DOMAINS.has("scanReport"), false);
+});
+
+test("F16 workspace key builders are invalidated only for their workspace", async () => {
+  const f16KeysFor = (brandKey: string) => [
+    keys.backlinksOverview(brandKey, "overview-input"),
+    keys.backlinksTab(brandKey, "backlinks", "tab-input"),
+    keys.backlinksDomainLinks(brandKey, "domain-links-input"),
+    keys.ahrefsRatings(brandKey, "ratings-input"),
+    keys.backlinkSnapshotTargets(brandKey),
+    keys.backlinkSnapshots(brandKey, "example.com", "subdomains"),
+  ];
+
+  const f16Keys = f16KeysFor("acme");
+  assert.deepEqual(f16Keys, [
+    ["backlinksOverview", "acme", "overview-input"],
+    ["backlinksTab", "acme", "backlinks", "tab-input"],
+    ["backlinksDomainLinks", "acme", "domain-links-input"],
+    ["ahrefsRatings", "acme", "ratings-input"],
+    ["backlinkSnapshotTargets", "acme"],
+    ["backlinkSnapshots", "acme", "example.com", "subdomains"],
+  ]);
+
+  const filters: Array<{
+    predicate(q: { queryKey: readonly unknown[] }): boolean;
+  }> = [];
+  const client = {
+    invalidateQueries: async (f: (typeof filters)[number]) => {
+      filters.push(f);
+    },
+  };
+  await invalidateWorkspace(client, "acme");
+  const matches = (queryKey: readonly unknown[]) =>
+    filters[0].predicate({ queryKey });
+
+  for (const key of f16Keys) {
+    assert.ok(WORKSPACE_DOMAINS.has(key[0]), key[0]);
+    assert.equal(matches(key), true, key[0]);
+  }
+  for (const key of f16KeysFor("other")) {
+    assert.equal(matches(key), false, key[0]);
+  }
 });
 
 test("isWorkspaceKey matches only the right workspace and never an id-addressed record", () => {

@@ -77,6 +77,19 @@ export const keys = {
     ["domainCompetitors", brandKey, inputKey] as const,
   declaredCompetitors: (brandKey: string) =>
     ["declaredCompetitors", brandKey] as const,
+  // F16
+  backlinksOverview: (brandKey: string, inputKey: string) =>
+    ["backlinksOverview", brandKey, inputKey] as const,
+  backlinksTab: (brandKey: string, tab: string, inputKey: string) =>
+    ["backlinksTab", brandKey, tab, inputKey] as const,
+  backlinksDomainLinks: (brandKey: string, inputKey: string) =>
+    ["backlinksDomainLinks", brandKey, inputKey] as const,
+  ahrefsRatings: (brandKey: string, inputKey: string) =>
+    ["ahrefsRatings", brandKey, inputKey] as const,
+  backlinkSnapshotTargets: (brandKey: string) =>
+    ["backlinkSnapshotTargets", brandKey] as const,
+  backlinkSnapshots: (brandKey: string, target: string, scope: string) =>
+    ["backlinkSnapshots", brandKey, target, scope] as const,
 } as const;
 
 export const privacyKeys = {
@@ -105,6 +118,12 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "savedKeywords",
   "keywordLocations",
   "schedule",
+  "backlinksOverview",
+  "backlinksTab",
+  "backlinksDomainLinks",
+  "ahrefsRatings",
+  "backlinkSnapshotTargets",
+  "backlinkSnapshots",
 ]);
 
 export function isWorkspaceKey(
