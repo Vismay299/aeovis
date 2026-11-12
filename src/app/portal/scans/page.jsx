@@ -1,22 +1,68 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { ChevronRight, Play, Radar } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { z } from "zod";
+import {
+  ChevronRight,
+  FileDown,
+  FileJson,
+  FileSpreadsheet,
+  Play,
+  Radar,
+  Sheet,
+} from "lucide-react";
 import { PrefetchLink } from "@/components/app/PrefetchLink";
+import { ExportMenu } from "@/components/app/ExportMenu";
+import { useExportRows } from "@/components/app/export/useExportRows";
+import {
+  DataTable,
+  makeSelectionColumn,
+  useDataTable,
+  useSelectionAnchor,
+} from "@/components/app/table/DataTable";
+import { TableBulkActionBar, TableBulkExportMenu } from "@/components/app/table/TableBulkActionBar";
+import { SortableHeader } from "@/components/app/table/SortableHeader";
+import { DataTableToolbar } from "@/components/app/table/DataTableToolbar";
+import { numericNullsLast } from "@/lib/table/nullSafeSort";
+import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
+import { QueryError } from "@/components/app/QueryState";
 import { scanReportQueryOptions } from "@/lib/query/portalQueries";
+import { exportFilename } from "@/lib/export/filenames";
 import { usePortal } from "@/components/portal/PortalShell";
 import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
 import MockScanPanel from "@/components/portal/scans/MockScanPanel";
 import {
-  Badge, Banner, Button, Card, EmptyState, PageHeader, ProgressBar, SkeletonRows,
-  formatDate, formatPct,
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  PageHeader,
+  ProgressBar,
+  formatDate,
+  formatPct,
 } from "@/components/portal/ui";
-import { platformLabel, scanVisibilityState } from "@/components/portal/scans/reportData";
+import {
+  platformLabel,
+  scanVisibilityState,
+} from "@/components/portal/scans/reportData";
 import { NextRunBadge } from "@/components/portal/schedule/NextRunBadge";
 import "@/components/portal/scans/scans.css";
 
 const FAILED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const SORT_DEFAULTS = { sort: "date", order: "desc" };
+const sortSchema = z.object({
+  sort: z.enum(["date", "visibility"]),
+  order: z.enum(["asc", "desc"]),
+});
+const EXPORT_HEADERS = [
+  "Date",
+  "AI visibility (%)",
+  "Questions",
+  "Naming you",
+  "Engines",
+  "Collection",
+];
 
 function finiteOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
@@ -24,51 +70,237 @@ function finiteOrNull(value) {
   return Number.isFinite(n) ? n : null;
 }
 
-function ScanRow({ scan }) {
+function collectionStatus(scan) {
+  if (scan.collection_partial === true) return "Partial";
+  return scanVisibilityState(scan) === "measured" ? "Complete" : "Pending";
+}
+
+function exportRow(scan) {
   const visibility = finiteOrNull(scan.visibility_pct);
-  const tracked = finiteOrNull(scan.prompts_tracked);
-  const mentioned = finiteOrNull(scan.prompts_mentioned);
-  const pending = scanVisibilityState(scan) === "pending";
-  const label = `Open scan from ${formatDate(scan.scanned_at || scan.created_at, { withTime: true })}`;
+  return [
+    formatDate(scan.scanned_at || scan.created_at, { withTime: true }),
+    visibility ?? "",
+    finiteOrNull(scan.prompts_tracked) ?? "",
+    finiteOrNull(scan.prompts_mentioned) ?? "",
+    platformLabel(scan.platform),
+    collectionStatus(scan),
+  ];
+}
+
+function scanDate(scan) {
+  const value = scan.scanned_at || scan.created_at;
+  const timestamp = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function scanPath(scan) {
+  return `/portal/scans/${encodeURIComponent(scan.id)}`;
+}
+
+function ScansHistoryTable({ scans, loading, error, onRetry, router, brandKey }) {
+  const [sortState, setSortState] = useUrlSearchState(sortSchema, SORT_DEFAULTS);
+  const [rowSelection, setRowSelection] = useState({});
+  const anchorRef = useSelectionAnchor();
+  const runExportRows = useExportRows();
+  const sorting = useMemo(
+    () => [{ id: sortState.sort, desc: sortState.order === "desc" }],
+    [sortState.order, sortState.sort],
+  );
+
+  const setSorting = (updater) => {
+    const next = typeof updater === "function" ? updater(sorting) : updater;
+    if (!next.length) {
+      setSortState(SORT_DEFAULTS);
+      return;
+    }
+    const nextSort = next[0].id === "visibility" ? "visibility" : "date";
+    const nextOrder = next[0].desc ? "desc" : "asc";
+    if (nextSort === "visibility" && nextOrder === "desc") {
+      // The generic URL helper removes default values. F06-B05 requires an
+      // explicit order=desc when visibility is the selected sort column.
+      const params = new URLSearchParams(window.location.search);
+      params.set("sort", nextSort);
+      params.set("order", nextOrder);
+      params.sort();
+      const query = params.toString();
+      router.replace(
+        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+        { scroll: false },
+      );
+      return;
+    }
+    setSortState({ sort: nextSort, order: nextOrder });
+  };
+
+  const columns = useMemo(() => [
+    makeSelectionColumn(anchorRef, (row) =>
+      `Select scan from ${formatDate(row.original.scanned_at || row.original.created_at, { withTime: true })}`,
+    ),
+    {
+      id: "date",
+      accessorFn: scanDate,
+      sortDescFirst: true,
+      header: ({ column }) => <SortableHeader column={column} label="Date" />,
+      cell: ({ row }) => (
+        <PrefetchLink
+          href={scanPath(row.original)}
+          prefetch={() => scanReportQueryOptions(row.original.id)}
+          onClick={(event) => event.stopPropagation()}
+          className="font-medium text-foreground hover:text-primary hover:underline"
+        >
+          {formatDate(row.original.scanned_at || row.original.created_at, { withTime: true })}
+        </PrefetchLink>
+      ),
+    },
+    {
+      id: "visibility",
+      accessorFn: (row) => finiteOrNull(row.visibility_pct),
+      sortingFn: numericNullsLast,
+      sortDescFirst: true,
+      header: ({ column }) => <SortableHeader column={column} label="AI visibility" />,
+      meta: { headerClassName: "min-w-44", cellClassName: "min-w-44" },
+      cell: ({ row }) => {
+        const visibility = finiteOrNull(row.original.visibility_pct);
+        const pending = scanVisibilityState(row.original) === "pending";
+        return (
+          <div className="flex min-w-32 items-center gap-3">
+            <div className="w-24">
+              <ProgressBar value={visibility} indeterminate={pending} size="sm" label="AI visibility" />
+            </div>
+            <span className={`w-12 text-right text-sm font-semibold tabular-nums ${visibility === null ? "text-muted-foreground" : "text-foreground"}`}>
+              {formatPct(visibility)}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      id: "questions",
+      accessorFn: (row) => finiteOrNull(row.prompts_tracked),
+      header: "Questions",
+      meta: { headerClassName: "text-right", cellClassName: "text-right tabular-nums" },
+      cell: ({ row }) => finiteOrNull(row.original.prompts_tracked) ?? "—",
+    },
+    {
+      id: "naming",
+      accessorFn: (row) => finiteOrNull(row.prompts_mentioned),
+      header: "Naming you",
+      meta: { headerClassName: "text-right", cellClassName: "text-right tabular-nums" },
+      cell: ({ row }) => finiteOrNull(row.original.prompts_mentioned) ?? "—",
+    },
+    {
+      id: "engines",
+      accessorFn: (row) => platformLabel(row.platform),
+      header: "Engines",
+      cell: ({ row }) => platformLabel(row.original.platform),
+    },
+    {
+      id: "actions",
+      enableSorting: false,
+      header: "",
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Open report"
+          className="reveal-on-hover text-muted-foreground"
+          onClick={(event) => {
+            event.stopPropagation();
+            router.push(scanPath(row.original));
+          }}
+        >
+          <ChevronRight aria-hidden="true" />
+        </Button>
+      ),
+    },
+  ], [anchorRef, router]);
+
+  const table = useDataTable({
+    data: scans,
+    columns,
+    getRowId: (row) => String(row.id),
+    state: { sorting, rowSelection },
+    onSortingChange: setSorting,
+    onRowSelectionChange: setRowSelection,
+    enableRowSelection: true,
+    sortDescFirst: true,
+    withSorting: true,
+  });
+  const selected = table.getSelectedRowModel().rows.map((row) => row.original);
+
+  const runHistoryExport = async (format, rows, scope) => {
+    await runExportRows({
+      format,
+      feature: "scan_history",
+      headers: EXPORT_HEADERS,
+      rows: rows.map(exportRow),
+      filename: exportFilename([brandKey || "workspace", "scan-history"]),
+      ...(scope ? { scope } : {}),
+    });
+  };
+
+  const openSelectedExport = (format) => {
+    void runHistoryExport(format, selected, "selection");
+  };
 
   return (
-    <PrefetchLink
-      href={`/portal/scans/${encodeURIComponent(scan.id)}`}
-      prefetch={() => scanReportQueryOptions(scan.id)}
-      aria-label={label}
-      className="group flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
-    >
-      <div className="min-w-[140px] flex-1">
-        <p className="text-sm font-medium text-foreground">
-          {formatDate(scan.scanned_at || scan.created_at, { withTime: true })}
-        </p>
-        <p className="text-xs text-muted-foreground">{platformLabel(scan.platform)}</p>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <div className="w-24">
-          <ProgressBar value={visibility} indeterminate={pending} size="sm" label="AI visibility" />
-        </div>
-        <span className={`w-12 text-right text-sm font-semibold tabular-nums ${visibility === null ? "text-muted-foreground" : "text-foreground"}`}>
-          {formatPct(visibility)}
-        </span>
-        {scan.collection_partial ? <Badge tone="warn">Partial</Badge> : null}
-      </div>
-
-      <div className="hidden sm:block text-right text-xs text-muted-foreground tabular-nums">
-        {tracked === null ? "—" : `${tracked} questions`}
-        {mentioned !== null && tracked !== null ? ` · ${mentioned} mentioned` : ""}
-      </div>
-
-      <span className="reveal-on-hover text-muted-foreground" aria-hidden="true">
-        <ChevronRight className="size-4" />
-      </span>
-    </PrefetchLink>
+    <>
+      <DataTable
+        table={table}
+        isLoading={loading}
+        isFiltered={false}
+        error={error ? (
+          <QueryError
+            title="Scans did not load"
+            error={error}
+            fallback="Could not load scans."
+            onRetry={onRetry}
+            isRetrying={loading}
+          />
+        ) : null}
+        empty={{ kind: "no-data", title: "No scans yet", description: "Run your first scan to see which brands AI engines recommend for your category." }}
+        scrollClassName="max-w-full"
+        toolbar={(
+          <DataTableToolbar
+            actions={(
+              <ExportMenu
+                actions={["sheets", "csv", "excel", "json"]}
+                scopes={[{ id: "history", label: "Scan history", actions: ["sheets", "csv", "excel", "json"] }]}
+                onExport={(action) => { void runHistoryExport(action, scans); }}
+              />
+            )}
+          />
+        )}
+        onRowClick={(row, event) => {
+          if (event.target?.closest?.("a, button, [role='checkbox']")) return;
+          router.push(scanPath(row.original));
+        }}
+      />
+      <TableBulkActionBar
+        selectedCount={selected.length}
+        selectedLabel="selected"
+        onClear={() => {
+          setRowSelection({});
+          anchorRef.current = null;
+        }}
+        actions={(
+          <TableBulkExportMenu
+            actions={[
+              { label: "Sheets", icon: <Sheet />, onClick: () => openSelectedExport("sheets") },
+              { label: "CSV", icon: <FileDown />, onClick: () => openSelectedExport("csv") },
+              { label: "Excel", icon: <FileSpreadsheet />, onClick: () => openSelectedExport("excel") },
+              { label: "JSON", icon: <FileJson />, onClick: () => openSelectedExport("json") },
+            ]}
+          />
+        )}
+      />
+    </>
   );
 }
 
 export default function ScansPage() {
   const { brandKey, brand, scan, redirectToLogin } = usePortal();
+  const router = useRouter();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -119,7 +351,7 @@ export default function ScansPage() {
   const showEmpty = !initialLoad && !error && scans.length === 0 && !scan.active;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 f06-scans-page">
       <PageHeader
         title="Scans"
         description="Every AI visibility scan for this workspace."
@@ -142,19 +374,9 @@ export default function ScansPage() {
         <ScanProgressCard showIdle={false} />
         {brandKey ? <MockScanPanel key={brandKey} brandKey={brandKey} brandName={brand?.display_name || "this workspace"} onUnauthorized={redirectToLogin} /> : null}
 
-        {error ? (
-          <Banner
-            tone="error"
-            title="Scans did not load"
-            action={<Button variant="secondary" size="sm" onClick={() => setReloadToken((n) => n + 1)}>Retry</Button>}
-          >
-            {error}
-          </Banner>
-        ) : null}
-
         {initialLoad ? (
-          <Card title="Scan history" flush>
-            <SkeletonRows rows={4} />
+          <Card title="Scan history" description={brand?.display_name ? `Each scan of ${brand.display_name}, newest first.` : "Newest first."} flush>
+            <ScansHistoryTable key={brandKey} scans={[]} loading router={router} brandKey={brandKey} />
           </Card>
         ) : showEmpty ? (
           <Card>
@@ -166,17 +388,21 @@ export default function ScansPage() {
               Run your first scan to see which brands AI engines recommend for your category.
             </EmptyState>
           </Card>
-        ) : scans.length > 0 ? (
+        ) : scans.length > 0 || error ? (
           <Card
             title="Scan history"
             description={brand?.display_name ? `Each scan of ${brand.display_name}, newest first.` : "Newest first."}
             flush
           >
-            <div className="divide-y divide-border">
-              {scans.map((row) => (
-                <ScanRow key={row.id} scan={row} />
-              ))}
-            </div>
+            <ScansHistoryTable
+              key={brandKey}
+              scans={scans}
+              loading={false}
+              error={error}
+              onRetry={() => setReloadToken((n) => n + 1)}
+              router={router}
+              brandKey={brandKey}
+            />
           </Card>
         ) : null}
 
