@@ -39,7 +39,7 @@ if (!(await waitForServer(1000))) {
   }
 }
 const onlyIndex = process.argv.indexOf("--only");
-const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B12";
+const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B17";
 const selectedScenarios = new Set();
 for (const selection of requested.split(",")) {
   const range = selection.match(/^B(\d+)-B(\d+)$/);
@@ -95,7 +95,7 @@ async function record(id, expected, run) {
   }
 }
 
-async function makePage({ flag = true, cacheMiss = true, priceChanged = false, viewport = { width: 1280, height: 900 }, fixtureRows = rows, researchErrorCode = null, delayedQuoteKeyword = null } = {}) {
+async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, serpItemCount = 1, serpDepth100Error = false, priceChanged = false, viewport = { width: 1280, height: 900 }, fixtureRows = rows, researchErrorCode = null, delayedQuoteKeyword = null } = {}) {
   const { context, page } = await openPortal(browser, origin, { viewport });
   const researchRequests = [];
   const serpRequests = [];
@@ -103,6 +103,10 @@ async function makePage({ flag = true, cacheMiss = true, priceChanged = false, v
   await page.route("**/api/customer/price/estimate*", async (route) => {
     const body = route.request().postDataJSON();
     if (delayedQuoteKeyword && body.input?.keyword === delayedQuoteKeyword) await new Promise((resolve) => setTimeout(resolve, 900));
+    if (body.action === "keywords.serp.run") {
+      const totalUsd = body.input?.depth === 100 ? 0.0155 : 0.0035;
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action, totalUsd, expectedUsd: totalUsd, lines: [{ label: `Top ${body.input?.depth ?? 20} Google results`, quantity: 1, unitUsd: totalUsd, totalUsd }] }) });
+    }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action }) });
   });
   await page.route("**/api/customer/keywords/research", (route) => {
@@ -115,7 +119,11 @@ async function makePage({ flag = true, cacheMiss = true, priceChanged = false, v
   await page.route("**/api/customer/keywords/serp", (route) => {
     const body = route.request().postDataJSON();
     serpRequests.push(body);
-    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ requestedKeyword: body.keyword, depth: body.depth, items: serpItems, cached: true }) });
+    if (body.depth === 100 && serpDepth100Error) return route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: "Deep crawl unavailable.", code: "serp_unavailable" }) });
+    if (body.cacheOnly && serpCacheMiss) return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ notCached: true, cached: false, depth: body.depth }) });
+    const count = body.depth === 100 ? 100 : serpItemCount;
+    const items = Array.from({ length: count }, (_, index) => ({ ...serpItems[0], rank: index + 1, title: `Search result ${index + 1}` }));
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ requestedKeyword: body.keyword, depth: body.depth, items, cached: body.cacheOnly }) });
   });
   await page.route("**/api/customer/keywords/saved", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ created: route.request().postDataJSON().keywords.length, savedKeywordIds: [] }) }));
   return { context, page, researchRequests, serpRequests };
@@ -275,7 +283,8 @@ try {
       await page.getByRole("button", { name: "family beta" }).waitFor();
       const childRow = page.locator("tr").filter({ hasText: "family beta" });
       assert.equal(await childRow.getAttribute("title"), "family beta: matching reported volume with family alpha. Shared volumes may overlap.");
-      assert.equal(await page.getByText("Page 1 of 1").count(), 1, "the two-row family must extend page one past its 50-row limit");
+      assert.equal(await page.getByText("1-51 of 51").count(), 1, "the parent and child family must stay together on the 51-row research page");
+      assert.equal(await page.getByRole("button", { name: "Next page" }).isDisabled(), true, "the complete shared-volume family should fit on page one");
       return "parent and child share a page and the child explains its shared volume";
     } finally { await context.close(); }
   });
@@ -307,6 +316,88 @@ try {
       await page.waitForTimeout(850);
       assert.equal(await search.isDisabled(), false, "the button should enable with the fresh quote");
       return "stale and loading quote states could not start a paid search";
+    } finally { await context.close(); }
+  });
+
+  await record("B13", "SERP approval sends one priced SERP request without enabling paid research", async () => {
+    const { context, page, researchRequests, serpRequests } = await openResearch({ cacheMiss: false, serpCacheMiss: true }, "/portal/keywords?q=oversized+t+shirt");
+    try {
+      await page.getByRole("button", { name: /Load results.*up to \$0\.01/ }).click();
+      await page.waitForFunction(() => document.body.innerText.includes("1 organic results"));
+      const paidSerp = serpRequests.find((request) => request.cacheOnly === false);
+      assert.equal(paidSerp?.depth, 20);
+      assert.equal(paidSerp?.maxUsd, 0.0035);
+      assert.ok(researchRequests.length > 0 && researchRequests.every((request) => request.cacheOnly === true), "SERP authorization must not start a paid research request");
+      return "the approved SERP ceiling was sent only to SERP; research stayed cache-only";
+    } finally { await context.close(); }
+  });
+
+  await record("B14", "SERP paginates ten rows and prices the top-100 extension", async () => {
+    const { context, page, serpRequests } = await openResearch({ cacheMiss: false, serpItemCount: 20 }, "/portal/keywords?q=oversized+t+shirt");
+    try {
+      await page.getByText("Page 1 of 2").waitFor();
+      await page.getByRole("link", { name: /^1\. example\.test Search result 1/ }).waitFor();
+      await page.getByRole("button", { name: "Next SERP page" }).click();
+      await page.getByRole("link", { name: /^11\. example\.test Search result 11/ }).waitFor();
+      await page.getByRole("button", { name: /Load top 100.*up to \$0\.02/ }).click();
+      await page.waitForFunction(() => document.body.innerText.includes("100 organic results"));
+      const deep = serpRequests.find((request) => request.depth === 100);
+      assert.equal(deep?.cacheOnly, false);
+      assert.equal(deep?.maxUsd, 0.0155);
+      await page.getByText("Page 1 of 10").waitFor();
+      return "SERP pages contain ten rows and top-100 ran with its displayed quote";
+    } finally { await context.close(); }
+  });
+
+  await record("B15", "failed deep crawl restores the loaded top-20 results", async () => {
+    const { context, page } = await openResearch({ cacheMiss: false, serpItemCount: 20, serpDepth100Error: true }, "/portal/keywords?q=oversized+t+shirt");
+    try {
+      await page.getByText("Page 1 of 2").waitFor();
+      await page.getByRole("button", { name: "Next SERP page" }).click();
+      await page.getByRole("button", { name: /Load top 100/ }).click();
+      await page.getByRole("alert").getByText("Deep crawl unavailable.").waitFor();
+      await page.getByRole("button", { name: "Show top 20" }).click();
+      await page.getByText("Page 1 of 2").waitFor();
+      await page.getByRole("link", { name: /^1\. example\.test Search result 1/ }).waitFor();
+      return "deep-crawl failure offered Show top 20 and restored the prior results";
+    } finally { await context.close(); }
+  });
+
+  await record("B16", "intent filters retain rows matching either selected intent", async () => {
+    const { context, page } = await openResearch({ cacheMiss: false }, "/portal/keywords?q=oversized+t+shirt");
+    try {
+      await page.getByRole("button", { name: "Filters" }).click();
+      await page.getByRole("checkbox", { name: "Intent informational" }).check();
+      await page.getByRole("checkbox", { name: "Intent transactional" }).check();
+      await page.getByRole("button", { name: "oversized tee outfit" }).waitFor();
+      await page.getByRole("button", { name: "oversized t shirt" }).waitFor();
+      await page.getByRole("button", { name: "oversized shirt for men" }).waitFor({ state: "hidden" });
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("button", { name: "Filters" }).click();
+      assert.equal(await page.getByRole("checkbox", { name: "Intent informational" }).isChecked(), true);
+      assert.equal(await page.getByRole("checkbox", { name: "Intent transactional" }).isChecked(), true);
+      return "both selected intents matched and persisted in the workspace filter";
+    } finally { await context.close(); }
+  });
+
+  await record("B17", "URL sort drives row order and accessible column state", async () => {
+    const { context, page } = await openResearch({ cacheMiss: false }, "/portal/keywords?q=oversized+t+shirt&sort=cpc&order=asc");
+    try {
+      const cpcHeader = page.locator("th").filter({ has: page.getByRole("button", { name: "Sort by CPC" }) });
+      assert.equal(await cpcHeader.getAttribute("aria-sort"), "ascending");
+      const volumeHeader = page.locator("th").filter({ has: page.getByRole("button", { name: "Sort by volume" }) });
+      await page.getByRole("button", { name: "Sort by volume" }).click();
+      await page.waitForFunction(() => {
+        const params = new URL(location.href).searchParams;
+        return (params.get("order") === "desc" || params.get("order") === null) && (params.get("sort") === "searchVolume" || params.get("sort") === null);
+      });
+      assert.equal(await volumeHeader.getAttribute("aria-sort"), "descending");
+      assert.match(await page.locator("tbody tr").first().innerText(), /oversized t shirt/);
+      await page.getByRole("button", { name: "Sort by volume" }).click();
+      await page.waitForFunction(() => new URL(location.href).searchParams.get("order") === "asc");
+      assert.equal(await volumeHeader.getAttribute("aria-sort"), "ascending");
+      assert.match(await page.locator("tbody tr").first().innerText(), /oversized tee outfit/);
+      return "sort/order URL state controls ordering and aria-sort";
     } finally { await context.close(); }
   });
 } finally {
