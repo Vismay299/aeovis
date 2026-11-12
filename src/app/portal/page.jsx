@@ -13,6 +13,7 @@ import VisibilityTrend from "@/components/portal/overview/VisibilityTrend";
 import RecentScans from "@/components/portal/overview/RecentScans";
 import ContentStudioCard from "@/components/portal/overview/ContentStudioCard";
 import { websiteHost } from "@/components/portal/overview/overviewModel";
+import { NextRunBadge } from "@/components/portal/schedule/NextRunBadge";
 
 /** true/false once the workspace's question panel is known; null while loading or unreadable. */
 function useApprovedPanel(brandKey) {
@@ -53,6 +54,7 @@ export default function OverviewPage() {
         description="How AI answer engines talk about your brand."
         actions={
           <>
+            <NextRunBadge />
             <Button icon={Play} onClick={scan.start} loading={scan.starting} disabled={scan.active}>
               Run scan
             </Button>

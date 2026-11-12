@@ -271,6 +271,8 @@ SOFTWARE.
 - `src/lib/schedules/aiVisibilitySchedules.jobs.ts` (from `src/server/features/ai-visibility/services/scheduledAiVisibility.ts`)
 - `src/lib/schedules/customerSchedule.ts` (from `src/server/features/ai-visibility/services/aiVisibilitySchedule.ts`)
 - `src/app/api/customer/schedule/route.ts` (from `src/server/features/ai-visibility/services/aiVisibilitySchedule.ts`)
+- `src/components/portal/schedule/ScheduleField.tsx` (from `src/client/features/rank-tracking/ScheduleField.tsx`, `scheduleTime.ts`)
+- `src/components/portal/schedule/ScheduleSummary.tsx` (from `src/client/features/ai-visibility/TrackingScheduleSummary.tsx`)
 
 - `src/lib/questions/workspaceQuestions.ts` (from `src/shared/ai-prompt-suggestions.ts`)
 - `src/lib/questions/applyQuestionPatch.ts` (from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts`)
@@ -486,3 +488,22 @@ SOFTWARE.
 - `src/components/portal/keywords/research/hooks/useKeywordResearchData.ts` (from `openseo:src/client/features/keywords/hooks/useKeywordResearchData.ts`)
 - `src/components/portal/keywords/research/hooks/useKeywordSearchTabs.ts` (from `openseo:src/client/features/search-tabs/useSearchTabs.ts`, `openseo:src/client/features/keywords/page/KeywordResearchPage.tsx`)
 - `src/components/portal/keywords/research/hooks/useKeywordSerpAnalysis.ts` (from `openseo:src/client/features/keywords/hooks/useKeywordSerpAnalysis.ts`)
+
+### F15 Phase 1 ports
+- src/shared/rank-tracking.ts
+- src/shared/rank-tracking-filters.ts
+- src/shared/google-serp-url.ts
+- src/lib/rank-tracking/cost.ts
+- src/lib/rank-tracking/market.ts
+- src/lib/rank-tracking/retries.ts
+- src/lib/rank-tracking/schedules.ts
+- src/lib/rank-tracking/repository.ts
+- src/lib/rank-tracking/memoryRepository.ts
+- supabase/migrations/110_f15_rank_tracking.sql
+- supabase/migrations/111_f15_rank_tracking_functions.sql
+- src/shared/rank-tracking.test.ts
+- src/shared/rank-tracking-filters.test.ts
+- src/shared/google-serp-url.test.ts
+- src/lib/rank-tracking/cost.test.ts
+- src/lib/rank-tracking/retries.test.ts
+- src/lib/rank-tracking/schedules.test.ts

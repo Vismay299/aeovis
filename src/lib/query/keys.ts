@@ -27,6 +27,8 @@ export const keys = {
   projectContext: (brandKey: string) => ["projectContext", brandKey] as const,
   // F26
   privacyChoice: () => ["privacyChoice"] as const,
+  // F10
+  schedule: (brandKey: string) => ["schedule", brandKey] as const,
   // F19
   indexnowSetup: (brandKey: string) => ["indexnowSetup", brandKey] as const,
   indexnowSubmissions: (
@@ -71,6 +73,7 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "keywordSerp",
   "savedKeywords",
   "keywordLocations",
+  "schedule",
 ]);
 
 export function isWorkspaceKey(

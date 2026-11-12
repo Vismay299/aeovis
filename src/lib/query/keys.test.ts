@@ -28,6 +28,7 @@ test("every builder returns its documented shape", () => {
   assert.deepEqual(keys.keywordSerp("a", "input"), ["keywordSerp", "a", "input"]);
   assert.deepEqual(keys.savedKeywords("a", "input"), ["savedKeywords", "a", "input"]);
   assert.deepEqual(keys.keywordLocations("a", "US", "shoes"), ["keywordLocations", "a", "US", "shoes"]);
+  assert.deepEqual(keys.schedule("a"), ["schedule", "a"]);
 });
 
 test("every workspace-scoped builder puts brandKey second and is a workspace domain", () => {
@@ -45,6 +46,7 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.keywordSerp("acme", "serp-input"),
     keys.savedKeywords("acme", "saved-input"),
     keys.keywordLocations("acme", "US", "shoes"),
+    keys.schedule("acme"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
