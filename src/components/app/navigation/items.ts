@@ -16,6 +16,7 @@
 
 import {
   BookOpen,
+  Globe,
   LayoutDashboard,
   MessageSquareText,
   PenLine,
@@ -73,7 +74,15 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     // F13, F14, F16 and F17 add their items here.
     id: "research",
     label: "Research",
-    items: [],
+    items: [
+      {
+        id: "domain",
+        label: "Domain",
+        href: "/portal/domain",
+        icon: Globe,
+        flag: "domain_research",
+      },
+    ],
   },
   {
     id: "site",
