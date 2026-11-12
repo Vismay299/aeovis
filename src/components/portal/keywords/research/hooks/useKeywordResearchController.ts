@@ -122,20 +122,30 @@ export function useKeywordResearchController() {
     action: "keywords.serp.run",
     input: { keyword: selectedKeyword || params.q || "keyword", locationCode: params.loc, languageCode: location?.languageCode ?? "en", depth: 100 },
   }, { enabled: Boolean(brandKey && (selectedKeyword || params.q)) });
-  const serpMaxUsd = researchQuote.data?.lines.find((line) => /serp/i.test(line.label))?.totalUsd
-    ?? serpQuote.data?.totalUsd;
-  const serpDeepMaxUsd = serpDeepQuote.data?.totalUsd;
+  // SERP prices depend on the keyword (operator keywords cost 5x), so the
+  // research quote's SERP line is the ceiling for the seed only; every other
+  // keyword uses its own quote. A placeholder quote still belongs to the
+  // previously selected keyword and must not become an approval.
+  const seedSerpLineUsd = researchQuote.isPlaceholderData
+    ? undefined
+    : researchQuote.data?.lines.find((line) => /serp/i.test(line.label))?.totalUsd;
+  const serpQuoteUsd = serpQuote.isPlaceholderData ? undefined : serpQuote.data?.totalUsd;
+  const serpMaxUsd = selectedKeyword === params.q ? seedSerpLineUsd ?? serpQuoteUsd : serpQuoteUsd;
+  const serpDeepMaxUsd = serpDeepQuote.isPlaceholderData ? undefined : serpDeepQuote.data?.totalUsd;
   const approvedSerpMaxUsd = serpApproval?.keyword === selectedKeyword && serpApproval.depth === serpDepth
     ? serpApproval.maxUsd
     : (serpDepth === 20 ? serpMaxUsd : serpDeepMaxUsd);
-  const serpInput = selectedKeyword && rows.length && !research.data?.notCached ? {
+  // In live mode a request without maxUsd is refused (400 approval_required);
+  // wait for this keyword's quote instead of sending one.
+  const serpAwaitingQuote = serpLiveMode && approvedSerpMaxUsd === undefined;
+  const serpInput = selectedKeyword && rows.length && !research.data?.notCached && !serpAwaitingQuote ? {
     brand_key: brandKey,
     keyword: selectedKeyword,
     locationCode: params.loc,
     languageCode: location?.languageCode ?? "en",
     depth: serpDepth,
     cacheOnly: !serpLiveMode,
-    ...(serpLiveMode && approvedSerpMaxUsd !== undefined ? { maxUsd: approvedSerpMaxUsd } : {}),
+    ...(serpLiveMode ? { maxUsd: approvedSerpMaxUsd } : {}),
   } : null;
   const serp = useKeywordSerpAnalysis(serpInput);
 
@@ -203,7 +213,7 @@ export function useKeywordResearchController() {
     setSelectedKeyword, selectedKeywords, toggleSelected, clearSelectedKeywords, filtersOpen, setFiltersOpen,
     mobileTab, setMobileTab, pageSize, setPageSize, page, setPage,
     liveMode: researchLiveMode, runSearch, runSerp, runSerpDeep, showSerpTop20,
-    serp, serpQuote, serpDeepQuote, serpMaxUsd, serpDeepMaxUsd, serpDepth, serpTop20Result, retryResearch,
+    serp, serpPending: serp.isFetching || Boolean(selectedKeyword && serpAwaitingQuote), serpQuote, serpDeepQuote, serpMaxUsd, serpDeepMaxUsd, serpDepth, serpTop20Result, retryResearch,
     priceChanged, setPriceChanged, history, tabs,
   };
 }
