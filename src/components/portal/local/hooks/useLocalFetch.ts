@@ -30,6 +30,24 @@ export function useLocalFetch(
   const queryClient = useQueryClient();
   const startTimesRef = useRef<Record<string, number>>({});
 
+  const historyQuery = useQuery<{ fetches: FetchSummary[] }>({
+    queryKey: keys.localFetches(brandKey, businessId ?? null, kind ?? null),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (businessId) params.set("businessId", businessId);
+      if (kind) params.set("kind", kind);
+      return fetchJson<{ fetches: FetchSummary[] }>(
+        withBrand(`/api/customer/local/fetches?${params.toString()}`, brandKey)
+      );
+    },
+    enabled: Boolean(brandKey && businessId),
+  });
+
+  // With no fetch in the URL, show the latest collection: the "Earlier
+  // collections" select already displays it as selected.
+  const routeFetchId = fetchId;
+  fetchId = routeFetchId ?? historyQuery.data?.fetches[0]?.id ?? null;
+
   const fetchQuery = useServerPacedQuery<FetchView>({
     queryKey: keys.localFetch(brandKey, fetchId ?? ""),
     queryFn: () =>
@@ -54,19 +72,6 @@ export function useLocalFetch(
         });
       }
     },
-  });
-
-  const historyQuery = useQuery<{ fetches: FetchSummary[] }>({
-    queryKey: keys.localFetches(brandKey, businessId ?? null, kind ?? null),
-    queryFn: () => {
-      const params = new URLSearchParams();
-      if (businessId) params.set("businessId", businessId);
-      if (kind) params.set("kind", kind);
-      return fetchJson<{ fetches: FetchSummary[] }>(
-        withBrand(`/api/customer/local/fetches?${params.toString()}`, brandKey)
-      );
-    },
-    enabled: Boolean(brandKey && businessId),
   });
 
   const startMutation = useMutation({
@@ -129,7 +134,9 @@ export function useLocalFetch(
     isTimedOut,
     history: historyQuery.data?.fetches ?? [],
     isLoadingHistory: historyQuery.isLoading,
-    startFetch: startMutation.mutateAsync,
+    // The global mutation toast reports a failure; resolve null instead of
+    // rejecting so the tabs' onRun callbacks leave no unhandled rejection.
+    startFetch: (input: StartFetchInput) => startMutation.mutateAsync(input).catch(() => null),
     isStarting: startMutation.isPending,
   };
 }

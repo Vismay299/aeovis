@@ -103,7 +103,9 @@ export function LocalSeoPage({
             competitors={competitors}
             selectedBusinessId={urlState.business ?? null}
             onSelectBusinessId={(id) =>
-              setUrlState({ business: id ?? undefined })
+              // A fetch belongs to one business: keep it and the new
+              // business would show the previous business's collection.
+              setUrlState({ business: id ?? undefined, fetch: undefined })
             }
             onSaveBusiness={saveBusiness}
             onRemoveCompetitor={removeBusiness}
@@ -120,7 +122,7 @@ export function LocalSeoPage({
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => setUrlState({ tab: t.id })}
+                      onClick={() => setUrlState({ tab: t.id, fetch: t.id === activeTab ? urlState.fetch : undefined })}
                       data-status={isActive ? "active" : undefined}
                       aria-current={isActive ? "page" : undefined}
                       className={cn(

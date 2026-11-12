@@ -105,7 +105,10 @@ export function ReviewsTab({
     100: 200,
     200: null,
   };
-  const nextDepth = nextDepthMap[depth];
+  // "Collect more" steps up from the collection on screen (which may be an
+  // earlier, deeper one), not from the depth selector.
+  const shownDepth = (currentFetch?.params?.depth ?? depth) as 20 | 50 | 100 | 200;
+  const nextDepth = nextDepthMap[shownDepth] ?? null;
 
   const handleStart = async (maxUsd: number, overrideDepth?: 20 | 50 | 100 | 200) => {
     const d = overrideDepth ?? depth;
