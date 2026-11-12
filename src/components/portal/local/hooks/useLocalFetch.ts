@@ -46,7 +46,7 @@ export function useLocalFetch(
   // With no fetch in the URL, show the latest collection: the "Earlier
   // collections" select already displays it as selected.
   const routeFetchId = fetchId;
-  fetchId = routeFetchId ?? historyQuery.data?.fetches[0]?.id ?? null;
+  fetchId = routeFetchId ?? historyQuery.data?.fetches?.[0]?.id ?? null;
 
   const fetchQuery = useServerPacedQuery<FetchView>({
     queryKey: keys.localFetch(brandKey, fetchId ?? ""),
