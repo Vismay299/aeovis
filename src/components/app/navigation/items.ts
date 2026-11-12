@@ -17,6 +17,7 @@
 import {
   BookOpen,
   LayoutDashboard,
+  Link2,
   MessageSquareText,
   PenLine,
   Radar,
@@ -73,7 +74,15 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     // F13, F14, F16 and F17 add their items here.
     id: "research",
     label: "Research",
-    items: [],
+    items: [
+      {
+        id: "backlinks",
+        label: "Backlinks",
+        href: "/portal/backlinks",
+        icon: Link2,
+        flag: "backlinks",
+      },
+    ],
   },
   {
     id: "site",
