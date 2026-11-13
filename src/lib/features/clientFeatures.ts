@@ -41,6 +41,9 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "usage_page",
   "rank_tracking",
   "rank_tracking_ai_questions",
+  "question_curation",
+  "question_setup",
+  "prompt_research",
 ];
 
 export type ClientFeatureName = FeatureName;

@@ -27,17 +27,20 @@ function sampleEntry(): AuditTab {
 }
 
 test("the shipped tab registry starts with the site audit panel", () => {
-  assert.equal(AUDIT_TABS.length, 1);
+  assert.equal(AUDIT_TABS.length, 2);
   assert.equal(AUDIT_TABS[0].id, "audit");
   assert.equal(AUDIT_TABS[0].label, "Site audit");
   assert.ok(AUDIT_TABS[0].Panel);
+  assert.equal(AUDIT_TABS[1].id, "indexnow");
+  assert.equal(AUDIT_TABS[1].label, "IndexNow");
+  assert.equal(AUDIT_TABS[1].flag, "indexnow");
 });
 
 test("an F19-shaped tab satisfies AuditTab and appends without edits", () => {
   const appended: AuditTab[] = [...AUDIT_TABS, sampleEntry()];
   assert.deepEqual(
     appended.map((tab) => tab.id),
-    ["audit", "indexnow"],
+    ["audit", "indexnow", "indexnow"],
   );
   assert.equal(appended[1].flag, "indexnow");
 });
@@ -63,6 +66,9 @@ test("an F19-shaped page action satisfies AuditPageAction", () => {
   );
 });
 
-test("the shipped page-action registry is empty", () => {
-  assert.deepEqual(AUDIT_PAGE_ACTIONS, []);
+test("the shipped page-action registry carries the IndexNow action", () => {
+  assert.equal(AUDIT_PAGE_ACTIONS.length, 1);
+  assert.equal(AUDIT_PAGE_ACTIONS[0].id, "indexnow_submit");
+  assert.equal(AUDIT_PAGE_ACTIONS[0].label, "Submit to IndexNow");
+  assert.equal(AUDIT_PAGE_ACTIONS[0].flag, "indexnow");
 });
