@@ -62,6 +62,39 @@ export const ga4AccountDeleteResponse = z.looseObject({
   workspacesDisconnected: z.number(),
 });
 
+export const ga4PropertiesQuery = z.strictObject({
+  brand_key: z.string().optional(),
+});
+
+export const ga4PropertyItemSchema = z.looseObject({
+  propertyId: z.string(),
+  displayName: z.string(),
+  accountDisplayName: z.string(),
+  isSelected: z.boolean().optional(),
+});
+
+export const ga4PropertiesAccountSchema = z.looseObject({
+  grantId: z.string(),
+  email: z.string().nullable(),
+  requiresReconnect: z.boolean(),
+  propertiesUnavailable: z.boolean(),
+  properties: z.array(ga4PropertyItemSchema),
+});
+
+export const ga4PropertiesResponse = z.looseObject({
+  accounts: z.array(ga4PropertiesAccountSchema),
+});
+
+export const ga4PropertyRequest = z.strictObject({
+  brand_key: z.string().optional(),
+  grantId: z.uuid(),
+  propertyId: z.string().regex(/^properties\/\d{1,20}$/),
+});
+
+export const ga4DisconnectResponse = z.looseObject({
+  connected: z.boolean(),
+});
+
 export const contracts = [
   defineRouteContract({
     id: "customer.ga4.status.get",
@@ -178,6 +211,90 @@ export const contracts = [
           workspacesDisconnected: 2,
         },
       },
+    ],
+  }),
+  defineRouteContract({
+    id: "customer.ga4.properties.get",
+    method: "GET",
+    path: "/api/customer/ga4/properties",
+    file: "src/app/api/customer/ga4/properties/route.ts",
+    auth: "workspace",
+    query: ga4PropertiesQuery,
+    response: ga4PropertiesResponse,
+    errorCodes: ["unauthenticated", "owner_required", "feature_unavailable", "ga4_unavailable"],
+    examples: [
+      {
+        response: {
+          accounts: [
+            {
+              grantId: "f0000000-0000-0000-0000-000000000001",
+              email: "owner@example.com",
+              requiresReconnect: false,
+              propertiesUnavailable: false,
+              properties: [
+                {
+                  propertyId: "properties/123456789",
+                  displayName: "Offcult India",
+                  accountDisplayName: "Offcult",
+                  isSelected: true,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  }),
+  defineRouteContract({
+    id: "customer.ga4.property.post",
+    method: "POST",
+    path: "/api/customer/ga4/property",
+    file: "src/app/api/customer/ga4/property/route.ts",
+    auth: "workspace",
+    request: ga4PropertyRequest,
+    response: ga4StatusResponse,
+    errorCodes: [
+      "invalid_request",
+      "unauthenticated",
+      "owner_required",
+      "feature_unavailable",
+      "ga4_grant_not_found",
+      "ga4_property_not_found",
+      "ga4_reconnect_required",
+      "ga4_unavailable",
+    ],
+    examples: [
+      {
+        response: {
+          connected: true,
+          configured: true,
+          canManage: true,
+          currentUserHasGrant: true,
+          connectorIsMember: true,
+          grantStatus: "active",
+          property: {
+            id: "properties/123456789",
+            displayName: "Offcult India",
+            timeZone: "Asia/Kolkata",
+            currencyCode: "INR",
+            accountDisplayName: "Offcult",
+          },
+          connectedByEmail: "owner@example.com",
+          connectedAt: "2026-10-22T09:00:00.000Z",
+        },
+      },
+    ],
+  }),
+  defineRouteContract({
+    id: "customer.ga4.disconnect.delete",
+    method: "DELETE",
+    path: "/api/customer/ga4",
+    file: "src/app/api/customer/ga4/route.ts",
+    auth: "workspace",
+    response: ga4DisconnectResponse,
+    errorCodes: ["unauthenticated", "owner_required", "feature_unavailable", "ga4_unavailable"],
+    examples: [
+      { response: { connected: false } },
     ],
   }),
 ];

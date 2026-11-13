@@ -4,6 +4,7 @@ import { toErrorResponse } from "../../../../lib/http/errors.ts";
 import { isFeatureEnabled } from "../../../../lib/features/flags.ts";
 import { isGa4Configured } from "../../../../lib/ga4/config.ts";
 import { listGrantsForUser } from "../../../../lib/ga4/grants.ts";
+import { disconnect } from "../../../../lib/ga4/connection.ts";
 import { ga4StatusQuery } from "../../../../lib/ga4/ga4.contract.ts";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export type Ga4RouteDeps = RequireWorkspaceDeps & {
   isFeatureEnabled?: typeof isFeatureEnabled;
   isGa4Configured?: typeof isGa4Configured;
   listGrantsForUser?: typeof listGrantsForUser;
+  disconnect?: typeof disconnect;
 };
 
 function json(data: unknown, status = 200): Response {
@@ -131,6 +133,43 @@ export async function GET(
       connectedByEmail: connection.connected_account_email || null,
       connectedAt: connection.connected_at || connection.created_at,
     });
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  _ctx?: unknown,
+  deps?: Ga4RouteDeps,
+): Promise<Response> {
+  try {
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      rawBody = {};
+    }
+    const brandKey = (rawBody && typeof rawBody === "object" ? (rawBody as any).brand_key : undefined) as string | undefined;
+
+    const workspace = await requireWorkspace(
+      request,
+      { brandKey, role: "owner" },
+      deps,
+    );
+
+    const featureCheck = deps?.isFeatureEnabled ?? isFeatureEnabled;
+    if (!(await featureCheck("ga4", workspace.brandKey))) {
+      throw new AppError(404, "feature_unavailable", "This page is not available for your workspace yet.");
+    }
+
+    const disconnecter = deps?.disconnect ?? disconnect;
+    await disconnecter(
+      workspace.admin,
+      { brandKey: workspace.brandKey, user: workspace.user, role: workspace.role },
+    );
+
+    return json({ connected: false });
   } catch (err) {
     return toErrorResponse(err);
   }
