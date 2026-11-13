@@ -32,6 +32,7 @@ import {
 import "../../../../../lib/pricing/actions/index.ts";
 import { createLabsClient } from "../../../../../lib/providers/dataforseo/labs.ts";
 import { createGoogleAdsClient } from "../../../../../lib/providers/dataforseo/google-ads.ts";
+import { assertLocalResearchLocation } from "../../../../../lib/keywords/localVolume.ts";
 import { appendResearch } from "../../../../../lib/projectContext/service.ts";
 import { toResearchError } from "../../../../../lib/research/providerErrors.ts";
 import { keepAlive as defaultKeepAlive } from "../../../../../lib/keepAlive.js";
@@ -45,6 +46,7 @@ export type ResearchRouteDeps = RequireWorkspaceDeps & {
   labs?: ResearchDeps["labs"];
   ads?: ResearchDeps["ads"];
   upsertMetrics?: ResearchDeps["upsertMetrics"];
+  assertLocalLocation?: ResearchDeps["assertLocalLocation"];
   requireApprovedPrice?: typeof requireApprovedPrice;
   appendResearch?: typeof appendResearch;
   cacheDeps?: CacheDeps;
@@ -199,6 +201,11 @@ export async function POST(
         labs,
         ads,
         upsertMetrics,
+        // F13-AC-20: an area outside the country registry is refused before
+        // any paid call.
+        assertLocalLocation:
+          deps?.assertLocalLocation ??
+          ((code, name) => assertLocalResearchLocation(code, name)),
         requestId: input.requestId ?? crypto.randomUUID(),
         maxUsd: approval.approvedMaxUsd,
         brandKey: workspace.brandKey,

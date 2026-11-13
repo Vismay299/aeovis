@@ -9,6 +9,7 @@ import {
   getKeywordDataProvider,
   LOCATION_OPTIONS,
   getIsoCountryCode,
+  formatLocationLabel,
 } from "../../../shared/keyword-locations.ts";
 import { fetchSerpLocationsForCountry } from "../../providers/dataforseo/serp-locations.ts";
 import { normalizeKeyword } from "../../keywords/helpers.ts";
@@ -41,6 +42,7 @@ export const serpRunActionInput = z.strictObject({
 export type KeywordQuoteDeps = {
   brandHost?: (brandKey: string) => Promise<string>;
   findRecentResearch?: typeof findRecentResearch;
+  fetchSerpLocations?: typeof fetchSerpLocationsForCountry;
 };
 
 async function loadBrandHost(
@@ -79,9 +81,9 @@ export async function estimateKeywordResearch(
 
   if (input.locationName) {
     try {
-      const locations = await fetchSerpLocationsForCountry(
-        getIsoCountryCode(market.locationCode),
-      );
+      const locations = await (
+        deps?.fetchSerpLocations ?? fetchSerpLocationsForCountry
+      )(getIsoCountryCode(market.locationCode));
       if (!locations.some((loc) => loc.locationName === input.locationName)) {
         const country =
           LOCATION_OPTIONS.find((opt) => opt.code === market.locationCode)
@@ -95,7 +97,7 @@ export async function estimateKeywordResearch(
           warnings: [],
           blocked: {
             code: "unknown_location",
-            message: `"${input.locationName}" is not a city, county, or region we can find in ${country}.`,
+            message: `"${formatLocationLabel(input.locationName)}" is not a city, county, or region we can find in ${country}.`,
           },
         };
       }
