@@ -1799,3 +1799,12 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - Status: in repo; NOT YET APPLIED to production. Apply after migration 110 and before deploying F15 phase 2.
 - Adds service-role-only keyword add, scheduler claim, run and spend guards, snapshot/result queries, tracker summaries, and retention pruning functions.
 - Verify with scripts/qa/check-f15-db.mjs against a loopback _qa database. Never run this harness against production.
+
+## `065_f06_exports.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply before deploying F06 phase 3.
+- **Additive only.** Creates the private Storage bucket `exports` (public = false, 25 MiB per object, MIME types `text/csv` and `application/json`) and the `export_requests` audit / hourly-rate-limit / retention table with RLS enabled. Customers may only `SELECT` their own workspace's rows; `anon` is revoked. No `storage.objects` policy is created, so the bucket is service-role only and customers receive one-hour signed URLs.
+- **Pre-check:** `select to_regclass('public.export_requests');` returns null.
+- **Applied-check:** `select to_regclass('public.export_requests');` returns `export_requests`; `select public, file_size_limit from storage.buckets where id = 'exports';` returns one row with `f` and `26214400`; `select count(*) from pg_constraint where conname like 'export_requests%';` returns 5.
+- **Rollback:** leaving 065 in place after reverting the phase-3 code is harmless (unused table and empty bucket). Objects are removed within two hours by `exports.retention` once the job runs; otherwise delete the bucket contents through the dashboard.
+- **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f06-db.mjs`. Never run that harness against production.

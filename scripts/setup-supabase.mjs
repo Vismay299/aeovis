@@ -584,6 +584,17 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "rank_config_summaries" },
     { kind: "function", name: "prune_rank_tracking" },
   ],
+  "065_f06_exports.sql": [
+    { kind: "bucket", name: "exports" },
+    { kind: "table", name: "export_requests" },
+    { kind: "index", name: "export_requests_brand_created_idx" },
+    { kind: "index", name: "export_requests_cleanup_idx" },
+    { kind: "constraint", name: "export_requests_kind_ck" },
+    { kind: "constraint", name: "export_requests_format_ck" },
+    { kind: "constraint", name: "export_requests_status_ck" },
+    { kind: "constraint", name: "export_requests_counts_ck" },
+    { kind: "constraint", name: "export_requests_path_ck" },
+  ],
 };
 
 /**

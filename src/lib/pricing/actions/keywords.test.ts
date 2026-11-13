@@ -19,6 +19,15 @@ function fakeContext(brandKey = "brand-test"): PricingContext {
   };
 }
 
+const austinRegistry = async () => [
+  {
+    locationCode: 1026201,
+    locationName: "Austin,Texas,United States",
+    locationType: "City",
+    displayLabel: "Austin, Texas, United States",
+  },
+];
+
 describe("keywords priced actions", () => {
   it("worked example matches $0.0755 total and $0.0455 expected for India defaults", async () => {
     // Offcult, India (2356), "oversized t shirt", defaults: 150 auto
@@ -133,13 +142,56 @@ describe("keywords priced actions", () => {
         clickstream: false,
         groupKeywords: false,
       },
+      { fetchSerpLocations: austinRegistry },
     );
 
+    assert.equal(quote.blocked, null);
     const localLine = quote.lines.find(
       (l) => l.label === "Local volume for Austin,Texas,United States",
     );
     assert.ok(localLine);
     assert.equal(localLine?.totalUsd, 0.09);
+  });
+
+  it("blocks an area that is not in the country registry (unknown_location)", async () => {
+    const quote = await estimateKeywordResearch(
+      fakeContext(),
+      {
+        keyword: "coffee shop",
+        locationCode: 2840,
+        languageCode: "en",
+        locationName: "Atlantis,Texas,United States",
+        resultLimit: 150,
+        mode: "auto",
+        clickstream: false,
+        groupKeywords: false,
+      },
+      { fetchSerpLocations: austinRegistry },
+    );
+    assert.equal(quote.blocked?.code, "unknown_location");
+    assert.equal(
+      quote.blocked?.message,
+      '"Atlantis, Texas, United States" is not a city, county, or region we can find in United States.',
+    );
+    assert.deepEqual(quote.lines, []);
+  });
+
+  it("does not block pricing when the registry cannot be loaded", async () => {
+    const quote = await estimateKeywordResearch(
+      fakeContext(),
+      {
+        keyword: "coffee shop",
+        locationCode: 2840,
+        languageCode: "en",
+        locationName: "Austin,Texas,United States",
+        resultLimit: 150,
+        mode: "auto",
+        clickstream: false,
+        groupKeywords: false,
+      },
+      { fetchSerpLocations: async () => { throw new Error("registry down"); } },
+    );
+    assert.equal(quote.blocked, null);
   });
 
   it("recent_research warning text from a stubbed findRecentResearch", async () => {

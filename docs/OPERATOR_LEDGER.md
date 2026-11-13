@@ -433,6 +433,8 @@ team invite redemption, and sync job lease recovery. Historical scans/GSC rows
 remain unassigned until an operator confirms ownership. Apply through 026 before
 deploying the repaired customer APIs.
 
+`065_f06_exports` is additive and must be applied before deploying F06 phase 3. It creates the private Storage bucket `exports` (25 MiB per object, `text/csv` and `application/json` only) and the `export_requests` audit/rate-limit table with RLS, two indexes and five constraints. No `storage.objects` policy is created: only the service role writes or reads objects, and customers receive one-hour signed URLs. Objects older than two hours are removed through the Storage API by the `exports.retention` periodic, and rows older than 90 days are pruned. Verified against loopback PostgreSQL by `scripts/qa/check-f06-db.mjs` and `tests/customer-uat.sql`. It is **NOT applied to production**.
+
 `npm run setup:db` applies them in filename order, one transaction per file,
 recording each in the `schema_migrations` ledger. The `BEGIN`, the ledger
 `INSERT` and the `COMMIT` all sit inside a single per-file `try` in

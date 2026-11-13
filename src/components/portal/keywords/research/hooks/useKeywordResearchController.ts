@@ -45,6 +45,8 @@ export function useKeywordResearchController() {
   const [locationPref, setLocationPref] = useLocalPref("keyword-location", z.number().int().positive(), market.locationCode, { brandKey });
   const [params, setParams] = useUrlSearchState(searchSchema, { ...defaults, loc: locationPref });
   const [draft, setDraft] = useState(params.q);
+  // F13 P8: the city picker edits a draft; a search commits it to `locName`.
+  const [areaDraft, setAreaDraft] = useState<string | undefined>(params.locName || undefined);
   const [researchLiveMode, setResearchLiveMode] = useState(false);
   const [researchApprovedMaxUsd, setResearchApprovedMaxUsd] = useState<number | undefined>();
   const [serpLiveMode, setSerpLiveMode] = useState(false);
@@ -63,6 +65,7 @@ export function useKeywordResearchController() {
   const tabs = useKeywordSearchTabs(brandKey);
 
   useEffect(() => { setDraft(params.q); setSelectedKeyword(params.q); }, [params.q]);
+  useEffect(() => { setAreaDraft(params.locName || undefined); }, [params.locName]);
   useEffect(() => {
     setResearchLiveMode(false);
     setResearchApprovedMaxUsd(undefined);
@@ -84,8 +87,12 @@ export function useKeywordResearchController() {
       mode: params.mode,
       clickstream: params.cs,
       groupKeywords: params.grp,
+      ...(areaDraft ? { locationName: areaDraft } : {}),
     },
   }, { enabled: Boolean(brandKey) });
+  const localVolumeUsd = areaDraft && !researchQuote.isPlaceholderData
+    ? researchQuote.data?.lines.find((line) => line.label.startsWith("Local volume"))?.totalUsd
+    : undefined;
 
   const queryInput = useMemo(() => params.q ? ({
     brand_key: brandKey,
@@ -96,6 +103,7 @@ export function useKeywordResearchController() {
     mode: params.mode,
     clickstream: params.cs,
     groupKeywords: params.grp,
+    ...(params.locName ? { locationName: params.locName } : {}),
     cacheOnly: !researchLiveMode,
     ...(researchLiveMode && researchApprovedMaxUsd !== undefined ? { maxUsd: researchApprovedMaxUsd } : {}),
   }) : null, [brandKey, location?.languageCode, locationPref, params, researchApprovedMaxUsd, researchLiveMode]);
@@ -104,7 +112,7 @@ export function useKeywordResearchController() {
 
   useEffect(() => {
     if (!params.q || !research.data || research.data.notCached || research.isError) return;
-    const key = `${brandKey}:${params.q}:${params.loc}`;
+    const key = `${brandKey}:${params.q}:${params.loc}:${params.locName}`;
     if (lastHistoryKey.current === key) return;
     lastHistoryKey.current = key;
     const entry = { keyword: params.q, locationCode: params.loc, locationName: params.locName || null };
@@ -162,8 +170,8 @@ export function useKeywordResearchController() {
     const keyword = keywords[0];
     if (!keyword) return;
     for (const tabKeyword of keywords) {
-      const input = { keyword: tabKeyword, locationCode: locationPref, locationName: params.locName || null };
-      tabs.openTab({ label: params.locName ? `${tabKeyword} · ${params.locName}` : tabKeyword, input });
+      const input = { keyword: tabKeyword, locationCode: locationPref, locationName: areaDraft ?? null };
+      tabs.openTab({ label: areaDraft ? `${tabKeyword} · ${areaDraft}` : tabKeyword, input });
     }
     const seedSerpCeiling = researchQuote.data?.lines.find((line) => /serp/i.test(line.label))?.totalUsd;
     setResearchApprovedMaxUsd(maxUsd);
@@ -176,7 +184,7 @@ export function useKeywordResearchController() {
     setSelectedKeyword(keyword);
     setPage(1);
     setSelectedKeywords([]);
-    setParams({ q: keyword, loc: locationPref, locName: "", kLimit: params.kLimit, mode: params.mode, cs: params.cs, grp: params.grp }, { replace: false });
+    setParams({ q: keyword, loc: locationPref, locName: areaDraft ?? "", kLimit: params.kLimit, mode: params.mode, cs: params.cs, grp: params.grp }, { replace: false });
   };
 
   const runSerp = (maxUsd: number) => {
@@ -208,7 +216,7 @@ export function useKeywordResearchController() {
   const featureEnabled = features?.keyword_research === true;
 
   return {
-    brandKey, brand, featureEnabled, params, setParams, draft, setDraft, locationPref,
+    brandKey, brand, featureEnabled, params, setParams, draft, setDraft, areaDraft, setAreaDraft, localVolumeUsd, locationPref,
     setLocationPref, location, research, researchQuote, rows, selectedKeyword,
     setSelectedKeyword, selectedKeywords, toggleSelected, clearSelectedKeywords, filtersOpen, setFiltersOpen,
     mobileTab, setMobileTab, pageSize, setPageSize, page, setPage,

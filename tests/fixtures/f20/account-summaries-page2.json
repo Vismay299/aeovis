@@ -1,0 +1,9 @@
+{
+  "accountSummaries": [
+    {
+      "account": "accounts/2",
+      "displayName": "Client",
+      "propertySummaries": [{ "property": "properties/22", "displayName": "Site B" }]
+    }
+  ]
+}
