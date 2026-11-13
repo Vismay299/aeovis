@@ -10,6 +10,10 @@ const SiteAuditPanel = lazy(
   () => import("./SiteAuditPanel.tsx"),
 ) as unknown as ComponentType<{ brandKey: string; auditId: string | null }>;
 
+const IndexNowAuditTabPanel = lazy(
+  () => import("../indexnow/IndexNowAuditTab.tsx"),
+) as unknown as ComponentType<{ brandKey: string; auditId: string | null }>;
+
 export type AuditTab = {
   id: string;
   label: string;
@@ -19,4 +23,5 @@ export type AuditTab = {
 
 export const AUDIT_TABS: AuditTab[] = [
   { id: "audit", label: "Site audit", Panel: SiteAuditPanel },
+  { id: "indexnow", label: "IndexNow", flag: "indexnow", Panel: IndexNowAuditTabPanel },
 ];
