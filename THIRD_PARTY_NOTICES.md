@@ -535,6 +535,24 @@ SOFTWARE.
 - `src/components/portal/keywords/research/hooks/useKeywordSearchTabs.ts` (from `openseo:src/client/features/search-tabs/useSearchTabs.ts`, `openseo:src/client/features/keywords/page/KeywordResearchPage.tsx`)
 - `src/components/portal/keywords/research/hooks/useKeywordSerpAnalysis.ts` (from `openseo:src/client/features/keywords/hooks/useKeywordSerpAnalysis.ts`)
 
+### F13 Phase 5 ports (saved-keywords page)
+- `src/components/portal/keywords/saved/SavedKeywordsPage.tsx` (from `openseo:src/routes/_app/p/$projectId/saved.tsx`, `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsHeader.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsTable.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsFilters.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsFilterPanel.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsTagFilter.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/ManageTagRow.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/TagChip.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsBulkActionBar.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsBulkTagsModal.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsModals.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/RefreshStatsStatus.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/hooks/useSavedKeywordsQuery.ts` (from `openseo:src/routes/_app/p/$projectId/saved.tsx`, `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/hooks/useSavedKeywordsExport.ts` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/hooks/useTagManage.ts` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/hooks/useRefreshStats.ts` (from `openseo:src/client/features/saved-keywords/**`)
+
 ### F15 Phase 1 ports
 - src/shared/rank-tracking.ts
 - src/shared/rank-tracking-filters.ts
