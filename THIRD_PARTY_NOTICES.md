@@ -593,6 +593,7 @@ SOFTWARE.
 - src/lib/export/serverCsv.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
 - src/lib/export/serverExport.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
 - src/lib/export/kinds/workspaceAnswers.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/lib/export/kinds/siteAudit.ts (from `src/client/features/audit/results/export.ts`)
 - src/app/api/customer/exports/route.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
 
 ### F18 Phase 4 ports
