@@ -11,7 +11,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { Copy, FileDown, Save, Sheet } from "lucide-react";
+import { toast } from "sonner";
 import { TablePagination } from "@/components/app/table/TablePagination";
+import {
+  TableBulkActionBar,
+  TableBulkActionButton,
+  TableBulkExportMenu,
+} from "@/components/app/table/TableBulkActionBar";
 import { useExportRows } from "@/components/app/export/useExportRows";
 import { QueryError } from "@/components/app/QueryState";
 import type { ExportFormat } from "@/lib/export/exportRows";
@@ -37,6 +44,7 @@ import { DomainPriceChangeReview, domainPriceChangeFromError } from "./DomainPri
 import { DomainKeywordsTable } from "./DomainKeywordsTable";
 import { DomainPageLink } from "./DomainPageLink";
 import { DomainTableToolbar } from "./DomainTableToolbar";
+import { SaveDomainKeywordsDialog } from "./SaveDomainKeywordsDialog";
 import { useDomainKeywordsQuery } from "./hooks/useDomainKeywordsQuery";
 import { useDomainFilterPreferences } from "./hooks/useDomainFilterPreferences";
 
@@ -71,7 +79,17 @@ type Props = {
   routeState: DomainOverviewRouteState;
   tabs: ReactNode;
   liveMode: boolean;
-  canSaveKeywords?: boolean;
+  /** `keyword_research`: when off, the bulk-save action is hidden. */
+  canSaveKeywords: boolean;
+  /** False when the overview has no data: the bulk-save action is disabled. */
+  hasData: boolean;
+  /** The market chosen in the search card, which may not be the shown one. */
+  formLocationCode: number;
+  formLanguageCode: string;
+  /** The shown market's country, for the disabled title. */
+  marketCountry: string;
+  /** The shown market's location code, sent with a save. */
+  shownLocationCode: number;
   setSearchParams: (updates: SearchUpdate) => void;
   onSortClick: (sort: DomainSortMode) => void;
   onPageChange: (nextPage: number) => void;
@@ -86,6 +104,12 @@ export function KeywordsTab({
   routeState,
   tabs,
   liveMode,
+  canSaveKeywords,
+  hasData,
+  formLocationCode,
+  formLanguageCode,
+  marketCountry,
+  shownLocationCode,
   setSearchParams,
   onSortClick,
   onPageChange,
@@ -95,6 +119,7 @@ export function KeywordsTab({
   const [selectedKeywords, setSelectedKeywords] = useState<Set<string>>(
     () => new Set(),
   );
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [overBudgetLimit, setOverBudgetLimit] = useState<number | null>(null);
   const priceApprovalContext = JSON.stringify([
     brandKey,
@@ -260,6 +285,96 @@ export function KeywordsTab({
     [hostname, rows, runExport],
   );
 
+  const selectedList = useMemo(
+    () => [...selectedKeywords],
+    [selectedKeywords],
+  );
+
+  const selectedRows = useMemo(
+    () => rows.filter((row) => selectedKeywords.has(row.keyword)),
+    [rows, selectedKeywords],
+  );
+
+  // Saving is refused when the form's market no longer matches the shown one,
+  // or when there is nothing to save for the shown market.
+  const saveDisabled = formLocationCode !== shownLocationCode || !hasData;
+  const saveDisabledTitle = `Change the location back to ${marketCountry} or run the lookup again to save.`;
+
+  const handleCopyKeywords = useCallback(async () => {
+    const keywords = [...selectedKeywords];
+    if (keywords.length === 0) return;
+    try {
+      if (
+        typeof navigator === "undefined" ||
+        !navigator.clipboard?.writeText
+      ) {
+        throw new Error("Clipboard API unavailable");
+      }
+      await navigator.clipboard.writeText(keywords.join("\n"));
+      toast.success(`${keywords.length} keywords copied`);
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
+  }, [selectedKeywords]);
+
+  const handleBulkExport = useCallback(
+    (format: ExportFormat) => {
+      const table = keywordsToTable(selectedRows);
+      void runExport({
+        format,
+        feature: "domain_overview",
+        headers: table.headers,
+        rows: table.rows,
+        filename: `${hostname || "domain"}-keywords`,
+        scope: "selection",
+      });
+    },
+    [hostname, runExport, selectedRows],
+  );
+
+  const bulkBar = (
+    <TableBulkActionBar
+      selectedCount={selectedKeywords.size}
+      selectedLabel="selected"
+      onClear={() => setSelectedKeywords(new Set())}
+      actions={
+        <>
+          {canSaveKeywords ? (
+            <span title={saveDisabled ? saveDisabledTitle : undefined}>
+              <TableBulkActionButton
+                icon={<Save data-icon="inline-start" />}
+                onClick={() => setSaveDialogOpen(true)}
+                disabled={saveDisabled}
+              >
+                Save keywords
+              </TableBulkActionButton>
+            </span>
+          ) : null}
+          <TableBulkActionButton
+            icon={<Copy data-icon="inline-start" />}
+            onClick={() => void handleCopyKeywords()}
+          >
+            Copy keywords
+          </TableBulkActionButton>
+          <TableBulkExportMenu
+            actions={[
+              {
+                label: "Export to Sheets",
+                icon: <Sheet data-icon="inline-start" />,
+                onClick: () => handleBulkExport("sheets"),
+              },
+              {
+                label: "Export CSV",
+                icon: <FileDown data-icon="inline-start" />,
+                onClick: () => handleBulkExport("csv"),
+              },
+            ]}
+          />
+        </>
+      }
+    />
+  );
+
   const filterPanel = (
     <DomainFilterPanel
       activeFilterCount={activeFilterCount}
@@ -297,6 +412,8 @@ export function KeywordsTab({
         </span>
       </DomainTableToolbar>
 
+      {bulkBar}
+
       {queryError ? <div className="px-4 py-3">{queryError}</div> : null}
 
       {(!keywordsQuery.isError || keywordsQuery.data) ? <DomainKeywordsTable
@@ -325,6 +442,16 @@ export function KeywordsTab({
           renderPageButton={DomainPageLink}
         />
       </div> : null}
+
+      {saveDialogOpen ? (
+        <SaveDomainKeywordsDialog
+          brandKey={brandKey}
+          keywords={selectedList}
+          locationCode={shownLocationCode}
+          languageCode={formLanguageCode}
+          onClose={() => setSaveDialogOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
