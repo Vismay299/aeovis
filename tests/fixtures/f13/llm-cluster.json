@@ -1,0 +1,24 @@
+{
+  "model": "google/gemma-4-31b-it:free",
+  "usd": 0.000234,
+  "object": {
+    "clusters": [
+      {
+        "name": "Oversized tees",
+        "intent": "commercial",
+        "priority": "high",
+        "targetPage": "https://example.com/oversized-tees",
+        "rationale": "Buyers comparing oversized tee styles for purchase.",
+        "keywordIndexes": [0, 1, 2, 3, 4, 5, 6, 7]
+      },
+      {
+        "name": "Tee outfit ideas",
+        "intent": "informational",
+        "priority": "medium",
+        "targetPage": null,
+        "rationale": "Styling questions one guide page could answer.",
+        "keywordIndexes": [8, 9, 10, 11]
+      }
+    ]
+  }
+}
