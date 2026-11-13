@@ -1,0 +1,18 @@
+{
+  "status_code": 20000,
+  "tasks": [
+    {
+      "status_code": 20000,
+      "cost": 0,
+      "result": [
+        {
+          "items": [
+            { "type": "organic", "rank_group": 1, "rank_absolute": 1, "domain": "other.com", "url": "https://other.com/x" },
+            { "type": "organic", "rank_group": 5, "rank_absolute": 5, "domain": "example.com", "url": "https://example.com/found" },
+            { "type": "people_also_ask", "text": "x" }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -16,3 +16,4 @@ import "../keywords/jobs.ts";
 import "../workers/queuedCollection.jobs.ts";
 import "../local/jobs.ts";
 import "../export/retention.ts";
+import "../rank-tracking/jobs.ts";

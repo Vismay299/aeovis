@@ -1,0 +1,10 @@
+{
+  "status_code": 20000,
+  "tasks": [
+    { "id": "task-1", "status_code": 20100, "status_message": "Task Created", "cost": 0.0006, "data": { "tag": "kw-1:mobile" } },
+    { "id": "task-2", "status_code": 20100, "status_message": "Task Created", "cost": 0.0006, "data": { "tag": "kw-2:mobile" } },
+    { "id": "task-3", "status_code": 20100, "status_message": "Task Created", "cost": 0.0006, "data": { "tag": "kw-3:desktop" } },
+    { "status_code": 40501, "status_message": "Invalid Field:'keyword'.", "cost": 0, "data": { "tag": "kw-4:mobile" } },
+    { "id": "task-5", "status_code": 20100, "status_message": "Task Created", "cost": 0.0006, "data": {} }
+  ]
+}
