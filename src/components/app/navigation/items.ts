@@ -16,6 +16,7 @@
 
 import {
   BookOpen,
+  Gauge,
   Globe,
   LayoutDashboard,
   MapPin,
@@ -164,6 +165,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         label: "Workspace settings",
         href: "/portal/settings",
         icon: Settings,
+      },
+      {
+        id: "usage",
+        label: "Usage",
+        href: "/portal/usage",
+        icon: Gauge,
+        flag: "usage_page",
       },
     ],
   },
