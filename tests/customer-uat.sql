@@ -22,6 +22,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/041_f01_spend.sql
 \ir ../supabase/migrations/043_f01_jobs_cron.sql
 \ir ../supabase/migrations/065_f06_exports.sql
+\ir ../supabase/migrations/066_f06_scan_history_columns.sql
 \ir ../supabase/migrations/070_f07_project_memory.sql
 \ir ../supabase/migrations/075_f08_workspace_questions.sql
 \ir ../supabase/migrations/076_f08_question_backfill.sql
@@ -679,5 +680,23 @@ DO $f06$ BEGIN
 END $f06$;
 RESET ROLE;
 -- End F06 tenant check.
+
+-- F06 phase 5: migration 066 derived columns. Trigger derives engines /
+-- collection_partial / started_by / listed_at on insert. Verify on a scan that
+-- carries raw_results engines and a data_source_issue slice.
+RESET ROLE;
+INSERT INTO public.scans(brand, url, brand_key, raw_results, platform, scanned_at, origin_job_id)
+VALUES ('%','https://same.example','10000000-0000-0000-0000-000000000001',
+        '{"engines":{"chatgpt":{"data_source_issue":true},"gemini":{}}}'::jsonb,
+        'multi', '2026-10-02T09:00:00Z', NULL);
+DO $f06p5$ BEGIN
+  IF (SELECT count(*) FROM public.scans WHERE brand_key='10000000-0000-0000-0000-000000000001' AND engines @> ARRAY['chatgpt','gemini']::text[]) <> 1
+     OR (SELECT count(*) FROM public.scans WHERE brand_key='10000000-0000-0000-0000-000000000001' AND collection_partial = true) < 1
+     OR (SELECT count(*) FROM public.scans WHERE brand_key='10000000-0000-0000-0000-000000000001' AND started_by='manual') < 1
+     OR (SELECT count(*) FROM public.scans WHERE brand_key='10000000-0000-0000-0000-000000000001' AND listed_at IS NULL) <> 0
+  THEN RAISE EXCEPTION 'F06 phase 5 derived columns were not populated by the trigger'; END IF;
+END $f06p5$;
+RESET ROLE;
+-- End F06 phase 5 tenant check.
 ROLLBACK;
 

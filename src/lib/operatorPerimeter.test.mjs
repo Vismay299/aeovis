@@ -332,6 +332,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/scan",
       "/api/customer/scan/mock",
       "/api/customer/scan/report/[scan_id]",
+      // F06 phase 5 - server-side Scans history. Self-gated via requireWorkspace.
+      "/api/customer/scans/history",
       "/api/customer/schedule",
       "/api/customer/team",
       "/api/customer/usage",
