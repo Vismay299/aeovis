@@ -103,6 +103,7 @@ export const usageResponse = z.looseObject({
     knownUsd: z.number().min(0),
     unknownUsd: z.number().min(0),
     calls: z.int().min(0),
+    unknownCalls: z.int().min(0).optional(),
   }),
   days: z.array(
     z.looseObject({
