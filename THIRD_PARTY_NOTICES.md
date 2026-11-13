@@ -616,3 +616,5 @@ SOFTWARE.
 - `src/components/portal/audit/results/export.ts` (from `openseo:src/client/features/audit/results/export.ts`)
 - `src/app/portal/audit/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
 - `src/app/portal/audit/[auditId]/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
+- `src/lib/keywords/clustering.ts` (ideas only from `openseo:.agents/skills/keyword-clustering/SKILL.md`)
+- `src/app/api/customer/keywords/cluster/route.ts` (from `openseo:src/serverFunctions/keywords.ts`)
