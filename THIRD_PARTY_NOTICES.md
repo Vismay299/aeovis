@@ -544,3 +544,25 @@ SOFTWARE.
 - src/lib/rank-tracking/cost.test.ts
 - src/lib/rank-tracking/retries.test.ts
 - src/lib/rank-tracking/schedules.test.ts
+
+### F18 Phase 4 ports
+- `src/components/portal/audit/AuditDetail.tsx` (from `openseo:src/client/features/audit/AuditDetail.tsx`, `openseo:src/client/features/audit/shared.tsx`)
+- `src/components/portal/audit/ProgressCard.tsx` (from `openseo:src/client/features/audit/AuditDetail.tsx`)
+- `src/components/portal/audit/CrawlFeed.tsx` (from `openseo:src/client/features/audit/AuditDetail.tsx`)
+- `src/components/portal/audit/AuditBanners.tsx` (from `openseo:src/client/features/audit/results/ResultsView.tsx`, `openseo:src/client/features/audit/RenderingWarnings.tsx`, `openseo:src/client/features/audit/shared.tsx`)
+- `src/components/portal/audit/shared.tsx` (from `openseo:src/client/features/audit/shared.tsx`)
+- `src/components/portal/audit/AuditPage.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
+- `src/components/portal/audit/launch/LaunchView.tsx` (from `openseo:src/client/features/audit/launch/LaunchView.tsx`)
+- `src/components/portal/audit/launch/LaunchFormCard.tsx` (from `openseo:src/client/features/audit/launch/LaunchFormCard.tsx`)
+- `src/components/portal/audit/launch/AuditHistoryTable.tsx` (from `openseo:src/client/features/audit/launch/AuditHistorySection.tsx`)
+- `src/components/portal/audit/launch/useLaunchController.ts` (from `openseo:src/client/features/audit/launch/useLaunchController.ts`)
+- `src/components/portal/audit/results/ResultsView.tsx` (from `openseo:src/client/features/audit/results/ResultsView.tsx`)
+- `src/components/portal/audit/results/StatsStrip.tsx` (from `openseo:src/client/features/audit/results/ResultsView.tsx`)
+- `src/components/portal/audit/results/IssuesView.tsx` (from `openseo:src/client/features/audit/results/IssuesView.tsx`)
+- `src/components/portal/audit/results/IssueDetails.tsx` (from `openseo:src/client/features/audit/results/IssuesView.tsx`)
+- `src/components/portal/audit/results/PagesTable.tsx` (from `openseo:src/client/features/audit/results/PagesTable.tsx`, `openseo:src/client/features/audit/results/AuditResultsTableFilters.tsx`)
+- `src/components/portal/audit/results/PagesFilters.tsx` (from `openseo:src/client/features/audit/results/AuditResultsTableFilters.tsx`)
+- `src/components/portal/audit/results/PerformanceTable.tsx` (from `openseo:src/client/features/audit/results/ResultsTables.tsx`)
+- `src/components/portal/audit/results/export.ts` (from `openseo:src/client/features/audit/results/export.ts`)
+- `src/app/portal/audit/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
+- `src/app/portal/audit/[auditId]/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
