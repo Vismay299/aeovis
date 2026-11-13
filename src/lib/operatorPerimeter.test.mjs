@@ -255,6 +255,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/audit/[auditId]/pages",
       "/api/customer/audit/[auditId]/performance",
       "/api/customer/audit/[auditId]/summary",
+      "/api/customer/audit/[auditId]/lighthouse/[resultId]",
+      "/api/customer/audit/[auditId]/lighthouse/[resultId]/export",
       "/api/customer/content",
     "/api/customer/content/[id]",
     "/api/customer/context",
@@ -332,6 +334,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/scan",
       "/api/customer/scan/mock",
       "/api/customer/scan/report/[scan_id]",
+      // F06 phase 5 - server-side Scans history. Self-gated via requireWorkspace.
+      "/api/customer/scans/history",
       "/api/customer/schedule",
       "/api/customer/team",
       "/api/customer/usage",
@@ -346,6 +350,19 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       // R1.2.23 — the scan_runs retention cron. Carries its own cronAuth gate,
       // exactly like the four above.
       "/api/scan-runs/retention",
+      "/api/customer/rank-tracking/configs",
+      "/api/customer/rank-tracking/configs/[configId]",
+      "/api/customer/rank-tracking/configs/[configId]/check",
+      "/api/customer/rank-tracking/configs/[configId]/keywords",
+      "/api/customer/rank-tracking/configs/[configId]/keywords/remove",
+      "/api/customer/rank-tracking/configs/[configId]/keywords/pin",
+      "/api/customer/rank-tracking/configs/[configId]/keywords/[keywordId]/history",
+      "/api/customer/rank-tracking/configs/[configId]/metrics/refresh",
+      "/api/customer/rank-tracking/configs/[configId]/runs/latest",
+      "/api/customer/rank-tracking/configs/[configId]/results",
+      "/api/customer/rank-tracking/configs/[configId]/trend",
+      "/api/customer/rank-tracking/configs/[configId]/matrix",
+      "/api/customer/rank-tracking/suggestions",
     ].sort(),
     "only cron workers and customer-authenticated routes may bypass the operator token gate"
   );

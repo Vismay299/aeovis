@@ -21,6 +21,7 @@ test("every builder returns its documented shape", () => {
   assert.deepEqual(keys.scanStatus("a", "j1"), ["scanStatus", "a", "j1"]);
   assert.deepEqual(keys.jobStatus("a", "j1"), ["jobStatus", "a", "j1"]);
   assert.deepEqual(keys.scanReport("s1"), ["scanReport", "s1"]);
+  assert.deepEqual(keys.scanHistory("a", "input"), ["scanHistory", "a", "input"]);
   assert.deepEqual(keys.usage("a", "30d", "UTC"), ["usage", "a", "30d", "UTC"]);
   assert.deepEqual(keys.price("a", "scan", "{}"), ["price", "a", "scan", "{}"]);
   assert.deepEqual(keys.projectContext("a"), ["projectContext", "a"]);
@@ -84,6 +85,7 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.ga4Opportunities("acme", "last_28_days"),
     keys.siteAudits("acme"),
     keys.siteAuditCapabilities("acme"),
+    keys.scanHistory("acme", "scan-history-input"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {

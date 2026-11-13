@@ -626,5 +626,36 @@ SOFTWARE.
 - `src/components/portal/audit/results/export.ts` (from `openseo:src/client/features/audit/results/export.ts`)
 - `src/app/portal/audit/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
 - `src/app/portal/audit/[auditId]/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
+
+### F13 Phase 6 ports
 - `src/lib/keywords/clustering.ts` (ideas only from `openseo:.agents/skills/keyword-clustering/SKILL.md`)
 - `src/app/api/customer/keywords/cluster/route.ts` (from `openseo:src/serverFunctions/keywords.ts`)
+
+
+### F18 Phase 5 ports
+- src/lib/providers/dataforseo/lighthouse.ts (from src/server/lib/dataforseo/lighthouse.ts)
+- src/lib/audit/lighthouse.ts (from src/server/lib/audit/lighthouse.ts)
+- src/lib/audit/lighthousePayload.ts (from src/server/lib/lighthousePayload.ts, src/server/lib/lighthouseStoredPayload.ts, src/server/lib/dataforseoLighthousePayload.ts)
+- src/lib/providers/dataforseo/lighthouse.test.ts (from src/server/lib/dataforseo/lighthouse.test.ts)
+- src/lib/audit/lighthouse.test.ts (from src/server/lib/audit/lighthouse.test.ts)
+- src/lib/audit/lighthousePayload.test.ts (from src/server/lib/lighthousePayload.test.ts, src/server/lib/lighthouseStoredPayload.test.ts, src/server/lib/dataforseoLighthousePayload.test.ts)
+- src/lib/audit/lighthousePhase.test.ts (from src/server/workflows/siteAuditWorkflowPhases.test.ts)
+- src/components/portal/audit/lighthouse/LighthouseIssuesScreen.tsx (from src/client/features/lighthouse/issues/LighthouseIssuesScreen.tsx)
+- src/components/portal/audit/lighthouse/LighthouseIssuesParts.tsx (from src/client/features/lighthouse/issues/LighthouseIssuesParts.tsx)
+- src/components/portal/audit/lighthouse/LighthouseIssueRow.tsx (from src/client/features/lighthouse/issues/LighthouseIssueRow.tsx)
+- src/components/portal/audit/lighthouse/LighthouseIssuesSummary.tsx (from src/client/features/lighthouse/issues/LighthouseIssuesSummary.tsx)
+- src/components/portal/audit/lighthouse/types.ts (from src/client/features/lighthouse/issues/types.ts)
+- src/components/portal/audit/lighthouse/utils.ts (from src/client/features/lighthouse/issues/utils.tsx)
+- src/app/portal/audit/[auditId]/lighthouse/[resultId]/page.tsx (from src/routes/_app/p/$projectId/audit/issues/$resultId.tsx)
+
+### F15 Phase 2 ports
+- `src/lib/rank-tracking/service.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.ts`)
+- `src/lib/rank-tracking/runGuards.ts` (from `openseo:src/server/features/rank-tracking/services/rankCheckRunGuards.ts`)
+- `src/lib/rank-tracking/checkPaths.ts` (from `openseo:src/server/workflows/rankCheckPaths.ts`)
+- `src/lib/rank-tracking/retries.ts` (from `openseo:src/server/workflows/rankCheckRetries.ts`)
+- `src/lib/rank-tracking/checkJob.ts` (from `openseo:src/server/workflows/RankCheckWorkflow.ts`)
+- `src/lib/rank-tracking/results.ts` (from `openseo:src/server/features/rank-tracking/services/rankTrackingResults.ts`)
+- `src/lib/pricing/actions/rankTracking.ts` (from `openseo:src/shared/rank-tracking.ts`)
+- `src/lib/rank-tracking/jobs.ts` (from `openseo:src/server/features/rank-tracking/jobs`)
+- `src/lib/rank-tracking/service.test.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.test.ts`)
+- `src/lib/rank-tracking/rankTracking.contract.ts` (from `openseo:src/types/schemas/rank-tracking.ts`)

@@ -1,0 +1,7 @@
+{
+  "items": [
+    { "keyword": "oversized t shirts", "keyword_info": { "search_volume": 12100, "cpc": 0.41, "competition": 0.62 }, "keyword_properties": { "keyword_difficulty": 34 } },
+    { "keyword": "baggy t shirts", "keyword_info": { "search_volume": 9900, "cpc": 0.52, "competition": 0.71 }, "keyword_properties": { "keyword_difficulty": 41 } },
+    { "keyword": "loose fit tshirts", "keyword_info": { "search_volume": 5400, "cpc": 0.29, "competition": 0.44 }, "keyword_properties": { "keyword_difficulty": 22 } }
+  ]
+}

@@ -1,0 +1,725 @@
+{
+  "scans": [
+    {
+      "id": "scan-1",
+      "visibility_pct": null,
+      "prompts_tracked": 30,
+      "prompts_mentioned": null,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T09:00:00.000Z",
+      "created_at": "2026-10-21T09:00:00.000Z"
+    },
+    {
+      "id": "scan-2",
+      "visibility_pct": 71,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T08:00:00.000Z",
+      "created_at": "2026-10-21T08:00:00.000Z"
+    },
+    {
+      "id": "scan-3",
+      "visibility_pct": 70,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T07:00:00.000Z",
+      "created_at": "2026-10-21T07:00:00.000Z"
+    },
+    {
+      "id": "scan-4",
+      "visibility_pct": 69,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T06:00:00.000Z",
+      "created_at": "2026-10-21T06:00:00.000Z"
+    },
+    {
+      "id": "scan-5",
+      "visibility_pct": 68,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T05:00:00.000Z",
+      "created_at": "2026-10-21T05:00:00.000Z"
+    },
+    {
+      "id": "scan-6",
+      "visibility_pct": 67,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T04:00:00.000Z",
+      "created_at": "2026-10-21T04:00:00.000Z"
+    },
+    {
+      "id": "scan-7",
+      "visibility_pct": 66,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T03:00:00.000Z",
+      "created_at": "2026-10-21T03:00:00.000Z"
+    },
+    {
+      "id": "scan-8",
+      "visibility_pct": null,
+      "prompts_tracked": 30,
+      "prompts_mentioned": null,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T02:00:00.000Z",
+      "created_at": "2026-10-21T02:00:00.000Z"
+    },
+    {
+      "id": "scan-9",
+      "visibility_pct": 64,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T01:00:00.000Z",
+      "created_at": "2026-10-21T01:00:00.000Z"
+    },
+    {
+      "id": "scan-10",
+      "visibility_pct": 63,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-21T00:00:00.000Z",
+      "created_at": "2026-10-21T00:00:00.000Z"
+    },
+    {
+      "id": "scan-11",
+      "visibility_pct": 62,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T23:00:00.000Z",
+      "created_at": "2026-10-20T23:00:00.000Z"
+    },
+    {
+      "id": "scan-12",
+      "visibility_pct": 61,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T22:00:00.000Z",
+      "created_at": "2026-10-20T22:00:00.000Z"
+    },
+    {
+      "id": "scan-13",
+      "visibility_pct": 60,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T21:00:00.000Z",
+      "created_at": "2026-10-20T21:00:00.000Z"
+    },
+    {
+      "id": "scan-14",
+      "visibility_pct": 59,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T20:00:00.000Z",
+      "created_at": "2026-10-20T20:00:00.000Z"
+    },
+    {
+      "id": "scan-15",
+      "visibility_pct": null,
+      "prompts_tracked": 30,
+      "prompts_mentioned": null,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T19:00:00.000Z",
+      "created_at": "2026-10-20T19:00:00.000Z"
+    },
+    {
+      "id": "scan-16",
+      "visibility_pct": 57,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T18:00:00.000Z",
+      "created_at": "2026-10-20T18:00:00.000Z"
+    },
+    {
+      "id": "scan-17",
+      "visibility_pct": 56,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T17:00:00.000Z",
+      "created_at": "2026-10-20T17:00:00.000Z"
+    },
+    {
+      "id": "scan-18",
+      "visibility_pct": 55,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T16:00:00.000Z",
+      "created_at": "2026-10-20T16:00:00.000Z"
+    },
+    {
+      "id": "scan-19",
+      "visibility_pct": 54,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T15:00:00.000Z",
+      "created_at": "2026-10-20T15:00:00.000Z"
+    },
+    {
+      "id": "scan-20",
+      "visibility_pct": 53,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T14:00:00.000Z",
+      "created_at": "2026-10-20T14:00:00.000Z"
+    },
+    {
+      "id": "scan-21",
+      "visibility_pct": 52,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T13:00:00.000Z",
+      "created_at": "2026-10-20T13:00:00.000Z"
+    },
+    {
+      "id": "scan-22",
+      "visibility_pct": null,
+      "prompts_tracked": 30,
+      "prompts_mentioned": null,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T12:00:00.000Z",
+      "created_at": "2026-10-20T12:00:00.000Z"
+    },
+    {
+      "id": "scan-23",
+      "visibility_pct": 50,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T11:00:00.000Z",
+      "created_at": "2026-10-20T11:00:00.000Z"
+    },
+    {
+      "id": "scan-24",
+      "visibility_pct": 49,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T10:00:00.000Z",
+      "created_at": "2026-10-20T10:00:00.000Z"
+    },
+    {
+      "id": "scan-25",
+      "visibility_pct": 48,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T09:00:00.000Z",
+      "created_at": "2026-10-20T09:00:00.000Z"
+    },
+    {
+      "id": "scan-26",
+      "visibility_pct": 47,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T08:00:00.000Z",
+      "created_at": "2026-10-20T08:00:00.000Z"
+    },
+    {
+      "id": "scan-27",
+      "visibility_pct": 46,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T07:00:00.000Z",
+      "created_at": "2026-10-20T07:00:00.000Z"
+    },
+    {
+      "id": "scan-28",
+      "visibility_pct": 45,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T06:00:00.000Z",
+      "created_at": "2026-10-20T06:00:00.000Z"
+    },
+    {
+      "id": "scan-29",
+      "visibility_pct": null,
+      "prompts_tracked": 30,
+      "prompts_mentioned": null,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T05:00:00.000Z",
+      "created_at": "2026-10-20T05:00:00.000Z"
+    },
+    {
+      "id": "scan-30",
+      "visibility_pct": 43,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T04:00:00.000Z",
+      "created_at": "2026-10-20T04:00:00.000Z"
+    },
+    {
+      "id": "scan-31",
+      "visibility_pct": 42,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T03:00:00.000Z",
+      "created_at": "2026-10-20T03:00:00.000Z"
+    },
+    {
+      "id": "scan-32",
+      "visibility_pct": 41,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T02:00:00.000Z",
+      "created_at": "2026-10-20T02:00:00.000Z"
+    },
+    {
+      "id": "scan-33",
+      "visibility_pct": 40,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T01:00:00.000Z",
+      "created_at": "2026-10-20T01:00:00.000Z"
+    },
+    {
+      "id": "scan-34",
+      "visibility_pct": 39,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-20T00:00:00.000Z",
+      "created_at": "2026-10-20T00:00:00.000Z"
+    },
+    {
+      "id": "scan-35",
+      "visibility_pct": 38,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T23:00:00.000Z",
+      "created_at": "2026-10-19T23:00:00.000Z"
+    },
+    {
+      "id": "scan-36",
+      "visibility_pct": null,
+      "prompts_tracked": 30,
+      "prompts_mentioned": null,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T22:00:00.000Z",
+      "created_at": "2026-10-19T22:00:00.000Z"
+    },
+    {
+      "id": "scan-37",
+      "visibility_pct": 36,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T21:00:00.000Z",
+      "created_at": "2026-10-19T21:00:00.000Z"
+    },
+    {
+      "id": "scan-38",
+      "visibility_pct": 35,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T20:00:00.000Z",
+      "created_at": "2026-10-19T20:00:00.000Z"
+    },
+    {
+      "id": "scan-39",
+      "visibility_pct": 34,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T19:00:00.000Z",
+      "created_at": "2026-10-19T19:00:00.000Z"
+    },
+    {
+      "id": "scan-40",
+      "visibility_pct": 33,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T18:00:00.000Z",
+      "created_at": "2026-10-19T18:00:00.000Z"
+    },
+    {
+      "id": "scan-41",
+      "visibility_pct": 32,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T17:00:00.000Z",
+      "created_at": "2026-10-19T17:00:00.000Z"
+    },
+    {
+      "id": "scan-42",
+      "visibility_pct": 31,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T16:00:00.000Z",
+      "created_at": "2026-10-19T16:00:00.000Z"
+    },
+    {
+      "id": "scan-43",
+      "visibility_pct": null,
+      "prompts_tracked": 30,
+      "prompts_mentioned": null,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T15:00:00.000Z",
+      "created_at": "2026-10-19T15:00:00.000Z"
+    },
+    {
+      "id": "scan-44",
+      "visibility_pct": 29,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T14:00:00.000Z",
+      "created_at": "2026-10-19T14:00:00.000Z"
+    },
+    {
+      "id": "scan-45",
+      "visibility_pct": 28,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T13:00:00.000Z",
+      "created_at": "2026-10-19T13:00:00.000Z"
+    },
+    {
+      "id": "scan-46",
+      "visibility_pct": 27,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T12:00:00.000Z",
+      "created_at": "2026-10-19T12:00:00.000Z"
+    },
+    {
+      "id": "scan-47",
+      "visibility_pct": 26,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T11:00:00.000Z",
+      "created_at": "2026-10-19T11:00:00.000Z"
+    },
+    {
+      "id": "scan-48",
+      "visibility_pct": 25,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T10:00:00.000Z",
+      "created_at": "2026-10-19T10:00:00.000Z"
+    },
+    {
+      "id": "scan-49",
+      "visibility_pct": 24,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T09:00:00.000Z",
+      "created_at": "2026-10-19T09:00:00.000Z"
+    },
+    {
+      "id": "scan-50",
+      "visibility_pct": null,
+      "prompts_tracked": 30,
+      "prompts_mentioned": null,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T08:00:00.000Z",
+      "created_at": "2026-10-19T08:00:00.000Z"
+    },
+    {
+      "id": "scan-51",
+      "visibility_pct": 22,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T07:00:00.000Z",
+      "created_at": "2026-10-19T07:00:00.000Z"
+    },
+    {
+      "id": "scan-52",
+      "visibility_pct": 21,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 21,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T06:00:00.000Z",
+      "created_at": "2026-10-19T06:00:00.000Z"
+    },
+    {
+      "id": "scan-53",
+      "visibility_pct": 20,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T05:00:00.000Z",
+      "created_at": "2026-10-19T05:00:00.000Z"
+    },
+    {
+      "id": "scan-54",
+      "visibility_pct": 19,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T04:00:00.000Z",
+      "created_at": "2026-10-19T04:00:00.000Z"
+    },
+    {
+      "id": "scan-55",
+      "visibility_pct": 18,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T03:00:00.000Z",
+      "created_at": "2026-10-19T03:00:00.000Z"
+    },
+    {
+      "id": "scan-56",
+      "visibility_pct": 17,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 22,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T02:00:00.000Z",
+      "created_at": "2026-10-19T02:00:00.000Z"
+    },
+    {
+      "id": "scan-57",
+      "visibility_pct": null,
+      "prompts_tracked": 30,
+      "prompts_mentioned": null,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T01:00:00.000Z",
+      "created_at": "2026-10-19T01:00:00.000Z"
+    },
+    {
+      "id": "scan-58",
+      "visibility_pct": 15,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 20,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-19T00:00:00.000Z",
+      "created_at": "2026-10-19T00:00:00.000Z"
+    },
+    {
+      "id": "scan-59",
+      "visibility_pct": 14,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 19,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-18T23:00:00.000Z",
+      "created_at": "2026-10-18T23:00:00.000Z"
+    },
+    {
+      "id": "scan-60",
+      "visibility_pct": 13,
+      "prompts_tracked": 30,
+      "prompts_mentioned": 18,
+      "platform": [
+        "chatgpt",
+        "gemini"
+      ],
+      "scanned_at": "2026-10-18T22:00:00.000Z",
+      "created_at": "2026-10-18T22:00:00.000Z"
+    }
+  ],
+  "jobs": []
+}

@@ -29,3 +29,4 @@ export {
   backlinksExpandDomainAction,
 } from "./backlinks.ts";
 import "./siteAudit.ts";
+import "./rankTracking.ts";

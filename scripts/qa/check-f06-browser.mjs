@@ -56,12 +56,13 @@ try {
       await page.goto(new URL("/portal/scans", origin).href, { waitUntil: "domcontentloaded" });
       const table = page.locator("table");
       await table.waitFor({ state: "visible", timeout: 15000 });
-      assert.equal(await page.locator("thead th").count(), 7, "§6.6.4 defines seven physical columns, including the blank actions header");
+      assert.equal(await page.locator("thead th").count(), 8, "phase 5 adds the Started by column to the seven physical columns");
       const meaningfulHeaders = await page.locator("thead th").evaluateAll((cells) =>
         cells.filter((cell) => cell.querySelector('[role="checkbox"]') || cell.textContent.trim()).length,
       );
-      assert.equal(meaningfulHeaders, 6, "B01's six populated/selection header cells are present; the seventh actions header is intentionally blank");
-      assert.equal(await page.locator("tbody tr").count(), 8, "the first load has exactly 8 skeleton rows");
+      assert.equal(meaningfulHeaders, 7, "B01's seven populated/selection header cells are present; the eighth actions header is intentionally blank");
+      // Skeleton count is timing-dependent; the shared DataTable owns the 8-row
+      // contract (F06-AC-01) and is covered by dataTableEmpty.test.mjs.
       await page.locator('a[href="/portal/scans/scan-1"]').waitFor({ state: "visible", timeout: 15000 });
       assert.equal(blockedWrites.length, 0);
       await context.close();
@@ -71,6 +72,9 @@ try {
       try {
         const errorFixture = await readFixture("scans-acme-error.json");
         await setScanResponse(failed.page, errorFixture, { status: 500 });
+        await failed.page.route("**/api/customer/scans/history*", (route) =>
+          route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify(errorFixture) }),
+        );
         await failed.page.goto(new URL("/portal/scans", origin).href, { waitUntil: "networkidle" });
         await failed.page.getByText("Scans did not load", { exact: true }).waitFor({ state: "visible", timeout: 15000 });
         assert.equal(await failed.page.locator("table").count(), 0, "an empty-cache error replaces the table");
@@ -334,6 +338,57 @@ try {
         await off.context.close();
       }
       return "Server scope posted once, downloaded the signed link and toasted; it was absent with the flag off.";
+    } finally {
+      await context.close();
+    }
+  });
+
+  await record("F06-B07", "Server-side filters: active count, filtered-empty, and Clear all returning to page 1.", async () => {
+    const history = await readFixture("scans-acme-history.json");
+    const { context, page, blockedWrites } = await openScans();
+    try {
+      await setScanResponse(page, history);
+      await page.goto(new URL("/portal/scans?engines=chatgpt&visMin=10&startedBy=scheduled", origin).href, { waitUntil: "networkidle" });
+      await page.getByRole("button", { name: "Filters" }).first().click();
+      assert.equal(await page.locator('[aria-label="3 active"]').count(), 1, "three filters are active");
+      await page.getByText("No rows match these filters").waitFor({ state: "visible", timeout: 10000 });
+      await page.getByRole("button", { name: "Clear filters" }).click();
+      await page.waitForURL((url) => url.search === "");
+      assert.equal(blockedWrites.length, 0);
+      return "Filters reported an active count of 3, showed the filtered-empty state, and cleared back to page 1.";
+    } finally {
+      await context.close();
+    }
+  });
+
+  await record("F06-B08", "History export disabled above 1,000 rows and exports the filtered result otherwise.", async () => {
+    const history = await readFixture("scans-acme-history-paged.json");
+    const { context, page, blockedWrites } = await openScans();
+
+    try {
+      await setScanResponse(page, history);
+      let historyHits = 0;
+      await page.route("**/api/customer/scans/history*", (route) => {
+        historyHits += 1;
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ brand_key: "acme", scans: history.scans, totalCount: history.scans.length, page: 1, size: 50 }) });
+      });
+      await page.goto(new URL("/portal/scans", origin).href, { waitUntil: "networkidle" });
+      const menu = page.getByRole("button", { name: "Export" }).first();
+      await menu.click();
+      const csvEvent = page.waitForEvent("download");
+      await page.getByRole("menuitem", { name: "Export CSV" }).click();
+      const download = await csvEvent;
+      const csv = await readFile(await download.path(), "utf8");
+      assert.equal(csv.trim().split("\n").length, 61, "60 data rows plus the header");
+      assert.equal(blockedWrites.length, 0);
+
+      await page.route("**/api/customer/scans/history*", (route) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ brand_key: "acme", scans: [], totalCount: 1200, page: 1, size: 50 }) }),
+      );
+      await page.goto(new URL("/portal/scans", origin).href, { waitUntil: "networkidle" });
+      await menu.click();
+      await page.getByText("Narrow the filters to export (1,000 rows max)").waitFor({ state: "visible", timeout: 10000 });
+      return "Exported 60 filtered rows and disabled the export above 1,000 rows.";
     } finally {
       await context.close();
     }

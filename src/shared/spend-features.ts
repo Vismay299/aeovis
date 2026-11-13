@@ -18,6 +18,9 @@ export const SPEND_FEATURES = [
   "backlinks.snapshots",
   "site_audit.lighthouse",
   "site_audit.render",
+  "rank_tracking.check",
+  "rank_tracking.suggestions",
+  "rank_tracking.metrics",
 ] as const;
 
 export type SpendFeature = (typeof SPEND_FEATURES)[number];
@@ -54,6 +57,9 @@ export const SPEND_FEATURE_LABELS: Record<string, string> = {
   "backlinks.snapshots": "Backlink history snapshots",
   "site_audit.lighthouse": "Site audit Lighthouse checks",
   "site_audit.render": "Site audit JavaScript rendering",
+  "rank_tracking.check": "Rank checks",
+  "rank_tracking.suggestions": "Rank tracking keyword suggestions",
+  "rank_tracking.metrics": "Rank tracking keyword stats",
 };
 
 /** The label for a ledger feature; an unknown key is "Other", never an empty string. */

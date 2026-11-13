@@ -595,6 +595,15 @@ const EXPECTED_OBJECTS = {
     { kind: "constraint", name: "export_requests_counts_ck" },
     { kind: "constraint", name: "export_requests_path_ck" },
   ],
+  "066_f06_scan_history_columns.sql": [
+    { kind: "function", name: "scan_engines" },
+    { kind: "function", name: "scan_collection_partial" },
+    { kind: "function", name: "scans_derive_history_columns" },
+    { kind: "constraint", name: "scans_started_by_ck" },
+    { kind: "index", name: "scans_brand_listed_idx" },
+    { kind: "index", name: "scans_brand_visibility_idx" },
+    { kind: "index", name: "scans_engines_gin_idx" },
+  ],
 };
 
 /**

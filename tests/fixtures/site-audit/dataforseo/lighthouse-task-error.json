@@ -1,0 +1,14 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "tasks": [
+    {
+      "id": "lighthouse-error-task-1",
+      "status_code": 40501,
+      "status_message": "Invalid URL.",
+      "path": ["v3", "on_page", "lighthouse", "live", "json"],
+      "cost": 0.00425,
+      "result": null
+    }
+  ]
+}

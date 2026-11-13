@@ -1,5 +1,6 @@
 import { AppError } from "../http/errors.ts";
 import { AUDIT_ISSUE_TYPES } from "../../shared/audit-issues.ts";
+import { readStoredLighthousePayload } from "./lighthousePayload.ts";
 
 const NOT_FOUND = "Audit not found.";
 
@@ -197,6 +198,43 @@ export async function listAuditPerformance(admin: any, brandKey: string, auditId
     bestPracticesScore: row.best_practices_score, seoScore: row.seo_score, lcpMs: row.lcp_ms, cls: row.cls,
     inpMs: row.inp_ms, ttfbMs: row.ttfb_ms, errorMessage: row.error_message, hasDetails: Boolean(row.payload_path),
   })) };
+}
+
+export async function getLighthouseDetail(
+  admin: any,
+  brandKey: string,
+  auditId: string,
+  resultId: string,
+  category?: string,
+): Promise<any> {
+  await ownedAudit(admin, brandKey, auditId, "id");
+  const { data: row, error } = await admin.from("site_audit_lighthouse").select("*").eq("id", resultId).eq("audit_id", auditId).eq("brand_key", brandKey).maybeSingle();
+  if (error) throw error;
+  if (!row) throw new AppError(404, "audit_not_found", "Audit not found.");
+  if (!row.payload_path) {
+    throw new AppError(404, "lighthouse_details_unavailable", "This Lighthouse run was saved without details.");
+  }
+  const { data: fileData, error: dlErr } = await admin.storage.from("site-audit-lighthouse").download(row.payload_path);
+  if (dlErr || !fileData) {
+    throw new AppError(404, "lighthouse_details_unavailable", "This Lighthouse run was saved without details.");
+  }
+  const text = await fileData.text();
+  const parsed = readStoredLighthousePayload(text, category as never);
+  return {
+    id: row.id,
+    finalUrl: parsed.storedPayload?.metadata.finalUrl ?? null,
+    strategy: row.strategy,
+    createdAt: row.created_at,
+    hasIssueDetails: parsed.report.hasIssueDetails,
+    scores: {
+      performance: row.performance_score,
+      accessibility: row.accessibility_score,
+      "best-practices": row.best_practices_score,
+      seo: row.seo_score,
+    },
+    metrics: parsed.storedPayload?.metrics ?? null,
+    issues: parsed.report.issues,
+  };
 }
 
 export function knownIssueType(type: string): boolean {
