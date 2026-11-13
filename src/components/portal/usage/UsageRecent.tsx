@@ -59,9 +59,27 @@ function When({ at }: { at: string }) {
 }
 
 export function UsageRecent({ recent }: { recent: WorkspaceUsage["recent"] }) {
+  // §11 risk 3: Content Studio spend is not in the ledger, so the page says so
+  // wherever the recent list appears — including when it is empty, which is
+  // exactly when a new workspace would otherwise read "nothing spent" as the
+  // whole truth.
+  const footnote = (
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">
+        Scan answers are added here when each scan finishes.
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Content Studio costs are not included yet.
+      </p>
+    </div>
+  );
+
   if (recent.length === 0) {
     return (
-      <EmptyState variant="plain" size="sm" title="No paid calls yet." />
+      <div className="space-y-3">
+        <EmptyState variant="plain" size="sm" title="No paid calls yet." />
+        {footnote}
+      </div>
     );
   }
 
@@ -125,9 +143,7 @@ export function UsageRecent({ recent }: { recent: WorkspaceUsage["recent"] }) {
         })}
       </ul>
 
-      <p className="text-xs text-muted-foreground">
-        Scan answers are added here when each scan finishes.
-      </p>
+      {footnote}
     </div>
   );
 }

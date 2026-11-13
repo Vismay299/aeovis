@@ -762,13 +762,17 @@ try {
       await page
         .getByText("No paid calls yet.", { exact: true })
         .waitFor({ state: "visible", timeout: 20000 });
+      // §11 risk 3: the Content Studio gap is disclosed even with no rows.
+      await page
+        .getByText("Content Studio costs are not included yet.", { exact: true })
+        .waitFor({ state: "visible", timeout: 20000 });
       assert.equal(
         await page.getByText("No usage recorded yet", { exact: true }).count(),
         2,
         "the chart and the feature list each say the range has no usage",
       );
       assert.deepEqual(foreign, [], "no request may leave the local origin");
-      return 'empty usage shows "No usage recorded yet" twice and "No paid calls yet."';
+      return 'empty usage shows "No usage recorded yet" twice, "No paid calls yet." and the Content Studio disclosure';
     } finally {
       await context.close();
     }
@@ -836,8 +840,15 @@ try {
         .locator('[aria-label="Daily spend, 30d"]')
         .first()
         .waitFor({ state: "attached", timeout: 20000 });
+      // §11 risk 3: the ledger excludes Content Studio, and the page says so.
+      await page
+        .getByText("Scan answers are added here when each scan finishes.", { exact: true })
+        .waitFor({ state: "visible", timeout: 20000 });
+      await page
+        .getByText("Content Studio costs are not included yet.", { exact: true })
+        .waitFor({ state: "visible", timeout: 20000 });
       assert.deepEqual(foreign, [], "no request may leave the local origin");
-      return "limit cards, the reset footnote, the chart legend, the total and all four source badges render";
+      return "limit cards, the reset footnote, the chart legend, the total, all four source badges and both footnotes render";
     } finally {
       await context.close();
     }

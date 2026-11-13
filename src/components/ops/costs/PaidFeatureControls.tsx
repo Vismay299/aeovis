@@ -57,6 +57,20 @@ function parseUsd(value: string): { ok: boolean; value: number | null } {
   return { ok: true, value: parsed };
 }
 
+/**
+ * F01's `maxCallUsd` is `z.number().positive().max(1000).nullable()`, so 0 is a
+ * 400 from the API. Empty still means "no cap", but a non-positive value is
+ * refused here rather than sent to be rejected.
+ */
+function parseMaxCall(value: string): { ok: boolean; value: number | null } {
+  if (value.trim() === "") return { ok: true, value: null };
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1000) {
+    return { ok: false, value: null };
+  }
+  return { ok: true, value: parsed };
+}
+
 function usdOrDash(value: number | null): string {
   return value === null ? "—" : formatUsd(value);
 }
@@ -85,7 +99,7 @@ function EditControlDialog({
   const [error, setError] = useState("");
 
   const daily = parseUsd(dailyCap);
-  const perCall = parseUsd(maxCall);
+  const perCall = parseMaxCall(maxCall);
   const confirmed = confirm === control.feature;
 
   async function submit() {
@@ -204,7 +218,8 @@ function EditControlDialog({
             <Input
               id="control-max-call"
               type="number"
-              min={0}
+              min={0.0001}
+              max={1000}
               step="0.0001"
               value={maxCall}
               placeholder="No cap"
@@ -212,9 +227,14 @@ function EditControlDialog({
             />
           </div>
         </div>
-        {!daily.ok || !perCall.ok ? (
+        {!daily.ok ? (
           <p className="text-xs text-destructive">
-            Enter a cap of 0 or more, or leave the field empty for no cap.
+            Enter a daily cap of 0 or more, or leave the field empty for no cap.
+          </p>
+        ) : null}
+        {!perCall.ok ? (
+          <p className="text-xs text-destructive">
+            Enter a max per call above 0 (up to 1000), or leave the field empty for no cap.
           </p>
         ) : null}
 
