@@ -1,19 +1,25 @@
 #!/usr/bin/env node
 /**
- * F14 Phase 3 — Domain Overview browser verification (B1–B4, B8).
+ * F14 Phase 3/4 — Domain Overview browser verification (B1–B9).
  *
  * Scenarios:
  *   B1: Flag off: empty state and nav item hidden
  *   B2: Loading /portal/domain?domain=offcult.in sends cacheOnly: true & shows "Run lookup · up to $0.03"
  *   B3: Click "Run lookup" → overview + keywords render, cost hint visible, next page sends maxUsd
  *   B4: Filters apply, URL updates, reload restores last-used filters, over-budget saved filters show held-back alert
+ *   B5: Save keywords with tags → POST /api/customer/keywords/saved without metrics; disabled after a
+ *       location change; hidden when keyword_research is off
+ *   B6: Competitors: CostReviewDialog → results → sort by average position (cache-only re-read)
+ *   B7: Add as competitor → toast; absent when project_memory is off; a quick pick fills the input
+ *       without a request
  *   B8: 375 px viewport: document.documentElement.scrollWidth <= 375 (no horizontal scroll)
+ *   B9: Export CSV filename and headers
  *
- * Output: "ok 5 scenarios" on pass.
+ * Output: "ok 9 scenarios" on pass.
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openPortal, SUPABASE_URL } from "./portalFixtureHarness.mjs";
@@ -193,6 +199,53 @@ function makeSampleKeywords() {
     });
   }
   return keywords;
+}
+
+function makeOverviewBody(overrides = {}) {
+  return {
+    status: "ok",
+    domain: "offcult.in",
+    displayTarget: "offcult.in",
+    scope: "subdomains",
+    organicTraffic: 1840,
+    organicKeywords: 312,
+    hasData: true,
+    market: { locationCode: 2356, languageCode: "en", country: "India" },
+    isOwnSite: false,
+    isDeclaredCompetitor: false,
+    cached: true,
+    fetchedAt: new Date().toISOString(),
+    provenance: { gateway: "dataforseo" },
+    ...overrides,
+  };
+}
+
+function makeKeywordsBody(keywords = makeSampleKeywords()) {
+  return {
+    status: "ok",
+    domain: "offcult.in",
+    page: 1,
+    pageSize: 50,
+    totalCount: keywords.length,
+    hasMore: false,
+    keywords,
+    cached: true,
+    fetchedAt: new Date().toISOString(),
+    provenance: { gateway: "dataforseo" },
+  };
+}
+
+function makeCompetitorRow(domain, { keywordsCount, avgPosition, visibility, etv }) {
+  return {
+    domain,
+    keywordsCount,
+    avgPosition,
+    medianPosition: 3,
+    visibility,
+    etv,
+    isOwnSite: false,
+    isDeclaredCompetitor: false,
+  };
 }
 
 try {
@@ -597,6 +650,559 @@ try {
     }
   });
 
+  // Scenario B5: Save keywords with tags → POST without metrics, disabled after a location change, hidden when keyword_research is off
+  await record("B5", "save with tags → POST has no metrics, toast; disabled after changing the location; hidden when keyword_research off", async () => {
+    const { context, page, blockedWrites } = await openPortal(browser, origin, {
+      viewport: { width: 1440, height: 1000 },
+    });
+    try {
+      let savedBody = null;
+
+      await page.route("**/api/customer/features*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            brandKey: "acme",
+            features: { domain_research: true, keyword_research: true, project_memory: true },
+          }),
+        });
+      });
+
+      await page.route("**/api/customer/domain/overview*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makeOverviewBody()),
+        });
+      });
+
+      await page.route("**/api/customer/domain/keywords*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makeKeywordsBody()),
+        });
+      });
+
+      await page.route("**/api/customer/price/estimate*", async (route) => {
+        let action = "domain.lookup.run";
+        try {
+          action = JSON.parse(route.request().postData() || "{}").action || action;
+        } catch {}
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makePriceQuote(action, 0.03012)),
+        });
+      });
+
+      await page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ available: true, competitors: [], ownHost: "offcult.in" }),
+        });
+      });
+
+      // The harness aborts every non-GET customer call, so this write is answered here.
+      await page.route("**/api/customer/keywords/saved*", async (route) => {
+        savedBody = JSON.parse(route.request().postData() || "{}");
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ savedKeywordIds: ["saved-1", "saved-2"], created: 2 }),
+        });
+      });
+
+      await page.goto(
+        new URL("/portal/domain?domain=offcult.in&loc=2356", origin).href,
+        {
+          waitUntil: "networkidle",
+        },
+      );
+      await page.getByText("oversized t shirt").waitFor({ state: "visible", timeout: 15000 });
+
+      const rowCheckboxes = page.getByRole("checkbox", { name: "Select row" });
+      await rowCheckboxes.nth(0).click();
+      await rowCheckboxes.nth(1).click();
+
+      await page.getByRole("button", { name: "Save keywords" }).click();
+      const saveDialog = page.getByRole("dialog");
+      await saveDialog.getByText("Save 2 keywords", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 10000,
+      });
+      await saveDialog.getByLabel("Tags").fill("priority, blog");
+      await saveDialog.getByRole("button", { name: "Save", exact: true }).click();
+
+      await page.getByText("Saved 2 keywords", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 15000,
+      });
+      await page.getByRole("button", { name: "Open saved keywords" }).waitFor({
+        state: "visible",
+        timeout: 10000,
+      });
+
+      assert.ok(savedBody, "the save posted to /api/customer/keywords/saved");
+      assert.equal(
+        Object.hasOwn(savedBody, "metrics"),
+        false,
+        "the save body carries no metrics key",
+      );
+      assert.deepEqual(savedBody.keywords, ["oversized t shirt", "anime t shirt"]);
+      assert.deepEqual(savedBody.tags, ["priority", "blog"]);
+      assert.equal(savedBody.locationCode, 2356, "the save used the shown market");
+      assert.equal(savedBody.languageCode, "en");
+      assert.equal(savedBody.tagMode, "append");
+      assert.equal(blockedWrites.length, 0, "no customer write was aborted");
+
+      // The form's market no longer matches the shown one (the overview still answers India).
+      await page.getByLabel("Country").click();
+      await page.getByLabel("Country").fill("United States");
+      await page
+        .locator('[data-slot="combobox-item"]:has-text("United States")')
+        .first()
+        .click();
+      await page.waitForFunction(
+        () => {
+          const input = document.querySelector('[aria-label="Country"]');
+          return input instanceof HTMLInputElement && input.value === "United States";
+        },
+        undefined,
+        { timeout: 10000 },
+      );
+
+      // A market change re-reads the overview; select a row again on the reloaded page.
+      await page.getByText("oversized t shirt").waitFor({ state: "visible", timeout: 15000 });
+      await page.getByRole("checkbox", { name: "Select row" }).nth(0).click();
+
+      const disabledSave = page.getByRole("button", { name: "Save keywords" });
+      await disabledSave.waitFor({ state: "visible", timeout: 10000 });
+      assert.equal(
+        await disabledSave.isDisabled(),
+        true,
+        "Save keywords is disabled after the location changed",
+      );
+      const disabledTitle = await disabledSave.evaluate(
+        (element) => element.closest("[title]")?.getAttribute("title") ?? null,
+      );
+      assert.ok(
+        disabledTitle?.startsWith("Change the location back to India"),
+        `disabled title starts with the shown market: ${disabledTitle}`,
+      );
+
+      // Second pass: keyword_research off hides the action instead of disabling it.
+      const second = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+      });
+      try {
+        await second.page.route("**/api/customer/features*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              brandKey: "acme",
+              features: { domain_research: true, keyword_research: false, project_memory: true },
+            }),
+          });
+        });
+
+        await second.page.route("**/api/customer/domain/overview*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeOverviewBody()),
+          });
+        });
+
+        await second.page.route("**/api/customer/domain/keywords*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeKeywordsBody()),
+          });
+        });
+
+        await second.page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ available: true, competitors: [], ownHost: "offcult.in" }),
+          });
+        });
+
+        await second.page.goto(new URL("/portal/domain?domain=offcult.in", origin).href, {
+          waitUntil: "networkidle",
+        });
+        await second.page.getByText("oversized t shirt").waitFor({ state: "visible", timeout: 15000 });
+        await second.page.getByRole("checkbox", { name: "Select row" }).nth(0).click();
+        await second.page.getByRole("toolbar", { name: "Bulk actions" }).waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+
+        assert.equal(
+          await second.page.getByRole("button", { name: "Save keywords" }).count(),
+          0,
+          "Save keywords is hidden when keyword_research is off",
+        );
+        await second.page.getByRole("button", { name: "Copy keywords" }).waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+      } finally {
+        await second.context.close();
+      }
+
+      return "Saved 2 keywords without metrics, toasted with the saved-keywords action, disabled after a location change and hidden with keyword_research off";
+    } finally {
+      await context.close();
+    }
+  });
+
+  // Scenario B6: Competitors — price approval, results, then a cache-only sort by average position
+  await record("B6", "competitors: CostReviewDialog → results → sort by average position", async () => {
+    const { context, page } = await openPortal(browser, origin, {
+      viewport: { width: 1440, height: 1000 },
+    });
+    try {
+      const competitorRequests = [];
+      let liveCacheWarm = false;
+      const twoKeywords = makeSampleKeywords().slice(0, 2);
+      const byVisibility = [
+        makeCompetitorRow("competitor-one.example", {
+          keywordsCount: 2,
+          avgPosition: 8.4,
+          visibility: 0.41,
+          etv: 12000,
+        }),
+        makeCompetitorRow("competitor-two.example", {
+          keywordsCount: 2,
+          avgPosition: 5.2,
+          visibility: 0.3,
+          etv: 8000,
+        }),
+        makeCompetitorRow("competitor-three.example", {
+          keywordsCount: 2,
+          avgPosition: 2.1,
+          visibility: 0.2,
+          etv: 4000,
+        }),
+      ];
+      const byAvgPosition = [byVisibility[2], byVisibility[0], byVisibility[1]];
+
+      await page.route("**/api/customer/features*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            brandKey: "acme",
+            features: { domain_research: true, keyword_research: true, project_memory: true },
+          }),
+        });
+      });
+
+      await page.route("**/api/customer/domain/overview*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makeOverviewBody()),
+        });
+      });
+
+      await page.route("**/api/customer/domain/keywords*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makeKeywordsBody(twoKeywords)),
+        });
+      });
+
+      await page.route("**/api/customer/domain/competitors*", async (route) => {
+        const body = JSON.parse(route.request().postData() || "{}");
+        competitorRequests.push(body);
+        if (body.cacheOnly && !liveCacheWarm) {
+          // The 12-hour cache is empty until the approved run fills it.
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              status: "not_cached",
+              keywordCount: twoKeywords.length,
+              competitors: [],
+            }),
+          });
+        }
+        if (!body.cacheOnly) liveCacheWarm = true;
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            status: "ok",
+            keywordCount: twoKeywords.length,
+            competitors: body.sortBy === "avg_position" ? byAvgPosition : byVisibility,
+            cached: body.cacheOnly,
+            fetchedAt: new Date().toISOString(),
+            provenance: { gateway: "dataforseo" },
+          }),
+        });
+      });
+
+      await page.route("**/api/customer/price/estimate*", async (route) => {
+        let action = "domain.competitors.run";
+        try {
+          action = JSON.parse(route.request().postData() || "{}").action || action;
+        } catch {}
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makePriceQuote(action, 0.018)),
+        });
+      });
+
+      await page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ available: true, competitors: [], ownHost: "offcult.in" }),
+        });
+      });
+
+      await page.goto(
+        new URL("/portal/domain?domain=offcult.in&tab=competitors", origin).href,
+        { waitUntil: "networkidle" },
+      );
+
+      await page
+        .getByText("Find the domains that rank in Google for the same keywords as offcult.in.", {
+          exact: true,
+        })
+        .waitFor({ state: "visible", timeout: 15000 });
+      await page
+        .getByText("Uses the 2 keywords on the current Top Keywords page.", { exact: true })
+        .waitFor({ state: "visible", timeout: 15000 });
+
+      assert.ok(competitorRequests.length > 0, "the idle state read the cache");
+      assert.equal(competitorRequests[0].cacheOnly, true, "the idle read is cache-only");
+      assert.deepEqual(competitorRequests[0].keywords, ["oversized t shirt", "anime t shirt"]);
+
+      const findButton = page.getByRole("button", { name: /Find competitors · up to \$0\.018/ });
+      await findButton.waitFor({ state: "visible", timeout: 15000 });
+      await findButton.click();
+
+      const costDialog = page.getByRole("dialog");
+      await costDialog.getByText("Find SERP competitors", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 10000,
+      });
+      await costDialog.getByRole("button", { name: "Find competitors", exact: true }).click();
+
+      await page.getByText("competitor-one.example").waitFor({ state: "visible", timeout: 15000 });
+      await page.getByText("competitor-two.example").waitFor({ state: "visible", timeout: 10000 });
+      await page.getByText("competitor-three.example").waitFor({ state: "visible", timeout: 10000 });
+      await page.getByText("41.0%", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+
+      const liveRequest = competitorRequests.find((request) => request.cacheOnly === false);
+      assert.ok(liveRequest, "the approved click sent one live request");
+      assert.ok(
+        Math.abs(liveRequest.maxUsd - 0.018) < 1e-9,
+        `the live request carried the approved maxUsd: ${liveRequest.maxUsd}`,
+      );
+
+      // A sort change re-reads the 12-hour cache and never spends again.
+      await page.getByRole("combobox", { name: "Sort competitors" }).click();
+      await page.getByRole("option", { name: "Average position", exact: true }).click();
+      await page.waitForFunction(
+        () => {
+          const tables = [...document.querySelectorAll("table")];
+          const table = tables.find((candidate) =>
+            candidate.textContent?.includes("Shared keywords"),
+          );
+          return table?.querySelector("tbody tr")?.textContent?.includes("competitor-three.example") === true;
+        },
+        undefined,
+        { timeout: 15000 },
+      );
+
+      const sortRequest = competitorRequests[competitorRequests.length - 1];
+      assert.equal(sortRequest.sortBy, "avg_position");
+      assert.equal(sortRequest.cacheOnly, true, "a sort change reads the cache");
+
+      const competitorsTable = page.locator("table").filter({ hasText: "Shared keywords" });
+      const firstDomain = await competitorsTable
+        .locator("tbody tr")
+        .first()
+        .locator("a")
+        .first()
+        .innerText();
+      assert.equal(firstDomain, "competitor-three.example", "the server order is kept");
+
+      return "Idle copy priced, CostReviewDialog approved $0.018, three domains rendered, and the average-position sort re-read the cache";
+    } finally {
+      await context.close();
+    }
+  });
+
+  // Scenario B7: Add as competitor, quick picks, and the project_memory-off state
+  await record("B7", "add competitor → toast; absent when project_memory off; quick pick fills the input without a request", async () => {
+    const { context, page } = await openPortal(browser, origin, {
+      viewport: { width: 1440, height: 1000 },
+    });
+    try {
+      let addedBody = null;
+      const overviewCalls = [];
+
+      await page.route("**/api/customer/features*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            brandKey: "acme",
+            features: { domain_research: true, keyword_research: true, project_memory: true },
+          }),
+        });
+      });
+
+      await page.route("**/api/customer/domain/overview*", async (route) => {
+        overviewCalls.push(JSON.parse(route.request().postData() || "{}"));
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makeOverviewBody()),
+        });
+      });
+
+      await page.route("**/api/customer/domain/keywords*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makeKeywordsBody()),
+        });
+      });
+
+      await page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            available: true,
+            competitors: [{ domain: "bewakoof.com", name: "Bewakoof" }],
+            ownHost: "offcult.in",
+          }),
+        });
+      });
+
+      // The harness aborts every non-GET customer call, so this write is answered here.
+      await page.route("**/api/customer/domain/competitors/add*", async (route) => {
+        addedBody = JSON.parse(route.request().postData() || "{}");
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            competitor: { domain: "offcult.in", name: null },
+            added: true,
+          }),
+        });
+      });
+
+      await page.goto(new URL("/portal/domain?domain=offcult.in", origin).href, {
+        waitUntil: "networkidle",
+      });
+      await page.getByText("oversized t shirt").waitFor({ state: "visible", timeout: 15000 });
+
+      const addButton = page.getByRole("button", { name: "Add as competitor" });
+      assert.equal(await addButton.count(), 1, "one add action on the keywords tab");
+      await addButton.click();
+
+      await page.getByText("Added offcult.in to your competitors.", { exact: true }).waitFor({
+        state: "visible",
+        timeout: 15000,
+      });
+      await page.getByRole("button", { name: "View context" }).waitFor({
+        state: "visible",
+        timeout: 10000,
+      });
+      assert.ok(addedBody, "the add posted to /api/customer/domain/competitors/add");
+      assert.equal(addedBody.domain, "offcult.in");
+
+      // A quick pick fills the input and scope only: no request follows.
+      const overviewCallsBeforePick = overviewCalls.length;
+      await page.getByRole("button", { name: "Bewakoof (bewakoof.com)" }).click();
+      assert.equal(await page.getByLabel("Domain or URL").inputValue(), "bewakoof.com");
+      await page.waitForTimeout(400);
+      assert.equal(
+        overviewCalls.length,
+        overviewCallsBeforePick,
+        "a quick pick made no request",
+      );
+
+      // Second pass: project_memory off removes the add action and the quick picks.
+      const second = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+      });
+      try {
+        await second.page.route("**/api/customer/features*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              brandKey: "acme",
+              features: { domain_research: true, keyword_research: true, project_memory: false },
+            }),
+          });
+        });
+
+        await second.page.route("**/api/customer/domain/overview*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeOverviewBody()),
+          });
+        });
+
+        await second.page.route("**/api/customer/domain/keywords*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeKeywordsBody()),
+          });
+        });
+
+        await second.page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ available: false, competitors: [] }),
+          });
+        });
+
+        await second.page.goto(new URL("/portal/domain?domain=offcult.in", origin).href, {
+          waitUntil: "networkidle",
+        });
+        await second.page.getByText("oversized t shirt").waitFor({ state: "visible", timeout: 15000 });
+
+        assert.equal(
+          await second.page.getByRole("button", { name: "Add as competitor" }).count(),
+          0,
+          "Add as competitor is absent when project_memory is off",
+        );
+        assert.equal(
+          await second.page.getByText("Quick picks:", { exact: true }).count(),
+          0,
+          "quick picks are absent when project_memory is off",
+        );
+      } finally {
+        await second.context.close();
+      }
+
+      return "Added offcult.in with the toast and action, the quick pick filled the input with no request, and project_memory off hid both";
+    } finally {
+      await context.close();
+    }
+  });
+
   // Regression R1: Enter uses the quoted Search action; failed paid overview calls do not retry.
   await record("R1", "keyboard Search uses quoted price and reviews overview price changes", async () => {
     const { context, page } = await openPortal(browser, origin, {
@@ -726,9 +1332,22 @@ try {
       });
       assert.equal(liveOverviewRequests.length, 2, "manual retry made one second request");
       const confirmButton = priceDialog.getByRole("button", { name: "Search", exact: true });
-      assert.equal(await confirmButton.isDisabled(), true, "shared cost dialog currently disables non-answer quotes");
+      // The shared cost dialog confirms non-scan quotes (its answers guard is
+      // scan-only), so the reader can approve the new price here.
+      assert.equal(
+        await confirmButton.isDisabled(),
+        false,
+        "the price-change dialog offers the newly quoted Search",
+      );
+      await confirmButton.click();
+      await page.getByText("1,840").waitFor({ state: "visible", timeout: 15000 });
+      assert.equal(liveOverviewRequests.length, 3, "approving the new price made one request");
+      assert.ok(
+        Math.abs(liveOverviewRequests[2].maxUsd - 0.06012) < 1e-9,
+        `the approved price changed the cap: ${liveOverviewRequests[2].maxUsd}`,
+      );
 
-      return "Enter used the quoted $0.03012 max; one failed request was followed only by manual retry; price-change dialog rendered";
+      return "Enter used the quoted $0.03012 max; one failed request was followed only by manual retry; the price-change dialog approved the new $0.06012 quote";
     } finally {
       await context.close();
     }
@@ -736,7 +1355,7 @@ try {
 
   // Regression R2: table failures render error/refusal states and do not retry automatically.
   await record("R2", "keywords and pages errors show price review or spend refusal without retries", async () => {
-    const { context, page, blockedWrites } = await openPortal(browser, origin, {
+    const { context, page } = await openPortal(browser, origin, {
       viewport: { width: 1440, height: 1000 },
     });
     try {
@@ -767,7 +1386,7 @@ try {
             organicKeywords: 312,
             hasData: true,
             market: { locationCode: 2356, languageCode: "en", country: "India" },
-            isOwnSite: false,
+            isOwnSite: true,
             isDeclaredCompetitor: false,
             cached: true,
             fetchedAt: new Date().toISOString(),
@@ -850,14 +1469,6 @@ try {
       });
       assert.equal(keywordRequests, 2, "manual keyword retry made one request");
       await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
-
-      const addCompetitor = page.getByRole("button", { name: "Add as competitor" });
-      await addCompetitor.click();
-      assert.equal(
-        blockedWrites.some((write) => write.includes("/api/customer/domain/competitors/add")),
-        false,
-        "Add as competitor is presentation-only in Phase 3",
-      );
 
       await page.getByRole("tab", { name: "Top Pages" }).click();
       await page.getByRole("button", { name: "Try again" }).waitFor({
@@ -969,6 +1580,71 @@ try {
       );
 
       return `375px viewport has no horizontal overflow: scrollWidth=${metrics.scrollWidth}, clientWidth=${metrics.clientWidth}`;
+    } finally {
+      await context.close();
+    }
+  });
+
+  // Scenario B9: Export CSV filename and headers
+  await record("B9", "export CSV filename and headers", async () => {
+    const { context, page } = await openPortal(browser, origin, {
+      viewport: { width: 1440, height: 1000 },
+    });
+    try {
+      await page.route("**/api/customer/features*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            brandKey: "acme",
+            features: { domain_research: true, keyword_research: true, project_memory: true },
+          }),
+        });
+      });
+
+      await page.route("**/api/customer/domain/overview*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makeOverviewBody()),
+        });
+      });
+
+      await page.route("**/api/customer/domain/keywords*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(makeKeywordsBody()),
+        });
+      });
+
+      await page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ available: true, competitors: [], ownHost: "offcult.in" }),
+        });
+      });
+
+      await page.goto(new URL("/portal/domain?domain=offcult.in", origin).href, {
+        waitUntil: "networkidle",
+      });
+      await page.getByText("oversized t shirt").waitFor({ state: "visible", timeout: 15000 });
+
+      await page.getByRole("button", { name: "Export" }).first().click();
+      const [download] = await Promise.all([
+        page.waitForEvent("download", { timeout: 15000 }),
+        page.getByRole("menuitem", { name: "Export CSV" }).click(),
+      ]);
+
+      assert.equal(download.suggestedFilename(), "offcult.in-keywords.csv");
+      const downloadedPath = await download.path();
+      const csv = await readFile(downloadedPath, "utf8");
+      // Papa quotes every field; the header line is asserted without quotes.
+      const headerLine = csv.split(/\r?\n/)[0].replace(/"/g, "");
+      assert.equal(headerLine, "Keyword,Rank,Volume,Traffic,CPC,URL,Score");
+
+      return "Export CSV downloaded offcult.in-keywords.csv with the keyword table headers";
     } finally {
       await context.close();
     }
