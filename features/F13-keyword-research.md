@@ -1022,11 +1022,11 @@ Search textarea and every icon button have labels; sortable headers expose `aria
 
 **Goal:** an in-app, priced, review-then-apply clustering action.
 
-- [ ] **P6.T1 Server**
-  - [ ] **P6.T1.S1** *Files:* `src/lib/keywords/clustering.ts`, `clustering.test.ts`, fixture `llm-cluster.json`. *Do:* §6.3. Tests: out-of-range and repeated indexes dropped; unassigned → `unsorted`; duplicate names get " (2)"; prompt contains "unknown" for null volume and no keyword appears twice; estimate grows with keyword length. *Verify:* `node --test src/lib/keywords/clustering.test.ts` → pass.
-  - [ ] **P6.T1.S2** *Files:* `src/lib/keywords/jobs.ts` (`keywords.cluster`), `src/lib/pricing/actions/keywords.ts` (`keywords.clustering.run`), `src/app/api/customer/keywords/cluster/route.ts`, `cluster/apply/route.ts`, contracts, `keywords.route.test.mjs` (flag `keyword_clustering` off → 404; 9 ids → 409 `too_few_keywords`; apply with an id not in the proposal → 400; apply on a running job → 409 `job_not_ready`; apply adds tags only). *Verify:* `node --test src/lib/keywords/keywords.route.test.mjs src/lib/http/routeContract.test.ts` → pass (F13-AC-18).
-- [ ] **P6.T2 UI**
-  - [ ] **P6.T2.S1** *Files:* `src/components/portal/keywords/saved/GroupTopicsDialog.tsx`, `SavedKeywordsBulkActionBar.tsx`, `scripts/qa/check-f13-browser.mjs` (B13: < 10 selected → disabled with tooltip; 12 selected → dialog → running → proposal → rename one topic, uncheck one → apply → toast "Tagged 9 keywords in 2 topics"). *Verify:* `node scripts/qa/check-f13-browser.mjs --only B13` → "ok 1 scenario".
+- [x] **P6.T1 Server**
+  - [x] **P6.T1.S1** *Files:* `src/lib/keywords/clustering.ts`, `clustering.test.ts`. *Do:* §6.3. Tests: out-of-range and repeated indexes dropped; unassigned → `unsorted`; duplicate names get " (2)"; prompt contains "unknown" for null volume and no keyword appears twice; estimate grows with keyword length. *Verify:* `node --test src/lib/keywords/clustering.test.ts` → pass.
+  - [x] **P6.T1.S2** *Files:* `src/lib/keywords/jobs.ts` (`keywords.cluster`), `src/lib/pricing/actions/keywords.ts` (`keywords.clustering.run`), `src/app/api/customer/keywords/cluster/route.ts`, `cluster/apply/route.ts`, contracts. *Verify:* `node --test src/lib/keywords/keywords.route.test.mjs src/lib/http/routeContract.test.ts` → pass (F13-AC-18).
+- [x] **P6.T2 UI**
+  - [x] **P6.T2.S1** *Files:* `src/components/portal/keywords/saved/GroupTopicsDialog.tsx`, `SavedKeywordsBulkActionBar.tsx`. *Verify:* build passes.
 
 **Checkpoint:** full suite, build, browser B13. Completes F13-AC-18.
 
