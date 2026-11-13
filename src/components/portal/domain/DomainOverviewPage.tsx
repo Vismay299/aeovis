@@ -13,15 +13,14 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { Globe, Info } from "lucide-react";
 import { BackButton, PageHeader } from "@/components/app/PageHeader";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent } from "@/components/ui/card";
 import { DataTableTabs } from "@/components/app/table/DataTableToolbar";
 import { TabsTrigger } from "@/components/ui/tabs";
 import { RecentSearches } from "@/components/app/RecentSearches";
 import { QueryError } from "@/components/app/QueryState";
-import { PricedActionButton } from "@/components/app/cost/PricedActionButton";
 import { SearchTabStrip } from "@/components/app/search-tabs/SearchTabStrip";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { buildSearch } from "@/lib/query/urlState";
@@ -64,12 +63,15 @@ import { DomainNotLoadedCard } from "./DomainNotLoadedCard";
 import { DomainOverviewCard } from "./DomainOverviewCard";
 import { KeywordsTab } from "./KeywordsTab";
 import { PagesTab } from "./PagesTab";
+import { CompetitorsTab } from "./CompetitorsTab";
 import { useDomainLiveMode } from "./hooks/useDomainLiveMode";
 import {
   useDomainOverviewQuery,
   type DomainOverviewOkResponse,
+  type DomainOverviewResponse,
 } from "./hooks/useDomainOverviewQuery";
 import { useDeclaredCompetitors } from "./hooks/useDeclaredCompetitors";
+import type { DomainCompetitorsResponse } from "./hooks/useDomainCompetitors";
 import {
   useDomainSearchTabs,
   formatDomainTabLabel,
@@ -79,6 +81,7 @@ import {
   useDomainSearchHistory,
   type DomainSearchHistoryItem,
 } from "./hooks/useDomainSearchHistory";
+import { trackDomainEvent } from "./telemetry";
 
 type SearchUpdate = Partial<DomainSearchParams>;
 
@@ -141,6 +144,7 @@ export function DomainOverviewPage({
 
   const { liveMode, enableLiveMode } = useDomainLiveMode(brandKey);
   const [liveMaxUsd, setLiveMaxUsd] = useState<number | undefined>(undefined);
+  const queryClient = useQueryClient();
 
   // Search card form input states
   const [domainInput, setDomainInput] = useState(routeState.domain);
@@ -369,6 +373,7 @@ export function DomainOverviewPage({
 
   const handleTabChange = useCallback((nextTab: string) => {
     const tab = nextTab as DomainTab;
+    trackDomainEvent("domain_overview:tab", { tab });
     const fallbackSortNeeded =
       tab !== "keywords" && KEYWORDS_ONLY_SORTS.has(routeState.sort);
 
@@ -388,6 +393,40 @@ export function DomainOverviewPage({
     setLiveMaxUsd(maxUsd);
     enableLiveMode();
   }, [enableLiveMode]);
+
+  // A competitor was just stored in F07. Patch the cached overview and the
+  // cached competitors rows so the badge and the button state update without a
+  // refetch: in live mode either refetch would be another paid call, and this
+  // gesture approved no such call.
+  const handleCompetitorAdded = useCallback(
+    (domain: string) => {
+      queryClient.setQueriesData<DomainOverviewResponse>(
+        { queryKey: ["domainOverview", brandKey] },
+        (previous) =>
+          previous && previous.status === "ok" && previous.domain === domain
+            ? { ...previous, isDeclaredCompetitor: true }
+            : previous,
+      );
+      queryClient.setQueriesData<DomainCompetitorsResponse>(
+        { queryKey: ["domainCompetitors", brandKey] },
+        (previous) =>
+          previous && previous.status === "ok"
+            ? {
+                ...previous,
+                competitors: previous.competitors.map((item) =>
+                  item.domain === domain
+                    ? { ...item, isDeclaredCompetitor: true }
+                    : item,
+                ),
+              }
+            : previous,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: keys.declaredCompetitors(brandKey),
+      });
+    },
+    [brandKey, queryClient],
+  );
 
   const tabsBar = (
     <DataTableTabs
@@ -588,7 +627,9 @@ export function DomainOverviewPage({
 
             <DomainOverviewCard
               data={overviewOkData}
+              brandKey={brandKey}
               hasProjectMemory={hasProjectMemory}
+              onCompetitorAdded={handleCompetitorAdded}
             />
 
             {routeState.tab === "pages" ? (
@@ -606,40 +647,17 @@ export function DomainOverviewPage({
                 onPageSizeChange={handlePageSizeChange}
               />
             ) : routeState.tab === "competitors" ? (
-              <div className="rounded-xl border border-border bg-card">
-                {tabsBar}
-                <CardContent className="space-y-4 py-6">
-                  <div className="space-y-1">
-                    <p className="text-base font-medium">
-                      Find the domains that rank in Google for the same keywords as {overviewOkData.displayTarget}.
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Uses the {overviewOkData.organicKeywords ?? 0} keywords on the current Top Keywords page.
-                    </p>
-                  </div>
-                  <div title="Load the Top Keywords tab first.">
-                    <PricedActionButton
-                      label="Find competitors"
-                      pendingLabel="Finding competitors..."
-                      brandKey={brandKey}
-                      action="domain.competitors.run"
-                      input={{
-                        domain: overviewOkData.domain,
-                        scope: overviewOkData.scope,
-                        locationCode: routeState.locationCode,
-                        keywordCount: 50,
-                        limit: 50,
-                      }}
-                      alwaysConfirm
-                      dialogTitle="Find SERP competitors"
-                      confirmLabel="Find competitors"
-                      enabled={false}
-                      pending={false}
-                      onRun={() => {}}
-                    />
-                  </div>
-                </CardContent>
-              </div>
+              <CompetitorsTab
+                brandKey={brandKey}
+                displayTarget={overviewOkData.displayTarget}
+                domain={overviewOkData.domain}
+                scope={overviewOkData.scope}
+                languageCode={overviewOkData.market.languageCode}
+                routeState={routeState}
+                tabs={tabsBar}
+                hasProjectMemory={hasProjectMemory}
+                onCompetitorAdded={handleCompetitorAdded}
+              />
             ) : (
               <KeywordsTab
                 brandKey={brandKey}
@@ -649,7 +667,12 @@ export function DomainOverviewPage({
                 routeState={routeState}
                 tabs={tabsBar}
                 liveMode={liveMode}
-                canSaveKeywords={canSaveKeywords && overviewOkData.hasData}
+                canSaveKeywords={canSaveKeywords}
+                hasData={overviewOkData.hasData}
+                formLocationCode={locationInput}
+                formLanguageCode={overviewOkData.market.languageCode}
+                marketCountry={overviewOkData.market.country}
+                shownLocationCode={overviewOkData.market.locationCode}
                 setSearchParams={setSearchParams}
                 onSortClick={handleSortColumnClick}
                 onPageChange={handlePageChange}

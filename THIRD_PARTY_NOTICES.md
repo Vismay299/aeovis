@@ -520,6 +520,10 @@ SOFTWARE.
 - `src/components/portal/domain/KeywordsTab.tsx` (from `src/client/features/domain/components/KeywordsTab.tsx`)
 - `src/components/portal/domain/PagesTab.tsx` (from `src/client/features/domain/components/PagesTab.tsx`)
 - `src/components/portal/domain/telemetry.ts` (from `src/client/lib/posthog.ts`)
+- `src/components/portal/domain/SaveDomainKeywordsDialog.tsx` (from `src/client/features/domain/domainActions.ts`)
+- `src/components/portal/domain/CompetitorsTab.tsx` (from `src/client/features/domain/components/KeywordsTab.tsx`)
+- `src/components/portal/domain/DomainCompetitorsTable.tsx` (from `src/client/features/domain/components/DomainPagesTable.tsx`)
+- `src/components/portal/domain/hooks/useDomainCompetitors.ts` (from `src/client/features/domain/hooks/useDomainKeywordsQuery.ts`)
 
 - `src/components/portal/keywords/research/AreaTrendChart.tsx` (from `openseo:src/client/features/keywords/components/DisplayPrimitives.tsx`)
 - `src/components/portal/keywords/research/IntentBadge.tsx` (from `openseo:src/client/features/keywords/components/IntentBadge.tsx`)
