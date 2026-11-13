@@ -1,0 +1,34 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "tasks": [
+    {
+      "id": "fixture-serp-locations-in",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "cost": 0,
+      "result": [
+        { "location_code": 2356, "location_name": "India", "location_type": "Country", "country_iso_code": "IN" },
+        { "location_code": 20453, "location_name": "Maharashtra,India", "location_type": "State", "country_iso_code": "IN" },
+        { "location_code": 9062154, "location_name": "Navi Mumbai,Maharashtra,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 1007785, "location_name": "Mumbai,Maharashtra,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 9040201, "location_name": "Mumbai Suburban,Maharashtra,India", "location_type": "District", "country_iso_code": "IN" },
+        { "location_code": 9300001, "location_name": "400001,Maharashtra,India", "location_type": "Postal Code", "country_iso_code": "IN" },
+        { "location_code": 9300002, "location_name": "Chhatrapati Shivaji Airport,Maharashtra,India", "location_type": "Airport", "country_iso_code": "IN" },
+        { "location_code": 1007788, "location_name": "Pune,Maharashtra,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 1007751, "location_name": "Bengaluru,Karnataka,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 1007740, "location_name": "Delhi,Delhi,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 9061642, "location_name": "Thane,Maharashtra,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 9061700, "location_name": "Mumbai City,Maharashtra,India", "location_type": "County", "country_iso_code": "IN" },
+        { "location_code": 9061701, "location_name": "Konkan Division,Maharashtra,India", "location_type": "Region", "country_iso_code": "IN" },
+        { "location_code": 9061702, "location_name": "Kalyan-Dombivli,Maharashtra,India", "location_type": "Municipality", "country_iso_code": "IN" },
+        { "location_code": 1007809, "location_name": "Chennai,Tamil Nadu,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 1007768, "location_name": "Hyderabad,Telangana,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 1007753, "location_name": "Kolkata,West Bengal,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 9300003, "location_name": "IIT Bombay,Maharashtra,India", "location_type": "University", "country_iso_code": "IN" },
+        { "location_code": 1007790, "location_name": "Ahmedabad,Gujarat,India", "location_type": "City", "country_iso_code": "IN" },
+        { "location_code": 9300004, "location_name": "Bandra,Mumbai,Maharashtra,India", "location_type": "Neighborhood", "country_iso_code": "IN" }
+      ]
+    }
+  ]
+}

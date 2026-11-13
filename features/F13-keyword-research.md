@@ -1045,12 +1045,12 @@ Search textarea and every icon button have labels; sortable headers expose `aria
 **Goal:** volume, CPC and competition for one city, county or region.
 
 - [x] **P8.T1 Area registry, local research and city picker**
-  - [x] **P8.T1.S1** *Files:* `src/lib/providers/dataforseo/serp-locations.ts`, `src/shared/serp-location-search.ts`. *Do:* §6.2.1. *Verify:* `npm run typecheck` → pass.
-  - [x] **P8.T1.S2** *Files:* `src/lib/keywords/localVolume.ts`, `research.ts` (wire `researchLocal`), `src/lib/pricing/actions/keywords.ts` (local line and `unknown_location` block). *Verify:* `npm run typecheck` → pass.
-  - [x] **P8.T1.S3** *Files:* `src/app/api/customer/keywords/locations/route.ts`, contract. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [x] **P8.T1.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* pass.
+  - [x] **P8.T1.S1** *Files:* `src/lib/providers/dataforseo/serp-locations.ts`, `serp-locations.test.ts`, `src/shared/serp-location-search.ts`, `serp-location-search.test.ts`, fixture `tests/fixtures/f13/serp-locations-in.json`. *Do:* §6.2.1; tests: only included types kept; cached globally; ranking "mumbai" puts "Mumbai,Maharashtra,India" first. *Verify:* `node --test src/lib/providers/dataforseo/serp-locations.test.ts src/shared/serp-location-search.test.ts` → pass.
+  - [x] **P8.T1.S2** *Files:* `src/lib/keywords/localVolume.ts`, `localVolume.test.ts`, `research.ts` (local branch), research and SERP routes (default `assertLocalLocation`), `keywords.route.test.mjs` (409 before any paid call), `src/lib/pricing/actions/keywords.ts` (local line and `unknown_location` block, injectable registry) and `keywords.test.ts`. *Do:* port `research.test.ts:180-267` (three local cases) into `localVolume.test.ts`. *Verify:* `node --test src/lib/keywords/localVolume.test.ts src/lib/keywords/research.test.ts src/lib/keywords/serp.test.ts src/lib/pricing/actions/keywords.test.ts` → pass (F13-AC-20).
+  - [x] **P8.T1.S3** *Files:* `src/app/api/customer/keywords/locations/route.ts`, `src/lib/keywords/locations.route.test.mjs`, contract, `src/components/portal/keywords/research/{SerpLocationCombobox,usePrewarmSerpLocations,KeywordAreaField}.tsx`, `KeywordResearchSearchBar.tsx`, `SaveKeywordsDialog.tsx`, `hooks/useKeywordResearchController.ts`, `scripts/qa/check-f13-browser.mjs` (B18 — B15 was already taken: typing "mum" lists Mumbai; selecting it shows "Local volume adds up to $0.09 per search.", the run sends `locationName`, and the save dialog note). Gate is `keyword_research` OR `local_seo`; `rank_tracking` joins when F15 registers that flag. *Verify:* `node scripts/qa/check-f13-browser.mjs --only B18` → "ok 1 scenario"; `node --test src/lib/http/routeContract.test.ts` → pass.
+  - [x] **P8.T1.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
 
-**Checkpoint:** full suite, build, all browser scenarios `node scripts/qa/check-f13-browser.mjs` → "ok 15 scenarios". Completes F13-AC-20.
+**Checkpoint:** full suite, build, all browser scenarios `node scripts/qa/check-f13-browser.mjs` → "ok 18 scenarios". Completes F13-AC-20.
 
 ## 9. Test plan
 

@@ -39,7 +39,7 @@ if (!(await waitForServer(1000))) {
   }
 }
 const onlyIndex = process.argv.indexOf("--only");
-const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B17";
+const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B18";
 const selectedScenarios = new Set();
 for (const selection of requested.split(",")) {
   const range = selection.match(/^B(\d+)-B(\d+)$/);
@@ -107,7 +107,23 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
       const totalUsd = body.input?.depth === 100 ? 0.0155 : 0.0035;
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action, totalUsd, expectedUsd: totalUsd, lines: [{ label: `Top ${body.input?.depth ?? 20} Google results`, quantity: 1, unitUsd: totalUsd, totalUsd }] }) });
     }
+    if (body.input?.locationName) {
+      const local = { label: `Local volume for ${body.input.locationName}`, quantity: 1, unitUsd: 0.09, totalUsd: 0.09 };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action, totalUsd: quote.totalUsd + 0.09, expectedUsd: quote.expectedUsd + 0.09, lines: [...quote.lines, local] }) });
+    }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action }) });
+  });
+  const locationRequests = [];
+  await page.route("**/api/customer/keywords/locations*", (route) => {
+    const url = new URL(route.request().url());
+    locationRequests.push(Object.fromEntries(url.searchParams));
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const registry = [
+      { locationName: "Mumbai,Maharashtra,India", displayLabel: "Mumbai, Maharashtra, India", locationType: "City" },
+      { locationName: "Navi Mumbai,Maharashtra,India", displayLabel: "Navi Mumbai, Maharashtra, India", locationType: "City" },
+      { locationName: "Pune,Maharashtra,India", displayLabel: "Pune, Maharashtra, India", locationType: "City" },
+    ];
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ locations: registry.filter((row) => row.locationName.toLowerCase().includes(q)) }) });
   });
   await page.route("**/api/customer/keywords/research", (route) => {
     const body = route.request().postDataJSON();
@@ -126,7 +142,7 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ requestedKeyword: body.keyword, depth: body.depth, items, cached: body.cacheOnly }) });
   });
   await page.route("**/api/customer/keywords/saved", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ created: route.request().postDataJSON().keywords.length, savedKeywordIds: [] }) }));
-  return { context, page, researchRequests, serpRequests };
+  return { context, page, researchRequests, serpRequests, locationRequests };
 }
 
 async function openResearch(options, url = "/portal/keywords") {
@@ -398,6 +414,27 @@ try {
       assert.equal(await volumeHeader.getAttribute("aria-sort"), "ascending");
       assert.match(await page.locator("tbody tr").first().innerText(), /oversized tee outfit/);
       return "sort/order URL state controls ordering and aria-sort";
+    } finally { await context.close(); }
+  });
+  await record("B18", "city picker lists Mumbai, prices local volume, sends locationName, and notes national-only saves", async () => {
+    const { context, page, researchRequests, locationRequests } = await openResearch({ cacheMiss: false }, "/portal/keywords");
+    try {
+      await page.getByLabel("Keywords").fill("plumber");
+      await page.getByRole("combobox", { name: "City (optional)" }).fill("mum");
+      const option = page.getByRole("option", { name: /^Mumbai, Maharashtra, India/ });
+      await option.waitFor();
+      assert.ok(locationRequests.some((request) => /^[a-z]{2}$/.test(request.country) && request.q === "mum"), `location lookups: ${JSON.stringify(locationRequests)}`);
+      await option.click();
+      await page.getByText("Local volume adds up to $0.09 per search.").waitFor();
+      await page.locator("#keyword-research-submit:not([disabled])").filter({ hasText: /up to \$0\.17/ }).click();
+      await page.getByRole("button", { name: "oversized shirt for men" }).waitFor();
+      const run = researchRequests.find((request) => request.cacheOnly === false);
+      assert.equal(run?.locationName, "Mumbai,Maharashtra,India");
+      assert.equal(new URL(page.url()).searchParams.get("locName"), "Mumbai,Maharashtra,India");
+      await page.getByRole("checkbox", { name: "Select oversized t shirt" }).check();
+      await page.getByRole("button", { name: "Save Keywords" }).click();
+      await page.getByRole("dialog").getByText("Saved keywords show national metrics. The local volume for Mumbai, Maharashtra, India is not saved.").waitFor();
+      return "typing \"mum\" listed Mumbai; selecting it priced and sent local volume; save dialog noted national metrics";
     } finally { await context.close(); }
   });
 } finally {

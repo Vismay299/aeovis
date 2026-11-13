@@ -174,7 +174,9 @@ export async function research(
           locationName: undefined,
         };
         const national = await research(nationalInput, deps);
-        if (national.result.rows.length > 0) {
+        // A fresh national fetch already persisted its rows inside the nested
+        // call; a cache hit did not, and F13-AC-20 wants them persisted anyway.
+        if (national.cached && national.result.rows.length > 0) {
           const upsertPromise = deps
             .upsertMetrics(national.result.rows, {
               locationCode: nationalInput.locationCode,
