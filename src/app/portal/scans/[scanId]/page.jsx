@@ -33,6 +33,7 @@ import {
   roundedPct,
 } from "@/components/portal/scans/reportData";
 import { questionExportRows } from "@/components/portal/scans/reportExport";
+import { ScanCostCard } from "@/components/portal/cost/ScanCostCard";
 import { exportFilename } from "@/lib/export/filenames";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { useDebouncedDraft } from "@/components/app/hooks/useDebouncedDraft";
@@ -323,6 +324,8 @@ export default function ScanReportPage() {
             ) : null}
           </div>
         ) : null}
+
+        {scan ? <ScanCostCard cost={scan.cost} results={results} /> : null}
 
         {loading ? (
           <Card title="Questions" flush>

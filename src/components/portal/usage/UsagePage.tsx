@@ -84,18 +84,6 @@ function UsageSkeleton() {
   );
 }
 
-/**
- * The number of calls that used a reservation. The route does not expose an
- * unknown-call count, so the newest fifty rows are the only call-level source;
- * `recent` may hold fewer than the range's unknown calls (see the handoff).
- */
-function unknownCalls(usage: WorkspaceUsage): number {
-  const count = usage.recent.filter(
-    (call) => !call.notBilled && call.costSource === "reservation",
-  ).length;
-  return Math.max(count, 1);
-}
-
 function UsageContent({
   usage,
   range,
@@ -127,7 +115,7 @@ function UsageContent({
                   <Info aria-hidden />
                   <AlertTitle>Some costs are estimates</AlertTitle>
                   <AlertDescription>
-                    {`${unknownCalls(usage)} calls did not report a cost, so they are counted at the amount reserved before they ran. Reported costs replace them when available.`}
+                    {`${usage.totals.unknownCalls} calls did not report a cost, so they are counted at the amount reserved before they ran. Reported costs replace them when available.`}
                   </AlertDescription>
                 </Alert>
               ) : null}
