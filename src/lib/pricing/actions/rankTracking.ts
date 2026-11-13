@@ -10,7 +10,7 @@ import {
 } from "../pricedActions.ts";
 import { dataforseoPricing } from "../dataforseo.ts";
 import { fromMicros, toMicros } from "../../spend/money.ts";
-import { DEVICES, RANK_SCHEDULES, type Devices } from "../../../shared/rank-tracking.ts";
+import { DEVICES, RANK_SCHEDULES, devicesCount, devicesLabel, type Devices } from "../../../shared/rank-tracking.ts";
 import { estimateRankCheckUsd } from "../../rank-tracking/cost.ts";
 import { normalizeTrackedDomain, resolveTrackerMarket } from "../../rank-tracking/market.ts";
 import { createRankTrackingRepository } from "../../rank-tracking/repository.ts";
@@ -35,9 +35,17 @@ const configSaveInput = z.strictObject({
 
 export type RankTrackingQuoteDeps = {
   findRecentResearch?: typeof findRecentResearch;
+  repo?: ReturnType<typeof createRankTrackingRepository>;
 };
 
-async function loadConfig(ctx: PricingContext, configId: string) {
+async function loadConfig(ctx: PricingContext, configId: string, deps?: RankTrackingQuoteDeps) {
+  if (deps?.repo) {
+    try {
+      return await deps.repo.getConfig(ctx.brandKey, configId);
+    } catch {
+      return null;
+    }
+  }
   if (!ctx.admin) return null;
   const repo = createRankTrackingRepository(ctx.admin);
   try {
@@ -47,12 +55,17 @@ async function loadConfig(ctx: PricingContext, configId: string) {
   }
 }
 
+function repoFor(ctx: PricingContext, deps?: RankTrackingQuoteDeps) {
+  if (deps?.repo) return deps.repo;
+  return createRankTrackingRepository(ctx.admin!);
+}
+
 export async function estimateRankCheckRun(
   ctx: PricingContext,
   input: z.infer<typeof checkRunInput>,
   _deps?: RankTrackingQuoteDeps,
 ): Promise<PricedActionEstimateResult> {
-  const config = await loadConfig(ctx, input.configId);
+  const config = await loadConfig(ctx, input.configId, _deps);
   if (!config) {
     return {
       totalUsd: 0,
@@ -64,7 +77,18 @@ export async function estimateRankCheckRun(
       blocked: { code: "tracker_not_found", message: "This tracked domain does not exist." },
     };
   }
-  const repo = createRankTrackingRepository(ctx.admin!);
+  if ((config as any).is_active === false) {
+    return {
+      totalUsd: 0,
+      expectedUsd: 0,
+      units: [],
+      lines: [],
+      monthly: null,
+      warnings: [],
+      blocked: { code: "tracker_archived", message: "This domain was archived." },
+    };
+  }
+  const repo = repoFor(ctx, _deps);
   const keywords = await repo.listKeywords(ctx.brandKey, input.configId);
   const ids = input.keywordIds ? new Set(input.keywordIds) : null;
   const chosen = ids ? keywords.filter((k: any) => ids.has(k.id)) : keywords;
@@ -80,15 +104,17 @@ export async function estimateRankCheckRun(
       blocked: { code: "no_keywords", message: "Add keywords before checking rankings." },
     };
   }
+  const devices = (config as any).devices as Devices;
+  const label = devicesLabel(devices);
   const est = estimateRankCheckUsd(
     keywordStrings,
-    config.devices as Devices,
-    config.serp_depth,
+    devices,
+    (config as any).serp_depth,
     input.method,
   );
   const lines = [
     {
-      label: `Check ${keywordStrings.length} keywords on ${config.devices} (${input.method === "live" ? "results now" : "queue price"})`,
+      label: `Check ${keywordStrings.length} keywords on ${label} (${input.method === "live" ? "results now" : "queue price"})`,
       quantity: est.pairs,
       unitUsd: fromMicros(toMicros(est.checkUsd) / Math.max(1, est.pairs)),
       totalUsd: est.checkUsd,
@@ -107,7 +133,7 @@ export async function estimateRankCheckRun(
     expectedUsd: est.checkUsd,
     units: [
       { key: "keywords", label: "keywords", count: keywordStrings.length },
-      { key: "devices", label: "devices", count: input.method === "live" ? 1 : 1 },
+      { key: "devices", label: "devices", count: devicesCount(devices) },
       { key: "checks", label: "checks", count: est.pairs },
     ],
     lines,
@@ -134,7 +160,7 @@ export async function estimateConfigSave(
 ): Promise<PricedActionEstimateResult> {
   let config: any = null;
   if (input.configId) {
-    config = await loadConfig(ctx, input.configId);
+    config = await loadConfig(ctx, input.configId, _deps);
     if (!config) {
       return {
         totalUsd: 0,
@@ -150,9 +176,10 @@ export async function estimateConfigSave(
   const devices = (input.devices ?? config?.devices ?? "mobile") as Devices;
   const depth = input.serpDepth ?? config?.serp_depth ?? 40;
   const interval = input.scheduleInterval;
+  const existingCount = config && _deps?.repo ? await _deps.repo.listKeywords(ctx.brandKey, input.configId!).then((ks) => ks.length) : config ? await createRankTrackingRepository(ctx.admin!).listKeywords(ctx.brandKey, input.configId!).then((ks) => ks.length) : 0;
   const keywordCount =
     input.draft?.keywordCount ??
-    ((config?.keyword_count ?? 0) + (input.addKeywords?.length ?? 0));
+    (existingCount + (input.addKeywords?.length ?? 0));
   if (keywordCount > 1000) {
     return {
       totalUsd: 0,
@@ -167,9 +194,10 @@ export async function estimateConfigSave(
   const keywords = Array.from({ length: Math.max(1, keywordCount || 1) }, () => "keyword");
   const method = interval === "manual" ? "live" : "queued";
   const est = estimateRankCheckUsd(keywords, devices, depth, method);
+  const label = devicesLabel(devices);
   const lines = [
     {
-      label: `Each ${interval === "manual" ? "check" : interval + " check"} of ${keywordCount} keywords on ${devices}`,
+      label: `Each ${interval === "manual" ? "check" : interval + " check"} of ${keywordCount} keywords on ${label}`,
       quantity: est.pairs,
       unitUsd: fromMicros(toMicros(est.checkUsd) / Math.max(1, est.pairs)),
       totalUsd: est.checkUsd,

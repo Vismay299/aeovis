@@ -626,3 +626,5 @@ SOFTWARE.
 - `src/lib/rank-tracking/results.ts` (from `openseo:src/server/features/rank-tracking/services/rankTrackingResults.ts`)
 - `src/lib/pricing/actions/rankTracking.ts` (from `openseo:src/shared/rank-tracking.ts`)
 - `src/lib/rank-tracking/jobs.ts` (from `openseo:src/server/features/rank-tracking/jobs`)
+- `src/lib/rank-tracking/service.test.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.test.ts`)
+- `src/lib/rank-tracking/rankTracking.contract.ts` (from `openseo:src/types/schemas/rank-tracking.ts`)

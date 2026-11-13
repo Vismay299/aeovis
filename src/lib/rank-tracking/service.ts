@@ -6,8 +6,7 @@ import { AppError } from "../http/appError.ts";
 import { requireApprovedPrice, recordApproval, quote } from "../pricing/pricedActions.ts";
 import { createRankTrackingRepository } from "./repository.ts";
 import { normalizeTrackedDomain, resolveTrackerMarket, assertTrackedLocation } from "./market.ts";
-import { fromMicros } from "../spend/money.ts";
-import { appendResearch } from "../projectContext/service.ts";
+import { resolveKeywordDataLanguage } from "../../shared/keyword-locations.ts";
 import { computeNextRunAt } from "../../shared/schedule.ts";
 
 export type Workspace = { brandKey: string; userId: string | null; admin: any };
@@ -43,16 +42,28 @@ export type AddKeywordsBody = {
   maxUsd?: number;
 };
 
-export async function createConfig(ws: Workspace, body: CreateConfigBody, deps?: any): Promise<any> {
+export type ServiceDeps = {
+  repo?: ReturnType<typeof createRankTrackingRepository>;
+  fetchSerpLocationsForCountry?: (iso: string) => Promise<any[]>;
+  quote?: typeof quote;
+  requireApprovedPrice?: typeof requireApprovedPrice;
+  recordApproval?: typeof recordApproval;
+};
+
+function getRepo(admin: any, deps?: ServiceDeps) {
+  return deps?.repo ?? createRankTrackingRepository(admin);
+}
+
+export async function createConfig(ws: Workspace, body: CreateConfigBody, deps?: ServiceDeps): Promise<any> {
   const admin = ws.admin;
-  const repo = createRankTrackingRepository(admin);
+  const repo = getRepo(admin, deps);
   const domain = normalizeTrackedDomain(body.domain);
   const market = resolveTrackerMarket(
     { locationCode: body.locationCode, languageCode: body.languageCode },
     { website_host: (ws as any).website_host ?? "" } as any,
   );
   const locationName = body.locationName ?? null;
-  await assertTrackedLocation(market.locationCode, locationName);
+  await assertTrackedLocation(market.locationCode, locationName, deps?.fetchSerpLocationsForCountry ? { fetchSerpLocationsForCountry: deps.fetchSerpLocationsForCountry } : undefined);
 
   const interval = body.scheduleInterval ?? "weekly";
   if (interval === "manual" && body.scheduleTime) {
@@ -76,7 +87,11 @@ export async function createConfig(ws: Workspace, body: CreateConfigBody, deps?:
 
   let config: any;
   if (existing && !existing.is_active) {
-    // reactivate
+    // reactivate: keep approved_max only if schedule and devices/depth unchanged, else NULL
+    const sameSchedule = (body.scheduleInterval ?? existing.schedule_interval) === existing.schedule_interval;
+    const sameDevices = (body.devices ?? existing.devices) === existing.devices;
+    const sameDepth = (body.serpDepth ?? existing.serp_depth) === existing.serp_depth;
+    const keepApproval = sameSchedule && sameDevices && sameDepth;
     config = await repo.updateConfig(ws.brandKey, existing.id, {
       domain,
       location_code: market.locationCode,
@@ -88,6 +103,7 @@ export async function createConfig(ws: Workspace, body: CreateConfigBody, deps?:
       next_check_at: nextCheckAt,
       is_active: true,
       last_skip_reason: null,
+      approved_max_usd: keepApproval ? existing.approved_max_usd : null,
     } as any);
   } else {
     config = await repo.insertConfig({
@@ -107,9 +123,9 @@ export async function createConfig(ws: Workspace, body: CreateConfigBody, deps?:
   return { tracker: config };
 }
 
-export async function updateConfig(ws: Workspace, configId: string, body: UpdateConfigBody, deps?: any): Promise<any> {
+export async function updateConfig(ws: Workspace, configId: string, body: UpdateConfigBody, deps?: ServiceDeps): Promise<any> {
   const admin = ws.admin;
-  const repo = createRankTrackingRepository(admin);
+  const repo = getRepo(admin, deps);
   const config = await repo.getConfig(ws.brandKey, configId);
   if (!config) throw new AppError(404, "tracker_not_found", "This tracked domain does not exist.");
 
@@ -125,7 +141,7 @@ export async function updateConfig(ws: Workspace, configId: string, body: Update
   }
   if (body.locationName !== undefined) {
     const ln = body.locationName;
-    await assertTrackedLocation(body.locationCode ?? config.location_code, ln);
+    await assertTrackedLocation(body.locationCode ?? config.location_code, ln, deps?.fetchSerpLocationsForCountry ? { fetchSerpLocationsForCountry: deps.fetchSerpLocationsForCountry } : undefined);
     patch.location_name = ln;
   }
   if (body.devices != null) patch.devices = body.devices;
@@ -160,7 +176,10 @@ export async function updateConfig(ws: Workspace, configId: string, body: Update
   const keywords = await repo.listKeywords(ws.brandKey, configId);
   const isScheduled = newInterval !== "manual";
   if (isScheduled && keywords.length > 0) {
-    const q = await quote("rank_tracking.config.save", { brandKey: ws.brandKey, admin: ws.admin } as any, {
+    const quoteFn = deps?.quote ?? quote;
+    const requireFn = deps?.requireApprovedPrice ?? requireApprovedPrice;
+    const recordFn = deps?.recordApproval ?? recordApproval;
+    const q = await quoteFn("rank_tracking.config.save", { brandKey: ws.brandKey, admin: ws.admin } as any, {
       configId,
       devices: newDevices,
       serpDepth: newDepth,
@@ -168,9 +187,9 @@ export async function updateConfig(ws: Workspace, configId: string, body: Update
     } as any);
     const approvedMax = config.approved_max_usd;
     if (q.totalUsd > (approvedMax ?? 0)) {
-      if (body.maxUsd == null) throw new AppError(400, "approval_required", "Approval required.");
-      const approved = await requireApprovedPrice("rank_tracking.config.save", { brandKey: ws.brandKey, admin: ws.admin } as any, { configId, devices: newDevices, serpDepth: newDepth, scheduleInterval: newInterval } as any, body.maxUsd);
-      await recordApproval(ws.admin, { brandKey: ws.brandKey, action: "rank_tracking.config.save", approvedMaxUsd: body.maxUsd, quote: approved.quote, source: "schedule", subject: { kind: "rank_tracking_config", id: configId } });
+      if (body.maxUsd == null) throw new AppError(400, "approval_required", "Approval required.", { details: { quote: q } });
+      const approved = await requireFn("rank_tracking.config.save", { brandKey: ws.brandKey, admin: ws.admin } as any, { configId, devices: newDevices, serpDepth: newDepth, scheduleInterval: newInterval } as any, body.maxUsd);
+      await recordFn(ws.admin, { brandKey: ws.brandKey, action: "rank_tracking.config.save", approvedMaxUsd: body.maxUsd, quote: approved.quote, source: "schedule", subject: { kind: "rank_tracking_config", id: configId } });
       patch.approved_max_usd = body.maxUsd;
     }
   }
@@ -180,6 +199,9 @@ export async function updateConfig(ws: Workspace, configId: string, body: Update
     if (interval === "manual") {
       patch.next_check_at = null;
     } else {
+      if (interval === "weekly" && body.scheduleTime && !body.scheduleTime.weekday) {
+        throw new AppError(400, "schedule_weekday_required", "A weekly schedule time needs a weekday.");
+      }
       patch.next_check_at = computeNextRunAt(interval as any, config.next_check_at, body.scheduleTime);
     }
   }
@@ -188,13 +210,18 @@ export async function updateConfig(ws: Workspace, configId: string, body: Update
   return { tracker: updated };
 }
 
-export async function addKeywords(ws: Workspace, configId: string, body: AddKeywordsBody, deps?: any): Promise<any> {
+export async function addKeywords(ws: Workspace, configId: string, body: AddKeywordsBody, deps?: ServiceDeps): Promise<any> {
   const admin = ws.admin;
-  const repo = createRankTrackingRepository(admin);
+  const repo = getRepo(admin, deps);
   const config = await repo.getConfig(ws.brandKey, configId);
   if (!config) throw new AppError(404, "tracker_not_found", "This tracked domain does not exist.");
 
   const normalized = body.keywords.map((k) => (body.matchCase ? k.trim() : k.trim().toLowerCase()));
+  for (const kw of normalized) {
+    if (!kw || kw.length < 1 || kw.length > 200) {
+      throw new AppError(400, "invalid_request", "Check request fields and try again.");
+    }
+  }
   // dedupe against request
   const unique = Array.from(new Set(normalized));
   // dedupe against existing
@@ -208,11 +235,13 @@ export async function addKeywords(ws: Workspace, configId: string, body: AddKeyw
   const rows: any[] = [];
   let metricsFromCache = 0;
   if (config.location_name == null) {
-    // one select on keyword_metrics
+    // one select on keyword_metrics with language resolution
+    const dataLang = resolveKeywordDataLanguage(config.location_code, config.language_code);
     const { data } = await admin
       .from("keyword_metrics")
       .select("keyword, search_volume, keyword_difficulty, cpc, fetched_at")
       .eq("location_code", config.location_code)
+      .eq("language_code", dataLang)
       .in("keyword", toAdd.map((k) => k.toLowerCase()));
     const fresh = ((data as any[]) ?? []).filter((r: any) => new Date(r.fetched_at).getTime() > Date.now() - 7 * 86400000);
     const byKw = new Map(fresh.map((r: any) => [r.keyword, r]));
@@ -240,7 +269,10 @@ export async function addKeywords(ws: Workspace, configId: string, body: AddKeyw
   // scheduled approval handling
   let approval: any = null;
   if (config.schedule_interval !== "manual" && toAdd.length > 0) {
-    const q = await quote("rank_tracking.config.save", { brandKey: ws.brandKey, admin } as any, {
+    const quoteFn = deps?.quote ?? quote;
+    const requireFn = deps?.requireApprovedPrice ?? requireApprovedPrice;
+    const recordFn = deps?.recordApproval ?? recordApproval;
+    const q = await quoteFn("rank_tracking.config.save", { brandKey: ws.brandKey, admin } as any, {
       configId,
       addKeywords: toAdd,
       devices: config.devices,
@@ -249,16 +281,15 @@ export async function addKeywords(ws: Workspace, configId: string, body: AddKeyw
     } as any);
     const approvedMax = config.approved_max_usd;
     if (q.totalUsd > (approvedMax ?? 0)) {
-      if (body.maxUsd == null) throw new AppError(400, "approval_required", "Approval required.");
-      if (body.maxUsd < q.totalUsd) throw new AppError(409, "price_changed", "Price changed.");
-      const approved = await requireApprovedPrice("rank_tracking.config.save", { brandKey: ws.brandKey, admin } as any, {
+      if (body.maxUsd == null) throw new AppError(400, "approval_required", "Approval required.", { details: { quote: q } });
+      const approved = await requireFn("rank_tracking.config.save", { brandKey: ws.brandKey, admin } as any, {
         configId,
         addKeywords: toAdd,
         devices: config.devices,
         serpDepth: config.serp_depth,
         scheduleInterval: config.schedule_interval,
       } as any, body.maxUsd);
-      await recordApproval(ws.admin, { brandKey: ws.brandKey, action: "rank_tracking.config.save", approvedMaxUsd: body.maxUsd, quote: approved.quote, source: "dialog", subject: { kind: "rank_tracking_config", id: configId } });
+      await recordFn(ws.admin, { brandKey: ws.brandKey, action: "rank_tracking.config.save", approvedMaxUsd: body.maxUsd, quote: approved.quote, source: "dialog", subject: { kind: "rank_tracking_config", id: configId } });
       await repo.updateConfig(ws.brandKey, configId, { approved_max_usd: body.maxUsd } as any);
       approval = { approvedMaxUsd: body.maxUsd, quote: q };
     }

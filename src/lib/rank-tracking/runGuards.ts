@@ -86,14 +86,14 @@ export async function beginRankCheckRun(
     const runId = crypto.randomUUID();
     const method = i.trigger === "scheduled" ? "queued" : "live";
     const ok = await repo.tryCreateRun({
-      brandKey: ws.brandKey,
-      configId: i.configId,
-      runId,
+      brand_key: ws.brandKey,
+      config_id: i.configId,
+      id: runId,
       trigger: i.trigger,
       method,
-      approvedMaxUsd: i.approvedMaxUsd,
-      keywordIds: i.keywordIds,
-      actor: ws.userId,
+      approved_max_usd: i.approvedMaxUsd,
+      keyword_ids: i.keywordIds,
+      created_by: ws.userId,
     } as any);
     if (ok) {
       try {
