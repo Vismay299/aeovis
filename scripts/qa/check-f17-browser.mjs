@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * F17 Phase 3 browser verification (F17-AC-13).
+ * F17 browser verification (F17-AC-13).
  *
  * Scenarios:
  *   B1: no business -> "By name" lookup shows the price and the result card
@@ -8,8 +8,14 @@
  *   B3: profile head-to-head shows "Not loaded" (not 0) for a competitor without a profile
  *   B4: reviews: processing then completed, "owner replied to 6 of 20", page 2 of 2, rating filter
  *   B5: posts and questions empty states
+ *   B6: "Run grid" opens the cost dialog with "9 Google Maps searches" and the centre
+ *       warning; the SVG fills from "3 of 9" to complete, the summary reads
+ *       "Ranked at 7 of 9 points", the failed point shows "×", arrow keys move focus
+ *       between points, and no request leaves the local app (F17 phase 4)
+ *   B7: local results "You rank #4 of 20" with the "You" badge (F17 phase 4)
+ *   B8: phone width 390 px: no horizontal page scroll, the SVG fits (F17 phase 4)
  *
- * Output: "ok 5 scenarios" on pass.
+ * Output: "ok 8 scenarios" on pass.
  */
 
 import assert from "node:assert/strict";
@@ -36,7 +42,7 @@ assert.ok(
 const port = parseInt(origin.port || "3328", 10);
 
 // Parse --only flag
-let requestedScenarios = ["B1", "B2", "B3", "B4", "B5"];
+let requestedScenarios = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8"];
 for (let i = 0; i < process.argv.length; i++) {
   if (process.argv[i].startsWith("--only=")) {
     requestedScenarios = process.argv[i].split("=")[1].split(",").map((s) => s.trim());
@@ -560,6 +566,334 @@ if (requestedScenarios.includes("B5")) {
 
     passedCount++;
     console.log("Scenario B5 passed");
+  } finally {
+    await context.close();
+  }
+}
+
+// ==========================================
+// Scenario B6: grid cost dialog, SVG progress, summary, failed point, keyboard, no third party
+// ==========================================
+if (requestedScenarios.includes("B6")) {
+  console.log("Running Scenario B6...");
+  const { context, page } = await openPortal(browser, origin, {
+    viewport: { width: 1440, height: 900 },
+    fixtures: { memberships: offcultMembership },
+  });
+
+  try {
+    const b3 = readFixture("b3-fixtures.json");
+    const b6 = readFixture("b6-fixtures.json");
+
+    const requestedHosts = new Set();
+    page.on("request", (request) => {
+      try {
+        requestedHosts.add(new URL(request.url()).hostname);
+      } catch {
+        // A request without a URL (data:, blob:) cannot leave the app.
+      }
+    });
+
+    await page.route((url) => url.pathname === "/api/customer/features", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ features: { local_seo: true } }),
+      });
+    });
+
+    await page.route((url) => url.pathname === "/api/customer/local/businesses", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(b3),
+      });
+    });
+
+    await page.route((url) => url.pathname === "/api/customer/price/estimate", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(b6.quoteGrid),
+      });
+    });
+
+    await page.route((url) => url.pathname === "/api/customer/local/grids", async (route) => {
+      if (route.request().method() === "POST") {
+        return route.fulfill({
+          status: 202,
+          contentType: "application/json",
+          body: JSON.stringify(b6.processing),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(b6.emptyGridHistory),
+      });
+    });
+
+    let gridGetCount = 0;
+    await page.route((url) => url.pathname.startsWith("/api/customer/local/grids/"), async (route) => {
+      gridGetCount++;
+      const body = gridGetCount === 1 ? b6.processing : b6.completed;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+    });
+
+    await page.goto(`${origin.href}portal/local?tab=grid`, { waitUntil: "networkidle" });
+
+    const keywordInput = page.locator("#grid-keyword");
+    await keywordInput.waitFor({ timeout: 10000 });
+    await keywordInput.fill("coffee shop");
+
+    const runBtn = page.locator('[data-slot="grid-controls"] button:has-text("Run grid")').first();
+    await runBtn.waitFor({ timeout: 10000 });
+    // Wait for the debounced quote to settle before opening the dialog.
+    await page.waitForTimeout(700);
+    await runBtn.click();
+
+    const dialog = page.locator('[role="dialog"]');
+    await dialog.waitFor({ timeout: 10000 });
+    await page.waitForTimeout(300);
+    const dialogText = await dialog.textContent();
+    assert.ok(
+      dialogText.includes("9 Google Maps searches"),
+      `dialog should state the search count: ${dialogText}`
+    );
+    assert.ok(
+      dialogText.includes("Check that the centre is your storefront before running"),
+      "dialog should show the centre warning"
+    );
+
+    const confirm = dialog.locator('button:has-text("Run grid")').last();
+    await confirm.click();
+
+    const processing = page.locator('[data-slot="grid-processing"]');
+    await processing.waitFor({ timeout: 15000 });
+    const processingText = await processing.textContent();
+    assert.ok(
+      processingText.includes("3 of 9 searches back"),
+      `processing should show the progress: ${processingText}`
+    );
+
+    const completed = page.locator('[data-slot="grid-completed"]');
+    await completed.waitFor({ timeout: 30000 });
+
+    const summaryText = await page.locator('[data-slot="grid-summary"]').textContent();
+    assert.ok(
+      summaryText.includes("Ranked at 7 of 9 points"),
+      `summary should read "Ranked at 7 of 9 points": ${summaryText}`
+    );
+
+    const failedCell = page.locator('[data-point="2-2"]');
+    assert.equal(
+      await failedCell.getAttribute("data-state"),
+      "failed",
+      "the refused point must render as a failed cell"
+    );
+    assert.ok(
+      (await failedCell.textContent()).includes("×"),
+      "the failed cell must show ×"
+    );
+
+    // Arrow keys move focus inside role="grid".
+    await page.locator('[data-point="0-0"]').focus();
+    await page.keyboard.press("ArrowRight");
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.getAttribute("data-point")),
+      "0-1",
+      "ArrowRight must move focus one point east"
+    );
+    await page.keyboard.press("ArrowDown");
+    assert.equal(
+      await page.evaluate(() => document.activeElement?.getAttribute("data-point")),
+      "1-1",
+      "ArrowDown must move focus one point south"
+    );
+
+    // No third party: the grid is drawn locally, never from map tiles.
+    const allowedHosts = new Set([origin.hostname, new URL(SUPABASE_URL).hostname]);
+    const foreignHosts = [...requestedHosts].filter(
+      (host) => host && !allowedHosts.has(host)
+    );
+    assert.deepEqual(
+      foreignHosts,
+      [],
+      `no request may leave the local app, saw: ${foreignHosts.join(", ")}`
+    );
+
+    passedCount++;
+    console.log("Scenario B6 passed");
+  } finally {
+    await context.close();
+  }
+}
+
+// ==========================================
+// Scenario B7: local results "You rank #4 of 20" with the "You" badge
+// ==========================================
+if (requestedScenarios.includes("B7")) {
+  console.log("Running Scenario B7...");
+  const { context, page } = await openPortal(browser, origin, {
+    viewport: { width: 1440, height: 900 },
+    fixtures: { memberships: offcultMembership },
+  });
+
+  try {
+    const b3 = readFixture("b3-fixtures.json");
+    const b7 = readFixture("b7-fixtures.json");
+
+    await page.route((url) => url.pathname === "/api/customer/features", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ features: { local_seo: true } }),
+      });
+    });
+
+    await page.route((url) => url.pathname === "/api/customer/local/businesses", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(b3),
+      });
+    });
+
+    await page.route((url) => url.pathname === "/api/customer/price/estimate", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(b7.quoteSerp),
+      });
+    });
+
+    await page.route((url) => url.pathname === "/api/customer/local/serp", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(b7.serpResult),
+      });
+    });
+
+    await page.goto(`${origin.href}portal/local?tab=results`, { waitUntil: "networkidle" });
+
+    const keywordInput = page.locator("#results-keyword");
+    await keywordInput.waitFor({ timeout: 10000 });
+    await keywordInput.fill("coffee shop");
+    await page.waitForTimeout(700);
+
+    const searchBtn = page
+      .locator('[data-slot="results-controls"] button:has-text("Search")')
+      .first();
+    await searchBtn.click();
+
+    // A quote at or below the inline threshold runs without a dialog; confirm
+    // one if the quote's warnings forced it open.
+    const dialogConfirm = page.locator('[role="dialog"] button:has-text("Search")');
+    if (await dialogConfirm.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await dialogConfirm.click();
+    }
+
+    const summary = page.locator('[data-slot="results-summary"]');
+    await summary.waitFor({ timeout: 10000 });
+    const summaryText = await summary.textContent();
+    assert.ok(
+      summaryText.includes("You rank #4 of 20"),
+      `summary should read "You rank #4 of 20": ${summaryText}`
+    );
+
+    const output = page.locator('[data-slot="results-output"]');
+    const ownRow = output.locator("tr", { hasText: "Acme Coffee" }).first();
+    await ownRow.waitFor({ timeout: 5000 });
+    const ownRowText = await ownRow.textContent();
+    assert.ok(ownRowText.includes("You"), `the own business row needs the You badge: ${ownRowText}`);
+    assert.ok(
+      ownRowText.includes("4"),
+      `the own business row must show its rank: ${ownRowText}`
+    );
+
+    passedCount++;
+    console.log("Scenario B7 passed");
+  } finally {
+    await context.close();
+  }
+}
+
+// ==========================================
+// Scenario B8: phone width 390 px: no horizontal page scroll, SVG fits
+// ==========================================
+if (requestedScenarios.includes("B8")) {
+  console.log("Running Scenario B8...");
+  const { context, page } = await openPortal(browser, origin, {
+    viewport: { width: 390, height: 844 },
+    fixtures: { memberships: offcultMembership },
+  });
+
+  try {
+    const b3 = readFixture("b3-fixtures.json");
+    const b6 = readFixture("b6-fixtures.json");
+
+    await page.route((url) => url.pathname === "/api/customer/features", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ features: { local_seo: true } }),
+      });
+    });
+
+    await page.route((url) => url.pathname === "/api/customer/local/businesses", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(b3),
+      });
+    });
+
+    await page.route((url) => url.pathname === "/api/customer/local/grids", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(b6.emptyGridHistory),
+      });
+    });
+
+    await page.route((url) => url.pathname.startsWith("/api/customer/local/grids/"), async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(b6.completed),
+      });
+    });
+
+    await page.goto(
+      `${origin.href}portal/local?tab=grid&grid=${b6.completed.id}`,
+      { waitUntil: "networkidle" }
+    );
+
+    await page.locator('[data-slot="grid-completed"]').waitFor({ timeout: 15000 });
+
+    const layout = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }));
+    assert.ok(
+      layout.scrollWidth <= layout.innerWidth + 1,
+      `the page must not scroll horizontally on a phone: ${JSON.stringify(layout)}`
+    );
+
+    const svgBox = await page.locator('[data-slot="rank-grid-svg"] svg').boundingBox();
+    assert.ok(svgBox, "the rank grid SVG must render");
+    assert.ok(
+      svgBox.width <= layout.innerWidth,
+      `the SVG must fit the phone width: ${svgBox.width} <= ${layout.innerWidth}`
+    );
+
+    passedCount++;
+    console.log("Scenario B8 passed");
   } finally {
     await context.close();
   }

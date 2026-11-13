@@ -4,9 +4,7 @@
 //   src/client/features/domain/DomainOverviewPage.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { HelpLabel } from "@/components/app/HelpLabel";
 import { MetricsTable } from "@/components/app/MetricsTable";
@@ -14,11 +12,14 @@ import {
   RESEARCH_SCOPE_LABELS,
   type ResearchScope,
 } from "@/shared/researchScope";
+import { AddCompetitorButton, canOfferAddCompetitor } from "./AddCompetitorButton";
 import type { DomainOverviewOkResponse } from "./hooks/useDomainOverviewQuery";
 
 type Props = {
   data: DomainOverviewOkResponse;
+  brandKey: string;
   hasProjectMemory?: boolean;
+  onCompetitorAdded?: (domain: string) => void;
 };
 
 function formatNumber(value: number | null | undefined): string {
@@ -40,12 +41,17 @@ function formatRelativeTime(dateString: string): string {
 
 export function DomainOverviewCard({
   data,
+  brandKey,
   hasProjectMemory = true,
+  onCompetitorAdded,
 }: Props) {
   const isNarrowerScope = data.scope !== "subdomains";
 
-  const showAddCompetitor =
-    hasProjectMemory && !data.isOwnSite && !data.isDeclaredCompetitor;
+  const showAddCompetitor = canOfferAddCompetitor({
+    hasProjectMemory,
+    isOwnSite: data.isOwnSite,
+    isDeclaredCompetitor: data.isDeclaredCompetitor,
+  });
 
   const metricRows = [
     {
@@ -99,14 +105,13 @@ export function DomainOverviewCard({
           </div>
 
           {showAddCompetitor ? (
-            <Button
-              type="button"
-              variant="outline"
+            <AddCompetitorButton
+              brandKey={brandKey}
+              domain={data.domain}
               size="sm"
-            >
-              <UserPlus data-icon="inline-start" />
-              Add as competitor
-            </Button>
+              variant="outline"
+              onAdded={onCompetitorAdded}
+            />
           ) : null}
         </div>
 

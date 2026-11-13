@@ -30,6 +30,7 @@ test("every builder returns its documented shape", () => {
   assert.deepEqual(keys.localGrid("a", "g1"), ["localGrid", "a", "g1"]);
   assert.deepEqual(keys.localGrids("a"), ["localGrids", "a"]);
   assert.deepEqual(keys.localCategories("q"), ["localCategories", "q"]);
+  assert.deepEqual(keys.localSerp("a", "input"), ["localSerp", "a", "input"]);
   assert.deepEqual(keys.keywordResearch("a", "input"), ["keywordResearch", "a", "input"]);
   assert.deepEqual(keys.keywordSerp("a", "input"), ["keywordSerp", "a", "input"]);
   assert.deepEqual(keys.savedKeywords("a", "input"), ["savedKeywords", "a", "input"]);
@@ -53,6 +54,7 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.localFetches("acme", "b1", "reviews"),
     keys.localGrid("acme", "g1"),
     keys.localGrids("acme"),
+    keys.localSerp("acme", "serp-input"),
     keys.keywordResearch("acme", "research-input"),
     keys.keywordSerp("acme", "serp-input"),
     keys.savedKeywords("acme", "saved-input"),
@@ -64,6 +66,11 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.ahrefsRatings("acme", "ratings-input"),
     keys.backlinkSnapshotTargets("acme"),
     keys.backlinkSnapshots("acme", "example.com", "subdomains"),
+    keys.domainOverview("acme", "overview-input"),
+    keys.domainKeywords("acme", "keywords-input"),
+    keys.domainPages("acme", "pages-input"),
+    keys.domainCompetitors("acme", "competitors-input"),
+    keys.declaredCompetitors("acme"),
     keys.ga4Connection("acme"),
     keys.ga4Properties("acme"),
     keys.ga4Accounts("acme"),

@@ -12,6 +12,8 @@ import { ProfileTab } from "./ProfileTab";
 import { ReviewsTab } from "./ReviewsTab";
 import { PostsTab } from "./PostsTab";
 import { QuestionsTab } from "./QuestionsTab";
+import { GridTab } from "./GridTab";
+import { LocalResultsTab } from "./LocalResultsTab";
 import { useLocalBusinesses } from "./hooks/useLocalBusinesses";
 
 export const localUrlStateSchema = z.object({
@@ -183,15 +185,23 @@ export function LocalSeoPage({
                   )}
 
                   {activeTab === "grid" && (
-                    <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-                      Map rankings grid will be available in Phase 4.
-                    </div>
+                    <GridTab
+                      brandKey={brandKey}
+                      business={selectedBusiness}
+                      currentGridId={urlState.grid ?? null}
+                      onSelectGridId={(id) =>
+                        setUrlState({ grid: id ?? undefined })
+                      }
+                    />
                   )}
 
                   {activeTab === "results" && (
-                    <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-                      Local search results will be available in Phase 4.
-                    </div>
+                    <LocalResultsTab
+                      brandKey={brandKey}
+                      business={selectedBusiness}
+                      competitors={competitors}
+                      onSaveBusiness={saveBusiness}
+                    />
                   )}
                 </div>
               )}
