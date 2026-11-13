@@ -64,6 +64,9 @@ export async function failRunIfActive(
 ): Promise<void> {
   const repo = deps?.repo ?? createRankTrackingRepository((deps as any)?.admin);
   try {
+    // Never overwrite a run that already finished (e.g. run_superseded).
+    const current = await repo.getRun(brandKey, runId);
+    if (!current || (current.status !== "pending" && current.status !== "running")) return;
     await repo.updateRun(brandKey, runId, {
       status: "failed",
       completed_at: new Date().toISOString(),

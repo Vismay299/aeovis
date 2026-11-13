@@ -171,3 +171,63 @@ test("500 task_get cap per collect", async () => {
   assert.ok(collectLimits.length > 0);
   assert.ok(collectLimits.every((l) => l <= 500));
 });
+
+// The real metered client (src/lib/providers/dataforseo/client.ts) returns
+// PromiseSettledResult[] from rankCheckBatch and refuses a reused
+// idempotency key with duplicate_paid_call; the doubles below behave the same.
+test("live check with the client's real shapes: settled results, one key per device", async () => {
+  const repo = createMemoryRankTrackingRepository();
+  const cfg = await repo.insertConfig({ brand_key: "brand-a", domain: "example.com", location_code: 2840, language_code: "en", location_name: null, devices: "both", serp_depth: 10, schedule_interval: "weekly", is_active: true, next_check_at: null, created_by: null } as any);
+  const ids = await repo.addKeywords("brand-a", cfg.id, [{ keyword: "a" }, { keyword: "b" }]);
+  const runId = crypto.randomUUID();
+  await repo.tryCreateRun({ brand_key: "brand-a", config_id: cfg.id, id: runId, trigger: "manual", method: "live", approved_max_usd: 10, keyword_ids: ids, created_by: null } as any);
+  const run = await repo.getRun("brand-a", runId);
+  const seenKeys = new Set<string>();
+  const client = {
+    serp: {
+      rankCheckBatch: async (ctx: any, inputs: any[]) => {
+        if (seenKeys.has(ctx.idempotencyKey)) {
+          const err: any = new Error("This paid request was already made.");
+          err.code = "duplicate_paid_call";
+          throw err;
+        }
+        seenKeys.add(ctx.idempotencyKey);
+        return inputs.map((inp: any, i: number) =>
+          i === 0
+            ? { status: "fulfilled", value: { keywordId: inp.keywordId, keyword: inp.keyword, position: 4, url: "https://example.com/a", serpFeatures: ["organic"] } }
+            : { status: "rejected", reason: Object.assign(new Error("no results"), { code: "dataforseo_no_results" }) },
+        );
+      },
+    },
+  };
+  await runLiveCheck(fakeCtx() as any, run, { repo, client } as any);
+  const snaps = await repo.snapshotsForRun("brand-a", runId);
+  assert.deepEqual(snaps.map((s: any) => s.device).sort(), ["desktop", "mobile"]);
+  assert.equal(seenKeys.size, 2);
+  const r = await repo.getRun("brand-a", runId);
+  assert.equal((r as any)?.error_code, "dataforseo_unavailable");
+});
+
+test("queued post understands the client's PostedRankCheckTask[] result", async () => {
+  const repo = createMemoryRankTrackingRepository();
+  const cfg = await repo.insertConfig({ brand_key: "brand-a", domain: "example.com", location_code: 2840, language_code: "en", location_name: null, devices: "mobile", serp_depth: 10, schedule_interval: "weekly", is_active: true, next_check_at: null, created_by: null } as any);
+  const ids = await repo.addKeywords("brand-a", cfg.id, [{ keyword: "kw-1" }, { keyword: "kw-2" }]);
+  const runId = crypto.randomUUID();
+  await repo.tryCreateRun({ brand_key: "brand-a", config_id: cfg.id, id: runId, trigger: "scheduled", method: "queued", approved_max_usd: 10, keyword_ids: ids, created_by: null } as any);
+  const run = await repo.getRun("brand-a", runId);
+  const client = {
+    serp: {
+      // Only accepted tasks come back, already mapped by the provider module.
+      rankCheckTaskPost: async (_ctx: any, input: any) =>
+        input.tasks.slice(0, 1).map((t: any) => ({ ...t, taskId: "task-accepted" })),
+    },
+  };
+  const collected: any[] = [];
+  await runQueuedRound(fakeCtx() as any, run, 0, {
+    repo,
+    client,
+    fetchTaskResult: async (i: any) => ({ status: "completed", result: { keywordId: i.keywordId, keyword: i.keyword, position: 7, url: null, serpFeatures: [] } }),
+  } as any, async (rows: any[]) => { collected.push(...rows); });
+  assert.equal(collected.length, 1);
+  assert.equal(collected[0].position, 7);
+});

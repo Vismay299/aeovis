@@ -10,7 +10,7 @@ const schema = z.strictObject({ brand_key: z.string().optional(), maxUsd: z.numb
 
 function parseId(raw: string) { if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) throw new AppError(404, "tracker_not_found", "This tracked domain does not exist."); return raw; }
 
-export async function POST(request: Request, ctx: { params: { configId: string } }, deps?: any): Promise<Response> {
+export async function POST(request: Request, ctx: { params: Promise<{ configId: string }> | { configId: string } }, deps?: any): Promise<Response> {
   try {
     const raw = await request.json().catch(() => ({}));
     const parsed = schema.safeParse(raw);
@@ -18,7 +18,7 @@ export async function POST(request: Request, ctx: { params: { configId: string }
     const input = parsed.data;
     const ws = await (deps?.requireWorkspace ?? requireWorkspace)(request, { brandKey: input.brand_key }, deps as any);
     if (!(await (deps?.isFeatureEnabled ?? isFeatureEnabled)("rank_tracking", ws.brandKey))) throw new AppError(404, "feature_unavailable", "This page is not available for your workspace yet.");
-    const configId = parseId(ctx.params.configId);
+    const configId = parseId((await ctx.params).configId);
     // metrics refresh not fully implemented; return placeholder
     return Response.json({ updated: 0, fromCache: 0, bought: 0 }, { headers: { "cache-control": "no-store" } });
   } catch (err) { return toErrorResponse(err); }

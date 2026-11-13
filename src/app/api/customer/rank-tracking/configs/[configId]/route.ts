@@ -42,7 +42,7 @@ export type ConfigRouteDeps = {
   updateConfig?: typeof updateConfig;
 };
 
-export async function GET(request: Request, ctx: { params: { configId: string } }, deps?: ConfigRouteDeps): Promise<Response> {
+export async function GET(request: Request, ctx: { params: Promise<{ configId: string }> | { configId: string } }, deps?: ConfigRouteDeps): Promise<Response> {
   try {
     const url = new URL(request.url);
     const brandKey = url.searchParams.get("brand_key") ?? undefined;
@@ -50,7 +50,7 @@ export async function GET(request: Request, ctx: { params: { configId: string } 
     if (!(await (deps?.isFeatureEnabled ?? isFeatureEnabled)("rank_tracking", ws.brandKey))) {
       throw new AppError(404, "feature_unavailable", "This page is not available for your workspace yet.");
     }
-    const configId = parseConfigId(ctx.params.configId);
+    const configId = parseConfigId((await ctx.params).configId);
     const tracker = await (deps?.getTracker ?? getTracker)(ws as any, configId);
     return Response.json(tracker, { headers: { "cache-control": "no-store" } });
   } catch (err) {
@@ -58,7 +58,7 @@ export async function GET(request: Request, ctx: { params: { configId: string } 
   }
 }
 
-export async function PATCH(request: Request, ctx: { params: { configId: string } }, deps?: ConfigRouteDeps): Promise<Response> {
+export async function PATCH(request: Request, ctx: { params: Promise<{ configId: string }> | { configId: string } }, deps?: ConfigRouteDeps): Promise<Response> {
   try {
     let raw: unknown;
     try {
@@ -73,7 +73,7 @@ export async function PATCH(request: Request, ctx: { params: { configId: string 
     if (!(await (deps?.isFeatureEnabled ?? isFeatureEnabled)("rank_tracking", ws.brandKey))) {
       throw new AppError(404, "feature_unavailable", "This page is not available for your workspace yet.");
     }
-    const configId = parseConfigId(ctx.params.configId);
+    const configId = parseConfigId((await ctx.params).configId);
     const tracker = await (deps?.updateConfig ?? updateConfig)(ws as any, configId, input);
     return Response.json(tracker, { headers: { "cache-control": "no-store" } });
   } catch (err) {

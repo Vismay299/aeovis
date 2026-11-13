@@ -61,7 +61,9 @@ export async function runLiveCheck(ctx: any, run: any, deps: CheckDeps): Promise
     const stepName = "live-batch-" + Math.floor(i / KEYWORDS_PER_BATCH);
     try {
       await ctx.step.do(stepName, SINGLE_ATTEMPT, async () => {
-        const est = estimatePairsUsd(pairs, run.serp_depth, "live");
+        const devices = run.devices === "both" ? ["desktop", "mobile"] : [run.devices];
+        // One paid SERP per keyword per device: reserve for every device.
+        const est = estimatePairsUsd(pairs, run.serp_depth, "live") * devices.length;
         const reserved = await repo.reserve(ctx.brandKey, run.id, est);
         if (!reserved) {
           const cur = await repo.getRun(ctx.brandKey, run.id);
@@ -70,7 +72,6 @@ export async function runLiveCheck(ctx: any, run: any, deps: CheckDeps): Promise
           }
           return { written: 0, budget: "exhausted" };
         }
-        const devices = run.devices === "both" ? ["desktop", "mobile"] : [run.devices];
         let wrote = 0;
         for (const dev of devices) {
           const devInputs = batch.map((k: any) => ({
@@ -88,13 +89,35 @@ export async function runLiveCheck(ctx: any, run: any, deps: CheckDeps): Promise
               {
                 brandKey: ctx.brandKey,
                 feature: "rank_tracking.check",
-                idempotencyKey: jobStepKey(ctx, stepName),
+                // Each device is a separate paid call within this step.
+                idempotencyKey: `${jobStepKey(ctx, stepName)}:${dev}`,
                 maxUsd: run.approved_max_usd,
                 jobId: ctx.jobId,
               },
               devInputs,
             );
-            const rows = mapResultsToSnapshotRows(ctx.brandKey, run.id, (res?.results ?? res?.data ?? []).map((r: any) => ({
+            // The metered client returns PromiseSettledResult[] (one per
+            // keyword): fulfilled rows become snapshots, the first rejection
+            // is kept as the run's reason (spec §6.2.7, PORT :105-130).
+            const settled: any[] = Array.isArray(res) ? res : (res?.results ?? res?.data ?? []);
+            const fulfilled: any[] = [];
+            for (const item of settled) {
+              if (item && item.status === "rejected") {
+                const reason = item.reason;
+                const upstream = isUpstream(reason) || !reason?.code;
+                await repo.setRunErrorIfEmpty(
+                  ctx.brandKey,
+                  run.id,
+                  upstream ? "dataforseo_unavailable" : reason.code,
+                  upstream ? "Our search data provider had errors." : String(reason?.message ?? "").slice(0, 200),
+                );
+              } else if (item && item.status === "fulfilled") {
+                fulfilled.push(item.value);
+              } else if (item) {
+                fulfilled.push(item);
+              }
+            }
+            const rows = mapResultsToSnapshotRows(ctx.brandKey, run.id, fulfilled.map((r: any) => ({
               keywordId: r.keywordId ?? r.keyword_id,
               keyword: r.keyword,
               device: dev,
@@ -208,12 +231,19 @@ export async function runQueuedRound(
             },
             postInput,
           );
-          const posted = res?.results ?? res?.data ?? res?.tasks ?? [];
+          // The metered client returns PostedRankCheckTask[] ({ keywordId,
+          // device, taskId }) holding only accepted tasks; raw provider
+          // entries ({ id, status_code, data.tag }) are still understood.
+          const posted: any[] = Array.isArray(res) ? res : (res?.results ?? res?.data ?? res?.tasks ?? []);
           for (const t of chunk) {
             const want = `${t.tracking_keyword_id}:${t.device}`;
-            const match = (posted as any[]).find((p: any) => p.tag === want || p.data?.tag === want);
-            if (match && (match.status_code === 20000 || match.status_code === 20100) && (match.id ?? match.task_id)) {
-              await repo.updateTasks([{ id: t.id, brand_key: t.brand_key, run_id: t.run_id, state: "posted", provider_task_id: match.id ?? match.task_id }]);
+            const match = posted.find(
+              (p: any) => p.tag === want || p.data?.tag === want || (p.keywordId != null && `${p.keywordId}:${p.device}` === want),
+            );
+            const taskId = match?.taskId ?? match?.id ?? match?.task_id;
+            const accepted = match && taskId && (match.taskId != null || match.status_code === 20000 || match.status_code === 20100);
+            if (accepted) {
+              await repo.updateTasks([{ id: t.id, brand_key: t.brand_key, run_id: t.run_id, state: "posted", provider_task_id: taskId }]);
             } else if (match) {
               await repo.updateTasks([{ id: t.id, brand_key: t.brand_key, run_id: t.run_id, state: "rejected", message: String(match.status_message ?? "rejected").slice(0, 300) }]);
             } else {

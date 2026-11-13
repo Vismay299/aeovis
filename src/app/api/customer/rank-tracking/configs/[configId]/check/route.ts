@@ -25,7 +25,7 @@ export type CheckRouteDeps = {
   assertTrackedLocation?: typeof assertTrackedLocation;
 };
 
-export async function POST(request: Request, ctx: { params: { configId: string } }, deps?: CheckRouteDeps): Promise<Response> {
+export async function POST(request: Request, ctx: { params: Promise<{ configId: string }> | { configId: string } }, deps?: CheckRouteDeps): Promise<Response> {
   try {
     let raw: unknown;
     try {
@@ -38,7 +38,7 @@ export async function POST(request: Request, ctx: { params: { configId: string }
     const input = parsed.data;
     const ws = await (deps?.requireWorkspace ?? requireWorkspace)(request, { brandKey: input.brand_key }, deps as any);
     if (!(await (deps?.isFeatureEnabled ?? isFeatureEnabled)("rank_tracking", ws.brandKey))) throw new AppError(404, "feature_unavailable", "This page is not available for your workspace yet.");
-    const configId = parseId(ctx.params.configId);
+    const configId = parseId((await ctx.params).configId);
     const repo = deps?.repo ?? createRankTrackingRepository(ws.admin);
     const config = await repo.getConfig(ws.brandKey, configId);
     if (!config) throw new AppError(404, "tracker_not_found", "This tracked domain does not exist.");

@@ -11,6 +11,9 @@ import { createRankTrackingRepository } from "./repository.ts";
 import { failRunIfActive } from "./runGuards.ts";
 import { runLiveCheck, runQueuedRound } from "./checkPaths.ts";
 import { retryRankChecks } from "./retries.ts";
+import { getSupabaseAdmin } from "../supabase/admin.js";
+import { createDataforseoClient } from "../providers/dataforseo/client.ts";
+import { fetchRankCheckTaskResult } from "../providers/dataforseo/serp.ts";
 
 export const rankCheckPayloadSchema = z.strictObject({ runId: z.string().uuid() });
 
@@ -27,8 +30,12 @@ export async function runRankCheckJob(
   ctx: JobContext<RankCheckPayload>,
   deps?: RankCheckDeps,
 ): Promise<{ status: string; result?: unknown }> {
-  const admin = deps?.admin ?? (ctx as any).admin;
+  // Production runs with no bound deps: use the real admin client, the
+  // metered DataForSEO client and the free task_get reader.
+  const admin = deps?.admin ?? (ctx as any).admin ?? (deps?.repo ? null : getSupabaseAdmin());
   const repo = deps?.repo ?? createRankTrackingRepository(admin);
+  const client = deps?.client ?? createDataforseoClient();
+  const fetchTaskResult = deps?.fetchTaskResult ?? fetchRankCheckTaskResult;
   const runId = ctx.payload.runId;
   const run = await repo.getRun(ctx.brandKey, runId);
   if (!run) throw new AppError(404, "run_not_found", "Run not found.");
@@ -46,60 +53,66 @@ export async function runRankCheckJob(
     return { status: "completed", result: { skipped: "archived" } } as any;
   }
 
-  // prepare
-  const prepared = await ctx.step.do("prepare", { timeoutMs: 60000, retries: 0 } as any, async () => {
-    const r = await repo.getRun(ctx.brandKey, runId);
-    if (!r || (r.status !== "pending" && r.status !== "running")) {
-      throw new AppError(409, "run_superseded", "Run superseded.");
-    }
-    await repo.updateRun(ctx.brandKey, runId, { status: "running", phase: "checking" } as any);
-    const cfg = await repo.getConfig(ctx.brandKey, run.config_id);
-    if (!cfg) throw new AppError(404, "tracker_not_found", "This tracked domain does not exist.");
-    const keywords = await repo.listKeywords(ctx.brandKey, run.config_id);
-    const byId = new Map(keywords.map((k: any) => [k.id, k]));
-    const keywordIdsSet = new Set((run.keyword_ids ?? []).map((x: string) => x));
-    const subset = run.keyword_ids && run.keyword_ids.length > 0;
-    const frozenRows = (subset
-      ? keywords.filter((k: any) => keywordIdsSet.has(k.id))
-      : keywords
-    );
-    const frozen = frozenRows.map((k: any) => k.id);
-    if (frozen.length === 0) {
-      throw new AppError(422, "no_keywords", "No keywords to track. Add keywords to this domain first.");
-    }
-    const { estimateRankCheckUsd } = await import("./cost.ts");
-    const est = estimateRankCheckUsd(
-      frozenRows.map((k: any) => k.keyword),
-      (cfg as any).devices,
-      (cfg as any).serp_depth,
-      run.method === "queued" ? "queued" : "live",
-    );
-    if (est.totalUsd > run.approved_max_usd) {
-      throw new AppError(409, "price_changed", "This check now costs more than you approved.");
-    }
-    await repo.updateRun(ctx.brandKey, runId, {
-      keyword_ids: frozen,
-      keywords_total: frozen.length,
-      is_subset_run: subset,
-    } as any);
-    return { keywordsTotal: frozen.length };
-  });
-
   const method = run.method === "queued" ? "queued" : "live";
 
   try {
+    // prepare runs inside the try so its refusals (price_changed,
+    // no_keywords) mark the run failed instead of leaving it "running".
+    const prepared = await ctx.step.do("prepare", { timeoutMs: 60000, retries: 0 } as any, async () => {
+      const r = await repo.getRun(ctx.brandKey, runId);
+      if (!r || (r.status !== "pending" && r.status !== "running")) {
+        throw new AppError(409, "run_superseded", "Run superseded.");
+      }
+      await repo.updateRun(ctx.brandKey, runId, { status: "running", phase: "checking" } as any);
+      const cfg = await repo.getConfig(ctx.brandKey, run.config_id);
+      if (!cfg) throw new AppError(404, "tracker_not_found", "This tracked domain does not exist.");
+      const keywords = await repo.listKeywords(ctx.brandKey, run.config_id);
+      const byId = new Map(keywords.map((k: any) => [k.id, k]));
+      const keywordIdsSet = new Set((run.keyword_ids ?? []).map((x: string) => x));
+      const subset = run.keyword_ids && run.keyword_ids.length > 0;
+      const frozenRows = (subset
+        ? keywords.filter((k: any) => keywordIdsSet.has(k.id))
+        : keywords
+      );
+      const frozen = frozenRows.map((k: any) => k.id);
+      if (frozen.length === 0) {
+        throw new AppError(422, "no_keywords", "No keywords to track. Add keywords to this domain first.");
+      }
+      const { estimateRankCheckUsd } = await import("./cost.ts");
+      const est = estimateRankCheckUsd(
+        frozenRows.map((k: any) => k.keyword),
+        (cfg as any).devices,
+        (cfg as any).serp_depth,
+        run.method === "queued" ? "queued" : "live",
+      );
+      if (est.totalUsd > run.approved_max_usd) {
+        throw new AppError(409, "price_changed", "This check now costs more than you approved.");
+      }
+      await repo.updateRun(ctx.brandKey, runId, {
+        keyword_ids: frozen,
+        keywords_total: frozen.length,
+        is_subset_run: subset,
+      } as any);
+      return { keywordsTotal: frozen.length };
+    });
+    void prepared;
+    // The check paths read keyword_ids from the run they are handed. A full
+    // (non-subset) run is created with keyword_ids = '{}' and only gets its
+    // frozen list in prepare, so pass the run as prepare left it.
+    const frozenRun = (await repo.getRun(ctx.brandKey, runId)) ?? run;
+
     if (method === "live") {
-      await runLiveCheck(ctx, run, {
+      await runLiveCheck(ctx, frozenRun, {
         repo,
-        client: deps?.client,
-        fetchTaskResult: deps?.fetchTaskResult,
+        client,
+        fetchTaskResult,
         logger: console,
       } as any);
     } else {
-      await runQueuedRound(ctx, run, 0, {
+      await runQueuedRound(ctx, frozenRun, 0, {
         repo,
-        client: deps?.client,
-        fetchTaskResult: deps?.fetchTaskResult,
+        client,
+        fetchTaskResult,
         logger: console,
       } as any, async (rows: any) => {
         await repo.insertSnapshots(rows);
@@ -111,10 +124,10 @@ export async function runRankCheckJob(
 
     // retries
     try {
-      await retryRankChecks(ctx, run, {
+      await retryRankChecks(ctx, frozenRun, {
         repo,
-        client: deps?.client,
-        fetchTaskResult: deps?.fetchTaskResult,
+        client,
+        fetchTaskResult,
         logger: console,
       } as any);
     } catch (err) {
@@ -139,14 +152,18 @@ export async function runRankCheckJob(
         } as any);
         return { status: "failed" };
       }
-      const mobileChecked = perDevice.mobile;
-      const desktopChecked = perDevice.desktop;
-      const partial = r.keywords_total > 0 && (mobileChecked !== r.keywords_total || desktopChecked !== r.keywords_total);
-      const summary = `Checked ${mobileChecked} of ${r.keywords_total} mobile and ${desktopChecked} of ${r.keywords_total} desktop keyword(s)`;
+      // Only the tracker's own devices count: a mobile-only tracker never has
+      // desktop rows and must not finish "partial" because of it.
+      const cfgDevices = (await repo.getConfig(ctx.brandKey, r.config_id) as any)?.devices ?? "both";
+      const wanted: Array<"mobile" | "desktop"> =
+        cfgDevices === "mobile" ? ["mobile"] : cfgDevices === "desktop" ? ["desktop"] : ["mobile", "desktop"];
+      const checked = Math.max(...wanted.map((d) => perDevice[d]));
+      const partial = r.keywords_total > 0 && wanted.some((d) => perDevice[d] !== r.keywords_total);
+      const summary = `Checked ${wanted.map((d) => `${perDevice[d]} of ${r.keywords_total} ${d}`).join(" and ")} keyword(s)`;
       await repo.updateRun(ctx.brandKey, runId, {
         status: "completed",
         completed_at: new Date().toISOString(),
-        keywords_checked: Math.max(mobileChecked, desktopChecked),
+        keywords_checked: checked,
         phase: null,
         error_message: partial ? summary : r.error_message,
       } as any);
@@ -159,7 +176,7 @@ export async function runRankCheckJob(
         } as any);
       }
       console.log(
-        `[rank-check] ${runId} ${partial ? "partial" : "completed"} trigger=${r.trigger} keywords=${Math.max(mobileChecked, desktopChecked)}/${r.keywords_total} error_code=${r.error_code ?? ""}`,
+        `[rank-check] ${runId} ${partial ? "partial" : "completed"} trigger=${r.trigger} keywords=${checked}/${r.keywords_total} error_code=${r.error_code ?? ""}`,
       );
       return { status: partial ? "partial" : "completed" };
     });

@@ -39,7 +39,7 @@ test("unknown_location returns 409 before any provider call", async () => {
   let providerCalls = 0;
   const fakeBegin = async () => { providerCalls++; return { ok: true, runId: crypto.randomUUID(), jobId: "j" }; };
   const cfg = await repo.insertConfig({ brand_key: BRAND, domain: "example.com", location_code: 2840, language_code: "en", location_name: "Mumbai", devices: "mobile", serp_depth: 10, schedule_interval: "weekly", is_active: true, next_check_at: null, created_by: null });
-  const res = await checkPost(req("http://localhost/api", { maxUsd: 5 }), { params: { configId: cfg.id } }, {
+  const res = await checkPost(req("http://localhost/api", { maxUsd: 5 }), { params: Promise.resolve({ configId: cfg.id }) }, {
     requireWorkspace: async () => ws(),
     isFeatureEnabled: async () => true,
     repo,
@@ -56,7 +56,7 @@ test("unknown_location returns 409 before any provider call", async () => {
 test("foreign tracker -> 404", async () => {
   const repo = createMemoryRankTrackingRepository();
   const cfg = await repo.insertConfig({ brand_key: "other-brand", domain: "example.com", location_code: 2840, language_code: "en", location_name: null, devices: "mobile", serp_depth: 10, schedule_interval: "weekly", is_active: true, next_check_at: null, created_by: null });
-  const res = await checkPost(req("http://localhost/api", { maxUsd: 5 }), { params: { configId: cfg.id } }, {
+  const res = await checkPost(req("http://localhost/api", { maxUsd: 5 }), { params: Promise.resolve({ configId: cfg.id }) }, {
     requireWorkspace: async () => ws(),
     isFeatureEnabled: async () => true,
     repo,
@@ -69,7 +69,7 @@ test("check without maxUsd -> 400 approval_required with details.quote (no spend
   const cfg = await repo.insertConfig({ brand_key: BRAND, domain: "example.com", location_code: 2840, language_code: "en", location_name: null, devices: "mobile", serp_depth: 10, schedule_interval: "weekly", is_active: true, next_check_at: null, created_by: null });
   await repo.addKeywords(BRAND, cfg.id, [{ keyword: "kw1" }]);
   let began = 0;
-  const res = await checkPost(req("http://localhost/api", {}), { params: { configId: cfg.id } }, {
+  const res = await checkPost(req("http://localhost/api", {}), { params: Promise.resolve({ configId: cfg.id }) }, {
     requireWorkspace: async () => ws(),
     isFeatureEnabled: async () => true,
     repo,
@@ -94,7 +94,7 @@ test("lower maxUsd -> 409 price_changed with details.quote", async () => {
   const repo = createMemoryRankTrackingRepository();
   const cfg = await repo.insertConfig({ brand_key: BRAND, domain: "example.com", location_code: 2840, language_code: "en", location_name: null, devices: "mobile", serp_depth: 10, schedule_interval: "weekly", is_active: true, next_check_at: null, created_by: null });
   await repo.addKeywords(BRAND, cfg.id, [{ keyword: "kw1" }]);
-  const res = await checkPost(req("http://localhost/api", { maxUsd: 0.01 }), { params: { configId: cfg.id } }, {
+  const res = await checkPost(req("http://localhost/api", { maxUsd: 0.01 }), { params: Promise.resolve({ configId: cfg.id }) }, {
     requireWorkspace: async () => ws(),
     isFeatureEnabled: async () => true,
     repo,
@@ -114,7 +114,7 @@ test("second check -> 409 rank_check_running", async () => {
   const repo = createMemoryRankTrackingRepository();
   const cfg = await repo.insertConfig({ brand_key: BRAND, domain: "example.com", location_code: 2840, language_code: "en", location_name: null, devices: "mobile", serp_depth: 10, schedule_interval: "weekly", is_active: true, next_check_at: null, created_by: null });
   await repo.addKeywords(BRAND, cfg.id, [{ keyword: "kw1" }]);
-  const res = await checkPost(req("http://localhost/api", { maxUsd: 5 }), { params: { configId: cfg.id } }, {
+  const res = await checkPost(req("http://localhost/api", { maxUsd: 5 }), { params: Promise.resolve({ configId: cfg.id }) }, {
     requireWorkspace: async () => ws(),
     isFeatureEnabled: async () => true,
     repo,
@@ -130,7 +130,7 @@ test("spend refusal -> 402/403 (F01 copy)", async () => {
   const repo = createMemoryRankTrackingRepository();
   const cfg = await repo.insertConfig({ brand_key: BRAND, domain: "example.com", location_code: 2840, language_code: "en", location_name: null, devices: "mobile", serp_depth: 10, schedule_interval: "weekly", is_active: true, next_check_at: null, created_by: null });
   await repo.addKeywords(BRAND, cfg.id, [{ keyword: "kw1" }]);
-  const res = await checkPost(req("http://localhost/api", { maxUsd: 5 }), { params: { configId: cfg.id } }, {
+  const res = await checkPost(req("http://localhost/api", { maxUsd: 5 }), { params: Promise.resolve({ configId: cfg.id }) }, {
     requireWorkspace: async () => ws(),
     isFeatureEnabled: async () => true,
     repo,
@@ -148,7 +148,7 @@ test("keywords add without maxUsd on scheduled tracker -> 400 before insert", as
   assert.equal(before.length, 0);
   const mod = await import("./service.ts");
   const realAdd = mod.addKeywords;
-  const res = await keywordsPost(req("http://localhost/api", { keywords: ["newkw"] }), { params: { configId: cfg.id } }, {
+  const res = await keywordsPost(req("http://localhost/api", { keywords: ["newkw"] }), { params: Promise.resolve({ configId: cfg.id }) }, {
     requireWorkspace: async () => ({ user: USER, brandKey: BRAND, brand: { brandKey: BRAND }, role: "member", admin: { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ in: async () => ({ data: [], error: null }) }) }) }) }) } }),
     isFeatureEnabled: async () => true,
     addKeywords: (w, id, body) => realAdd(w, id, body, { repo, quote: async () => ({ totalUsd: 1, checkUsd: 1, retryUsd: 0, pairs: 1 }) }),
@@ -156,4 +156,15 @@ test("keywords add without maxUsd on scheduled tracker -> 400 before insert", as
   assert.equal(res.status, 400);
   const after = await repo.listKeywords(BRAND, cfg.id);
   assert.equal(after.length, 0);
+});
+
+test("trend refuses a non-numeric sinceDays with 400 instead of crashing", async () => {
+  const { GET: trendGet } = await import("../../app/api/customer/rank-tracking/configs/[configId]/trend/route.ts");
+  const res = await trendGet(
+    new Request("http://localhost/api?brand_key=brand-a&sinceDays=abc"),
+    { params: Promise.resolve({ configId: crypto.randomUUID() }) },
+    { requireWorkspace: async () => ws(), isFeatureEnabled: async () => true },
+  );
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).code, "invalid_request");
 });
