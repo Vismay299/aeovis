@@ -5,7 +5,7 @@
 import { defineJob, getJobDefinition } from "../jobs/registry.ts";
 import { definePeriodic, listPeriodics } from "../jobs/periodic.ts";
 import { enqueueSystemJob } from "../jobs/enqueue.ts";
-import { DB_STEP } from "../jobs/stepConfigs.ts";
+import { DB_STEP, LONG_PAID_STEP } from "../jobs/stepConfigs.ts";
 import { AppError } from "../http/errors.ts";
 import { getSupabaseAdmin } from "../supabase/admin.js";
 import {
@@ -13,9 +13,22 @@ import {
   runRefreshMetricsJob,
   type RefreshMetricsDeps,
 } from "./refreshMetrics.ts";
+import {
+  clusterOutputSchema as _clusterOutputSchema,
+  runClusterJob,
+  type ClusterJobDeps,
+} from "./clustering.ts";
+import { z } from "zod";
 
 export const KEYWORDS_REFRESH_METRICS_KIND = "keywords.refresh_metrics";
 export const KEYWORDS_METRICS_RETENTION_KIND = "keywords.metrics_retention";
+export const KEYWORDS_CLUSTER_KIND = "keywords.cluster";
+
+export const clusterPayloadSchema = z.strictObject({
+  savedKeywordIds: z.array(z.string().uuid()).min(10).max(500),
+  approvedMaxUsd: z.number().positive(),
+  requestedBy: z.string().uuid(),
+});
 
 const RETENTION_DAYS = 400;
 const DAY_MS = 86_400_000;
@@ -28,13 +41,16 @@ export type KeywordRetentionDeps = {
 
 let boundRetentionAdmin: any = null;
 let boundRefreshDeps: RefreshMetricsDeps | null = null;
+let boundClusterDeps: ClusterJobDeps | null = null;
 
 export function setKeywordJobsDeps(deps: {
   retention?: KeywordRetentionDeps;
   refresh?: RefreshMetricsDeps;
+  cluster?: ClusterJobDeps;
 }): void {
   if (deps.retention?.admin) boundRetentionAdmin = deps.retention.admin;
   if (deps.refresh) boundRefreshDeps = deps.refresh;
+  if (deps.cluster) boundClusterDeps = deps.cluster;
 }
 
 export function registerKeywordJobs(): void {
@@ -92,7 +108,28 @@ export function registerKeywordJobs(): void {
     );
   }
 
-  // 3. keywords.metrics_retention periodic
+  // 3. keywords.cluster
+  if (!getJobDefinition(KEYWORDS_CLUSTER_KIND)) {
+    defineJob(
+      KEYWORDS_CLUSTER_KIND,
+      async (ctx) => {
+        const parsed = clusterPayloadSchema.parse(ctx.payload);
+        const typedCtx = {
+          ...ctx,
+          payload: parsed,
+        };
+        const result = await runClusterJob(typedCtx as any, boundClusterDeps ?? undefined);
+        return result as any;
+      },
+      {
+        deadlineSeconds: 600,
+        maxInvocations: 5,
+        pollAfterSeconds: 3,
+      },
+    );
+  }
+
+  // 4. keywords.metrics_retention periodic
   if (!listPeriodics().some((p) => p.name === KEYWORDS_METRICS_RETENTION_KIND)) {
     definePeriodic({
       name: KEYWORDS_METRICS_RETENTION_KIND,

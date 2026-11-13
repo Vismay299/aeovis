@@ -627,6 +627,11 @@ SOFTWARE.
 - `src/app/portal/audit/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
 - `src/app/portal/audit/[auditId]/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
 
+### F13 Phase 6 ports
+- `src/lib/keywords/clustering.ts` (ideas only from `openseo:.agents/skills/keyword-clustering/SKILL.md`)
+- `src/app/api/customer/keywords/cluster/route.ts` (from `openseo:src/serverFunctions/keywords.ts`)
+
+
 ### F18 Phase 5 ports
 - src/lib/providers/dataforseo/lighthouse.ts (from src/server/lib/dataforseo/lighthouse.ts)
 - src/lib/audit/lighthouse.ts (from src/server/lib/audit/lighthouse.ts)

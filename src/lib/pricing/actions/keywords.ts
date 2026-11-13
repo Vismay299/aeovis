@@ -14,6 +14,9 @@ import {
 import { fetchSerpLocationsForCountry } from "../../providers/dataforseo/serp-locations.ts";
 import { normalizeKeyword } from "../../keywords/helpers.ts";
 import { researchKey, resolveResearchMarket } from "../../keywords/market.ts";
+import { estimateClusterPromptChars } from "../../keywords/clustering.ts";
+import { getLlmModel } from "../../llmConfig.js";
+import { estimateLlmUsd } from "../../llm/openrouter.ts";
 import { findRecentResearch } from "../../projectContext/service.ts";
 import {
   createSavedKeywordsRepository,
@@ -452,4 +455,69 @@ export const metricsRefreshAction = definePricedAction({
   input: metricsRefreshActionInput,
   requireApproval: true,
   estimate: (ctx, input) => estimateMetricsRefresh(ctx, input),
+});
+
+export const clusteringActionInput = z.strictObject({
+  savedKeywordIds: z.array(z.string().uuid()).min(1).max(500),
+});
+
+export async function estimateClustering(
+  ctx: PricingContext,
+  input: z.infer<typeof clusteringActionInput>,
+  deps?: KeywordQuoteDeps & {
+    repo?: SavedKeywordsRepository;
+  },
+): Promise<PricedActionEstimateResult> {
+  const repo = deps?.repo ?? (ctx.admin ? createSavedKeywordsRepository(ctx.admin) : null);
+  if (!repo) {
+    throw new Error("Repository is unavailable.");
+  }
+
+  const listed = await repo.list({ brandKey: ctx.brandKey, pageSize: 5000 });
+  const idSet = new Set(input.savedKeywordIds);
+  const rows = listed.rows.filter((r) => idSet.has(r.id));
+
+  if (rows.length < 10) {
+    return {
+      totalUsd: 0,
+      expectedUsd: 0,
+      units: [{ key: "keywords", label: "keywords", count: rows.length }],
+      lines: [],
+      monthly: null,
+      warnings: [],
+      blocked: {
+        code: "too_few_keywords",
+        message: "Select at least 10 keywords to group into topics.",
+      },
+    };
+  }
+
+  const model = ctx.env.LLM_HELPER_MODEL ?? getLlmModel(ctx.env as unknown as NodeJS.ProcessEnv);
+  const chars = estimateClusterPromptChars(rows.map((r) => ({ keyword: r.keyword })));
+  const cost = estimateLlmUsd(model, chars + 4000, 8000, ctx.env);
+
+  return {
+    totalUsd: cost,
+    expectedUsd: cost,
+    units: [{ key: "keywords", label: "keywords", count: rows.length }],
+    lines: [
+      {
+        label: `AI topic grouping for ${rows.length} keywords`,
+        quantity: 1,
+        unitUsd: cost,
+        totalUsd: cost,
+      },
+    ],
+    monthly: null,
+    warnings: [],
+    blocked: null,
+  };
+}
+
+export const clusteringAction = definePricedAction({
+  key: "keywords.clustering.run",
+  feature: "keywords.clustering",
+  input: clusteringActionInput,
+  requireApproval: true,
+  estimate: (ctx, input) => estimateClustering(ctx, input),
 });

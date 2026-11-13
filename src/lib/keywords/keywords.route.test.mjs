@@ -14,6 +14,8 @@ import {
 } from "../../app/api/customer/keywords/tags/[tagId]/route.ts";
 import { GET as exportGet } from "../../app/api/customer/keywords/saved/export/route.ts";
 import { POST as refreshPost } from "../../app/api/customer/keywords/saved/refresh/route.ts";
+import { POST as clusterPost } from "../../app/api/customer/keywords/cluster/route.ts";
+import { POST as clusterApplyPost } from "../../app/api/customer/keywords/cluster/apply/route.ts";
 import { createMemorySavedKeywordsRepository } from "./memoryRepository.ts";
 import { AppError } from "../http/appError.ts";
 import { SpendRefused } from "../spend/errors.ts";
@@ -686,5 +688,374 @@ test("keywords routes", async (t) => {
     assert.equal(body.pollAfterSeconds, 5);
     assert.equal(enqueuedJob, true);
     assert.equal(recordedApproval, true);
+  });
+
+  // F13-AC-18: "Group into topics" refuses before any paid call, prices
+  // through the real approval path, and applies tags add-only.
+  const clusterIds = (n, seed = 1) =>
+    Array.from(
+      { length: n },
+      (_, i) =>
+        `${String(seed).padStart(8, "0")}-${"1111"}-4111-8111-${String(i).padStart(12, "0")}`,
+    );
+
+  function fakeAdminWithRows(rows) {
+    const calls = { rpc: [], from: [] };
+    let tagSeq = 0;
+    const admin = {
+      calls,
+      async rpc(name, args) {
+        calls.rpc.push({ name, args });
+        if (name === "list_saved_keywords") {
+          return {
+            data: { rows, totalCount: rows.length, tags: [] },
+            error: null,
+          };
+        }
+        if (name === "update_saved_keyword_tags") {
+          return {
+            data: {
+              taggedCount: args.p_ids.length,
+              addedTags: (args.p_add ?? []).map((t) => ({
+                id: `tag-${(tagSeq += 1)}`,
+                name: t.name,
+                normalizedName: t.normalized,
+                color: null,
+              })),
+              removedTagIds: args.p_remove ?? [],
+              removedAssignments: 0,
+            },
+            error: null,
+          };
+        }
+        throw new Error(`unexpected rpc ${name}`);
+      },
+      from(table) {
+        calls.from.push(table);
+        throw new Error(`unexpected table access ${table}`);
+      },
+    };
+    return admin;
+  }
+
+  function savedRow(id, keyword) {
+    return {
+      id,
+      keyword,
+      locationCode: 2356,
+      languageCode: "en",
+      createdAt: "2026-11-01T10:00:00.000Z",
+      searchVolume: 1000,
+      cpc: 0.4,
+      competition: 0.5,
+      keywordDifficulty: 20,
+      intent: "commercial",
+      monthlySearches: [],
+      fetchedAt: "2026-11-10T09:59:00.000Z",
+      tags: [],
+    };
+  }
+
+  await t.test("cluster route: flag keyword_clustering off -> 404 feature_unavailable", async () => {
+    let enqueued = 0;
+    const req = new Request("http://localhost/api/customer/keywords/cluster", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ savedKeywordIds: clusterIds(12) }),
+    });
+
+    const res = await clusterPost(req, null, {
+      requireWorkspace: async () => makeWorkspace(),
+      isFeatureEnabled: async (name) => name !== "keyword_clustering",
+      enqueueJob: async () => {
+        enqueued += 1;
+        return { jobId: "x", deduped: false };
+      },
+    });
+
+    assert.equal(res.status, 404);
+    const body = await res.json();
+    assert.equal(body.code, "feature_unavailable");
+    assert.equal(enqueued, 0);
+  });
+
+  await t.test("cluster route: no maxUsd -> 400 approval_required and zero paid calls (F13-AC-18)", async () => {
+    const ids = clusterIds(12);
+    const admin = fakeAdminWithRows(ids.map((id, i) => savedRow(id, `kw ${i}`)));
+    let enqueued = 0;
+    const req = new Request("http://localhost/api/customer/keywords/cluster", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ savedKeywordIds: ids }),
+    });
+
+    const res = await clusterPost(req, null, {
+      requireWorkspace: async () => ({ ...makeWorkspace(), admin }),
+      isFeatureEnabled: async () => true,
+      enqueueJob: async () => {
+        enqueued += 1;
+        return { jobId: "x", deduped: false };
+      },
+    });
+
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.code, "approval_required");
+    assert.equal(enqueued, 0);
+    assert.ok(
+      admin.calls.from.length === 0,
+      "refusal happened before any approval record or paid call",
+    );
+  });
+
+  await t.test("cluster route: low maxUsd -> 409 price_changed", async () => {
+    const ids = clusterIds(12);
+    const admin = fakeAdminWithRows(ids.map((id, i) => savedRow(id, `kw ${i}`)));
+    let enqueued = 0;
+    // The repo default helper model is :free ($0 quotes); price with a
+    // table-rated model so the ceiling check has something to refuse.
+    const prevModel = process.env.LLM_HELPER_MODEL;
+    process.env.LLM_HELPER_MODEL = "gpt-4o-mini";
+    let res;
+    try {
+      const req = new Request("http://localhost/api/customer/keywords/cluster", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ savedKeywordIds: ids, maxUsd: 0.000001 }),
+      });
+
+      res = await clusterPost(req, null, {
+        requireWorkspace: async () => ({ ...makeWorkspace(), admin }),
+        isFeatureEnabled: async () => true,
+        enqueueJob: async () => {
+          enqueued += 1;
+          return { jobId: "x", deduped: false };
+        },
+      });
+    } finally {
+      if (prevModel === undefined) delete process.env.LLM_HELPER_MODEL;
+      else process.env.LLM_HELPER_MODEL = prevModel;
+    }
+
+    assert.equal(res.status, 409);
+    const body = await res.json();
+    assert.equal(body.code, "price_changed");
+    assert.equal(enqueued, 0);
+  });
+
+  await t.test("cluster route: 9 of 10 ids in workspace -> 409 too_few_keywords before any paid call (F13-AC-18)", async () => {
+    const ids = clusterIds(10);
+    // Only 9 of the 10 ids belong to the workspace.
+    const admin = fakeAdminWithRows(ids.slice(0, 9).map((id, i) => savedRow(id, `kw ${i}`)));
+    let enqueued = 0;
+    const req = new Request("http://localhost/api/customer/keywords/cluster", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ savedKeywordIds: ids, maxUsd: 5 }),
+    });
+
+    const res = await clusterPost(req, null, {
+      requireWorkspace: async () => ({ ...makeWorkspace(), admin }),
+      isFeatureEnabled: async () => true,
+      enqueueJob: async () => {
+        enqueued += 1;
+        return { jobId: "x", deduped: false };
+      },
+    });
+
+    assert.equal(res.status, 409);
+    const body = await res.json();
+    assert.equal(body.code, "too_few_keywords");
+    assert.equal(enqueued, 0);
+    assert.ok(admin.calls.from.length === 0, "nothing was recorded or enqueued");
+  });
+
+  await t.test("cluster route: retry while running -> 409 job_already_running with no second paid call", async () => {
+    const ids = clusterIds(12);
+    const admin = fakeAdminWithRows(ids.map((id, i) => savedRow(id, `kw ${i}`)));
+    let recorded = 0;
+    const req = new Request("http://localhost/api/customer/keywords/cluster", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ savedKeywordIds: ids, maxUsd: 5 }),
+    });
+
+    const res = await clusterPost(req, null, {
+      requireWorkspace: async () => ({ ...makeWorkspace(), admin }),
+      isFeatureEnabled: async () => true,
+      requireApprovedPrice: async () => ({ approvedMaxUsd: 5, quote: { totalUsd: 0.01 }, source: "dialog" }),
+      enqueueJob: async () => {
+        throw new AppError(409, "job_already_running", "Keyword grouping is already running.");
+      },
+      recordApproval: async () => {
+        recorded += 1;
+      },
+    });
+
+    assert.equal(res.status, 409);
+    const body = await res.json();
+    assert.equal(body.code, "job_already_running");
+    assert.equal(recorded, 0);
+  });
+
+  await t.test("cluster route: valid approval -> 202 queued with pollAfterSeconds 3", async () => {
+    const ids = clusterIds(12);
+    const admin = fakeAdminWithRows(ids.map((id, i) => savedRow(id, `kw ${i}`)));
+    let enqueuedKind = null;
+    let recordedApproval = false;
+    const req = new Request("http://localhost/api/customer/keywords/cluster", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ savedKeywordIds: ids, maxUsd: 5 }),
+    });
+
+    const res = await clusterPost(req, null, {
+      requireWorkspace: async () => ({ ...makeWorkspace(), admin }),
+      isFeatureEnabled: async () => true,
+      requireApprovedPrice: async () => ({ approvedMaxUsd: 5, quote: { totalUsd: 0.01 }, source: "dialog" }),
+      enqueueJob: async (kind, payload, options) => {
+        enqueuedKind = kind;
+        assert.deepEqual(payload.savedKeywordIds, ids);
+        assert.equal(payload.approvedMaxUsd, 5);
+        assert.equal(options.singleActiveKey, `keywords.cluster:${BRAND_KEY}`);
+        return { jobId: "33333333-3333-4333-8333-333333333333", deduped: false };
+      },
+      recordApproval: async () => {
+        recordedApproval = true;
+      },
+    });
+
+    assert.equal(res.status, 202);
+    const body = await res.json();
+    assert.equal(body.status, "queued");
+    assert.equal(body.jobId, "33333333-3333-4333-8333-333333333333");
+    assert.equal(body.pollAfterSeconds, 3);
+    assert.equal(enqueuedKind, "keywords.cluster");
+    assert.equal(recordedApproval, true);
+  });
+
+  const proposalIds = clusterIds(12);
+  const proposalResult = {
+    clusters: [
+      { name: "Topic A", savedKeywordIds: proposalIds.slice(0, 5) },
+      { name: "Topic B", savedKeywordIds: proposalIds.slice(5, 9) },
+      { name: "Topic C", savedKeywordIds: proposalIds.slice(9, 12) },
+    ],
+    unsorted: [],
+    model: "google/gemma-4-31b-it:free",
+    usd: 0.000234,
+  };
+
+  function applyDeps({ status = "completed", result = proposalResult, brandKey = BRAND_KEY, admin = null } = {}) {
+    const updateCalls = [];
+    const store = {
+      async getJob() {
+        return { id: "job-cluster-1", brand_key: brandKey, kind: "keywords.cluster", status };
+      },
+    };
+    const rpcAdmin = admin ?? fakeAdminWithRows([]);
+    const wrapped = {
+      ...rpcAdmin,
+      async rpc(name, args) {
+        if (name === "update_saved_keyword_tags") updateCalls.push(args);
+        return rpcAdmin.rpc(name, args);
+      },
+    };
+    return {
+      updateCalls,
+      deps: {
+        requireWorkspace: async () => ({ ...makeWorkspace(brandKey), admin: wrapped }),
+        isFeatureEnabled: async () => true,
+        jobStore: () => store,
+        getJobStatus: async () => ({ status, result, progress: null, pollAfterSeconds: null, error: null }),
+      },
+    };
+  }
+
+  await t.test("cluster apply: id outside the proposal -> 400 invalid_request with no tag writes", async () => {
+    const { updateCalls, deps } = applyDeps();
+    const outsider = "99999999-9999-4999-8999-999999999999";
+    const req = new Request("http://localhost/api/customer/keywords/cluster/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jobId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        clusters: [{ name: "Topic A", savedKeywordIds: [outsider] }],
+      }),
+    });
+
+    const res = await clusterApplyPost(req, null, deps);
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.code, "invalid_request");
+    assert.equal(updateCalls.length, 0);
+  });
+
+  await t.test("cluster apply: running job -> 409 job_not_ready with no tag writes", async () => {
+    const { updateCalls, deps } = applyDeps({ status: "running", result: null });
+    const req = new Request("http://localhost/api/customer/keywords/cluster/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jobId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        clusters: [{ name: "Topic A", savedKeywordIds: proposalIds.slice(0, 5) }],
+      }),
+    });
+
+    const res = await clusterApplyPost(req, null, deps);
+    assert.equal(res.status, 409);
+    const body = await res.json();
+    assert.equal(body.code, "job_not_ready");
+    assert.equal(updateCalls.length, 0);
+  });
+
+  await t.test("cluster apply: other workspace's job -> 404 job_not_found", async () => {
+    const { deps } = applyDeps({ brandKey: "workspace-beta" });
+    const req = new Request("http://localhost/api/customer/keywords/cluster/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jobId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        clusters: [{ name: "Topic A", savedKeywordIds: proposalIds.slice(0, 5) }],
+      }),
+    });
+
+    // Workspace alpha tries to apply workspace beta's job.
+    const res = await clusterApplyPost(req, null, {
+      ...deps,
+      requireWorkspace: async () => ({ ...makeWorkspace("workspace-alpha"), admin: fakeAdminWithRows([]) }),
+    });
+    assert.equal(res.status, 404);
+    const body = await res.json();
+    assert.equal(body.code, "job_not_found");
+  });
+
+  await t.test("cluster apply: adds tags only and reports counts (F13-AC-18)", async () => {
+    const { updateCalls, deps } = applyDeps();
+    const req = new Request("http://localhost/api/customer/keywords/cluster/apply", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jobId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        clusters: [
+          { name: "Renamed topic", savedKeywordIds: proposalIds.slice(0, 5) },
+          { name: "Topic B", savedKeywordIds: proposalIds.slice(5, 9) },
+        ],
+      }),
+    });
+
+    const res = await clusterApplyPost(req, null, deps);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.taggedCount, 9);
+    assert.equal(body.tags.length, 2);
+    assert.equal(updateCalls.length, 2);
+    // Tags are added; existing tags stay: removals are never sent.
+    for (const call of updateCalls) {
+      assert.deepEqual(call.p_remove, []);
+      assert.equal(call.p_add.length, 1);
+    }
+    assert.equal(updateCalls[0].p_add[0].name, "Renamed topic");
+    assert.equal(updateCalls[1].p_add[0].name, "Topic B");
   });
 });

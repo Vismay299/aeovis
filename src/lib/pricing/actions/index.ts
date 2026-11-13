@@ -10,6 +10,7 @@ import "./questions.ts";
 export { scanRunAction } from "./scanRun.ts";
 export { scheduleSaveAction } from "./scheduleSave.ts";
 export { keywordResearchAction, serpRunAction } from "./keywords.ts";
+export { metricsRefreshAction, clusteringAction } from "./keywords.ts";
 export {
   domainLookupRunAction,
   domainKeywordsPageAction,

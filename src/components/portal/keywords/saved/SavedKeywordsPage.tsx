@@ -15,6 +15,7 @@ import { copyList } from "@/components/app/export/useExportRows";
 import { fetchJson, withBrand } from "@/lib/query/fetchJson";
 import type { SavedKeywordRow } from "@/shared/keywords";
 import { SavedKeywordsBulkActionBar } from "./SavedKeywordsBulkActionBar";
+import { GroupTopicsDialog } from "./GroupTopicsDialog";
 import { SavedKeywordsHeader } from "./SavedKeywordsHeader";
 import { SavedKeywordsModals } from "./SavedKeywordsModals";
 import { SavedKeywordsTable } from "./SavedKeywordsTable";
@@ -43,6 +44,7 @@ export function SavedKeywordsPage() {
     null,
   );
   const [bulkTagRows, setBulkTagRows] = useState<SavedKeywordRow[] | null>(null);
+  const [groupOpen, setGroupOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const invalidateList = () =>
@@ -160,6 +162,7 @@ export function SavedKeywordsPage() {
       <SavedKeywordsBulkActionBar
         selectedCount={selectedRows.length}
         onTag={() => setBulkTagRows(selectedRows)}
+        onGroupTopics={() => setGroupOpen(true)}
         onExport={(format) =>
           void exporter.exportSelected(format, selectedRows)
         }
@@ -185,6 +188,14 @@ export function SavedKeywordsPage() {
         manage={tagManage}
         onCloseBulkTags={() => setBulkTagRows(null)}
         onBulkTagsApplied={clearSelection}
+      />
+
+      <GroupTopicsDialog
+        open={groupOpen}
+        onOpenChange={setGroupOpen}
+        brandKey={saved.brandKey}
+        selectedRows={selectedRows}
+        onApplied={clearSelection}
       />
     </PageFrame>
   );
