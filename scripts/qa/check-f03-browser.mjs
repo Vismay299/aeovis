@@ -983,7 +983,21 @@ try {
       await page
         .getByLabel("Not available while a cost is unknown")
         .waitFor({ state: "visible", timeout: 20000 });
+      // §6.6.2 names the section "Cost per answer": the label is on screen while
+      // the list is closed, and stays there while it is open.
+      await page
+        .getByText("Cost per answer", { exact: true })
+        .waitFor({ state: "visible", timeout: 20000 });
+      await page
+        .getByRole("button", { name: "Show cost per answer", exact: true })
+        .waitFor({ state: "visible", timeout: 20000 });
       await page.getByRole("button", { name: "Show cost per answer" }).click();
+      await page
+        .getByRole("button", { name: "Hide cost per answer", exact: true })
+        .waitFor({ state: "visible", timeout: 20000 });
+      await page
+        .getByText("Cost per answer", { exact: true })
+        .waitFor({ state: "visible", timeout: 20000 });
       await page
         .getByRole("columnheader", { name: "Question", exact: true })
         .waitFor({ state: "visible", timeout: 20000 });
@@ -991,8 +1005,15 @@ try {
         .getByText("Unknown", { exact: true })
         .first()
         .waitFor({ state: "visible", timeout: 20000 });
+      await page.getByRole("button", { name: "Hide cost per answer" }).click();
+      await page
+        .getByRole("button", { name: "Show cost per answer", exact: true })
+        .waitFor({ state: "visible", timeout: 20000 });
+      await page
+        .getByText("Cost per answer", { exact: true })
+        .waitFor({ state: "visible", timeout: 20000 });
       assert.deepEqual(foreign, [], "no request may leave the local origin");
-      return "unknown attempts warn, the per-answer cell is an em dash, and a null answer cost reads Unknown";
+      return "unknown attempts warn, the per-answer cell is an em dash, a null answer cost reads Unknown, and the Cost per answer section is labelled open or closed";
     } finally {
       await context.close();
     }

@@ -75,15 +75,20 @@ function CostPerAnswer({ results }: { results: ScanResultRow[] }) {
   }));
 
   return (
-    <div className="space-y-3">
-      <Button
-        variant="outline"
-        size="sm"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-      >
-        {open ? "Hide cost per answer" : "Show cost per answer"}
-      </Button>
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-medium text-muted-foreground">
+          Cost per answer
+        </h2>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {open ? "Hide cost per answer" : "Show cost per answer"}
+        </Button>
+      </div>
 
       {open ? (
         rows.length === 0 ? (
@@ -126,7 +131,7 @@ function CostPerAnswer({ results }: { results: ScanResultRow[] }) {
           </div>
         )
       ) : null}
-    </div>
+    </section>
   );
 }
 
