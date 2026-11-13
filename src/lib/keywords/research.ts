@@ -26,6 +26,7 @@ import {
   fetchGoogleAdsResearchRows,
   fetchResearchRowsBySource,
 } from "./researchData.ts";
+import { localizeResearchRows } from "./localVolume.ts";
 
 export const researchResultSchema = z.looseObject({
   rows: z.array(
@@ -158,9 +159,58 @@ export async function research(
     locationName: effectiveInput.locationName ?? null,
   });
 
+  if (input.locationName && deps.assertLocalLocation) {
+    await deps.assertLocalLocation(input.locationCode, input.locationName);
+  }
+
+  const isLocal = Boolean(input.locationName);
+
   const cacheRes = await cachedIf(
     cacheInput,
     async (): Promise<ResearchResult> => {
+      if (isLocal) {
+        const nationalInput: ResolvedResearchInput = {
+          ...effectiveInput,
+          locationName: undefined,
+        };
+        const national = await research(nationalInput, deps);
+        if (national.result.rows.length > 0) {
+          const upsertPromise = deps
+            .upsertMetrics(national.result.rows, {
+              locationCode: nationalInput.locationCode,
+              languageCode: nationalInput.languageCode,
+            })
+            .catch((err) => {
+              console.error("[keywords] metrics upsert failed", err);
+            });
+          if (deps.keepAlive) {
+            deps.keepAlive(upsertPromise);
+          } else {
+            void upsertPromise;
+          }
+        }
+        const localized = await localizeResearchRows(
+          national.result.rows,
+          {
+            locationCode: input.locationCode,
+            locationName: input.locationName!,
+            languageCode: input.languageCode,
+            call: {
+              brandKey: deps.brandKey,
+              idempotencyKey: `keywords.research:${deps.requestId}:local_volume`,
+              maxUsd: deps.maxUsd,
+              feature: "keywords.research",
+            },
+          },
+          { ads: deps.ads },
+        );
+        return {
+          rows: localized,
+          source: national.result.source,
+          usedFallback: national.result.usedFallback,
+        };
+      }
+
       if (provider === "google_ads") {
         const rows = await fetchGoogleAdsResearchRows(
           {
