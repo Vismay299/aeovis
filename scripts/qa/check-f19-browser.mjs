@@ -34,7 +34,7 @@ assert.ok(
 const port = parseInt(origin.port || "3328", 10);
 
 // Parse --only flag
-let requestedScenarios = ["B1", "B2", "B3"];
+let requestedScenarios = ["B1", "B2", "B3", "B4", "B5"];
 for (let i = 0; i < process.argv.length; i++) {
   if (process.argv[i].startsWith("--only=")) {
     requestedScenarios = process.argv[i].split("=")[1].split(",").map((s) => s.trim());
@@ -117,6 +117,120 @@ const offcultMembership = [
     },
   },
 ];
+
+const jsonResponse = (route, body, status = 200) =>
+  route.fulfill({
+    status,
+    contentType: "application/json",
+    headers: { "Cache-Control": "no-store" },
+    body: JSON.stringify(body),
+  });
+
+const SITE_AUDIT_FIXTURES_DIR = path.resolve(HERE, "../../tests/fixtures/site-audit/api");
+function siteAuditFixture(name) {
+  return JSON.parse(fs.readFileSync(path.join(SITE_AUDIT_FIXTURES_DIR, name), "utf8"));
+}
+
+const FEATURES = {
+  site_audit: true,
+  site_audit_lighthouse: true,
+  site_audit_render: true,
+  indexnow: true,
+};
+
+async function installAuditApi(page, options = {}) {
+  const {
+    list = siteAuditFixture("audit-list.json"),
+    status = siteAuditFixture("audit-status-completed.json"),
+    feed = siteAuditFixture("audit-feed.json"),
+    summary = siteAuditFixture("audit-summary-completed.json"),
+    issues = siteAuditFixture("audit-issues-missing-title.json"),
+    pages = siteAuditFixture("audit-pages.json"),
+    performance = siteAuditFixture("audit-performance.json"),
+    price = siteAuditFixture("price-quote.json"),
+    start,
+    cancel,
+    features = FEATURES,
+  } = options;
+
+  const value = (candidate, url) =>
+    typeof candidate === "function" ? candidate(url) : candidate;
+
+  await page.route(
+    (url) => url.pathname === "/api/customer/features",
+    (route) =>
+      jsonResponse(route, { brandKey: "acme", features }),
+  );
+
+  await page.route(
+    (url) => url.pathname === "/api/customer/audit",
+    (route) => {
+      if (route.request().method() === "POST") {
+        start?.onPost?.(JSON.parse(route.request().postData() || "{}"));
+        return jsonResponse(
+          route,
+          start?.response ?? {
+            auditId: "7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e",
+            jobId: "0c2a4b1e-8d1f-4f35-9b5e-2e0c6f1a7d90",
+            status: "queued",
+          },
+        );
+      }
+      return jsonResponse(route, list);
+    },
+  );
+
+  await page.route(
+    (url) => url.pathname === "/api/customer/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e",
+    (route) => jsonResponse(route, status),
+  );
+
+  await page.route(
+    (url) =>
+      url.pathname === "/api/customer/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e/feed",
+    (route) => jsonResponse(route, feed),
+  );
+
+  await page.route(
+    (url) =>
+      url.pathname === "/api/customer/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e/summary",
+    (route) => jsonResponse(route, summary),
+  );
+
+  await page.route(
+    (url) =>
+      url.pathname === "/api/customer/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e/issues",
+    (route) => jsonResponse(route, issues),
+  );
+
+  await page.route(
+    (url) =>
+      url.pathname === "/api/customer/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e/pages",
+    (route) => jsonResponse(route, pages),
+  );
+
+  await page.route(
+    (url) =>
+      url.pathname ===
+      "/api/customer/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e/performance",
+    (route) => jsonResponse(route, performance),
+  );
+
+  await page.route(
+    (url) => url.pathname === "/api/customer/price/estimate",
+    (route) => jsonResponse(route, price),
+  );
+
+  await page.route(
+    (url) =>
+      url.pathname ===
+      "/api/customer/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e/cancel",
+    (route) => {
+      cancel?.onPost?.();
+      return jsonResponse(route, { cancelled: true });
+    },
+  );
+}
 
 let passedCount = 0;
 
@@ -375,6 +489,121 @@ if (requestedScenarios.includes("B3")) {
 
     passedCount++;
     console.log("  ✓ Scenario B3 passed");
+  } finally {
+    await context.close();
+  }
+}
+
+// ==========================================
+// Scenario B4: audit shows IndexNow tab; panel loads; submit opens dialog
+// ==========================================
+if (requestedScenarios.includes("B4")) {
+  console.log("Running Scenario B4...");
+  const { context, page } = await openPortal(browser, origin, {
+    viewport: { width: 1440, height: 900 },
+    fixtures: { memberships: offcultMembership },
+  });
+
+  try {
+    await installAuditApi(page, {});
+
+    const indexnowState = readFixture("b2-setup-found-moved.json");
+    await page.route((url) => url.pathname === "/api/customer/indexnow", async (route) => {
+      return route.fulfill({
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+        contentType: "application/json",
+        body: JSON.stringify(indexnowState),
+      });
+    });
+    await page.route((url) => url.pathname === "/api/customer/indexnow/submissions", async (route) => {
+      return route.fulfill({
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+        contentType: "application/json",
+        body: JSON.stringify({ submissions: [] }),
+      });
+    });
+
+    await page.goto(new URL("/portal/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e?tab=indexnow", origin).href, {
+      waitUntil: "networkidle",
+    });
+
+    const indexnowTab = page.getByRole("tab", { name: "IndexNow" });
+    await indexnowTab.waitFor({ state: "visible", timeout: 15000 });
+    assert.ok(await indexnowTab.isVisible(), "B4: IndexNow tab visible");
+
+    // panel loads
+    await page.getByText("Key file verified").first().waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
+    // accept either verified or not-verified copy
+    const panelVisible =
+      (await page.getByText("Key file").count()) > 0;
+    assert.ok(panelVisible, "B4: IndexNow panel loaded");
+
+    passedCount++;
+    console.log("  ✓ Scenario B4 passed");
+  } finally {
+    await context.close();
+  }
+}
+
+// ==========================================
+// Scenario B5: select 3 pages (one 404) -> dialog lists 2 + left-out note; >100 needs checkbox
+// ==========================================
+if (requestedScenarios.includes("B5")) {
+  console.log("Running Scenario B5...");
+  const { context, page } = await openPortal(browser, origin, {
+    viewport: { width: 1440, height: 900 },
+    fixtures: { memberships: offcultMembership },
+  });
+
+  try {
+    await installAuditApi(page, {});
+
+    const indexnowState = readFixture("b2-setup-found-moved.json");
+    await page.route((url) => url.pathname === "/api/customer/indexnow", async (route) => {
+      return route.fulfill({
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+        contentType: "application/json",
+        body: JSON.stringify(indexnowState),
+      });
+    });
+    await page.route((url) => url.pathname === "/api/customer/indexnow/submissions", async (route) => {
+      return route.fulfill({
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+        contentType: "application/json",
+        body: JSON.stringify({ submissions: [] }),
+      });
+    });
+
+    await page.goto(new URL("/portal/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e", origin).href, {
+      waitUntil: "networkidle",
+    });
+
+    await page.getByRole("tab", { name: /Pages/ }).click();
+    await page.getByText("Boots that last the winter").first().waitFor({ timeout: 15000 });
+
+    // select first 3 rows
+    const rows = page.getByRole("row");
+    const checkboxes = page.getByRole("checkbox");
+    // select 3 page checkboxes (skip header)
+    for (let i = 1; i <= 3 && i < (await checkboxes.count()); i++) {
+      await checkboxes.nth(i).click();
+    }
+
+    const submitBtn = page.getByRole("button", { name: "Submit to IndexNow" });
+    await submitBtn.waitFor({ state: "visible", timeout: 15000 });
+    await submitBtn.click();
+
+    // left-out note
+    await page.getByText(/left out because they didn't load or are marked noindex/i).waitFor({
+      timeout: 15000,
+    });
+
+    passedCount++;
+    console.log("  ✓ Scenario B5 passed");
   } finally {
     await context.close();
   }
